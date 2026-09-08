@@ -1,0 +1,45 @@
+# =============================================================================
+# Open ADMS :: local development stack
+#
+#   docker compose up -d db      Postgres 16 + PostGIS, ready in a few seconds
+#   docker compose up -d         database + API
+#
+# The connection string this gives you:
+#   postgresql://adms:adms@localhost:5432/openadms
+# =============================================================================
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: openadms-db
+    environment:
+      POSTGRES_USER: adms
+      POSTGRES_PASSWORD: adms
+      POSTGRES_DB: openadms
+    ports:
+      - "5432:5432"
+    volumes:
+      - openadms-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U adms -d openadms"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  api:
+    build: ./backend
+    container_name: openadms-api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Inside the compose network the database is reachable as "db".
+      DATABASE_URL: postgresql://adms:adms@db:5432/openadms
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
+      ENVIRONMENT: development
+      PORT: 8080
+    ports:
+      - "8080:8080"
+    profiles: ["full"]
+
+volumes:
+  openadms-pgdata:

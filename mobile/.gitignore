@@ -1,0 +1,7 @@
+node_modules
+dist
+.env
+.env.local
+
+# Netlify CLI folder link
+.netlify/

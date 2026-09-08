@@ -1,0 +1,36 @@
+{
+  "name": "openadms",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Open ADMS \u2014 a self-hosted, portable Automated Debris Management System with granular cryptographic sharing between instances.",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "install:adms": "node installer.js",
+    "setup": "node installer.js",
+    "db:migrate": "cd database && ./migrate.sh",
+    "db:setup": "cd database && ./setup.sh --with-demo --test",
+    "db:status": "cd database && ./migrate.sh --status",
+    "dev:api": "cd backend && uvicorn app.main:app --reload --port 8080",
+    "dev:back-office": "cd frontend && npm run dev",
+    "dev:field": "cd mobile && npm run dev",
+    "build": "npm --prefix frontend run build && npm --prefix mobile run build",
+    "test:api": "cd backend && python3 -m pytest",
+    "test:db": "cd database && psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f tests/schema_tests.sql",
+    "deploy:netlify": "node deploy/deploy.mjs netlify",
+    "deploy:plan": "node installer.js --dry-run",
+    "preflight": "node deploy/deploy.mjs --check",
+    "db:up": "docker compose up -d db",
+    "db:down": "docker compose down"
+  },
+  "keywords": [
+    "adms",
+    "debris",
+    "fema",
+    "disaster-recovery",
+    "self-hosted"
+  ],
+  "license": "MIT"
+}

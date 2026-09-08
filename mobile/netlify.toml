@@ -1,0 +1,32 @@
+# Netlify build for the Open ADMS field companion.
+
+[build]
+  base    = "mobile"
+  command = "npm ci && npm run build"
+  publish = "mobile/dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy        = "strict-origin-when-cross-origin"
+    # The field app needs the device camera and GPS.
+    Permissions-Policy     = "geolocation=(self), camera=(self)"
+
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/manifest.webmanifest"
+  [headers.values]
+    Content-Type = "application/manifest+json"

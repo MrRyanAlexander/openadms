@@ -1,0 +1,33 @@
+# Netlify build for the Open ADMS back office.
+# Set VITE_API_URL in Site settings > Environment variables, or let the
+# installer push it in during provisioning.
+
+[build]
+  base    = "frontend"
+  command = "npm ci && npm run build"
+  publish = "frontend/dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# Single page app: every path resolves to the shell.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options        = "SAMEORIGIN"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy        = "strict-origin-when-cross-origin"
+    Permissions-Policy     = "geolocation=(self), camera=(self)"
+
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[context.deploy-preview.environment]
+  VITE_ENVIRONMENT = "preview"
