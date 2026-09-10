@@ -123,6 +123,7 @@ export async function provisionNetlifyRailway({
     const plan = [
       `railway init --name ${prefix} --json`,
       'railway add --database postgres --json',
+      'railway tcp-proxy create --port 5432 --service Postgres   # public access',
       'railway variable list --service Postgres --json      # read DATABASE_PUBLIC_URL',
       './database/setup.sh --with-demo --test               # 13 migrations + 64 assertions',
       'git add --all && git commit -m "chore: initial deploy commit"',
@@ -202,6 +203,50 @@ export async function provisionNetlifyRailway({
     }
     ok('Postgres service created')
 
+    // Railway databases are private by default: no TCP proxy, so no
+    // DATABASE_PUBLIC_URL variable at all. Migrations run from this machine,
+    // which is off Railway's private network, so one has to be created before
+    // there is anything reachable to read. `tcp-proxy` arrived in a later CLI;
+    // on an older one every spelling below fails harmlessly and the operator is
+    // pointed at the dashboard toggle instead.
+    const PG_SERVICE_NAMES = ['Postgres', 'postgres', 'postgresql', 'PostgreSQL']
+
+    const ensurePublicProxy = () => {
+      for (const service of PG_SERVICE_NAMES) {
+        const listed = cli('railway',
+                           ['tcp-proxy', 'list', '--service', service, '--json'],
+                           { cwd: root, quiet: true, timeout: 60000 })
+        // A failure here is either the wrong service name or a CLI with no
+        // tcp-proxy command. Either way, try the next name.
+        if (!listed.ok) continue
+
+        const proxies = parseJson(listed.stdout)
+        if (Array.isArray(proxies) ? proxies.length : Boolean(listed.stdout.trim())) {
+          ok(`Public access already enabled on "${service}"`)
+          return true
+        }
+
+        const created = cli('railway',
+                            ['tcp-proxy', 'create', '--port', '5432', '--service', service],
+                            { cwd: root, timeout: 120000 })
+        if (created.ok) {
+          ok(`Public access enabled on "${service}" (TCP proxy to port 5432)`)
+          return true
+        }
+        // Right service, command understood, create refused. Nothing more to
+        // try automatically; the read loop below will decide whether it matters.
+        return false
+      }
+      return false
+    }
+
+    if (!ensurePublicProxy()) {
+      warn('Could not enable public access on Postgres from the CLI.')
+      note('Railway dashboard: Postgres service, Settings, Networking, Add Public Access.')
+      note('This is only so migrations can run from here. The API keeps using the')
+      note('private URL, and the proxy can be removed again once setup is done.')
+    }
+
     // The public proxy URL is the one that works from this laptop; the API
     // gets the internal one via a Railway reference variable.
     //
@@ -210,6 +255,19 @@ export async function provisionNetlifyRailway({
     // database takes a few seconds to finish provisioning, so the first read
     // often comes back empty. Try both spellings, both output formats, and
     // give it time before giving up and asking.
+    // Migrations run from this laptop, not from inside Railway, so only a URL
+    // this machine can actually dial is any use here. *.railway.internal
+    // resolves only on Railway's private network, and it lands in the variable
+    // list several seconds before the TCP proxy behind DATABASE_PUBLIC_URL is
+    // allocated. Accepting it ends the retry loop on the first pass with an
+    // address psql cannot resolve, which is exactly the failure this guards.
+    const reachable = (value) => {
+      const url = String(value ?? '').trim()
+      if (!/^postgres(ql)?:\/\//i.test(url)) return null
+      if (/\.railway\.internal\b/i.test(url)) return null
+      return url
+    }
+
     const readDatabaseUrl = () => {
       for (const service of ['Postgres', 'postgres', 'postgresql', 'PostgreSQL']) {
         const attempts = [
@@ -225,18 +283,22 @@ export async function provisionNetlifyRailway({
 
           const parsed = parseJson(result.stdout)
           if (parsed && typeof parsed === 'object') {
-            const hit = parsed.DATABASE_PUBLIC_URL || parsed.DATABASE_URL
-            if (hit && /^postgres/i.test(hit)) return hit
+            const hit = reachable(parsed.DATABASE_PUBLIC_URL)
+                     || reachable(parsed.DATABASE_URL)
+            if (hit) return hit
           }
 
           // KV output: KEY=value per line.
-          const kv = result.stdout.match(
-            /^DATABASE_PUBLIC_URL=(.+)$/m) || result.stdout.match(/^DATABASE_URL=(.+)$/m)
-          if (kv && /^postgres/i.test(kv[1].trim())) return kv[1].trim()
+          const kvPublic = result.stdout.match(/^DATABASE_PUBLIC_URL=(.+)$/m)
+          const kvPrivate = result.stdout.match(/^DATABASE_URL=(.+)$/m)
+          const kv = reachable(kvPublic?.[1]) || reachable(kvPrivate?.[1])
+          if (kv) return kv
 
-          // Last resort: any postgres URL in the output at all.
-          const loose = result.stdout.match(/postgres(ql)?:\/\/[^\s"',]+/)
-          if (loose) return loose[0]
+          // Last resort: the first reachable postgres URL anywhere in the output.
+          for (const m of result.stdout.matchAll(/postgres(?:ql)?:\/\/[^\s"',]+/g)) {
+            const hit = reachable(m[0])
+            if (hit) return hit
+          }
         }
       }
       return null
@@ -254,12 +316,21 @@ export async function provisionNetlifyRailway({
     }
 
     if (!found) {
-      warn('Postgres is up but the CLI did not return a connection string.')
+      warn('Postgres is up but the CLI did not return a reachable connection string.')
       note('Railway dashboard, Postgres service, Variables tab, copy DATABASE_PUBLIC_URL.')
+      note('No DATABASE_PUBLIC_URL listed? Settings, Networking, Add Public Access first.')
       found = await ask('DATABASE_PUBLIC_URL', {
         unattended,
-        validate: (v) => (/^postgres(ql)?:\/\//i.test(v)
-          ? null : 'Must be a full postgresql:// connection string.'),
+        validate: (v) => {
+          if (!/^postgres(ql)?:\/\//i.test(v)) {
+            return 'Must be a full postgresql:// connection string.'
+          }
+          if (/\.railway\.internal\b/i.test(v)) {
+            return 'That is the internal URL. This machine cannot reach it; '
+                 + 'use DATABASE_PUBLIC_URL instead.'
+          }
+          return null
+        },
       })
     }
 
