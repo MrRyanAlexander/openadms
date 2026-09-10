@@ -129,6 +129,7 @@ export async function provisionNetlifyRailway({
       'git add --all && git commit -m "chore: initial deploy commit"',
       'git push origin HEAD                                  # push code to GitHub',
       `railway add --service api --repo <owner/repo> --branch main`,
+      'railway environment edit --service-config api source.rootDirectory /backend',
       'railway variable set DATABASE_URL=... JWT_SECRET=... ... --service api --skip-deploys',
       'railway service redeploy --service api --yes          # trigger first build',
       'railway domain --service api --port 8080',
@@ -220,29 +221,60 @@ export async function provisionNetlifyRailway({
         // tcp-proxy command. Either way, try the next name.
         if (!listed.ok) continue
 
-        const proxies = parseJson(listed.stdout)
-        if (Array.isArray(proxies) ? proxies.length : Boolean(listed.stdout.trim())) {
+        // Be strict about what counts as an existing proxy. An empty listing
+        // can come back as [], {}, null, or an English sentence, and treating
+        // any non-empty stdout as "already enabled" skips the create and leaves
+        // the database private, which is the exact failure this guards against.
+        // Only a parsed entry carrying proxy-shaped fields counts.
+        const parsedList = parseJson(listed.stdout)
+        const entries = Array.isArray(parsedList) ? parsedList
+          : (parsedList && typeof parsedList === 'object' ? Object.values(parsedList) : [])
+        const hasProxy = entries.some((entry) => entry && typeof entry === 'object'
+          && (entry.domain || entry.proxyDomain || entry.applicationPort || entry.id))
+
+        if (hasProxy) {
           ok(`Public access already enabled on "${service}"`)
-          return true
+          return service
         }
 
         const created = cli('railway',
                             ['tcp-proxy', 'create', '--port', '5432', '--service', service],
                             { cwd: root, timeout: 120000 })
-        if (created.ok) {
+
+        if (created.ok || /already (exists|enabled|has)/i.test(`${created.stdout}\n${created.stderr}`)) {
           ok(`Public access enabled on "${service}" (TCP proxy to port 5432)`)
-          return true
+          return service
         }
         // Right service, command understood, create refused. Nothing more to
-        // try automatically; the read loop below will decide whether it matters.
-        return false
+        // try automatically.
+        return null
       }
-      return false
+      return null
     }
 
-    if (!ensurePublicProxy()) {
+    const proxyService = ensurePublicProxy()
+
+    if (proxyService) {
+      // Creating the proxy edits the service's networking config, and Railway
+      // holds that as a staged change: the proxy exists on paper but no
+      // DATABASE_PUBLIC_URL appears until the service is deployed again. This
+      // is the "hit Deploy in the dashboard" step, done from here.
+      const applied = tryVariants('railway', [
+        ['redeploy', '--service', proxyService, '--yes'],
+        ['service', 'redeploy', '--service', proxyService, '--yes'],
+        ['redeploy', '--service', proxyService],
+      ], { cwd: root, timeout: 180000 })
+
+      if (applied?.ok) {
+        ok('Postgres redeployed so the proxy goes live')
+      } else {
+        note('Could not redeploy Postgres from the CLI. If the read below comes up')
+        note('empty, press Deploy on the Postgres service in the dashboard.')
+      }
+    } else {
       warn('Could not enable public access on Postgres from the CLI.')
-      note('Railway dashboard: Postgres service, Settings, Networking, Add Public Access.')
+      note('Railway dashboard: Postgres service, Settings, Networking, Add Public')
+      note('Access, then press Deploy. The change is staged until you deploy it.')
       note('This is only so migrations can run from here. The API keeps using the')
       note('private URL, and the proxy can be removed again once setup is done.')
     }
@@ -305,7 +337,7 @@ export async function provisionNetlifyRailway({
     }
 
     let found = null
-    const waits = [0, 3000, 5000, 8000, 12000, 15000]
+    const waits = [0, 3000, 5000, 8000, 12000, 15000, 20000, 20000]
     for (let attempt = 0; attempt < waits.length; attempt += 1) {
       if (waits[attempt]) {
         note(`Waiting for Postgres to finish provisioning (${attempt}/${waits.length - 1})`)
@@ -546,17 +578,41 @@ export async function provisionNetlifyRailway({
       record('apiService', 'api')
     }
 
-    // Set root directory to /backend on every run — idempotent, non-interactive.
-    // --stage skips the interactive confirmation prompt.
-    const setRoot = cli('railway',
-      ['environment', 'edit',
-       '--service-config', 'api', 'source.rootDirectory', '/backend', '--stage'],
-      { cwd: root, timeout: 60000 })
-    if (setRoot.ok) {
+    // Root directory, set on every run so a resumed run repairs drift.
+    //
+    // This must be COMMITTED, not staged. `--stage` means "stage changes
+    // without committing", so passing it left the setting looking applied while
+    // Railway kept building from the repo root, where there is no Dockerfile,
+    // and the API never came up. Same staged-changes trap as the TCP proxy.
+    const setRoot = tryVariants('railway', [
+      ['environment', 'edit', '--service-config', 'api',
+       'source.rootDirectory', '/backend', '--yes'],
+      ['environment', 'edit', '--service-config', 'api',
+       'source.rootDirectory', '/backend'],
+    ], { cwd: root, timeout: 60000 })
+
+    if (setRoot?.ok) {
       ok('Root directory set to /backend')
     } else {
-      warn('Could not set root directory automatically.')
-      note('In the Railway dashboard: api service → Settings → Root Directory → /backend')
+      // Not a warn-and-carry-on: a wrong root directory builds the whole
+      // monorepo and produces an API that never starts, which is a far more
+      // confusing failure an hour later than stopping here is now.
+      warn('Could not set the API root directory from the CLI.')
+      note('/backend is where the Dockerfile lives. Pointed at the repo root,')
+      note('Railway builds the wrong thing and the API never starts.')
+      note('Railway dashboard: api service, Settings, Source, Root Directory,')
+      note('set /backend, then Deploy.')
+
+      if (unattended) {
+        fail('Set the root directory to /backend on the api service, then re-run.')
+        return { ok: false, state }
+      }
+
+      const fixed = await confirm('Continue once it is saved in the dashboard?', true)
+      if (!fixed) {
+        fail('Stopping. Re-run once the root directory is set.')
+        return { ok: false, state }
+      }
     }
 
     // Set every time, not only at creation, so a resumed run repairs anything
