@@ -193,21 +193,39 @@ export function Organization() {
   )
 }
 
+const RECORD_STATES = [
+  ['current', 'Current'],
+  ['inactive', 'Inactive'],
+  ['archived', 'Archived'],
+]
+
 function EntityTable({ config }) {
   const { toast } = useApp()
   const [q, setQ] = useState('')
   const search = useDebounced(q, 320)
+  const [state, setState] = useState('current')
   const [editing, setEditing] = useState(null)
   const [viewing, setViewing] = useState(null)
   const { data, loading, error, reload } = useFetch(
-    () => api.get(config.path, { q: search || undefined, limit: 200 }),
-    [config.path, search])
+    () => api.get(config.path, { q: search || undefined, state, limit: 200 }),
+    [config.path, search, state])
+
+  async function restore(row) {
+    await api.post(`${config.path}/${row.id}/restore`)
+    toast('Restored', row.name || row.unit_number || row.contract_number)
+    reload()
+  }
 
   return (
     <>
       {config.notice === 'contracts' && <ContractRemediation />}
       <div className="card-head" style={{ borderTop: 0 }}>
         <Search value={q} onChange={setQ} placeholder={`Search ${config.label.toLowerCase()}`} />
+        <select className="select" style={{ width: 130 }} value={state}
+                aria-label="Record state"
+                onChange={(e) => setState(e.target.value)}>
+          {RECORD_STATES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
         <div className="spacer" />
         <button className="btn primary sm" onClick={() => setEditing({})}>
           <Icon name="plus" size={13} /> New
@@ -218,7 +236,12 @@ function EntityTable({ config }) {
       {error && <div style={{ padding: 16 }}><ErrorNote error={error} onRetry={reload} /></div>}
 
       {data && !loading && (data.items.length === 0 ? (
-        <Empty icon={config.icon} title={`No ${config.label.toLowerCase()} yet`} />
+        <Empty icon={config.icon}
+               title={state === 'current'
+                 ? `No ${config.label.toLowerCase()} yet`
+                 : `Nothing ${state} here`}>
+          {state !== 'current' && 'Switch the filter back to Current to see live records.'}
+        </Empty>
       ) : (
         <div className="table-wrap">
           <table className="data">
@@ -235,8 +258,13 @@ function EntityTable({ config }) {
                       {typeof accessor === 'function' ? accessor(row) : (row[accessor] ?? '—')}
                     </td>
                   ))}
-                  <td style={{ width: 30, textAlign: 'right' }} className="dim">
-                    <Icon name="chevron" size={13} />
+                  <td style={{ width: 130, textAlign: 'right' }} className="dim"
+                      onClick={(e) => e.stopPropagation()}>
+                    {row.deleted_at
+                      ? <button className="btn sm" onClick={() => restore(row)}>Restore</button>
+                      : row.is_active === false
+                        ? <Badge>Inactive</Badge>
+                        : <Icon name="chevron" size={13} />}
                   </td>
                 </tr>
               ))}
@@ -449,11 +477,8 @@ function EntityForm({ config, record, onClose, onSaved, toast }) {
            onClose={onClose} footer={
              <>
                {!isNew && (
-                 <button className="btn danger" onClick={async () => {
-                   await api.del(`${config.path}/${record.id}`)
-                   toast('Deactivated', record.name || record.unit_number)
-                   onSaved()
-                 }}>Deactivate</button>
+                 <RecordStateActions config={config} record={record}
+                                     toast={toast} onDone={onSaved} />
                )}
                <div className="spacer" />
                <button className="btn" onClick={onClose}>Cancel</button>
@@ -474,6 +499,99 @@ function EntityForm({ config, record, onClose, onSaved, toast }) {
         ))}
       </div>
     </Modal>
+  )
+}
+
+/**
+ * Deactivating and archiving are different acts and used to share one button.
+ *
+ * Deactivate keeps the record on the list and takes it out of every picker,
+ * including the field app's, which is what a closed disposal site needs.
+ * Archive takes it off the list, so it is refused while anything live still
+ * points at it, and the confirmation says exactly what that is.
+ */
+function RecordStateActions({ config, record, toast, onDone }) {
+  const [confirming, setConfirming] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+  const label = record.name || record.unit_number || record.contract_number || 'Record'
+  const deps = useFetch(
+    () => (confirming ? api.get(`${config.path}/${record.id}/dependents`) : null),
+    [confirming, config.path, record.id])
+
+  async function run(fn, done) {
+    setBusy(true); setError(null)
+    try { await fn(); toast(done, label); onDone() }
+    catch (err) { setError(err.message) } finally { setBusy(false) }
+  }
+
+  const blocking = deps.data?.dependents || []
+
+  return (
+    <>
+      {record.deleted_at ? (
+        <button className="btn" disabled={busy}
+                onClick={() => run(() => api.post(`${config.path}/${record.id}/restore`),
+                                   'Restored')}>
+          Restore
+        </button>
+      ) : record.is_active === false ? (
+        <button className="btn" disabled={busy}
+                onClick={() => run(() => api.patch(`${config.path}/${record.id}`,
+                                                   { is_active: true }), 'Reactivated')}>
+          Reactivate
+        </button>
+      ) : (
+        <button className="btn" disabled={busy}
+                onClick={() => run(() => api.patch(`${config.path}/${record.id}`,
+                                                   { is_active: false }), 'Deactivated')}>
+          Deactivate
+        </button>
+      )}
+      {!record.deleted_at && (
+        <button className="btn danger" disabled={busy}
+                onClick={() => setConfirming(true)}>Archive</button>
+      )}
+      {error && <span style={{ color: 'var(--red)', fontSize: 13 }}>{error}</span>}
+
+      {confirming && (
+        <Modal title={`Archive ${label}?`} onClose={() => setConfirming(false)} footer={
+          <>
+            <button className="btn" onClick={() => setConfirming(false)}>Cancel</button>
+            <button className="btn danger" disabled={busy || blocking.length > 0}
+                    onClick={() => run(() => api.del(`${config.path}/${record.id}`),
+                                       'Archived')}>
+              {busy && <span className="spinner" />} Archive
+            </button>
+          </>
+        }>
+          <div className="stack">
+            {deps.loading && <p className="muted">Checking what depends on it.</p>}
+            {blocking.length > 0 ? (
+              <>
+                <p>This record is still in use:</p>
+                <ul style={{ margin: 0, paddingLeft: 18 }}>
+                  {blocking.map((d) => (
+                    <li key={`${d.table}.${d.column}`}>
+                      {fmt.int(d.count)} {d.table.replace(/_/g, ' ')}
+                    </li>
+                  ))}
+                </ul>
+                <p className="muted">
+                  Deactivate it instead. That takes it out of every picker,
+                  including the field app, and leaves the history intact.
+                </p>
+              </>
+            ) : !deps.loading && (
+              <p>
+                Nothing references it, so archiving takes it off this list.
+                It stays under the Archived filter and can be restored.
+              </p>
+            )}
+          </div>
+        </Modal>
+      )}
+    </>
   )
 }
 

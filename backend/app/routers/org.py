@@ -282,7 +282,9 @@ async def _guard_editing_target(actor: dict[str, Any], user_id: uuid.UUID) -> di
 
 
 class UserCreate(BaseModel):
-    username: str = Field(min_length=2, max_length=64)
+    # Optional because nobody should have to invent one. Derived from the name
+    # by the same helper the paste importer uses when it is left out.
+    username: Optional[str] = Field(default=None, min_length=2, max_length=64)
     # The parts are the stored truth. full_name is accepted as a convenience
     # and split, because most real input arrives as one string.
     first_name: Optional[str] = None
@@ -415,6 +417,22 @@ _IMPORT_FIELDS = [
                                      "company name", "vendor"), priority=40),
     tabular.Field_("username", ("username", "user name", "login", "user"), priority=41),
 ]
+
+
+async def _next_monitor_id(conn: Any, prefix: str = "MON-") -> str:
+    """The next free monitor ID in the prefix's sequence.
+
+    Monitor IDs are system-unique keys printed on every ticket, and the
+    walkthrough asked for a suggestion rather than a guess: pasting a crew list
+    with a missing or wrong ID should not be the user's problem to solve."""
+    highest = await conn.fetchval(
+        """
+        SELECT max(substring(monitor_id from '[0-9]+$')::integer)
+          FROM users
+         WHERE monitor_id LIKE $1 || '%'
+           AND substring(monitor_id from '[0-9]+$') IS NOT NULL
+        """, prefix)
+    return f"{prefix}{(highest or 0) + 1:03d}"
 
 
 def _username_for(row: dict[str, Any], taken: set[str]) -> str:
@@ -634,8 +652,17 @@ async def create_user(body: UserCreate, user: CurrentUser,
     payload["must_reset"] = raw is None
     if payload.get("email"):
         payload["email"] = str(payload["email"])
-    sql, args = db.build_insert("users", payload, returning="id")
     async with db.tx(user) as conn:
+        if not payload.get("username"):
+            taken = {r["username"].lower() for r in
+                     await conn.fetch("SELECT username FROM users")}
+            payload["username"] = _username_for(payload, taken)
+        # A monitor writes tickets, and the monitor ID is what is printed on
+        # them. Suggesting the next free one beats asking someone to guess a
+        # key the system owns.
+        if not payload.get("monitor_id") and payload.get("global_role", "monitor") == "monitor":
+            payload["monitor_id"] = await _next_monitor_id(conn)
+        sql, args = db.build_insert("users", payload, returning="id")
         new_id = await conn.fetchval(sql, *args)
         rec = await conn.fetchrow(f"{_USER_SELECT} WHERE u.id = $1", new_id)
     return db.row(rec)

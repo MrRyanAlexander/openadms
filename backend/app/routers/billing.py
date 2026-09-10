@@ -288,14 +288,37 @@ async def update_rule(rule_id: uuid.UUID, body: RuleBody, user: CurrentUser,
     return db.row(rec)
 
 
-@router.delete("/rules/{rule_id}", status_code=204)
+@router.delete("/rules/{rule_id}")
 async def delete_rule(rule_id: uuid.UUID, user: CurrentUser,
                       _: dict = Depends(require_permission("rule.manage"))):
+    """A rule that has priced work is retired, never removed.
+
+    Every transaction names the rule that made it, and a transaction whose rule
+    vanished cannot be explained to an auditor. Retiring stops it matching new
+    tickets and leaves the explanation in place. The walkthrough reported this
+    as "I was only able to retire the rule", because both outcomes returned the
+    same silent 204: the response now says which one happened and why."""
     async with db.tx(user) as conn:
-        await conn.execute(
-            "UPDATE rules SET deleted_at = now(), is_active = false WHERE id = $1",
-            rule_id)
-    return None
+        priced = int(await conn.fetchval(
+            "SELECT count(*) FROM transactions WHERE rule_id = $1", rule_id) or 0)
+        rec = await conn.fetchrow(
+            "UPDATE rules SET deleted_at = now(), is_active = false "
+            "WHERE id = $1 AND deleted_at IS NULL RETURNING name", rule_id)
+        if rec is None:
+            raise not_found("Rule")
+
+    if priced:
+        return {
+            "rule": rec["name"], "outcome": "retired", "transactions": priced,
+            "message": (
+                f"Retired. This rule priced {priced} transaction"
+                f"{'s' if priced != 1 else ''}, so it stops matching new tickets "
+                f"and every transaction it made still names it."),
+        }
+    return {
+        "rule": rec["name"], "outcome": "removed", "transactions": 0,
+        "message": "Removed. This rule never priced anything.",
+    }
 
 
 @router.post("/rules/{rule_id}/test")
