@@ -795,6 +795,174 @@ BEGIN
 END
 $phase1$;
 
+-- =============================================================================
+-- Sprint 2: certification, reprocessing, and the promises that had to survive
+-- both. The claim under test is that repricing became possible without any
+-- loosening of the append-only guarantee.
+-- =============================================================================
+DO $sprint2$
+DECLARE
+    v_project uuid;
+    v_equip   uuid;
+    v_cert    uuid;
+    v_fix     uuid;
+    v_ticket  uuid;
+    v_txn     uuid;
+    v_user    uuid;
+    v_n       integer;
+    v_num     numeric;
+    v_old     numeric;
+    v_new     numeric;
+BEGIN
+    SELECT id INTO v_project FROM projects ORDER BY created_at LIMIT 1;
+    SELECT id INTO v_user FROM users WHERE username = 'manager';
+
+    -- ---------------------------------------------------------------- shape
+    PERFORM pg_temp.check_that('certifications are project scoped',
+        (SELECT count(*) FROM information_schema.columns
+          WHERE table_name = 'project_equipment_certifications'
+            AND column_name IN ('project_id', 'equipment_id', 'applies_from',
+                                'supersedes_id', 'status')) = 5);
+
+    PERFORM pg_temp.check_that('every certified truck has exactly one live row',
+        NOT EXISTS (
+            SELECT 1 FROM project_equipment_certifications
+             WHERE status = 'active'
+             GROUP BY project_id, equipment_id HAVING count(*) > 1));
+
+    PERFORM pg_temp.check_that('demo tickets resolve to a certification',
+        (SELECT count(*) FROM tickets
+          WHERE equipment_id IS NOT NULL AND certification_id IS NULL) = 0,
+        (SELECT count(*)::text FROM tickets
+          WHERE equipment_id IS NOT NULL AND certification_id IS NULL));
+
+    SELECT pec.id, pec.equipment_id INTO v_cert, v_equip
+      FROM project_equipment_certifications pec
+      JOIN tickets t ON t.certification_id = pec.id
+     WHERE pec.status = 'active' AND pec.project_id = v_project
+     GROUP BY pec.id, pec.equipment_id
+     ORDER BY count(*) DESC LIMIT 1;
+
+    -- ------------------------------------------------- the correction chain
+    INSERT INTO project_equipment_certifications (
+        project_id, equipment_id, certified_capacity_cy, method, measured_on,
+        supersedes_id, notes, created_by)
+    SELECT project_id, equipment_id, round(certified_capacity_cy * 0.5, 2),
+           'correction', current_date, id, 'Measurement corrected', v_user
+      FROM project_equipment_certifications WHERE id = v_cert
+    RETURNING id INTO v_fix;
+
+    PERFORM pg_temp.check_that('superseding closes the previous certification',
+        (SELECT status FROM project_equipment_certifications WHERE id = v_cert)
+            = 'superseded');
+
+    PERFORM pg_temp.check_that('a correction inherits applies_from so it reaches back',
+        (SELECT applies_from FROM project_equipment_certifications WHERE id = v_fix)
+        = (SELECT applies_from FROM project_equipment_certifications WHERE id = v_cert));
+
+    PERFORM pg_temp.check_raises('a certification cannot supersede another truck''s',
+        format('INSERT INTO project_equipment_certifications
+                    (project_id, equipment_id, certified_capacity_cy, applies_from,
+                     supersedes_id)
+                SELECT %L, id, 10, current_date, %L FROM equipment
+                 WHERE id <> %L LIMIT 1', v_project, v_fix, v_equip),
+        'same equipment');
+
+    -- ------------------------------------------------------ queue and reprice
+    v_n := adms_queue_reprocess('certification', v_fix, 'Measurement corrected');
+    PERFORM pg_temp.check_that('correcting a certification queues the work it priced',
+        v_n > 0, v_n::text);
+
+    SELECT id INTO v_ticket FROM tickets
+     WHERE needs_reprocess AND NOT is_void
+       AND processing_state = 'processed' LIMIT 1;
+
+    IF v_ticket IS NOT NULL THEN
+        SELECT out_old_total, out_new_total INTO v_old, v_new
+          FROM adms_reprocess_ticket(v_ticket, 'Measurement corrected', v_user);
+
+        PERFORM pg_temp.check_that('repricing a halved capacity halves the money',
+            v_new < v_old, format('%s -> %s', v_old, v_new));
+
+        PERFORM pg_temp.check_that('reprocessing clears the queue flag',
+            (SELECT NOT needs_reprocess FROM tickets WHERE id = v_ticket));
+
+        PERFORM pg_temp.check_that('reprocessing writes an audit artifact with both totals',
+            EXISTS (SELECT 1 FROM audit_events
+                     WHERE entity_id = v_ticket AND action = 'reprocess'
+                       AND changed ? 'old_total' AND changed ? 'new_total'));
+
+        PERFORM pg_temp.check_that('the whole ledger still nets to the live total',
+            (SELECT COALESCE(sum(amount), 0) FROM transactions
+              WHERE ticket_id = v_ticket)
+            = (SELECT COALESCE(sum(amount), 0) FROM transactions
+                WHERE ticket_id = v_ticket AND superseded_at IS NULL
+                  AND NOT is_reversal));
+
+        PERFORM pg_temp.check_that('a reversal is superseded with the row it reverses',
+            NOT EXISTS (
+                SELECT 1 FROM transactions r
+                  JOIN transactions o ON o.id = r.reverses_id
+                 WHERE r.ticket_id = v_ticket
+                   AND o.superseded_at IS NOT NULL
+                   AND r.superseded_at IS NULL));
+    END IF;
+
+    -- ------------------------------------------- the promises that must hold
+    SELECT id INTO v_txn FROM transactions
+     WHERE superseded_at IS NULL AND NOT is_reversal LIMIT 1;
+
+    PERFORM pg_temp.check_raises('a transaction amount is still not editable',
+        format('UPDATE transactions SET amount = 1 WHERE id = %L', v_txn),
+        'append-only');
+
+    PERFORM pg_temp.check_raises('a transaction still cannot be deleted',
+        format('DELETE FROM transactions WHERE id = %L', v_txn),
+        'append-only');
+
+    PERFORM pg_temp.check_raises('a supersede marker cannot be cleared',
+        format('UPDATE transactions SET superseded_at = NULL WHERE id = %L',
+               (SELECT id FROM transactions WHERE superseded_at IS NOT NULL LIMIT 1)),
+        'cannot change again');
+
+    PERFORM pg_temp.check_raises('reprocessing without a reason is refused',
+        format('SELECT adms_reprocess_ticket(%L, '''', NULL)', v_ticket),
+        'reason');
+
+    -- ------------------------------------------------------- the guardrails
+    PERFORM pg_temp.check_that('approved invoices are visible to the reprocess guard',
+        (SELECT count(*) FROM pg_proc WHERE proname = 'adms_ticket_invoice_lock') = 1);
+
+    PERFORM pg_temp.check_that('invoice_integrity reports superseded lines',
+        (SELECT count(*) FROM information_schema.columns
+          WHERE table_name = 'invoice_integrity'
+            AND column_name IN ('needs_review', 'superseded_lines')) = 2);
+
+    -- ------------------------------------------------------------- unvoiding
+    SELECT id INTO v_ticket FROM tickets WHERE is_void LIMIT 1;
+    IF v_ticket IS NOT NULL THEN
+        PERFORM adms_unvoid_ticket(v_ticket, 'Voided in error', v_user);
+        PERFORM pg_temp.check_that('unvoiding restores the ticket and queues repricing',
+            (SELECT NOT is_void AND needs_reprocess FROM tickets WHERE id = v_ticket));
+        PERFORM pg_temp.check_that('unvoiding is on the record',
+            EXISTS (SELECT 1 FROM audit_events
+                     WHERE entity_id = v_ticket AND action = 'unvoid'));
+        PERFORM pg_temp.check_raises('unvoiding a live ticket is refused',
+            format('SELECT adms_unvoid_ticket(%L, ''again'', NULL)', v_ticket),
+            'not void');
+    END IF;
+
+    -- ---------------------------------------------------- stream to type map
+    PERFORM pg_temp.check_that('every debris stream names the ticket types it needs',
+        NOT EXISTS (SELECT 1 FROM debris_types
+                     WHERE is_active AND cardinality(ticket_type_codes) = 0));
+
+    PERFORM pg_temp.check_that('counted tree work is recorded on the unit rate ticket',
+        (SELECT ticket_type_codes FROM debris_types WHERE code = 'HANGER')
+            @> ARRAY['UNIT']);
+END
+$sprint2$;
+
 SELECT
     count(*) FILTER (WHERE ok)     AS passed,
     count(*) FILTER (WHERE NOT ok) AS failed,

@@ -451,6 +451,27 @@ BEGIN
       FROM equipment WHERE contractor_id = v_prime AND equipment_type = 'truck';
 
     -- -----------------------------------------------------------------------
+    -- Certifications, per project
+    --
+    -- Capacity is measured under a declaration, never carried between them, so
+    -- every truck working this project has a row here and that row is what
+    -- prices its loads. equipment.capacity_cy stays as the manufacturer figure
+    -- the first measurement started from.
+    -- -----------------------------------------------------------------------
+    INSERT INTO project_equipment_certifications (
+        project_id, equipment_id, certification_number, certified_capacity_cy,
+        tare_weight_lbs, method, measured_on, applies_from, expires_on,
+        measured_by, measured_by_name, created_by)
+    SELECT v_project, e.id,
+           'CERT-' || e.unit_number,
+           e.capacity_cy, e.tare_weight_lbs, 'physical',
+           v_base - 2, v_base - 2, v_base + 300,
+           v_manager, 'Luis Ortega', v_manager
+      FROM equipment e
+     WHERE e.contractor_id IN (v_prime, v_sub)
+       AND e.capacity_cy IS NOT NULL;
+
+    -- -----------------------------------------------------------------------
     -- Service codes and rates
     -- -----------------------------------------------------------------------
     -- Each code names the contract and the line of it that it came from, so a
@@ -583,7 +604,10 @@ BEGIN
     FOR i IN 1..64 LOOP
         v_day  := v_base + ((i - 1) * 26 / 64);
         v_truck := v_trucks[1 + (i % array_length(v_trucks, 1))];
-        SELECT capacity_cy INTO v_cap FROM equipment WHERE id = v_truck;
+        SELECT certified_capacity_cy INTO v_cap
+          FROM project_equipment_certifications
+         WHERE project_id = v_project AND equipment_id = v_truck
+           AND status = 'active';
         v_call := 40 + ((i * 13) % 61);
         v_lat  := 38.780000 + ((i % 17) * 0.00420);
         v_lon  := -90.340000 - ((i % 23) * 0.00380);
@@ -661,9 +685,13 @@ BEGIN
     -- ---- Haul out tickets -------------------------------------------------
     FOR i IN 1..18 LOOP
         v_day := (v_base + 3) + ((i - 1) * 21 / 18);
-        SELECT id, capacity_cy INTO v_truck, v_cap
-          FROM equipment WHERE contractor_id = v_sub AND equipment_type = 'truck'
-         ORDER BY unit_number OFFSET (i % 6) LIMIT 1;
+        SELECT e.id, pec.certified_capacity_cy INTO v_truck, v_cap
+          FROM equipment e
+          JOIN project_equipment_certifications pec
+            ON pec.equipment_id = e.id AND pec.project_id = v_project
+           AND pec.status = 'active'
+         WHERE e.contractor_id = v_sub AND e.equipment_type = 'truck'
+         ORDER BY e.unit_number OFFSET (i % 6) LIMIT 1;
         v_call := 75 + ((i * 7) % 26);
 
         PERFORM set_config('adms.actor_id', v_monitors[1 + (i % 4)]::text, true);

@@ -27,9 +27,10 @@ CREATE TABLE audit_events (
     request_id    text,
     occurred_at   timestamptz NOT NULL DEFAULT now(),
     CONSTRAINT audit_events_action_valid CHECK (action IN (
-        'create', 'update', 'delete', 'void', 'restore', 'login', 'logout',
-        'login_failed', 'export', 'process', 'reverse', 'share', 'peer_read',
-        'approve', 'reject', 'submit'))
+        'create', 'update', 'delete', 'void', 'unvoid', 'restore', 'archive',
+        'login', 'logout', 'login_failed', 'export', 'process', 'reprocess',
+        'reverse', 'supersede', 'share', 'peer_read',
+        'approve', 'reject', 'submit', 'review'))
 );
 
 CREATE INDEX audit_events_entity_idx  ON audit_events (entity_type, entity_id, occurred_at DESC);
