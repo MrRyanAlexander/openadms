@@ -123,7 +123,8 @@ export async function provisionNetlifyRailway({
     const plan = [
       `railway init --name ${prefix} --json`,
       'railway add --database postgres --json',
-      'railway tcp-proxy create --port 5432 --service Postgres   # public access',
+      'railway tcp-proxy create --port 5432 --service Postgres   # half of Add Public Access',
+      'railway variable set DATABASE_PUBLIC_URL=... --service Postgres  # the other half',
       'railway variable list --service Postgres --json      # read DATABASE_PUBLIC_URL',
       './database/setup.sh --with-demo --test               # 13 migrations + 64 assertions',
       'git add --all && git commit -m "chore: initial deploy commit"',
@@ -254,11 +255,36 @@ export async function provisionNetlifyRailway({
 
     const proxyService = ensurePublicProxy()
 
+    // The dashboard's "Add Public Access" button is TWO changes, not one: the
+    // TCP proxy, and a DATABASE_PUBLIC_URL variable that points at it. Its
+    // confirmation dialog says so, listing "1 Variable, 1 Setting".
+    // `railway tcp-proxy create` performs only the setting half, so the proxy
+    // comes up and the variable is never written. Publish it here, using the
+    // exact reference template the button stages, so a project built by this
+    // script is indistinguishable from one built by hand.
+    const PUBLIC_URL_TEMPLATE = 'postgresql://${{PGUSER}}:${{PGPASSWORD}}'
+      + '@${{RAILWAY_TCP_PROXY_DOMAIN}}:${{RAILWAY_TCP_PROXY_PORT}}/${{PGDATABASE}}'
+
     if (proxyService) {
-      // Creating the proxy edits the service's networking config, and Railway
-      // holds that as a staged change: the proxy exists on paper but no
-      // DATABASE_PUBLIC_URL appears until the service is deployed again. This
-      // is the "hit Deploy in the dashboard" step, done from here.
+      const pair = `DATABASE_PUBLIC_URL=${PUBLIC_URL_TEMPLATE}`
+      const published = tryVariants('railway', [
+        ['variable', 'set', pair, '--service', proxyService, '--skip-deploys'],
+        ['variables', '--set', pair, '--service', proxyService, '--skip-deploys'],
+        ['variables', '--set', pair, '--service', proxyService],
+      ], { cwd: root, timeout: 90000 })
+
+      if (published?.ok) {
+        ok('DATABASE_PUBLIC_URL published on the Postgres service')
+      } else {
+        note('Could not publish DATABASE_PUBLIC_URL. It gets rebuilt from the')
+        note('proxy endpoint below instead, so this is not fatal.')
+      }
+    }
+
+    if (proxyService) {
+      // Both of those are staged changes. The proxy exists on paper and the
+      // variable is unresolved until the service deploys again. This is the
+      // "hit Deploy in the dashboard" step, done from here.
       const applied = tryVariants('railway', [
         ['redeploy', '--service', proxyService, '--yes'],
         ['service', 'redeploy', '--service', proxyService, '--yes'],
@@ -336,6 +362,67 @@ export async function provisionNetlifyRailway({
       return null
     }
 
+    // Safety net for the case above: even with no DATABASE_PUBLIC_URL anywhere,
+    // the proxy listing knows the public host and port, and the private
+    // DATABASE_URL carries the user, password and database name. Swapping the
+    // host of one into the other reconstructs precisely what the dashboard
+    // button would have produced.
+    const readProxyEndpoint = () => {
+      for (const service of PG_SERVICE_NAMES) {
+        const listed = cli('railway',
+                           ['tcp-proxy', 'list', '--service', service, '--json'],
+                           { cwd: root, quiet: true, timeout: 60000 })
+        if (!listed.ok || !listed.stdout) continue
+
+        const parsed = parseJson(listed.stdout)
+        const entries = Array.isArray(parsed) ? parsed
+          : (parsed && typeof parsed === 'object' ? Object.values(parsed) : [])
+        for (const entry of entries) {
+          if (!entry || typeof entry !== 'object') continue
+          const domain = entry.domain || entry.proxyDomain || entry.host
+          const port = entry.proxyPort || entry.publicPort || entry.port
+          if (domain && port) return { domain: String(domain), port: String(port) }
+        }
+
+        // Some builds print "host:port -> 5432" instead of JSON.
+        const loose = listed.stdout.match(/([a-z0-9-]+\.proxy\.rlwy\.net):(\d+)/i)
+        if (loose) return { domain: loose[1], port: loose[2] }
+      }
+      return null
+    }
+
+    const readInternalUrl = () => {
+      for (const service of PG_SERVICE_NAMES) {
+        for (const args of [
+          ['variable', 'list', '--service', service, '--json'],
+          ['variables', '--service', service, '--json'],
+          ['variable', 'list', '--service', service, '--kv'],
+          ['variables', '--service', service, '--kv'],
+        ]) {
+          const result = cli('railway', args, { cwd: root, quiet: true, timeout: 90000 })
+          if (!result.stdout) continue
+          const parsed = parseJson(result.stdout)
+          const dsn = String(
+            (parsed && typeof parsed === 'object' && parsed.DATABASE_URL)
+            || result.stdout.match(/^DATABASE_URL=(.+)$/m)?.[1]
+            || result.stdout.match(/postgres(?:ql)?:\/\/[^\s"',]+/)?.[0]
+            || '').trim()
+          if (/^postgres(ql)?:\/\//i.test(dsn)) return dsn
+        }
+      }
+      return null
+    }
+
+    const derivePublicUrl = () => {
+      const endpoint = readProxyEndpoint()
+      if (!endpoint) return null
+      const internal = readInternalUrl()
+      if (!internal) return null
+      return reachable(internal.replace(
+        /^(postgres(?:ql)?:\/\/(?:[^@/]*@)?)[^/?#]+/i,
+        `$1${endpoint.domain}:${endpoint.port}`))
+    }
+
     let found = null
     const waits = [0, 3000, 5000, 8000, 12000, 15000, 20000, 20000]
     for (let attempt = 0; attempt < waits.length; attempt += 1) {
@@ -345,6 +432,15 @@ export async function provisionNetlifyRailway({
       }
       found = readDatabaseUrl()
       if (found) break
+    }
+
+    if (!found) {
+      found = derivePublicUrl()
+      if (found) {
+        ok('Rebuilt the public URL from the TCP proxy endpoint')
+        note('DATABASE_PUBLIC_URL was not readable, so the proxy host and port')
+        note('were merged into the private connection string instead.')
+      }
     }
 
     if (!found) {
