@@ -1,0 +1,41 @@
+# Build context is the repository root so that Railway needs no Root Directory
+# setting. Everything the API image does not need is excluded here, which keeps
+# the context smaller than the old backend-only one.
+.git/
+.github/
+node_modules/
+**/node_modules/
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/
+.venv/
+
+# Other workspaces
+frontend/
+mobile/
+e2e/
+deploy/
+database/
+docs/
+backup/
+Claude outputs/
+
+# Docs and notes
+*.md
+*.docx
+
+# Secrets and generated state
+.env
+**/.env
+.env.*
+.instance
+.instance-key.pem
+.instance-key.pub
+.deploy-state.json
+.netlify/
+**/.netlify/
+
+# Not needed in the image
+backend/tests/
+.DS_Store
+**/.DS_Store

@@ -99,7 +99,7 @@ asset caching, and the security headers. The field app additionally allows
 ## AWS
 
 S3 + CloudFront for the frontends, App Runner for the API from
-`backend/Dockerfile`, RDS Postgres 16.
+`Dockerfile` (repo root), RDS Postgres 16.
 
 ```bash
 cd deploy/aws

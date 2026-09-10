@@ -102,6 +102,135 @@ function tryVariants(bin, variants, options = {}) {
   return last
 }
 
+/* --------------------------------------------------------------------------
+ * Postgres public access is a manual step, deliberately.
+ *
+ * Railway creates databases private by default. Turning public access on from
+ * the dashboard is one button that stages TWO changes, the TCP proxy and the
+ * DATABASE_PUBLIC_URL variable, and applies them on Deploy. The CLI has no
+ * equivalent: `tcp-proxy create` performs only the proxy half, `variable set`
+ * only the variable half, and the redeploy needed to apply them races the read
+ * that follows. Every automatic combination of those was tried and each failed
+ * in a different way, so this asks the operator to press the button and then
+ * proves the result by opening a real connection rather than believing it.
+ * ------------------------------------------------------------------------ */
+const publicAccessInstructions = () => {
+  say('')
+  note('Railway keeps databases private by default, and its CLI cannot switch')
+  note('public access on reliably. This one step is yours. In the dashboard:')
+  say('')
+  note('  1. Open this project, then the Postgres service')
+  note('  2. Settings, Networking, Add Public Access')
+  note('  3. Press Deploy, and wait for the service to read Online')
+  note('  4. Variables tab, copy DATABASE_PUBLIC_URL')
+  say('')
+  note('Migrations run from this machine, so it needs a public address. The API')
+  note('keeps talking to Postgres privately. You can remove public access when')
+  note('setup has finished.')
+  say('')
+}
+
+/** Turn a psql failure into the next thing worth trying. */
+const DSN_HINTS = [
+  [/closed the connection unexpectedly|terminated abnormally/i,
+   'The service is still redeploying. Wait for it to read Online, then retry.'],
+  [/could not translate host name/i,
+   'That host does not resolve. A .railway.internal address only works inside '
+   + 'Railway: copy DATABASE_PUBLIC_URL, not DATABASE_URL.'],
+  [/nothing is listening|Connection refused/i,
+   'Nothing is listening there. Public access may not be deployed yet.'],
+  [/username or password is wrong|password authentication/i,
+   'Those credentials are stale. Re-copy DATABASE_PUBLIC_URL after the deploy '
+   + 'has finished.'],
+  [/database name does not exist/i,
+   'Right server, wrong database name on the end of the URL.'],
+]
+
+/**
+ * Ask for a connection string and do not accept it until psql agrees. Loops
+ * rather than failing, because the usual reason is simply "not deployed yet".
+ */
+async function askVerifiedDatabaseUrl({ unattended = false, suppliedValue } = {}) {
+  for (let attempt = 1; ; attempt += 1) {
+    const url = await ask('DATABASE_PUBLIC_URL', {
+      unattended,
+      suppliedValue: attempt === 1 ? suppliedValue : undefined,
+      validate: (v) => {
+        if (!/^postgres(ql)?:\/\//i.test(v)) {
+          return 'Must be a full postgresql:// connection string.'
+        }
+        if (/\.railway\.internal\b/i.test(v)) {
+          return 'That is the private URL. This machine cannot reach it; copy '
+               + 'DATABASE_PUBLIC_URL instead.'
+        }
+        return null
+      },
+    })
+
+    if (!url) return null
+
+    cmdEcho("psql <DATABASE_PUBLIC_URL> -tAc 'SELECT version()'")
+    const probe = checkDatabase(url)
+
+    if (probe.ok) {
+      ok(`Connected: ${probe.version}`)
+      return url
+    }
+    if (probe.skipped) {
+      warn('psql is not installed, so the connection was not verified.')
+      note('The migrations need it. Install it before going further.')
+      return url
+    }
+
+    fail(`Could not connect: ${probe.reason}`)
+    const hint = DSN_HINTS.find(([re]) => re.test(`${probe.reason} ${probe.stderr || ''}`))
+    if (hint) note(hint[1])
+
+    if (unattended) return null
+    if (!await confirm('Try again?', true)) return null
+  }
+}
+
+/**
+ * Poll an API health endpoint until it answers 200, or the operator gives up.
+ * Railway builds take a couple of minutes, so this is patient by default and
+ * then hands the decision back rather than looping forever.
+ */
+async function waitForHealth(url, { unattended = false } = {}) {
+  const probe = async () => {
+    try {
+      const response = await fetch(url, { signal: AbortSignal.timeout(10000) })
+      const body = await response.text()
+      return { ok: response.ok, status: response.status, body: body.slice(0, 200) }
+    } catch (error) {
+      return { ok: false, status: 0, body: error.message }
+    }
+  }
+
+  for (let round = 1; ; round += 1) {
+    const waits = [0, 10000, 15000, 15000, 20000, 20000, 30000, 30000, 30000]
+    let last = null
+
+    for (let i = 0; i < waits.length; i += 1) {
+      if (waits[i]) {
+        note(`Waiting for the API to build and answer (${i}/${waits.length - 1})`)
+        await new Promise((resolve) => { setTimeout(resolve, waits[i]) })
+      }
+      last = await probe()
+      if (last.ok) {
+        ok(`API healthy: ${last.body}`)
+        return true
+      }
+    }
+
+    fail(`API not healthy after ${round === 1 ? 'three minutes' : 'another wait'}.`)
+    note(last.status ? `Last response: HTTP ${last.status} ${last.body}`
+                     : `Last error: ${last.body}`)
+    if (unattended) return false
+    if (!await confirm('Keep waiting?', true)) return false
+  }
+}
+
 /* ========================================================================== */
 export async function provisionNetlifyRailway({
   root, config, unattended = false, dryRun = false,
@@ -124,17 +253,17 @@ export async function provisionNetlifyRailway({
     const plan = [
       `railway init --name ${prefix} --json`,
       'railway add --database postgres --json',
-      'railway tcp-proxy create --port 5432 --service Postgres   # half of Add Public Access',
-      'railway variable set DATABASE_PUBLIC_URL=... --service Postgres  # the other half',
-      'railway variable list --service Postgres --json      # read DATABASE_PUBLIC_URL',
-      './database/setup.sh --with-demo --test               # 13 migrations + 64 assertions',
+      '   -> you enable Public Access in the dashboard and paste DATABASE_PUBLIC_URL',
+      '   -> psql verifies it before anything else runs',
+      './database/setup.sh --with-demo --test               # 18 migrations + assertions',
       'git add --all && git commit -m "chore: initial deploy commit"',
       'git push origin HEAD                                  # push code to GitHub',
       `railway add --service api --repo <owner/repo> --branch main`,
-      'railway environment edit --service-config api source.rootDirectory /backend',
+      '   (no Root Directory step: railway.json pins the root Dockerfile)',
       'railway variable set DATABASE_URL=... JWT_SECRET=... ... --service api --skip-deploys',
       'railway service redeploy --service api --yes          # trigger first build',
       'railway domain --service api --port 8080',
+      '   -> GET <api>/health until it answers 200',
       'cd frontend && VITE_API_URL=<api> npm run build',
       'cd mobile   && VITE_API_URL=<api> npm run build',
       `cd frontend && netlify sites:create --name ${names.backOffice}`,
@@ -206,266 +335,13 @@ export async function provisionNetlifyRailway({
     }
     ok('Postgres service created')
 
-    // Railway databases are private by default: no TCP proxy, so no
-    // DATABASE_PUBLIC_URL variable at all. Migrations run from this machine,
-    // which is off Railway's private network, so one has to be created before
-    // there is anything reachable to read. `tcp-proxy` arrived in a later CLI;
-    // on an older one every spelling below fails harmlessly and the operator is
-    // pointed at the dashboard toggle instead.
-    const PG_SERVICE_NAMES = ['Postgres', 'postgres', 'postgresql', 'PostgreSQL']
-
-    const ensurePublicProxy = () => {
-      for (const service of PG_SERVICE_NAMES) {
-        const listed = cli('railway',
-                           ['tcp-proxy', 'list', '--service', service, '--json'],
-                           { cwd: root, quiet: true, timeout: 60000 })
-        // A failure here is either the wrong service name or a CLI with no
-        // tcp-proxy command. Either way, try the next name.
-        if (!listed.ok) continue
-
-        // Be strict about what counts as an existing proxy. An empty listing
-        // can come back as [], {}, null, or an English sentence, and treating
-        // any non-empty stdout as "already enabled" skips the create and leaves
-        // the database private, which is the exact failure this guards against.
-        // Only a parsed entry carrying proxy-shaped fields counts.
-        const parsedList = parseJson(listed.stdout)
-        const entries = Array.isArray(parsedList) ? parsedList
-          : (parsedList && typeof parsedList === 'object' ? Object.values(parsedList) : [])
-        const hasProxy = entries.some((entry) => entry && typeof entry === 'object'
-          && (entry.domain || entry.proxyDomain || entry.applicationPort || entry.id))
-
-        if (hasProxy) {
-          ok(`Public access already enabled on "${service}"`)
-          return service
-        }
-
-        const created = cli('railway',
-                            ['tcp-proxy', 'create', '--port', '5432', '--service', service],
-                            { cwd: root, timeout: 120000 })
-
-        if (created.ok || /already (exists|enabled|has)/i.test(`${created.stdout}\n${created.stderr}`)) {
-          ok(`Public access enabled on "${service}" (TCP proxy to port 5432)`)
-          return service
-        }
-        // Right service, command understood, create refused. Nothing more to
-        // try automatically.
-        return null
-      }
-      return null
+    publicAccessInstructions()
+    databaseUrl = await askVerifiedDatabaseUrl({ unattended })
+    if (!databaseUrl) {
+      fail('No reachable database URL. Nothing further can run.')
+      return { ok: false, state }
     }
-
-    const proxyService = ensurePublicProxy()
-
-    // The dashboard's "Add Public Access" button is TWO changes, not one: the
-    // TCP proxy, and a DATABASE_PUBLIC_URL variable that points at it. Its
-    // confirmation dialog says so, listing "1 Variable, 1 Setting".
-    // `railway tcp-proxy create` performs only the setting half, so the proxy
-    // comes up and the variable is never written. Publish it here, using the
-    // exact reference template the button stages, so a project built by this
-    // script is indistinguishable from one built by hand.
-    const PUBLIC_URL_TEMPLATE = 'postgresql://${{PGUSER}}:${{PGPASSWORD}}'
-      + '@${{RAILWAY_TCP_PROXY_DOMAIN}}:${{RAILWAY_TCP_PROXY_PORT}}/${{PGDATABASE}}'
-
-    if (proxyService) {
-      const pair = `DATABASE_PUBLIC_URL=${PUBLIC_URL_TEMPLATE}`
-      const published = tryVariants('railway', [
-        ['variable', 'set', pair, '--service', proxyService, '--skip-deploys'],
-        ['variables', '--set', pair, '--service', proxyService, '--skip-deploys'],
-        ['variables', '--set', pair, '--service', proxyService],
-      ], { cwd: root, timeout: 90000 })
-
-      if (published?.ok) {
-        ok('DATABASE_PUBLIC_URL published on the Postgres service')
-      } else {
-        note('Could not publish DATABASE_PUBLIC_URL. It gets rebuilt from the')
-        note('proxy endpoint below instead, so this is not fatal.')
-      }
-    }
-
-    if (proxyService) {
-      // Both of those are staged changes. The proxy exists on paper and the
-      // variable is unresolved until the service deploys again. This is the
-      // "hit Deploy in the dashboard" step, done from here.
-      const applied = tryVariants('railway', [
-        ['redeploy', '--service', proxyService, '--yes'],
-        ['service', 'redeploy', '--service', proxyService, '--yes'],
-        ['redeploy', '--service', proxyService],
-      ], { cwd: root, timeout: 180000 })
-
-      if (applied?.ok) {
-        ok('Postgres redeployed so the proxy goes live')
-      } else {
-        note('Could not redeploy Postgres from the CLI. If the read below comes up')
-        note('empty, press Deploy on the Postgres service in the dashboard.')
-      }
-    } else {
-      warn('Could not enable public access on Postgres from the CLI.')
-      note('Railway dashboard: Postgres service, Settings, Networking, Add Public')
-      note('Access, then press Deploy. The change is staged until you deploy it.')
-      note('This is only so migrations can run from here. The API keeps using the')
-      note('private URL, and the proxy can be removed again once setup is done.')
-    }
-
-    // The public proxy URL is the one that works from this laptop; the API
-    // gets the internal one via a Railway reference variable.
-    //
-    // Two things make this fiddly: the variables command was renamed between
-    // CLI 4 (`railway variables`) and 5 (`railway variable list`), and the
-    // database takes a few seconds to finish provisioning, so the first read
-    // often comes back empty. Try both spellings, both output formats, and
-    // give it time before giving up and asking.
-    // Migrations run from this laptop, not from inside Railway, so only a URL
-    // this machine can actually dial is any use here. *.railway.internal
-    // resolves only on Railway's private network, and it lands in the variable
-    // list several seconds before the TCP proxy behind DATABASE_PUBLIC_URL is
-    // allocated. Accepting it ends the retry loop on the first pass with an
-    // address psql cannot resolve, which is exactly the failure this guards.
-    const reachable = (value) => {
-      const url = String(value ?? '').trim()
-      if (!/^postgres(ql)?:\/\//i.test(url)) return null
-      if (/\.railway\.internal\b/i.test(url)) return null
-      return url
-    }
-
-    const readDatabaseUrl = () => {
-      for (const service of ['Postgres', 'postgres', 'postgresql', 'PostgreSQL']) {
-        const attempts = [
-          ['variable', 'list', '--service', service, '--json'],   // CLI 5
-          ['variables', '--service', service, '--json'],          // CLI 4
-          ['variable', 'list', '--service', service, '--kv'],     // CLI 5, KV
-          ['variables', '--service', service, '--kv'],            // CLI 4, KV
-        ]
-
-        for (const args of attempts) {
-          const result = cli('railway', args, { cwd: root, quiet: true, timeout: 90000 })
-          if (!result.stdout) continue
-
-          const parsed = parseJson(result.stdout)
-          if (parsed && typeof parsed === 'object') {
-            const hit = reachable(parsed.DATABASE_PUBLIC_URL)
-                     || reachable(parsed.DATABASE_URL)
-            if (hit) return hit
-          }
-
-          // KV output: KEY=value per line.
-          const kvPublic = result.stdout.match(/^DATABASE_PUBLIC_URL=(.+)$/m)
-          const kvPrivate = result.stdout.match(/^DATABASE_URL=(.+)$/m)
-          const kv = reachable(kvPublic?.[1]) || reachable(kvPrivate?.[1])
-          if (kv) return kv
-
-          // Last resort: the first reachable postgres URL anywhere in the output.
-          for (const m of result.stdout.matchAll(/postgres(?:ql)?:\/\/[^\s"',]+/g)) {
-            const hit = reachable(m[0])
-            if (hit) return hit
-          }
-        }
-      }
-      return null
-    }
-
-    // Safety net for the case above: even with no DATABASE_PUBLIC_URL anywhere,
-    // the proxy listing knows the public host and port, and the private
-    // DATABASE_URL carries the user, password and database name. Swapping the
-    // host of one into the other reconstructs precisely what the dashboard
-    // button would have produced.
-    const readProxyEndpoint = () => {
-      for (const service of PG_SERVICE_NAMES) {
-        const listed = cli('railway',
-                           ['tcp-proxy', 'list', '--service', service, '--json'],
-                           { cwd: root, quiet: true, timeout: 60000 })
-        if (!listed.ok || !listed.stdout) continue
-
-        const parsed = parseJson(listed.stdout)
-        const entries = Array.isArray(parsed) ? parsed
-          : (parsed && typeof parsed === 'object' ? Object.values(parsed) : [])
-        for (const entry of entries) {
-          if (!entry || typeof entry !== 'object') continue
-          const domain = entry.domain || entry.proxyDomain || entry.host
-          const port = entry.proxyPort || entry.publicPort || entry.port
-          if (domain && port) return { domain: String(domain), port: String(port) }
-        }
-
-        // Some builds print "host:port -> 5432" instead of JSON.
-        const loose = listed.stdout.match(/([a-z0-9-]+\.proxy\.rlwy\.net):(\d+)/i)
-        if (loose) return { domain: loose[1], port: loose[2] }
-      }
-      return null
-    }
-
-    const readInternalUrl = () => {
-      for (const service of PG_SERVICE_NAMES) {
-        for (const args of [
-          ['variable', 'list', '--service', service, '--json'],
-          ['variables', '--service', service, '--json'],
-          ['variable', 'list', '--service', service, '--kv'],
-          ['variables', '--service', service, '--kv'],
-        ]) {
-          const result = cli('railway', args, { cwd: root, quiet: true, timeout: 90000 })
-          if (!result.stdout) continue
-          const parsed = parseJson(result.stdout)
-          const dsn = String(
-            (parsed && typeof parsed === 'object' && parsed.DATABASE_URL)
-            || result.stdout.match(/^DATABASE_URL=(.+)$/m)?.[1]
-            || result.stdout.match(/postgres(?:ql)?:\/\/[^\s"',]+/)?.[0]
-            || '').trim()
-          if (/^postgres(ql)?:\/\//i.test(dsn)) return dsn
-        }
-      }
-      return null
-    }
-
-    const derivePublicUrl = () => {
-      const endpoint = readProxyEndpoint()
-      if (!endpoint) return null
-      const internal = readInternalUrl()
-      if (!internal) return null
-      return reachable(internal.replace(
-        /^(postgres(?:ql)?:\/\/(?:[^@/]*@)?)[^/?#]+/i,
-        `$1${endpoint.domain}:${endpoint.port}`))
-    }
-
-    let found = null
-    const waits = [0, 3000, 5000, 8000, 12000, 15000, 20000, 20000]
-    for (let attempt = 0; attempt < waits.length; attempt += 1) {
-      if (waits[attempt]) {
-        note(`Waiting for Postgres to finish provisioning (${attempt}/${waits.length - 1})`)
-        await sleep(waits[attempt])
-      }
-      found = readDatabaseUrl()
-      if (found) break
-    }
-
-    if (!found) {
-      found = derivePublicUrl()
-      if (found) {
-        ok('Rebuilt the public URL from the TCP proxy endpoint')
-        note('DATABASE_PUBLIC_URL was not readable, so the proxy host and port')
-        note('were merged into the private connection string instead.')
-      }
-    }
-
-    if (!found) {
-      warn('Postgres is up but the CLI did not return a reachable connection string.')
-      note('Railway dashboard, Postgres service, Variables tab, copy DATABASE_PUBLIC_URL.')
-      note('No DATABASE_PUBLIC_URL listed? Settings, Networking, Add Public Access first.')
-      found = await ask('DATABASE_PUBLIC_URL', {
-        unattended,
-        validate: (v) => {
-          if (!/^postgres(ql)?:\/\//i.test(v)) {
-            return 'Must be a full postgresql:// connection string.'
-          }
-          if (/\.railway\.internal\b/i.test(v)) {
-            return 'That is the internal URL. This machine cannot reach it; '
-                 + 'use DATABASE_PUBLIC_URL instead.'
-          }
-          return null
-        },
-      })
-    }
-
-    databaseUrl = found
     record('databaseUrl', databaseUrl)
-    ok('Postgres public URL resolved')
   }
 
   /* ------------------------------------------------------------ 3. Schema */
@@ -474,46 +350,26 @@ export async function provisionNetlifyRailway({
   if (state.migrated) {
     ok('Schema already applied')
   } else {
-    // A URL is not a database.
-    //
-    // `railway redeploy` tears the Postgres container down and brings a new one
-    // up. The TCP proxy stays reachable the whole time: DNS resolves, the port
-    // accepts, and for a while there is nothing behind it, which psql reports
-    // as "server closed the connection unexpectedly". Meanwhile the variable
-    // resolves the instant it is published, so the read above can succeed while
-    // the database is still restarting.
-    //
-    // That race was always here. It stayed hidden while the URL took a minute
-    // to appear, or while a human sat pasting one in, because either way the
-    // restart had spent itself by the time psql ran. Publishing the variable
-    // ourselves removed the delay and uncovered it. So probe the connection
-    // rather than trusting the string.
-    const waitForDatabase = async (dsn) => {
-      const waits = [0, 4000, 6000, 8000, 10000, 12000, 15000, 15000, 20000, 20000]
-      let last = null
-      for (let i = 0; i < waits.length; i += 1) {
-        if (waits[i]) await sleep(waits[i])
-        const probe = checkDatabase(dsn)
-        if (probe.ok || probe.skipped) return probe
-        last = probe
-        note(`Waiting for Postgres to accept connections (${i + 1}/${waits.length}): ${probe.reason}`)
-      }
-      return last
-    }
+    // Never assume the saved URL still works. A resumed run can be pointing at
+    // a database that has since been redeployed, torn down, or had public
+    // access removed. Verify, and walk through it again if it has gone stale.
+    const probe = checkDatabase(databaseUrl)
 
-    const ready = await waitForDatabase(databaseUrl)
-
-    if (ready?.ok) {
-      ok(`Connected: ${ready.version}`)
-    } else if (ready?.skipped) {
+    if (probe.ok) {
+      ok('Database reachable')
+    } else if (probe.skipped) {
       warn('psql is not installed, so the connection was not verified.')
-      note('The migrations below need it. Install it if they fail.')
+      note('The migrations below need it.')
     } else {
-      fail('Postgres never accepted a connection on the public proxy.')
-      note(`Last error: ${ready?.reason || 'unknown'}`)
-      note('The service is probably still redeploying. Wait a minute and re-run;')
-      note('the URL is already saved, so it resumes from this step.')
-      return { ok: false, state }
+      warn(`The saved database URL does not connect: ${probe.reason}`)
+      publicAccessInstructions()
+      const fresh = await askVerifiedDatabaseUrl({ unattended })
+      if (!fresh) {
+        fail('Cannot reach the database, so the schema was not applied.')
+        return { ok: false, state }
+      }
+      databaseUrl = fresh
+      record('databaseUrl', databaseUrl)
     }
 
     const withDemo = unattended
@@ -709,7 +565,7 @@ export async function provisionNetlifyRailway({
       if (!serviceOk) {
         fail('Could not create the API service.')
         note('Create a service named "api" in the Railway dashboard, connect it to:')
-        note(`  Repo: ${repoSlug}   Branch: main   Root directory: /backend`)
+        note(`  Repo: ${repoSlug}   Branch: main   Root directory: / (the default)`)
         note('Then re-run this script.')
         return { ok: false, state }
       }
@@ -717,42 +573,11 @@ export async function provisionNetlifyRailway({
       record('apiService', 'api')
     }
 
-    // Root directory, set on every run so a resumed run repairs drift.
-    //
-    // This must be COMMITTED, not staged. `--stage` means "stage changes
-    // without committing", so passing it left the setting looking applied while
-    // Railway kept building from the repo root, where there is no Dockerfile,
-    // and the API never came up. Same staged-changes trap as the TCP proxy.
-    const setRoot = tryVariants('railway', [
-      ['environment', 'edit', '--service-config', 'api',
-       'source.rootDirectory', '/backend', '--yes'],
-      ['environment', 'edit', '--service-config', 'api',
-       'source.rootDirectory', '/backend'],
-    ], { cwd: root, timeout: 60000 })
-
-    if (setRoot?.ok) {
-      ok('Root directory set to /backend')
-    } else {
-      // Not a warn-and-carry-on: a wrong root directory builds the whole
-      // monorepo and produces an API that never starts, which is a far more
-      // confusing failure an hour later than stopping here is now.
-      warn('Could not set the API root directory from the CLI.')
-      note('/backend is where the Dockerfile lives. Pointed at the repo root,')
-      note('Railway builds the wrong thing and the API never starts.')
-      note('Railway dashboard: api service, Settings, Source, Root Directory,')
-      note('set /backend, then Deploy.')
-
-      if (unattended) {
-        fail('Set the root directory to /backend on the api service, then re-run.')
-        return { ok: false, state }
-      }
-
-      const fixed = await confirm('Continue once it is saved in the dashboard?', true)
-      if (!fixed) {
-        fail('Stopping. Re-run once the root directory is set.')
-        return { ok: false, state }
-      }
-    }
+    // No root directory step. The Dockerfile sits at the repository root and
+    // railway.json pins builder + dockerfilePath, so Railway's default is
+    // already correct. Root Directory was a staged, dashboard-only setting that
+    // silently failed to apply; the fix was to stop needing it.
+    ok('Build configured by railway.json (Dockerfile at the repo root)')
 
     // Set every time, not only at creation, so a resumed run repairs anything
     // that drifted. --skip-deploys avoids one redeploy per variable.
@@ -810,6 +635,25 @@ export async function provisionNetlifyRailway({
 
     record('apiUrl', apiUrl)
     ok(`API at ${apiUrl}`)
+
+    // Never assume a deployed service is a working service. Railway reports a
+    // domain the moment it exists, long before the first build finishes, and a
+    // build that produces a broken image still gets one. /health runs a real
+    // query, so a 200 here means the image built, booted, and reached Postgres.
+    const healthUrl = `${apiUrl.replace(/\/api\/v1\/?$/, '')}/health`
+    const apiReady = await waitForHealth(healthUrl, { unattended })
+
+    if (!apiReady) {
+      warn('The API is not answering yet, so the frontends would be built')
+      note('against a URL that does not work.')
+      note(`Check the build log: Railway dashboard, api service, Deployments.`)
+      note(`Health endpoint: ${healthUrl}`)
+      if (unattended) return { ok: false, state }
+      if (!await confirm('Carry on and deploy the frontends anyway?', false)) {
+        fail('Stopping. Re-run once the API is healthy; it resumes from here.')
+        return { ok: false, state }
+      }
+    }
   }
 
   /* -------------------------------------------------- 5. Build the frontends */
