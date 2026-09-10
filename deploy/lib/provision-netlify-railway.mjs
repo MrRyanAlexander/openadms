@@ -23,7 +23,8 @@ import path from 'node:path'
 import process from 'node:process'
 import crypto from 'node:crypto'
 import {
-  ask, c, capture, cmdEcho, confirm, fail, note, ok, run, say, step, warn,
+  ask, c, capture, checkDatabase, cmdEcho, confirm, fail, note, ok, run, say,
+  step, warn,
 } from './cli.mjs'
 
 const STATE_FILE = '.deploy-state.json'
@@ -464,7 +465,7 @@ export async function provisionNetlifyRailway({
 
     databaseUrl = found
     record('databaseUrl', databaseUrl)
-    ok('Postgres ready')
+    ok('Postgres public URL resolved')
   }
 
   /* ------------------------------------------------------------ 3. Schema */
@@ -473,6 +474,48 @@ export async function provisionNetlifyRailway({
   if (state.migrated) {
     ok('Schema already applied')
   } else {
+    // A URL is not a database.
+    //
+    // `railway redeploy` tears the Postgres container down and brings a new one
+    // up. The TCP proxy stays reachable the whole time: DNS resolves, the port
+    // accepts, and for a while there is nothing behind it, which psql reports
+    // as "server closed the connection unexpectedly". Meanwhile the variable
+    // resolves the instant it is published, so the read above can succeed while
+    // the database is still restarting.
+    //
+    // That race was always here. It stayed hidden while the URL took a minute
+    // to appear, or while a human sat pasting one in, because either way the
+    // restart had spent itself by the time psql ran. Publishing the variable
+    // ourselves removed the delay and uncovered it. So probe the connection
+    // rather than trusting the string.
+    const waitForDatabase = async (dsn) => {
+      const waits = [0, 4000, 6000, 8000, 10000, 12000, 15000, 15000, 20000, 20000]
+      let last = null
+      for (let i = 0; i < waits.length; i += 1) {
+        if (waits[i]) await sleep(waits[i])
+        const probe = checkDatabase(dsn)
+        if (probe.ok || probe.skipped) return probe
+        last = probe
+        note(`Waiting for Postgres to accept connections (${i + 1}/${waits.length}): ${probe.reason}`)
+      }
+      return last
+    }
+
+    const ready = await waitForDatabase(databaseUrl)
+
+    if (ready?.ok) {
+      ok(`Connected: ${ready.version}`)
+    } else if (ready?.skipped) {
+      warn('psql is not installed, so the connection was not verified.')
+      note('The migrations below need it. Install it if they fail.')
+    } else {
+      fail('Postgres never accepted a connection on the public proxy.')
+      note(`Last error: ${ready?.reason || 'unknown'}`)
+      note('The service is probably still redeploying. Wait a minute and re-run;')
+      note('the URL is already saved, so it resumes from this step.')
+      return { ok: false, state }
+    }
+
     const withDemo = unattended
       ? Boolean(config.demo)
       : await confirm('Seed the worked demo project as well?', true)
