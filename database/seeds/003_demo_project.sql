@@ -31,6 +31,8 @@ DECLARE
     v_lat numeric; v_lon numeric;
     v_invoice uuid;
     v_line integer := 0;
+    v_doc_permit1 uuid;
+    v_li_veg uuid; v_li_cd uuid; v_li_haul uuid; v_li_stump uuid;
     -- The demo is anchored relative to today so it stays current whenever it
     -- is seeded, rather than aging into an empty dashboard.
     v_base date := current_date - 30;
@@ -59,15 +61,20 @@ BEGIN
     -- -----------------------------------------------------------------------
     -- Staff. Demo password for every account: openadms
     -- -----------------------------------------------------------------------
-    INSERT INTO users (username, email, full_name, monitor_id, global_role, password_hash)
+    -- full_name is generated from the parts, so it is never written directly.
+    -- rcarter and sboyd are temp workers on the same contract paid by a
+    -- staffing firm, which is the case a single full_name column could not
+    -- answer when someone asked to see their billable line items.
+    INSERT INTO users (username, email, first_name, last_name, employee_id,
+                       employer_name, monitor_id, global_role, password_hash)
     VALUES
-      ('admin',    'admin@openadms.local',   'Dana Whitfield',  'ADM-001', 'admin',   crypt('openadms', gen_salt('bf', 10))),
-      ('manager',  'manager@openadms.local', 'Luis Ortega',     'MGR-014', 'manager', crypt('openadms', gen_salt('bf', 10))),
-      ('analyst',  'analyst@openadms.local', 'Priya Raman',     'ANL-007', 'analyst', crypt('openadms', gen_salt('bf', 10))),
-      ('jmiller',  'jmiller@openadms.local', 'Jordan Miller',   'MON-118', 'monitor', crypt('openadms', gen_salt('bf', 10))),
-      ('tnguyen',  'tnguyen@openadms.local', 'Thu Nguyen',      'MON-119', 'monitor', crypt('openadms', gen_salt('bf', 10))),
-      ('rcarter',  'rcarter@openadms.local', 'Ray Carter',      'MON-120', 'monitor', crypt('openadms', gen_salt('bf', 10))),
-      ('sboyd',    'sboyd@openadms.local',   'Sam Boyd',        'MON-121', 'monitor', crypt('openadms', gen_salt('bf', 10)));
+      ('admin',    'admin@openadms.local',   'Dana',   'Whitfield', 'CMG-1001', 'Confluence Monitoring Group', 'ADM-001', 'admin',   crypt('openadms', gen_salt('bf', 10))),
+      ('manager',  'manager@openadms.local', 'Luis',   'Ortega',    'CMG-1014', 'Confluence Monitoring Group', 'MGR-014', 'manager', crypt('openadms', gen_salt('bf', 10))),
+      ('analyst',  'analyst@openadms.local', 'Priya',  'Raman',     'CMG-1007', 'Confluence Monitoring Group', 'ANL-007', 'analyst', crypt('openadms', gen_salt('bf', 10))),
+      ('jmiller',  'jmiller@openadms.local', 'Jordan', 'Miller',    'CMG-1118', 'Confluence Monitoring Group', 'MON-118', 'monitor', crypt('openadms', gen_salt('bf', 10))),
+      ('tnguyen',  'tnguyen@openadms.local', 'Thu',    'Nguyen',    'CMG-1119', 'Confluence Monitoring Group', 'MON-119', 'monitor', crypt('openadms', gen_salt('bf', 10))),
+      ('rcarter',  'rcarter@openadms.local', 'Ray',    'Carter',    'TW-4471',  'Gateway Staffing Partners',   'MON-120', 'monitor', crypt('openadms', gen_salt('bf', 10))),
+      ('sboyd',    'sboyd@openadms.local',   'Sam',    'Boyd',      'TW-4472',  'Gateway Staffing Partners',   'MON-121', 'monitor', crypt('openadms', gen_salt('bf', 10)));
 
     SELECT id INTO v_admin   FROM users WHERE username = 'admin';
     SELECT id INTO v_manager FROM users WHERE username = 'manager';
@@ -92,17 +99,39 @@ BEGIN
 
     INSERT INTO contractors (name, code, contractor_type, primary_contact,
                              contact_email, city, state_code)
-    VALUES ('Gateway Environmental Services', 'GES', 'debris_removal',
+    VALUES ('Gateway Environmental Services', 'GES', 'hauler',
             'Mark Delgado', 'mdelgado@gatewayenv.example', 'Earth City', 'MO')
     RETURNING id INTO v_prime;
 
     INSERT INTO contractors (name, code, contractor_type, primary_contact, city, state_code)
-    VALUES ('Meramec Hauling LLC', 'MER', 'hauling', 'Tina Brandt', 'Fenton', 'MO')
+    VALUES ('Meramec Hauling LLC', 'MER', 'hauler', 'Tina Brandt', 'Fenton', 'MO')
     RETURNING id INTO v_sub;
 
     INSERT INTO contractors (name, code, contractor_type, primary_contact, city, state_code)
     VALUES ('Confluence Monitoring Group', 'CMG', 'monitoring', 'Dana Whitfield', 'Florissant', 'MO')
     RETURNING id INTO v_monitor_firm;
+
+    -- -----------------------------------------------------------------------
+    -- Contacts. A client is not one person: there is someone running the
+    -- project, someone in finance who wants the invoice, and someone who signs
+    -- the permit. The primary row keeps clients.primary_contact populated.
+    -- -----------------------------------------------------------------------
+    INSERT INTO contacts (entity_type, entity_id, first_name, last_name, title,
+                          email, phone, contact_role, is_primary) VALUES
+        ('clients', v_client, 'Angela', 'Brooks', 'Debris Program Manager',
+         'abrooks@stlouiscountymo.gov', '(314) 555-0142', 'primary', true),
+        ('clients', v_client, 'Marcus', 'Feld', 'Accounts Payable Supervisor',
+         'mfeld@stlouiscountymo.gov', '(314) 555-0188', 'finance', false),
+        ('clients', v_client, 'Renee', 'Okafor', 'Solid Waste Permits',
+         'rokafor@stlouiscountymo.gov', '(314) 555-0175', 'permits', false),
+        ('contractors', v_prime, 'Mark', 'Delgado', 'Operations Director',
+         'mdelgado@gatewayenv.example', NULL, 'primary', true),
+        ('contractors', v_prime, 'Sheila', 'Vance', 'Billing Manager',
+         'svance@gatewayenv.example', NULL, 'finance', false),
+        ('contractors', v_sub, 'Tina', 'Brandt', 'Owner',
+         NULL, NULL, 'primary', true),
+        ('contractors', v_monitor_firm, 'Dana', 'Whitfield', 'Data Manager',
+         NULL, NULL, 'primary', true);
 
     -- -----------------------------------------------------------------------
     -- Disaster and contracts
@@ -116,18 +145,20 @@ BEGIN
 
     INSERT INTO contracts (contract_number, title, client_id, contractor_id,
                            contract_type, status, executed_on, effective_from,
-                           effective_to, not_to_exceed)
+                           effective_to, not_to_exceed, document_url)
     VALUES ('STL-DEB-2026-001', 'Countywide Disaster Debris Removal',
             v_client, v_prime, 'unit_price', 'active', (v_base - 6),
-            (v_base - 6), (v_base + 330), 18500000.00)
+            (v_base - 6), (v_base + 330), 18500000.00,
+            'https://stlcounty.sharepoint.com/contracts/STL-DEB-2026-001.pdf')
     RETURNING id INTO v_contract;
 
     INSERT INTO contracts (contract_number, title, client_id, contractor_id,
                            contract_type, status, executed_on, effective_from,
-                           effective_to, not_to_exceed)
+                           effective_to, not_to_exceed, document_url)
     VALUES ('STL-DEB-2026-002', 'Supplemental Haul Out and Final Disposal',
             v_client, v_sub, 'unit_price', 'active', (v_base - 4),
-            (v_base - 4), (v_base + 330), 4200000.00)
+            (v_base - 4), (v_base + 330), 4200000.00,
+            'https://stlcounty.sharepoint.com/contracts/STL-DEB-2026-002.pdf')
     RETURNING id INTO v_contract_sub;
 
     -- -----------------------------------------------------------------------
@@ -167,21 +198,23 @@ BEGIN
     -- Project
     -- -----------------------------------------------------------------------
     INSERT INTO projects (name, project_code, client_id, disaster_id,
-                          primary_contract_id, status, program, description,
+                          primary_contract_id, status, program_code, program,
+                          description,
                           starts_on, timezone, ticket_prefix,
                           owner_instance_key, visibility_flag, created_by)
     VALUES ('St. Louis County ROW Collection', 'STL-2026-ROW', v_client, v_disaster,
-            v_contract, 'active', 'ROW Collection',
+            v_contract, 'active', 'row_collection', 'ROW Collection',
             'Right-of-way vegetative and C&D collection across north county '
             'following the spring tornado outbreak.',
             v_base, 'America/Chicago', 'STL',
             v_instance_key, 'private', v_admin)
     RETURNING id INTO v_project;
 
-    INSERT INTO project_contractors (project_id, contractor_id, role_on_project) VALUES
-        (v_project, v_prime, 'prime'),
-        (v_project, v_sub, 'subcontractor'),
-        (v_project, v_monitor_firm, 'monitoring_firm');
+    INSERT INTO project_contractors (project_id, contractor_id, role_on_project,
+                                     parent_contractor_id) VALUES
+        (v_project, v_prime,        'prime',           NULL),
+        (v_project, v_monitor_firm, 'monitoring_firm', NULL),
+        (v_project, v_sub,          'sub_tier_1',      v_prime);
 
     INSERT INTO project_contracts (project_id, contract_id, is_primary) VALUES
         (v_project, v_contract, true),
@@ -191,6 +224,168 @@ BEGIN
         (v_project, v_dms1, v_base),
         (v_project, v_dms2, (v_base + 2)),
         (v_project, v_fds,  v_base);
+
+    -- -----------------------------------------------------------------------
+    -- The document registry. Links into SharePoint, never files. The contracts
+    -- and one site permit are verified; the Hazelwood permit is still pending
+    -- with the client and has been for twelve days, which is exactly the state
+    -- the alerts feed is built to nag about, and which stops nothing.
+    -- -----------------------------------------------------------------------
+    INSERT INTO documents (entity_type, entity_id, kind_code, title, url, provider,
+                           effective_from, verification_status, verified_by,
+                           verified_at, created_by)
+    VALUES ('contracts', v_contract, 'contract',
+            'STL-DEB-2026-001 executed contract',
+            'https://stlcounty.sharepoint.com/contracts/STL-DEB-2026-001.pdf',
+            'sharepoint', (v_base - 6), 'verified', v_admin, (v_base - 5), v_admin),
+           ('contracts', v_contract_sub, 'contract',
+            'STL-DEB-2026-002 executed contract',
+            'https://stlcounty.sharepoint.com/contracts/STL-DEB-2026-002.pdf',
+            'sharepoint', (v_base - 4), 'verified', v_admin, (v_base - 3), v_admin);
+
+    INSERT INTO documents (entity_type, entity_id, kind_code, title, url, provider,
+                           effective_from, expires_on, verification_status,
+                           verified_by, verified_at, created_by)
+    VALUES ('contractors', v_prime, 'rate_sheet',
+            'Gateway Environmental 2026 rate sheet',
+            'https://gatewayenv.box.com/s/rate-sheet-2026',
+            'box', (v_base - 6), (v_base + 330), 'verified', v_admin, (v_base - 5), v_admin),
+           ('contractors', v_prime, 'certificate_hhw',
+            'Gateway Environmental HHW handling certificate',
+            'https://gatewayenv.box.com/s/hhw-cert-2026',
+            'box', (v_base - 60), (v_base + 45), 'verified', v_admin, (v_base - 5), v_admin),
+           ('contractors', v_sub, 'insurance',
+            'Meramec Hauling certificate of insurance',
+            'https://meramechauling.box.com/s/coi-2026',
+            'box', (v_base - 40), (v_base + 120), 'verified', v_admin, (v_base - 3), v_admin);
+
+    INSERT INTO documents (entity_type, entity_id, project_id, kind_code, title, url,
+                           provider, effective_from, expires_on,
+                           verification_status, verified_by, verified_at, created_by)
+    VALUES ('disposal_sites', v_dms1, v_project, 'permit',
+            'Florissant DMS operating permit MO-SW-2026-118',
+            'https://stlcounty.sharepoint.com/permits/MO-SW-2026-118.pdf',
+            'sharepoint', (v_base - 3), (v_base + 380), 'verified',
+            v_admin, (v_base - 2), v_admin)
+    RETURNING id INTO v_doc_permit1;
+
+    UPDATE project_sites
+       SET permit_status = 'verified',
+           permit_document_id = v_doc_permit1,
+           permit_verified_by = v_admin,
+           permit_verified_on = (v_base - 2)
+     WHERE project_id = v_project AND site_id = v_dms1;
+
+    UPDATE project_sites
+       SET permit_status = 'pending',
+           permit_requested_from = 'client',
+           permit_requested_on = (v_base + 1),
+           permit_notes = 'Requested from the county PM. Chased twice. '
+                          'Operations continue in the meantime.'
+     WHERE project_id = v_project AND site_id = v_dms2;
+
+    UPDATE project_sites
+       SET permit_status = 'not_required',
+           permit_notes = 'Permitted landfill operating under its own state licence.'
+     WHERE project_id = v_project AND site_id = v_fds;
+
+    -- -----------------------------------------------------------------------
+    -- Contract line items. This is what the service codes below were built
+    -- from, and what the review screen accepts and rejects against.
+    -- -----------------------------------------------------------------------
+    INSERT INTO contract_line_items (contract_id, line_number, item_code, description,
+                                     unit_type_code, unit_price, debris_type_code,
+                                     service_category, effective_from, source_page,
+                                     status, reviewed_by, reviewed_at)
+    VALUES (v_contract, 1, '1.01',
+            'Collection and hauling of vegetative debris from the public right of way',
+            'per_cubic_yard', 9.4500, 'VEG', 'collection', (v_base - 6), 4,
+            'accepted', v_admin, (v_base - 5))
+    RETURNING id INTO v_li_veg;
+
+    INSERT INTO contract_line_items (contract_id, line_number, item_code, description,
+                                     unit_type_code, unit_price, debris_type_code,
+                                     service_category, effective_from, source_page,
+                                     status, reviewed_by, reviewed_at)
+    VALUES (v_contract, 2, '1.02',
+            'Collection and hauling of construction and demolition debris',
+            'per_cubic_yard', 11.2000, 'CD', 'collection', (v_base - 6), 4,
+            'accepted', v_admin, (v_base - 5))
+    RETURNING id INTO v_li_cd;
+
+    INSERT INTO contract_line_items (contract_id, line_number, item_code, description,
+                                     unit_type_code, unit_price, debris_type_code,
+                                     service_category, effective_from, source_page,
+                                     status, reviewed_by, reviewed_at)
+    VALUES (v_contract, 3, '2.01',
+            'Stump removal and disposal, 24 inch diameter and above',
+            'per_unit', 185.0000, 'STUMP', 'tree_work', (v_base - 6), 5,
+            'accepted', v_admin, (v_base - 5))
+    RETURNING id INTO v_li_stump;
+
+    INSERT INTO contract_line_items (contract_id, line_number, item_code, description,
+                                     unit_type_code, unit_price, debris_type_code,
+                                     service_category, effective_from, source_page, status)
+    VALUES (v_contract, 4, '2.02',
+            'Hanger removal from the public right of way, per hanger',
+            'per_unit', 78.0000, 'HANGER', 'tree_work', (v_base - 6), 5, 'draft'),
+           (v_contract, 5, '2.03',
+            'Leaning tree removal, 6 inch diameter and above',
+            'per_unit', 142.0000, 'LEANER', 'tree_work', (v_base - 6), 5, 'draft'),
+           (v_contract, 6, '3.01',
+            'Standby time for idle equipment at the direction of the client',
+            'per_equip_hour', 95.0000, NULL, 'standby', (v_base - 6), 6, 'rejected');
+
+    INSERT INTO contract_line_items (contract_id, line_number, item_code, description,
+                                     unit_type_code, unit_price, debris_type_code,
+                                     service_category, effective_from, source_page,
+                                     status, reviewed_by, reviewed_at)
+    VALUES (v_contract_sub, 1, '1.01',
+            'Haul out from a debris management site to final disposal',
+            'per_cubic_yard', 6.7500, 'MIXED', 'haul_out', (v_base - 4), 3,
+            'accepted', v_admin, (v_base - 3))
+    RETURNING id INTO v_li_haul;
+
+    INSERT INTO contract_ingestions (contract_id, status, uploaded_by,
+                                     proposed_count, accepted_count, rejected_count,
+                                     notes)
+    VALUES (v_contract, 'parsing_not_enabled', v_admin, 6, 4, 1,
+            'Line items entered by hand. Extraction from the PDF is a later pass.');
+
+    -- -----------------------------------------------------------------------
+    -- Confirmed scope. Only what the client actually authorised: vegetative,
+    -- C&D and white goods, with tree crews on and stumps off. Nothing else is
+    -- assumed to be in scope.
+    -- -----------------------------------------------------------------------
+    INSERT INTO project_scopes (project_id, debris_type_code, is_enabled,
+                                confirmed_by, confirmed_on, notes) VALUES
+        (v_project, 'VEG',    true,  v_admin, (v_base - 2), 'Curbside vegetative, county wide.'),
+        (v_project, 'CD',     true,  v_admin, (v_base - 2), 'Structural debris from the tornado track.'),
+        (v_project, 'WHITE',  true,  v_admin, (v_base - 2), 'White goods, refrigerant recovery by the prime.'),
+        (v_project, 'HANGER', true,  v_admin, (v_base - 2), 'Tree crews authorised on the ROW.'),
+        (v_project, 'LEANER', true,  v_admin, (v_base - 2), 'Tree crews authorised on the ROW.'),
+        (v_project, 'STUMP',  false, v_admin, (v_base - 2), 'Not authorised. Client is still deciding.');
+
+    -- -----------------------------------------------------------------------
+    -- Debris estimates, one per confirmed stream, in the unit the stream is
+    -- counted in. The C&D number was revised upward after the field survey;
+    -- both rows survive, and the newer as_of_date is the current estimate.
+    -- -----------------------------------------------------------------------
+    INSERT INTO project_estimates (project_id, debris_type_code, estimated_quantity,
+                                   unit_type_code, source, confidence, as_of_date,
+                                   notes, created_by) VALUES
+        (v_project, 'VEG',    420000, 'per_cubic_yard', 'client',       'client_provided', (v_base - 2),
+         'County public works estimate at kickoff.', v_admin),
+        (v_project, 'CD',      95000, 'per_cubic_yard', 'client',       'rough',           (v_base - 2),
+         'Rough number pending the damage assessment.', v_admin),
+        (v_project, 'CD',     138000, 'per_cubic_yard', 'field_survey', 'surveyed',        (v_base + 9),
+         'Revised after the week two windshield survey.', v_manager),
+        (v_project, 'WHITE',    1200, 'per_unit',       'client',       'rough',           (v_base - 2),
+         'Appliance count, rough.', v_admin),
+        (v_project, 'HANGER',   3400, 'per_unit',       'field_survey', 'surveyed',        (v_base + 4),
+         'Counted on the ROW survey.', v_manager),
+        (v_project, 'LEANER',    810, 'per_unit',       'field_survey', 'surveyed',        (v_base + 4),
+         'Counted on the ROW survey.', v_manager);
 
     INSERT INTO project_zones (project_id, zone_code, name) VALUES
         (v_project, '001', 'Florissant North'),
@@ -258,30 +453,51 @@ BEGIN
     -- -----------------------------------------------------------------------
     -- Service codes and rates
     -- -----------------------------------------------------------------------
-    INSERT INTO service_codes (project_id, code, name, contractor_id, fema_category, description)
+    -- Each code names the contract and the line of it that it came from, so a
+    -- transaction can be traced back to the page of the PDF it is billed under.
+    INSERT INTO service_codes (project_id, code, name, contractor_id, fema_category,
+                               description, contract_id, contract_line_item_id)
     VALUES (v_project, 'ROW-VEG', 'ROW Vegetative Collection', v_prime, 'A',
-            'Curbside vegetative debris collected in the right of way and hauled to a DMS.')
+            'Curbside vegetative debris collected in the right of way and hauled to a DMS.',
+            v_contract, v_li_veg)
     RETURNING id INTO v_sc_veg;
 
-    INSERT INTO service_codes (project_id, code, name, contractor_id, fema_category, description)
+    INSERT INTO service_codes (project_id, code, name, contractor_id, fema_category,
+                               description, contract_id, contract_line_item_id)
     VALUES (v_project, 'ROW-CD', 'ROW Construction and Demolition', v_prime, 'A',
-            'Curbside C&D debris collected in the right of way and hauled to a DMS.')
+            'Curbside C&D debris collected in the right of way and hauled to a DMS.',
+            v_contract, v_li_cd)
     RETURNING id INTO v_sc_cd;
 
-    INSERT INTO service_codes (project_id, code, name, contractor_id, fema_category, description)
+    INSERT INTO service_codes (project_id, code, name, contractor_id, fema_category,
+                               description, contract_id, contract_line_item_id)
     VALUES (v_project, 'HAUL-FDS', 'Haul Out to Final Disposal', v_sub, 'A',
-            'Reduced debris hauled from a DMS to the final disposal site.')
+            'Reduced debris hauled from a DMS to the final disposal site.',
+            v_contract_sub, v_li_haul)
     RETURNING id INTO v_sc_haul;
 
-    INSERT INTO service_codes (project_id, code, name, contractor_id, fema_category, description)
+    INSERT INTO service_codes (project_id, code, name, contractor_id, fema_category,
+                               description, contract_id, contract_line_item_id)
     VALUES (v_project, 'STUMP', 'Hazardous Stump Removal', v_prime, 'B',
-            'Per diameter inch removal of hazardous stumps 24 inches and over.')
+            'Per diameter inch removal of hazardous stumps 24 inches and over.',
+            v_contract, v_li_stump)
     RETURNING id INTO v_sc_stump;
 
-    INSERT INTO service_codes (project_id, code, name, contractor_id, fema_category, description)
+    -- No line item: HHW handling was agreed by change order and the modification
+    -- has not been entered yet. A code without a line is allowed and visible.
+    INSERT INTO service_codes (project_id, code, name, contractor_id, fema_category,
+                               description, contract_id)
     VALUES (v_project, 'HHW', 'Household Hazardous Waste Handling', v_prime, 'B',
-            'Segregation, packaging and disposal of household hazardous waste.')
+            'Segregation, packaging and disposal of household hazardous waste.',
+            v_contract)
     RETURNING id INTO v_sc_haz;
+
+    -- The accepted line items now name the code they produced, which closes
+    -- the loop the review screen writes and the parser will later learn from.
+    UPDATE contract_line_items SET accepted_service_code_id = v_sc_veg   WHERE id = v_li_veg;
+    UPDATE contract_line_items SET accepted_service_code_id = v_sc_cd    WHERE id = v_li_cd;
+    UPDATE contract_line_items SET accepted_service_code_id = v_sc_stump WHERE id = v_li_stump;
+    UPDATE contract_line_items SET accepted_service_code_id = v_sc_haul  WHERE id = v_li_haul;
 
     INSERT INTO rates (service_code_id, amount, unit_type, effective_from, notes) VALUES
         (v_sc_veg,   9.4500,  'per_cubic_yard',  v_base, 'Base contract rate'),

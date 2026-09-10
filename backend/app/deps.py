@@ -3,7 +3,7 @@ they are acting inside."""
 from __future__ import annotations
 
 import uuid
-from typing import Annotated, Any, Optional
+from typing import Annotated, Any, Optional, Sequence
 
 from fastapi import Depends, Header, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -53,24 +53,48 @@ CurrentUser = Annotated[dict[str, Any], Depends(current_user)]
 
 
 def require_permission(*codes: str):
-    """Role ranks are cumulative, so one lookup answers the whole question."""
+    """Role ranks are cumulative, so one lookup answers the whole question.
+
+    The refusal names the permission that is missing rather than only the role,
+    because "you need worker.manage" is actionable and "you are a Manager" is
+    not."""
 
     async def _guard(user: CurrentUser) -> dict[str, Any]:
         async with db.read() as conn:
-            allowed = await conn.fetchval(
+            rows = await conn.fetch(
                 """
-                SELECT bool_and(adms_role_has_permission($1, p))
+                SELECT p AS code, adms_role_has_permission($1, p) AS ok
                   FROM unnest($2::text[]) p
                 """,
                 user["global_role"], list(codes),
             )
-        if not allowed:
-            raise forbidden(
-                f"Your role ({user['role_label']}) does not include: {', '.join(codes)}"
-            )
+        missing = [r["code"] for r in rows if not r["ok"]]
+        if missing:
+            raise forbidden(permission_refusal(user, missing))
         return user
 
     return _guard
+
+
+def permission_refusal(user: dict[str, Any], codes: Sequence[str],
+                       action: Optional[str] = None) -> str:
+    """One wording for every refusal, so the message always names the permission."""
+    listed = ", ".join(codes)
+    lead = f"{action} needs" if action else "This action needs"
+    noun = "permission" if len(codes) == 1 else "permissions"
+    return (f"{lead} the {listed} {noun}. "
+            f"Your role ({user['role_label']}) does not include it.")
+
+
+async def has_permission(user: dict[str, Any], code: str) -> bool:
+    """The same question as require_permission, asked inside a handler.
+
+    Some writes are only partly gated: creating a monitor is worker.manage work,
+    while promoting that monitor to admin is user.manage work, and the handler
+    cannot know which it is until it has read the body."""
+    async with db.read() as conn:
+        return bool(await conn.fetchval(
+            "SELECT adms_role_has_permission($1, $2)", user["global_role"], code))
 
 
 async def project_context(

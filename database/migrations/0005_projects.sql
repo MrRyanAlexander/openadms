@@ -75,17 +75,60 @@ CREATE TABLE project_contractors (
     id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     project_id        uuid NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
     contractor_id     uuid NOT NULL REFERENCES contractors (id) ON DELETE RESTRICT,
+    -- Tier lives here and not on the contractor, because a firm can be prime on
+    -- one declaration and a second tier sub on the next.
     role_on_project   text NOT NULL DEFAULT 'prime',
+    parent_contractor_id uuid REFERENCES contractors (id) ON DELETE RESTRICT,
     is_active         boolean NOT NULL DEFAULT true,
     created_at        timestamptz NOT NULL DEFAULT now(),
     updated_at        timestamptz NOT NULL DEFAULT now(),
     UNIQUE (project_id, contractor_id),
     CONSTRAINT project_contractors_role_valid CHECK (role_on_project IN (
-        'prime', 'subcontractor', 'monitoring_firm'))
+        'prime', 'sub_tier_1', 'sub_tier_2', 'monitoring_firm')),
+    CONSTRAINT project_contractors_top_tier_has_no_parent CHECK (
+        role_on_project NOT IN ('prime', 'monitoring_firm')
+        OR parent_contractor_id IS NULL),
+    CONSTRAINT project_contractors_second_tier_has_a_parent CHECK (
+        role_on_project <> 'sub_tier_2' OR parent_contractor_id IS NOT NULL),
+    CONSTRAINT project_contractors_parent_is_not_self CHECK (
+        parent_contractor_id IS NULL OR parent_contractor_id <> contractor_id)
 );
 
 CREATE INDEX project_contractors_project_idx ON project_contractors (project_id);
+CREATE INDEX project_contractors_parent_idx ON project_contractors (parent_contractor_id)
+    WHERE parent_contractor_id IS NOT NULL;
 SELECT adms_attach_touch('project_contractors');
+
+COMMENT ON COLUMN project_contractors.parent_contractor_id IS
+    'The firm this one works under on this project. A second tier sub must '
+    'name one, and that firm must itself be linked to the same project.';
+
+-- A tier chain that points off the project is not a chain. Enforced in a
+-- trigger because the check needs another row of the same table.
+CREATE OR REPLACE FUNCTION adms_check_contractor_parent()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF NEW.parent_contractor_id IS NOT NULL AND NOT EXISTS (
+        SELECT 1 FROM project_contractors pc
+         WHERE pc.project_id = NEW.project_id
+           AND pc.contractor_id = NEW.parent_contractor_id
+           AND pc.is_active
+    ) THEN
+        RAISE EXCEPTION
+            'Contractor % is not linked to project %, so it cannot be the tier '
+            'parent of contractor %',
+            NEW.parent_contractor_id, NEW.project_id, NEW.contractor_id
+            USING ERRCODE = 'foreign_key_violation';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_project_contractors_parent_scope
+    BEFORE INSERT OR UPDATE ON project_contractors
+    FOR EACH ROW EXECUTE FUNCTION adms_check_contractor_parent();
 
 -- ---------------------------------------------------------------------------
 -- Contracts linked to a project. A rule cannot be saved without one of these.

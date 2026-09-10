@@ -16,6 +16,10 @@ export default function Rules() {
   const [editing, setEditing] = useState(null)
   const [testing, setTesting] = useState(null)
   const [removing, setRemoving] = useState(null)
+  // The statement expression and the billed total are useful to the people who
+  // want them and noise to everyone else, so the list leads and the technical
+  // view sits one click away.
+  const [expanded, setExpanded] = useState(null)
 
   const rules = useFetch(() => api.get(`/projects/${projectId}/rules`),
                          [projectId], { skip: !projectId })
@@ -37,13 +41,6 @@ export default function Rules() {
       <Empty icon="folder" title="No project in context" /></div></>)
   }
 
-  const byType = useMemo(() => {
-    const groups = {}
-    for (const r of rules.data?.items || []) {
-      (groups[r.ticket_type_label] ||= []).push(r)
-    }
-    return groups
-  }, [rules.data])
 
   return (
     <>
@@ -78,26 +75,29 @@ export default function Rules() {
             Until a rule exists, completed tickets are recorded but never billed.
           </Empty>
         ) : (
-          <div className="stack" style={{ gap: 18 }}>
-            {Object.entries(byType).map(([typeLabel, items]) => (
-              <div key={typeLabel}>
-                <div className="row" style={{ marginBottom: 9 }}>
-                  <h3 style={{ margin: 0, fontSize: 13.5, fontWeight: 620 }}>{typeLabel}</h3>
-                  <span className="dim" style={{ fontSize: 12.5 }}>
-                    {items.length} rule{items.length === 1 ? '' : 's'}
-                  </span>
-                </div>
-                <div className="stack" style={{ gap: 10 }}>
-                  {items.map((r) => (
-                    <RuleCard key={r.id} rule={r}
-                              onEdit={() => setEditing(hydrate(r))}
-                              onTest={() => setTesting(r)}
-                              onRemove={() => setRemoving(r)} />
+          <Card flush>
+            <div className="table-wrap">
+              <table className="data">
+                <thead><tr>
+                  <th style={{ width: 30 }} />
+                  <th>Rule</th><th>Ticket type</th><th>Service code</th>
+                  <th className="num">Rate</th><th>Contract</th>
+                  <th className="num">Priority</th><th>Active</th>
+                  <th className="num">Matches</th><th className="num">Billed</th><th />
+                </tr></thead>
+                <tbody>
+                  {rules.data.items.map((r) => (
+                    <RuleRow key={r.id} rule={r}
+                             open={expanded === r.id}
+                             onToggle={() => setExpanded(expanded === r.id ? null : r.id)}
+                             onEdit={() => setEditing(hydrate(r))}
+                             onTest={() => setTesting(r)}
+                             onRemove={() => setRemoving(r)} />
                   ))}
-                </div>
-              </div>
-            ))}
-          </div>
+                </tbody>
+              </table>
+            </div>
+          </Card>
         ))}
       </div>
 
@@ -130,21 +130,62 @@ function hydrate(rule) {
   }
 }
 
-function RuleCard({ rule, onEdit, onTest, onRemove }) {
+/**
+ * One rule per row. Someone arriving here is either adding a rule or editing
+ * one, so Edit is on the row rather than inside a detail view. The chevron opens
+ * the statement expression, the dry run and the totals, unchanged, for the
+ * people who came for those.
+ */
+function RuleRow({ rule, open, onToggle, onEdit, onTest, onRemove }) {
   return (
-    <div className="card" style={{ padding: 15 }}>
-      <div className="row" style={{ alignItems: 'flex-start', gap: 12 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div className="row" style={{ gap: 8 }}>
-            <span style={{ fontWeight: 600, fontSize: 14 }}>{rule.name}</span>
-            {!rule.is_active && <Badge>Inactive</Badge>}
-            {rule.stop_on_match && <Badge tone="violet">Stops evaluation</Badge>}
-            <Badge>Priority {rule.priority}</Badge>
+    <>
+      <tr className="clickable" onClick={onToggle}>
+        <td className="dim" style={{ textAlign: 'center' }}>
+          <Icon name={open ? 'chevronDown' : 'chevron'} size={13} />
+        </td>
+        <td style={{ fontWeight: 550 }}>
+          {rule.name}
+          {rule.stop_on_match && <Badge tone="violet">Stops</Badge>}
+        </td>
+        <td className="muted">{rule.ticket_type_label}</td>
+        <td className="mono">{rule.service_code}</td>
+        <td className="num">
+          {rule.rate_amount != null ? fmt.money(rule.rate_amount, 4) : '—'}
+          <span className="dim"> / {rule.unit_abbrev || '—'}</span>
+        </td>
+        <td className="muted truncate" style={{ maxWidth: 150 }}>{rule.contract_number}</td>
+        <td className="num dim">{rule.priority}</td>
+        <td>{rule.is_active ? <Badge tone="green">Active</Badge> : <Badge>Inactive</Badge>}</td>
+        <td className="num">{fmt.int(rule.match_count)}</td>
+        <td className="num">{fmt.money(rule.billed_total)}</td>
+        <td style={{ width: 130, textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
+          <div className="row" style={{ gap: 5, justifyContent: 'flex-end' }}>
+            <button className="btn sm" onClick={onEdit}>Edit</button>
+            <button className="btn ghost icon sm" onClick={onRemove} title="Retire">
+              <Icon name="trash" size={13} />
+            </button>
           </div>
+        </td>
+      </tr>
+      {open && (
+        <tr>
+          <td colSpan={11} style={{ background: 'var(--surface-2)' }}>
+            <RuleDetail rule={rule} onTest={onTest} />
+          </td>
+        </tr>
+      )}
+    </>
+  )
+}
+
+function RuleDetail({ rule, onTest }) {
+  return (
+    <div className="row" style={{ alignItems: 'flex-start', gap: 12, padding: '4px 2px' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
           {rule.description && (
-            <div className="muted" style={{ fontSize: 12.5, marginTop: 4 }}>{rule.description}</div>
+            <div className="muted" style={{ fontSize: 12.5, marginBottom: 8 }}>{rule.description}</div>
           )}
-          <div className="rule-summary" style={{ marginTop: 10 }}>
+          <div className="rule-summary">
             {rule.statements.length === 0 ? (
               <div><span className="op">always</span> matches this ticket type</div>
             ) : rule.statements.map((s, i) => (
@@ -168,20 +209,15 @@ function RuleCard({ rule, onEdit, onTest, onRemove }) {
           </div>
         </div>
 
-        <div style={{ textAlign: 'right', flex: '0 0 150px' }}>
+        <div style={{ textAlign: 'right', flex: '0 0 160px' }}>
           <div style={{ fontSize: 17, fontWeight: 640 }}>{fmt.money(rule.billed_total)}</div>
           <div className="dim" style={{ fontSize: 12 }}>
             {fmt.int(rule.match_count)} ticket{rule.match_count === 1 ? '' : 's'} matched
           </div>
-          <div className="row" style={{ gap: 6, marginTop: 10, justifyContent: 'flex-end' }}>
-            <button className="btn sm" onClick={onTest}>Dry run</button>
-            <button className="btn sm" onClick={onEdit}>Edit</button>
-            <button className="btn sm ghost icon" onClick={onRemove} title="Retire">
-              <Icon name="trash" size={13} />
-            </button>
-          </div>
+          <button className="btn sm" style={{ marginTop: 10 }} onClick={onTest}>
+            Dry run
+          </button>
         </div>
-      </div>
     </div>
   )
 }

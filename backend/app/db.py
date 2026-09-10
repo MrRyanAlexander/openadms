@@ -73,6 +73,10 @@ async def _load_column_types(p: asyncpg.Pool) -> None:
         _COLUMN_TYPES.setdefault(r["table_name"], {})[r["column_name"]] = r["data_type"]
 
 
+def has_column(table: str, column: str) -> bool:
+    return column in _COLUMN_TYPES.get(table, {})
+
+
 def _cast_for(table: str, column: str) -> Optional[str]:
     return _CASTS.get(_COLUMN_TYPES.get(table, {}).get(column, ""))
 
@@ -162,6 +166,14 @@ _CONSTRAINT_HINTS = {
     "invoice_lines_transaction_once": "That transaction is already on an invoice.",
     "transactions_one_per_ticket_rule": "That ticket already has a transaction for this rule.",
     "instance_only_one": "This deployment already has an instance identity.",
+    "contract_line_items_number_key":
+        "That line number is already used on this contract.",
+    "service_codes_project_code_key":
+        "That service code already exists on this project.",
+    "contacts_one_primary_per_entity":
+        "There is already a primary contact here. Change that one first.",
+    "users_employer_employee_id_key":
+        "That employee ID is already used by this employer.",
 }
 
 

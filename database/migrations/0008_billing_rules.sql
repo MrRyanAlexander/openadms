@@ -21,10 +21,13 @@ CREATE TABLE service_codes (
     metadata        jsonb NOT NULL DEFAULT '{}'::jsonb,
     created_at      timestamptz NOT NULL DEFAULT now(),
     updated_at      timestamptz NOT NULL DEFAULT now(),
-    deleted_at      timestamptz,
-    UNIQUE (project_id, code)
+    deleted_at      timestamptz
 );
 
+-- Partial, so a retired code's name can be reused. A plain unique constraint
+-- would let a soft-deleted row hold a code hostage forever.
+CREATE UNIQUE INDEX service_codes_project_code_key
+    ON service_codes (project_id, lower(code)) WHERE deleted_at IS NULL;
 CREATE INDEX service_codes_project_idx ON service_codes (project_id);
 CREATE INDEX service_codes_contractor_idx ON service_codes (contractor_id);
 SELECT adms_attach_touch('service_codes');

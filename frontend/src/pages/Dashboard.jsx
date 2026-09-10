@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { api, fmt } from '../lib/api'
 import { useApp, useFetch } from '../lib/store'
 import { PageHeader } from '../components/Shell'
+import { AlertsPanel } from '../components/setup-bits'
 import {
   AreaChart, BarList, Badge, Card, Donut, Empty, ErrorNote, Icon, Loading, Stat,
 } from '../components/ui'
@@ -89,6 +90,13 @@ export default function Dashboard() {
                     tone={s.awaiting_processing > 0 ? 'amber' : undefined}
                     detail={s.awaiting_processing ? 'Completed but not yet billed' : 'Queue is clear'} />
             </div>
+
+            {/* Nagging, never blocking. Nobody should have to dig through email
+                to find out which permit or certificate is outstanding. */}
+            <Card title="Outstanding"
+                  sub="Permits, documents and certifications that need chasing. None of this stops field work.">
+              <AlertsPanel projectId={projectId} limit={6} />
+            </Card>
 
             <div className="grid" style={{ gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr)' }}>
               <Card title="Volume and billing"

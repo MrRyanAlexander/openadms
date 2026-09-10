@@ -1,0 +1,368 @@
+/**
+ * Walks the back office the way a data manager would, and fails loudly on any
+ * console error, page error, 5xx or missing screen. A build passing proves the
+ * code parses; this proves it runs.
+ *
+ * Needs the API on 8080 against a seeded database, and the built front end
+ * served on 4173:
+ *
+ *   npm run dev:api
+ *   cd frontend && VITE_API_URL=http://127.0.0.1:8080/api/v1 npm run build \
+ *     && npx vite preview --port 4173
+ *   node e2e/uiwalk.mjs [--shots]
+ *
+ * UI_BASE overrides the front end URL. PW_CHROMIUM points at a Chromium binary
+ * where Playwright's own download is not available.
+ */
+import { chromium } from 'playwright'
+import { mkdirSync } from 'node:fs'
+
+const BASE = process.env.UI_BASE || 'http://127.0.0.1:4173'
+const SHOTS = process.argv.includes('--shots')
+const OUT = process.env.UI_SHOTS || 'e2e/shots'
+if (SHOTS) mkdirSync(OUT, { recursive: true })
+
+const problems = []
+const seen = []
+
+function watch(page) {
+  page.on('console', (m) => {
+    if (m.type() === 'error') {
+      const text = m.text()
+      // React dev warnings are not what this is looking for.
+      if (/Failed to load resource/.test(text)) return
+      problems.push(`console: ${text}`)
+    }
+  })
+  page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`))
+  page.on('response', (r) => {
+    if (r.status() >= 500) problems.push(`${r.status()} ${r.url()}`)
+  })
+}
+
+/**
+ * Click a nav item and wait for the screen itself, not merely for a table. The
+ * previous screen's table is still in the DOM the instant after a click, and
+ * reading it produces a confident wrong answer.
+ */
+async function go(page, nav, heading) {
+  await page.click(`.nav-item:has-text("${nav}")`)
+  await page.locator('.topbar h1', { hasText: heading }).first()
+    .waitFor({ timeout: 15000 })
+  await page.waitForTimeout(350)
+}
+
+async function step(page, name, fn) {
+  const before = problems.length
+  try {
+    await fn()
+    await page.waitForTimeout(450)
+  } catch (e) {
+    problems.push(`${name}: ${e.message.split('\n')[0]}`)
+    // A failed step often leaves a modal or drawer open, and its backdrop eats
+    // every later click. Clear it so one failure reports one failure.
+    await page.keyboard.press('Escape').catch(() => {})
+    await page.waitForTimeout(300)
+  }
+  if (SHOTS) {
+    await page.screenshot({ path: `${OUT}/${name.replace(/[^a-z0-9]+/gi, '-')}.png`,
+                            fullPage: false }).catch(() => {})
+  }
+  const added = problems.length - before
+  seen.push(`${added === 0 ? 'ok  ' : 'FAIL'} ${name}${added ? ` (${added} problem)` : ''}`)
+}
+
+const ARGS = ['--no-sandbox', '--disable-background-networking',
+              '--disable-component-update', '--disable-sync', '--no-first-run',
+              '--disable-features=Translate,OptimizationHints,MediaRouter']
+const browser = await chromium.launch(
+  process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM, args: ARGS }
+                          : { args: ARGS })
+const page = await browser.newPage({ viewport: { width: 1440, height: 900 } })
+watch(page)
+
+await step(page, 'login', async () => {
+  await page.goto(BASE, { waitUntil: 'networkidle' })
+  await page.fill('input[name="username"], input:not([type="password"])', 'admin')
+  await page.fill('input[type="password"]', 'openadms')
+  await page.click('button[type="submit"], .btn.primary')
+  await page.waitForSelector('.sidebar', { timeout: 15000 })
+})
+
+await step(page, 'projects-list', async () => {
+  await page.waitForSelector('table.data tbody tr', { timeout: 10000 })
+  const rows = await page.locator('table.data tbody tr').count()
+  if (rows < 1) throw new Error('no projects listed')
+  const stats = await page.locator('.card.stat').count()
+  if (stats < 4) throw new Error('portfolio summary tiles missing')
+})
+
+await step(page, 'projects-sort-and-filter', async () => {
+  await page.click('th:has-text("Billed")')
+  await page.waitForTimeout(400)
+  await page.selectOption('.card-head select >> nth=0', 'active')
+  await page.waitForTimeout(400)
+})
+
+await step(page, 'portfolio-contracts', async () => {
+  await go(page, 'Contracts', 'Contracts')
+  await page.waitForSelector('table.data tbody tr', { timeout: 10000 })
+})
+
+await step(page, 'contract-detail-drawer', async () => {
+  await page.click('table.data tbody tr >> nth=0')
+  await page.waitForSelector('.drawer', { timeout: 10000 })
+  // The drawer renders a loading state first, so wait for the content itself
+  // rather than for the element.
+  await page.locator('.drawer').getByText(/not to exceed/i)
+    .first().waitFor({ timeout: 15000 })
+  const text = await page.locator('.drawer').innerText()
+  if (!/billed across all projects/i.test(text)) {
+    throw new Error('NTE burn across projects is missing from the drawer')
+  }
+  await page.keyboard.press('Escape')
+  await page.waitForSelector('.drawer', { state: 'detached', timeout: 10000 })
+})
+
+await step(page, 'portfolio-workers', async () => {
+  await go(page, 'Workers', 'Workers')
+  await page.waitForSelector('table.data tbody tr', { timeout: 10000 })
+  // Table headings are uppercased by CSS, so compare on lowercase.
+  const head = (await page.locator('table.data thead').innerText()).toLowerCase()
+  for (const col of ['employee id', 'employer', 'last login']) {
+    if (!head.includes(col)) throw new Error(`the workers list is missing ${col}`)
+  }
+})
+
+await step(page, 'worker-paste-import', async () => {
+  const stamp = Date.now().toString().slice(-5)
+  await page.click('button:has-text("Paste a crew list")')
+  await page.waitForSelector('textarea', { timeout: 10000 })
+  await page.fill('textarea',
+    `Name\tEmployee ID\tEmail\n` +
+    `Walk Carter${stamp}\tW${stamp}1\twc${stamp}@example.com\n` +
+    `de la Cruz, Ana${stamp}\tW${stamp}2\tac${stamp}@example.com\n` +
+    `\tW${stamp}3\tnobody${stamp}@example.com`)
+  await page.click('button:has-text("Read it")')
+  // The workers table behind the modal is also table.data, so wait for the
+  // preview's own summary rather than for any row.
+  await page.locator('.modal').getByText(/^Read \d+ rows?/).first()
+    .waitFor({ timeout: 20000 })
+
+  const body = await page.locator('.modal').innerText()
+  if (!/Read 3 rows/.test(body)) throw new Error('the preview did not read three rows')
+  if (!/no name in this row/.test(body)) {
+    throw new Error('the unusable row is not explained in plain language')
+  }
+  // The bad row stays editable rather than being silently dropped.
+  const firstCell = page.locator('.modal table.data tbody tr').nth(2).locator('input').first()
+  await firstCell.fill(`Fixed${stamp}`)
+  await page.waitForTimeout(300)
+  const after = await page.locator('.modal').innerText()
+  if (!/Import 3 workers/.test(after)) {
+    throw new Error('correcting the row did not bring it back into the import')
+  }
+  await page.click('button:has-text("Import 3 workers")')
+  await page.waitForSelector('.modal', { state: 'detached', timeout: 15000 })
+
+  await page.fill('.search input', `W${stamp}`)
+  await page.waitForTimeout(900)
+  const rows = await page.locator('table.data tbody tr').count()
+  if (rows !== 3) throw new Error(`expected the three imported workers, saw ${rows}`)
+})
+
+await step(page, 'worker-bulk-password', async () => {
+  // Only ever the rows this walk created. Selecting all of an unfiltered list
+  // would set a password on the demo accounts, which is exactly the mistake
+  // this guard exists to make impossible.
+  const rows = await page.locator('table.data tbody tr').count()
+  if (rows !== 3 || !(await page.locator('.search input').inputValue())) {
+    throw new Error('refusing to bulk-set a password on an unfiltered list')
+  }
+  await page.click('table.data thead input[type="checkbox"]')
+  await page.click('button:has-text("Set password for")')
+  await page.waitForSelector('.modal', { timeout: 10000 })
+  await page.fill('.modal input', 'walkthrough-temp-1')
+  await page.click('.modal button:has-text("Set it")')
+  await page.waitForSelector('.modal', { state: 'detached', timeout: 10000 })
+})
+
+await step(page, 'enter-project', async () => {
+  await go(page, 'Projects', 'Projects')
+  await page.waitForSelector('table.data tbody tr')
+  await page.click('table.data tbody tr >> nth=0')
+  await page.waitForSelector('.nav-item:has-text("Dashboard")', { timeout: 10000 })
+})
+
+for (const [label, nav] of [
+  ['dashboard', 'Dashboard'],
+  ['tickets', 'Tickets'],
+  ['project-setup', 'Project Setup'],
+  ['rules', 'Rules'],
+  ['service-codes', 'Service Codes'],
+  ['transactions', 'Transactions'],
+  ['invoices', 'Invoices'],
+]) {
+  await step(page, label, async () => {
+    await go(page, nav, nav === 'Dashboard' ? 'Dashboard' : nav)
+    const body = await page.locator('.main').innerText()
+    if (/No project in context/i.test(body)) throw new Error('lost project context')
+  })
+}
+
+await step(page, 'dashboard-alerts-tile', async () => {
+  await go(page, 'Dashboard', 'Dashboard')
+  await page.waitForSelector('.card:has-text("Outstanding")', { timeout: 10000 })
+  const tile = await page.locator('.card:has-text("Outstanding")').first().innerText()
+  if (!/permit/i.test(tile)) throw new Error('the pending permit is not on the dashboard')
+  if (!/does not stop|stops field work/i.test(tile)) {
+    throw new Error('the tile should say plainly that it blocks nothing')
+  }
+})
+
+await step(page, 'rules-read-as-a-list', async () => {
+  await go(page, 'Rules', 'Rules')
+  await page.waitForSelector('table.data tbody tr', { timeout: 10000 })
+  const head = (await page.locator('table.data thead').innerText()).toLowerCase()
+  for (const col of ['service code', 'rate', 'contract', 'priority', 'matches']) {
+    if (!head.includes(col)) throw new Error(`the rules list is missing ${col}`)
+  }
+  const before = await page.locator('.main').innerText()
+  if (/then bill/.test(before)) throw new Error('the statement view is showing by default')
+  await page.click('table.data tbody tr >> nth=0')
+  await page.waitForTimeout(500)
+  const after = await page.locator('.main').innerText()
+  if (!/then bill/.test(after)) throw new Error('the statement view did not open')
+  if (!/Dry run/.test(after)) throw new Error('the dry run is not in the expansion')
+})
+
+await step(page, 'service-codes-read-as-a-list', async () => {
+  await go(page, 'Service Codes', 'Service Codes')
+  await page.waitForSelector('table.data tbody tr', { timeout: 10000 })
+  await page.click('table.data tbody tr >> nth=0')
+  await page.waitForTimeout(500)
+  const body = await page.locator('.main').innerText()
+  if (!/rate history/i.test(body)) throw new Error('rate history is not in the expansion')
+})
+
+await step(page, 'documents-on-a-record', async () => {
+  await go(page, 'Project Setup', 'Project Setup')
+  await page.waitForSelector('.tabs', { timeout: 10000 })
+  await page.click('.tabs button:has-text("Documents")')
+  await page.waitForTimeout(700)
+  const body = await page.locator('.main').innerText()
+  if (!/Add document link/.test(body)) throw new Error('the documents panel is missing')
+})
+
+await step(page, 'contract-intake', async () => {
+  await go(page, 'Contract Intake', 'Contract Intake')
+  const body = await page.locator('.main').innerText()
+  if (!/later pass/i.test(body)) {
+    throw new Error('the screen has to be honest that nothing reads the PDF yet')
+  }
+  await page.click('button:has-text("Register a PDF")')
+  await page.waitForSelector('.modal', { timeout: 10000 })
+  const stamp = Date.now().toString().slice(-6)
+  await page.fill('.modal input >> nth=0', `Walk contract ${stamp}`)
+  await page.fill('.modal input >> nth=1', `https://example.sharepoint.com/walk-${stamp}.pdf`)
+  await page.click('.modal button:has-text("Register and stage")')
+  await page.waitForSelector('.modal', { state: 'detached', timeout: 15000 })
+  const after = await page.locator('.main').innerText()
+  if (!/Not read yet/i.test(after)) throw new Error('the staged document is not marked')
+})
+
+await step(page, 'contract-intake-seed-and-review', async () => {
+  await page.click('button:has-text("Enter the lines") >> nth=0')
+  await page.waitForSelector('.modal table.data', { timeout: 10000 })
+  // A line number is unique per contract, so the walk has to pick a fresh one
+  // rather than the same one every run.
+  const line = 900 + (Date.now() % 90)
+  await page.fill('.modal table.data tbody tr >> nth=0 >> input >> nth=2',
+                  `Walkthrough proposed line ${line}`)
+  await page.fill('.modal table.data tbody tr >> nth=0 >> input >> nth=0', String(line))
+  await page.click('.modal button:has-text("Add for review")')
+  await page.waitForSelector('.modal', { state: 'detached', timeout: 15000 })
+  // The card reloads its staged documents after the write, so wait for the
+  // state to change rather than for the modal to go.
+  await page.locator('.badge', { hasText: /Proposals ready/i }).first()
+    .waitFor({ timeout: 15000 })
+})
+
+await step(page, 'closeout-manifest-and-package', async () => {
+  await go(page, 'Closeout', 'Closeout')
+  await page.waitForSelector('table.data tbody tr', { timeout: 15000 })
+  const body = await page.locator('.main').innerText()
+  if (!/manifest/i.test(body)) throw new Error('the manifest is missing')
+  if (!/naming convention/i.test(body)) throw new Error('the naming template is missing')
+
+  const rows = await page.locator('table.data tbody tr').count()
+  if (rows < 4) throw new Error(`the manifest lists only ${rows} documents`)
+
+  const download = page.waitForEvent('download', { timeout: 30000 })
+  await page.click('button:has-text("Build the package")')
+  const file = await download
+  if (!/^STL-2026-ROW-closeout-\d{4}-\d{2}-\d{2}\.zip$/.test(file.suggestedFilename())) {
+    throw new Error(`unexpected download: ${file.suggestedFilename()}`)
+  }
+})
+
+await step(page, 'new-project-wizard', async () => {
+  await page.click('button:has-text("All projects")')
+  await page.waitForSelector('table.data tbody tr', { timeout: 10000 })
+  await page.click('button:has-text("New project")')
+  await page.waitForSelector('input[placeholder*="St. Louis"]', { timeout: 10000 })
+  const stamp = Date.now().toString().slice(-6)
+  await page.fill('input[placeholder*="St. Louis"]', `Walkthrough Project ${stamp}`)
+  await page.fill('input[placeholder="STL-2026-ROW"]', `WALK-${stamp}`)
+  await page.selectOption('.field:has-text("Client") select', { index: 1 })
+  await page.click('button:has-text("Create and continue")')
+  await page.waitForSelector('.card:has-text("Debris streams")', { timeout: 15000 })
+})
+
+await step(page, 'wizard-scope-and-estimate', async () => {
+  await page.click('.card button:has-text("Vegetative")')
+  await page.waitForTimeout(600)
+  await page.click('button:has-text("Next: Estimate")')
+  await page.waitForTimeout(700)
+  await page.click('button:has-text("1,000")')
+  await page.click('button:has-text("Record")')
+  await page.waitForTimeout(700)
+  const body = await page.locator('.main').innerText()
+  if (!/Now: 1,000/.test(body)) throw new Error('the estimate did not stick')
+})
+
+await step(page, 'wizard-through-to-review', async () => {
+  for (const label of ['Contractors', 'Contracts', 'Disposal sites', 'Ticket types',
+                       'Service codes', 'Workers', 'Review']) {
+    await page.click(`button:has-text("Next: ${label}")`)
+    await page.waitForTimeout(600)
+  }
+  const body = await page.locator('.main').innerText()
+  if (!/Field work is blocked until you add/.test(body)) {
+    throw new Error('the review step is not reading readiness from the database')
+  }
+})
+
+await step(page, 'wizard-resumes-on-setup', async () => {
+  await page.click('button:has-text("Open the project")')
+  await page.waitForSelector('.card:has-text("Contractors")', { timeout: 15000 })
+  const body = await page.locator('.main').innerText()
+  if (!/Field work is blocked/.test(body)) throw new Error('setup lost the readiness panel')
+})
+
+await step(page, 'back-to-all-projects', async () => {
+  await page.click('button:has-text("All projects")')
+  await page.waitForSelector('table.data tbody tr', { timeout: 10000 })
+  const nav = await page.locator('.sidebar').innerText()
+  if (/Dashboard/.test(nav)) throw new Error('project navigation is still showing')
+})
+
+await browser.close()
+
+console.log(seen.join('\n'))
+if (problems.length) {
+  console.log('\nPROBLEMS:')
+  console.log(problems.map((p) => `  - ${p}`).join('\n'))
+  process.exit(1)
+}
+console.log('\nUI walk clean.')

@@ -3,7 +3,44 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useApp } from '../lib/store'
 import { Icon, Modal, Toasts } from './ui'
 
-const NAV = [
+/**
+ * Two navigation sets, because there are two scopes and it should never be
+ * ambiguous which one a screen is operating at.
+ *
+ * With no project in context the sidebar is the portfolio: the projects list
+ * and the instance-wide records that are reusable on any project. Inside a
+ * project it is that project's work, with the project named in the header and
+ * a way back out that is always visible.
+ */
+const PORTFOLIO_NAV = [
+  { group: 'Portfolio', items: [
+    { to: '/projects', label: 'Projects', icon: 'folder' },
+  ]},
+  { group: 'Organization', items: [
+    { to: '/organization?tab=clients', match: '/organization', label: 'Clients',
+      icon: 'building', perm: 'client.manage' },
+    { to: '/organization?tab=contractors', match: '/organization', label: 'Contractors',
+      icon: 'truck', perm: 'contractor.manage' },
+    { to: '/organization?tab=contracts', match: '/organization', label: 'Contracts',
+      icon: 'invoice', perm: 'contract.manage' },
+    { to: '/organization?tab=sites', match: '/organization', label: 'Disposal Sites',
+      icon: 'pin', perm: 'site.manage' },
+    { to: '/organization?tab=equipment', match: '/organization', label: 'Trucks & Equipment',
+      icon: 'truck', perm: 'equipment.manage' },
+    { to: '/organization?tab=disasters', match: '/organization', label: 'Disasters',
+      icon: 'alert', perm: 'project.create' },
+    { to: '/workers', label: 'Workers', icon: 'users', perm: 'worker.manage' },
+  ]},
+  { group: 'Oversight', items: [
+    { to: '/catalog', label: 'Ticket Catalog', icon: 'layers', perm: 'ticket_type.manage' },
+    { to: '/audit', label: 'Audit History', icon: 'audit', perm: 'audit.read' },
+    { to: '/query', label: 'Query Builder', icon: 'query', perm: 'query.build' },
+    { to: '/sharing', label: 'Sharing & Peers', icon: 'share', perm: 'sharing.manage' },
+    { to: '/settings', label: 'Settings', icon: 'settings' },
+  ]},
+]
+
+const PROJECT_NAV = [
   { group: 'Operations', items: [
     { to: '/', label: 'Dashboard', icon: 'dashboard', end: true },
     { to: '/tickets', label: 'Tickets', icon: 'truck' },
@@ -11,6 +48,7 @@ const NAV = [
   ]},
   { group: 'Project', items: [
     { to: '/setup', label: 'Project Setup', icon: 'layers', perm: 'project.update' },
+    { to: '/intake', label: 'Contract Intake', icon: 'inbox', perm: 'contract.manage' },
     { to: '/rules', label: 'Rules', icon: 'rules', perm: 'rule.manage' },
     { to: '/service-codes', label: 'Service Codes', icon: 'money', perm: 'service_code.manage' },
   ]},
@@ -18,12 +56,8 @@ const NAV = [
     { to: '/transactions', label: 'Transactions', icon: 'money', perm: 'transaction.read' },
     { to: '/invoices', label: 'Invoices', icon: 'invoice', perm: 'invoice.manage' },
   ]},
-  { group: 'Records', items: [
-    { to: '/organization', label: 'Organization', icon: 'building', perm: 'client.manage' },
-    { to: '/workers', label: 'Workers', icon: 'users', perm: 'worker.manage' },
-    { to: '/catalog', label: 'Ticket Catalog', icon: 'layers', perm: 'ticket_type.manage' },
-  ]},
   { group: 'Oversight', items: [
+    { to: '/closeout', label: 'Closeout', icon: 'download', perm: 'report.run' },
     { to: '/audit', label: 'Audit History', icon: 'audit', perm: 'audit.read' },
     { to: '/query', label: 'Query Builder', icon: 'query', perm: 'query.build' },
     { to: '/sharing', label: 'Sharing & Peers', icon: 'share', perm: 'sharing.manage' },
@@ -31,11 +65,19 @@ const NAV = [
 ]
 
 export default function Shell() {
-  const { user, can, projects, project, setProjectId, logout, theme, setTheme, toasts } = useApp()
+  const { user, can, projects, project, enterProject, exitProject, logout,
+          theme, setTheme, toasts } = useApp()
   const [switching, setSwitching] = useState(false)
   const [menu, setMenu] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
+  const nav = project ? PROJECT_NAV : PORTFOLIO_NAV
+
+  function leaveProject() {
+    exitProject()
+    setSwitching(false)
+    navigate('/projects')
+  }
 
   const initials = useMemo(() => (user?.full_name || '?')
     .split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase(), [user])
@@ -57,16 +99,34 @@ export default function Shell() {
           </div>
         </div>
 
-        <button className="project-switch" onClick={() => setSwitching(true)}>
-          <div className="label">Active project</div>
-          <div className="value">
-            <span>{project ? project.name : 'No project selected'}</span>
-            <Icon name="chevronDown" size={13} />
-          </div>
-        </button>
+        {project ? (
+          <>
+            <button className="project-switch" onClick={() => setSwitching(true)}>
+              <div className="label">In project · {project.project_code}</div>
+              <div className="value">
+                <span>{project.name}</span>
+                <Icon name="chevronDown" size={13} />
+              </div>
+            </button>
+            <button className="btn ghost sm"
+                    style={{ justifyContent: 'flex-start', margin: '6px 0 2px' }}
+                    onClick={leaveProject}>
+              <Icon name="chevron" size={13} style={{ transform: 'rotate(180deg)' }} />
+              All projects
+            </button>
+          </>
+        ) : (
+          <button className="project-switch" onClick={() => navigate('/projects')}>
+            <div className="label">Scope</div>
+            <div className="value">
+              <span>All projects</span>
+              <Icon name="chevron" size={13} />
+            </div>
+          </button>
+        )}
 
         <nav className="nav">
-          {NAV.map((group) => {
+          {nav.map((group) => {
             const visible = group.items.filter((i) => !i.perm || can(i.perm))
             if (!visible.length) return null
             return (
@@ -74,7 +134,13 @@ export default function Shell() {
                 <div className="nav-group-title">{group.group}</div>
                 {visible.map((item) => (
                   <NavLink key={item.to} to={item.to} end={item.end}
-                           className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
+                           className={({ isActive }) => {
+                             const on = item.match
+                               ? location.pathname === item.match
+                                 && location.search === item.to.slice(item.match.length)
+                               : isActive
+                             return `nav-item${on ? ' active' : ''}`
+                           }}>
                     <Icon name={item.icon} size={15} />
                     {item.label}
                   </NavLink>
@@ -120,6 +186,18 @@ export default function Shell() {
       {switching && (
         <Modal title="Switch project" onClose={() => setSwitching(false)}>
           <div className="stack">
+            <button className="card" style={{ padding: 13, textAlign: 'left', cursor: 'pointer' }}
+                    onClick={leaveProject}>
+              <div className="row" style={{ gap: 9 }}>
+                <Icon name="folder" size={15} />
+                <div>
+                  <div style={{ fontWeight: 590 }}>View all projects</div>
+                  <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>
+                    Work above any single project
+                  </div>
+                </div>
+              </div>
+            </button>
             {projects.map((p) => (
               <button key={p.id}
                       className="card"
@@ -129,7 +207,7 @@ export default function Shell() {
                         background: p.id === project?.id ? 'var(--accent-soft)' : undefined,
                       }}
                       onClick={() => {
-                        setProjectId(p.id)
+                        enterProject(p.id)
                         setSwitching(false)
                         if (location.pathname !== '/') navigate('/')
                       }}>
@@ -137,7 +215,7 @@ export default function Shell() {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 590 }}>{p.name}</div>
                     <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>
-                      {p.project_code} · {p.project_role} · {p.status}
+                      {p.project_code} · {p.project_role || 'not assigned'} · {p.status}
                     </div>
                   </div>
                   {p.id === project?.id && <Icon name="check" size={16} />}
@@ -145,7 +223,7 @@ export default function Shell() {
               </button>
             ))}
             {!projects.length && (
-              <p className="muted">You are not assigned to any project yet.</p>
+              <p className="muted">There is nothing to switch to yet.</p>
             )}
           </div>
         </Modal>
@@ -156,12 +234,15 @@ export default function Shell() {
   )
 }
 
-export function PageHeader({ title, sub, children, crumb }) {
+export function PageHeader({ title, sub, children, crumb, scope }) {
+  const { project } = useApp()
+  const label = crumb || (scope === 'portfolio' ? 'All projects'
+                          : project ? `${project.project_code} · ${project.name}` : null)
   return (
     <>
       <header className="topbar">
         <h1>{title}</h1>
-        {crumb && <span className="crumb">/ {crumb}</span>}
+        {label && <span className="crumb">/ {label}</span>}
         <div className="topbar-actions">{children}</div>
       </header>
     </>

@@ -9,8 +9,11 @@ import {
 /* ============================== SERVICE CODES ============================ */
 export function ServiceCodes() {
   const { projectId, project, lookups, toast } = useApp()
-  const [creating, setCreating] = useState(false)
+  const [editing, setEditing] = useState(null)
   const [rating, setRating] = useState(null)
+  // Same treatment as the rules list: the list leads, the rate history is one
+  // click further in for whoever wants it.
+  const [expanded, setExpanded] = useState(null)
 
   const codes = useFetch(() => api.get(`/projects/${projectId}/service-codes`),
                          [projectId], { skip: !projectId })
@@ -25,7 +28,7 @@ export function ServiceCodes() {
   return (
     <>
       <PageHeader title="Service Codes" crumb={project?.project_code}>
-        <button className="btn primary" onClick={() => setCreating(true)}>
+        <button className="btn primary" onClick={() => setEditing({})}>
           <Icon name="plus" size={14} /> New service code
         </button>
       </PageHeader>
@@ -46,67 +49,40 @@ export function ServiceCodes() {
 
         {codes.data && (codes.data.items.length === 0 ? (
           <Empty icon="money" title="No service codes yet"
-                 action={<button className="btn primary" onClick={() => setCreating(true)}>
+                 action={<button className="btn primary" onClick={() => setEditing({})}>
                    <Icon name="plus" size={14} /> Create one</button>}>
             Rules cannot be written until at least one service code exists.
           </Empty>
         ) : (
-          <div className="stack" style={{ gap: 12 }}>
-            {codes.data.items.map((c) => (
-              <div className="card" key={c.id} style={{ padding: 15 }}>
-                <div className="row" style={{ alignItems: 'flex-start', gap: 14 }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div className="row" style={{ gap: 8 }}>
-                      <span className="mono" style={{ fontWeight: 620, fontSize: 13.5 }}>{c.code}</span>
-                      <span style={{ fontWeight: 570 }}>{c.name}</span>
-                      {c.fema_category && <Badge>FEMA {c.fema_category}</Badge>}
-                      {!c.is_active && <Badge>Inactive</Badge>}
-                    </div>
-                    <div className="muted" style={{ fontSize: 12.5, marginTop: 4 }}>
-                      {c.contractor_name}
-                      {c.description && ` · ${c.description}`}
-                    </div>
-                    <div className="row wrap" style={{ gap: 6, marginTop: 10 }}>
-                      {c.rates.map((r) => {
-                        const current = r.id === c.current_rate_id
-                        return (
-                          <span key={r.id} className={`badge ${current ? 'green' : ''}`}>
-                            {fmt.money(r.amount, 4)} / {r.abbreviation}
-                            <span className="dim" style={{ marginLeft: 4 }}>
-                              {fmt.date(r.effective_from)}
-                              {r.effective_to ? ` – ${fmt.date(r.effective_to)}` : ' →'}
-                            </span>
-                          </span>
-                        )
-                      })}
-                    </div>
-                  </div>
-                  <div style={{ textAlign: 'right', flex: '0 0 160px' }}>
-                    <div style={{ fontSize: 19, fontWeight: 640 }}>
-                      {c.current_rate != null ? fmt.money(c.current_rate, 2) : '—'}
-                    </div>
-                    <div className="dim" style={{ fontSize: 12 }}>
-                      per {c.current_unit_label || 'unit not set'}
-                    </div>
-                    <div className="dim" style={{ fontSize: 12, marginTop: 4 }}>
-                      {fmt.int(c.rule_count)} rule(s) · {fmt.money(c.billed_total)} billed
-                    </div>
-                    <button className="btn sm" style={{ marginTop: 9 }}
-                            onClick={() => setRating(c)}>
-                      New rate
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+          <Card flush>
+            <div className="table-wrap">
+              <table className="data">
+                <thead><tr>
+                  <th style={{ width: 30 }} />
+                  <th>Code</th><th>Name</th><th>Contractor</th>
+                  <th className="num">Current rate</th><th>Unit</th>
+                  <th>From contract</th><th className="num">Rules</th>
+                  <th className="num">Billed</th><th />
+                </tr></thead>
+                <tbody>
+                  {codes.data.items.map((c) => (
+                    <ServiceCodeRow key={c.id} code={c}
+                                    open={expanded === c.id}
+                                    onToggle={() => setExpanded(expanded === c.id ? null : c.id)}
+                                    onEdit={() => setEditing(c)}
+                                    onRate={() => setRating(c)} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
         ))}
       </div>
 
-      {creating && (
-        <ServiceCodeModal project={detail.data} lookups={lookups}
-                          onClose={() => setCreating(false)}
-                          onSaved={() => { setCreating(false); codes.reload() }} />
+      {editing && (
+        <ServiceCodeModal project={detail.data} lookups={lookups} record={editing}
+                          onClose={() => setEditing(null)}
+                          onSaved={() => { setEditing(null); codes.reload() }} />
       )}
       {rating && (
         <RateModal code={rating} lookups={lookups} onClose={() => setRating(null)}
@@ -116,10 +92,97 @@ export function ServiceCodes() {
   )
 }
 
-function ServiceCodeModal({ project, lookups, onClose, onSaved }) {
+/**
+ * One code per row, with Edit on the row because that is what someone arriving
+ * here came to do. The chevron opens the rate history, which is the part that
+ * has to stay readable: a rate is superseded, never rewritten.
+ */
+function ServiceCodeRow({ code, open, onToggle, onEdit, onRate }) {
+  const c = code
+  return (
+    <>
+      <tr className="clickable" onClick={onToggle}>
+        <td className="dim" style={{ textAlign: 'center' }}>
+          <Icon name={open ? 'chevronDown' : 'chevron'} size={13} />
+        </td>
+        <td className="mono" style={{ fontWeight: 600 }}>{c.code}</td>
+        <td className="truncate" style={{ maxWidth: 240 }}>
+          {c.name}
+          {c.fema_category && <Badge>FEMA {c.fema_category}</Badge>}
+          {!c.is_active && <Badge>Inactive</Badge>}
+        </td>
+        <td className="muted truncate" style={{ maxWidth: 160 }}>{c.contractor_name}</td>
+        <td className="num" style={{ fontWeight: 550 }}>
+          {c.current_rate != null ? fmt.money(c.current_rate, 4) : '—'}
+        </td>
+        <td className="dim">{c.current_unit_abbrev || 'not set'}</td>
+        <td>
+          {c.contract_line_item_id
+            ? <Badge tone="green">Line item</Badge>
+            : c.contract_id ? <Badge tone="blue">Contract</Badge>
+            : <span className="dim">entered by hand</span>}
+        </td>
+        <td className="num">{fmt.int(c.rule_count)}</td>
+        <td className="num">{fmt.money(c.billed_total)}</td>
+        <td style={{ width: 140, textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
+          <div className="row" style={{ gap: 5, justifyContent: 'flex-end' }}>
+            <button className="btn sm" onClick={onEdit}>Edit</button>
+            <button className="btn sm" onClick={onRate}>New rate</button>
+          </div>
+        </td>
+      </tr>
+      {open && (
+        <tr>
+          <td colSpan={10} style={{ background: 'var(--surface-2)' }}>
+            <div className="stack" style={{ gap: 9, padding: '4px 2px' }}>
+              {c.description && (
+                <div className="muted" style={{ fontSize: 12.5 }}>{c.description}</div>
+              )}
+              <div style={{ fontSize: 11.5, fontWeight: 650, letterSpacing: '.06em',
+                            textTransform: 'uppercase', color: 'var(--text-dim)' }}>
+                Rate history
+              </div>
+              {c.rates.length === 0 ? (
+                <div className="muted" style={{ fontSize: 13 }}>
+                  No rate yet, so nothing this code matches can be billed.
+                </div>
+              ) : (
+                <div className="row wrap" style={{ gap: 6 }}>
+                  {c.rates.map((r) => {
+                    const current = r.id === c.current_rate_id
+                    return (
+                      <span key={r.id} className={`badge ${current ? 'green' : ''}`}>
+                        {fmt.money(r.amount, 4)} / {r.abbreviation}
+                        <span className="dim" style={{ marginLeft: 4 }}>
+                          {fmt.date(r.effective_from)}
+                          {r.effective_to ? ` – ${fmt.date(r.effective_to)}` : ' →'}
+                        </span>
+                      </span>
+                    )
+                  })}
+                </div>
+              )}
+              <div className="dim" style={{ fontSize: 11.5 }}>
+                A new rate supersedes the current one from its effective date. Nothing
+                already billed is rewritten.
+              </div>
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
+  )
+}
+
+function ServiceCodeModal({ project, lookups, record = {}, onClose, onSaved }) {
   const { projectId, toast } = useApp()
+  const isNew = !record.id
   const [form, setForm] = useState({
-    code: '', name: '', contractor_id: '', description: '', fema_category: '',
+    code: record.code || '', name: record.name || '',
+    contractor_id: record.contractor_id || '',
+    description: record.description || '',
+    fema_category: record.fema_category || '',
+    is_active: record.is_active ?? true,
     rate_amount: '', rate_unit_type: 'per_cubic_yard',
   })
   const [busy, setBusy] = useState(false)
@@ -129,21 +192,30 @@ function ServiceCodeModal({ project, lookups, onClose, onSaved }) {
   async function save() {
     setBusy(true); setError(null)
     try {
-      await api.post(`/projects/${projectId}/service-codes`, {
-        ...form,
-        rate_amount: form.rate_amount === '' ? null : Number(form.rate_amount),
-      })
-      toast('Service code created', `${form.code} — ${form.name}`)
+      if (isNew) {
+        await api.post(`/projects/${projectId}/service-codes`, {
+          ...form,
+          rate_amount: form.rate_amount === '' ? null : Number(form.rate_amount),
+        })
+        toast('Service code created', `${form.code} — ${form.name}`)
+      } else {
+        await api.patch(`/service-codes/${record.id}`, {
+          code: form.code, name: form.name, contractor_id: form.contractor_id,
+          description: form.description, fema_category: form.fema_category,
+          is_active: form.is_active,
+        })
+        toast('Service code saved', `${form.code} — ${form.name}`)
+      }
       onSaved()
     } catch (err) { setError(err.message) } finally { setBusy(false) }
   }
 
   return (
-    <Modal title="New service code" onClose={onClose} footer={
+    <Modal title={isNew ? 'New service code' : `Edit ${record.code}`} onClose={onClose} footer={
       <>
         <button className="btn" onClick={onClose}>Cancel</button>
         <button className="btn primary" disabled={busy || !form.code || !form.name || !form.contractor_id}
-                onClick={save}>{busy && <span className="spinner" />} Create</button>
+                onClick={save}>{busy && <span className="spinner" />} {isNew ? 'Create' : 'Save'}</button>
       </>
     }>
       <div className="stack">
@@ -179,21 +251,35 @@ function ServiceCodeModal({ project, lookups, onClose, onSaved }) {
           <textarea className="textarea" value={form.description}
                     onChange={(e) => set({ description: e.target.value })} />
         </Field>
-        <div className="grid c2" style={{ gap: 12 }}>
-          <Field label="Opening rate">
-            <input className="input" type="number" step="0.0001" value={form.rate_amount}
-                   onChange={(e) => set({ rate_amount: e.target.value })} placeholder="9.4500" />
-          </Field>
-          <Field label="Unit type"
-                 hint={(lookups?.unit_types || []).find((u) => u.code === form.rate_unit_type)?.description}>
-            <select className="select" value={form.rate_unit_type}
-                    onChange={(e) => set({ rate_unit_type: e.target.value })}>
-              {(lookups?.unit_types || []).map((u) => (
-                <option key={u.code} value={u.code}>{u.label}</option>
-              ))}
-            </select>
-          </Field>
-        </div>
+        {isNew ? (
+          <div className="grid c2" style={{ gap: 12 }}>
+            <Field label="Opening rate">
+              <input className="input" type="number" step="0.0001" value={form.rate_amount}
+                     onChange={(e) => set({ rate_amount: e.target.value })} placeholder="9.4500" />
+            </Field>
+            <Field label="Unit type"
+                   hint={(lookups?.unit_types || []).find((u) => u.code === form.rate_unit_type)?.description}>
+              <select className="select" value={form.rate_unit_type}
+                      onChange={(e) => set({ rate_unit_type: e.target.value })}>
+                {(lookups?.unit_types || []).map((u) => (
+                  <option key={u.code} value={u.code}>{u.label}</option>
+                ))}
+              </select>
+            </Field>
+          </div>
+        ) : (
+          <>
+            <label className="check">
+              <input type="checkbox" checked={form.is_active}
+                     onChange={(e) => set({ is_active: e.target.checked })} />
+              Active
+            </label>
+            <div className="hint">
+              Rates carry their own history. Use New rate to supersede the current one
+              rather than editing it here.
+            </div>
+          </>
+        )}
       </div>
     </Modal>
   )
@@ -458,7 +544,7 @@ export function Invoices() {
 
         {invoices.data && (invoices.data.items.length === 0 ? (
           <Empty icon="invoice" title="No invoices yet"
-                 action={<button className="btn primary" onClick={() => setCreating(true)}>
+                 action={<button className="btn primary" onClick={() => setEditing({})}>
                    <Icon name="plus" size={14} /> Create one</button>}>
             An invoice gathers every uninvoiced transaction for a contractor in a period.
           </Empty>

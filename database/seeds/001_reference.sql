@@ -30,7 +30,10 @@ INSERT INTO permissions (code, label, domain, min_rank, description) VALUES
     ('contractor.manage',    'Manage contractors',        'org',     20, NULL),
     ('contract.manage',      'Manage contracts',          'org',     20, NULL),
     ('equipment.manage',     'Manage trucks and equipment','org',    20, NULL),
-    ('worker.manage',        'Manage workers',            'org',     20, NULL),
+    ('worker.manage',        'Manage workers',            'org',     20,
+     'Create and edit monitor and manager accounts'),
+    ('document.manage',      'Manage documents',          'org',     20,
+     'Register, verify and chase contracts, permits, certificates and insurance'),
     ('project.create',       'Create projects',           'project', 20, NULL),
     ('project.assign',       'Assign workers to projects','project', 20, NULL),
     ('project.ticket_types', 'Enable ticket types',       'project', 20, NULL),
@@ -48,13 +51,14 @@ INSERT INTO permissions (code, label, domain, min_rank, description) VALUES
     ('report.run',           'Run reports and exports',   'audit',   20, NULL),
     ('query.build',          'Use the query builder',     'audit',   30, NULL),
     ('ticket_type.manage',   'Define ticket types',       'admin',   40, NULL),
-    ('user.manage',          'Manage users and roles',    'admin',   40, NULL),
+    ('user.manage',          'Manage users and roles',    'admin',   40,
+     'Grant analyst or admin rank, edit those accounts, and deactivate accounts'),
     ('instance.manage',      'Manage instance settings',  'admin',   40, NULL),
     ('peer.manage',          'Manage peer instances',     'admin',   40, NULL),
     ('sharing.manage',       'Change visibility flags',   'admin',   30, NULL)
 ON CONFLICT (code) DO UPDATE
     SET label = EXCLUDED.label, domain = EXCLUDED.domain,
-        min_rank = EXCLUDED.min_rank;
+        min_rank = EXCLUDED.min_rank, description = EXCLUDED.description;
 
 -- ---------------------------------------------------------------------------
 -- Ticket statuses
@@ -71,28 +75,6 @@ INSERT INTO ticket_statuses (code, label, is_terminal, is_billable, color, sort_
 ON CONFLICT (code) DO UPDATE
     SET label = EXCLUDED.label, color = EXCLUDED.color,
         is_terminal = EXCLUDED.is_terminal, is_billable = EXCLUDED.is_billable;
-
--- ---------------------------------------------------------------------------
--- Debris types
--- ---------------------------------------------------------------------------
-INSERT INTO debris_types (code, label, category, fema_category, default_density_lbs_cy, sort_order) VALUES
-    ('VEG',      'Vegetative / Woody',            'vegetative',              'A', 500, 10),
-    ('CD',       'Construction & Demolition',     'construction_demolition', 'A', 750, 20),
-    ('MIXED',    'Mixed Debris',                  'other',                   'A', 600, 30),
-    ('HHW',      'Household Hazardous Waste',     'hazardous',               'B', 400, 40),
-    ('WHITE',    'White Goods / Appliances',      'white_goods',             'A', 200, 50),
-    ('EWASTE',   'Electronic Waste',              'electronic',              'A', 300, 60),
-    ('SOIL',     'Soil, Mud and Sand',            'soil_mud_sand',           'A', 2200, 70),
-    ('VEHICLE',  'Vehicles and Vessels',          'vehicle_vessel',          'B', NULL, 80),
-    ('PUTRES',   'Putrescent Debris',             'putrescent',              'A', 800, 90),
-    ('STUMP',    'Stumps',                        'vegetative',              'A', 550, 100),
-    ('HANGER',   'Hangers',                       'vegetative',              'A', NULL, 110),
-    ('LEANER',   'Leaners',                       'vegetative',              'A', NULL, 120),
-    ('SAND',     'Beach Sand Screening',          'soil_mud_sand',           'A', 2600, 130)
-ON CONFLICT (code) DO UPDATE
-    SET label = EXCLUDED.label, category = EXCLUDED.category,
-        fema_category = EXCLUDED.fema_category,
-        default_density_lbs_cy = EXCLUDED.default_density_lbs_cy;
 
 -- ---------------------------------------------------------------------------
 -- Unit types. quantity_source is the ticket_metrics column the engine reads.
@@ -117,6 +99,35 @@ ON CONFLICT (code) DO UPDATE
     SET label = EXCLUDED.label, abbreviation = EXCLUDED.abbreviation,
         quantity_source = EXCLUDED.quantity_source,
         description = EXCLUDED.description;
+
+-- ---------------------------------------------------------------------------
+-- Debris types
+-- ---------------------------------------------------------------------------
+-- estimate_unit_type_code fixes how a stream is counted, so nobody is asked to
+-- choose a unit while entering an estimate. Bulk streams are cubic yards.
+-- Streams that are counted one at a time - stumps, hangers, leaners, white
+-- goods - are per_unit, which reads a count off the ticket. per_each is not
+-- used here: it always resolves to one, which is right for a flat per-ticket
+-- fee and wrong for "1,200 appliances".
+INSERT INTO debris_types (code, label, category, fema_category, default_density_lbs_cy, sort_order, estimate_unit_type_code) VALUES
+    ('VEG',      'Vegetative / Woody',            'vegetative',              'A', 500, 10,  'per_cubic_yard'),
+    ('CD',       'Construction & Demolition',     'construction_demolition', 'A', 750, 20,  'per_cubic_yard'),
+    ('MIXED',    'Mixed Debris',                  'other',                   'A', 600, 30,  'per_cubic_yard'),
+    ('HHW',      'Household Hazardous Waste',     'hazardous',               'B', 400, 40,  'per_unit'),
+    ('WHITE',    'White Goods / Appliances',      'white_goods',             'A', 200, 50,  'per_unit'),
+    ('EWASTE',   'Electronic Waste',              'electronic',              'A', 300, 60,  'per_unit'),
+    ('SOIL',     'Soil, Mud and Sand',            'soil_mud_sand',           'A', 2200, 70, 'per_cubic_yard'),
+    ('VEHICLE',  'Vehicles and Vessels',          'vehicle_vessel',          'B', NULL, 80, 'per_unit'),
+    ('PUTRES',   'Putrescent Debris',             'putrescent',              'A', 800, 90,  'per_cubic_yard'),
+    ('STUMP',    'Stumps',                        'vegetative',              'A', 550, 100, 'per_unit'),
+    ('HANGER',   'Hangers',                       'vegetative',              'A', NULL, 110,'per_unit'),
+    ('LEANER',   'Leaners',                       'vegetative',              'A', NULL, 120,'per_unit'),
+    ('SAND',     'Beach Sand Screening',          'soil_mud_sand',           'A', 2600, 130,'per_cubic_yard')
+ON CONFLICT (code) DO UPDATE
+    SET label = EXCLUDED.label, category = EXCLUDED.category,
+        estimate_unit_type_code = EXCLUDED.estimate_unit_type_code,
+        fema_category = EXCLUDED.fema_category,
+        default_density_lbs_cy = EXCLUDED.default_density_lbs_cy;
 
 -- ---------------------------------------------------------------------------
 -- Rule operators
@@ -210,3 +221,79 @@ SELECT v.code, v.label, p.id, v.sev, v.ord
   ) AS v(code, label, parent_code, sev, ord)
   JOIN incident_categories p ON p.code = v.parent_code
 ON CONFLICT (code) DO NOTHING;
+
+-- ---------------------------------------------------------------------------
+-- Programs. What kind of debris program this is, as data rather than a
+-- free-text label. default_debris_types pre-selects streams at setup and never
+-- gates them: the contract decides the work, not the program name.
+-- ---------------------------------------------------------------------------
+INSERT INTO programs (code, label, description, default_debris_types, sort_order) VALUES
+    ('row_collection', 'ROW Collection',
+     'Right-of-way collection of debris residents have brought to the curb.',
+     ARRAY['VEG','CD','MIXED'], 10),
+    ('private_property_debris_removal', 'Private Property Debris Removal',
+     'PPDR. Debris removed from private land under a right of entry.',
+     ARRAY['VEG','CD','MIXED','WHITE'], 20),
+    ('waterway_marine', 'Waterway and Marine',
+     'Debris removed from rivers, canals, harbours and shoreline.',
+     ARRAY['VEG','CD','VEHICLE','SOIL'], 30),
+    ('demolition', 'Demolition',
+     'Structural demolition and the debris it produces.',
+     ARRAY['CD','MIXED','HHW'], 40),
+    ('disposal_only', 'Disposal Only',
+     'Final disposal and haul out where collection is someone else''s scope.',
+     ARRAY['VEG','CD','MIXED'], 50),
+    ('unit_rate_tree', 'Unit Rate Tree Work',
+     'Hangers, leaners and stumps priced per unit rather than by volume.',
+     ARRAY['HANGER','LEANER','STUMP'], 60),
+    ('other', 'Other', 'Anything the categories above do not describe.',
+     ARRAY[]::text[], 90)
+ON CONFLICT (code) DO UPDATE
+    SET label = EXCLUDED.label, description = EXCLUDED.description,
+        default_debris_types = EXCLUDED.default_debris_types,
+        sort_order = EXCLUDED.sort_order;
+
+-- ---------------------------------------------------------------------------
+-- Document kinds. Everything the closeout package has to account for. The file
+-- itself always lives in Box or SharePoint; the registry holds the link.
+-- ---------------------------------------------------------------------------
+INSERT INTO document_kinds (code, label, description, applies_to, expects_expiry, sort_order) VALUES
+    ('contract', 'Executed Contract',
+     'The signed contract itself.',
+     ARRAY['contracts'], false, 10),
+    ('contract_modification', 'Contract Modification',
+     'An executed change order or amendment.',
+     ARRAY['contracts'], false, 20),
+    ('rate_sheet', 'Rate Sheet',
+     'The priced schedule a contractor bills against.',
+     ARRAY['contracts','contractors'], true, 30),
+    ('certificate_hhw', 'HHW Certification',
+     'Household hazardous waste handling certification.',
+     ARRAY['contractors','users'], true, 40),
+    ('certificate_asbestos', 'Asbestos Certification',
+     'Asbestos abatement or handling certification.',
+     ARRAY['contractors','users'], true, 50),
+    ('certificate_other', 'Other Certification',
+     'Any other certification a firm or a person has to hold.',
+     ARRAY['contractors','users','equipment'], true, 60),
+    ('permit', 'Site Permit',
+     'The operating permit for a debris management or disposal site.',
+     ARRAY['disposal_sites','project_sites'], true, 70),
+    ('insurance', 'Certificate of Insurance',
+     'General liability, auto and workers compensation coverage.',
+     ARRAY['contractors','clients'], true, 80),
+    ('w9', 'W-9',
+     'Taxpayer identification for a firm being paid.',
+     ARRAY['contractors'], false, 90),
+    ('truck_certification', 'Truck Certification',
+     'Certified capacity measurement for a hauling unit.',
+     ARRAY['equipment'], true, 100),
+    ('other', 'Other Document',
+     'Anything the kinds above do not describe.',
+     ARRAY['clients','contractors','contracts','disposal_sites','projects','equipment','users'],
+     false, 900)
+ON CONFLICT (code) DO UPDATE
+    SET label = EXCLUDED.label, description = EXCLUDED.description,
+        applies_to = EXCLUDED.applies_to,
+        expects_expiry = EXCLUDED.expects_expiry,
+        sort_order = EXCLUDED.sort_order;

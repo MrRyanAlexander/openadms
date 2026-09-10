@@ -17,7 +17,8 @@ from fastapi.responses import ORJSONResponse
 from . import db
 from .config import settings
 from .errors import ApiError, api_error_handler, http_error_handler
-from .routers import auth, billing, catalog, instance, lookups, org, projects, reports, tickets
+from .routers import (auth, billing, catalog, closeout, documents, instance,
+                      lookups, org, projects, reports, tickets)
 
 logging.basicConfig(
     level=getattr(logging, settings.log_level.upper(), logging.INFO),
@@ -64,7 +65,9 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["X-Request-Id", "X-Response-Time"],
+    # Content-Disposition has to be readable by the client, or a download
+    # arrives named "download" whatever the server called it.
+    expose_headers=["X-Request-Id", "X-Response-Time", "Content-Disposition"],
     max_age=86400,
 )
 
@@ -131,6 +134,8 @@ app.include_router(tickets.router, prefix=API)
 app.include_router(billing.router, prefix=API)
 app.include_router(reports.router, prefix=API)
 app.include_router(instance.router, prefix=API)
+app.include_router(documents.router, prefix=API)
+app.include_router(closeout.router, prefix=API)
 for r in org.routers:
     app.include_router(r, prefix=API)
 

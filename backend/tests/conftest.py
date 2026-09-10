@@ -69,3 +69,13 @@ def project_id(admin):
     assert demo is not None, (
         "The demo project is missing. Run database/setup.sh --with-demo first.")
     return demo["id"]
+
+
+@pytest.fixture(scope="session")
+def manager(client):
+    return _login(client, "manager")
+
+
+@pytest.fixture(scope="session")
+def manager_auth(manager):
+    return {"Authorization": f"Bearer {manager['access_token']}"}

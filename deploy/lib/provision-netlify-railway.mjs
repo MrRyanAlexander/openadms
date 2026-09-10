@@ -402,11 +402,43 @@ export async function provisionNetlifyRailway({
         `^https://([a-z0-9-]+--)?${prefix}-(back-office|field)\\.netlify\\.app$`,
     }
 
-    if (!state.apiService) {
-      // Create the service already linked to the GitHub repo so Railway builds
-      // from source immediately. --repo links it; --branch targets main.
-      // The Railway CLI's `add --service` with `--repo` and `--branch` is 5.x+.
-      // Fall back to creating an empty service and then connecting the source.
+    // Check whether the service already exists on Railway regardless of what
+    // state says — a manual dashboard action may have created it.
+    const serviceList = cli('railway', ['service', 'list', '--json'],
+                            { cwd: root, quiet: true, timeout: 60000 })
+    const services = parseJson(serviceList.stdout)
+    const existingService = Array.isArray(services)
+      ? services.find((s) => s.name === 'api')
+      : null
+
+    if (existingService) {
+      // Service exists (created manually or by a previous run). Record it so
+      // future re-runs skip straight past this block.
+      record('apiService', 'api')
+      ok('API service already exists on Railway')
+
+      // Ensure the GitHub source is connected if it isn't already.
+      if (!existingService.source?.repo) {
+        const connected = cli('railway',
+          ['service', 'source', 'connect',
+           '--repo', repoSlug, '--branch', 'main', '--service', 'api'],
+          { cwd: root, timeout: 180000 })
+        if (connected.ok) {
+          ok('GitHub source connected to API service')
+        } else {
+          warn('Could not connect the GitHub source automatically.')
+          note('In the Railway dashboard: api service → Settings → Source → Connect Repo')
+          note(`Repo: ${repoSlug}   Branch: main`)
+          note('Once connected, re-run this script.')
+          return { ok: false, state }
+        }
+      } else {
+        ok(`Source already connected: ${existingService.source.repo}`)
+      }
+    } else {
+      // Service does not exist yet — create it linked to the GitHub repo.
+      // --repo + --branch is Railway CLI 5.x. Fall back to create-then-connect
+      // for older versions.
       let serviceOk = false
 
       const withRepo = cli('railway',
@@ -417,8 +449,7 @@ export async function provisionNetlifyRailway({
         serviceOk = true
         ok('API service created and linked to GitHub repo')
       } else if (UNKNOWN_FLAG.test(withRepo.stderr + withRepo.stdout)) {
-        // Older CLI: create first, then connect source separately.
-        note('CLI does not support --repo on add; creating service then connecting source.')
+        note('CLI does not support --repo on add; creating then connecting source.')
         const created = cli('railway', ['add', '--service', 'api', '--json'],
                             { cwd: root, timeout: 180000 })
         if (created.ok) {
@@ -428,13 +459,7 @@ export async function provisionNetlifyRailway({
             { cwd: root, timeout: 180000 })
           if (connected.ok) {
             serviceOk = true
-            ok('API service created and source connected to GitHub repo')
-          } else {
-            warn('Could not connect the GitHub source automatically.')
-            note('In the Railway dashboard: api service → Settings → Source → Connect Repo')
-            note(`Repo: ${repoSlug}  Branch: main`)
-            note('Once connected, re-run this script.')
-            return { ok: false, state }
+            ok('API service created and source connected')
           }
         }
       }
@@ -442,23 +467,25 @@ export async function provisionNetlifyRailway({
       if (!serviceOk) {
         fail('Could not create the API service.')
         note('Create a service named "api" in the Railway dashboard, connect it to:')
-        note(`  Repo: ${repoSlug}   Branch: main`)
+        note(`  Repo: ${repoSlug}   Branch: main   Root directory: /backend`)
         note('Then re-run this script.')
         return { ok: false, state }
       }
 
       record('apiService', 'api')
+    }
+
+    // Set root directory to /backend on every run — idempotent, non-interactive.
+    // --stage skips the interactive confirmation prompt.
+    const setRoot = cli('railway',
+      ['environment', 'edit',
+       '--service-config', 'api', 'source.rootDirectory', '/backend', '--stage'],
+      { cwd: root, timeout: 60000 })
+    if (setRoot.ok) {
+      ok('Root directory set to /backend')
     } else {
-      // Service already exists but may not have a source connected yet (e.g. a
-      // previous run created it without --repo). Ensure the source is linked.
-      const connected = cli('railway',
-        ['service', 'source', 'connect',
-         '--repo', repoSlug, '--branch', 'main', '--service', 'api'],
-        { cwd: root, quiet: true, timeout: 180000 })
-      if (connected.ok) {
-        ok('GitHub source connected to existing API service')
-      }
-      // If it fails here it was probably already connected; continue.
+      warn('Could not set root directory automatically.')
+      note('In the Railway dashboard: api service → Settings → Root Directory → /backend')
     }
 
     // Set every time, not only at creation, so a resumed run repairs anything
@@ -479,22 +506,19 @@ export async function provisionNetlifyRailway({
     }
     ok(`Set ${pairs.length} environment variables`)
 
-    // Trigger the first build by redeploying (variables were set with
-    // --skip-deploys, so Railway hasn't started a build yet).
+    // Trigger a redeploy so the env vars take effect. If the service was just
+    // created Railway may already be building; the redeploy ensures env vars
+    // are present. Non-fatal if it fails — the domain check below will catch
+    // a broken service.
     const redeployed = tryVariants('railway', [
       ['service', 'redeploy', '--service', 'api', '--yes'],
       ['service', 'redeploy', '--service', 'api'],
-      ['redeploy', '--service', 'api', '--yes'],
-      ['redeploy', '--service', 'api'],
     ], { cwd: root, timeout: 180000 })
 
     if (redeployed?.ok) {
-      ok('API build triggered on Railway')
+      ok('API redeployed with new environment variables')
     } else {
-      // Not fatal — Railway may have started a build automatically when the
-      // source was connected. Warn and let the domain step confirm liveness.
-      warn('Could not trigger a redeploy via CLI; Railway may have started one automatically.')
-      note('Check the Railway dashboard to confirm a build is running for the api service.')
+      note('Could not trigger a redeploy via CLI — Railway may already be building.')
     }
 
     // `--port` is 5.x only.

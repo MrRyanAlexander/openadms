@@ -1,10 +1,13 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { api, fmt } from '../lib/api'
 import { useApp, useFetch } from '../lib/store'
 import { PageHeader } from '../components/Shell'
 import {
-  Badge, Card, Empty, ErrorNote, Field, Icon, Loading, Modal, Search, Tabs, useDebounced,
+  Badge, Card, Drawer, Empty, ErrorNote, Field, Icon, Loading, Modal, Search, Stat,
+  Tabs, useDebounced,
 } from '../components/ui'
+import { DocumentsPanel } from '../components/setup-bits'
 
 /* ============================== ORGANIZATION ============================= */
 const ENTITIES = {
@@ -31,15 +34,17 @@ const ENTITIES = {
     ],
   },
   contractors: {
-    label: 'Contractors', path: '/contractors', icon: 'truck',
+    label: 'Contractors', path: '/contractors', icon: 'truck', detail: 'documents',
+    documentKinds: ['rate_sheet', 'certificate_hhw', 'certificate_asbestos',
+                    'certificate_other', 'insurance', 'w9', 'other'],
     columns: [['Name', 'name'], ['Code', 'code'],
               ['Type', (r) => fmt.title(r.contractor_type)],
               ['Contact', 'primary_contact'], ['City', 'city']],
     fields: [
       { key: 'name', label: 'Name', required: true },
       { key: 'code', label: 'Code' },
-      { key: 'contractor_type', label: 'Type', type: 'select',
-        options: ['debris_removal', 'monitoring', 'hauling', 'processing', 'other'] },
+      { key: 'contractor_type', label: 'Type', type: 'select', required: true,
+        options: ['hauler', 'tree_removal', 'monitoring', 'other'] },
       { key: 'primary_contact', label: 'Primary contact' },
       { key: 'contact_email', label: 'Email' },
       { key: 'contact_phone', label: 'Phone' },
@@ -52,6 +57,11 @@ const ENTITIES = {
     columns: [['Number', 'contract_number'], ['Title', 'title'],
               ['Client', 'client_name'], ['Contractor', 'contractor_name'],
               ['Status', (r) => <Badge status={r.status} />],
+              ['Projects', (r) => (Number(r.project_count) > 0
+                ? <Badge>{fmt.int(r.project_count)}</Badge>
+                : <span className="dim">none</span>)],
+              ['Line items', (r) => (Number(r.line_item_count) > 0
+                ? fmt.int(r.line_item_count) : '—')],
               ['NTE', (r) => fmt.money(r.not_to_exceed)],
               ['Executed', (r) => fmt.date(r.executed_on)]],
     fields: [
@@ -61,19 +71,24 @@ const ENTITIES = {
         required: true },
       { key: 'contractor_id', label: 'Contractor', type: 'ref', source: '/contractors',
         labelKey: 'name', required: true },
-      { key: 'contract_type', label: 'Contract type', type: 'select',
+      { key: 'contract_type', label: 'Contract type', type: 'select', required: true,
         options: ['unit_price', 'time_and_materials', 'lump_sum', 'cost_plus'] },
-      { key: 'status', label: 'Status', type: 'select',
+      { key: 'status', label: 'Status', type: 'select', required: true,
         options: ['draft', 'executed', 'active', 'suspended', 'closed'] },
       { key: 'executed_on', label: 'Executed on', type: 'date' },
-      { key: 'effective_from', label: 'Effective from', type: 'date' },
+      { key: 'effective_from', label: 'Effective from', type: 'date', required: true },
       { key: 'effective_to', label: 'Effective to', type: 'date' },
       { key: 'not_to_exceed', label: 'Not to exceed', type: 'number' },
-      { key: 'document_url', label: 'Signed document URL' },
+      { key: 'document_url', label: 'Signed document URL', required: true, wide: true,
+        hint: 'The executed contract in Box or SharePoint. Paste the full https link. '
+            + 'Billing depends on it later, so it is required now.' },
     ],
+    notice: 'contracts',
+    detail: 'contract',
   },
   sites: {
-    label: 'Disposal sites', path: '/sites', icon: 'pin',
+    label: 'Disposal sites', path: '/sites', icon: 'pin', detail: 'documents',
+    documentKinds: ['permit', 'insurance', 'certificate_other', 'other'],
     columns: [['Name', 'name'], ['Code', 'site_code'],
               ['Kind', (r) => <Badge>{r.site_kind}</Badge>],
               ['Scale', (r) => (r.has_scale ? 'Yes' : 'No')],
@@ -140,14 +155,34 @@ const ENTITIES = {
   },
 }
 
+function ScopeNote({ children }) {
+  return (
+    <div className="card" style={{ padding: '11px 14px', marginBottom: 14,
+                                   background: 'var(--surface-2)' }}>
+      <div className="row" style={{ gap: 9, alignItems: 'flex-start' }}>
+        <Icon name="building" size={14} />
+        <div className="muted" style={{ fontSize: 12.5, lineHeight: 1.6 }}>{children}</div>
+      </div>
+    </div>
+  )
+}
+
 export function Organization() {
-  const [tab, setTab] = useState('clients')
+  const [params, setParams] = useSearchParams()
+  const tab = ENTITIES[params.get('tab')] ? params.get('tab') : 'clients'
+  const setTab = (next) => setParams({ tab: next }, { replace: true })
   const config = ENTITIES[tab]
 
   return (
     <>
-      <PageHeader title="Organization" crumb={config.label} />
+      <PageHeader title={config.label} scope="portfolio" crumb="Organization" />
       <div className="page">
+        <ScopeNote>
+          These records belong to this instance, not to the project in the switcher.
+          A client, contractor, contract, disposal site, truck or disaster entered here
+          is reusable on every project, and linking one to a project happens in Project
+          Setup.
+        </ScopeNote>
         <Card flush>
           <Tabs value={tab} onChange={setTab}
                 tabs={Object.entries(ENTITIES).map(([key, c]) => ({ key, label: c.label }))} />
@@ -163,12 +198,14 @@ function EntityTable({ config }) {
   const [q, setQ] = useState('')
   const search = useDebounced(q, 320)
   const [editing, setEditing] = useState(null)
+  const [viewing, setViewing] = useState(null)
   const { data, loading, error, reload } = useFetch(
     () => api.get(config.path, { q: search || undefined, limit: 200 }),
     [config.path, search])
 
   return (
     <>
+      {config.notice === 'contracts' && <ContractRemediation />}
       <div className="card-head" style={{ borderTop: 0 }}>
         <Search value={q} onChange={setQ} placeholder={`Search ${config.label.toLowerCase()}`} />
         <div className="spacer" />
@@ -191,7 +228,8 @@ function EntityTable({ config }) {
             </tr></thead>
             <tbody>
               {data.items.map((row) => (
-                <tr key={row.id} className="clickable" onClick={() => setEditing(row)}>
+                <tr key={row.id} className="clickable"
+                    onClick={() => (config.detail ? setViewing(row) : setEditing(row))}>
                   {config.columns.map(([label, accessor]) => (
                     <td key={label}>
                       {typeof accessor === 'function' ? accessor(row) : (row[accessor] ?? '—')}
@@ -207,11 +245,169 @@ function EntityTable({ config }) {
         </div>
       ))}
 
+      {viewing && config.detail === 'contract' && (
+        <ContractDrawer contractId={viewing.id} onClose={() => setViewing(null)}
+                        onEdit={() => { setEditing(viewing); setViewing(null) }} />
+      )}
+
+      {viewing && config.detail === 'documents' && (
+        <Drawer title={viewing.name}
+                sub={config.label.replace(/s$/, '')}
+                onClose={() => setViewing(null)}
+                actions={<button className="btn sm"
+                                 onClick={() => { setEditing(viewing); setViewing(null) }}>
+                  Edit
+                </button>}>
+          <DocumentsPanel entityType={config.path === '/sites' ? 'disposal_sites' : 'contractors'}
+                          entityId={viewing.id} kinds={config.documentKinds} />
+        </Drawer>
+      )}
+
       {editing && (
         <EntityForm config={config} record={editing} onClose={() => setEditing(null)}
                     onSaved={() => { setEditing(null); reload() }} toast={toast} />
       )}
     </>
+  )
+}
+
+/**
+ * A contract read from above any single project. The question this answers is
+ * the one a single project screen cannot: which projects does this contract
+ * serve, and how much of its not-to-exceed is gone across all of them.
+ */
+function ContractDrawer({ contractId, onClose, onEdit }) {
+  const [tab, setTab] = useState('projects')
+  const { data, loading, error } = useFetch(
+    () => api.get(`/contracts/${contractId}/overview`), [contractId])
+
+  return (
+    <Drawer title={data ? data.contract_number : 'Contract'}
+            sub={data ? data.title : ''}
+            onClose={onClose}
+            actions={<button className="btn sm" onClick={onEdit}>Edit</button>}>
+      {loading && <Loading rows={5} />}
+      {error && <ErrorNote error={error} />}
+      {data && (
+        <div className="stack" style={{ gap: 14 }}>
+          <div className="grid c3" style={{ gap: 12 }}>
+            <Stat label="Not to exceed" value={fmt.money(data.not_to_exceed, 0)} />
+            <Stat label="Billed across all projects" value={fmt.money(data.billed_total, 0)}
+                  detail={data.nte_burn_pct != null ? `${data.nte_burn_pct}% of NTE` : null}
+                  tone={data.nte_burn_pct >= 90 ? 'red'
+                        : data.nte_burn_pct >= 75 ? 'amber' : undefined} />
+            <Stat label="Remaining"
+                  value={data.nte_remaining != null ? fmt.money(data.nte_remaining, 0) : '—'} />
+          </div>
+
+          <div className="card" style={{ padding: '11px 14px' }}>
+            <div className="row" style={{ gap: 9, alignItems: 'flex-start' }}>
+              <Icon name="external" size={14} />
+              <div style={{ fontSize: 12.5, lineHeight: 1.6, minWidth: 0 }}>
+                <div className="dim">Signed document</div>
+                <a href={data.document_url} target="_blank" rel="noreferrer"
+                   className="truncate" style={{ display: 'block' }}>{data.document_url}</a>
+              </div>
+            </div>
+          </div>
+
+          <Card flush>
+            <Tabs value={tab} onChange={setTab} tabs={[
+              { key: 'projects', label: 'Projects', count: data.projects.length },
+              { key: 'lines', label: 'Line items', count: data.line_items.length },
+              { key: 'documents', label: 'Documents', count: data.documents.length },
+            ]} />
+            {tab === 'projects' && (
+              data.projects.length === 0
+                ? <Empty icon="folder" title="Not linked to any project yet" />
+                : (
+                  <div className="table-wrap">
+                    <table className="data">
+                      <thead><tr>
+                        <th>Code</th><th>Project</th><th>Status</th>
+                        <th className="num">Billed</th><th>Linked</th>
+                      </tr></thead>
+                      <tbody>
+                        {data.projects.map((p) => (
+                          <tr key={p.id}>
+                            <td className="mono">{p.project_code}</td>
+                            <td>{p.name}{p.is_primary && <Badge tone="green">Primary</Badge>}</td>
+                            <td><Badge status={p.status} /></td>
+                            <td className="num">{fmt.money(p.billed, 0)}</td>
+                            <td className="muted">{fmt.date(p.linked_on)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )
+            )}
+            {tab === 'lines' && (
+              data.line_items.length === 0
+                ? <Empty icon="invoice" title="No line items entered yet">
+                    Line items are what service codes and rates get built from.
+                  </Empty>
+                : (
+                  <div className="table-wrap">
+                    <table className="data">
+                      <thead><tr>
+                        <th>Line</th><th>Code</th><th>Description</th><th>Unit</th>
+                        <th className="num">Price</th><th>Status</th><th>Service code</th>
+                      </tr></thead>
+                      <tbody>
+                        {data.line_items.map((l) => (
+                          <tr key={l.id}>
+                            <td className="mono dim">{l.line_number ?? '—'}</td>
+                            <td className="mono">{l.item_code || '—'}</td>
+                            <td className="truncate" style={{ maxWidth: 260 }}>{l.description}</td>
+                            <td className="dim">{l.unit_abbreviation || '—'}</td>
+                            <td className="num">{l.unit_price != null
+                              ? fmt.money(l.unit_price, 4) : '—'}</td>
+                            <td><Badge status={l.status === 'accepted' ? 'approved'
+                                              : l.status === 'rejected' ? 'rejected' : 'draft'}>
+                              {fmt.title(l.status)}</Badge></td>
+                            <td className="mono">{l.service_code || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )
+            )}
+            {tab === 'documents' && (
+              <div style={{ padding: 14 }}>
+                <DocumentsPanel entityType="contracts" entityId={contractId}
+                                kinds={['contract', 'contract_modification', 'rate_sheet',
+                                        'insurance', 'other']} />
+              </div>
+            )}
+          </Card>
+        </div>
+      )}
+    </Drawer>
+  )
+}
+
+/** Contracts entered before the document link was required. Listed rather than
+    left to fail at billing time. */
+function ContractRemediation() {
+  const { data } = useFetch(() => api.get('/contracts/remediation'), [])
+  if (!data || !data.items.length) return null
+  return (
+    <div style={{ padding: '13px 16px 0' }}>
+      <div className="card" style={{ padding: '11px 14px', borderColor: 'var(--amber)',
+                                     background: 'var(--amber-soft)' }}>
+        <div className="row" style={{ gap: 9, alignItems: 'flex-start' }}>
+          <Icon name="alert" size={14} />
+          <div style={{ fontSize: 12.5, lineHeight: 1.6 }}>
+            <b>{data.items.length} contract{data.items.length === 1 ? '' : 's'} need
+            attention.</b> These predate the required signed document link and will not
+            save again until one is added:{' '}
+            {data.items.map((c) => c.contract_number).join(', ')}
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -271,8 +467,10 @@ function EntityForm({ config, record, onClose, onSaved, toast }) {
                        color: 'var(--red)' }}>{error}</div>}
       <div className="grid c2" style={{ gap: 12 }}>
         {config.fields.map((f) => (
-          <FormField key={f.key} field={f} value={form[f.key]}
-                     onChange={(v) => setForm({ ...form, [f.key]: v })} />
+          <div key={f.key} style={f.wide ? { gridColumn: '1 / -1' } : undefined}>
+            <FormField field={f} value={form[f.key]}
+                       onChange={(v) => setForm({ ...form, [f.key]: v })} />
+          </div>
         ))}
       </div>
     </Modal>
@@ -295,7 +493,7 @@ function FormField({ field, value, onChange }) {
   }
 
   return (
-    <Field label={field.label} required={field.required}>
+    <Field label={field.label} required={field.required} hint={field.hint}>
       {field.type === 'select' ? (
         <select className="select" value={value || ''} onChange={(e) => onChange(e.target.value)}>
           <option value="">Choose…</option>
@@ -314,149 +512,5 @@ function FormField({ field, value, onChange }) {
                value={value ?? ''} onChange={(e) => onChange(e.target.value)} />
       )}
     </Field>
-  )
-}
-
-/* ================================= WORKERS =============================== */
-export function Workers() {
-  const { toast, lookups } = useApp()
-  const [q, setQ] = useState('')
-  const search = useDebounced(q, 320)
-  const [editing, setEditing] = useState(null)
-  const { data, loading, error, reload } = useFetch(
-    () => api.get('/users', { q: search || undefined, limit: 200 }), [search])
-
-  return (
-    <>
-      <PageHeader title="Workers">
-        <button className="btn primary" onClick={() => setEditing({})}>
-          <Icon name="plus" size={14} /> New worker
-        </button>
-      </PageHeader>
-      <div className="page">
-        <Card flush>
-          <div className="card-head">
-            <Search value={q} onChange={setQ} placeholder="Name, username, monitor ID" />
-          </div>
-          {loading && <Loading rows={6} />}
-          {error && <div style={{ padding: 16 }}><ErrorNote error={error} onRetry={reload} /></div>}
-          {data && !loading && (
-            <div className="table-wrap">
-              <table className="data">
-                <thead><tr>
-                  <th>Name</th><th>Username</th><th>Monitor ID</th><th>Role</th>
-                  <th className="num">Projects</th><th className="num">Tickets created</th>
-                  <th>Last login</th><th>Status</th>
-                </tr></thead>
-                <tbody>
-                  {data.items.map((u) => (
-                    <tr key={u.id} className="clickable" onClick={() => setEditing(u)}>
-                      <td style={{ fontWeight: 550 }}>{u.full_name}</td>
-                      <td className="mono dim">{u.username}</td>
-                      <td className="mono">{u.monitor_id || '—'}</td>
-                      <td><Badge>{u.role_label}</Badge></td>
-                      <td className="num">{fmt.int(u.project_count)}</td>
-                      <td className="num">{fmt.int(u.tickets_created)}</td>
-                      <td className="muted">{u.last_login_at ? fmt.ago(u.last_login_at) : 'Never'}</td>
-                      <td>{u.is_active ? <Badge tone="green">Active</Badge> : <Badge>Disabled</Badge>}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Card>
-      </div>
-
-      {editing && (
-        <WorkerForm user={editing} roles={lookups?.roles || []} toast={toast}
-                    onClose={() => setEditing(null)}
-                    onSaved={() => { setEditing(null); reload() }} />
-      )}
-    </>
-  )
-}
-
-function WorkerForm({ user, roles, toast, onClose, onSaved }) {
-  const isNew = !user.id
-  const [form, setForm] = useState({
-    username: user.username || '', full_name: user.full_name || '',
-    email: user.email || '', monitor_id: user.monitor_id || '',
-    phone: user.phone || '', global_role: user.global_role || 'monitor',
-    password: '', is_active: user.is_active ?? true,
-  })
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState(null)
-  const set = (patch) => setForm((f) => ({ ...f, ...patch }))
-
-  async function save() {
-    setBusy(true); setError(null)
-    const payload = Object.fromEntries(
-      Object.entries(form).filter(([k, v]) => v !== '' && !(k === 'password' && !v)))
-    try {
-      if (isNew) await api.post('/users', payload)
-      else {
-        delete payload.username
-        await api.patch(`/users/${user.id}`, payload)
-      }
-      toast(isNew ? 'Worker created' : 'Worker updated', form.full_name)
-      onSaved()
-    } catch (err) { setError(err.message) } finally { setBusy(false) }
-  }
-
-  return (
-    <Modal title={isNew ? 'New worker' : form.full_name} onClose={onClose} footer={
-      <>
-        <button className="btn" onClick={onClose}>Cancel</button>
-        <button className="btn primary" disabled={busy || !form.full_name || !form.username}
-                onClick={save}>{busy && <span className="spinner" />} {isNew ? 'Create' : 'Save'}</button>
-      </>
-    }>
-      {error && <div className="card" style={{ padding: 12, marginBottom: 14,
-                       borderColor: 'var(--red)', background: 'var(--red-soft)',
-                       color: 'var(--red)' }}>{error}</div>}
-      <div className="stack">
-        <div className="grid c2" style={{ gap: 12 }}>
-          <Field label="Full name" required>
-            <input className="input" value={form.full_name} autoFocus
-                   onChange={(e) => set({ full_name: e.target.value })} />
-          </Field>
-          <Field label="Username" required hint={isNew ? '' : 'Cannot be changed'}>
-            <input className="input" value={form.username} disabled={!isNew}
-                   onChange={(e) => set({ username: e.target.value })} />
-          </Field>
-          <Field label="Monitor ID" hint="Printed on tickets the field creates">
-            <input className="input" value={form.monitor_id}
-                   onChange={(e) => set({ monitor_id: e.target.value })} placeholder="MON-118" />
-          </Field>
-          <Field label="Role">
-            <select className="select" value={form.global_role}
-                    onChange={(e) => set({ global_role: e.target.value })}>
-              {roles.map((r) => (
-                <option key={r.code} value={r.code}>{r.label} — {r.description}</option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Email">
-            <input className="input" type="email" value={form.email}
-                   onChange={(e) => set({ email: e.target.value })} />
-          </Field>
-          <Field label="Phone">
-            <input className="input" value={form.phone}
-                   onChange={(e) => set({ phone: e.target.value })} />
-          </Field>
-        </div>
-        <Field label={isNew ? 'Initial password' : 'Reset password'}
-               hint="Leave blank to require a reset on first sign in">
-          <input className="input" type="password" value={form.password}
-                 onChange={(e) => set({ password: e.target.value })} />
-        </Field>
-        <label className="check">
-          <input type="checkbox" checked={form.is_active}
-                 onChange={(e) => set({ is_active: e.target.checked })} />
-          Active
-        </label>
-      </div>
-    </Modal>
   )
 }

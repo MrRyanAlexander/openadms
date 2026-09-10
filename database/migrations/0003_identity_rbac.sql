@@ -41,7 +41,23 @@ CREATE TABLE users (
     id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     email            citext,
     username         text NOT NULL,
-    full_name        text NOT NULL,
+    -- A worker is looked for by the parts of their name, by the badge their
+    -- employer knows them by, and by who signs their cheque. One `full_name`
+    -- column answered none of those, so the parts are the stored truth and
+    -- full_name is derived from them.
+    first_name       text,
+    middle_name      text,
+    last_name        text,
+    full_name        text NOT NULL GENERATED ALWAYS AS (
+                         btrim(regexp_replace(
+                             coalesce(first_name, '') || ' ' ||
+                             coalesce(middle_name, '') || ' ' ||
+                             coalesce(last_name, ''),
+                             '\s+', ' ', 'g'))
+                     ) STORED,
+    employee_id      text,
+    -- employer_contractor_id is added in 0004, once contractors exists.
+    employer_name    text,
     monitor_id       text,
     password_hash    text,
     global_role      text NOT NULL REFERENCES roles (code) ON UPDATE CASCADE,
@@ -54,7 +70,10 @@ CREATE TABLE users (
     preferences      jsonb NOT NULL DEFAULT '{}'::jsonb,
     created_at       timestamptz NOT NULL DEFAULT now(),
     updated_at       timestamptz NOT NULL DEFAULT now(),
-    deleted_at       timestamptz
+    deleted_at       timestamptz,
+    CONSTRAINT users_name_present CHECK (
+        coalesce(btrim(first_name), '') <> ''
+        OR coalesce(btrim(last_name), '') <> '')
 );
 
 CREATE UNIQUE INDEX users_username_key
@@ -65,8 +84,22 @@ CREATE UNIQUE INDEX users_monitor_id_key
     ON users (monitor_id) WHERE deleted_at IS NULL AND monitor_id IS NOT NULL;
 SELECT adms_attach_touch('users');
 
+CREATE INDEX users_employee_id_idx ON users (employee_id)
+    WHERE employee_id IS NOT NULL;
+CREATE INDEX users_employer_name_idx ON users (lower(employer_name))
+    WHERE employer_name IS NOT NULL;
+CREATE INDEX users_last_name_idx ON users (lower(last_name));
+
 COMMENT ON COLUMN users.monitor_id IS
     'Field-facing Monitor ID printed on tickets. Distinct from the surrogate id.';
+COMMENT ON COLUMN users.employee_id IS
+    'The badge or payroll number the employer knows this person by. Unique '
+    'within an employer, never across employers.';
+COMMENT ON COLUMN users.employer_name IS
+    'Free text for a staffing firm that is not a contractor on any project. '
+    'Where the employer is a contractor, employer_contractor_id carries it.';
+COMMENT ON COLUMN users.full_name IS
+    'Derived from the name parts. Written by the database, never by a client.';
 
 -- ---------------------------------------------------------------------------
 -- Refresh / session tokens

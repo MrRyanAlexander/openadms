@@ -135,6 +135,34 @@ export const api = {
     return request('GET', '/auth/me')
   },
 
+  /** A file the API streams back, rather than JSON. The access token is in
+      memory, so a plain link cannot fetch it: the blob is pulled here and
+      handed to the browser as a download. */
+  async download(path, filename, params) {
+    const pull = () => fetch(url(path, params), {
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+    })
+    let response = await pull()
+    if (response.status === 401 && tokens.refresh && await refreshOnce()) {
+      response = await pull()
+    }
+    if (!response.ok) {
+      const text = await response.text()
+      let message = response.statusText
+      try { message = JSON.parse(text)?.error?.message || message } catch { /* not json */ }
+      throw new ApiError(response.status, 'download_failed', message)
+    }
+    const blob = await response.blob()
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = filename
+      || (response.headers.get('content-disposition') || '').split('filename=')[1]
+        ?.replace(/"/g, '') || 'download'
+    link.click()
+    URL.revokeObjectURL(link.href)
+    return blob.size
+  },
+
   async logout() {
     try {
       if (tokens.refresh) await raw('POST', '/auth/logout',

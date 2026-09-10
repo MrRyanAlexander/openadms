@@ -8,7 +8,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Body, Depends, Query
 from pydantic import BaseModel, Field
 
-from .. import db
+from .. import db, tabular
 from ..deps import CurrentUser, Paging, ProjectContext, require_permission
 from ..errors import bad_request, conflict, not_found
 
@@ -560,3 +560,564 @@ async def remove_invoice_line(invoice_id: uuid.UUID, line_id: uuid.UUID,
             "DELETE FROM invoice_lines WHERE id = $1 AND invoice_id = $2",
             line_id, invoice_id)
     return None
+
+
+# ---------------------------------------------------------------------------
+# Contract line items
+#
+# A contract PDF is a list of priced lines. Those lines are what service codes,
+# rates and rules get built from, so they live here as rows a person can accept
+# or reject. The parser is a later pass; this is the structure it will feed, and
+# the manual path that works without it.
+# ---------------------------------------------------------------------------
+class LineItemBody(BaseModel):
+    description: str = Field(min_length=2)
+    line_number: Optional[int] = None
+    item_code: Optional[str] = None
+    unit_type_code: Optional[str] = None
+    unit_price: Optional[float] = Field(default=None, ge=0)
+    debris_type_code: Optional[str] = None
+    service_category: Optional[str] = None
+    effective_from: Optional[date] = None
+    effective_to: Optional[date] = None
+    source_page: Optional[int] = None
+    source_text: Optional[str] = None
+    status: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class LineItemImport(BaseModel):
+    text: str = Field(min_length=1)
+    dry_run: bool = True
+
+
+class FromLineItems(BaseModel):
+    line_item_ids: list[uuid.UUID] = Field(min_length=1)
+    contractor_id: Optional[uuid.UUID] = None
+    fema_category: Optional[str] = None
+
+
+_LINE_ITEM_SELECT = "SELECT * FROM contract_line_item_review"
+
+_LINE_FIELDS = [
+    tabular.Field_("line_number", ("line", "line no", "no", "number", "item no",
+                                   "line number", "seq"), tabular.is_id, priority=20),
+    tabular.Field_("item_code", ("item code", "code", "item", "ref", "pay item"),
+                   priority=30),
+    tabular.Field_("description", ("description", "item description", "scope",
+                                   "work", "detail", "service"),
+                   tabular.is_sentence, priority=10),
+    tabular.Field_("unit_type_code", ("unit", "uom", "unit of measure", "units",
+                                      "measure"), priority=40),
+    tabular.Field_("unit_price", ("unit price", "price", "rate", "amount", "cost",
+                                  "unit cost"), tabular.is_money, priority=15),
+    tabular.Field_("debris_type_code", ("debris", "debris type", "material",
+                                        "stream", "type"), priority=60),
+    tabular.Field_("service_category", ("category", "service category", "class"),
+                   priority=70),
+]
+
+# What people actually write in a unit column.
+_UNIT_SYNONYMS = {
+    "cy": "per_cubic_yard", "c.y.": "per_cubic_yard", "cubic yard": "per_cubic_yard",
+    "cubic yards": "per_cubic_yard", "cuyd": "per_cubic_yard", "yd3": "per_cubic_yard",
+    "ton": "per_ton", "tons": "per_ton", "tn": "per_ton",
+    "mile": "per_mile", "miles": "per_mile", "mi": "per_mile",
+    "hour": "per_labor_hour", "hr": "per_labor_hour", "hrs": "per_labor_hour",
+    "labor hour": "per_labor_hour", "man hour": "per_labor_hour",
+    "equipment hour": "per_equip_hour", "eq hr": "per_equip_hour",
+    "each": "per_each", "ea": "per_each", "ea.": "per_each",
+    "unit": "per_unit", "units": "per_unit", "count": "per_unit",
+    "stump": "per_unit", "tree": "per_unit",
+    "inch": "per_diameter_in", "diameter inch": "per_diameter_in",
+    "dia": "per_diameter_in", "in": "per_diameter_in",
+    "lf": "per_linear_foot", "linear foot": "per_linear_foot",
+    "linear feet": "per_linear_foot", "ft": "per_linear_foot",
+    "ls": "flat_fee", "lump sum": "flat_fee", "flat": "flat_fee",
+}
+
+_DEBRIS_SYNONYMS = {
+    "veg": "VEG", "vegetative": "VEG", "vegetation": "VEG", "woody": "VEG",
+    "green waste": "VEG", "c&d": "CD", "c and d": "CD", "cd": "CD",
+    "construction": "CD", "construction and demolition": "CD", "demo": "CD",
+    "mixed": "MIXED", "hhw": "HHW", "hazardous": "HHW",
+    "white goods": "WHITE", "appliances": "WHITE", "white": "WHITE",
+    "ewaste": "EWASTE", "e-waste": "EWASTE", "electronics": "EWASTE",
+    "soil": "SOIL", "mud": "SOIL", "sand": "SAND",
+    "vehicle": "VEHICLE", "vessel": "VEHICLE", "car": "VEHICLE",
+    "stump": "STUMP", "stumps": "STUMP", "hanger": "HANGER", "hangers": "HANGER",
+    "leaner": "LEANER", "leaners": "LEANER", "putrescent": "PUTRES",
+}
+
+
+async def _lookup_maps(conn) -> tuple[dict[str, str], dict[str, str]]:
+    units = await conn.fetch("SELECT code, label, abbreviation FROM unit_types")
+    debris = await conn.fetch("SELECT code, label FROM debris_types")
+    unit_map = dict(_UNIT_SYNONYMS)
+    for u in units:
+        unit_map[u["code"].lower()] = u["code"]
+        unit_map[u["label"].lower()] = u["code"]
+        unit_map[u["abbreviation"].lower()] = u["code"]
+    debris_map = dict(_DEBRIS_SYNONYMS)
+    for d in debris:
+        debris_map[d["code"].lower()] = d["code"]
+        debris_map[d["label"].lower()] = d["code"]
+    return unit_map, debris_map
+
+
+def _resolve(value: Optional[str], table: dict[str, str]) -> Optional[str]:
+    if not value:
+        return None
+    key = str(value).strip().lower()
+    return table.get(key) or table.get(key.rstrip("s")) or None
+
+
+async def _contract_or_404(conn, contract_id: uuid.UUID) -> dict[str, Any]:
+    rec = await conn.fetchrow(
+        "SELECT * FROM contracts WHERE id = $1 AND deleted_at IS NULL", contract_id)
+    if rec is None:
+        raise not_found("Contract")
+    return dict(rec)
+
+
+@router.get("/contracts/{contract_id}/line-items")
+async def list_line_items(contract_id: uuid.UUID, user: CurrentUser,
+                          status: Optional[str] = None,
+                          _: dict = Depends(require_permission("ticket.read.project"))):
+    where = ["contract_id = $1"]
+    args: list[Any] = [contract_id]
+    if status:
+        args.append(status)
+        where.append(f"status = ${len(args)}")
+    async with db.read() as conn:
+        recs = await conn.fetch(
+            f"{_LINE_ITEM_SELECT} WHERE {' AND '.join(where)} "
+            f"ORDER BY line_number NULLS LAST, created_at", *args)
+    items = db.rows(recs)
+    return {
+        "items": items,
+        "total": len(items),
+        "counts": {
+            s: sum(1 for i in items if i["status"] == s)
+            for s in ("draft", "accepted", "rejected")
+        },
+    }
+
+
+@router.post("/contracts/{contract_id}/line-items", status_code=201)
+async def create_line_item(contract_id: uuid.UUID, body: LineItemBody,
+                           user: CurrentUser,
+                           _: dict = Depends(require_permission("contract.manage"))):
+    payload = body.model_dump(exclude_none=True)
+    payload["contract_id"] = contract_id
+    async with db.tx(user) as conn:
+        await _contract_or_404(conn, contract_id)
+        sql, args = db.build_insert("contract_line_items", payload, returning="id")
+        new_id = await conn.fetchval(sql, *args)
+        rec = await conn.fetchrow(f"{_LINE_ITEM_SELECT} WHERE id = $1", new_id)
+    return db.row(rec)
+
+
+@router.patch("/line-items/{line_item_id}")
+async def update_line_item(line_item_id: uuid.UUID, body: LineItemBody,
+                           user: CurrentUser,
+                           _: dict = Depends(require_permission("contract.manage"))):
+    payload = body.model_dump(exclude_none=True)
+    if body.status in ("accepted", "rejected"):
+        payload["reviewed_by"] = user["id"]
+    sql, args = db.build_update("contract_line_items", payload,
+                                "id = $1 AND deleted_at IS NULL", [line_item_id],
+                                returning="id")
+    async with db.tx(user) as conn:
+        found = await conn.fetchval(sql, *args)
+        if found is None:
+            raise not_found("Line item")
+        if body.status in ("accepted", "rejected"):
+            await conn.execute(
+                "UPDATE contract_line_items SET reviewed_at = now() WHERE id = $1", found)
+        rec = await conn.fetchrow(f"{_LINE_ITEM_SELECT} WHERE id = $1", found)
+    return db.row(rec)
+
+
+@router.delete("/line-items/{line_item_id}", status_code=204)
+async def remove_line_item(line_item_id: uuid.UUID, user: CurrentUser,
+                           _: dict = Depends(require_permission("contract.manage"))):
+    async with db.tx(user) as conn:
+        await conn.execute(
+            "UPDATE contract_line_items SET deleted_at = now() WHERE id = $1",
+            line_item_id)
+    return None
+
+
+@router.post("/contracts/{contract_id}/line-items/import")
+async def import_line_items(contract_id: uuid.UUID, body: LineItemImport,
+                            user: CurrentUser,
+                            _: dict = Depends(require_permission("contract.manage"))):
+    """Takes whatever was pasted and says what it would do before doing it.
+
+    Dry run is the default. The answer is a table the caller renders and the
+    user corrects, not a count of successes and failures."""
+    parsed = tabular.parse(body.text, _LINE_FIELDS)
+    if not parsed.rows:
+        raise bad_request(
+            "Nothing readable in that paste. A block copied out of the contract "
+            "spreadsheet, or one line item per line, both work.",
+            code="nothing_parsed")
+
+    async with db.read() as conn:
+        await _contract_or_404(conn, contract_id)
+        unit_map, debris_map = await _lookup_maps(conn)
+        existing = await conn.fetch(
+            "SELECT id, line_number, item_code FROM contract_line_items "
+            "WHERE contract_id = $1 AND deleted_at IS NULL", contract_id)
+
+    by_number = {r["line_number"]: r["id"] for r in existing if r["line_number"]}
+    by_code = {(r["item_code"] or "").lower(): r["id"] for r in existing if r["item_code"]}
+
+    plan: list[dict[str, Any]] = []
+    for index, raw in enumerate(parsed.rows):
+        problems: list[str] = []
+        line_number = None
+        if raw.get("line_number"):
+            digits = "".join(c for c in raw["line_number"] if c.isdigit())
+            line_number = int(digits) if digits else None
+
+        unit_code = _resolve(raw.get("unit_type_code"), unit_map)
+        if raw.get("unit_type_code") and not unit_code:
+            problems.append(f"the unit \"{raw['unit_type_code']}\" is not one we know")
+
+        debris_code = _resolve(raw.get("debris_type_code"), debris_map)
+        if raw.get("debris_type_code") and not debris_code:
+            problems.append(
+                f"the debris type \"{raw['debris_type_code']}\" is not one we know")
+
+        price = tabular.to_number(raw.get("unit_price"))
+        if raw.get("unit_price") and price is None:
+            problems.append(f"\"{raw['unit_price']}\" is not a price")
+
+        description = (raw.get("description") or "").strip()
+        if not description:
+            problems.append("no description, so there is nothing to bill against")
+
+        match = by_number.get(line_number) if line_number else None
+        if match is None and raw.get("item_code"):
+            match = by_code.get(raw["item_code"].lower())
+
+        plan.append({
+            "row": index + 1,
+            "action": "skip" if problems else ("update" if match else "create"),
+            "existing_id": str(match) if match else None,
+            "problems": problems,
+            "source_text": parsed.source_lines[index] if index < len(parsed.source_lines) else "",
+            "values": {
+                "line_number": line_number,
+                "item_code": raw.get("item_code"),
+                "description": description,
+                "unit_type_code": unit_code,
+                "unit_price": price,
+                "debris_type_code": debris_code,
+                "service_category": raw.get("service_category"),
+            },
+        })
+
+    creates = [p for p in plan if p["action"] == "create"]
+    updates = [p for p in plan if p["action"] == "update"]
+    skips = [p for p in plan if p["action"] == "skip"]
+
+    summary = (
+        f"{parsed.describe()} "
+        f"{len(creates)} would be added, {len(updates)} already on this contract "
+        f"and would be updated, {len(skips)} cannot be used yet."
+    )
+
+    if body.dry_run:
+        return {"dry_run": True, "summary": summary, "rows": plan,
+                "columns": parsed.columns, "header": parsed.header_row,
+                "unmapped_columns": parsed.unmapped}
+
+    # One transaction. A half-imported contract never happens.
+    written = 0
+    async with db.tx(user) as conn:
+        for p in plan:
+            if p["action"] == "skip":
+                continue
+            values = {k: v for k, v in p["values"].items() if v is not None}
+            values["source_text"] = p["source_text"]
+            if p["action"] == "create":
+                values["contract_id"] = contract_id
+                sql, args = db.build_insert("contract_line_items", values, returning="id")
+                await conn.fetchval(sql, *args)
+            else:
+                sql, args = db.build_update(
+                    "contract_line_items", values, "id = $1",
+                    [uuid.UUID(p["existing_id"])], returning="id")
+                await conn.fetchval(sql, *args)
+            written += 1
+        recs = await conn.fetch(
+            f"{_LINE_ITEM_SELECT} WHERE contract_id = $1 "
+            f"ORDER BY line_number NULLS LAST, created_at", contract_id)
+
+    return {"dry_run": False, "summary": summary, "written": written,
+            "skipped": len(skips), "items": db.rows(recs)}
+
+
+@router.post("/projects/{project_id}/service-codes/from-line-items", status_code=201)
+async def service_codes_from_line_items(
+    ctx: ProjectContext, body: FromLineItems, user: CurrentUser,
+    _: dict = Depends(require_permission("service_code.manage")),
+):
+    """Turn accepted contract lines into billable codes, in one transaction.
+
+    This is the manual version of the automation and the step the parser will
+    feed later. Each code points back at the line it came from, and the line
+    records the code it produced."""
+    project_id = ctx["project"]["id"]
+    created: list[dict[str, Any]] = []
+
+    async with db.tx(user) as conn:
+        lines = await conn.fetch(
+            """
+            SELECT li.*, c.contractor_id AS contract_contractor_id
+              FROM contract_line_items li
+              JOIN contracts c ON c.id = li.contract_id
+             WHERE li.id = ANY($1::uuid[]) AND li.deleted_at IS NULL
+            """, list(body.line_item_ids))
+        if len(lines) != len(set(body.line_item_ids)):
+            raise not_found("One or more line items")
+
+        taken = {r["code"].lower() for r in await conn.fetch(
+            "SELECT code FROM service_codes WHERE project_id = $1 AND deleted_at IS NULL",
+            project_id)}
+
+        for line in lines:
+            contractor_id = body.contractor_id or line["contract_contractor_id"]
+            code = _code_for(line, taken)
+            taken.add(code.lower())
+            name = (line["description"] or "").strip()
+            rec = await conn.fetchrow(
+                """
+                INSERT INTO service_codes (project_id, code, name, contractor_id,
+                                           description, fema_category,
+                                           contract_id, contract_line_item_id)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id
+                """,
+                project_id, code, name[:120], contractor_id,
+                name if len(name) > 120 else None, body.fema_category,
+                line["contract_id"], line["id"])
+
+            if line["unit_price"] is not None and line["unit_type_code"]:
+                await conn.execute(
+                    """
+                    INSERT INTO rates (service_code_id, amount, unit_type,
+                                       effective_from, notes)
+                    VALUES ($1, $2, $3, COALESCE($4::date, current_date), $5)
+                    """,
+                    rec["id"], line["unit_price"], line["unit_type_code"],
+                    line["effective_from"],
+                    f"Opening rate from contract line {line['line_number'] or line['item_code']}")
+
+            await conn.execute(
+                """
+                UPDATE contract_line_items
+                   SET status = 'accepted', accepted_service_code_id = $2,
+                       reviewed_by = $3, reviewed_at = now()
+                 WHERE id = $1
+                """, line["id"], rec["id"], user["id"])
+
+            full = await conn.fetchrow(f"{_SERVICE_CODE_SELECT} WHERE sc.id = $1", rec["id"])
+            created.append(db.row(full))
+
+    return {"items": created, "created": len(created)}
+
+
+def _code_for(line: dict[str, Any], taken: set[str]) -> str:
+    """A short, stable code. The contract's own item code where there is one,
+    because that is what people will look for on the invoice."""
+    base = (line["item_code"] or "").strip().upper()
+    if not base:
+        parts = [line["debris_type_code"] or "SVC"]
+        if line["line_number"]:
+            parts.append(str(line["line_number"]))
+        base = "-".join(parts)
+    base = "".join(c for c in base.replace(" ", "-") if c.isalnum() or c in "-_")[:28] or "SVC"
+    code = base
+    suffix = 2
+    while code.lower() in taken:
+        code = f"{base}-{suffix}"
+        suffix += 1
+    return code
+
+
+# ---------------------------------------------------------------------------
+# Contract intake staging (Phase 6)
+#
+# Dropping a contract PDF registers the link and stages it. Nothing reads the
+# file yet, and the interface says so rather than implying otherwise. What this
+# does buy now is the review surface: proposed line items can be seeded by hand,
+# accepted or rejected, and turned into service codes, so the parser later drops
+# into a path that already works end to end.
+# ---------------------------------------------------------------------------
+class IngestionCreate(BaseModel):
+    document_id: Optional[uuid.UUID] = None
+    title: Optional[str] = None
+    url: Optional[str] = None
+    provider: str = "sharepoint"
+    notes: Optional[str] = None
+
+
+class ProposalBody(BaseModel):
+    """A line item as a parser would propose it, or as a person seeds one."""
+    description: str = Field(min_length=2)
+    line_number: Optional[int] = None
+    item_code: Optional[str] = None
+    unit_type_code: Optional[str] = None
+    unit_price: Optional[float] = Field(default=None, ge=0)
+    debris_type_code: Optional[str] = None
+    service_category: Optional[str] = None
+    source_page: Optional[int] = None
+    source_text: Optional[str] = None
+    extraction_confidence: Optional[float] = Field(default=None, ge=0, le=1)
+
+
+_INGESTION_SELECT = """
+    SELECT ci.*, d.title AS document_title, d.url AS document_url,
+           d.provider, u.full_name AS uploaded_by_name,
+           (SELECT count(*) FROM contract_line_items li
+             WHERE li.ingestion_id = ci.id AND li.deleted_at IS NULL
+               AND li.status = 'draft') AS awaiting_count
+      FROM contract_ingestions ci
+      LEFT JOIN documents d ON d.id = ci.document_id
+      LEFT JOIN users u ON u.id = ci.uploaded_by
+"""
+
+
+@router.get("/contracts/{contract_id}/ingestions")
+async def list_ingestions(contract_id: uuid.UUID, user: CurrentUser,
+                          _: dict = Depends(require_permission("ticket.read.project"))):
+    async with db.read() as conn:
+        recs = await conn.fetch(
+            f"{_INGESTION_SELECT} WHERE ci.contract_id = $1 ORDER BY ci.created_at DESC",
+            contract_id)
+    return {"items": db.rows(recs), "total": len(recs),
+            "parsing_enabled": False,
+            "note": ("Extraction from the PDF is a later pass. Staged documents are "
+                     "registered and reviewable now, and nothing is reading them yet.")}
+
+
+@router.post("/contracts/{contract_id}/ingestions", status_code=201)
+async def stage_contract_document(contract_id: uuid.UUID, body: IngestionCreate,
+                                  user: CurrentUser,
+                                  _: dict = Depends(require_permission("contract.manage"))):
+    """Registers the document link and stages it for extraction.
+
+    The file itself stays wherever the Box or SharePoint link points. This never
+    takes custody of it."""
+    if not body.document_id and not (body.title and body.url):
+        raise bad_request(
+            "Send an existing document_id, or a title and a link to register one.",
+            code="document_required")
+
+    async with db.tx(user) as conn:
+        await _contract_or_404(conn, contract_id)
+        document_id = body.document_id
+        if document_id is None:
+            url = str(body.url).strip()
+            if not url.lower().startswith(("http://", "https://")):
+                raise bad_request(
+                    "The contract link has to be a full http or https URL into Box, "
+                    "SharePoint or wherever the PDF lives.",
+                    code="document_url_invalid")
+            document_id = await conn.fetchval(
+                """
+                INSERT INTO documents (entity_type, entity_id, kind_code, title, url,
+                                       provider, created_by)
+                VALUES ('contracts', $1, 'contract', $2, $3, $4, $5)
+                RETURNING id
+                """, contract_id, body.title, url, body.provider, user["id"])
+
+        new_id = await conn.fetchval(
+            """
+            INSERT INTO contract_ingestions (contract_id, document_id, status,
+                                             uploaded_by, notes)
+            VALUES ($1, $2, 'parsing_not_enabled', $3, $4)
+            RETURNING id
+            """, contract_id, document_id, user["id"], body.notes)
+        rec = await conn.fetchrow(f"{_INGESTION_SELECT} WHERE ci.id = $1", new_id)
+    return db.row(rec)
+
+
+@router.post("/ingestions/{ingestion_id}/proposals", status_code=201)
+async def seed_proposals(ingestion_id: uuid.UUID, user: CurrentUser,
+                         body: list[ProposalBody] = Body(...),
+                         _: dict = Depends(require_permission("contract.manage"))):
+    """Proposed line items against a staged document.
+
+    Today these are seeded by hand, which is what lets the review screen be
+    built and tested before any parser exists. Tomorrow the parser writes the
+    same rows and nothing downstream changes."""
+    if not body:
+        raise bad_request("No proposals supplied")
+
+    async with db.tx(user) as conn:
+        ingestion = await conn.fetchrow(
+            "SELECT * FROM contract_ingestions WHERE id = $1", ingestion_id)
+        if ingestion is None:
+            raise not_found("Ingestion")
+
+        for item in body:
+            payload = item.model_dump(exclude_none=True)
+            payload["contract_id"] = ingestion["contract_id"]
+            payload["ingestion_id"] = ingestion_id
+            payload["status"] = "draft"
+            sql, args = db.build_insert("contract_line_items", payload, returning="id")
+            await conn.fetchval(sql, *args)
+
+        await conn.execute(
+            """
+            UPDATE contract_ingestions
+               SET proposed_count = (SELECT count(*) FROM contract_line_items
+                                      WHERE ingestion_id = $1 AND deleted_at IS NULL),
+                   status = 'parsed', parsed_at = now(),
+                   parser_version = COALESCE(parser_version, 'seeded-by-hand')
+             WHERE id = $1
+            """, ingestion_id)
+        rec = await conn.fetchrow(f"{_INGESTION_SELECT} WHERE ci.id = $1", ingestion_id)
+    return db.row(rec)
+
+
+@router.get("/ingestions/{ingestion_id}/proposals")
+async def list_proposals(ingestion_id: uuid.UUID, user: CurrentUser,
+                         _: dict = Depends(require_permission("ticket.read.project"))):
+    async with db.read() as conn:
+        recs = await conn.fetch(
+            f"{_LINE_ITEM_SELECT} WHERE ingestion_id = $1 "
+            f"ORDER BY line_number NULLS LAST, created_at", ingestion_id)
+    items = db.rows(recs)
+    return {
+        "items": items, "total": len(items),
+        "counts": {s: sum(1 for i in items if i["status"] == s)
+                   for s in ("draft", "accepted", "rejected")},
+    }
+
+
+@router.post("/ingestions/{ingestion_id}/close")
+async def close_ingestion(ingestion_id: uuid.UUID, user: CurrentUser,
+                          _: dict = Depends(require_permission("contract.manage"))):
+    """Marks the review done and records how it went, which is the accept and
+    reject history a later ranking pass learns from."""
+    async with db.tx(user) as conn:
+        rec = await conn.fetchrow(
+            """
+            UPDATE contract_ingestions ci
+               SET status = 'reviewed',
+                   accepted_count = (SELECT count(*) FROM contract_line_items
+                                      WHERE ingestion_id = ci.id AND status = 'accepted'),
+                   rejected_count = (SELECT count(*) FROM contract_line_items
+                                      WHERE ingestion_id = ci.id AND status = 'rejected')
+             WHERE ci.id = $1
+         RETURNING ci.id
+            """, ingestion_id)
+        if rec is None:
+            raise not_found("Ingestion")
+        full = await conn.fetchrow(f"{_INGESTION_SELECT} WHERE ci.id = $1", rec["id"])
+    return db.row(full)

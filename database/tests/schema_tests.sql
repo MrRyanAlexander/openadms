@@ -245,8 +245,12 @@ BEGIN
     -- =======================================================================
     SELECT id INTO v_type FROM ticket_types WHERE code = 'LOAD';
     DELETE FROM contracts WHERE contract_number = 'TEST-UNLINKED-001';
-    INSERT INTO contracts (contract_number, title, client_id, contractor_id, status)
-    SELECT 'TEST-UNLINKED-001', 'Contract not on any project', client_id, contractor_id, 'draft'
+    -- effective_from and document_url are required on every contract now, so
+    -- even a throwaway fixture has to carry them.
+    INSERT INTO contracts (contract_number, title, client_id, contractor_id, status,
+                           effective_from, document_url)
+    SELECT 'TEST-UNLINKED-001', 'Contract not on any project', client_id, contractor_id,
+           'draft', current_date, 'https://example.invalid/test-unlinked-001.pdf'
       FROM contracts LIMIT 1
     RETURNING id INTO v_txn;
 
@@ -507,6 +511,289 @@ BEGIN
     UPDATE ticket_types SET is_active = false WHERE code = 'TEST_MARINE';
 END
 $tests$;
+
+
+-- =============================================================================
+-- Phase 1 :: documents, contacts, scope, estimates, permits, line items
+-- =============================================================================
+DO $phase1$
+DECLARE
+    v_project    uuid;
+    v_client     uuid;
+    v_prime      uuid;
+    v_sub        uuid;
+    v_site       uuid;
+    v_ps         uuid;
+    v_contract   uuid;
+    v_doc        uuid;
+    v_line       uuid;
+    v_user       uuid;
+    v_n          integer;
+    v_num        numeric;
+    v_txt        text;
+BEGIN
+    SELECT id INTO v_project FROM projects WHERE project_code = 'STL-2026-ROW';
+    SELECT client_id INTO v_client FROM projects WHERE id = v_project;
+    SELECT id INTO v_prime FROM contractors WHERE code = 'GES';
+    SELECT id INTO v_sub   FROM contractors WHERE code = 'MER';
+
+    -- 1.1 The document registry --------------------------------------------
+    PERFORM pg_temp.check_that('a rate sheet round-trips on a contractor',
+        EXISTS (SELECT 1 FROM documents
+                 WHERE entity_type = 'contractors' AND entity_id = v_prime
+                   AND kind_code = 'rate_sheet' AND url LIKE 'https://%'));
+
+    PERFORM pg_temp.check_that('a permit round-trips on a disposal site',
+        EXISTS (SELECT 1 FROM documents
+                 WHERE entity_type = 'disposal_sites' AND kind_code = 'permit'));
+
+    SELECT count(*) INTO v_n FROM documents
+     WHERE deleted_at IS NULL AND expires_on IS NOT NULL
+       AND expires_on <= current_date + 30;
+    PERFORM pg_temp.check_that('the expiring-in-30-days sweep finds the HHW certificate',
+        v_n >= 1, v_n::text || ' expiring');
+
+    PERFORM pg_temp.check_that('document_watch flags the same certificate as expiring',
+        EXISTS (SELECT 1 FROM document_watch
+                 WHERE kind_code = 'certificate_hhw' AND watch_state = 'expiring'));
+
+    PERFORM pg_temp.check_raises('a document link that is not a URL is refused',
+        format('INSERT INTO documents (entity_type, entity_id, kind_code, title, url)
+                VALUES (''contractors'', %L, ''other'', ''Bad link'', ''box://nope'')', v_prime),
+        'documents_url_shape');
+
+    PERFORM pg_temp.check_raises('a verified document must name who verified it',
+        format('INSERT INTO documents (entity_type, entity_id, kind_code, title, url,
+                                       verification_status)
+                VALUES (''contractors'', %L, ''other'', ''Unattributed'',
+                        ''https://example.invalid/x.pdf'', ''verified'')', v_prime),
+        'documents_verified_is_attributed');
+
+    -- 1.2 Contractor taxonomy ----------------------------------------------
+    PERFORM pg_temp.check_raises('the old contractor types are gone',
+        'INSERT INTO contractors (name, contractor_type)
+         VALUES (''Schema Test Hauler'', ''debris_removal'')',
+        'contractors_type_valid');
+
+    PERFORM pg_temp.check_that('every contractor sits in the four real kinds',
+        NOT EXISTS (SELECT 1 FROM contractors
+                     WHERE contractor_type NOT IN
+                           ('hauler', 'tree_removal', 'monitoring', 'other')));
+
+    -- 1.3 Contractor tier ---------------------------------------------------
+    PERFORM pg_temp.check_that('the sub is a first tier sub under the prime',
+        EXISTS (SELECT 1 FROM project_contractors
+                 WHERE project_id = v_project AND contractor_id = v_sub
+                   AND role_on_project = 'sub_tier_1'
+                   AND parent_contractor_id = v_prime));
+
+    PERFORM pg_temp.check_raises('a prime cannot carry a tier parent',
+        format('INSERT INTO project_contractors (project_id, contractor_id,
+                                                 role_on_project, parent_contractor_id)
+                VALUES (%L, (SELECT id FROM contractors WHERE code = ''CMG''),
+                        ''prime'', %L)', v_project, v_prime),
+        'top_tier_has_no_parent');
+
+    PERFORM pg_temp.check_raises('a second tier sub must name a parent',
+        format('INSERT INTO project_contractors (project_id, contractor_id, role_on_project)
+                SELECT %L, id, ''sub_tier_2'' FROM contractors WHERE code = ''CMG''',
+               v_project),
+        'second_tier_has_a_parent');
+
+    INSERT INTO contractors (name, code, contractor_type)
+    VALUES ('Schema Test Offsite Hauling', 'STOH', 'hauler')
+    RETURNING id INTO v_user;
+
+    PERFORM pg_temp.check_raises('a tier parent must be on the same project',
+        format('INSERT INTO project_contractors (project_id, contractor_id,
+                                                 role_on_project, parent_contractor_id)
+                SELECT %L, id, ''sub_tier_2'', %L FROM contractors WHERE code = ''CMG''',
+               v_project, v_user),
+        'not linked to project');
+
+    DELETE FROM contractors WHERE id = v_user;
+
+    -- 1.4 Contacts ----------------------------------------------------------
+    SELECT count(*) INTO v_n FROM contacts
+     WHERE entity_type = 'clients' AND entity_id = v_client AND deleted_at IS NULL;
+    PERFORM pg_temp.check_that('a client holds more than one contact',
+        v_n >= 3, v_n::text || ' contacts');
+
+    PERFORM pg_temp.check_that('the same table serves a contractor contact',
+        EXISTS (SELECT 1 FROM contacts
+                 WHERE entity_type = 'contractors' AND entity_id = v_prime));
+
+    SELECT primary_contact INTO v_txt FROM clients WHERE id = v_client;
+    PERFORM pg_temp.check_that('clients.primary_contact still reads correctly',
+        v_txt = 'Angela Brooks', coalesce(v_txt, 'null'));
+
+    PERFORM pg_temp.check_raises('a parent cannot hold two primary contacts',
+        format('INSERT INTO contacts (entity_type, entity_id, first_name, last_name,
+                                      contact_role, is_primary)
+                VALUES (''clients'', %L, ''Second'', ''Primary'', ''primary'', true)',
+               v_client),
+        'contacts_one_primary_per_entity');
+
+    -- 1.5 Worker identity ---------------------------------------------------
+    SELECT full_name INTO v_txt FROM users WHERE username = 'jmiller';
+    PERFORM pg_temp.check_that('full_name is derived from the parts',
+        v_txt = 'Jordan Miller', coalesce(v_txt, 'null'));
+
+    PERFORM pg_temp.check_raises('full_name cannot be written directly',
+        'UPDATE users SET full_name = ''Nope'' WHERE username = ''jmiller''',
+        'can only be updated to DEFAULT');
+
+    PERFORM pg_temp.check_that('a temp worker is findable by employer',
+        EXISTS (SELECT 1 FROM users
+                 WHERE employer_name = 'Gateway Staffing Partners'
+                   AND employee_id = 'TW-4471'));
+
+    PERFORM pg_temp.check_that('a worker is findable by employee ID',
+        EXISTS (SELECT 1 FROM users WHERE employee_id = 'CMG-1118'));
+
+    PERFORM pg_temp.check_raises('a worker needs at least one name part',
+        'INSERT INTO users (username, global_role) VALUES (''nameless'', ''monitor'')',
+        'users_name_present');
+
+    -- 1.6 Program, scope and estimate ---------------------------------------
+    PERFORM pg_temp.check_that('the project records its program as data',
+        (SELECT program_code FROM projects WHERE id = v_project) = 'row_collection');
+
+    PERFORM pg_temp.check_that('stumps are out of scope until the client says otherwise',
+        (SELECT is_enabled FROM project_scopes
+          WHERE project_id = v_project AND debris_type_code = 'STUMP') = false);
+
+    PERFORM pg_temp.check_that('every confirmed stream carries an estimate',
+        NOT EXISTS (
+            SELECT 1 FROM project_scopes s
+             WHERE s.project_id = v_project AND s.is_enabled
+               AND NOT EXISTS (SELECT 1 FROM project_estimate_current e
+                                WHERE e.project_id = s.project_id
+                                  AND e.debris_type_code = s.debris_type_code)));
+
+    SELECT estimated_quantity INTO v_num FROM project_estimate_current
+     WHERE project_id = v_project AND debris_type_code = 'CD';
+    PERFORM pg_temp.check_that('the current C&D estimate is the revision',
+        v_num = 138000, coalesce(v_num::text, 'null'));
+
+    PERFORM pg_temp.check_that('the original C&D estimate is still readable',
+        EXISTS (SELECT 1 FROM project_estimates
+                 WHERE project_id = v_project AND debris_type_code = 'CD'
+                   AND estimated_quantity = 95000));
+
+    PERFORM pg_temp.check_raises('an estimate cannot be edited in place',
+        format('UPDATE project_estimates SET estimated_quantity = 1
+                 WHERE project_id = %L AND debris_type_code = ''CD''', v_project),
+        'append-only');
+
+    PERFORM pg_temp.check_that('tree work is counted per unit without anyone choosing',
+        (SELECT estimate_unit_type_code FROM debris_types WHERE code = 'HANGER') = 'per_unit'
+        AND (SELECT estimate_unit_type_code FROM debris_types WHERE code = 'VEG')
+            = 'per_cubic_yard');
+
+    -- 1.7 Permits -----------------------------------------------------------
+    SELECT ps.id INTO v_ps FROM project_sites ps
+      JOIN disposal_sites s ON s.id = ps.site_id
+     WHERE ps.project_id = v_project AND s.site_code = 'DMS-02';
+
+    PERFORM pg_temp.check_that('the pending permit reports days since it was requested',
+        (SELECT days_since_request FROM project_permit_watch
+          WHERE project_site_id = v_ps) > 0);
+
+    PERFORM pg_temp.check_raises('a permit cannot be verified without a document',
+        format('UPDATE project_sites SET permit_status = ''verified'' WHERE id = %L', v_ps),
+        'verified_permit_has_a_document');
+
+    SELECT id INTO v_doc FROM documents
+     WHERE entity_type = 'contractors' AND kind_code = 'rate_sheet' LIMIT 1;
+    PERFORM pg_temp.check_raises('a permit slot will not take a rate sheet',
+        format('UPDATE project_sites SET permit_document_id = %L WHERE id = %L',
+               v_doc, v_ps),
+        'not a permit');
+
+    -- The whole point: a pending permit stops nothing.
+    SELECT id INTO v_user FROM users WHERE username = 'jmiller';
+    PERFORM pg_temp.check_that('a pending permit does not block ticket creation',
+        (SELECT ready_for_field FROM project_readiness_summary
+          WHERE project_id = v_project));
+
+    -- 1.8 Line items and the service code bridge ----------------------------
+    PERFORM pg_temp.check_that('a service code names the line it came from',
+        EXISTS (SELECT 1 FROM service_codes
+                 WHERE project_id = v_project AND code = 'ROW-VEG'
+                   AND contract_line_item_id IS NOT NULL
+                   AND contract_id IS NOT NULL));
+
+    PERFORM pg_temp.check_that('the accepted line names the code it produced',
+        EXISTS (SELECT 1 FROM contract_line_item_review
+                 WHERE contract_number = 'STL-DEB-2026-001' AND line_number = 1
+                   AND status = 'accepted' AND service_code = 'ROW-VEG'));
+
+    PERFORM pg_temp.check_that('draft and rejected lines are both preserved',
+        (SELECT count(*) FROM contract_line_items
+          WHERE status = 'draft') >= 2
+        AND (SELECT count(*) FROM contract_line_items
+              WHERE status = 'rejected') >= 1);
+
+    DELETE FROM contracts WHERE contract_number = 'TEST-OFFPROJECT-001';
+    INSERT INTO contracts (contract_number, title, client_id, contractor_id, status,
+                           effective_from, document_url)
+    VALUES ('TEST-OFFPROJECT-001', 'Contract on no project', v_client, v_prime,
+            'draft', current_date, 'https://example.invalid/offproject.pdf')
+    RETURNING id INTO v_contract;
+
+    INSERT INTO contract_line_items (contract_id, line_number, description,
+                                     unit_type_code, unit_price)
+    VALUES (v_contract, 1, 'A line on a contract nobody linked', 'per_cubic_yard', 5.00)
+    RETURNING id INTO v_line;
+
+    PERFORM pg_temp.check_raises(
+        'a service code cannot point at a contract that is not on the project',
+        format('INSERT INTO service_codes (project_id, code, name, contractor_id, contract_id)
+                VALUES (%L, ''SCHEMATEST-1'', ''Off project'', %L, %L)',
+               v_project, v_prime, v_contract),
+        'not linked to project');
+
+    PERFORM pg_temp.check_raises(
+        'a service code cannot point at a line item from another contract',
+        format('INSERT INTO service_codes (project_id, code, name, contractor_id,
+                                           contract_id, contract_line_item_id)
+                SELECT %L, ''SCHEMATEST-2'', ''Wrong line'', %L, pc.contract_id, %L
+                  FROM project_contracts pc WHERE pc.project_id = %L LIMIT 1',
+               v_project, v_prime, v_line, v_project),
+        'belongs to contract');
+
+    DELETE FROM contract_line_items WHERE contract_id = v_contract;
+    DELETE FROM contracts WHERE id = v_contract;
+
+    -- 1.9 Contract constraints ----------------------------------------------
+    PERFORM pg_temp.check_raises('a contract cannot be saved without a document link',
+        format('INSERT INTO contracts (contract_number, title, client_id, contractor_id,
+                                       effective_from)
+                VALUES (''TEST-NODOC-001'', ''No document'', %L, %L, current_date)',
+               v_client, v_prime),
+        'document_url');
+
+    PERFORM pg_temp.check_raises('a contract document link must look like a link',
+        format('INSERT INTO contracts (contract_number, title, client_id, contractor_id,
+                                       effective_from, document_url)
+                VALUES (''TEST-BADDOC-001'', ''Bad document'', %L, %L, current_date,
+                        ''ask Marcus for it'')', v_client, v_prime),
+        'contracts_document_url_shape');
+
+    PERFORM pg_temp.check_raises('a contract cannot be saved without a start date',
+        format('INSERT INTO contracts (contract_number, title, client_id, contractor_id,
+                                       document_url)
+                VALUES (''TEST-NODATE-001'', ''No start date'', %L, %L,
+                        ''https://example.invalid/x.pdf'')', v_client, v_prime),
+        'effective_from');
+
+    PERFORM pg_temp.check_that('every contract in the database carries a link',
+        NOT EXISTS (SELECT 1 FROM contracts
+                     WHERE deleted_at IS NULL
+                       AND coalesce(btrim(document_url), '') = ''));
+END
+$phase1$;
 
 SELECT
     count(*) FILTER (WHERE ok)     AS passed,

@@ -25,16 +25,20 @@ def make_router(
     allowed_fields: Sequence[str] = (),
     select_sql: Optional[str] = None,
     alias: str = "",
+    validate: Optional[Callable[[dict[str, Any], bool], dict[str, Any]]] = None,
 ) -> APIRouter:
     router = APIRouter(prefix=prefix, tags=list(tags))
     base_select = select_sql or f"SELECT * FROM {table}"
     p = f"{alias}." if alias else ""
     alive = f"{p}deleted_at IS NULL" if soft_delete else "TRUE"
 
-    def clean(payload: dict[str, Any]) -> dict[str, Any]:
-        if not allowed_fields:
-            return payload
-        return {k: v for k, v in payload.items() if k in allowed_fields}
+    def clean(payload: dict[str, Any], *, creating: bool) -> dict[str, Any]:
+        data = payload if not allowed_fields else {
+            k: v for k, v in payload.items() if k in allowed_fields}
+        # A table whose rules the interface must not be the only thing enforcing
+        # gets a validator here, so an import or a direct API call meets the
+        # same wall the form does.
+        return validate(data, creating) if validate else data
 
     @router.get("")
     async def list_items(
@@ -85,7 +89,7 @@ def make_router(
         payload: dict[str, Any] = Body(...),
         _: dict = Depends(require_permission(write_permission)),
     ):
-        data = clean(payload)
+        data = clean(payload, creating=True)
         sql, args = db.build_insert(table, data)
         async with db.tx(user) as conn:
             rec = await conn.fetchrow(sql, *args)
@@ -98,7 +102,7 @@ def make_router(
         payload: dict[str, Any] = Body(...),
         _: dict = Depends(require_permission(write_permission)),
     ):
-        data = clean(payload)
+        data = clean(payload, creating=False)
         data.pop("id", None)
         if not data:
             return await get_item(item_id, user, user)
@@ -117,9 +121,12 @@ def make_router(
     ):
         async with db.tx(user) as conn:
             if soft_delete:
+                # Not every table has is_active; contracts, for one, does not.
+                sets = "deleted_at = now()"
+                if db.has_column(table, "is_active"):
+                    sets += ", is_active = false"
                 await conn.execute(
-                    f"UPDATE {table} SET deleted_at = now(), is_active = false "
-                    f"WHERE id = $1", item_id)
+                    f"UPDATE {table} SET {sets} WHERE id = $1", item_id)
             else:
                 await conn.execute(f"DELETE FROM {table} WHERE id = $1", item_id)
         return None

@@ -28,6 +28,12 @@ async def all_lookups(user: CurrentUser):
                 "SELECT * FROM ticket_statuses ORDER BY sort_order")),
             "debris_types": db.rows(await conn.fetch(
                 "SELECT * FROM debris_types WHERE is_active ORDER BY sort_order")),
+            # Both new in Phase 1. They live here so the clients keep their
+            # single boot call rather than adding two more round trips.
+            "programs": db.rows(await conn.fetch(
+                "SELECT * FROM programs WHERE is_active ORDER BY sort_order")),
+            "document_kinds": db.rows(await conn.fetch(
+                "SELECT * FROM document_kinds WHERE is_active ORDER BY sort_order")),
             "unit_types": db.rows(await conn.fetch(
                 "SELECT * FROM unit_types WHERE is_active ORDER BY sort_order")),
             "visibility_flags": db.rows(await conn.fetch(
