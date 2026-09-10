@@ -56,6 +56,19 @@ COMMENT ON COLUMN debris_types.estimate_unit_type_code IS
     'so tree work is counted each without anyone choosing.';
 
 -- ---------------------------------------------------------------------------
+-- Which ticket types a stream needs. Confirming hangers on a project without
+-- turning the unit rate ticket on leaves the field with no way to record the
+-- work, so the scope step enables these and reports what it enabled.
+-- Enabling is additive and never removes a type another stream still needs.
+-- ---------------------------------------------------------------------------
+ALTER TABLE debris_types
+    ADD COLUMN ticket_type_codes text[] NOT NULL DEFAULT '{}';
+
+COMMENT ON COLUMN debris_types.ticket_type_codes IS
+    'Ticket types this stream is recorded on. Confirming the stream links '
+    'these to the project. Never used to unlink.';
+
+-- ---------------------------------------------------------------------------
 -- Confirmed scope. A stream appears here because someone confirmed it, and the
 -- ticket types offered on the project follow from it.
 -- ---------------------------------------------------------------------------

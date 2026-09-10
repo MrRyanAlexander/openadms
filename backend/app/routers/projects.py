@@ -561,7 +561,29 @@ async def set_scope(ctx: ProjectContext, body: ScopeBody, user: CurrentUser,
                        notes = COALESCE(EXCLUDED.notes, project_scopes.notes)
                 """, pid, entry.debris_type_code, entry.is_enabled,
                 user["id"], entry.notes)
-    return await get_scope(ctx, user)
+
+        # Confirming a stream implies the ticket types the field records it on.
+        # Hangers with no unit rate ticket leave a crew with nowhere to put the
+        # work, which is what the walkthrough found. Additive only: disabling a
+        # stream never unlinks a type, because another stream may still need it.
+        added = await conn.fetch(
+            """
+            INSERT INTO project_ticket_types (project_id, ticket_type_id)
+            SELECT $1, tt.id
+              FROM project_scopes ps
+              JOIN debris_types dt ON dt.code = ps.debris_type_code
+              JOIN ticket_types tt ON tt.code = ANY (dt.ticket_type_codes)
+             WHERE ps.project_id = $1
+               AND ps.is_enabled
+               AND tt.is_active
+               AND NOT tt.is_system
+            ON CONFLICT (project_id, ticket_type_id) DO NOTHING
+            RETURNING (SELECT code FROM ticket_types WHERE id = ticket_type_id) AS code
+            """, pid)
+
+    scope = await get_scope(ctx, user)
+    scope["ticket_types_enabled"] = sorted({r["code"] for r in added})
+    return scope
 
 
 @router.get("/{project_id}/estimates")
@@ -608,7 +630,7 @@ async def record_estimate(ctx: ProjectContext, body: EstimateBody, user: Current
             RETURNING *
             """, pid, body.debris_type_code, body.estimated_quantity, unit,
             body.source, body.confidence,
-            body.as_of_date.isoformat() if body.as_of_date else None,
+            body.as_of_date,
             body.notes, user["id"])
     return db.row(rec)
 

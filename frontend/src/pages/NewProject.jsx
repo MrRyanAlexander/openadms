@@ -383,7 +383,8 @@ export function ContractorStep({ project, projectId, onChanged }) {
       {adding && (
         <LinkPicker title="Add a contractor" items={available}
                     labelFor={(c) => `${c.name}${c.code ? ` (${c.code})` : ''}`}
-                    valueKey="id" selected={selected} onSelect={setSelected}
+                    valueKey="id" linkKey="contractor_id"
+                    selected={selected} onSelect={setSelected}
                     createFields={NEW_CONTRACTOR_FIELDS} createTitle="Create new contractor"
                     busy={busy} onClose={() => setAdding(false)} onSubmit={submit}>
           <Field label="Tier on this project" required>
@@ -464,7 +465,8 @@ export function ContractStep({ project, projectId, onChanged }) {
       {adding && (
         <LinkPicker title="Add a contract" items={available}
                     labelFor={(c) => `${c.contract_number} — ${c.title}`}
-                    valueKey="id" selected={selected} onSelect={setSelected}
+                    valueKey="id" linkKey="contract_id"
+                    selected={selected} onSelect={setSelected}
                     createFields={NEW_CONTRACT_FIELDS} createTitle="Create new contract"
                     busy={busy} onClose={() => setAdding(false)} onSubmit={submit}>
           <label className="check">
@@ -563,7 +565,8 @@ export function SiteStep({ project, projectId, onChanged }) {
       {adding && (
         <LinkPicker title="Add a disposal site" items={available}
                     labelFor={(s) => `${s.name} (${s.site_kind})`}
-                    valueKey="id" selected={selected} onSelect={setSelected}
+                    valueKey="id" linkKey="site_id"
+                    selected={selected} onSelect={setSelected}
                     createFields={NEW_SITE_FIELDS} createTitle="Create new site"
                     busy={busy} onClose={() => setAdding(false)} onSubmit={submit} />
       )}

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 import uuid
+from datetime import date
 from typing import Any, Optional
 
 from fastapi import APIRouter, Body, Depends, Query
@@ -111,8 +112,8 @@ async def audit_trail(
     entity_id: Optional[uuid.UUID] = None,
     action: Optional[str] = None,
     actor: Optional[str] = None,
-    date_from: Optional[str] = None,
-    date_to: Optional[str] = None,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
     _: dict = Depends(require_permission("audit.read")),
 ):
     where = ["TRUE"]

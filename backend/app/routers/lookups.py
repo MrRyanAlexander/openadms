@@ -92,19 +92,23 @@ _OPTION_SQL: dict[str, str] = {
     "project_contractors": """
         SELECT c.id::text AS value, c.name AS label, pc.role_on_project AS hint
           FROM project_contractors pc JOIN contractors c ON c.id = pc.contractor_id
-         WHERE pc.project_id = $1 AND pc.is_active ORDER BY c.name
+         WHERE pc.project_id = $1 AND pc.is_active
+           AND c.is_active AND c.deleted_at IS NULL ORDER BY c.name
     """,
     "project_contracts": """
         SELECT c.id::text AS value,
                c.contract_number || ' - ' || c.title AS label,
                c.status AS hint
           FROM project_contracts pc JOIN contracts c ON c.id = pc.contract_id
-         WHERE pc.project_id = $1 ORDER BY c.contract_number
+         WHERE pc.project_id = $1 AND c.deleted_at IS NULL
+         ORDER BY c.contract_number
     """,
     "project_sites": """
         SELECT s.id::text AS value, s.name AS label, s.site_kind AS hint
           FROM project_sites ps JOIN disposal_sites s ON s.id = ps.site_id
-         WHERE ps.project_id = $1 AND ps.is_active ORDER BY s.site_kind, s.name
+         WHERE ps.project_id = $1 AND ps.is_active
+           AND s.is_active AND s.deleted_at IS NULL
+         ORDER BY s.site_kind, s.name
     """,
     "project_zones": """
         SELECT zone_code AS value,
@@ -167,7 +171,8 @@ _OPTION_SQL: dict[str, str] = {
     "site_kinds": """
         SELECT DISTINCT s.site_kind AS value, s.site_kind AS label, NULL::text AS hint
           FROM project_sites ps JOIN disposal_sites s ON s.id = ps.site_id
-         WHERE ps.project_id = $1 ORDER BY 1
+         WHERE ps.project_id = $1 AND s.is_active AND s.deleted_at IS NULL
+         ORDER BY 1
     """,
     "equipment_types": """
         SELECT DISTINCT e.equipment_type AS value,

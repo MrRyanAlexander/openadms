@@ -109,23 +109,24 @@ ON CONFLICT (code) DO UPDATE
 -- goods - are per_unit, which reads a count off the ticket. per_each is not
 -- used here: it always resolves to one, which is right for a flat per-ticket
 -- fee and wrong for "1,200 appliances".
-INSERT INTO debris_types (code, label, category, fema_category, default_density_lbs_cy, sort_order, estimate_unit_type_code) VALUES
-    ('VEG',      'Vegetative / Woody',            'vegetative',              'A', 500, 10,  'per_cubic_yard'),
-    ('CD',       'Construction & Demolition',     'construction_demolition', 'A', 750, 20,  'per_cubic_yard'),
-    ('MIXED',    'Mixed Debris',                  'other',                   'A', 600, 30,  'per_cubic_yard'),
-    ('HHW',      'Household Hazardous Waste',     'hazardous',               'B', 400, 40,  'per_unit'),
-    ('WHITE',    'White Goods / Appliances',      'white_goods',             'A', 200, 50,  'per_unit'),
-    ('EWASTE',   'Electronic Waste',              'electronic',              'A', 300, 60,  'per_unit'),
-    ('SOIL',     'Soil, Mud and Sand',            'soil_mud_sand',           'A', 2200, 70, 'per_cubic_yard'),
-    ('VEHICLE',  'Vehicles and Vessels',          'vehicle_vessel',          'B', NULL, 80, 'per_unit'),
-    ('PUTRES',   'Putrescent Debris',             'putrescent',              'A', 800, 90,  'per_cubic_yard'),
-    ('STUMP',    'Stumps',                        'vegetative',              'A', 550, 100, 'per_unit'),
-    ('HANGER',   'Hangers',                       'vegetative',              'A', NULL, 110,'per_unit'),
-    ('LEANER',   'Leaners',                       'vegetative',              'A', NULL, 120,'per_unit'),
-    ('SAND',     'Beach Sand Screening',          'soil_mud_sand',           'A', 2600, 130,'per_cubic_yard')
+INSERT INTO debris_types (code, label, category, fema_category, default_density_lbs_cy, sort_order, estimate_unit_type_code, ticket_type_codes) VALUES
+    ('VEG',      'Vegetative / Woody',            'vegetative',              'A', 500, 10,  'per_cubic_yard', '{LOAD,HAULOUT}'),
+    ('CD',       'Construction & Demolition',     'construction_demolition', 'A', 750, 20,  'per_cubic_yard', '{LOAD,HAULOUT}'),
+    ('MIXED',    'Mixed Debris',                  'other',                   'A', 600, 30,  'per_cubic_yard', '{LOAD,HAULOUT}'),
+    ('HHW',      'Household Hazardous Waste',     'hazardous',               'B', 400, 40,  'per_unit', '{LOAD}'),
+    ('WHITE',    'White Goods / Appliances',      'white_goods',             'A', 200, 50,  'per_unit', '{LOAD}'),
+    ('EWASTE',   'Electronic Waste',              'electronic',              'A', 300, 60,  'per_unit', '{LOAD}'),
+    ('SOIL',     'Soil, Mud and Sand',            'soil_mud_sand',           'A', 2200, 70, 'per_cubic_yard', '{LOAD,HAULOUT}'),
+    ('VEHICLE',  'Vehicles and Vessels',          'vehicle_vessel',          'B', NULL, 80, 'per_unit', '{LOAD}'),
+    ('PUTRES',   'Putrescent Debris',             'putrescent',              'A', 800, 90,  'per_cubic_yard', '{LOAD,HAULOUT}'),
+    ('STUMP',    'Stumps',                        'vegetative',              'A', 550, 100, 'per_unit', '{UNIT}'),
+    ('HANGER',   'Hangers',                       'vegetative',              'A', NULL, 110,'per_unit', '{UNIT}'),
+    ('LEANER',   'Leaners',                       'vegetative',              'A', NULL, 120,'per_unit', '{UNIT}'),
+    ('SAND',     'Beach Sand Screening',          'soil_mud_sand',           'A', 2600, 130,'per_cubic_yard', '{LOAD,HAULOUT}')
 ON CONFLICT (code) DO UPDATE
     SET label = EXCLUDED.label, category = EXCLUDED.category,
         estimate_unit_type_code = EXCLUDED.estimate_unit_type_code,
+        ticket_type_codes = EXCLUDED.ticket_type_codes,
         fema_category = EXCLUDED.fema_category,
         default_density_lbs_cy = EXCLUDED.default_density_lbs_cy;
 

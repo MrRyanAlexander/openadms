@@ -3,7 +3,7 @@ waypoints, media, void and replacement, and the search the back office runs."""
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Optional
 
 from fastapi import APIRouter, Body, Depends, Query, Request
@@ -119,8 +119,8 @@ async def list_tickets(
     processing_state: Optional[str] = None,
     mine_only: bool = False,
     include_void: bool = True,
-    date_from: Optional[str] = None,
-    date_to: Optional[str] = None,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
     sort: str = Query("created_at", pattern="^[a-z_]+$"),
     direction: str = Query("desc", pattern="^(asc|desc)$"),
 ):

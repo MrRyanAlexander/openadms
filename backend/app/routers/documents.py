@@ -257,7 +257,7 @@ async def request_document(document_id: uuid.UUID, body: RequestBody,
              WHERE id = $1 AND deleted_at IS NULL
          RETURNING id
             """, document_id, body.requested_from,
-            body.requested_on.isoformat() if body.requested_on else None,
+            body.requested_on,
             body.notes)
         if rec is None:
             raise not_found("Document")

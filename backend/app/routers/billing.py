@@ -349,8 +349,8 @@ async def list_transactions(
     contractor_id: Optional[uuid.UUID] = None,
     service_code_id: Optional[uuid.UUID] = None,
     invoice_status: Optional[str] = Query(None, description="uninvoiced | invoiced"),
-    date_from: Optional[str] = None,
-    date_to: Optional[str] = None,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
     _: dict = Depends(require_permission("transaction.read")),
 ):
     where = ["project_id = $1"]
@@ -570,8 +570,30 @@ async def remove_invoice_line(invoice_id: uuid.UUID, line_id: uuid.UUID,
 # or reject. The parser is a later pass; this is the structure it will feed, and
 # the manual path that works without it.
 # ---------------------------------------------------------------------------
+_LINE_ITEM_STATUSES = {"draft", "accepted", "rejected"}
+
+
 class LineItemBody(BaseModel):
+    """Create shape. A line item with no description cannot be reviewed."""
     description: str = Field(min_length=2)
+    line_number: Optional[int] = None
+    item_code: Optional[str] = None
+    unit_type_code: Optional[str] = None
+    unit_price: Optional[float] = Field(default=None, ge=0)
+    debris_type_code: Optional[str] = None
+    service_category: Optional[str] = None
+    effective_from: Optional[date] = None
+    effective_to: Optional[date] = None
+    source_page: Optional[int] = None
+    source_text: Optional[str] = None
+    status: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class LineItemPatch(BaseModel):
+    """Update shape. Every field is optional because a review action sends one
+    field and nothing else, and a partial edit must not have to resend the row."""
+    description: Optional[str] = Field(default=None, min_length=2)
     line_number: Optional[int] = None
     item_code: Optional[str] = None
     unit_type_code: Optional[str] = None
@@ -719,10 +741,17 @@ async def create_line_item(contract_id: uuid.UUID, body: LineItemBody,
 
 
 @router.patch("/line-items/{line_item_id}")
-async def update_line_item(line_item_id: uuid.UUID, body: LineItemBody,
+async def update_line_item(line_item_id: uuid.UUID, body: LineItemPatch,
                            user: CurrentUser,
                            _: dict = Depends(require_permission("contract.manage"))):
     payload = body.model_dump(exclude_none=True)
+    if not payload:
+        raise bad_request("Nothing to change on this line item.",
+                          code="empty_update")
+    if body.status is not None and body.status not in _LINE_ITEM_STATUSES:
+        raise bad_request(
+            "A line item is draft, accepted or rejected.",
+            code="line_item_status_invalid", allowed=sorted(_LINE_ITEM_STATUSES))
     if body.status in ("accepted", "rejected"):
         payload["reviewed_by"] = user["id"]
     sql, args = db.build_update("contract_line_items", payload,

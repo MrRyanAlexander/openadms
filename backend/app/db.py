@@ -77,6 +77,39 @@ def has_column(table: str, column: str) -> bool:
     return column in _COLUMN_TYPES.get(table, {})
 
 
+async def dependents_of(conn: Any, table: str, item_id: Any) -> list[dict[str, Any]]:
+    """Every live row in another table that points at this one.
+
+    Read from pg_constraint rather than a hand-kept list, so a new foreign key
+    is covered the day it is added. Archiving a record that something still
+    references has to be refused with the reason, because a soft delete does
+    not meet the ON DELETE RESTRICT the database would have applied to a real
+    one, and a client that quietly vanishes from under a live contract is the
+    black hole the walkthrough found."""
+    refs = await conn.fetch(
+        """
+        SELECT src.relname AS child_table, att.attname AS child_column
+          FROM pg_constraint con
+          JOIN pg_class src ON src.oid = con.conrelid
+          JOIN pg_class tgt ON tgt.oid = con.confrelid
+          JOIN pg_attribute att
+            ON att.attrelid = con.conrelid AND att.attnum = con.conkey[1]
+         WHERE con.contype = 'f'
+           AND tgt.relname = $1
+           AND array_length(con.conkey, 1) = 1
+        """, table)
+
+    found: list[dict[str, Any]] = []
+    for r in refs:
+        child, column = r["child_table"], r["child_column"]
+        alive = " AND deleted_at IS NULL" if has_column(child, "deleted_at") else ""
+        count = await conn.fetchval(
+            f'SELECT count(*) FROM "{child}" WHERE "{column}" = $1{alive}', item_id)
+        if count:
+            found.append({"table": child, "column": column, "count": int(count)})
+    return sorted(found, key=lambda d: -d["count"])
+
+
 def _cast_for(table: str, column: str) -> Optional[str]:
     return _CASTS.get(_COLUMN_TYPES.get(table, {}).get(column, ""))
 

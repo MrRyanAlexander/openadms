@@ -28,8 +28,11 @@ def not_found(what: str = "Record") -> ApiError:
     return ApiError(status.HTTP_404_NOT_FOUND, "not_found", f"{what} not found")
 
 
-def conflict(message: str, **extra) -> ApiError:
-    return ApiError(status.HTTP_409_CONFLICT, "conflict", message, **extra)
+def conflict(message: str, code: str = "conflict", **extra) -> ApiError:
+    """`code` is nameable for the same reason bad_request's is: a client that
+    has to branch on which conflict this was should read a stable string, not
+    the message text."""
+    return ApiError(status.HTTP_409_CONFLICT, code, message, **extra)
 
 
 def unprocessable(message: str, **extra) -> ApiError:

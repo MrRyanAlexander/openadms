@@ -18,7 +18,7 @@ import { Badge, Card, Empty, Field, Icon, Loading, Modal } from './ui'
  * one transaction.
  */
 export function LinkPicker({
-  title, items, labelFor, valueKey = 'id', selected, onSelect,
+  title, items, labelFor, valueKey = 'id', linkKey, selected, onSelect,
   createFields, createTitle, children, hint, busy, onSubmit, onClose,
   submitLabel = 'Add',
 }) {
@@ -30,9 +30,13 @@ export function LinkPicker({
   async function submit() {
     setError(null)
     try {
+      // valueKey reads the list. linkKey is what the API calls the column, and
+      // the two are not the same: a contractor is chosen by `id` and linked as
+      // `contractor_id`. Sending the reading key is what refused every attempt
+      // to link a record that already existed.
       await onSubmit(mode === 'new'
         ? { new: Object.fromEntries(Object.entries(fresh).filter(([, v]) => v !== '')) }
-        : { [valueKey]: selected })
+        : { [linkKey || valueKey]: selected })
     } catch (err) { setError(err.message) }
   }
 
