@@ -63,9 +63,22 @@ command runs:
   so `frontend/` and `mobile/` are each linked to their own, and every
   site-scoped command runs from inside that folder. Afterwards `cd frontend &&
   netlify open` does the right thing.
-- **Railway** links one directory to a project. The repo root is linked, so the
-  API deploys with `railway up backend --service api` from the root rather than
-  by changing into `backend/`.
+- **Railway** links one directory to a project. The repo root is linked, and
+  the `api` service carries **Root Directory `/backend`**, so Railway builds
+  `backend/Dockerfile` against `backend/` and reads `backend/railway.json`.
+
+  That setting cannot be committed by the CLI. `railway environment edit
+  --service-config` stages it the way the dashboard does, so it reports success
+  while Railway keeps building whatever it was pointed at before. The
+  provisioner writes it with Railway's public GraphQL API
+  (`serviceInstanceUpdate`) and then reads the value back, and only reports it
+  as set once Railway returns `/backend`. Auth comes from `railway login` or
+  `RAILWAY_API_TOKEN`; nothing new to create.
+
+  A matching `Dockerfile` and `railway.json` also sit at the repo root and
+  build the same image from the root context, so a service left at `/` still
+  deploys. Both are kept deliberately: whichever Root Directory the service
+  ends up with, there is a valid build.
 
 If a site already exists on your account, the provisioner runs `netlify link
 --id` instead of creating a duplicate. If a folder is already linked, it leaves

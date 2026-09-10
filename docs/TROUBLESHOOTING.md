@@ -98,8 +98,36 @@ exists on your account but the folder is not linked (it runs `netlify link
 folder as a side effect). `.netlify/` is gitignored in both apps.
 
 Railway works the same way but links a single directory to a project, so the
-repo root is linked and the API is deployed with `railway up backend --service
-api` from the root rather than by cd-ing into `backend/`.
+repo root is linked and the `api` service carries Root Directory `/backend`,
+which is where the API code and `backend/railway.json` live.
+
+## The API URL answers 404 "Application not found"
+
+That 404 comes from Railway's edge, not from the API. It means the domain
+exists but no deployment is serving it, so the usual causes are a build that
+failed and a service that never built at all.
+
+Check which one it is:
+
+```bash
+railway status                         # is the api service there, and linked?
+railway logs --service api --build     # the build log, if a build ran
+railway redeploy --service api --yes   # start one if none has
+```
+
+Two bugs produced this repeatedly and are both fixed in the provisioner:
+
+- `railway service redeploy` is not a command. `redeploy` is top level, so the
+  old call always failed, and because the variables were set with
+  `--skip-deploys` the service could sit with no deployment at all. There is a
+  Railway API fallback now, since a service with zero deployments cannot be
+  redeployed.
+- Root Directory was staged rather than committed, so Railway built the wrong
+  tree. It is written through the Railway API and read back for confirmation.
+
+While it waits for `/health`, the provisioner now prints the Railway deployment
+status each round, so `FAILED` shows up immediately instead of as a silent
+three-minute timeout.
 
 ## The installer quit when I typed the connection string wrong
 

@@ -1,0 +1,13 @@
+# Build context is backend/ when Railway's Root Directory is /backend.
+__pycache__/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+**/.pytest_cache/
+.venv/
+tests/
+.env
+.env.*
+.DS_Store
+**/.DS_Store
+*.md

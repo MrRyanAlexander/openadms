@@ -1,11 +1,15 @@
 # syntax=docker/dockerfile:1
 # Open ADMS API. Small, single-stage, generic web port.
 #
-# This lives at the repository root deliberately. Railway builds from the root
-# of the repo unless a service's Root Directory is changed, and that setting is
-# a staged, dashboard-only change the CLI cannot reliably commit. Keeping the
-# Dockerfile here means the default is already correct: nothing to set, nothing
-# to click, nothing to forget. .dockerignore trims the context to the backend.
+# Built with the repository root as the build context, which is why every COPY
+# is prefixed with backend/. .dockerignore trims the context down to the API.
+#
+# The installer points the Railway api service at Root Directory /backend, and
+# backend/Dockerfile is the equivalent file for that context. This one stays
+# because it is what docker-compose, App Runner and Cloud Run build, and
+# because it keeps a service left at / building correctly instead of failing
+# with nothing to explain it. The two files differ only in their COPY paths:
+# change one, change both.
 FROM python:3.11-slim AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \

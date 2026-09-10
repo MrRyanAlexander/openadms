@@ -26,6 +26,10 @@ import {
   ask, c, capture, checkDatabase, cmdEcho, confirm, fail, note, ok, run, say,
   step, warn,
 } from './cli.mjs'
+import {
+  latestDeployment, linkContext, projectServices, railwayApi, readServiceInstance,
+  setRootDirectory, triggerDeploy,
+} from './railway-api.mjs'
 
 const STATE_FILE = '.deploy-state.json'
 
@@ -191,25 +195,30 @@ async function askVerifiedDatabaseUrl({ unattended = false, suppliedValue } = {}
   }
 }
 
+/** One request against a health endpoint. Never throws. */
+async function probeHealth(url) {
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(10000) })
+    const body = await response.text()
+    return { ok: response.ok, status: response.status, body: body.slice(0, 200) }
+  } catch (error) {
+    return { ok: false, status: 0, body: error.message }
+  }
+}
+
 /**
  * Poll an API health endpoint until it answers 200, or the operator gives up.
  * Railway builds take a couple of minutes, so this is patient by default and
  * then hands the decision back rather than looping forever.
  */
-async function waitForHealth(url, { unattended = false } = {}) {
-  const probe = async () => {
-    try {
-      const response = await fetch(url, { signal: AbortSignal.timeout(10000) })
-      const body = await response.text()
-      return { ok: response.ok, status: response.status, body: body.slice(0, 200) }
-    } catch (error) {
-      return { ok: false, status: 0, body: error.message }
-    }
-  }
+async function waitForHealth(url, { unattended = false, describe = null } = {}) {
+  const probe = () => probeHealth(url)
 
   for (let round = 1; ; round += 1) {
     const waits = [0, 10000, 15000, 15000, 20000, 20000, 30000, 30000, 30000]
     let last = null
+
+    let lastLine = null
 
     for (let i = 0; i < waits.length; i += 1) {
       if (waits[i]) {
@@ -221,6 +230,23 @@ async function waitForHealth(url, { unattended = false } = {}) {
         ok(`API healthy: ${last.body}`)
         return true
       }
+
+      // Say what Railway is actually doing rather than counting silently. A
+      // build that has already failed is worth stopping on now instead of in
+      // another two minutes, and a domain that answers 404 "Application not
+      // found" because no deployment exists looks identical from out here.
+      if (describe) {
+        const report = await describe()
+        if (report?.line && report.line !== lastLine) {
+          lastLine = report.line
+          note(report.line)
+        }
+        if (report?.stop) {
+          fail(`Railway build did not succeed: ${report.line}`)
+          note('Build log:  railway logs --service api --build')
+          return false
+        }
+      }
     }
 
     fail(`API not healthy after ${round === 1 ? 'three minutes' : 'another wait'}.`)
@@ -228,6 +254,140 @@ async function waitForHealth(url, { unattended = false } = {}) {
                      : `Last error: ${last.body}`)
     if (unattended) return false
     if (!await confirm('Keep waiting?', true)) return false
+  }
+}
+
+/* --------------------------------------------------------------------------
+ * Root Directory, and why it goes through the API.
+ *
+ * The API code lives in backend/. Railway builds from the service's Root
+ * Directory, so with that unset it builds the repository root and reads the
+ * root railway.json. Both trees are buildable here on purpose, but the service
+ * should say out loud where the API is, because that is what makes the build
+ * predictable and what makes railway.json land where the API code is.
+ *
+ * The CLI cannot commit this. `railway environment edit --service-config`
+ * stages the change the way the dashboard does, so it reported success while
+ * Railway carried on building the previous tree. The public API applies it
+ * immediately and can be read straight back, which is the only reason we can
+ * claim it is set.
+ * ------------------------------------------------------------------------ */
+const API_ROOT_DIRECTORY = '/backend'
+
+/** Compare what Railway reports against what we asked for, ignoring slashes. */
+const trimSlashes = (value) => String(value || '').replace(/^\/+|\/+$/g, '')
+const isWantedRootDirectory = (live) => trimSlashes(live) === trimSlashes(API_ROOT_DIRECTORY)
+
+/** What Railway currently reports as the root directory, or null. */
+async function currentRootDirectory(rw) {
+  const check = await readServiceInstance(rw.api, {
+    serviceId: rw.serviceId, environmentId: rw.environmentId,
+  })
+  return check.ok ? (check.instance.rootDirectory ?? null) : null
+}
+
+/** Resolve project, environment and service ids for one service by name. */
+async function railwayServiceContext(root, serviceName) {
+  const link = linkContext(root)
+  if (!link.ok) return { ok: false, reason: link.reason }
+
+  const api = railwayApi()
+  const project = await projectServices(api, link.projectId)
+  if (!project.ok) {
+    return { ok: false, api, reason: project.reason || 'Railway API did not return the project.' }
+  }
+
+  const service = project.services.find((entry) => entry.name === serviceName)
+  if (!service?.id) {
+    return { ok: false, api,
+             reason: `No service named "${serviceName}" in ${project.name || link.projectId}.` }
+  }
+
+  const environmentId = link.environmentId
+    || project.environments.find((entry) => entry.name === 'production')?.id
+    || project.environments[0]?.id
+  if (!environmentId) {
+    return { ok: false, api, reason: 'Could not work out which environment to write to.' }
+  }
+
+  return {
+    ok: true,
+    api,
+    projectId: link.projectId,
+    environmentId,
+    serviceId: service.id,
+    projectName: project.name || link.projectName || null,
+    source: link.source,
+  }
+}
+
+/**
+ * Commit API_ROOT_DIRECTORY on the api service and verify it. Returns true only
+ * when Railway itself reports the value back.
+ */
+async function ensureRootDirectory({ root, rw, unattended, prompt = true }) {
+  if (rw.ok) {
+    const applied = await setRootDirectory(rw.api, {
+      serviceId: rw.serviceId,
+      environmentId: rw.environmentId,
+      rootDirectory: API_ROOT_DIRECTORY,
+    })
+    if (applied.ok) {
+      const via = rw.api.authSource ? ` (token from ${rw.api.authSource})` : ''
+      ok(`Root directory committed and verified as ${API_ROOT_DIRECTORY}${via}`)
+      return true
+    }
+    warn(`The Railway API would not set the root directory: ${applied.reason}`)
+  } else {
+    warn(`Could not reach the Railway API: ${rw.reason}`)
+    note('The API path needs `railway login`, or RAILWAY_API_TOKEN in the environment.')
+  }
+
+  // Second attempt: the CLI, without --stage. It may work on some versions and
+  // costs one call to find out. input: '' closes stdin straight away, so on
+  // versions where this command is an interactive editor it exits rather than
+  // waiting out the timeout.
+  const viaCli = tryVariants('railway', [
+    ['environment', 'edit', '--service-config', 'api',
+     'source.rootDirectory', API_ROOT_DIRECTORY, '--yes'],
+    ['environment', 'edit', '--service-config', 'api',
+     'source.rootDirectory', API_ROOT_DIRECTORY],
+  ], { cwd: root, timeout: 60000, input: '' })
+
+  if (viaCli?.ok && rw.ok) {
+    const live = await currentRootDirectory(rw)
+    if (isWantedRootDirectory(live)) {
+      ok(`Root directory set to ${API_ROOT_DIRECTORY} by the CLI and verified`)
+      return true
+    }
+    warn('The CLI reported success but Railway still does not report that value.')
+    note('That is the staged-change trap: the setting is pending, not applied.')
+  }
+
+  // Third attempt: the operator, with a verified re-check rather than a promise.
+  note('')
+  note(`Set this by hand: Railway dashboard, api service, Settings, Source,`)
+  note(`Root Directory = ${API_ROOT_DIRECTORY}, then press Deploy.`)
+  note('')
+
+  if (unattended || !prompt) return false
+
+  // Without API access there is nothing to check the answer against, and a
+  // confirmation nobody can verify is worse than no question at all.
+  if (!rw.ok) {
+    note('This run cannot read the setting back, so it will not ask you to')
+    note('confirm it. The health check below is the real test.')
+    return false
+  }
+
+  for (;;) {
+    if (!await confirm('Saved and deployed in the dashboard?', true)) return false
+    const live = await currentRootDirectory(rw)
+    if (isWantedRootDirectory(live)) {
+      ok(`Verified: root directory is ${live}`)
+      return true
+    }
+    warn(`Railway reports ${live === null ? 'no root directory' : live}. Press Deploy so it applies.`)
   }
 }
 
@@ -259,9 +419,9 @@ export async function provisionNetlifyRailway({
       'git add --all && git commit -m "chore: initial deploy commit"',
       'git push origin HEAD                                  # push code to GitHub',
       `railway add --service api --repo <owner/repo> --branch main`,
-      '   (no Root Directory step: railway.json pins the root Dockerfile)',
+      '   -> Railway API: serviceInstanceUpdate rootDirectory=/backend, then read it back',
       'railway variable set DATABASE_URL=... JWT_SECRET=... ... --service api --skip-deploys',
-      'railway service redeploy --service api --yes          # trigger first build',
+      'railway redeploy --service api --yes                  # trigger first build',
       'railway domain --service api --port 8080',
       '   -> GET <api>/health until it answers 200',
       'cd frontend && VITE_API_URL=<api> npm run build',
@@ -406,9 +566,15 @@ export async function provisionNetlifyRailway({
   // service is linked. We commit anything untracked/modified and push. This is
   // intentionally a "get it there" push rather than a curated commit; the
   // operator can tidy history afterwards.
-  if (state.githubPushed) {
-    ok('Code already pushed to GitHub')
-  } else {
+  // This step runs every time, and a recorded "already pushed" is treated as a
+  // note rather than proof.
+  //
+  // Railway builds the commit that is on GitHub. When the installer itself is
+  // fixed between runs, which is the normal case for a resumed deploy, the
+  // local tree holds the fix and the remote does not, so skipping this step
+  // deploys the old commit and the run fails for a reason that has nothing to
+  // do with the code being looked at. Verifying costs one ls-remote.
+  {
     // Discover the remote URL so we can tell Railway which repo to watch.
     const remoteResult = cli('git', ['remote', 'get-url', 'origin'], { cwd: root, quiet: true })
     if (!remoteResult.ok || !remoteResult.stdout) {
@@ -461,16 +627,37 @@ export async function provisionNetlifyRailway({
       }
     }
 
-    const pushed = cli('git', ['push', 'origin', 'HEAD'], { cwd: root, timeout: 120000 })
-    if (!pushed.ok) {
-      fail('git push failed.')
-      note(pushed.stderr || pushed.stdout)
-      note('Make sure you have push access to the remote and try again.')
-      return { ok: false, state }
+    // Compare the local commit against the branch Railway watches. ls-remote
+    // reads the remote directly, so this is accurate without a fetch.
+    const branchResult = cli('git', ['rev-parse', '--abbrev-ref', 'HEAD'],
+                             { cwd: root, quiet: true })
+    const branch = branchResult.stdout?.trim() || 'main'
+    const localHead = cli('git', ['rev-parse', 'HEAD'], { cwd: root, quiet: true }).stdout?.trim()
+    const remoteRef = cli('git', ['ls-remote', 'origin', `refs/heads/${branch}`],
+                          { cwd: root, quiet: true, timeout: 60000 })
+    const remoteHead = remoteRef.stdout?.trim().split(/\s+/)[0] || ''
+
+    if (branch !== 'main') {
+      warn(`On branch "${branch}", but the Railway service is linked to main.`)
+      note(`Railway will not build this branch. Merge it into main, or point the`)
+      note('api service at it in the dashboard.')
     }
 
-    record('githubPushed', true)
-    ok(`Pushed to github.com/${repoSlug}`)
+    if (localHead && localHead === remoteHead) {
+      record('githubPushed', true)
+      ok(`github.com/${repoSlug} already has ${localHead.slice(0, 7)} on ${branch}`)
+    } else {
+      const pushed = cli('git', ['push', 'origin', 'HEAD'], { cwd: root, timeout: 120000 })
+      if (!pushed.ok) {
+        fail('git push failed.')
+        note(pushed.stderr || pushed.stdout)
+        note('Make sure you have push access to the remote and try again.')
+        return { ok: false, state }
+      }
+
+      record('githubPushed', true)
+      ok(`Pushed ${(localHead || '').slice(0, 7)} to github.com/${repoSlug}`)
+    }
   }
 
   const repoSlug = state.githubRepo
@@ -480,9 +667,45 @@ export async function provisionNetlifyRailway({
 
   let apiUrl = state.apiUrl || ''
 
+  // Ids for the api service, resolved once. The root-directory repair, the
+  // deploy trigger and the deployment-status reporting all need them.
+  const rw = await railwayServiceContext(root, 'api')
+  if (rw.ok) {
+    note(`Railway project ${rw.projectName || rw.projectId} (ids via ${rw.source})`)
+  }
+
+  /*
+   * A URL in .deploy-state.json is not evidence of a working API. An earlier
+   * run recorded one the moment Railway minted the domain, which happens long
+   * before, and regardless of whether, a build succeeds. Trusting it meant a
+   * resumed run printed "API already deployed", skipped every repair below,
+   * and then built both frontends against an address that answered 404. So the
+   * recorded URL is probed, and a dead one falls through to the repair path.
+   */
+  let apiHealthy = false
+
   if (apiUrl) {
-    ok(`API already deployed at ${apiUrl}`)
-  } else {
+    const probe = await probeHealth(`${apiUrl.replace(/\/api\/v1\/?$/, '')}/health`)
+    if (probe.ok) {
+      apiHealthy = true
+      ok(`API already deployed and healthy at ${apiUrl}`)
+
+      // Repair the root directory even on a healthy service, since a run that
+      // finished before this existed left it unset. No prompting here: the API
+      // works, so this is housekeeping, not a blocker.
+      const repaired = await ensureRootDirectory({ root, rw, unattended, prompt: false })
+      if (!repaired) {
+        note(`Root directory is not confirmed as ${API_ROOT_DIRECTORY}, but the API`)
+        note('is answering, so nothing here needs to change today.')
+      }
+    } else {
+      warn(`The recorded API URL does not answer: HTTP ${probe.status || 'no response'}`)
+      note(probe.body ? probe.body.split('\n')[0] : 'no body')
+      note('Repairing the service rather than building the frontends against it.')
+    }
+  }
+
+  if (!apiHealthy) {
     const variables = {
       // When Railway provisions the database, reference the service so the API
       // talks to it over the internal network. When the operator supplied their
@@ -565,7 +788,7 @@ export async function provisionNetlifyRailway({
       if (!serviceOk) {
         fail('Could not create the API service.')
         note('Create a service named "api" in the Railway dashboard, connect it to:')
-        note(`  Repo: ${repoSlug}   Branch: main   Root directory: / (the default)`)
+        note(`  Repo: ${repoSlug}   Branch: main   Root Directory: ${API_ROOT_DIRECTORY}`)
         note('Then re-run this script.')
         return { ok: false, state }
       }
@@ -573,11 +796,19 @@ export async function provisionNetlifyRailway({
       record('apiService', 'api')
     }
 
-    // No root directory step. The Dockerfile sits at the repository root and
-    // railway.json pins builder + dockerfilePath, so Railway's default is
-    // already correct. Root Directory was a staged, dashboard-only setting that
-    // silently failed to apply; the fix was to stop needing it.
-    ok('Build configured by railway.json (Dockerfile at the repo root)')
+    // Root directory. Tell Railway where the API lives instead of relying on a
+    // default, so it reads backend/railway.json and builds backend/Dockerfile.
+    const rootDirSet = await ensureRootDirectory({ root, rw, unattended })
+
+    if (rootDirSet) {
+      ok('Build configured by backend/railway.json (Dockerfile in backend/)')
+    } else {
+      warn(`Root directory is not confirmed as ${API_ROOT_DIRECTORY}.`)
+      note('Carrying on rather than stopping: the repository root holds an')
+      note('equivalent Dockerfile and railway.json that build the same image')
+      note('from the root context, so a service left at / still deploys. The')
+      note('health check below is what decides whether it worked.')
+    }
 
     // Set every time, not only at creation, so a resumed run repairs anything
     // that drifted. --skip-deploys avoids one redeploy per variable.
@@ -597,29 +828,48 @@ export async function provisionNetlifyRailway({
     }
     ok(`Set ${pairs.length} environment variables`)
 
-    // Trigger a redeploy so the env vars take effect. If the service was just
-    // created Railway may already be building; the redeploy ensures env vars
-    // are present. Non-fatal if it fails — the domain check below will catch
-    // a broken service.
+    // Trigger a build so the variables and the root directory take effect.
+    //
+    // `redeploy` is a top-level command, not a subcommand of `service`, which
+    // is why the earlier spelling always failed and left runs with a service
+    // that had never built. A service with no deployment at all cannot be
+    // redeployed either, so the API is the fallback: without a first build,
+    // the generated domain answers every request with a 404 "Application not
+    // found" that looks exactly like a broken API.
     const redeployed = tryVariants('railway', [
+      ['redeploy', '--service', 'api', '--yes'],
+      ['redeploy', '--service', 'api'],
       ['service', 'redeploy', '--service', 'api', '--yes'],
-      ['service', 'redeploy', '--service', 'api'],
     ], { cwd: root, timeout: 180000 })
 
     if (redeployed?.ok) {
-      ok('API redeployed with new environment variables')
+      ok('Deploy triggered with the new environment variables')
+    } else if (rw.ok) {
+      const triggered = await triggerDeploy(rw.api, {
+        serviceId: rw.serviceId, environmentId: rw.environmentId,
+      })
+      if (triggered.ok) {
+        ok(`Deploy triggered through the Railway API (${triggered.mutation})`)
+      } else {
+        warn(`Could not trigger a deploy: ${triggered.reason}`)
+        note('Railway may already be building from the source connection.')
+      }
     } else {
-      note('Could not trigger a redeploy via CLI — Railway may already be building.')
+      note('Could not trigger a deploy from here; Railway may already be building.')
     }
 
-    // `--port` is 5.x only.
-    const domain = tryVariants('railway', [
+    // `--port` is 5.x only. Skipped when a domain was already recorded: the
+    // service keeps its address across rebuilds, and asking again risks a
+    // second domain.
+    const domain = apiUrl ? null : tryVariants('railway', [
       ['domain', '--service', 'api', '--port', '8080'],
       ['domain', '--service', 'api'],
       ['domain'],
     ], { cwd: root, timeout: 180000 })
 
-    const host = firstUrl(domain?.stdout) || firstUrl(domain?.stderr)
+    const host = apiUrl
+      ? apiUrl.replace(/\/api\/v1\/?$/, '')
+      : (firstUrl(domain?.stdout) || firstUrl(domain?.stderr))
 
     if (!host) {
       warn('Railway did not print a domain.')
@@ -641,7 +891,30 @@ export async function provisionNetlifyRailway({
     // build that produces a broken image still gets one. /health runs a real
     // query, so a 200 here means the image built, booted, and reached Postgres.
     const healthUrl = `${apiUrl.replace(/\/api\/v1\/?$/, '')}/health`
-    const apiReady = await waitForHealth(healthUrl, { unattended })
+
+    // Report what Railway thinks is happening while we poll, so a failed build
+    // is named in seconds instead of showing up as a silent timeout.
+    const describe = rw.ok
+      ? async () => {
+        const result = await latestDeployment(rw.api, {
+          projectId: rw.projectId,
+          environmentId: rw.environmentId,
+          serviceId: rw.serviceId,
+        })
+        if (!result.ok) return null
+        if (!result.deployment) {
+          return { line: 'Railway has no deployment for this service yet.', stop: false }
+        }
+        const status = String(result.deployment.status || 'UNKNOWN').toUpperCase()
+        const id = String(result.deployment.id || '').slice(0, 8)
+        return {
+          line: `Railway deployment ${id || '(unknown)'} is ${status}`,
+          stop: ['FAILED', 'CRASHED', 'REMOVED', 'SKIPPED'].includes(status),
+        }
+      }
+      : null
+
+    const apiReady = await waitForHealth(healthUrl, { unattended, describe })
 
     if (!apiReady) {
       warn('The API is not answering yet, so the frontends would be built')
