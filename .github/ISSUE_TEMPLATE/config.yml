@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/MrRyanAlexander/openadms/security/advisories/new
+    about: Report privately. Never open a public issue for a vulnerability.
+  - name: Question or idea
+    url: https://github.com/MrRyanAlexander/openadms/discussions
+    about: Ask about the domain, the design, or how to run this on your program.
+  - name: OpenRecover
+    url: https://openrecover.com
+    about: The other tools in this set, and the release list.

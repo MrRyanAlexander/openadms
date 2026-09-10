@@ -1,0 +1,108 @@
+name: Bug report
+description: Something behaves differently than it should
+title: "[bug] "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting this.
+
+        **Before you write anything: redact.** No client names, project names, addresses, ticket numbers, contract numbers, dollar figures or credentials. If you can reproduce it against the demo seed (`./database/setup.sh --with-demo`), use that instead.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where is it
+      options:
+        - Field app (mobile/)
+        - Back office (frontend/)
+        - API (backend/)
+        - Database, schema or migrations
+        - Rules engine or billing
+        - Installer or deployment
+        - Federation and peers
+        - Documentation
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you observed, and what you expected instead.
+      placeholder: |
+        A load ticket completed but produced no transaction. The processing
+        queue shows it as no_match. I expected the ROW Vegetative rule to hit.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Numbered, from a known starting state.
+      placeholder: |
+        1. Seed with ./database/setup.sh --with-demo
+        2. Sign in as analyst
+        3. Open Rules, dry run "ROW Vegetative Load"
+        4. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Errors, logs or screenshots
+      description: |
+        The `X-Request-Id` header from the failing response is the fastest way
+        to find it in the audit trail. Paste logs in a code block. Redact first.
+      render: shell
+
+  - type: input
+    id: version
+    attributes:
+      label: Commit or release
+      placeholder: "13a48f8, or v0.9.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: Where is it running
+      options:
+        - Local, docker compose
+        - Local, my own Postgres
+        - Netlify + Railway
+        - AWS
+        - Google Cloud
+        - Somewhere else
+    validations:
+      required: true
+
+  - type: input
+    id: postgres
+    attributes:
+      label: Postgres version, and PostGIS present
+      placeholder: "16.4, PostGIS 3.4"
+
+  - type: textarea
+    id: migrations
+    attributes:
+      label: Migration state
+      description: Output of `./database/migrate.sh --status`. Optional, and often decisive.
+      render: shell
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I have redacted all client, project and contract identifying data
+          required: true
+        - label: I checked [Troubleshooting](https://github.com/MrRyanAlexander/openadms/blob/main/docs/TROUBLESHOOTING.md)
+          required: true
+        - label: This is not a security vulnerability (those go through private reporting)
+          required: true

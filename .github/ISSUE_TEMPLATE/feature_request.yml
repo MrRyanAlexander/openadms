@@ -1,0 +1,63 @@
+name: Feature request
+description: Something is missing
+title: "[feature] "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        If what you need is a new **kind of ticket**, use the [ticket type proposal](https://github.com/MrRyanAlexander/openadms/issues/new?template=ticket_type.yml) instead. Those usually ship as a seed row rather than as code.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is the situation
+      description: |
+        Describe the operational problem, not the feature. What happens today,
+        who it happens to, and what it costs in time or in findings.
+      placeholder: |
+        At closeout the client asks for haul distances broken out by zone. Today
+        that is an export plus a pivot table, done by hand, every week.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would solve it
+      validations:
+        required: true
+
+  - type: dropdown
+    id: shape
+    attributes:
+      label: What shape do you think it takes
+      description: A guess is fine. It helps triage.
+      options:
+        - A row in a lookup table, no code
+        - A new ticket type
+        - A rule operand or a unit type
+        - An API endpoint
+        - A back office screen or panel
+        - A field app change
+        - A schema change
+        - Not sure
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you do instead today
+      description: The workaround, however ugly. It usually says something about the real requirement.
+
+  - type: dropdown
+    id: role
+    attributes:
+      label: Who are you asking as
+      options:
+        - Field monitor
+        - Data manager
+        - Project manager
+        - Client, city or county
+        - Contractor or hauler
+        - Developer
+        - Other

@@ -1,0 +1,111 @@
+name: Ticket type proposal
+description: Your contract needs a form this catalog does not have
+title: "[ticket type] "
+labels: ["ticket-type", "domain"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A ticket type in Open ADMS is **data, not code**. It declares its own lifecycle (`stage_schema`) and its own form (`field_schema`) as JSON, and both clients render from those documents. Most proposals ship as one seed row.
+
+        Read [Ticket types](https://github.com/MrRyanAlexander/openadms/blob/main/docs/TICKET_TYPES.md) first if you have not. You do not need to write the JSON. Describing the work accurately is the contribution.
+
+  - type: input
+    id: name
+    attributes:
+      label: What is it called
+      placeholder: "Hazardous Tree Removal, Marine Debris Recovery, Sand Screening"
+    validations:
+      required: true
+
+  - type: textarea
+    id: work
+    attributes:
+      label: What work does it record
+      description: The physical activity, from the monitor's point of view.
+      validations:
+        required: true
+
+  - type: textarea
+    id: stages
+    attributes:
+      label: The stages
+      description: |
+        One step per line, in order. Say who performs it, where they are, and
+        which stage ends the ticket.
+      placeholder: |
+        1. Assessment - monitor at the tree - photo, GPS, diameter, lean direction
+        2. Removal - monitor at the tree - photo, crew, completion time  [ends the ticket]
+      validations:
+        required: true
+
+  - type: textarea
+    id: fields
+    attributes:
+      label: The fields
+      description: |
+        One per line: label, what kind of input, which stage, and whether it is
+        required. Note anything that should come from a project list rather than
+        being typed.
+      placeholder: |
+        Tree diameter - number, inches - assessment - required
+        Lean direction - select - assessment - required
+        Contractor - select from project contractors - assessment - required
+        Removal photo - photo - removal - required
+      validations:
+        required: true
+
+  - type: dropdown
+    id: billing
+    attributes:
+      label: How does it bill
+      options:
+        - Per cubic yard
+        - Per ton
+        - Per mile
+        - Per unit or each
+        - Per diameter inch
+        - Per linear foot
+        - Per labor hour
+        - Per equipment hour
+        - Flat fee
+        - It does not bill, it is a record
+        - Something not on this list
+    validations:
+      required: true
+
+  - type: textarea
+    id: quantity
+    attributes:
+      label: Where does the billed quantity come from
+      description: |
+        Which recorded value on the ticket produces the number. Quantity is never
+        typed by a human, so if the answer is "the monitor enters it", say what
+        they are reading it off.
+      placeholder: "Diameter in inches, measured at 4.5 feet, entered at the assessment stage."
+    validations:
+      required: true
+
+  - type: textarea
+    id: barcode
+    attributes:
+      label: Does it hand off between two people
+      description: |
+        A load ticket is opened by one monitor and closed by another, with a
+        barcode carried between them. Say whether this type does anything similar.
+
+  - type: textarea
+    id: authority
+    attributes:
+      label: Contract or policy this comes from
+      description: |
+        A PAPPG section, a state debris plan, a contract clause, or "this is how
+        every program I have run does it". Redact contract numbers and client names.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I have redacted client, project and contract identifying data
+          required: true

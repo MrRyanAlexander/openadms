@@ -1,3 +1,11 @@
+<div align="center">
+<sub>
+
+[Docs index](README.md) · [Architecture](ARCHITECTURE.md) · [Data model](DATA_MODEL.md) · [ERD](ERD.md) · [Ticket types](TICKET_TYPES.md) · [Rules](RULES_ENGINE.md) · [Access](ACCESS_CONTROL.md) · [Federation](FEDERATION.md) · [API](API.md) · [Deploy](DEPLOYMENT.md) · [Testing](TESTING.md) · **Troubleshooting**
+
+</sub>
+</div>
+
 # When something does not work
 
 ## `could not translate host name "host"`
@@ -213,3 +221,13 @@ psql "$DATABASE_URL" -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
 Yes. It normalises anything a previous interrupted run left behind and picks
 records that are still in a clean state, so `--test` is repeatable against a
 database it has already touched.
+
+<br>
+
+<div align="center">
+<sub>
+
+**[Docs index](README.md)** · **[Repository](../README.md)**
+
+</sub>
+</div>

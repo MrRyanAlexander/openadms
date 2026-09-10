@@ -1,3 +1,11 @@
+<div align="center">
+<sub>
+
+[Docs index](README.md) · [Rules engine](RULES_ENGINE.md) · [Repository](../README.md)
+
+</sub>
+</div>
+
 # Rules and transactions: how a rule creates money
 
 Reference note. Source material is a set of ten screenshots of the legacy

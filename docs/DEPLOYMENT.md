@@ -1,3 +1,11 @@
+<div align="center">
+<sub>
+
+[Docs index](README.md) · [Architecture](ARCHITECTURE.md) · [Data model](DATA_MODEL.md) · [ERD](ERD.md) · [Ticket types](TICKET_TYPES.md) · [Rules](RULES_ENGINE.md) · [Access](ACCESS_CONTROL.md) · [Federation](FEDERATION.md) · [API](API.md) · **Deploy** · [Testing](TESTING.md) · [Troubleshooting](TROUBLESHOOTING.md)
+
+</sub>
+</div>
+
 # Deployment
 
 Three targets, one codebase. The installer collects the same answers for each
@@ -167,3 +175,13 @@ cd backend && python3 -m pytest -k peer
 restricts a project to Beta's key, and asserts that Beta reads it, that a replayed
 nonce is refused, that a forged signature is refused, that an unregistered third
 party receives 403, and that an unsigned request receives 403.
+
+<br>
+
+<div align="center">
+<sub>
+
+**[Docs index](README.md)** · **[Repository](../README.md)**
+
+</sub>
+</div>
