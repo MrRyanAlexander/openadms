@@ -6,6 +6,7 @@ import uuid
 from datetime import date, datetime
 from typing import Any, Optional
 
+import asyncpg
 from fastapi import APIRouter, Body, Depends, Query, Request
 from pydantic import BaseModel, Field
 
@@ -292,23 +293,66 @@ async def _hydrate(conn, ticket_id: uuid.UUID) -> dict[str, Any]:
             "stages": db.rows(stages)}
 
 
+# Changing one of these changes what the ticket bills, so the edit queues a
+# reprice rather than leaving the ticket and its money disagreeing.
+_PRICING_FIELDS = {
+    "load_call_pct", "certified_capacity_cy", "equipment_id", "contractor_id",
+    "contract_id", "debris_type", "quantity", "net_weight_lbs",
+    "gross_weight_lbs", "tare_weight_lbs", "haul_distance_miles", "labor_hours",
+    "equipment_hours", "destination_site_id", "origin_site_id", "completed_at",
+    "special_class", "status",
+}
+
+
 @router.patch("/tickets/{ticket_id}")
 async def update_ticket(ticket_id: uuid.UUID, user: CurrentUser,
                         payload: dict[str, Any] = Body(...),
                         _: dict = Depends(require_permission("ticket.update"))):
+    """Correcting a ticket after the field is done with it.
+
+    The walkthrough's finding was that no screen called this. The finding under
+    that one is that calling it was not enough: a ticket whose load call changes
+    is a ticket whose money is now wrong, and the engine could not reprice it.
+    So an edit that touches anything the price is derived from queues a reprice
+    and says so, and an edit to work already sitting on an approved invoice is
+    refused by name rather than silently desynchronising it."""
     columns, extra = _split_fields(payload)
     if "status" in payload:
         columns["status"] = payload["status"]
     if not columns and not extra:
         raise bad_request("No updatable fields supplied")
 
-    reason = payload.get("_reason", "")
+    reason = (payload.get("_reason") or "").strip()
+    touches_pricing = bool(_PRICING_FIELDS & set(columns))
+
     async with db.tx({**user, "reason": reason}) as conn:
         current = await conn.fetchrow(
-            "SELECT project_id, data FROM tickets WHERE id = $1 AND deleted_at IS NULL",
-            ticket_id)
+            "SELECT project_id, data, status, is_void, processing_state, "
+            "       ticket_number "
+            "  FROM tickets WHERE id = $1 AND deleted_at IS NULL", ticket_id)
         if current is None:
             raise not_found("Ticket")
+
+        settled = (current["status"] == "completed"
+                   or current["processing_state"] == "processed")
+        if settled and not reason:
+            raise bad_request(
+                "Changing a completed ticket needs a reason. It goes on the "
+                "audit artifact next to what changed.",
+                code="reason_required")
+
+        if settled and touches_pricing:
+            locked = await conn.fetch(
+                "SELECT invoice_number FROM adms_ticket_invoice_lock($1)", ticket_id)
+            if locked:
+                raise conflict(
+                    "This ticket is on "
+                    + ", ".join(r["invoice_number"] for r in locked)
+                    + ", which has been approved. Reopen the invoice, or reverse "
+                      "the transaction and leave an adjustment behind.",
+                    code="ticket_invoiced",
+                    invoices=[r["invoice_number"] for r in locked])
+
         if extra:
             columns["data"] = {**(current["data"] or {}), **extra}
         if "completed_by" not in columns and columns.get("status") == "completed":
@@ -317,7 +361,17 @@ async def update_ticket(ticket_id: uuid.UUID, user: CurrentUser,
         sql, args = db.build_update("tickets", columns, "id = $1", [ticket_id],
                                     returning="id")
         await conn.fetchval(sql, *args)
-        return await _hydrate(conn, ticket_id)
+
+        queued = 0
+        if touches_pricing and not current["is_void"]:
+            queued = await conn.fetchval(
+                "SELECT adms_queue_reprocess('ticket', $1, $2)",
+                ticket_id, reason or "Ticket corrected")
+
+        ticket = await _hydrate(conn, ticket_id)
+
+    ticket["reprocess_queued"] = bool(queued)
+    return ticket
 
 
 @router.post("/tickets/{ticket_id}/stages")
@@ -722,3 +776,154 @@ async def process_queue(ctx: ProjectContext, user: CurrentUser,
             created += len(await conn.fetch(
                 "SELECT * FROM adms_process_ticket($1, $2)", row["id"], user["id"]))
     return {"tickets_processed": len(pending), "transactions_created": created}
+
+
+# ---------------------------------------------------------------------------
+# Correction
+#
+# The walkthrough's blunt finding: "I have no way to edit existing tickets in
+# the back-office (apart from void), but I should." Voiding was the only button,
+# and it was irreversible. These are the rest of the verbs.
+# ---------------------------------------------------------------------------
+class ReasonBody(BaseModel):
+    reason: str = Field(min_length=4)
+
+
+class ReprocessBody(ReasonBody):
+    # An approved invoice stops a reprice. Forcing it is a decision someone
+    # takes deliberately, so it is a field rather than a default.
+    force: bool = False
+
+
+@router.get("/projects/{project_id}/reprocess-queue")
+async def reprocess_queue(ctx: ProjectContext, user: CurrentUser,
+                          paging: Paging,
+                          _: dict = Depends(require_permission("ticket.read.project"))):
+    """Tickets waiting to be repriced, and why.
+
+    Correcting one truck certificate can queue a week of loads. The count is
+    what an operator decides on, so it is a list before it is an action."""
+    pid = ctx["project"]["id"]
+    async with db.read() as conn:
+        total = await conn.fetchval(
+            "SELECT count(*) FROM tickets WHERE project_id = $1 AND needs_reprocess",
+            pid)
+        rows = await conn.fetch(
+            """
+            SELECT t.id, t.ticket_number, t.reprocess_reason, t.reprocess_queued_at,
+                   t.completed_at, e.unit_number, tt.code AS ticket_type_code,
+                   COALESCE((SELECT sum(amount) FROM transactions tx
+                              WHERE tx.ticket_id = t.id
+                                AND tx.superseded_at IS NULL
+                                AND NOT tx.is_reversal), 0) AS current_total,
+                   (SELECT count(*) FROM adms_ticket_invoice_lock(t.id)) AS locked_by
+              FROM tickets t
+              JOIN ticket_types tt ON tt.id = t.ticket_type_id
+              LEFT JOIN equipment e ON e.id = t.equipment_id
+             WHERE t.project_id = $1 AND t.needs_reprocess
+             ORDER BY t.reprocess_queued_at, t.ticket_number
+             LIMIT $2 OFFSET $3
+            """, pid, paging["limit"], paging["offset"])
+    page = db.Page.of(db.rows(rows), total, paging["limit"], paging["offset"])
+    page["locked_count"] = sum(1 for r in rows if r["locked_by"])
+    return page
+
+
+@router.post("/tickets/{ticket_id}/reprocess")
+async def reprocess_ticket(ticket_id: uuid.UUID, body: ReprocessBody,
+                           user: CurrentUser,
+                           _: dict = Depends(require_permission("transaction.process"))):
+    """Reverse, supersede and recompute one ticket.
+
+    Returns both totals, because what a correction cost is the first thing
+    anyone asks and the last thing they should have to reconstruct."""
+    async with db.tx({**user, "reason": body.reason}) as conn:
+        try:
+            row = await conn.fetchrow(
+                "SELECT * FROM adms_reprocess_ticket($1, $2, $3, $4)",
+                ticket_id, body.reason, user["id"], body.force)
+        except asyncpg.PostgresError as exc:
+            raise _reprocess_refusal(exc) from exc
+        ticket = await _hydrate(conn, ticket_id)
+
+    ticket["reprocess"] = {
+        "reversed": row["out_reversed"], "created": row["out_created"],
+        "old_total": float(row["out_old_total"]),
+        "new_total": float(row["out_new_total"]),
+        "difference": float(row["out_new_total"] - row["out_old_total"]),
+    }
+    return ticket
+
+
+@router.post("/projects/{project_id}/reprocess")
+async def reprocess_project_queue(ctx: ProjectContext, body: ReprocessBody,
+                                  user: CurrentUser,
+                                  limit: int = Query(500, le=5000),
+                                  _: dict = Depends(
+                                      require_permission("transaction.process"))):
+    """Drain the reprice queue.
+
+    Tickets held by an approved invoice are skipped and named rather than
+    silently left behind, unless the caller forces them."""
+    pid = ctx["project"]["id"]
+    done, skipped = [], []
+    old_total = new_total = 0.0
+
+    async with db.tx({**user, "reason": body.reason}) as conn:
+        queued = await conn.fetch(
+            "SELECT id, ticket_number FROM tickets "
+            " WHERE project_id = $1 AND needs_reprocess AND deleted_at IS NULL"
+            " ORDER BY reprocess_queued_at LIMIT $2", pid, limit)
+
+        for row in queued:
+            try:
+                result = await conn.fetchrow(
+                    "SELECT * FROM adms_reprocess_ticket($1, $2, $3, $4)",
+                    row["id"], body.reason, user["id"], body.force)
+            except asyncpg.PostgresError:
+                skipped.append(row["ticket_number"])
+                continue
+            done.append(row["ticket_number"])
+            old_total += float(result["out_old_total"])
+            new_total += float(result["out_new_total"])
+
+    return {
+        "reprocessed": len(done), "skipped": len(skipped),
+        "skipped_tickets": skipped[:25],
+        "old_total": round(old_total, 2), "new_total": round(new_total, 2),
+        "difference": round(new_total - old_total, 2),
+        "message": (
+            f"Repriced {len(done)} ticket{'s' if len(done) != 1 else ''}"
+            + (f", skipped {len(skipped)} held by an approved invoice"
+               if skipped else "")
+            + f". Billing moved {new_total - old_total:+,.2f}."),
+    }
+
+
+@router.post("/tickets/{ticket_id}/unvoid")
+async def unvoid_ticket(ticket_id: uuid.UUID, body: ReasonBody, user: CurrentUser,
+                        _: dict = Depends(require_permission("ticket.void"))):
+    """Undo a void. The ticket returns and is queued for repricing.
+
+    Void used to be the one button in the product that could not be taken back,
+    which made a mis-click a permanent hole in a project's volume."""
+    async with db.tx({**user, "reason": body.reason}) as conn:
+        try:
+            await conn.execute("SELECT adms_unvoid_ticket($1, $2, $3)",
+                               ticket_id, body.reason, user["id"])
+        except asyncpg.PostgresError as exc:
+            raise _reprocess_refusal(exc) from exc
+        return await _hydrate(conn, ticket_id)
+
+
+def _reprocess_refusal(exc: Exception) -> Exception:
+    """Database refusals here are written for a person, so they are passed
+    through rather than replaced with a generic message."""
+    message = str(getattr(exc, "message", None) or exc)
+    if "has been approved" in message:
+        return conflict(message, code="ticket_invoiced")
+    if "not void" in message or "not found" in message:
+        return bad_request(message, code="unvoid_refused")
+    if "reason" in message.lower():
+        return bad_request(message, code="reason_required")
+    return bad_request(message, code="reprocess_refused")

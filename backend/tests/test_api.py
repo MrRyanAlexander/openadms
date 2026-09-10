@@ -1417,3 +1417,186 @@ def test_the_package_is_recorded_in_the_audit_trail(client, auth, project_id):
     after = client.get("/api/v1/audit", params={"action": "export"},
                        headers=auth).json()["total"]
     assert after > before
+
+
+# ===========================================================================
+# Sprint 2: correcting work the field has already finished
+#
+# The second walkthrough's blunt version: "I have no way to edit existing
+# tickets in the back-office (apart from void), but I should." These cover the
+# verbs that answer it, and the guardrails that keep them honest.
+# ===========================================================================
+
+def _a_priced_ticket(client, auth, project_id):
+    tickets = client.get(
+        f"/api/v1/projects/{project_id}/tickets",
+        params={"status": "completed", "limit": 50}, headers=auth).json()
+    for t in tickets["items"]:
+        if (t.get("transaction_total") or 0) > 0 and not t.get("is_void"):
+            return t
+    raise AssertionError("the demo project should have priced tickets")
+
+
+def test_correcting_a_completed_ticket_requires_a_reason(client, manager_auth, project_id, auth):
+    ticket = _a_priced_ticket(client, auth, project_id)
+    refused = client.patch(f"/api/v1/tickets/{ticket['id']}",
+                           json={"load_call_pct": 51}, headers=manager_auth)
+    assert refused.status_code == 400
+    assert refused.json()["error"]["code"] == "reason_required"
+
+
+def test_a_manager_corrects_a_ticket_and_the_money_follows(
+        client, manager_auth, analyst_auth, auth, project_id):
+    ticket = _a_priced_ticket(client, auth, project_id)
+    before = float(ticket["transaction_total"])
+
+    edited = client.patch(
+        f"/api/v1/tickets/{ticket['id']}",
+        json={"load_call_pct": 25,
+              "_reason": "Load call corrected after reviewing the photos"},
+        headers=manager_auth)
+    assert edited.status_code == 200
+    # The edit alone must not leave the ticket and its money disagreeing.
+    assert edited.json()["reprocess_queued"] is True
+
+    repriced = client.post(
+        f"/api/v1/tickets/{ticket['id']}/reprocess",
+        json={"reason": "Load call corrected after reviewing the photos"},
+        headers=analyst_auth)
+    assert repriced.status_code == 200
+    result = repriced.json()["reprocess"]
+    assert result["old_total"] == pytest.approx(before, rel=1e-6)
+    assert result["new_total"] < result["old_total"]
+    assert result["reversed"] >= 1 and result["created"] >= 1
+
+
+def test_repricing_is_analyst_work_not_manager_work(
+        client, manager_auth, auth, project_id):
+    ticket = _a_priced_ticket(client, auth, project_id)
+    refused = client.post(f"/api/v1/tickets/{ticket['id']}/reprocess",
+                          json={"reason": "Trying it as a manager"},
+                          headers=manager_auth)
+    assert refused.status_code == 403
+
+
+def test_a_manager_can_still_see_what_is_waiting_to_be_repriced(
+        client, manager_auth, project_id):
+    queue = client.get(f"/api/v1/projects/{project_id}/reprocess-queue",
+                       headers=manager_auth)
+    assert queue.status_code == 200
+    assert "locked_count" in queue.json()
+
+
+def test_void_and_unvoid_return_the_billing(client, analyst_auth, auth, project_id):
+    ticket = _a_priced_ticket(client, auth, project_id)
+    original = float(ticket["transaction_total"])
+
+    voided = client.post(f"/api/v1/tickets/{ticket['id']}/void",
+                         json={"reason": "Duplicate scan at the DMS gate"},
+                         headers=analyst_auth)
+    assert voided.status_code == 200
+
+    restored = client.post(f"/api/v1/tickets/{ticket['id']}/unvoid",
+                           json={"reason": "Not a duplicate, the load was real"},
+                           headers=analyst_auth)
+    assert restored.status_code == 200
+    assert restored.json()["ticket"]["is_void"] is False
+    # Voiding drives the status to voided; restoring the flag alone used to
+    # leave the engine refusing the ticket as incomplete.
+    assert restored.json()["ticket"]["status"] == "completed"
+
+    repriced = client.post(f"/api/v1/tickets/{ticket['id']}/reprocess",
+                           json={"reason": "Restored after an incorrect void"},
+                           headers=analyst_auth).json()["reprocess"]
+    assert repriced["new_total"] == pytest.approx(original, rel=1e-6)
+
+
+def test_unvoiding_a_live_ticket_is_refused(client, analyst_auth, auth, project_id):
+    ticket = _a_priced_ticket(client, auth, project_id)
+    refused = client.post(f"/api/v1/tickets/{ticket['id']}/unvoid",
+                          json={"reason": "It is not void"}, headers=analyst_auth)
+    assert refused.status_code == 400
+
+
+def test_a_certification_is_scoped_to_the_project(client, auth, project_id):
+    listing = client.get(f"/api/v1/projects/{project_id}/certifications",
+                         params={"limit": 100}, headers=auth).json()
+    assert listing["summary"]["certified"] > 0
+    assert all(c["project_id"] == project_id for c in listing["items"])
+
+
+def test_a_second_first_measurement_is_refused(client, auth, project_id):
+    cert = client.get(f"/api/v1/projects/{project_id}/certifications",
+                      params={"limit": 1}, headers=auth).json()["items"][0]
+    refused = client.post(
+        f"/api/v1/projects/{project_id}/certifications",
+        json={"equipment_id": cert["equipment_id"], "certified_capacity_cy": 40,
+              "method": "physical"}, headers=auth)
+    assert refused.status_code == 409
+    assert refused.json()["error"]["code"] == "already_certified"
+
+
+def test_the_impact_of_a_correction_is_visible_before_it_is_written(
+        client, auth, project_id):
+    certs = client.get(f"/api/v1/projects/{project_id}/certifications",
+                       params={"limit": 100}, headers=auth).json()["items"]
+    cert = max(certs, key=lambda c: c["tickets_priced"])
+    assert cert["tickets_priced"] > 0
+
+    half = round(cert["certified_capacity_cy"] / 2, 2)
+    impact = client.get(f"/api/v1/certifications/{cert['id']}/impact",
+                        params={"capacity": half}, headers=auth).json()
+    assert impact["affected"]["tickets"] == cert["tickets_priced"]
+    assert impact["estimated_difference"] < 0
+
+
+def test_a_correction_reaches_back_and_a_recertification_does_not(
+        client, auth, analyst_auth, project_id):
+    certs = client.get(f"/api/v1/projects/{project_id}/certifications",
+                       params={"limit": 100}, headers=auth).json()["items"]
+    cert = max(certs, key=lambda c: c["tickets_priced"])
+
+    fixed = client.post(
+        f"/api/v1/projects/{project_id}/certifications",
+        json={"equipment_id": cert["equipment_id"],
+              "certified_capacity_cy": round(cert["certified_capacity_cy"] / 2, 2),
+              "method": "correction", "supersedes_id": cert["id"],
+              "notes": "Tare read as 3 instead of 1 at the original measurement"},
+        headers=auth)
+    assert fixed.status_code == 201
+    body = fixed.json()
+    # The whole point: it stands where the wrong number stood.
+    assert body["applies_from"] == cert["applies_from"]
+    assert body["tickets_queued"] == cert["tickets_priced"]
+
+    drained = client.post(f"/api/v1/projects/{project_id}/reprocess",
+                          json={"reason": "Certified capacity corrected"},
+                          headers=analyst_auth).json()
+    assert drained["reprocessed"] >= cert["tickets_priced"]
+    assert drained["difference"] < 0
+
+
+def test_repricing_stops_at_an_approved_invoice(client, auth, analyst_auth, project_id):
+    invoices = client.get(f"/api/v1/projects/{project_id}/invoices",
+                          headers=auth).json()
+    invoice = next((i for i in invoices["items"] if i["line_count"]), None)
+    if invoice is None:
+        pytest.skip("the demo project has no invoice with lines")
+
+    client.patch(f"/api/v1/invoices/{invoice['id']}",
+                 json={"status": "submitted"}, headers=auth)
+    client.patch(f"/api/v1/invoices/{invoice['id']}",
+                 json={"status": "approved"}, headers=auth)
+
+    detail = client.get(f"/api/v1/invoices/{invoice['id']}", headers=auth).json()
+    ticket_id = detail["lines"][0]["ticket_id"]
+
+    refused = client.post(f"/api/v1/tickets/{ticket_id}/reprocess",
+                          json={"reason": "Load call corrected"}, headers=analyst_auth)
+    assert refused.status_code == 409
+    assert invoice["invoice_number"] in refused.json()["error"]["message"]
+
+    forced = client.post(f"/api/v1/tickets/{ticket_id}/reprocess",
+                         json={"reason": "Load call corrected, adjustment agreed",
+                               "force": True}, headers=analyst_auth)
+    assert forced.status_code == 200

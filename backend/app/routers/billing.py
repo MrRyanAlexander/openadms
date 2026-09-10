@@ -523,9 +523,13 @@ async def get_invoice(invoice_id: uuid.UUID, user: CurrentUser,
             raise not_found("Invoice")
         lines = await conn.fetch(
             """
-            SELECT il.*, tl.transaction_number, tl.ticket_number, tl.service_code,
-                   tl.service_code_name, tl.quantity, tl.unit_abbrev,
-                   tl.rate_amount, tl.rule_name
+            SELECT il.*, tl.transaction_number, tl.ticket_id, tl.ticket_number,
+                   tl.service_code, tl.service_code_name, tl.quantity,
+                   tl.unit_abbrev, tl.rate_amount, tl.rule_name,
+                   -- A line whose transaction has since been reversed and
+                   -- recomputed is the case D7 found: the ledger moved and the
+                   -- invoice went on reading its old total.
+                   tl.superseded_at, (tl.superseded_at IS NULL) AS is_live
               FROM invoice_lines il
               JOIN transaction_ledger tl ON tl.id = il.transaction_id
              WHERE il.invoice_id = $1 ORDER BY il.line_number
@@ -540,8 +544,11 @@ async def get_invoice(invoice_id: uuid.UUID, user: CurrentUser,
              WHERE il.invoice_id = $1
              GROUP BY 1, 2, 3 ORDER BY 1
             """, invoice_id)
+        integrity = await conn.fetchrow(
+            "SELECT * FROM invoice_integrity WHERE invoice_id = $1", invoice_id)
     return {"invoice": db.row(invoice), "lines": db.rows(lines),
-            "by_service_code": db.rows(rollup)}
+            "by_service_code": db.rows(rollup),
+            "integrity": db.row(integrity)}
 
 
 @router.patch("/invoices/{invoice_id}")

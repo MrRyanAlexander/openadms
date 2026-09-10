@@ -193,8 +193,7 @@ BEGIN
     END IF;
 
     SELECT COALESCE(sum(amount), 0) INTO v_old
-      FROM transactions
-     WHERE ticket_id = p_ticket AND superseded_at IS NULL AND NOT is_reversal;
+      FROM transactions WHERE ticket_id = p_ticket AND superseded_at IS NULL;
 
     -- Re-resolve what the ticket is measured from. A corrected certification
     -- carries the applies_from of the row it replaced, so this lands on the
@@ -260,8 +259,7 @@ BEGIN
     SELECT count(*) INTO v_created FROM adms_process_ticket(p_ticket, p_actor);
 
     SELECT COALESCE(sum(amount), 0) INTO v_new
-      FROM transactions
-     WHERE ticket_id = p_ticket AND superseded_at IS NULL AND NOT is_reversal;
+      FROM transactions WHERE ticket_id = p_ticket AND superseded_at IS NULL;
 
     UPDATE tickets
        SET needs_reprocess = false, reprocess_reason = NULL,
@@ -400,6 +398,15 @@ BEGIN
     UPDATE tickets
        SET is_void = false, voided_at = NULL, voided_by = NULL,
            void_reason = NULL,
+           -- Voiding drives status to 'voided'. Restoring the flag and leaving
+           -- the status behind left the engine treating the ticket as
+           -- incomplete, so it came back to the list billing nothing.
+           status = CASE WHEN status = 'voided'
+                         THEN CASE WHEN completed_at IS NOT NULL
+                                   THEN 'completed' ELSE 'open' END
+                         ELSE status END,
+           processing_state = 'unprocessed',
+           processing_error = NULL,
            needs_reprocess = true,
            reprocess_reason = 'Unvoided: ' || p_reason,
            reprocess_queued_at = now()
