@@ -46,6 +46,17 @@ BEGIN
 END;
 $$;
 
+-- A block whose precondition is not there did not pass and did not fail. It is
+-- recorded either way, because a suite whose count drops in silence is a suite
+-- that can lose an assertion without anyone noticing.
+CREATE OR REPLACE FUNCTION pg_temp.check_skipped(p_name text, p_why text)
+RETURNS void LANGUAGE plpgsql AS $$
+BEGIN
+    INSERT INTO _results (name, ok, detail) VALUES (p_name, true, 'skipped: ' || p_why);
+    RAISE NOTICE '  skipped: % (%)', p_name, p_why;
+END;
+$$;
+
 DO $tests$
 DECLARE
     v_project uuid;
@@ -459,14 +470,22 @@ BEGIN
     -- =======================================================================
     -- Invoicing
     -- =======================================================================
-    PERFORM pg_temp.check_that('the demo invoice totals its lines',
-        (SELECT i.total = round(COALESCE((SELECT SUM(amount) FROM invoice_lines
-                                           WHERE invoice_id = i.id), 0), 2) + i.adjustments
-           FROM invoices i WHERE i.project_id = v_project LIMIT 1));
+    -- Every invoice, not whichever one came back first. LIMIT 1 with no ORDER BY
+    -- picks a different row once anything else has written, and the point of
+    -- the rule is that it holds for all of them.
+    PERFORM pg_temp.check_that('every invoice totals its own lines',
+        NOT EXISTS (
+            SELECT 1 FROM invoices i
+             WHERE i.project_id = v_project
+               AND i.total <> round(COALESCE((SELECT SUM(amount) FROM invoice_lines
+                                               WHERE invoice_id = i.id), 0), 2)
+                              + i.adjustments));
 
-    PERFORM pg_temp.check_that('the demo invoice has lines and a positive total',
-        (SELECT total > 0 AND EXISTS (SELECT 1 FROM invoice_lines WHERE invoice_id = i.id)
-           FROM invoices i WHERE i.project_id = v_project LIMIT 1));
+    PERFORM pg_temp.check_that('the demo project has an invoice with lines on it',
+        EXISTS (
+            SELECT 1 FROM invoices i
+             WHERE i.project_id = v_project AND i.total > 0
+               AND EXISTS (SELECT 1 FROM invoice_lines WHERE invoice_id = i.id)));
 
     PERFORM pg_temp.check_raises('a transaction cannot appear on two invoices',
         format('INSERT INTO invoice_lines (invoice_id, transaction_id, line_number, amount)
@@ -881,6 +900,7 @@ DECLARE
     -- are carried back out in an array, which survives the rollback.
     v_mark    integer;
     v_names   text[];
+    v_details text[];
 BEGIN
     SELECT id INTO v_project FROM projects ORDER BY created_at LIMIT 1;
     SELECT id INTO v_user FROM users WHERE username = 'manager';
@@ -981,6 +1001,10 @@ BEGIN
                      WHERE r.ticket_id = v_ticket
                        AND o.superseded_at IS NOT NULL
                        AND r.superseded_at IS NULL));
+        ELSE
+            PERFORM pg_temp.check_skipped(
+                'repricing a halved capacity halves the money',
+                'nothing was queued for reprocessing on this database');
         END IF;
 
         -- ------------------------------------------- the promises that must hold
@@ -1025,6 +1049,10 @@ BEGIN
             PERFORM pg_temp.check_raises('unvoiding a live ticket is refused',
                 format('SELECT adms_unvoid_ticket(%L, ''again'', NULL)', v_ticket),
                 'not void');
+        ELSE
+            PERFORM pg_temp.check_skipped(
+                'unvoiding restores a ticket and its billing',
+                'this database has no void ticket to restore');
         END IF;
 
         -- ---------------------------------------------------- stream to type map
@@ -1036,7 +1064,9 @@ BEGIN
             (SELECT ticket_type_codes FROM debris_types WHERE code = 'HANGER')
                 @> ARRAY['UNIT']);
 
-        SELECT array_agg(name ORDER BY n) INTO v_names
+        SELECT array_agg(name ORDER BY n),
+               array_agg(COALESCE(detail, '') ORDER BY n)
+          INTO v_names, v_details
           FROM _results WHERE n > v_mark;
 
         -- Everything above passed, so undo all of it. A failure would have
@@ -1048,7 +1078,9 @@ BEGIN
     END;
 
     INSERT INTO _results (name, ok, detail)
-    SELECT unnest(COALESCE(v_names, '{}')), true, 'sandboxed';
+    SELECT u.nm, true,
+           CASE WHEN u.dt LIKE 'skipped:%' THEN u.dt ELSE 'sandboxed' END
+      FROM unnest(COALESCE(v_names, '{}'), COALESCE(v_details, '{}')) AS u(nm, dt);
 END
 $sprint2$;
 
@@ -1064,6 +1096,7 @@ DECLARE
     v_n       integer;
     v_mark    integer;
     v_names   text[];
+    v_details text[];
 BEGIN
     SELECT id INTO v_project FROM projects ORDER BY created_at LIMIT 1;
     SELECT id INTO v_user FROM users WHERE username = 'manager';
@@ -1115,6 +1148,10 @@ BEGIN
                              WHERE ticket_id = v_ticket
                                AND flag_code = 'full_load_call'
                                AND cleared_at IS NULL));
+        ELSE
+            PERFORM pg_temp.check_skipped(
+                'a flag clears when it stops being true',
+                'no ticket on this database carries a full load call');
         END IF;
 
         -- The review decision. On a ticket nobody has reviewed yet, because a
@@ -1162,7 +1199,9 @@ BEGIN
                          WHERE approved = 0 AND flagged = 0
                            AND approval_rate IS NOT NULL));
 
-        SELECT array_agg(name ORDER BY n) INTO v_names
+        SELECT array_agg(name ORDER BY n),
+               array_agg(COALESCE(detail, '') ORDER BY n)
+          INTO v_names, v_details
           FROM _results WHERE n > v_mark;
         RAISE EXCEPTION 'sandbox' USING ERRCODE = 'ADMS1';
     EXCEPTION
@@ -1171,7 +1210,9 @@ BEGIN
     END;
 
     INSERT INTO _results (name, ok, detail)
-    SELECT unnest(COALESCE(v_names, '{}')), true, 'sandboxed';
+    SELECT u.nm, true,
+           CASE WHEN u.dt LIKE 'skipped:%' THEN u.dt ELSE 'sandboxed' END
+      FROM unnest(COALESCE(v_names, '{}'), COALESCE(v_details, '{}')) AS u(nm, dt);
 END
 $review$;
 
@@ -1188,6 +1229,7 @@ DECLARE
     v_txt     text;
     v_mark    integer;
     v_names   text[];
+    v_details text[];
 BEGIN
     SELECT id INTO v_project FROM projects ORDER BY created_at LIMIT 1;
     SELECT COALESCE(max(n), 0) INTO v_mark FROM _results;
@@ -1270,7 +1312,9 @@ BEGIN
             format('UPDATE invoices SET adjustments = -100 WHERE id = %L', v_inv),
             'adjustment_has_a_reason');
 
-        SELECT array_agg(name ORDER BY n) INTO v_names
+        SELECT array_agg(name ORDER BY n),
+               array_agg(COALESCE(detail, '') ORDER BY n)
+          INTO v_names, v_details
           FROM _results WHERE n > v_mark;
         RAISE EXCEPTION 'sandbox' USING ERRCODE = 'ADMS1';
     EXCEPTION
@@ -1279,16 +1323,26 @@ BEGIN
     END;
 
     INSERT INTO _results (name, ok, detail)
-    SELECT unnest(COALESCE(v_names, '{}')), true, 'sandboxed';
+    SELECT u.nm, true,
+           CASE WHEN u.dt LIKE 'skipped:%' THEN u.dt ELSE 'sandboxed' END
+      FROM unnest(COALESCE(v_names, '{}'), COALESCE(v_details, '{}')) AS u(nm, dt);
 END
 $money$;
 
 SELECT
-    count(*) FILTER (WHERE ok)     AS passed,
-    count(*) FILTER (WHERE NOT ok) AS failed,
-    count(*)                       AS total
+    count(*) FILTER (WHERE ok AND detail IS DISTINCT FROM NULL
+                     AND detail LIKE 'skipped:%')  AS skipped,
+    count(*) FILTER (WHERE ok)                     AS passed,
+    count(*) FILTER (WHERE NOT ok)                 AS failed,
+    count(*)                                       AS total
   FROM _results;
 
+-- Named, not just counted. A skip is a block whose precondition was not on this
+-- database, which on a fresh seed should be none of them.
+SELECT name, detail FROM _results
+ WHERE detail LIKE 'skipped:%' ORDER BY n;
+
 \echo ''
-\echo '  All schema assertions passed.'
+\echo '  All schema assertions passed. Anything listed above as skipped had no'
+\echo '  precondition on this database, which on a fresh seed should be nothing.'
 \echo ''
