@@ -150,7 +150,7 @@ function RuleRow({ rule, open, onToggle, onEdit, onTest, onRemove }) {
         <td className="muted">{rule.ticket_type_label}</td>
         <td className="mono">{rule.service_code}</td>
         <td className="num">
-          {rule.rate_amount != null ? fmt.money(rule.rate_amount, 4) : '—'}
+          {rule.rate_amount != null ? fmt.rate(rule.rate_amount) : '—'}
           <span className="dim"> / {rule.unit_abbrev || '—'}</span>
         </td>
         <td className="muted truncate" style={{ maxWidth: 150 }}>{rule.contract_number}</td>
@@ -203,7 +203,7 @@ function RuleDetail({ rule, onTest }) {
             <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid var(--line-soft)' }}>
               <span className="op">then bill</span> <b>{rule.service_code}</b>
               {' '}<span className="op">at</span>{' '}
-              <b>{fmt.money(rule.rate_amount || 0, 4)} / {rule.unit_abbrev || '—'}</b>
+              <b>{fmt.rate(rule.rate_amount || 0)} / {rule.unit_abbrev || '—'}</b>
               {' '}<span className="op">under</span> <b>{rule.contract_number}</b>
             </div>
           </div>
@@ -374,7 +374,7 @@ function RuleEditor({ rule, project, serviceCodes, onClose, onSaved }) {
           <div className="grid c2" style={{ gap: 12 }}>
             <Field label="Service code" required
                    hint={selectedCode
-                     ? `${fmt.money(selectedCode.current_rate || 0, 4)} per ${selectedCode.current_unit_abbrev || '—'} · ${selectedCode.contractor_name}`
+                     ? `${fmt.rate(selectedCode.current_rate || 0)} per ${selectedCode.current_unit_abbrev || '—'} · ${selectedCode.contractor_name}`
                      : 'Project-scoped; the contractor comes from the code'}>
               <select className="select" value={form.service_code_id}
                       onChange={(e) => set({ service_code_id: e.target.value })}>

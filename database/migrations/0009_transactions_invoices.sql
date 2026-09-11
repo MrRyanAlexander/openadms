@@ -82,12 +82,22 @@ CREATE TABLE invoices (
     approved_at       timestamptz,
     approved_by       uuid REFERENCES users (id) ON DELETE SET NULL,
     paid_at           timestamptz,
+    -- A rejection that says nothing is a phone call somebody has to make
+    -- instead, so the reason travels with the invoice and survives a reopen.
+    rejected_at       timestamptz,
+    rejected_by       uuid REFERENCES users (id) ON DELETE SET NULL,
+    rejection_reason  text,
+    adjustment_reason text,
     metadata          jsonb NOT NULL DEFAULT '{}'::jsonb,
     created_by        uuid REFERENCES users (id) ON DELETE SET NULL,
     created_at        timestamptz NOT NULL DEFAULT now(),
     updated_at        timestamptz NOT NULL DEFAULT now(),
     CONSTRAINT invoices_status_valid CHECK (status IN (
         'draft', 'submitted', 'approved', 'rejected', 'paid', 'void')),
+    CONSTRAINT invoices_rejection_has_a_reason CHECK (
+        status <> 'rejected' OR COALESCE(btrim(rejection_reason), '') <> ''),
+    CONSTRAINT invoices_adjustment_has_a_reason CHECK (
+        adjustments = 0 OR COALESCE(btrim(adjustment_reason), '') <> ''),
     CONSTRAINT invoices_period_ordered CHECK (
         period_end IS NULL OR period_start IS NULL OR period_end >= period_start)
 );

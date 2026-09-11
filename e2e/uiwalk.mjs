@@ -211,6 +211,98 @@ for (const [label, nav] of [
 }
 
 /* -------------------------------------------------------------------------
+ * Sprint 2: the money surfaces.
+ *
+ * Suite H judged this screen the way the recipient would, and found no way to
+ * take a line off, no way to record an adjustment, and a rejection that
+ * required no reason and had no way back.
+ * ---------------------------------------------------------------------- */
+
+await step(page, 'an-invoice-line-can-come-off-a-draft', async () => {
+  await go(page, 'Invoices', 'Invoices')
+  await page.waitForSelector('table.data tbody tr', { timeout: 15000 })
+  await page.click('table.data tbody tr >> nth=0')
+  await page.waitForSelector('.modal', { timeout: 15000 })
+  await page.locator('.modal').getByText(/Lines \(/i).first().waitFor({ timeout: 15000 })
+
+  const rows = page.locator('.modal table.data').last().locator('tbody tr')
+  const before = await rows.count()
+  const remove = page.locator('.modal button:has-text("Remove")').first()
+  if (await remove.count()) {
+    await remove.click()
+    await page.waitForTimeout(1800)
+    if (await rows.count() >= before) throw new Error('the line did not come off')
+  }
+})
+
+await step(page, 'an-adjustment-says-what-it-is-for', async () => {
+  await page.click('.modal button:has-text("Adjustment")')
+  await page.waitForTimeout(600)
+  const save = page.locator('.modal button:has-text("Save adjustment")')
+  await page.fill('.modal input[type="number"]', '-250')
+  // The dialog loads any reason already on the invoice, so the walk clears it
+  // to test the rule rather than the previous run's answer.
+  await page.fill('.modal textarea', '')
+  await page.waitForTimeout(250)
+  if (!(await save.isDisabled())) {
+    throw new Error('an adjustment with no reason was accepted')
+  }
+  await page.fill('.modal textarea', 'Credit agreed for the two loads rejected at the gate')
+  await save.click()
+  await page.waitForTimeout(1800)
+  const body = await page.locator('.modal').innerText()
+  if (!/Credit agreed/i.test(body)) {
+    throw new Error('the adjustment reason is not shown on the invoice')
+  }
+})
+
+await step(page, 'rejecting-needs-a-reason-and-reopening-works', async () => {
+  await page.click('.modal button:has-text("Submit")')
+  await page.waitForTimeout(1800)
+  await page.click('.modal button:has-text("Reject")')
+  await page.waitForTimeout(600)
+  const confirm = page.locator('.modal button:has-text("Reject invoice")')
+  if (!(await confirm.isDisabled())) throw new Error('a rejection with no reason was accepted')
+  await page.fill('.modal textarea', 'Two load calls look high against the photos')
+  await confirm.click()
+  await page.waitForTimeout(1800)
+
+  const body = await page.locator('.modal').innerText()
+  if (!/Rejected/.test(body)) throw new Error('the rejection is not shown')
+  if (!/Two load calls look high/.test(body)) {
+    throw new Error('the rejection reason is not carried on the invoice')
+  }
+  await page.click('.modal button:has-text("Reopen")')
+  await page.waitForTimeout(1800)
+  const after = await page.locator('.modal').innerText()
+  if (/Two load calls look high/.test(after)) {
+    throw new Error('reopening left the old rejection on the invoice')
+  }
+})
+
+await step(page, 'the-printed-invoice-is-a-document', async () => {
+  // Printing used to print the screen, which capped the lines at a scrolling
+  // box and framed the result in a border.
+  const doc = page.locator('.print-doc')
+  if (await doc.count() === 0) throw new Error('no printable document is rendered')
+  // .print-doc-table is the summary and the detail; the totals are their own
+  // table, so counting the last table would count the totals.
+  const lines = await doc.locator('table.print-doc-table').last()
+    .locator('tbody tr').count()
+  const onScreen = await page.locator('.modal table.data').last()
+    .locator('tbody tr').count()
+  if (lines < onScreen) {
+    throw new Error('the document has fewer lines than the screen')
+  }
+  const text = await doc.innerText()
+  for (const want of ['Invoice', 'Subtotal', 'Total']) {
+    if (!text.includes(want)) throw new Error(`the document has no ${want}`)
+  }
+  await page.keyboard.press('Escape')
+  await page.waitForSelector('.modal', { state: 'detached', timeout: 10000 })
+})
+
+/* -------------------------------------------------------------------------
  * Sprint 2: the review queue.
  *
  * C1 and B12 describe the same screen, and this is the one the product did not

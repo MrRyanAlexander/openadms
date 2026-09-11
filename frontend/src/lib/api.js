@@ -183,6 +183,20 @@ export const fmt = {
       minimumFractionDigits: digits, maximumFractionDigits: digits,
     })
   },
+  /**
+   * A rate, shown at the precision it actually carries.
+   *
+   * Contracts write 9.45 and occasionally 9.4567. Padding the first to 9.4500
+   * to accommodate the second makes every column harder to read for the sake
+   * of a case that is rare, so the trailing zeros go and the precision stays.
+   */
+  rate(value, max = 4) {
+    const n = Number(value || 0)
+    return n.toLocaleString('en-US', {
+      style: 'currency', currency: 'USD',
+      minimumFractionDigits: 2, maximumFractionDigits: max,
+    })
+  },
   number(value, digits = 2) {
     return Number(value || 0).toLocaleString('en-US', {
       minimumFractionDigits: digits, maximumFractionDigits: digits,

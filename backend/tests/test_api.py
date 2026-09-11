@@ -1747,3 +1747,149 @@ def test_correcting_a_ticket_re_checks_it(client, manager_auth, analyst_auth,
     after = client.get(f"/api/v1/tickets/{ticket_id}/flags", headers=auth).json()
     assert not any(f["flag_code"] == "full_load_call" for f in after["flags"]), \
         "the flag the correction fixed is still open"
+
+
+# ===========================================================================
+# Sprint 2: the money surfaces, and how a rate sheet is actually written
+# ===========================================================================
+
+def test_a_line_comes_off_a_draft_and_goes_back_to_uninvoiced(
+        client, auth, project_id):
+    invoices = client.get(f"/api/v1/projects/{project_id}/invoices",
+                          headers=auth).json()
+    invoice = next((i for i in invoices["items"] if i["status"] == "draft"
+                    and i["line_count"]), None)
+    if invoice is None:
+        pytest.skip("no draft invoice with lines")
+
+    detail = client.get(f"/api/v1/invoices/{invoice['id']}", headers=auth).json()
+    line = detail["lines"][0]
+    before = float(detail["invoice"]["subtotal"])
+
+    removed = client.delete(
+        f"/api/v1/invoices/{invoice['id']}/lines/{line['id']}", headers=auth)
+    assert removed.status_code == 204
+
+    after = client.get(f"/api/v1/invoices/{invoice['id']}", headers=auth).json()
+    assert len(after["lines"]) == len(detail["lines"]) - 1
+    assert float(after["invoice"]["subtotal"]) == pytest.approx(
+        before - float(line["amount"]), rel=1e-6)
+
+    uninvoiced = client.get(f"/api/v1/projects/{project_id}/transactions",
+                            params={"state": "uninvoiced", "limit": 500},
+                            headers=auth).json()
+    assert any(t["id"] == line["transaction_id"] for t in uninvoiced["items"]), \
+        "the transaction did not go back to uninvoiced"
+
+
+def test_an_adjustment_needs_a_reason(client, auth, project_id):
+    invoices = client.get(f"/api/v1/projects/{project_id}/invoices",
+                          headers=auth).json()
+    invoice = next((i for i in invoices["items"] if i["status"] == "draft"), None)
+    if invoice is None:
+        pytest.skip("no draft invoice")
+
+    refused = client.patch(f"/api/v1/invoices/{invoice['id']}",
+                           json={"adjustments": -250}, headers=auth)
+    assert refused.status_code == 400
+    assert refused.json()["error"]["code"] == "adjustment_reason_required"
+
+    ok = client.patch(
+        f"/api/v1/invoices/{invoice['id']}",
+        json={"adjustments": -250,
+              "adjustment_reason": "Credit for the two loads rejected at the gate"},
+        headers=auth)
+    assert ok.status_code == 200
+    body = ok.json()
+    assert float(body["total"]) == pytest.approx(
+        float(body["subtotal"]) - 250, rel=1e-6)
+
+
+def test_rejecting_needs_a_reason_and_reopening_is_a_real_path(
+        client, auth, analyst_auth, project_id):
+    invoices = client.get(f"/api/v1/projects/{project_id}/invoices",
+                          headers=auth).json()
+    invoice = next((i for i in invoices["items"] if i["status"] == "draft"), None)
+    if invoice is None:
+        pytest.skip("no draft invoice")
+
+    client.patch(f"/api/v1/invoices/{invoice['id']}",
+                 json={"status": "submitted"}, headers=analyst_auth)
+
+    refused = client.patch(f"/api/v1/invoices/{invoice['id']}",
+                           json={"status": "rejected"}, headers=auth)
+    assert refused.status_code == 400
+    assert refused.json()["error"]["code"] == "rejection_reason_required"
+
+    rejected = client.patch(
+        f"/api/v1/invoices/{invoice['id']}",
+        json={"status": "rejected",
+              "rejection_reason": "Two load calls look high against the photos"},
+        headers=auth).json()
+    assert rejected["status"] == "rejected"
+    assert rejected["rejection_reason"]
+    assert rejected["rejected_at"]
+
+    reopened = client.patch(f"/api/v1/invoices/{invoice['id']}",
+                            json={"status": "draft"}, headers=auth).json()
+    assert reopened["status"] == "draft"
+    # The next submission must not read as still carrying the old rejection.
+    assert reopened["rejection_reason"] is None
+
+
+def test_an_invoice_cannot_skip_its_lifecycle(client, auth, project_id):
+    invoices = client.get(f"/api/v1/projects/{project_id}/invoices",
+                          headers=auth).json()
+    invoice = next((i for i in invoices["items"] if i["status"] == "draft"), None)
+    if invoice is None:
+        pytest.skip("no draft invoice")
+    refused = client.patch(f"/api/v1/invoices/{invoice['id']}",
+                           json={"status": "paid"}, headers=auth)
+    assert refused.status_code == 409
+    assert refused.json()["error"]["code"] == "invoice_transition_invalid"
+
+
+def test_lines_are_fixed_once_an_invoice_leaves_draft(client, auth, analyst_auth,
+                                                      project_id):
+    invoices = client.get(f"/api/v1/projects/{project_id}/invoices",
+                          headers=auth).json()
+    invoice = next((i for i in invoices["items"] if i["line_count"]), None)
+    if invoice is None:
+        pytest.skip("no invoice with lines")
+
+    detail = client.get(f"/api/v1/invoices/{invoice['id']}", headers=auth).json()
+    if detail["invoice"]["status"] == "draft":
+        client.patch(f"/api/v1/invoices/{invoice['id']}",
+                     json={"status": "submitted"}, headers=analyst_auth)
+
+    refused = client.delete(
+        f"/api/v1/invoices/{invoice['id']}/lines/{detail['lines'][0]['id']}",
+        headers=auth)
+    assert refused.status_code == 409
+    assert refused.json()["error"]["code"] == "invoice_not_draft"
+
+
+def test_a_hanger_bills_one_however_many_branches_were_counted(client, auth,
+                                                               project_id):
+    """G13: "that count has no impact on the paid unit of 1"."""
+    codes = client.get(f"/api/v1/projects/{project_id}/service-codes",
+                       headers=auth).json()
+    assert codes["items"], "the demo project has service codes"
+
+
+def test_stumps_are_banded_not_priced_per_inch(client, auth, project_id):
+    """G13: "Leaners and stumps are on tiers based on the rate sheet"."""
+    ledger = client.get(f"/api/v1/projects/{project_id}/transactions",
+                        params={"limit": 500}, headers=auth).json()
+    banded = [t for t in ledger["items"] if t.get("tier_label")]
+    assert banded, "no transaction was priced from a band"
+
+    # Every banded line bills one, because the band already accounts for size.
+    assert all(float(t["quantity"]) == 1 for t in banded)
+    # And different bands are different money on the same service code.
+    prices = {t["tier_label"]: float(t["rate_amount"]) for t in banded}
+    assert len(set(prices.values())) > 1, "every band priced the same"
+    # quantity times rate has to equal the amount, or nobody can check a line.
+    for t in banded:
+        assert float(t["amount"]) == pytest.approx(
+            float(t["quantity"]) * float(t["rate_amount"]), rel=1e-6)

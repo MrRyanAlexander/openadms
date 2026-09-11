@@ -390,7 +390,7 @@ function ContractDrawer({ contractId, onClose, onEdit }) {
                             <td className="truncate" style={{ maxWidth: 260 }}>{l.description}</td>
                             <td className="dim">{l.unit_abbreviation || '—'}</td>
                             <td className="num">{l.unit_price != null
-                              ? fmt.money(l.unit_price, 4) : '—'}</td>
+                              ? fmt.rate(l.unit_price) : '—'}</td>
                             <td><Badge status={l.status === 'accepted' ? 'approved'
                                               : l.status === 'rejected' ? 'rejected' : 'draft'}>
                               {fmt.title(l.status)}</Badge></td>

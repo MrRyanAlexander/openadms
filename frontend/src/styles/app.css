@@ -557,10 +557,77 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
 }
 
 .print-only { display: none; }
+.print-doc { display: none; }
+
+/*
+ * Printing an invoice.
+ *
+ * Printing the screen gave nine rows inside a scrolling box with a border
+ * around it. So the screen is hidden entirely and a separate document is
+ * printed: full width, every line, and a table head that repeats across page
+ * breaks so page four still says what its columns are.
+ */
 @media print {
-  .sidebar, .topbar, .btn, .toasts { display: none !important; }
-  .print-only { display: block; }
+  @page { margin: 16mm 14mm; }
+
+  /* The hidden chrome still reserved a viewport of height, which printed as a
+     blank first page before the document started. */
+  html, body, #root {
+    height: auto !important; min-height: 0 !important;
+    margin: 0 !important; padding: 0 !important;
+  }
   body { background: #fff; color: #000; }
-  .page { padding: 0; }
-  .card { border-color: #ddd; box-shadow: none; }
+  .shell, .sidebar, .topbar, .toasts, .backdrop, .drawer, .drawer-backdrop {
+    display: none !important;
+  }
+  .print-only { display: block; }
+
+  .print-doc {
+    display: block !important;
+    position: static;
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    font-size: 10pt;
+    color: #000;
+  }
+
+  .print-doc-head {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    gap: 18mm; padding-bottom: 4mm; margin-bottom: 6mm;
+    border-bottom: 1.5pt solid #000;
+  }
+  .print-doc-title { font-size: 18pt; font-weight: 700; letter-spacing: -0.01em; }
+  .print-doc-sub { font-size: 11pt; margin-top: 1mm; }
+  .print-doc-meta { font-size: 9pt; line-height: 1.65; text-align: right; }
+  .print-doc-meta b { display: inline-block; min-width: 22mm; text-align: left; }
+
+  .print-doc-section {
+    font-size: 8.5pt; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.08em; margin: 6mm 0 2mm;
+  }
+
+  .print-doc-table { width: 100%; border-collapse: collapse; font-size: 9pt; }
+  .print-doc-table thead { display: table-header-group; }
+  .print-doc-table tr { page-break-inside: avoid; }
+  .print-doc-table th {
+    text-align: left; font-size: 8pt; text-transform: uppercase;
+    letter-spacing: 0.05em; border-bottom: 1pt solid #000;
+    padding: 1.5mm 2mm;
+  }
+  .print-doc-table td { padding: 1.4mm 2mm; border-bottom: 0.4pt solid #bbb; }
+  .print-doc-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+  .print-doc-totals {
+    margin: 5mm 0 0 auto; border-collapse: collapse; font-size: 10pt;
+    min-width: 70mm; page-break-inside: avoid;
+  }
+  .print-doc-totals td { padding: 1.5mm 2mm; }
+  .print-doc-totals .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .print-doc-totals .grand td {
+    border-top: 1.2pt solid #000; font-weight: 700; font-size: 12pt;
+  }
+
+  .print-doc-notes {
+    margin-top: 8mm; padding-top: 3mm; border-top: 0.4pt solid #bbb;
+    font-size: 9pt;
+  }
 }

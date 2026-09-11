@@ -436,7 +436,7 @@ export function LineItemReview({ contractId, projectId, onGenerated }) {
                   <td className="mono">{l.item_code || '—'}</td>
                   <td className="truncate" style={{ maxWidth: 300 }}>{l.description}</td>
                   <td className="dim">{l.unit_abbreviation || '—'}</td>
-                  <td className="num">{l.unit_price != null ? fmt.money(l.unit_price, 4) : '—'}</td>
+                  <td className="num">{l.unit_price != null ? fmt.rate(l.unit_price) : '—'}</td>
                   <td className="dim">{l.debris_type_code || '—'}</td>
                   <td>
                     {done ? <Badge tone="green">{l.service_code || 'Accepted'}</Badge>

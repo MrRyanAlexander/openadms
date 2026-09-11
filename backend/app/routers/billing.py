@@ -551,28 +551,95 @@ async def get_invoice(invoice_id: uuid.UUID, user: CurrentUser,
             "integrity": db.row(integrity)}
 
 
+# draft -> submitted -> approved -> paid, with rejected hanging off submitted
+# and reopening to draft. The walkthrough found the last two missing: "no
+# reason was required. And no opportunity to reopen and fix it to resubmit
+# later exists."
+_INVOICE_NEXT = {
+    "draft": {"submitted", "void"},
+    "submitted": {"approved", "rejected", "draft"},
+    "rejected": {"draft", "void"},
+    "approved": {"paid", "submitted"},
+    "paid": set(),
+    "void": set(),
+}
+
+
 @router.patch("/invoices/{invoice_id}")
 async def update_invoice(invoice_id: uuid.UUID, user: CurrentUser,
                          payload: dict[str, Any] = Body(...),
                          _: dict = Depends(require_permission("invoice.manage"))):
-    allowed = {"status", "notes", "adjustments", "period_start", "period_end"}
-    data = {k: v for k, v in payload.items() if k in allowed}
-    if data.get("status") in ("approved", "paid"):
-        require = require_permission("invoice.approve")
-        await require(user)
-        if data["status"] == "approved":
-            data["approved_at"] = "now()"
-    data.pop("approved_at", None)
+    """Move an invoice along, adjust it, or send it back.
 
-    sql, args = db.build_update("invoices", data, "id = $1", [invoice_id])
+    Rejecting requires a reason and reopening is a real path, because an
+    invoice that can only be rejected into silence leaves somebody making a
+    phone call the system should have made unnecessary."""
+    allowed = {"status", "notes", "adjustments", "period_start", "period_end",
+               "rejection_reason", "adjustment_reason"}
+    data = {k: v for k, v in payload.items() if k in allowed}
+    if not data:
+        raise bad_request("Nothing to change on this invoice.", code="empty_update")
+
     async with db.tx(user) as conn:
+        current = await conn.fetchrow(
+            "SELECT status, subtotal FROM invoices WHERE id = $1", invoice_id)
+        if current is None:
+            raise not_found("Invoice")
+
+        target = data.get("status")
+        if target and target != current["status"]:
+            if target not in _INVOICE_NEXT.get(current["status"], set()):
+                raise conflict(
+                    f"An invoice that is {current['status']} cannot become "
+                    f"{target}. From here it can be "
+                    + (", ".join(sorted(_INVOICE_NEXT[current["status"]]))
+                       or "left as it is") + ".",
+                    code="invoice_transition_invalid",
+                    allowed=sorted(_INVOICE_NEXT[current["status"]]))
+
+            if target in ("approved", "paid"):
+                await require_permission("invoice.approve")(user)
+            if target == "rejected":
+                await require_permission("invoice.approve")(user)
+                if not (data.get("rejection_reason") or "").strip():
+                    raise bad_request(
+                        "Rejecting an invoice needs a reason. It is what the "
+                        "person reopening it has to work from.",
+                        code="rejection_reason_required")
+                data["rejected_by"] = user["id"]
+                data["rejected_at"] = "now()"
+            if target == "draft":
+                # Reopening clears the rejection so the next submission is not
+                # read as still carrying it.
+                data["rejection_reason"] = None
+                data["rejected_at"] = None
+                data["rejected_by"] = None
+
+        if data.get("adjustments") is not None and float(data["adjustments"] or 0) != 0:
+            if not (data.get("adjustment_reason") or "").strip():
+                raise bad_request(
+                    "An adjustment needs a line on what it is for. It appears "
+                    "on the invoice the client reads.",
+                    code="adjustment_reason_required")
+
+        data.pop("approved_at", None)
+        sets = {k: v for k, v in data.items()
+                if k not in ("rejected_at", "approved_at")}
+        sql, args = db.build_update("invoices", sets, "id = $1", [invoice_id])
         rec = await conn.fetchrow(sql, *args)
         if rec is None:
             raise not_found("Invoice")
-        if data.get("status") == "approved":
+
+        if target == "approved":
             await conn.execute(
                 "UPDATE invoices SET approved_at = now(), approved_by = $1 "
                 "WHERE id = $2", user["id"], invoice_id)
+        if target == "rejected":
+            await conn.execute(
+                "UPDATE invoices SET rejected_at = now() WHERE id = $1", invoice_id)
+        if target == "draft":
+            await conn.execute(
+                "UPDATE invoices SET rejected_at = NULL WHERE id = $1", invoice_id)
         if data.get("adjustments") is not None:
             await conn.execute(
                 "UPDATE invoices SET total = subtotal + adjustments WHERE id = $1",
@@ -585,10 +652,24 @@ async def update_invoice(invoice_id: uuid.UUID, user: CurrentUser,
 async def remove_invoice_line(invoice_id: uuid.UUID, line_id: uuid.UUID,
                               user: CurrentUser,
                               _: dict = Depends(require_permission("invoice.manage"))):
+    """Take a line off a draft. The transaction goes back to uninvoiced, so the
+    next invoice picks it up rather than it falling out of billing entirely."""
     async with db.tx(user) as conn:
-        await conn.execute(
-            "DELETE FROM invoice_lines WHERE id = $1 AND invoice_id = $2",
-            line_id, invoice_id)
+        status = await conn.fetchval(
+            "SELECT status FROM invoices WHERE id = $1", invoice_id)
+        if status is None:
+            raise not_found("Invoice")
+        if status != "draft":
+            raise conflict(
+                f"This invoice has been {status}, so its lines are fixed. "
+                f"Reopen it to draft first.",
+                code="invoice_not_draft")
+
+        gone = await conn.fetchval(
+            "DELETE FROM invoice_lines WHERE id = $1 AND invoice_id = $2 "
+            "RETURNING id", line_id, invoice_id)
+        if gone is None:
+            raise not_found("Invoice line")
     return None
 
 

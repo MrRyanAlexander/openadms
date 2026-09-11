@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { api, fmt } from '../lib/api'
 import { useApp, useFetch } from '../lib/store'
 import { PageHeader } from '../components/Shell'
@@ -113,7 +114,7 @@ function ServiceCodeRow({ code, open, onToggle, onEdit, onRate }) {
         </td>
         <td className="muted truncate" style={{ maxWidth: 160 }}>{c.contractor_name}</td>
         <td className="num" style={{ fontWeight: 550 }}>
-          {c.current_rate != null ? fmt.money(c.current_rate, 4) : '—'}
+          {c.current_rate != null ? fmt.rate(c.current_rate) : '—'}
         </td>
         <td className="dim">{c.current_unit_abbrev || 'not set'}</td>
         <td>
@@ -152,7 +153,7 @@ function ServiceCodeRow({ code, open, onToggle, onEdit, onRate }) {
                     const current = r.id === c.current_rate_id
                     return (
                       <span key={r.id} className={`badge ${current ? 'green' : ''}`}>
-                        {fmt.money(r.amount, 4)} / {r.abbreviation}
+                        {fmt.rate(r.amount)} / {r.abbreviation}
                         <span className="dim" style={{ marginLeft: 4 }}>
                           {fmt.date(r.effective_from)}
                           {r.effective_to ? ` – ${fmt.date(r.effective_to)}` : ' →'}
@@ -300,7 +301,7 @@ function RateModal({ code, lookups, onClose, onSaved }) {
       await api.post(`/service-codes/${code.id}/rates`, {
         ...form, amount: Number(form.amount),
       })
-      toast('Rate added', `${code.code} now bills at ${fmt.money(form.amount, 4)}`)
+      toast('Rate added', `${code.code} now bills at ${fmt.rate(form.amount)}`)
       onSaved()
     } catch (err) { toast('Could not add rate', err.message, 'err') } finally { setBusy(false) }
   }
@@ -439,7 +440,7 @@ export function Transactions() {
                         <td className="num">
                           {fmt.number(t.quantity, 2)} <span className="dim">{t.unit_abbrev}</span>
                         </td>
-                        <td className="num">{fmt.money(t.rate_amount, 4)}</td>
+                        <td className="num">{fmt.rate(t.rate_amount)}</td>
                         <td className="num" style={{ fontWeight: 600 }}>{fmt.money(t.amount)}</td>
                         <td>{t.invoice_number
                           ? <Badge status={t.invoice_status}>{t.invoice_number}</Badge>
@@ -671,20 +672,51 @@ function NewInvoice({ project, onClose, onSaved }) {
   )
 }
 
+/**
+ * One invoice.
+ *
+ * This is the only screen in the product whose output leaves the building, so
+ * it gets judged by somebody who has never seen the app. The walkthrough judged
+ * it that way and found three things: no way to take a line off, no way to
+ * record an adjustment, a rejection that required no reason and no way back
+ * from it, and a printed page that showed nine rows inside a border.
+ */
 function InvoiceDetail({ invoiceId, onClose, onChanged }) {
   const { can, toast } = useApp()
+  const [busy, setBusy] = useState(false)
+  const [rejecting, setRejecting] = useState(false)
+  const [adjusting, setAdjusting] = useState(false)
   const { data, loading, error, reload } = useFetch(
     () => api.get(`/invoices/${invoiceId}`), [invoiceId])
 
-  async function setStatus(status) {
+  async function patch(body, done) {
+    setBusy(true)
     try {
-      await api.patch(`/invoices/${invoiceId}`, { status })
-      toast('Invoice updated', `Status set to ${status}`)
+      await api.patch(`/invoices/${invoiceId}`, body)
+      toast('Invoice updated', done)
       reload(); onChanged?.()
-    } catch (err) { toast('Could not update', err.message, 'err') }
+      return true
+    } catch (err) {
+      toast('Could not update', err.message, 'err')
+      return false
+    } finally { setBusy(false) }
+  }
+
+  async function removeLine(line) {
+    setBusy(true)
+    try {
+      await api.del(`/invoices/${invoiceId}/lines/${line.id}`)
+      toast('Line removed',
+            `${line.ticket_number} goes back to uninvoiced and the next invoice picks it up`)
+      reload(); onChanged?.()
+    } catch (err) {
+      toast('Could not remove', err.message, 'err')
+    } finally { setBusy(false) }
   }
 
   const i = data?.invoice
+  const draft = i?.status === 'draft'
+  const integrity = data?.integrity
 
   return (
     <Modal wide title={loading ? 'Loading invoice' : i?.invoice_number} onClose={onClose}
@@ -693,18 +725,40 @@ function InvoiceDetail({ invoiceId, onClose, onChanged }) {
                <button className="btn" onClick={() => window.print()}>
                  <Icon name="print" size={14} /> Print
                </button>
+               {draft && can('invoice.manage') && (
+                 <button className="btn" onClick={() => setAdjusting(true)}>
+                   Adjustment
+                 </button>
+               )}
                <div className="spacer" />
-               {i?.status === 'draft' && (
-                 <button className="btn" onClick={() => setStatus('submitted')}>Submit</button>
+               {draft && (
+                 <button className="btn" disabled={busy}
+                         onClick={() => patch({ status: 'submitted' }, 'Submitted for approval')}>
+                   Submit
+                 </button>
+               )}
+               {i?.status === 'rejected' && can('invoice.manage') && (
+                 <button className="btn primary" disabled={busy}
+                         onClick={() => patch({ status: 'draft' }, 'Reopened as a draft')}>
+                   Reopen
+                 </button>
                )}
                {i?.status === 'submitted' && can('invoice.approve') && (
                  <>
-                   <button className="btn danger" onClick={() => setStatus('rejected')}>Reject</button>
-                   <button className="btn primary" onClick={() => setStatus('approved')}>Approve</button>
+                   <button className="btn danger" onClick={() => setRejecting(true)}>
+                     Reject
+                   </button>
+                   <button className="btn primary" disabled={busy}
+                           onClick={() => patch({ status: 'approved' }, 'Approved')}>
+                     Approve
+                   </button>
                  </>
                )}
                {i?.status === 'approved' && can('invoice.approve') && (
-                 <button className="btn primary" onClick={() => setStatus('paid')}>Mark paid</button>
+                 <button className="btn primary" disabled={busy}
+                         onClick={() => patch({ status: 'paid' }, 'Marked paid')}>
+                   Mark paid
+                 </button>
                )}
              </>
            }>
@@ -712,6 +766,35 @@ function InvoiceDetail({ invoiceId, onClose, onChanged }) {
       {error && <ErrorNote error={error} onRetry={reload} />}
       {data && (
         <div className="stack" style={{ gap: 16 }}>
+          {i.status === 'rejected' && (
+            <div className="card" style={{ padding: 12, borderColor: 'var(--red)',
+                                           background: 'var(--red-soft)' }}>
+              <div className="row" style={{ color: 'var(--red)', gap: 8 }}>
+                <Icon name="alert" size={14} /><b>Rejected</b>
+              </div>
+              <div style={{ marginTop: 4, fontSize: 13 }}>{i.rejection_reason}</div>
+              <div className="dim" style={{ fontSize: 12, marginTop: 4 }}>
+                {fmt.datetime(i.rejected_at)} · Reopen to correct and resubmit.
+              </div>
+            </div>
+          )}
+
+          {integrity?.needs_review && (
+            <div className="card" style={{ padding: 12, borderColor: 'var(--amber)',
+                                           background: 'var(--amber-soft)' }}>
+              <div className="row" style={{ color: 'var(--amber)', gap: 8 }}>
+                <Icon name="alert" size={14} /><b>Needs review</b>
+              </div>
+              <div style={{ marginTop: 4, fontSize: 13 }}>
+                {fmt.int(integrity.superseded_lines)} line
+                {integrity.superseded_lines === 1 ? '' : 's'} worth{' '}
+                {fmt.money(integrity.superseded_amount)} {integrity.superseded_lines === 1
+                  ? 'has' : 'have'} been reversed and recomputed since this invoice
+                was built, so the total below no longer matches the ledger.
+              </div>
+            </div>
+          )}
+
           <div className="row wrap" style={{ gap: 14, alignItems: 'flex-start' }}>
             <div style={{ flex: 1, minWidth: 220 }}>
               <dl className="kv">
@@ -719,7 +802,11 @@ function InvoiceDetail({ invoiceId, onClose, onChanged }) {
                 <dt>Client</dt><dd>{i.client_name}</dd>
                 <dt>Contractor</dt><dd>{i.contractor_name}</dd>
                 <dt>Contract</dt><dd className="mono">{i.contract_number}</dd>
-                <dt>Period</dt><dd>{fmt.date(i.period_start)} – {fmt.date(i.period_end)}</dd>
+                <dt>Period</dt><dd>{fmt.date(i.period_start)} to {fmt.date(i.period_end)}</dd>
+                {i.approved_at && (
+                  <><dt>Approved</dt><dd>{fmt.datetime(i.approved_at)}</dd></>
+                )}
+                {i.paid_at && (<><dt>Paid</dt><dd>{fmt.datetime(i.paid_at)}</dd></>)}
               </dl>
             </div>
             <div style={{ textAlign: 'right' }}>
@@ -729,10 +816,16 @@ function InvoiceDetail({ invoiceId, onClose, onChanged }) {
               </div>
               <div className="dim" style={{ fontSize: 12 }}>
                 {fmt.money(i.subtotal)} subtotal
-                {Number(i.adjustments) !== 0 && ` · ${fmt.money(i.adjustments)} adjustments`}
+                {Number(i.adjustments) !== 0 && ` · ${fmt.money(i.adjustments)} adjustment`}
               </div>
             </div>
           </div>
+
+          {Number(i.adjustments) !== 0 && i.adjustment_reason && (
+            <div className="muted" style={{ fontSize: 13 }}>
+              Adjustment of {fmt.money(i.adjustments)}: {i.adjustment_reason}
+            </div>
+          )}
 
           {data.by_service_code.length > 0 && (
             <div>
@@ -766,24 +859,37 @@ function InvoiceDetail({ invoiceId, onClose, onChanged }) {
             <div className="k dim" style={{ fontSize: 11, textTransform: 'uppercase',
                                             letterSpacing: '0.06em', marginBottom: 8 }}>
               Lines ({data.lines.length})
+              {draft && <span style={{ textTransform: 'none', letterSpacing: 0 }}>
+                {' '}· a removed line goes back to uninvoiced
+              </span>}
             </div>
             <div className="card table-wrap" style={{ padding: 0, maxHeight: 340,
                                                       overflowY: 'auto' }}>
               <table className="data">
                 <thead><tr>
                   <th>#</th><th>Ticket</th><th>Service code</th><th>Rule</th>
-                  <th className="num">Qty</th><th className="num">Rate</th><th className="num">Amount</th>
+                  <th className="num">Qty</th><th className="num">Rate</th>
+                  <th className="num">Amount</th>{draft && <th />}
                 </tr></thead>
                 <tbody>
                   {data.lines.map((l) => (
-                    <tr key={l.id}>
+                    <tr key={l.id} style={{ opacity: l.is_live === false ? 0.55 : 1 }}>
                       <td className="dim">{l.line_number}</td>
-                      <td className="mono">{l.ticket_number}</td>
+                      <td className="mono">
+                        {l.ticket_number}
+                        {l.is_live === false && <> <Badge>Superseded</Badge></>}
+                      </td>
                       <td>{l.service_code}</td>
                       <td className="muted truncate" style={{ maxWidth: 160 }}>{l.rule_name}</td>
                       <td className="num">{fmt.number(l.quantity, 2)} {l.unit_abbrev}</td>
-                      <td className="num">{fmt.money(l.rate_amount, 4)}</td>
+                      <td className="num">{fmt.rate(l.rate_amount)}</td>
                       <td className="num">{fmt.money(l.amount)}</td>
+                      {draft && (
+                        <td style={{ textAlign: 'right' }}>
+                          <button className="btn sm" disabled={busy}
+                                  onClick={() => removeLine(l)}>Remove</button>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -792,6 +898,203 @@ function InvoiceDetail({ invoiceId, onClose, onChanged }) {
           </div>
         </div>
       )}
+
+      {data && <InvoiceDocument data={data} />}
+
+      {rejecting && (
+        <ReasonModal title={`Reject ${i.invoice_number}`}
+                     blurb="The reason is what the person reopening this has to work from, so it goes on the invoice rather than into a phone call."
+                     placeholder="Two load calls look high against the photos, please re-check STL-0000024"
+                     confirm="Reject invoice" danger
+                     onClose={() => setRejecting(false)}
+                     onSubmit={async (reason) => {
+                       if (await patch({ status: 'rejected', rejection_reason: reason },
+                                       'Rejected')) setRejecting(false)
+                     }} />
+      )}
+
+      {adjusting && (
+        <AdjustmentModal current={i.adjustments} subtotal={i.subtotal}
+                         reason={i.adjustment_reason}
+                         onClose={() => setAdjusting(false)}
+                         onSubmit={async (amount, reason) => {
+                           if (await patch({ adjustments: amount, adjustment_reason: reason },
+                                           'Adjustment recorded')) setAdjusting(false)
+                         }} />
+      )}
+    </Modal>
+  )
+}
+
+/**
+ * The printed invoice.
+ *
+ * Rendered separately from the screen rather than printed from it. The modal
+ * capped its line list at a scrolling 340 pixels, which on paper became nine
+ * rows inside a border, and that was the whole of H12. This is a full page
+ * document: every line, a repeating table head across page breaks, and nothing
+ * from the application chrome.
+ */
+function InvoiceDocument({ data }) {
+  const i = data.invoice
+  // Portalled to the body on purpose. Rendered inside the modal it would be a
+  // child of the application chrome that printing has to hide.
+  return createPortal(
+    <div className="print-doc" aria-hidden="true">
+      <div className="print-doc-head">
+        <div>
+          <div className="print-doc-title">Invoice {i.invoice_number}</div>
+          <div className="print-doc-sub">
+            {i.project_name} · {i.client_name}
+          </div>
+        </div>
+        <div className="print-doc-meta">
+          <div><b>Contractor</b> {i.contractor_name}</div>
+          <div><b>Contract</b> {i.contract_number}</div>
+          <div><b>Period</b> {fmt.date(i.period_start)} to {fmt.date(i.period_end)}</div>
+          <div><b>Status</b> {fmt.title(i.status)}</div>
+          {i.approved_at && <div><b>Approved</b> {fmt.datetime(i.approved_at)}</div>}
+          {i.paid_at && <div><b>Paid</b> {fmt.datetime(i.paid_at)}</div>}
+        </div>
+      </div>
+
+      {data.by_service_code.length > 0 && (
+        <>
+          <div className="print-doc-section">Summary by service code</div>
+          <table className="print-doc-table">
+            <thead><tr>
+              <th>Code</th><th>Description</th><th className="num">Quantity</th>
+              <th className="num">Lines</th><th className="num">Amount</th>
+            </tr></thead>
+            <tbody>
+              {data.by_service_code.map((r) => (
+                <tr key={r.service_code}>
+                  <td>{r.service_code}</td>
+                  <td>{r.service_code_name}</td>
+                  <td className="num">{fmt.number(r.quantity, 2)} {r.unit_abbrev}</td>
+                  <td className="num">{fmt.int(r.lines)}</td>
+                  <td className="num">{fmt.money(r.amount)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+
+      <div className="print-doc-section">
+        Detail · {data.lines.length} line{data.lines.length === 1 ? '' : 's'}
+      </div>
+      <table className="print-doc-table">
+        <thead><tr>
+          <th>#</th><th>Ticket</th><th>Service code</th><th>Description</th>
+          <th className="num">Quantity</th><th className="num">Rate</th>
+          <th className="num">Amount</th>
+        </tr></thead>
+        <tbody>
+          {data.lines.map((l) => (
+            <tr key={l.id}>
+              <td>{l.line_number}</td>
+              <td>{l.ticket_number}</td>
+              <td>{l.service_code}</td>
+              <td>{l.service_code_name}</td>
+              <td className="num">{fmt.number(l.quantity, 2)} {l.unit_abbrev}</td>
+              <td className="num">{fmt.rate(l.rate_amount)}</td>
+              <td className="num">{fmt.money(l.amount)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <table className="print-doc-totals">
+        <tbody>
+          <tr><td>Subtotal</td><td className="num">{fmt.money(i.subtotal)}</td></tr>
+          {Number(i.adjustments) !== 0 && (
+            <tr>
+              <td>Adjustment{i.adjustment_reason ? ` · ${i.adjustment_reason}` : ''}</td>
+              <td className="num">{fmt.money(i.adjustments)}</td>
+            </tr>
+          )}
+          <tr className="grand"><td>Total</td><td className="num">{fmt.money(i.total)}</td></tr>
+        </tbody>
+      </table>
+
+      {i.notes && <div className="print-doc-notes">{i.notes}</div>}
+    </div>,
+    document.body)
+}
+
+function ReasonModal({ title, blurb, placeholder, confirm, danger, onClose, onSubmit }) {
+  const [reason, setReason] = useState('')
+  const [busy, setBusy] = useState(false)
+  return (
+    <Modal title={title} onClose={onClose} footer={
+      <>
+        <button className="btn" onClick={onClose}>Cancel</button>
+        <button className={`btn ${danger ? 'danger' : 'primary'}`}
+                disabled={busy || reason.trim().length < 4}
+                onClick={async () => { setBusy(true); await onSubmit(reason); setBusy(false) }}>
+          {busy && <span className="spinner" />} {confirm}
+        </button>
+      </>
+    }>
+      <p className="muted" style={{ marginTop: 0 }}>{blurb}</p>
+      <Field label="Reason" required>
+        <textarea className="input" rows={3} value={reason} autoFocus
+                  onChange={(e) => setReason(e.target.value)} placeholder={placeholder} />
+      </Field>
+    </Modal>
+  )
+}
+
+function AdjustmentModal({ current, subtotal, reason: existing, onClose, onSubmit }) {
+  const [amount, setAmount] = useState(String(current || ''))
+  const [reason, setReason] = useState(existing || '')
+  const [busy, setBusy] = useState(false)
+  const next = Number(subtotal || 0) + Number(amount || 0)
+  return (
+    <Modal title="Adjustment" onClose={onClose} footer={
+      <>
+        <button className="btn" onClick={onClose}>Cancel</button>
+        <button className="btn primary"
+                disabled={busy || (Number(amount || 0) !== 0 && reason.trim().length < 4)}
+                onClick={async () => {
+                  setBusy(true); await onSubmit(Number(amount || 0), reason); setBusy(false)
+                }}>
+          {busy && <span className="spinner" />} Save adjustment
+        </button>
+      </>
+    }>
+      <p className="muted" style={{ marginTop: 0 }}>
+        An adjustment sits beside the lines rather than changing them, so the
+        tickets still add up to the subtotal. Negative for a credit.
+      </p>
+      <div className="stack">
+        <Field label="Amount" hint="Negative for a credit">
+          <input className="input" type="number" step="0.01" value={amount} autoFocus
+                 onChange={(e) => setAmount(e.target.value)} placeholder="-250.00" />
+        </Field>
+        <Field label="What it is for" required={Number(amount || 0) !== 0}
+               hint="This prints on the invoice the client reads">
+          <textarea className="input" rows={2} value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                    placeholder="Credit agreed for the two loads rejected at the DMS gate" />
+        </Field>
+        <div className="card" style={{ padding: 12 }}>
+          <div className="row">
+            <span className="dim">Subtotal</span><div className="spacer" />
+            <span>{fmt.money(subtotal)}</span>
+          </div>
+          <div className="row" style={{ marginTop: 4 }}>
+            <span className="dim">Adjustment</span><div className="spacer" />
+            <span>{fmt.money(Number(amount || 0))}</span>
+          </div>
+          <div className="row" style={{ marginTop: 6, paddingTop: 6,
+                                        borderTop: '1px solid var(--line)' }}>
+            <b>Total</b><div className="spacer" />
+            <b style={{ fontSize: 17 }}>{fmt.money(next)}</b>
+          </div>
+        </div>
+      </div>
     </Modal>
   )
 }

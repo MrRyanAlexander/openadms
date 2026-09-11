@@ -520,12 +520,29 @@ BEGIN
     UPDATE contract_line_items SET accepted_service_code_id = v_sc_stump WHERE id = v_li_stump;
     UPDATE contract_line_items SET accepted_service_code_id = v_sc_haul  WHERE id = v_li_haul;
 
-    INSERT INTO rates (service_code_id, amount, unit_type, effective_from, notes) VALUES
-        (v_sc_veg,   9.4500,  'per_cubic_yard',  v_base, 'Base contract rate'),
-        (v_sc_cd,   11.2500,  'per_cubic_yard',  v_base, 'Base contract rate'),
-        (v_sc_haul,  4.7500,  'per_cubic_yard',  v_base, 'Haul out to Champ Landfill'),
-        (v_sc_stump, 6.5000,  'per_diameter_in', v_base, '24 inch minimum'),
-        (v_sc_haz, 285.0000,  'per_each',        v_base, 'Flat per HHW load');
+    -- Stumps are banded, not priced per inch. That is how the rate sheet is
+    -- written and it is why rate_tiers exists: a 26 inch stump and an 8 inch
+    -- one are different money on the same service code.
+    UPDATE service_codes SET quantity_mode = 'tiered' WHERE id = v_sc_stump;
+
+    INSERT INTO rates (service_code_id, amount, unit_type, effective_from,
+                       tier_source, notes) VALUES
+        (v_sc_veg,   9.4500,  'per_cubic_yard',  v_base, NULL, 'Base contract rate'),
+        (v_sc_cd,   11.2500,  'per_cubic_yard',  v_base, NULL, 'Base contract rate'),
+        (v_sc_haul,  4.7500,  'per_cubic_yard',  v_base, NULL, 'Haul out to Champ Landfill'),
+        (v_sc_stump, 0.0000,  'per_unit',        v_base, 'stump_diameter_inches',
+         'Banded by diameter. The bands carry the price, not this figure.'),
+        (v_sc_haz, 285.0000,  'per_each',        v_base, NULL, 'Flat per HHW load');
+
+    INSERT INTO rate_tiers (rate_id, label, from_value, to_value, amount, sort_order)
+    SELECT r.id, t.label, t.from_value, t.to_value, t.amount, t.sort_order
+      FROM rates r,
+           (VALUES ('6 to 12 inches',        6,  12,   45.0000, 10),
+                   ('12 to 24 inches',      12,  24,  120.0000, 20),
+                   ('24 to 36 inches',      24,  36,  260.0000, 30),
+                   ('36 inches and over',   36, NULL, 400.0000, 40))
+             AS t(label, from_value, to_value, amount, sort_order)
+     WHERE r.service_code_id = v_sc_stump;
 
     -- -----------------------------------------------------------------------
     -- Rules. Each says: when these conditions hold, bill this service code

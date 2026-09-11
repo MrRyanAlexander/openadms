@@ -676,7 +676,7 @@ export function ServiceCodeStep({ project, projectId, onChanged }) {
                   <td className="mono">{c.code}</td>
                   <td className="truncate" style={{ maxWidth: 260 }}>{c.name}</td>
                   <td className="muted">{c.contractor_name}</td>
-                  <td className="num">{c.current_rate != null ? fmt.money(c.current_rate, 4) : '—'}</td>
+                  <td className="num">{c.current_rate != null ? fmt.rate(c.current_rate) : '—'}</td>
                   <td className="dim">{c.current_unit_abbrev || '—'}</td>
                   <td>{c.contract_line_item_id
                     ? <Badge tone="green">Linked</Badge>

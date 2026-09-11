@@ -671,7 +671,7 @@ function DetailTab({ t, o, m, type }) {
         <div className="card stat">
           <div className="k">Net weight</div>
           <div className="v" style={{ fontSize: 20 }}>
-            {fmt.number(m?.net_tons, 3)}<small>tons</small>
+            {fmt.number(m?.net_tons, 2)}<small>tons</small>
           </div>
         </div>
         <div className="card stat">
@@ -858,7 +858,7 @@ function MoneyTab({ transactions, onChanged }) {
             <div style={{ textAlign: 'right' }}>
               <div style={{ fontSize: 17, fontWeight: 640 }}>{fmt.money(tx.amount)}</div>
               <div className="dim nums" style={{ fontSize: 12 }}>
-                {fmt.number(tx.quantity, 2)} {tx.unit_abbrev} × {fmt.money(tx.rate_amount, 4)}
+                {fmt.number(tx.quantity, 2)} {tx.unit_abbrev} × {fmt.rate(tx.rate_amount)}
               </div>
               <div className="dim" style={{ fontSize: 11, marginTop: 2 }}>
                 from {fmt.title(tx.quantity_source)}

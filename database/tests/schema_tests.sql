@@ -1099,6 +1099,105 @@ BEGIN
 END
 $review$;
 
+-- =============================================================================
+-- Sprint 2: how a rate sheet is actually written, and the invoice lifecycle.
+-- =============================================================================
+DO $money$
+DECLARE
+    v_project uuid;
+    v_rate    uuid;
+    v_ticket  uuid;
+    v_inv     uuid;
+    v_num     numeric;
+    v_txt     text;
+    v_mark    integer;
+    v_names   text[];
+BEGIN
+    SELECT id INTO v_project FROM projects ORDER BY created_at LIMIT 1;
+    SELECT COALESCE(max(n), 0) INTO v_mark FROM _results;
+
+    BEGIN
+        PERFORM pg_temp.check_that('a service code says how it is counted',
+            NOT EXISTS (SELECT 1 FROM service_codes
+                         WHERE quantity_mode NOT IN ('measured', 'flat', 'tiered')));
+
+        PERFORM pg_temp.check_that('stumps are banded rather than priced per inch',
+            EXISTS (SELECT 1 FROM service_codes
+                     WHERE code = 'STUMP' AND quantity_mode = 'tiered'));
+
+        SELECT r.id INTO v_rate FROM rates r
+          JOIN service_codes sc ON sc.id = r.service_code_id
+         WHERE sc.quantity_mode = 'tiered' LIMIT 1;
+
+        PERFORM pg_temp.check_that('a banded rate names what picks the band',
+            (SELECT tier_source FROM rates WHERE id = v_rate) IS NOT NULL);
+
+        PERFORM pg_temp.check_that('the bands are on the rate',
+            (SELECT count(*) FROM rate_tiers WHERE rate_id = v_rate) >= 3);
+
+        PERFORM pg_temp.check_raises('overlapping bands are refused',
+            format('INSERT INTO rate_tiers (rate_id, from_value, to_value, amount)
+                    VALUES (%L, 10, 20, 99)', v_rate),
+            'overlaps');
+
+        -- A 26 inch stump and an 8 inch one are different money.
+        SELECT id INTO v_ticket FROM tickets
+         WHERE project_id = v_project AND NOT is_void LIMIT 1;
+
+        UPDATE tickets SET data = data || '{"stump_diameter_inches": 30}'::jsonb
+         WHERE id = v_ticket;
+        SELECT pf.out_amount INTO v_num FROM adms_price_for(v_ticket, v_rate) pf;
+
+        UPDATE tickets SET data = data || '{"stump_diameter_inches": 8}'::jsonb
+         WHERE id = v_ticket;
+        PERFORM pg_temp.check_that('a bigger stump is more money on the same code',
+            (SELECT pf.out_amount FROM adms_price_for(v_ticket, v_rate) pf) < v_num);
+
+        UPDATE tickets SET data = data - 'stump_diameter_inches' WHERE id = v_ticket;
+        SELECT pf.out_tier_label INTO v_txt FROM adms_price_for(v_ticket, v_rate) pf;
+        PERFORM pg_temp.check_that('an unmeasured stump is priced and says so',
+            v_txt LIKE 'No band%', COALESCE(v_txt, 'null'));
+
+        PERFORM pg_temp.check_that('a banded code bills one, not the count',
+            adms_quantity_for(v_ticket, 'per_unit',
+                (SELECT id FROM service_codes WHERE quantity_mode = 'tiered' LIMIT 1)) = 1);
+
+        PERFORM pg_temp.check_that('every banded transaction records its band',
+            NOT EXISTS (
+                SELECT 1 FROM transactions tx
+                  JOIN service_codes sc ON sc.id = tx.service_code_id
+                 WHERE sc.quantity_mode = 'tiered' AND NOT tx.is_reversal
+                   AND tx.tier_label IS NULL));
+
+        PERFORM pg_temp.check_that('quantity times rate equals the amount on every line',
+            NOT EXISTS (
+                SELECT 1 FROM transactions
+                 WHERE round(quantity * rate_amount, 4) <> round(amount, 4)));
+
+        -- The invoice lifecycle.
+        SELECT id INTO v_inv FROM invoices WHERE project_id = v_project LIMIT 1;
+
+        PERFORM pg_temp.check_raises('a rejection has to say why',
+            format('UPDATE invoices SET status = ''rejected'' WHERE id = %L', v_inv),
+            'rejection_has_a_reason');
+
+        PERFORM pg_temp.check_raises('an adjustment has to say what it is for',
+            format('UPDATE invoices SET adjustments = -100 WHERE id = %L', v_inv),
+            'adjustment_has_a_reason');
+
+        SELECT array_agg(name ORDER BY n) INTO v_names
+          FROM _results WHERE n > v_mark;
+        RAISE EXCEPTION 'sandbox' USING ERRCODE = 'ADMS1';
+    EXCEPTION
+        WHEN SQLSTATE 'ADMS1' THEN
+            NULL;
+    END;
+
+    INSERT INTO _results (name, ok, detail)
+    SELECT unnest(COALESCE(v_names, '{}')), true, 'sandboxed';
+END
+$money$;
+
 SELECT
     count(*) FILTER (WHERE ok)     AS passed,
     count(*) FILTER (WHERE NOT ok) AS failed,
