@@ -48,6 +48,8 @@ const PROJECT_NAV = [
   ]},
   { group: 'Project', items: [
     { to: '/setup', label: 'Project Setup', icon: 'layers', perm: 'project.update' },
+    { to: '/certifications', label: 'Certifications', icon: 'scale',
+      perm: 'equipment.manage' },
     { to: '/intake', label: 'Contract Intake', icon: 'inbox', perm: 'contract.manage' },
     { to: '/rules', label: 'Rules', icon: 'rules', perm: 'rule.manage' },
     { to: '/service-codes', label: 'Service Codes', icon: 'money', perm: 'service_code.manage' },

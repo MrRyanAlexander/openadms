@@ -210,6 +210,130 @@ for (const [label, nav] of [
   })
 }
 
+/* -------------------------------------------------------------------------
+ * Sprint 2: correcting work the field has already finished.
+ *
+ * These are the steps the second walkthrough could not perform at all, so they
+ * exist to prove the screens are reachable and do what they claim, not merely
+ * that they render.
+ * ---------------------------------------------------------------------- */
+
+await step(page, 'certifications-screen', async () => {
+  await go(page, 'Certifications', 'Certifications')
+  await page.waitForSelector('table.data tbody tr', { timeout: 15000 })
+  const head = (await page.locator('table.data thead').innerText()).toLowerCase()
+  for (const col of ['unit', 'capacity', 'tickets', 'expires']) {
+    if (!head.includes(col)) throw new Error(`certifications list is missing ${col}`)
+  }
+  const stats = await page.locator('.card.stat').count()
+  if (stats < 4) throw new Error('certification summary tiles missing')
+})
+
+await step(page, 'certification-chain-reads-as-history', async () => {
+  // Sort by the ticket count so the row opened is one a correction would
+  // actually reprice. On a row that has priced nothing the impact panel says
+  // so, correctly, and there would be no difference to assert on.
+  await page.click('th:has-text("Tickets")')
+  await page.waitForTimeout(500)
+  await page.click('table.data tbody tr >> nth=0')
+  await page.waitForSelector('.drawer', { timeout: 10000 })
+  await page.locator('.drawer').getByText(/Measurement history/i)
+    .first().waitFor({ timeout: 15000 })
+  const text = await page.locator('.drawer').innerText()
+  if (!/Counts from/i.test(text)) {
+    throw new Error('the drawer does not say when a capacity counts from')
+  }
+})
+
+await step(page, 'a-correction-prices-itself-before-it-is-written', async () => {
+  await page.click('.drawer button:has-text("Correct")')
+  await page.waitForSelector('.modal', { timeout: 10000 })
+  const blurb = await page.locator('.modal').innerText()
+  if (!/says the previous number was/i.test(blurb)) {
+    throw new Error('the correction dialog does not explain what a correction does')
+  }
+  // Halving the capacity has to show a negative difference before anything is
+  // committed. This is the E10 case: a measurement found wrong after days of
+  // hauling.
+  await page.fill('.modal input[type="number"] >> nth=0', '11')
+  await page.waitForTimeout(1200)
+  const priced = await page.locator('.modal').innerText()
+  if (!/What this reprices/i.test(priced)) {
+    throw new Error('the correction dialog does not show what it would reprice')
+  }
+  if (!/Difference/i.test(priced)) throw new Error('no difference shown')
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(300)
+  await page.keyboard.press('Escape')
+  await page.waitForSelector('.drawer', { state: 'detached', timeout: 10000 })
+})
+
+await step(page, 'a-completed-ticket-can-be-corrected', async () => {
+  await go(page, 'Tickets', 'Tickets')
+  await page.waitForSelector('table.data tbody tr', { timeout: 15000 })
+  // A void ticket offers Restore, not Correct, which is the intended
+  // behaviour rather than something to work around.
+  await page.selectOption('.card-head select >> nth=0', 'completed')
+  await page.waitForTimeout(700)
+  await page.click('table.data tbody tr >> nth=0')
+  await page.waitForSelector('.drawer', { timeout: 10000 })
+  await page.locator('.drawer button:has-text("Correct")').first()
+    .waitFor({ timeout: 15000 })
+  await page.click('.drawer button:has-text("Correct")')
+  await page.waitForSelector('.modal', { timeout: 10000 })
+
+  const save = page.locator('.modal button:has-text("Save correction")')
+  if (!(await save.isDisabled())) {
+    throw new Error('a correction saved with no reason and no change')
+  }
+  // Always move the load call somewhere it is not, so the walk survives being
+  // run twice against the same database. A correction that changes nothing is
+  // correctly refused, and this step is not what tests that.
+  const call = page.locator('.modal input[type="number"] >> nth=0')
+  const now = Number(await call.inputValue()) || 50
+  await call.fill(String(now > 30 ? now - 7 : now + 7))
+  await page.fill('.modal textarea', 'Load call corrected after reviewing the photos')
+  const summary = await page.locator('.modal').innerText()
+  if (!/Changing/i.test(summary)) {
+    throw new Error('the correction does not summarise what it will change')
+  }
+  if (await save.isDisabled()) throw new Error('a complete correction stayed disabled')
+  await save.click()
+  await page.waitForSelector('.modal', { state: 'detached', timeout: 15000 })
+})
+
+await step(page, 'the-ticket-says-it-is-waiting-to-be-repriced', async () => {
+  await page.locator('.drawer').getByText(/Waiting to be repriced/i)
+    .first().waitFor({ timeout: 15000 })
+  const text = await page.locator('.drawer').innerText()
+  if (!/before the change/i.test(text)) {
+    throw new Error('the banner does not say the figures are pre-correction')
+  }
+})
+
+await step(page, 'repricing-reports-what-it-cost', async () => {
+  await page.click('.drawer button:has-text("Reprice")')
+  await page.waitForSelector('.modal', { timeout: 10000 })
+  await page.fill('.modal textarea', 'Load call corrected after reviewing the photos')
+  await page.click('.modal button.primary:has-text("Reprice")')
+  await page.waitForSelector('.modal', { state: 'detached', timeout: 20000 })
+  await page.locator('.toast, .toasts').first().waitFor({ timeout: 10000 })
+})
+
+await step(page, 'the-ledger-keeps-the-superseded-rows', async () => {
+  await page.click('.drawer .tabs button:has-text("Transactions")')
+  await page.waitForTimeout(600)
+  const text = await page.locator('.drawer').innerText()
+  if (!/Superseded/i.test(text)) {
+    throw new Error('superseded transactions are not shown as evidence')
+  }
+  if (!/Billing now/i.test(text)) {
+    throw new Error('the live total is missing from the transactions tab')
+  }
+  await page.keyboard.press('Escape')
+  await page.waitForSelector('.drawer', { state: 'detached', timeout: 10000 })
+})
+
 await step(page, 'dashboard-alerts-tile', async () => {
   await go(page, 'Dashboard', 'Dashboard')
   await page.waitForSelector('.card:has-text("Outstanding")', { timeout: 10000 })

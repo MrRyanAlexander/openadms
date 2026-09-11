@@ -10,6 +10,7 @@ import Closeout from './pages/Closeout'
 import Tickets from './pages/Tickets'
 import Rules from './pages/Rules'
 import Setup from './pages/Setup'
+import Certifications from './pages/Certifications'
 import { Invoices, ServiceCodes, Transactions } from './pages/Money'
 import { Organization } from './pages/Records'
 import Workers from './pages/Workers'
@@ -41,6 +42,7 @@ export default function App() {
         <Route path="tickets" element={<Tickets />} />
         <Route path="incidents" element={<Tickets kindFilter="incident" />} />
         <Route path="setup" element={<Setup />} />
+        <Route path="certifications" element={<Certifications />} />
         <Route path="intake" element={<ContractIntake />} />
         <Route path="closeout" element={<Closeout />} />
         <Route path="rules" element={<Rules />} />

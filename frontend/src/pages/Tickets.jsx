@@ -230,6 +230,9 @@ function TicketDrawer({ ticketId, onClose, onChanged }) {
   const { can, toast } = useApp()
   const [tab, setTab] = useState('detail')
   const [voiding, setVoiding] = useState(false)
+  const [unvoiding, setUnvoiding] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [repricing, setRepricing] = useState(false)
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
   const { data, loading, error, reload } = useFetch(
@@ -240,14 +243,29 @@ function TicketDrawer({ ticketId, onClose, onChanged }) {
     try {
       await api.post(`/tickets/${ticketId}/void`, { reason })
       toast('Ticket voided', 'Existing transactions were reversed')
-      setVoiding(false)
+      setVoiding(false); setReason('')
       reload(); onChanged?.()
     } catch (err) {
       toast('Could not void', err.message, 'err')
     } finally { setBusy(false) }
   }
 
-  async function reprocess() {
+  async function doUnvoid() {
+    setBusy(true)
+    try {
+      await api.post(`/tickets/${ticketId}/unvoid`, { reason })
+      toast('Ticket restored', 'It is queued for repricing')
+      setUnvoiding(false); setReason('')
+      reload(); onChanged?.()
+    } catch (err) {
+      toast('Could not restore', err.message, 'err')
+    } finally { setBusy(false) }
+  }
+
+  // Re-running the rules and repricing are different acts. The first only ever
+  // adds what was missing; the second reverses what is there and computes it
+  // again, which is the one a corrected ticket needs.
+  async function reRunRules() {
     try {
       const result = await api.post(`/tickets/${ticketId}/process`)
       toast('Rules re-run',
@@ -269,13 +287,25 @@ function TicketDrawer({ ticketId, onClose, onChanged }) {
       onClose={onClose}
       actions={
         <>
-          {can('transaction.process') && t && !t.is_void && t.status === 'completed' && (
-            <button className="btn sm" onClick={reprocess}>
-              <Icon name="refresh" size={13} /> Re-run rules
+          {can('ticket.update') && t && !t.is_void && (
+            <button className="btn sm" onClick={() => setEditing(true)}>
+              <Icon name="edit" size={13} /> Correct
             </button>
+          )}
+          {can('transaction.process') && t && !t.is_void && t.status === 'completed' && (
+            t.needs_reprocess
+              ? <button className="btn sm primary" onClick={() => setRepricing(true)}>
+                  <Icon name="refresh" size={13} /> Reprice
+                </button>
+              : <button className="btn sm" onClick={reRunRules}>
+                  <Icon name="refresh" size={13} /> Re-run rules
+                </button>
           )}
           {can('ticket.void') && t && !t.is_void && (
             <button className="btn sm danger" onClick={() => setVoiding(true)}>Void</button>
+          )}
+          {can('ticket.void') && t && t.is_void && (
+            <button className="btn sm" onClick={() => setUnvoiding(true)}>Restore</button>
           )}
         </>
       }>
@@ -296,6 +326,21 @@ function TicketDrawer({ ticketId, onClose, onChanged }) {
               </div>
             )}
           </div>
+
+          {t.needs_reprocess && !t.is_void && (
+            <div className="card" style={{ padding: 12, marginBottom: 14,
+                                           borderColor: 'var(--amber)',
+                                           background: 'var(--amber-soft)' }}>
+              <div className="row" style={{ color: 'var(--amber)', gap: 8 }}>
+                <Icon name="alert" size={14} /><b>Waiting to be repriced</b>
+              </div>
+              <div className="muted" style={{ marginTop: 4, fontSize: 12.5 }}>
+                {t.reprocess_reason}
+                {t.reprocess_queued_at ? ` · queued ${fmt.datetime(t.reprocess_queued_at)}` : ''}
+                . The figures below are what it billed before the change.
+              </div>
+            </div>
+          )}
 
           {t.is_void && (
             <div className="card" style={{ padding: 12, marginBottom: 14,
@@ -322,10 +367,46 @@ function TicketDrawer({ ticketId, onClose, onChanged }) {
             {tab === 'stages' && <StagesTab stages={data.stages} type={type}
                                             waypoints={data.waypoints} />}
             {tab === 'media' && <MediaTab media={data.media} />}
-            {tab === 'money' && <MoneyTab transactions={data.transactions} />}
+            {tab === 'money' && <MoneyTab transactions={data.transactions}
+                                          onChanged={() => { reload(); onChanged?.() }} />}
             {tab === 'audit' && <AuditTab events={data.audit} />}
           </div>
         </>
+      )}
+
+      {editing && t && (
+        <TicketCorrection ticket={t} onClose={() => setEditing(false)}
+                          onSaved={() => { setEditing(false); reload(); onChanged?.() }}
+                          toast={toast} />
+      )}
+
+      {repricing && t && (
+        <RepriceModal ticket={t} onClose={() => setRepricing(false)}
+                      onDone={() => { setRepricing(false); reload(); onChanged?.() }}
+                      toast={toast} />
+      )}
+
+      {unvoiding && (
+        <Modal title="Restore this ticket" onClose={() => setUnvoiding(false)} footer={
+          <>
+            <button className="btn" onClick={() => setUnvoiding(false)}>Cancel</button>
+            <button className="btn primary" disabled={reason.length < 4 || busy}
+                    onClick={doUnvoid}>
+              {busy && <span className="spinner" />} Restore ticket
+            </button>
+          </>
+        }>
+          <p className="muted" style={{ marginTop: 0 }}>
+            The ticket comes back and is queued for repricing, so its money
+            returns when the queue is next run. The original void stays on the
+            audit trail.
+          </p>
+          <Field label="Reason" required>
+            <textarea className="input" rows={3} value={reason}
+                      onChange={(e) => setReason(e.target.value)}
+                      placeholder="Not a duplicate, the second load was real" />
+          </Field>
+        </Modal>
       )}
 
       {voiding && (
@@ -350,6 +431,203 @@ function TicketDrawer({ ticketId, onClose, onChanged }) {
         </Modal>
       )}
     </Drawer>
+  )
+}
+
+/**
+ * Correcting a ticket the field has already finished with.
+ *
+ * The walkthrough's finding was blunt: "I have no way to edit existing tickets
+ * in the back-office (apart from void), but I should." The fields here are the
+ * ones a data manager actually corrects at 9am after looking at the photos, and
+ * the reason is required because it is what an auditor reads next to the
+ * change. Anything touched here queues a reprice rather than leaving the ticket
+ * and its money disagreeing.
+ */
+const CORRECTABLE = [
+  { key: 'load_call_pct', label: 'Load call', type: 'number', unit: '%',
+    hint: 'Certified capacity times this is the billable volume' },
+  { key: 'debris_type', label: 'Debris type', source: 'debris_types' },
+  { key: 'destination_site_id', label: 'Disposal site', source: 'project_sites' },
+  { key: 'equipment_id', label: 'Truck', source: 'project_equipment' },
+  { key: 'contractor_id', label: 'Contractor', source: 'project_contractors' },
+  { key: 'driver_name', label: 'Driver' },
+  { key: 'scale_ticket_number', label: 'Scale ticket' },
+  { key: 'net_weight_lbs', label: 'Net weight', type: 'number', unit: 'lbs' },
+  { key: 'quantity', label: 'Unit count', type: 'number',
+    hint: 'Hangers, leaners or stumps on a unit rate ticket' },
+  { key: 'origin_address', label: 'Origin address', wide: true,
+    hint: 'Correcting an address a monitor typed by hand' },
+  { key: 'notes', label: 'Notes', wide: true },
+]
+
+function TicketCorrection({ ticket, onClose, onSaved, toast }) {
+  const { project } = useApp()
+  const [form, setForm] = useState({})
+  const [reason, setReason] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+
+  const changed = Object.entries(form).filter(
+    ([k, v]) => String(v ?? '') !== String(ticket[k] ?? ''))
+
+  async function save() {
+    setBusy(true); setError(null)
+    try {
+      const payload = { _reason: reason }
+      changed.forEach(([k, v]) => {
+        const field = CORRECTABLE.find((f) => f.key === k)
+        payload[k] = v === '' ? null : (field?.type === 'number' ? Number(v) : v)
+      })
+      const result = await api.patch(`/tickets/${ticket.id}`, payload)
+      toast('Ticket corrected',
+            result.reprocess_queued
+              ? 'Queued for repricing, so the money follows'
+              : 'Nothing about the price changed')
+      onSaved()
+    } catch (err) { setError(err.message) } finally { setBusy(false) }
+  }
+
+  return (
+    <Modal wide title={`Correct ${ticket.ticket_number}`} onClose={onClose} footer={
+      <>
+        <button className="btn" onClick={onClose}>Cancel</button>
+        <button className="btn primary"
+                disabled={busy || reason.trim().length < 4 || changed.length === 0}
+                onClick={save}>
+          {busy && <span className="spinner" />} Save correction
+        </button>
+      </>
+    }>
+      {error && <ErrorNote error={{ message: error }} />}
+
+      <div className="grid c2" style={{ gap: 12 }}>
+        {CORRECTABLE.map((f) => (
+          <div key={f.key} style={f.wide ? { gridColumn: '1 / -1' } : undefined}>
+            <Field label={f.label} hint={f.hint}>
+              {f.source ? (
+                <OptionSelect source={f.source} projectId={project?.id}
+                              value={form[f.key] ?? ticket[f.key] ?? ''}
+                              onChange={(v) => setForm({ ...form, [f.key]: v })} />
+              ) : (
+                <input className="input" type={f.type === 'number' ? 'number' : 'text'}
+                       value={form[f.key] ?? ticket[f.key] ?? ''}
+                       onChange={(e) => setForm({ ...form, [f.key]: e.target.value })} />
+              )}
+            </Field>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ marginTop: 16 }}>
+        <Field label="Reason" required
+               hint="Goes on the audit artifact next to what changed">
+          <textarea className="input" rows={2} value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                    placeholder="Load call corrected after reviewing the photos" />
+        </Field>
+      </div>
+
+      {changed.length > 0 && (
+        <div className="card" style={{ padding: 12, marginTop: 14 }}>
+          <div className="dim" style={{ fontSize: 11, letterSpacing: '0.06em',
+                                        textTransform: 'uppercase', marginBottom: 6 }}>
+            Changing
+          </div>
+          {changed.map(([k, v]) => (
+            <div key={k} style={{ fontSize: 13 }}>
+              {CORRECTABLE.find((f) => f.key === k)?.label}:{' '}
+              <span className="dim">{String(ticket[k] ?? '—')}</span> to <b>{String(v || '—')}</b>
+            </div>
+          ))}
+        </div>
+      )}
+    </Modal>
+  )
+}
+
+function OptionSelect({ source, projectId, value, onChange }) {
+  const opts = useFetch(
+    () => (projectId ? api.get(`/projects/${projectId}/options/${source}`) : null),
+    [projectId, source])
+  return (
+    <select className="select" value={value || ''} onChange={(e) => onChange(e.target.value)}>
+      <option value="">Not set</option>
+      {(opts.data?.items || []).map((o) => (
+        <option key={o.value} value={o.value}>{o.label}</option>
+      ))}
+    </select>
+  )
+}
+
+/**
+ * Repricing, with the cost shown rather than reported afterwards.
+ *
+ * An approved invoice stops this. Forcing past it is a real decision, so the
+ * refusal is read first and the override only appears once it has been.
+ */
+function RepriceModal({ ticket, onClose, onDone, toast }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+  const [locked, setLocked] = useState(false)
+  const [reason, setReason] = useState(ticket.reprocess_reason || '')
+
+  async function run(force) {
+    setBusy(true); setError(null)
+    try {
+      const result = await api.post(`/tickets/${ticket.id}/reprocess`, { reason, force })
+      const r = result.reprocess
+      toast('Repriced',
+            `${fmt.money(r.old_total)} to ${fmt.money(r.new_total)} `
+            + `(${r.difference >= 0 ? '+' : ''}${fmt.money(r.difference)})`)
+      onDone()
+    } catch (err) {
+      setError(err.message)
+      if (/has been approved/i.test(err.message)) setLocked(true)
+    } finally { setBusy(false) }
+  }
+
+  return (
+    <Modal title={`Reprice ${ticket.ticket_number}`} onClose={onClose} footer={
+      <>
+        <button className="btn" onClick={onClose}>Cancel</button>
+        {locked && (
+          <button className="btn danger" disabled={busy || reason.trim().length < 4}
+                  onClick={() => run(true)}>
+            Reprice anyway
+          </button>
+        )}
+        <button className="btn primary" disabled={busy || reason.trim().length < 4}
+                onClick={() => run(false)}>
+          {busy && <span className="spinner" />} Reprice
+        </button>
+      </>
+    }>
+      <p className="muted" style={{ marginTop: 0 }}>
+        Every live transaction on this ticket is reversed and the rules run
+        again. Nothing is deleted: the reversals stay in the ledger as the record
+        of what changed.
+      </p>
+      {error && (
+        <div className="card" style={{ padding: 12, marginBottom: 12,
+                                       borderColor: 'var(--red)',
+                                       background: 'var(--red-soft)',
+                                       color: 'var(--red)' }}>
+          {error}
+          {locked && (
+            <div style={{ marginTop: 6, color: 'var(--text-muted)' }}>
+              Repricing anyway leaves the invoice carrying a superseded line,
+              which shows on the invoice as needing review.
+            </div>
+          )}
+        </div>
+      )}
+      <Field label="Reason" required>
+        <textarea className="input" rows={2} value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="Certified capacity corrected" />
+      </Field>
+    </Modal>
   )
 }
 
@@ -536,21 +814,40 @@ function MediaTab({ media }) {
   )
 }
 
-function MoneyTab({ transactions }) {
+function MoneyTab({ transactions, onChanged }) {
+  const { can, toast } = useApp()
+  const [reversing, setReversing] = useState(null)
+
   if (!transactions.length) {
     return <Empty icon="money" title="No transactions">
       This ticket has not matched any rule yet, or it is not in a billable state.
     </Empty>
   }
+
+  // A superseded row is the evidence of a correction, not a live charge. It is
+  // dimmed rather than hidden, because the whole point of keeping it is that
+  // somebody can see what the number used to be.
+  const live = transactions.filter((tx) => !tx.superseded_at)
+  const total = live.reduce((sum, tx) => sum + Number(tx.amount || 0), 0)
+
   return (
     <div className="stack" style={{ gap: 10 }}>
+      {transactions.length !== live.length && (
+        <div className="muted" style={{ fontSize: 13 }}>
+          {transactions.length - live.length} of these have been superseded by a
+          correction. They stay here as the record of what changed.
+        </div>
+      )}
+
       {transactions.map((tx) => (
-        <div className="card" key={tx.id} style={{ padding: 14 }}>
+        <div className="card" key={tx.id}
+             style={{ padding: 14, opacity: tx.superseded_at ? 0.55 : 1 }}>
           <div className="row">
             <div style={{ flex: 1, minWidth: 0 }}>
               <div className="row" style={{ gap: 8 }}>
                 <span className="mono dim">{tx.transaction_number}</span>
                 {tx.is_reversal && <Badge tone="red">Reversal</Badge>}
+                {tx.superseded_at && <Badge>Superseded</Badge>}
                 {tx.invoice_number && <Badge tone="blue">{tx.invoice_number}</Badge>}
               </div>
               <div style={{ fontWeight: 570, marginTop: 4 }}>{tx.service_code_name}</div>
@@ -566,11 +863,88 @@ function MoneyTab({ transactions }) {
               <div className="dim" style={{ fontSize: 11, marginTop: 2 }}>
                 from {fmt.title(tx.quantity_source)}
               </div>
+              {can('transaction.reverse') && !tx.is_reversal && !tx.superseded_at && (
+                <button className="btn sm" style={{ marginTop: 8 }}
+                        onClick={() => setReversing(tx)}>Reverse</button>
+              )}
             </div>
           </div>
+          {tx.supersede_reason && (
+            <div className="dim" style={{ fontSize: 12, marginTop: 8,
+                                          paddingTop: 8, borderTop: '1px solid var(--line)' }}>
+              Superseded: {tx.supersede_reason}
+            </div>
+          )}
+          {tx.reversal_reason && (
+            <div className="dim" style={{ fontSize: 12, marginTop: 8,
+                                          paddingTop: 8, borderTop: '1px solid var(--line)' }}>
+              Reversed: {tx.reversal_reason}
+            </div>
+          )}
         </div>
       ))}
+
+      <div className="row" style={{ justifyContent: 'flex-end', gap: 10,
+                                    paddingTop: 4 }}>
+        <span className="dim" style={{ fontSize: 12 }}>Billing now</span>
+        <span style={{ fontSize: 17, fontWeight: 640 }}>{fmt.money(total)}</span>
+      </div>
+
+      {reversing && (
+        <ReverseModal tx={reversing} onClose={() => setReversing(null)}
+                      onDone={() => { setReversing(null); onChanged?.() }}
+                      toast={toast} />
+      )}
     </div>
+  )
+}
+
+/**
+ * Reversing one transaction, as opposed to repricing the whole ticket.
+ *
+ * The endpoint has always existed and no screen called it, which is why the
+ * walkthrough found "no way to reverse a transaction". The original is never
+ * touched: a matching negative row is written beside it.
+ */
+function ReverseModal({ tx, onClose, onDone, toast }) {
+  const [reason, setReason] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+
+  async function run() {
+    setBusy(true); setError(null)
+    try {
+      await api.post(`/transactions/${tx.id}/reverse`, { reason })
+      toast('Transaction reversed', `${fmt.money(-tx.amount)} against ${tx.transaction_number}`)
+      onDone()
+    } catch (err) { setError(err.message) } finally { setBusy(false) }
+  }
+
+  return (
+    <Modal title={`Reverse ${tx.transaction_number}`} onClose={onClose} footer={
+      <>
+        <button className="btn" onClick={onClose}>Cancel</button>
+        <button className="btn danger" disabled={busy || reason.trim().length < 4}
+                onClick={run}>
+          {busy && <span className="spinner" />} Reverse {fmt.money(tx.amount)}
+        </button>
+      </>
+    }>
+      <p className="muted" style={{ marginTop: 0 }}>
+        The original is not touched. A matching negative row is written beside
+        it, so the ledger explains itself.
+        {tx.invoice_number && (
+          <> This transaction is on <b>{tx.invoice_number}</b>, which will show
+          as needing review.</>
+        )}
+      </p>
+      {error && <ErrorNote error={{ message: error }} />}
+      <Field label="Reason" required>
+        <textarea className="input" rows={2} value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="Load call corrected after site review" />
+      </Field>
+    </Modal>
   )
 }
 

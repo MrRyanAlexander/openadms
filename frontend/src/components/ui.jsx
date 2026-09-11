@@ -39,6 +39,9 @@ export function Icon({ name, size = 16, strokeWidth = 1.7, ...rest }) {
     logout: 'M15 17l5-5-5-5M20 12H9M12 20H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h6',
     barcode: 'M4 5v14M7 5v14M10 5v10M13 5v14M16 5v10M20 5v14',
     inbox: 'M3 12h5l2 3h4l2-3h5M3 12l3-8h12l3 8v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-6Z',
+    edit: 'M4 20h4L19.5 8.5a2.1 2.1 0 0 0-3-3L5 17v3Z',
+    undo: 'M4 9h11a5 5 0 0 1 0 10h-6M4 9l4-4M4 9l4 4',
+    scale: 'M12 4v16M7 20h10M12 7 5 11h14L12 7ZM5 11a3.5 3.5 0 0 0 7 0M12 11a3.5 3.5 0 0 0 7 0',
   }
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
