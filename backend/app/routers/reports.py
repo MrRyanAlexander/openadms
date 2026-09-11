@@ -151,37 +151,49 @@ async def dashboard(ctx: ProjectContext, user: CurrentUser,
         # E4: the alerts feed existed and lived inside project setup, where
         # nobody looking for "what expires in the next thirty days" would find
         # it.
+        # C2 asked for two things from this tile: words a person recognises, and
+        # "each item is a link into the list that holds it". The destination is
+        # decided here rather than guessed in the UI, because the server is what
+        # knows which screen owns each kind of outstanding work.
         alerts = await conn.fetch(
             """
-            SELECT kind, label, detail, due_on, severity, days_out FROM (
+            SELECT kind, label, detail, due_on, severity, days_out, link FROM (
                 SELECT 'permit' AS kind,
                        pw.site_name AS label,
-                       'Permit pending'
-                         || COALESCE(', ' || pw.days_since_request::text
-                                     || ' days since it was asked for', '')
+                       'Waiting on the permit'
+                         || COALESCE(', asked for ' || pw.days_since_request::text
+                                     || ' days ago', '')
                          AS detail,
                        NULL::date AS due_on,
                        CASE WHEN COALESCE(pw.days_since_request, 0) > 21
                             THEN 'serious' ELSE 'review' END AS severity,
-                       NULL::integer AS days_out
+                       NULL::integer AS days_out,
+                       '/setup?tab=sites' AS link
                   FROM project_permit_watch pw
                  WHERE pw.project_id = $1 AND pw.permit_status = 'pending'
                 UNION ALL
                 SELECT 'document', d.title,
-                       'Expires ' || to_char(d.expires_on, 'Mon DD'),
+                       CASE WHEN d.expires_on < current_date
+                            THEN 'Expired ' || to_char(d.expires_on, 'Mon DD')
+                            ELSE 'Expires ' || to_char(d.expires_on, 'Mon DD') END,
                        d.expires_on,
                        CASE WHEN d.expires_on < current_date THEN 'serious'
                             ELSE 'review' END,
-                       (d.expires_on - current_date)::integer
+                       (d.expires_on - current_date)::integer,
+                       '/setup?tab=documents'
                   FROM document_watch d
                  WHERE d.project_id = $1 AND d.expires_on IS NOT NULL
                    AND d.expires_on <= current_date + 30
                 UNION ALL
                 SELECT 'certification', c.unit_number,
-                       'Certification expires ' || to_char(c.expires_on, 'Mon DD'),
+                       CASE WHEN c.is_expired
+                            THEN 'Certification expired ' || to_char(c.expires_on, 'Mon DD')
+                            ELSE 'Certification expires ' || to_char(c.expires_on, 'Mon DD')
+                       END,
                        c.expires_on,
                        CASE WHEN c.is_expired THEN 'serious' ELSE 'review' END,
-                       c.days_to_expiry::integer
+                       c.days_to_expiry::integer,
+                       '/certifications'
                   FROM project_equipment_current c
                  WHERE c.project_id = $1 AND c.expires_on IS NOT NULL
                    AND c.expires_on <= current_date + 30
@@ -488,8 +500,19 @@ async def run_query(user: CurrentUser, body: dict[str, Any] = Body(...),
         recs = await conn.fetch(
             f"SELECT {select} FROM {source['view']} WHERE {clause} "
             f"ORDER BY {order_sql} LIMIT {limit}", *args)
+    truncated = total > len(recs)
     return {"columns": columns, "total": total, "returned": len(recs),
+            "limit": limit, "truncated": truncated,
+            "message": (f"Showing {len(recs):,} of {total:,} rows. Narrow the "
+                        f"filters or raise the row limit to see the rest."
+                        if truncated else None),
             "rows": db.rows(recs)}
+
+
+# M6: "the export states its cap rather than truncating in silence. The cap is
+# 50,000 rows." Named once, applied everywhere an export is built, and reported
+# back with every response that hits it.
+EXPORT_CAP = 50_000
 
 
 @router.get("/projects/{project_id}/export/{dataset}")
@@ -502,8 +525,11 @@ async def export_dataset(dataset: str, ctx: ProjectContext, user: CurrentUser,
     if view is None:
         raise bad_request("Unknown dataset", available=list(views))
     async with db.tx(user) as conn:
+        available = await conn.fetchval(
+            f"SELECT count(*) FROM {view} WHERE project_id = $1",
+            ctx["project"]["id"])
         recs = await conn.fetch(
-            f"SELECT * FROM {view} WHERE project_id = $1 LIMIT 50000",
+            f"SELECT * FROM {view} WHERE project_id = $1 LIMIT {EXPORT_CAP}",
             ctx["project"]["id"])
         await conn.execute(
             """
@@ -512,7 +538,20 @@ async def export_dataset(dataset: str, ctx: ProjectContext, user: CurrentUser,
             VALUES ($1, $2, 'export', $3, $4, $5::jsonb)
             """,
             view, ctx["project"]["id"], user["id"], user["full_name"],
-            {"rows": len(recs)})
+            {"rows": len(recs), "available": int(available or 0),
+             "cap": EXPORT_CAP, "truncated": int(available or 0) > len(recs)})
     rows = db.rows(recs)
-    return {"dataset": dataset, "count": len(rows),
-            "columns": list(rows[0].keys()) if rows else [], "rows": rows}
+    available = int(available or 0)
+    truncated = available > len(rows)
+    return {
+        "dataset": dataset, "count": len(rows),
+        "available": available, "cap": EXPORT_CAP, "truncated": truncated,
+        # Said out loud. An export that stops at fifty thousand rows and does
+        # not say so is the one that gets sent to a client as complete.
+        "message": (
+            f"This export carries {len(rows):,} of {available:,} rows. The cap "
+            f"is {EXPORT_CAP:,}. Filter the list and export again, or take the "
+            f"remainder from the closeout package with a date range."
+            if truncated else f"{len(rows):,} row(s), the whole dataset."),
+        "columns": list(rows[0].keys()) if rows else [], "rows": rows,
+    }

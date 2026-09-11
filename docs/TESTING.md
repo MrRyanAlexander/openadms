@@ -12,9 +12,9 @@ Three suites, each aimed at a different failure.
 
 | Suite | Count | Runs against | Proves |
 |---|---|---|---|
-| **Schema** | 106 assertions | A live Postgres | The database refuses what it should refuse, with no application in the way |
-| **API** | 96 tests | A live API on a seeded database | The endpoints behave, end to end, including two instances federating |
-| **UI walk** | 1 scripted walk | A built frontend and a running API | The back office actually runs, not just compiles |
+| **Schema** | 160 assertions | A live Postgres | The database refuses what it should refuse, with no application in the way |
+| **API** | 151 tests | A live API on a seeded database | The endpoints behave, end to end, including two instances federating |
+| **UI walk** | 60 scripted steps | A built frontend and a running API | The back office actually runs, not just compiles |
 
 ```bash
 ./database/setup.sh --with-demo --test    # schema
@@ -76,7 +76,7 @@ npm run test:db                            # the same file, directly
 
 ## The API suite
 
-[`backend/tests/`](../backend/tests). 86 tests in `test_api.py`, 10 in `test_names.py`. Session scoped fixtures log in as each demo role once and reuse the tokens.
+[`backend/tests/`](../backend/tests). 141 tests in `test_api.py`, 10 in `test_names.py`. Session scoped fixtures log in as each demo role once and reuse the tokens.
 
 ```bash
 export DATABASE_URL=postgresql://adms:adms@127.0.0.1:5432/openadms

@@ -306,6 +306,24 @@ a { color: inherit; text-decoration: none; }
 .search svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
               color: var(--text-dim); pointer-events: none; }
 
+/* An outstanding item on the dashboard. It is a link, so it looks like a row
+   you can open rather than a line of text about something happening elsewhere. */
+.alert-row {
+  display: flex; align-items: baseline; gap: 9px;
+  padding: 6px 8px; border-radius: 8px; color: inherit; text-decoration: none;
+  transition: background 0.12s var(--ease);
+}
+.alert-row:hover { background: var(--surface-2); text-decoration: none; }
+.alert-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* A value the system filled in, not one the user typed. Marked so it can be
+   trusted or typed over on sight, rather than looking like their own input. */
+.input.suggested, .suggested-key {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+}
+.suggested-key { padding: 1px 6px; border-radius: 5px; border: 1px solid var(--accent-line); }
+
 .check { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; }
 .check input { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
 

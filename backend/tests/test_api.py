@@ -699,6 +699,131 @@ def test_a_worker_created_while_assigning_is_a_whole_worker(
     assert assigned.status_code in (200, 201), assigned.text
 
 
+# J1: a monitor ID is printed on every ticket and has to be unique, so asking
+# somebody pasting twenty names to invent twenty of them is asking for twenty
+# collisions.
+def test_the_importer_suggests_monitor_ids_rather_than_demanding_them(
+        client, auth):
+    tag = uuid.uuid4().hex[:5]
+    preview = client.post("/api/v1/users/import", headers=auth, json={
+        "text": (f"Name\tEmployee ID\n"
+                 f"Ada Vasquez{tag}\tIMP-{tag}1\n"
+                 f"Ben Okoro{tag}\tIMP-{tag}2\n"),
+        "global_role": "monitor",
+    }).json()
+
+    rows = [r for r in preview["rows"] if r["action"] == "create"]
+    assert len(rows) == 2
+    ids = [r["values"]["monitor_id"] for r in rows]
+    assert all(i.startswith("MON-") for i in ids), ids
+    # Two rows in one paste never get the same number.
+    assert len(set(ids)) == 2
+    # And the preview says which cells it filled in, so nothing looks typed.
+    assert all("monitor_id" in r["suggested"] for r in rows)
+    assert all("username" in r["suggested"] for r in rows)
+
+
+def test_a_suggested_monitor_id_is_never_one_already_issued(client, auth):
+    # The failure this guards against is specific: numbering on from the highest
+    # walks into every gap left by an ID entered by hand, and the collision only
+    # surfaces at the write, after the user has corrected the table and pressed
+    # import.
+    taken = {u["monitor_id"] for u in
+             client.get("/api/v1/users", params={"limit": 500},
+                        headers=auth).json()["items"] if u.get("monitor_id")}
+    tag = uuid.uuid4().hex[:5]
+    preview = client.post("/api/v1/users/import", headers=auth, json={
+        "text": "Name\tEmployee ID\n" + "".join(
+            f"Crew Member{tag}{n}\tBULK-{tag}-{n}\n" for n in range(12)),
+        "global_role": "monitor",
+    }).json()
+
+    suggested = [r["values"]["monitor_id"] for r in preview["rows"]
+                 if r["action"] == "create"]
+    assert len(suggested) == 12
+    assert not (set(suggested) & taken), sorted(set(suggested) & taken)
+
+    # And the import it previewed actually writes.
+    done = client.post("/api/v1/users/import", headers=auth, json={
+        "text": "Name\tEmployee ID\tMonitor ID\n" + "".join(
+            f"Crew Member{tag}{n}\tBULK-{tag}-{n}\t{suggested[n]}\n"
+            for n in range(12)),
+        "global_role": "monitor", "dry_run": False,
+        "default_password": "bulk-temporary-pass",
+    })
+    assert done.status_code == 200, done.text
+
+
+def test_a_blank_row_is_never_given_an_id_another_row_is_taking(client, auth):
+    # This is the exact shape the screen sends back: the preview filled two rows
+    # in, the user corrected the third, and the corrected table comes back with
+    # two IDs present and one still blank. An allocator that only knew what was
+    # in the database would hand the blank row the first of the other two.
+    tag = uuid.uuid4().hex[:5]
+    preview = client.post("/api/v1/users/import", headers=auth, json={
+        "text": (f"Name\tEmployee ID\n"
+                 f"Row One{tag}\tSEQ-{tag}-1\n"
+                 f"Row Two{tag}\tSEQ-{tag}-2\n"
+                 f"\tSEQ-{tag}-3\n"),
+        "global_role": "monitor",
+    }).json()
+    filled = [r["values"]["monitor_id"] for r in preview["rows"]
+              if r["action"] == "create"]
+    assert len(filled) == 2
+
+    corrected = client.post("/api/v1/users/import", headers=auth, json={
+        "text": (f"First\tLast\tEmployee ID\tMonitor ID\n"
+                 f"Row\tOne{tag}\tSEQ-{tag}-1\t{filled[0]}\n"
+                 f"Row\tTwo{tag}\tSEQ-{tag}-2\t{filled[1]}\n"
+                 f"Fixed{tag}\t\tSEQ-{tag}-3\t\n"),
+        "global_role": "monitor", "dry_run": False,
+        "default_password": "sequence-temporary-pass",
+    })
+    assert corrected.status_code == 200, corrected.text
+    assert corrected.json()["created"] == 3
+
+
+def test_a_monitor_id_already_in_use_is_named_not_left_to_the_constraint(
+        client, auth):
+    mine = next(u for u in client.get("/api/v1/users", params={"limit": 50},
+                                      headers=auth).json()["items"]
+                if u.get("monitor_id"))
+    tag = uuid.uuid4().hex[:5]
+    preview = client.post("/api/v1/users/import", headers=auth, json={
+        "text": (f"Name\tEmployee ID\tMonitor ID\n"
+                 f"Clashing Person{tag}\tCLASH-{tag}\t{mine['monitor_id']}\n"),
+        "global_role": "monitor",
+    }).json()
+    row = preview["rows"][0]
+    assert row["action"] == "skip"
+    assert any("already belongs to somebody else" in p for p in row["problems"])
+
+
+def test_the_same_monitor_id_twice_in_one_paste_is_caught(client, auth):
+    tag = uuid.uuid4().hex[:5]
+    preview = client.post("/api/v1/users/import", headers=auth, json={
+        "text": (f"Name\tEmployee ID\tMonitor ID\n"
+                 f"First Person{tag}\tDUP-{tag}-1\tDUPE-{tag}\n"
+                 f"Second Person{tag}\tDUP-{tag}-2\tDUPE-{tag}\n"),
+        "global_role": "monitor",
+    }).json()
+    assert preview["rows"][0]["action"] == "create"
+    assert preview["rows"][1]["action"] == "skip"
+    assert any("appears twice" in p for p in preview["rows"][1]["problems"])
+
+
+def test_a_monitor_id_in_the_paste_is_left_alone(client, auth):
+    tag = uuid.uuid4().hex[:5]
+    preview = client.post("/api/v1/users/import", headers=auth, json={
+        "text": (f"Name\tEmployee ID\tMonitor ID\n"
+                 f"Cyd Farrow{tag}\tIMP-{tag}3\tCREW-{tag}\n"),
+        "global_role": "monitor",
+    }).json()
+    row = preview["rows"][0]
+    assert row["values"]["monitor_id"] == f"CREW-{tag}"
+    assert "monitor_id" not in row["suggested"]
+
+
 def test_a_manager_cannot_grant_admin_rank(client, manager_auth):
     refused = client.post("/api/v1/users", headers=manager_auth,
                           json=_worker_body(global_role="admin"))
@@ -1039,6 +1164,23 @@ def test_the_project_list_sorts_by_how_far_behind_a_project_is(client, auth):
                          params={"sort": "days_left"}).json()["items"]
     dated = [p["ends_on"] for p in by_date if p["ends_on"]]
     assert dated == sorted(dated), "the nearest deadline comes first"
+
+
+# C2: "It names what is outstanding in words a person recognises, and each item
+# is a link into the list that holds it."
+def test_every_outstanding_item_says_where_it_lives(client, auth, project_id):
+    data = client.get(f"/api/v1/projects/{project_id}/dashboard",
+                      headers=auth).json()
+    assert data["alerts"], "the demo project has a pending permit"
+    for alert in data["alerts"]:
+        assert alert["link"], f"{alert['kind']} has nowhere to go"
+        assert alert["link"].startswith("/")
+        assert alert["detail"], "an item with no detail explains nothing"
+    kinds = {a["kind"]: a["link"] for a in data["alerts"]}
+    if "permit" in kinds:
+        assert kinds["permit"] == "/setup?tab=sites"
+    if "certification" in kinds:
+        assert kinds["certification"] == "/certifications"
 
 
 def test_the_portfolio_summary_answers_above_project_scope(client, auth):
@@ -1578,6 +1720,76 @@ def test_an_export_with_no_rows_still_carries_its_headers(client, auth, project_
     body = bundle.read(ticket_file).decode()
     assert "ticket_number" in body, "an empty export still has to be openable"
     assert len(body.strip().split("\n")) == 1
+
+
+# M6: "The list pages without stalling and the export states its cap rather
+# than truncating in silence. The cap is 50,000 rows."
+def test_an_export_says_how_much_of_the_dataset_it_carries(
+        client, auth, project_id):
+    body = client.get(f"/api/v1/projects/{project_id}/export/tickets",
+                      headers=auth).json()
+    assert body["cap"] == 50_000
+    assert body["available"] >= body["count"]
+    assert body["truncated"] is False
+    assert "whole dataset" in body["message"]
+
+
+def test_an_export_that_stops_at_the_cap_says_so(client, auth, project_id,
+                                                 monkeypatch):
+    from app.routers import reports
+    monkeypatch.setattr(reports, "EXPORT_CAP", 5)
+
+    body = client.get(f"/api/v1/projects/{project_id}/export/tickets",
+                      headers=auth).json()
+    assert body["count"] == 5
+    assert body["truncated"] is True
+    assert body["cap"] == 5
+    assert "of" in body["message"] and "cap" in body["message"]
+
+    # And the trail records that it stopped, so an export sent on as complete
+    # can be checked afterwards.
+    latest = client.get("/api/v1/audit",
+                        params={"action": "export", "limit": 1},
+                        headers=auth).json()["items"][0]
+    assert latest["changed"]["truncated"] is True
+    assert latest["changed"]["cap"] == 5
+
+
+def test_a_capped_closeout_package_carries_the_warning_in_it(
+        client, auth, project_id, monkeypatch):
+    import io
+    import zipfile
+    from app.routers import closeout
+    monkeypatch.setattr(closeout, "EXPORT_CAP", 5)
+
+    manifest = client.get(f"/api/v1/projects/{project_id}/closeout/manifest",
+                          headers=auth).json()
+    assert "tickets" in manifest["over_cap"]
+    assert any("export cap" in w for w in manifest["warnings"])
+
+    response = client.get(f"/api/v1/projects/{project_id}/closeout/package",
+                          params={"datasets": "tickets"}, headers=auth)
+    bundle = zipfile.ZipFile(io.BytesIO(response.content))
+    readme = bundle.read(next(n for n in bundle.namelist()
+                              if n.endswith(".txt"))).decode()
+    assert "READ THIS FIRST" in readme
+    assert "row cap" in readme
+
+    body = json.loads(bundle.read(next(n for n in bundle.namelist()
+                                       if n.endswith(".json"))))
+    assert body["truncated"] == ["tickets"]
+    assert body["datasets"]["tickets"]["rows"] == 5
+
+
+def test_the_query_builder_says_when_it_held_rows_back(client, auth, project_id):
+    result = client.post("/api/v1/query/run", headers=auth, json={
+        "source": "tickets", "project_id": str(project_id),
+        "filters": [], "limit": 3,
+    }).json()
+    assert result["returned"] == 3
+    assert result["total"] > 3
+    assert result["truncated"] is True
+    assert "Narrow the filters" in result["message"]
 
 
 def test_a_backwards_range_is_refused_rather_than_silently_empty(

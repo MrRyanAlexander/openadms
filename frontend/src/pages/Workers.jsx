@@ -311,7 +311,10 @@ function PasteImport({ onClose, toast, onDone }) {
 
           <div className="muted" style={{ fontSize: 12.5, lineHeight: 1.6 }}>
             The name split is shown rather than applied silently, because it is sometimes
-            wrong. Fix anything here and it is what gets written.
+            wrong. Fix anything here and it is what gets written. Cells marked{' '}
+            <span className="suggested-key">like this</span> were filled in for you:
+            usernames and monitor IDs are numbered on from what is already issued, so
+            nobody has to invent one, and either can be typed over.
           </div>
 
           <div className="table-wrap" style={{ maxHeight: 380, overflowY: 'auto' }}>
@@ -328,9 +331,14 @@ function PasteImport({ onClose, toast, onDone }) {
                     <td className="dim mono">{r.row}</td>
                     {COLUMNS.map(([key]) => (
                       <td key={key} style={{ padding: 3 }}>
-                        <input className="input" style={{ minWidth: 92, fontSize: 12.5 }}
-                               value={r.values[key] || ''}
-                               onChange={(e) => edit(i, key, e.target.value)} />
+                        <input
+                          className={`input${(r.suggested || []).includes(key)
+                            ? ' suggested' : ''}`}
+                          title={(r.suggested || []).includes(key)
+                            ? 'Filled in for you. Type over it to use your own.' : undefined}
+                          style={{ minWidth: 92, fontSize: 12.5 }}
+                          value={r.values[key] || ''}
+                          onChange={(e) => edit(i, key, e.target.value)} />
                       </td>
                     ))}
                     <td style={{ minWidth: 190 }}>

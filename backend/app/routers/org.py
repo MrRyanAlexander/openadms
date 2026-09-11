@@ -424,15 +424,23 @@ async def _next_monitor_id(conn: Any, prefix: str = "MON-") -> str:
 
     Monitor IDs are system-unique keys printed on every ticket, and the
     walkthrough asked for a suggestion rather than a guess: pasting a crew list
-    with a missing or wrong ID should not be the user's problem to solve."""
-    highest = await conn.fetchval(
-        """
-        SELECT max(substring(monitor_id from '[0-9]+$')::integer)
-          FROM users
-         WHERE monitor_id LIKE $1 || '%'
-           AND substring(monitor_id from '[0-9]+$') IS NOT NULL
-        """, prefix)
-    return f"{prefix}{(highest or 0) + 1:03d}"
+    with a missing or wrong ID should not be the user's problem to solve.
+
+    The next number is checked against what is actually issued rather than taken
+    as one past the highest. IDs entered by hand leave gaps and do not always
+    end in digits, and a candidate that is already taken fails at the write,
+    which is the worst place to find out."""
+    issued = {(r["monitor_id"] or "").upper() for r in await conn.fetch(
+        "SELECT monitor_id FROM users WHERE monitor_id IS NOT NULL")}
+    n = 0
+    for value in issued:
+        if value.startswith(prefix.upper()) and value[len(prefix):].isdigit():
+            n = max(n, int(value[len(prefix):]))
+    while True:
+        n += 1
+        candidate = f"{prefix}{n:03d}"
+        if candidate.upper() not in issued:
+            return candidate
 
 
 def _username_for(row: dict[str, Any], taken: set[str]) -> str:
@@ -470,6 +478,39 @@ async def import_users(body: UserImport, user: CurrentUser,
                    lower(full_name) AS full_name
               FROM users WHERE deleted_at IS NULL
             """)
+        # J1: a monitor ID is a system-unique key printed on every ticket, and
+        # asking somebody pasting a crew list to invent twenty of them is asking
+        # for twenty collisions. The next free number in the sequence is
+        # suggested instead, shown in the preview, and editable like every other
+        # cell before anything is written.
+        issued = await conn.fetch(
+            "SELECT monitor_id FROM users WHERE monitor_id IS NOT NULL")
+
+    # Numbering on from the highest is not enough on its own. An ID that does
+    # not end in digits, or one issued out of sequence, leaves gaps that max+1
+    # walks straight into, and the collision only shows up at the write. So the
+    # whole set is held and every candidate is checked against it.
+    issued_ids = {(r["monitor_id"] or "").upper() for r in issued}
+    taken_monitor_ids = set(issued_ids)
+    # Including the ones inside this paste. A preview suggests IDs for the rows
+    # that need them; the corrected table comes back carrying those suggestions
+    # and one row still blank, and an allocator that only knew what was already
+    # in the database would hand that row an ID another row is about to take.
+    taken_monitor_ids |= {(r.get("monitor_id") or "").strip().upper()
+                          for r in parsed.rows if r.get("monitor_id")}
+    next_monitor = 0
+    for value in taken_monitor_ids:
+        if value.startswith("MON-") and value[4:].isdigit():
+            next_monitor = max(next_monitor, int(value[4:]))
+
+    def suggest_monitor_id() -> str:
+        nonlocal next_monitor
+        while True:
+            next_monitor += 1
+            candidate = f"MON-{next_monitor:03d}"
+            if candidate.upper() not in taken_monitor_ids:
+                taken_monitor_ids.add(candidate.upper())
+                return candidate
 
     taken_usernames = {r["username"].lower() for r in existing}
     by_badge = {(str(r["employer_contractor_id"] or r["employer_name"] or ""),
@@ -484,6 +525,7 @@ async def import_users(body: UserImport, user: CurrentUser,
 
     plan: list[dict[str, Any]] = []
     seen_in_paste: set[str] = set()
+    monitor_ids_in_paste: set[str] = set()
 
     for index, raw in enumerate(parsed.rows):
         problems: list[str] = []
@@ -534,12 +576,33 @@ async def import_users(body: UserImport, user: CurrentUser,
         if username:
             row["username"] = username
 
+        # Suggested, not imposed: numbered on from the highest already issued,
+        # and only for rows that are actually going to create somebody.
+        # A monitor ID somebody typed is checked here rather than left to fail
+        # against a unique index halfway through the write, where the message
+        # names a constraint and not the row.
+        typed_monitor = (row.get("monitor_id") or "").strip().upper()
+        if typed_monitor and match is None:
+            if typed_monitor in monitor_ids_in_paste:
+                problems.append("this monitor ID appears twice in what you pasted")
+            elif typed_monitor in issued_ids:
+                problems.append(
+                    f"monitor ID {row['monitor_id']} already belongs to somebody else")
+            monitor_ids_in_paste.add(typed_monitor)
+
+        suggested_monitor = False
+        if not row.get("monitor_id") and not problems and match is None:
+            row["monitor_id"] = suggest_monitor_id()
+            suggested_monitor = True
+
         plan.append({
             "row": index + 1,
             "action": "skip" if problems else ("update" if match else "create"),
             "existing_id": str(match) if match else None,
             "problems": problems,
             "source_text": source,
+            "suggested": (["monitor_id"] if suggested_monitor else [])
+                         + (["username"] if username and not raw.get("username") else []),
             "values": {k: v for k, v in row.items() if v},
         })
 

@@ -474,6 +474,15 @@ export function QueryBuilder() {
           </div>
 
           <Card flush title={result ? `${fmt.int(result.returned)} of ${fmt.int(result.total)} rows` : 'Results'}>
+            {/* A result that stopped short says so here rather than looking
+                like the whole answer to the question that was asked. */}
+            {result?.truncated && (
+              <div style={{ padding: '11px 16px', borderBottom: '1px solid var(--line-soft)',
+                            background: 'var(--amber-soft)', fontSize: 12.5 }}>
+                <Icon name="alert" size={14} style={{ verticalAlign: '-2px', marginRight: 7 }} />
+                {result.message}
+              </div>
+            )}
             {!result ? (
               <Empty icon="query" title="Nothing run yet">
                 Pick a source, add filters, then run the query. Column names and operators

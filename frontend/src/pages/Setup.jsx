@@ -8,7 +8,7 @@
  */
 import { useState } from 'react'
 import { api, fmt } from '../lib/api'
-import { useApp, useFetch } from '../lib/store'
+import { useApp, useFetch, useListState } from '../lib/store'
 import { PageHeader } from '../components/Shell'
 import { Badge, Card, Empty, ErrorNote, Icon, Loading, Tabs } from '../components/ui'
 import {
@@ -20,7 +20,12 @@ import {
 
 export default function Setup() {
   const { projectId, project, lookups, toast } = useApp()
-  const [tab, setTab] = useState('contractors')
+  // The tab lives in the URL so the dashboard can link straight at the panel
+  // holding a piece of outstanding work, and so the back button walks the tabs
+  // somebody actually opened.
+  const { state, set } = useListState({ tab: 'contractors' })
+  const tab = state.tab
+  const setTab = (next) => set({ tab: next })
 
   const detail = useFetch(() => api.get(`/projects/${projectId}`),
                           [projectId], { skip: !projectId })

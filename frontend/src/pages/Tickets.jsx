@@ -102,7 +102,10 @@ export default function Tickets({ kindFilter }) {
       link.download = `${project?.project_code || 'project'}-tickets.csv`
       link.click()
       URL.revokeObjectURL(link.href)
-      toast('Export ready', `${result.count} rows written to CSV`)
+      // M6: an export that stops at the cap says so, in the place somebody is
+      // already looking, rather than leaving a short file to be noticed later.
+      toast(result.truncated ? 'Export stopped at the cap' : 'Export ready',
+            result.message, result.truncated ? 'err' : undefined)
     } catch (err) {
       toast('Export failed', err.message, 'err')
     }

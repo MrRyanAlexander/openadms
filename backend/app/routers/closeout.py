@@ -227,6 +227,10 @@ MANIFEST_COLUMNS = ["filename", "kind", "title", "belongs_to", "source_url",
 DATASETS = {"tickets": "ticket_overview", "transactions": "transaction_ledger",
             "audit": "audit_trail"}
 
+# The same cap the dataset export uses, named in one place. M6: an export that
+# stops has to say it stopped.
+EXPORT_CAP = 50_000
+
 # Which column a date range means for each export. A range that silently meant
 # something different per dataset would be worse than no range at all.
 DATASET_DATE = {
@@ -358,6 +362,8 @@ async def closeout_manifest(ctx: ProjectContext, user: CurrentUser,
         "date_to": date_to.isoformat() if date_to else None,
         "period": period,
         "package_files": names,
+        "row_cap": EXPORT_CAP,
+        "over_cap": sorted(n for n, c in counts.items() if c > EXPORT_CAP),
         "unverified": [
             {"filename": r["filename"], "title": r["title"],
              "state": r["verification_status"]} for r in unverified],
@@ -373,6 +379,12 @@ async def closeout_manifest(ctx: ProjectContext, user: CurrentUser,
                 ("The project is not marked ready for billing, so the transaction "
                  "export may be incomplete"
                  if readiness and not readiness["ready_for_billing"] else None),
+                # Named before the package is built rather than discovered in
+                # the zip. A date range is the way out, so the warning says so.
+                (f"{', '.join(n for n, c in counts.items() if c > EXPORT_CAP)} "
+                 f"exceeds the {EXPORT_CAP:,} row export cap and will stop there. "
+                 f"Build the package a period at a time to carry all of it"
+                 if any(c > EXPORT_CAP for c in counts.values()) else None),
             ] if w
         ],
     }
@@ -415,12 +427,16 @@ async def closeout_package(ctx: ProjectContext, user: CurrentUser,
         rows = await _manifest_rows(conn, project, template, tokens)
 
         exports: dict[str, tuple[list[str], list[dict]]] = {}
+        available: dict[str, int] = {}
         for name in wanted:
             args: list[Any] = [project["id"]]
             extra = _range_clause(name, date_from, date_to, args)
+            available[name] = int(await conn.fetchval(
+                f"SELECT count(*) FROM {DATASETS[name]} WHERE project_id = $1{extra}",
+                *args) or 0)
             stmt = await conn.prepare(
                 f"SELECT * FROM {DATASETS[name]} WHERE project_id = $1{extra} "
-                f"LIMIT 50000")
+                f"LIMIT {EXPORT_CAP}")
             recs = await stmt.fetch(*args)
             data = db.rows(recs)
             # Headers come from the statement, not from the first row, so a
@@ -457,6 +473,19 @@ async def closeout_package(ctx: ProjectContext, user: CurrentUser,
     else:
         covers = "every record on the project"
 
+    # A dataset that hit the cap is named in the README and in the manifest, at
+    # the top, because the whole risk is somebody sending this to a client as a
+    # complete accounting when fifty thousand is where it stopped.
+    capped = {n: available[n] for n in exports if available[n] > len(exports[n][1])}
+    cap_note = (
+        "NOTHING WAS LEFT OUT. Every row in range is in this package.\n"
+        if not capped else
+        "READ THIS FIRST\n"
+        f"    One or more exports stopped at the {EXPORT_CAP:,} row cap:\n"
+        + "".join(f"        {names[n]}: {len(exports[n][1]):,} of {available[n]:,} rows\n"
+                  for n in capped)
+        + "    Build a second package with a date range to carry the remainder.\n")
+
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr(f"{base}/{names['manifest.csv']}", _csv(MANIFEST_COLUMNS, rows))
@@ -470,6 +499,10 @@ async def closeout_package(ctx: ProjectContext, user: CurrentUser,
             "date_from": date_from.isoformat() if date_from else None,
             "date_to": date_to.isoformat() if date_to else None,
             "files": {k: v for k, v in names.items() if k != "archive"},
+            "row_cap": EXPORT_CAP,
+            "datasets": {n: {"rows": len(exports[n][1]), "available": available[n],
+                             "truncated": n in capped} for n in exports},
+            "truncated": sorted(capped),
             "documents": rows,
             "note": ("Documents live in Box or SharePoint. This package carries "
                      "their links and their verification state, never the files."),
@@ -478,13 +511,16 @@ async def closeout_package(ctx: ProjectContext, user: CurrentUser,
             zf.writestr(f"{base}/data/{names[name]}", _csv(columns, data))
 
         listing = "\n".join(
-            f"data/{names[n]}\n    {len(exports[n][1])} row(s)" for n in exports)
+            f"data/{names[n]}\n    {len(exports[n][1]):,} of {available[n]:,} row(s)"
+            + ("  [CAPPED]" if n in capped else "")
+            for n in exports)
         zf.writestr(f"{base}/{names['readme']}",
                     f"Closeout package for {project['project_code']} "
                     f"({project['name']})\n"
                     f"Generated {stamp} by {user['full_name']}\n"
                     f"Covers: {covers}\n"
                     f"Naming convention: {template}\n\n"
+                    f"{cap_note}\n"
                     f"{names['manifest.csv']}\n"
                     f"    every document this project collected, with the link it "
                     f"lives behind and who verified it\n"

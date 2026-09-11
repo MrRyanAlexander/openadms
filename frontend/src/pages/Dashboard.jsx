@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { api, fmt } from '../lib/api'
 import { useApp, useFetch } from '../lib/store'
 import { PageHeader } from '../components/Shell'
@@ -166,20 +166,25 @@ export default function Dashboard() {
                           ? 'red' : 'amber'}>{data.alerts.length}</Badge>
                       : <Badge tone="green">Clear</Badge>}>
                 {data.alerts?.length ? (
-                  <div className="stack" style={{ gap: 8 }}>
+                  <div className="stack" style={{ gap: 2 }}>
+                    {/* C2: each item opens the screen that holds it, so reading
+                        the tile and doing something about it are one gesture. */}
                     {data.alerts.slice(0, 6).map((a, n) => (
-                      <div key={n} className="row" style={{ gap: 9, alignItems: 'baseline' }}>
+                      <Link key={n} to={a.link || '/setup'} className="alert-row">
                         <Badge tone={a.severity === 'serious' ? 'red' : 'amber'}>
                           {fmt.title(a.kind)}
                         </Badge>
                         <b style={{ fontSize: 13.5 }}>{a.label}</b>
                         <span className="dim" style={{ fontSize: 12.5 }}>{a.detail}</span>
-                      </div>
+                        <div className="spacer" />
+                        <Icon name="chevron" size={13} className="dim" />
+                      </Link>
                     ))}
                     {data.alerts.length > 6 && (
-                      <div className="dim" style={{ fontSize: 12.5 }}>
+                      <Link to="/setup" className="dim"
+                            style={{ fontSize: 12.5, padding: '4px 8px' }}>
                         and {data.alerts.length - 6} more
-                      </div>
+                      </Link>
                     )}
                   </div>
                 ) : (

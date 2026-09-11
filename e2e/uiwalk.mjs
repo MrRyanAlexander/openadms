@@ -154,6 +154,13 @@ await step(page, 'worker-paste-import', async () => {
   if (!/no name in this row/.test(body)) {
     throw new Error('the unusable row is not explained in plain language')
   }
+
+  // J1: nobody should have to invent a monitor ID. The ones filled in are
+  // marked, so they can be trusted at a glance or typed over.
+  const filled = await page.locator('.modal input.suggested').count()
+  if (filled === 0) throw new Error('nothing was suggested, so IDs are still manual')
+  const suggested = await page.locator('.modal input.suggested').first().inputValue()
+  if (!suggested) throw new Error('a cell is marked as filled in but is empty')
   // The bad row stays editable rather than being silently dropped.
   const firstCell = page.locator('.modal table.data tbody tr').nth(2).locator('input').first()
   await firstCell.fill(`Fixed${stamp}`)
@@ -163,7 +170,17 @@ await step(page, 'worker-paste-import', async () => {
     throw new Error('correcting the row did not bring it back into the import')
   }
   await page.click('button:has-text("Import 3 workers")')
-  await page.waitForSelector('.modal', { state: 'detached', timeout: 15000 })
+  // A modal that stays open is showing a refusal. Report what it says, because
+  // "timed out waiting for the modal" names the symptom and not the cause.
+  try {
+    await page.waitForSelector('.modal', { state: 'detached', timeout: 15000 })
+  } catch {
+    const refusal = (await page.locator('.modal').innerText())
+      .split('\n').map((l) => l.trim())
+      .filter((l) => l && !/^Paste a crew list$|^Cancel$|^Import /.test(l))
+      .join(' | ')
+    throw new Error(`the import did not go through: ${refusal.slice(0, 260)}`)
+  }
 
   await page.fill('.search input', `W${stamp}`)
   await page.waitForTimeout(900)
@@ -621,6 +638,19 @@ await step(page, 'dashboard-alerts-tile', async () => {
   if (!/stops the field|does not stop|stops field work/i.test(tile)) {
     throw new Error('the tile should say plainly that it blocks nothing')
   }
+
+  // C2's other half: "each item is a link into the list that holds it."
+  const first = page.locator('.card:has-text("Outstanding") .alert-row').first()
+  if (await first.count() === 0) throw new Error('the outstanding items are not links')
+  await first.click()
+  await page.locator('.topbar h1', { hasText: 'Project Setup' }).first()
+    .waitFor({ timeout: 15000 })
+  await page.waitForTimeout(500)
+  if (!/tab=sites/.test(page.url())) {
+    throw new Error(`the permit did not open the sites panel: ${page.url()}`)
+  }
+  const panel = await page.locator('.main').innerText()
+  if (!/Disposal sites/i.test(panel)) throw new Error('the sites panel did not open')
 })
 
 // C20: the trail splits by domain rather than reading as one undifferentiated
@@ -809,7 +839,7 @@ await step(page, 'a-photo-opens-full-screen', async () => {
   // Not every ticket carries a photograph, so open rows until one does rather
   // than asserting against whichever ticket happens to sort first.
   let shown = 0
-  for (let row = 0; row < 6 && shown === 0; row += 1) {
+  for (let row = 0; row < 12 && shown === 0; row += 1) {
     await page.click(`table.data tbody tr >> nth=${row}`)
     await page.waitForSelector('.drawer', { timeout: 10000 })
     const images = page.locator('.drawer .tabs button:has-text("Images")')
@@ -916,9 +946,23 @@ await step(page, 'wizard-through-to-review', async () => {
 
 await step(page, 'wizard-resumes-on-setup', async () => {
   await page.click('button:has-text("Open the project")')
+  await page.locator('.topbar h1', { hasText: 'Project Setup' }).first()
+    .waitFor({ timeout: 15000 })
   await page.waitForSelector('.card:has-text("Contractors")', { timeout: 15000 })
-  const body = await page.locator('.main').innerText()
-  if (!/Field work is blocked/.test(body)) throw new Error('setup lost the readiness panel')
+  // Readiness is its own fetch, so wait for it rather than reading the page the
+  // instant the tabs appear and calling a race a missing panel.
+  await page.locator('.main').getByText(/Field work is blocked/).first()
+    .waitFor({ timeout: 15000 })
+
+  // The tab is in the URL now, so setup opens where it is asked to open.
+  await page.click('.tabs button:has-text("Disposal sites")')
+  await page.waitForTimeout(500)
+  if (!/tab=sites/.test(page.url())) {
+    throw new Error(`the setup tab is not in the URL: ${page.url()}`)
+  }
+  await page.goBack()
+  await page.waitForTimeout(500)
+  if (/tab=sites/.test(page.url())) throw new Error('back did not leave the sites tab')
 })
 
 await step(page, 'back-to-all-projects', async () => {

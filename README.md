@@ -13,7 +13,7 @@
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4E9BEE?style=flat-square&labelColor=07090C)](docs/DATA_MODEL.md)
 [![Python](https://img.shields.io/badge/Python-3.11+-4E9BEE?style=flat-square&labelColor=07090C)](backend/requirements.txt)
 [![Node](https://img.shields.io/badge/Node-18+-4E9BEE?style=flat-square&labelColor=07090C)](package.json)
-[![Tests](https://img.shields.io/badge/tests-106%20schema%20%2B%2096%20API-8A929E?style=flat-square&labelColor=07090C)](docs/TESTING.md)
+[![Tests](https://img.shields.io/badge/tests-160%20schema%20%2B%20151%20API-8A929E?style=flat-square&labelColor=07090C)](docs/TESTING.md)
 [![PAPPG](https://img.shields.io/badge/built%20for-FEMA%20PA%20debris-8A929E?style=flat-square&labelColor=07090C)](docs/spec/01-product-definition.md)
 
 **[Quick start](#quick-start) · [How it works](#how-it-works) · [Documentation](docs/) · [API](docs/API.md) · [Deploy](docs/DEPLOYMENT.md) · [Contributing](CONTRIBUTING.md)**
@@ -317,11 +317,22 @@ openadms/
 ## Verification
 
 ```bash
-./database/setup.sh --with-demo --test   # 106 schema assertions
-cd backend && python3 -m pytest          # 96 API tests
+./database/setup.sh --with-demo --test   # 160 schema assertions
+cd backend && python3 -m pytest          # 151 API tests
 npm run build                            # both frontends
-npm run test:ui                          # Playwright walk of both apps
+npm run test:ui                          # Playwright walk of the back office
 ```
+
+Every suite is written to be re-runnable against the same database, not only against a fresh one. A test that passes once and then quietly passes for the wrong reason is worse than no test, so anything that mutates the demo data derives its target from the current state rather than from a written-in value.
+
+To work the screens at real volume:
+
+```bash
+npm run db:seed:large            # 25,000 tickets on the demo project
+npm run db:seed:large -- 50000   # a specific number
+```
+
+This is a separate target on purpose. `npm run setup` is untouched and still builds exactly the database the Railway and Netlify path expects; the volume seed runs only when it is asked for by name, states what it is about to do, and prices every ticket it generates through the real rules engine.
 
 The schema suite runs as plain SQL with no pgTAP dependency. Every assertion raises on failure, so the whole file fails loudly under `psql -v ON_ERROR_STOP=1`.
 
