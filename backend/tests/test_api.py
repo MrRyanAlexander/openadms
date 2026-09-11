@@ -1893,3 +1893,50 @@ def test_stumps_are_banded_not_priced_per_inch(client, auth, project_id):
     for t in banded:
         assert float(t["amount"]) == pytest.approx(
             float(t["quantity"]) * float(t["rate_amount"]), rel=1e-6)
+
+
+def test_the_dashboard_compares_production_to_the_estimate(client, auth, project_id):
+    """E1: "are we at sixty percent of the hanger estimate"."""
+    board = client.get(f"/api/v1/projects/{project_id}/dashboard", headers=auth).json()
+    assert board["progress"], "no stream carries an estimate to measure against"
+    for row in board["progress"]:
+        assert "collected" in row and "estimated_quantity" in row
+        if row["estimated_quantity"] and float(row["estimated_quantity"]) > 0:
+            assert row["percent_of_estimate"] is not None
+
+
+def test_the_dashboard_breakdowns_answer_a_period(client, auth, project_id):
+    """E5 and E6: yesterday, and this week, neither of which could be asked."""
+    whole = client.get(f"/api/v1/projects/{project_id}/dashboard",
+                       params={"period": "all"}, headers=auth).json()
+    week = client.get(f"/api/v1/projects/{project_id}/dashboard",
+                      params={"period": "week"}, headers=auth).json()
+
+    def tickets(board):
+        return sum(int(m["tickets"]) for m in board["top_monitors"])
+
+    assert tickets(week) <= tickets(whole)
+    # The headline totals are project to date and must not follow the period,
+    # because "billed to date" has to keep meaning to date.
+    assert whole["summary"]["billable_total"] == week["summary"]["billable_total"]
+
+
+def test_what_expires_is_on_the_dashboard(client, auth, project_id):
+    """E4: the alerts feed lived inside project setup, where nobody looking for
+    "what expires in the next thirty days" would find it."""
+    board = client.get(f"/api/v1/projects/{project_id}/dashboard", headers=auth).json()
+    assert "alerts" in board
+    for a in board["alerts"]:
+        assert a["kind"] in ("permit", "document", "certification")
+        assert a["severity"] in ("review", "serious")
+        assert a["label"] and a["detail"]
+
+
+def test_the_dashboard_says_what_needs_attention(client, auth, project_id):
+    """C1: the data manager's question, on the screen that opens first."""
+    client.post(f"/api/v1/projects/{project_id}/review/scan", headers=auth)
+    board = client.get(f"/api/v1/projects/{project_id}/dashboard", headers=auth).json()
+    review = board["review"]
+    for key in ("unreviewed", "flagged", "serious", "raised"):
+        assert key in review
+    assert "needs_reprocess" in board

@@ -211,6 +211,44 @@ for (const [label, nav] of [
 }
 
 /* -------------------------------------------------------------------------
+ * Sprint 2: the dashboard answering the questions it was asked.
+ * ---------------------------------------------------------------------- */
+
+await step(page, 'the-dashboard-leads-with-what-is-wrong', async () => {
+  await go(page, 'Dashboard', 'Dashboard')
+  await page.waitForSelector('.card.stat', { timeout: 15000 })
+  const body = await page.locator('.main').innerText()
+  if (!/Needs attention|Nothing needs attention/.test(body)) {
+    throw new Error('the dashboard does not open on what needs attention')
+  }
+  if (!/Outstanding work/.test(body)) throw new Error('the outstanding tile is gone')
+  // C2 asked for the explanation to go.
+  if (/None of this stops field work\. It is here so nobody/.test(body)) {
+    throw new Error('the outstanding tile still explains itself at length')
+  }
+})
+
+await step(page, 'production-against-the-estimate', async () => {
+  const body = await page.locator('.main').innerText()
+  if (!/Against the estimate/.test(body)) {
+    throw new Error('E1 has no panel: production against the estimate')
+  }
+  if (!/%/.test(body)) throw new Error('no percentage of estimate is shown')
+})
+
+await step(page, 'the-breakdowns-answer-a-period', async () => {
+  const seg = page.locator('.seg').last()
+  await seg.locator('button:has-text("This week")').click()
+  await page.waitForTimeout(1500)
+  const body = await page.locator('.main').innerText()
+  if (!/the last seven days/.test(body)) {
+    throw new Error('the period selector does not say what it is counting')
+  }
+  await seg.locator('button:has-text("All")').click()
+  await page.waitForTimeout(1200)
+})
+
+/* -------------------------------------------------------------------------
  * Sprint 2: lists that keep their state.
  *
  * C13: "When I filter VOID and then page back back and forward forward I see
@@ -578,7 +616,9 @@ await step(page, 'dashboard-alerts-tile', async () => {
   await page.waitForSelector('.card:has-text("Outstanding")', { timeout: 10000 })
   const tile = await page.locator('.card:has-text("Outstanding")').first().innerText()
   if (!/permit/i.test(tile)) throw new Error('the pending permit is not on the dashboard')
-  if (!/does not stop|stops field work/i.test(tile)) {
+  // C2 asked for the long explanation to go and the promise to stay, so the
+  // assertion follows the shorter wording.
+  if (!/stops the field|does not stop|stops field work/i.test(tile)) {
     throw new Error('the tile should say plainly that it blocks nothing')
   }
 })

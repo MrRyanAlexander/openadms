@@ -17,8 +17,33 @@ router = APIRouter(tags=["reports"])
 
 @router.get("/projects/{project_id}/dashboard")
 async def dashboard(ctx: ProjectContext, user: CurrentUser,
-                    days: int = Query(30, ge=1, le=365)):
+                    days: int = Query(30, ge=1, le=365),
+                    period: str = Query(
+                        "all", pattern="^(yesterday|week|month|all)$",
+                        description="What the breakdowns count, as opposed to "
+                                    "the project-to-date totals")):
+    """The project at a glance.
+
+    Two things the second walkthrough asked for and could not get. Everything
+    except the headline totals now answers a PERIOD: "most active monitors"
+    project-to-date is a vanity number, while yesterday is a management one, and
+    "what is our cubic yard total by contractor this week" had no way to be
+    asked at all. And the streams carry their estimate beside what has been
+    collected against it, which is the "are we at sixty percent of the hanger
+    estimate" question that E1 could not answer from any screen.
+    """
     pid = ctx["project"]["id"]
+
+    # Applied to the breakdowns, never to the project totals: "billed to date"
+    # has to keep meaning to date.
+    window = {
+        "yesterday": "AND COALESCE(completed_at, created_at)::date"
+                     " = (current_date - 1)",
+        "week": "AND COALESCE(completed_at, created_at) > now() - interval '7 days'",
+        "month": "AND COALESCE(completed_at, created_at) > now() - interval '30 days'",
+        "all": "",
+    }[period]
+
     async with db.read() as conn:
         summary = await conn.fetchrow(
             "SELECT * FROM project_dashboard WHERE project_id = $1", pid)
@@ -47,32 +72,32 @@ async def dashboard(ctx: ProjectContext, user: CurrentUser,
             SELECT COALESCE(debris_label, 'Unclassified') AS label,
                    count(*) AS tickets,
                    COALESCE(SUM(billable_cubic_yards), 0) AS cubic_yards
-              FROM ticket_overview WHERE project_id = $1 AND NOT is_void
+              FROM ticket_overview WHERE project_id = $1 AND NOT is_void {window}
              GROUP BY 1 ORDER BY cubic_yards DESC
-            """, pid)
+            """.format(window=window), pid)
         by_contractor = await conn.fetch(
             """
             SELECT COALESCE(contractor_name, 'Unassigned') AS label,
                    count(*) AS tickets,
                    COALESCE(SUM(billable_cubic_yards), 0) AS cubic_yards,
                    COALESCE(SUM(transaction_total), 0) AS billable
-              FROM ticket_overview WHERE project_id = $1 AND NOT is_void
+              FROM ticket_overview WHERE project_id = $1 AND NOT is_void {window}
              GROUP BY 1 ORDER BY billable DESC
-            """, pid)
+            """.format(window=window), pid)
         by_site = await conn.fetch(
             """
             SELECT COALESCE(destination_site_name, 'No site recorded') AS label,
                    count(*) AS tickets,
                    COALESCE(SUM(billable_cubic_yards), 0) AS cubic_yards
-              FROM ticket_overview WHERE project_id = $1 AND NOT is_void
+              FROM ticket_overview WHERE project_id = $1 AND NOT is_void {window}
              GROUP BY 1 ORDER BY cubic_yards DESC
-            """, pid)
+            """.format(window=window), pid)
         top_monitors = await conn.fetch(
             """
             SELECT COALESCE(created_by_name, 'Unknown') AS label, count(*) AS tickets
-              FROM ticket_overview WHERE project_id = $1 AND NOT is_void
+              FROM ticket_overview WHERE project_id = $1 AND NOT is_void {window}
              GROUP BY 1 ORDER BY tickets DESC LIMIT 8
-            """, pid)
+            """.format(window=window), pid)
         open_incidents = await conn.fetch(
             """
             SELECT t.id, t.ticket_number, t.severity, t.is_ongoing, t.notes,
@@ -90,7 +115,98 @@ async def dashboard(ctx: ProjectContext, user: CurrentUser,
               FROM tickets WHERE project_id = $1 AND deleted_at IS NULL
              GROUP BY 1 ORDER BY 1
             """, pid)
+
+        # E1: "are we at sixty percent of the hanger estimate". The estimate has
+        # existed since Sprint 1 and nothing ever compared it to production.
+        progress = await conn.fetch(
+            """
+            SELECT e.debris_type_code, dt.label AS debris_label,
+                   e.estimated_quantity, e.unit_type_code,
+                   ut.abbreviation AS unit_abbrev,
+                   e.confidence, e.as_of_date, e.source,
+                   COALESCE(a.collected, 0) AS collected,
+                   CASE WHEN e.estimated_quantity > 0
+                        THEN round(100.0 * COALESCE(a.collected, 0)
+                                   / e.estimated_quantity, 1)
+                   END AS percent_of_estimate,
+                   (SELECT count(*) FROM project_estimates pe
+                     WHERE pe.project_id = $1
+                       AND pe.debris_type_code = e.debris_type_code) AS revisions
+              FROM project_estimate_current e
+              JOIN debris_types dt ON dt.code = e.debris_type_code
+              LEFT JOIN unit_types ut ON ut.code = e.unit_type_code
+              LEFT JOIN LATERAL (
+                  -- Counted streams are counted; measured ones are volume.
+                  SELECT CASE WHEN e.unit_type_code = 'per_cubic_yard'
+                              THEN COALESCE(sum(o.billable_cubic_yards), 0)
+                              ELSE count(*)::numeric END AS collected
+                    FROM ticket_overview o
+                   WHERE o.project_id = $1 AND NOT o.is_void
+                     AND o.debris_type = e.debris_type_code
+              ) a ON true
+             WHERE e.project_id = $1
+             ORDER BY percent_of_estimate DESC NULLS LAST
+            """, pid)
+
+        # E4: the alerts feed existed and lived inside project setup, where
+        # nobody looking for "what expires in the next thirty days" would find
+        # it.
+        alerts = await conn.fetch(
+            """
+            SELECT kind, label, detail, due_on, severity, days_out FROM (
+                SELECT 'permit' AS kind,
+                       pw.site_name AS label,
+                       'Permit pending'
+                         || COALESCE(', ' || pw.days_since_request::text
+                                     || ' days since it was asked for', '')
+                         AS detail,
+                       NULL::date AS due_on,
+                       CASE WHEN COALESCE(pw.days_since_request, 0) > 21
+                            THEN 'serious' ELSE 'review' END AS severity,
+                       NULL::integer AS days_out
+                  FROM project_permit_watch pw
+                 WHERE pw.project_id = $1 AND pw.permit_status = 'pending'
+                UNION ALL
+                SELECT 'document', d.title,
+                       'Expires ' || to_char(d.expires_on, 'Mon DD'),
+                       d.expires_on,
+                       CASE WHEN d.expires_on < current_date THEN 'serious'
+                            ELSE 'review' END,
+                       (d.expires_on - current_date)::integer
+                  FROM document_watch d
+                 WHERE d.project_id = $1 AND d.expires_on IS NOT NULL
+                   AND d.expires_on <= current_date + 30
+                UNION ALL
+                SELECT 'certification', c.unit_number,
+                       'Certification expires ' || to_char(c.expires_on, 'Mon DD'),
+                       c.expires_on,
+                       CASE WHEN c.is_expired THEN 'serious' ELSE 'review' END,
+                       c.days_to_expiry::integer
+                  FROM project_equipment_current c
+                 WHERE c.project_id = $1 AND c.expires_on IS NOT NULL
+                   AND c.expires_on <= current_date + 30
+            ) a
+             ORDER BY CASE severity WHEN 'serious' THEN 1 ELSE 2 END,
+                      due_on NULLS FIRST
+             LIMIT 25
+            """, pid)
+
+        # C1: the data manager's question, on the screen that opens first.
+        review = await conn.fetchrow(
+            """
+            SELECT count(*) FILTER (WHERE review_state = 'pending')   AS unreviewed,
+                   count(*) FILTER (WHERE open_flags > 0)             AS flagged,
+                   count(*) FILTER (WHERE worst_severity = 'serious') AS serious,
+                   count(*) FILTER (WHERE review_state = 'flagged')   AS raised
+              FROM ticket_review_queue WHERE project_id = $1
+            """, pid)
+
+        reprocess = await conn.fetchval(
+            "SELECT count(*) FROM tickets "
+            " WHERE project_id = $1 AND needs_reprocess AND deleted_at IS NULL", pid)
+
     return {
+        "period": period,
         "summary": db.row(summary),
         "readiness": db.row(readiness),
         "by_day": db.rows(by_day),
@@ -101,6 +217,10 @@ async def dashboard(ctx: ProjectContext, user: CurrentUser,
         "top_monitors": db.rows(top_monitors),
         "open_incidents": db.rows(open_incidents),
         "processing_queue": db.rows(queue),
+        "progress": db.rows(progress),
+        "alerts": db.rows(alerts),
+        "review": db.row(review),
+        "needs_reprocess": int(reprocess or 0),
     }
 
 
