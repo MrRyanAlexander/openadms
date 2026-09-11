@@ -1,27 +1,39 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { api, fmt } from '../lib/api'
-import { useApp, useFetch } from '../lib/store'
+import { useApp, useFetch, useListState } from '../lib/store'
 import { PageHeader } from '../components/Shell'
 import {
   Badge, Card, Confirm, Drawer, Empty, ErrorNote, Field, Icon, Loading, Modal,
   Search, Tabs, useDebounced,
 } from '../components/ui'
 
+const SEVERITY_TONE = {
+  critical: 'red', high: 'red', medium: 'amber', low: 'blue', info: undefined,
+}
+
 const PAGE = 50
+
+const TICKET_DEFAULTS = {
+  q: '', status: '', ticket_type: '', debris_type: '', processing_state: '',
+  date_from: '', date_to: '', sort: 'created_at', dir: 'desc', offset: 0,
+}
 
 export default function Tickets({ kindFilter }) {
   const { projectId, project, can, lookups, toast } = useApp()
   const [params, setParams] = useSearchParams()
-  const [q, setQ] = useState('')
-  const search = useDebounced(q, 320)
-  const [filters, setFilters] = useState({
-    status: '', ticket_type: '', debris_type: '', processing_state: '',
-    date_from: '', date_to: '',
-  })
-  const [sort, setSort] = useState({ key: 'created_at', dir: 'desc' })
-  const [offset, setOffset] = useState(0)
+  // Filters live in the URL. Component state does not survive the back button,
+  // which is what the walkthrough hit: filter to void, page forward and back,
+  // and the filters were gone.
+  const { state: f, set: setF, clear: clearFilters, touched } =
+    useListState(TICKET_DEFAULTS)
+  // The search box is the one control that is not applied as you type. A list
+  // that refetches on every keystroke fights whoever is still typing, so this
+  // holds the draft and submits it.
+  const [draft, setDraft] = useState(f.q)
   const [openId, setOpenId] = useState(params.get('ticket') || null)
+
+  useEffect(() => { setDraft(f.q) }, [f.q])
 
   const types = useFetch(() => api.get('/ticket-types'), [])
   const typeCodes = useMemo(() => {
@@ -29,17 +41,20 @@ export default function Tickets({ kindFilter }) {
     return (types.data?.items || []).filter((t) => t.kind === kindFilter).map((t) => t.code)
   }, [types.data, kindFilter])
 
-  useEffect(() => { setOffset(0) }, [search, filters, projectId, sort])
-
   const query = {
-    q: search || undefined,
+    q: f.q || undefined,
     limit: PAGE,
-    offset,
-    sort: sort.key,
-    direction: sort.dir,
-    ...Object.fromEntries(Object.entries(filters).filter(([, v]) => v)),
+    offset: f.offset,
+    sort: f.sort,
+    direction: f.dir,
+    status: f.status || undefined,
+    ticket_type: f.ticket_type || undefined,
+    debris_type: f.debris_type || undefined,
+    processing_state: f.processing_state || undefined,
+    date_from: f.date_from || undefined,
+    date_to: f.date_to || undefined,
   }
-  if (kindFilter && typeCodes?.length && !filters.ticket_type) {
+  if (kindFilter && typeCodes?.length && !f.ticket_type) {
     query.ticket_type = typeCodes[0]
   }
 
@@ -48,17 +63,27 @@ export default function Tickets({ kindFilter }) {
     [projectId, JSON.stringify(query)], { skip: !projectId })
 
   function toggleSort(key) {
-    setSort((s) => ({ key, dir: s.key === key && s.dir === 'desc' ? 'asc' : 'desc' }))
+    setF({ sort: key, dir: f.sort === key && f.dir === 'desc' ? 'asc' : 'desc' })
   }
 
   function openTicket(id) {
     setOpenId(id)
-    setParams({ ticket: id }, { replace: true })
+    // Merge rather than replace: opening a ticket must not throw away the
+    // filters that found it.
+    setParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.set('ticket', id)
+      return next
+    }, { replace: true })
   }
 
   function closeTicket() {
     setOpenId(null)
-    setParams({}, { replace: true })
+    setParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.delete('ticket')
+      return next
+    }, { replace: true })
   }
 
   async function exportCsv() {
@@ -90,6 +115,7 @@ export default function Tickets({ kindFilter }) {
   }
 
   const title = kindFilter === 'incident' ? 'Incidents' : 'Tickets'
+  const incidents = kindFilter === 'incident'
 
   return (
     <>
@@ -97,53 +123,60 @@ export default function Tickets({ kindFilter }) {
         <button className="btn" onClick={exportCsv}>
           <Icon name="download" size={14} /> Export
         </button>
-        <button className="btn icon" onClick={reload}><Icon name="refresh" size={15} /></button>
       </PageHeader>
 
       <div className="page">
         <Card flush>
           <div className="card-head" style={{ flexWrap: 'wrap', gap: 9 }}>
-            <Search value={q} onChange={setQ}
-                    placeholder="Ticket, truck, driver, address, scale ticket" />
-            <select className="select" style={{ width: 150 }} value={filters.status}
-                    onChange={(e) => setFilters({ ...filters, status: e.target.value })}>
+            <form style={{ display: 'contents' }}
+                  onSubmit={(e) => { e.preventDefault(); setF({ q: draft }) }}>
+              <Search value={draft} onChange={setDraft}
+                      placeholder="Ticket, truck, driver, address, scale ticket" />
+              <button className="btn sm" type="submit">Search</button>
+            </form>
+            <select className="select" style={{ width: 150 }} value={f.status}
+                    onChange={(e) => setF({ status: e.target.value })}>
               <option value="">Any status</option>
               {(lookups?.ticket_statuses || []).map((s) => (
                 <option key={s.code} value={s.code}>{s.label}</option>
               ))}
             </select>
             {!kindFilter && (
-              <select className="select" style={{ width: 160 }} value={filters.ticket_type}
-                      onChange={(e) => setFilters({ ...filters, ticket_type: e.target.value })}>
+              <select className="select" style={{ width: 160 }} value={f.ticket_type}
+                      onChange={(e) => setF({ ticket_type: e.target.value })}>
                 <option value="">Any type</option>
                 {(types.data?.items || []).map((t) => (
                   <option key={t.code} value={t.code}>{t.label}</option>
                 ))}
               </select>
             )}
-            <select className="select" style={{ width: 150 }} value={filters.debris_type}
-                    onChange={(e) => setFilters({ ...filters, debris_type: e.target.value })}>
+            {!incidents && (
+            <select className="select" style={{ width: 150 }} value={f.debris_type}
+                    onChange={(e) => setF({ debris_type: e.target.value })}>
               <option value="">Any debris</option>
               {(lookups?.debris_types || []).map((d) => (
                 <option key={d.code} value={d.code}>{d.label}</option>
               ))}
             </select>
-            <select className="select" style={{ width: 165 }} value={filters.processing_state}
-                    onChange={(e) => setFilters({ ...filters, processing_state: e.target.value })}>
+            )}
+            {!incidents && (
+            <select className="select" style={{ width: 165 }} value={f.processing_state}
+                    onChange={(e) => setF({ processing_state: e.target.value })}>
               <option value="">Any billing state</option>
               {['unprocessed', 'queued', 'processed', 'no_match', 'error', 'excluded'].map((s) => (
                 <option key={s} value={s}>{fmt.title(s)}</option>
               ))}
             </select>
-            <input className="input" type="date" style={{ width: 145 }} value={filters.date_from}
-                   onChange={(e) => setFilters({ ...filters, date_from: e.target.value })} />
-            <input className="input" type="date" style={{ width: 145 }} value={filters.date_to}
-                   onChange={(e) => setFilters({ ...filters, date_to: e.target.value })} />
-            {Object.values(filters).some(Boolean) && (
-              <button className="btn ghost sm" onClick={() => setFilters({
-                status: '', ticket_type: '', debris_type: '', processing_state: '',
-                date_from: '', date_to: '' })}>
-                <Icon name="x" size={13} /> Clear
+            )}
+            <input className="input" type="date" style={{ width: 145 }} value={f.date_from}
+                   aria-label="Completed from"
+                   onChange={(e) => setF({ date_from: e.target.value })} />
+            <input className="input" type="date" style={{ width: 145 }} value={f.date_to}
+                   aria-label="Completed to"
+                   onChange={(e) => setF({ date_to: e.target.value })} />
+            {touched > 0 && (
+              <button className="btn ghost sm" onClick={() => { setDraft(''); clearFilters() }}>
+                <Icon name="x" size={13} /> Clear {touched} filter{touched === 1 ? '' : 's'}
               </button>
             )}
           </div>
@@ -153,7 +186,7 @@ export default function Tickets({ kindFilter }) {
 
           {data && !loading && (
             data.items.length === 0 ? (
-              <Empty icon="truck" title="No tickets match">
+              <Empty icon="truck" title={`No ${title.toLowerCase()} match`}>
                 Adjust the filters, or widen the date range.
               </Empty>
             ) : (
@@ -161,19 +194,32 @@ export default function Tickets({ kindFilter }) {
                 <div className="table-wrap">
                   <table className="data">
                     <thead>
-                      <tr>
-                        <th className="sortable" onClick={() => toggleSort('ticket_number')}>Ticket</th>
-                        <th>Type</th>
-                        <th className="sortable" onClick={() => toggleSort('status')}>Status</th>
-                        <th>Debris</th>
-                        <th>Contractor</th>
-                        <th>Truck</th>
-                        <th className="num sortable" onClick={() => toggleSort('billable_cubic_yards')}>CY</th>
-                        <th className="num">Load call</th>
-                        <th className="num sortable" onClick={() => toggleSort('transaction_total')}>Billed</th>
-                        <th>Billing</th>
-                        <th className="sortable" onClick={() => toggleSort('completed_at')}>Completed</th>
-                      </tr>
+                      {incidents ? (
+                        <tr>
+                          <th className="sortable" onClick={() => toggleSort('ticket_number')}>Ticket</th>
+                          <th>Severity</th>
+                          <th>Category</th>
+                          <th>What happened</th>
+                          <th>Contractor</th>
+                          <th>Where</th>
+                          <th>Open</th>
+                          <th className="sortable" onClick={() => toggleSort('completed_at')}>Filed</th>
+                        </tr>
+                      ) : (
+                        <tr>
+                          <th className="sortable" onClick={() => toggleSort('ticket_number')}>Ticket</th>
+                          <th>Type</th>
+                          <th className="sortable" onClick={() => toggleSort('status')}>Status</th>
+                          <th>Debris</th>
+                          <th>Contractor</th>
+                          <th>Truck</th>
+                          <th className="num sortable" onClick={() => toggleSort('billable_cubic_yards')}>CY</th>
+                          <th className="num">Load call</th>
+                          <th className="num sortable" onClick={() => toggleSort('transaction_total')}>Billed</th>
+                          <th>Billing</th>
+                          <th className="sortable" onClick={() => toggleSort('completed_at')}>Completed</th>
+                        </tr>
+                      )}
                     </thead>
                     <tbody>
                       {data.items.map((t) => (
@@ -182,18 +228,39 @@ export default function Tickets({ kindFilter }) {
                             {t.ticket_number}
                             {t.is_void && <Badge tone="red" >Void</Badge>}
                           </td>
-                          <td>{t.ticket_type_label}</td>
-                          <td><Badge status={t.status} /></td>
-                          <td className="muted">{t.debris_label || '—'}</td>
-                          <td className="truncate" style={{ maxWidth: 170 }}>{t.contractor_name || '—'}</td>
-                          <td className="mono dim">{t.truck_number || '—'}</td>
-                          <td className="num">{t.billable_cubic_yards > 0
-                            ? fmt.number(t.billable_cubic_yards, 1) : '—'}</td>
-                          <td className="num">{t.load_call_pct ? `${fmt.number(t.load_call_pct, 0)}%` : '—'}</td>
-                          <td className="num">{Number(t.transaction_total) !== 0
-                            ? fmt.money(t.transaction_total) : '—'}</td>
-                          <td><Badge status={t.processing_state} /></td>
-                          <td className="muted">{fmt.date(t.completed_at || t.created_at)}</td>
+                          {incidents ? (
+                            <>
+                              <td><Badge tone={SEVERITY_TONE[t.severity]}>
+                                {t.severity ? fmt.title(t.severity) : 'Not set'}
+                              </Badge></td>
+                              <td>{t.incident_category || '—'}</td>
+                              <td className="truncate" style={{ maxWidth: 320 }}
+                                  title={t.notes || ''}>{t.notes || '—'}</td>
+                              <td className="truncate" style={{ maxWidth: 150 }}>
+                                {t.contractor_name || '—'}</td>
+                              <td className="muted truncate" style={{ maxWidth: 170 }}>
+                                {t.origin_address || '—'}</td>
+                              <td>{t.is_ongoing
+                                ? <Badge tone="amber">Ongoing</Badge>
+                                : <span className="dim">Closed</span>}</td>
+                              <td className="muted">{fmt.date(t.completed_at || t.created_at)}</td>
+                            </>
+                          ) : (
+                            <>
+                              <td>{t.ticket_type_label}</td>
+                              <td><Badge status={t.status} /></td>
+                              <td className="muted">{t.debris_label || '—'}</td>
+                              <td className="truncate" style={{ maxWidth: 170 }}>{t.contractor_name || '—'}</td>
+                              <td className="mono dim">{t.truck_number || '—'}</td>
+                              <td className="num">{t.billable_cubic_yards > 0
+                                ? fmt.number(t.billable_cubic_yards, 1) : '—'}</td>
+                              <td className="num">{t.load_call_pct ? `${fmt.number(t.load_call_pct, 0)}%` : '—'}</td>
+                              <td className="num">{Number(t.transaction_total) !== 0
+                                ? fmt.money(t.transaction_total) : '—'}</td>
+                              <td><Badge status={t.processing_state} /></td>
+                              <td className="muted">{fmt.date(t.completed_at || t.created_at)}</td>
+                            </>
+                          )}
                         </tr>
                       ))}
                     </tbody>
@@ -202,17 +269,19 @@ export default function Tickets({ kindFilter }) {
 
                 <div className="pager">
                   <span>
-                    {fmt.int(offset + 1)}–{fmt.int(offset + data.items.length)} of {fmt.int(data.total)}
+                    {fmt.int(f.offset + 1)} to {fmt.int(f.offset + data.items.length)} of {fmt.int(data.total)}
                   </span>
                   <span className="dim">·</span>
                   <span className="dim">
                     {fmt.number(data.totals.cubic_yards, 0)} CY · {fmt.money(data.totals.billable)} billed
                   </span>
                   <div className="spacer" />
-                  <button className="btn sm" disabled={offset === 0}
-                          onClick={() => setOffset(Math.max(0, offset - PAGE))}>Previous</button>
+                  <button className="btn sm" disabled={f.offset === 0}
+                          onClick={() => setF({ offset: Math.max(0, f.offset - PAGE) },
+                                              { keepOffset: true })}>Previous</button>
                   <button className="btn sm" disabled={!data.has_more}
-                          onClick={() => setOffset(offset + PAGE)}>Next</button>
+                          onClick={() => setF({ offset: f.offset + PAGE },
+                                              { keepOffset: true })}>Next</button>
                 </div>
               </>
             )

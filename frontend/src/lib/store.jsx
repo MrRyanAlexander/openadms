@@ -8,6 +8,7 @@
  * the projects list possible.
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { api, prefs, tokens } from './api'
 
 const AppContext = createContext(null)
@@ -169,4 +170,74 @@ export function useFetch(fn, deps = [], { skip = false } = {}) {
   }, [...deps, nonce, skip])
 
   return { data, loading, error, reload: () => setNonce((n) => n + 1), setData }
+}
+
+/**
+ * List state that lives in the URL rather than in a component.
+ *
+ * The walkthrough found the consequence of the alternative: "When I filter VOID
+ * and then page back back and forward forward I see the default list of tickets
+ * again without any filters." Component state does not survive the back button,
+ * a drawer close, or a reload, and it cannot be sent to somebody else. The URL
+ * survives all four, so the query string is the single source of truth for
+ * every filter, sort and page on a list screen.
+ *
+ * Pass the defaults. Anything sitting at its default stays out of the URL, so a
+ * clean list has a clean address and a shared link carries only what was
+ * actually chosen.
+ */
+export function useListState(defaults) {
+  const [params, setParams] = useSearchParams()
+
+  const state = useMemo(() => {
+    const out = { ...defaults }
+    for (const key of Object.keys(defaults)) {
+      const raw = params.get(key)
+      if (raw === null) continue
+      out[key] = typeof defaults[key] === 'number' ? Number(raw) || 0 : raw
+    }
+    return out
+  }, [params, JSON.stringify(defaults)])
+
+  const set = useCallback((patch, opts = {}) => {
+    setParams((prev) => {
+      const next = new URLSearchParams(prev)
+      const merged = { ...patch }
+      // Changing what is being looked at means starting at the first page.
+      // Forgetting that is how a filter lands somebody on an empty page four.
+      if (!('offset' in merged) && !opts.keepOffset) merged.offset = 0
+      for (const [key, value] of Object.entries(merged)) {
+        const isDefault = String(value ?? '') === String(defaults[key] ?? '')
+        if (value === '' || value === null || value === undefined || isDefault) {
+          next.delete(key)
+        } else {
+          next.set(key, String(value))
+        }
+      }
+      return next
+    // Pushed, not replaced. The walkthrough's complaint was about the BACK
+    // BUTTON: "I filter VOID and then page back back and forward forward I see
+    // the default list of tickets again". Back has to walk through the filters
+    // somebody chose, which it cannot do if each choice overwrote the last.
+    }, { replace: opts.replace ?? false })
+  }, [setParams, JSON.stringify(defaults)])
+
+  const clear = useCallback(() => {
+    setParams((prev) => {
+      const next = new URLSearchParams()
+      // Anything not part of this list's own state, such as an open record,
+      // is somebody else's business and is left alone.
+      for (const [key, value] of prev.entries()) {
+        if (!(key in defaults)) next.set(key, value)
+      }
+      return next
+    }, { replace: false })
+  }, [setParams, JSON.stringify(defaults)])
+
+  const touched = useMemo(
+    () => Object.keys(defaults).filter(
+      (key) => key !== 'offset' && params.get(key) !== null).length,
+    [params, JSON.stringify(defaults)])
+
+  return { state, set, clear, touched }
 }

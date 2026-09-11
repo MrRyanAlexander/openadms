@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { api, fmt } from '../lib/api'
-import { useApp, useFetch } from '../lib/store'
+import { useApp, useFetch, useListState } from '../lib/store'
 import { PageHeader } from '../components/Shell'
 import {
   Badge, Card, Empty, ErrorNote, Field, Icon, Loading, Modal, Search, useDebounced,
@@ -350,17 +350,37 @@ function RateModal({ code, lookups, onClose, onSaved }) {
 }
 
 /* ============================== TRANSACTIONS ============================= */
+const TXN_DEFAULTS = {
+  invoice_status: '', contractor_id: '', service_code_id: '',
+  date_from: '', date_to: '', offset: 0,
+}
+
 export function Transactions() {
   const { projectId, project, can, toast } = useApp()
-  const [filters, setFilters] = useState({ invoice_status: '', date_from: '', date_to: '' })
-  const [offset, setOffset] = useState(0)
+  const { state: f, set: setF, clear, touched } = useListState(TXN_DEFAULTS)
   const [reversing, setReversing] = useState(null)
+
+  // E7: "No option to select the contractor so we are just seeing everything."
+  // What is owed to one hauler is the question this screen exists to answer.
+  const contractors = useFetch(
+    () => (projectId ? api.get(`/projects/${projectId}/options/project_contractors`) : null),
+    [projectId])
+  const codes = useFetch(
+    () => (projectId ? api.get(`/projects/${projectId}/options/project_service_codes`) : null),
+    [projectId])
 
   const { data, loading, error, reload } = useFetch(
     () => api.get(`/projects/${projectId}/transactions`, {
-      limit: 100, offset, ...Object.fromEntries(Object.entries(filters).filter(([, v]) => v)),
+      limit: 100,
+      offset: f.offset,
+      invoice_status: f.invoice_status || undefined,
+      contractor_id: f.contractor_id || undefined,
+      service_code_id: f.service_code_id || undefined,
+      date_from: f.date_from || undefined,
+      date_to: f.date_to || undefined,
     }),
-    [projectId, offset, JSON.stringify(filters)], { skip: !projectId })
+    [projectId, f.offset, f.invoice_status, f.contractor_id, f.service_code_id,
+     f.date_from, f.date_to], { skip: !projectId })
 
   if (!projectId) {
     return (<><PageHeader title="Transactions" /><div className="page">
@@ -385,16 +405,40 @@ export function Transactions() {
 
         <Card flush>
           <div className="card-head" style={{ gap: 9, flexWrap: 'wrap' }}>
-            <select className="select" style={{ width: 170 }} value={filters.invoice_status}
-                    onChange={(e) => { setOffset(0); setFilters({ ...filters, invoice_status: e.target.value }) }}>
+            <select className="select" style={{ width: 170 }} value={f.invoice_status}
+                    aria-label="Invoice state"
+                    onChange={(e) => setF({ invoice_status: e.target.value })}>
               <option value="">All transactions</option>
               <option value="uninvoiced">Not yet invoiced</option>
               <option value="invoiced">On an invoice</option>
             </select>
-            <input className="input" type="date" style={{ width: 150 }} value={filters.date_from}
-                   onChange={(e) => setFilters({ ...filters, date_from: e.target.value })} />
-            <input className="input" type="date" style={{ width: 150 }} value={filters.date_to}
-                   onChange={(e) => setFilters({ ...filters, date_to: e.target.value })} />
+            <select className="select" style={{ width: 190 }} value={f.contractor_id}
+                    aria-label="Contractor"
+                    onChange={(e) => setF({ contractor_id: e.target.value })}>
+              <option value="">Any contractor</option>
+              {(contractors.data?.items || []).map((c) => (
+                <option key={c.value} value={c.value}>{c.label}</option>
+              ))}
+            </select>
+            <select className="select" style={{ width: 180 }} value={f.service_code_id}
+                    aria-label="Service code"
+                    onChange={(e) => setF({ service_code_id: e.target.value })}>
+              <option value="">Any service code</option>
+              {(codes.data?.items || []).map((c) => (
+                <option key={c.value} value={c.value}>{c.label}</option>
+              ))}
+            </select>
+            <input className="input" type="date" style={{ width: 150 }} value={f.date_from}
+                   aria-label="Computed from"
+                   onChange={(e) => setF({ date_from: e.target.value })} />
+            <input className="input" type="date" style={{ width: 150 }} value={f.date_to}
+                   aria-label="Computed to"
+                   onChange={(e) => setF({ date_to: e.target.value })} />
+            {touched > 0 && (
+              <button className="btn ghost sm" onClick={clear}>
+                <Icon name="x" size={13} /> Clear {touched}
+              </button>
+            )}
             <div className="spacer" />
             {data?.summary && (
               <div className="row" style={{ gap: 16 }}>
@@ -459,12 +503,14 @@ export function Transactions() {
                 </table>
               </div>
               <div className="pager">
-                <span>{fmt.int(offset + 1)}–{fmt.int(offset + data.items.length)} of {fmt.int(data.total)}</span>
+                <span>{fmt.int(f.offset + 1)} to {fmt.int(f.offset + data.items.length)} of {fmt.int(data.total)}</span>
                 <div className="spacer" />
-                <button className="btn sm" disabled={offset === 0}
-                        onClick={() => setOffset(Math.max(0, offset - 100))}>Previous</button>
+                <button className="btn sm" disabled={f.offset === 0}
+                        onClick={() => setF({ offset: Math.max(0, f.offset - 100) },
+                                            { keepOffset: true })}>Previous</button>
                 <button className="btn sm" disabled={!data.has_more}
-                        onClick={() => setOffset(offset + 100)}>Next</button>
+                        onClick={() => setF({ offset: f.offset + 100 },
+                                            { keepOffset: true })}>Next</button>
               </div>
             </>
           ))}

@@ -211,6 +211,83 @@ for (const [label, nav] of [
 }
 
 /* -------------------------------------------------------------------------
+ * Sprint 2: lists that keep their state.
+ *
+ * C13: "When I filter VOID and then page back back and forward forward I see
+ * the default list of tickets again without any filters."
+ * ---------------------------------------------------------------------- */
+
+await step(page, 'filters-survive-the-back-button', async () => {
+  await go(page, 'Tickets', 'Tickets')
+  await page.waitForSelector('table.data tbody tr', { timeout: 15000 })
+  await page.selectOption('.card-head select >> nth=0', 'completed')
+  await page.waitForTimeout(900)
+  if (!page.url().includes('status=completed')) {
+    throw new Error('the filter is not in the address, so nothing can restore it')
+  }
+  const filtered = await page.locator('table.data tbody tr').count()
+
+  await page.click('button:has-text("Next")')
+  await page.waitForTimeout(900)
+  await page.goBack()
+  await page.waitForTimeout(1200)
+
+  const after = await page.locator('.card-head select').first().inputValue()
+  if (after !== 'completed') {
+    throw new Error('the filter was lost going back a page')
+  }
+  if (await page.locator('table.data tbody tr').count() !== filtered) {
+    throw new Error('the list came back showing something else')
+  }
+})
+
+await step(page, 'search-waits-to-be-submitted', async () => {
+  const before = await page.locator('table.data tbody tr').count()
+  await page.fill('.card-head input[type="search"], .card-head input', 'STL')
+  await page.waitForTimeout(900)
+  // Nothing should have moved yet: a list that refetches on every keystroke
+  // fights whoever is still typing.
+  if (page.url().includes('q=STL')) {
+    throw new Error('the search applied itself before it was submitted')
+  }
+  await page.click('.card-head button:has-text("Search")')
+  await page.waitForTimeout(1200)
+  if (!page.url().includes('q=STL')) throw new Error('submitting the search did nothing')
+  await page.click('button:has-text("Clear")')
+  await page.waitForTimeout(900)
+})
+
+await step(page, 'an-incident-is-not-a-load-ticket', async () => {
+  await go(page, 'Incidents', 'Incidents')
+  await page.waitForSelector('table.data tbody tr', { timeout: 15000 })
+  const head = (await page.locator('table.data thead').first().innerText()).toLowerCase()
+  for (const col of ['severity', 'what happened']) {
+    if (!head.includes(col)) throw new Error(`the incident list is missing ${col}`)
+  }
+  for (const col of ['load call', 'cy']) {
+    if (head.includes(col)) {
+      throw new Error(`the incident list still shows ${col}, which an incident has none of`)
+    }
+  }
+})
+
+await step(page, 'transactions-can-be-narrowed-to-one-contractor', async () => {
+  await go(page, 'Transactions', 'Transactions')
+  await page.waitForSelector('table.data tbody tr', { timeout: 15000 })
+  const all = await page.locator('table.data tbody tr').count()
+  const picker = page.locator('.card-head select').nth(1)
+  const options = await picker.locator('option').count()
+  if (options < 2) throw new Error('there is no contractor to choose')
+  await picker.selectOption({ index: 1 })
+  await page.waitForTimeout(1200)
+  if (!page.url().includes('contractor_id=')) {
+    throw new Error('the contractor filter is not in the address')
+  }
+  const narrowed = await page.locator('table.data tbody tr').count()
+  if (narrowed > all) throw new Error('narrowing produced more rows')
+})
+
+/* -------------------------------------------------------------------------
  * Sprint 2: the money surfaces.
  *
  * Suite H judged this screen the way the recipient would, and found no way to
