@@ -44,6 +44,7 @@ const PROJECT_NAV = [
   { group: 'Operations', items: [
     { to: '/', label: 'Dashboard', icon: 'dashboard', end: true },
     { to: '/tickets', label: 'Tickets', icon: 'truck' },
+    { to: '/review', label: 'Review', icon: 'check' },
     { to: '/incidents', label: 'Incidents', icon: 'alert' },
   ]},
   { group: 'Project', items: [

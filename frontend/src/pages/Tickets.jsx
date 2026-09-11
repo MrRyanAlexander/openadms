@@ -226,7 +226,7 @@ export default function Tickets({ kindFilter }) {
 }
 
 /* ======================================================================== */
-function TicketDrawer({ ticketId, onClose, onChanged }) {
+export function TicketDrawer({ ticketId, onClose, onChanged }) {
   const { can, toast } = useApp()
   const [tab, setTab] = useState('detail')
   const [voiding, setVoiding] = useState(false)

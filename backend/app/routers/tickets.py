@@ -775,6 +775,9 @@ async def process_queue(ctx: ProjectContext, user: CurrentUser,
         for row in pending:
             created += len(await conn.fetch(
                 "SELECT * FROM adms_process_ticket($1, $2)", row["id"], user["id"]))
+            # Processing is the moment a ticket becomes reviewable work, so the
+            # detectors run here rather than waiting for somebody to ask.
+            await conn.execute("SELECT adms_flag_ticket($1)", row["id"])
     return {"tickets_processed": len(pending), "transactions_created": created}
 
 
@@ -844,6 +847,9 @@ async def reprocess_ticket(ticket_id: uuid.UUID, body: ReprocessBody,
                 ticket_id, body.reason, user["id"], body.force)
         except asyncpg.PostgresError as exc:
             raise _reprocess_refusal(exc) from exc
+        # Re-check after a correction, so a flag the correction fixed visibly
+        # clears rather than sitting in the queue looking unresolved.
+        await conn.execute("SELECT adms_flag_ticket($1)", ticket_id)
         ticket = await _hydrate(conn, ticket_id)
 
     ticket["reprocess"] = {

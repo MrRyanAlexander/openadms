@@ -1600,3 +1600,150 @@ def test_repricing_stops_at_an_approved_invoice(client, auth, analyst_auth, proj
                          json={"reason": "Load call corrected, adjustment agreed",
                                "force": True}, headers=analyst_auth)
     assert forced.status_code == 200
+
+
+# ===========================================================================
+# Sprint 2: ticket review
+#
+# C1 and B12 describe the same screen: "we are hunting for the issues" and
+# "I spend most of my day auditing tickets for accuracy ... and then marking
+# each ticket QC approved or if there is some issue". These cover the detector,
+# the queue and the decision.
+# ===========================================================================
+
+def test_the_detector_finds_things_and_says_why(client, auth, project_id):
+    scan = client.post(f"/api/v1/projects/{project_id}/review/scan", headers=auth)
+    assert scan.status_code == 200
+    body = scan.json()
+    assert body["tickets_checked"] > 0
+    assert body["flags"] > 0, "the demo project has tickets with no photo on them"
+
+    summary = client.get(f"/api/v1/projects/{project_id}/review/summary",
+                         headers=auth).json()
+    assert summary["with_flags"] > 0
+    # The wording is the product here: a reviewer reads this, not a rule name.
+    for flag in summary["by_flag"]:
+        assert flag["label"] and flag["description"]
+        assert flag["severity"] in ("info", "review", "serious")
+
+
+def test_scanning_twice_does_not_duplicate_flags(client, auth, project_id):
+    first = client.post(f"/api/v1/projects/{project_id}/review/scan",
+                        headers=auth).json()
+    second = client.post(f"/api/v1/projects/{project_id}/review/scan",
+                         headers=auth).json()
+    assert second["flags"] == first["flags"]
+
+
+def test_the_queue_leads_with_the_worst(client, auth, project_id):
+    queue = client.get(f"/api/v1/projects/{project_id}/review",
+                       params={"flagged_only": True, "limit": 50},
+                       headers=auth).json()
+    assert queue["total"] > 0
+    rank = {"serious": 1, "review": 2, "info": 3, "none": 4}
+    order = [rank[r["worst_severity"]] for r in queue["items"]]
+    assert order == sorted(order), "the queue is not worst first"
+
+
+def test_a_flag_carries_the_numbers_behind_it(client, auth, project_id):
+    queue = client.get(f"/api/v1/projects/{project_id}/review",
+                       params={"flagged_only": True, "limit": 1}, headers=auth).json()
+    ticket_id = queue["items"][0]["ticket_id"]
+    detail = client.get(f"/api/v1/tickets/{ticket_id}/flags", headers=auth).json()
+    assert detail["flags"], "a flagged ticket with no flag on it"
+    assert detail["flags"][0]["label"]
+    assert isinstance(detail["flags"][0]["detail"], dict)
+
+
+def test_flagging_has_to_say_what_is_wrong(client, manager_auth, auth, project_id):
+    queue = client.get(f"/api/v1/projects/{project_id}/review",
+                       params={"limit": 1}, headers=auth).json()
+    ticket_id = queue["items"][0]["ticket_id"]
+    refused = client.post(f"/api/v1/tickets/{ticket_id}/review",
+                          json={"state": "flagged"}, headers=manager_auth)
+    assert refused.status_code == 400
+    assert refused.json()["error"]["code"] == "issue_required"
+
+
+def test_a_manager_reviews_a_ticket_and_it_leaves_the_queue(
+        client, manager_auth, auth, project_id):
+    queue = client.get(f"/api/v1/projects/{project_id}/review",
+                       params={"state": "pending", "limit": 1}, headers=auth).json()
+    ticket_id = queue["items"][0]["ticket_id"]
+
+    flagged = client.post(
+        f"/api/v1/tickets/{ticket_id}/review",
+        json={"state": "flagged", "issue_code": "photo_missing",
+              "notes": "Monitor needs to re-shoot the pre photo"},
+        headers=manager_auth)
+    assert flagged.status_code == 200
+    assert flagged.json()["review_state"] == "flagged"
+
+    resolved = client.post(
+        f"/api/v1/tickets/{ticket_id}/review",
+        json={"state": "resolved",
+              "resolution": "Photo re-shot and attached, checked against street view"},
+        headers=manager_auth)
+    assert resolved.status_code == 200
+    assert resolved.json()["review_state"] == "resolved"
+    # Resolving settles the flags: the queue stops asking, the history keeps them.
+    assert resolved.json()["open_flags"] == 0
+
+    history = client.get(f"/api/v1/tickets/{ticket_id}/flags",
+                         params={"include_cleared": True}, headers=auth).json()
+    assert any(f["cleared_at"] for f in history["flags"])
+
+
+def test_a_queue_is_worked_in_bulk_not_one_modal_at_a_time(
+        client, manager_auth, auth, project_id):
+    queue = client.get(f"/api/v1/projects/{project_id}/review",
+                       params={"state": "pending", "limit": 5}, headers=auth).json()
+    ids = [r["ticket_id"] for r in queue["items"]]
+    if not ids:
+        pytest.skip("nothing left unreviewed")
+
+    done = client.post(f"/api/v1/projects/{project_id}/review/bulk",
+                       json={"ticket_ids": ids, "state": "approved"},
+                       headers=manager_auth)
+    assert done.status_code == 200
+    assert done.json()["reviewed"] == len(ids)
+
+    after = client.get(f"/api/v1/projects/{project_id}/review",
+                       params={"state": "approved", "limit": 100}, headers=auth).json()
+    approved = {r["ticket_id"] for r in after["items"]}
+    assert set(ids) <= approved
+
+
+def test_monitor_accuracy_is_rate_not_volume(client, auth, project_id):
+    accuracy = client.get(f"/api/v1/projects/{project_id}/monitor-accuracy",
+                          headers=auth).json()
+    assert accuracy["items"], "the demo project has monitors"
+    for m in accuracy["items"]:
+        assert "approval_rate" in m
+        # A monitor is never scored on work nobody has read yet.
+        if m["approved"] == 0 and m["flagged"] == 0:
+            assert m["approval_rate"] is None
+
+
+def test_correcting_a_ticket_re_checks_it(client, manager_auth, analyst_auth,
+                                          auth, project_id):
+    """A correction that fixes a flag should visibly close it, not leave the
+    ticket sitting in the queue looking unresolved."""
+    client.post(f"/api/v1/projects/{project_id}/review/scan", headers=auth)
+    queue = client.get(f"/api/v1/projects/{project_id}/review",
+                       params={"flagged_only": True, "flag_code": "full_load_call",
+                               "state": "all", "limit": 1}, headers=auth).json()
+    if not queue["items"]:
+        pytest.skip("no ticket carries a full load call")
+    ticket_id = queue["items"][0]["ticket_id"]
+
+    client.patch(f"/api/v1/tickets/{ticket_id}",
+                 json={"load_call_pct": 60,
+                       "_reason": "Load call corrected after reviewing the photos"},
+                 headers=manager_auth)
+    client.post(f"/api/v1/tickets/{ticket_id}/reprocess",
+                json={"reason": "Load call corrected"}, headers=analyst_auth)
+
+    after = client.get(f"/api/v1/tickets/{ticket_id}/flags", headers=auth).json()
+    assert not any(f["flag_code"] == "full_load_call" for f in after["flags"]), \
+        "the flag the correction fixed is still open"

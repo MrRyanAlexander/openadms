@@ -70,7 +70,7 @@ export default function Certifications() {
         </div>
 
         {summary && (
-          <div className="stats">
+          <div className="grid c4">
             <Stat label="Certified units" value={fmt.int(summary.certified)} />
             <Stat label="Total capacity" value={`${fmt.number(summary.total_capacity_cy, 0)} CY`} />
             <Stat label="Expiring in 30 days" value={fmt.int(summary.expiring_soon)}

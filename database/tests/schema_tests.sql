@@ -988,6 +988,117 @@ BEGIN
 END
 $sprint2$;
 
+-- =============================================================================
+-- Sprint 2: ticket review. Sandboxed for the same reason the block above is:
+-- the detector writes flags, and setup.sh runs this file.
+-- =============================================================================
+DO $review$
+DECLARE
+    v_project uuid;
+    v_ticket  uuid;
+    v_user    uuid;
+    v_n       integer;
+    v_mark    integer;
+    v_names   text[];
+BEGIN
+    SELECT id INTO v_project FROM projects ORDER BY created_at LIMIT 1;
+    SELECT id INTO v_user FROM users WHERE username = 'manager';
+    SELECT COALESCE(max(n), 0) INTO v_mark FROM _results;
+
+    BEGIN
+        PERFORM pg_temp.check_that('every check has wording a reviewer can read',
+            NOT EXISTS (SELECT 1 FROM ticket_flag_kinds
+                         WHERE coalesce(btrim(label), '') = ''
+                            OR coalesce(btrim(description), '') = ''));
+
+        SELECT count(*) INTO v_n FROM ticket_flag_kinds WHERE is_active;
+        PERFORM pg_temp.check_that('the detector ships with checks to run',
+            v_n >= 10, v_n::text);
+
+        -- Run it over the project.
+        SELECT COALESCE(sum(adms_flag_ticket(id)), 0) INTO v_n
+          FROM tickets WHERE project_id = v_project AND NOT is_void
+                         AND deleted_at IS NULL;
+        PERFORM pg_temp.check_that('the detector finds something in the demo data',
+            v_n > 0, v_n::text);
+
+        PERFORM pg_temp.check_that('a flag carries the numbers behind it',
+            NOT EXISTS (SELECT 1 FROM ticket_flags WHERE detail = '{}'::jsonb));
+
+        -- Idempotence matters: this runs every time anything is processed.
+        SELECT count(*) INTO v_n FROM ticket_flags WHERE cleared_at IS NULL;
+        PERFORM adms_flag_ticket(id) FROM tickets
+         WHERE project_id = v_project AND NOT is_void AND deleted_at IS NULL;
+        PERFORM pg_temp.check_that('re-running the detector does not duplicate flags',
+            (SELECT count(*) FROM ticket_flags WHERE cleared_at IS NULL) = v_n,
+            format('%s then %s', v_n,
+                   (SELECT count(*) FROM ticket_flags WHERE cleared_at IS NULL)));
+
+        PERFORM pg_temp.check_that('a void ticket is never flagged',
+            NOT EXISTS (
+                SELECT 1 FROM ticket_flags f JOIN tickets t ON t.id = f.ticket_id
+                 WHERE t.is_void AND f.cleared_at IS NULL));
+
+        -- A flag that stops being true has to clear itself, or a correction
+        -- looks like it did nothing.
+        SELECT f.ticket_id INTO v_ticket FROM ticket_flags f
+         WHERE f.flag_code = 'full_load_call' AND f.cleared_at IS NULL LIMIT 1;
+        IF v_ticket IS NOT NULL THEN
+            UPDATE tickets SET load_call_pct = 60 WHERE id = v_ticket;
+            PERFORM adms_flag_ticket(v_ticket);
+            PERFORM pg_temp.check_that('a flag clears when it stops being true',
+                NOT EXISTS (SELECT 1 FROM ticket_flags
+                             WHERE ticket_id = v_ticket
+                               AND flag_code = 'full_load_call'
+                               AND cleared_at IS NULL));
+        END IF;
+
+        -- The review decision.
+        SELECT id INTO v_ticket FROM tickets
+         WHERE project_id = v_project AND NOT is_void AND deleted_at IS NULL LIMIT 1;
+
+        PERFORM pg_temp.check_raises('flagging without a claim is refused',
+            format('INSERT INTO ticket_reviews (ticket_id, project_id, state, reviewed_at)
+                    VALUES (%L, %L, ''flagged'', now())', v_ticket, v_project),
+            'flagged_has_a_reason');
+
+        PERFORM pg_temp.check_raises('a decision has to have been made by someone',
+            format('INSERT INTO ticket_reviews (ticket_id, project_id, state)
+                    VALUES (%L, %L, ''approved'')', v_ticket, v_project),
+            'decided_has_an_actor');
+
+        INSERT INTO ticket_reviews (ticket_id, project_id, state, notes,
+                                    reviewed_by, reviewed_by_name, reviewed_at)
+        VALUES (v_ticket, v_project, 'flagged', 'Pre photo is unusable',
+                v_user, 'Luis Ortega', now());
+
+        PERFORM pg_temp.check_that('the queue reflects the decision',
+            (SELECT review_state FROM ticket_review_queue WHERE ticket_id = v_ticket)
+                = 'flagged');
+
+        PERFORM pg_temp.check_that('monitor accuracy scores rate, not volume',
+            (SELECT count(*) FROM information_schema.columns
+              WHERE table_name = 'monitor_accuracy'
+                AND column_name IN ('approval_rate', 'flagged', 'unreviewed')) = 3);
+
+        PERFORM pg_temp.check_that('a monitor with nothing reviewed has no rate',
+            NOT EXISTS (SELECT 1 FROM monitor_accuracy
+                         WHERE approved = 0 AND flagged = 0
+                           AND approval_rate IS NOT NULL));
+
+        SELECT array_agg(name ORDER BY n) INTO v_names
+          FROM _results WHERE n > v_mark;
+        RAISE EXCEPTION 'sandbox' USING ERRCODE = 'ADMS1';
+    EXCEPTION
+        WHEN SQLSTATE 'ADMS1' THEN
+            NULL;
+    END;
+
+    INSERT INTO _results (name, ok, detail)
+    SELECT unnest(COALESCE(v_names, '{}')), true, 'sandboxed';
+END
+$review$;
+
 SELECT
     count(*) FILTER (WHERE ok)     AS passed,
     count(*) FILTER (WHERE NOT ok) AS failed,

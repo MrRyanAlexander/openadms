@@ -211,6 +211,76 @@ for (const [label, nav] of [
 }
 
 /* -------------------------------------------------------------------------
+ * Sprint 2: the review queue.
+ *
+ * C1 and B12 describe the same screen, and this is the one the product did not
+ * have at all: the morning job of hunting for what looks wrong.
+ * ---------------------------------------------------------------------- */
+
+await step(page, 'review-queue', async () => {
+  await go(page, 'Review', 'Review')
+  await page.waitForSelector('.card.stat', { timeout: 15000 })
+  const stats = await page.locator('.card.stat').count()
+  if (stats < 4) throw new Error('review summary tiles missing')
+})
+
+await step(page, 'the-detector-runs-and-reports', async () => {
+  await page.click('button:has-text("Re-check every ticket")')
+  await page.locator('.toast, .toasts').first().waitFor({ timeout: 25000 })
+  await page.waitForTimeout(1200)
+  const body = await page.locator('.main').innerText()
+  if (!/What the checks are finding/i.test(body)) {
+    throw new Error('the screen does not say what the checks found')
+  }
+  // The wording is the product: a reviewer reads a sentence, not a rule name.
+  if (!/No photo|photos for tree work|does not match/i.test(body)) {
+    throw new Error('flags are not described in words a reviewer would use')
+  }
+})
+
+await step(page, 'the-queue-leads-with-the-worst', async () => {
+  await page.waitForSelector('table.data tbody tr', { timeout: 15000 })
+  // Two data tables on this screen: the queue, then monitor accuracy.
+  const head = (await page.locator('table.data thead').first().innerText()).toLowerCase()
+  for (const col of ['ticket', 'monitor', 'what the check saw', 'state']) {
+    if (!head.includes(col)) throw new Error(`the review queue is missing ${col}`)
+  }
+})
+
+await step(page, 'a-ticket-is-approved-from-the-row', async () => {
+  const row = page.locator('table.data tbody tr').first()
+  const ticket = (await row.locator('td').nth(1).innerText()).split('\n')[0].trim()
+  await row.locator('button:has-text("Approve")').click()
+  await page.waitForTimeout(2000)
+  const still = await page.locator(`table.data tbody tr:has-text("${ticket}")`).count()
+  if (still > 0) {
+    throw new Error(`${ticket} is still in the unreviewed queue after approval`)
+  }
+})
+
+await step(page, 'flagging-asks-what-is-wrong', async () => {
+  await page.locator('table.data tbody tr').first()
+    .locator('input[type="checkbox"]').click()
+  await page.click('button:has-text("Flag these")')
+  await page.waitForSelector('.modal', { timeout: 10000 })
+  const flag = page.locator('.modal button:has-text("Flag")').last()
+  if (!(await flag.isDisabled())) {
+    throw new Error('a flag with no issue and no note was accepted')
+  }
+  await page.fill('.modal textarea', 'Monitor needs to re-shoot the pre photo')
+  await flag.click()
+  await page.waitForSelector('.modal', { state: 'detached', timeout: 15000 })
+})
+
+await step(page, 'monitor-accuracy-is-a-rate', async () => {
+  const body = await page.locator('.main').innerText()
+  if (!/Monitor accuracy/i.test(body)) throw new Error('no monitor accuracy panel')
+  if (!/Approval rate over reviewed work/i.test(body)) {
+    throw new Error('the panel does not explain what the rate counts')
+  }
+})
+
+/* -------------------------------------------------------------------------
  * Sprint 2: correcting work the field has already finished.
  *
  * These are the steps the second walkthrough could not perform at all, so they

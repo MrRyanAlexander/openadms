@@ -11,6 +11,7 @@ import Tickets from './pages/Tickets'
 import Rules from './pages/Rules'
 import Setup from './pages/Setup'
 import Certifications from './pages/Certifications'
+import Review from './pages/Review'
 import { Invoices, ServiceCodes, Transactions } from './pages/Money'
 import { Organization } from './pages/Records'
 import Workers from './pages/Workers'
@@ -41,6 +42,7 @@ export default function App() {
         <Route path="projects/new" element={<NewProject />} />
         <Route path="tickets" element={<Tickets />} />
         <Route path="incidents" element={<Tickets kindFilter="incident" />} />
+        <Route path="review" element={<Review />} />
         <Route path="setup" element={<Setup />} />
         <Route path="certifications" element={<Certifications />} />
         <Route path="intake" element={<ContractIntake />} />
