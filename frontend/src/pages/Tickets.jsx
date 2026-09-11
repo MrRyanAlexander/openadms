@@ -5,7 +5,7 @@ import { useApp, useFetch, useListState } from '../lib/store'
 import { PageHeader } from '../components/Shell'
 import {
   Badge, Card, Confirm, Drawer, Empty, ErrorNote, Field, Icon, Loading, Modal,
-  Search, Tabs, useDebounced,
+  rowProps, Search, Tabs, useDebounced,
 } from '../components/ui'
 
 const SEVERITY_TONE = {
@@ -223,7 +223,7 @@ export default function Tickets({ kindFilter }) {
                     </thead>
                     <tbody>
                       {data.items.map((t) => (
-                        <tr key={t.id} className="clickable" onClick={() => openTicket(t.id)}>
+                        <tr key={t.id} {...rowProps(() => openTicket(t.id))}>
                           <td className="mono">
                             {t.ticket_number}
                             {t.is_void && <Badge tone="red" >Void</Badge>}
@@ -862,23 +862,126 @@ function Route({ waypoints }) {
   )
 }
 
+/**
+ * C18: "the images are just icons, i cant actually see anything".
+ *
+ * The photograph is the evidence. A grid of camera glyphs proves a row exists
+ * in a table and nothing about the load, so the tile renders the image itself
+ * and opening one fills the screen with it. An image that will not load says
+ * so and names the link, because a broken photo on a ticket is a real finding
+ * somebody has to chase rather than something to hide behind an icon.
+ */
 function MediaTab({ media }) {
+  const [open, setOpen] = useState(null)
   if (!media.length) {
     return <Empty icon="camera" title="No images attached">
       Photos captured in the field appear here alongside any scanned documents.
     </Empty>
   }
   return (
-    <div className="photo-grid">
-      {media.map((m) => (
-        <div key={m.id} className={`photo${m.is_primary ? ' primary' : ''}`}>
-          <Icon name="camera" size={20} />
-          <div className="cap">
-            {m.description || fmt.title(m.media_kind)}
-            {m.is_primary && ' · primary'}
+    <>
+      <div className="photo-grid">
+        {media.map((m, index) => (
+          <button key={m.id} type="button"
+                  className={`photo${m.is_primary ? ' primary' : ''}`}
+                  onClick={() => setOpen(index)}
+                  aria-label={`Open ${m.description || fmt.title(m.media_kind)}`}>
+            <PhotoThumb item={m} />
+            <div className="cap">
+              {m.description || fmt.title(m.media_kind)}
+              {m.is_primary && ' · primary'}
+            </div>
+          </button>
+        ))}
+      </div>
+      {open !== null && (
+        <Lightbox items={media} index={open} onIndex={setOpen}
+                  onClose={() => setOpen(null)} />
+      )}
+    </>
+  )
+}
+
+function PhotoThumb({ item }) {
+  const [failed, setFailed] = useState(false)
+  const url = item.thumbnail_url || item.storage_url
+  if (failed || !url) {
+    return (
+      <div className="photo-missing" title={url || 'No link recorded'}>
+        <Icon name="camera" size={20} />
+        <span>{url ? 'Will not load' : 'No link'}</span>
+      </div>
+    )
+  }
+  return <img src={url} alt={item.description || 'Ticket photo'} loading="lazy"
+              onError={() => setFailed(true)} />
+}
+
+function Lightbox({ items, index, onIndex, onClose }) {
+  const item = items[index]
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => { setFailed(false) }, [index])
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'Escape') onClose()
+      if (e.key === 'ArrowRight') onIndex((i) => (i + 1) % items.length)
+      if (e.key === 'ArrowLeft') onIndex((i) => (i - 1 + items.length) % items.length)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [items.length, onClose, onIndex])
+
+  const url = item.storage_url
+
+  return (
+    <div className="lightbox" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="lightbox-bar">
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontWeight: 570 }}>
+            {item.description || fmt.title(item.media_kind)}
+          </div>
+          <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>
+            {fmt.title(item.stage_code || '')}
+            {item.captured_at && ` · ${fmt.datetime(item.captured_at)}`}
+            {items.length > 1 && ` · ${index + 1} of ${items.length}`}
           </div>
         </div>
-      ))}
+        <div className="spacer" />
+        {url && (
+          <a className="btn sm" href={url} target="_blank" rel="noreferrer">
+            <Icon name="external" size={13} /> Open original
+          </a>
+        )}
+        <button className="btn ghost icon sm" onClick={onClose} aria-label="Close">
+          <Icon name="x" size={16} />
+        </button>
+      </div>
+
+      <div className="lightbox-stage">
+        {items.length > 1 && (
+          <button className="lightbox-step" aria-label="Previous image"
+                  onClick={() => onIndex((i) => (i - 1 + items.length) % items.length)}>
+            <Icon name="chevron" size={20} style={{ transform: 'rotate(180deg)' }} />
+          </button>
+        )}
+        {failed || !url ? (
+          <div className="photo-missing big">
+            <Icon name="camera" size={34} />
+            <span>{url ? 'This image will not load' : 'No link was recorded'}</span>
+            {url && <code className="mono">{url}</code>}
+          </div>
+        ) : (
+          <img src={url} alt={item.description || 'Ticket photo'}
+               onError={() => setFailed(true)} />
+        )}
+        {items.length > 1 && (
+          <button className="lightbox-step" aria-label="Next image"
+                  onClick={() => onIndex((i) => (i + 1) % items.length)}>
+            <Icon name="chevron" size={20} />
+          </button>
+        )}
+      </div>
     </div>
   )
 }

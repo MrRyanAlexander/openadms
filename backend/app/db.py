@@ -84,7 +84,7 @@ async def dependents_of(conn: Any, table: str, item_id: Any) -> list[dict[str, A
     is covered the day it is added. Archiving a record that something still
     references has to be refused with the reason, because a soft delete does
     not meet the ON DELETE RESTRICT the database would have applied to a real
-    one, and a client that quietly vanishes from under a live contract is the
+    one, and a client that vanishes from under a live contract with no warning is the
     black hole the walkthrough found."""
     refs = await conn.fetch(
         """

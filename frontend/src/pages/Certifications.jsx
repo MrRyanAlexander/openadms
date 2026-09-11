@@ -17,8 +17,8 @@ import { api, fmt } from '../lib/api'
 import { useApp, useFetch } from '../lib/store'
 import { PageHeader } from '../components/Shell'
 import {
-  Badge, Card, Drawer, Empty, ErrorNote, Field, Icon, Loading, Modal, Search,
-  Stat, useDebounced,
+  Badge, Card, Drawer, Empty, ErrorNote, Field, Icon, Loading, Modal, rowProps,
+  Search, Stat, useDebounced,
 } from '../components/ui'
 
 const METHOD_LABEL = {
@@ -113,7 +113,7 @@ export default function Certifications() {
                 </tr></thead>
                 <tbody>
                   {data.items.map((c) => (
-                    <tr key={c.id} className="clickable" onClick={() => setViewing(c)}>
+                    <tr key={c.id} {...rowProps(() => setViewing(c))}>
                       <td>
                         <b>{c.unit_number}</b>
                         {c.certification_number && (

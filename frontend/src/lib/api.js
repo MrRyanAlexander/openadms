@@ -155,9 +155,12 @@ export const api = {
     const blob = await response.blob()
     const link = document.createElement('a')
     link.href = URL.createObjectURL(blob)
-    link.download = filename
-      || (response.headers.get('content-disposition') || '').split('filename=')[1]
-        ?.replace(/"/g, '') || 'download'
+    // The server wins on naming. Closeout packages are named from the project's
+    // own convention, and a name invented here would override it without anyone
+    // seeing, which is the complaint: the convention set did not reach the files.
+    const offered = (response.headers.get('content-disposition') || '')
+      .split('filename=')[1]?.replace(/"/g, '').trim()
+    link.download = offered || filename || 'download'
     link.click()
     URL.revokeObjectURL(link.href)
     return blob.size

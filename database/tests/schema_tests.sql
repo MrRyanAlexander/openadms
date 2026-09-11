@@ -391,10 +391,50 @@ BEGIN
         (SELECT count(*) FROM audit_events
           WHERE entity_type = 'tickets' AND entity_id = v_ticket) = v_n);
 
-    -- A billing-relevant edit re-queues the ticket.
-    UPDATE tickets SET load_call_pct = 55 WHERE id = v_ticket;
+    -- A billing-relevant edit re-queues the ticket. Both halves are derived
+    -- from where the ticket currently sits: a fixed value re-runs as a no-op,
+    -- which changes nothing and so proves nothing.
+    UPDATE tickets SET processing_state = 'processed' WHERE id = v_ticket;
+    UPDATE tickets
+       SET load_call_pct = CASE WHEN load_call_pct = 55 THEN 65 ELSE 55 END
+     WHERE id = v_ticket;
     PERFORM pg_temp.check_that('a billing-relevant edit re-queues the ticket',
         (SELECT processing_state FROM tickets WHERE id = v_ticket) = 'queued');
+
+    -- The domain is derived, not written. Anything else drifts the moment a
+    -- new action is added and somebody forgets to classify it.
+    PERFORM pg_temp.check_that('every audit artifact lands in exactly one domain',
+        NOT EXISTS (SELECT 1 FROM audit_events
+                     WHERE domain NOT IN ('operations', 'billing',
+                                          'records', 'security')));
+
+    PERFORM pg_temp.check_that('the domain is generated, never inserted',
+        (SELECT is_generated FROM information_schema.columns
+          WHERE table_name = 'audit_events' AND column_name = 'domain') = 'ALWAYS');
+
+    PERFORM pg_temp.check_that('signing in is a security artifact',
+        NOT EXISTS (SELECT 1 FROM audit_events
+                     WHERE action IN ('login', 'logout', 'login_failed')
+                       AND domain <> 'security'));
+
+    PERFORM pg_temp.check_that('money movement is a billing artifact',
+        NOT EXISTS (SELECT 1 FROM audit_events
+                     WHERE entity_type IN ('transactions', 'invoices',
+                                           'invoice_lines', 'rates')
+                       AND domain <> 'billing'));
+
+    PERFORM pg_temp.check_that('ticket work is an operations artifact',
+        NOT EXISTS (SELECT 1 FROM audit_events
+                     WHERE entity_type = 'tickets' AND domain <> 'operations'));
+
+    PERFORM pg_temp.check_that('the trail view carries the domain through',
+        EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_name = 'audit_trail' AND column_name = 'domain'));
+
+    PERFORM pg_temp.check_that('the domain is indexed for the tab counts',
+        EXISTS (SELECT 1 FROM pg_indexes
+                 WHERE tablename = 'audit_events'
+                   AND indexdef ILIKE '%(domain,%'));
 
     -- =======================================================================
     -- Invoicing
@@ -884,9 +924,13 @@ BEGIN
         PERFORM pg_temp.check_that('correcting a certification queues the work it priced',
             v_n > 0, v_n::text);
 
-        SELECT id INTO v_ticket FROM tickets
-         WHERE needs_reprocess AND NOT is_void
-           AND processing_state = 'processed' LIMIT 1;
+        -- Not one an approved invoice is holding. The engine is right to refuse
+        -- those, and a suite that picks one is testing the wrong thing.
+        SELECT id INTO v_ticket FROM tickets t
+         WHERE t.needs_reprocess AND NOT t.is_void
+           AND t.processing_state = 'processed'
+           AND NOT EXISTS (SELECT 1 FROM adms_ticket_invoice_lock(t.id))
+         LIMIT 1;
 
         IF v_ticket IS NOT NULL THEN
             SELECT out_old_total, out_new_total INTO v_old, v_new
@@ -1053,9 +1097,21 @@ BEGIN
                                AND cleared_at IS NULL));
         END IF;
 
-        -- The review decision.
-        SELECT id INTO v_ticket FROM tickets
-         WHERE project_id = v_project AND NOT is_void AND deleted_at IS NULL LIMIT 1;
+        -- The review decision. On a ticket nobody has reviewed yet, because a
+        -- review is one row per ticket and the API suite leaves some behind.
+        SELECT t.id INTO v_ticket FROM tickets t
+         WHERE t.project_id = v_project AND NOT t.is_void AND t.deleted_at IS NULL
+           AND NOT EXISTS (SELECT 1 FROM ticket_reviews r WHERE r.ticket_id = t.id)
+         LIMIT 1;
+
+        IF v_ticket IS NULL THEN
+            -- Everything is reviewed. Clear one inside the sandbox rather than
+            -- skipping the assertions that matter most.
+            SELECT id INTO v_ticket FROM tickets
+             WHERE project_id = v_project AND NOT is_void AND deleted_at IS NULL
+             LIMIT 1;
+            DELETE FROM ticket_reviews WHERE ticket_id = v_ticket;
+        END IF;
 
         PERFORM pg_temp.check_raises('flagging without a claim is refused',
             format('INSERT INTO ticket_reviews (ticket_id, project_id, state, reviewed_at)
@@ -1174,8 +1230,17 @@ BEGIN
                 SELECT 1 FROM transactions
                  WHERE round(quantity * rate_amount, 4) <> round(amount, 4)));
 
-        -- The invoice lifecycle.
-        SELECT id INTO v_inv FROM invoices WHERE project_id = v_project LIMIT 1;
+        -- The invoice lifecycle. Both reasons are cleared first: an invoice
+        -- somebody already adjusted carries one, and the rule would then look
+        -- satisfied when nothing had been tested. Inside the sandbox, so the
+        -- clearing is undone with everything else.
+        SELECT id INTO v_inv FROM invoices WHERE project_id = v_project
+         ORDER BY invoice_number LIMIT 1;
+
+        UPDATE invoices
+           SET rejection_reason = NULL, adjustment_reason = NULL,
+               adjustments = 0, status = 'draft'
+         WHERE id = v_inv;
 
         PERFORM pg_temp.check_raises('a rejection has to say why',
             format('UPDATE invoices SET status = ''rejected'' WHERE id = %L', v_inv),

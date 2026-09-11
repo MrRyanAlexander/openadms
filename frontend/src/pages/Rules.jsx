@@ -3,7 +3,7 @@ import { api, fmt } from '../lib/api'
 import { useApp, useFetch } from '../lib/store'
 import { PageHeader } from '../components/Shell'
 import {
-  Badge, Card, Confirm, Empty, ErrorNote, Field, Icon, Loading, Modal,
+  Badge, Card, Confirm, Empty, ErrorNote, Field, Icon, Loading, Modal, rowProps,
 } from '../components/ui'
 
 const BLANK = {
@@ -139,7 +139,7 @@ function hydrate(rule) {
 function RuleRow({ rule, open, onToggle, onEdit, onTest, onRemove }) {
   return (
     <>
-      <tr className="clickable" onClick={onToggle}>
+      <tr {...rowProps(onToggle)}>
         <td className="dim" style={{ textAlign: 'center' }}>
           <Icon name={open ? 'chevronDown' : 'chevron'} size={13} />
         </td>

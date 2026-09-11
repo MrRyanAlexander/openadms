@@ -26,6 +26,29 @@ CREATE TABLE audit_events (
     user_agent    text,
     request_id    text,
     occurred_at   timestamptz NOT NULL DEFAULT now(),
+    -- C20: "billing related audit history is not the same as user or otherwise
+    -- admin level changes and security like logins, all of it matters but we
+    -- need not think it all the same". Derived rather than written, so a new
+    -- table lands in the right place without a write path remembering to say
+    -- so, and a row can never disagree with its own entity type.
+    domain            text GENERATED ALWAYS AS (
+        CASE
+            WHEN action IN ('login', 'logout', 'login_failed') THEN 'security'
+            WHEN entity_type IN ('users', 'user_sessions', 'roles', 'permissions',
+                                 'instance', 'peer_instances', 'visibility_flags')
+                 THEN 'security'
+            WHEN entity_type IN ('transactions', 'invoices', 'invoice_lines',
+                                 'rules', 'rule_statements', 'service_codes',
+                                 'rates', 'rate_tiers', 'contract_line_items',
+                                 'contract_ingestions')
+                 THEN 'billing'
+            WHEN entity_type IN ('tickets', 'ticket_stages', 'ticket_media',
+                                 'ticket_waypoints', 'ticket_reviews',
+                                 'ticket_flags', 'pending_handoffs')
+                 THEN 'operations'
+            ELSE 'records'
+        END) STORED,
+
     CONSTRAINT audit_events_action_valid CHECK (action IN (
         'create', 'update', 'delete', 'void', 'unvoid', 'restore', 'archive',
         'login', 'logout', 'login_failed', 'export', 'process', 'reprocess',
@@ -37,6 +60,12 @@ CREATE INDEX audit_events_entity_idx  ON audit_events (entity_type, entity_id, o
 CREATE INDEX audit_events_project_idx ON audit_events (project_id, occurred_at DESC);
 CREATE INDEX audit_events_actor_idx   ON audit_events (actor_id, occurred_at DESC);
 CREATE INDEX audit_events_changed_gin ON audit_events USING gin (changed jsonb_path_ops);
+
+CREATE INDEX audit_events_domain_idx ON audit_events (domain, occurred_at DESC);
+
+COMMENT ON COLUMN audit_events.domain IS
+    'What kind of change this is. Billing, operations, records or security, so '
+    'somebody checking an invoice is not reading login attempts.';
 
 CREATE TRIGGER trg_audit_events_immutable
     BEFORE UPDATE OR DELETE ON audit_events

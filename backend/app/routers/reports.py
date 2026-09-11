@@ -224,18 +224,30 @@ async def dashboard(ctx: ProjectContext, user: CurrentUser,
     }
 
 
+AUDIT_DOMAINS = ("operations", "billing", "records", "security")
+
+
 @router.get("/audit")
 async def audit_trail(
     paging: Paging, user: CurrentUser,
     project_id: Optional[uuid.UUID] = None,
     entity_type: Optional[str] = None,
     entity_id: Optional[uuid.UUID] = None,
+    domain: Optional[str] = None,
     action: Optional[str] = None,
     actor: Optional[str] = None,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
     _: dict = Depends(require_permission("audit.read")),
 ):
+    """The trail, split four ways.
+
+    A single undifferentiated list of every write is technically complete and
+    practically useless: the person asking who changed a rate is not the person
+    asking who logged in. The domain is computed from the record type, so the
+    split costs nothing to maintain and cannot drift from what actually
+    happened. Counts come back for every domain under the same filters, so the
+    tabs say how much is behind them before anyone clicks."""
     where = ["TRUE"]
     args: list[Any] = []
 
@@ -258,15 +270,115 @@ async def audit_trail(
     if date_to:
         add("occurred_at < (${n}::date + 1)", date_to)
 
-    clause = " AND ".join(where)
+    # The domain clause is kept out of the shared prefix so the tab counts can
+    # be taken across every domain under the same filters.
+    shared, shared_args = " AND ".join(where), list(args)
+    clause = shared
+    if domain in AUDIT_DOMAINS:
+        args.append(domain)
+        clause = f"{shared} AND domain = ${len(args)}"
+
     async with db.read() as conn:
+        counts = await conn.fetch(
+            f"SELECT domain, count(*) AS n FROM audit_trail WHERE {shared} "
+            f"GROUP BY domain", *shared_args)
         total = await conn.fetchval(
             f"SELECT count(*) FROM audit_trail WHERE {clause}", *args)
         recs = await conn.fetch(
             f"SELECT * FROM audit_trail WHERE {clause} ORDER BY occurred_at DESC "
             f"LIMIT ${len(args)+1} OFFSET ${len(args)+2}",
             *args, paging["limit"], paging["offset"])
-    return db.Page.of(db.rows(recs), total, paging["limit"], paging["offset"])
+
+    page = db.Page.of(db.rows(recs), total, paging["limit"], paging["offset"])
+    by_domain = {r["domain"]: int(r["n"]) for r in counts}
+    page["domains"] = {d: by_domain.get(d, 0) for d in AUDIT_DOMAINS}
+    page["domains"]["all"] = sum(by_domain.values())
+    return page
+
+
+# What else belongs in one record's story. An auditor asking what happened to a
+# ticket does not care that the reprice landed on a transaction row: it is the
+# same event to them, so the chain gathers the record's own history and the
+# history of everything that hangs off it.
+_CHAIN_RELATED: dict[str, list[tuple[str, str]]] = {
+    "tickets": [
+        ("transactions", "SELECT id FROM transactions WHERE ticket_id = $1"),
+        ("ticket_reviews", "SELECT id FROM ticket_reviews WHERE ticket_id = $1"),
+        ("ticket_flags", "SELECT id FROM ticket_flags WHERE ticket_id = $1"),
+        ("ticket_media", "SELECT id FROM ticket_media WHERE ticket_id = $1"),
+    ],
+    "invoices": [
+        ("invoice_lines", "SELECT id FROM invoice_lines WHERE invoice_id = $1"),
+    ],
+    "rules": [
+        ("rule_statements", "SELECT id FROM rule_statements WHERE rule_id = $1"),
+    ],
+    "contracts": [
+        ("contract_line_items",
+         "SELECT id FROM contract_line_items WHERE contract_id = $1"),
+        ("rates", "SELECT id FROM rates WHERE contract_id = $1"),
+    ],
+    "projects": [
+        ("project_assignments",
+         "SELECT id FROM project_assignments WHERE project_id = $1"),
+    ],
+}
+
+
+@router.get("/audit/chain")
+async def audit_chain(
+    user: CurrentUser,
+    entity_type: str,
+    entity_id: uuid.UUID,
+    _: dict = Depends(require_permission("audit.read")),
+):
+    """Every artifact touching one record, oldest first.
+
+    The trail answers what changed. The chain answers what happened to this
+    thing, in order, which is the question an auditor actually asks."""
+    async with db.read() as conn:
+        pairs: list[tuple[str, uuid.UUID]] = [(entity_type, entity_id)]
+        related: dict[str, int] = {}
+        for kind, sql in _CHAIN_RELATED.get(entity_type, []):
+            try:
+                ids = await conn.fetch(sql, entity_id)
+            except Exception:      # a table this build does not carry
+                continue
+            if ids:
+                related[kind] = len(ids)
+                pairs.extend((kind, r["id"]) for r in ids)
+
+        types = [p[0] for p in pairs]
+        ids = [p[1] for p in pairs]
+        events = await conn.fetch(
+            """
+            SELECT a.* FROM audit_trail a
+              JOIN unnest($1::text[], $2::uuid[]) AS w(entity_type, entity_id)
+                ON w.entity_type = a.entity_type AND w.entity_id = a.entity_id
+             ORDER BY a.occurred_at, a.id
+             LIMIT 400
+            """, types, ids)
+
+        label = await conn.fetchval(
+            """
+            SELECT entity_label FROM audit_events
+             WHERE entity_type = $1 AND entity_id = $2 AND entity_label IS NOT NULL
+             ORDER BY id DESC LIMIT 1
+            """, entity_type, entity_id)
+
+    rows = db.rows(events)
+    actors = sorted({r["actor"] for r in rows if r["actor"]})
+    return {
+        "entity_type": entity_type,
+        "entity_id": str(entity_id),
+        "entity_label": label,
+        "events": rows,
+        "count": len(rows),
+        "related": related,
+        "actors": actors,
+        "first_at": rows[0]["occurred_at"] if rows else None,
+        "last_at": rows[-1]["occurred_at"] if rows else None,
+    }
 
 
 # ---------------------------------------------------------------------------

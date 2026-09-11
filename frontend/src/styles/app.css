@@ -317,6 +317,30 @@ a { color: inherit; text-decoration: none; }
   transition: background 0.14s var(--ease), color 0.14s var(--ease);
 }
 .seg button.on { background: var(--surface); color: var(--text); box-shadow: var(--shadow-1); }
+/* A segmented control used as tabs across a whole screen rather than as a
+   two-way toggle in a header. It wraps instead of overflowing. */
+.seg.wide { display: flex; flex-wrap: wrap; width: 100%; }
+.seg.wide button { height: 32px; flex: 1 1 auto; }
+
+/* The chain: one record's artifacts down a spine, oldest first. */
+.chain { list-style: none; margin: 0; padding: 0 0 0 20px; position: relative; }
+.chain::before {
+  content: ''; position: absolute; left: 4px; top: 6px; bottom: 6px;
+  width: 2px; background: var(--line-soft); border-radius: 2px;
+}
+.chain li { position: relative; padding: 0 0 14px 0; }
+.chain li:last-child { padding-bottom: 0; }
+.chain-dot {
+  position: absolute; left: -20px; top: 5px; width: 10px; height: 10px;
+  border-radius: 50%; background: var(--accent);
+  box-shadow: 0 0 0 3px var(--surface);
+}
+.chain li.related .chain-dot { background: var(--line); }
+.chain-body {
+  border: 1px solid var(--line-soft); border-radius: 9px;
+  padding: 9px 11px; background: var(--surface);
+}
+.chain li.related .chain-body { background: var(--surface-2); }
 
 /* Badges */
 .badge {
@@ -347,6 +371,17 @@ table.data td { padding: 10px 14px; border-bottom: 1px solid var(--line-soft); v
 table.data tbody tr { transition: background 0.1s var(--ease); }
 table.data tbody tr:hover { background: var(--surface-2); }
 table.data tbody tr.clickable { cursor: pointer; }
+/* M13: a row you can tab to has to look like the one you are on, and Enter on
+   it has to open it. The ring is drawn inside the row because an outline on a
+   <tr> is clipped by the scrolling container it sits in. */
+table.data tbody tr.clickable:focus { outline: none; }
+table.data tbody tr.clickable:focus-visible { background: var(--accent-soft); }
+table.data tbody tr.clickable:focus-visible td { box-shadow: inset 0 1px 0 var(--accent),
+                                                             inset 0 -1px 0 var(--accent); }
+table.data tbody tr.clickable:focus-visible td:first-child { box-shadow:
+    inset 1px 1px 0 var(--accent), inset 0 -1px 0 var(--accent); }
+table.data tbody tr.clickable:focus-visible td:last-child { box-shadow:
+    inset -1px 1px 0 var(--accent), inset 0 -1px 0 var(--accent); }
 table.data tbody tr:last-child td { border-bottom: 0; }
 table.data td.num, table.data th.num { text-align: right; font-variant-numeric: tabular-nums; }
 
@@ -542,6 +577,44 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
 .photo .cap { position: absolute; left: 0; right: 0; bottom: 0; padding: 5px 7px;
               background: linear-gradient(transparent, rgba(0,0,0,0.72)); color: #fff;
               font-size: 10.5px; text-align: left; }
+/* The tile is a button now: it opens the photograph rather than sitting there. */
+button.photo { font: inherit; cursor: pointer; }
+button.photo:hover { border-color: var(--line-strong); }
+button.photo:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.photo img { position: absolute; inset: 0; width: 100%; height: 100%;
+             object-fit: cover; display: block; }
+.photo-missing {
+  display: grid; place-items: center; gap: 5px; padding: 8px;
+  color: var(--text-dim); font-size: 10.5px; text-align: center;
+}
+.photo-missing.big { gap: 10px; font-size: 13px; color: var(--text-muted); }
+.photo-missing.big code { font-size: 11.5px; word-break: break-all; max-width: 420px; }
+
+/* The photograph, full screen. Its own layer rather than a modal, because the
+   image is the content and chrome around it only makes it smaller. */
+.lightbox {
+  position: fixed; inset: 0; z-index: 140; background: rgba(8, 10, 14, 0.93);
+  display: flex; flex-direction: column; animation: fade 0.15s var(--ease);
+}
+.lightbox-bar {
+  display: flex; align-items: center; gap: 10px; padding: 12px 16px; color: #fff;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12); flex: none;
+}
+.lightbox-bar .dim { color: rgba(255, 255, 255, 0.62); }
+.lightbox-bar .btn { background: rgba(255, 255, 255, 0.1); border-color: transparent;
+                     color: #fff; text-decoration: none; }
+.lightbox-bar .btn:hover { background: rgba(255, 255, 255, 0.18); }
+.lightbox-stage {
+  flex: 1; min-height: 0; display: flex; align-items: center; gap: 10px;
+  padding: 16px; justify-content: center;
+}
+.lightbox-stage img { max-width: 100%; max-height: 100%; object-fit: contain;
+                      border-radius: var(--r); }
+.lightbox-step {
+  flex: none; width: 42px; height: 42px; border-radius: 50%; border: 0; cursor: pointer;
+  background: rgba(255, 255, 255, 0.12); color: #fff; display: grid; place-items: center;
+}
+.lightbox-step:hover { background: rgba(255, 255, 255, 0.22); }
 
 .diff { font-family: var(--mono); font-size: 12px; }
 .diff .from { color: var(--red); text-decoration: line-through; opacity: 0.8; }
@@ -558,6 +631,93 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
 
 .print-only { display: none; }
 .print-doc { display: none; }
+
+/* ==========================================================================
+   Phone and tablet.
+
+   M12: "the back office does not navigate on mobile whatsoever and it should
+   be 100% compatible". The sidebar was a fixed 248px column that simply ate
+   the screen, and the toggle that would have moved it did not exist.
+
+   The approach is the same one every screen already uses on a desktop rather
+   than a second set of layouts: the navigation becomes a drawer, the page
+   gutters shrink, filter rows wrap, and every table keeps scrolling inside its
+   own container so the page itself never scrolls sideways.
+   ========================================================================== */
+.nav-toggle { display: none; }
+
+@media (max-width: 900px) {
+  .shell { min-height: 100dvh; }
+
+  .sidebar {
+    position: fixed; top: 0; left: 0; bottom: 0; height: 100dvh;
+    z-index: 120; width: min(280px, 86vw); flex-basis: min(280px, 86vw);
+    transform: translateX(-102%);
+    transition: transform 0.22s var(--ease);
+    box-shadow: var(--shadow-3);
+  }
+  .shell.nav-open .sidebar { transform: translateX(0); }
+
+  .nav-scrim {
+    position: fixed; inset: 0; z-index: 110; border: 0; padding: 0;
+    background: var(--overlay); animation: fade 0.16s var(--ease);
+  }
+
+  .nav-toggle { display: inline-flex; margin-left: -6px; }
+
+  .topbar { padding: 0 12px; gap: 8px; }
+  .topbar h1 { font-size: 15px; }
+  /* The project name and code both in a 360px header leave no room for the
+     actions. The sidebar already names the project in context. */
+  .topbar .crumb { display: none; }
+  .topbar-actions { gap: 6px; }
+
+  .page { padding: 14px 12px; }
+  .page-head { gap: 10px; margin-bottom: 14px; }
+  .page-title { font-size: 18px; }
+
+  .card-head { padding: 12px; flex-wrap: wrap; gap: 8px; }
+  .card-body { padding: 12px; }
+
+  /* A filter bar of fixed-width selects is what pushes a phone layout sideways.
+     Every control in a wrapping row takes the width it is given instead. */
+  .card-head .select, .card-head .input, .card-head .search { width: 100% !important; }
+  .card-head .search { flex: 1 1 160px; min-width: 140px; }
+  .card-head .select, .card-head .input { flex: 1 1 130px; min-width: 120px; }
+  .card-head .spacer { flex-basis: 100%; height: 0; }
+
+  .seg { width: 100%; }
+  .seg button { flex: 1 1 auto; }
+
+  /* Tables scroll in their own container and never widen the page. */
+  .table-wrap { -webkit-overflow-scrolling: touch; max-width: 100%; }
+  table.data { font-size: 12.5px; }
+  table.data th, table.data td { padding: 9px 10px; }
+
+  .backdrop { padding: 0; place-items: end stretch; }
+  .modal, .modal.wide {
+    width: 100%; max-width: 100%; max-height: 92dvh;
+    border-radius: var(--r-xl) var(--r-xl) 0 0;
+    animation: rise 0.2s var(--ease);
+  }
+  .modal-body { padding: 14px; }
+  .modal-head, .modal-foot { padding: 13px 14px; }
+  .modal-foot .btn { flex: 1; }
+
+  .drawer { width: 100%; border-left: 0; }
+
+  .pager { flex-wrap: wrap; gap: 8px; }
+}
+
+@keyframes rise { from { transform: translateY(24px); opacity: 0; } }
+
+/* Narrow phones. Multi-column forms stop pretending to be columns. */
+@media (max-width: 560px) {
+  .grid.c2, .grid.c3, .grid.c4 { grid-template-columns: minmax(0, 1fr); }
+  .page { padding: 12px 10px; }
+  .btn { height: 36px; }
+  .topbar-actions .btn { padding: 0 10px; }
+}
 
 /*
  * Printing an invoice.
@@ -637,4 +797,11 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
   height: 6px; border-radius: 99px; background: var(--surface-2);
   overflow: hidden; margin-top: 5px; border: 1px solid var(--line);
 }
-.meter > span { display: block; height: 100%; border-radius: 99px; }
+.meter > span { display: block; height: 100%; border-radius: 99px;
+                background: var(--accent); }
+.meter.green > span { background: var(--green); }
+.meter.amber > span { background: var(--amber); }
+.meter.red   > span { background: var(--red); }
+/* Inside a table row the meter sits above its own caption, so it loses the
+   top margin it needs when it follows a label. */
+table.data .meter { margin-top: 0; }

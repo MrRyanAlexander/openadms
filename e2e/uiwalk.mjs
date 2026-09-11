@@ -623,6 +623,59 @@ await step(page, 'dashboard-alerts-tile', async () => {
   }
 })
 
+// C20: the trail splits by domain rather than reading as one undifferentiated
+// list of every write in the system.
+await step(page, 'the-audit-trail-splits-by-domain', async () => {
+  await go(page, 'Audit History', 'Audit History')
+  await page.waitForSelector('table.data tbody tr', { timeout: 15000 })
+  const tabs = await page.locator('.seg.wide').first().innerText()
+  for (const name of ['Everything', 'Operations', 'Billing', 'Records', 'Security']) {
+    if (!tabs.includes(name)) throw new Error(`the ${name} domain is missing`)
+  }
+
+  // Counted from the total the screen reports, not from the rows on the first
+  // page: a page cap of sixty makes any two busy tabs look identical.
+  const total = async () => {
+    const text = await page.locator('.card-head').first().innerText()
+    const found = text.match(/([\d,]+)\s+artifacts/)
+    if (!found) throw new Error(`the trail does not report a total: ${text}`)
+    return Number(found[1].replace(/,/g, ''))
+  }
+
+  const all = await total()
+  await page.click('.seg.wide button:has-text("Billing")')
+  await page.waitForTimeout(900)
+  const billing = await total()
+  if (billing === 0) throw new Error('the billing domain is empty')
+  if (billing >= all) throw new Error(`the domain tab did not narrow ${all} down`)
+
+  // The tab has to survive the back button, like every other list filter.
+  await page.goBack()
+  await page.waitForTimeout(900)
+  if (await total() !== all) throw new Error('going back did not restore the whole trail')
+})
+
+// K2: "the chain described here isn't clearly visible.. i just see a list of
+// changes and no way to click and view any updates from the past".
+await step(page, 'a-row-opens-the-records-whole-chain', async () => {
+  await page.click('.seg.wide button:has-text("Operations")')
+  await page.waitForTimeout(800)
+  await page.click('table.data tbody tr:first-child')
+  await page.waitForSelector('.modal', { timeout: 10000 })
+  // Wait for the chain itself, not for the skeleton that stands in for it.
+  await page.waitForSelector('.modal .chain, .modal .empty', { timeout: 10000 })
+
+  const body = await page.locator('.modal').innerText()
+  if (!/oldest first|artifact/i.test(body)) {
+    throw new Error(`the chain does not say what it is showing: ${body.slice(0, 120)}`)
+  }
+  const events = await page.locator('.modal .chain li').count()
+  if (events === 0) throw new Error('the chain is empty on a record that has history')
+
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(400)
+})
+
 await step(page, 'rules-read-as-a-list', async () => {
   await go(page, 'Rules', 'Rules')
   await page.waitForSelector('table.data tbody tr', { timeout: 10000 })
@@ -701,12 +754,127 @@ await step(page, 'closeout-manifest-and-package', async () => {
   const rows = await page.locator('table.data tbody tr').count()
   if (rows < 4) throw new Error(`the manifest lists only ${rows} documents`)
 
+  // K11: the convention has to reach the file on disk, not only the manifest.
+  if (!/What the package will be called/i.test(body)) {
+    throw new Error('the screen does not show what the package files will be named')
+  }
+
   const download = page.waitForEvent('download', { timeout: 30000 })
   await page.click('button:has-text("Build the package")')
   const file = await download
-  if (!/^STL-2026-ROW-closeout-\d{4}-\d{2}-\d{2}\.zip$/.test(file.suggestedFilename())) {
+  if (!/^STL-2026-ROW_closeout_Package_\d{4}-\d{2}-\d{2}\.zip$/.test(file.suggestedFilename())) {
     throw new Error(`unexpected download: ${file.suggestedFilename()}`)
   }
+})
+
+// K13: "Can I package closeout for a date range only? I dont see any way to do
+// this in the UI."
+await step(page, 'closeout-takes-a-date-range', async () => {
+  await page.click('button:has-text("Last 90 days")')
+  await page.waitForTimeout(900)
+  const body = await page.locator('.main').innerText()
+  if (!/on the project/.test(body)) {
+    throw new Error('a narrowed package does not say what it is leaving out')
+  }
+
+  const download = page.waitForEvent('download', { timeout: 30000 })
+  await page.click('button:has-text("Build the package")')
+  const file = await download
+  if (!/-to-\d{4}-\d{2}-\d{2}\.zip$/.test(file.suggestedFilename())) {
+    throw new Error(`the period is not in the filename: ${file.suggestedFilename()}`)
+  }
+
+  await page.click('button:has-text("Whole project")')
+  await page.waitForTimeout(700)
+})
+
+// M13: "if i tab down to a row and press enter it should open that row".
+await step(page, 'enter-opens-a-focused-row', async () => {
+  await page.click('button:has-text("All projects")')
+  await page.waitForSelector('table.data tbody tr', { timeout: 10000 })
+  await page.focus('table.data tbody tr:first-child')
+  const focused = await page.evaluate(() => document.activeElement?.tagName)
+  if (focused !== 'TR') throw new Error(`a row cannot take focus, got ${focused}`)
+  await page.keyboard.press('Enter')
+  await page.waitForSelector('.sidebar .project-switch', { timeout: 10000 })
+  const scope = await page.locator('.project-switch').innerText()
+  if (/All projects/.test(scope)) throw new Error('Enter did not enter the project')
+})
+
+// C18: "the images are just icons, i cant actually see anything".
+await step(page, 'a-photo-opens-full-screen', async () => {
+  await go(page, 'Tickets', 'Tickets')
+  await page.waitForSelector('table.data tbody tr', { timeout: 15000 })
+
+  // Not every ticket carries a photograph, so open rows until one does rather
+  // than asserting against whichever ticket happens to sort first.
+  let shown = 0
+  for (let row = 0; row < 6 && shown === 0; row += 1) {
+    await page.click(`table.data tbody tr >> nth=${row}`)
+    await page.waitForSelector('.drawer', { timeout: 10000 })
+    const images = page.locator('.drawer .tabs button:has-text("Images")')
+    if (await images.count()) {
+      await images.click()
+      await page.waitForTimeout(600)
+      shown = await page.locator('.photo img').count()
+    }
+    if (shown === 0) {
+      await page.keyboard.press('Escape')
+      await page.waitForSelector('.drawer', { state: 'detached', timeout: 10000 })
+    }
+  }
+  if (shown === 0) throw new Error('the images still render as icons')
+
+  await page.click('button.photo:first-child')
+  await page.waitForSelector('.lightbox', { timeout: 8000 })
+  if (await page.locator('.lightbox-stage img').count() === 0) {
+    throw new Error('the lightbox opened without an image in it')
+  }
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(300)
+  if (await page.locator('.lightbox').count() !== 0) {
+    throw new Error('Escape did not close the lightbox')
+  }
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(300)
+})
+
+// M12: "the back office does not navigate on mobile whatsoever and it should
+// be 100% compatible". Walked at phone width, on the real build.
+await step(page, 'the-back-office-navigates-at-phone-width', async () => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.waitForTimeout(500)
+
+  // The sidebar is off screen, and the button that brings it back is not.
+  const hidden = await page.locator('.sidebar').evaluate(
+    (el) => el.getBoundingClientRect().right <= 1)
+  if (!hidden) throw new Error('the sidebar still eats the screen at 390px')
+  if (await page.locator('.nav-toggle').isVisible() === false) {
+    throw new Error('there is no way to open the navigation')
+  }
+
+  await page.click('.nav-toggle')
+  await page.waitForTimeout(400)
+  const open = await page.locator('.sidebar').evaluate(
+    (el) => el.getBoundingClientRect().left >= -1)
+  if (!open) throw new Error('the navigation drawer did not open')
+
+  // Navigating from it closes it, and lands on the screen asked for.
+  await page.click('.sidebar .nav-item:has-text("Invoices")')
+  await page.locator('.topbar h1', { hasText: 'Invoices' }).first()
+    .waitFor({ timeout: 15000 })
+  await page.waitForTimeout(500)
+  if (await page.locator('.nav-scrim').count() !== 0) {
+    throw new Error('the drawer stayed open over the screen it opened')
+  }
+
+  // And the page itself never scrolls sideways.
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+  if (overflow > 2) throw new Error(`the page scrolls sideways by ${overflow}px`)
+
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.waitForTimeout(400)
 })
 
 await step(page, 'new-project-wizard', async () => {

@@ -277,6 +277,20 @@ per the standing decision to rebuild rather than migrate forward.
 | 12.2 | J1 | Monitor ID suggestions in the worker importer instead of requiring the user to invent them |
 | 12.3 | C2 | Copy pass on the tiles the walkthrough called wordy |
 
+### Phase 13. The six notes that did not reach the artifact
+
+Six answers were cut off by a bug in the walkthrough artifact and were supplied
+in full later. Five of them changed what the finding meant.
+
+| | Finding | What the full note said | Change |
+|---|---|---|---|
+| 13.1 | A5 | "We can save a new worker from inside of the organzation, but from the assign worker option inside of projects we dont have the same form or options and are not able to fully create a new user the right way" | The inline create in the assign-worker picker carries the same fields as the Workers form: middle name, instance role, employer contractor, username and initial password. Username and monitor ID are issued when left empty, and the toast says what they came out as |
+| 13.2 | B5 | "It works... However it would be ideal if there is also an edit button on each row so we can either click the row to enter the project dashboard or project setup if we click that button/option on the row" | Row enters the project. A button on the row goes straight to its setup |
+| 13.3 | B6 | "Estimate Vs Completion (some kinda value for that), Days To Project end date, things like that if it makes sense" | Two columns on the projects list, both sortable: volume collected against the volume estimated, and days to the end date. The demo project carries a period of performance so the column means something |
+| 13.4 | B8 | "We are not able to do that because a contract is part of a project" | Already answered in phase 6: contracts are instance-level, the list carries a project count, and the drawer shows every project a contract serves with its line items, documents and NTE burn across all of them. No change needed |
+| 13.5 | C17 | "It is called the lifecycle... but you had it called stages" | Already renamed in phase 7 |
+| 13.6 | F7 | "you correctly figured this one out" | No change |
+
 ---
 
 ## Explicitly out of scope

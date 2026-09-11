@@ -29,7 +29,17 @@ _PROJECT_SELECT = """
                AS permits_pending,
            (SELECT count(*) FROM project_permit_watch pw
              WHERE pw.project_id = p.id AND pw.watch_state = 'overdue')
-               AS permits_overdue
+               AS permits_overdue,
+           -- B6: "which project is furthest behind on billing" has to be
+           -- answerable from this screen alone. Volume estimates only: hangers
+           -- and leaners are counts and do not add to a cubic yard total, so
+           -- summing them together would produce a confident wrong percentage.
+           (SELECT COALESCE(sum(e.estimated_quantity), 0)
+              FROM project_estimate_current e
+             WHERE e.project_id = p.id AND e.unit_type_code = 'per_cubic_yard')
+               AS estimated_cubic_yards,
+           CASE WHEN p.ends_on IS NULL THEN NULL
+                ELSE (p.ends_on - CURRENT_DATE) END AS days_to_end
       FROM projects p
       JOIN clients cl ON cl.id = p.client_id
       LEFT JOIN disasters d ON d.id = p.disaster_id
@@ -55,6 +65,14 @@ _PROJECT_SORTS = {
     "permits":       "permits_pending DESC",
     "started":       "p.starts_on DESC NULLS LAST",
     "updated":       "p.updated_at DESC",
+    # Furthest behind first: the smallest share of the estimate collected.
+    "progress":      ("COALESCE(dash.total_cubic_yards, 0) / NULLIF((SELECT "
+                      "sum(e.estimated_quantity) FROM project_estimate_current e "
+                      "WHERE e.project_id = p.id "
+                      "AND e.unit_type_code = 'per_cubic_yard'), 0) "
+                      "ASC NULLS LAST"),
+    # Closest to its end date first, and projects with no end date last.
+    "days_left":     "p.ends_on ASC NULLS LAST",
 }
 
 

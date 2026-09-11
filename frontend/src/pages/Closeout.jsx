@@ -21,16 +21,50 @@ const DATASETS = [
   ['audit', 'Audit history'],
 ]
 
+const iso = (d) => d.toISOString().slice(0, 10)
+
+// The periods a closeout is actually asked for. A client wants last month, a
+// program wants the quarter, and typing two dates for either is friction
+// nobody needs twice a month.
+const PRESETS = [
+  ['This month', () => {
+    const now = new Date()
+    return { date_from: iso(new Date(now.getFullYear(), now.getMonth(), 1)),
+             date_to: iso(now) }
+  }],
+  ['Last month', () => {
+    const now = new Date()
+    return { date_from: iso(new Date(now.getFullYear(), now.getMonth() - 1, 1)),
+             date_to: iso(new Date(now.getFullYear(), now.getMonth(), 0)) }
+  }],
+  ['Last 90 days', () => {
+    const now = new Date()
+    const from = new Date(now); from.setDate(from.getDate() - 89)
+    return { date_from: iso(from), date_to: iso(now) }
+  }],
+]
+
 export default function Closeout() {
   const { projectId, project, toast } = useApp()
   const [template, setTemplate] = useState(null)
   const [busy, setBusy] = useState(false)
   const [picked, setPicked] = useState({ tickets: true, transactions: true, audit: true })
+  const [range, setRange] = useState({ date_from: '', date_to: '' })
 
-  const naming = useFetch(() => api.get(`/projects/${projectId}/closeout/naming`),
-                          [projectId], { skip: !projectId })
-  const manifest = useFetch(() => api.get(`/projects/${projectId}/closeout/manifest`),
-                            [projectId], { skip: !projectId })
+  const period = { date_from: range.date_from || undefined,
+                   date_to: range.date_to || undefined }
+  const ranged = Boolean(range.date_from || range.date_to)
+  const inverted = Boolean(range.date_from && range.date_to
+                           && range.date_to < range.date_from)
+
+  const naming = useFetch(
+    () => api.get(`/projects/${projectId}/closeout/naming`, period),
+    [projectId, range.date_from, range.date_to],
+    { skip: !projectId || inverted })
+  const manifest = useFetch(
+    () => api.get(`/projects/${projectId}/closeout/manifest`, period),
+    [projectId, range.date_from, range.date_to],
+    { skip: !projectId || inverted })
 
   if (!projectId) {
     return (<><PageHeader title="Closeout" /><div className="page">
@@ -54,11 +88,13 @@ export default function Closeout() {
   async function download() {
     setBusy(true)
     try {
-      const stamp = new Date().toISOString().slice(0, 10)
+      // The server names the archive from the same template it names everything
+      // else with. This is only the fallback if the header does not arrive.
+      const fallback = `${manifest.data?.package_files?.archive
+                          || project?.project_code || 'project'}.zip`
       const size = await api.download(
-        `/projects/${projectId}/closeout/package`,
-        `${project?.project_code || 'project'}-closeout-${stamp}.zip`,
-        { datasets: chosen.join(',') })
+        `/projects/${projectId}/closeout/package`, fallback,
+        { datasets: chosen.join(','), ...period })
       toast('Package built', `${(size / 1024).toFixed(0)} KB downloaded`)
     } catch (err) { toast('Could not build the package', err.message, 'err') }
     finally { setBusy(false) }
@@ -66,14 +102,28 @@ export default function Closeout() {
 
   return (
     <>
-      <PageHeader title="Closeout">
-        <button className="btn primary" disabled={busy || !chosen.length} onClick={download}>
+      <PageHeader title="Closeout"
+                  crumb={ranged ? manifest.data?.period : undefined}>
+        <button className="btn primary"
+                disabled={busy || !chosen.length || inverted} onClick={download}>
           {busy && <span className="spinner" />}
           <Icon name="download" size={14} /> Build the package
         </button>
       </PageHeader>
 
       <div className="page">
+        {inverted && (
+          <div className="card" style={{ padding: '12px 15px', marginBottom: 14,
+                                         borderColor: 'var(--red)' }}>
+            <div className="row" style={{ gap: 9 }}>
+              <Icon name="alert" size={15} />
+              <span style={{ fontSize: 13 }}>
+                The end of the range falls before its start. Fix the dates and the
+                package will build.
+              </span>
+            </div>
+          </div>
+        )}
         {(naming.loading || manifest.loading) && <Loading rows={6} />}
         {manifest.error && <ErrorNote error={manifest.error} onRetry={manifest.reload} />}
 
@@ -86,9 +136,15 @@ export default function Closeout() {
                     tone={manifest.data.unverified.length ? 'amber' : undefined}
                     detail={manifest.data.unverified.length
                       ? 'Named in the manifest, not hidden' : 'All verified'} />
-              <Stat label="Tickets" value={fmt.int(manifest.data.datasets.tickets)} />
+              <Stat label="Tickets" value={fmt.int(manifest.data.datasets.tickets)}
+                    detail={ranged
+                      ? `of ${fmt.int(manifest.data.dataset_totals.tickets)} on the project`
+                      : undefined} />
               <Stat label="Transactions"
-                    value={fmt.int(manifest.data.datasets.transactions)} />
+                    value={fmt.int(manifest.data.datasets.transactions)}
+                    detail={ranged
+                      ? `of ${fmt.int(manifest.data.dataset_totals.transactions)} on the project`
+                      : undefined} />
             </div>
 
             {manifest.data.warnings.length > 0 && (
@@ -125,10 +181,29 @@ export default function Closeout() {
                     )}
                   </div>
                 </Field>
+                {naming.data?.package?.length > 0 && (
+                  <div>
+                    <div className="dim" style={{ fontSize: 11.5, marginBottom: 6 }}>
+                      What the package will be called
+                    </div>
+                    <div className="stack" style={{ gap: 4 }}>
+                      {naming.data.package.map((e) => (
+                        <div key={e.what} className="row" style={{ gap: 8 }}>
+                          <span className="dim" style={{ fontSize: 12, minWidth: 150 }}>
+                            {e.what}
+                          </span>
+                          <span className="mono truncate" style={{ fontSize: 12 }}>
+                            {e.filename}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {naming.data?.examples?.length > 0 && (
                   <div>
                     <div className="dim" style={{ fontSize: 11.5, marginBottom: 6 }}>
-                      What that produces
+                      What the documents in the manifest will be called
                     </div>
                     <div className="stack" style={{ gap: 4 }}>
                       {naming.data.examples.slice(0, 5).map((e, i) => (
@@ -136,17 +211,27 @@ export default function Closeout() {
                           <span className="dim" style={{ fontSize: 12, minWidth: 150 }}>
                             {e.kind}
                           </span>
-                          <span className="mono" style={{ fontSize: 12 }}>{e.filename}</span>
+                          <span className="mono truncate" style={{ fontSize: 12 }}>
+                            {e.filename}
+                          </span>
                         </div>
                       ))}
                     </div>
+                  </div>
+                )}
+                {naming.data?.values && (
+                  <div className="dim" style={{ fontSize: 11.5, lineHeight: 1.7 }}>
+                    Token values on this project:{' '}
+                    {Object.entries(naming.data.values)
+                      .map(([k, v]) => `{${k}} = ${v || 'not set'}`)
+                      .join(' · ')}
                   </div>
                 )}
               </div>
             </Card>
 
             <Card title="What goes in the package">
-              <div className="stack" style={{ gap: 10 }}>
+              <div className="stack" style={{ gap: 12 }}>
                 <div className="row wrap" style={{ gap: 14 }}>
                   {DATASETS.map(([key, label]) => (
                     <label key={key} className="check">
@@ -159,9 +244,37 @@ export default function Closeout() {
                     </label>
                   ))}
                 </div>
+
+                <Field label="Period"
+                       hint="Leave both dates empty for the whole project. A range narrows the exports by ticket date, transaction pricing date and audit date.">
+                  <div className="row wrap" style={{ gap: 8, alignItems: 'center' }}>
+                    <input className="input" type="date" style={{ width: 152 }}
+                           value={range.date_from}
+                           onChange={(e) => setRange({ ...range, date_from: e.target.value })} />
+                    <span className="dim" style={{ fontSize: 12 }}>through</span>
+                    <input className="input" type="date" style={{ width: 152 }}
+                           value={range.date_to}
+                           onChange={(e) => setRange({ ...range, date_to: e.target.value })} />
+                    {ranged && (
+                      <button className="btn sm"
+                              onClick={() => setRange({ date_from: '', date_to: '' })}>
+                        Whole project
+                      </button>
+                    )}
+                    <div className="row wrap" style={{ gap: 6 }}>
+                      {PRESETS.map(([label, make]) => (
+                        <button key={label} className="btn ghost sm"
+                                onClick={() => setRange(make())}>{label}</button>
+                      ))}
+                    </div>
+                  </div>
+                </Field>
+
                 <div className="muted" style={{ fontSize: 12.5, lineHeight: 1.65 }}>
-                  The manifest is always included. The documents themselves are not: they
-                  live in Box or SharePoint, and the manifest names where each one is.
+                  The manifest is always included and is never narrowed by the period: a
+                  document belongs to the project whatever month it was signed in. The
+                  documents themselves are not in the package. They live in Box or
+                  SharePoint, and the manifest names where each one is.
                 </div>
               </div>
             </Card>

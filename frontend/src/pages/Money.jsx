@@ -4,7 +4,8 @@ import { api, fmt } from '../lib/api'
 import { useApp, useFetch, useListState } from '../lib/store'
 import { PageHeader } from '../components/Shell'
 import {
-  Badge, Card, Empty, ErrorNote, Field, Icon, Loading, Modal, Search, useDebounced,
+  Badge, Card, Empty, ErrorNote, Field, Icon, Loading, Modal, rowProps, Search,
+  useDebounced,
 } from '../components/ui'
 
 /* ============================== SERVICE CODES ============================ */
@@ -102,7 +103,7 @@ function ServiceCodeRow({ code, open, onToggle, onEdit, onRate }) {
   const c = code
   return (
     <>
-      <tr className="clickable" onClick={onToggle}>
+      <tr {...rowProps(onToggle)}>
         <td className="dim" style={{ textAlign: 'center' }}>
           <Icon name={open ? 'chevronDown' : 'chevron'} size={13} />
         </td>
@@ -606,7 +607,7 @@ export function Invoices() {
                 </tr></thead>
                 <tbody>
                   {invoices.data.items.map((i) => (
-                    <tr key={i.id} className="clickable" onClick={() => setOpen(i.id)}>
+                    <tr key={i.id} {...rowProps(() => setOpen(i.id))}>
                       <td className="mono">{i.invoice_number}</td>
                       <td>{i.contractor_name}</td>
                       <td className="mono dim">{i.contract_number}</td>

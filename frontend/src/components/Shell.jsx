@@ -1,7 +1,18 @@
-import { useMemo, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useApp } from '../lib/store'
 import { Icon, Modal, Toasts } from './ui'
+
+/**
+ * Whether the navigation is showing on a narrow screen.
+ *
+ * M12: "the back office does not navigate on mobile whatsoever and it should
+ * be 100% compatible". The sidebar is always there on a desktop and slides in
+ * over the page on a phone, which means the button that opens it belongs in
+ * the page header. Kept in its own context rather than in the app store so
+ * opening the menu does not re-render every screen that reads a project.
+ */
+const NavContext = createContext({ open: false, setOpen: () => {} })
 
 /**
  * Two navigation sets, because there are two scopes and it should never be
@@ -72,9 +83,22 @@ export default function Shell() {
           theme, setTheme, toasts } = useApp()
   const [switching, setSwitching] = useState(false)
   const [menu, setMenu] = useState(false)
+  const [navOpen, setNavOpen] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
   const nav = project ? PROJECT_NAV : PORTFOLIO_NAV
+
+  // Going somewhere closes the menu. A navigation drawer left standing over the
+  // screen you just asked for is the most common way a phone layout feels
+  // broken even when every route works.
+  useEffect(() => { setNavOpen(false) }, [location.pathname, location.search])
+
+  useEffect(() => {
+    if (!navOpen) return undefined
+    const onKey = (e) => { if (e.key === 'Escape') setNavOpen(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [navOpen])
 
   function leaveProject() {
     exitProject()
@@ -85,8 +109,15 @@ export default function Shell() {
   const initials = useMemo(() => (user?.full_name || '?')
     .split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase(), [user])
 
+  const navValue = useMemo(() => ({ open: navOpen, setOpen: setNavOpen }), [navOpen])
+
   return (
-    <div className="shell">
+    <NavContext.Provider value={navValue}>
+    <div className={`shell${navOpen ? ' nav-open' : ''}`}>
+      {navOpen && (
+        <button className="nav-scrim" aria-label="Close navigation"
+                onClick={() => setNavOpen(false)} />
+      )}
       <aside className="sidebar">
         <div className="brand">
           <div className="brand-mark">
@@ -234,16 +265,23 @@ export default function Shell() {
 
       <Toasts items={toasts} />
     </div>
+    </NavContext.Provider>
   )
 }
 
 export function PageHeader({ title, sub, children, crumb, scope }) {
   const { project } = useApp()
+  const { setOpen } = useContext(NavContext)
   const label = crumb || (scope === 'portfolio' ? 'All projects'
                           : project ? `${project.project_code} · ${project.name}` : null)
   return (
     <>
       <header className="topbar">
+        {/* Hidden above the breakpoint, where the sidebar is always showing. */}
+        <button className="btn ghost icon nav-toggle" aria-label="Open navigation"
+                onClick={() => setOpen(true)}>
+          <Icon name="menu" size={17} />
+        </button>
         <h1>{title}</h1>
         {label && <span className="crumb">/ {label}</span>}
         <div className="topbar-actions">{children}</div>

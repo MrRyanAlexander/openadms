@@ -13,7 +13,8 @@ import { api, fmt } from '../lib/api'
 import { useApp, useFetch } from '../lib/store'
 import { PageHeader } from '../components/Shell'
 import {
-  Badge, Card, Empty, ErrorNote, Field, Icon, Loading, Modal, Search, useDebounced,
+  Badge, Card, Empty, ErrorNote, Field, Icon, Loading, Modal, rowProps, Search,
+  useDebounced,
 } from '../components/ui'
 
 const ELEVATED_ROLE_RANK = 30
@@ -132,7 +133,7 @@ export default function Workers() {
                 </tr></thead>
                 <tbody>
                   {visible.map((u) => (
-                    <tr key={u.id} className="clickable">
+                    <tr key={u.id} {...rowProps(() => setEditing(u))}>
                       <td onClick={(e) => e.stopPropagation()}>
                         <input type="checkbox" checked={Boolean(picked[u.id])}
                                onChange={(e) => setPicked({ ...picked, [u.id]: e.target.checked })} />

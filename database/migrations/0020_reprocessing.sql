@@ -134,7 +134,7 @@ $$;
 
 COMMENT ON FUNCTION adms_ticket_invoice_lock IS
     'Approved or paid invoices carrying this ticket. Repricing has to stop and '
-    'name them rather than quietly changing a number a client has already '
+    'name them rather than changing a number a client has already '
     'agreed to pay.';
 
 -- ---------------------------------------------------------------------------

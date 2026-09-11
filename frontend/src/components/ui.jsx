@@ -21,6 +21,7 @@ export function Icon({ name, size = 16, strokeWidth = 1.7, ...rest }) {
     plus: 'M12 5v14M5 12h14',
     check: 'm5 12.5 4.5 4.5L19 7',
     x: 'M6 6l12 12M18 6 6 18',
+    menu: 'M4 7h16M4 12h16M4 17h16',
     chevron: 'm9 5 7 7-7 7',
     chevronDown: 'm5 9 7 7 7-7',
     alert: 'M12 9v4m0 4h.01M10.3 3.8 2.5 17.3A2 2 0 0 0 4.2 20.3h15.6a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0Z',
@@ -107,6 +108,38 @@ export function Search({ value, onChange, placeholder = 'Search' }) {
              onChange={(e) => onChange(e.target.value)} />
     </div>
   )
+}
+
+/**
+ * Everything a row needs to behave like the button it already is.
+ *
+ * M13: "if i tab down to a row and press enter it should open that row". A
+ * table row carrying an onClick and nothing else is reachable by mouse only,
+ * which is a problem for anyone working a long queue from the keyboard and a
+ * problem for a screen reader at any length.
+ *
+ * Spread rather than wrapped, because a <tr> cannot be nested inside anything
+ * else without breaking the table:
+ *
+ *   <tr key={t.id} {...rowProps(() => openTicket(t.id))}>
+ *
+ * A control inside the row (a button, a link, a select) stops the event itself,
+ * so pressing Enter on it does that control's job rather than opening the row.
+ */
+export function rowProps(onOpen) {
+  return {
+    className: 'clickable',
+    tabIndex: 0,
+    role: 'button',
+    onClick: onOpen,
+    onKeyDown: (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return
+      if (event.target !== event.currentTarget
+          && event.target.closest('button, a, input, select, textarea')) return
+      event.preventDefault()
+      onOpen(event)
+    },
+  }
 }
 
 export function Empty({ icon = 'inbox', title, children, action }) {

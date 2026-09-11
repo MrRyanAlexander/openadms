@@ -200,13 +200,15 @@ BEGIN
     INSERT INTO projects (name, project_code, client_id, disaster_id,
                           primary_contract_id, status, program_code, program,
                           description,
-                          starts_on, timezone, ticket_prefix,
+                          starts_on, ends_on, timezone, ticket_prefix,
                           owner_instance_key, visibility_flag, created_by)
     VALUES ('St. Louis County ROW Collection', 'STL-2026-ROW', v_client, v_disaster,
             v_contract, 'active', 'row_collection', 'ROW Collection',
             'Right-of-way vegetative and C&D collection across north county '
             'following the spring tornado outbreak.',
-            v_base, 'America/Chicago', 'STL',
+            -- A period of performance, because a debris mission has one and the
+            -- days-remaining column is only honest if the demo carries a date.
+            v_base, v_base + 120, 'America/Chicago', 'STL',
             v_instance_key, 'private', v_admin)
     RETURNING id INTO v_project;
 
@@ -695,7 +697,7 @@ BEGIN
         INSERT INTO ticket_media (ticket_id, stage_code, media_kind, description,
                                   storage_url, is_primary, captured_at, uploaded_by)
         VALUES (v_ticket, 'disposal', 'photo', 'Load call photo',
-                '/media/demo/load-' || i || '.jpg', true,
+                '/media/demo/load.svg', true,
                 (v_day + TIME '08:22'), v_monitors[1 + ((i + 1) % 4)]);
     END LOOP;
 
@@ -744,7 +746,7 @@ BEGIN
         INSERT INTO ticket_media (ticket_id, stage_code, media_kind, description,
                                   storage_url, is_primary, captured_at)
         VALUES (v_ticket, 'haul_out_start', 'photo', 'Bed photo at DMS',
-                '/media/demo/haul-' || i || '.jpg', true, (v_day + TIME '09:18'));
+                '/media/demo/haul.svg', true, (v_day + TIME '09:18'));
     END LOOP;
 
     -- ---- Unit rate tickets ------------------------------------------------
@@ -784,11 +786,11 @@ BEGIN
         INSERT INTO ticket_media (ticket_id, stage_code, media_kind, description,
                                   storage_url, is_primary, captured_at)
         VALUES (v_ticket, 'work', 'photo', 'Before',
-                '/media/demo/stump-' || i || '-before.jpg', true, (v_day + TIME '10:02'));
+                '/media/demo/stump-before.svg', true, (v_day + TIME '10:02'));
         INSERT INTO ticket_media (ticket_id, stage_code, media_kind, description,
                                   storage_url, captured_at)
         VALUES (v_ticket, 'work', 'photo', 'After',
-                '/media/demo/stump-' || i || '-after.jpg', (v_day + TIME '11:08'));
+                '/media/demo/stump-after.svg', (v_day + TIME '11:08'));
     END LOOP;
 
     -- ---- Incident reports -------------------------------------------------

@@ -137,7 +137,10 @@ function NewField({ field, value, onChange }) {
         </select>
       ) : (
         <input className="input"
-               type={field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : 'text'}
+               type={field.type === 'number' ? 'number'
+                     : field.type === 'date' ? 'date'
+                     : field.type === 'password' ? 'password' : 'text'}
+               autoComplete={field.type === 'password' ? 'new-password' : undefined}
                value={value ?? ''} placeholder={field.placeholder}
                onChange={(e) => onChange(e.target.value)} />
       )}
@@ -191,15 +194,36 @@ export const NEW_SITE_FIELDS = [
   { key: 'capacity_cy', label: 'Capacity (CY)', type: 'number' },
 ]
 
+// A5: "from the assign worker option inside of projects we dont have the same
+// form or options and are not able to fully create a new user the right way".
+// The same fields the Workers screen asks for, so a worker created here is a
+// whole worker rather than a stub somebody has to go back and finish.
 export const NEW_WORKER_FIELDS = [
   { key: 'first_name', label: 'First name', required: true },
+  { key: 'middle_name', label: 'Middle name' },
   { key: 'last_name', label: 'Last name', required: true },
+  { key: 'global_role', label: 'Role', type: 'select', required: true,
+    hint: 'What they can do across the instance. The project role is set below.',
+    options: [
+      { value: 'monitor', label: 'Monitor' },
+      { value: 'manager', label: 'Manager' },
+      { value: 'analyst', label: 'Analyst' },
+      { value: 'admin', label: 'Admin' },
+    ] },
   { key: 'employee_id', label: 'Employee ID', hint: 'The badge their employer knows them by' },
-  { key: 'monitor_id', label: 'Monitor ID', hint: 'Printed on tickets the field creates' },
+  { key: 'monitor_id', label: 'Monitor ID',
+    hint: 'Printed on tickets the field creates. Left empty, one is issued.' },
+  { key: 'employer_contractor_id', label: 'Employer on the project', type: 'ref',
+    source: '/contractors', labelKey: 'name',
+    hint: 'The contractor paying them, where one on this project does' },
+  { key: 'employer_name', label: 'Employer name',
+    hint: 'A staffing firm, where they are not paid by a contractor on the project' },
   { key: 'email', label: 'Email' },
   { key: 'phone', label: 'Phone' },
-  { key: 'employer_name', label: 'Employer',
-    hint: 'A staffing firm, where they are not paid by a contractor on the project' },
+  { key: 'username', label: 'Username',
+    hint: 'Left empty, one is built from their name' },
+  { key: 'password', label: 'Initial password', type: 'password',
+    hint: 'At least 8 characters. They are asked to change it at first sign-in.' },
 ]
 
 /* ------------------------------------------------------------------- scope */

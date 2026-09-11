@@ -264,7 +264,10 @@ SELECT
     a.id, a.event_uuid, a.entity_type, a.entity_id, a.entity_label,
     a.project_id, p.name AS project_name, a.action,
     COALESCE(a.actor_name, u.full_name, 'system') AS actor,
-    a.actor_role, a.source, a.changed, a.reason, a.occurred_at
+    a.actor_role, a.source, a.changed, a.reason, a.occurred_at,
+    -- Appended, never inserted: CREATE OR REPLACE VIEW cannot reorder columns,
+    -- so every later addition lands at the end.
+    a.domain
 FROM audit_events a
 LEFT JOIN users u    ON u.id = a.actor_id
 LEFT JOIN projects p ON p.id = a.project_id;

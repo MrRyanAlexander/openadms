@@ -4,8 +4,8 @@ import { api, fmt } from '../lib/api'
 import { useApp, useFetch } from '../lib/store'
 import { PageHeader } from '../components/Shell'
 import {
-  Badge, Card, Drawer, Empty, ErrorNote, Field, Icon, Loading, Modal, Search, Stat,
-  Tabs, useDebounced,
+  Badge, Card, Drawer, Empty, ErrorNote, Field, Icon, Loading, Modal, rowProps,
+  Search, Stat, Tabs, useDebounced,
 } from '../components/ui'
 import { DocumentsPanel } from '../components/setup-bits'
 
@@ -251,8 +251,8 @@ function EntityTable({ config }) {
             </tr></thead>
             <tbody>
               {data.items.map((row) => (
-                <tr key={row.id} className="clickable"
-                    onClick={() => (config.detail ? setViewing(row) : setEditing(row))}>
+                <tr key={row.id}
+                    {...rowProps(() => (config.detail ? setViewing(row) : setEditing(row)))}>
                   {config.columns.map(([label, accessor]) => (
                     <td key={label}>
                       {typeof accessor === 'function' ? accessor(row) : (row[accessor] ?? '—')}

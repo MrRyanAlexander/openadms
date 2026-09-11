@@ -1,34 +1,58 @@
 import { useState } from 'react'
 import { api, fmt } from '../lib/api'
-import { useApp, useFetch } from '../lib/store'
+import { useApp, useFetch, useListState } from '../lib/store'
 import { PageHeader } from '../components/Shell'
 import {
-  Badge, Card, Empty, ErrorNote, Field, Icon, Loading, Modal, Search, Tabs, useDebounced,
+  Badge, Card, Empty, ErrorNote, Field, Icon, Loading, Modal, rowProps, Search,
+  Tabs, useDebounced,
 } from '../components/ui'
 
 /* ================================= AUDIT ================================= */
+// Four questions, four audiences. Who logged in is a security question, who
+// changed a rate is a billing question, and an auditor asking one of them
+// should not have to read past the other three.
+const DOMAINS = [
+  ['', 'Everything', 'Every write, in one list'],
+  ['operations', 'Operations', 'Tickets, media, review and field records'],
+  ['billing', 'Billing', 'Rules, rates, transactions and invoices'],
+  ['records', 'Records', 'Projects, contracts, catalog and reference data'],
+  ['security', 'Security', 'Sign-in, accounts, roles and sharing'],
+]
+
+const AUDIT_DEFAULTS = {
+  domain: '', entity_type: '', action: '', actor: '',
+  date_from: '', date_to: '', scope: 'project', offset: 0,
+}
+
 export function Audit() {
   const { projectId, project } = useApp()
-  const [filters, setFilters] = useState({ entity_type: '', action: '', actor: '',
-                                           date_from: '', date_to: '' })
-  const [offset, setOffset] = useState(0)
-  const [scope, setScope] = useState('project')
+  const { state, set, clear, touched } = useListState(AUDIT_DEFAULTS)
+  const [chain, setChain] = useState(null)
+  const { domain, entity_type, action, actor, date_from, date_to, scope, offset } = state
 
   const { data, loading, error, reload } = useFetch(
     () => api.get('/audit', {
       limit: 60, offset,
       project_id: scope === 'project' ? projectId : undefined,
-      ...Object.fromEntries(Object.entries(filters).filter(([, v]) => v)),
+      domain: domain || undefined,
+      entity_type: entity_type || undefined,
+      action: action || undefined,
+      actor: actor || undefined,
+      date_from: date_from || undefined,
+      date_to: date_to || undefined,
     }),
-    [projectId, scope, offset, JSON.stringify(filters)])
+    [projectId, scope, offset, domain, entity_type, action, actor, date_from, date_to])
+
+  const counts = data?.domains || {}
 
   return (
     <>
-      <PageHeader title="Audit History" crumb={scope === 'project' ? project?.project_code : 'All projects'}>
+      <PageHeader title="Audit History"
+                  crumb={scope === 'project' ? project?.project_code : 'All projects'}>
         <div className="seg">
           {['project', 'all'].map((s) => (
             <button key={s} className={scope === s ? 'on' : ''}
-                    onClick={() => { setScope(s); setOffset(0) }}>
+                    onClick={() => set({ scope: s })}>
               {s === 'project' ? 'This project' : 'Everything'}
             </button>
           ))}
@@ -42,38 +66,52 @@ export function Audit() {
           <div className="muted" style={{ fontSize: 13, lineHeight: 1.65 }}>
             Every write in the system leaves an artifact here: what changed, the value
             before and after, who did it and when. The table is append-only at the
-            database level, so nothing in this list can be edited or removed.
+            database level, so nothing in this list can be edited or removed. Open any
+            row to follow that record's whole chain of events in order.
           </div>
+        </div>
+
+        <div className="seg wide" style={{ marginBottom: 12 }}>
+          {DOMAINS.map(([key, label, hint]) => (
+            <button key={key || 'all'} className={domain === key ? 'on' : ''}
+                    title={hint} onClick={() => set({ domain: key })}>
+              {label}
+              <span className="dim" style={{ marginLeft: 6 }}>
+                {fmt.int(counts[key || 'all'] ?? 0)}
+              </span>
+            </button>
+          ))}
         </div>
 
         <Card flush>
           <div className="card-head" style={{ gap: 9, flexWrap: 'wrap' }}>
-            <select className="select" style={{ width: 165 }} value={filters.entity_type}
-                    onChange={(e) => { setOffset(0); setFilters({ ...filters, entity_type: e.target.value }) }}>
+            <select className="select" style={{ width: 165 }} value={entity_type}
+                    onChange={(e) => set({ entity_type: e.target.value })}>
               <option value="">Any record type</option>
               {['tickets', 'projects', 'rules', 'rule_statements', 'service_codes', 'rates',
-                'invoices', 'invoice_lines', 'transactions', 'users', 'contracts',
-                'clients', 'contractors', 'disposal_sites', 'equipment',
+                'rate_tiers', 'invoices', 'invoice_lines', 'transactions', 'users',
+                'contracts', 'clients', 'contractors', 'disposal_sites', 'equipment',
+                'equipment_certifications', 'ticket_reviews', 'ticket_flags',
                 'project_assignments', 'peer_instances'].map((t) => (
                 <option key={t} value={t}>{fmt.title(t)}</option>
               ))}
             </select>
-            <select className="select" style={{ width: 140 }} value={filters.action}
-                    onChange={(e) => { setOffset(0); setFilters({ ...filters, action: e.target.value }) }}>
+            <select className="select" style={{ width: 140 }} value={action}
+                    onChange={(e) => set({ action: e.target.value })}>
               <option value="">Any action</option>
-              {['create', 'update', 'delete', 'void', 'login', 'login_failed', 'logout',
-                'export', 'process', 'reverse', 'share', 'peer_read', 'approve',
-                'reject', 'submit'].map((a) => (
+              {['create', 'update', 'delete', 'void', 'unvoid', 'login', 'login_failed',
+                'logout', 'export', 'process', 'reprocess', 'reverse', 'supersede',
+                'share', 'peer_read', 'approve', 'reject', 'submit'].map((a) => (
                 <option key={a} value={a}>{fmt.title(a)}</option>
               ))}
             </select>
             <input className="input" style={{ width: 170 }} placeholder="Actor"
-                   value={filters.actor}
-                   onChange={(e) => setFilters({ ...filters, actor: e.target.value })} />
-            <input className="input" type="date" style={{ width: 148 }} value={filters.date_from}
-                   onChange={(e) => setFilters({ ...filters, date_from: e.target.value })} />
-            <input className="input" type="date" style={{ width: 148 }} value={filters.date_to}
-                   onChange={(e) => setFilters({ ...filters, date_to: e.target.value })} />
+                   value={actor} onChange={(e) => set({ actor: e.target.value })} />
+            <input className="input" type="date" style={{ width: 148 }} value={date_from}
+                   onChange={(e) => set({ date_from: e.target.value })} />
+            <input className="input" type="date" style={{ width: 148 }} value={date_to}
+                   onChange={(e) => set({ date_to: e.target.value })} />
+            {touched && <button className="btn sm" onClick={clear}>Clear</button>}
             <div className="spacer" />
             {data && <span className="dim">{fmt.int(data.total)} artifacts</span>}
           </div>
@@ -82,35 +120,36 @@ export function Audit() {
           {error && <div style={{ padding: 16 }}><ErrorNote error={error} onRetry={reload} /></div>}
 
           {data && !loading && (data.items.length === 0 ? (
-            <Empty icon="audit" title="No audit artifacts match" />
+            <Empty icon="audit" title="No audit artifacts match">
+              {touched ? 'Clear the filters to see the whole trail.' : null}
+            </Empty>
           ) : (
             <>
               <div className="table-wrap">
                 <table className="data">
                   <thead><tr>
                     <th>When</th><th>Action</th><th>Record</th><th>Identifier</th>
-                    <th>Actor</th><th>Changed</th><th>Reason</th>
+                    <th>Actor</th><th>Changed</th><th>Reason</th><th />
                   </tr></thead>
                   <tbody>
                     {data.items.map((e) => (
-                      <tr key={e.id}>
+                      <tr key={e.id} {...rowProps(() => setChain(e))}>
                         <td className="muted" style={{ whiteSpace: 'nowrap' }}>
                           {fmt.datetime(e.occurred_at)}
                         </td>
-                        <td><Badge tone={
-                          e.action === 'delete' || e.action === 'void' ? 'red'
-                          : e.action === 'create' ? 'green'
-                          : e.action === 'peer_read' ? 'violet' : ''
-                        }>{fmt.title(e.action)}</Badge></td>
+                        <td><ActionBadge action={e.action} /></td>
                         <td className="muted">{fmt.title(e.entity_type)}</td>
                         <td className="mono">{e.entity_label || '—'}</td>
                         <td>{e.actor}{e.actor_role && (
                           <span className="dim"> · {e.actor_role}</span>)}</td>
-                        <td>
+                        <td onClick={(ev) => ev.stopPropagation()}>
                           <ChangeSummary changed={e.changed} />
                         </td>
                         <td className="muted truncate" style={{ maxWidth: 180 }}>
                           {e.reason || '—'}
+                        </td>
+                        <td className="dim" style={{ textAlign: 'right' }}>
+                          <Icon name="chevron" size={14} />
                         </td>
                       </tr>
                     ))}
@@ -121,15 +160,126 @@ export function Audit() {
                 <span>{fmt.int(offset + 1)}–{fmt.int(offset + data.items.length)} of {fmt.int(data.total)}</span>
                 <div className="spacer" />
                 <button className="btn sm" disabled={offset === 0}
-                        onClick={() => setOffset(Math.max(0, offset - 60))}>Previous</button>
+                        onClick={() => set({ offset: Math.max(0, offset - 60) })}>Previous</button>
                 <button className="btn sm" disabled={!data.has_more}
-                        onClick={() => setOffset(offset + 60)}>Next</button>
+                        onClick={() => set({ offset: offset + 60 })}>Next</button>
               </div>
             </>
           ))}
         </Card>
       </div>
+
+      {chain && <ChainView event={chain} onClose={() => setChain(null)} />}
     </>
+  )
+}
+
+function ActionBadge({ action }) {
+  const tone =
+    action === 'delete' || action === 'void' || action === 'login_failed' ? 'red'
+    : action === 'create' ? 'green'
+    : action === 'peer_read' || action === 'share' ? 'violet'
+    : action === 'reverse' || action === 'supersede' || action === 'reprocess' ? 'amber'
+    : ''
+  return <Badge tone={tone}>{fmt.title(action)}</Badge>
+}
+
+/* The chain. One record, every artifact touching it, oldest first. */
+function ChainView({ event, onClose }) {
+  const { data, loading, error, reload } = useFetch(
+    () => api.get('/audit/chain', {
+      entity_type: event.entity_type, entity_id: event.entity_id,
+    }),
+    [event.entity_type, event.entity_id])
+
+  const title = `${fmt.title(event.entity_type)} · ${event.entity_label || 'record'}`
+
+  return (
+    <Modal title={title} wide onClose={onClose}>
+      {loading && <Loading rows={6} />}
+      {error && <ErrorNote error={error} onRetry={reload} />}
+
+      {data && (
+        <div className="stack" style={{ gap: 14 }}>
+          <div className="muted" style={{ fontSize: 12.5, lineHeight: 1.7 }}>
+            {data.count === 1
+              ? 'One artifact so far.'
+              : `${fmt.int(data.count)} artifacts, oldest first.`}
+            {data.first_at && (
+              <> From {fmt.datetime(data.first_at)} to {fmt.datetime(data.last_at)}.</>)}
+            {data.actors.length > 0 && <> Touched by {data.actors.join(', ')}.</>}
+            {Object.keys(data.related).length > 0 && (
+              <> The chain also carries {
+                Object.entries(data.related)
+                  .map(([k, n]) => `${fmt.int(n)} ${fmt.title(k).toLowerCase()}`)
+                  .join(', ')
+              } that hang off this record.</>
+            )}
+          </div>
+
+          {data.events.length === 0 ? (
+            <Empty icon="audit" title="Nothing recorded against this record yet" />
+          ) : (
+            <ol className="chain">
+              {data.events.map((e) => {
+                const fields = Object.entries(e.changed || {})
+                const own = e.entity_type === data.entity_type
+                return (
+                  <li key={e.id} className={own ? '' : 'related'}>
+                    <div className="chain-dot" />
+                    <div className="chain-body">
+                      <div className="row wrap" style={{ gap: 8, alignItems: 'baseline' }}>
+                        <ActionBadge action={e.action} />
+                        {!own && (
+                          <span className="dim" style={{ fontSize: 11.5 }}>
+                            on {fmt.title(e.entity_type)}
+                            {e.entity_label ? ` ${e.entity_label}` : ''}
+                          </span>
+                        )}
+                        <div className="spacer" />
+                        <span className="dim" style={{ fontSize: 11.5, whiteSpace: 'nowrap' }}>
+                          {fmt.datetime(e.occurred_at)}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 12.5, marginTop: 3 }}>
+                        {e.actor}
+                        {e.actor_role && <span className="dim"> · {e.actor_role}</span>}
+                        {e.source && <span className="dim"> · via {e.source}</span>}
+                      </div>
+                      {e.reason && (
+                        <div className="muted" style={{ fontSize: 12.5, marginTop: 4,
+                                                        fontStyle: 'italic' }}>
+                          {e.reason}
+                        </div>
+                      )}
+                      {fields.length > 0 && (
+                        <div className="diff stack" style={{ gap: 3, marginTop: 6 }}>
+                          {fields.slice(0, 8).map(([field, change]) => (
+                            <div key={field} style={{ fontSize: 12 }}>
+                              <span className="dim">{field}: </span>
+                              {change?.from !== undefined && change?.from !== null && (
+                                <><span className="from">{JSON.stringify(change.from)}</span>
+                                  {' → '}</>
+                              )}
+                              <span className="to">{JSON.stringify(change?.to ?? change)}</span>
+                            </div>
+                          ))}
+                          {fields.length > 8 && (
+                            <div className="dim" style={{ fontSize: 11.5 }}>
+                              and {fields.length - 8} more field(s)
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </li>
+                )
+              })}
+            </ol>
+          )}
+        </div>
+      )}
+    </Modal>
   )
 }
 

@@ -21,8 +21,8 @@ import { api, fmt } from '../lib/api'
 import { useApp, useFetch } from '../lib/store'
 import { PageHeader } from '../components/Shell'
 import {
-  Badge, Card, Empty, ErrorNote, Field, Icon, Loading, Modal, Search, Stat,
-  useDebounced,
+  Badge, Card, Empty, ErrorNote, Field, Icon, Loading, Modal, rowProps, Search,
+  Stat, useDebounced,
 } from '../components/ui'
 import { TicketDrawer } from './Tickets'
 
@@ -232,8 +232,7 @@ export default function Review() {
                 </tr></thead>
                 <tbody>
                   {rows.map((r) => (
-                    <tr key={r.ticket_id} className="clickable"
-                        onClick={() => setOpenId(r.ticket_id)}>
+                    <tr key={r.ticket_id} {...rowProps(() => setOpenId(r.ticket_id))}>
                       <td onClick={(e) => e.stopPropagation()}>
                         <input type="checkbox" aria-label={`Select ${r.ticket_number}`}
                                checked={selected.has(r.ticket_id)}
@@ -304,8 +303,8 @@ export default function Review() {
                 </tr></thead>
                 <tbody>
                   {monitors.data.items.map((m) => (
-                    <tr key={m.monitor_id} className="clickable"
-                        onClick={() => { setMonitorId(m.monitor_id); setState('all') }}>
+                    <tr key={m.monitor_id}
+                        {...rowProps(() => { setMonitorId(m.monitor_id); setState('all') })}>
                       <td><b>{m.monitor_name}</b></td>
                       <td className="num">{fmt.int(m.tickets)}</td>
                       <td className="num">{fmt.int(m.approved)}</td>

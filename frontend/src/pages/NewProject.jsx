@@ -722,6 +722,7 @@ export function ServiceCodeStep({ project, projectId, onChanged }) {
 
 /* ----------------------------------------------------------------- workers */
 export function WorkerStep({ project, projectId, onChanged }) {
+  const { toast } = useApp()
   const [adding, setAdding] = useState(false)
   const [selected, setSelected] = useState('')
   const [role, setRole] = useState('monitor')
@@ -739,11 +740,21 @@ export function WorkerStep({ project, projectId, onChanged }) {
     try {
       // Assignments take a user id, so a brand new worker is created first and
       // then assigned. Both happen without leaving this step.
-      const userId = body.new ? (await api.post('/users', body.new)).id : body.user_id
+      let created = null
+      if (body.new) created = await api.post('/users', body.new)
+      const userId = created ? created.id : body.user_id
       await api.post(`/projects/${projectId}/assignments`, {
         user_id: userId, project_role: role,
         can_create_tickets: creates, can_review_tickets: reviews,
       })
+      if (created) {
+        // The username and monitor ID are issued server-side when they are left
+        // empty, so say what they came out as. A PM who has to go and look them
+        // up on another screen has not finished creating the worker here.
+        toast('Worker created and assigned',
+              `${created.full_name} · ${created.username}`
+              + (created.monitor_id ? ` · ${created.monitor_id}` : ''))
+      }
       setAdding(false); setSelected('')
       await all.reload()
       onChanged()
@@ -753,8 +764,10 @@ export function WorkerStep({ project, projectId, onChanged }) {
   return (
     <div className="stack" style={{ gap: 12 }}>
       <div className="muted" style={{ fontSize: 13, lineHeight: 1.65, maxWidth: 640 }}>
-        A ticket can only be created by someone assigned here and cleared to create. Whole
-        crews are faster to bring in by pasting a list on the Workers screen.
+        A ticket can only be created by someone assigned here and cleared to create. A
+        worker created here is a full account: the same fields the Workers screen asks
+        for, with a username and monitor ID issued where they are left empty. Whole crews
+        are faster to bring in by pasting a list on the Workers screen.
       </div>
 
       <LinkedTable rows={linked} empty="Nobody is assigned yet."
