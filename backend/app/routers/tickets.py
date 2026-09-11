@@ -158,9 +158,19 @@ async def list_tickets(
         add("created_by_name = (SELECT full_name FROM users WHERE id = ${n})",
             user["id"])
 
-    allowed_sorts = {"created_at", "completed_at", "ticket_number", "status",
-                     "origin_at", "billable_cubic_yards", "transaction_total"}
-    order = sort if sort in allowed_sorts else "created_at"
+    # NULLS LAST only where the column can actually be null.
+    #
+    # It reads as harmless boilerplate and is not. An index on (project_id,
+    # created_at DESC) orders nulls first, so asking for DESC NULLS LAST on a
+    # NOT NULL column matches no index, and the list falls back to reading every
+    # ticket in the project and sorting them. At twenty-five thousand tickets
+    # that was 915 milliseconds against 14 with the clause dropped, for an
+    # ordering that cannot differ: there are no nulls to place.
+    allowed_sorts = {"created_at", "ticket_number", "status"}
+    nullable_sorts = {"completed_at", "origin_at",
+                      "billable_cubic_yards", "transaction_total"}
+    order = sort if sort in (allowed_sorts | nullable_sorts) else "created_at"
+    nulls = " NULLS LAST" if order in nullable_sorts else ""
     clause = " AND ".join(where)
 
     async with db.read() as conn:
@@ -168,7 +178,7 @@ async def list_tickets(
             f"SELECT count(*) FROM ticket_overview WHERE {clause}", *args)
         recs = await conn.fetch(
             f"{_TICKET_SELECT} WHERE {clause} "
-            f"ORDER BY {order} {direction.upper()} NULLS LAST "
+            f"ORDER BY {order} {direction.upper()}{nulls} "
             f"LIMIT ${len(args)+1} OFFSET ${len(args)+2}",
             *args, paging["limit"], paging["offset"])
         totals = await conn.fetchrow(

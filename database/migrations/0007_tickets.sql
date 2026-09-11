@@ -132,6 +132,28 @@ CREATE INDEX tickets_status_idx         ON tickets (project_id, status);
 CREATE INDEX tickets_contractor_idx     ON tickets (contractor_id);
 CREATE INDEX tickets_equipment_idx      ON tickets (equipment_id);
 CREATE INDEX tickets_origin_at_idx      ON tickets (origin_at DESC);
+
+-- M6: "the list pages without stalling" at tens of thousands of tickets.
+--
+-- The ticket list reads a view that carries per-ticket totals: how many
+-- transactions, how much they came to, how many photos. Ordering a project's
+-- tickets with only project_id indexed means every row in the project is read
+-- and every one of those totals is computed before the sort throws all but the
+-- first page away. At a hundred tickets nobody notices. At twenty-five thousand
+-- it is a two second page.
+--
+-- One index per column the list actually sorts by turns that into an index
+-- scan that stops after the page, so the totals are computed for the fifty rows
+-- being shown and no others.
+-- The null ordering has to match what the list asks for, or the index is not
+-- usable for the sort and none of this helps. completed_at and origin_at are
+-- nullable and the list puts those last; created_at and ticket_number are NOT
+-- NULL and the list says nothing about nulls, so a plain index serves both
+-- directions.
+CREATE INDEX tickets_project_created_idx   ON tickets (project_id, created_at DESC);
+CREATE INDEX tickets_project_completed_idx ON tickets (project_id, completed_at DESC NULLS LAST);
+CREATE INDEX tickets_project_origin_idx    ON tickets (project_id, origin_at DESC NULLS LAST);
+CREATE INDEX tickets_project_number_idx    ON tickets (project_id, ticket_number);
 CREATE INDEX tickets_processing_idx     ON tickets (processing_state)
     WHERE processing_state IN ('unprocessed', 'queued', 'error');
 CREATE INDEX tickets_barcode_idx        ON tickets (barcode) WHERE barcode IS NOT NULL;

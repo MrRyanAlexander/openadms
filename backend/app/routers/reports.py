@@ -67,37 +67,44 @@ async def dashboard(ctx: ProjectContext, user: CurrentUser,
               FROM ticket_overview WHERE project_id = $1 AND NOT is_void
              GROUP BY 1, 2 ORDER BY tickets DESC
             """, pid)
-        by_debris = await conn.fetch(
+        # Four breakdowns, one pass.
+        #
+        # They were four statements, each aggregating the whole project through
+        # a view that computes per-ticket totals as it goes. At twenty-five
+        # thousand tickets that was four full scans of the expensive thing for
+        # one screen, and the dashboard is the screen that opens first.
+        #
+        # Fanning each ticket into four labelled rows and grouping once reads
+        # the view a single time. The split back into four lists happens below,
+        # in Python, where it costs nothing.
+        rows = await conn.fetch(
             """
-            SELECT COALESCE(debris_label, 'Unclassified') AS label,
+            SELECT d.dimension, d.label,
                    count(*) AS tickets,
-                   COALESCE(SUM(billable_cubic_yards), 0) AS cubic_yards
-              FROM ticket_overview WHERE project_id = $1 AND NOT is_void {window}
-             GROUP BY 1 ORDER BY cubic_yards DESC
+                   COALESCE(SUM(t.billable_cubic_yards), 0) AS cubic_yards,
+                   COALESCE(SUM(t.transaction_total), 0) AS billable
+              FROM ticket_overview t
+              CROSS JOIN LATERAL (VALUES
+                  ('debris',     COALESCE(t.debris_label, 'Unclassified')),
+                  ('contractor', COALESCE(t.contractor_name, 'Unassigned')),
+                  ('site',       COALESCE(t.destination_site_name, 'No site recorded')),
+                  ('monitor',    COALESCE(t.created_by_name, 'Unknown'))
+              ) AS d(dimension, label)
+             WHERE t.project_id = $1 AND NOT t.is_void {window}
+             GROUP BY 1, 2
             """.format(window=window), pid)
-        by_contractor = await conn.fetch(
-            """
-            SELECT COALESCE(contractor_name, 'Unassigned') AS label,
-                   count(*) AS tickets,
-                   COALESCE(SUM(billable_cubic_yards), 0) AS cubic_yards,
-                   COALESCE(SUM(transaction_total), 0) AS billable
-              FROM ticket_overview WHERE project_id = $1 AND NOT is_void {window}
-             GROUP BY 1 ORDER BY billable DESC
-            """.format(window=window), pid)
-        by_site = await conn.fetch(
-            """
-            SELECT COALESCE(destination_site_name, 'No site recorded') AS label,
-                   count(*) AS tickets,
-                   COALESCE(SUM(billable_cubic_yards), 0) AS cubic_yards
-              FROM ticket_overview WHERE project_id = $1 AND NOT is_void {window}
-             GROUP BY 1 ORDER BY cubic_yards DESC
-            """.format(window=window), pid)
-        top_monitors = await conn.fetch(
-            """
-            SELECT COALESCE(created_by_name, 'Unknown') AS label, count(*) AS tickets
-              FROM ticket_overview WHERE project_id = $1 AND NOT is_void {window}
-             GROUP BY 1 ORDER BY tickets DESC LIMIT 8
-            """.format(window=window), pid)
+
+        def slice_of(dimension: str, key, keep: Optional[int] = None):
+            picked = sorted((dict(r) for r in rows if r["dimension"] == dimension),
+                            key=key, reverse=True)
+            for row in picked:
+                row.pop("dimension", None)
+            return picked[:keep] if keep else picked
+
+        by_debris = slice_of("debris", lambda r: r["cubic_yards"])
+        by_contractor = slice_of("contractor", lambda r: r["billable"])
+        by_site = slice_of("site", lambda r: r["cubic_yards"])
+        top_monitors = slice_of("monitor", lambda r: r["tickets"], keep=8)
         open_incidents = await conn.fetch(
             """
             SELECT t.id, t.ticket_number, t.severity, t.is_ongoing, t.notes,
@@ -118,34 +125,46 @@ async def dashboard(ctx: ProjectContext, user: CurrentUser,
 
         # E1: "are we at sixty percent of the hanger estimate". The estimate has
         # existed since Sprint 1 and nothing ever compared it to production.
+        # The collected side is aggregated once for the whole project and then
+        # joined, rather than re-scanned per estimate row. As a LATERAL it read
+        # the project once for every debris stream on it: seven streams, seven
+        # full passes over the view, and by far the largest part of this screen
+        # at twenty-five thousand tickets.
         progress = await conn.fetch(
             """
-            SELECT e.debris_type_code, dt.label AS debris_label,
-                   e.estimated_quantity, e.unit_type_code,
-                   ut.abbreviation AS unit_abbrev,
-                   e.confidence, e.as_of_date, e.source,
-                   COALESCE(a.collected, 0) AS collected,
-                   CASE WHEN e.estimated_quantity > 0
-                        THEN round(100.0 * COALESCE(a.collected, 0)
-                                   / e.estimated_quantity, 1)
-                   END AS percent_of_estimate,
-                   (SELECT count(*) FROM project_estimates pe
-                     WHERE pe.project_id = $1
-                       AND pe.debris_type_code = e.debris_type_code) AS revisions
-              FROM project_estimate_current e
-              JOIN debris_types dt ON dt.code = e.debris_type_code
-              LEFT JOIN unit_types ut ON ut.code = e.unit_type_code
-              LEFT JOIN LATERAL (
-                  -- Counted streams are counted; measured ones are volume.
-                  SELECT CASE WHEN e.unit_type_code = 'per_cubic_yard'
-                              THEN COALESCE(sum(o.billable_cubic_yards), 0)
-                              ELSE count(*)::numeric END AS collected
-                    FROM ticket_overview o
-                   WHERE o.project_id = $1 AND NOT o.is_void
-                     AND o.debris_type = e.debris_type_code
-              ) a ON true
-             WHERE e.project_id = $1
-             ORDER BY percent_of_estimate DESC NULLS LAST
+            WITH collected AS (
+                SELECT o.debris_type,
+                       COALESCE(sum(o.billable_cubic_yards), 0) AS cubic_yards,
+                       count(*)::numeric AS units
+                  FROM ticket_overview o
+                 WHERE o.project_id = $1 AND NOT o.is_void
+                 GROUP BY 1
+            ), lined_up AS (
+                SELECT e.debris_type_code, dt.label AS debris_label,
+                       e.estimated_quantity, e.unit_type_code,
+                       ut.abbreviation AS unit_abbrev,
+                       e.confidence, e.as_of_date, e.source,
+                       -- Counted streams are counted; measured ones are volume.
+                       CASE WHEN e.unit_type_code = 'per_cubic_yard'
+                            THEN COALESCE(c.cubic_yards, 0)
+                            ELSE COALESCE(c.units, 0) END AS collected,
+                       (SELECT count(*) FROM project_estimates pe
+                         WHERE pe.project_id = $1
+                           AND pe.debris_type_code = e.debris_type_code) AS revisions
+                  FROM project_estimate_current e
+                  JOIN debris_types dt ON dt.code = e.debris_type_code
+                  LEFT JOIN unit_types ut ON ut.code = e.unit_type_code
+                  LEFT JOIN collected c ON c.debris_type = e.debris_type_code
+                 WHERE e.project_id = $1
+            )
+            SELECT *,
+                   CASE WHEN estimated_quantity > 0
+                        THEN round(100.0 * collected / estimated_quantity, 1)
+                   END AS percent_of_estimate
+              FROM lined_up
+             ORDER BY CASE WHEN estimated_quantity > 0
+                           THEN round(100.0 * collected / estimated_quantity, 1)
+                      END DESC NULLS LAST
             """, pid)
 
         # E4: the alerts feed existed and lived inside project setup, where

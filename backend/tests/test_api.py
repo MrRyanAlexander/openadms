@@ -1724,6 +1724,42 @@ def test_an_export_with_no_rows_still_carries_its_headers(client, auth, project_
 
 # M6: "The list pages without stalling and the export states its cap rather
 # than truncating in silence. The cap is 50,000 rows."
+def test_every_ticket_sort_works_in_both_directions(client, auth, project_id):
+    # The null ordering was dropped from the non-nullable sorts so the indexes
+    # can serve them. That is a performance change, and this is the guard that
+    # it did not change what the list actually returns.
+    for column in ("created_at", "completed_at", "ticket_number", "origin_at"):
+        for direction in ("asc", "desc"):
+            page = client.get(f"/api/v1/projects/{project_id}/tickets",
+                              params={"sort": column, "direction": direction,
+                                      "limit": 40},
+                              headers=auth).json()
+            values = [t[column] for t in page["items"] if t.get(column) is not None]
+            assert values == sorted(values, reverse=(direction == "desc")), \
+                f"{column} {direction} came back out of order"
+
+    # A nullable column still puts its blanks at the end, where they belong.
+    page = client.get(f"/api/v1/projects/{project_id}/tickets",
+                      params={"sort": "completed_at", "direction": "desc",
+                              "limit": 200},
+                      headers=auth).json()
+    seen_blank = False
+    for ticket in page["items"]:
+        if ticket["completed_at"] is None:
+            seen_blank = True
+        else:
+            assert not seen_blank, "a dated ticket came back after an undated one"
+
+
+def test_an_unknown_sort_falls_back_rather_than_reaching_sql(
+        client, auth, project_id):
+    page = client.get(f"/api/v1/projects/{project_id}/tickets",
+                      params={"sort": "drop_table", "limit": 5}, headers=auth)
+    assert page.status_code == 200
+    stamps = [t["created_at"] for t in page.json()["items"]]
+    assert stamps == sorted(stamps, reverse=True)
+
+
 def test_an_export_says_how_much_of_the_dataset_it_carries(
         client, auth, project_id):
     body = client.get(f"/api/v1/projects/{project_id}/export/tickets",
@@ -1923,14 +1959,28 @@ def _tickets_an_approved_invoice_holds(client, auth, project_id):
     return held
 
 
-def _a_priced_ticket(client, auth, project_id):
+def _a_priced_ticket(client, auth, project_id, *, priced_by_volume=False):
+    """A completed, priced ticket the correction verbs can actually move.
+
+    `priced_by_volume` picks one whose money is derived from the load, which is
+    what a test about correcting a load call needs. A flat or per-unit service
+    code prices the same whatever the load call says, so a ticket billed under
+    one would make a correct engine look broken."""
     held = _tickets_an_approved_invoice_holds(client, auth, project_id)
     tickets = client.get(
         f"/api/v1/projects/{project_id}/tickets",
         params={"status": "completed", "limit": 200}, headers=auth).json()
     for t in tickets["items"]:
-        if ((t.get("transaction_total") or 0) > 0 and not t.get("is_void")
-                and t["id"] not in held):
+        if ((t.get("transaction_total") or 0) <= 0 or t.get("is_void")
+                or t["id"] in held):
+            continue
+        if not priced_by_volume:
+            return t
+        detail = client.get(f"/api/v1/tickets/{t['id']}", headers=auth).json()
+        live = [tx for tx in detail.get("transactions", [])
+                if not tx.get("superseded_at") and not tx.get("is_reversal")]
+        if live and all(tx.get("quantity_source") == "billable_cubic_yards"
+                        for tx in live):
             return t
     raise AssertionError("the demo project should have priced tickets")
 
@@ -1945,7 +1995,7 @@ def test_correcting_a_completed_ticket_requires_a_reason(client, manager_auth, p
 
 def test_a_manager_corrects_a_ticket_and_the_money_follows(
         client, manager_auth, analyst_auth, auth, project_id):
-    ticket = _a_priced_ticket(client, auth, project_id)
+    ticket = _a_priced_ticket(client, auth, project_id, priced_by_volume=True)
     before = float(ticket["transaction_total"])
 
     # The target is derived from where the ticket actually sits, not written in.

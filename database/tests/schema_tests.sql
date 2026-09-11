@@ -436,6 +436,26 @@ BEGIN
                  WHERE tablename = 'audit_events'
                    AND indexdef ILIKE '%(domain,%'));
 
+    -- M6: the ticket list has to page without stalling at volume. That needs an
+    -- index per column it sorts by, whose null ordering matches what the list
+    -- asks for. A mismatch is invisible in the plan until somebody times it.
+    PERFORM pg_temp.check_that('the ticket list can sort by date from an index',
+        EXISTS (SELECT 1 FROM pg_indexes
+                 WHERE tablename = 'tickets'
+                   AND indexdef ILIKE '%(project_id, created_at DESC)%'));
+
+    PERFORM pg_temp.check_that('a nullable sort column is indexed nulls last',
+        (SELECT count(*) FROM pg_indexes
+          WHERE tablename = 'tickets'
+            AND indexdef ILIKE '%DESC NULLS LAST)%') = 2,
+        (SELECT string_agg(indexname, ', ') FROM pg_indexes
+          WHERE tablename = 'tickets' AND indexdef ILIKE '%DESC NULLS LAST)%'));
+
+    PERFORM pg_temp.check_that('ticket numbers are indexed within a project',
+        EXISTS (SELECT 1 FROM pg_indexes
+                 WHERE tablename = 'tickets'
+                   AND indexdef ILIKE '%(project_id, ticket_number)%'));
+
     -- =======================================================================
     -- Invoicing
     -- =======================================================================

@@ -27,6 +27,7 @@ async def _init_connection(conn: asyncpg.Connection) -> None:
     )
 
 
+
 async def connect() -> asyncpg.Pool:
     global _pool
     if _pool is None:
@@ -36,6 +37,27 @@ async def connect() -> asyncpg.Pool:
             max_size=settings.db_pool_max,
             command_timeout=settings.db_command_timeout,
             init=_init_connection,
+            # JIT compilation is turned off for this application's connections.
+            #
+            # Found while testing the ticket list against twenty-five thousand
+            # tickets, the size a real programme reaches in a fortnight. The
+            # first page took 2.2 seconds. The query itself took 10
+            # milliseconds: the rest was Postgres compiling it.
+            #
+            # Every list here reads a wide view. The ticket list joins eleven
+            # relations, so its ESTIMATED cost crosses jit_above_cost easily
+            # while its ACTUAL work is an index scan that stops after fifty
+            # rows. Postgres then spends a second and a half generating and
+            # optimising machine code for a query that runs in ten, and does it
+            # again on the next request. Measured across every query this
+            # application runs, including the aggregates over a whole project,
+            # it was never faster with JIT and often six to eight times slower.
+            #
+            # It goes in server_settings rather than a SET in the init callback
+            # because asyncpg issues RESET ALL when a connection is returned to
+            # the pool. A session SET therefore survives exactly one request. A
+            # startup parameter is what RESET ALL resets back TO.
+            server_settings={"jit": "off"},
         )
         await _load_column_types(_pool)
     return _pool

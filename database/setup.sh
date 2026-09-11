@@ -70,6 +70,21 @@ if [[ $WITH_DEMO -eq 1 ]]; then
   "${PSQL[@]}" -f "$HERE/seeds/003_demo_project.sql"
 fi
 
+# Measured, not assumed. See the note in backend/app/db.py: every list in this
+# application reads a wide view whose estimated cost crosses jit_above_cost
+# while its actual work is an index scan that stops after one page. At 25,000
+# tickets the first page took 2.2 seconds, of which 2.1 was Postgres compiling
+# a query that runs in 10 milliseconds. Turn it back on with:
+#   ALTER DATABASE <name> RESET jit;
+step "Turning off JIT for this database"
+if "${PSQL[@]}" -tAc "ALTER DATABASE \"$("${PSQL[@]}" -tAc 'SELECT current_database()')\" SET jit = off" >/dev/null 2>&1; then
+  echo "  JIT off. Lists stay fast as ticket counts grow."
+else
+  echo "  Could not set it at the database level, which needs ownership of the"
+  echo "  database. The API turns JIT off per connection anyway, so this is a"
+  echo "  note rather than a problem."
+fi
+
 step "Provisioning the instance key"
 "${PSQL[@]}" -tAc "
   INSERT INTO instance (instance_key, display_name, organization)

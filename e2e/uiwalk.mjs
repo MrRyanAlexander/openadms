@@ -565,10 +565,12 @@ await step(page, 'a-correction-prices-itself-before-it-is-written', async () => 
 await step(page, 'a-completed-ticket-can-be-corrected', async () => {
   await go(page, 'Tickets', 'Tickets')
   await page.waitForSelector('table.data tbody tr', { timeout: 15000 })
-  // A void ticket offers Restore, not Correct, which is the intended
-  // behaviour rather than something to work around.
-  await page.selectOption('.card-head select >> nth=0', 'completed')
-  await page.waitForTimeout(700)
+  // A load ticket, completed. A void one offers Restore rather than Correct,
+  // and a ticket billed under a flat or per-unit code prices the same whatever
+  // the load call says, so correcting one would make a working engine look
+  // broken. The filters are in the URL, so the walk asks for exactly that.
+  await page.goto(`${page.url().split('?')[0]}?status=completed&ticket_type=LOAD`)
+  await page.waitForSelector('table.data tbody tr', { timeout: 15000 })
   await page.click('table.data tbody tr >> nth=0')
   await page.waitForSelector('.drawer', { timeout: 10000 })
   await page.locator('.drawer button:has-text("Correct")').first()
@@ -835,9 +837,13 @@ await step(page, 'enter-opens-a-focused-row', async () => {
 await step(page, 'a-photo-opens-full-screen', async () => {
   await go(page, 'Tickets', 'Tickets')
   await page.waitForSelector('table.data tbody tr', { timeout: 15000 })
+  // Load tickets carry a photograph. Incidents do not, and the list opens on
+  // whatever was created last, so ask for the kind this step is about.
+  await page.goto(`${page.url().split('?')[0]}?ticket_type=LOAD`)
+  await page.waitForSelector('table.data tbody tr', { timeout: 15000 })
 
-  // Not every ticket carries a photograph, so open rows until one does rather
-  // than asserting against whichever ticket happens to sort first.
+  // Even inside one kind, a ticket can be missing its photo. Open rows until
+  // one has images rather than asserting against whichever sorts first.
   let shown = 0
   for (let row = 0; row < 12 && shown === 0; row += 1) {
     await page.click(`table.data tbody tr >> nth=${row}`)
