@@ -464,8 +464,11 @@ BEGIN
         project_id, equipment_id, certification_number, certified_capacity_cy,
         tare_weight_lbs, method, measured_on, applies_from, expires_on,
         measured_by, measured_by_name, created_by)
+    -- The certification number is the number printed on the placard. They are
+    -- the same thing in the field, and a demo where they differ trains the
+    -- reviewer to ignore a real finding.
     SELECT v_project, e.id,
-           'CERT-' || e.unit_number,
+           e.placard_code,
            e.capacity_cy, e.tare_weight_lbs, 'physical',
            v_base - 2, v_base - 2, v_base + 300,
            v_manager, 'Luis Ortega', v_manager
@@ -694,9 +697,10 @@ BEGIN
                (v_day + TIME '07:45') + (w * INTERVAL '6 minutes')
           FROM generate_series(1, 4) w;
 
-        INSERT INTO ticket_media (ticket_id, stage_code, media_kind, description,
-                                  storage_url, is_primary, captured_at, uploaded_by)
-        VALUES (v_ticket, 'disposal', 'photo', 'Load call photo',
+        INSERT INTO ticket_media (ticket_id, stage_code, slot, media_kind,
+                                  description, storage_url, is_primary,
+                                  captured_at, uploaded_by)
+        VALUES (v_ticket, 'disposal', 'disposal_photo', 'photo', 'Load call photo',
                 '/media/demo/load.svg', true,
                 (v_day + TIME '08:22'), v_monitors[1 + ((i + 1) % 4)]);
     END LOOP;
@@ -743,9 +747,9 @@ BEGIN
                (v_ticket, 'haul_out_complete', 2, 'complete', v_monitors[1 + ((i + 2) % 4)],
                 v_fds, NULL, (v_day + TIME '10:05'));
 
-        INSERT INTO ticket_media (ticket_id, stage_code, media_kind, description,
-                                  storage_url, is_primary, captured_at)
-        VALUES (v_ticket, 'haul_out_start', 'photo', 'Bed photo at DMS',
+        INSERT INTO ticket_media (ticket_id, stage_code, slot, media_kind,
+                                  description, storage_url, is_primary, captured_at)
+        VALUES (v_ticket, 'haul_out_start', 'origin_photo', 'photo', 'Bed photo at DMS',
                 '/media/demo/haul.svg', true, (v_day + TIME '09:18'));
     END LOOP;
 
@@ -783,13 +787,13 @@ BEGIN
         VALUES (v_ticket, 'work', 1, 'complete', v_monitors[1 + (i % 4)],
                 (v_day + TIME '10:05'));
 
-        INSERT INTO ticket_media (ticket_id, stage_code, media_kind, description,
-                                  storage_url, is_primary, captured_at)
-        VALUES (v_ticket, 'work', 'photo', 'Before',
+        INSERT INTO ticket_media (ticket_id, stage_code, slot, media_kind,
+                                  description, storage_url, is_primary, captured_at)
+        VALUES (v_ticket, 'work', 'before_photo', 'photo', 'Before',
                 '/media/demo/stump-before.svg', true, (v_day + TIME '10:02'));
-        INSERT INTO ticket_media (ticket_id, stage_code, media_kind, description,
-                                  storage_url, captured_at)
-        VALUES (v_ticket, 'work', 'photo', 'After',
+        INSERT INTO ticket_media (ticket_id, stage_code, slot, media_kind,
+                                  description, storage_url, captured_at)
+        VALUES (v_ticket, 'work', 'after_photo', 'photo', 'After',
                 '/media/demo/stump-after.svg', (v_day + TIME '11:08'));
     END LOOP;
 
@@ -920,3 +924,348 @@ BEGIN
         v_line;
 END
 $demo$;
+
+-- ===========================================================================
+-- Sprint 3: measured certifications, and a morning's review work
+--
+-- The demo needs both worlds side by side, because that is what a real
+-- programme looks like three weeks in. Twenty capacities were typed at
+-- mobilisation and have nothing behind them, which the detector says out loud.
+-- Four units were properly measured, one per container family, with the
+-- photographs and the sections that produced the number.
+--
+-- The measured units are new equipment with no tickets on them, so approving
+-- them reprices nothing. The point here is the worksheet, not the money.
+-- ===========================================================================
+DO $measured$
+DECLARE
+    v_project  uuid;
+    v_prime    uuid;
+    v_manager  uuid;
+    v_monitor  uuid;
+    v_equip    uuid;
+    v_cert     uuid;
+    v_meas     uuid;
+    v_ticket   uuid;
+    v_base     date;
+    v_n        integer;
+BEGIN
+    SELECT id, starts_on INTO v_project, v_base
+      FROM projects WHERE project_code = 'STL-2026-ROW';
+    IF v_project IS NULL THEN RETURN; END IF;
+
+    SELECT contractor_id INTO v_prime FROM project_contractors
+     WHERE project_id = v_project AND role_on_project = 'prime'
+       AND is_active LIMIT 1;
+    SELECT id INTO v_manager FROM users WHERE username = 'manager';
+    SELECT id INTO v_monitor FROM users WHERE username = 'jmiller';
+
+    -- ------------------------------------------------------------- the units
+    INSERT INTO equipment (unit_number, contractor_id, equipment_type, make,
+                           model, model_year, tare_weight_lbs, placard_code,
+                           barcode)
+    VALUES
+      ('GES-101', v_prime, 'grapple', 'Mack', 'Granite Knuckleboom', 2022,
+       31400, 'P-0101', 'GES101BC'),
+      ('GES-102', v_prime, 'trailer', 'Peterbilt', 'Round Bottom End Dump', 2021,
+       14200, 'P-0102', 'GES102BC'),
+      ('GES-103', v_prime, 'trailer', 'MAC', 'Aluminum Live Floor', 2023,
+       16800, 'P-0103', 'GES103BC'),
+      ('GES-104', v_prime, 'trailer', 'Load Trail', 'Custom Dump', 2020,
+       4900, 'P-0104', 'GES104BC')
+    ON CONFLICT DO NOTHING;
+
+    -- ------------------------------------------- 1. the grapple truck body
+    -- A rectangular lower body with the side walls flared out above it. Two
+    -- sections, and a toolbox intruding into the floor.
+    SELECT id INTO v_equip FROM equipment WHERE unit_number = 'GES-101';
+    INSERT INTO project_equipment_certifications (
+        project_id, equipment_id, certification_number, status, method,
+        measured_on, applies_from, expires_on, measured_by, measured_by_name,
+        created_by)
+    VALUES (v_project, v_equip, 'P-0101', 'draft', 'physical',
+            v_base + 12, v_base + 12, v_base + 300, v_manager, 'Luis Ortega',
+            v_manager)
+    RETURNING id INTO v_cert;
+
+    INSERT INTO certification_measurements (
+        certification_id, container_type_code, intended_use, measurement_method,
+        measured_by, measured_by_name, measured_on, paper_form_number,
+        created_by)
+    VALUES (v_cert, 'grapple_body', 'Self loader working residential collection',
+            'tape', v_manager, 'Luis Ortega', v_base + 12, 'PF-2026-0101',
+            v_manager)
+    RETURNING id INTO v_meas;
+
+    INSERT INTO certification_sections (
+        measurement_id, sequence, label, shape_code, role, quantity,
+        dimensions, notes) VALUES
+      (v_meas, 1, 'Lower body', 'rectangular', 'base', 1,
+       '{"length":264,"width":96,"height":54}',
+       'Headboard to the inside of the tailgate'),
+      (v_meas, 2, 'Top flare', 'tapered_sides', 'addition', 1,
+       '{"length":264,"height":18,"width_top":102,"width_bottom":96}',
+       'Sides lean out above the lower body'),
+      (v_meas, 3, 'Toolbox intrusion', 'rectangular', 'deduction', 1,
+       '{"length":36,"width":18,"height":20}',
+       'Driver side, welded in, cannot hold debris');
+
+    INSERT INTO certification_media (certification_id, slot, storage_url,
+                                     description, uploaded_by, captured_at)
+    SELECT v_cert, s.slot, '/media/demo/load.svg', s.label, v_manager,
+           (v_base + 12)::timestamptz + TIME '09:15'
+      FROM (VALUES ('front', 'Front, placard visible'),
+                   ('side', 'Driver side'),
+                   ('interior', 'Looking into the body'),
+                   ('placard', 'Certification placard'),
+                   ('measurement', 'Tape on the interior length'))
+             AS s(slot, label);
+
+    UPDATE project_equipment_certifications
+       SET status = 'active', approved_at = now(), approved_by = v_manager,
+           submitted_at = now(), submitted_by = v_manager
+     WHERE id = v_cert;
+
+    -- ------------------------------------- 2. the round bottom end dump
+    -- The shape the whole measurement model exists for. Measured as a box it
+    -- would come out 2.67 CY per load too big.
+    SELECT id INTO v_equip FROM equipment WHERE unit_number = 'GES-102';
+    INSERT INTO project_equipment_certifications (
+        project_id, equipment_id, certification_number, status, method,
+        measured_on, applies_from, expires_on, measured_by, measured_by_name,
+        created_by)
+    VALUES (v_project, v_equip, 'P-0102', 'draft', 'physical',
+            v_base + 12, v_base + 12, v_base + 300, v_manager, 'Luis Ortega',
+            v_manager)
+    RETURNING id INTO v_cert;
+
+    INSERT INTO certification_measurements (
+        certification_id, container_type_code, intended_use, measurement_method,
+        measured_by, measured_by_name, measured_on, paper_form_number,
+        device_notes, created_by)
+    VALUES (v_cert, 'round_bottom_end_dump',
+            'Hauling to the debris management site', 'tape', v_manager,
+            'Luis Ortega', v_base + 12, 'PF-2026-0102',
+            'Width taken at the widest point, where the straight sides begin',
+            v_manager)
+    RETURNING id INTO v_meas;
+
+    INSERT INTO certification_sections (
+        measurement_id, sequence, label, shape_code, role, quantity,
+        dimensions, notes) VALUES
+      (v_meas, 1, 'Main body', 'round_bottom', 'base', 1,
+       '{"length":288,"width":96,"straight_height":60,"curve_depth":14}',
+       'Curved floor. Measuring this as a box would add 2.67 CY to every load'),
+      (v_meas, 2, 'Wheel well intrusion', 'rectangular', 'deduction', 2,
+       '{"length":30,"width":8,"height":12}', 'Both sides');
+
+    INSERT INTO certification_media (certification_id, slot, storage_url,
+                                     description, uploaded_by, captured_at)
+    SELECT v_cert, s.slot, '/media/demo/haul.svg', s.label, v_manager,
+           (v_base + 12)::timestamptz + TIME '10:40'
+      FROM (VALUES ('front', 'Front of the trailer'),
+                   ('side', 'Curb side'),
+                   ('interior', 'Curved floor from the tailgate'),
+                   ('placard', 'Certification placard'),
+                   ('measurement', 'Depth of the curve'))
+             AS s(slot, label);
+
+    UPDATE project_equipment_certifications
+       SET status = 'active', approved_at = now(), approved_by = v_manager,
+           submitted_at = now(), submitted_by = v_manager
+     WHERE id = v_cert;
+
+    -- ----------------------------------- 3. the live floor, waiting on review
+    -- Submitted from the field and not yet approved, so the queue has a
+    -- certification on it that somebody actually has to decide about.
+    SELECT id INTO v_equip FROM equipment WHERE unit_number = 'GES-103';
+    INSERT INTO project_equipment_certifications (
+        project_id, equipment_id, certification_number, status, method,
+        measured_on, applies_from, expires_on, measured_by, measured_by_name,
+        submitted_at, submitted_by, created_by)
+    VALUES (v_project, v_equip, 'P-0103', 'draft', 'physical',
+            v_base + 18, v_base + 18, v_base + 320, v_monitor, 'Jordan Miller',
+            now(), v_monitor, v_monitor)
+    RETURNING id INTO v_cert;
+
+    INSERT INTO certification_measurements (
+        certification_id, container_type_code, intended_use, measurement_method,
+        measured_by, measured_by_name, measured_on, paper_form_number,
+        created_by)
+    VALUES (v_cert, 'live_floor_trailer',
+            'Haul out from the DMS on the reduction stream', 'tape', v_monitor,
+            'Jordan Miller', v_base + 18, 'PF-2026-0103', v_monitor)
+    RETURNING id INTO v_meas;
+
+    INSERT INTO certification_sections (
+        measurement_id, sequence, label, shape_code, role, quantity, dimensions)
+    VALUES (v_meas, 1, 'Main body', 'rectangular', 'base', 1,
+            '{"length":576,"width":98,"height":102}');
+
+    -- Three of the five photographs. The missing interior and placard are the
+    -- finding a reviewer is meant to see.
+    INSERT INTO certification_media (certification_id, slot, storage_url,
+                                     description, uploaded_by, captured_at)
+    SELECT v_cert, s.slot, '/media/demo/haul.svg', s.label, v_monitor,
+           (v_base + 18)::timestamptz + TIME '07:50'
+      FROM (VALUES ('front', 'Front of the trailer'),
+                   ('side', 'Driver side'),
+                   ('measurement', 'Tape on the interior height'))
+             AS s(slot, label);
+
+    UPDATE project_equipment_certifications SET status = 'submitted'
+     WHERE id = v_cert;
+
+    -- ------------------------------- 4. the custom trailer, still being measured
+    -- A draft, so the field app has something half done to pick back up.
+    SELECT id INTO v_equip FROM equipment WHERE unit_number = 'GES-104';
+    INSERT INTO project_equipment_certifications (
+        project_id, equipment_id, certification_number, status, method,
+        measured_on, applies_from, measured_by, measured_by_name, created_by)
+    VALUES (v_project, v_equip, 'P-0104', 'draft', 'physical',
+            current_date, current_date, v_monitor, 'Jordan Miller', v_monitor)
+    RETURNING id INTO v_cert;
+
+    INSERT INTO certification_measurements (
+        certification_id, container_type_code, intended_use, measurement_method,
+        measured_by, measured_by_name, paper_form_number, created_by)
+    VALUES (v_cert, 'custom_dump_trailer',
+            'Small contractor on residential collection', 'tape', v_monitor,
+            'Jordan Miller', 'PF-2026-0104', v_monitor)
+    RETURNING id INTO v_meas;
+
+    INSERT INTO certification_sections (
+        measurement_id, sequence, label, shape_code, role, quantity,
+        dimensions, notes) VALUES
+      (v_meas, 1, 'Bed', 'rectangular', 'base', 1,
+       '{"length":168,"width":82,"height":26}', 'Fold down sides are up'),
+      (v_meas, 2, 'Side extensions', 'tapered_sides', 'addition', 1,
+       '{"length":168,"height":18,"width_top":86,"width_bottom":82}',
+       'Bolt on boards, removable');
+
+    -- ------------------------------------------------- a morning's review work
+    -- Run the detectors first. Flags are what the review work is about, and
+    -- nothing raises them until somebody asks.
+    PERFORM adms_flag_ticket(id) FROM tickets
+     WHERE project_id = v_project AND deleted_at IS NULL AND NOT is_void;
+
+    -- Approve the first run of clean load tickets, so monitor accuracy has
+    -- something to divide by.
+    FOR v_ticket IN
+        SELECT q.subject_id FROM review_queue q
+         WHERE q.project_id = v_project AND q.subject_kind = 'ticket'
+           AND q.open_flags = 0 AND q.record_kind = 'load'
+         ORDER BY q.occurred_at LIMIT 24
+    LOOP
+        PERFORM adms_review_item('ticket', v_ticket, v_project, v_manager,
+                                 'Luis Ortega');
+        UPDATE review_items
+           SET state = 'approved', reviewed_by = v_manager,
+               reviewed_by_name = 'Luis Ortega', reviewed_at = now()
+         WHERE subject_kind = 'ticket' AND subject_id = v_ticket;
+        INSERT INTO review_events (review_item_id, event, from_state, to_state,
+                                   actor_id, actor_name)
+        SELECT id, 'decided', 'pending', 'approved', v_manager, 'Luis Ortega'
+          FROM review_items
+         WHERE subject_kind = 'ticket' AND subject_id = v_ticket;
+    END LOOP;
+
+    -- Flag the ones with no photograph, which is the same monitor over and
+    -- over. That run is what the pattern view is for.
+    v_n := 0;
+    FOR v_ticket IN
+        SELECT f.subject_id FROM review_flags f
+         WHERE f.project_id = v_project AND f.subject_kind = 'ticket'
+           AND f.issue_code = 'photo_missing' AND f.cleared_at IS NULL
+         ORDER BY f.raised_at
+    LOOP
+        v_n := v_n + 1;
+        PERFORM adms_review_item('ticket', v_ticket, v_project, v_manager,
+                                 'Luis Ortega');
+        UPDATE review_items
+           SET state = 'flagged', issue_code = 'photo_missing',
+               notes = 'No load photo. Monitor has to re-shoot it before this bills.',
+               reviewed_by = v_manager, reviewed_by_name = 'Luis Ortega',
+               reviewed_at = now() - (v_n || ' days')::interval
+         WHERE subject_kind = 'ticket' AND subject_id = v_ticket;
+        INSERT INTO review_events (review_item_id, event, from_state, to_state,
+                                   issue_code, note, actor_id, actor_name)
+        SELECT id, 'decided', 'pending', 'flagged', 'photo_missing',
+               'No load photo', v_manager, 'Luis Ortega'
+          FROM review_items
+         WHERE subject_kind = 'ticket' AND subject_id = v_ticket;
+
+        -- The fourth one is where a person stops correcting and escalates.
+        IF v_n = 4 THEN
+            UPDATE review_items
+               SET escalation_level = 'supervisor', escalated_at = now(),
+                   escalated_by = v_manager,
+                   escalation_reason =
+                     'Fourth load ticket with no photo from this monitor in a '
+                     'week. This needs a conversation, not another correction.'
+             WHERE subject_kind = 'ticket' AND subject_id = v_ticket;
+            INSERT INTO review_events (review_item_id, event, note, detail,
+                                       actor_id, actor_name)
+            SELECT id, 'escalated',
+                   'Fourth one this week from the same monitor',
+                   jsonb_build_object('from', 'none', 'to', 'supervisor'),
+                   v_manager, 'Luis Ortega'
+              FROM review_items
+             WHERE subject_kind = 'ticket' AND subject_id = v_ticket;
+
+            INSERT INTO review_alerts (review_item_id, project_id, to_user_id,
+                                       subject, body, severity, sent_by,
+                                       sent_by_name)
+            SELECT id, v_project, v_monitor,
+                   'Load photos missing on four tickets',
+                   'Four of your load tickets this week have no photo at the '
+                   'site. Re-shoot what you can and come and find me about the '
+                   'rest.', 'serious', v_manager, 'Luis Ortega'
+              FROM review_items
+             WHERE subject_kind = 'ticket' AND subject_id = v_ticket;
+        END IF;
+    END LOOP;
+
+    -- One that went round the loop: flagged, fixed, resolved.
+    SELECT q.subject_id INTO v_ticket FROM review_queue q
+     WHERE q.project_id = v_project AND q.subject_kind = 'ticket'
+       AND q.review_state = 'pending' AND q.open_flags > 0
+     ORDER BY q.occurred_at LIMIT 1;
+    IF v_ticket IS NOT NULL THEN
+        PERFORM adms_review_item('ticket', v_ticket, v_project, v_manager,
+                                 'Luis Ortega');
+        UPDATE review_items
+           SET state = 'resolved', reviewed_by = v_manager,
+               reviewed_by_name = 'Luis Ortega', reviewed_at = now(),
+               resolved_by = v_manager, resolved_at = now(),
+               resolution = 'Monitor re-shot the photo and it is on the ticket now.'
+         WHERE subject_kind = 'ticket' AND subject_id = v_ticket;
+        UPDATE review_flags SET cleared_at = now(), cleared_by = v_manager,
+               cleared_reason = 'Reviewed by Luis Ortega'
+         WHERE subject_kind = 'ticket' AND subject_id = v_ticket
+           AND cleared_at IS NULL;
+    END IF;
+
+    -- Thresholds this project actually works to.
+    INSERT INTO project_review_policy (project_id, overdue_days, repeat_count,
+                                       repeat_window_days, escalate_to_user)
+    VALUES (v_project, 3, 3, 7, v_manager)
+    ON CONFLICT (project_id) DO UPDATE
+      SET overdue_days = 3, repeat_count = 3, repeat_window_days = 7;
+
+    -- Re-check everything so the queue reflects all of the above.
+    PERFORM adms_flag_certification(id) FROM project_equipment_certifications
+     WHERE project_id = v_project;
+
+    RAISE NOTICE
+      'Sprint 3 demo: % measured certifications, % typed, % review decisions',
+      (SELECT count(*) FROM project_equipment_certifications c
+        JOIN certification_measurements m ON m.certification_id = c.id
+       WHERE c.project_id = v_project),
+      (SELECT count(*) FROM project_equipment_certifications c
+       WHERE c.project_id = v_project AND c.status = 'active'
+         AND NOT EXISTS (SELECT 1 FROM certification_measurements m
+                          WHERE m.certification_id = c.id)),
+      (SELECT count(*) FROM review_items WHERE project_id = v_project);
+END
+$measured$;

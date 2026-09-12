@@ -18,8 +18,8 @@ from . import db
 from .config import settings
 from .errors import ApiError, api_error_handler, http_error_handler
 from .routers import (auth, billing, catalog, certifications, closeout,
-                      documents, instance,
-                      lookups, org, projects, reports, review, tickets)
+                      documents, instance, lookups, measurements, org,
+                      projects, reports, review, tickets)
 
 logging.basicConfig(
     level=getattr(logging, settings.log_level.upper(), logging.INFO),
@@ -138,6 +138,7 @@ app.include_router(instance.router, prefix=API)
 app.include_router(documents.router, prefix=API)
 app.include_router(closeout.router, prefix=API)
 app.include_router(certifications.router, prefix=API)
+app.include_router(measurements.router, prefix=API)
 app.include_router(review.router, prefix=API)
 for r in org.routers:
     app.include_router(r, prefix=API)

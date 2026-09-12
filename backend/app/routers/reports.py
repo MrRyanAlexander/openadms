@@ -334,8 +334,12 @@ async def audit_trail(
 _CHAIN_RELATED: dict[str, list[tuple[str, str]]] = {
     "tickets": [
         ("transactions", "SELECT id FROM transactions WHERE ticket_id = $1"),
-        ("ticket_reviews", "SELECT id FROM ticket_reviews WHERE ticket_id = $1"),
-        ("ticket_flags", "SELECT id FROM ticket_flags WHERE ticket_id = $1"),
+        ("review_items",
+         "SELECT id FROM review_items "
+         " WHERE subject_kind = 'ticket' AND subject_id = $1"),
+        ("review_flags",
+         "SELECT id FROM review_flags "
+         " WHERE subject_kind = 'ticket' AND subject_id = $1"),
         ("ticket_media", "SELECT id FROM ticket_media WHERE ticket_id = $1"),
     ],
     "invoices": [

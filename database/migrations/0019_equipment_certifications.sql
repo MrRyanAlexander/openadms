@@ -7,6 +7,12 @@
 -- multiplied by the monitor's load call is the billable volume on every load
 -- ticket, so this table sits directly under the money.
 --
+-- A certification is also measured before it is trusted. The field user
+-- identifies the equipment, photographs it, measures the interior and submits;
+-- a reviewer approves. Only an approved row prices a ticket, which is why
+-- status carries draft, submitted and rejected alongside the three states the
+-- chain itself needs. The measurements behind the number live in 0024.
+--
 -- Corrections are the reason the chain exists. A tare read as 3 instead of 1
 -- can add forty cubic yards to every load that trailer hauled for a week, and
 -- the fix has to reach the tickets that were already priced. That is what
@@ -22,7 +28,10 @@ CREATE TABLE project_equipment_certifications (
     equipment_id          uuid NOT NULL REFERENCES equipment (id) ON DELETE RESTRICT,
 
     certification_number  text,
-    certified_capacity_cy numeric(10, 2) NOT NULL,
+    -- Nullable on purpose. A draft exists from the moment the monitor picks the
+    -- truck, before the tape comes out, and the number that lands here is
+    -- written by the measurement engine rather than typed.
+    certified_capacity_cy numeric(10, 2),
     tare_weight_lbs       numeric(10, 2),
 
     -- How the number was arrived at, and from when it counts.
@@ -41,21 +50,37 @@ CREATE TABLE project_equipment_certifications (
     superseded_at         timestamptz,
     superseded_reason     text,
 
+    -- Field submission and the review decision that lets it price work.
+    submitted_at          timestamptz,
+    submitted_by          uuid REFERENCES users (id) ON DELETE SET NULL,
+    approved_at           timestamptz,
+    approved_by           uuid REFERENCES users (id) ON DELETE SET NULL,
+    rejected_reason       text,
+
     notes                 text,
     created_by            uuid REFERENCES users (id) ON DELETE SET NULL,
     created_at            timestamptz NOT NULL DEFAULT now(),
     updated_at            timestamptz NOT NULL DEFAULT now(),
 
-    CONSTRAINT pec_capacity_positive CHECK (certified_capacity_cy > 0),
+    CONSTRAINT pec_capacity_positive CHECK (
+        certified_capacity_cy IS NULL OR certified_capacity_cy > 0),
+    -- A draft may not have a number yet. Anything past draft must.
+    CONSTRAINT pec_decided_has_a_capacity CHECK (
+        status = 'draft' OR certified_capacity_cy IS NOT NULL),
     CONSTRAINT pec_tare_positive CHECK (
         tare_weight_lbs IS NULL OR tare_weight_lbs >= 0),
     CONSTRAINT pec_method_valid CHECK (method IN (
         'physical', 'manufacturer', 'recertification', 'correction')),
     CONSTRAINT pec_status_valid CHECK (status IN (
+        'draft', 'submitted', 'rejected',
         'active', 'superseded', 'revoked')),
+    -- superseded_at is the moment a row stopped being in force. A draft or a
+    -- rejected measurement never was in force, so it never carries one.
     CONSTRAINT pec_superseded_shape CHECK (
-        (status = 'active' AND superseded_at IS NULL)
-        OR (status <> 'active' AND superseded_at IS NOT NULL)),
+        (status IN ('superseded', 'revoked') AND superseded_at IS NOT NULL)
+        OR (status NOT IN ('superseded', 'revoked') AND superseded_at IS NULL)),
+    CONSTRAINT pec_rejected_has_a_reason CHECK (
+        status <> 'rejected' OR COALESCE(btrim(rejected_reason), '') <> ''),
     CONSTRAINT pec_expiry_after_measurement CHECK (
         expires_on IS NULL OR expires_on >= measured_on),
     CONSTRAINT pec_not_self_superseding CHECK (
@@ -68,6 +93,12 @@ CREATE TABLE project_equipment_certifications (
 CREATE UNIQUE INDEX pec_one_active_per_project_equipment
     ON project_equipment_certifications (project_id, equipment_id)
     WHERE status = 'active';
+
+-- One worksheet in progress per truck per project. Two monitors starting two
+-- drafts on the same trailer is how a measurement gets half entered twice.
+CREATE UNIQUE INDEX pec_one_draft_per_project_equipment
+    ON project_equipment_certifications (project_id, equipment_id)
+    WHERE status IN ('draft', 'submitted');
 
 CREATE INDEX pec_equipment_idx ON project_equipment_certifications (equipment_id);
 CREATE INDEX pec_project_idx   ON project_equipment_certifications (project_id, status);
@@ -86,6 +117,11 @@ COMMENT ON COLUMN project_equipment_certifications.applies_from IS
     'The service date this capacity counts from. A correction inherits the '
     'applies_from of the row it replaces so it reaches back over the same '
     'tickets; a recertification starts at its own measurement date.';
+COMMENT ON COLUMN project_equipment_certifications.status IS
+    'draft while the field is still measuring, submitted once it is sent for '
+    'review, active once approved, then superseded or revoked. rejected is a '
+    'measurement a reviewer would not stand behind. Only active and superseded '
+    'rows have ever priced a ticket.';
 COMMENT ON COLUMN project_equipment_certifications.method IS
     'physical and manufacturer are original measurements. recertification is a '
     'new measurement that counts forward. correction says the previous number '
@@ -151,6 +187,70 @@ CREATE TRIGGER trg_certification_before_insert
     FOR EACH ROW EXECUTE FUNCTION adms_certification_before_insert();
 
 -- ---------------------------------------------------------------------------
+-- Approval is the moment a measurement starts pricing work.
+--
+-- A draft inserted with supersedes_id did not close the row it replaces,
+-- because it was never in force. That handover happens here, when a reviewer
+-- approves, which is also the only point at which the partial unique index
+-- would otherwise see two live rows.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION adms_certification_before_update()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_prev project_equipment_certifications%ROWTYPE;
+BEGIN
+    IF NEW.status = 'active' AND OLD.status IN ('draft', 'submitted') THEN
+        IF NEW.certified_capacity_cy IS NULL THEN
+            RAISE EXCEPTION
+                'This certification has no capacity yet, so there is nothing to approve'
+                USING ERRCODE = 'check_violation';
+        END IF;
+
+        IF NEW.supersedes_id IS NOT NULL THEN
+            SELECT * INTO v_prev FROM project_equipment_certifications
+             WHERE id = NEW.supersedes_id;
+
+            -- A correction stands where the number it corrects stood, so it
+            -- reaches the same tickets. Re-asserted at approval because the
+            -- row it replaces can have moved while the draft sat in the queue.
+            IF NEW.method = 'correction' AND v_prev.id IS NOT NULL THEN
+                NEW.applies_from := v_prev.applies_from;
+            END IF;
+
+            UPDATE project_equipment_certifications
+               SET status = 'superseded',
+                   superseded_at = now(),
+                   superseded_reason = COALESCE(superseded_reason, NEW.notes)
+             WHERE id = NEW.supersedes_id
+               AND status = 'active';
+        END IF;
+
+        NEW.approved_at := COALESCE(NEW.approved_at, now());
+    END IF;
+
+    -- Nothing about a measurement moves once it is in force. It is superseded
+    -- instead, which is the whole reason the chain exists.
+    IF OLD.status = 'active' AND NEW.status = 'active'
+       AND (NEW.certified_capacity_cy IS DISTINCT FROM OLD.certified_capacity_cy
+            OR NEW.applies_from IS DISTINCT FROM OLD.applies_from
+            OR NEW.method IS DISTINCT FROM OLD.method) THEN
+        RAISE EXCEPTION
+            'A certification in force is never edited. Record a recertification '
+            'if the unit changed, or a correction if the number was wrong.'
+            USING ERRCODE = 'check_violation';
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_certification_before_update
+    BEFORE UPDATE ON project_equipment_certifications
+    FOR EACH ROW EXECUTE FUNCTION adms_certification_before_update();
+
+-- ---------------------------------------------------------------------------
 -- Which certification governs a ticket completed on a given date.
 --
 -- The latest applies_from at or before the service date wins, and a correction
@@ -169,7 +269,10 @@ AS $$
       FROM project_equipment_certifications
      WHERE project_id = p_project
        AND equipment_id = p_equipment
-       AND status <> 'revoked'
+       -- Only a measurement somebody approved has ever priced work. A draft
+       -- or a rejected one has to be invisible here, or an unreviewed number
+       -- would reach a load ticket.
+       AND status IN ('active', 'superseded')
        AND applies_from <= COALESCE(p_on, current_date)
      ORDER BY applies_from DESC, created_at DESC
      LIMIT 1;

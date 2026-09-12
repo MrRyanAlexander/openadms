@@ -133,6 +133,52 @@ Full CRUD on `/clients`, `/contractors`, `/contracts`, `/sites`, `/equipment`, `
 
 <br>
 
+## Certification and measurement
+
+A capacity is a measurement, not a number. These endpoints record what came off
+the tape and derive the capacity from it, so a certification can answer how it
+was reached.
+
+| Method | Path | Notes |
+|---|---|---|
+| `GET` | `/measurements/shapes` | The calculation methods, each with the dimensions it asks for |
+| `GET` | `/measurements/container-types` | What can be measured, its normal capacity band, and the photographs it requires |
+| `POST` | `/measurements/preview` | Stateless. Cubic inches, feet and yards for a worksheet that has not been saved. What the field app calls while the tape is still out |
+| `GET` `POST` | `/projects/{id}/certifications` | Posting without a capacity opens a draft to be measured |
+| `GET` `POST` | `/certifications/{id}/measurement` | The worksheet. Open only while the certification is a draft |
+| `POST` | `/certifications/{id}/measurement/sections` | Add one measured shape |
+| `PATCH` `DELETE` | `/measurements/sections/{id}` | Correct or remove one |
+| `GET` `POST` `DELETE` | `/certifications/{id}/media` | The photographs, with what is still missing |
+| `POST` | `/certifications/{id}/submit` | Send a finished measurement for review |
+| `POST` | `/certifications/{id}/approve` | The moment it starts pricing loads. Supersedes and queues repricing |
+| `POST` | `/certifications/{id}/reject` | Send it back, with what has to be fixed |
+| `GET` | `/certifications/{id}/impact` | What a correction would touch, and what it would cost |
+
+<br>
+
+## Review
+
+One queue and one decision path across records. Invoices are deliberately
+absent: they belong to an invoice analyst rather than the data review function.
+
+| Method | Path | Notes |
+|---|---|---|
+| `GET` | `/issue-kinds` | Every check the detectors can raise, filterable by record kind |
+| `GET` | `/projects/{id}/review/queue` | Across kinds, with age, escalation state and the repeat signal |
+| `GET` | `/projects/{id}/review/overview` | The shape of the day, by kind and by issue |
+| `GET` | `/projects/{id}/review/patterns` | What keeps coming back, from whom |
+| `GET` | `/projects/{id}/review/escalations` | What meets this project's thresholds, and why |
+| `POST` | `/projects/{id}/review/scan` | Re-run every detector over tickets and certifications |
+| `GET` | `/review/{kind}/{id}` | One read: identity, flags, evidence against what was required, location with the day's track, the time sequence, relationships, the arithmetic, project rules, related records, review history |
+| `POST` | `/review/{kind}/{id}/decision` | Approve, flag, resolve or reopen |
+| `POST` | `/review/{kind}/{id}/note` | Half a review is a real state |
+| `POST` | `/review/{kind}/{id}/alert` | Put the record in front of whoever has to act |
+| `POST` | `/review/{kind}/{id}/escalate` | Suggested by the thresholds, chosen by a person |
+| `GET` | `/review/inbox` | Review work somebody has put in front of this user |
+| `POST` | `/review/alerts/{id}/acknowledge` | Seen and picked up |
+
+<br>
+
 ## Billing
 
 | Method | Path | Notes |

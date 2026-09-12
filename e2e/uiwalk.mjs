@@ -449,7 +449,7 @@ await step(page, 'review-queue', async () => {
 })
 
 await step(page, 'the-detector-runs-and-reports', async () => {
-  await page.click('button:has-text("Re-check every ticket")')
+  await page.click('button:has-text("Re-check everything")')
   await page.locator('.toast, .toasts').first().waitFor({ timeout: 25000 })
   await page.waitForTimeout(1200)
   const body = await page.locator('.main').innerText()
@@ -462,24 +462,37 @@ await step(page, 'the-detector-runs-and-reports', async () => {
   }
 })
 
-await step(page, 'the-queue-leads-with-the-worst', async () => {
+await step(page, 'the-queue-answers-the-eight-questions', async () => {
   await page.waitForSelector('table.data tbody tr', { timeout: 15000 })
   // Two data tables on this screen: the queue, then monitor accuracy.
   const head = (await page.locator('table.data thead').first().innerText()).toLowerCase()
-  for (const col of ['ticket', 'monitor', 'what the check saw', 'state']) {
+  for (const col of ['record', 'type', 'who', 'why it needs review',
+                     'waiting', 'state']) {
     if (!head.includes(col)) throw new Error(`the review queue is missing ${col}`)
   }
 })
 
-await step(page, 'a-ticket-is-approved-from-the-row', async () => {
-  const row = page.locator('table.data tbody tr').first()
-  const ticket = (await row.locator('td').nth(1).innerText()).split('\n')[0].trim()
-  await row.locator('button:has-text("Approve")').click()
-  await page.waitForTimeout(2000)
-  const still = await page.locator(`table.data tbody tr:has-text("${ticket}")`).count()
-  if (still > 0) {
-    throw new Error(`${ticket} is still in the unreviewed queue after approval`)
+await step(page, 'the-queue-carries-more-than-tickets', async () => {
+  const body = await page.locator('.main').innerText()
+  // The requirement is explicit that certifications are reviewed the same way
+  // tickets are, and that invoices are not part of this queue at all.
+  if (!/Certifications/i.test(body)) {
+    throw new Error('the queue does not offer certifications as a kind')
   }
+  if (/\bInvoices\b/i.test(await page.locator('.card-head').first().innerText())) {
+    throw new Error('invoices are in the data review queue')
+  }
+})
+
+await step(page, 'a-selection-is-approved-in-one-action', async () => {
+  const row = page.locator('table.data tbody tr').first()
+  const title = (await row.locator('td').nth(1).innerText()).split('\n')[0].trim()
+  await row.locator('input[type="checkbox"]').click()
+  await page.click('button:has-text("Approve 1")')
+  // The queue reloads three reads: the page, the overview and the accuracy
+  // panel. Waiting for the row to go is more honest than waiting a fixed time.
+  await page.locator(`table.data tbody tr:has-text("${title}")`).first()
+    .waitFor({ state: 'detached', timeout: 20000 })
 })
 
 await step(page, 'flagging-asks-what-is-wrong', async () => {
@@ -494,6 +507,120 @@ await step(page, 'flagging-asks-what-is-wrong', async () => {
   await page.fill('.modal textarea', 'Monitor needs to re-shoot the pre photo')
   await flag.click()
   await page.waitForSelector('.modal', { state: 'detached', timeout: 15000 })
+})
+
+/* -------------------------------------------------------------------------
+ * Sprint 3: the record as one scrollable read rather than five tabs.
+ * ---------------------------------------------------------------------- */
+
+await step(page, 'a-record-opens-as-one-scrollable-view', async () => {
+  await page.selectOption('select[aria-label="Review state"]', 'pending')
+  await page.waitForTimeout(900)
+  await page.selectOption('select[aria-label="Record type"]', 'load')
+  await page.waitForTimeout(1200)
+  await page.click('table.data tbody tr >> nth=0')
+  await page.waitForSelector('.review-sheet', { timeout: 15000 })
+  await page.locator('.review-jump button').first().waitFor({ timeout: 20000 })
+  // No tabs. The steps are sections in the page, and the rail jumps to them.
+  if (await page.locator('.review-sheet .tabs').count() > 0) {
+    throw new Error('the review record still uses tabs')
+  }
+  const rail = await page.locator('.review-jump button').count()
+  if (rail < 6) throw new Error('the jump list does not cover the record')
+  const body = await page.locator('.review-sheet-body').innerText()
+  for (const heading of ['Why it needs review', 'Location', 'Time',
+                         'Evidence', 'Project rules', 'Review history']) {
+    if (!body.includes(heading)) throw new Error(`the record has no ${heading} step`)
+  }
+})
+
+await step(page, 'the-evidence-says-what-was-required', async () => {
+  await page.click('.review-jump button:has-text("Evidence")')
+  await page.waitForTimeout(700)
+  const body = await page.locator('.review-sheet-body').innerText()
+  // The reviewer's question is what was supposed to be collected, which a grid
+  // of whatever arrived cannot answer.
+  if (!/requires? \d+ photograph|does not require photographs/i.test(body)) {
+    throw new Error('the record does not say what evidence was required')
+  }
+})
+
+await step(page, 'the-location-is-on-imagery-with-the-rest-of-the-day', async () => {
+  await page.click('.review-jump button:has-text("Location")')
+  await page.waitForTimeout(1400)
+  const hasMap = await page.locator('.review-map').count()
+  const noCoords = /Nothing to put on a map/i.test(
+    await page.locator('.review-sheet-body').innerText())
+  if (!hasMap && !noCoords) {
+    throw new Error('no map and no explanation of why there is none')
+  }
+  if (hasMap) {
+    await page.locator('.review-map .leaflet-container').first()
+      .waitFor({ timeout: 20000 })
+  }
+})
+
+await step(page, 'time-is-a-sequence-with-the-gaps-named', async () => {
+  await page.click('.review-jump button:has-text("Time")')
+  await page.waitForTimeout(700)
+  const body = await page.locator('.review-sheet-body').innerText()
+  if (!/minutes later|No times recorded/i.test(body)) {
+    throw new Error('the time step does not name the gaps between events')
+  }
+})
+
+await step(page, 'void-is-behind-a-menu-and-correct-is-now-update', async () => {
+  const bar = await page.locator('.decide-bar').innerText()
+  if (!/Approve/.test(bar)) throw new Error('no approve action')
+  if (!/Update/.test(bar)) throw new Error('Correct was not renamed to Update')
+  if (/Void/i.test(bar)) throw new Error('Void is still an exposed action')
+  await page.click('.decide-bar button[aria-label="More actions"]')
+  await page.waitForSelector('.more-menu', { timeout: 8000 })
+  const menu = await page.locator('.more-menu').innerText()
+  for (const item of ['Re-run the rules', 'Void this ticket']) {
+    if (!menu.includes(item)) throw new Error(`${item} is not in the menu`)
+  }
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(300)
+})
+
+await step(page, 'a-record-is-approved-by-keystroke', async () => {
+  const before = await page.locator('.review-sheet-head h2').innerText()
+  await page.locator('.review-sheet-body').click({ position: { x: 5, y: 5 } })
+  await page.keyboard.press('a')
+  await page.waitForTimeout(2200)
+  const after = await page.locator('.review-sheet-head h2').innerText()
+  // Approving steps to the next record rather than dropping back to the list,
+  // because working a queue means deciding over and over.
+  if (after === before) {
+    throw new Error('approving did not move to the next record')
+  }
+  await page.keyboard.press('Escape')
+  await page.waitForSelector('.review-sheet', { state: 'detached', timeout: 10000 })
+})
+
+await step(page, 'a-certification-is-reviewed-the-same-way', async () => {
+  await page.selectOption('select[aria-label="Record type"]', 'certification')
+  await page.selectOption('select[aria-label="Review state"]', 'all')
+  await page.waitForTimeout(1400)
+  await page.click('table.data tbody tr >> nth=0')
+  await page.waitForSelector('.review-sheet', { timeout: 15000 })
+  await page.locator('.review-jump button').first().waitFor({ timeout: 20000 })
+  await page.waitForTimeout(600)
+  const body = await page.locator('.review-sheet-body').innerText()
+  if (!/Measurements/.test(body)) {
+    throw new Error('a certification review does not lead with its measurements')
+  }
+  // Either it was measured and the sections are there, or it says plainly that
+  // nothing behind the number says how it was reached.
+  if (!/cubic inches|Nothing says how this number was reached/i.test(body)) {
+    throw new Error('the certification review does not show the arithmetic')
+  }
+  await page.keyboard.press('Escape')
+  await page.waitForSelector('.review-sheet', { state: 'detached', timeout: 10000 })
+  await page.selectOption('select[aria-label="Record type"]', '')
+  await page.selectOption('select[aria-label="Review state"]', 'pending')
+  await page.waitForTimeout(900)
 })
 
 await step(page, 'monitor-accuracy-is-a-rate', async () => {
@@ -516,11 +643,60 @@ await step(page, 'certifications-screen', async () => {
   await go(page, 'Certifications', 'Certifications')
   await page.waitForSelector('table.data tbody tr', { timeout: 15000 })
   const head = (await page.locator('table.data thead').innerText()).toLowerCase()
-  for (const col of ['unit', 'capacity', 'tickets', 'expires']) {
+  for (const col of ['unit', 'capacity', 'how it was reached', 'tickets',
+                     'expires']) {
     if (!head.includes(col)) throw new Error(`certifications list is missing ${col}`)
   }
   const stats = await page.locator('.card.stat').count()
   if (stats < 4) throw new Error('certification summary tiles missing')
+})
+
+await step(page, 'a-typed-capacity-is-called-out-as-unmeasured', async () => {
+  // Every capacity carried over from before measurements existed says so, on
+  // the list and in the drawer. That is the honest answer to "how did we
+  // determine this trailer is 30 CY".
+  const body = await page.locator('.main').innerText()
+  if (!/Typed, not measured/i.test(body)) {
+    throw new Error('the list does not distinguish a measured capacity from a typed one')
+  }
+  if (!/no measurements behind/i.test(body)) {
+    throw new Error('the screen does not say what an unmeasured capacity means')
+  }
+})
+
+await step(page, 'a-measured-capacity-shows-its-sections', async () => {
+  const measured = page.locator('table.data tbody tr:has-text("section")').first()
+  if (await measured.count() === 0) {
+    throw new Error('the demo has no measured certification to read')
+  }
+  await measured.click()
+  await page.waitForSelector('.drawer', { timeout: 10000 })
+  await page.locator('.drawer').getByText(/How the number was reached/i)
+    .first().waitFor({ timeout: 15000 })
+  const text = await page.locator('.drawer').innerText()
+  // The requirement: not the answer, the measurements that produced it.
+  if (!/cubic inches/i.test(text)) {
+    throw new Error('the worksheet does not show the arithmetic')
+  }
+  if (!/ft|in\b/.test(text)) {
+    throw new Error('the sections do not show what came off the tape')
+  }
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(400)
+})
+
+await step(page, 'measuring-a-unit-calculates-as-you-type', async () => {
+  await page.click('button:has-text("Measure a unit")')
+  await page.waitForSelector('.modal', { timeout: 10000 })
+  const blurb = await page.locator('.modal').innerText()
+  if (!/No capacity is entered here/i.test(blurb)) {
+    throw new Error('the dialog does not say the capacity comes from the measurements')
+  }
+  // There is deliberately no capacity field on this screen at all.
+  const caps = await page.locator('.modal input[placeholder*="44"]').count()
+  if (caps > 0) throw new Error('a capacity can still be typed directly')
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(400)
 })
 
 await step(page, 'certification-chain-reads-as-history', async () => {
@@ -546,16 +722,16 @@ await step(page, 'a-correction-prices-itself-before-it-is-written', async () => 
   if (!/says the previous number was/i.test(blurb)) {
     throw new Error('the correction dialog does not explain what a correction does')
   }
-  // Halving the capacity has to show a negative difference before anything is
-  // committed. This is the E10 case: a measurement found wrong after days of
+  // A correction is a measurement too, so it opens a worksheet rather than
+  // asking for a replacement number. What it will reprice is shown first,
+  // because this is the E10 case: a measurement found wrong after days of
   // hauling.
-  await page.fill('.modal input[type="number"] >> nth=0', '11')
-  await page.waitForTimeout(1200)
+  await page.waitForTimeout(1400)
   const priced = await page.locator('.modal').innerText()
-  if (!/What this reprices/i.test(priced)) {
+  if (!/What this will reprice/i.test(priced)) {
     throw new Error('the correction dialog does not show what it would reprice')
   }
-  if (!/Difference/i.test(priced)) throw new Error('no difference shown')
+  if (!/ticket/i.test(priced)) throw new Error('no ticket count shown')
   await page.keyboard.press('Escape')
   await page.waitForTimeout(300)
   await page.keyboard.press('Escape')
@@ -565,7 +741,7 @@ await step(page, 'a-correction-prices-itself-before-it-is-written', async () => 
 await step(page, 'a-completed-ticket-can-be-corrected', async () => {
   await go(page, 'Tickets', 'Tickets')
   await page.waitForSelector('table.data tbody tr', { timeout: 15000 })
-  // A load ticket, completed. A void one offers Restore rather than Correct,
+  // A load ticket, completed. A void one offers Restore rather than Update,
   // and a ticket billed under a flat or per-unit code prices the same whatever
   // the load call says, so correcting one would make a working engine look
   // broken. The filters are in the URL, so the walk asks for exactly that.
@@ -573,14 +749,15 @@ await step(page, 'a-completed-ticket-can-be-corrected', async () => {
   await page.waitForSelector('table.data tbody tr', { timeout: 15000 })
   await page.click('table.data tbody tr >> nth=0')
   await page.waitForSelector('.drawer', { timeout: 10000 })
-  await page.locator('.drawer button:has-text("Correct")').first()
+  // Correct was confusing terminology for what this does, so it is Update now.
+  await page.locator('.drawer button:has-text("Update")').first()
     .waitFor({ timeout: 15000 })
-  await page.click('.drawer button:has-text("Correct")')
+  await page.click('.drawer button:has-text("Update")')
   await page.waitForSelector('.modal', { timeout: 10000 })
 
-  const save = page.locator('.modal button:has-text("Save correction")')
+  const save = page.locator('.modal button:has-text("Save the update")')
   if (!(await save.isDisabled())) {
-    throw new Error('a correction saved with no reason and no change')
+    throw new Error('an update saved with no reason and no change')
   }
   // Always move the load call somewhere it is not, so the walk survives being
   // run twice against the same database. A correction that changes nothing is
@@ -591,9 +768,9 @@ await step(page, 'a-completed-ticket-can-be-corrected', async () => {
   await page.fill('.modal textarea', 'Load call corrected after reviewing the photos')
   const summary = await page.locator('.modal').innerText()
   if (!/Changing/i.test(summary)) {
-    throw new Error('the correction does not summarise what it will change')
+    throw new Error('the update does not summarise what it will change')
   }
-  if (await save.isDisabled()) throw new Error('a complete correction stayed disabled')
+  if (await save.isDisabled()) throw new Error('a complete update stayed disabled')
   await save.click()
   await page.waitForSelector('.modal', { state: 'detached', timeout: 15000 })
 })

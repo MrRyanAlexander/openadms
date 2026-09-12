@@ -1,5 +1,6 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { api } from '../lib/api'
 import { useApp } from '../lib/store'
 import { Icon, Modal, Toasts } from './ui'
 
@@ -185,6 +186,7 @@ export default function Shell() {
         </nav>
 
         <div className="sidebar-foot">
+          <ReviewInbox />
           <div className="user-chip" style={{ cursor: 'pointer' }} onClick={() => setMenu(!menu)}>
             <div className="avatar">{initials}</div>
             <div className="who" style={{ flex: 1, minWidth: 0 }}>
@@ -287,5 +289,68 @@ export function PageHeader({ title, sub, children, crumb, scope }) {
         <div className="topbar-actions">{children}</div>
       </header>
     </>
+  )
+}
+
+
+/* ------------------------------------------------------------------------ */
+/**
+ * Review work somebody has put in front of this person.
+ *
+ * "The list should also be supported by notifications/alerts elsewhere in the
+ *  application so users know that work is waiting for them." A queue nobody
+ * opens is not a queue, so the count sits where the reviewer already looks and
+ * each line opens the record it is about.
+ */
+function ReviewInbox() {
+  const [open, setOpen] = useState(false)
+  const [data, setData] = useState(null)
+  const navigate = useNavigate()
+
+  const load = useCallback(async () => {
+    try { setData(await api.get('/review/inbox')) } catch { /* not fatal */ }
+  }, [])
+
+  useEffect(() => {
+    load()
+    // Cheap and infrequent: this is a nudge, not a live feed.
+    const handle = setInterval(load, 120000)
+    return () => clearInterval(handle)
+  }, [load])
+
+  const unread = data?.unread || 0
+  const items = data?.items || []
+  if (!items.length) return null
+
+  async function go(alert) {
+    setOpen(false)
+    try { await api.post(`/review/alerts/${alert.id}/acknowledge`) } catch { /* fine */ }
+    load()
+    navigate(`/review?open=${alert.subject_kind}:${alert.subject_id}`)
+  }
+
+  return (
+    <div style={{ marginBottom: 8 }}>
+      <button className="btn ghost sm" style={{ width: '100%', justifyContent: 'flex-start' }}
+              onClick={() => setOpen(!open)}>
+        <Icon name="inbox" size={14} />
+        Review inbox
+        {unread > 0 && <span className="badge red" style={{ marginLeft: 'auto' }}>{unread}</span>}
+      </button>
+      {open && (
+        <div className="stack" style={{ gap: 4, marginTop: 6 }}>
+          {items.slice(0, 6).map((a) => (
+            <button key={a.id} className="inbox-line" onClick={() => go(a)}>
+              <span className={`dot ${a.severity}`} />
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <b>{a.title}</b>
+                <span className="dim"> {a.subject}</span>
+              </span>
+              {!a.read_at && <span className="badge blue">New</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }

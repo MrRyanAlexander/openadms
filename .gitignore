@@ -1,6 +1,8 @@
 node_modules/
 dist/
 backup/
+EquipmentTypes/
+DevFiles/
 .env
 .env.local
 .instance
@@ -18,3 +20,4 @@ __pycache__/
 .deploy-state.json
 backend/.env
 node_modules
+Claude outputs/

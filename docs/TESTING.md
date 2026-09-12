@@ -12,15 +12,21 @@ Three suites, each aimed at a different failure.
 
 | Suite | Count | Runs against | Proves |
 |---|---|---|---|
-| **Schema** | 160 assertions | A live Postgres | The database refuses what it should refuse, with no application in the way |
-| **API** | 151 tests | A live API on a seeded database | The endpoints behave, end to end, including two instances federating |
-| **UI walk** | 60 scripted steps | A built frontend and a running API | The back office actually runs, not just compiles |
+| **Schema** | 206 assertions | A live Postgres | The database refuses what it should refuse, with no application in the way |
+| **API** | 177 tests | A live API on a seeded database | The endpoints behave, end to end, including two instances federating |
+| **UI walk** | 69 scripted steps | A built frontend and a running API | The back office actually runs, not just compiles |
 
 ```bash
 ./database/setup.sh --with-demo --test    # schema
 cd backend && python3 -m pytest           # API
 npm run build && npm run test:ui          # UI walk
 ```
+
+> [!NOTE]
+> The walk is clean from a freshly seeded database. Three of its invoice steps
+> walk one draft invoice through submit, reject and reopen, so running the walk
+> twice against the same database, or running it after the API suite, finds that
+> invoice in a state those steps did not leave it in. Rebuild before walking.
 
 > [!IMPORTANT]
 > Nothing here is mocked. The rules engine and the audit trail live in the database, so stubbing the database out would test nothing at all. Every suite runs against real Postgres.
@@ -234,3 +240,25 @@ Editing a migration that has already been applied is schema drift. `--verify` is
 
 </sub>
 </div>
+
+<br>
+
+## What the measurement assertions hold
+
+The volume formulas are the most expensive thing in this system to get quietly
+wrong: certified capacity times the monitor's load call is the billable volume
+on every load a truck hauls. So the figures are computed by hand and checked in
+rather than derived by the same code under test.
+
+| Assertion | Figure |
+|---|---|
+| A rectangular box measures to the hand figure | 264 by 96 by 54 inches is 1,368,576 cubic inches, 792 cubic feet, 29.33 CY |
+| A curved floor measures to the hand figure | 288 long, 96 wide, 60 inches of straight side on a 14 inch curve is 41.18 CY |
+| Measuring that trailer as a box overstates it | 43.85 CY against 41.18, so 2.67 CY on every load |
+| A half circle floor matches the closed form | Segment volume equals length times pi r squared over two |
+| A floor with no curve is just a box | The round bottom shape degenerates correctly at zero |
+| A taper with equal ends is a box | So does the sloped side shape |
+
+Each of those has an API test behind it as well, because the arithmetic a
+monitor sees on the device comes back over `/measurements/preview` and has to be
+the same arithmetic the certification is saved with.

@@ -1093,6 +1093,7 @@ DECLARE
     v_project uuid;
     v_ticket  uuid;
     v_user    uuid;
+    v_item    uuid;
     v_n       integer;
     v_mark    integer;
     v_names   text[];
@@ -1120,33 +1121,50 @@ BEGIN
             v_n > 0, v_n::text);
 
         PERFORM pg_temp.check_that('a flag carries the numbers behind it',
-            NOT EXISTS (SELECT 1 FROM ticket_flags WHERE detail = '{}'::jsonb));
+            NOT EXISTS (SELECT 1 FROM review_flags
+                         WHERE subject_kind = 'ticket' AND detail = '{}'::jsonb));
 
         -- Idempotence matters: this runs every time anything is processed.
-        SELECT count(*) INTO v_n FROM ticket_flags WHERE cleared_at IS NULL;
+        SELECT count(*) INTO v_n FROM review_flags
+         WHERE subject_kind = 'ticket' AND cleared_at IS NULL;
         PERFORM adms_flag_ticket(id) FROM tickets
          WHERE project_id = v_project AND NOT is_void AND deleted_at IS NULL;
         PERFORM pg_temp.check_that('re-running the detector does not duplicate flags',
-            (SELECT count(*) FROM ticket_flags WHERE cleared_at IS NULL) = v_n,
+            (SELECT count(*) FROM review_flags
+              WHERE subject_kind = 'ticket' AND cleared_at IS NULL) = v_n,
             format('%s then %s', v_n,
-                   (SELECT count(*) FROM ticket_flags WHERE cleared_at IS NULL)));
+                   (SELECT count(*) FROM review_flags
+                     WHERE subject_kind = 'ticket' AND cleared_at IS NULL)));
 
         PERFORM pg_temp.check_that('a void ticket is never flagged',
             NOT EXISTS (
-                SELECT 1 FROM ticket_flags f JOIN tickets t ON t.id = f.ticket_id
-                 WHERE t.is_void AND f.cleared_at IS NULL));
+                SELECT 1 FROM review_flags f
+                  JOIN tickets t ON t.id = f.subject_id
+                 WHERE f.subject_kind = 'ticket'
+                   AND t.is_void AND f.cleared_at IS NULL));
+
+        -- The spine has no foreign key on subject_id, so the check that
+        -- replaces it has to actually refuse a record that is not there.
+        PERFORM pg_temp.check_raises('a review cannot name a record that does not exist',
+            format('INSERT INTO review_flags (subject_kind, subject_id, project_id,
+                                              issue_code, detail)
+                    VALUES (''ticket'', gen_random_uuid(), %L, ''full_load_call'',
+                            ''{"x": 1}''::jsonb)', v_project),
+            'no ticket exists');
 
         -- A flag that stops being true has to clear itself, or a correction
         -- looks like it did nothing.
-        SELECT f.ticket_id INTO v_ticket FROM ticket_flags f
-         WHERE f.flag_code = 'full_load_call' AND f.cleared_at IS NULL LIMIT 1;
+        SELECT f.subject_id INTO v_ticket FROM review_flags f
+         WHERE f.subject_kind = 'ticket' AND f.issue_code = 'full_load_call'
+           AND f.cleared_at IS NULL LIMIT 1;
         IF v_ticket IS NOT NULL THEN
             UPDATE tickets SET load_call_pct = 60 WHERE id = v_ticket;
             PERFORM adms_flag_ticket(v_ticket);
             PERFORM pg_temp.check_that('a flag clears when it stops being true',
-                NOT EXISTS (SELECT 1 FROM ticket_flags
-                             WHERE ticket_id = v_ticket
-                               AND flag_code = 'full_load_call'
+                NOT EXISTS (SELECT 1 FROM review_flags
+                             WHERE subject_kind = 'ticket'
+                               AND subject_id = v_ticket
+                               AND issue_code = 'full_load_call'
                                AND cleared_at IS NULL));
         ELSE
             PERFORM pg_temp.check_skipped(
@@ -1158,7 +1176,8 @@ BEGIN
         -- review is one row per ticket and the API suite leaves some behind.
         SELECT t.id INTO v_ticket FROM tickets t
          WHERE t.project_id = v_project AND NOT t.is_void AND t.deleted_at IS NULL
-           AND NOT EXISTS (SELECT 1 FROM ticket_reviews r WHERE r.ticket_id = t.id)
+           AND NOT EXISTS (SELECT 1 FROM review_items r
+                            WHERE r.subject_kind = 'ticket' AND r.subject_id = t.id)
          LIMIT 1;
 
         IF v_ticket IS NULL THEN
@@ -1167,27 +1186,71 @@ BEGIN
             SELECT id INTO v_ticket FROM tickets
              WHERE project_id = v_project AND NOT is_void AND deleted_at IS NULL
              LIMIT 1;
-            DELETE FROM ticket_reviews WHERE ticket_id = v_ticket;
+            DELETE FROM review_items
+             WHERE subject_kind = 'ticket' AND subject_id = v_ticket;
         END IF;
 
+        -- A record nobody has touched has no review row and still reads as
+        -- pending. That is what lets 25,000 seeded tickets cost nothing.
+        PERFORM pg_temp.check_that('an untouched ticket is pending without a row',
+            (SELECT review_state FROM ticket_review_queue
+              WHERE ticket_id = v_ticket) = 'pending');
+
         PERFORM pg_temp.check_raises('flagging without a claim is refused',
-            format('INSERT INTO ticket_reviews (ticket_id, project_id, state, reviewed_at)
-                    VALUES (%L, %L, ''flagged'', now())', v_ticket, v_project),
+            format('INSERT INTO review_items (subject_kind, subject_id, project_id,
+                                              state, reviewed_at)
+                    VALUES (''ticket'', %L, %L, ''flagged'', now())',
+                   v_ticket, v_project),
             'flagged_has_a_reason');
 
         PERFORM pg_temp.check_raises('a decision has to have been made by someone',
-            format('INSERT INTO ticket_reviews (ticket_id, project_id, state)
-                    VALUES (%L, %L, ''approved'')', v_ticket, v_project),
+            format('INSERT INTO review_items (subject_kind, subject_id, project_id, state)
+                    VALUES (''ticket'', %L, %L, ''approved'')', v_ticket, v_project),
             'decided_has_an_actor');
 
-        INSERT INTO ticket_reviews (ticket_id, project_id, state, notes,
-                                    reviewed_by, reviewed_by_name, reviewed_at)
-        VALUES (v_ticket, v_project, 'flagged', 'Pre photo is unusable',
-                v_user, 'Luis Ortega', now());
+        PERFORM pg_temp.check_raises('escalating without a reason is refused',
+            format('INSERT INTO review_items (subject_kind, subject_id, project_id,
+                                              escalation_level, escalated_at)
+                    VALUES (''ticket'', %L, %L, ''management'', now())',
+                   v_ticket, v_project),
+            'escalation_shape');
+
+        -- The write path every surface uses: open the row, then decide on it.
+        v_item := adms_review_item('ticket', v_ticket, v_project, v_user,
+                                   'Luis Ortega');
+
+        PERFORM pg_temp.check_that('opening a review is recorded as an event',
+            EXISTS (SELECT 1 FROM review_events
+                     WHERE review_item_id = v_item AND event = 'opened'));
+
+        PERFORM pg_temp.check_that('opening the same review twice is one row',
+            adms_review_item('ticket', v_ticket, v_project, v_user, 'Luis Ortega')
+                = v_item);
+
+        UPDATE review_items
+           SET state = 'flagged', notes = 'Pre photo is unusable',
+               reviewed_by = v_user, reviewed_by_name = 'Luis Ortega',
+               reviewed_at = now()
+         WHERE id = v_item;
 
         PERFORM pg_temp.check_that('the queue reflects the decision',
             (SELECT review_state FROM ticket_review_queue WHERE ticket_id = v_ticket)
                 = 'flagged');
+
+        PERFORM pg_temp.check_that('the generic queue agrees with the ticket queue',
+            (SELECT review_state FROM review_queue
+              WHERE subject_kind = 'ticket' AND subject_id = v_ticket) = 'flagged');
+
+        PERFORM pg_temp.check_that('a waiting item reports how long it has waited',
+            (SELECT waiting_days FROM review_queue
+              WHERE subject_kind = 'ticket' AND subject_id = v_ticket) >= 0);
+
+        PERFORM pg_temp.check_that('escalation candidates are suggested, not written',
+            (SELECT count(*) FROM adms_review_escalation_candidates(v_project)
+              WHERE reason_code NOT IN ('waited_too_long', 'repeating_issue')) = 0);
+
+        PERFORM pg_temp.check_that('invoices are deliberately not reviewable',
+            NOT EXISTS (SELECT 1 FROM review_subject_kinds WHERE code = 'invoice'));
 
         PERFORM pg_temp.check_that('monitor accuracy scores rate, not volume',
             (SELECT count(*) FROM information_schema.columns
@@ -1215,6 +1278,294 @@ BEGIN
       FROM unnest(COALESCE(v_names, '{}'), COALESCE(v_details, '{}')) AS u(nm, dt);
 END
 $review$;
+
+-- =============================================================================
+-- Sprint 3: the measurements behind a certified capacity.
+--
+-- The figures asserted here were computed by hand and are checked in on
+-- purpose. A volume formula that is silently wrong is the most expensive
+-- failure in this system: capacity times the load call is the billable volume
+-- on every load that truck hauls.
+-- =============================================================================
+DO $measure$
+DECLARE
+    v_project uuid;
+    v_equip   uuid;
+    v_cert    uuid;
+    v_meas    uuid;
+    v_user    uuid;
+    v_num     numeric;
+    v_box     numeric;
+    v_mark    integer;
+    v_names   text[];
+    v_details text[];
+BEGIN
+    SELECT id INTO v_project FROM projects ORDER BY created_at LIMIT 1;
+    SELECT id INTO v_user FROM users WHERE username = 'manager';
+    SELECT COALESCE(max(n), 0) INTO v_mark FROM _results;
+
+    BEGIN
+        PERFORM pg_temp.check_that('every shape says what it is and how it is worked out',
+            NOT EXISTS (SELECT 1 FROM measurement_shapes
+                         WHERE coalesce(btrim(label), '') = ''
+                            OR coalesce(btrim(description), '') = ''
+                            OR coalesce(btrim(formula_note), '') = ''
+                            OR jsonb_array_length(dimension_schema) = 0));
+
+        PERFORM pg_temp.check_that('every container type says what it is for',
+            NOT EXISTS (SELECT 1 FROM container_types
+                         WHERE coalesce(btrim(typical_use), '') = ''
+                            OR cardinality(required_photo_slots) = 0));
+
+        PERFORM pg_temp.check_that('a certification needs a photograph of the placard',
+            NOT EXISTS (SELECT 1 FROM container_types
+                         WHERE NOT ('placard' = ANY (required_photo_slots))));
+
+        -- 22ft by 8ft by 4ft 6in rolloff, in inches. 1,368,576 cubic inches,
+        -- 792 cubic feet, 29.33 cubic yards.
+        v_num := adms_shape_volume('rectangular',
+                   '{"length":264,"width":96,"height":54}'::jsonb);
+        PERFORM pg_temp.check_that('a rectangular box measures to the hand figure',
+            v_num = 1368576, v_num::text);
+        PERFORM pg_temp.check_that('cubic inches convert to cubic yards',
+            round(v_num / 46656.0, 2) = 29.33, round(v_num / 46656.0, 2)::text);
+
+        -- The round bottom trailer from the migration header. 288 by 96
+        -- interior, 60in of straight side on a 14in curve: 41.18 CY, against
+        -- 43.85 CY if the same trailer is measured floor to rail as a box.
+        v_num := adms_shape_volume('round_bottom',
+                   '{"length":288,"width":96,"straight_height":60,"curve_depth":14}'::jsonb);
+        v_box := adms_shape_volume('rectangular',
+                   '{"length":288,"width":96,"height":74}'::jsonb);
+        PERFORM pg_temp.check_that('a curved floor measures to the hand figure',
+            round(v_num / 46656.0, 2) = 41.18, round(v_num / 46656.0, 2)::text);
+        PERFORM pg_temp.check_that('measuring that trailer as a box overstates it',
+            round((v_box - v_num) / 46656.0, 2) = 2.67,
+            format('%s CY per load', round((v_box - v_num) / 46656.0, 2)));
+
+        PERFORM pg_temp.check_that('a floor with no curve is just a box',
+            adms_shape_volume('round_bottom',
+                '{"length":10,"width":10,"straight_height":10,"curve_depth":0}'::jsonb) = 1000);
+
+        PERFORM pg_temp.check_that('a half circle floor matches the closed form',
+            round(adms_shape_volume('round_bottom',
+                '{"length":100,"width":96,"straight_height":0,"curve_depth":48}'::jsonb), 0)
+            = round((100 * pi() * 48 * 48 / 2)::numeric, 0));
+
+        PERFORM pg_temp.check_that('a taper with equal ends is a box',
+            adms_shape_volume('tapered_sides',
+                '{"length":10,"height":10,"width_top":10,"width_bottom":10}'::jsonb) = 1000);
+
+        PERFORM pg_temp.check_that('a prismatoid with equal ends is a box',
+            round(adms_shape_volume('prismatoid',
+                '{"length_bottom":10,"width_bottom":10,"length_top":10,"width_top":10,"height":10}'::jsonb))
+            = 1000);
+
+        PERFORM pg_temp.check_raises('a curve deeper than the trailer is wide is refused',
+            'SELECT adms_shape_volume(''round_bottom'',
+                ''{"length":10,"width":10,"straight_height":5,"curve_depth":9}''::jsonb)',
+            'not a circular floor');
+
+        PERFORM pg_temp.check_raises('an unknown shape is refused',
+            'SELECT adms_shape_volume(''banana'', ''{}''::jsonb)',
+            'no measurement shape');
+
+        PERFORM pg_temp.check_raises('a missing dimension is refused',
+            'SELECT adms_shape_volume(''rectangular'', ''{"length":10,"width":10}''::jsonb)',
+            'needs a height');
+
+        -- ------------------------------------------------------- a worksheet
+        SELECT e.id INTO v_equip FROM equipment e
+          JOIN project_contractors pc ON pc.contractor_id = e.contractor_id
+         WHERE pc.project_id = v_project AND pc.is_active AND e.deleted_at IS NULL
+           AND NOT EXISTS (SELECT 1 FROM project_equipment_certifications c
+                            WHERE c.project_id = v_project AND c.equipment_id = e.id)
+         LIMIT 1;
+
+        IF v_equip IS NULL THEN
+            PERFORM pg_temp.check_skipped('a capacity is derived from its measurements',
+                'every unit on this project is already certified');
+        ELSE
+            INSERT INTO project_equipment_certifications
+                (project_id, equipment_id, status, method, measured_on,
+                 applies_from, created_by)
+            VALUES (v_project, v_equip, 'draft', 'physical', current_date,
+                    current_date, v_user)
+            RETURNING id INTO v_cert;
+
+            PERFORM pg_temp.check_that('a draft starts with no capacity at all',
+                (SELECT certified_capacity_cy FROM project_equipment_certifications
+                  WHERE id = v_cert) IS NULL);
+
+            PERFORM pg_temp.check_that('a draft never prices a ticket',
+                (adms_certification_in_force(v_project, v_equip, current_date)).id
+                    IS NULL);
+
+            INSERT INTO certification_measurements
+                (certification_id, container_type_code, intended_use,
+                 measurement_method, measured_by, measured_by_name,
+                 paper_form_number)
+            VALUES (v_cert, 'round_bottom_end_dump', 'Haul out to final disposal',
+                    'tape', v_user, 'Luis Ortega', 'PF-TEST-0001')
+            RETURNING id INTO v_meas;
+
+            INSERT INTO certification_sections
+                (measurement_id, sequence, label, shape_code, role, dimensions)
+            VALUES (v_meas, 1, 'Main body', 'round_bottom', 'base',
+                    '{"length":288,"width":96,"straight_height":60,"curve_depth":14}');
+
+            PERFORM pg_temp.check_that('a capacity is derived from its measurements',
+                (SELECT certified_capacity_cy FROM project_equipment_certifications
+                  WHERE id = v_cert) = 41.18,
+                (SELECT certified_capacity_cy::text FROM project_equipment_certifications
+                  WHERE id = v_cert));
+
+            INSERT INTO certification_sections
+                (measurement_id, sequence, label, shape_code, role, quantity,
+                 dimensions, notes)
+            VALUES (v_meas, 2, 'Wheel well intrusion', 'rectangular', 'deduction',
+                    2, '{"length":30,"width":8,"height":12}', 'Both sides');
+
+            PERFORM pg_temp.check_that('a deduction counts once per unit measured',
+                (SELECT deduction_cubic_inches FROM certification_measurements
+                  WHERE id = v_meas) = 5760);
+
+            INSERT INTO certification_sections
+                (measurement_id, sequence, label, shape_code, role, dimensions)
+            VALUES (v_meas, 3, 'Bolted sideboards', 'tapered_sides', 'addition',
+                    '{"length":288,"height":12,"width_top":102,"width_bottom":96}');
+
+            PERFORM pg_temp.check_that('base plus additions minus deductions is the total',
+                (SELECT total_cubic_inches FROM certification_measurements
+                  WHERE id = v_meas)
+                = (SELECT base_cubic_inches + addition_cubic_inches
+                          - deduction_cubic_inches
+                     FROM certification_measurements WHERE id = v_meas));
+
+            PERFORM pg_temp.check_that('the worksheet keeps every section it was built from',
+                (SELECT section_count FROM certification_measurements
+                  WHERE id = v_meas) = 3);
+
+            PERFORM pg_temp.check_that('the reviewer can read the sections back',
+                jsonb_array_length((SELECT sections FROM certification_measurement_detail
+                                     WHERE id = v_meas)) = 3);
+
+            PERFORM pg_temp.check_raises('a section with no volume is refused',
+                format('INSERT INTO certification_sections
+                            (measurement_id, sequence, label, shape_code, role, dimensions)
+                        VALUES (%L, 9, ''Nothing'', ''rectangular'', ''base'',
+                                ''{"length":0,"width":10,"height":10}'')', v_meas),
+                'no volume');
+
+            PERFORM pg_temp.check_raises('deducting more than the container holds is refused',
+                format('INSERT INTO certification_sections
+                            (measurement_id, sequence, label, shape_code, role, dimensions)
+                        VALUES (%L, 8, ''Impossible'', ''rectangular'', ''deduction'',
+                                ''{"length":1000,"width":1000,"height":1000}'')', v_meas),
+                'more than the container holds');
+
+            -- Submission closes the worksheet. Evidence that can be edited
+            -- afterwards is not evidence.
+            UPDATE project_equipment_certifications
+               SET status = 'submitted', submitted_at = now(), submitted_by = v_user
+             WHERE id = v_cert;
+
+            PERFORM pg_temp.check_raises('a submitted worksheet cannot be edited',
+                format('INSERT INTO certification_sections
+                            (measurement_id, sequence, label, shape_code, role, dimensions)
+                        VALUES (%L, 7, ''Late addition'', ''rectangular'', ''addition'',
+                                ''{"length":10,"width":10,"height":10}'')', v_meas),
+                'measurements are closed');
+
+            UPDATE project_equipment_certifications
+               SET status = 'active', approved_by = v_user WHERE id = v_cert;
+
+            PERFORM pg_temp.check_that('an approved measurement prices work',
+                (adms_certification_in_force(v_project, v_equip, current_date))
+                    .certified_capacity_cy IS NOT NULL);
+
+            PERFORM pg_temp.check_raises('a certification in force is never edited',
+                format('UPDATE project_equipment_certifications
+                           SET certified_capacity_cy = 99 WHERE id = %L', v_cert),
+                'never edited');
+
+            -- ------------------------------------------- reviewable records
+            PERFORM adms_flag_certification(v_cert);
+
+            PERFORM pg_temp.check_that('a measured certification is not called unmeasured',
+                NOT EXISTS (SELECT 1 FROM review_flags
+                             WHERE subject_kind = 'certification'
+                               AND subject_id = v_cert
+                               AND issue_code = 'capacity_not_measured'
+                               AND cleared_at IS NULL));
+
+            PERFORM pg_temp.check_that('a certification with no photographs says which are missing',
+                cardinality((SELECT missing_slots FROM certification_evidence
+                              WHERE certification_id = v_cert)) > 0);
+
+            PERFORM pg_temp.check_that('a certification reaches the review queue',
+                EXISTS (SELECT 1 FROM review_queue
+                         WHERE subject_kind = 'certification'
+                           AND subject_id = v_cert));
+
+            INSERT INTO certification_media (certification_id, slot, storage_url)
+            SELECT v_cert, slot, 'https://example.invalid/' || slot || '.jpg'
+              FROM unnest(ARRAY['front', 'side', 'interior', 'placard',
+                                'measurement']) AS slot;
+
+            PERFORM pg_temp.check_that('collecting every required photograph closes the gap',
+                (SELECT evidence_complete FROM certification_evidence
+                  WHERE certification_id = v_cert));
+
+            PERFORM adms_flag_certification(v_cert);
+            PERFORM pg_temp.check_that('the missing photograph flag clears when they arrive',
+                NOT EXISTS (SELECT 1 FROM review_flags
+                             WHERE subject_kind = 'certification'
+                               AND subject_id = v_cert
+                               AND issue_code = 'photo_slot_missing'
+                               AND cleared_at IS NULL));
+        END IF;
+
+        -- Every certification written before this sprint is a typed number, and
+        -- the detector has to say so rather than letting them pass.
+        SELECT COALESCE(sum(adms_flag_certification(id)), 0) INTO v_num
+          FROM project_equipment_certifications WHERE project_id = v_project;
+
+        PERFORM pg_temp.check_that('an unmeasured capacity is called out',
+            NOT EXISTS (
+                SELECT 1 FROM project_equipment_certifications c
+                 WHERE c.project_id = v_project AND c.status = 'active'
+                   AND NOT EXISTS (SELECT 1 FROM certification_measurements m
+                                    WHERE m.certification_id = c.id)
+                   AND NOT EXISTS (SELECT 1 FROM review_flags f
+                                    WHERE f.subject_kind = 'certification'
+                                      AND f.subject_id = c.id
+                                      AND f.issue_code = 'capacity_not_measured'
+                                      AND f.cleared_at IS NULL)));
+
+        PERFORM pg_temp.check_that('certification checks stay out of the ticket catalog',
+            NOT EXISTS (SELECT 1 FROM ticket_flag_kinds
+                         WHERE code IN ('capacity_not_measured', 'placard_mismatch')));
+
+        PERFORM pg_temp.check_that('the queue carries more than one kind of record',
+            (SELECT count(DISTINCT subject_kind) FROM review_queue) >= 2);
+
+        SELECT array_agg(name ORDER BY n),
+               array_agg(COALESCE(detail, '') ORDER BY n)
+          INTO v_names, v_details
+          FROM _results WHERE n > v_mark;
+        RAISE EXCEPTION 'sandbox' USING ERRCODE = 'ADMS1';
+    EXCEPTION
+        WHEN SQLSTATE 'ADMS1' THEN
+            NULL;
+    END;
+
+    INSERT INTO _results (name, ok, detail)
+    SELECT u.nm, true,
+           CASE WHEN u.dt LIKE 'skipped:%' THEN u.dt ELSE 'sandboxed' END
+      FROM unnest(COALESCE(v_names, '{}'), COALESCE(v_details, '{}')) AS u(nm, dt);
+END
+$measure$;
 
 -- =============================================================================
 -- Sprint 2: how a rate sheet is actually written, and the invoice lifecycle.

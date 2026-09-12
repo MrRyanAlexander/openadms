@@ -235,6 +235,11 @@ CREATE TABLE ticket_media (
     id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     ticket_id      uuid NOT NULL REFERENCES tickets (id) ON DELETE CASCADE,
     stage_code     text,
+    -- Which of the photographs the ticket type asks for this one is. The key
+    -- of a photo field in ticket_types.field_schema, so what was required and
+    -- what was collected can be compared without a screen guessing from a
+    -- description a monitor typed.
+    slot           text,
     media_kind     text NOT NULL DEFAULT 'photo',
     description    text,
     storage_url    text NOT NULL,
@@ -259,6 +264,8 @@ CREATE TABLE ticket_media (
 CREATE UNIQUE INDEX ticket_media_one_primary
     ON ticket_media (ticket_id) WHERE is_primary AND deleted_at IS NULL;
 CREATE INDEX ticket_media_ticket_idx ON ticket_media (ticket_id);
+CREATE INDEX ticket_media_slot_idx ON ticket_media (ticket_id, slot)
+    WHERE slot IS NOT NULL AND deleted_at IS NULL;
 SELECT adms_attach_touch('ticket_media');
 
 -- ---------------------------------------------------------------------------

@@ -141,12 +141,23 @@ terraform apply -var="project_id=..." -var="image_uri=<artifact registry image>"
 
 ## Environment
 
-**Backend** — `DATABASE_URL` (the only database variable), `JWT_SECRET`,
+**Backend**: `DATABASE_URL` (the only database variable), `JWT_SECRET`,
 `INSTANCE_KEY`, `CORS_ORIGIN_REGEX`, `PORT`, `ENVIRONMENT`, `LOG_LEVEL`,
 `ACCESS_TOKEN_MINUTES`, `REFRESH_TOKEN_DAYS`, `PEER_SIGNATURE_SKEW_SECONDS`,
 `REGISTRY_URL`.
 
-**Frontends** — `VITE_API_URL` and nothing else that matters.
+**Frontends**: `VITE_API_URL`, and for the back office two optional map
+settings.
+
+| Variable | Default | Why you would change it |
+|---|---|---|
+| `VITE_API_URL` | `http://localhost:8080/api/v1` | Always set this |
+| `VITE_MAP_TILES` | Esri World Imagery | The review screen draws the load point on satellite imagery. Point this at an internal ArcGIS server or an offline tile cache on a self hosted or air gapped install. `{z}/{y}/{x}` placeholders |
+| `VITE_MAP_CREDIT` | `Esri World Imagery` | The attribution shown on the map |
+
+Without reachable tiles the review map still plots the points and the haul line
+on a plain ground and says the imagery did not load, so a deployment with no
+outbound access degrades rather than breaking.
 
 ## Migrations in production
 

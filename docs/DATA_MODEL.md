@@ -103,7 +103,7 @@ Shipped types: `LOAD`, `HAULOUT`, `UNIT`, `INCIDENT`, plus `ROE`, `TM` and `SURV
 | `tickets` | Common columns are first class, so they index and query fast. Anything a type invents lands in `data` JSONB, GIN indexed. Carries the void and replacement workflow, the processing state, and the federation columns |
 | `ticket_stages` | One row per lifecycle stage instance: monitor, site, GPS, debris, load call, scale, time |
 | `ticket_waypoints` | The GPS trail, used to derive haul distance |
-| `ticket_media` | Photos, scans, signatures and documents, with one primary per ticket |
+| `ticket_media` | Photos, scans, signatures and documents, with one primary per ticket. `slot` names which of the photographs the ticket type asked for this one is |
 | `pending_handoffs` | The two hidden ticket types, modelled as short lived rows keyed by the barcode the driver carries |
 
 `tickets.client_uuid` is minted by the field app before the ticket reaches the server, which is what makes the offline queue idempotent.
@@ -160,6 +160,13 @@ Full reference: [The rules engine](RULES_ENGINE.md).
 | `project_permit_watch` | Sites with a pending or expiring permit, and how long it has been pending |
 | `document_watch` | The expiring sweep the alerts feed reads |
 | `contract_line_item_review` | The intake review queue |
+| `review_subjects` | Every reviewable record flattened to one shape. The seam a new record kind is added at |
+| `review_queue` | What needs review, why, how long it has waited, and whether it is decided or escalated |
+| `review_issue_patterns` | A run of the same issue from the same monitor or contractor, counted over rolling windows |
+| `ticket_review_queue` / `monitor_accuracy` | The ticket queue and the monitor scoreboard, over the generic spine |
+| `ticket_evidence` / `certification_evidence` / `review_evidence` | Required photographs against collected ones |
+| `certification_measurement_detail` | A worksheet with its sections, dimensions, formulas and totals |
+| `project_equipment_current` | The live certification for every truck on every project, with expiry |
 | `transaction_ledger` | Transactions joined to ticket, rule, code, contract, invoice |
 | `audit_trail` | Audit events with actor and project resolved |
 | `role_permission_matrix` | Effective permissions per role |
@@ -170,6 +177,13 @@ Full reference: [The rules engine](RULES_ENGINE.md).
 
 | Function | Purpose |
 |---|---|
+| `adms_shape_volume(shape, dims)` | Cubic inches for one measured shape. The single source of the arithmetic, shared by the field app, the back office and the tests |
+| `adms_certification_volume(measurement)` | Recomputes a worksheet from its sections and writes the derived capacity onto the draft certification |
+| `adms_round_capacity(cy, rule)` | How the exact volume becomes the certified capacity |
+| `adms_certification_in_force(project, equipment, on)` | Which approved measurement governs work done on a date |
+| `adms_flag_ticket(ticket)` / `adms_flag_certification(cert)` | Run every detector over one record. Idempotent, and clears a flag that has stopped being true |
+| `adms_review_item(kind, subject, project, ...)` | The review row for a record, opened on first use |
+| `adms_review_escalation_candidates(project)` | Items meeting this project's escalation thresholds, with the reason spelled out |
 | `adms_process_ticket(ticket, actor)` | Evaluate every active rule for the type on the project, write one locked transaction per match. Idempotent |
 | `adms_rule_matches(ticket, rule)` | Whole rule evaluation honouring `match_mode` |
 | `adms_eval_statement(row, operand, operator, value, negate)` | One statement line, typed by the operand's `data_type` |

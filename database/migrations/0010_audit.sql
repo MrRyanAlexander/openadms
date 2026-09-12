@@ -43,8 +43,8 @@ CREATE TABLE audit_events (
                                  'contract_ingestions')
                  THEN 'billing'
             WHEN entity_type IN ('tickets', 'ticket_stages', 'ticket_media',
-                                 'ticket_waypoints', 'ticket_reviews',
-                                 'ticket_flags', 'pending_handoffs')
+                                 'ticket_waypoints', 'review_items',
+                                 'review_flags', 'pending_handoffs')
                  THEN 'operations'
             ELSE 'records'
         END) STORED,

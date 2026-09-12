@@ -128,6 +128,7 @@ $field$[
   {"key":"origin_gps","label":"GPS","type":"gps","required":true,"stage":"work"},
   {"key":"zone_id","label":"Zone","type":"select","source":"project_zones","required":false,"stage":"work"},
   {"key":"before_photo","label":"Before Photo","type":"photo","required":true,"stage":"work"},
+  {"key":"measure_photo","label":"Measurement Photo","type":"photo","required":false,"stage":"work","help":"Tape against the stump or the hanger, where the work is measured"},
   {"key":"after_photo","label":"After Photo","type":"photo","required":true,"stage":"work"},
   {"key":"notes","label":"Notes","type":"textarea","required":false,"stage":"work"}
 ]$field$::jsonb

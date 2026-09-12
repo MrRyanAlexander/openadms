@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { api, fmt } from '../lib/api'
 import { useApp, useFetch, useListState } from '../lib/store'
@@ -305,6 +305,7 @@ export function TicketDrawer({ ticketId, onClose, onChanged }) {
   const [unvoiding, setUnvoiding] = useState(false)
   const [editing, setEditing] = useState(false)
   const [repricing, setRepricing] = useState(false)
+  const [menu, setMenu] = useState(false)
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
   const { data, loading, error, reload } = useFetch(
@@ -361,23 +362,30 @@ export function TicketDrawer({ ticketId, onClose, onChanged }) {
         <>
           {can('ticket.update') && t && !t.is_void && (
             <button className="btn sm" onClick={() => setEditing(true)}>
-              <Icon name="edit" size={13} /> Correct
+              <Icon name="edit" size={13} /> Update
             </button>
           )}
-          {can('transaction.process') && t && !t.is_void && t.status === 'completed' && (
-            t.needs_reprocess
-              ? <button className="btn sm primary" onClick={() => setRepricing(true)}>
-                  <Icon name="refresh" size={13} /> Reprice
-                </button>
-              : <button className="btn sm" onClick={reRunRules}>
-                  <Icon name="refresh" size={13} /> Re-run rules
-                </button>
-          )}
-          {can('ticket.void') && t && !t.is_void && (
-            <button className="btn sm danger" onClick={() => setVoiding(true)}>Void</button>
+          {can('transaction.process') && t && !t.is_void && t.needs_reprocess && (
+            <button className="btn sm primary" onClick={() => setRepricing(true)}>
+              <Icon name="refresh" size={13} /> Reprice
+            </button>
           )}
           {can('ticket.void') && t && t.is_void && (
             <button className="btn sm" onClick={() => setUnvoiding(true)}>Restore</button>
+          )}
+          {t && !t.is_void && (
+            <div style={{ position: 'relative' }}>
+              <button className="btn sm ghost icon" aria-label="More actions"
+                      onClick={() => setMenu(!menu)}>
+                <Icon name="menu" size={15} />
+              </button>
+              {menu && (
+                <TicketMoreMenu ticket={t} can={can} onClose={() => setMenu(false)}
+                                onRerun={() => { setMenu(false); reRunRules() }}
+                                onReprice={() => { setMenu(false); setRepricing(true) }}
+                                onVoid={() => { setMenu(false); setVoiding(true) }} />
+              )}
+            </div>
           )}
         </>
       }>
@@ -507,7 +515,63 @@ export function TicketDrawer({ ticketId, onClose, onChanged }) {
 }
 
 /**
- * Correcting a ticket the field has already finished with.
+ * The rare and the destructive, kept out of the action row.
+ *
+ * Void reverses money and used to sit next to the close control, which is one
+ * slip from a reversal nobody meant. Re-running the rules is genuinely useful
+ * and genuinely rare, so it belongs here too rather than beside the thing a
+ * reviewer clicks all day.
+ */
+function TicketMoreMenu({ ticket, can, onClose, onRerun, onReprice, onVoid }) {
+  const ref = useRef(null)
+  useEffect(() => {
+    const away = (e) => { if (!ref.current?.contains(e.target)) onClose() }
+    // The menu owns Escape while it is open. Without stopping propagation the
+    // record's own Escape handler also fires and closes the whole record out
+    // from under the menu, which is the slip this menu exists to prevent.
+    const esc = (e) => {
+      if (e.key !== 'Escape') return
+      e.stopPropagation()
+      onClose()
+    }
+    document.addEventListener('mousedown', away)
+    document.addEventListener('keydown', esc)
+    return () => {
+      document.removeEventListener('mousedown', away)
+      document.removeEventListener('keydown', esc)
+    }
+  }, [onClose])
+
+  return (
+    <div className="more-menu" ref={ref}>
+      {can('transaction.process') && ticket.status === 'completed' && (
+        <>
+          <button onClick={onRerun}>
+            <Icon name="refresh" size={13} /> Re-run the rules
+            <span className="dim">adds what was missing</span>
+          </button>
+          <button onClick={onReprice}>
+            <Icon name="undo" size={13} /> Reprice
+            <span className="dim">reverses and computes again</span>
+          </button>
+        </>
+      )}
+      {can('ticket.void') && (
+        <button className="danger" onClick={onVoid}>
+          <Icon name="trash" size={13} /> Void this ticket
+          <span className="dim">reverses its money</span>
+        </button>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Updating a ticket the field has already finished with.
+ *
+ * This used to be called Correct, which reads like a judgement on the monitor
+ * rather than a description of the act. Most of these are a load call read off
+ * a photograph or an address the street list did not have.
  *
  * The walkthrough's finding was blunt: "I have no way to edit existing tickets
  * in the back-office (apart from void), but I should." The fields here are the
@@ -533,7 +597,7 @@ const CORRECTABLE = [
   { key: 'notes', label: 'Notes', wide: true },
 ]
 
-function TicketCorrection({ ticket, onClose, onSaved, toast }) {
+export function TicketCorrection({ ticket, onClose, onSaved, toast }) {
   const { project } = useApp()
   const [form, setForm] = useState({})
   const [reason, setReason] = useState('')
@@ -561,13 +625,13 @@ function TicketCorrection({ ticket, onClose, onSaved, toast }) {
   }
 
   return (
-    <Modal wide title={`Correct ${ticket.ticket_number}`} onClose={onClose} footer={
+    <Modal wide title={`Update ${ticket.ticket_number}`} onClose={onClose} footer={
       <>
         <button className="btn" onClick={onClose}>Cancel</button>
         <button className="btn primary"
                 disabled={busy || reason.trim().length < 4 || changed.length === 0}
                 onClick={save}>
-          {busy && <span className="spinner" />} Save correction
+          {busy && <span className="spinner" />} Save the update
         </button>
       </>
     }>

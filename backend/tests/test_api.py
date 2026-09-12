@@ -2558,3 +2558,428 @@ def test_the_dashboard_says_what_needs_attention(client, auth, project_id):
     for key in ("unreviewed", "flagged", "serious", "raised"):
         assert key in review
     assert "needs_reprocess" in board
+
+
+# ===========================================================================
+# Sprint 3: the measurements behind a certified capacity
+#
+# "Do not just record the answer. Record the measurements that produced the
+#  answer." These tests hold the arithmetic to figures computed by hand,
+# because a volume formula that is silently wrong prices every load the truck
+# hauls.
+# ===========================================================================
+
+def _open_draft(client, auth, project_id):
+    """Open a measurement worksheet on some unit, whatever state the database
+    is in.
+
+    The suite is re-runnable against the same database, so "find an
+    uncertified truck" stops working the second time. A unit that is already
+    certified gets a recertification draft instead, which is the same workflow
+    with a supersede on the end."""
+    options = client.get(f"/api/v1/projects/{project_id}/options/project_equipment",
+                         headers=auth).json()["items"]
+    certs = client.get(f"/api/v1/projects/{project_id}/certifications",
+                       params={"limit": 500, "status": "all"},
+                       headers=auth).json()["items"]
+    active = {c["equipment_id"]: c for c in certs if c["status"] == "active"}
+    busy = {c["equipment_id"] for c in certs
+            if c["status"] in ("draft", "submitted")}
+
+    for option in options:
+        unit = option["value"]
+        if unit in busy:
+            continue
+        payload = {"equipment_id": unit, "method": "physical"}
+        if unit in active:
+            payload = {"equipment_id": unit, "method": "recertification",
+                       "supersedes_id": active[unit]["id"],
+                       "notes": "Measured again for the worksheet tests"}
+        created = client.post(f"/api/v1/projects/{project_id}/certifications",
+                              headers=auth, json=payload)
+        if created.status_code == 201:
+            return created.json()
+    return None
+
+
+def test_the_shape_catalog_says_what_each_one_asks_for(client, auth):
+    shapes = client.get("/api/v1/measurements/shapes", headers=auth).json()["items"]
+    codes = {s["code"] for s in shapes}
+    # The shapes debris equipment actually takes. A round bottom trailer that
+    # can only be measured as a box is the whole problem.
+    assert {"rectangular", "round_bottom", "tapered_sides"} <= codes
+    for s in shapes:
+        assert s["dimension_schema"], s["code"]
+        assert s["formula_note"]
+
+
+def test_a_container_type_carries_what_is_expected_of_it(client, auth):
+    types = client.get("/api/v1/measurements/container-types",
+                       headers=auth).json()["items"]
+    assert len(types) >= 8
+    for t in types:
+        assert t["typical_use"]
+        assert "placard" in t["required_photo_slots"]
+
+
+def test_preview_matches_the_figure_computed_by_hand(client, auth):
+    # 22ft by 8ft by 4ft 6in rolloff, in inches.
+    out = client.post("/api/v1/measurements/preview", headers=auth, json={
+        "sections": [{"label": "Main body", "shape_code": "rectangular",
+                      "role": "base",
+                      "dimensions": {"length": 264, "width": 96, "height": 54}}],
+    }).json()
+    assert out["total_cubic_inches"] == 1368576
+    assert out["total_cubic_feet"] == 792.0
+    assert out["capacity_cy"] == 29.33
+
+
+def test_a_curved_floor_is_not_a_box(client, auth):
+    dims = {"length": 288, "width": 96, "straight_height": 60, "curve_depth": 14}
+    curved = client.post("/api/v1/measurements/preview", headers=auth, json={
+        "sections": [{"label": "Main body", "shape_code": "round_bottom",
+                      "role": "base", "dimensions": dims}]}).json()
+    boxed = client.post("/api/v1/measurements/preview", headers=auth, json={
+        "sections": [{"label": "Main body", "shape_code": "rectangular",
+                      "role": "base",
+                      "dimensions": {"length": 288, "width": 96, "height": 74}}],
+    }).json()
+    assert curved["capacity_cy"] == 41.18
+    assert boxed["capacity_cy"] == 43.85
+    # 2.67 CY on every load that trailer hauls.
+    assert round(boxed["capacity_cy"] - curved["capacity_cy"], 2) == 2.67
+
+
+def test_leaving_the_curve_out_is_refused_rather_than_treated_as_flat(client, auth):
+    refused = client.post("/api/v1/measurements/preview", headers=auth, json={
+        "sections": [{"label": "Main body", "shape_code": "round_bottom",
+                      "role": "base",
+                      "dimensions": {"length": 288, "width": 96,
+                                     "straight_height": 60}}]})
+    assert refused.status_code == 400
+    assert "curve_depth" in refused.json()["error"]["message"]
+    assert refused.json()["error"]["details"]["label"] == "Main body"
+
+
+def test_additions_and_deductions_compose(client, auth):
+    out = client.post("/api/v1/measurements/preview", headers=auth, json={
+        "container_type_code": "rolloff_box",
+        "sections": [
+            {"label": "Main body", "shape_code": "rectangular", "role": "base",
+             "dimensions": {"length": 264, "width": 96, "height": 54}},
+            {"label": "Wheel well", "shape_code": "rectangular",
+             "role": "deduction", "quantity": 2,
+             "dimensions": {"length": 30, "width": 8, "height": 12}}],
+    }).json()
+    assert out["deduction_cubic_inches"] == 5760      # two of them, not one
+    assert out["total_cubic_inches"] == 1368576 - 5760
+    assert out["within_typical_range"] is True
+
+
+def test_a_capacity_outside_the_band_is_said_not_refused(client, auth):
+    out = client.post("/api/v1/measurements/preview", headers=auth, json={
+        "container_type_code": "tandem_dump_truck",
+        "sections": [{"label": "Main body", "shape_code": "rectangular",
+                      "role": "base",
+                      "dimensions": {"length": 600, "width": 96, "height": 96}}],
+    }).json()
+    assert out["within_typical_range"] is False
+    assert "normally measures" in out["range_note"]
+
+
+def test_a_measured_certification_carries_its_arithmetic(client, auth, project_id):
+    draft = _open_draft(client, auth, project_id)
+    assert draft is not None, "no unit on this project could take a measurement"
+    # No capacity was sent, so nothing was certified. A worksheet was opened.
+    assert draft["status"] == "draft"
+    assert draft["certified_capacity_cy"] is None
+
+    sheet = client.post(f"/api/v1/certifications/{draft['id']}/measurement",
+                        headers=auth, json={
+        "container_type_code": "grapple_body",
+        "intended_use": "Collection side, self loader",
+        "paper_form_number": "PF-TEST-0002",
+        "sections": [
+            {"label": "Lower body", "shape_code": "rectangular", "role": "base",
+             "dimensions": {"length": 264, "width": 96, "height": 54}},
+            {"label": "Top flare", "shape_code": "tapered_sides",
+             "role": "addition",
+             "dimensions": {"length": 264, "height": 18, "width_top": 102,
+                            "width_bottom": 96}},
+            {"label": "Toolbox intrusion", "shape_code": "rectangular",
+             "role": "deduction",
+             "dimensions": {"length": 36, "width": 18, "height": 20}}]})
+    assert sheet.status_code == 201, sheet.text
+    body = sheet.json()
+    assert body["section_count"] == 3
+    assert body["total_cubic_inches"] == 1368576 + 470448 - 12960
+    # The capacity is derived, never typed.
+    assert float(body["certified_capacity_cy"]) == float(body["derived_capacity_cy"])
+
+    # A draft prices nothing.
+    listing = client.get(f"/api/v1/projects/{project_id}/certifications",
+                         params={"status": "active", "limit": 500},
+                         headers=auth).json()
+    assert draft["id"] not in [c["id"] for c in listing["items"]]
+
+    submitted = client.post(f"/api/v1/certifications/{draft['id']}/submit",
+                            headers=auth, json={})
+    assert submitted.status_code == 200
+    # Missing photographs are reported, not blocked. Operations do not stop
+    # because a photograph is behind.
+    assert submitted.json()["missing_photos"]
+
+    for slot in ("front", "side", "interior", "placard", "measurement"):
+        client.post(f"/api/v1/certifications/{draft['id']}/media", headers=auth,
+                    json={"slot": slot,
+                          "storage_url": f"https://box.invalid/{slot}.jpg"})
+    evidence = client.get(f"/api/v1/certifications/{draft['id']}/media",
+                          headers=auth).json()["evidence"]
+    assert evidence["evidence_complete"] is True
+
+    approved = client.post(f"/api/v1/certifications/{draft['id']}/approve",
+                           headers=auth,
+                           json={"notes": "Measurements match the photos"})
+    assert approved.status_code == 200
+    assert approved.json()["status"] == "active"
+
+    # Evidence that can be edited afterwards is not evidence.
+    closed = client.post(
+        f"/api/v1/certifications/{draft['id']}/measurement/sections",
+        headers=auth, json={"label": "Late", "shape_code": "rectangular",
+                            "role": "addition",
+                            "dimensions": {"length": 10, "width": 10, "height": 10}})
+    assert closed.status_code == 409
+
+    read_back = client.get(f"/api/v1/certifications/{draft['id']}/measurement",
+                           headers=auth).json()
+    assert read_back["measured"] is True
+    assert len(read_back["sections"]) == 3
+    assert read_back["evidence"]["evidence_complete"] is True
+
+
+def test_a_typed_capacity_admits_it_has_no_measurements(client, auth, project_id):
+    certs = client.get(f"/api/v1/projects/{project_id}/certifications",
+                       params={"limit": 500, "status": "all"},
+                       headers=auth).json()["items"]
+    typed = [c for c in certs if not c["is_measured"]]
+    assert typed, "the demo seeds capacities that were typed, and none are here"
+    sheet = client.get(f"/api/v1/certifications/{typed[0]['id']}/measurement",
+                       headers=auth).json()
+    assert sheet["measured"] is False
+    assert "entered directly" in sheet["message"]
+
+
+def test_two_measurements_cannot_be_open_on_one_unit(client, auth, project_id):
+    first = _open_draft(client, auth, project_id)
+    assert first is not None
+    second = client.post(f"/api/v1/projects/{project_id}/certifications",
+                         headers=auth,
+                         json={"equipment_id": first["equipment_id"],
+                               "method": "physical"})
+    assert second.status_code == 409
+    assert second.json()["error"]["code"] in (
+        "measurement_in_progress", "already_certified")
+
+    # Leave the database as it was found: a stranded draft would block the
+    # next run of the suite on this unit.
+    client.post(f"/api/v1/certifications/{first['id']}/reject", headers=auth,
+                json={"reason": "Opened by the test suite, not a real measurement"})
+
+
+# ===========================================================================
+# Sprint 3: one review queue, whatever the record is
+# ===========================================================================
+
+def test_the_queue_carries_more_than_tickets(client, auth, project_id):
+    client.post(f"/api/v1/projects/{project_id}/review/scan", headers=auth)
+    queue = client.get(f"/api/v1/projects/{project_id}/review/queue",
+                       params={"state": "all", "limit": 400}, headers=auth).json()
+    kinds = {r["subject_kind"] for r in queue["items"]}
+    assert "ticket" in kinds
+    assert "certification" in kinds
+    # Invoices are an invoice analyst's job, not data review.
+    assert "invoice" not in kinds
+
+
+def test_the_queue_says_how_long_something_has_waited(client, auth, project_id):
+    queue = client.get(f"/api/v1/projects/{project_id}/review/queue",
+                       params={"state": "pending", "sort": "waiting", "limit": 5},
+                       headers=auth).json()
+    assert queue["items"]
+    top = queue["items"][0]
+    assert float(top["waiting_days"]) >= 0
+    assert "is_overdue" in top
+    assert queue["policy"]["overdue_days"] >= 1
+
+
+def test_a_certification_can_be_filtered_out_of_the_ticket_work(client, auth,
+                                                                project_id):
+    only_certs = client.get(f"/api/v1/projects/{project_id}/review/queue",
+                            params={"subject_kind": "certification",
+                                    "state": "all", "limit": 100},
+                            headers=auth).json()
+    assert only_certs["items"]
+    assert all(r["subject_kind"] == "certification" for r in only_certs["items"])
+
+    incidents = client.get(f"/api/v1/projects/{project_id}/review/queue",
+                           params={"record_kind": "incident", "state": "all",
+                                   "limit": 100}, headers=auth).json()
+    assert all(r["record_kind"] == "incident" for r in incidents["items"])
+
+
+def test_the_overview_counts_every_kind(client, auth, project_id):
+    out = client.get(f"/api/v1/projects/{project_id}/review/overview",
+                     headers=auth).json()
+    assert out["totals"]["records"] > 0
+    assert {k["subject_kind"] for k in out["by_kind"]} >= {"ticket", "certification"}
+    assert out["policy"]["repeat_count"] >= 2
+
+
+def test_one_read_gives_the_reviewer_the_whole_record(client, auth, project_id):
+    queue = client.get(f"/api/v1/projects/{project_id}/review/queue",
+                       params={"subject_kind": "ticket", "state": "all",
+                               "record_kind": "load", "limit": 1},
+                       headers=auth).json()
+    ticket = queue["items"][0]
+    bundle = client.get(f"/api/v1/review/ticket/{ticket['subject_id']}",
+                        headers=auth).json()
+
+    # The conceptual review sequence, in one payload rather than five tabs.
+    for section in ("identity", "flags", "evidence", "media", "location",
+                    "time", "relationships", "measurements", "compliance",
+                    "declared", "history"):
+        assert section in bundle, section
+
+    # What was supposed to be collected, against what was.
+    assert "required_slots" in bundle["evidence"]
+    assert "missing_slots" in bundle["evidence"]
+
+    # The location comparison that used to mean a second browser window.
+    assert "day_track" in bundle["location"]
+    assert "same_street" in bundle["location"]
+
+    # Time as a sequence with the gaps named, not two bare timestamps.
+    assert bundle["time"]["sequence"]
+    assert all("gap_minutes" in s for s in bundle["time"]["sequence"])
+
+
+def test_a_certification_reads_as_its_measurements(client, auth, project_id):
+    queue = client.get(f"/api/v1/projects/{project_id}/review/queue",
+                       params={"subject_kind": "certification", "state": "all",
+                               "limit": 100}, headers=auth).json()
+    measured = None
+    for row in queue["items"]:
+        bundle = client.get(f"/api/v1/review/certification/{row['subject_id']}",
+                            headers=auth).json()
+        if bundle["measurements"].get("sections"):
+            measured = bundle
+            break
+    assert measured is not None, "no measured certification to review"
+    assert measured["measurements"]["total_cubic_inches"]
+    assert measured["relationships"]["chain"]
+    assert "impact" in measured
+
+
+def test_a_decision_and_an_escalation_leave_a_history(client, auth, project_id):
+    queue = client.get(f"/api/v1/projects/{project_id}/review/queue",
+                       params={"subject_kind": "ticket", "state": "pending",
+                               "limit": 1}, headers=auth).json()
+    ticket = queue["items"][0]
+    kind_id = f"ticket/{ticket['subject_id']}"
+
+    naked = client.post(f"/api/v1/review/{kind_id}/decision", headers=auth,
+                        json={"state": "flagged"})
+    assert naked.status_code == 400
+    assert naked.json()["error"]["code"] == "issue_required"
+
+    flagged = client.post(f"/api/v1/review/{kind_id}/decision", headers=auth,
+                          json={"state": "flagged",
+                                "notes": "Disposal photo is unreadable"}).json()
+    assert flagged["review_state"] == "flagged"
+
+    client.post(f"/api/v1/review/{kind_id}/note", headers=auth,
+                json={"note": "Called the monitor, they are re-shooting it"})
+
+    escalated = client.post(f"/api/v1/review/{kind_id}/escalate", headers=auth,
+                            json={"level": "supervisor",
+                                  "reason": "Fourth one from this monitor this week"}).json()
+    assert escalated["escalation_level"] == "supervisor"
+
+    bundle = client.get(f"/api/v1/review/{kind_id}", headers=auth).json()
+    events = [e["event"] for e in bundle["history"]]
+    # The old table was overwritten on every decision. This is why it is a log.
+    assert events[0] == "opened"
+    assert "decided" in events and "noted" in events and "escalated" in events
+
+    resolved = client.post(f"/api/v1/review/{kind_id}/decision", headers=auth,
+                           json={"state": "resolved",
+                                 "resolution": "New photo attached and checked"}).json()
+    assert resolved["review_state"] == "resolved"
+    assert resolved["open_flags"] == 0
+
+
+def test_an_alert_puts_the_record_on_somebody_else_s_list(client, auth,
+                                                          manager, project_id):
+    queue = client.get(f"/api/v1/projects/{project_id}/review/queue",
+                       params={"subject_kind": "ticket", "state": "pending",
+                               "limit": 1}, headers=auth).json()
+    ticket = queue["items"][0]
+    sent = client.post(
+        f"/api/v1/review/ticket/{ticket['subject_id']}/alert", headers=auth,
+        json={"to_user_id": manager["user"]["id"],
+              "subject": "Re-shoot needed before this can close",
+              "body": "The disposal photo does not show the bed",
+              "severity": "review"})
+    assert sent.status_code == 201
+
+    inbox = client.get("/api/v1/review/inbox",
+                       headers={"Authorization": f"Bearer {manager['access_token']}"}
+                       ).json()
+    assert inbox["unread"] >= 1
+    mine = inbox["items"][0]
+    assert mine["title"]
+    acked = client.post(
+        f"/api/v1/review/alerts/{mine['id']}/acknowledge",
+        headers={"Authorization": f"Bearer {manager['access_token']}"})
+    assert acked.status_code == 200
+
+
+def test_escalation_is_suggested_with_a_reason(client, auth, project_id):
+    out = client.get(f"/api/v1/projects/{project_id}/review/escalations",
+                     headers=auth).json()
+    for row in out["items"]:
+        assert row["reason_code"] in ("waited_too_long", "repeating_issue")
+        assert row["reason"]
+
+
+def test_a_repeating_issue_is_counted_not_guessed(client, auth, project_id):
+    out = client.get(f"/api/v1/projects/{project_id}/review/patterns",
+                     headers=auth).json()
+    assert out["items"]
+    row = out["items"][0]
+    assert row["occurrences"] >= 1
+    assert row["issue_label"]
+
+
+def test_a_dimension_that_does_not_fit_on_a_road_is_caught(client, auth,
+                                                           project_id):
+    draft = _open_draft(client, auth, project_id)
+    assert draft is not None
+    client.post(f"/api/v1/certifications/{draft['id']}/measurement", headers=auth,
+                json={"container_type_code": "high_side_end_dump",
+                      "sections": [{"label": "Main body",
+                                    "shape_code": "rectangular", "role": "base",
+                                    # 24 feet keyed into an inches box.
+                                    "dimensions": {"length": 288, "width": 288,
+                                                   "height": 60}}]})
+    client.post(f"/api/v1/certifications/{draft['id']}/submit", headers=auth,
+                json={})
+    bundle = client.get(f"/api/v1/review/certification/{draft['id']}",
+                        headers=auth).json()
+    codes = {f["issue_code"] for f in bundle["flags"] if not f["cleared_at"]}
+    assert "dimension_implausible" in codes
+
+    client.post(f"/api/v1/certifications/{draft['id']}/reject", headers=auth,
+                json={"reason": "Interior width is 288 inches, which is feet "
+                                "keyed into an inches box"})

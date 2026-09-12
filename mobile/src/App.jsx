@@ -8,9 +8,11 @@ import MyTickets from './pages/MyTickets'
 import Profile from './pages/Profile'
 import TicketFlow from './pages/TicketFlow'
 import TicketDetail from './pages/TicketDetail'
+import Certify, { CertifyFlow } from './pages/Certify'
 
 const TITLES = {
-  '/': 'Field', '/scan': 'Scan', '/tickets': 'My Tickets', '/profile': 'Profile',
+  '/': 'Field', '/scan': 'Scan', '/tickets': 'My Tickets',
+  '/certify': 'Certify', '/profile': 'Profile',
 }
 
 export default function App() {
@@ -60,12 +62,15 @@ export default function App() {
         <Route path="/new/:typeId" element={<TicketFlow />} />
         <Route path="/ticket/:ticketId" element={<TicketDetail />} />
         <Route path="/ticket/:ticketId/continue" element={<TicketFlow />} />
+        <Route path="/certify" element={<Certify />} />
+        <Route path="/certify/:certificationId" element={<CertifyFlow />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
 
       <nav className="tabbar">
         {[['/', 'home', 'Home'], ['/scan', 'barcode', 'Scan'],
-          ['/tickets', 'list', 'Tickets'], ['/profile', 'user', 'Profile']].map(
+          ['/tickets', 'list', 'Tickets'], ['/certify', 'ruler', 'Certify'],
+          ['/profile', 'user', 'Profile']].map(
           ([to, icon, label]) => (
             <NavLink key={to} to={to} end className={({ isActive }) => `tab${isActive ? ' on' : ''}`}>
               <Icon name={icon} size={21} />
