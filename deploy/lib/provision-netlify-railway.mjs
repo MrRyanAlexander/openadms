@@ -78,6 +78,96 @@ const firstUrl = (text) => {
   return m ? m[0].replace(/[.,)]+$/, '') : null
 }
 
+/* ------------------------------------------------- frontend dependencies */
+
+const readFile = (file) => {
+  try {
+    return fs.readFileSync(file, 'utf8')
+  } catch {
+    return null
+  }
+}
+
+/**
+ * A node_modules folder is not proof that the dependencies are current. A
+ * commit that adds a package leaves the folder in place and the new package
+ * absent, and the build then fails deep inside rollup as an unresolved
+ * import. Compare what package.json declares against what is actually on
+ * disk instead.
+ */
+function missingDependencies(cwd) {
+  const manifest = parseJson(readFile(path.join(cwd, 'package.json')))
+  if (!manifest) return []
+  const declared = Object.keys({
+    ...(manifest.dependencies || {}),
+    ...(manifest.devDependencies || {}),
+  })
+  return declared.filter(
+    (name) => !fs.existsSync(path.join(cwd, 'node_modules', name)))
+}
+
+/** True when the lockfile does not know about a package package.json wants. */
+function lockIsStale(cwd, names) {
+  const lock = parseJson(readFile(path.join(cwd, 'package-lock.json')))
+  if (!lock) return true
+  const packages = lock.packages || {}
+  return names.some((name) => !packages[`node_modules/${name}`])
+}
+
+/**
+ * Install before building, and install whenever anything declared is absent.
+ *
+ * `npm ci` is the reproducible path, but it refuses to run when package.json
+ * and package-lock.json disagree, which is exactly the state left behind by a
+ * commit that adds a dependency without regenerating the lockfile. In that
+ * case go straight to `npm install`, which reconciles the two, and say so:
+ * the rewritten lockfile has to be committed, because both netlify.toml files
+ * build with `npm ci` and would fail on the same mismatch.
+ */
+function installDependencies(cwd, dir) {
+  const fresh = !fs.existsSync(path.join(cwd, 'node_modules'))
+  const missing = missingDependencies(cwd)
+  if (!fresh && !missing.length) return true
+
+  if (missing.length && !fresh) {
+    note(`${dir}: ${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} `
+         + 'declared in package.json but not installed.')
+  }
+
+  const lockBefore = readFile(path.join(cwd, 'package-lock.json'))
+  const stale = missing.length > 0 && lockIsStale(cwd, missing)
+
+  if (stale) {
+    note('The lockfile does not list it, so npm ci would refuse. Installing.')
+    if (!run('npm', ['install'], { cwd }).ok) {
+      fail(`Could not install the ${dir} dependencies.`)
+      return false
+    }
+  } else if (!run('npm', ['ci'], { cwd }).ok) {
+    warn(`npm ci failed in ${dir}. Falling back to npm install.`)
+    if (!run('npm', ['install'], { cwd }).ok) {
+      fail(`Could not install the ${dir} dependencies.`)
+      return false
+    }
+  }
+
+  const stillMissing = missingDependencies(cwd)
+  if (stillMissing.length) {
+    fail(`${dir} is still missing ${stillMissing.join(', ')} after installing.`)
+    note('Check that the package name in package.json is spelled correctly')
+    note('and that the registry is reachable.')
+    return false
+  }
+
+  const lockAfter = readFile(path.join(cwd, 'package-lock.json'))
+  if (lockBefore !== null && lockAfter !== lockBefore) {
+    warn(`${dir}/package-lock.json was rewritten by the install.`)
+    note('Commit it. Netlify builds with `npm ci`, which fails when the')
+    note('lockfile and package.json disagree.')
+  }
+  return true
+}
+
 const suffix = () => crypto.randomBytes(2).toString('hex')
 const sleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms) })
 
@@ -934,10 +1024,7 @@ export async function provisionNetlifyRailway({
 
   for (const dir of ['frontend', 'mobile']) {
     const cwd = path.join(root, dir)
-    if (!fs.existsSync(path.join(cwd, 'node_modules'))) {
-      const ci = run('npm', ['ci'], { cwd })
-      if (!ci.ok) run('npm', ['install'], { cwd })
-    }
+    if (!installDependencies(cwd, dir)) return { ok: false, state }
     const built = run('npm', ['run', 'build'], {
       cwd, env: { ...process.env, VITE_API_URL: apiUrl },
     })
