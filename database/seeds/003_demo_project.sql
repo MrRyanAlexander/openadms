@@ -954,6 +954,20 @@ BEGIN
       FROM projects WHERE project_code = 'STL-2026-ROW';
     IF v_project IS NULL THEN RETURN; END IF;
 
+    -- Idempotent, the same way the demo block above is. Re-running setup.sh
+    -- against a database that already carries this demo has to be a no-op
+    -- rather than a unique violation on pec_one_active_per_project_equipment.
+    -- That matters more than it looks: a failed setup never records the schema
+    -- step, so the very next re-run comes straight back through here, and
+    -- without this guard every retry fails on a different error than the one
+    -- the operator was trying to fix.
+    IF EXISTS (SELECT 1 FROM project_equipment_certifications c
+                JOIN certification_measurements m ON m.certification_id = c.id
+               WHERE c.project_id = v_project) THEN
+        RAISE NOTICE 'Sprint 3 demo already present; skipping.';
+        RETURN;
+    END IF;
+
     SELECT contractor_id INTO v_prime FROM project_contractors
      WHERE project_id = v_project AND role_on_project = 'prime'
        AND is_active LIMIT 1;

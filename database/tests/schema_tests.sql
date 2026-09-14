@@ -1025,10 +1025,28 @@ BEGIN
 
         -- Not one an approved invoice is holding. The engine is right to refuse
         -- those, and a suite that picks one is testing the wrong thing.
+        --
+        -- It must also be a ticket this correction actually reprices, and one
+        -- that had money on it to begin with. adms_queue_reprocess flags every
+        -- ticket for the truck from applies_from forward whether or not it was
+        -- ever priced, so an unscoped LIMIT 1 could return a ticket with no
+        -- live transactions. Repricing that one moves the total from 0.00 up
+        -- to whatever the rules say, the assertion below reads
+        -- 0.0000 -> 178.2000, and the suite fails on a ticket that was never
+        -- halved because it was never priced. Scope it to the corrected truck
+        -- on this project, require prior money, and order it so the same row
+        -- is chosen every run.
         SELECT id INTO v_ticket FROM tickets t
          WHERE t.needs_reprocess AND NOT t.is_void
            AND t.processing_state = 'processed'
+           AND t.project_id = v_project
+           AND t.equipment_id = v_equip
+           AND EXISTS (SELECT 1 FROM transactions x
+                        WHERE x.ticket_id = t.id
+                          AND x.superseded_at IS NULL AND NOT x.is_reversal
+                          AND x.amount <> 0)
            AND NOT EXISTS (SELECT 1 FROM adms_ticket_invoice_lock(t.id))
+         ORDER BY t.id
          LIMIT 1;
 
         IF v_ticket IS NOT NULL THEN
