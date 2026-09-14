@@ -353,6 +353,13 @@ _CHAIN_RELATED: dict[str, list[tuple[str, str]]] = {
          "SELECT id FROM contract_line_items WHERE contract_id = $1"),
         ("rates", "SELECT id FROM rates WHERE contract_id = $1"),
     ],
+    "contract_line_items": [
+        # Who accepted or rejected this line, and on which project. An auditor
+        # asking why a code exists is asking exactly this.
+        ("contract_line_item_decisions",
+         "SELECT id FROM contract_line_item_decisions "
+         " WHERE contract_line_item_id = $1"),
+    ],
     "projects": [
         ("project_assignments",
          "SELECT id FROM project_assignments WHERE project_id = $1"),

@@ -225,7 +225,18 @@ async def get_project(ctx: ProjectContext, user: CurrentUser):
             """
             SELECT pc.*, c.contract_number, c.title, c.status AS contract_status,
                    c.not_to_exceed, c.effective_from, c.effective_to,
-                   ct.name AS contractor_name
+                   ct.name AS contractor_name,
+                   -- Where this project stands on the contract's lines, so the
+                   -- setup wizard can say "3 of 6 accepted" without opening it.
+                   (SELECT count(*) FROM contract_line_items li
+                     WHERE li.contract_id = c.id AND li.deleted_at IS NULL)
+                       AS line_item_count,
+                   (SELECT count(*) FROM contract_line_item_project_review v
+                     WHERE v.contract_id = c.id AND v.project_id = pc.project_id
+                       AND v.status = 'accepted') AS line_items_accepted,
+                   (SELECT count(*) FROM contract_line_item_project_review v
+                     WHERE v.contract_id = c.id AND v.project_id = pc.project_id
+                       AND v.status = 'draft') AS line_items_awaiting
               FROM project_contracts pc
               JOIN contracts c ON c.id = pc.contract_id
               JOIN contractors ct ON ct.id = c.contractor_id

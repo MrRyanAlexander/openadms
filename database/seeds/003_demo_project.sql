@@ -525,6 +525,26 @@ BEGIN
     UPDATE contract_line_items SET accepted_service_code_id = v_sc_stump WHERE id = v_li_stump;
     UPDATE contract_line_items SET accepted_service_code_id = v_sc_haul  WHERE id = v_li_haul;
 
+    -- And the decision itself, which belongs to this project rather than to the
+    -- contract. 0027 has the reasoning: the same contract on the next
+    -- declaration is decided again, from scratch, without disturbing this one.
+    INSERT INTO contract_line_item_decisions
+        (project_id, contract_line_item_id, status, service_code_id,
+         reviewed_by, reviewed_at)
+    VALUES (v_project, v_li_veg,   'accepted', v_sc_veg,   v_admin, (v_base - 5)),
+           (v_project, v_li_cd,    'accepted', v_sc_cd,    v_admin, (v_base - 5)),
+           (v_project, v_li_stump, 'accepted', v_sc_stump, v_admin, (v_base - 5)),
+           (v_project, v_li_haul,  'accepted', v_sc_haul,  v_admin, (v_base - 3));
+
+    -- Standby time is the case that proves the point. This project will not
+    -- pay for idle equipment; the next project on the same contract might.
+    INSERT INTO contract_line_item_decisions
+        (project_id, contract_line_item_id, status, reviewed_by, reviewed_at, notes)
+    SELECT v_project, li.id, 'rejected', v_admin, (v_base - 5),
+           'Not billable on this declaration.'
+      FROM contract_line_items li
+     WHERE li.contract_id = v_contract AND li.status = 'rejected';
+
     -- Stumps are banded, not priced per inch. That is how the rate sheet is
     -- written and it is why rate_tiers exists: a 26 inch stump and an 8 inch
     -- one are different money on the same service code.

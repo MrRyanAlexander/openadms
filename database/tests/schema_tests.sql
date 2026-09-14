@@ -665,6 +665,8 @@ DECLARE
     v_contract   uuid;
     v_doc        uuid;
     v_line       uuid;
+    v_second     uuid;
+    v_code       uuid;
     v_user       uuid;
     v_n          integer;
     v_num        numeric;
@@ -903,6 +905,132 @@ BEGIN
 
     DELETE FROM contract_line_items WHERE contract_id = v_contract;
     DELETE FROM contracts WHERE id = v_contract;
+
+    -- 1.8b A decision belongs to a project, not to the contract ---------------
+    -- 0027. The same contract sits on project after project, so accepting a
+    -- line on one of them has to leave every other project untouched. This is
+    -- what the setup wizard was getting wrong: a line accepted on the first
+    -- project read accepted everywhere and a second project could never build
+    -- its own service codes from that contract at all.
+    SELECT id INTO v_contract FROM contracts
+     WHERE contract_number = 'STL-DEB-2026-001';
+
+    PERFORM pg_temp.check_that('the backfill gave the demo project its decisions',
+        (SELECT count(*) FROM contract_line_item_decisions
+          WHERE project_id = v_project AND status = 'accepted') >= 3);
+
+    PERFORM pg_temp.check_that('an accepted decision names the code it produced',
+        EXISTS (SELECT 1 FROM contract_line_item_decisions d
+                  JOIN service_codes sc ON sc.id = d.service_code_id
+                 WHERE d.project_id = v_project AND sc.code = 'ROW-VEG'));
+
+    -- A second project on the same contract. This is the case that was broken.
+    DELETE FROM contract_line_item_decisions WHERE project_id IN
+        (SELECT id FROM projects WHERE project_code = 'TEST-SECOND-ROW');
+    DELETE FROM service_codes WHERE project_id IN
+        (SELECT id FROM projects WHERE project_code = 'TEST-SECOND-ROW');
+    DELETE FROM project_contracts WHERE project_id IN
+        (SELECT id FROM projects WHERE project_code = 'TEST-SECOND-ROW');
+    DELETE FROM project_contractors WHERE project_id IN
+        (SELECT id FROM projects WHERE project_code = 'TEST-SECOND-ROW');
+    DELETE FROM projects WHERE project_code = 'TEST-SECOND-ROW';
+
+    INSERT INTO projects (name, project_code, client_id, status, program_code,
+                          starts_on, timezone, ticket_prefix,
+                          owner_instance_key, visibility_flag)
+    SELECT 'Second declaration on the same contract', 'TEST-SECOND-ROW',
+           v_client, 'setup', 'row_collection', current_date, 'America/Chicago',
+           'TS2', owner_instance_key, 'private'
+      FROM projects WHERE id = v_project
+    RETURNING id INTO v_second;
+
+    INSERT INTO project_contractors (project_id, contractor_id, role_on_project)
+    VALUES (v_second, v_prime, 'prime');
+
+    INSERT INTO project_contracts (project_id, contract_id, is_primary)
+    VALUES (v_second, v_contract, true);
+
+    SELECT id INTO v_line FROM contract_line_items
+     WHERE contract_id = v_contract AND line_number = 1;
+
+    PERFORM pg_temp.check_that(
+        'a line accepted on one project is still on offer on the next one',
+        (SELECT status FROM contract_line_item_project_review
+          WHERE project_id = v_second AND id = v_line) = 'draft');
+
+    PERFORM pg_temp.check_that(
+        'the new project can see the code that line already carries elsewhere',
+        (SELECT code_used_elsewhere FROM contract_line_item_project_review
+          WHERE project_id = v_second AND id = v_line) = 'ROW-VEG');
+
+    -- The same contract line, billed again on the new project. The code is
+    -- free here because codes are unique per project and only per project.
+    INSERT INTO service_codes (project_id, code, name, contractor_id,
+                               contract_id, contract_line_item_id)
+    VALUES (v_second, 'ROW-VEG', 'ROW Vegetative Collection', v_prime,
+            v_contract, v_line)
+    RETURNING id INTO v_code;
+
+    INSERT INTO contract_line_item_decisions
+        (project_id, contract_line_item_id, status, service_code_id)
+    VALUES (v_second, v_line, 'accepted', v_code);
+
+    PERFORM pg_temp.check_that('the same line bills on both projects at once',
+        (SELECT count(*) FROM contract_line_item_decisions
+          WHERE contract_line_item_id = v_line AND status = 'accepted') = 2);
+
+    PERFORM pg_temp.check_that('the first project keeps its own decision intact',
+        (SELECT service_code FROM contract_line_item_project_review
+          WHERE project_id = v_project AND id = v_line) = 'ROW-VEG');
+
+    -- A rejection is a project's own call too. Standby time is the real case:
+    -- ruled out on one declaration, billable on the next.
+    SELECT id INTO v_line FROM contract_line_items
+     WHERE contract_id = v_contract AND item_code = '3.01';
+
+    PERFORM pg_temp.check_that('a rejection on one project does not follow the line',
+        (SELECT status FROM contract_line_item_project_review
+          WHERE project_id = v_second AND id = v_line) = 'draft'
+        AND (SELECT status FROM contract_line_item_project_review
+              WHERE project_id = v_project AND id = v_line) = 'rejected');
+
+    PERFORM pg_temp.check_raises('a project cannot rule on a line twice',
+        format('INSERT INTO contract_line_item_decisions
+                    (project_id, contract_line_item_id, status)
+                VALUES (%L, %L, ''rejected''), (%L, %L, ''rejected'')',
+               v_second, v_line, v_second, v_line));
+
+    PERFORM pg_temp.check_raises('a rejection cannot carry a service code',
+        format('INSERT INTO contract_line_item_decisions
+                    (project_id, contract_line_item_id, status, service_code_id)
+                VALUES (%L, %L, ''rejected'', %L)', v_second, v_line, v_code),
+        'code_matches_status');
+
+    PERFORM pg_temp.check_raises(
+        'a project cannot rule on a line from a contract it has not linked',
+        format('INSERT INTO contract_line_item_decisions
+                    (project_id, contract_line_item_id, status)
+                SELECT %L, li.id, ''rejected''
+                  FROM contract_line_items li
+                  JOIN contracts c ON c.id = li.contract_id
+                 WHERE c.contract_number = ''STL-DEB-2026-002'' LIMIT 1',
+               v_second),
+        'not linked to project');
+
+    -- Retiring the code puts the line back on the table rather than leaving it
+    -- accepted with nothing to bill against.
+    UPDATE service_codes SET deleted_at = now() WHERE id = v_code;
+    SELECT id INTO v_line FROM contract_line_items
+     WHERE contract_id = v_contract AND line_number = 1;
+    PERFORM pg_temp.check_that('retiring the code puts its line back on offer',
+        (SELECT status FROM contract_line_item_project_review
+          WHERE project_id = v_second AND id = v_line) = 'draft');
+
+    DELETE FROM contract_line_item_decisions WHERE project_id = v_second;
+    DELETE FROM service_codes WHERE project_id = v_second;
+    DELETE FROM project_contracts WHERE project_id = v_second;
+    DELETE FROM project_contractors WHERE project_id = v_second;
+    DELETE FROM projects WHERE id = v_second;
 
     -- 1.9 Contract constraints ----------------------------------------------
     PERFORM pg_temp.check_raises('a contract cannot be saved without a document link',

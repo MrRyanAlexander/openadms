@@ -553,6 +553,7 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
 }
 .toast.ok  { border-left-color: var(--green); }
 .toast.err { border-left-color: var(--red); }
+.toast.warn { border-left-color: var(--amber); }
 .toast .t { font-weight: 590; }
 .toast .m { color: var(--text-muted); font-size: 12.5px; margin-top: 2px; }
 

@@ -809,6 +809,9 @@ class FromLineItems(BaseModel):
 
 
 _LINE_ITEM_SELECT = "SELECT * FROM contract_line_item_review"
+# Same rows, but the status column is this project's decision rather than
+# the contract level one. 0027 has the reasoning.
+_LINE_ITEM_PROJECT_SELECT = "SELECT * FROM contract_line_item_project_review"
 
 _LINE_FIELDS = [
     tabular.Field_("line_number", ("line", "line no", "no", "number", "item no",
@@ -894,20 +897,41 @@ async def _contract_or_404(conn, contract_id: uuid.UUID) -> dict[str, Any]:
 @router.get("/contracts/{contract_id}/line-items")
 async def list_line_items(contract_id: uuid.UUID, user: CurrentUser,
                           status: Optional[str] = None,
+                          project_id: Optional[uuid.UUID] = None,
                           _: dict = Depends(require_permission("ticket.read.project"))):
+    """The contract's lines, and where a project is named, that project's view.
+
+    A contract is a priced schedule used on project after project, so the
+    accept and reject state a caller sees has to be the state on the project
+    being set up. Without project_id this is the contract wide read the
+    contract detail screen wants."""
+    scoped = project_id is not None
+    select = (_LINE_ITEM_PROJECT_SELECT if scoped else _LINE_ITEM_SELECT)
     where = ["contract_id = $1"]
     args: list[Any] = [contract_id]
+    if scoped:
+        args.append(project_id)
+        where.append(f"project_id = ${len(args)}")
     if status:
         args.append(status)
         where.append(f"status = ${len(args)}")
     async with db.read() as conn:
+        if scoped and not await conn.fetchval(
+            "SELECT 1 FROM project_contracts WHERE project_id = $1 AND contract_id = $2",
+            project_id, contract_id,
+        ):
+            raise bad_request(
+                "That contract is not linked to this project yet, so there is "
+                "nothing for the project to decide on.",
+                code="contract_not_on_project")
         recs = await conn.fetch(
-            f"{_LINE_ITEM_SELECT} WHERE {' AND '.join(where)} "
+            f"{select} WHERE {' AND '.join(where)} "
             f"ORDER BY line_number NULLS LAST, created_at", *args)
     items = db.rows(recs)
     return {
         "items": items,
         "total": len(items),
+        "scoped_to_project": scoped,
         "counts": {
             s: sum(1 for i in items if i["status"] == s)
             for s in ("draft", "accepted", "rejected")
@@ -1091,25 +1115,70 @@ async def service_codes_from_line_items(
     records the code it produced."""
     project_id = ctx["project"]["id"]
     created: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
 
     async with db.tx(user) as conn:
         lines = await conn.fetch(
             """
-            SELECT li.*, c.contractor_id AS contract_contractor_id
+            SELECT li.*, c.contractor_id AS contract_contractor_id,
+                   c.contract_number,
+                   EXISTS (SELECT 1 FROM project_contracts pc
+                            WHERE pc.project_id = $2
+                              AND pc.contract_id = li.contract_id) AS on_project,
+                   (SELECT sc.id FROM service_codes sc
+                     WHERE sc.project_id = $2
+                       AND sc.contract_line_item_id = li.id
+                       AND sc.deleted_at IS NULL
+                     ORDER BY sc.created_at LIMIT 1) AS existing_code_id,
+                   (SELECT sc.code FROM service_codes sc
+                     WHERE sc.project_id = $2
+                       AND sc.contract_line_item_id = li.id
+                       AND sc.deleted_at IS NULL
+                     ORDER BY sc.created_at LIMIT 1) AS existing_code,
+                   (SELECT s2.code
+                      FROM contract_line_item_decisions d2
+                      JOIN service_codes s2 ON s2.id = d2.service_code_id
+                     WHERE d2.contract_line_item_id = li.id
+                       AND d2.project_id <> $2
+                       AND d2.status = 'accepted'
+                       AND s2.deleted_at IS NULL
+                     ORDER BY d2.reviewed_at LIMIT 1) AS code_used_elsewhere
               FROM contract_line_items li
               JOIN contracts c ON c.id = li.contract_id
              WHERE li.id = ANY($1::uuid[]) AND li.deleted_at IS NULL
-            """, list(body.line_item_ids))
+            """, list(body.line_item_ids), project_id)
         if len(lines) != len(set(body.line_item_ids)):
             raise not_found("One or more line items")
+
+        off_project = [r for r in lines if not r["on_project"]]
+        if off_project:
+            raise bad_request(
+                "Line items from a contract that is not linked to this project: "
+                + ", ".join(sorted({r["contract_number"] for r in off_project}))
+                + ". Link the contract to the project first.",
+                code="contract_not_on_project")
 
         taken = {r["code"].lower() for r in await conn.fetch(
             "SELECT code FROM service_codes WHERE project_id = $1 AND deleted_at IS NULL",
             project_id)}
 
         for line in lines:
+            # Already coded on this project. Saying so beats quietly minting a
+            # second code with a -2 on the end that nobody asked for.
+            if line["existing_code_id"] is not None:
+                skipped.append({
+                    "line_item_id": str(line["id"]),
+                    "line_number": line["line_number"],
+                    "service_code": line["existing_code"],
+                    "reason": (f"Already billed on this project as "
+                               f"{line['existing_code']}."),
+                })
+                await _record_decision(conn, project_id, line["id"], "accepted",
+                                       line["existing_code_id"], user["id"])
+                continue
+
             contractor_id = body.contractor_id or line["contract_contractor_id"]
-            code = _code_for(line, taken)
+            code = _code_for(line, taken, line["code_used_elsewhere"])
             taken.add(code.lower())
             name = (line["description"] or "").strip()
             rec = await conn.fetchrow(
@@ -1134,36 +1203,151 @@ async def service_codes_from_line_items(
                     line["effective_from"],
                     f"Opening rate from contract line {line['line_number'] or line['item_code']}")
 
+            await _record_decision(conn, project_id, line["id"], "accepted",
+                                   rec["id"], user["id"])
+
+            # The contract level columns stay as curation and provenance: the
+            # first project to accept a line is what the parser ranking pass
+            # reads later. They no longer gate any project, so they are only
+            # written where they are still empty.
             await conn.execute(
                 """
                 UPDATE contract_line_items
-                   SET status = 'accepted', accepted_service_code_id = $2,
-                       reviewed_by = $3, reviewed_at = now()
+                   SET status = CASE WHEN status = 'draft' THEN 'accepted'
+                                     ELSE status END,
+                       accepted_service_code_id =
+                           COALESCE(accepted_service_code_id, $2),
+                       reviewed_by = COALESCE(reviewed_by, $3),
+                       reviewed_at = COALESCE(reviewed_at, now())
                  WHERE id = $1
                 """, line["id"], rec["id"], user["id"])
 
             full = await conn.fetchrow(f"{_SERVICE_CODE_SELECT} WHERE sc.id = $1", rec["id"])
             created.append(db.row(full))
 
-    return {"items": created, "created": len(created)}
+    return {"items": created, "created": len(created),
+            "skipped": skipped, "reused": len(skipped)}
 
 
-def _code_for(line: dict[str, Any], taken: set[str]) -> str:
-    """A short, stable code. The contract's own item code where there is one,
-    because that is what people will look for on the invoice."""
-    base = (line["item_code"] or "").strip().upper()
+async def _record_decision(conn, project_id, line_item_id, status,
+                           service_code_id, actor_id) -> None:
+    """One decision per project and line, written or replaced in place.
+
+    A decision on one project says nothing about the same line on another, so
+    this never touches a sibling row. 0027 is where that reasoning lives."""
+    await conn.execute(
+        """
+        INSERT INTO contract_line_item_decisions
+            (project_id, contract_line_item_id, status, service_code_id,
+             reviewed_by, reviewed_at)
+        VALUES ($1, $2, $3, $4, $5, now())
+        ON CONFLICT (project_id, contract_line_item_id) DO UPDATE
+           SET status = EXCLUDED.status,
+               service_code_id = EXCLUDED.service_code_id,
+               reviewed_by = EXCLUDED.reviewed_by,
+               reviewed_at = now()
+        """, project_id, line_item_id, status, service_code_id, actor_id)
+
+
+def _code_for(line: dict[str, Any], taken: set[str],
+              used_elsewhere: Optional[str] = None) -> str:
+    """A short, stable code for a contract line.
+
+    Codes are unique per project and only per project, so the same contract
+    line is free to carry the same code on every project it is billed on. That
+    is the first choice here: a line already billing as ROW-VEG somewhere else
+    comes up as ROW-VEG again rather than being renamed for no reason. Failing
+    that, the contract's own item code, because a pay item number is what
+    people look for on an invoice. Failing that, the debris stream."""
+    if used_elsewhere and used_elsewhere.lower() not in taken:
+        return used_elsewhere
+
+    raw = (line["item_code"] or "").strip().upper()
+    # A pay item reads 2.02, not 202. Keeping the separator keeps it findable
+    # in the PDF it came from.
+    base = "-".join(part for part in re.split(r"[^A-Za-z0-9]+", raw) if part)
     if not base:
         parts = [line["debris_type_code"] or "SVC"]
         if line["line_number"]:
             parts.append(str(line["line_number"]))
         base = "-".join(parts)
-    base = "".join(c for c in base.replace(" ", "-") if c.isalnum() or c in "-_")[:28] or "SVC"
+    base = base[:28] or "SVC"
     code = base
     suffix = 2
     while code.lower() in taken:
         code = f"{base}-{suffix}"
         suffix += 1
     return code
+
+
+class LineItemDecision(BaseModel):
+    """What a project says about one contract line. Accepting is done by
+    generating the service code, so only these two land here."""
+    status: str
+    notes: Optional[str] = None
+
+
+@router.post("/projects/{project_id}/line-items/{line_item_id}/decision")
+async def decide_line_item(ctx: ProjectContext, line_item_id: uuid.UUID,
+                           body: LineItemDecision, user: CurrentUser,
+                           _: dict = Depends(require_permission("service_code.manage"))):
+    """Reject a line on this project, or put it back on the table.
+
+    Rejecting used to be written on the line item itself, which meant a line
+    ruled out on one declaration was ruled out on every project that contract
+    ever touched. A rejection is a project's call and stays with the project."""
+    project_id = ctx["project"]["id"]
+    if body.status not in ("rejected", "draft"):
+        raise bad_request(
+            "A project rejects a line or puts it back to draft. Accepting is "
+            "done by generating the service code, so the code and the decision "
+            "are written together.",
+            code="line_item_decision_invalid", allowed=["rejected", "draft"])
+
+    async with db.tx(user) as conn:
+        line = await conn.fetchrow(
+            """
+            SELECT li.id, li.contract_id,
+                   EXISTS (SELECT 1 FROM project_contracts pc
+                            WHERE pc.project_id = $2 AND pc.contract_id = li.contract_id)
+                       AS on_project,
+                   (SELECT sc.code FROM service_codes sc
+                     WHERE sc.project_id = $2 AND sc.contract_line_item_id = li.id
+                       AND sc.deleted_at IS NULL LIMIT 1) AS existing_code
+              FROM contract_line_items li
+             WHERE li.id = $1 AND li.deleted_at IS NULL
+            """, line_item_id, project_id)
+        if line is None:
+            raise not_found("Line item")
+        if not line["on_project"]:
+            raise bad_request(
+                "That line belongs to a contract that is not linked to this "
+                "project.", code="contract_not_on_project")
+        if line["existing_code"]:
+            raise bad_request(
+                f"This line is already billing on this project as "
+                f"{line['existing_code']}. Retire that service code first, and "
+                f"the line goes back on the table.",
+                code="line_item_already_billing")
+
+        if body.status == "draft":
+            await conn.execute(
+                "DELETE FROM contract_line_item_decisions "
+                "WHERE project_id = $1 AND contract_line_item_id = $2",
+                project_id, line_item_id)
+        else:
+            await _record_decision(conn, project_id, line_item_id, "rejected",
+                                   None, user["id"])
+            if body.notes:
+                await conn.execute(
+                    "UPDATE contract_line_item_decisions SET notes = $3 "
+                    "WHERE project_id = $1 AND contract_line_item_id = $2",
+                    project_id, line_item_id, body.notes)
+
+        rec = await conn.fetchrow(
+            f"{_LINE_ITEM_PROJECT_SELECT} WHERE id = $1 AND project_id = $2",
+            line_item_id, project_id)
+    return db.row(rec)
 
 
 # ---------------------------------------------------------------------------

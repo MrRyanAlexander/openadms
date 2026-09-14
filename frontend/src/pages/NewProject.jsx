@@ -457,7 +457,9 @@ export function ContractStep({ project, projectId, onChanged }) {
                              ['Line items', (r) => (
                                <button className="btn ghost sm"
                                        onClick={(e) => { e.stopPropagation(); setReviewing(r) }}>
-                                 Review
+                                 {r.line_item_count
+                                   ? `${r.line_items_accepted} of ${r.line_item_count} accepted`
+                                   : 'Review'}
                                </button>
                              )]]}
                    onAdd={() => setAdding(true)} addLabel="Add contract"
@@ -484,7 +486,8 @@ export function ContractStep({ project, projectId, onChanged }) {
       {reviewing && (
         <Modal wide title={`Line items · ${reviewing.contract_number}`}
                onClose={() => { setReviewing(null); onChanged() }}>
-          <LineItemReview contractId={reviewing.contract_id} projectId={projectId} />
+          <LineItemReview contractId={reviewing.contract_id} projectId={projectId}
+                          onGenerated={onChanged} />
         </Modal>
       )}
     </div>

@@ -381,28 +381,45 @@ export function LineItemReview({ contractId, projectId, onGenerated }) {
   const [error, setError] = useState(null)
   const { toast } = useApp()
   const { data, loading, reload } = useFetch(
-    () => api.get(`/contracts/${contractId}/line-items`), [contractId])
+    () => api.get(`/contracts/${contractId}/line-items`, { project_id: projectId }),
+    [contractId, projectId])
 
   const lines = data?.items || []
+  // Accepted means accepted on THIS project. Everything else is on the table,
+  // a line this project previously rejected included, because a rejection is
+  // this project's call and this project can take it back.
   const selectable = lines.filter((l) => l.status !== 'accepted')
   const chosen = Object.entries(picked).filter(([, v]) => v).map(([k]) => k)
+  const allPicked = selectable.length > 0 && chosen.length === selectable.length
 
   async function generate() {
     setBusy(true); setError(null)
     try {
       const made = await api.post(`/projects/${projectId}/service-codes/from-line-items`,
                                   { line_item_ids: chosen })
-      toast('Service codes created',
-            made.items.map((c) => c.code).join(', '))
+      const names = made.items.map((c) => c.code)
+      if (names.length) {
+        toast(`${names.length} service code${names.length === 1 ? '' : 's'} created`,
+              names.join(', '))
+      }
+      if (made.skipped?.length) {
+        toast('Already billing on this project',
+              made.skipped.map((sk) => sk.service_code).filter(Boolean).join(', '),
+              'warn')
+      }
       setPicked({})
       reload()
       onGenerated?.(made)
     } catch (err) { setError(err.message) } finally { setBusy(false) }
   }
 
-  async function reject(id) {
-    await api.patch(`/line-items/${id}`, { status: 'rejected', description: undefined })
-      .catch((err) => toast('Could not reject', err.message, 'err'))
+  async function decide(id, status) {
+    setError(null)
+    try {
+      await api.post(`/projects/${projectId}/line-items/${id}/decision`, { status })
+    } catch (err) {
+      toast('Could not record that', err.message, 'err')
+    }
     reload()
   }
 
@@ -420,6 +437,11 @@ export function LineItemReview({ contractId, projectId, onGenerated }) {
     <div className="stack" style={{ gap: 12 }}>
       {error && <div className="card" style={{ padding: 12, borderColor: 'var(--red)',
                      background: 'var(--red-soft)', color: 'var(--red)' }}>{error}</div>}
+      <div className="muted" style={{ fontSize: 12.5, lineHeight: 1.6, maxWidth: 620 }}>
+        This is what <strong>this project</strong> bills under the contract. The same
+        contract on another project is decided separately, so accepting a line here
+        changes nothing anywhere else.
+      </div>
       <div className="row wrap" style={{ gap: 9 }}>
         <div className="muted" style={{ fontSize: 12.5 }}>
           {data.counts.accepted} accepted · {data.counts.draft} awaiting a decision ·{' '}
@@ -427,9 +449,9 @@ export function LineItemReview({ contractId, projectId, onGenerated }) {
         </div>
         <div className="spacer" />
         <button className="btn ghost sm" disabled={!selectable.length}
-                onClick={() => setPicked(Object.fromEntries(
+                onClick={() => setPicked(allPicked ? {} : Object.fromEntries(
                   selectable.map((l) => [l.id, true])))}>
-          Select all
+          {allPicked ? 'Clear selection' : `Select all ${selectable.length || ''}`}
         </button>
         <button className="btn primary sm" disabled={!chosen.length || busy}
                 onClick={generate}>
@@ -463,15 +485,33 @@ export function LineItemReview({ contractId, projectId, onGenerated }) {
                   <td className="num">{l.unit_price != null ? fmt.rate(l.unit_price) : '—'}</td>
                   <td className="dim">{l.debris_type_code || '—'}</td>
                   <td>
-                    {done ? <Badge tone="green">{l.service_code || 'Accepted'}</Badge>
-                          : l.status === 'rejected' ? <Badge tone="red">Rejected</Badge>
-                          : <Badge>Awaiting</Badge>}
+                    <div className="row" style={{ gap: 6 }}>
+                      {done ? <Badge tone="green">{l.service_code || 'Accepted'}</Badge>
+                            : l.status === 'rejected' ? <Badge tone="red">Rejected</Badge>
+                            : <Badge>Awaiting</Badge>}
+                      {!done && l.code_used_elsewhere && (
+                        <span className="dim" style={{ fontSize: 11 }}
+                              title={`Billed as ${l.code_used_elsewhere} on `
+                                     + `${l.accepted_on_other_projects} other project`
+                                     + `${l.accepted_on_other_projects === 1 ? '' : 's'}`}>
+                          {l.code_used_elsewhere} elsewhere
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td style={{ width: 36, textAlign: 'right' }}>
                     {l.status === 'draft' && (
-                      <button className="btn ghost icon sm" title="Reject this line"
-                              onClick={() => reject(l.id)}>
+                      <button className="btn ghost icon sm"
+                              title="Not billed on this project"
+                              onClick={() => decide(l.id, 'rejected')}>
                         <Icon name="x" size={12} />
+                      </button>
+                    )}
+                    {l.status === 'rejected' && (
+                      <button className="btn ghost sm"
+                              title="Put this line back on the table for this project"
+                              onClick={() => decide(l.id, 'draft')}>
+                        Undo
                       </button>
                     )}
                   </td>
@@ -825,7 +865,7 @@ export function RuleProposalReview({ projectId, serviceCodeIds, onWritten }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
 
-  const { data, loading, reload } = useFetch(
+  const { data, loading, error: loadError, reload } = useFetch(
     () => api.post(`/projects/${projectId}/rules/from-line-items`,
                    serviceCodeIds?.length ? { service_code_ids: serviceCodeIds } : {}),
     [projectId, (serviceCodeIds || []).join(',')])
@@ -900,6 +940,16 @@ export function RuleProposalReview({ projectId, serviceCodeIds, onWritten }) {
   }
 
   if (loading) return <Loading rows={4} />
+  // A proposal that could not be asked for at all is not the same as a project
+  // with nothing left to rule on, and saying so is the difference between the
+  // user fixing the ticket types and the user staring at the wrong sentence.
+  if (loadError) {
+    return (
+      <Empty icon="rules" title="Nothing to propose yet">
+        {loadError.message}
+      </Empty>
+    )
+  }
   if (!proposals.length) {
     return (
       <Empty icon="rules" title="Every code already has a rule">

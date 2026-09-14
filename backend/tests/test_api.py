@@ -1141,6 +1141,145 @@ def test_selecting_line_items_produces_matching_service_codes(
         client.delete(f"/api/v1/service-codes/{c['id']}", headers=auth)
 
 
+def test_a_contract_is_decided_again_on_every_project_it_is_on(
+        client, auth, project_id, spare_contract):
+    """The setup wizard bug, end to end.
+
+    A contract is a priced schedule a contractor sends to client after client,
+    and project_contracts is many to many for exactly that reason. The accept
+    and reject state used to sit on the line item, so a line accepted on the
+    first project read accepted on every project after it, the review screen
+    gave it no checkbox, and a second project could never build its own service
+    codes from that contract at all. A decision belongs to a project."""
+    paste = "\n".join([
+        "Line\tItem Code\tDescription\tUnit\tUnit Price\tDebris",
+        "1\tSHARE-01\tCollection and hauling on a shared contract\tCY\t9.45\tVeg",
+        "2\tSHARE-02\tStandby time for idle equipment\tHr\t95.00\t",
+    ])
+    client.post(f"/api/v1/contracts/{spare_contract['id']}/line-items/import",
+                headers=auth, json={"text": paste, "dry_run": False})
+    client.post(f"/api/v1/projects/{project_id}/contracts", headers=auth,
+                json={"contract_id": spare_contract["id"]})
+
+    lines = client.get(f"/api/v1/contracts/{spare_contract['id']}/line-items",
+                       headers=auth, params={"project_id": project_id}).json()["items"]
+    by_item = {l["item_code"]: l for l in lines}
+    assert {l["status"] for l in lines} == {"draft"}
+
+    first = client.post(f"/api/v1/projects/{project_id}/service-codes/from-line-items",
+                        headers=auth,
+                        json={"line_item_ids": [by_item["SHARE-01"]["id"]]})
+    assert first.status_code == 201, first.text
+    first_code = first.json()["items"][0]
+
+    # The same contract, a second declaration.
+    clients_ = client.get("/api/v1/clients", headers=auth).json()["items"]
+    contractors = client.get("/api/v1/contractors", headers=auth).json()["items"]
+    second = client.post("/api/v1/projects", headers=auth, json={
+        "name": "Second declaration on the same contract",
+        "project_code": f"API-{uuid.uuid4().hex[:6].upper()}",
+        "client_id": clients_[0]["id"],
+    })
+    assert second.status_code == 201, second.text
+    second_id = second.json()["id"]
+    try:
+        client.post(f"/api/v1/projects/{second_id}/contractors", headers=auth,
+                    json={"contractor_id": contractors[0]["id"],
+                          "role_on_project": "prime"})
+        client.post(f"/api/v1/projects/{second_id}/contracts", headers=auth,
+                    json={"contract_id": spare_contract["id"]})
+
+        fresh = client.get(f"/api/v1/contracts/{spare_contract['id']}/line-items",
+                           headers=auth,
+                           params={"project_id": second_id}).json()
+        assert fresh["counts"]["accepted"] == 0, \
+            "a line accepted on one project must still be on offer on the next"
+        assert fresh["counts"]["draft"] == 2
+        assert {l["id"] for l in fresh["items"]} == {l["id"] for l in lines}, \
+            "every line is selectable, which is what the wizard could not do"
+
+        shared = next(l for l in fresh["items"] if l["item_code"] == "SHARE-01")
+        assert shared["code_used_elsewhere"] == first_code["code"]
+
+        both = client.post(
+            f"/api/v1/projects/{second_id}/service-codes/from-line-items",
+            headers=auth, json={"line_item_ids": [l["id"] for l in fresh["items"]]})
+        assert both.status_code == 201, both.text
+        made = both.json()
+        assert made["created"] == 2
+        reused = next(c for c in made["items"]
+                      if c["contract_line_item_id"] == shared["id"])
+        assert reused["code"] == first_code["code"], \
+            "one contract line reads the same on every project it bills on"
+
+        # And the first project is untouched by any of it.
+        back = client.get(f"/api/v1/contracts/{spare_contract['id']}/line-items",
+                          headers=auth, params={"project_id": project_id}).json()
+        assert back["counts"]["accepted"] == 1
+        assert back["counts"]["draft"] == 1
+
+        # Asking twice reports the code that already exists rather than
+        # quietly minting a second one with a -2 on the end.
+        again = client.post(
+            f"/api/v1/projects/{second_id}/service-codes/from-line-items",
+            headers=auth, json={"line_item_ids": [shared["id"]]}).json()
+        assert again["created"] == 0
+        assert again["skipped"][0]["service_code"] == first_code["code"]
+
+        for c in made["items"]:
+            client.delete(f"/api/v1/service-codes/{c['id']}", headers=auth)
+    finally:
+        client.delete(f"/api/v1/projects/{second_id}", headers=auth)
+    client.delete(f"/api/v1/service-codes/{first_code['id']}", headers=auth)
+
+
+def test_a_rejected_line_is_rejected_on_one_project_only(
+        client, auth, project_id, spare_contract):
+    """Standby time is the real case: ruled out on one declaration, billable on
+    the next. Rejection used to be written on the line item, so ruling it out
+    once ruled it out everywhere that contract was ever used."""
+    line = client.post(f"/api/v1/contracts/{spare_contract['id']}/line-items",
+                       headers=auth,
+                       json={"description": "Standby time, decided per project",
+                             "line_number": 950, "item_code": "RJ-STANDBY",
+                             "unit_type_code": "per_equip_hour",
+                             "unit_price": 95.00}).json()
+    client.post(f"/api/v1/projects/{project_id}/contracts", headers=auth,
+                json={"contract_id": spare_contract["id"]})
+
+    rejected = client.post(
+        f"/api/v1/projects/{project_id}/line-items/{line['id']}/decision",
+        headers=auth, json={"status": "rejected"})
+    assert rejected.status_code == 200, rejected.text
+    assert rejected.json()["status"] == "rejected"
+
+    # The contract wide read is unchanged, because the contract did not decide
+    # anything. The project did.
+    contract_wide = client.get(f"/api/v1/contracts/{spare_contract['id']}/line-items",
+                               headers=auth).json()
+    assert next(l for l in contract_wide["items"]
+                if l["id"] == line["id"])["status"] == "draft"
+
+    # And the project can take it back without asking anybody else.
+    restored = client.post(
+        f"/api/v1/projects/{project_id}/line-items/{line['id']}/decision",
+        headers=auth, json={"status": "draft"})
+    assert restored.status_code == 200, restored.text
+    assert restored.json()["status"] == "draft"
+
+    made = client.post(f"/api/v1/projects/{project_id}/service-codes/from-line-items",
+                       headers=auth, json={"line_item_ids": [line["id"]]}).json()
+    assert made["created"] == 1
+
+    refused = client.post(
+        f"/api/v1/projects/{project_id}/line-items/{line['id']}/decision",
+        headers=auth, json={"status": "rejected"})
+    assert refused.status_code == 400
+    assert refused.json()["error"]["code"] == "line_item_already_billing"
+
+    client.delete(f"/api/v1/service-codes/{made['items'][0]['id']}", headers=auth)
+
+
 # ---------------------------------------------------------------------------
 # The widened project list
 # ---------------------------------------------------------------------------
