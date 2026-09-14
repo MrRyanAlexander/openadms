@@ -1,15 +1,25 @@
 # syntax=docker/dockerfile:1
-# Open ADMS API. Small, single-stage, generic web port.
+# =============================================================================
+# Open ADMS API image.
 #
-# Built with the repository root as the build context, which is why every COPY
-# is prefixed with backend/. .dockerignore trims the context down to the API.
+# This is the ONLY Dockerfile that builds the API. It lives at the repository
+# root on purpose.
 #
-# The installer points the Railway api service at Root Directory /backend, and
-# backend/Dockerfile is the equivalent file for that context. This one stays
-# because it is what docker-compose, App Runner and Cloud Run build, and
-# because it keeps a service left at / building correctly instead of failing
-# with nothing to explain it. The two files differ only in their COPY paths:
-# change one, change both.
+# Railway builds a GitHub service by looking for `Dockerfile` at the root of
+# the service's source directory, and the service's Root Directory is left at
+# its default. That default is the one build setting nobody has to apply,
+# verify, or repair, so there is nothing here that can silently drift.
+#
+# An earlier layout kept a second, near-identical Dockerfile in backend/ and
+# pointed Railway at it with a Root Directory of /backend. Setting that from
+# the CLI stages the change instead of committing it, so the setting reported
+# success and never landed, and this file quietly built instead. Both files had
+# to be kept in sync by hand and the mismatch was invisible. One file removes
+# the whole class of problem.
+#
+# The build context is this directory. .dockerignore trims it to the API, so
+# the context stays small even though it starts at the root.
+# =============================================================================
 FROM python:3.11-slim AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \

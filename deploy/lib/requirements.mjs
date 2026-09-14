@@ -1,5 +1,7 @@
 /**
- * Tool preflight.
+ * What each deployment target needs installed and signed in to.
+ *
+ * This file owns the tool table and the preflight walk over it.
  *
  * Nothing here assumes a CLI is installed or that you are signed in. For every
  * tool a target needs: check it, explain what it is for, offer to install it,
@@ -7,7 +9,11 @@
  * login flow. Control returns to the caller in the same place either way.
  */
 import process from 'node:process'
-import { ask, c, capture, cmdEcho, confirm, fail, has, isInteractive, note, ok, run, say, step, unattendedMode, warn } from './cli.mjs'
+import {
+  ask, c, cmdEcho, confirm, fail, isInteractive, note, ok, say, step,
+  unattendedMode, warn,
+} from './ui.mjs'
+import { capture, has, run } from './shell.mjs'
 
 const mac = process.platform === 'darwin'
 const linux = process.platform === 'linux'

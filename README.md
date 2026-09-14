@@ -295,14 +295,18 @@ A signed peer read presents `X-Instance-Key`, `X-Timestamp`, `X-Nonce` and `X-Si
 ```
 openadms/
 ├── database/      Postgres schema, 18 migrations, seeds, setup script, test suite
-├── backend/       FastAPI server app (its own Dockerfile, EXPOSE 8080)
+├── backend/       FastAPI server app (EXPOSE 8080)
 ├── frontend/      Back office, desktop web app (Netlify)
 ├── mobile/        Field companion, mobile web app / PWA (Netlify)
-├── deploy/        Terraform for Netlify+Railway, AWS, GCP, plus the CLI provisioner
+├── deploy/        npm run setup / teardown, plus Terraform for Netlify+Railway, AWS, GCP
 ├── e2e/           Playwright walk of both frontends
 ├── docs/          Everything below
-└── installer.js   Interactive CLI installer
+└── Dockerfile     The API image. One file, built by Railway, compose, App Runner and Cloud Run.
 ```
+
+`npm run setup` is the installer and `npm run teardown` is its inverse. Both
+live in [`deploy/`](deploy), which has its own [README](deploy/README.md)
+explaining the layout and how the API image gets built.
 
 | Directory | What lives there | Lines |
 |---|---|---|

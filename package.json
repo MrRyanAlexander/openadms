@@ -8,8 +8,8 @@
     "node": ">=18"
   },
   "scripts": {
-    "install:adms": "node installer.js",
-    "setup": "node installer.js",
+    "install:adms": "node deploy/setup.mjs",
+    "setup": "node deploy/setup.mjs",
     "db:migrate": "cd database && ./migrate.sh",
     "db:setup": "cd database && ./setup.sh --with-demo --test",
     "db:seed:large": "cd database && ./seed-large.sh",
@@ -20,12 +20,12 @@
     "build": "npm --prefix frontend run build && npm --prefix mobile run build",
     "test:api": "cd backend && python3 -m pytest",
     "test:db": "cd database && psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f tests/schema_tests.sql",
-    "deploy:netlify": "node deploy/deploy.mjs netlify",
-    "deploy:plan": "node installer.js --dry-run",
+    "deploy:netlify": "node deploy/setup.mjs --resume --target=netlify",
+    "deploy:plan": "node deploy/setup.mjs --dry-run",
     "teardown": "node deploy/teardown.mjs",
     "teardown:plan": "node deploy/teardown.mjs --dry-run",
     "teardown:local": "node deploy/teardown.mjs --local-only",
-    "preflight": "node deploy/deploy.mjs --check",
+    "preflight": "node deploy/setup.mjs --check",
     "db:up": "docker compose up -d db",
     "db:down": "docker compose down",
     "test:ui": "node e2e/uiwalk.mjs"

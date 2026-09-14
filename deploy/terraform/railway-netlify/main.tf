@@ -5,7 +5,7 @@
 # and needs no GitHub connection:
 #
 #     npm run setup            # choose Netlify + Railway
-#     npm run deploy:netlify   # re-run provisioning on its own
+#     npm run deploy:netlify   # re-run provisioning, keys reused
 #
 # Use this stack when you want the deployment in version-controlled state.
 # =============================================================================
@@ -91,12 +91,18 @@ resource "railway_project" "adms" {
   description = "Open ADMS API and Postgres"
 }
 
+# No root_directory on purpose.
+#
+# Railway builds a GitHub service from `Dockerfile` at the root of the
+# service's source directory, and this repo has exactly one Dockerfile, at the
+# repository root, which builds the API. Leaving root_directory unset means
+# this stack and `npm run setup` produce identical services, and there is no
+# build setting either path has to apply, verify or repair.
 resource "railway_service" "api" {
   name               = "api"
   project_id         = railway_project.adms.id
   source_repo        = var.github_repo
   source_repo_branch = var.branch
-  root_directory     = "/backend"
 }
 
 resource "railway_variable_collection" "api" {

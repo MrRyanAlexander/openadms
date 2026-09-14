@@ -14,7 +14,7 @@ and pipes them into the matching Terraform stack.
 ```bash
 npm run setup
 # or unattended
-node installer.js --yes --target=netlify \
+node deploy/setup.mjs --yes --target=netlify \
   --database-url="postgresql://..." --api-url="https://api.example.org/api/v1"
 ```
 
@@ -72,21 +72,27 @@ command runs:
   site-scoped command runs from inside that folder. Afterwards `cd frontend &&
   netlify open` does the right thing.
 - **Railway** links one directory to a project. The repo root is linked, and
-  the `api` service carries **Root Directory `/backend`**, so Railway builds
-  `backend/Dockerfile` against `backend/` and reads `backend/railway.json`.
+  the `api` service is left at its **default Root Directory**. Railway builds a
+  GitHub service from `Dockerfile` at the root of the service's source
+  directory, and this repo has exactly one Dockerfile, at the repository root,
+  which builds the API. Nothing in the provisioner sets, reads, or repairs that
+  setting, so there is nothing that can drift.
 
-  That setting cannot be committed by the CLI. `railway environment edit
-  --service-config` stages it the way the dashboard does, so it reports success
-  while Railway keeps building whatever it was pointed at before. The
-  provisioner writes it with Railway's public GraphQL API
-  (`serviceInstanceUpdate`) and then reads the value back, and only reports it
-  as set once Railway returns `/backend`. Auth comes from `railway login` or
-  `RAILWAY_API_TOKEN`; nothing new to create.
+  This replaces an earlier design that kept a second Dockerfile in `backend/`
+  and pointed Railway at it with Root Directory `/backend`. That setting cannot
+  be committed by the Railway CLI: `railway environment edit --service-config`
+  stages it the way the dashboard does, so it reported success while Railway
+  kept building the root Dockerfile. Because that build produced a working
+  image, the failure never surfaced, and two near-identical Dockerfiles had to
+  be kept in sync by hand.
 
-  A matching `Dockerfile` and `railway.json` also sit at the repo root and
-  build the same image from the root context, so a service left at `/` still
-  deploys. Both are kept deliberately: whichever Root Directory the service
-  ends up with, there is a valid build.
+  Railway's docs are also explicit that `railway.json` does not follow Root
+  Directory: with one set, the config file is still read from the repository
+  root unless the service is separately pointed at `/backend/railway.json`.
+
+  Setting Root Directory to `/backend` by hand will now fail the build rather
+  than silently fall back, because there is no Dockerfile there any more. That
+  is intended.
 
 If a site already exists on your account, the provisioner runs `netlify link
 --id` instead of creating a duplicate. If a folder is already linked, it leaves

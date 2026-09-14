@@ -1,6 +1,6 @@
 # =============================================================================
 # Open ADMS :: AWS
-# Frontends on S3 + CloudFront, the API on App Runner from the same Dockerfile,
+# Frontends on S3 + CloudFront, the API on App Runner from the same root Dockerfile,
 # Postgres on RDS. Same code, same environment variables, different plumbing.
 # =============================================================================
 
@@ -41,7 +41,7 @@ variable "db_instance" {
 }
 variable "image_uri" {
   type = string
-  description = "ECR image built from backend/Dockerfile"
+  description = "ECR image built from the Dockerfile at the repo root"
 }
 
 provider "aws" { region = var.region }
@@ -104,7 +104,7 @@ locals {
 }
 
 # ---------------------------------------------------------------------------
-# API on App Runner, built from backend/Dockerfile
+# API on App Runner, built from the Dockerfile at the repo root
 # ---------------------------------------------------------------------------
 resource "aws_apprunner_service" "api" {
   service_name = "${var.name_prefix}-api"

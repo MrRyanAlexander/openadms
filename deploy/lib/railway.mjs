@@ -1,27 +1,26 @@
 /**
- * Railway's public GraphQL API, used for the handful of service settings its
- * CLI cannot commit.
+ * Railway's public GraphQL API, for the two things its CLI cannot do reliably:
+ * naming the status of the latest deployment, and starting a build on a
+ * service that has never built (which `railway redeploy` cannot do, because
+ * there is nothing to re-deploy).
  *
- * Why this file exists: Root Directory is a per-environment service setting.
- * In the dashboard it is a staged change that only lands when you press
- * Deploy, and `railway environment edit --service-config ...` behaves the same
- * way, so earlier runs of the installer reported "root directory set" while
- * Railway went on building from wherever it was pointed before. The API has no
- * staging concept: serviceInstanceUpdate applies immediately, and the value can
- * be read straight back to prove it. Nothing here trusts a mutation that has
- * not been verified by a follow-up read.
+ * This file used to also set the api service's Root Directory, and that is
+ * gone on purpose. The API now builds the Dockerfile at the repository root,
+ * which is Railway's default for a GitHub service, so there is no build
+ * setting left for this installer to apply, verify or repair. See the comment
+ * at the top of /Dockerfile for why.
  *
  * Auth reuses whatever the operator already has. No new secret to create:
  *   RAILWAY_API_TOKEN / RAILWAY_TOKEN from the environment, or the token the
  *   CLI wrote to ~/.railway/config.json when they ran `railway login`.
  *
- * Every function returns { ok, ... } and never throws, matching cli.mjs.
+ * Every function returns { ok, ... } and never throws, matching shell.mjs.
  */
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
-import { capture } from './cli.mjs'
+import { capture } from './shell.mjs'
 
 const ENDPOINTS = [
   'https://backboard.railway.com/graphql/v2',
@@ -225,71 +224,6 @@ export async function projectServices(api, projectId) {
     name: project?.name || null,
     services: edges('services'),
     environments: edges('environments'),
-  }
-}
-
-/** Read the live per-environment settings for one service. */
-export async function readServiceInstance(api, { serviceId, environmentId }) {
-  const wide = await api.call(`
-    query($serviceId: String!, $environmentId: String!) {
-      serviceInstance(serviceId: $serviceId, environmentId: $environmentId) {
-        id
-        rootDirectory
-        builder
-        railwayConfigFile
-        healthcheckPath
-      }
-    }`, { serviceId, environmentId })
-
-  if (wide.ok) return { ok: true, instance: wide.data?.serviceInstance || {} }
-
-  // Older schema, or a field this account cannot read. Ask for the one value
-  // that actually matters.
-  const narrow = await api.call(`
-    query($serviceId: String!, $environmentId: String!) {
-      serviceInstance(serviceId: $serviceId, environmentId: $environmentId) {
-        rootDirectory
-      }
-    }`, { serviceId, environmentId })
-
-  if (narrow.ok) return { ok: true, instance: narrow.data?.serviceInstance || {} }
-  return { ok: false, reason: narrow.reason || wide.reason }
-}
-
-/**
- * Apply a root directory and prove it stuck.
- *
- * The read-back is the whole point. A mutation that returns without error is
- * not evidence: the earlier CLI path returned success while the setting sat
- * unapplied, which is how the API ended up building the wrong tree.
- */
-export async function setRootDirectory(api, { serviceId, environmentId, rootDirectory }) {
-  const applied = await api.call(`
-    mutation($serviceId: String!, $environmentId: String!, $rootDirectory: String!) {
-      serviceInstanceUpdate(
-        serviceId: $serviceId
-        environmentId: $environmentId
-        input: { rootDirectory: $rootDirectory }
-      )
-    }`, { serviceId, environmentId, rootDirectory })
-
-  const readBack = await readServiceInstance(api, { serviceId, environmentId })
-  const live = readBack.ok ? (readBack.instance.rootDirectory ?? null) : null
-  const same = (a, b) => String(a || '').replace(/^\/+|\/+$/g, '')
-                      === String(b || '').replace(/^\/+|\/+$/g, '')
-
-  if (readBack.ok && same(live, rootDirectory)) {
-    return { ok: true, verified: true, rootDirectory: live }
-  }
-  return {
-    ok: false,
-    verified: readBack.ok,
-    rootDirectory: live,
-    reason: applied.ok
-      ? (readBack.ok
-        ? `Railway still reports root directory ${live === null ? '(unset)' : live}`
-        : `Could not read the setting back: ${readBack.reason}`)
-      : applied.reason,
   }
 }
 

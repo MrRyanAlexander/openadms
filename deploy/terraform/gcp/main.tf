@@ -1,6 +1,6 @@
 # =============================================================================
 # Open ADMS :: Google Cloud
-# Frontends on Firebase Hosting, the API on Cloud Run from the same Dockerfile,
+# Frontends on Firebase Hosting, the API on Cloud Run from the same root Dockerfile,
 # Postgres on Cloud SQL.
 # =============================================================================
 
@@ -22,7 +22,7 @@ variable "name_prefix" {
 }
 variable "image_uri" {
   type = string
-  description = "Artifact Registry image from backend/Dockerfile"
+  description = "Artifact Registry image from the Dockerfile at the repo root"
 }
 variable "jwt_secret" {
   type = string

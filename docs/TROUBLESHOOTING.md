@@ -106,8 +106,11 @@ exists on your account but the folder is not linked (it runs `netlify link
 folder as a side effect). `.netlify/` is gitignored in both apps.
 
 Railway works the same way but links a single directory to a project, so the
-repo root is linked and the `api` service carries Root Directory `/backend`,
-which is where the API code and `backend/railway.json` live.
+repo root is linked and the `api` service is left at its default Root
+Directory. Railway builds `Dockerfile` from the root of the source directory,
+and the one Dockerfile in this repo lives at the repository root and builds the
+API. If you set Root Directory to `/backend` by hand the build will fail, since
+there is no Dockerfile there. See [deploy/README.md](../deploy/README.md).
 
 ## The API URL answers 404 "Application not found"
 
@@ -131,7 +134,9 @@ Two bugs produced this repeatedly and are both fixed in the provisioner:
   Railway API fallback now, since a service with zero deployments cannot be
   redeployed.
 - Root Directory was staged rather than committed, so Railway built the wrong
-  tree. It is written through the Railway API and read back for confirmation.
+  tree. That setting is gone entirely: there is one Dockerfile, at the
+  repository root, and the service stays at its default Root Directory, so
+  there is nothing left to stage or verify.
 
 While it waits for `/health`, the provisioner now prints the Railway deployment
 status each round, so `FAILED` shows up immediately instead of as a silent
@@ -202,7 +207,7 @@ The `([a-z0-9-]+--)?` part is what lets Netlify deploy previews through.
 ## `permission denied` running the scripts
 
 ```bash
-chmod +x database/setup.sh database/migrate.sh installer.js deploy/deploy.mjs
+chmod +x database/setup.sh database/migrate.sh deploy/setup.mjs deploy/teardown.mjs
 ```
 
 ## Migrations fail with a checksum warning

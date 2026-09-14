@@ -31,9 +31,9 @@ import path from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 import {
-  ask, c, capture, closePrompts, cmdEcho, confirm, fail, initPrompts,
-  note, ok, say, step, warn,
-} from './lib/cli.mjs'
+  ask, c, closePrompts, cmdEcho, confirm, initPrompts, note, ok, say, step, warn,
+} from './lib/ui.mjs'
+import { capture } from './lib/shell.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const STATE_FILE = path.join(ROOT, '.deploy-state.json')
