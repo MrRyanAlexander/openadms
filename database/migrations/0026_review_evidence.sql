@@ -86,8 +86,11 @@ BEGIN
     SELECT te.*, t.origin_site_id, t.certification_id,
            t.origin_street, t.origin_latitude, t.origin_longitude,
            t.origin_at AS started_at,
+           t.processing_state,
+           t.processing_error,
            dt.default_density_lbs_cy,
-           tt.requires_photo, tt.kind AS type_kind,
+           tt.requires_photo, tt.kind AS type_kind, tt.billable,
+           tt.label AS type_label,
            pec.certified_capacity_cy
       INTO e
       FROM ticket_evaluation te
@@ -185,6 +188,23 @@ BEGIN
         v_found := array_append(v_found, 'truck_overlaps');
     END IF;
 
+    -- ---------------------------------------------------------------- billing
+    -- Monitored work that produced no transaction. Not a silent skip and not
+    -- an unhandled exception: a named issue on the same queue as everything
+    -- else, so a rig that was never finished is visible the morning after
+    -- rather than at invoice time. Non-billable types are excluded, because an
+    -- incident is supposed to bill nothing.
+    IF COALESCE(e.billable, false)
+       AND e.status = 'completed'
+       AND NOT e.is_void
+       AND NOT EXISTS (
+            SELECT 1 FROM transactions tx
+             WHERE tx.ticket_id = p_ticket
+               AND NOT tx.is_reversal
+               AND tx.superseded_at IS NULL) THEN
+        v_found := array_append(v_found, 'no_rule_matched');
+    END IF;
+
     -- ------------------------------------------------------------- write it
     INSERT INTO review_flags (
         subject_kind, subject_id, project_id, issue_code, severity, detail)
@@ -198,6 +218,9 @@ BEGIN
                'net_tons', NULLIF(e.net_tons, 0),
                'photo_count', e.photo_count,
                'missing_photos', to_jsonb(NULLIF(v_missing, '{}'::text[])),
+               'processing_state', e.processing_state,
+               'processing_error', e.processing_error,
+               'ticket_type', e.type_label,
                'origin_street', e.origin_street))
       FROM review_issue_kinds k
      WHERE k.code = ANY (v_found) AND k.is_active

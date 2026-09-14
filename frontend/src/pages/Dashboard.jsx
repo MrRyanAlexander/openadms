@@ -268,15 +268,30 @@ export default function Dashboard() {
                       ? <Badge tone="green">Ready</Badge>
                       : <Badge tone="amber">Setup incomplete</Badge>}>
                 <div className="checklist">
-                  {Object.entries(READINESS_LABELS).map(([key, label]) => (
-                    <div key={key} className={`check-row ${r?.[key] ? 'ok' : 'missing'}`}>
-                      <span className="check-icon">
-                        <Icon name={r?.[key] ? 'check' : 'alert'} size={15} />
-                      </span>
-                      {label}
-                    </div>
-                  ))}
+                  {Object.entries(READINESS_LABELS).map(([key, label]) => {
+                    // The summary row carries has_client, has_contract and so
+                    // on; the labels are keyed by what goes into missing. This
+                    // read the wrong side and reported a fully configured
+                    // project as missing everything.
+                    const gone = (r?.missing || []).includes(key)
+                    return (
+                      <div key={key} className={`check-row ${gone ? 'missing' : 'ok'}`}>
+                        <span className="check-icon">
+                          <Icon name={gone ? 'alert' : 'check'} size={15} />
+                        </span>
+                        {label}
+                      </div>
+                    )
+                  })}
                 </div>
+                {(r?.unruled_ticket_types || []).length > 0 && (
+                  <div className="muted" style={{ fontSize: 12.5, lineHeight: 1.6,
+                                                  marginTop: 10 }}>
+                    No rule covers {r.unruled_ticket_types.join(', ')}. Tickets of{' '}
+                    {r.unruled_ticket_types.length === 1 ? 'that type' : 'those types'}{' '}
+                    cannot be billed, so the field is blocked.
+                  </div>
+                )}
                 {!r?.ready_for_field && can('project.update') && (
                   <button className="btn block" style={{ marginTop: 12 }}
                           onClick={() => navigate('/setup')}>

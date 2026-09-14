@@ -542,6 +542,47 @@ BEGIN
     ON CONFLICT (project_id, ticket_type_id) DO UPDATE SET is_active = true;
 
     SELECT id INTO v_user FROM users WHERE username = 'jmiller';
+
+    -- The type is enabled but nothing can price it yet. Readiness has to say
+    -- so, and the creation gate has to refuse the ticket, because a ticket on
+    -- an unrigged type could never become a transaction.
+    PERFORM pg_temp.check_that('an enabled type with no rule is named as uncovered',
+        (SELECT 'Marine Debris Recovery' = ANY (unruled_ticket_types)
+           FROM project_readiness_summary WHERE project_id = v_project));
+    PERFORM pg_temp.check_that('an uncovered ticket type blocks field readiness',
+        (SELECT NOT ready_for_field FROM project_readiness_summary
+          WHERE project_id = v_project));
+    PERFORM pg_temp.check_that('missing names rule_coverage, not just rule',
+        (SELECT 'rule_coverage' = ANY (missing) AND NOT ('rule' = ANY (missing))
+           FROM project_readiness_summary WHERE project_id = v_project));
+
+    PERFORM pg_temp.check_raises('a ticket on an unruled type is refused',
+        format($q$
+            INSERT INTO tickets (project_id, ticket_type_id, status, contractor_id,
+                                 origin_latitude, origin_longitude, origin_at,
+                                 quantity, created_by, data)
+            SELECT %L::uuid, %L::uuid, 'completed', contractor_id, 38.79, -90.33,
+                   now(), 3, %L::uuid, '{"vessel_name":"Refused"}'::jsonb
+              FROM project_contractors WHERE project_id = %L::uuid LIMIT 1
+        $q$, v_project, v_type, v_user, v_project),
+        'No rule covers Marine Debris Recovery');
+
+    -- Rig it with a brand new rule, again with no code change.
+    DELETE FROM rule_statements WHERE rule_id IN (
+        SELECT id FROM rules WHERE project_id = v_project AND name = 'Marine Recovery Flat');
+    UPDATE rules SET name = 'Marine Recovery Flat (retired ' || id || ')'
+     WHERE project_id = v_project AND name = 'Marine Recovery Flat';
+
+    INSERT INTO rules (project_id, ticket_type_id, name, service_code_id, contract_id)
+    SELECT v_project, v_type, 'Marine Recovery Flat',
+           (SELECT id FROM service_codes WHERE project_id = v_project AND code = 'HHW'),
+           (SELECT contract_id FROM project_contracts WHERE project_id = v_project AND is_primary)
+    RETURNING id INTO v_rule;
+
+    PERFORM pg_temp.check_that('one rule on the type restores field readiness',
+        (SELECT ready_for_field FROM project_readiness_summary
+          WHERE project_id = v_project));
+
     INSERT INTO tickets (project_id, ticket_type_id, status, contractor_id,
                          origin_latitude, origin_longitude, origin_at,
                          quantity, created_by, data)
@@ -554,18 +595,6 @@ BEGIN
         v_ticket IS NOT NULL);
     PERFORM pg_temp.check_that('the new type''s data is queryable through the JSONB index',
         (SELECT data ->> 'vessel_name' FROM tickets WHERE id = v_ticket) = 'Test Runner');
-
-    -- Bill it with a brand new rule, again with no code change.
-    DELETE FROM rule_statements WHERE rule_id IN (
-        SELECT id FROM rules WHERE project_id = v_project AND name = 'Marine Recovery Flat');
-    UPDATE rules SET name = 'Marine Recovery Flat (retired ' || id || ')'
-     WHERE project_id = v_project AND name = 'Marine Recovery Flat';
-
-    INSERT INTO rules (project_id, ticket_type_id, name, service_code_id, contract_id)
-    SELECT v_project, v_type, 'Marine Recovery Flat',
-           (SELECT id FROM service_codes WHERE project_id = v_project AND code = 'HHW'),
-           (SELECT contract_id FROM project_contracts WHERE project_id = v_project AND is_primary)
-    RETURNING id INTO v_rule;
 
     PERFORM adms_process_ticket(v_ticket);
     PERFORM pg_temp.check_that('the new type bills through the same engine',
@@ -1142,6 +1171,55 @@ BEGIN
                   JOIN tickets t ON t.id = f.subject_id
                  WHERE f.subject_kind = 'ticket'
                    AND t.is_void AND f.cleared_at IS NULL));
+
+        -- Monitored work that produced no transaction. It used to sit in
+        -- processing_state = 'no_match' with a NULL error, which is the silent
+        -- skip the notes called the real bug.
+        PERFORM pg_temp.check_that('a billable ticket that matched nothing carries a named error',
+            NOT EXISTS (
+                SELECT 1 FROM tickets t
+                  JOIN ticket_types tt ON tt.id = t.ticket_type_id
+                 WHERE t.project_id = v_project
+                   AND tt.billable
+                   AND t.processing_state = 'no_match'
+                   AND COALESCE(btrim(t.processing_error), '') = ''));
+
+        PERFORM pg_temp.check_that('a non-billable type is excluded, never reported as no_match',
+            NOT EXISTS (
+                SELECT 1 FROM tickets t
+                  JOIN ticket_types tt ON tt.id = t.ticket_type_id
+                 WHERE t.project_id = v_project
+                   AND NOT tt.billable
+                   AND t.processing_state = 'no_match'));
+
+        PERFORM pg_temp.check_that('nothing billed it reaches the review queue',
+            NOT EXISTS (
+                SELECT 1 FROM tickets t
+                  JOIN ticket_types tt ON tt.id = t.ticket_type_id
+                 WHERE t.project_id = v_project
+                   AND tt.billable
+                   AND t.status = 'completed'
+                   AND NOT t.is_void
+                   AND t.deleted_at IS NULL
+                   AND NOT EXISTS (
+                        SELECT 1 FROM transactions tx
+                         WHERE tx.ticket_id = t.id AND NOT tx.is_reversal
+                           AND tx.superseded_at IS NULL)
+                   AND NOT EXISTS (
+                        SELECT 1 FROM review_flags f
+                         WHERE f.subject_kind = 'ticket' AND f.subject_id = t.id
+                           AND f.issue_code = 'no_rule_matched'
+                           AND f.cleared_at IS NULL)));
+
+        PERFORM pg_temp.check_that('an incident is never asked why it did not bill',
+            NOT EXISTS (
+                SELECT 1 FROM review_flags f
+                  JOIN tickets t ON t.id = f.subject_id
+                  JOIN ticket_types tt ON tt.id = t.ticket_type_id
+                 WHERE f.subject_kind = 'ticket'
+                   AND f.issue_code = 'no_rule_matched'
+                   AND f.cleared_at IS NULL
+                   AND NOT tt.billable));
 
         -- The spine has no foreign key on subject_id, so the check that
         -- replaces it has to actually refuse a record that is not there.

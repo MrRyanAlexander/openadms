@@ -484,13 +484,54 @@ def test_a_new_ticket_type_is_added_as_data(client, auth, project_id):
                          json={"ticket_type_id": type_id})
     assert linked.status_code == 201
 
-    ticket = client.post(f"/api/v1/projects/{project_id}/tickets", headers=auth,
-                         json={"ticket_type_id": type_id, "status": "open",
-                               "fields": {"widget_count": 7, "quantity": 7}})
-    assert ticket.status_code == 201, ticket.text
-    assert ticket.json()["ticket"]["data"]["widget_count"] == 7
+    # Enabled and billable, but nothing can price it yet. Readiness has to say
+    # so, and the creation gate has to refuse, because a ticket of a type no
+    # rule covers could never become a transaction.
+    readiness = client.get(f"/api/v1/projects/{project_id}/readiness",
+                           headers=auth).json()
+    assert "API Test Type" in readiness["unruled_ticket_types"]
+    assert readiness["ready_for_field"] is False
+    assert "rule_coverage" in readiness["missing"]
 
-    client.delete(f"/api/v1/ticket-types/{type_id}", headers=auth)
+    refused = client.post(f"/api/v1/projects/{project_id}/tickets", headers=auth,
+                          json={"ticket_type_id": type_id, "status": "open",
+                                "fields": {"widget_count": 7, "quantity": 7}})
+    assert refused.status_code == 422, refused.text
+    assert "API Test Type" in refused.json()["error"]["message"]
+
+    rule_id = None
+    try:
+        # Rig it. One rule on the type is all the gate asks for.
+        code = client.get(f"/api/v1/projects/{project_id}/service-codes",
+                          headers=auth).json()["items"][0]
+        contract = client.get(f"/api/v1/projects/{project_id}", headers=auth
+                              ).json()["contracts"][0]
+        rule = client.post(f"/api/v1/projects/{project_id}/rules", headers=auth, json={
+            "name": f"API Test Rule {uuid.uuid4().hex[:6]}",
+            "ticket_type_id": type_id,
+            "service_code_id": code["id"],
+            "contract_id": contract["contract_id"],
+            "statements": [],
+        })
+        assert rule.status_code == 201, rule.text
+        rule_id = rule.json()["id"]
+
+        readiness = client.get(f"/api/v1/projects/{project_id}/readiness",
+                               headers=auth).json()
+        assert readiness["ready_for_field"] is True
+
+        ticket = client.post(f"/api/v1/projects/{project_id}/tickets", headers=auth,
+                             json={"ticket_type_id": type_id, "status": "open",
+                                   "fields": {"widget_count": 7, "quantity": 7}})
+        assert ticket.status_code == 201, ticket.text
+        assert ticket.json()["ticket"]["data"]["widget_count"] == 7
+    finally:
+        # This type is enabled on the shared demo project, so leaving it behind
+        # would make every later readiness assertion fail for a reason that has
+        # nothing to do with the test that hit it.
+        if rule_id:
+            client.delete(f"/api/v1/rules/{rule_id}", headers=auth)
+        client.delete(f"/api/v1/ticket-types/{type_id}", headers=auth)
 
 
 def test_a_stage_schema_without_a_completing_stage_is_rejected(client, auth):

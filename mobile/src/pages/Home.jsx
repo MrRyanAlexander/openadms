@@ -58,7 +58,10 @@ export default function Home() {
       {detail.data && !ready && (
         <div className="banner amber" style={{ marginBottom: 14 }}>
           This project is not fully configured yet, so the server will refuse new tickets.
-          Missing: {(detail.data.missing || []).join(', ')}.
+          {(detail.data.unruled_ticket_types || []).length > 0
+            ? ` Nothing on this project can bill a ${
+                detail.data.unruled_ticket_types.join(' or ')} ticket yet.`
+            : ` Missing: ${(detail.data.missing || []).join(', ')}.`}
         </div>
       )}
 

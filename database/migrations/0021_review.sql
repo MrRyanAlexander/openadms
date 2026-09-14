@@ -105,7 +105,7 @@ CREATE TABLE review_issue_kinds (
     CONSTRAINT issue_kind_severity_valid CHECK (severity IN ('info', 'review', 'serious')),
     CONSTRAINT issue_kind_domain_valid CHECK (domain IN (
         'timing', 'location', 'volume', 'evidence', 'duplication',
-        'measurement', 'compliance', 'data')),
+        'measurement', 'compliance', 'billing', 'data')),
     CONSTRAINT issue_kind_has_a_subject CHECK (cardinality(subject_kinds) > 0)
 );
 
@@ -965,7 +965,10 @@ INSERT INTO review_issue_kinds (code, label, description, severity, domain, subj
      'review', 'location', ARRAY['ticket'], 100),
     ('street_seen_once', 'Street recorded only here',
      'No other ticket on this project names this street. Often the address was typed by hand because the street list had not downloaded.',
-     'review', 'location', ARRAY['ticket'], 110)
+     'review', 'location', ARRAY['ticket'], 110),
+    ('no_rule_matched', 'Nothing billed it',
+     'This ticket completed and no rule produced a transaction, so it is monitored work that cannot reach an invoice. Either no rule covers the ticket type or none of the conditions held.',
+     'serious', 'billing', ARRAY['ticket'], 120)
 ON CONFLICT (code) DO UPDATE
     SET label = EXCLUDED.label, description = EXCLUDED.description,
         severity = EXCLUDED.severity, domain = EXCLUDED.domain,

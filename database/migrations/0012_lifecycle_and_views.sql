@@ -4,6 +4,24 @@
 
 -- ---------------------------------------------------------------------------
 -- Project readiness. The field is blocked until every one of these is true.
+--
+-- Rule coverage is part of the field gate, not an afterthought on the billing
+-- side. A project with no rule covering an enabled ticket type cannot produce a
+-- transaction on any ticket of that type, so calling it "ready for field work"
+-- was the system saying something that was not true. has_rule only ever asked
+-- whether one rule existed anywhere on the project, which a project with a
+-- single load rule and three other enabled types passed.
+--
+-- Two directions of coverage, deliberately weighted differently:
+--
+--   unruled_ticket_types  an enabled, billable type with no rule. Blocks the
+--                         field, because a ticket of that type can never bill.
+--   unruled_service_codes an active code no rule references. Blocks billing
+--                         readiness and is named in the wizard, because it is a
+--                         configuration gap rather than a reason to stop work.
+--
+-- System types and non-billable types are excluded from both. An incident
+-- carries no transaction by design and must never be asked for a rule.
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE VIEW project_readiness AS
 SELECT
@@ -32,15 +50,59 @@ SELECT
                AND r.deleted_at IS NULL)                     AS has_rule,
     EXISTS (SELECT 1 FROM project_assignments pa
              WHERE pa.project_id = p.id AND pa.is_active
-               AND pa.can_create_tickets)                    AS has_field_worker
+               AND pa.can_create_tickets)                    AS has_field_worker,
+
+    -- Enabled, billable ticket types with nothing that can price them.
+    COALESCE((
+        SELECT array_agg(DISTINCT tt.label ORDER BY tt.label)
+          FROM project_ticket_types ptt
+          JOIN ticket_types tt ON tt.id = ptt.ticket_type_id
+         WHERE ptt.project_id = p.id
+           AND ptt.is_active
+           AND tt.is_active
+           AND tt.billable
+           AND NOT tt.is_system
+           AND NOT EXISTS (
+                SELECT 1 FROM rules r
+                 WHERE r.project_id = p.id
+                   AND r.ticket_type_id = tt.id
+                   AND r.is_active
+                   AND r.deleted_at IS NULL)
+    ), '{}'::text[])                                         AS unruled_ticket_types,
+
+    -- Active codes no rule references. These can never reach an invoice.
+    COALESCE((
+        SELECT array_agg(DISTINCT sc.code ORDER BY sc.code)
+          FROM service_codes sc
+         WHERE sc.project_id = p.id
+           AND sc.is_active
+           AND sc.deleted_at IS NULL
+           AND NOT EXISTS (
+                SELECT 1 FROM rules r
+                 WHERE r.service_code_id = sc.id
+                   AND r.is_active
+                   AND r.deleted_at IS NULL)
+    ), '{}'::text[])                                         AS unruled_service_codes
 FROM projects p
 WHERE p.deleted_at IS NULL;
 
+COMMENT ON VIEW project_readiness IS
+    'One row per project saying what is configured and what is not. Rule '
+    'coverage is computed per enabled ticket type rather than as a single '
+    'does-any-rule-exist flag, because the latter let a project with one load '
+    'rule and three other enabled types call itself ready.';
+
 CREATE OR REPLACE VIEW project_readiness_summary AS
 SELECT r.*,
+       (cardinality(r.unruled_ticket_types) = 0 AND r.has_rule)
+                                                      AS has_rule_coverage,
+       (cardinality(r.unruled_service_codes) = 0)     AS has_code_coverage,
        (r.has_client AND r.has_contract AND r.has_contractor AND r.has_site
-        AND r.has_ticket_type AND r.has_field_worker)  AS ready_for_field,
-       (r.has_service_code AND r.has_rate AND r.has_rule) AS ready_for_billing,
+        AND r.has_ticket_type AND r.has_field_worker
+        AND r.has_rule
+        AND cardinality(r.unruled_ticket_types) = 0)  AS ready_for_field,
+       (r.has_service_code AND r.has_rate AND r.has_rule
+        AND cardinality(r.unruled_service_codes) = 0) AS ready_for_billing,
        ARRAY_REMOVE(ARRAY[
            CASE WHEN NOT r.has_client        THEN 'client'        END,
            CASE WHEN NOT r.has_contract      THEN 'contract'      END,
@@ -50,9 +112,20 @@ SELECT r.*,
            CASE WHEN NOT r.has_service_code  THEN 'service_code'  END,
            CASE WHEN NOT r.has_rate          THEN 'rate'          END,
            CASE WHEN NOT r.has_rule          THEN 'rule'          END,
+           CASE WHEN r.has_rule AND cardinality(r.unruled_ticket_types) > 0
+                                             THEN 'rule_coverage' END,
+           CASE WHEN cardinality(r.unruled_service_codes) > 0
+                                             THEN 'code_coverage' END,
            CASE WHEN NOT r.has_field_worker  THEN 'field_worker'  END
        ], NULL) AS missing
 FROM project_readiness r;
+
+COMMENT ON VIEW project_readiness_summary IS
+    'The readiness view with the two gates resolved. ready_for_field now '
+    'includes rule coverage, so the creation gate refuses a ticket on a '
+    'project that could not price it. missing names rule_coverage separately '
+    'from rule, because "no rules at all" and "three types covered, one not" '
+    'are different jobs for whoever has to fix it.';
 
 -- ---------------------------------------------------------------------------
 -- Ticket number assignment + the creation gate
@@ -67,6 +140,7 @@ DECLARE
     v_type_code text;
     v_enforce   text := COALESCE(current_setting('adms.enforce_gate', true), 'on');
     v_ready     boolean;
+    v_unruled   text[];
 BEGIN
     SELECT ticket_prefix INTO v_prefix FROM projects WHERE id = NEW.project_id;
     SELECT is_system, code INTO v_is_system, v_type_code
@@ -97,11 +171,23 @@ BEGIN
             USING ERRCODE = 'check_violation';
     END IF;
 
-    -- The project must be configured far enough for field work.
-    SELECT ready_for_field INTO v_ready
+    -- The project must be configured far enough for field work. Rule coverage
+    -- is part of that now, so this refuses a ticket on a project that could
+    -- not have priced it, and names the uncovered type rather than the flag.
+    SELECT ready_for_field, unruled_ticket_types
+      INTO v_ready, v_unruled
       FROM project_readiness_summary WHERE project_id = NEW.project_id;
 
     IF NOT COALESCE(v_ready, false) THEN
+        IF v_unruled IS NOT NULL AND cardinality(v_unruled) > 0 THEN
+            RAISE EXCEPTION
+                'Project is not ready for field work. No rule covers %, so a '
+                'ticket of that type could never be billed. Still missing: %',
+                array_to_string(v_unruled, ', '),
+                (SELECT array_to_string(missing, ', ')
+                   FROM project_readiness_summary WHERE project_id = NEW.project_id)
+                USING ERRCODE = 'check_violation';
+        END IF;
         RAISE EXCEPTION
             'Project is not ready for field work; missing: %',
             (SELECT array_to_string(missing, ', ')

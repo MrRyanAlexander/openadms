@@ -20,6 +20,7 @@ _PROJECT_SELECT = """
     SELECT p.*, cl.name AS client_name, d.declaration_code, d.name AS disaster_name,
            k.contract_number AS primary_contract_number,
            rs.ready_for_field, rs.ready_for_billing, rs.missing,
+           rs.unruled_ticket_types, rs.unruled_service_codes,
            dash.ticket_total, dash.ticket_completed, dash.ticket_open,
            dash.awaiting_processing, dash.total_cubic_yards, dash.total_tons,
            dash.billable_total,

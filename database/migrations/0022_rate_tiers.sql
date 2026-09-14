@@ -294,11 +294,31 @@ DECLARE
     v_service_dt date;
     v_unit_price numeric;
     v_tier_label text;
+    v_billable   boolean;
+    v_type_label text;
 BEGIN
     SELECT * INTO v_ticket FROM tickets WHERE id = p_ticket AND deleted_at IS NULL;
 
     IF NOT FOUND THEN
         RAISE EXCEPTION 'Ticket % not found', p_ticket USING ERRCODE = 'no_data_found';
+    END IF;
+
+    SELECT tt.billable, tt.label INTO v_billable, v_type_label
+      FROM ticket_types tt WHERE tt.id = v_ticket.ticket_type_id;
+
+    -- An incident, a survey or a right of entry carries no transaction by
+    -- design. Sending it through the rule loop and calling the empty result
+    -- "no_match" said the configuration was wrong when it was not, and buried
+    -- the tickets that really did fall through. Excluded is the honest state.
+    IF NOT COALESCE(v_billable, true) THEN
+        UPDATE tickets
+           SET processing_state = 'excluded', processed_at = now(),
+               processing_error = format(
+                   '%s tickets do not carry transactions. Recorded, not billed.',
+                   COALESCE(v_type_label, 'This type')),
+               rules_matched = 0
+         WHERE id = p_ticket;
+        RETURN;
     END IF;
 
     IF v_ticket.is_void THEN
@@ -417,6 +437,10 @@ BEGIN
      WHERE ticket_id = p_ticket AND NOT is_reversal
        AND superseded_at IS NULL;
 
+    -- A billable ticket that matched nothing is a configuration failure, not a
+    -- quiet skip. It gets a named error a person can act on, and the detector
+    -- in adms_flag_ticket raises no_rule_matched so it reaches the review queue
+    -- rather than sitting in a column nobody opens.
     UPDATE tickets
        SET processing_state = CASE
                WHEN v_existing > 0 THEN 'processed'
@@ -424,11 +448,26 @@ BEGIN
                ELSE 'no_match' END,
            processed_at     = now(),
            processing_error = CASE
-               WHEN v_existing = 0 AND cardinality(v_no_rate) > 0
+               WHEN v_existing > 0 THEN NULL
+               WHEN cardinality(v_no_rate) > 0
                THEN format(
                    'Matched %s but no rate is effective on %s: %s',
                    CASE WHEN cardinality(v_no_rate) = 1 THEN 'rule' ELSE 'rules' END,
                    v_service_dt, array_to_string(v_no_rate, ', '))
+               WHEN NOT EXISTS (
+                   SELECT 1 FROM rules r
+                    WHERE r.project_id = v_ticket.project_id
+                      AND r.ticket_type_id = v_ticket.ticket_type_id
+                      AND r.is_active AND r.deleted_at IS NULL)
+               THEN format(
+                   'No rule on this project covers a %s ticket, so nothing can '
+                   'be billed against it. Add a rule for that type.',
+                   COALESCE(v_type_label, 'ticket'))
+               ELSE format(
+                   'No rule matched this ticket on %s. Rules for %s exist but '
+                   'none of their conditions held, or none was effective on '
+                   'that date.',
+                   v_service_dt, COALESCE(v_type_label, 'this type'))
                END,
            rules_matched    = GREATEST(v_matched, v_existing)
      WHERE id = p_ticket;
@@ -442,7 +481,11 @@ COMMENT ON FUNCTION adms_process_ticket IS
     'Each match writes one immutable transaction, so a single ticket can '
     'produce several. Idempotent: re-running never duplicates a transaction, '
     'and a superseded transaction leaves its slot free for the replacement. '
-    'A tiered service code is priced from the band its measurement falls in.';
+    'A tiered service code is priced from the band its measurement falls in. '
+    'A non-billable type is excluded rather than reported as no_match, and a '
+    'billable ticket that matched nothing carries a named processing_error '
+    'saying whether no rule covers the type or the conditions simply did not '
+    'hold.';
 
 -- ---------------------------------------------------------------------------
 -- The ledger carries the band, so an invoice line can be checked against the

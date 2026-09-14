@@ -544,16 +544,32 @@ export const READINESS_LABELS = {
   client: 'Client', contract: 'Contract', contractor: 'Contractor',
   disposal_site: 'Disposal site', ticket_type: 'Ticket types',
   service_code: 'Service codes', rate: 'Rates', rule: 'Rules',
+  rule_coverage: 'Rule coverage', code_coverage: 'Billable codes',
   field_worker: 'Field workers',
 }
+
+// Which of the checks above stop the field from working. The rest stop an
+// invoice from being produced, which is a different conversation with a
+// different person.
+const FIELD_KEYS = ['client', 'contract', 'contractor', 'disposal_site',
+                    'ticket_type', 'rule', 'rule_coverage', 'field_worker']
 
 /**
  * Read straight from project_readiness_summary so the wizard and the database
  * can never disagree about what is still missing.
+ *
+ * Rule coverage is the check that used to sit here as a yellow badge next to a
+ * green "ready" state. A project with no rule covering an enabled ticket type
+ * cannot produce a transaction on that type, so the badge now belongs to the
+ * gate rather than beside it, and it names the type rather than saying "rules".
  */
 export function ReadinessPanel({ readiness }) {
   if (!readiness) return <Loading rows={3} />
   const missing = readiness.missing || []
+  const unruledTypes = readiness.unruled_ticket_types || []
+  const unruledCodes = readiness.unruled_service_codes || []
+  const fieldMissing = missing.filter((m) => FIELD_KEYS.includes(m))
+
   return (
     <div className="stack" style={{ gap: 12 }}>
       <div className="row wrap" style={{ gap: 7 }}>
@@ -566,14 +582,39 @@ export function ReadinessPanel({ readiness }) {
           )
         })}
       </div>
+
+      {unruledTypes.length > 0 && (
+        <div className="card" style={{ padding: '11px 14px', borderColor: 'var(--amber)',
+                                       background: 'var(--amber-soft)' }}>
+          <div className="row" style={{ gap: 9, alignItems: 'flex-start' }}>
+            <Icon name="alert" size={15} style={{ marginTop: 2, color: 'var(--amber)' }} />
+            <div style={{ fontSize: 13, lineHeight: 1.65 }}>
+              <b>No rule covers {unruledTypes.join(', ')}.</b> A ticket of{' '}
+              {unruledTypes.length === 1 ? 'that type' : 'those types'} could be
+              created and monitored and would never reach an invoice, so the
+              field stays blocked until{' '}
+              {unruledTypes.length === 1 ? 'it has' : 'each has'} at least one rule.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {unruledCodes.length > 0 && (
+        <div className="muted" style={{ fontSize: 12.5, lineHeight: 1.6 }}>
+          No rule references {unruledCodes.join(', ')}. Those codes carry a rate
+          and can still never be billed, which is usually a rule that was never
+          written rather than a code that was not wanted.
+        </div>
+      )}
+
       <div className="muted" style={{ fontSize: 13, lineHeight: 1.65 }}>
         {readiness.ready_for_field
           ? 'The field can create tickets on this project.'
-          : `Field work is blocked until you add: ${missing.map(
+          : `Field work is blocked until you add: ${fieldMissing.map(
               (m) => READINESS_LABELS[m] || m).join(', ')}.`}
         {readiness.ready_for_billing
           ? ' Billing is ready to run.'
-          : ' Billing needs service codes, rates and at least one rule.'}
+          : ' Billing needs service codes, rates, and a rule on every code.'}
       </div>
     </div>
   )
