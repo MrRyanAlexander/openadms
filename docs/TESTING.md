@@ -12,9 +12,9 @@ Three suites, each aimed at a different failure.
 
 | Suite | Count | Runs against | Proves |
 |---|---|---|---|
-| **Schema** | 206 assertions | A live Postgres | The database refuses what it should refuse, with no application in the way |
-| **API** | 177 tests | A live API on a seeded database | The endpoints behave, end to end, including two instances federating |
-| **UI walk** | 69 scripted steps | A built frontend and a running API | The back office actually runs, not just compiles |
+| **Schema** | 219 assertions | A live Postgres | The database refuses what it should refuse, with no application in the way |
+| **API** | 186 tests | A live API on a seeded database | The endpoints behave, end to end, including two instances federating |
+| **UI walk** | 71 scripted steps | A built frontend and a running API | The back office actually runs, not just compiles |
 
 ```bash
 ./database/setup.sh --with-demo --test    # schema
@@ -41,8 +41,8 @@ Two helpers do the work:
 
 | Helper | Asserts |
 |---|---|
-| `pg_temp.check_that(name, condition, detail)` | The condition holds. 76 of these |
-| `pg_temp.check_raises(name, sql, fragment)` | The SQL raises, and the message contains the fragment. 30 of these |
+| `pg_temp.check_that(name, condition, detail)` | The condition holds. 167 of these |
+| `pg_temp.check_raises(name, sql, fragment)` | The SQL raises, and the message contains the fragment. 52 of these |
 
 `check_raises` is the interesting half. Most of the guarantees in this system are things the database **refuses**, and the only honest way to test a refusal is to attempt it.
 

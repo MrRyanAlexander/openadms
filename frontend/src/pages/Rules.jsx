@@ -5,6 +5,7 @@ import { PageHeader } from '../components/Shell'
 import {
   Badge, Card, Confirm, Empty, ErrorNote, Field, Icon, Loading, Modal, rowProps,
 } from '../components/ui'
+import { RuleProposalReview } from '../components/setup-bits'
 
 const BLANK = {
   name: '', description: '', ticket_type_id: '', service_code_id: '', contract_id: '',
@@ -20,6 +21,11 @@ export default function Rules() {
   // want them and noise to everyone else, so the list leads and the technical
   // view sits one click away.
   const [expanded, setExpanded] = useState(null)
+  const [building, setBuilding] = useState(false)
+  // The list answers "what rules exist". The map answers "does every kind of
+  // work on this project reach an invoice", which is a different question and
+  // needs the whole chain on one row.
+  const [view, setView] = useState('list')
 
   const rules = useFetch(() => api.get(`/projects/${projectId}/rules`),
                          [projectId], { skip: !projectId })
@@ -45,6 +51,15 @@ export default function Rules() {
   return (
     <>
       <PageHeader title="Rules" crumb={project?.project_code}>
+        <div className="seg" style={{ marginRight: 6 }}>
+          <button className={view === 'list' ? 'on' : ''}
+                  onClick={() => setView('list')}>List</button>
+          <button className={view === 'map' ? 'on' : ''}
+                  onClick={() => setView('map')}>Map</button>
+        </div>
+        <button className="btn" onClick={() => setBuilding(true)}>
+          <Icon name="layers" size={14} /> Build from contract
+        </button>
         <button className="btn primary" onClick={() => setEditing(BLANK)}>
           <Icon name="plus" size={14} /> New rule
         </button>
@@ -65,14 +80,22 @@ export default function Rules() {
           </div>
         </div>
 
-        {rules.loading && <Loading rows={5} />}
-        {rules.error && <ErrorNote error={rules.error} onRetry={rules.reload} />}
+        {view === 'map' && (
+          <RuleMap projectId={projectId} serviceCodes={codes.data?.items || []}
+                   project={detail.data}
+                   onBuild={() => setBuilding(true)}
+                   onChanged={() => { rules.reload(); codes.reload() }} />
+        )}
 
-        {rules.data && (rules.data.items.length === 0 ? (
+        {view === 'list' && rules.loading && <Loading rows={5} />}
+        {view === 'list' && rules.error && <ErrorNote error={rules.error} onRetry={rules.reload} />}
+
+        {view === 'list' && rules.data && (rules.data.items.length === 0 ? (
           <Empty icon="rules" title="No rules yet"
-                 action={<button className="btn primary" onClick={() => setEditing(BLANK)}>
-                   <Icon name="plus" size={14} /> Create the first rule</button>}>
-            Until a rule exists, completed tickets are recorded but never billed.
+                 action={<button className="btn primary" onClick={() => setBuilding(true)}>
+                   <Icon name="layers" size={14} /> Build them from the contract</button>}>
+            Until a rule exists, completed tickets are recorded but never billed, and
+            the field stays blocked.
           </Empty>
         ) : (
           <Card flush>
@@ -101,6 +124,13 @@ export default function Rules() {
         ))}
       </div>
 
+      {building && (
+        <Modal wide title="Rules from the contract"
+               onClose={() => { setBuilding(false); rules.reload() }}>
+          <RuleProposalReview projectId={projectId}
+                              onWritten={() => rules.reload()} />
+        </Modal>
+      )}
       {editing && (
         <RuleEditor rule={editing} project={detail.data} serviceCodes={codes.data?.items || []}
                     onClose={() => setEditing(null)}
@@ -113,6 +143,205 @@ export default function Rules() {
                  confirmLabel="Retire rule" onConfirm={remove} onClose={() => setRemoving(null)} />
       )}
     </>
+  )
+}
+
+/* --------------------------------------------------------------- rule map */
+/**
+ * The chain on one row.
+ *
+ * A rule read on its own does not answer the question somebody checking a
+ * project actually has, which is whether every kind of work this project does
+ * reaches an invoice under the right code, rate, contract and contractor.
+ * Opening rules one at a time to assemble that in your head is how a wrong
+ * service code survives a whole event.
+ *
+ * Rows with something wrong sort first, the ticket types nothing covers are
+ * named above the table, and the service code, contract and priority are
+ * editable in place, because the fix for what this screen shows is almost
+ * always one field on one row.
+ */
+const PROBLEM_TEXT = {
+  no_rate: 'No rate in effect, so a match produces nothing',
+  code_inactive: 'The service code is retired',
+  rule_inactive: 'The rule is switched off',
+  tiered_without_bands: 'Priced in bands, but no bands are written',
+  expired: 'The rule stopped being effective',
+}
+
+function RuleMap({ projectId, serviceCodes, project, onBuild, onChanged }) {
+  const { toast } = useApp()
+  const [saving, setSaving] = useState(null)
+  const map = useFetch(() => api.get(`/projects/${projectId}/rules/map`),
+                       [projectId], { skip: !projectId })
+
+  const contracts = project?.contracts || []
+
+  async function patch(rule, body) {
+    setSaving(rule.rule_id)
+    try {
+      await api.patch(`/rules/${rule.rule_id}`, body)
+      map.reload()
+      onChanged?.()
+    } catch (err) { toast('Could not change that', err.message, 'err') }
+    finally { setSaving(null) }
+  }
+
+  if (map.loading) return <Loading rows={6} />
+  if (map.error) return <ErrorNote error={map.error} onRetry={map.reload} />
+  if (!map.data) return null
+
+  const uncovered = map.data.unruled_ticket_types || []
+  const unruledCodes = map.data.unruled_service_codes || []
+
+  return (
+    <div className="stack" style={{ gap: 12 }}>
+      {uncovered.length > 0 && (
+        <div className="card" style={{ padding: '12px 15px', borderColor: 'var(--amber)',
+                                       background: 'var(--amber-soft)' }}>
+          <div className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
+            <Icon name="alert" size={16} style={{ marginTop: 2, color: 'var(--amber)' }} />
+            <div style={{ flex: 1, fontSize: 13, lineHeight: 1.65 }}>
+              <b>Nothing bills {uncovered.join(', ')}.</b> A ticket of{' '}
+              {uncovered.length === 1 ? 'that type' : 'those types'} cannot produce a
+              transaction, so the field is blocked on this project until{' '}
+              {uncovered.length === 1 ? 'it has' : 'each has'} a rule.
+            </div>
+            <button className="btn sm" onClick={onBuild}>Build from contract</button>
+          </div>
+        </div>
+      )}
+
+      <div className="muted" style={{ fontSize: 12.5, lineHeight: 1.6 }}>
+        {map.data.total} rule{map.data.total === 1 ? '' : 's'}
+        {map.data.with_problems > 0
+          ? `, ${map.data.with_problems} with something in the chain that stops it billing.`
+          : '. Every chain is complete.'}
+      </div>
+
+      <Card flush>
+        <div className="table-wrap">
+          <table className="data">
+            <thead><tr>
+              <th>Rule</th><th>Ticket type</th><th>Service code</th>
+              <th className="num">Rate</th><th>Contract</th><th>Contractor</th>
+              <th className="num">Priority</th><th className="num">Billed</th>
+              <th>State</th>
+            </tr></thead>
+            <tbody>
+              {map.data.items.map((r) => (
+                <tr key={r.rule_id} style={{
+                  opacity: saving === r.rule_id ? 0.55 : 1,
+                  background: r.problems?.length ? 'var(--amber-soft)' : undefined,
+                }}>
+                  <td style={{ minWidth: 190 }}>
+                    <div style={{ fontWeight: 540 }}>{r.rule_name}</div>
+                    {r.line_number != null && (
+                      <div className="dim" style={{ fontSize: 11.5 }}>
+                        contract line {r.line_number}
+                        {r.item_code ? ` · ${r.item_code}` : ''}
+                      </div>
+                    )}
+                  </td>
+                  <td className="dim">{r.ticket_type_label}</td>
+                  <td style={{ minWidth: 170 }}>
+                    <select className="select sm" value={r.service_code_id}
+                            onChange={(e) => patch(r, { service_code_id: e.target.value })}>
+                      {serviceCodes.map((c) => (
+                        <option key={c.id} value={c.id}>{c.code}</option>
+                      ))}
+                    </select>
+                    <div className="dim truncate" style={{ fontSize: 11.5, maxWidth: 180 }}>
+                      {r.service_code_name}
+                    </div>
+                  </td>
+                  <td className="num">
+                    {r.rate_amount != null
+                      ? <>{fmt.rate(r.rate_amount)}<span className="dim"> / {r.unit_abbrev}</span></>
+                      : <span className="dim">none</span>}
+                    {r.tier_count > 0 && (
+                      <div className="dim" style={{ fontSize: 11.5 }}>
+                        {r.tier_count} band{r.tier_count === 1 ? '' : 's'}
+                      </div>
+                    )}
+                  </td>
+                  <td style={{ minWidth: 150 }}>
+                    <select className="select sm" value={r.contract_id}
+                            onChange={(e) => patch(r, { contract_id: e.target.value })}>
+                      {contracts.map((c) => (
+                        <option key={c.contract_id} value={c.contract_id}>
+                          {c.contract_number}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="dim truncate" style={{ maxWidth: 160 }}>
+                    {r.contractor_name}
+                  </td>
+                  <td className="num" style={{ width: 82 }}>
+                    <input className="input num sm" type="number"
+                           defaultValue={r.priority}
+                           onBlur={(e) => Number(e.target.value) !== r.priority
+                             && patch(r, { priority: Number(e.target.value) })} />
+                  </td>
+                  <td className="num">
+                    {fmt.money(r.billed_total)}
+                    <div className="dim" style={{ fontSize: 11.5 }}>
+                      {fmt.int(r.transaction_count)} txn
+                    </div>
+                  </td>
+                  <td style={{ minWidth: 150 }}>
+                    {r.problems?.length ? (
+                      r.problems.map((code) => (
+                        <div key={code} style={{ fontSize: 11.5, lineHeight: 1.5,
+                                                 color: 'var(--amber)' }}>
+                          {PROBLEM_TEXT[code] || code}
+                        </div>
+                      ))
+                    ) : (
+                      <Badge tone="green">Billing</Badge>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      {unruledCodes.length > 0 && (
+        <Card title="Service codes no rule references"
+              sub="Priced, on the project, and unable to reach an invoice">
+          <div className="table-wrap">
+            <table className="data">
+              <thead><tr>
+                <th>Code</th><th>Name</th><th>Contractor</th><th className="num">Rate</th>
+              </tr></thead>
+              <tbody>
+                {unruledCodes.map((c) => (
+                  <tr key={c.id}>
+                    <td className="mono">{c.code}</td>
+                    <td className="truncate" style={{ maxWidth: 280 }}>{c.name}</td>
+                    <td className="dim">{c.contractor_name}</td>
+                    <td className="num">
+                      {c.rate_amount != null
+                        ? <>{fmt.rate(c.rate_amount)}<span className="dim"> / {c.unit_abbrev}</span></>
+                        : <span className="dim">none</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="row" style={{ marginTop: 10 }}>
+            <div className="spacer" />
+            <button className="btn sm" onClick={onBuild}>
+              <Icon name="layers" size={13} /> Propose rules for these
+            </button>
+          </div>
+        </Card>
+      )}
+    </div>
   )
 }
 

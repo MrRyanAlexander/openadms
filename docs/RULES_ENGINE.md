@@ -147,6 +147,82 @@ sequenceDiagram
 
 Re-running the engine over an already processed ticket writes nothing. A partial unique index on ticket plus rule makes it idempotent, which is what lets the back office safely offer a **Process queued** button that drains the whole project.
 
+### A ticket that matches nothing says so
+
+A completed ticket that produced no transaction is monitored work that cannot reach an invoice. It used to sit in `processing_state = 'no_match'` with a NULL `processing_error`, which is a silent skip, and non billable types took the same path, so an incident looked identical to a project that was never rigged.
+
+Three states now, and they mean three different things:
+
+| State | What it means |
+|---|---|
+| `excluded` | The ticket type does not carry transactions. An incident, a survey, a right of entry. Recorded, not billed, by design |
+| `no_match` with an error naming the type | No rule on this project covers that ticket type at all. Somebody has to write one |
+| `no_match` with an error naming the date | Rules for that type exist and none of their conditions held, or none was effective on the service date |
+
+`adms_flag_ticket` raises `no_rule_matched` at serious severity on the same finding, so it reaches the review queue the morning after rather than at invoice time. Non billable types are never flagged for it.
+
+<br>
+
+## No rule, no field work
+
+A rule is what connects a service code to a transaction. A project with no rule covering an enabled ticket type cannot produce a transaction on any ticket of that type, so calling it ready for field work was the system asserting something untrue.
+
+`project_readiness` computes coverage per ticket type rather than asking whether any rule exists anywhere:
+
+| Column | What it holds |
+|---|---|
+| `unruled_ticket_types` | Enabled, active, billable, non system types with no active rule. **Blocks `ready_for_field`** |
+| `unruled_service_codes` | Active codes no active rule references. Blocks `ready_for_billing` |
+| `has_rule_coverage` | Both halves of the first, as one flag |
+
+`adms_ticket_before_insert` refuses the ticket and names the type: *No rule covers Haul Out Ticket, so a ticket of that type could never be billed.* The wizard, the dashboard and the field app all read the same row, so none of them can disagree about it.
+
+`missing` reports `rule_coverage` separately from `rule`. No rules at all and three types covered with one left over are different jobs for whoever has to fix them.
+
+<br>
+
+## Rules built from the contract
+
+A contract line item already drives service code creation. Once the line is captured the rule is mostly derivable from it, so the derivable half is derived and the rest is asked for.
+
+```http
+POST /api/v1/projects/{project_id}/rules/from-line-items
+```
+
+Dry run by default, the same shape as the line item import and for the same reason: the answer is a table somebody reads and corrects, not a count of rules that appeared.
+
+| Derived from | What it fills in |
+|---|---|
+| The line's own bridge | Service code, contract, contractor |
+| `debris_types.ticket_type_codes`, intersected with what the project has enabled | Which ticket type bills it |
+| The rate's unit type, where the debris stream does not say | Which ticket type bills it |
+| The contractor and the debris stream | The base conditions |
+| The rate's unit type | A quantity guard, so a rule cannot fire on a ticket that measured nothing |
+
+Three kinds of line come back, and only one of them is ready to write:
+
+- **standard**. Everything derived. Confirm and write.
+- **tiered**. The line prices in bands. The boundaries are **asked for**, never read out of the line's wording, because being one mile wrong on a band is a silent pricing error on every haul that crosses it. A confirmed banded line writes one tiered rate with its bands on `rate_tiers` rather than a rule per band, because `adms_price_for` already reads them.
+- **pass_through**. A tipping fee, a landfill or gate fee, anything at cost or cost plus. **Held back and not shaped at all.** How one is billed varies by contract: at cost, at cost plus a markup, a flat rate per ton, or paid by the client directly. A rule that looks right and bills wrong is the expensive failure here, so these go in front of a person with the question named.
+
+Nothing is written until the second call carries confirmed proposals. An empty confirmation is refused rather than treated as "write them all".
+
+<br>
+
+## The rule map
+
+`rule_map` puts the whole chain on one row: rule, ticket type, service code, the contract line it came from, the rate and how many bands it has, the contract, the contractor, and what the rule has produced. `problems` names the links that cannot bill, so the map can lead with those rather than burying them.
+
+| Problem | What it means |
+|---|---|
+| `no_rate` | The code has no rate in effect. The rule matches and writes nothing |
+| `tiered_without_bands` | Priced in bands with no bands written |
+| `code_inactive` | The service code is retired |
+| `rule_inactive` | The rule is switched off |
+| `expired` | The rule stopped being effective before today |
+
+`PATCH /api/v1/rules/{rule_id}` changes one link without touching the statements. `PUT` replaces them, which is right when somebody is editing the conditions and wrong when they are fixing a service code from the map.
+
 <br>
 
 ## Quantity is never typed by a human

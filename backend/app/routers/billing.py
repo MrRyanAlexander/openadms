@@ -1,6 +1,7 @@
 """Service codes, rates, the rule builder, transactions, and invoices."""
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import date
 from typing import Any, Optional
@@ -233,6 +234,55 @@ async def list_rules(ctx: ProjectContext, user: CurrentUser,
     return {"items": db.rows(recs)}
 
 
+@router.get("/projects/{project_id}/rules/map")
+async def rule_map(ctx: ProjectContext, user: CurrentUser):
+    """The whole chain, one row per rule, plus what is not covered at all.
+
+    A rule on its own does not answer the question a person checking a project
+    actually has, which is whether every kind of work this project does reaches
+    an invoice under the right code, rate, contract and contractor. That needs
+    the chain in one row and it needs the gaps named next to it."""
+    project_id = ctx["project"]["id"]
+    async with db.read() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT * FROM rule_map
+             WHERE project_id = $1
+             ORDER BY cardinality(problems) DESC, ticket_type_label,
+                      priority, rule_name
+            """, project_id)
+        readiness = await conn.fetchrow(
+            "SELECT unruled_ticket_types, unruled_service_codes, "
+            "       ready_for_field, ready_for_billing "
+            "  FROM project_readiness_summary WHERE project_id = $1", project_id)
+        codes = await conn.fetch(
+            """
+            SELECT sc.id, sc.code, sc.name, ct.name AS contractor_name,
+                   r.amount AS rate_amount, ut.abbreviation AS unit_abbrev
+              FROM service_codes sc
+              JOIN contractors ct ON ct.id = sc.contractor_id
+              LEFT JOIN LATERAL adms_rate_for(sc.id, current_date) r ON true
+              LEFT JOIN unit_types ut ON ut.code = r.unit_type
+             WHERE sc.project_id = $1 AND sc.is_active AND sc.deleted_at IS NULL
+               AND NOT EXISTS (SELECT 1 FROM rules ru
+                                WHERE ru.service_code_id = sc.id
+                                  AND ru.is_active AND ru.deleted_at IS NULL)
+             ORDER BY sc.code
+            """, project_id)
+
+    items = db.rows(rows)
+    summary = db.row(readiness) or {}
+    return {
+        "items": items,
+        "total": len(items),
+        "unruled_ticket_types": summary.get("unruled_ticket_types") or [],
+        "unruled_service_codes": db.rows(codes),
+        "ready_for_field": summary.get("ready_for_field"),
+        "ready_for_billing": summary.get("ready_for_billing"),
+        "with_problems": sum(1 for i in items if i["problems"]),
+    }
+
+
 @router.get("/rules/{rule_id}")
 async def get_rule(rule_id: uuid.UUID, user: CurrentUser):
     async with db.read() as conn:
@@ -285,6 +335,34 @@ async def update_rule(rule_id: uuid.UUID, body: RuleBody, user: CurrentUser,
             raise not_found("Rule")
         await _write_statements(conn, rule_id, body.statements)
         rec = await conn.fetchrow(f"{_RULE_SELECT} WHERE r.id = $1", rule_id)
+    return db.row(rec)
+
+
+@router.patch("/rules/{rule_id}")
+async def patch_rule(rule_id: uuid.UUID, user: CurrentUser,
+                     payload: dict[str, Any] = Body(...),
+                     _: dict = Depends(require_permission("rule.manage"))):
+    """Change one link in the chain without rewriting the rule.
+
+    PUT replaces the statements, which is right when somebody is editing the
+    conditions and wrong when they are fixing a service code from the map. The
+    conditions are the part nobody wants silently cleared, so this leaves them
+    exactly where they are."""
+    allowed = {"name", "description", "ticket_type_id", "service_code_id",
+               "contract_id", "priority", "is_active", "stop_on_match",
+               "match_mode", "quantity_override", "effective_from", "effective_to"}
+    data = {k: v for k, v in payload.items() if k in allowed}
+    if not data:
+        raise bad_request(
+            "Nothing to change on this rule.", code="empty_update",
+            allowed=sorted(allowed))
+    sql, args = db.build_update("rules", data, "id = $1 AND deleted_at IS NULL",
+                                [rule_id], returning="id")
+    async with db.tx(user) as conn:
+        found = await conn.fetchval(sql, *args)
+        if found is None:
+            raise not_found("Rule")
+        rec = await conn.fetchrow(f"{_RULE_SELECT} WHERE r.id = $1", found)
     return db.row(rec)
 
 
@@ -1261,3 +1339,473 @@ async def close_ingestion(ingestion_id: uuid.UUID, user: CurrentUser,
             raise not_found("Ingestion")
         full = await conn.fetchrow(f"{_INGESTION_SELECT} WHERE ci.id = $1", rec["id"])
     return db.row(full)
+
+
+# ---------------------------------------------------------------------------
+# Rules from the contract
+#
+# A contract line item already drives service code creation. A rule is what
+# connects a service code to a transaction, and once the line item is captured
+# the rule is mostly derivable from it: the code and the contract come off the
+# line's own bridge, the ticket type follows from the debris stream or the unit,
+# and the base conditions follow from the contractor and that stream.
+#
+# What is derivable is proposed. What is not is asked for. Nothing is written
+# until a person says so, which is the same dry-run-then-confirm shape the line
+# item import already uses, for the same reason: a generated billing rule that
+# nobody read is worse than no rule at all.
+# ---------------------------------------------------------------------------
+
+# Tipping fees and other pass-through costs are deliberately NOT shaped here.
+# How one is billed varies by contract: at cost, at cost plus a markup, a flat
+# rate per ton, a gate fee the client pays directly. Guessing produces a rule
+# that looks right and bills wrong, so these are detected, held back, and put
+# in front of a person with the question named.
+_PASS_THROUGH_PATTERNS = (
+    "tipping", "tip fee", "tipping fee", "disposal fee", "landfill fee",
+    "gate fee", "host fee", "franchise fee", "pass through", "pass-through",
+    "passthrough", "pass thru", "at cost", "cost plus", "cost-plus",
+    "reimbursable", "reimbursement", "markup", "mark-up",
+)
+
+# A line that prices in bands. Detected, never resolved: the boundaries are
+# asked for, because reading "0 to 10 miles" out of contract prose and being
+# one mile wrong is a silent pricing error on every haul.
+_TIERED_PATTERNS = (
+    "tier", "tiered", "band", "bracket", "bracketed", "zone rate",
+    "mileage band", "per mile over", "and over", "or more", "or greater",
+)
+_RANGE_RE = re.compile(
+    r"\b\d+(?:\.\d+)?\s*(?:to|through|thru|-|\u2013)\s*\d+(?:\.\d+)?\b")
+
+# Debris streams whose rate sheets are written in bands as a matter of course.
+# Stated in 0022: "Hangers are flat rate. Leaners and stumps are on tiers based
+# on the rate sheet."
+_TIERED_DEBRIS = {"STUMP", "LEANER"}
+
+# The ticket type a unit implies where the debris stream does not say. Only the
+# units that point at exactly one kind of work appear here; per_unit, per_each,
+# flat_fee and per_linear_foot are all genuinely ambiguous and are asked about.
+_UNIT_TO_TYPE_KIND = {
+    "per_cubic_yard": "load",
+    "per_ton": "load",
+    "per_mile": "haul_out",
+    "per_diameter_in": "unit_rate",
+    "per_labor_hour": "unit_rate",
+    "per_equip_hour": "unit_rate",
+}
+
+# The quantity guard a rule gets so it cannot fire on a ticket that measured
+# nothing. Keyed by the unit the rate is written in.
+_UNIT_TO_GUARD = {
+    "per_cubic_yard": ("cubic_yards", "greater than 0 CY"),
+    "per_ton":        ("tons", "greater than 0 tons"),
+    "per_mile":       ("distance", "more than 0 miles"),
+    "per_diameter_in": ("stump_diameter", "greater than 0 inches"),
+    "per_labor_hour": ("labor_hours", "more than 0 hours"),
+    "per_equip_hour": ("equipment_hours", "more than 0 hours"),
+    "per_unit":       ("unit_count", "at least one counted"),
+}
+
+
+class RuleProposalRequest(BaseModel):
+    """Dry run by default, exactly like the line item import.
+
+    line_item_ids and service_code_ids both narrow what is proposed. Neither
+    given means every active code on the project that no rule references yet,
+    which is the set that can never bill as things stand."""
+    line_item_ids: list[uuid.UUID] = []
+    service_code_ids: list[uuid.UUID] = []
+    include_ruled: bool = False
+    dry_run: bool = True
+    proposals: list["ConfirmedProposal"] = []
+
+
+class TierBand(BaseModel):
+    label: Optional[str] = None
+    from_value: float = Field(default=0, ge=0)
+    to_value: Optional[float] = Field(default=None, ge=0)
+    amount: float = Field(ge=0)
+
+
+class ConfirmedTiers(BaseModel):
+    """What the person supplied for a banded line. tier_source is the
+    ticket_metrics column whose value picks the band."""
+    tier_source: str
+    bands: list[TierBand] = Field(min_length=1)
+
+
+class ConfirmedProposal(BaseModel):
+    service_code_id: uuid.UUID
+    ticket_type_id: uuid.UUID
+    contract_id: uuid.UUID
+    name: str = Field(min_length=2)
+    description: Optional[str] = None
+    match_mode: str = "all"
+    priority: int = 100
+    stop_on_match: bool = False
+    statements: list[StatementBody] = []
+    tiers: Optional[ConfirmedTiers] = None
+
+
+RuleProposalRequest.model_rebuild()
+
+
+def _looks_like(text: str, needles: tuple[str, ...]) -> Optional[str]:
+    low = (text or "").lower()
+    for needle in needles:
+        if needle in low:
+            return needle
+    return None
+
+
+async def _proposal_context(conn, project_id: uuid.UUID) -> dict[str, Any]:
+    """Everything the derivation reads, fetched once."""
+    types = await conn.fetch(
+        """
+        SELECT tt.id, tt.code, tt.label, tt.kind, tt.sort_order
+          FROM project_ticket_types ptt
+          JOIN ticket_types tt ON tt.id = ptt.ticket_type_id
+         WHERE ptt.project_id = $1 AND ptt.is_active
+           AND tt.is_active AND tt.billable AND NOT tt.is_system
+         ORDER BY tt.sort_order, tt.label
+        """, project_id)
+    debris = await conn.fetch(
+        "SELECT code, label, ticket_type_codes FROM debris_types")
+    contracts = await conn.fetch(
+        """
+        SELECT pc.contract_id, c.contract_number, pc.is_primary
+          FROM project_contracts pc
+          JOIN contracts c ON c.id = pc.contract_id
+         WHERE pc.project_id = $1
+         ORDER BY pc.is_primary DESC, c.contract_number
+        """, project_id)
+    operands = await conn.fetch(
+        "SELECT code, label, data_type FROM rule_operands WHERE is_active")
+    taken = await conn.fetch(
+        "SELECT name FROM rules WHERE project_id = $1 AND deleted_at IS NULL",
+        project_id)
+    return {
+        "types": [dict(t) for t in types],
+        "debris": {d["code"]: dict(d) for d in debris},
+        "contracts": [dict(c) for c in contracts],
+        "operands": {o["code"]: dict(o) for o in operands},
+        "taken": {r["name"].lower() for r in taken},
+    }
+
+
+def _statement(ctx: dict[str, Any], operand: str, operator: str,
+               value: Any, label: str) -> Optional[dict[str, Any]]:
+    meta = ctx["operands"].get(operand)
+    if meta is None:
+        return None
+    symbol = {"eq": "=", "in": "in", "gt": ">"}.get(operator, operator)
+    return {
+        "operand_code": operand, "operand_label": meta["label"],
+        "operator_code": operator, "operator_symbol": symbol,
+        "value": value, "value_label": label, "negate": False,
+    }
+
+
+def _unique_name(base: str, taken: set[str]) -> str:
+    name = base[:120]
+    suffix = 2
+    while name.lower() in taken:
+        name = f"{base[:112]} ({suffix})"
+        suffix += 1
+    taken.add(name.lower())
+    return name
+
+
+def _propose_one(code: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
+    """One service code in, one proposed rule out, with what is still unknown
+    named rather than filled in."""
+    text = " ".join(str(x) for x in (
+        code.get("line_description") or code.get("name") or "",
+        code.get("service_category") or "",
+        code.get("item_code") or "",
+        code.get("code") or "",
+    ))
+    debris_code = code.get("debris_type_code")
+    unit = code.get("current_unit_type") or code.get("line_unit_type_code")
+
+    needs: list[dict[str, str]] = []
+    blocked: Optional[str] = None
+
+    # ---- what kind of line is this ----------------------------------------
+    kind = "standard"
+    pass_hit = _looks_like(text, _PASS_THROUGH_PATTERNS)
+    if pass_hit:
+        kind = "pass_through"
+        blocked = (
+            f'This line reads as a pass-through cost ("{pass_hit}"). How one is '
+            "billed varies by contract: at cost, at cost plus a markup, a flat "
+            "rate, or paid by the client directly. Confirm the basis against "
+            "the contract and write this rule by hand."
+        )
+    elif (code.get("quantity_mode") == "tiered"
+          or debris_code in _TIERED_DEBRIS
+          or _looks_like(text, _TIERED_PATTERNS)
+          or _RANGE_RE.search(text)):
+        kind = "tiered"
+        needs.append({
+            "field": "tier_boundaries",
+            "why": ("This line prices in bands. The boundaries have to come "
+                    "from the rate sheet, not from the wording of the line."),
+        })
+
+    # ---- which ticket type -------------------------------------------------
+    enabled = ctx["types"]
+    by_code = {t["code"]: t for t in enabled}
+    by_kind: dict[str, list[dict[str, Any]]] = {}
+    for t in enabled:
+        by_kind.setdefault(t["kind"], []).append(t)
+
+    candidates: list[dict[str, Any]] = []
+    source = None
+    debris = ctx["debris"].get(debris_code) if debris_code else None
+    if debris and debris.get("ticket_type_codes"):
+        candidates = [by_code[c] for c in debris["ticket_type_codes"] if c in by_code]
+        if candidates:
+            source = f"the {debris['label']} stream"
+    if not candidates and unit in _UNIT_TO_TYPE_KIND:
+        candidates = by_kind.get(_UNIT_TO_TYPE_KIND[unit], [])
+        if candidates:
+            source = f"the {unit.replace('_', ' ')} rate"
+
+    ticket_type = candidates[0] if candidates else None
+    if ticket_type is None:
+        needs.append({
+            "field": "ticket_type",
+            "why": ("Nothing on this line says which ticket type bills it. "
+                    "Pick the one the field will raise."),
+        })
+    elif len(candidates) > 1:
+        needs.append({
+            "field": "ticket_type",
+            "why": (f"{source} bills on more than one ticket type. "
+                    f"{candidates[0]['label']} is pre-filled; change it if that "
+                    f"is not the one."),
+        })
+
+    # ---- the base conditions ----------------------------------------------
+    statements = []
+    st = _statement(ctx, "contractor", "eq", str(code["contractor_id"]),
+                    code.get("contractor_name") or "this contractor")
+    if st:
+        statements.append(st)
+    if debris_code:
+        st = _statement(ctx, "debris_type", "eq", debris_code,
+                        (debris or {}).get("label") or debris_code)
+        if st:
+            statements.append(st)
+    if kind != "tiered" and code.get("quantity_mode") != "flat":
+        guard = _UNIT_TO_GUARD.get(unit)
+        if guard:
+            st = _statement(ctx, guard[0], "gt", 0, guard[1])
+            if st:
+                statements.append(st)
+
+    # ---- which contract ----------------------------------------------------
+    contract_id = code.get("contract_id")
+    contract_number = code.get("contract_number")
+    if contract_id is None and ctx["contracts"]:
+        fallback = ctx["contracts"][0]
+        contract_id = fallback["contract_id"]
+        contract_number = fallback["contract_number"]
+        needs.append({
+            "field": "contract",
+            "why": (f"This code is not tied to a contract, so the project's "
+                    f"primary contract {contract_number} is pre-filled."),
+        })
+    if contract_id is None:
+        blocked = blocked or (
+            "No contract is linked to this project, and a rule cannot be saved "
+            "without one.")
+
+    label = (ticket_type or {}).get("label") or "an unassigned type"
+    base_name = f"{code['code']} on {label}"
+
+    return {
+        "service_code_id": str(code["id"]),
+        "service_code": code["code"],
+        "service_code_name": code["name"],
+        "contractor_id": str(code["contractor_id"]),
+        "contractor_name": code.get("contractor_name"),
+        "contract_id": str(contract_id) if contract_id else None,
+        "contract_number": contract_number,
+        "line_item_id": str(code["contract_line_item_id"])
+                        if code.get("contract_line_item_id") else None,
+        "line_number": code.get("line_number"),
+        "item_code": code.get("item_code"),
+        "description": code.get("line_description") or code["name"],
+        "unit_type_code": unit,
+        "unit_abbrev": code.get("current_unit_abbrev"),
+        "unit_price": (float(code["current_rate"])
+                       if code.get("current_rate") is not None else None),
+        "debris_type_code": debris_code,
+        "quantity_mode": code.get("quantity_mode"),
+        "ticket_type_id": str(ticket_type["id"]) if ticket_type else None,
+        "ticket_type_label": (ticket_type or {}).get("label"),
+        "ticket_type_source": source,
+        "ticket_type_options": [
+            {"id": str(t["id"]), "code": t["code"], "label": t["label"]}
+            for t in (candidates or enabled)],
+        "name": _unique_name(base_name, ctx["taken"]),
+        "match_mode": "all",
+        "priority": 100,
+        "statements": statements,
+        "kind": kind,
+        "needs": needs,
+        "blocked": blocked,
+        "tier_source_suggestion": (
+            "haul_miles" if unit == "per_mile"
+            else "stump_diameter_inches" if unit == "per_diameter_in"
+            else "net_tons" if unit == "per_ton"
+            else "billable_cubic_yards" if unit == "per_cubic_yard"
+            else None) if kind == "tiered" else None,
+    }
+
+
+_PROPOSAL_CODE_SELECT = """
+    SELECT sc.id, sc.code, sc.name, sc.contractor_id, sc.contract_id,
+           sc.contract_line_item_id, sc.quantity_mode,
+           ct.name AS contractor_name,
+           k.contract_number,
+           li.description   AS line_description,
+           li.line_number, li.item_code, li.service_category,
+           li.debris_type_code,
+           li.unit_type_code AS line_unit_type_code,
+           r.amount AS current_rate, r.unit_type AS current_unit_type,
+           ut.abbreviation AS current_unit_abbrev,
+           (SELECT count(*) FROM rules ru
+             WHERE ru.service_code_id = sc.id AND ru.is_active
+               AND ru.deleted_at IS NULL) AS rule_count
+      FROM service_codes sc
+      JOIN contractors ct ON ct.id = sc.contractor_id
+      LEFT JOIN contracts k ON k.id = sc.contract_id
+      LEFT JOIN contract_line_items li ON li.id = sc.contract_line_item_id
+      LEFT JOIN LATERAL adms_rate_for(sc.id, current_date) r ON true
+      LEFT JOIN unit_types ut ON ut.code = r.unit_type
+"""
+
+
+@router.post("/projects/{project_id}/rules/from-line-items")
+async def rules_from_line_items(
+    ctx_project: ProjectContext, body: RuleProposalRequest, user: CurrentUser,
+    _: dict = Depends(require_permission("rule.manage")),
+):
+    """Propose a rule per billable service code, then write the ones confirmed.
+
+    Dry run is the default and is the whole point: the answer is a table
+    somebody reads and corrects, not a count of rules that appeared."""
+    project_id = ctx_project["project"]["id"]
+
+    where = ["sc.project_id = $1", "sc.deleted_at IS NULL", "sc.is_active"]
+    args: list[Any] = [project_id]
+    if body.service_code_ids:
+        args.append(list(body.service_code_ids))
+        where.append(f"sc.id = ANY(${len(args)}::uuid[])")
+    if body.line_item_ids:
+        args.append(list(body.line_item_ids))
+        where.append(f"sc.contract_line_item_id = ANY(${len(args)}::uuid[])")
+
+    async with db.read() as conn:
+        codes = await conn.fetch(
+            f"{_PROPOSAL_CODE_SELECT} WHERE {' AND '.join(where)} ORDER BY sc.code",
+            *args)
+        ctx = await _proposal_context(conn, project_id)
+
+    if not ctx["types"]:
+        raise bad_request(
+            "No billable ticket type is enabled on this project, so there is "
+            "nothing for a rule to bill against. Enable the ticket types the "
+            "field will raise first.",
+            code="no_billable_ticket_type")
+
+    proposals: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
+    for rec in codes:
+        code = dict(rec)
+        if code["rule_count"] and not body.include_ruled:
+            skipped.append({
+                "service_code": code["code"],
+                "reason": (f"{code['rule_count']} rule"
+                           f"{'s' if code['rule_count'] != 1 else ''} already "
+                           f"reference this code."),
+            })
+            continue
+        proposals.append(_propose_one(code, ctx))
+
+    ready = [p for p in proposals if not p["blocked"] and not p["needs"]]
+    asking = [p for p in proposals if not p["blocked"] and p["needs"]]
+    held = [p for p in proposals if p["blocked"]]
+
+    summary = (
+        f"{len(proposals)} code{'s' if len(proposals) != 1 else ''} with no rule. "
+        f"{len(ready)} can be written as proposed, {len(asking)} need an answer "
+        f"first, {len(held)} are held back."
+    )
+
+    if body.dry_run:
+        return {
+            "dry_run": True, "summary": summary, "proposals": proposals,
+            "skipped": skipped,
+            "counts": {"proposed": len(proposals), "ready": len(ready),
+                       "asking": len(asking), "held": len(held),
+                       "skipped": len(skipped)},
+        }
+
+    if not body.proposals:
+        raise bad_request(
+            "Nothing was confirmed. Run the proposal, check what it derived, "
+            "and send back the rules you want written.",
+            code="nothing_confirmed")
+
+    written: list[dict[str, Any]] = []
+    async with db.tx(user) as conn:
+        for confirmed in body.proposals:
+            payload = confirmed.model_dump(
+                exclude={"statements", "tiers"}, exclude_none=True)
+            payload["project_id"] = project_id
+            payload["created_by"] = user["id"]
+            sql, args = db.build_insert("rules", payload, returning="id")
+            rule_id = await conn.fetchval(sql, *args)
+            await _write_statements(conn, rule_id, confirmed.statements)
+
+            if confirmed.tiers:
+                # A banded line is one tiered rate, not a rule per band: the
+                # bands live on the rate sheet and adms_price_for already reads
+                # them, so the rule stays one statement of intent.
+                await conn.execute(
+                    "UPDATE service_codes SET quantity_mode = 'tiered' WHERE id = $1",
+                    confirmed.service_code_id)
+                rate_id = await conn.fetchval(
+                    "SELECT id FROM adms_rate_for($1, current_date)",
+                    confirmed.service_code_id)
+                if rate_id is None:
+                    raise bad_request(
+                        f"{confirmed.name} prices in bands but its service code "
+                        f"has no rate in effect, so there is nothing to hang "
+                        f"them on. Add the opening rate first.",
+                        code="tiered_without_rate")
+                await conn.execute(
+                    "UPDATE rates SET tier_source = $2 WHERE id = $1",
+                    rate_id, confirmed.tiers.tier_source)
+                await conn.execute("DELETE FROM rate_tiers WHERE rate_id = $1", rate_id)
+                for order, band in enumerate(confirmed.tiers.bands):
+                    await conn.execute(
+                        """
+                        INSERT INTO rate_tiers (rate_id, label, from_value,
+                                                to_value, amount, sort_order)
+                        VALUES ($1, $2, $3, $4, $5, $6)
+                        """,
+                        rate_id, band.label, band.from_value, band.to_value,
+                        band.amount, order)
+
+            rec = await conn.fetchrow(f"{_RULE_SELECT} WHERE r.id = $1", rule_id)
+            written.append(db.row(rec))
+
+    return {"dry_run": False, "written": len(written), "items": written,
+            "summary": f"{len(written)} rule"
+                       f"{'s' if len(written) != 1 else ''} written."}

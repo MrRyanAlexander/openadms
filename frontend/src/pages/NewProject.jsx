@@ -22,7 +22,7 @@ import {
 import {
   EstimateEditor, LineItemReview, LinkPicker, NEW_CONTRACTOR_FIELDS,
   NEW_CONTRACT_FIELDS, NEW_SITE_FIELDS, NEW_WORKER_FIELDS, PermitControl,
-  ReadinessPanel, ScopeEditor,
+  ReadinessPanel, RuleProposalReview, ScopeEditor,
 } from '../components/setup-bits'
 
 const STEPS = [
@@ -34,6 +34,7 @@ const STEPS = [
   { key: 'sites', label: 'Disposal sites', hint: 'And their permit state' },
   { key: 'types', label: 'Ticket types', hint: 'What the field can create' },
   { key: 'codes', label: 'Service codes', hint: 'Built from accepted line items' },
+  { key: 'rules', label: 'Rules', hint: 'What turns a ticket into a transaction' },
   { key: 'workers', label: 'Workers', hint: 'Who is on this project' },
   { key: 'review', label: 'Review', hint: 'What is still missing' },
 ]
@@ -147,9 +148,12 @@ export default function NewProject() {
               <ServiceCodeStep project={project} projectId={projectId} onChanged={refresh} />
             )}
             {step === 8 && project && (
-              <WorkerStep project={project} projectId={projectId} onChanged={refresh} />
+              <RuleStep projectId={projectId} onChanged={refresh} />
             )}
             {step === 9 && project && (
+              <WorkerStep project={project} projectId={projectId} onChanged={refresh} />
+            )}
+            {step === 10 && project && (
               <div className="stack" style={{ gap: 14 }}>
                 <ReadinessPanel readiness={readiness.data} />
                 <div className="muted" style={{ fontSize: 13, lineHeight: 1.65, maxWidth: 640 }}>
@@ -716,6 +720,47 @@ export function ServiceCodeStep({ project, projectId, onChanged }) {
                           onGenerated={() => { codes.reload(); onChanged() }} />
         </Modal>
       )}
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------- rules */
+/**
+ * The step the wizard did not have.
+ *
+ * Service codes were generated from the contract and then nothing connected
+ * them to a ticket, which is the gap that let a project reach "ready for field
+ * work" with no way to bill anything it collected. The rules are proposed from
+ * the same line items the codes came from, and a person confirms them here.
+ */
+export function RuleStep({ projectId, onChanged }) {
+  const readiness = useFetch(() => api.get(`/projects/${projectId}/readiness`),
+                             [projectId])
+  const uncovered = readiness.data?.unruled_ticket_types || []
+
+  return (
+    <div className="stack" style={{ gap: 12 }}>
+      <div className="muted" style={{ fontSize: 13, lineHeight: 1.65, maxWidth: 680 }}>
+        A rule reads: when these conditions hold on a completed ticket of this type,
+        bill this service code under this contract. Without one, a ticket is collected,
+        monitored and never billed, so the field stays blocked until every enabled
+        ticket type has at least one.
+      </div>
+
+      {uncovered.length > 0 && (
+        <div className="card" style={{ padding: '11px 14px', borderColor: 'var(--amber)',
+                                       background: 'var(--amber-soft)' }}>
+          <div className="row" style={{ gap: 9, alignItems: 'flex-start' }}>
+            <Icon name="alert" size={15} style={{ marginTop: 2, color: 'var(--amber)' }} />
+            <div style={{ fontSize: 13, lineHeight: 1.65 }}>
+              Nothing bills {uncovered.join(', ')} yet.
+            </div>
+          </div>
+        </div>
+      )}
+
+      <RuleProposalReview projectId={projectId}
+                          onWritten={() => { readiness.reload(); onChanged?.() }} />
     </div>
   )
 }

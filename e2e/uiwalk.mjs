@@ -901,6 +901,38 @@ await step(page, 'rules-read-as-a-list', async () => {
   if (!/Dry run/.test(after)) throw new Error('the dry run is not in the expansion')
 })
 
+await step(page, 'the-rule-map-reads-as-one-chain', async () => {
+  await go(page, 'Rules', 'Rules')
+  await page.click('.seg button:has-text("Map")')
+  await page.waitForSelector('table.data tbody tr', { timeout: 10000 })
+  const head = (await page.locator('table.data thead').innerText()).toLowerCase()
+  for (const col of ['rule', 'ticket type', 'service code', 'rate', 'contract',
+                     'contractor', 'priority', 'billed']) {
+    if (!head.includes(col)) throw new Error(`the rule map is missing ${col}`)
+  }
+  const body = await page.locator('.main').innerText()
+  if (!/Every chain is complete|stops it billing/.test(body)) {
+    throw new Error('the map does not say whether the chains are complete')
+  }
+  // The chain is editable where it is read, not behind an editor.
+  const selects = await page.locator('table.data tbody tr >> nth=0 >> select').count()
+  if (selects < 2) throw new Error('the map is not editable in place')
+})
+
+await step(page, 'rules-can-be-built-from-the-contract', async () => {
+  await page.click('button:has-text("Build from contract")')
+  await page.waitForSelector('.modal', { timeout: 10000 })
+  // The proposal is a POST that writes nothing, so the body is empty for a beat
+  // while it runs. Reading it the instant the modal appears reads the skeleton.
+  await page.locator('.modal-body').getByText(
+    /saved until you write it|already has a rule/).first()
+    .waitFor({ timeout: 15000 })
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(400)
+  await page.click('.seg button:has-text("List")')
+  await page.waitForTimeout(400)
+})
+
 await step(page, 'service-codes-read-as-a-list', async () => {
   await go(page, 'Service Codes', 'Service Codes')
   await page.waitForSelector('table.data tbody tr', { timeout: 10000 })
@@ -1117,13 +1149,24 @@ await step(page, 'wizard-scope-and-estimate', async () => {
 
 await step(page, 'wizard-through-to-review', async () => {
   for (const label of ['Contractors', 'Contracts', 'Disposal sites', 'Ticket types',
-                       'Service codes', 'Workers', 'Review']) {
+                       'Service codes', 'Rules', 'Workers', 'Review']) {
     await page.click(`button:has-text("Next: ${label}")`)
     await page.waitForTimeout(600)
+    if (label === 'Rules') {
+      // The step the wizard did not have. A project reaching the end of setup
+      // with no rule on it is exactly the state that used to read as ready.
+      const step = await page.locator('.main').innerText()
+      if (!/when these conditions hold on a completed ticket/.test(step)) {
+        throw new Error('the rules step does not explain what a rule is')
+      }
+    }
   }
   const body = await page.locator('.main').innerText()
   if (!/Field work is blocked until you add/.test(body)) {
     throw new Error('the review step is not reading readiness from the database')
+  }
+  if (!/Rule coverage/.test(body)) {
+    throw new Error('readiness does not report rule coverage')
   }
 })
 

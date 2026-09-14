@@ -68,3 +68,97 @@ COMMENT ON VIEW ticket_overview IS
     'Every live ticket, flattened for a list. Carries the load columns and the '
     'incident columns, because one screen renders both and an incident judged '
     'on cubic yards tells a reviewer nothing.';
+
+
+-- ===========================================================================
+-- The rule map
+--
+-- A rule is only half a thought on its own. What a person checking a project
+-- wants is the chain: which rule, on which ticket type, billing which service
+-- code, at which rate, under which contract, for which contractor, and what it
+-- has actually produced. Opening rules one at a time to assemble that in your
+-- head is how a wrong service code survives a whole event.
+--
+-- This is a different presentation of data that already exists, not a new
+-- resource. Nothing here is stored twice.
+-- ===========================================================================
+CREATE OR REPLACE VIEW rule_map AS
+SELECT
+    r.id                    AS rule_id,
+    r.project_id,
+    r.name                  AS rule_name,
+    r.description           AS rule_description,
+    r.priority,
+    r.match_mode,
+    r.stop_on_match,
+    r.is_active,
+    r.effective_from,
+    r.effective_to,
+
+    tt.id                   AS ticket_type_id,
+    tt.code                 AS ticket_type_code,
+    tt.label                AS ticket_type_label,
+    tt.kind                 AS ticket_type_kind,
+
+    sc.id                   AS service_code_id,
+    sc.code                 AS service_code,
+    sc.name                 AS service_code_name,
+    sc.quantity_mode,
+    sc.contract_line_item_id,
+    li.line_number,
+    li.item_code,
+
+    rt.id                   AS rate_id,
+    rt.amount               AS rate_amount,
+    rt.unit_type,
+    ut.abbreviation         AS unit_abbrev,
+    rt.tier_source,
+    (SELECT count(*) FROM rate_tiers t WHERE t.rate_id = rt.id) AS tier_count,
+
+    k.id                    AS contract_id,
+    k.contract_number,
+    k.title                 AS contract_title,
+
+    ct.id                   AS contractor_id,
+    ct.name                 AS contractor_name,
+
+    COALESCE(x.txn_count, 0)  AS transaction_count,
+    COALESCE(x.txn_total, 0)  AS billed_total,
+    x.last_billed_at,
+
+    -- What is wrong with this link in the chain, said plainly, so the map can
+    -- lead with the rows that cannot bill rather than the rows that can.
+    ARRAY_REMOVE(ARRAY[
+        CASE WHEN NOT r.is_active                THEN 'rule_inactive'  END,
+        CASE WHEN rt.id IS NULL                  THEN 'no_rate'        END,
+        CASE WHEN NOT sc.is_active               THEN 'code_inactive'  END,
+        CASE WHEN sc.quantity_mode = 'tiered'
+              AND (rt.tier_source IS NULL
+                   OR NOT EXISTS (SELECT 1 FROM rate_tiers t
+                                   WHERE t.rate_id = rt.id))
+                                                 THEN 'tiered_without_bands' END,
+        CASE WHEN r.effective_to IS NOT NULL
+              AND r.effective_to < current_date  THEN 'expired'        END
+    ], NULL)                AS problems
+FROM rules r
+JOIN ticket_types tt   ON tt.id = r.ticket_type_id
+JOIN service_codes sc  ON sc.id = r.service_code_id
+JOIN contractors ct    ON ct.id = sc.contractor_id
+JOIN contracts k       ON k.id = r.contract_id
+LEFT JOIN contract_line_items li ON li.id = sc.contract_line_item_id
+LEFT JOIN LATERAL adms_rate_for(sc.id, current_date) rt ON true
+LEFT JOIN unit_types ut ON ut.code = rt.unit_type
+LEFT JOIN LATERAL (
+    SELECT count(*) AS txn_count,
+           COALESCE(sum(tx.amount), 0) AS txn_total,
+           max(tx.computed_at) AS last_billed_at
+      FROM transactions tx
+     WHERE tx.rule_id = r.id AND NOT tx.is_reversal AND tx.superseded_at IS NULL
+) x ON true
+WHERE r.deleted_at IS NULL;
+
+COMMENT ON VIEW rule_map IS
+    'One row per rule carrying the whole chain: ticket type, service code, the '
+    'contract line it came from, the rate and its bands, the contract and the '
+    'contractor, and what the rule has produced. problems names the links that '
+    'cannot bill, so the map leads with those.';

@@ -1590,6 +1590,274 @@ def test_seeded_proposals_can_be_reviewed_end_to_end(
 
 
 # ---------------------------------------------------------------------------
+# Rules from the contract
+# ---------------------------------------------------------------------------
+def test_a_rule_is_proposed_from_the_line_it_bills(client, auth, project_id,
+                                                   spare_contract):
+    """The derivable half is derived. What is not derivable is asked for, and
+    nothing is written until somebody says so."""
+    client.post(f"/api/v1/projects/{project_id}/contracts", headers=auth,
+                json={"contract_id": spare_contract["id"]})
+
+    lines = client.post(f"/api/v1/contracts/{spare_contract['id']}/line-items",
+                        headers=auth, json={
+                            "description": "Vegetative debris collection and haul",
+                            "line_number": 900, "item_code": "RG-VEG",
+                            "unit_type_code": "per_cubic_yard", "unit_price": 9.5,
+                            "debris_type_code": "VEG"})
+    assert lines.status_code == 201, lines.text
+    line_id = lines.json()["id"]
+
+    made = client.post(f"/api/v1/projects/{project_id}/service-codes/from-line-items",
+                       headers=auth, json={"line_item_ids": [line_id]})
+    assert made.status_code == 201, made.text
+    code = made.json()["items"][0]
+
+    rule_id = None
+    try:
+        plan = client.post(f"/api/v1/projects/{project_id}/rules/from-line-items",
+                           headers=auth, json={"service_code_ids": [code["id"]]})
+        assert plan.status_code == 200, plan.text
+        body = plan.json()
+        assert body["dry_run"] is True, "a rule nobody read is worse than no rule"
+
+        proposal = next(p for p in body["proposals"]
+                        if p["service_code_id"] == code["id"])
+        assert proposal["kind"] == "standard"
+        assert proposal["blocked"] is None
+        assert proposal["ticket_type_id"], "VEG bills on a ticket type the project has"
+        assert proposal["contract_id"] == spare_contract["id"]
+
+        operands = {s["operand_code"]: s for s in proposal["statements"]}
+        assert operands["contractor"]["value"] == code["contractor_id"]
+        assert operands["debris_type"]["value"] == "VEG"
+        assert operands["cubic_yards"]["operator_code"] == "gt", \
+            "a rule that fires on a ticket measuring nothing bills nothing twice"
+
+        # Nothing exists yet.
+        before = client.get(f"/api/v1/projects/{project_id}/rules", headers=auth).json()
+        assert not any(r["service_code_id"] == code["id"] for r in before["items"])
+
+        written = client.post(f"/api/v1/projects/{project_id}/rules/from-line-items",
+                              headers=auth, json={
+                                  "dry_run": False,
+                                  "proposals": [{
+                                      "service_code_id": proposal["service_code_id"],
+                                      "ticket_type_id": proposal["ticket_type_id"],
+                                      "contract_id": proposal["contract_id"],
+                                      "name": proposal["name"],
+                                      "statements": [
+                                          {"operand_code": s["operand_code"],
+                                           "operator_code": s["operator_code"],
+                                           "value": s["value"],
+                                           "value_label": s["value_label"]}
+                                          for s in proposal["statements"]],
+                                  }]})
+        assert written.status_code == 200, written.text
+        assert written.json()["written"] == 1
+        rule_id = written.json()["items"][0]["id"]
+        assert written.json()["items"][0]["service_code"] == code["code"]
+    finally:
+        if rule_id:
+            client.delete(f"/api/v1/rules/{rule_id}", headers=auth)
+        client.delete(f"/api/v1/service-codes/{code['id']}", headers=auth)
+
+
+def test_a_tipping_fee_is_held_back_rather_than_guessed(client, auth, project_id,
+                                                        spare_contract):
+    """How a pass-through is billed varies by contract. A rule that looks right
+    and bills wrong is the expensive failure here, so these are not shaped."""
+    client.post(f"/api/v1/projects/{project_id}/contracts", headers=auth,
+                json={"contract_id": spare_contract["id"]})
+    line = client.post(f"/api/v1/contracts/{spare_contract['id']}/line-items",
+                       headers=auth, json={
+                           "description": "Landfill tipping fee, billed at cost",
+                           "line_number": 901, "item_code": "RG-TIP",
+                           "unit_type_code": "per_ton", "unit_price": 42.0}).json()
+    made = client.post(f"/api/v1/projects/{project_id}/service-codes/from-line-items",
+                       headers=auth, json={"line_item_ids": [line["id"]]}).json()
+    code = made["items"][0]
+
+    try:
+        body = client.post(f"/api/v1/projects/{project_id}/rules/from-line-items",
+                           headers=auth,
+                           json={"service_code_ids": [code["id"]]}).json()
+        proposal = next(p for p in body["proposals"]
+                        if p["service_code_id"] == code["id"])
+        assert proposal["kind"] == "pass_through"
+        assert proposal["blocked"], "held back with the question named"
+        assert "at cost" in proposal["blocked"]
+        assert body["counts"]["held"] >= 1
+    finally:
+        client.delete(f"/api/v1/service-codes/{code['id']}", headers=auth)
+
+
+def test_a_banded_line_asks_for_its_boundaries_and_writes_a_tiered_rate(
+        client, auth, project_id, spare_contract):
+    """Reading "0 to 10 miles" out of contract prose and being one mile wrong is
+    a silent error on every haul, so the boundaries are asked for."""
+    client.post(f"/api/v1/projects/{project_id}/contracts", headers=auth,
+                json={"contract_id": spare_contract["id"]})
+    line = client.post(f"/api/v1/contracts/{spare_contract['id']}/line-items",
+                       headers=auth, json={
+                           "description": "Haul out, tiered 0 to 10 miles",
+                           "line_number": 902, "item_code": "RG-HAUL",
+                           "unit_type_code": "per_mile", "unit_price": 1.25}).json()
+    made = client.post(f"/api/v1/projects/{project_id}/service-codes/from-line-items",
+                       headers=auth, json={"line_item_ids": [line["id"]]}).json()
+    code = made["items"][0]
+
+    rule_id = None
+    try:
+        body = client.post(f"/api/v1/projects/{project_id}/rules/from-line-items",
+                           headers=auth,
+                           json={"service_code_ids": [code["id"]]}).json()
+        proposal = next(p for p in body["proposals"]
+                        if p["service_code_id"] == code["id"])
+        assert proposal["kind"] == "tiered"
+        assert any(n["field"] == "tier_boundaries" for n in proposal["needs"])
+        assert proposal["tier_source_suggestion"] == "haul_miles"
+
+        written = client.post(f"/api/v1/projects/{project_id}/rules/from-line-items",
+                              headers=auth, json={
+                                  "dry_run": False,
+                                  "proposals": [{
+                                      "service_code_id": proposal["service_code_id"],
+                                      "ticket_type_id": proposal["ticket_type_id"],
+                                      "contract_id": proposal["contract_id"],
+                                      "name": proposal["name"],
+                                      "statements": [],
+                                      "tiers": {
+                                          "tier_source": "haul_miles",
+                                          "bands": [
+                                              {"label": "0 to 10 miles",
+                                               "from_value": 0, "to_value": 10,
+                                               "amount": 1.25},
+                                              {"label": "10 to 20 miles",
+                                               "from_value": 10, "to_value": 20,
+                                               "amount": 1.75},
+                                              {"label": "20 miles and over",
+                                               "from_value": 20, "amount": 2.4},
+                                          ]},
+                                  }]})
+        assert written.status_code == 200, written.text
+        rule_id = written.json()["items"][0]["id"]
+
+        refreshed = client.get(f"/api/v1/projects/{project_id}/service-codes",
+                               headers=auth).json()
+        saved = next(c for c in refreshed["items"] if c["id"] == code["id"])
+        assert saved["quantity_mode"] == "tiered"
+    finally:
+        if rule_id:
+            client.delete(f"/api/v1/rules/{rule_id}", headers=auth)
+        client.delete(f"/api/v1/service-codes/{code['id']}", headers=auth)
+
+
+def test_nothing_is_written_without_a_confirmation(client, auth, project_id):
+    refused = client.post(f"/api/v1/projects/{project_id}/rules/from-line-items",
+                          headers=auth, json={"dry_run": False, "proposals": []})
+    assert refused.status_code == 400
+    assert refused.json()["error"]["code"] == "nothing_confirmed"
+
+
+def test_a_code_a_rule_already_references_is_not_proposed_again(
+        client, auth, project_id):
+    body = client.post(f"/api/v1/projects/{project_id}/rules/from-line-items",
+                       headers=auth, json={}).json()
+    proposed = {p["service_code"] for p in body["proposals"]}
+    skipped = {s["service_code"] for s in body["skipped"]}
+    assert skipped, "the demo has codes with rules on them already"
+    assert not (proposed & skipped)
+
+
+def test_the_rule_map_carries_the_whole_chain(client, auth, project_id):
+    """One row per rule, with everything between a ticket and an invoice line on
+    it, because opening rules one at a time to assemble that is how a wrong
+    service code survives a whole event."""
+    body = client.get(f"/api/v1/projects/{project_id}/rules/map", headers=auth)
+    assert body.status_code == 200, body.text
+    data = body.json()
+    assert data["items"], "the demo has rules"
+
+    row = data["items"][0]
+    for field in ("rule_name", "ticket_type_label", "service_code", "rate_amount",
+                  "unit_abbrev", "contract_number", "contractor_name",
+                  "transaction_count", "billed_total", "problems"):
+        assert field in row, f"{field} is part of the chain and has to be on the row"
+
+    # Problems sort first, so the rows that cannot bill are the ones read first.
+    counts = [len(i["problems"]) for i in data["items"]]
+    assert counts == sorted(counts, reverse=True)
+
+
+def test_the_map_names_a_rate_that_would_produce_nothing(client, auth, project_id,
+                                                         spare_contract):
+    """A rule with no rate in effect matches and writes nothing. That is a
+    silent nothing, so the map says it out loud."""
+    client.post(f"/api/v1/projects/{project_id}/contracts", headers=auth,
+                json={"contract_id": spare_contract["id"]})
+    contractor = client.get(f"/api/v1/projects/{project_id}", headers=auth
+                            ).json()["contractors"][0]
+    code = client.post(f"/api/v1/projects/{project_id}/service-codes", headers=auth,
+                       json={"code": f"NORATE{uuid.uuid4().hex[:4].upper()}",
+                             "name": "Deliberately unpriced",
+                             "contractor_id": contractor["contractor_id"]}).json()
+    types = client.get(f"/api/v1/projects/{project_id}", headers=auth
+                       ).json()["ticket_types"]
+    load = next(t for t in types if t["code"] == "LOAD")
+
+    rule_id = None
+    try:
+        rule = client.post(f"/api/v1/projects/{project_id}/rules", headers=auth, json={
+            "name": f"Unpriced {uuid.uuid4().hex[:6]}",
+            "ticket_type_id": load["ticket_type_id"],
+            "service_code_id": code["id"],
+            "contract_id": spare_contract["id"],
+            "statements": []})
+        assert rule.status_code == 201, rule.text
+        rule_id = rule.json()["id"]
+
+        data = client.get(f"/api/v1/projects/{project_id}/rules/map",
+                          headers=auth).json()
+        row = next(r for r in data["items"] if r["rule_id"] == rule_id)
+        assert "no_rate" in row["problems"]
+        assert data["with_problems"] >= 1
+    finally:
+        if rule_id:
+            client.delete(f"/api/v1/rules/{rule_id}", headers=auth)
+        client.delete(f"/api/v1/service-codes/{code['id']}", headers=auth)
+
+
+def test_fixing_one_link_from_the_map_leaves_the_conditions_alone(
+        client, auth, project_id):
+    """PUT replaces the statements, which is right when somebody is editing the
+    conditions and wrong when they are fixing a priority from the map."""
+    rules = client.get(f"/api/v1/projects/{project_id}/rules", headers=auth).json()
+    rule = next(r for r in rules["items"] if r["statements"])
+    before = len(rule["statements"])
+    original = rule["priority"]
+
+    changed = client.patch(f"/api/v1/rules/{rule['id']}", headers=auth,
+                           json={"priority": original + 5})
+    assert changed.status_code == 200, changed.text
+    assert changed.json()["priority"] == original + 5
+    assert len(changed.json()["statements"]) == before, \
+        "a priority change must not clear the conditions"
+
+    client.patch(f"/api/v1/rules/{rule['id']}", headers=auth,
+                 json={"priority": original})
+
+
+def test_a_patch_with_nothing_in_it_says_so(client, auth, project_id):
+    rules = client.get(f"/api/v1/projects/{project_id}/rules", headers=auth).json()
+    rule = rules["items"][0]
+    refused = client.patch(f"/api/v1/rules/{rule['id']}", headers=auth,
+                           json={"created_at": "2020-01-01"})
+    assert refused.status_code == 400
+    assert refused.json()["error"]["code"] == "empty_update"
+
+
+# ---------------------------------------------------------------------------
 # Closeout packaging
 # ---------------------------------------------------------------------------
 def test_the_naming_template_renders_real_filenames(client, auth, project_id):

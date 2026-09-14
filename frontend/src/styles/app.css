@@ -301,6 +301,12 @@ a { color: inherit; text-decoration: none; }
 .input::placeholder, .textarea::placeholder { color: var(--text-dim); }
 .input:disabled, .select:disabled { opacity: 0.55; cursor: not-allowed; }
 
+/* Editable in place. A control inside a table row has to read as part of the
+   row rather than as a form dropped into it, or the table stops scanning. */
+.input.sm, .select.sm { height: 28px; font-size: 12.5px; padding: 0 8px; }
+.select.sm { padding-right: 24px; background-position: right 7px center; }
+.input.num { text-align: right; font-variant-numeric: tabular-nums; }
+
 .search { position: relative; }
 .search .input { padding-left: 32px; }
 .search svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%);

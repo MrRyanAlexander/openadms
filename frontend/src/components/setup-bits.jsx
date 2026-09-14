@@ -802,3 +802,333 @@ export function AlertsPanel({ projectId, limit }) {
     </div>
   )
 }
+
+/* ------------------------------------------------------ rules from contract */
+/**
+ * The confirm half of the rule proposal.
+ *
+ * A line item already knows almost everything a rule needs: the service code
+ * and contract come off its own bridge, the ticket type follows from the debris
+ * stream or the unit, and the conditions follow from the contractor and that
+ * stream. So the derivable part is derived and shown, and the part that is not
+ * derivable is asked for here rather than guessed at.
+ *
+ * Nothing is written until the button at the bottom is pressed. A banded line
+ * cannot be selected until its boundaries are entered, and a pass-through line
+ * cannot be selected at all, because how one is billed varies by contract and a
+ * rule that looks right and bills wrong is the expensive mistake in this domain.
+ */
+export function RuleProposalReview({ projectId, serviceCodeIds, onWritten }) {
+  const { toast } = useApp()
+  const [picked, setPicked] = useState({})
+  const [edits, setEdits] = useState({})
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+
+  const { data, loading, reload } = useFetch(
+    () => api.post(`/projects/${projectId}/rules/from-line-items`,
+                   serviceCodeIds?.length ? { service_code_ids: serviceCodeIds } : {}),
+    [projectId, (serviceCodeIds || []).join(',')])
+
+  const proposals = data?.proposals || []
+
+  function edit(id, patch) {
+    setEdits((e) => ({ ...e, [id]: { ...(e[id] || {}), ...patch } }))
+  }
+  function valueOf(p, key) {
+    const e = edits[p.service_code_id] || {}
+    return e[key] !== undefined ? e[key] : p[key]
+  }
+
+  // What still stops a row from being written, read fresh every render so the
+  // answer follows what has been typed rather than what was proposed.
+  function blocking(p) {
+    if (p.blocked) return p.blocked
+    if (!valueOf(p, 'ticket_type_id')) return 'Pick the ticket type this bills on.'
+    if (!valueOf(p, 'contract_id')) return 'This needs a contract.'
+    if (p.kind === 'tiered') {
+      const bands = valueOf(p, 'bands') || []
+      const usable = bands.filter((b) => b.amount !== '' && b.amount != null)
+      if (!usable.length) return 'Enter the bands off the rate sheet.'
+      if (!valueOf(p, 'tier_source')) return 'Say which measurement picks the band.'
+    }
+    return null
+  }
+
+  const chosen = proposals.filter((p) => picked[p.service_code_id] && !blocking(p))
+
+  async function write() {
+    setBusy(true); setError(null)
+    try {
+      const body = {
+        dry_run: false,
+        proposals: chosen.map((p) => {
+          const out = {
+            service_code_id: p.service_code_id,
+            ticket_type_id: valueOf(p, 'ticket_type_id'),
+            contract_id: valueOf(p, 'contract_id'),
+            name: valueOf(p, 'name'),
+            priority: Number(valueOf(p, 'priority')) || 100,
+            statements: (p.statements || []).map((s) => ({
+              operand_code: s.operand_code, operator_code: s.operator_code,
+              value: s.value, value_label: s.value_label,
+            })),
+          }
+          if (p.kind === 'tiered') {
+            out.tiers = {
+              tier_source: valueOf(p, 'tier_source'),
+              bands: (valueOf(p, 'bands') || [])
+                .filter((b) => b.amount !== '' && b.amount != null)
+                .map((b) => ({
+                  label: b.label || null,
+                  from_value: Number(b.from_value) || 0,
+                  to_value: b.to_value === '' || b.to_value == null
+                    ? null : Number(b.to_value),
+                  amount: Number(b.amount),
+                })),
+            }
+          }
+          return out
+        }),
+      }
+      const made = await api.post(`/projects/${projectId}/rules/from-line-items`, body)
+      toast('Rules written', made.summary)
+      setPicked({}); setEdits({})
+      reload()
+      onWritten?.(made)
+    } catch (err) { setError(err.message) } finally { setBusy(false) }
+  }
+
+  if (loading) return <Loading rows={4} />
+  if (!proposals.length) {
+    return (
+      <Empty icon="rules" title="Every code already has a rule">
+        {data?.skipped?.length
+          ? `${data.skipped.length} code${data.skipped.length === 1 ? ' is' : 's are'} already referenced by a rule. Nothing on this project is left unbilled.`
+          : 'Accept some contract line items first and the rules are proposed from them.'}
+      </Empty>
+    )
+  }
+
+  return (
+    <div className="stack" style={{ gap: 12 }}>
+      {error && <div className="card" style={{ padding: 12, borderColor: 'var(--red)',
+                     background: 'var(--red-soft)', color: 'var(--red)' }}>{error}</div>}
+
+      <div className="muted" style={{ fontSize: 12.5, lineHeight: 1.6, maxWidth: 700 }}>
+        {data.summary} Nothing here is saved until you write it.
+      </div>
+
+      <div className="stack" style={{ gap: 9 }}>
+        {proposals.map((p) => {
+          const stop = blocking(p)
+          const on = Boolean(picked[p.service_code_id])
+          return (
+            <div key={p.service_code_id} className="card"
+                 style={{ padding: '12px 14px',
+                          borderColor: p.blocked ? 'var(--amber)'
+                                     : on ? 'var(--accent)' : undefined }}>
+              <div className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
+                <input type="checkbox" checked={on} disabled={Boolean(p.blocked)}
+                       style={{ marginTop: 4 }}
+                       onChange={(e) => setPicked(
+                         { ...picked, [p.service_code_id]: e.target.checked })} />
+
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="row wrap" style={{ gap: 7 }}>
+                    <span className="mono" style={{ fontWeight: 580 }}>{p.service_code}</span>
+                    {p.kind === 'tiered' && <Badge tone="blue">Priced in bands</Badge>}
+                    {p.kind === 'pass_through' && <Badge tone="amber">Pass-through cost</Badge>}
+                    {p.line_number != null && (
+                      <span className="dim" style={{ fontSize: 12 }}>
+                        contract line {p.line_number}
+                      </span>
+                    )}
+                  </div>
+                  <div className="dim truncate" style={{ fontSize: 12.5, marginTop: 2 }}>
+                    {p.description}
+                    {p.unit_price != null && ` · ${fmt.rate(p.unit_price)}`}
+                    {p.unit_abbrev && ` per ${p.unit_abbrev}`}
+                  </div>
+
+                  {p.blocked ? (
+                    <div style={{ fontSize: 12.5, lineHeight: 1.6, marginTop: 8,
+                                  color: 'var(--amber)' }}>
+                      {p.blocked}
+                    </div>
+                  ) : (
+                    <>
+                      <div className="grid c2" style={{ gap: 10, marginTop: 10 }}>
+                        <Field label="Rule name">
+                          <input className="input" value={valueOf(p, 'name')}
+                                 onChange={(e) => edit(p.service_code_id,
+                                                       { name: e.target.value })} />
+                        </Field>
+                        <Field label="Bills on"
+                               hint={p.ticket_type_source
+                                 ? `Derived from ${p.ticket_type_source}`
+                                 : 'Nothing on the line says which'}>
+                          <select className="select" value={valueOf(p, 'ticket_type_id') || ''}
+                                  onChange={(e) => edit(p.service_code_id,
+                                                        { ticket_type_id: e.target.value })}>
+                            <option value="">Choose a ticket type</option>
+                            {(p.ticket_type_options || []).map((t) => (
+                              <option key={t.id} value={t.id}>{t.label}</option>
+                            ))}
+                          </select>
+                        </Field>
+                      </div>
+
+                      <div className="muted" style={{ fontSize: 12.5, marginTop: 8,
+                                                      lineHeight: 1.7 }}>
+                        When{' '}
+                        {(p.statements || []).length
+                          ? p.statements.map((s, i) => (
+                              <span key={s.operand_code}>
+                                {i > 0 && ' and '}
+                                <b style={{ color: 'var(--text)' }}>{s.operand_label}</b>
+                                {' '}{s.operator_symbol}{' '}
+                                <b style={{ color: 'var(--text)' }}>{s.value_label}</b>
+                              </span>
+                            ))
+                          : <b style={{ color: 'var(--text)' }}>any ticket of that type</b>}
+                        , bill <b style={{ color: 'var(--text)' }}>{p.service_code}</b>
+                        {p.contract_number && ` under ${p.contract_number}`}.
+                      </div>
+
+                      {p.kind === 'tiered' && (
+                        <TierBands proposal={p}
+                                   source={valueOf(p, 'tier_source')
+                                           || p.tier_source_suggestion || ''}
+                                   bands={valueOf(p, 'bands')}
+                                   onChange={(patch) => edit(p.service_code_id, patch)} />
+                      )}
+
+                      {(p.needs || []).map((n) => (
+                        <div key={n.field} className="dim"
+                             style={{ fontSize: 12, marginTop: 6 }}>
+                          <Icon name="alert" size={11} /> {n.why}
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {(data.skipped || []).length > 0 && (
+        <div className="dim" style={{ fontSize: 12, lineHeight: 1.6 }}>
+          Not proposed, because a rule already references them:{' '}
+          {data.skipped.map((s) => s.service_code).join(', ')}.
+        </div>
+      )}
+
+      <div className="row">
+        <div className="spacer" />
+        <button className="btn primary" disabled={!chosen.length || busy} onClick={write}>
+          {busy && <span className="spinner" />}
+          Write {chosen.length || ''} rule{chosen.length === 1 ? '' : 's'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * The bands, off the rate sheet rather than out of the line's wording. from is
+ * inclusive and to is exclusive, which is how rate_tiers stores them, so bands
+ * copied straight off a contract meet at the boundary instead of across it.
+ */
+const TIER_SOURCES = [
+  { value: 'haul_miles', label: 'Haul distance in miles' },
+  { value: 'stump_diameter_inches', label: 'Stump diameter in inches' },
+  { value: 'net_tons', label: 'Net tons' },
+  { value: 'billable_cubic_yards', label: 'Billable cubic yards' },
+  { value: 'unit_count', label: 'Unit count' },
+]
+
+function TierBands({ proposal, source, bands, onChange }) {
+  const rows = bands || [
+    { label: '', from_value: 0, to_value: '', amount: proposal.unit_price ?? '' },
+  ]
+
+  function setRow(i, patch) {
+    onChange({ bands: rows.map((r, n) => (n === i ? { ...r, ...patch } : r)) })
+  }
+
+  return (
+    <div className="card" style={{ padding: '10px 12px', marginTop: 10,
+                                   background: 'var(--surface-2)' }}>
+      <div className="row" style={{ gap: 10, marginBottom: 8 }}>
+        <Field label="Which measurement picks the band">
+          <select className="select" value={source}
+                  onChange={(e) => onChange({ tier_source: e.target.value })}>
+            <option value="">Choose</option>
+            {TIER_SOURCES.map((t) => (
+              <option key={t.value} value={t.value}>{t.label}</option>
+            ))}
+          </select>
+        </Field>
+      </div>
+
+      <table className="data">
+        <thead><tr>
+          <th>Band</th><th className="num">From</th><th className="num">To</th>
+          <th className="num">Rate</th><th />
+        </tr></thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i}>
+              <td>
+                <input className="input" value={r.label || ''} placeholder="0 to 10 miles"
+                       onChange={(e) => setRow(i, { label: e.target.value })} />
+              </td>
+              <td className="num">
+                <input className="input num" type="number" value={r.from_value ?? ''}
+                       onChange={(e) => setRow(i, { from_value: e.target.value })} />
+              </td>
+              <td className="num">
+                <input className="input num" type="number" value={r.to_value ?? ''}
+                       placeholder="and over"
+                       onChange={(e) => setRow(i, { to_value: e.target.value })} />
+              </td>
+              <td className="num">
+                <input className="input num" type="number" step="0.0001"
+                       value={r.amount ?? ''}
+                       onChange={(e) => setRow(i, { amount: e.target.value })} />
+              </td>
+              <td style={{ width: 34, textAlign: 'right' }}>
+                {rows.length > 1 && (
+                  <button className="btn ghost icon sm" title="Remove this band"
+                          onClick={() => onChange(
+                            { bands: rows.filter((_, n) => n !== i) })}>
+                    <Icon name="x" size={12} />
+                  </button>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <div className="row" style={{ marginTop: 8 }}>
+        <button className="btn ghost sm" onClick={() => onChange({
+          bands: [...rows, {
+            label: '',
+            from_value: rows[rows.length - 1]?.to_value || 0,
+            to_value: '', amount: '',
+          }],
+        })}>
+          <Icon name="plus" size={12} /> Add a band
+        </button>
+        <div className="spacer" />
+        <span className="dim" style={{ fontSize: 11.5 }}>
+          From is inclusive, To is exclusive. Leave To empty for the top band.
+        </span>
+      </div>
+    </div>
+  )
+}

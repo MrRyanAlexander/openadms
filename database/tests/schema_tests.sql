@@ -339,6 +339,36 @@ BEGIN
     PERFORM pg_temp.check_that('an unreversed transaction was available to test with',
         v_txn IS NOT NULL);
 
+    -- The rule map is a different presentation of data that already exists.
+    -- Its job is to leave nothing about a rule's chain to be assembled by hand.
+    PERFORM pg_temp.check_that('the rule map carries one row per live rule',
+        (SELECT count(*) FROM rule_map WHERE project_id = v_project)
+        = (SELECT count(*) FROM rules
+            WHERE project_id = v_project AND deleted_at IS NULL));
+
+    PERFORM pg_temp.check_that('the map never shows a chain with a link missing',
+        NOT EXISTS (
+            SELECT 1 FROM rule_map
+             WHERE project_id = v_project
+               AND (service_code IS NULL OR contract_number IS NULL
+                    OR contractor_name IS NULL OR ticket_type_label IS NULL)));
+
+    PERFORM pg_temp.check_that('the map totals agree with the ledger',
+        NOT EXISTS (
+            SELECT 1 FROM rule_map m
+             WHERE m.project_id = v_project
+               AND m.transaction_count <> (
+                    SELECT count(*) FROM transactions tx
+                     WHERE tx.rule_id = m.rule_id AND NOT tx.is_reversal
+                       AND tx.superseded_at IS NULL)));
+
+    PERFORM pg_temp.check_that('a rule with no rate in effect is named as a problem',
+        NOT EXISTS (
+            SELECT 1 FROM rule_map
+             WHERE project_id = v_project
+               AND rate_id IS NULL
+               AND NOT ('no_rate' = ANY (problems))));
+
     PERFORM pg_temp.check_that('re-processing does not demote an already billed ticket',
         NOT EXISTS (
             SELECT 1 FROM tickets t
