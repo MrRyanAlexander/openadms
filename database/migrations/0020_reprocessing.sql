@@ -552,7 +552,7 @@ BEGIN
             quantity_source, computed_by
         )
         SELECT
-            adms_next_number('txn:' || v_ticket.project_id::text, 'TXN-'),
+            adms_next_number('txn', 'TXN-'),
             v_ticket.project_id, p_ticket, v_rule.id, v_rule.service_code_id,
             v_rate.id, v_rule.contract_id, v_rule.sc_contractor_id,
             v_qty, v_rate.unit_type, v_rate.amount, v_amount, v_rate.currency,

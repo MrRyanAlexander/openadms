@@ -281,7 +281,7 @@ API=http://localhost:8080/api/v1
 # 1. Sign in
 TOKEN=$(curl -s -X POST $API/auth/login \
   -H 'Content-Type: application/json' \
-  -d '{"username":"jmiller","password":"openadms"}' | jq -r .access_token)
+  -d '{"username":"monitor1","password":"openadms"}' | jq -r .access_token)
 
 AUTH="Authorization: Bearer $TOKEN"
 

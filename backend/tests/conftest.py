@@ -37,7 +37,7 @@ def admin(client):
 
 @pytest.fixture(scope="session")
 def monitor(client):
-    return _login(client, "jmiller")
+    return _login(client, "monitor1")
 
 
 @pytest.fixture(scope="session")
@@ -65,7 +65,7 @@ def analyst_auth(analyst):
 def project_id(admin):
     """Always the seeded demo project, never a project a test created."""
     demo = next((p for p in admin["projects"]
-                 if p["project_code"] == "STL-2026-ROW"), None)
+                 if p["project_code"] == "DEMO-01-VESPER"), None)
     assert demo is not None, (
         "The demo project is missing. Run database/setup.sh --with-demo first.")
     return demo["id"]

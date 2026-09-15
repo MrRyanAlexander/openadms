@@ -75,6 +75,8 @@ export async function applySchema({ root, config, state, record, unattended, dat
 }
 
 const DEFAULT_LARGE_TICKETS = 25000
+const MAX_LARGE_TICKETS = 1000000
+const MAX_LARGE_PROJECTS = 50
 
 /**
  * The optional volume seed, offered here rather than left as a target somebody
@@ -82,17 +84,25 @@ const DEFAULT_LARGE_TICKETS = 25000
  *
  * It is still the same script `npm run db:seed:large` runs and it still refuses
  * to run without the demo project, because the tickets it writes are priced
- * through that project's rules. Answering no leaves the database exactly as it
- * was before this existed, which is what every other install already expects.
+ * through a demo project's rules. Answering no leaves the database exactly as
+ * it was before this existed, which is what every other install already expects.
+ *
+ * Two questions, because two things scale independently. The ticket number is a
+ * TOTAL split across the projects being filled, not a per project figure, so
+ * asking for a million across twenty projects is a million tickets and not
+ * twenty. The project number builds that many NEW demo projects first, each
+ * with its own client, contractors, contract, sites, rules and rates; zero
+ * fills the demo project that is already there.
  *
  * Unattended runs never get it by surprise: it happens only when --large-seed
- * names a number. The count is recorded, so a resumed run does not quietly add
- * another twenty-five thousand tickets on top of the ones already there.
+ * names a number. Both counts are recorded, so a resumed run does not quietly
+ * add another twenty-five thousand tickets on top of the ones already there.
  */
 export async function seedVolume({
   root, databaseUrl, unattended, config, state = {}, record = () => {}, withDemo,
 }) {
   const asked = config?.largeSeed
+  const askedProjects = config?.largeProjects
 
   if (state.largeSeeded) {
     ok(`Volume seed already run (${state.largeSeeded} tickets)`)
@@ -100,7 +110,7 @@ export async function seedVolume({
   }
 
   if (!withDemo) {
-    // The seed adds tickets to the demo project and exits non-zero without it,
+    // The seed adds tickets to a demo project and exits non-zero without one,
     // so this is a skip with a reason rather than a failure to explain later.
     if (asked) {
       warn('The volume seed needs the demo project, which was not seeded, so it '
@@ -109,31 +119,58 @@ export async function seedVolume({
     return { ok: true, seeded: 0 }
   }
 
+  const whole = (value, max) => {
+    const n = Number(value)
+    if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0 || n > max) return null
+    return n
+  }
+
   let count = 0
+  let projects = 0
+
   if (unattended) {
     if (asked === undefined || asked === null || asked === false) return { ok: true, seeded: 0 }
-    count = asked === true ? DEFAULT_LARGE_TICKETS : Number(asked)
-    if (!Number.isFinite(count) || count < 1) return { ok: true, seeded: 0 }
+    count = asked === true ? DEFAULT_LARGE_TICKETS : whole(asked, MAX_LARGE_TICKETS)
+    if (!count || count < 1) return { ok: true, seeded: 0 }
+    projects = askedProjects === undefined || askedProjects === true
+      ? 0
+      : (whole(askedProjects, MAX_LARGE_PROJECTS) ?? 0)
   } else {
     step('Volume seed')
     note('The demo project carries about a hundred tickets, which makes every list '
-         + 'look fast. This adds tens of thousands more and prices each one through '
-         + 'the rules engine, so the screens can be judged at real volume.')
-    note('It takes a few minutes and leaves the database several hundred megabytes '
-         + 'larger. Skipping it changes nothing else about this install.')
-    const wanted = await confirm('Load a large volume of demo tickets as well?',
+         + 'look fast, and one project makes the projects list look like a label. '
+         + 'This adds as many tickets as you ask for, across as many demo projects '
+         + 'as you ask for, and prices every ticket through the rules engine.')
+    note('Reckon on four minutes and a quarter of a gigabyte per 25,000 tickets. '
+         + 'Skipping it changes nothing else about this install.')
+    const wanted = await confirm('Load a large volume of demo data as well?',
                                  Boolean(asked))
     if (!wanted) return { ok: true, seeded: 0 }
-    const answer = await ask('How many tickets', {
+
+    const answer = await ask('How many tickets in total', {
       fallback: String(asked && asked !== true ? asked : DEFAULT_LARGE_TICKETS),
-      validate: (v) => (/^\d+$/.test(v) && Number(v) > 0
-        ? null : 'A whole number of tickets, for example 25000.'),
+      validate: (v) => (/^\d+$/.test(v) && Number(v) > 0 && Number(v) <= MAX_LARGE_TICKETS
+        ? null : `A whole number of tickets between 1 and ${MAX_LARGE_TICKETS}.`),
     })
     count = Number(answer)
+
+    note('Extra projects are built complete: their own client, contractors, '
+         + 'contract and line items, sites, zones, crew, trucks, certifications, '
+         + 'service codes, rates and rules. Each one is a DEMO project with an '
+         + 'invented storm name. The tickets above are split across them.')
+    const answerProjects = await ask('How many demo projects to build', {
+      fallback: String(askedProjects && askedProjects !== true ? askedProjects : 0),
+      validate: (v) => (/^\d+$/.test(v) && Number(v) <= MAX_LARGE_PROJECTS
+        ? null : `0 to ${MAX_LARGE_PROJECTS}. Zero fills the demo project already there.`),
+    })
+    projects = Number(answerProjects)
   }
 
-  step(`Seeding ${count} tickets`)
-  const result = run('bash', ['./seed-large.sh', String(count), '--yes'], {
+  step(projects > 0
+    ? `Seeding ${count} tickets across ${projects} new demo project(s)`
+    : `Seeding ${count} tickets`)
+  const args = ['./seed-large.sh', String(count), `--projects=${projects}`, '--yes']
+  const result = run('bash', args, {
     cwd: path.join(root, 'database'),
     env: { ...process.env, DATABASE_URL: databaseUrl },
   })
@@ -147,6 +184,7 @@ export async function seedVolume({
   }
 
   record('largeSeeded', count)
+  if (projects > 0) record('largeProjects', projects)
   ok(`${count} tickets seeded and priced`)
-  return { ok: true, seeded: count }
+  return { ok: true, seeded: count, projects }
 }

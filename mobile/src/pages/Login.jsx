@@ -52,7 +52,7 @@ export default function Login() {
       </div>
 
       <div className="banner" style={{ marginTop: 22 }}>
-        <b>Demo</b> — jmiller / openadms
+        <b>Demo</b> — monitor1 / openadms
         <div className="dim mono" style={{ fontSize: 11, marginTop: 6, wordBreak: 'break-all' }}>
           {API_BASE}
         </div>

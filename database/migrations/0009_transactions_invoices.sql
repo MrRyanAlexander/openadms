@@ -7,6 +7,11 @@
 
 CREATE TABLE transactions (
     id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    -- Unique across the whole instance, so the sequence that feeds it is drawn
+    -- on the scope 'txn' rather than one scope per project. A per-project
+    -- sequence would hand the second project a TXN-0000001 of its own and the
+    -- insert would fail. Ticket numbers are the opposite case: they carry the
+    -- project's ticket_prefix, so a per-project sequence is right there.
     transaction_number text NOT NULL UNIQUE,
     project_id         uuid NOT NULL REFERENCES projects (id) ON DELETE RESTRICT,
     ticket_id          uuid NOT NULL REFERENCES tickets (id) ON DELETE RESTRICT,
@@ -66,6 +71,8 @@ COMMENT ON COLUMN transactions.snapshot IS
 -- ---------------------------------------------------------------------------
 CREATE TABLE invoices (
     id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    -- Instance wide, for the same reason transaction_number is. Drawn on the
+    -- scope 'invoice'.
     invoice_number    text NOT NULL UNIQUE,
     project_id        uuid NOT NULL REFERENCES projects (id) ON DELETE RESTRICT,
     contractor_id     uuid NOT NULL REFERENCES contractors (id) ON DELETE RESTRICT,

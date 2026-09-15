@@ -117,7 +117,7 @@ Shipped types: `LOAD`, `HAULOUT`, `UNIT`, `INCIDENT`, plus `ROE`, `TM` and `SURV
 | `rule_operands` | What the left side of a statement may reference, and which project scoped option list the value picker should call |
 | `rule_operators` | `=`, `!=`, `>`, `>=`, `<`, `<=`, `in`, `not in`, `between`, `contains`, `starts with`, `is empty`, `is not empty` |
 | `rules` | Name, ticket type, service code, contract, match mode, priority, effective dates |
-| `rule_statements` | The line items, each storing a `value_label` captured at save time so an audit reader sees "Gateway Environmental Services" and not a bare uuid |
+| `rule_statements` | The line items, each storing a `value_label` captured at save time so an audit reader sees "DEMO Prime 01 - Vesper Hauling Group" and not a bare uuid |
 
 Full reference: [The rules engine](RULES_ENGINE.md).
 

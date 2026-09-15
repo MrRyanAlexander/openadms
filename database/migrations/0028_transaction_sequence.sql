@@ -226,7 +226,7 @@ BEGIN
             rule_snapshot, quantity_source, tier_label, computed_by
         )
         SELECT
-            adms_next_number('txn:' || v_ticket.project_id::text, 'TXN-'),
+            adms_next_number('txn', 'TXN-'),
             v_rule.transaction_sequence,
             v_ticket.project_id, p_ticket, v_rule.id, v_rule.service_code_id,
             v_rate.id, v_rule.contract_id, v_rule.sc_contractor_id,
@@ -407,3 +407,28 @@ LEFT JOIN LATERAL (
      WHERE tx.rule_id = r.id AND NOT tx.is_reversal AND tx.superseded_at IS NULL
 ) x ON true
 WHERE r.deleted_at IS NULL;
+
+
+-- ---------------------------------------------------------------------------
+-- Numbering scopes
+--
+-- transaction_number and invoice_number are unique across the instance, so both
+-- are drawn on a single instance wide scope. A database seeded before this
+-- migration has per-project scopes ('txn:<uuid>') and its highest number could
+-- be anywhere, so the instance wide scopes start above whatever is already
+-- there rather than at one. On a fresh database both of these insert nothing
+-- and the sequences start where they always did.
+-- ---------------------------------------------------------------------------
+INSERT INTO number_sequences AS ns (scope_key, last_value)
+SELECT 'txn', COALESCE(max(NULLIF(regexp_replace(transaction_number, '\D', '', 'g'), ''))::bigint, 0)
+  FROM transactions
+ HAVING count(*) > 0
+ON CONFLICT (scope_key) DO UPDATE
+       SET last_value = GREATEST(ns.last_value, EXCLUDED.last_value);
+
+INSERT INTO number_sequences AS ns (scope_key, last_value)
+SELECT 'invoice', COALESCE(max(NULLIF(regexp_replace(invoice_number, '\D', '', 'g'), ''))::bigint, 0)
+  FROM invoices
+ HAVING count(*) > 0
+ON CONFLICT (scope_key) DO UPDATE
+       SET last_value = GREATEST(ns.last_value, EXCLUDED.last_value);

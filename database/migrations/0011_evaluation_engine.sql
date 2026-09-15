@@ -440,7 +440,7 @@ BEGIN
             quantity_source, computed_by
         )
         SELECT
-            adms_next_number('txn:' || v_ticket.project_id::text, 'TXN-'),
+            adms_next_number('txn', 'TXN-'),
             v_ticket.project_id, p_ticket, v_rule.id, v_rule.service_code_id,
             v_rate.id, v_rule.contract_id, v_rule.sc_contractor_id,
             v_qty, v_rate.unit_type, v_rate.amount, v_amount, v_rate.currency,
@@ -538,7 +538,7 @@ BEGIN
         amount, currency, snapshot, rule_snapshot, quantity_source,
         is_reversal, reverses_id, reversal_reason, computed_by
     ) VALUES (
-        adms_next_number('txn:' || v_orig.project_id::text, 'TXN-'),
+        adms_next_number('txn', 'TXN-'),
         v_orig.project_id, v_orig.ticket_id, v_orig.rule_id, v_orig.service_code_id,
         v_orig.rate_id, v_orig.contract_id, v_orig.contractor_id,
         -v_orig.quantity, v_orig.unit_type, v_orig.rate_amount,

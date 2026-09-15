@@ -4,6 +4,22 @@
 -- ticket types, service codes, rates, rules, staff, and several weeks of field
 -- tickets carried all the way through to locked transactions and an invoice.
 --
+-- Every name in here is invented. There is no Hurricane Vesper, no Vesper
+-- County, no DEMO Prime 01, and the state code is XX because no real state
+-- should appear on demonstration data. That is the rule the whole seed follows:
+--
+--   project      DEMO Project 01 - Hurricane Vesper   (code DEMO-01-VESPER)
+--   everything   DEMO <role> 01 - <storm word> <thing>
+--   addresses    invented streets in Vesper City, XX
+--   contacts     name@demo.invalid, (555) 010-xxxx
+--
+-- seeds/large/001_volume.sql builds further projects on exactly this pattern,
+-- numbered 02 upward with their own storm names, so a database with twenty
+-- demo projects on it still reads as twenty obvious demonstrations rather than
+-- as somebody's real programme.
+--
+-- Demo accounts: admin, manager, analyst, monitor1..monitor4, password openadms.
+--
 -- Safe to re-run: it exits early if the demo project already exists.
 -- =============================================================================
 
@@ -36,8 +52,11 @@ DECLARE
     -- The demo is anchored relative to today so it stays current whenever it
     -- is seeded, rather than aging into an empty dashboard.
     v_base date := current_date - 30;
+    -- One bcrypt round for all seven accounts. They share a password,
+    -- so hashing it seven times only makes the seed slower.
+    v_pw text := crypt('openadms', gen_salt('bf', 10));
 BEGIN
-    IF EXISTS (SELECT 1 FROM projects WHERE project_code = 'STL-2026-ROW') THEN
+    IF EXISTS (SELECT 1 FROM projects WHERE project_code = 'DEMO-01-VESPER') THEN
         RAISE NOTICE 'Demo project already present; skipping.';
         RETURN;
     END IF;
@@ -55,34 +74,34 @@ BEGIN
     IF v_instance_key IS NULL THEN
         v_instance_key := encode(gen_random_bytes(32), 'hex');
         INSERT INTO instance (instance_key, display_name, organization)
-        VALUES (v_instance_key, 'Open ADMS Demo Instance', 'OpenRecover');
+        VALUES (v_instance_key, 'Open ADMS Demo Instance', 'DEMO Organization');
     END IF;
 
     -- -----------------------------------------------------------------------
     -- Staff. Demo password for every account: openadms
     -- -----------------------------------------------------------------------
     -- full_name is generated from the parts, so it is never written directly.
-    -- rcarter and sboyd are temp workers on the same contract paid by a
+    -- monitor3 and monitor4 are temp workers on the same contract paid by a
     -- staffing firm, which is the case a single full_name column could not
     -- answer when someone asked to see their billable line items.
     INSERT INTO users (username, email, first_name, last_name, employee_id,
                        employer_name, monitor_id, global_role, password_hash)
     VALUES
-      ('admin',    'admin@openadms.local',   'Dana',   'Whitfield', 'CMG-1001', 'Confluence Monitoring Group', 'ADM-001', 'admin',   crypt('openadms', gen_salt('bf', 10))),
-      ('manager',  'manager@openadms.local', 'Luis',   'Ortega',    'CMG-1014', 'Confluence Monitoring Group', 'MGR-014', 'manager', crypt('openadms', gen_salt('bf', 10))),
-      ('analyst',  'analyst@openadms.local', 'Priya',  'Raman',     'CMG-1007', 'Confluence Monitoring Group', 'ANL-007', 'analyst', crypt('openadms', gen_salt('bf', 10))),
-      ('jmiller',  'jmiller@openadms.local', 'Jordan', 'Miller',    'CMG-1118', 'Confluence Monitoring Group', 'MON-118', 'monitor', crypt('openadms', gen_salt('bf', 10))),
-      ('tnguyen',  'tnguyen@openadms.local', 'Thu',    'Nguyen',    'CMG-1119', 'Confluence Monitoring Group', 'MON-119', 'monitor', crypt('openadms', gen_salt('bf', 10))),
-      ('rcarter',  'rcarter@openadms.local', 'Ray',    'Carter',    'TW-4471',  'Gateway Staffing Partners',   'MON-120', 'monitor', crypt('openadms', gen_salt('bf', 10))),
-      ('sboyd',    'sboyd@openadms.local',   'Sam',    'Boyd',      'TW-4472',  'Gateway Staffing Partners',   'MON-121', 'monitor', crypt('openadms', gen_salt('bf', 10)));
+      ('admin',    'admin@demo.invalid',    'Demo', 'Admin',       'DMN-1001', 'DEMO Monitoring 01 - Vesper Monitoring Group', 'ADM-001', 'admin',   v_pw),
+      ('manager',  'manager@demo.invalid',  'Demo', 'Manager',     'DMN-1014', 'DEMO Monitoring 01 - Vesper Monitoring Group', 'MGR-014', 'manager', v_pw),
+      ('analyst',  'analyst@demo.invalid',  'Demo', 'Analyst',     'DMN-1007', 'DEMO Monitoring 01 - Vesper Monitoring Group', 'ANL-007', 'analyst', v_pw),
+      ('monitor1', 'monitor1@demo.invalid', 'Demo', 'Monitor One',   'DMN-1118', 'DEMO Monitoring 01 - Vesper Monitoring Group', 'MON-118', 'monitor', v_pw),
+      ('monitor2', 'monitor2@demo.invalid', 'Demo', 'Monitor Two',   'DMN-1119', 'DEMO Monitoring 01 - Vesper Monitoring Group', 'MON-119', 'monitor', v_pw),
+      ('monitor3', 'monitor3@demo.invalid', 'Demo', 'Monitor Three', 'DTW-4471', 'DEMO Staffing 01 - Vesper Staffing Partners',   'MON-120', 'monitor', v_pw),
+      ('monitor4', 'monitor4@demo.invalid', 'Demo', 'Monitor Four',  'DTW-4472', 'DEMO Staffing 01 - Vesper Staffing Partners',   'MON-121', 'monitor', v_pw);
 
     SELECT id INTO v_admin   FROM users WHERE username = 'admin';
     SELECT id INTO v_manager FROM users WHERE username = 'manager';
     SELECT id INTO v_analyst FROM users WHERE username = 'analyst';
-    SELECT id INTO v_mon1    FROM users WHERE username = 'jmiller';
-    SELECT id INTO v_mon2    FROM users WHERE username = 'tnguyen';
-    SELECT id INTO v_mon3    FROM users WHERE username = 'rcarter';
-    SELECT id INTO v_mon4    FROM users WHERE username = 'sboyd';
+    SELECT id INTO v_mon1    FROM users WHERE username = 'monitor1';
+    SELECT id INTO v_mon2    FROM users WHERE username = 'monitor2';
+    SELECT id INTO v_mon3    FROM users WHERE username = 'monitor3';
+    SELECT id INTO v_mon4    FROM users WHERE username = 'monitor4';
 
     PERFORM set_config('adms.actor_id', v_admin::text, true);
 
@@ -92,23 +111,23 @@ BEGIN
     INSERT INTO clients (name, code, client_type, fema_applicant_id,
                          primary_contact, contact_email, contact_phone,
                          address_line1, city, state_code, postal_code)
-    VALUES ('St. Louis County, Missouri', 'STLCO', 'local_government', '189-00000-00',
-            'Angela Brooks', 'abrooks@stlouiscountymo.gov', '(314) 555-0142',
-            '41 South Central Avenue', 'Clayton', 'MO', '63105')
+    VALUES ('DEMO Client 01 - Vesper County', 'DCL01', 'local_government', '000-00001-00',
+            'Avery Client', 'client@demo.invalid', '(555) 010-0001',
+            '1 Demo Civic Plaza', 'Vesper City', 'XX', '00001')
     RETURNING id INTO v_client;
 
     INSERT INTO contractors (name, code, contractor_type, primary_contact,
                              contact_email, city, state_code)
-    VALUES ('Gateway Environmental Services', 'GES', 'hauler',
-            'Mark Delgado', 'mdelgado@gatewayenv.example', 'Earth City', 'MO')
+    VALUES ('DEMO Prime 01 - Vesper Hauling Group', 'DPR01', 'hauler',
+            'Parker Prime', 'prime@demo.invalid', 'Vesper City', 'XX')
     RETURNING id INTO v_prime;
 
     INSERT INTO contractors (name, code, contractor_type, primary_contact, city, state_code)
-    VALUES ('Meramec Hauling LLC', 'MER', 'hauler', 'Tina Brandt', 'Fenton', 'MO')
+    VALUES ('DEMO Sub 01 - Vesper Transfer LLC', 'DSB01', 'hauler', 'Taylor Sub', 'Vesper Falls', 'XX')
     RETURNING id INTO v_sub;
 
     INSERT INTO contractors (name, code, contractor_type, primary_contact, city, state_code)
-    VALUES ('Confluence Monitoring Group', 'CMG', 'monitoring', 'Dana Whitfield', 'Florissant', 'MO')
+    VALUES ('DEMO Monitoring 01 - Vesper Monitoring Group', 'DMN01', 'monitoring', 'Demo Admin', 'Vesper City', 'XX')
     RETURNING id INTO v_monitor_firm;
 
     -- -----------------------------------------------------------------------
@@ -118,19 +137,19 @@ BEGIN
     -- -----------------------------------------------------------------------
     INSERT INTO contacts (entity_type, entity_id, first_name, last_name, title,
                           email, phone, contact_role, is_primary) VALUES
-        ('clients', v_client, 'Angela', 'Brooks', 'Debris Program Manager',
-         'abrooks@stlouiscountymo.gov', '(314) 555-0142', 'primary', true),
-        ('clients', v_client, 'Marcus', 'Feld', 'Accounts Payable Supervisor',
-         'mfeld@stlouiscountymo.gov', '(314) 555-0188', 'finance', false),
-        ('clients', v_client, 'Renee', 'Okafor', 'Solid Waste Permits',
-         'rokafor@stlouiscountymo.gov', '(314) 555-0175', 'permits', false),
-        ('contractors', v_prime, 'Mark', 'Delgado', 'Operations Director',
-         'mdelgado@gatewayenv.example', NULL, 'primary', true),
-        ('contractors', v_prime, 'Sheila', 'Vance', 'Billing Manager',
-         'svance@gatewayenv.example', NULL, 'finance', false),
-        ('contractors', v_sub, 'Tina', 'Brandt', 'Owner',
+        ('clients', v_client, 'Avery', 'Client', 'Debris Program Manager',
+         'client@demo.invalid', '(555) 010-0001', 'primary', true),
+        ('clients', v_client, 'Morgan', 'Payable', 'Accounts Payable Supervisor',
+         'ap@demo.invalid', '(555) 010-0002', 'finance', false),
+        ('clients', v_client, 'Reese', 'Permit', 'Solid Waste Permits',
+         'permits@demo.invalid', '(555) 010-0003', 'permits', false),
+        ('contractors', v_prime, 'Parker', 'Prime', 'Operations Director',
+         'prime@demo.invalid', NULL, 'primary', true),
+        ('contractors', v_prime, 'Sasha', 'Billing', 'Billing Manager',
+         'billing@demo.invalid', NULL, 'finance', false),
+        ('contractors', v_sub, 'Taylor', 'Sub', 'Owner',
          NULL, NULL, 'primary', true),
-        ('contractors', v_monitor_firm, 'Dana', 'Whitfield', 'Data Manager',
+        ('contractors', v_monitor_firm, 'Demo', 'Admin', 'Data Manager',
          NULL, NULL, 'primary', true);
 
     -- -----------------------------------------------------------------------
@@ -138,27 +157,27 @@ BEGIN
     -- -----------------------------------------------------------------------
     INSERT INTO disasters (declaration_code, name, incident_type, declared_on,
                            incident_start, incident_end, state_code)
-    VALUES ('DR-4808-MO', 'Missouri Severe Storms, Tornadoes and Flooding',
-            'Severe Storm', (v_base - 8), (v_base - 14),
-            (v_base - 10), 'MO')
+    VALUES ('DEMO-DR-001', 'DEMO Hurricane Vesper',
+            'Hurricane', (v_base - 8), (v_base - 14),
+            (v_base - 10), 'XX')
     RETURNING id INTO v_disaster;
 
     INSERT INTO contracts (contract_number, title, client_id, contractor_id,
                            contract_type, status, executed_on, effective_from,
                            effective_to, not_to_exceed, document_url)
-    VALUES ('STL-DEB-2026-001', 'Countywide Disaster Debris Removal',
+    VALUES ('DEMO-01-C001', 'DEMO Countywide Disaster Debris Removal',
             v_client, v_prime, 'unit_price', 'active', (v_base - 6),
             (v_base - 6), (v_base + 330), 18500000.00,
-            'https://stlcounty.sharepoint.com/contracts/STL-DEB-2026-001.pdf')
+            'https://demo.invalid/contracts/DEMO-01-C001.pdf')
     RETURNING id INTO v_contract;
 
     INSERT INTO contracts (contract_number, title, client_id, contractor_id,
                            contract_type, status, executed_on, effective_from,
                            effective_to, not_to_exceed, document_url)
-    VALUES ('STL-DEB-2026-002', 'Supplemental Haul Out and Final Disposal',
+    VALUES ('DEMO-01-C002', 'DEMO Supplemental Haul Out and Final Disposal',
             v_client, v_sub, 'unit_price', 'active', (v_base - 4),
             (v_base - 4), (v_base + 330), 4200000.00,
-            'https://stlcounty.sharepoint.com/contracts/STL-DEB-2026-002.pdf')
+            'https://demo.invalid/contracts/DEMO-01-C002.pdf')
     RETURNING id INTO v_contract_sub;
 
     -- -----------------------------------------------------------------------
@@ -168,9 +187,9 @@ BEGIN
                                 city, state_code, postal_code, latitude, longitude,
                                 permit_number, permit_expires_on, has_scale,
                                 accepted_debris, capacity_cy)
-    VALUES ('Florissant DMS', 'DMS-01', 'DMS', v_prime, '3025 Patterson Road',
-            'Florissant', 'MO', '63031', 38.789200, -90.322400,
-            'MO-SW-2026-118', (v_base + 380), true,
+    VALUES ('DEMO Vesper North DMS', 'D01-DMS-1', 'DMS', v_prime, '100 Windrow Drive',
+            'Vesper City', 'XX', '00001', 38.789200, -90.322400,
+            'DEMO-SW-0118', (v_base + 380), true,
             ARRAY['VEG','CD','MIXED','STUMP'], 420000)
     RETURNING id INTO v_dms1;
 
@@ -178,9 +197,9 @@ BEGIN
                                 city, state_code, postal_code, latitude, longitude,
                                 permit_number, permit_expires_on, has_scale,
                                 accepted_debris, capacity_cy)
-    VALUES ('Hazelwood DMS', 'DMS-02', 'DMS', v_prime, '640 Howdershell Road',
-            'Hazelwood', 'MO', '63042', 38.771500, -90.371800,
-            'MO-SW-2026-119', (v_base + 380), false,
+    VALUES ('DEMO Vesper South DMS', 'D01-DMS-2', 'DMS', v_prime, '200 Leeward Lane',
+            'Vesper Falls', 'XX', '00002', 38.771500, -90.371800,
+            'DEMO-SW-0119', (v_base + 380), false,
             ARRAY['VEG','CD','MIXED','WHITE'], 260000)
     RETURNING id INTO v_dms2;
 
@@ -188,9 +207,9 @@ BEGIN
                                 city, state_code, postal_code, latitude, longitude,
                                 permit_number, permit_expires_on, has_scale,
                                 accepted_debris)
-    VALUES ('Champ Landfill', 'FDS-01', 'FDS', v_sub, '13570 Missouri Bottom Road',
-            'Maryland Heights', 'MO', '63043', 38.746900, -90.446100,
-            'MO-LF-118-0042', (v_base + 1200), true,
+    VALUES ('DEMO Vesper Regional Landfill', 'D01-FDS-1', 'FDS', v_sub, '300 Rainshadow Road',
+            'Vesper Heights', 'XX', '00003', 38.746900, -90.446100,
+            'DEMO-LF-0042', (v_base + 1200), true,
             ARRAY['VEG','CD','MIXED','SOIL'])
     RETURNING id INTO v_fds;
 
@@ -202,13 +221,13 @@ BEGIN
                           description,
                           starts_on, ends_on, timezone, ticket_prefix,
                           owner_instance_key, visibility_flag, created_by)
-    VALUES ('St. Louis County ROW Collection', 'STL-2026-ROW', v_client, v_disaster,
+    VALUES ('DEMO Project 01 - Hurricane Vesper', 'DEMO-01-VESPER', v_client, v_disaster,
             v_contract, 'active', 'row_collection', 'ROW Collection',
-            'Right-of-way vegetative and C&D collection across north county '
-            'following the spring tornado outbreak.',
+            'DEMO data. Right of way vegetative and C&D collection across the '
+            'demonstration county after Hurricane Vesper, which is not a real storm.',
             -- A period of performance, because a debris mission has one and the
             -- days-remaining column is only honest if the demo carries a date.
-            v_base, v_base + 120, 'America/Chicago', 'STL',
+            v_base, v_base + 120, 'America/Chicago', 'D01',
             v_instance_key, 'private', v_admin)
     RETURNING id INTO v_project;
 
@@ -229,7 +248,7 @@ BEGIN
 
     -- -----------------------------------------------------------------------
     -- The document registry. Links into SharePoint, never files. The contracts
-    -- and one site permit are verified; the Hazelwood permit is still pending
+    -- and one site permit are verified; the south DMS permit is still pending
     -- with the client and has been for twelve days, which is exactly the state
     -- the alerts feed is built to nag about, and which stops nothing.
     -- -----------------------------------------------------------------------
@@ -237,36 +256,36 @@ BEGIN
                            effective_from, verification_status, verified_by,
                            verified_at, created_by)
     VALUES ('contracts', v_contract, 'contract',
-            'STL-DEB-2026-001 executed contract',
-            'https://stlcounty.sharepoint.com/contracts/STL-DEB-2026-001.pdf',
+            'DEMO-01-C001 executed contract',
+            'https://demo.invalid/contracts/DEMO-01-C001.pdf',
             'sharepoint', (v_base - 6), 'verified', v_admin, (v_base - 5), v_admin),
            ('contracts', v_contract_sub, 'contract',
-            'STL-DEB-2026-002 executed contract',
-            'https://stlcounty.sharepoint.com/contracts/STL-DEB-2026-002.pdf',
+            'DEMO-01-C002 executed contract',
+            'https://demo.invalid/contracts/DEMO-01-C002.pdf',
             'sharepoint', (v_base - 4), 'verified', v_admin, (v_base - 3), v_admin);
 
     INSERT INTO documents (entity_type, entity_id, kind_code, title, url, provider,
                            effective_from, expires_on, verification_status,
                            verified_by, verified_at, created_by)
     VALUES ('contractors', v_prime, 'rate_sheet',
-            'Gateway Environmental 2026 rate sheet',
-            'https://gatewayenv.box.com/s/rate-sheet-2026',
+            'DEMO Prime 01 rate sheet',
+            'https://demo.invalid/box/rate-sheet',
             'box', (v_base - 6), (v_base + 330), 'verified', v_admin, (v_base - 5), v_admin),
            ('contractors', v_prime, 'certificate_hhw',
-            'Gateway Environmental HHW handling certificate',
-            'https://gatewayenv.box.com/s/hhw-cert-2026',
+            'DEMO Prime 01 HHW handling certificate',
+            'https://demo.invalid/box/hhw-certificate',
             'box', (v_base - 60), (v_base + 45), 'verified', v_admin, (v_base - 5), v_admin),
            ('contractors', v_sub, 'insurance',
-            'Meramec Hauling certificate of insurance',
-            'https://meramechauling.box.com/s/coi-2026',
+            'DEMO Sub 01 certificate of insurance',
+            'https://demo.invalid/box/certificate-of-insurance',
             'box', (v_base - 40), (v_base + 120), 'verified', v_admin, (v_base - 3), v_admin);
 
     INSERT INTO documents (entity_type, entity_id, project_id, kind_code, title, url,
                            provider, effective_from, expires_on,
                            verification_status, verified_by, verified_at, created_by)
     VALUES ('disposal_sites', v_dms1, v_project, 'permit',
-            'Florissant DMS operating permit MO-SW-2026-118',
-            'https://stlcounty.sharepoint.com/permits/MO-SW-2026-118.pdf',
+            'DEMO Vesper North DMS operating permit DEMO-SW-0118',
+            'https://demo.invalid/permits/DEMO-SW-0118.pdf',
             'sharepoint', (v_base - 3), (v_base + 380), 'verified',
             v_admin, (v_base - 2), v_admin)
     RETURNING id INTO v_doc_permit1;
@@ -282,7 +301,7 @@ BEGIN
        SET permit_status = 'pending',
            permit_requested_from = 'client',
            permit_requested_on = (v_base + 1),
-           permit_notes = 'Requested from the county PM. Chased twice. '
+           permit_notes = 'Requested from the demo client PM. Chased twice. '
                           'Operations continue in the meantime.'
      WHERE project_id = v_project AND site_id = v_dms2;
 
@@ -390,9 +409,9 @@ BEGIN
          'Counted on the ROW survey.', v_manager);
 
     INSERT INTO project_zones (project_id, zone_code, name) VALUES
-        (v_project, '001', 'Florissant North'),
-        (v_project, '002', 'Hazelwood / Berkeley'),
-        (v_project, '003', 'Ferguson / Dellwood');
+        (v_project, '001', 'Vesper North'),
+        (v_project, '002', 'Vesper Central'),
+        (v_project, '003', 'Vesper South');
     SELECT id INTO v_zone1 FROM project_zones WHERE project_id = v_project AND zone_code = '001';
     SELECT id INTO v_zone2 FROM project_zones WHERE project_id = v_project AND zone_code = '002';
     SELECT id INTO v_zone3 FROM project_zones WHERE project_id = v_project AND zone_code = '003';
@@ -430,24 +449,24 @@ BEGIN
     INSERT INTO equipment (unit_number, contractor_id, equipment_type, make, model,
                            model_year, capacity_cy, tare_weight_lbs, certified_on,
                            placard_code, barcode)
-    SELECT 'GES-' || lpad(n::text, 3, '0'), v_prime, 'truck', 'Mack', 'Granite',
+    SELECT 'D01-T' || lpad(n::text, 3, '0'), v_prime, 'truck', 'DemoTruck', 'Model A',
            2019 + (n % 5), (30 + (n * 7) % 70)::numeric, 22000 + (n * 130),
            (v_base - 2), 'P-' || lpad(n::text, 4, '0'),
-           'GES' || lpad(n::text, 3, '0') || 'BC'
+           'D01T' || lpad(n::text, 3, '0') || 'BC'
       FROM generate_series(1, 14) n;
 
     INSERT INTO equipment (unit_number, contractor_id, equipment_type, make, model,
                            model_year, capacity_cy, tare_weight_lbs, certified_on,
                            placard_code, barcode)
-    SELECT 'MER-' || lpad(n::text, 3, '0'), v_sub, 'truck', 'Peterbilt', '567',
+    SELECT 'D01-S' || lpad(n::text, 3, '0'), v_sub, 'truck', 'DemoTruck', 'Model B',
            2020 + (n % 4), (60 + (n * 9) % 50)::numeric, 26000 + (n * 90),
            (v_base - 2), 'M-' || lpad(n::text, 4, '0'),
-           'MER' || lpad(n::text, 3, '0') || 'BC'
+           'D01S' || lpad(n::text, 3, '0') || 'BC'
       FROM generate_series(1, 6) n;
 
     INSERT INTO equipment (unit_number, contractor_id, equipment_type, make, certified_on)
-    VALUES ('CREW-A', v_prime, 'crew', 'Bucket + Chipper', (v_base - 2)),
-           ('CREW-B', v_prime, 'crew', 'Grapple + Grinder', (v_base - 2));
+    VALUES ('D01-CREW-A', v_prime, 'crew', 'Bucket + Chipper', (v_base - 2)),
+           ('D01-CREW-B', v_prime, 'crew', 'Grapple + Grinder', (v_base - 2));
 
     SELECT array_agg(id ORDER BY unit_number) INTO v_trucks
       FROM equipment WHERE contractor_id = v_prime AND equipment_type = 'truck';
@@ -471,7 +490,7 @@ BEGIN
            e.placard_code,
            e.capacity_cy, e.tare_weight_lbs, 'physical',
            v_base - 2, v_base - 2, v_base + 300,
-           v_manager, 'Luis Ortega', v_manager
+           v_manager, 'Demo Manager', v_manager
       FROM equipment e
      WHERE e.contractor_id IN (v_prime, v_sub)
        AND e.capacity_cy IS NOT NULL;
@@ -554,7 +573,7 @@ BEGIN
                        tier_source, notes) VALUES
         (v_sc_veg,   9.4500,  'per_cubic_yard',  v_base, NULL, 'Base contract rate'),
         (v_sc_cd,   11.2500,  'per_cubic_yard',  v_base, NULL, 'Base contract rate'),
-        (v_sc_haul,  4.7500,  'per_cubic_yard',  v_base, NULL, 'Haul out to Champ Landfill'),
+        (v_sc_haul,  4.7500,  'per_cubic_yard',  v_base, NULL, 'Haul out to the final disposal site'),
         (v_sc_stump, 0.0000,  'per_unit',        v_base, 'stump_diameter_inches',
          'Banded by diameter. The bands carry the price, not this figure.'),
         (v_sc_haz, 285.0000,  'per_each',        v_base, NULL, 'Flat per HHW load');
@@ -580,7 +599,7 @@ BEGIN
             v_sc_veg, v_contract, 'all', 10, v_analyst)
     RETURNING id INTO v_rule;
     INSERT INTO rule_statements (rule_id, sequence, operand_code, operator_code, value, value_label) VALUES
-        (v_rule, 1, 'contractor',   'eq', to_jsonb(v_prime::text), 'Gateway Environmental Services'),
+        (v_rule, 1, 'contractor',   'eq', to_jsonb(v_prime::text), 'DEMO Prime 01 - Vesper Hauling Group'),
         (v_rule, 2, 'debris_type',  'in', '["VEG","STUMP","HANGER","LEANER"]'::jsonb, 'Vegetative debris'),
         (v_rule, 3, 'site_kind',    'in', '["DMS","TDSRS"]'::jsonb, 'Debris management site'),
         (v_rule, 4, 'cubic_yards',  'gt', '0'::jsonb, 'greater than 0 CY');
@@ -592,7 +611,7 @@ BEGIN
             v_sc_cd, v_contract, 'all', 20, v_analyst)
     RETURNING id INTO v_rule;
     INSERT INTO rule_statements (rule_id, sequence, operand_code, operator_code, value, value_label) VALUES
-        (v_rule, 1, 'contractor',  'eq', to_jsonb(v_prime::text), 'Gateway Environmental Services'),
+        (v_rule, 1, 'contractor',  'eq', to_jsonb(v_prime::text), 'DEMO Prime 01 - Vesper Hauling Group'),
         (v_rule, 2, 'debris_type', 'in', '["CD","MIXED"]'::jsonb, 'C&D or mixed'),
         (v_rule, 3, 'cubic_yards', 'gt', '0'::jsonb, 'greater than 0 CY');
 
@@ -619,7 +638,7 @@ BEGIN
 
     INSERT INTO rules (project_id, ticket_type_id, name, description, service_code_id,
                        contract_id, match_mode, priority, created_by)
-    VALUES (v_project, v_tt_haul, 'Haul Out to Champ Landfill',
+    VALUES (v_project, v_tt_haul, 'Haul Out to Final Disposal',
             'Subcontractor haul out from a DMS to the final disposal site, '
             'more than five miles.',
             v_sc_haul, v_contract_sub, 'all', 10, v_analyst)
@@ -673,10 +692,10 @@ BEGIN
             'Driver ' || (100 + i), e.barcode,
             v_debris[1 + (i % 10)],
             (1000 + i * 7)::text,
-            (ARRAY['Paddock Drive','Shackelford Road','Lindbergh Boulevard',
-                   'Chambers Road','Dunn Road','Washington Street',
-                   'Florissant Road','Howdershell Road'])[1 + (i % 8)],
-            'Florissant', 'MO',
+            (ARRAY['Anvil Ridge Road','Cinder Hollow Lane','Windrow Drive',
+                   'Gale Point Road','Squall Street','Driftwood Avenue',
+                   'Thunder Gap Road','Hailstone Court'])[1 + (i % 8)],
+            'Vesper City', 'XX',
             v_lat, v_lon,
             (v_day + TIME '07:30') + (i % 6) * INTERVAL '48 minutes',
             CASE WHEN i % 3 = 0 THEN v_dms2 ELSE v_dms1 END,
@@ -786,11 +805,11 @@ BEGIN
             created_by, completed_by, completed_at, source, data, notes
         ) VALUES (
             v_project, v_tt_unit, 'completed', v_prime, v_contract,
-            (SELECT id FROM equipment WHERE unit_number = 'CREW-A'),
+            (SELECT id FROM equipment WHERE unit_number = 'D01-CREW-A'),
             v_zones[1 + (i % 3)], 'STUMP', 1, 'per_each',
-            (ARRAY['Elm Grove Lane','Cottage Avenue','Saint Ferdinand Street',
-                   'New Halls Ferry Road'])[1 + (i % 4)],
-            'Florissant', 'MO',
+            (ARRAY['Leeward Lane','Stormwatch Boulevard','Rainshadow Road',
+                   'Tempest Trail'])[1 + (i % 4)],
+            'Vesper City', 'XX',
             38.792000 + (i * 0.0021), -90.331000 - (i * 0.0019),
             (v_day + TIME '10:00') + (i % 3) * INTERVAL '75 minutes',
             v_monitors[1 + (i % 4)], v_monitors[1 + (i % 4)],
@@ -834,8 +853,8 @@ BEGIN
               ORDER BY code OFFSET (i % 14) LIMIT 1),
             (ARRAY['low','medium','high','critical','medium','low'])[i],
             (i % 3 = 0), v_zones[1 + (i % 3)],
-            (ARRAY['Patterson Road','Airport Road','Chambers Road'])[1 + (i % 3)],
-            'Florissant', 'MO',
+            (ARRAY['Windrow Drive','Gale Point Road','Squall Street'])[1 + (i % 3)],
+            'Vesper City', 'XX',
             38.786000 + (i * 0.0034), -90.327000 - (i * 0.0029),
             (v_day + TIME '13:20'),
             v_monitors[1 + (i % 4)], v_monitors[1 + (i % 4)], (v_day + TIME '13:45'),
@@ -869,7 +888,7 @@ BEGIN
         )
         SELECT v_project, v_tt_load, 'pending_disposal', v_prime, v_truck,
                v_contract, v_zone1, 'Driver ' || (300 + i), 'VEG',
-               'Saint Catherine Street', 'Florissant', 'MO',
+               'Driftwood Avenue', 'Vesper City', 'XX',
                38.790000 + (i * 0.002), -90.325000 - (i * 0.002),
                now() - (i * INTERVAL '35 minutes'),
                e.capacity_cy, v_mon1, 'field_app'
@@ -918,7 +937,7 @@ BEGIN
     -- =======================================================================
     INSERT INTO invoices (invoice_number, project_id, contractor_id, contract_id,
                           status, period_start, period_end, notes, created_by)
-    VALUES (adms_next_number('invoice:' || v_project::text, 'INV-'),
+    VALUES (adms_next_number('invoice', 'INV-'),
             v_project, v_prime, v_contract, 'draft',
             v_base, (v_base + 6),
             'First weekly billing period, ROW collection.', v_manager)
@@ -971,7 +990,7 @@ DECLARE
     v_n        integer;
 BEGIN
     SELECT id, starts_on INTO v_project, v_base
-      FROM projects WHERE project_code = 'STL-2026-ROW';
+      FROM projects WHERE project_code = 'DEMO-01-VESPER';
     IF v_project IS NULL THEN RETURN; END IF;
 
     -- Idempotent, the same way the demo block above is. Re-running setup.sh
@@ -992,33 +1011,33 @@ BEGIN
      WHERE project_id = v_project AND role_on_project = 'prime'
        AND is_active LIMIT 1;
     SELECT id INTO v_manager FROM users WHERE username = 'manager';
-    SELECT id INTO v_monitor FROM users WHERE username = 'jmiller';
+    SELECT id INTO v_monitor FROM users WHERE username = 'monitor1';
 
     -- ------------------------------------------------------------- the units
     INSERT INTO equipment (unit_number, contractor_id, equipment_type, make,
                            model, model_year, tare_weight_lbs, placard_code,
                            barcode)
     VALUES
-      ('GES-101', v_prime, 'grapple', 'Mack', 'Granite Knuckleboom', 2022,
-       31400, 'P-0101', 'GES101BC'),
-      ('GES-102', v_prime, 'trailer', 'Peterbilt', 'Round Bottom End Dump', 2021,
-       14200, 'P-0102', 'GES102BC'),
-      ('GES-103', v_prime, 'trailer', 'MAC', 'Aluminum Live Floor', 2023,
-       16800, 'P-0103', 'GES103BC'),
-      ('GES-104', v_prime, 'trailer', 'Load Trail', 'Custom Dump', 2020,
-       4900, 'P-0104', 'GES104BC')
+      ('D01-G101', v_prime, 'grapple', 'DemoTruck', 'Knuckleboom', 2022,
+       31400, 'P-0101', 'D01G101BC'),
+      ('D01-G102', v_prime, 'trailer', 'DemoTrailer', 'Round Bottom End Dump', 2021,
+       14200, 'P-0102', 'D01G102BC'),
+      ('D01-G103', v_prime, 'trailer', 'DemoTrailer', 'Aluminum Live Floor', 2023,
+       16800, 'P-0103', 'D01G103BC'),
+      ('D01-G104', v_prime, 'trailer', 'DemoTrailer', 'Custom Dump', 2020,
+       4900, 'P-0104', 'D01G104BC')
     ON CONFLICT DO NOTHING;
 
     -- ------------------------------------------- 1. the grapple truck body
     -- A rectangular lower body with the side walls flared out above it. Two
     -- sections, and a toolbox intruding into the floor.
-    SELECT id INTO v_equip FROM equipment WHERE unit_number = 'GES-101';
+    SELECT id INTO v_equip FROM equipment WHERE unit_number = 'D01-G101';
     INSERT INTO project_equipment_certifications (
         project_id, equipment_id, certification_number, status, method,
         measured_on, applies_from, expires_on, measured_by, measured_by_name,
         created_by)
     VALUES (v_project, v_equip, 'P-0101', 'draft', 'physical',
-            v_base + 12, v_base + 12, v_base + 300, v_manager, 'Luis Ortega',
+            v_base + 12, v_base + 12, v_base + 300, v_manager, 'Demo Manager',
             v_manager)
     RETURNING id INTO v_cert;
 
@@ -1027,7 +1046,7 @@ BEGIN
         measured_by, measured_by_name, measured_on, paper_form_number,
         created_by)
     VALUES (v_cert, 'grapple_body', 'Self loader working residential collection',
-            'tape', v_manager, 'Luis Ortega', v_base + 12, 'PF-2026-0101',
+            'tape', v_manager, 'Demo Manager', v_base + 12, 'PF-2026-0101',
             v_manager)
     RETURNING id INTO v_meas;
 
@@ -1063,13 +1082,13 @@ BEGIN
     -- ------------------------------------- 2. the round bottom end dump
     -- The shape the whole measurement model exists for. Measured as a box it
     -- would come out 2.67 CY per load too big.
-    SELECT id INTO v_equip FROM equipment WHERE unit_number = 'GES-102';
+    SELECT id INTO v_equip FROM equipment WHERE unit_number = 'D01-G102';
     INSERT INTO project_equipment_certifications (
         project_id, equipment_id, certification_number, status, method,
         measured_on, applies_from, expires_on, measured_by, measured_by_name,
         created_by)
     VALUES (v_project, v_equip, 'P-0102', 'draft', 'physical',
-            v_base + 12, v_base + 12, v_base + 300, v_manager, 'Luis Ortega',
+            v_base + 12, v_base + 12, v_base + 300, v_manager, 'Demo Manager',
             v_manager)
     RETURNING id INTO v_cert;
 
@@ -1079,7 +1098,7 @@ BEGIN
         device_notes, created_by)
     VALUES (v_cert, 'round_bottom_end_dump',
             'Hauling to the debris management site', 'tape', v_manager,
-            'Luis Ortega', v_base + 12, 'PF-2026-0102',
+            'Demo Manager', v_base + 12, 'PF-2026-0102',
             'Width taken at the widest point, where the straight sides begin',
             v_manager)
     RETURNING id INTO v_meas;
@@ -1112,13 +1131,13 @@ BEGIN
     -- ----------------------------------- 3. the live floor, waiting on review
     -- Submitted from the field and not yet approved, so the queue has a
     -- certification on it that somebody actually has to decide about.
-    SELECT id INTO v_equip FROM equipment WHERE unit_number = 'GES-103';
+    SELECT id INTO v_equip FROM equipment WHERE unit_number = 'D01-G103';
     INSERT INTO project_equipment_certifications (
         project_id, equipment_id, certification_number, status, method,
         measured_on, applies_from, expires_on, measured_by, measured_by_name,
         submitted_at, submitted_by, created_by)
     VALUES (v_project, v_equip, 'P-0103', 'draft', 'physical',
-            v_base + 18, v_base + 18, v_base + 320, v_monitor, 'Jordan Miller',
+            v_base + 18, v_base + 18, v_base + 320, v_monitor, 'Demo Monitor One',
             now(), v_monitor, v_monitor)
     RETURNING id INTO v_cert;
 
@@ -1128,7 +1147,7 @@ BEGIN
         created_by)
     VALUES (v_cert, 'live_floor_trailer',
             'Haul out from the DMS on the reduction stream', 'tape', v_monitor,
-            'Jordan Miller', v_base + 18, 'PF-2026-0103', v_monitor)
+            'Demo Monitor One', v_base + 18, 'PF-2026-0103', v_monitor)
     RETURNING id INTO v_meas;
 
     INSERT INTO certification_sections (
@@ -1152,12 +1171,12 @@ BEGIN
 
     -- ------------------------------- 4. the custom trailer, still being measured
     -- A draft, so the field app has something half done to pick back up.
-    SELECT id INTO v_equip FROM equipment WHERE unit_number = 'GES-104';
+    SELECT id INTO v_equip FROM equipment WHERE unit_number = 'D01-G104';
     INSERT INTO project_equipment_certifications (
         project_id, equipment_id, certification_number, status, method,
         measured_on, applies_from, measured_by, measured_by_name, created_by)
     VALUES (v_project, v_equip, 'P-0104', 'draft', 'physical',
-            current_date, current_date, v_monitor, 'Jordan Miller', v_monitor)
+            current_date, current_date, v_monitor, 'Demo Monitor One', v_monitor)
     RETURNING id INTO v_cert;
 
     INSERT INTO certification_measurements (
@@ -1165,7 +1184,7 @@ BEGIN
         measured_by, measured_by_name, paper_form_number, created_by)
     VALUES (v_cert, 'custom_dump_trailer',
             'Small contractor on residential collection', 'tape', v_monitor,
-            'Jordan Miller', 'PF-2026-0104', v_monitor)
+            'Demo Monitor One', 'PF-2026-0104', v_monitor)
     RETURNING id INTO v_meas;
 
     INSERT INTO certification_sections (
@@ -1192,14 +1211,14 @@ BEGIN
          ORDER BY q.occurred_at LIMIT 24
     LOOP
         PERFORM adms_review_item('ticket', v_ticket, v_project, v_manager,
-                                 'Luis Ortega');
+                                 'Demo Manager');
         UPDATE review_items
            SET state = 'approved', reviewed_by = v_manager,
-               reviewed_by_name = 'Luis Ortega', reviewed_at = now()
+               reviewed_by_name = 'Demo Manager', reviewed_at = now()
          WHERE subject_kind = 'ticket' AND subject_id = v_ticket;
         INSERT INTO review_events (review_item_id, event, from_state, to_state,
                                    actor_id, actor_name)
-        SELECT id, 'decided', 'pending', 'approved', v_manager, 'Luis Ortega'
+        SELECT id, 'decided', 'pending', 'approved', v_manager, 'Demo Manager'
           FROM review_items
          WHERE subject_kind = 'ticket' AND subject_id = v_ticket;
     END LOOP;
@@ -1215,17 +1234,17 @@ BEGIN
     LOOP
         v_n := v_n + 1;
         PERFORM adms_review_item('ticket', v_ticket, v_project, v_manager,
-                                 'Luis Ortega');
+                                 'Demo Manager');
         UPDATE review_items
            SET state = 'flagged', issue_code = 'photo_missing',
                notes = 'No load photo. Monitor has to re-shoot it before this bills.',
-               reviewed_by = v_manager, reviewed_by_name = 'Luis Ortega',
+               reviewed_by = v_manager, reviewed_by_name = 'Demo Manager',
                reviewed_at = now() - (v_n || ' days')::interval
          WHERE subject_kind = 'ticket' AND subject_id = v_ticket;
         INSERT INTO review_events (review_item_id, event, from_state, to_state,
                                    issue_code, note, actor_id, actor_name)
         SELECT id, 'decided', 'pending', 'flagged', 'photo_missing',
-               'No load photo', v_manager, 'Luis Ortega'
+               'No load photo', v_manager, 'Demo Manager'
           FROM review_items
          WHERE subject_kind = 'ticket' AND subject_id = v_ticket;
 
@@ -1243,7 +1262,7 @@ BEGIN
             SELECT id, 'escalated',
                    'Fourth one this week from the same monitor',
                    jsonb_build_object('from', 'none', 'to', 'supervisor'),
-                   v_manager, 'Luis Ortega'
+                   v_manager, 'Demo Manager'
               FROM review_items
              WHERE subject_kind = 'ticket' AND subject_id = v_ticket;
 
@@ -1254,7 +1273,7 @@ BEGIN
                    'Load photos missing on four tickets',
                    'Four of your load tickets this week have no photo at the '
                    'site. Re-shoot what you can and come and find me about the '
-                   'rest.', 'serious', v_manager, 'Luis Ortega'
+                   'rest.', 'serious', v_manager, 'Demo Manager'
               FROM review_items
              WHERE subject_kind = 'ticket' AND subject_id = v_ticket;
         END IF;
@@ -1267,15 +1286,15 @@ BEGIN
      ORDER BY q.occurred_at LIMIT 1;
     IF v_ticket IS NOT NULL THEN
         PERFORM adms_review_item('ticket', v_ticket, v_project, v_manager,
-                                 'Luis Ortega');
+                                 'Demo Manager');
         UPDATE review_items
            SET state = 'resolved', reviewed_by = v_manager,
-               reviewed_by_name = 'Luis Ortega', reviewed_at = now(),
+               reviewed_by_name = 'Demo Manager', reviewed_at = now(),
                resolved_by = v_manager, resolved_at = now(),
                resolution = 'Monitor re-shot the photo and it is on the ticket now.'
          WHERE subject_kind = 'ticket' AND subject_id = v_ticket;
         UPDATE review_flags SET cleared_at = now(), cleared_by = v_manager,
-               cleared_reason = 'Reviewed by Luis Ortega'
+               cleared_reason = 'Reviewed by Demo Manager'
          WHERE subject_kind = 'ticket' AND subject_id = v_ticket
            AND cleared_at IS NULL;
     END IF;

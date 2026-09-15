@@ -47,7 +47,7 @@ cd frontend && npm install && npm run dev    # back office → :5173
 cd mobile   && npm install && npm run dev    # field app   → :5174
 ```
 
-Demo accounts are `admin`, `manager`, `analyst`, `jmiller`, `tnguyen`, `rcarter`, `sboyd`, all with password `openadms`.
+Demo accounts are `admin`, `manager`, `analyst`, `monitor1`, `monitor2`, `monitor3`, `monitor4`, all with password `openadms`.
 
 <br>
 

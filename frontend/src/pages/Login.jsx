@@ -83,7 +83,7 @@ export default function Login() {
           <div className="demo-hint">
             <div><b>Demo accounts</b> — password <b>openadms</b></div>
             <div style={{ marginTop: 5 }}>
-              admin · manager · analyst · jmiller (monitor)
+              admin · manager · analyst · monitor1 (monitor)
             </div>
             <div className="dim mono" style={{ marginTop: 8, fontSize: 11 }}>
               API {API_BASE}

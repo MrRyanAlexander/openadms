@@ -1302,7 +1302,7 @@ def test_the_project_list_sorts_and_filters(client, auth, project_id):
     assert "billable_total" in first
     assert "program_label" in first
 
-    demo = next(p for p in listed["items"] if p["project_code"] == "STL-2026-ROW")
+    demo = next(p for p in listed["items"] if p["project_code"] == "DEMO-01-VESPER")
     by_client = client.get("/api/v1/projects", headers=auth,
                            params={"client_id": demo["client_id"]}).json()
     assert all(p["client_id"] == demo["client_id"] for p in by_client["items"])
@@ -1323,7 +1323,7 @@ def test_the_project_list_sorts_and_filters(client, auth, project_id):
 def test_the_project_list_answers_how_far_along_and_how_long_is_left(
         client, auth, project_id):
     listed = client.get("/api/v1/projects", headers=auth).json()["items"]
-    demo = next(p for p in listed if p["project_code"] == "STL-2026-ROW")
+    demo = next(p for p in listed if p["project_code"] == "DEMO-01-VESPER")
 
     assert float(demo["estimated_cubic_yards"]) > 0, \
         "the demo project carries a volume estimate"
@@ -1516,12 +1516,12 @@ def test_a_crew_list_copied_out_of_excel_parses(client, auth):
 
 def test_a_table_copied_out_of_an_email_parses(client, auth):
     paste = ("Worker Name, Company, Email\n"
-             "Dee Hollis, Meramec Hauling LLC, dhollis@example.com\n"
-             "Sam Ruiz, Meramec Hauling LLC, sruiz@example.com")
+             "Dee Hollis, DEMO Sub 01 - Vesper Transfer LLC, dhollis@demo.invalid\n"
+             "Sam Ruiz, DEMO Sub 01 - Vesper Transfer LLC, sruiz@demo.invalid")
     preview = client.post("/api/v1/users/import", headers=auth,
                           json={"text": paste}).json()
     assert len(preview["rows"]) == 2
-    assert preview["rows"][0]["values"]["employer_name"] == "Meramec Hauling LLC"
+    assert preview["rows"][0]["values"]["employer_name"] == "DEMO Sub 01 - Vesper Transfer LLC"
 
 
 def test_a_bare_list_of_names_parses(client, auth):
@@ -1660,7 +1660,7 @@ def test_linking_without_an_id_or_a_body_says_what_to_send(client, auth, project
 def test_a_contract_pdf_is_registered_and_staged(client, auth, spare_contract):
     staged = client.post(f"/api/v1/contracts/{spare_contract['id']}/ingestions",
                          headers=auth, json={
-                             "title": "Meramec Hauling executed contract",
+                             "title": "DEMO Sub 01 executed contract",
                              "url": "https://example.sharepoint.com/contracts/meramec.pdf",
                              "provider": "sharepoint"})
     assert staged.status_code == 201, staged.text
@@ -2021,7 +2021,7 @@ def test_the_naming_template_renders_real_filenames(client, auth, project_id):
     body = saved.json()
     assert body["template"] == "{project_code}-{kind}-{date}"
     for example in body["examples"]:
-        assert example["filename"].startswith("STL-2026-ROW-")
+        assert example["filename"].startswith("DEMO-01-VESPER-")
         assert " " not in example["filename"]
 
     client.put(f"/api/v1/projects/{project_id}/closeout/naming", headers=auth,
@@ -2074,7 +2074,7 @@ def test_the_package_is_a_real_zip(client, auth, project_id):
                           headers=auth)
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/zip"
-    assert "STL-2026-ROW" in response.headers["content-disposition"]
+    assert "DEMO-01-VESPER" in response.headers["content-disposition"]
 
     bundle = zipfile.ZipFile(io.BytesIO(response.content))
     names = bundle.namelist()
@@ -2104,21 +2104,21 @@ def test_the_naming_template_names_the_files_in_the_package(
     assert put.status_code == 200
     try:
         preview = {p["what"]: p["filename"] for p in put.json()["package"]}
-        assert all(f.startswith("DR-4808-MO--STL-2026-ROW--")
+        assert all(f.startswith("DEMO-DR-001--DEMO-01-VESPER--")
                    for f in preview.values()), preview
 
         response = client.get(f"/api/v1/projects/{project_id}/closeout/package",
                               headers=auth)
         assert response.status_code == 200
         # The zip's own name, not only the names inside it.
-        assert "DR-4808-MO--STL-2026-ROW--closeout" in \
+        assert "DEMO-DR-001--DEMO-01-VESPER--closeout" in \
             response.headers["content-disposition"]
 
         names = zipfile.ZipFile(io.BytesIO(response.content)).namelist()
         leaves = [n.rsplit("/", 1)[-1] for n in names]
         assert leaves, names
         for leaf in leaves:
-            assert leaf.startswith("DR-4808-MO--STL-2026-ROW--"), leaf
+            assert leaf.startswith("DEMO-DR-001--DEMO-01-VESPER--"), leaf
     finally:
         client.put(f"/api/v1/projects/{project_id}/closeout/naming",
                    json={"template": "{project_code}_{kind}_{title}_{date}"},

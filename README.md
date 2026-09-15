@@ -173,14 +173,24 @@ The API serves interactive OpenAPI documentation at `http://localhost:8080/docs`
 <summary><b>Demo accounts</b></summary>
 <br>
 
-`./database/setup.sh --with-demo` seeds a St. Louis County right of way collection project with 100+ tickets, contractors, disposal sites, service codes, rates, rules and processed transactions.
+`./database/setup.sh --with-demo` seeds **DEMO Project 01 - Hurricane Vesper**, a right of way collection project with 100+ tickets, contractors, disposal sites, service codes, rates, rules and processed transactions. Every name in it is invented, down to the state code `XX`, so demo data can never be mistaken for a real programme.
+
+Want more of it? `npm run db:seed:large` takes a ticket total and a project count:
+
+```bash
+npm run db:seed:large                     # 25,000 more tickets on the demo project
+./database/seed-large.sh 250000 -p 10     # 10 more DEMO projects, 250,000 tickets split across them
+./database/seed-large.sh 1000000 -p 20    # the ceiling: 1,000,000 tickets, 20 projects
+```
+
+Each generated project is complete on its own: its own client, contractors, contract and line items, sites, zones, crew, trucks, certifications, service codes, rates and rules, named after a storm that does not exist. Reckon on four minutes and about a quarter of a gigabyte per 25,000 tickets.
 
 | Username | Role | What it is useful for |
 |---|---|---|
 | `admin` | Admin | Ticket catalog, users, instance and peer settings, reversals |
 | `manager` | Manager | Clients, contracts, workers, project assignments |
 | `analyst` | Analyst | Rules, service codes, rates, the query builder |
-| `jmiller` `tnguyen` `rcarter` `sboyd` | Monitor | The field app |
+| `monitor1` `monitor2` `monitor3` `monitor4` | Monitor | The field app |
 
 Password for all of them is `openadms`.
 

@@ -276,7 +276,7 @@ function PasteImport({ onClose, toast, onDone }) {
           </div>
           <Field label="Paste here" required>
             <textarea className="textarea" rows={9} value={text} autoFocus
-                      placeholder={'Jordan Miller\t88101\tjmiller@example.com\nThu Nguyen\t88102\ttnguyen@example.com'}
+                      placeholder={'Demo Monitor One\t88101\tmonitor1@demo.invalid\nDemo Monitor Two\t88102\tmonitor2@demo.invalid'}
                       onChange={(e) => setText(e.target.value)} />
           </Field>
           <div className="grid c3" style={{ gap: 12 }}>

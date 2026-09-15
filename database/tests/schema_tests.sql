@@ -140,7 +140,7 @@ BEGIN
     -- =======================================================================
     -- Demo data landed
     -- =======================================================================
-    SELECT id INTO v_project FROM projects WHERE project_code = 'STL-2026-ROW';
+    SELECT id INTO v_project FROM projects WHERE project_code = 'DEMO-01-VESPER';
     PERFORM pg_temp.check_that('demo project exists', v_project IS NOT NULL);
 
     PERFORM pg_temp.check_that('demo project is field ready and billing ready',
@@ -198,7 +198,7 @@ BEGIN
         NOT EXISTS (
             SELECT ticket_number FROM tickets WHERE project_id = v_project
              GROUP BY ticket_number HAVING count(*) > 1)
-        AND (SELECT bool_and(ticket_number LIKE 'STL-%')
+        AND (SELECT bool_and(ticket_number LIKE 'D01-%')
                FROM tickets WHERE project_id = v_project));
 
     -- =======================================================================
@@ -571,7 +571,7 @@ BEGIN
     VALUES (v_project, v_type)
     ON CONFLICT (project_id, ticket_type_id) DO UPDATE SET is_active = true;
 
-    SELECT id INTO v_user FROM users WHERE username = 'jmiller';
+    SELECT id INTO v_user FROM users WHERE username = 'monitor1';
 
     -- The type is enabled but nothing can price it yet. Readiness has to say
     -- so, and the creation gate has to refuse the ticket, because a ticket on
@@ -672,10 +672,10 @@ DECLARE
     v_num        numeric;
     v_txt        text;
 BEGIN
-    SELECT id INTO v_project FROM projects WHERE project_code = 'STL-2026-ROW';
+    SELECT id INTO v_project FROM projects WHERE project_code = 'DEMO-01-VESPER';
     SELECT client_id INTO v_client FROM projects WHERE id = v_project;
-    SELECT id INTO v_prime FROM contractors WHERE code = 'GES';
-    SELECT id INTO v_sub   FROM contractors WHERE code = 'MER';
+    SELECT id INTO v_prime FROM contractors WHERE code = 'DPR01';
+    SELECT id INTO v_sub   FROM contractors WHERE code = 'DSB01';
 
     -- 1.1 The document registry --------------------------------------------
     PERFORM pg_temp.check_that('a rate sheet round-trips on a contractor',
@@ -730,13 +730,13 @@ BEGIN
     PERFORM pg_temp.check_raises('a prime cannot carry a tier parent',
         format('INSERT INTO project_contractors (project_id, contractor_id,
                                                  role_on_project, parent_contractor_id)
-                VALUES (%L, (SELECT id FROM contractors WHERE code = ''CMG''),
+                VALUES (%L, (SELECT id FROM contractors WHERE code = ''DMN01''),
                         ''prime'', %L)', v_project, v_prime),
         'top_tier_has_no_parent');
 
     PERFORM pg_temp.check_raises('a second tier sub must name a parent',
         format('INSERT INTO project_contractors (project_id, contractor_id, role_on_project)
-                SELECT %L, id, ''sub_tier_2'' FROM contractors WHERE code = ''CMG''',
+                SELECT %L, id, ''sub_tier_2'' FROM contractors WHERE code = ''DMN01''',
                v_project),
         'second_tier_has_a_parent');
 
@@ -747,7 +747,7 @@ BEGIN
     PERFORM pg_temp.check_raises('a tier parent must be on the same project',
         format('INSERT INTO project_contractors (project_id, contractor_id,
                                                  role_on_project, parent_contractor_id)
-                SELECT %L, id, ''sub_tier_2'', %L FROM contractors WHERE code = ''CMG''',
+                SELECT %L, id, ''sub_tier_2'', %L FROM contractors WHERE code = ''DMN01''',
                v_project, v_user),
         'not linked to project');
 
@@ -765,7 +765,7 @@ BEGIN
 
     SELECT primary_contact INTO v_txt FROM clients WHERE id = v_client;
     PERFORM pg_temp.check_that('clients.primary_contact still reads correctly',
-        v_txt = 'Angela Brooks', coalesce(v_txt, 'null'));
+        v_txt = 'Avery Client', coalesce(v_txt, 'null'));
 
     PERFORM pg_temp.check_raises('a parent cannot hold two primary contacts',
         format('INSERT INTO contacts (entity_type, entity_id, first_name, last_name,
@@ -775,21 +775,21 @@ BEGIN
         'contacts_one_primary_per_entity');
 
     -- 1.5 Worker identity ---------------------------------------------------
-    SELECT full_name INTO v_txt FROM users WHERE username = 'jmiller';
+    SELECT full_name INTO v_txt FROM users WHERE username = 'monitor1';
     PERFORM pg_temp.check_that('full_name is derived from the parts',
-        v_txt = 'Jordan Miller', coalesce(v_txt, 'null'));
+        v_txt = 'Demo Monitor One', coalesce(v_txt, 'null'));
 
     PERFORM pg_temp.check_raises('full_name cannot be written directly',
-        'UPDATE users SET full_name = ''Nope'' WHERE username = ''jmiller''',
+        'UPDATE users SET full_name = ''Nope'' WHERE username = ''monitor1''',
         'can only be updated to DEFAULT');
 
     PERFORM pg_temp.check_that('a temp worker is findable by employer',
         EXISTS (SELECT 1 FROM users
-                 WHERE employer_name = 'Gateway Staffing Partners'
-                   AND employee_id = 'TW-4471'));
+                 WHERE employer_name = 'DEMO Staffing 01 - Vesper Staffing Partners'
+                   AND employee_id = 'DTW-4471'));
 
     PERFORM pg_temp.check_that('a worker is findable by employee ID',
-        EXISTS (SELECT 1 FROM users WHERE employee_id = 'CMG-1118'));
+        EXISTS (SELECT 1 FROM users WHERE employee_id = 'DMN-1118'));
 
     PERFORM pg_temp.check_raises('a worker needs at least one name part',
         'INSERT INTO users (username, global_role) VALUES (''nameless'', ''monitor'')',
@@ -834,7 +834,7 @@ BEGIN
     -- 1.7 Permits -----------------------------------------------------------
     SELECT ps.id INTO v_ps FROM project_sites ps
       JOIN disposal_sites s ON s.id = ps.site_id
-     WHERE ps.project_id = v_project AND s.site_code = 'DMS-02';
+     WHERE ps.project_id = v_project AND s.site_code = 'D01-DMS-2';
 
     PERFORM pg_temp.check_that('the pending permit reports days since it was requested',
         (SELECT days_since_request FROM project_permit_watch
@@ -852,7 +852,7 @@ BEGIN
         'not a permit');
 
     -- The whole point: a pending permit stops nothing.
-    SELECT id INTO v_user FROM users WHERE username = 'jmiller';
+    SELECT id INTO v_user FROM users WHERE username = 'monitor1';
     PERFORM pg_temp.check_that('a pending permit does not block ticket creation',
         (SELECT ready_for_field FROM project_readiness_summary
           WHERE project_id = v_project));
@@ -866,7 +866,7 @@ BEGIN
 
     PERFORM pg_temp.check_that('the accepted line names the code it produced',
         EXISTS (SELECT 1 FROM contract_line_item_review
-                 WHERE contract_number = 'STL-DEB-2026-001' AND line_number = 1
+                 WHERE contract_number = 'DEMO-01-C001' AND line_number = 1
                    AND status = 'accepted' AND service_code = 'ROW-VEG'));
 
     PERFORM pg_temp.check_that('draft and rejected lines are both preserved',
@@ -913,7 +913,7 @@ BEGIN
     -- project read accepted everywhere and a second project could never build
     -- its own service codes from that contract at all.
     SELECT id INTO v_contract FROM contracts
-     WHERE contract_number = 'STL-DEB-2026-001';
+     WHERE contract_number = 'DEMO-01-C001';
 
     PERFORM pg_temp.check_that('the backfill gave the demo project its decisions',
         (SELECT count(*) FROM contract_line_item_decisions
@@ -1013,7 +1013,7 @@ BEGIN
                 SELECT %L, li.id, ''rejected''
                   FROM contract_line_items li
                   JOIN contracts c ON c.id = li.contract_id
-                 WHERE c.contract_number = ''STL-DEB-2026-002'' LIMIT 1',
+                 WHERE c.contract_number = ''DEMO-01-C002'' LIMIT 1',
                v_second),
         'not linked to project');
 
@@ -1044,7 +1044,7 @@ BEGIN
         format('INSERT INTO contracts (contract_number, title, client_id, contractor_id,
                                        effective_from, document_url)
                 VALUES (''TEST-BADDOC-001'', ''Bad document'', %L, %L, current_date,
-                        ''ask Marcus for it'')', v_client, v_prime),
+                        ''ask the PM for it'')', v_client, v_prime),
         'contracts_document_url_shape');
 
     PERFORM pg_temp.check_raises('a contract cannot be saved without a start date',
@@ -1471,19 +1471,19 @@ BEGIN
 
         -- The write path every surface uses: open the row, then decide on it.
         v_item := adms_review_item('ticket', v_ticket, v_project, v_user,
-                                   'Luis Ortega');
+                                   'Demo Manager');
 
         PERFORM pg_temp.check_that('opening a review is recorded as an event',
             EXISTS (SELECT 1 FROM review_events
                      WHERE review_item_id = v_item AND event = 'opened'));
 
         PERFORM pg_temp.check_that('opening the same review twice is one row',
-            adms_review_item('ticket', v_ticket, v_project, v_user, 'Luis Ortega')
+            adms_review_item('ticket', v_ticket, v_project, v_user, 'Demo Manager')
                 = v_item);
 
         UPDATE review_items
            SET state = 'flagged', notes = 'Pre photo is unusable',
-               reviewed_by = v_user, reviewed_by_name = 'Luis Ortega',
+               reviewed_by = v_user, reviewed_by_name = 'Demo Manager',
                reviewed_at = now()
          WHERE id = v_item;
 
@@ -1660,7 +1660,7 @@ BEGIN
                  measurement_method, measured_by, measured_by_name,
                  paper_form_number)
             VALUES (v_cert, 'round_bottom_end_dump', 'Haul out to final disposal',
-                    'tape', v_user, 'Luis Ortega', 'PF-TEST-0001')
+                    'tape', v_user, 'Demo Manager', 'PF-TEST-0001')
             RETURNING id INTO v_meas;
 
             INSERT INTO certification_sections
@@ -1981,7 +1981,7 @@ BEGIN
                      WHERE indexname = 'rules_project_name_key'
                        AND indexdef LIKE '%deleted_at IS NULL%'));
 
-    SELECT id INTO v_project FROM projects WHERE project_code = 'STL-2026-ROW';
+    SELECT id INTO v_project FROM projects WHERE project_code = 'DEMO-01-VESPER';
 
     -- Everything from here writes, so the mark is taken here and everything
     -- after it is replayed as a passing result once the sandbox is undone.

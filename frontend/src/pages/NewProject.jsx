@@ -221,12 +221,12 @@ function IdentityStep({ lookups, onCreated }) {
         <Field label="Project name" required>
           <input className="input" value={form.name} autoFocus
                  onChange={(e) => set({ name: e.target.value })}
-                 placeholder="St. Louis County ROW Collection" />
+                 placeholder="DEMO Project 01 - Hurricane Vesper" />
         </Field>
         <Field label="Project code" required hint="Short, stable, and used on every ticket">
           <input className="input mono" value={form.project_code}
                  onChange={(e) => set({ project_code: e.target.value.toUpperCase() })}
-                 placeholder="STL-2026-ROW" />
+                 placeholder="DEMO-01-VESPER" />
         </Field>
         <Field label="Client" required>
           <div className="row" style={{ gap: 6 }}>

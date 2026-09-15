@@ -21,11 +21,11 @@ Every completed ticket is evaluated against **all** of the rules for its type on
 ```mermaid
 flowchart TB
     R["<b>Rule</b><br/>name, ticket type, priority,<br/>match_mode, effective dates"]
-    R --> S1["Statement: Contractor = Gateway Environmental"]
+    R --> S1["Statement: Contractor = DEMO Prime 01"]
     R --> S2["Statement: Debris Type in [Vegetative]"]
     R --> S3["Statement: Billable CY > 0"]
     R --> SC["<b>Service code</b> ROW-VEG<br/>must be on this project"]
-    R --> CT["<b>Contract</b> STL-DEB-2026-001<br/>must be on this project"]
+    R --> CT["<b>Contract</b> DEMO-01-C001<br/>must be on this project"]
     SC --> RT["<b>Rate</b> $9.45 per_cubic_yard<br/>effective dated"]
 
     classDef paper fill:#F3EDE1,stroke:#CFC6B5,color:#0A0C10
@@ -54,7 +54,7 @@ flowchart TB
 
 A statement is `operand operator value`, with an optional `negate` flag. The value picker in the builder is populated from project bound options, so if three contractors are on the project, those three are what `Contractor =` offers.
 
-Each statement stores a `value_label` captured at save time, so an audit reader three years later sees `Gateway Environmental Services` rather than a bare uuid whose row may have been renamed since.
+Each statement stores a `value_label` captured at save time, so an audit reader three years later sees `DEMO Prime 01 - Vesper Hauling Group` rather than a bare uuid whose row may have been renamed since.
 
 ### Operands
 
@@ -297,8 +297,8 @@ Four rules on Load Ticket, from the demo project:
 
 | Rule | Priority | Conditions | Bills |
 |---|---|---|---|
-| ROW Vegetative Load | 10 | Contractor = Gateway Environmental, Debris Type in Vegetative, Site Kind in DMS, Billable CY > 0 | `ROW-VEG` at $9.45 / CY |
-| ROW C&D Load | 20 | Contractor = Gateway Environmental, Debris Type in C&D or mixed, Billable CY > 0 | `ROW-CD` at $11.25 / CY |
+| ROW Vegetative Load | 10 | Contractor = DEMO Prime 01, Debris Type in Vegetative, Site Kind in DMS, Billable CY > 0 | `ROW-VEG` at $9.45 / CY |
+| ROW C&D Load | 20 | Contractor = DEMO Prime 01, Debris Type in C&D or mixed, Billable CY > 0 | `ROW-CD` at $11.25 / CY |
 | ROW HHW Volume | 25 | Debris Type = Household Hazardous Waste, Billable CY > 0 | `ROW-CD` at $11.25 / CY |
 | HHW Segregation Surcharge | 30 | Debris Type = Household Hazardous Waste | `HHW` at $285.00 each |
 

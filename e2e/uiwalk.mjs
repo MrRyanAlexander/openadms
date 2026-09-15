@@ -1003,7 +1003,7 @@ await step(page, 'closeout-manifest-and-package', async () => {
   const download = page.waitForEvent('download', { timeout: 30000 })
   await page.click('button:has-text("Build the package")')
   const file = await download
-  if (!/^STL-2026-ROW_closeout_Package_\d{4}-\d{2}-\d{2}\.zip$/.test(file.suggestedFilename())) {
+  if (!/^DEMO-01-VESPER_closeout_Package_\d{4}-\d{2}-\d{2}\.zip$/.test(file.suggestedFilename())) {
     throw new Error(`unexpected download: ${file.suggestedFilename()}`)
   }
 })
@@ -1126,10 +1126,10 @@ await step(page, 'new-project-wizard', async () => {
   await page.click('button:has-text("All projects")')
   await page.waitForSelector('table.data tbody tr', { timeout: 10000 })
   await page.click('button:has-text("New project")')
-  await page.waitForSelector('input[placeholder*="St. Louis"]', { timeout: 10000 })
+  await page.waitForSelector('input[placeholder*="DEMO Project"]', { timeout: 10000 })
   const stamp = Date.now().toString().slice(-6)
-  await page.fill('input[placeholder*="St. Louis"]', `Walkthrough Project ${stamp}`)
-  await page.fill('input[placeholder="STL-2026-ROW"]', `WALK-${stamp}`)
+  await page.fill('input[placeholder*="DEMO Project"]', `Walkthrough Project ${stamp}`)
+  await page.fill('input[placeholder="DEMO-01-VESPER"]', `WALK-${stamp}`)
   await page.selectOption('.field:has-text("Client") select', { index: 1 })
   await page.click('button:has-text("Create and continue")')
   await page.waitForSelector('.card:has-text("Debris streams")', { timeout: 15000 })

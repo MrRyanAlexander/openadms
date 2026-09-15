@@ -7,7 +7,9 @@
  *   npm run setup -- --yes ...        unattended, every answer from a flag
  *   npm run preflight                 check tooling only  (--check)
  *   npm run deploy:netlify            re-provision without re-minting keys (--resume)
- *   npm run setup -- --large-seed=25000   also load a volume of demo tickets
+ *   npm run setup -- --large-seed=250000 --large-projects=10
+ *                                     also build 10 more demo projects and
+ *                                     split 250,000 tickets across them
  *
  * This file owns the ORDER. Each step owns its own job and lives in one file
  * under deploy/steps/, named for what it does. Nothing calls sideways: a step
@@ -124,7 +126,7 @@ async function provisionRailwayNetlify({ config, prefix }) {
       '   you enable Public Access in the dashboard and paste DATABASE_PUBLIC_URL',
       '   psql verifies it before anything else runs',
       './database/setup.sh --with-demo --test',
-      '   optionally ./database/seed-large.sh <n> --yes for a volume of tickets',
+      '   optionally ./database/seed-large.sh <n> --projects=<n> --yes for volume',
       'git add --all && git commit && git push origin HEAD',
       'railway add --service api --repo <owner/repo> --branch main',
       '   no Root Directory is set: Railway builds /Dockerfile, which is the API',
@@ -363,7 +365,10 @@ ${c.dim}Automated Debris Management System, self-hosted, portable, federated.${c
     demo: flags.demo === undefined ? true : flags.demo !== 'false',
     // Absent means never. A volume seed is minutes of work and hundreds of
     // megabytes, so an unattended run only gets one when it asks by number.
+    // largeSeed is the TOTAL number of tickets, split across the projects being
+    // filled; largeProjects is how many further demo projects to build first.
     largeSeed: flags['large-seed'],
+    largeProjects: flags['large-projects'],
   }
 
   /* ---- 7. provision ----------------------------------------------------- */
@@ -490,7 +495,7 @@ ${c.dim}Automated Debris Management System, self-hosted, portable, federated.${c
   if (target === 'netlify' && backOfficeUrl) {
     say(`  ${c.bold}Sign in${c.reset}
     Open ${backOfficeUrl} and use one of the demo accounts
-    (admin / manager / analyst / jmiller), password ${c.cyan}openadms${c.reset}.
+    (admin / manager / analyst / monitor1), password ${c.cyan}openadms${c.reset}.
     Change those before anyone real touches this.
 `)
   } else {
