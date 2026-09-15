@@ -13,6 +13,7 @@
     "db:migrate": "cd database && ./migrate.sh",
     "db:setup": "cd database && ./setup.sh --with-demo --test",
     "db:seed:large": "cd database && ./seed-large.sh",
+    "db:seed:showcase": "cd database && ./seed-showcase.sh",
     "db:status": "cd database && ./migrate.sh --status",
     "dev:api": "cd backend && uvicorn app.main:app --reload --port 8080",
     "dev:back-office": "cd frontend && npm run dev",

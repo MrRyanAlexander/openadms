@@ -7,9 +7,12 @@
  *   npm run setup -- --yes ...        unattended, every answer from a flag
  *   npm run preflight                 check tooling only  (--check)
  *   npm run deploy:netlify            re-provision without re-minting keys (--resume)
+ *   npm run setup -- --showcase-seed=10000
+ *                                     also load the showcase: 20 projects,
+ *                                     6 declarations, 10,000 tickets
  *   npm run setup -- --large-seed=250000 --large-projects=10
- *                                     also build 10 more demo projects and
- *                                     split 250,000 tickets across them
+ *                                     or the volume seed instead: 10 more
+ *                                     projects, 250,000 tickets across them
  *
  * This file owns the ORDER. Each step owns its own job and lives in one file
  * under deploy/steps/, named for what it does. Nothing calls sideways: a step
@@ -126,7 +129,8 @@ async function provisionRailwayNetlify({ config, prefix }) {
       '   you enable Public Access in the dashboard and paste DATABASE_PUBLIC_URL',
       '   psql verifies it before anything else runs',
       './database/setup.sh --with-demo --test',
-      '   optionally ./database/seed-large.sh <n> --projects=<n> --yes for volume',
+      '   optionally ./database/seed-showcase.sh --yes for 20 varied projects,',
+      '   or ./database/seed-large.sh <n> --projects=<n> --yes for volume',
       'git add --all && git commit && git push origin HEAD',
       'railway add --service api --repo <owner/repo> --branch main',
       '   no Root Directory is set: Railway builds /Dockerfile, which is the API',
@@ -369,6 +373,9 @@ ${c.dim}Automated Debris Management System, self-hosted, portable, federated.${c
     // filled; largeProjects is how many further demo projects to build first.
     largeSeed: flags['large-seed'],
     largeProjects: flags['large-projects'],
+    // The other shape of demo data: twenty varied projects inside ten thousand
+    // tickets, which is the one that fits a free database.
+    showcaseSeed: flags['showcase-seed'],
   }
 
   /* ---- 7. provision ----------------------------------------------------- */

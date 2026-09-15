@@ -175,7 +175,19 @@ The API serves interactive OpenAPI documentation at `http://localhost:8080/docs`
 
 `./database/setup.sh --with-demo` seeds **DEMO Project 01 - Hurricane Vesper**, a right of way collection project with 100+ tickets, contractors, disposal sites, service codes, rates, rules and processed transactions. Every name in it is invented, down to the state code `XX`, so demo data can never be mistaken for a real programme.
 
-Want more of it? `npm run db:seed:large` takes a ticket total and a project count:
+Want more of it? There are two shapes of demo data, and they answer different questions.
+
+**Showcase** is the one to run first. Twenty projects across six declarations inside ten thousand tickets, small enough for a free Postgres:
+
+```bash
+npm run db:seed:showcase                  # 20 projects, 6 declarations, 10,000 tickets
+./database/seed-showcase.sh 4000          # the same 20 projects, fewer tickets
+./database/seed-showcase.sh 10000 -s 7    # a different random spread of the work
+```
+
+Two hurricanes, a flood, a wildfire, an ice storm and a state river flood, and inside those: six of the seven programs, five kinds of client, seven ticket types, per cubic yard and per ton and per unit and per hour and banded pricing, projects in setup, active, paused, closeout and closed, a contract shared by two projects and decided separately on each, an approved invoice that locks its tickets, a corrected certification that reprices what it touched, permits verified and pending and expired, and loads still out in the field. About two minutes and 150 MB.
+
+**Volume** answers "is it still fast at this size":
 
 ```bash
 npm run db:seed:large                     # 25,000 more tickets on the demo project
@@ -183,7 +195,7 @@ npm run db:seed:large                     # 25,000 more tickets on the demo proj
 ./database/seed-large.sh 1000000 -p 20    # the ceiling: 1,000,000 tickets, 20 projects
 ```
 
-Each generated project is complete on its own: its own client, contractors, contract and line items, sites, zones, crew, trucks, certifications, service codes, rates and rules, named after a storm that does not exist. Reckon on four minutes and about a quarter of a gigabyte per 25,000 tickets.
+Every generated project is complete on its own: its own client, contractors, contract and line items, sites, zones, crew, trucks, certifications, service codes, rates and rules, named after a storm that does not exist. The volume seed costs about four minutes and a quarter of a gigabyte per 25,000 tickets, so a million tickets wants a paid database and an hour or two.
 
 | Username | Role | What it is useful for |
 |---|---|---|

@@ -91,10 +91,13 @@ if [[ $ASSUME_YES -eq 0 ]]; then
 fi
 
 step "Generating"
-# Passed as psql variables rather than -c SET, so the values and the file are
-# unambiguously in the same session.
+# The kit first, the driver second, the cleanup last. Passed as psql variables
+# rather than -c SET, so the values and the file are unambiguously in the same
+# session.
+"${PSQL[@]}" -f "$HERE/seeds/large/000_demo_kit.sql"
 "${PSQL[@]}" -v tickets="$COUNT" -v projects="$PROJECTS" \
              -f "$HERE/seeds/large/001_volume.sql"
+"${PSQL[@]}" -f "$HERE/seeds/large/099_cleanup.sql"
 
 step "Summary"
 "${PSQL[@]}" -c "
