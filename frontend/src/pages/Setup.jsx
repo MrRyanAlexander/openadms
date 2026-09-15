@@ -15,7 +15,8 @@ import {
   AlertsPanel, DocumentsPanel, EstimateEditor, ReadinessPanel, ScopeEditor,
 } from '../components/setup-bits'
 import {
-  ContractStep, ContractorStep, ServiceCodeStep, SiteStep, TicketTypeStep, WorkerStep,
+  ContractStep, ContractorStep, RuleStep, ServiceCodeStep, SiteStep, TicketTypeStep,
+  WorkerStep,
 } from './NewProject'
 
 export default function Setup() {
@@ -99,6 +100,7 @@ export default function Setup() {
                 { key: 'sites', label: 'Disposal sites', count: p.sites.length },
                 { key: 'types', label: 'Ticket types', count: p.ticket_types.length },
                 { key: 'codes', label: 'Service codes' },
+                { key: 'rules', label: 'Rules' },
                 { key: 'zones', label: 'Zones', count: p.zones.length },
                 { key: 'workers', label: 'Workers', count: p.assignments.length },
                 { key: 'documents', label: 'Documents' },
@@ -142,6 +144,13 @@ export default function Setup() {
                 )}
                 {tab === 'codes' && (
                   <ServiceCodeStep project={p} projectId={projectId} onChanged={refresh} />
+                )}
+                {/* The tab this screen was missing. Readiness said field work was
+                    blocked on rules and then offered nowhere to write one, which
+                    sent people to a separate screen to finish setting up a
+                    project they were already setting up. */}
+                {tab === 'rules' && (
+                  <RuleStep project={p} projectId={projectId} onChanged={refresh} />
                 )}
                 {tab === 'zones' && (
                   <ZoneEditor zones={p.zones} projectId={projectId}

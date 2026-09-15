@@ -334,9 +334,10 @@ To work the screens at real volume:
 ```bash
 npm run db:seed:large            # 25,000 tickets on the demo project
 npm run db:seed:large -- 50000   # a specific number
+npm run setup -- --large-seed=25000   # or load it during the initial setup
 ```
 
-This is a separate target on purpose. `npm run setup` is untouched and still builds exactly the database the Railway and Netlify path expects; the volume seed runs only when it is asked for by name, states what it is about to do, and prices every ticket it generates through the real rules engine.
+`npm run setup` offers it once, after the migrations and the demo seed, and defaults to no. Answering no builds exactly the database the Railway and Netlify path has always expected. An unattended run gets it only when `--large-seed` names a number, the count is recorded in `.deploy-state.json` so a resumed run does not add a second batch, and a volume seed that fails never fails the install. Either way it states what it is about to do and prices every ticket it generates through the real rules engine.
 
 The schema suite runs as plain SQL with no pgTAP dependency. Every assertion raises on failure, so the whole file fails loudly under `psql -v ON_ERROR_STOP=1`.
 

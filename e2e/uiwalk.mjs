@@ -1152,12 +1152,28 @@ await step(page, 'wizard-through-to-review', async () => {
                        'Service codes', 'Rules', 'Workers', 'Review']) {
     await page.click(`button:has-text("Next: ${label}")`)
     await page.waitForTimeout(600)
+    const here = await page.locator('.main').innerText()
+    if (label === 'Contracts') {
+      // A contract typed in by hand used to arrive with no lines and no way to
+      // add any, which made it a dead end. The button says what it does now.
+      if (!/typed or pasted in here/.test(here)) {
+        throw new Error('the contracts step still treats line items as the only road')
+      }
+    }
+    if (label === 'Service codes') {
+      // The step used to be a read-only list of codes generated elsewhere.
+      if (!await page.locator('button:has-text("Add service code")').count()) {
+        throw new Error('the service codes step cannot create a service code')
+      }
+    }
     if (label === 'Rules') {
       // The step the wizard did not have. A project reaching the end of setup
       // with no rule on it is exactly the state that used to read as ready.
-      const step = await page.locator('.main').innerText()
-      if (!/when these conditions hold on a completed ticket/.test(step)) {
+      if (!/when these checks hold, bill this service code/.test(here)) {
         throw new Error('the rules step does not explain what a rule is')
+      }
+      if (!await page.locator('button:has-text("New rule")').count()) {
+        throw new Error('the rules step offers no way to write a rule by hand')
       }
     }
   }

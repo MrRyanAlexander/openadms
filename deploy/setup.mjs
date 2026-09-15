@@ -7,6 +7,7 @@
  *   npm run setup -- --yes ...        unattended, every answer from a flag
  *   npm run preflight                 check tooling only  (--check)
  *   npm run deploy:netlify            re-provision without re-minting keys (--resume)
+ *   npm run setup -- --large-seed=25000   also load a volume of demo tickets
  *
  * This file owns the ORDER. Each step owns its own job and lives in one file
  * under deploy/steps/, named for what it does. Nothing calls sideways: a step
@@ -39,7 +40,7 @@ import { stateRecorder } from './lib/state.mjs'
 import { preflight, TARGET_TOOLS } from './lib/requirements.mjs'
 
 import { ensureDatabase, ensureProject } from './steps/railway-project.mjs'
-import { applySchema } from './steps/database-schema.mjs'
+import { applySchema, seedVolume } from './steps/database-schema.mjs'
 import { pushToGithub } from './steps/github.mjs'
 import { deployApi } from './steps/api-service.mjs'
 import { deployWebApps } from './steps/web-apps.mjs'
@@ -123,6 +124,7 @@ async function provisionRailwayNetlify({ config, prefix }) {
       '   you enable Public Access in the dashboard and paste DATABASE_PUBLIC_URL',
       '   psql verifies it before anything else runs',
       './database/setup.sh --with-demo --test',
+      '   optionally ./database/seed-large.sh <n> --yes for a volume of tickets',
       'git add --all && git commit && git push origin HEAD',
       'railway add --service api --repo <owner/repo> --branch main',
       '   no Root Directory is set: Railway builds /Dockerfile, which is the API',
@@ -359,6 +361,9 @@ ${c.dim}Automated Debris Management System, self-hosted, portable, federated.${c
     instanceName, organization, instanceKey, jwtSecret, databaseUrl,
     bringYourOwnDatabase, registryUrl,
     demo: flags.demo === undefined ? true : flags.demo !== 'false',
+    // Absent means never. A volume seed is minutes of work and hundreds of
+    // megabytes, so an unattended run only gets one when it asks by number.
+    largeSeed: flags['large-seed'],
   }
 
   /* ---- 7. provision ----------------------------------------------------- */
@@ -461,8 +466,14 @@ ${c.dim}Automated Debris Management System, self-hosted, portable, federated.${c
         env: { ...process.env, DATABASE_URL: databaseUrl,
                ADMS_INSTANCE_NAME: instanceName, ADMS_ORGANIZATION: organization },
       })
-      if (result.ok) ok('Schema applied and verified')
-      else warn('The setup script exited non-zero. Check the output above.')
+      if (result.ok) {
+        ok('Schema applied and verified')
+        await seedVolume({
+          root: ROOT, databaseUrl, unattended: UNATTENDED, config, withDemo,
+        })
+      } else {
+        warn('The setup script exited non-zero. Check the output above.')
+      }
     }
   }
 

@@ -1,16 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { api, fmt } from '../lib/api'
 import { useApp, useFetch } from '../lib/store'
 import { PageHeader } from '../components/Shell'
 import {
-  Badge, Card, Confirm, Empty, ErrorNote, Field, Icon, Loading, Modal, rowProps,
+  Badge, Card, Confirm, Empty, ErrorNote, Icon, Loading, Modal, rowProps,
 } from '../components/ui'
-import { RuleProposalReview } from '../components/setup-bits'
-
-const BLANK = {
-  name: '', description: '', ticket_type_id: '', service_code_id: '', contract_id: '',
-  match_mode: 'all', priority: 100, stop_on_match: false, is_active: true, statements: [],
-}
+import { RuleBuilder, RuleProposalReview } from '../components/setup-bits'
 
 export default function Rules() {
   const { projectId, project, toast } = useApp()
@@ -60,7 +55,7 @@ export default function Rules() {
         <button className="btn" onClick={() => setBuilding(true)}>
           <Icon name="layers" size={14} /> Build from contract
         </button>
-        <button className="btn primary" onClick={() => setEditing(BLANK)}>
+        <button className="btn primary" onClick={() => setEditing({})}>
           <Icon name="plus" size={14} /> New rule
         </button>
       </PageHeader>
@@ -71,11 +66,13 @@ export default function Rules() {
           <div className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
             <Icon name="rules" size={16} style={{ marginTop: 2, color: 'var(--accent)' }} />
             <div className="muted" style={{ fontSize: 13, lineHeight: 1.65 }}>
-              A rule reads: <b style={{ color: 'var(--text)' }}>when these conditions hold on a
-              completed ticket of this type, bill this service code under this contract</b>.
-              Every completed ticket is evaluated against all of them, so one ticket can
-              produce several transactions. A rule cannot be saved without both a service
-              code and a contract already linked to the project.
+              A rule reads: <b style={{ color: 'var(--text)' }}>on a completed ticket of this
+              type, when these checks hold, bill this service code as transaction number n,
+              under this contract</b>. One ticket can produce several: a haul is number 1
+              and the tipping fee it incurs is number 2, and both bill. Rules sharing a
+              number are alternatives instead, and priority decides which of them wins. A
+              rule cannot be saved without both a service code and a contract already
+              linked to the project.
             </div>
           </div>
         </div>
@@ -105,6 +102,9 @@ export default function Rules() {
                   <th style={{ width: 30 }} />
                   <th>Rule</th><th>Ticket type</th><th>Service code</th>
                   <th className="num">Rate</th><th>Contract</th>
+                  <th className="num" title="The order this charge runs on one ticket">
+                    Txn #
+                  </th>
                   <th className="num">Priority</th><th>Active</th>
                   <th className="num">Matches</th><th className="num">Billed</th><th />
                 </tr></thead>
@@ -132,9 +132,11 @@ export default function Rules() {
         </Modal>
       )}
       {editing && (
-        <RuleEditor rule={editing} project={detail.data} serviceCodes={codes.data?.items || []}
-                    onClose={() => setEditing(null)}
-                    onSaved={() => { setEditing(null); rules.reload() }} />
+        <RuleBuilder projectId={projectId} project={detail.data}
+                     serviceCodes={codes.data?.items || []}
+                     rule={editing.id ? editing : null}
+                     onClose={() => setEditing(null)}
+                     onSaved={() => { setEditing(null); rules.reload() }} />
       )}
       {testing && <RuleTest rule={testing} onClose={() => setTesting(null)} />}
       {removing && (
@@ -350,8 +352,8 @@ function hydrate(rule) {
     id: rule.id, name: rule.name, description: rule.description || '',
     ticket_type_id: rule.ticket_type_id, service_code_id: rule.service_code_id,
     contract_id: rule.contract_id, match_mode: rule.match_mode,
-    priority: rule.priority, stop_on_match: rule.stop_on_match,
-    is_active: rule.is_active,
+    priority: rule.priority, transaction_sequence: rule.transaction_sequence ?? 1,
+    stop_on_match: rule.stop_on_match, is_active: rule.is_active,
     statements: (rule.statements || []).map((s) => ({
       operand_code: s.operand_code, operator_code: s.operator_code,
       value: s.value, value_label: s.value_label, negate: s.negate,
@@ -383,6 +385,11 @@ function RuleRow({ rule, open, onToggle, onEdit, onTest, onRemove }) {
           <span className="dim"> / {rule.unit_abbrev || '—'}</span>
         </td>
         <td className="muted truncate" style={{ maxWidth: 150 }}>{rule.contract_number}</td>
+        <td className="num">
+          <Badge tone={rule.transaction_sequence > 1 ? '' : 'blue'}>
+            {rule.transaction_sequence ?? 1}
+          </Badge>
+        </td>
         <td className="num dim">{rule.priority}</td>
         <td>{rule.is_active ? <Badge tone="green">Active</Badge> : <Badge>Inactive</Badge>}</td>
         <td className="num">{fmt.int(rule.match_count)}</td>
@@ -454,319 +461,6 @@ function RuleDetail({ rule, onTest }) {
 function renderValue(value) {
   if (Array.isArray(value)) return `[${value.join(', ')}]`
   return String(value ?? '')
-}
-
-/* ======================================================================== */
-function RuleEditor({ rule, project, serviceCodes, onClose, onSaved }) {
-  const { projectId, toast } = useApp()
-  const [form, setForm] = useState(rule)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState(null)
-
-  const operands = useFetch(
-    () => api.get(`/projects/${projectId}/rule-operands`,
-                  form.ticket_type_id ? { ticket_type_id: form.ticket_type_id } : {}),
-    [projectId, form.ticket_type_id])
-
-  const set = (patch) => setForm((f) => ({ ...f, ...patch }))
-
-  const selectedCode = serviceCodes.find((c) => c.id === form.service_code_id)
-
-  function addStatement() {
-    const first = operands.data?.items?.[0]
-    set({ statements: [...form.statements, {
-      operand_code: first?.code || 'debris_type',
-      operator_code: first?.operators?.[0]?.code || 'eq',
-      value: '', value_label: '', negate: false,
-    }] })
-  }
-
-  function updateStatement(index, patch) {
-    const next = form.statements.map((s, i) => (i === index ? { ...s, ...patch } : s))
-    set({ statements: next })
-  }
-
-  async function save() {
-    setBusy(true); setError(null)
-    try {
-      const payload = {
-        ...form,
-        priority: Number(form.priority) || 100,
-        statements: form.statements.map((s) => ({
-          operand_code: s.operand_code,
-          operator_code: s.operator_code,
-          value: normalise(s),
-          value_label: s.value_label || null,
-          negate: Boolean(s.negate),
-        })),
-      }
-      delete payload.id
-      if (rule.id) await api.put(`/rules/${rule.id}`, payload)
-      else await api.post(`/projects/${projectId}/rules`, payload)
-      toast(rule.id ? 'Rule updated' : 'Rule created', form.name)
-      onSaved()
-    } catch (err) {
-      setError(err.message)
-    } finally { setBusy(false) }
-  }
-
-  const valid = form.name.length > 1 && form.ticket_type_id && form.service_code_id
-                && form.contract_id
-
-  return (
-    <Modal wide title={rule.id ? 'Edit rule' : 'New rule'} onClose={onClose} footer={
-      <>
-        <button className="btn" onClick={onClose}>Cancel</button>
-        <button className="btn primary" disabled={!valid || busy} onClick={save}>
-          {busy && <span className="spinner" />} {rule.id ? 'Save rule' : 'Create rule'}
-        </button>
-      </>
-    }>
-      <div className="stack" style={{ gap: 16 }}>
-        {error && (
-          <div className="card" style={{ padding: 12, borderColor: 'var(--red)',
-                                         background: 'var(--red-soft)', color: 'var(--red)' }}>
-            {error}
-          </div>
-        )}
-
-        <div className="grid c2" style={{ gap: 12 }}>
-          <Field label="Rule name" required>
-            <input className="input" value={form.name} autoFocus
-                   onChange={(e) => set({ name: e.target.value })}
-                   placeholder="ROW Vegetative Load" />
-          </Field>
-          <Field label="Applies to ticket type" required>
-            <select className="select" value={form.ticket_type_id}
-                    onChange={(e) => set({ ticket_type_id: e.target.value, statements: [] })}>
-              <option value="">Choose a ticket type</option>
-              {(project?.ticket_types || []).map((t) => (
-                <option key={t.ticket_type_id} value={t.ticket_type_id}>{t.label}</option>
-              ))}
-            </select>
-          </Field>
-        </div>
-
-        <Field label="Description">
-          <input className="input" value={form.description}
-                 onChange={(e) => set({ description: e.target.value })}
-                 placeholder="What this rule is for, in the words the reviewer will read later" />
-        </Field>
-
-        <div>
-          <div className="row" style={{ marginBottom: 8 }}>
-            <label style={{ fontSize: 12, fontWeight: 560, color: 'var(--text-muted)' }}>
-              Conditions
-            </label>
-            <div className="seg" style={{ marginLeft: 8 }}>
-              {['all', 'any'].map((mode) => (
-                <button key={mode} className={form.match_mode === mode ? 'on' : ''}
-                        onClick={() => set({ match_mode: mode })}>
-                  match {mode}
-                </button>
-              ))}
-            </div>
-            <div className="spacer" />
-            <button className="btn sm" onClick={addStatement}
-                    disabled={!form.ticket_type_id}>
-              <Icon name="plus" size={13} /> Add condition
-            </button>
-          </div>
-
-          {form.statements.length === 0 ? (
-            <div className="card" style={{ padding: 16, background: 'var(--surface-2)' }}>
-              <div className="muted" style={{ fontSize: 13 }}>
-                No conditions. This rule will match every completed ticket of the chosen
-                type, which is the right shape for a flat per-ticket fee and the wrong
-                shape for anything else.
-              </div>
-            </div>
-          ) : form.statements.map((s, i) => (
-            <div key={i}>
-              {i > 0 && <div className="statement-join">{form.match_mode === 'any' ? 'or' : 'and'}</div>}
-              <StatementRow
-                statement={s}
-                operands={operands.data?.items || []}
-                projectId={projectId}
-                onChange={(patch) => updateStatement(i, patch)}
-                onRemove={() => set({ statements: form.statements.filter((_, j) => j !== i) })}
-              />
-            </div>
-          ))}
-        </div>
-
-        <div className="card" style={{ padding: 14, background: 'var(--surface-2)' }}>
-          <div className="k dim" style={{ fontSize: 11, textTransform: 'uppercase',
-                                          letterSpacing: '0.06em', marginBottom: 10 }}>
-            Then bill
-          </div>
-          <div className="grid c2" style={{ gap: 12 }}>
-            <Field label="Service code" required
-                   hint={selectedCode
-                     ? `${fmt.rate(selectedCode.current_rate || 0)} per ${selectedCode.current_unit_abbrev || '—'} · ${selectedCode.contractor_name}`
-                     : 'Project-scoped; the contractor comes from the code'}>
-              <select className="select" value={form.service_code_id}
-                      onChange={(e) => set({ service_code_id: e.target.value })}>
-                <option value="">Choose a service code</option>
-                {serviceCodes.map((c) => (
-                  <option key={c.id} value={c.id}>{c.code} — {c.name}</option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Under contract" required
-                   hint="Must already be linked to this project">
-              <select className="select" value={form.contract_id}
-                      onChange={(e) => set({ contract_id: e.target.value })}>
-                <option value="">Choose a contract</option>
-                {(project?.contracts || []).map((c) => (
-                  <option key={c.contract_id} value={c.contract_id}>
-                    {c.contract_number} — {c.contractor_name}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          </div>
-        </div>
-
-        <div className="grid c3" style={{ gap: 12, alignItems: 'end' }}>
-          <Field label="Priority" hint="Lower runs first">
-            <input className="input" type="number" value={form.priority}
-                   onChange={(e) => set({ priority: e.target.value })} />
-          </Field>
-          <label className="check" style={{ paddingBottom: 9 }}>
-            <input type="checkbox" checked={form.stop_on_match}
-                   onChange={(e) => set({ stop_on_match: e.target.checked })} />
-            Stop after this rule matches
-          </label>
-          <label className="check" style={{ paddingBottom: 9 }}>
-            <input type="checkbox" checked={form.is_active}
-                   onChange={(e) => set({ is_active: e.target.checked })} />
-            Active
-          </label>
-        </div>
-      </div>
-    </Modal>
-  )
-}
-
-function normalise(statement) {
-  const operator = statement.operator_code
-  if (operator === 'is_null' || operator === 'is_not_null') return null
-  if (operator === 'in' || operator === 'not_in') {
-    if (Array.isArray(statement.value)) return statement.value
-    return String(statement.value || '').split(',').map((v) => v.trim()).filter(Boolean)
-  }
-  if (operator === 'between') {
-    if (Array.isArray(statement.value)) return statement.value.map(Number)
-    return String(statement.value || '').split(',').map((v) => Number(v.trim()))
-  }
-  const numeric = ['gt', 'gte', 'lt', 'lte'].includes(operator)
-  return numeric ? Number(statement.value) : statement.value
-}
-
-function StatementRow({ statement, operands, projectId, onChange, onRemove }) {
-  const operand = operands.find((o) => o.code === statement.operand_code)
-  const operators = operand?.operators || []
-  const [options, setOptions] = useState(null)
-
-  useEffect(() => {
-    let cancelled = false
-    setOptions(null)
-    if (operand?.options_source) {
-      api.get(`/projects/${projectId}/options/${operand.options_source}`)
-        .then((r) => { if (!cancelled) setOptions(r.items) })
-        .catch(() => { if (!cancelled) setOptions([]) })
-    }
-    return () => { cancelled = true }
-  }, [operand?.options_source, projectId])
-
-  const multi = ['in', 'not_in'].includes(statement.operator_code)
-  const none = ['is_null', 'is_not_null'].includes(statement.operator_code)
-  const selected = multi
-    ? (Array.isArray(statement.value) ? statement.value
-       : String(statement.value || '').split(',').filter(Boolean))
-    : statement.value
-
-  function pick(value, label) {
-    onChange({ value, value_label: label })
-  }
-
-  return (
-    <div className="statement">
-      <select className="select" value={statement.operand_code}
-              onChange={(e) => {
-                const next = operands.find((o) => o.code === e.target.value)
-                onChange({
-                  operand_code: e.target.value,
-                  operator_code: next?.operators?.[0]?.code || 'eq',
-                  value: '', value_label: '',
-                })
-              }}>
-        {operands.map((o) => (
-          <option key={o.code} value={o.code}>{o.label}</option>
-        ))}
-      </select>
-
-      <select className="select" value={statement.operator_code}
-              onChange={(e) => onChange({ operator_code: e.target.value, value: '', value_label: '' })}>
-        {operators.map((op) => (
-          <option key={op.code} value={op.code}>{op.label}</option>
-        ))}
-      </select>
-
-      {none ? (
-        <div className="dim" style={{ fontSize: 12.5, paddingLeft: 4 }}>no value needed</div>
-      ) : options ? (
-        multi ? (
-          <div className="row wrap" style={{ gap: 6 }}>
-            {options.map((o) => {
-              const on = selected.includes(o.value)
-              return (
-                <button key={o.value}
-                        className={`btn sm${on ? ' primary' : ''}`}
-                        onClick={() => {
-                          const next = on ? selected.filter((v) => v !== o.value)
-                                          : [...selected, o.value]
-                          const labels = options.filter((x) => next.includes(x.value))
-                            .map((x) => x.label).join(', ')
-                          pick(next, labels)
-                        }}>
-                  {o.label}
-                </button>
-              )
-            })}
-          </div>
-        ) : (
-          <select className="select" value={statement.value || ''}
-                  onChange={(e) => {
-                    const opt = options.find((o) => o.value === e.target.value)
-                    pick(e.target.value, opt?.label)
-                  }}>
-            <option value="">Choose…</option>
-            {options.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}{o.hint ? ` — ${o.hint}` : ''}
-              </option>
-            ))}
-          </select>
-        )
-      ) : (
-        <input className="input"
-               type={operand?.data_type === 'number' ? 'number'
-                     : operand?.data_type === 'date' ? 'date' : 'text'}
-               value={Array.isArray(statement.value) ? statement.value.join(', ')
-                                                     : (statement.value ?? '')}
-               placeholder={statement.operator_code === 'between' ? 'min, max'
-                            : multi ? 'comma separated'
-                            : operand?.unit_hint ? `value in ${operand.unit_hint}` : 'value'}
-               onChange={(e) => pick(e.target.value, e.target.value)} />
-      )}
-
-      <button className="btn ghost icon sm" onClick={onRemove} title="Remove condition">
-        <Icon name="x" size={13} />
-      </button>
-    </div>
-  )
 }
 
 /* ======================================================================== */

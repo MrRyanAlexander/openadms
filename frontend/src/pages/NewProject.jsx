@@ -20,9 +20,10 @@ import {
   Badge, Card, Empty, ErrorNote, Field, Icon, Loading, Modal,
 } from '../components/ui'
 import {
-  EstimateEditor, LineItemReview, LinkPicker, NEW_CONTRACTOR_FIELDS,
-  NEW_CONTRACT_FIELDS, NEW_SITE_FIELDS, NEW_WORKER_FIELDS, PermitControl,
-  ReadinessPanel, RuleProposalReview, ScopeEditor,
+  ContractLineItems, EstimateEditor, LineItemReview, LinkPicker,
+  NEW_CONTRACTOR_FIELDS, NEW_CONTRACT_FIELDS, NEW_SITE_FIELDS, NEW_WORKER_FIELDS,
+  PermitControl, RateForm, ReadinessPanel, RuleBuilder, RuleProposalReview,
+  ScopeEditor, ServiceCodeForm,
 } from '../components/setup-bits'
 
 const STEPS = [
@@ -148,7 +149,7 @@ export default function NewProject() {
               <ServiceCodeStep project={project} projectId={projectId} onChanged={refresh} />
             )}
             {step === 8 && project && (
-              <RuleStep projectId={projectId} onChanged={refresh} />
+              <RuleStep project={project} projectId={projectId} onChanged={refresh} />
             )}
             {step === 9 && project && (
               <WorkerStep project={project} projectId={projectId} onChanged={refresh} />
@@ -441,10 +442,12 @@ export function ContractStep({ project, projectId, onChanged }) {
 
   return (
     <div className="stack" style={{ gap: 12 }}>
-      <div className="muted" style={{ fontSize: 13, lineHeight: 1.65, maxWidth: 640 }}>
-        Only what is in the contract goes into the system. Open a contract's line items to
-        accept the ones this project actually bills, and the service codes and opening
-        rates are generated from them.
+      <div className="muted" style={{ fontSize: 13, lineHeight: 1.65, maxWidth: 660 }}>
+        The contracts this project bills under. A rule cannot be saved without one, and
+        the contract it names has to be on this list. A contract's priced schedule can be
+        typed or pasted in here, which is a head start on the service codes rather than a
+        requirement: a project whose rates were agreed by email bills perfectly well
+        without a line item on file.
       </div>
 
       <LinkedTable rows={linked} empty="No contracts linked. A rule cannot be saved until its contract is on the project."
@@ -458,8 +461,8 @@ export function ContractStep({ project, projectId, onChanged }) {
                                <button className="btn ghost sm"
                                        onClick={(e) => { e.stopPropagation(); setReviewing(r) }}>
                                  {r.line_item_count
-                                   ? `${r.line_items_accepted} of ${r.line_item_count} accepted`
-                                   : 'Review'}
+                                   ? `${r.line_item_count} line${r.line_item_count === 1 ? '' : 's'}`
+                                   : 'Add lines'}
                                </button>
                              )]]}
                    onAdd={() => setAdding(true)} addLabel="Add contract"
@@ -486,8 +489,8 @@ export function ContractStep({ project, projectId, onChanged }) {
       {reviewing && (
         <Modal wide title={`Line items · ${reviewing.contract_number}`}
                onClose={() => { setReviewing(null); onChanged() }}>
-          <LineItemReview contractId={reviewing.contract_id} projectId={projectId}
-                          onGenerated={onChanged} />
+          <ContractLineItems contractId={reviewing.contract_id} projectId={projectId}
+                             onChanged={onChanged} />
         </Modal>
       )}
     </div>
@@ -652,42 +655,74 @@ export function TicketTypeStep({ project, projectId, scopes, onChanged }) {
 }
 
 /* ----------------------------------------------------------- service codes */
+/**
+ * Where a service code is made.
+ *
+ * This step used to be a read-only list of codes generated somewhere else, with
+ * a second copy of the contract line reviewer underneath it. That put the whole
+ * weight of the step on a path that only works when the priced schedule is
+ * already typed in, and gave a project whose contract arrived as a scan no way
+ * to bill at all.
+ *
+ * So the code, its rate and its contractor are entered here, and building a
+ * batch of them from a contract's lines is one button beside that: an
+ * accelerator, which is what it always was.
+ */
 export function ServiceCodeStep({ project, projectId, onChanged }) {
   const codes = useFetch(() => api.get(`/projects/${projectId}/service-codes`), [projectId])
-  const [reviewing, setReviewing] = useState(null)
+  const [adding, setAdding] = useState(false)
+  const [rating, setRating] = useState(null)
+  const [building, setBuilding] = useState(null)
   const contracts = project.contracts || []
+  const contractors = project.contractors || []
+
+  function refresh() { codes.reload(); onChanged() }
 
   return (
     <div className="stack" style={{ gap: 12 }}>
-      <div className="muted" style={{ fontSize: 13, lineHeight: 1.65, maxWidth: 640 }}>
-        A service code and its opening rate are generated from the contract line they are
-        billed under, so a transaction can always be traced back to the page of the PDF it
-        came from.
+      <div className="muted" style={{ fontSize: 13, lineHeight: 1.65, maxWidth: 660 }}>
+        A service code is what a rule bills: a code, the rate in effect, and the
+        contractor it is paid to. Enter them here. Where a contract's priced schedule is
+        already on file, the codes and their opening rates can be built from it in one
+        pass instead, and each one keeps a link back to the line it came from.
       </div>
 
       {codes.loading && <Loading rows={3} />}
       {codes.data && (codes.data.items.length === 0 ? (
         <Empty icon="money" title="No service codes yet">
-          Accept the line items on a contract below and the codes are made for you.
+          Nothing on this project can be billed until there is at least one, with a rate
+          in effect and a contractor who is on the project.
         </Empty>
       ) : (
         <div className="table-wrap">
           <table className="data">
             <thead><tr>
               <th>Code</th><th>Name</th><th>Contractor</th>
-              <th className="num">Rate</th><th>Unit</th><th>From line</th>
+              <th className="num">Rate</th><th>Unit</th><th>Rules</th>
+              <th>From line</th><th style={{ width: 90 }} />
             </tr></thead>
             <tbody>
               {codes.data.items.map((c) => (
                 <tr key={c.id}>
                   <td className="mono">{c.code}</td>
-                  <td className="truncate" style={{ maxWidth: 260 }}>{c.name}</td>
+                  <td className="truncate" style={{ maxWidth: 240 }}>{c.name}</td>
                   <td className="muted">{c.contractor_name}</td>
-                  <td className="num">{c.current_rate != null ? fmt.rate(c.current_rate) : '—'}</td>
+                  <td className="num">
+                    {c.current_rate != null ? fmt.rate(c.current_rate)
+                      : <Badge tone="amber">No rate</Badge>}
+                  </td>
                   <td className="dim">{c.current_unit_abbrev || '—'}</td>
+                  <td className="dim">
+                    {c.rule_count ? `${c.rule_count}` : <Badge tone="amber">None</Badge>}
+                  </td>
                   <td>{c.contract_line_item_id
                     ? <Badge tone="green">Linked</Badge>
                     : <span className="dim">entered by hand</span>}</td>
+                  <td style={{ textAlign: 'right' }}>
+                    <button className="btn ghost sm" onClick={() => setRating(c)}>
+                      {c.current_rate != null ? 'Change rate' : 'Add a rate'}
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -695,32 +730,53 @@ export function ServiceCodeStep({ project, projectId, onChanged }) {
         </div>
       ))}
 
-      <div className="stack" style={{ gap: 8 }}>
-        {contracts.map((c) => (
-          <div key={c.id} className="card" style={{ padding: '11px 14px' }}>
-            <div className="row" style={{ gap: 10 }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 560 }}>{c.contract_number}</div>
-                <div className="dim" style={{ fontSize: 12 }}>{c.title}</div>
-              </div>
-              <button className="btn sm" onClick={() => setReviewing(c)}>
-                Review line items
-              </button>
-            </div>
-          </div>
-        ))}
-        {!contracts.length && (
-          <div className="muted" style={{ fontSize: 13 }}>
-            No contracts are linked yet, so there are no line items to build codes from.
+      <div className="row wrap" style={{ gap: 8 }}>
+        <div className="spacer" />
+        {contracts.length > 0 && (
+          <div className="row" style={{ gap: 6 }}>
+            <select className="select sm" style={{ maxWidth: 260 }}
+                    value={building?.contract_id || ''}
+                    onChange={(e) => setBuilding(contracts.find(
+                      (c) => c.contract_id === e.target.value) || null)}>
+              <option value="">Build from a contract…</option>
+              {contracts.map((c) => (
+                <option key={c.contract_id} value={c.contract_id}>
+                  {c.contract_number}
+                  {c.line_item_count ? ` · ${c.line_item_count} lines` : ' · no lines yet'}
+                </option>
+              ))}
+            </select>
           </div>
         )}
+        <button className="btn primary sm" disabled={!contractors.length}
+                onClick={() => setAdding(true)}>
+          <Icon name="plus" size={13} /> Add service code
+        </button>
       </div>
 
-      {reviewing && (
-        <Modal wide title={`Line items · ${reviewing.contract_number}`}
-               onClose={() => { setReviewing(null); codes.reload(); onChanged() }}>
-          <LineItemReview contractId={reviewing.contract_id} projectId={projectId}
-                          onGenerated={() => { codes.reload(); onChanged() }} />
+      {!contractors.length && (
+        <div className="muted" style={{ fontSize: 12.5 }}>
+          Every service code names the contractor it pays, so link a contractor to this
+          project first.
+        </div>
+      )}
+
+      {adding && (
+        <ServiceCodeForm projectId={projectId} contractors={contractors}
+                         onClose={() => setAdding(false)}
+                         onSaved={() => { setAdding(false); refresh() }} />
+      )}
+
+      {rating && (
+        <RateForm serviceCode={rating} onClose={() => setRating(null)}
+                  onSaved={() => { setRating(null); refresh() }} />
+      )}
+
+      {building && (
+        <Modal wide title={`Build codes from ${building.contract_number}`}
+               onClose={() => { setBuilding(null); refresh() }}>
+          <LineItemReview contractId={building.contract_id} projectId={projectId}
+                          onGenerated={refresh} />
         </Modal>
       )}
     </div>
@@ -736,18 +792,28 @@ export function ServiceCodeStep({ project, projectId, onChanged }) {
  * work" with no way to bill anything it collected. The rules are proposed from
  * the same line items the codes came from, and a person confirms them here.
  */
-export function RuleStep({ projectId, onChanged }) {
+export function RuleStep({ project, projectId, onChanged }) {
   const readiness = useFetch(() => api.get(`/projects/${projectId}/readiness`),
                              [projectId])
+  const codes = useFetch(() => api.get(`/projects/${projectId}/service-codes`),
+                         [projectId])
+  const rules = useFetch(() => api.get(`/projects/${projectId}/rules`), [projectId])
+  const [building, setBuilding] = useState(null)
   const uncovered = readiness.data?.unruled_ticket_types || []
+
+  function refresh() {
+    readiness.reload(); rules.reload(); codes.reload(); onChanged?.()
+  }
+
+  const written = rules.data?.items || []
 
   return (
     <div className="stack" style={{ gap: 12 }}>
       <div className="muted" style={{ fontSize: 13, lineHeight: 1.65, maxWidth: 680 }}>
-        A rule reads: when these conditions hold on a completed ticket of this type,
-        bill this service code under this contract. Without one, a ticket is collected,
-        monitored and never billed, so the field stays blocked until every enabled
-        ticket type has at least one.
+        A rule reads: on a ticket of this type, when these checks hold, bill this service
+        code as the nth transaction on the ticket, under this contract. Without one, a
+        ticket is collected, monitored and never billed, so the field stays blocked until
+        every enabled ticket type has at least one.
       </div>
 
       {uncovered.length > 0 && (
@@ -762,10 +828,81 @@ export function RuleStep({ projectId, onChanged }) {
         </div>
       )}
 
-      <RuleProposalReview projectId={projectId}
-                          onWritten={() => { readiness.reload(); onChanged?.() }} />
+      {written.length > 0 && (
+        <div className="table-wrap">
+          <table className="data">
+            <thead><tr>
+              <th style={{ width: 44 }}>#</th>
+              <th>Rule</th><th>Ticket type</th><th>Bills</th>
+              <th className="num">Rate</th><th>Contract</th>
+            </tr></thead>
+            <tbody>
+              {written.map((r) => (
+                <tr key={r.id} style={{ cursor: 'pointer' }}
+                    onClick={() => setBuilding(hydrateRule(r))}>
+                  <td><Badge tone={r.transaction_sequence > 1 ? '' : 'blue'}>
+                    {r.transaction_sequence}
+                  </Badge></td>
+                  <td style={{ fontWeight: 540 }}>{r.name}</td>
+                  <td className="muted">{r.ticket_type_label}</td>
+                  <td className="mono">{r.service_code}</td>
+                  <td className="num">
+                    {r.rate_amount != null ? fmt.rate(r.rate_amount) : '—'}
+                  </td>
+                  <td className="dim">{r.contract_number}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div className="row wrap" style={{ gap: 8 }}>
+        <div className="spacer" />
+        <button className="btn primary sm" onClick={() => setBuilding({})}
+                disabled={!(project?.contracts || []).length}>
+          <Icon name="plus" size={13} /> New rule
+        </button>
+      </div>
+
+      <div className="card" style={{ padding: '12px 14px' }}>
+        <div className="dim" style={{ fontSize: 11, textTransform: 'uppercase',
+                                      letterSpacing: '.06em', marginBottom: 10 }}>
+          Proposed from the contract
+        </div>
+        <RuleProposalReview projectId={projectId} onWritten={refresh} />
+      </div>
+
+      {building && (
+        <RuleBuilder projectId={projectId} project={project}
+                     serviceCodes={codes.data?.items || []}
+                     rule={building.id ? building : null}
+                     onClose={() => setBuilding(null)}
+                     onSaved={() => { setBuilding(null); refresh() }} />
+      )}
     </div>
   )
+}
+
+/** A rule as the list returns it, in the shape the builder edits. */
+export function hydrateRule(rule) {
+  return {
+    id: rule.id || rule.rule_id,
+    name: rule.name || rule.rule_name || '',
+    description: rule.description || rule.rule_description || '',
+    ticket_type_id: rule.ticket_type_id || '',
+    service_code_id: rule.service_code_id || '',
+    contract_id: rule.contract_id || '',
+    match_mode: rule.match_mode || 'all',
+    priority: rule.priority ?? 100,
+    transaction_sequence: rule.transaction_sequence ?? 1,
+    stop_on_match: Boolean(rule.stop_on_match),
+    is_active: rule.is_active !== false,
+    statements: (rule.statements || []).map((s) => ({
+      operand_code: s.operand_code, operator_code: s.operator_code,
+      value: s.value, value_label: s.value_label, negate: Boolean(s.negate),
+    })),
+  }
 }
 
 /* ----------------------------------------------------------------- workers */

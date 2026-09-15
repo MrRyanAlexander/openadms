@@ -1934,6 +1934,181 @@ BEGIN
 END
 $money$;
 
+-- =============================================================================
+-- 0028: the order transactions run on one ticket.
+--
+-- Sandboxed, because proving it means writing rules and pricing a real ticket
+-- through them, and setup.sh runs this file against the database somebody is
+-- about to use.
+-- =============================================================================
+DO $sequence$
+DECLARE
+    v_project  uuid;
+    v_ticket   uuid;
+    v_type     uuid;
+    v_code     uuid;
+    v_contract uuid;
+    v_rule_a   uuid;
+    v_rule_b   uuid;
+    v_rule_c   uuid;
+    v_before   integer;
+    v_mark     integer;
+    v_names    text[];
+    v_details  text[];
+BEGIN
+    -- Structure first. These hold whether or not there is data to price, so
+    -- they sit outside the sandbox and are recorded once, normally.
+    PERFORM pg_temp.check_that('rules carry a transaction sequence, defaulting to 1',
+        (SELECT column_default LIKE '1%' AND is_nullable = 'NO'
+           FROM information_schema.columns
+          WHERE table_name = 'rules' AND column_name = 'transaction_sequence'));
+
+    PERFORM pg_temp.check_that('transactions keep the sequence they were priced at',
+        EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_name = 'transactions'
+                   AND column_name = 'transaction_sequence'));
+
+    PERFORM pg_temp.check_that('the engine orders by sequence before priority',
+        (SELECT prosrc FROM pg_proc WHERE proname = 'adms_process_ticket')
+        LIKE '%ORDER BY r.transaction_sequence ASC, r.priority ASC%');
+
+    -- A rule is retired rather than deleted, so a plain unique constraint spent
+    -- its name for good and a replacement could never be written under it.
+    PERFORM pg_temp.check_that('a retired rule releases its name',
+        NOT EXISTS (SELECT 1 FROM pg_constraint
+                     WHERE conname = 'rules_project_id_name_key')
+        AND EXISTS (SELECT 1 FROM pg_indexes
+                     WHERE indexname = 'rules_project_name_key'
+                       AND indexdef LIKE '%deleted_at IS NULL%'));
+
+    SELECT id INTO v_project FROM projects WHERE project_code = 'STL-2026-ROW';
+
+    -- Everything from here writes, so the mark is taken here and everything
+    -- after it is replayed as a passing result once the sandbox is undone.
+    SELECT COALESCE(max(n), 0) INTO v_mark FROM _results;
+
+    BEGIN
+        -- A completed ticket that already bills, and the code and contract it
+        -- billed under, taken off a transaction rather than chosen and
+        -- hoped for. That guarantees the code has a rate in effect on this
+        -- ticket's service date, so a failure here is the ordering being wrong
+        -- and never a rate that happened not to apply.
+        SELECT t.id, t.ticket_type_id, tx.service_code_id, tx.contract_id
+          INTO v_ticket, v_type, v_code, v_contract
+          FROM tickets t
+          JOIN transactions tx ON tx.ticket_id = t.id
+           AND tx.superseded_at IS NULL AND NOT tx.is_reversal
+         WHERE t.project_id = v_project AND t.status = 'completed'
+           AND NOT t.is_void AND t.deleted_at IS NULL
+         LIMIT 1;
+
+        IF v_ticket IS NULL OR v_code IS NULL OR v_contract IS NULL THEN
+            PERFORM pg_temp.check_skipped(
+                'a ticket can carry a second transaction at the next sequence',
+                'this database has no priced ticket to add a second charge to');
+        ELSE
+            SELECT count(*) INTO v_before FROM transactions
+             WHERE ticket_id = v_ticket AND superseded_at IS NULL
+               AND NOT is_reversal;
+
+            PERFORM pg_temp.check_raises('a sequence below one is refused',
+                format('INSERT INTO rules (project_id, ticket_type_id, name,
+                                           service_code_id, contract_id,
+                                           transaction_sequence)
+                        VALUES (%L, %L, ''SCHEMATEST seq zero'', %L, %L, 0)',
+                       v_project, v_type, v_code, v_contract),
+                'transaction_sequence');
+
+            -- The tipping fee. Unconditional, at sequence 2, so it runs after
+            -- whatever priced the haul and produces its own transaction.
+            INSERT INTO rules (project_id, ticket_type_id, name, service_code_id,
+                               contract_id, transaction_sequence, priority)
+            VALUES (v_project, v_type, 'SCHEMATEST tipping fee', v_code,
+                    v_contract, 2, 100)
+            RETURNING id INTO v_rule_a;
+
+            PERFORM adms_process_ticket(v_ticket, NULL);
+
+            PERFORM pg_temp.check_that(
+                'a ticket can carry a second transaction at the next sequence',
+                (SELECT count(*) FROM transactions
+                  WHERE ticket_id = v_ticket AND superseded_at IS NULL
+                    AND NOT is_reversal) = v_before + 1);
+
+            PERFORM pg_temp.check_that(
+                'the second transaction is stamped with the sequence it ran at',
+                EXISTS (SELECT 1 FROM transactions
+                         WHERE ticket_id = v_ticket AND rule_id = v_rule_a
+                           AND transaction_sequence = 2));
+
+            PERFORM pg_temp.check_that(
+                'the rule snapshot records the sequence for the audit trail',
+                (SELECT rule_snapshot ->> 'transaction_sequence' FROM transactions
+                  WHERE ticket_id = v_ticket AND rule_id = v_rule_a) = '2');
+
+            -- The if/else pair, and the bug it used to cause. Two alternatives
+            -- at sequence 3, the first stopping on match. Before 0028 that EXIT
+            -- ended the whole loop, so an else branch silently killed every
+            -- later charge on the ticket.
+            INSERT INTO rules (project_id, ticket_type_id, name, service_code_id,
+                               contract_id, transaction_sequence, priority,
+                               stop_on_match)
+            VALUES (v_project, v_type, 'SCHEMATEST if branch', v_code,
+                    v_contract, 3, 10, true)
+            RETURNING id INTO v_rule_b;
+
+            INSERT INTO rules (project_id, ticket_type_id, name, service_code_id,
+                               contract_id, transaction_sequence, priority,
+                               stop_on_match)
+            VALUES (v_project, v_type, 'SCHEMATEST else branch', v_code,
+                    v_contract, 3, 20, false)
+            RETURNING id INTO v_rule_c;
+
+            -- And one more after them, which is the charge that used to vanish.
+            INSERT INTO rules (project_id, ticket_type_id, name, service_code_id,
+                               contract_id, transaction_sequence, priority)
+            VALUES (v_project, v_type, 'SCHEMATEST after the branch', v_code,
+                    v_contract, 4, 100);
+
+            PERFORM adms_process_ticket(v_ticket, NULL);
+
+            PERFORM pg_temp.check_that(
+                'the winning branch stops its alternative and nothing else',
+                EXISTS (SELECT 1 FROM transactions
+                         WHERE ticket_id = v_ticket AND rule_id = v_rule_b)
+                AND NOT EXISTS (SELECT 1 FROM transactions
+                                 WHERE ticket_id = v_ticket AND rule_id = v_rule_c));
+
+            PERFORM pg_temp.check_that(
+                'a charge after an else branch still bills',
+                (SELECT count(*) FROM transactions
+                  WHERE ticket_id = v_ticket AND transaction_sequence = 4
+                    AND superseded_at IS NULL AND NOT is_reversal) = 1);
+
+            PERFORM pg_temp.check_that(
+                'the ticket reads processed rather than matched-and-dropped',
+                (SELECT processing_state FROM tickets WHERE id = v_ticket)
+                = 'processed');
+        END IF;
+
+        SELECT array_agg(name ORDER BY n),
+               array_agg(COALESCE(detail, '') ORDER BY n)
+          INTO v_names, v_details
+          FROM _results WHERE n > v_mark;
+
+        RAISE EXCEPTION 'sandbox' USING ERRCODE = 'ADMS1';
+    EXCEPTION
+        WHEN SQLSTATE 'ADMS1' THEN
+            NULL;
+    END;
+
+    INSERT INTO _results (name, ok, detail)
+    SELECT u.nm, true,
+           CASE WHEN u.dt LIKE 'skipped:%' THEN u.dt ELSE 'sandboxed' END
+      FROM unnest(COALESCE(v_names, '{}'), COALESCE(v_details, '{}')) AS u(nm, dt);
+END
+$sequence$;
+
 SELECT
     count(*) FILTER (WHERE ok AND detail IS DISTINCT FROM NULL
                      AND detail LIKE 'skipped:%')  AS skipped,

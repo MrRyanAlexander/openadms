@@ -6,7 +6,7 @@
  * Organization to make a disposal site and then back again was the navigating
  * around that made setup feel like a maze.
  */
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api, fmt } from '../lib/api'
 import { useApp, useFetch } from '../lib/store'
 import { Badge, Card, Empty, Field, Icon, Loading, Modal } from './ui'
@@ -704,7 +704,13 @@ export function DocumentsPanel({ entityType, entityId, projectId, kinds }) {
 
       {loading && <Loading rows={3} />}
       {data && (data.items.length === 0 ? (
-        <Empty icon="invoice" title="Nothing registered yet" />
+        <Empty icon="invoice" title="Nothing registered yet">
+          What belongs here is every piece of paper the closeout package has to account
+          for: the executed contract and its amendments, the disposal site permits, load
+          ticket samples, insurance and licences, and the client's notice to proceed.
+          Each one is a link and a date, watched for expiry, so nobody is reading email
+          to find out what is outstanding.
+        </Empty>
       ) : (
         <div className="table-wrap">
           <table className="data">
@@ -1181,4 +1187,1085 @@ function TierBands({ proposal, source, bands, onChange }) {
       </div>
     </div>
   )
+}
+
+/* ------------------------------------------------- contract line items ---- */
+const BLANK_LINE = {
+  line_number: '', item_code: '', description: '', unit_type_code: '',
+  unit_price: '', debris_type_code: '', source_page: '',
+}
+
+/**
+ * The priced schedule itself, editable.
+ *
+ * This is the half the setup wizard did not have. A contract typed in by hand
+ * arrived with no lines and no way to add any: the only manual entry path was
+ * on the intake screen, behind registering a PDF first, for the project already
+ * in context rather than the one being created. So a contract created in the
+ * wizard was a dead end.
+ *
+ * What lives here is the contract, not a project's opinion of it. Accepting
+ * lines onto a project is a separate decision on a separate screen, because
+ * the same schedule goes out to client after client and 0027 is the reasoning.
+ */
+export function ContractLineItems({ contractId, projectId, onChanged }) {
+  const { lookups, toast } = useApp()
+  const [pasting, setPasting] = useState(false)
+  const [adding, setAdding] = useState(BLANK_LINE)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+  const { data, loading, reload } = useFetch(
+    () => api.get(`/contracts/${contractId}/line-items`), [contractId])
+
+  const lines = data?.items || []
+
+  function changed() { reload(); onChanged?.() }
+
+  async function add() {
+    setBusy(true); setError(null)
+    try {
+      await api.post(`/contracts/${contractId}/line-items`, clean(adding))
+      setAdding(BLANK_LINE)
+      changed()
+    } catch (err) { setError(err.message) } finally { setBusy(false) }
+  }
+
+  async function remove(line) {
+    try {
+      await api.del(`/line-items/${line.id}`)
+      changed()
+    } catch (err) { toast('Could not remove that line', err.message, 'err') }
+  }
+
+  return (
+    <div className="stack" style={{ gap: 12 }}>
+      {error && <div className="card" style={{ padding: 12, borderColor: 'var(--red)',
+                     background: 'var(--red-soft)', color: 'var(--red)' }}>{error}</div>}
+
+      <div className="muted" style={{ fontSize: 12.5, lineHeight: 1.6, maxWidth: 660 }}>
+        The priced schedule off the contract, as the contract has it. Type the lines,
+        or paste a block straight out of the rate sheet. Which of them{' '}
+        <strong>this project</strong> bills is a separate decision, made on the service
+        codes step, because the same contract goes out to client after client.
+      </div>
+
+      {loading && <Loading rows={4} />}
+
+      <div className="table-wrap">
+        <table className="data">
+          <thead><tr>
+            <th style={{ width: 62 }}>Line</th>
+            <th style={{ width: 96 }}>Code</th>
+            <th>Description</th>
+            <th style={{ width: 118 }}>Unit</th>
+            <th style={{ width: 104 }}>Price</th>
+            <th style={{ width: 108 }}>Debris</th>
+            <th style={{ width: 40 }} />
+          </tr></thead>
+          <tbody>
+            {lines.map((l) => (
+              <LineItemRow key={l.id} line={l} lookups={lookups}
+                           onSaved={changed} onRemove={() => remove(l)} />
+            ))}
+            <tr style={{ background: 'var(--surface-2)' }}>
+              <LineCells row={adding} lookups={lookups}
+                         onChange={(patch) => setAdding({ ...adding, ...patch })} />
+              <td style={{ textAlign: 'right' }}>
+                <button className="btn primary icon sm" title="Add this line"
+                        disabled={!adding.description.trim() || busy} onClick={add}>
+                  <Icon name="plus" size={13} />
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div className="row">
+        <div className="dim" style={{ fontSize: 12 }}>
+          {lines.length} line{lines.length === 1 ? '' : 's'} on this contract
+          {lines.length === 0 && '. Nothing can be billed under it until it has at least one, '
+            + 'or until a service code is entered by hand.'}
+        </div>
+        <div className="spacer" />
+        <button className="btn sm" onClick={() => setPasting(true)}>
+          <Icon name="plus" size={13} /> Paste a priced schedule
+        </button>
+      </div>
+
+      {pasting && (
+        <PasteSchedule contractId={contractId} onClose={() => setPasting(false)}
+                       onWritten={() => { setPasting(false); changed() }} />
+      )}
+    </div>
+  )
+}
+
+function clean(row) {
+  const out = { description: (row.description || '').trim() }
+  if (row.line_number !== '') out.line_number = Number(row.line_number)
+  if (row.item_code) out.item_code = row.item_code
+  if (row.unit_type_code) out.unit_type_code = row.unit_type_code
+  if (row.unit_price !== '') out.unit_price = Number(row.unit_price)
+  if (row.debris_type_code) out.debris_type_code = row.debris_type_code
+  if (row.source_page !== '') out.source_page = Number(row.source_page)
+  return out
+}
+
+/** One row, edited in place. Saves on blur and only when something changed, so
+ *  tabbing across a row somebody was only reading never writes anything. */
+function LineItemRow({ line, lookups, onSaved, onRemove }) {
+  const { toast } = useApp()
+  const [draft, setDraft] = useState(line)
+  const [dirty, setDirty] = useState(false)
+
+  useEffect(() => { setDraft(line); setDirty(false) }, [line.id, line.updated_at])
+
+  // Focus moving between cells of the same row is still someone typing one
+  // line, so the write waits until they have left the row altogether.
+  async function commit(event) {
+    if (!dirty) return
+    if (event.currentTarget.contains(event.relatedTarget)) return
+    setDirty(false)
+    try {
+      await api.patch(`/line-items/${line.id}`, clean(draft))
+      onSaved()
+    } catch (err) {
+      toast('Could not save that line', err.message, 'err')
+      setDraft(line)
+    }
+  }
+
+  return (
+    <tr onBlur={commit}>
+      <LineCells row={draft} lookups={lookups}
+                 onChange={(patch) => { setDraft({ ...draft, ...patch }); setDirty(true) }} />
+      <td style={{ textAlign: 'right' }}>
+        <button className="btn ghost icon sm" title="Remove this line" onClick={onRemove}>
+          <Icon name="x" size={12} />
+        </button>
+      </td>
+    </tr>
+  )
+}
+
+/** The cells themselves, shared by an existing row and the row being added, so
+ *  the two can never offer different fields. */
+function LineCells({ row, lookups, onChange }) {
+  const val = (k) => (row[k] === null || row[k] === undefined ? '' : row[k])
+  return (
+    <>
+      <td style={{ padding: 3 }}>
+        <input className="input" value={val('line_number')} placeholder="1"
+               onChange={(e) => onChange({ line_number: e.target.value })} />
+      </td>
+      <td style={{ padding: 3 }}>
+        <input className="input mono" value={val('item_code')} placeholder="2.02"
+               onChange={(e) => onChange({ item_code: e.target.value })} />
+      </td>
+      <td style={{ padding: 3 }}>
+        <input className="input" value={val('description')}
+               placeholder="What the contract calls this work"
+               onChange={(e) => onChange({ description: e.target.value })} />
+      </td>
+      <td style={{ padding: 3 }}>
+        <select className="select" value={val('unit_type_code')}
+                onChange={(e) => onChange({ unit_type_code: e.target.value })}>
+          <option value="">—</option>
+          {(lookups?.unit_types || []).map((u) => (
+            <option key={u.code} value={u.code}>{u.abbreviation}</option>
+          ))}
+        </select>
+      </td>
+      <td style={{ padding: 3 }}>
+        <input className="input num" type="number" step="0.0001" value={val('unit_price')}
+               onChange={(e) => onChange({ unit_price: e.target.value })} />
+      </td>
+      <td style={{ padding: 3 }}>
+        <select className="select" value={val('debris_type_code')}
+                onChange={(e) => onChange({ debris_type_code: e.target.value })}>
+          <option value="">—</option>
+          {(lookups?.debris_types || []).map((d) => (
+            <option key={d.code} value={d.code}>{d.code}</option>
+          ))}
+        </select>
+      </td>
+    </>
+  )
+}
+
+/**
+ * Paste, then read what it would do, then write it. The dry run is not a
+ * formality: a rate sheet pasted out of a PDF arrives with merged columns and
+ * stray headers often enough that writing first and apologising later would
+ * put wrong money in the system.
+ */
+function PasteSchedule({ contractId, onClose, onWritten }) {
+  const { toast } = useApp()
+  const [text, setText] = useState('')
+  const [plan, setPlan] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+
+  async function preview() {
+    setBusy(true); setError(null)
+    try {
+      setPlan(await api.post(`/contracts/${contractId}/line-items/import`,
+                             { text, dry_run: true }))
+    } catch (err) { setError(err.message) } finally { setBusy(false) }
+  }
+
+  async function write() {
+    setBusy(true); setError(null)
+    try {
+      const done = await api.post(`/contracts/${contractId}/line-items/import`,
+                                  { text, dry_run: false })
+      toast('Schedule imported', `${done.written} line(s) written`)
+      onWritten()
+    } catch (err) { setError(err.message) } finally { setBusy(false) }
+  }
+
+  const usable = plan ? plan.rows.filter((r) => r.action !== 'skip').length : 0
+
+  return (
+    <Modal wide title="Paste a priced schedule" onClose={onClose} footer={
+      <>
+        <button className="btn" onClick={onClose}>Cancel</button>
+        {plan ? (
+          <button className="btn primary" disabled={!usable || busy} onClick={write}>
+            {busy && <span className="spinner" />} Write {usable || ''} line{usable === 1 ? '' : 's'}
+          </button>
+        ) : (
+          <button className="btn primary" disabled={!text.trim() || busy} onClick={preview}>
+            {busy && <span className="spinner" />} Read it back to me
+          </button>
+        )}
+      </>
+    }>
+      {error && <div className="card" style={{ padding: 12, marginBottom: 14,
+                     borderColor: 'var(--red)', background: 'var(--red-soft)',
+                     color: 'var(--red)' }}>{error}</div>}
+
+      <div className="stack" style={{ gap: 12 }}>
+        <div className="muted" style={{ fontSize: 12.5, lineHeight: 1.6 }}>
+          A block copied out of the contract spreadsheet works, and so does one line item
+          per line. Nothing is written until you have read back what it found.
+        </div>
+
+        <textarea className="textarea mono" rows={8} value={text} autoFocus
+                  placeholder={'Line\tItem Code\tDescription\tUnit\tUnit Price\tDebris'}
+                  onChange={(e) => { setText(e.target.value); setPlan(null) }} />
+
+        {plan && (
+          <>
+            <div className="muted" style={{ fontSize: 12.5 }}>{plan.summary}</div>
+            <div className="table-wrap">
+              <table className="data">
+                <thead><tr>
+                  <th>Row</th><th>Action</th><th>Line</th><th>Code</th>
+                  <th>Description</th><th>Unit</th><th className="num">Price</th>
+                  <th>Debris</th>
+                </tr></thead>
+                <tbody>
+                  {plan.rows.map((r) => (
+                    <tr key={r.row}>
+                      <td className="dim">{r.row}</td>
+                      <td>
+                        {r.action === 'create' && <Badge tone="green">Add</Badge>}
+                        {r.action === 'update' && <Badge tone="blue">Update</Badge>}
+                        {r.action === 'skip' && (
+                          <Badge tone="amber" title={r.problems.join('; ')}>Skip</Badge>
+                        )}
+                      </td>
+                      <td className="mono dim">{r.values.line_number ?? '—'}</td>
+                      <td className="mono">{r.values.item_code || '—'}</td>
+                      <td className="truncate" style={{ maxWidth: 260 }}>
+                        {r.values.description || (
+                          <span className="dim">{r.problems.join('; ')}</span>
+                        )}
+                      </td>
+                      <td className="dim">{r.values.unit_type_code || '—'}</td>
+                      <td className="num">
+                        {r.values.unit_price != null ? fmt.rate(r.values.unit_price) : '—'}
+                      </td>
+                      <td className="dim">{r.values.debris_type_code || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {(plan.unmapped_columns || []).length > 0 && (
+              <div className="dim" style={{ fontSize: 12 }}>
+                Columns nothing was read from: {plan.unmapped_columns.join(', ')}.
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </Modal>
+  )
+}
+
+/* ------------------------------------------------------- service codes ---- */
+/**
+ * A service code, entered directly.
+ *
+ * The code, its rate and its contractor are one thought and are asked for
+ * together. Generating them from an accepted contract line is a shortcut for
+ * when the schedule is already typed in, not the only way in: a project whose
+ * contract arrived as a scan, or whose rates were agreed by email, still has
+ * to be able to bill.
+ */
+export function ServiceCodeForm({ projectId, contractors, onClose, onSaved }) {
+  const { lookups, toast } = useApp()
+  const [form, setForm] = useState({
+    code: '', name: '', contractor_id: contractors.length === 1
+      ? contractors[0].contractor_id : '',
+    rate_amount: '', rate_unit_type: '', fema_category: '', description: '',
+  })
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+  const set = (patch) => setForm((f) => ({ ...f, ...patch }))
+
+  async function save() {
+    setBusy(true); setError(null)
+    try {
+      const made = await api.post(`/projects/${projectId}/service-codes`, {
+        code: form.code.trim(), name: form.name.trim(),
+        contractor_id: form.contractor_id,
+        ...(form.description ? { description: form.description } : {}),
+        ...(form.fema_category ? { fema_category: form.fema_category } : {}),
+        ...(form.rate_amount !== '' && form.rate_unit_type
+          ? { rate_amount: Number(form.rate_amount), rate_unit_type: form.rate_unit_type }
+          : {}),
+      })
+      toast('Service code created', `${made.code} — ${made.name}`)
+      onSaved(made)
+    } catch (err) { setError(err.message) } finally { setBusy(false) }
+  }
+
+  const ready = form.code.trim() && form.name.trim().length > 1 && form.contractor_id
+
+  return (
+    <Modal wide title="Add a service code" onClose={onClose} footer={
+      <>
+        <button className="btn" onClick={onClose}>Cancel</button>
+        <button className="btn primary" disabled={!ready || busy} onClick={save}>
+          {busy && <span className="spinner" />} Create code
+        </button>
+      </>
+    }>
+      {error && <div className="card" style={{ padding: 12, marginBottom: 14,
+                     borderColor: 'var(--red)', background: 'var(--red-soft)',
+                     color: 'var(--red)' }}>{error}</div>}
+
+      <div className="stack" style={{ gap: 12 }}>
+        <div className="grid c2" style={{ gap: 12 }}>
+          <Field label="Code" required hint="Short, and printed on every transaction">
+            <input className="input mono" value={form.code} autoFocus
+                   placeholder="ROW-VEG"
+                   onChange={(e) => set({ code: e.target.value.toUpperCase() })} />
+          </Field>
+          <Field label="Name" required>
+            <input className="input" value={form.name}
+                   placeholder="Collection and hauling of vegetative debris"
+                   onChange={(e) => set({ name: e.target.value })} />
+          </Field>
+          <Field label="Contractor" required
+                 hint="Who gets paid under this code. Has to be on this project.">
+            <select className="select" value={form.contractor_id}
+                    onChange={(e) => set({ contractor_id: e.target.value })}>
+              <option value="">Choose…</option>
+              {contractors.map((c) => (
+                <option key={c.contractor_id} value={c.contractor_id}>
+                  {c.name} · {fmt.title(c.role_on_project)}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="FEMA category" hint="Usually A for debris removal">
+            <input className="input" value={form.fema_category} placeholder="A"
+                   onChange={(e) => set({ fema_category: e.target.value.toUpperCase() })} />
+          </Field>
+        </div>
+
+        <div className="card" style={{ padding: '12px 14px', background: 'var(--surface-2)' }}>
+          <div className="dim" style={{ fontSize: 11, textTransform: 'uppercase',
+                                        letterSpacing: '.06em', marginBottom: 10 }}>
+            Opening rate
+          </div>
+          <div className="grid c2" style={{ gap: 12 }}>
+            <Field label="Amount" hint="Leave both empty and add the rate later">
+              <input className="input num" type="number" step="0.0001"
+                     value={form.rate_amount} placeholder="9.45"
+                     onChange={(e) => set({ rate_amount: e.target.value })} />
+            </Field>
+            <Field label="Per">
+              <select className="select" value={form.rate_unit_type}
+                      onChange={(e) => set({ rate_unit_type: e.target.value })}>
+                <option value="">Choose…</option>
+                {(lookups?.unit_types || []).map((u) => (
+                  <option key={u.code} value={u.code}>{u.label} ({u.abbreviation})</option>
+                ))}
+              </select>
+            </Field>
+          </div>
+          <div className="dim" style={{ fontSize: 11.5, marginTop: 8, lineHeight: 1.6 }}>
+            A code with no rate cannot bill. Rules can still reference it, and the
+            readiness check will keep saying so until a rate is in effect.
+          </div>
+        </div>
+
+        <Field label="Description">
+          <input className="input" value={form.description}
+                 placeholder="What this covers, in the words the reviewer will read later"
+                 onChange={(e) => set({ description: e.target.value })} />
+        </Field>
+      </div>
+    </Modal>
+  )
+}
+
+/**
+ * A rate change, written as a new effective-dated row rather than an edit.
+ *
+ * Overwriting the amount would silently restate money that was already
+ * computed under the old one. Every transaction names the rate it used, so the
+ * old row has to stay exactly where it is.
+ */
+export function RateForm({ serviceCode, onClose, onSaved }) {
+  const { lookups, toast } = useApp()
+  const [form, setForm] = useState({
+    amount: serviceCode.current_rate ?? '',
+    unit_type: serviceCode.current_unit_type || '',
+    effective_from: '',
+  })
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+  const set = (patch) => setForm((f) => ({ ...f, ...patch }))
+
+  async function save() {
+    setBusy(true); setError(null)
+    try {
+      await api.post(`/service-codes/${serviceCode.id}/rates`, {
+        amount: Number(form.amount), unit_type: form.unit_type,
+        ...(form.effective_from ? { effective_from: form.effective_from } : {}),
+      })
+      toast('Rate recorded', `${serviceCode.code} at ${fmt.rate(Number(form.amount))}`)
+      onSaved()
+    } catch (err) { setError(err.message) } finally { setBusy(false) }
+  }
+
+  const history = serviceCode.rates || []
+
+  return (
+    <Modal title={`Rate · ${serviceCode.code}`} onClose={onClose} footer={
+      <>
+        <button className="btn" onClick={onClose}>Cancel</button>
+        <button className="btn primary" onClick={save}
+                disabled={form.amount === '' || !form.unit_type || busy}>
+          {busy && <span className="spinner" />} Record rate
+        </button>
+      </>
+    }>
+      {error && <div className="card" style={{ padding: 12, marginBottom: 14,
+                     borderColor: 'var(--red)', background: 'var(--red-soft)',
+                     color: 'var(--red)' }}>{error}</div>}
+
+      <div className="stack" style={{ gap: 12 }}>
+        <div className="muted" style={{ fontSize: 12.5, lineHeight: 1.6 }}>
+          A rate is never edited. This writes a new one and closes the one in effect the
+          day before it starts, so every transaction already computed still names the
+          rate it was actually priced at.
+        </div>
+
+        <div className="grid c2" style={{ gap: 12 }}>
+          <Field label="Amount" required>
+            <input className="input num" type="number" step="0.0001" autoFocus
+                   value={form.amount}
+                   onChange={(e) => set({ amount: e.target.value })} />
+          </Field>
+          <Field label="Per" required>
+            <select className="select" value={form.unit_type}
+                    onChange={(e) => set({ unit_type: e.target.value })}>
+              <option value="">Choose…</option>
+              {(lookups?.unit_types || []).map((u) => (
+                <option key={u.code} value={u.code}>{u.label} ({u.abbreviation})</option>
+              ))}
+            </select>
+          </Field>
+        </div>
+
+        <Field label="In effect from" hint="Left empty, it starts today">
+          <input className="input" type="date" value={form.effective_from}
+                 onChange={(e) => set({ effective_from: e.target.value })} />
+        </Field>
+
+        {history.length > 0 && (
+          <div className="table-wrap">
+            <table className="data">
+              <thead><tr>
+                <th className="num">Amount</th><th>Per</th><th>From</th><th>To</th>
+              </tr></thead>
+              <tbody>
+                {history.map((r) => (
+                  <tr key={r.id}>
+                    <td className="num">{fmt.rate(r.amount)}</td>
+                    <td className="dim">{r.abbreviation}</td>
+                    <td className="muted">{fmt.date(r.effective_from)}</td>
+                    <td className="muted">{r.effective_to ? fmt.date(r.effective_to)
+                                                          : 'in effect'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </Modal>
+  )
+}
+
+/* --------------------------------------------------------- rule builder ---- */
+/**
+ * The rule, built the way it is actually read.
+ *
+ * A rule is one sentence with five parts: on this ticket type, when these
+ * checks hold, bill this service code, as the nth transaction on the ticket,
+ * under this contract. The checks are the part that varies in length, so they
+ * get the table; the four fixed choices sit beside them and stay in view while
+ * the checks are edited; and the sentence the whole thing adds up to is written
+ * out at the bottom before anything is saved.
+ *
+ * Two things this deliberately does not do:
+ *
+ * An else branch is not a row in the database. Branching inside one rule would
+ * break the one rule to one transaction guarantee every audit trail depends on,
+ * so "otherwise" is written as a second rule at the same transaction_sequence,
+ * behind the first on priority, with the first stopping its group. Both go in
+ * one call, because half of an if/else on a live project means every ticket the
+ * else was meant to catch quietly bills nothing.
+ *
+ * And the transaction sequence is not the priority. The sequence is the order
+ * separate charges stack on one ticket: a haul is 1 and the tipping fee it
+ * incurs is 2, and both bill. Priority only decides which of several
+ * alternatives at the same sequence wins. Confusing the two is how a tipping
+ * fee disappears.
+ */
+const BLANK_RULE = {
+  name: '', ticket_type_id: '', service_code_id: '', contract_id: '',
+  description: '', match_mode: 'all', priority: 100, transaction_sequence: 1,
+  stop_on_match: false, is_active: true, statements: [],
+}
+
+export function RuleBuilder({ projectId, project, serviceCodes, rule,
+                              onClose, onSaved }) {
+  const { toast } = useApp()
+  const editing = Boolean(rule?.id)
+  const [form, setForm] = useState({ ...BLANK_RULE, ...(rule || {}) })
+  const [otherwise, setOtherwise] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+
+  const operands = useFetch(
+    () => api.get(`/projects/${projectId}/rule-operands`,
+                  form.ticket_type_id ? { ticket_type_id: form.ticket_type_id } : {}),
+    [projectId, form.ticket_type_id])
+
+  const set = (patch) => setForm((f) => ({ ...f, ...patch }))
+  const codeOf = (id) => serviceCodes.find((c) => c.id === id)
+  const contracts = project?.contracts || []
+  const types = project?.ticket_types || []
+  const contract = contracts.find((c) => c.contract_id === form.contract_id)
+
+  function addCheck() {
+    const first = operands.data?.items?.[0]
+    set({ statements: [...form.statements, {
+      operand_code: first?.code || 'debris_type',
+      operator_code: first?.operators?.[0]?.code || 'eq',
+      value: '', value_label: '', negate: false,
+    }] })
+  }
+
+  function updateCheck(index, patch) {
+    set({ statements: form.statements.map((s, i) => (i === index ? { ...s, ...patch } : s)) })
+  }
+
+  function body(over = {}) {
+    return {
+      name: form.name.trim(),
+      ticket_type_id: form.ticket_type_id,
+      service_code_id: form.service_code_id,
+      contract_id: form.contract_id,
+      description: form.description || null,
+      match_mode: form.match_mode,
+      priority: Number(form.priority) || 100,
+      transaction_sequence: Number(form.transaction_sequence) || 1,
+      stop_on_match: Boolean(form.stop_on_match),
+      is_active: form.is_active !== false,
+      statements: form.statements.map((s) => ({
+        operand_code: s.operand_code,
+        operator_code: s.operator_code,
+        value: normaliseValue(s),
+        value_label: s.value_label || null,
+        negate: Boolean(s.negate),
+      })),
+      ...over,
+    }
+  }
+
+  // What is actually going to be written, derived rather than described, so the
+  // preview at the bottom and the request are the same object.
+  const payloads = useMemo(() => {
+    if (!otherwise) return [body()]
+    return [
+      // The branch that wins closes its own sequence group and nothing beyond it.
+      body({ priority: 10, stop_on_match: true }),
+      body({
+        name: otherwise.name.trim(),
+        service_code_id: otherwise.service_code_id,
+        priority: 20, stop_on_match: false, statements: [],
+        description: `Anything of this type the previous rule did not catch.`,
+      }),
+    ]
+  }, [form, otherwise])
+
+  async function save() {
+    setBusy(true); setError(null)
+    try {
+      if (editing) {
+        await api.put(`/rules/${rule.id}`, payloads[0])
+        toast('Rule updated', form.name)
+      } else if (payloads.length > 1) {
+        const made = await api.post(`/projects/${projectId}/rules/batch`,
+                                    { rules: payloads })
+        toast('Rules written', made.summary)
+      } else {
+        await api.post(`/projects/${projectId}/rules`, payloads[0])
+        toast('Rule created', form.name)
+      }
+      onSaved()
+    } catch (err) { setError(err.message) } finally { setBusy(false) }
+  }
+
+  const stops = []
+  if (form.name.trim().length < 2) stops.push('a name')
+  if (!form.ticket_type_id) stops.push('a ticket type')
+  if (!form.service_code_id) stops.push('a service code')
+  if (!form.contract_id) stops.push('a contract')
+  if (otherwise && otherwise.name.trim().length < 2) stops.push('a name for the otherwise branch')
+  if (otherwise && !otherwise.service_code_id) stops.push('a service code for the otherwise branch')
+  if (otherwise && !form.statements.length) {
+    stops.push('at least one check, or there is nothing for the otherwise branch to be other than')
+  }
+
+  return (
+    <Modal wide title={editing ? `Edit rule · ${rule.name}` : 'New rule'}
+           onClose={onClose} footer={
+      <>
+        <button className="btn" onClick={onClose}>Cancel</button>
+        <button className="btn primary" disabled={stops.length > 0 || busy} onClick={save}>
+          {busy && <span className="spinner" />}
+          {editing ? 'Save rule'
+            : `Save ${payloads.length} rule${payloads.length === 1 ? '' : 's'}`}
+        </button>
+      </>
+    }>
+      {error && <div className="card" style={{ padding: 12, marginBottom: 14,
+                     borderColor: 'var(--red)', background: 'var(--red-soft)',
+                     color: 'var(--red)' }}>{error}</div>}
+
+      <div className="row wrap" style={{ gap: 16, alignItems: 'flex-start' }}>
+        {/* ------------------------------------------------ the checks ---- */}
+        <div className="stack" style={{ gap: 12, flex: '2 1 440px', minWidth: 320 }}>
+          <div className="grid c2" style={{ gap: 12 }}>
+            <Field label="Rule name" required>
+              <input className="input" value={form.name} autoFocus
+                     placeholder="ROW vegetative load"
+                     onChange={(e) => set({ name: e.target.value })} />
+            </Field>
+            <Field label="Ticket type" required
+                   hint="What the field raises. The checks follow from it.">
+              <select className="select" value={form.ticket_type_id}
+                      onChange={(e) => set({ ticket_type_id: e.target.value,
+                                             statements: [] })}>
+                <option value="">Choose…</option>
+                {types.map((t) => (
+                  <option key={t.ticket_type_id} value={t.ticket_type_id}>{t.label}</option>
+                ))}
+              </select>
+            </Field>
+          </div>
+
+          <div>
+            <div className="row" style={{ gap: 8, marginBottom: 8 }}>
+              <span style={{ fontSize: 12, fontWeight: 560, color: 'var(--text-muted)' }}>
+                Checks
+              </span>
+              <div className="seg">
+                {['all', 'any'].map((mode) => (
+                  <button key={mode} className={form.match_mode === mode ? 'on' : ''}
+                          onClick={() => set({ match_mode: mode })}>
+                    match {mode}
+                  </button>
+                ))}
+              </div>
+              <div className="spacer" />
+              <button className="btn sm" onClick={addCheck} disabled={!form.ticket_type_id}>
+                <Icon name="plus" size={13} /> Add a check
+              </button>
+            </div>
+
+            <div className="table-wrap">
+              <table className="data">
+                <thead><tr>
+                  <th style={{ width: 28 }} />
+                  <th>Field</th><th style={{ width: 150 }}>Test</th>
+                  <th>Value</th><th style={{ width: 36 }} />
+                </tr></thead>
+                <tbody>
+                  {form.statements.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="muted"
+                          style={{ fontSize: 12.5, lineHeight: 1.6, padding: '12px 10px' }}>
+                        No checks. This bills every completed ticket of that type, which
+                        is right for a flat per-ticket fee and wrong for anything else.
+                      </td>
+                    </tr>
+                  ) : form.statements.map((s, i) => (
+                    <CheckRow key={i} statement={s} index={i}
+                              joiner={form.match_mode === 'any' ? 'or' : 'and'}
+                              operands={operands.data?.items || []}
+                              projectId={projectId}
+                              onChange={(patch) => updateCheck(i, patch)}
+                              onRemove={() => set({
+                                statements: form.statements.filter((_, j) => j !== i) })} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {!editing && (
+            <div className="card" style={{ padding: '11px 14px',
+                                           background: 'var(--surface-2)' }}>
+              <label className="check">
+                <input type="checkbox" checked={Boolean(otherwise)}
+                       onChange={(e) => setOtherwise(e.target.checked
+                         ? { name: `${form.name || 'Rule'} — otherwise`,
+                             service_code_id: '' }
+                         : null)} />
+                Bill something else when these checks do not hold
+              </label>
+              {otherwise && (
+                <div className="grid c2" style={{ gap: 12, marginTop: 10 }}>
+                  <Field label="Otherwise rule name" required>
+                    <input className="input" value={otherwise.name}
+                           onChange={(e) => setOtherwise(
+                             { ...otherwise, name: e.target.value })} />
+                  </Field>
+                  <Field label="Otherwise bills" required>
+                    <select className="select" value={otherwise.service_code_id}
+                            onChange={(e) => setOtherwise(
+                              { ...otherwise, service_code_id: e.target.value })}>
+                      <option value="">Choose a service code</option>
+                      {serviceCodes.map((c) => (
+                        <option key={c.id} value={c.id}>{c.code} — {c.name}</option>
+                      ))}
+                    </select>
+                  </Field>
+                </div>
+              )}
+              <div className="dim" style={{ fontSize: 11.5, marginTop: 8, lineHeight: 1.6 }}>
+                Saved as a second rule sharing this transaction number, behind this one.
+                They are alternatives to each other, so exactly one of them bills.
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* -------------------------------------------- the fixed choices ---- */}
+        <div className="stack" style={{ gap: 12, flex: '1 1 250px', minWidth: 230 }}>
+          <div className="card" style={{ padding: '12px 14px' }}>
+            <div className="dim" style={{ fontSize: 11, textTransform: 'uppercase',
+                                          letterSpacing: '.06em', marginBottom: 10 }}>
+              Then bill
+            </div>
+            <div className="stack" style={{ gap: 12 }}>
+              <Field label="Service code" required
+                     hint={codeOf(form.service_code_id)
+                       ? `${codeOf(form.service_code_id).current_rate != null
+                            ? fmt.rate(codeOf(form.service_code_id).current_rate)
+                            : 'no rate yet'} per `
+                         + `${codeOf(form.service_code_id).current_unit_abbrev || '—'} · `
+                         + `${codeOf(form.service_code_id).contractor_name}`
+                       : 'The contractor and the rate come from the code'}>
+                <select className="select" value={form.service_code_id}
+                        onChange={(e) => set({ service_code_id: e.target.value })}>
+                  <option value="">Choose…</option>
+                  {serviceCodes.map((c) => (
+                    <option key={c.id} value={c.id}>{c.code} — {c.name}</option>
+                  ))}
+                </select>
+              </Field>
+
+              <Field label="Transaction #" required
+                     hint={'1 is the first charge on the ticket. A tipping fee that '
+                           + 'follows a haul is 2, and both of them bill.'}>
+                <input className="input num" type="number" min="1"
+                       value={form.transaction_sequence}
+                       onChange={(e) => set({ transaction_sequence: e.target.value })} />
+              </Field>
+
+              <Field label="Contract" required
+                     hint="Only contracts already on this project">
+                <select className="select" value={form.contract_id}
+                        onChange={(e) => set({ contract_id: e.target.value })}>
+                  <option value="">Choose…</option>
+                  {contracts.map((c) => (
+                    <option key={c.contract_id} value={c.contract_id}>
+                      {c.contract_number} · {c.contractor_name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+          </div>
+
+          {editing && (
+            <div className="card" style={{ padding: '12px 14px' }}>
+              <div className="stack" style={{ gap: 10 }}>
+                <Field label="Priority"
+                       hint="Which alternative at this transaction number wins. Lower first.">
+                  <input className="input num" type="number" value={form.priority}
+                         onChange={(e) => set({ priority: e.target.value })} />
+                </Field>
+                <label className="check">
+                  <input type="checkbox" checked={Boolean(form.stop_on_match)}
+                         onChange={(e) => set({ stop_on_match: e.target.checked })} />
+                  Stop the alternatives here
+                </label>
+                <label className="check">
+                  <input type="checkbox" checked={form.is_active !== false}
+                         onChange={(e) => set({ is_active: e.target.checked })} />
+                  Active
+                </label>
+              </div>
+            </div>
+          )}
+
+          {contracts.length === 0 && (
+            <div className="dim" style={{ fontSize: 12, lineHeight: 1.6 }}>
+              No contract is on this project yet, and a rule cannot be saved without one.
+            </div>
+          )}
+          {serviceCodes.length === 0 && (
+            <div className="dim" style={{ fontSize: 12, lineHeight: 1.6 }}>
+              No service code on this project yet. Add one on the service codes step;
+              a rule has nothing to bill without it.
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ------------------------------------------------ what gets saved ---- */}
+      <div className="card" style={{ padding: '12px 14px', marginTop: 16,
+                                     background: 'var(--surface-2)' }}>
+        <div className="dim" style={{ fontSize: 11, textTransform: 'uppercase',
+                                      letterSpacing: '.06em', marginBottom: 10 }}>
+          What gets saved
+        </div>
+
+        {stops.length > 0 ? (
+          <div className="muted" style={{ fontSize: 12.5, lineHeight: 1.65 }}>
+            Still needs {stops.join(', ')}.
+          </div>
+        ) : (
+          <div className="stack" style={{ gap: 8 }}>
+            {payloads.map((p, i) => (
+              <RuleSentence key={i} payload={p} index={i} total={payloads.length}
+                            code={codeOf(p.service_code_id)}
+                            ticketType={types.find(
+                              (t) => t.ticket_type_id === p.ticket_type_id)}
+                            contract={contract} />
+            ))}
+            <div className="dim" style={{ fontSize: 11.5, lineHeight: 1.6, marginTop: 2 }}>
+              {payloads.length > 1
+                ? 'Two rules, one transaction. The first to match bills and the other '
+                  + 'does not, because they share a transaction number.'
+                : `Transaction ${payloads[0].transaction_sequence} on the ticket. `
+                  + 'Another rule at a different number bills alongside this one.'}
+            </div>
+          </div>
+        )}
+      </div>
+    </Modal>
+  )
+}
+
+/** One line of the preview: the rule as the person who reads it later sees it. */
+function RuleSentence({ payload, index, total, code, ticketType, contract }) {
+  return (
+    <div className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
+      <Badge tone={index === 0 ? 'blue' : ''}>#{payload.transaction_sequence}</Badge>
+      <div style={{ fontSize: 12.5, lineHeight: 1.7, minWidth: 0 }}>
+        <b>{payload.name}</b>
+        {total > 1 && (
+          <span className="dim">{index === 0 ? ' (if)' : ' (otherwise)'}</span>
+        )}
+        <br />
+        On a <b>{ticketType?.label || 'ticket'}</b>
+        {payload.statements.length === 0
+          ? (index === 0 ? ', whatever it measures' : ' the first rule did not catch')
+          : (<>
+              {' when '}
+              {payload.statements.map((s, i) => (
+                <span key={i}>
+                  {i > 0 && (payload.match_mode === 'any' ? ' or ' : ' and ')}
+                  <b>{s.operand_code}</b>{' '}
+                  {s.operator_code}{' '}
+                  <b>{s.value_label || String(s.value ?? '')}</b>
+                </span>
+              ))}
+            </>)}
+        {', bill '}
+        <b className="mono">{code?.code || '—'}</b>
+        {code?.current_rate != null && ` at ${fmt.rate(code.current_rate)} per `
+          + `${code.current_unit_abbrev || 'unit'}`}
+        {code?.contractor_name && ` to ${code.contractor_name}`}
+        {contract && ` under ${contract.contract_number}`}.
+      </div>
+    </div>
+  )
+}
+
+/** A check, as a table row. The value control follows the operand: a list where
+ *  the project can enumerate the answers, a plain box where it cannot. */
+function CheckRow({ statement, index, joiner, operands, projectId, onChange, onRemove }) {
+  const operand = operands.find((o) => o.code === statement.operand_code)
+  const operators = operand?.operators || []
+  const [options, setOptions] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setOptions(null)
+    if (operand?.options_source) {
+      api.get(`/projects/${projectId}/options/${operand.options_source}`)
+        .then((r) => { if (!cancelled) setOptions(r.items) })
+        .catch(() => { if (!cancelled) setOptions([]) })
+    }
+    return () => { cancelled = true }
+  }, [operand?.options_source, projectId])
+
+  const multi = ['in', 'not_in'].includes(statement.operator_code)
+  const none = ['is_null', 'is_not_null'].includes(statement.operator_code)
+  const selected = multi
+    ? (Array.isArray(statement.value) ? statement.value
+       : String(statement.value || '').split(',').filter(Boolean))
+    : statement.value
+
+  return (
+    <tr>
+      <td className="dim" style={{ fontSize: 11.5, verticalAlign: 'middle' }}>
+        {index === 0 ? 'if' : joiner}
+      </td>
+      <td style={{ padding: 3 }}>
+        <select className="select" value={statement.operand_code}
+                onChange={(e) => {
+                  const next = operands.find((o) => o.code === e.target.value)
+                  onChange({
+                    operand_code: e.target.value,
+                    operator_code: next?.operators?.[0]?.code || 'eq',
+                    value: '', value_label: '',
+                  })
+                }}>
+          {operands.map((o) => (
+            <option key={o.code} value={o.code}>{o.label}</option>
+          ))}
+        </select>
+      </td>
+      <td style={{ padding: 3 }}>
+        <select className="select" value={statement.operator_code}
+                onChange={(e) => onChange({ operator_code: e.target.value,
+                                            value: '', value_label: '' })}>
+          {operators.map((op) => (
+            <option key={op.code} value={op.code}>{op.label}</option>
+          ))}
+        </select>
+      </td>
+      <td style={{ padding: 3 }}>
+        {none ? (
+          <span className="dim" style={{ fontSize: 12 }}>no value needed</span>
+        ) : options ? (
+          multi ? (
+            <div className="row wrap" style={{ gap: 5 }}>
+              {options.map((o) => {
+                const on = selected.includes(o.value)
+                return (
+                  <button key={o.value} className={`btn sm${on ? ' primary' : ''}`}
+                          onClick={() => {
+                            const next = on ? selected.filter((v) => v !== o.value)
+                                            : [...selected, o.value]
+                            onChange({ value: next,
+                                       value_label: options
+                                         .filter((x) => next.includes(x.value))
+                                         .map((x) => x.label).join(', ') })
+                          }}>
+                    {o.label}
+                  </button>
+                )
+              })}
+            </div>
+          ) : (
+            <select className="select" value={statement.value || ''}
+                    onChange={(e) => {
+                      const opt = options.find((o) => o.value === e.target.value)
+                      onChange({ value: e.target.value, value_label: opt?.label })
+                    }}>
+              <option value="">Choose…</option>
+              {options.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}{o.hint ? ` — ${o.hint}` : ''}
+                </option>
+              ))}
+            </select>
+          )
+        ) : (
+          <input className="input"
+                 type={operand?.data_type === 'number' ? 'number'
+                       : operand?.data_type === 'date' ? 'date' : 'text'}
+                 value={Array.isArray(statement.value) ? statement.value.join(', ')
+                                                       : (statement.value ?? '')}
+                 placeholder={statement.operator_code === 'between' ? 'min, max'
+                              : multi ? 'comma separated'
+                              : operand?.unit_hint ? `value in ${operand.unit_hint}`
+                              : 'value'}
+                 onChange={(e) => onChange({ value: e.target.value,
+                                             value_label: e.target.value })} />
+        )}
+      </td>
+      <td style={{ textAlign: 'right' }}>
+        <button className="btn ghost icon sm" onClick={onRemove} title="Remove this check">
+          <Icon name="x" size={12} />
+        </button>
+      </td>
+    </tr>
+  )
+}
+
+/** The value as the operator means it: a list for in, a pair for between, a
+ *  number where the comparison is numeric, and nothing where none is wanted. */
+export function normaliseValue(statement) {
+  const operator = statement.operator_code
+  if (operator === 'is_null' || operator === 'is_not_null') return null
+  if (operator === 'in' || operator === 'not_in') {
+    if (Array.isArray(statement.value)) return statement.value
+    return String(statement.value || '').split(',').map((v) => v.trim()).filter(Boolean)
+  }
+  if (operator === 'between') {
+    if (Array.isArray(statement.value)) return statement.value.map(Number)
+    return String(statement.value || '').split(',').map((v) => Number(v.trim()))
+  }
+  return ['gt', 'gte', 'lt', 'lte'].includes(operator)
+    ? Number(statement.value) : statement.value
 }

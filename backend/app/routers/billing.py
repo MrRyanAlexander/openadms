@@ -169,6 +169,14 @@ class StatementBody(BaseModel):
 
 
 class RuleBody(BaseModel):
+    """One rule.
+
+    transaction_sequence and priority answer different questions and are the
+    two most commonly confused fields on this model. The sequence is the order
+    the transactions stack on one ticket: a haul is 1 and the tipping fee it
+    incurs is 2, and both bill. Priority decides which of several ALTERNATIVES
+    at the same sequence wins, which is the if/else, and only matters next to
+    stop_on_match. 0028 has the reasoning."""
     name: str = Field(min_length=2)
     ticket_type_id: uuid.UUID
     service_code_id: uuid.UUID
@@ -176,6 +184,7 @@ class RuleBody(BaseModel):
     description: Optional[str] = None
     match_mode: str = "all"
     priority: int = 100
+    transaction_sequence: int = Field(default=1, ge=1)
     stop_on_match: bool = False
     quantity_override: Optional[float] = None
     effective_from: Optional[date] = None
@@ -323,6 +332,58 @@ async def create_rule(ctx: ProjectContext, body: RuleBody, user: CurrentUser,
     return db.row(rec)
 
 
+class RuleSet(BaseModel):
+    """A set of rules written together, or not at all."""
+    rules: list[RuleBody] = Field(min_length=1, max_length=25)
+
+
+@router.post("/projects/{project_id}/rules/batch", status_code=201)
+async def create_rule_set(ctx: ProjectContext, body: RuleSet, user: CurrentUser,
+                          _: dict = Depends(require_permission("rule.manage"))):
+    """Write several rules as one unit.
+
+    An if/else is two rows: the branch that wins carries stop_on_match, the
+    fallback sits behind it at the same transaction_sequence, and the pair only
+    means anything together. Writing them with two POSTs leaves a window where
+    the "if" exists without its "else", which on a live project means every
+    ticket the else was meant to catch quietly bills nothing. So they go in one
+    transaction and the database refuses or accepts the whole set.
+
+    The same applies to a haul and the tipping fee that follows it: two rules,
+    different sequences, one intent, and half of it is worse than none."""
+    project_id = ctx["project"]["id"]
+
+    names = [r.name for r in body.rules]
+    if len(set(names)) != len(names):
+        raise bad_request(
+            "Two rules in this set share a name, and a name is unique on a "
+            "project. Say what each one does differently.",
+            code="duplicate_rule_name")
+
+    written: list[dict[str, Any]] = []
+    async with db.tx(user) as conn:
+        for rule in body.rules:
+            payload = rule.model_dump(exclude={"statements"}, exclude_none=True)
+            payload["project_id"] = project_id
+            payload["created_by"] = user["id"]
+            sql, args = db.build_insert("rules", payload, returning="id")
+            rule_id = await conn.fetchval(sql, *args)
+            await _write_statements(conn, rule_id, rule.statements)
+            written.append(rule_id)
+        recs = await conn.fetch(
+            f"{_RULE_SELECT} WHERE r.id = ANY($1::uuid[]) "
+            f"ORDER BY r.transaction_sequence, r.priority", written)
+
+    items = db.rows(recs)
+    return {
+        "items": items,
+        "written": len(items),
+        "summary": (
+            f"{len(items)} rule{'s' if len(items) != 1 else ''} written: "
+            + ", ".join(i["name"] for i in items)),
+    }
+
+
 @router.put("/rules/{rule_id}")
 async def update_rule(rule_id: uuid.UUID, body: RuleBody, user: CurrentUser,
                       _: dict = Depends(require_permission("rule.manage"))):
@@ -349,8 +410,9 @@ async def patch_rule(rule_id: uuid.UUID, user: CurrentUser,
     conditions are the part nobody wants silently cleared, so this leaves them
     exactly where they are."""
     allowed = {"name", "description", "ticket_type_id", "service_code_id",
-               "contract_id", "priority", "is_active", "stop_on_match",
-               "match_mode", "quantity_override", "effective_from", "effective_to"}
+               "contract_id", "priority", "transaction_sequence", "is_active",
+               "stop_on_match", "match_mode", "quantity_override",
+               "effective_from", "effective_to"}
     data = {k: v for k, v in payload.items() if k in allowed}
     if not data:
         raise bad_request(
@@ -1627,6 +1689,7 @@ class ConfirmedProposal(BaseModel):
     description: Optional[str] = None
     match_mode: str = "all"
     priority: int = 100
+    transaction_sequence: int = Field(default=1, ge=1)
     stop_on_match: bool = False
     statements: list[StatementBody] = []
     tiers: Optional[ConfirmedTiers] = None

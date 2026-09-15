@@ -127,12 +127,22 @@ def test_ticket_search_filters_and_totals(client, auth, project_id):
 
 
 def test_ticket_detail_bundles_stages_media_and_transactions(client, auth, project_id):
+    # The highest billing LOAD ticket is not necessarily one with a full record
+    # behind it: the volume seed writes tens of thousands of priced tickets with
+    # no stages or waypoints, and `npm run setup -- --large-seed` now puts those
+    # on a database this suite runs against. So the ticket is chosen by having
+    # the record the test is about rather than by being the most expensive.
     listing = client.get(f"/api/v1/projects/{project_id}/tickets",
                          params={"ticket_type": "LOAD", "status": "completed",
                                  "sort": "transaction_total", "direction": "desc",
-                                 "limit": 1}, headers=auth).json()
-    ticket_id = listing["items"][0]["id"]
-    detail = client.get(f"/api/v1/tickets/{ticket_id}", headers=auth).json()
+                                 "limit": 50}, headers=auth).json()
+    detail = None
+    for item in listing["items"]:
+        candidate = client.get(f"/api/v1/tickets/{item['id']}", headers=auth).json()
+        if candidate["stages"] and candidate["waypoints"]:
+            detail = candidate
+            break
+    assert detail is not None, "no completed LOAD ticket carries its stages"
     assert detail["ticket"]["ticket_number"].startswith("STL-")
     assert detail["stages"]
     assert detail["waypoints"]
@@ -2841,8 +2851,17 @@ def test_a_line_comes_off_a_draft_and_goes_back_to_uninvoiced(
     assert float(after["invoice"]["subtotal"]) == pytest.approx(
         before - float(line["amount"]), abs=0.01)
 
+    # Narrowed to the code the line was billed under, and filtered on the
+    # parameter the endpoint actually reads. This used to pass "state", which
+    # the API ignores, and then scan a page: on a database carrying the volume
+    # seed the transaction it was looking for simply fell off the end of the
+    # page and the test reported a lifecycle failure that had not happened.
+    codes = client.get(f"/api/v1/projects/{project_id}/service-codes",
+                       headers=auth).json()["items"]
+    code = next(c for c in codes if c["code"] == line["service_code"])
     uninvoiced = client.get(f"/api/v1/projects/{project_id}/transactions",
-                            params={"state": "uninvoiced", "limit": 500},
+                            params={"invoice_status": "uninvoiced",
+                                    "service_code_id": code["id"], "limit": 500},
                             headers=auth).json()
     assert any(t["id"] == line["transaction_id"] for t in uninvoiced["items"]), \
         "the transaction did not go back to uninvoiced"
@@ -2944,10 +2963,22 @@ def test_a_hanger_bills_one_however_many_branches_were_counted(client, auth,
 
 
 def test_stumps_are_banded_not_priced_per_inch(client, auth, project_id):
-    """G13: "Leaners and stumps are on tiers based on the rate sheet"."""
-    ledger = client.get(f"/api/v1/projects/{project_id}/transactions",
-                        params={"limit": 500}, headers=auth).json()
-    banded = [t for t in ledger["items"] if t.get("tier_label")]
+    """G13: "Leaners and stumps are on tiers based on the rate sheet".
+
+    Asked of the banded code rather than of the first five hundred transactions
+    on the project, so the answer does not depend on how many tickets happen to
+    be on the database."""
+    codes = client.get(f"/api/v1/projects/{project_id}/service-codes",
+                       headers=auth).json()["items"]
+    tiered = [c for c in codes if c.get("quantity_mode") == "tiered"]
+    assert tiered, "the demo project has a code priced in bands"
+
+    banded = []
+    for code in tiered:
+        ledger = client.get(f"/api/v1/projects/{project_id}/transactions",
+                            params={"service_code_id": code["id"], "limit": 500},
+                            headers=auth).json()
+        banded.extend(t for t in ledger["items"] if t.get("tier_label"))
     assert banded, "no transaction was priced from a band"
 
     # Every banded line bills one, because the band already accounts for size.
@@ -3431,3 +3462,172 @@ def test_a_dimension_that_does_not_fit_on_a_road_is_caught(client, auth,
     client.post(f"/api/v1/certifications/{draft['id']}/reject", headers=auth,
                 json={"reason": "Interior width is 288 inches, which is feet "
                                 "keyed into an inches box"})
+
+
+# ---------------------------------------------------------------------------
+# Setup without a contract line item, and the order transactions run in
+#
+# The wizard used to make contract line items the only road to a service code,
+# which meant a contract typed in by hand was a dead end: no lines, no codes,
+# no rules, and a project that could never reach field ready. These prove the
+# road the interface now takes, and 0028's ordering underneath it.
+# ---------------------------------------------------------------------------
+@pytest.fixture()
+def bare_project(client, auth):
+    """A project with nothing on it, cleaned up whatever the test does."""
+    client_id = client.get("/api/v1/clients", headers=auth).json()["items"][0]["id"]
+    created = client.post("/api/v1/projects", headers=auth, json={
+        "name": "API Test Manual Setup",
+        "project_code": f"API-{uuid.uuid4().hex[:6].upper()}",
+        "client_id": client_id,
+    })
+    assert created.status_code == 201, created.text
+    project = created.json()
+    yield project
+    client.delete(f"/api/v1/projects/{project['id']}", headers=auth)
+
+
+def test_a_project_reaches_billing_without_one_contract_line_item(
+        client, auth, bare_project):
+    """The whole point of the setup rework: line items are an accelerator, not
+    the only road. Every step here is what the wizard now calls."""
+    pid = bare_project["id"]
+    contractor_id = client.get("/api/v1/contractors",
+                               headers=auth).json()["items"][0]["id"]
+
+    linked = client.post(f"/api/v1/projects/{pid}/contractors", headers=auth,
+                         json={"contractor_id": contractor_id,
+                               "role_on_project": "prime"})
+    assert linked.status_code == 201, linked.text
+
+    # A contract created and linked in one call, with no priced schedule behind
+    # it. This is the "Create new contract" tab of the wizard, exactly.
+    contract = client.post(f"/api/v1/projects/{pid}/contracts", headers=auth, json={
+        "new": _contract_body(client, auth, title="Typed in by hand",
+                              contractor_id=contractor_id),
+        "is_primary": True})
+    assert contract.status_code == 201, contract.text
+    contract_id = contract.json()["contract_id"]
+
+    lines = client.get(f"/api/v1/contracts/{contract_id}/line-items",
+                       params={"project_id": pid}, headers=auth).json()
+    assert lines["total"] == 0, "this contract deliberately has no line items"
+
+    # The service code, typed rather than generated, with its opening rate.
+    code = client.post(f"/api/v1/projects/{pid}/service-codes", headers=auth, json={
+        "code": "HAND-CD", "name": "Collection and haul, entered by hand",
+        "contractor_id": contractor_id, "rate_amount": 11.2,
+        "rate_unit_type": "per_cubic_yard"})
+    assert code.status_code == 201, code.text
+    assert float(code.json()["current_rate"]) == pytest.approx(11.2)
+
+    types = client.get("/api/v1/ticket-types", headers=auth).json()["items"]
+    load = next(t for t in types if t["code"] == "LOAD")
+    assert client.post(f"/api/v1/projects/{pid}/ticket-types", headers=auth,
+                       json={"ticket_type_id": load["id"]}).status_code == 201
+
+    rule = client.post(f"/api/v1/projects/{pid}/rules", headers=auth, json={
+        "name": "Haul, by hand", "ticket_type_id": load["id"],
+        "service_code_id": code.json()["id"], "contract_id": contract_id})
+    assert rule.status_code == 201, rule.text
+    assert rule.json()["transaction_sequence"] == 1, "the default is the first charge"
+
+    readiness = client.get(f"/api/v1/projects/{pid}/readiness", headers=auth).json()
+    for gate in ("contract", "contractor", "ticket_type", "service_code",
+                 "rate", "rule", "rule_coverage"):
+        assert gate not in readiness["missing"], \
+            f"{gate} is still missing and no line item was ever touched"
+
+
+def test_an_if_else_pair_is_written_or_neither_is(client, auth, bare_project):
+    """Two rows, one intent. Half of an if/else on a live project means every
+    ticket the else was meant to catch quietly bills nothing."""
+    pid = bare_project["id"]
+    contractor_id = client.get("/api/v1/contractors",
+                               headers=auth).json()["items"][0]["id"]
+    client.post(f"/api/v1/projects/{pid}/contractors", headers=auth,
+                json={"contractor_id": contractor_id, "role_on_project": "prime"})
+    contract = client.post(f"/api/v1/projects/{pid}/contracts", headers=auth, json={
+        "new": _contract_body(client, auth, contractor_id=contractor_id)}).json()
+    veg = client.post(f"/api/v1/projects/{pid}/service-codes", headers=auth, json={
+        "code": "BR-VEG", "name": "Vegetative", "contractor_id": contractor_id,
+        "rate_amount": 9.45, "rate_unit_type": "per_cubic_yard"}).json()
+    cd = client.post(f"/api/v1/projects/{pid}/service-codes", headers=auth, json={
+        "code": "BR-CD", "name": "Construction and demolition",
+        "contractor_id": contractor_id, "rate_amount": 11.2,
+        "rate_unit_type": "per_cubic_yard"}).json()
+    types = client.get("/api/v1/ticket-types", headers=auth).json()["items"]
+    load = next(t for t in types if t["code"] == "LOAD")
+    client.post(f"/api/v1/projects/{pid}/ticket-types", headers=auth,
+                json={"ticket_type_id": load["id"]})
+
+    def branch(name, code_id, priority, stop, statements):
+        return {"name": name, "ticket_type_id": load["id"],
+                "service_code_id": code_id, "contract_id": contract["contract_id"],
+                "priority": priority, "transaction_sequence": 1,
+                "stop_on_match": stop, "statements": statements}
+
+    # A set whose two rules share a name writes nothing at all.
+    refused = client.post(f"/api/v1/projects/{pid}/rules/batch", headers=auth, json={
+        "rules": [branch("Same name", veg["id"], 10, True, []),
+                  branch("Same name", cd["id"], 20, False, [])]})
+    assert refused.status_code == 400
+    assert refused.json()["error"]["code"] == "duplicate_rule_name"
+    assert client.get(f"/api/v1/projects/{pid}/rules",
+                      headers=auth).json()["items"] == []
+
+    written = client.post(f"/api/v1/projects/{pid}/rules/batch", headers=auth, json={
+        "rules": [
+            branch("If vegetative", veg["id"], 10, True,
+                   [{"operand_code": "debris_type", "operator_code": "eq",
+                     "value": "VEG", "value_label": "Vegetative"}]),
+            branch("Otherwise C and D", cd["id"], 20, False, []),
+        ]})
+    assert written.status_code == 201, written.text
+    assert written.json()["written"] == 2
+    ordered = [r["name"] for r in written.json()["items"]]
+    assert ordered == ["If vegetative", "Otherwise C and D"], \
+        "the branch that wins is listed before its fallback"
+    assert all(r["transaction_sequence"] == 1 for r in written.json()["items"]), \
+        "alternatives share a sequence; they are not two charges"
+
+
+def test_a_second_charge_on_one_ticket_sits_at_the_next_sequence(
+        client, auth, bare_project):
+    """A tipping fee is not an alternative to the haul, it is the charge after
+    it, so it takes the next transaction_sequence rather than a priority."""
+    pid = bare_project["id"]
+    contractor_id = client.get("/api/v1/contractors",
+                               headers=auth).json()["items"][0]["id"]
+    client.post(f"/api/v1/projects/{pid}/contractors", headers=auth,
+                json={"contractor_id": contractor_id, "role_on_project": "prime"})
+    contract = client.post(f"/api/v1/projects/{pid}/contracts", headers=auth, json={
+        "new": _contract_body(client, auth, contractor_id=contractor_id)}).json()
+    haul = client.post(f"/api/v1/projects/{pid}/service-codes", headers=auth, json={
+        "code": "SEQ-HAUL", "name": "Haul", "contractor_id": contractor_id,
+        "rate_amount": 11.2, "rate_unit_type": "per_cubic_yard"}).json()
+    tip = client.post(f"/api/v1/projects/{pid}/service-codes", headers=auth, json={
+        "code": "SEQ-TIP", "name": "Tipping fee", "contractor_id": contractor_id,
+        "rate_amount": 3.5, "rate_unit_type": "per_ton"}).json()
+    types = client.get("/api/v1/ticket-types", headers=auth).json()["items"]
+    load = next(t for t in types if t["code"] == "LOAD")
+    client.post(f"/api/v1/projects/{pid}/ticket-types", headers=auth,
+                json={"ticket_type_id": load["id"]})
+
+    written = client.post(f"/api/v1/projects/{pid}/rules/batch", headers=auth, json={
+        "rules": [
+            {"name": "Haul", "ticket_type_id": load["id"],
+             "service_code_id": haul["id"], "contract_id": contract["contract_id"],
+             "transaction_sequence": 1},
+            {"name": "Tipping fee", "ticket_type_id": load["id"],
+             "service_code_id": tip["id"], "contract_id": contract["contract_id"],
+             "transaction_sequence": 2},
+        ]})
+    assert written.status_code == 201, written.text
+    assert [r["transaction_sequence"] for r in written.json()["items"]] == [1, 2]
+
+    refused = client.post(f"/api/v1/projects/{pid}/rules", headers=auth, json={
+        "name": "Before the first", "ticket_type_id": load["id"],
+        "service_code_id": haul["id"], "contract_id": contract["contract_id"],
+        "transaction_sequence": 0})
+    assert refused.status_code == 422, "there is no charge before the first one"
