@@ -1,0 +1,9 @@
+{
+  "name": "@open-adms/field",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Open ADMS field app (React + Vite + Capacitor, ARCHITECTURE §7–§12).",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "exports": "./dist/index.js"
+}

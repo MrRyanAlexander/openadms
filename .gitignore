@@ -1,0 +1,74 @@
+# ─────────────────────────────────────────────
+# Open ADMS — root .gitignore (rewritten for the ARCHITECTURE §18 layout, ADR-255)
+# ─────────────────────────────────────────────
+
+# ── OS & editor ──────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# ── Agent output dirs (never commit) ─────────
+AGENT_OUTPUTS/
+CLAUDE_OUTPUTS/
+GROK_OUTPUTS/
+
+# ── Environment files and secrets ────────────
+# Keep .env.example files; ignore every real .env file, at any depth.
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# ── Dependencies and build output ────────────
+# The lockfile (pnpm-lock.yaml) is committed.
+node_modules/
+dist/
+build/
+# The Prisma client, made from the schema by `pnpm generate` (ADR-273).
+packages/db/src/generated/
+.vite/
+.cache/
+*.tsbuildinfo
+
+# ── Tests ────────────────────────────────────
+coverage/
+lcov.info
+playwright-report/
+test-results/
+
+# ── Logs and temporary files ─────────────────
+*.log
+npm-debug.log*
+pnpm-debug.log*
+*.tmp
+*.temp
+tmp/
+temp/
+
+# ── Docker ───────────────────────────────────
+.docker/
+# The local stack's generated files (Caddy's root certificate); its .env is ignored above.
+infra/local/.generated/
+# The installer's record of the installation (no secrets; its env files are ignored above).
+tools/setup/.state/
+
+# ── Historical tree (database/, read-only, ADR-093) ──
+database/node_modules/
+database/dist/
+database/prisma/generated/
+database/python/.venv/
+database/python/**/__pycache__/
+database/python/.pytest_cache/
+database/python/**/*.pyc
+database/python/**/*.pyo
+database/python/htmlcov/
+database/python/.coverage
+
+# ── Reference material, never committed ──────
+development/
+old_openadms(do not copy)/
