@@ -1,0 +1,310 @@
+// The Prisma client extension that states the actor (BACKLOG 0.3.4; ARCHITECTURE §5.3; ADR-273):
+// a write through $write is audited with its actor, a write without one is refused, the actor ends
+// with its transaction, and the worker writes as the seeded system actor. Each test connects as the
+// service's own login and undoes its work (service.ts).
+import { randomUUID } from 'node:crypto';
+
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
+import type { Actor } from '../src/actor.ts';
+import type { Database } from '../src/database.ts';
+import type { Prisma } from '../src/generated/prisma/client.ts';
+import { systemActor, systemActorId, systemActorName } from '../src/system-actor.ts';
+import { GuardedDatabase } from './support/database.ts';
+import { openService, undone } from './support/service.ts';
+
+let api: Database;
+let worker: Database;
+
+beforeAll(async () => {
+  // Refuses a database that isn't at head or hasn't been seeded.
+  await (await GuardedDatabase.open()).close();
+  api = openService('api');
+  worker = openService('worker');
+});
+
+afterAll(async () => {
+  await api.$disconnect();
+  await worker.$disconnect();
+});
+
+interface Stated {
+  user: string;
+  actor: string;
+  source: string;
+  device: string;
+  reason: string;
+  request: string;
+}
+
+// Who the database sees writing, as the audit trigger reads it.
+async function stated(tx: Prisma.TransactionClient): Promise<Stated> {
+  const [row] = await tx.$queryRaw<Stated[]>`SELECT current_user AS "user",
+    current_setting('adms.actor_id', true) AS actor, current_setting('adms.source', true) AS source,
+    current_setting('adms.device_id', true) AS device, current_setting('adms.reason', true) AS reason,
+    current_setting('adms.request_id', true) AS request`;
+  if (row === undefined) throw new Error('No settings row.');
+  return row;
+}
+
+async function refusal(write: Promise<unknown>): Promise<string> {
+  try {
+    await write;
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+  throw new Error('Expected the write to be refused, but it ran.');
+}
+
+const p1 = { name: 'Bayline County ROW, Hurricane Delphine', timeZone: 'America/New_York' };
+
+describe('a write through $write is audited with its actor', () => {
+  it('a person in the back office, with the reason and the request', async () => {
+    // Dana Reyes, the first admin, written with herself as the actor (ADR-270 (4)).
+    const dana = randomUUID();
+    const actor: Actor = {
+      actorId: dana,
+      source: 'BACK_OFFICE',
+      reason: 'Set up the Hurricane Delphine projects',
+      requestId: 'req-0001',
+    };
+    const { project, records, seen } = await undone(api, actor, async (tx) => {
+      await tx.user.create({ data: { id: dana, name: 'Dana Reyes', role: 'ADMIN' } });
+      const project = await tx.project.create({ data: p1 });
+      const records = await tx.auditRecord.findMany({
+        where: { recordId: { in: [dana, project.id] } },
+        orderBy: { id: 'asc' },
+      });
+      return { project, records, seen: await stated(tx) };
+    });
+
+    expect(seen).toEqual({
+      user: 'adms_api',
+      actor: dana,
+      source: 'BACK_OFFICE',
+      device: '',
+      reason: 'Set up the Hurricane Delphine projects',
+      request: 'req-0001',
+    });
+    const who = {
+      operation: 'INSERT',
+      actorId: dana,
+      source: 'BACK_OFFICE',
+      deviceId: null,
+      reason: 'Set up the Hurricane Delphine projects',
+      requestId: 'req-0001',
+    };
+    expect(records).toMatchObject([
+      { ...who, tableName: 'user', recordId: dana, domain: 'SECURITY' },
+      { ...who, tableName: 'project', recordId: project.id, domain: 'OPERATIONS' },
+    ]);
+    expect(records[1]?.newValue).toMatchObject({ name: p1.name, time_zone: p1.timeZone });
+  });
+
+  it('the device it came from: Ana Brooks on her phone', async () => {
+    // Dana sets up herself, Ana, the phone, P1 and Ana's assignment; then the same work states Ana
+    // on her phone, as the API will for a sync (a test-only restatement: the phone and Ana must
+    // exist to be named, and what a login writes can't be deleted, so it all happens in one undone
+    // $write). Dana is written without a Monitor ID, so the database issues none here and Ana's
+    // example one can't meet it.
+    const dana = randomUUID();
+    const ana = randomUUID();
+    const phone = randomUUID();
+    const collection = randomUUID();
+    const setup: Actor = { actorId: dana, source: 'BACK_OFFICE' };
+    const { records, seen } = await undone(api, setup, async (tx) => {
+      await tx.user.create({
+        data: { id: dana, name: 'Dana Reyes', role: 'ADMIN', monitorNumber: null },
+      });
+      await tx.user.create({
+        data: { id: ana, name: 'Ana Brooks', role: 'MONITOR', monitorNumber: 'M004127' },
+      });
+      await tx.device.create({
+        data: {
+          id: phone,
+          name: 'P1-COL-1',
+          publicKey: 'test-public-key-P1-COL-1',
+          masterPasscodeVersion: 1,
+        },
+      });
+      const project = await tx.project.create({ data: p1 });
+      const assignment = await tx.assignment.create({
+        data: {
+          personId: ana,
+          workDate: new Date('2026-10-12'),
+          projectId: project.id,
+          fieldEventKinds: ['COLLECTION'],
+          deviceId: phone,
+          origin: 'PLANNED',
+          madeById: dana,
+        },
+      });
+      await tx.$queryRaw`SELECT set_config('adms.actor_id', ${ana}, true),
+        set_config('adms.source', 'DEVICE', true), set_config('adms.device_id', ${phone}, true)`;
+      await tx.fieldEvent.create({
+        data: {
+          id: collection,
+          projectId: project.id,
+          workflow: 'LOAD',
+          kind: 'COLLECTION',
+          ticketNumber: '101001',
+          monitorId: ana,
+          deviceId: phone,
+          assignmentId: assignment.id,
+          setupVersion: 1,
+          startedAt: new Date('2026-10-12T08:15:00-04:00'),
+          endedAt: new Date('2026-10-12T08:40:00-04:00'),
+          deviceUtcOffsetMinutes: -240,
+        },
+      });
+      const records = await tx.auditRecord.findMany({
+        where: { recordId: { in: [phone, collection] } },
+        orderBy: { id: 'asc' },
+      });
+      return { records, seen: await stated(tx) };
+    });
+    expect(seen).toMatchObject({ user: 'adms_api', actor: ana, source: 'DEVICE', device: phone });
+    expect(records).toMatchObject([
+      {
+        tableName: 'device',
+        operation: 'INSERT',
+        actorId: dana,
+        source: 'BACK_OFFICE',
+        deviceId: null,
+        domain: 'SECURITY',
+      },
+      {
+        tableName: 'field_event',
+        operation: 'INSERT',
+        actorId: ana,
+        source: 'DEVICE',
+        deviceId: phone,
+        domain: 'RECORDS',
+      },
+    ]);
+  });
+
+  it('an update: the prior value, the new one and the field that changed', async () => {
+    const dana = randomUUID();
+    const actor: Actor = { actorId: dana, source: 'BACK_OFFICE', reason: 'Wrong time zone' };
+    const records = await undone(api, actor, async (tx) => {
+      await tx.user.create({ data: { id: dana, name: 'Dana Reyes', role: 'ADMIN' } });
+      const { id } = await tx.project.create({ data: { ...p1, timeZone: 'America/Chicago' } });
+      await tx.project.update({ where: { id }, data: { timeZone: 'America/New_York' } });
+      return tx.auditRecord.findMany({ where: { recordId: id }, orderBy: { id: 'asc' } });
+    });
+    expect(records).toHaveLength(2);
+    expect(records[1]).toMatchObject({
+      operation: 'UPDATE',
+      changedFields: ['time_zone'],
+      priorValue: { time_zone: 'America/Chicago' },
+      newValue: { time_zone: 'America/New_York' },
+      actorId: dana,
+      reason: 'Wrong time zone',
+    });
+  });
+});
+
+describe('a write without an actor is refused', () => {
+  it('outside $write, by the database', async () => {
+    const name = `Unattributed ${randomUUID()}`;
+    expect(await refusal(api.project.create({ data: { ...p1, name } }))).toContain(
+      'A write to project needs its actor: state adms.actor_id before writing',
+    );
+    expect(await api.project.count({ where: { name } })).toBe(0);
+  });
+
+  it('with an actor who is not a user', async () => {
+    const actor: Actor = { actorId: randomUUID(), source: 'BACK_OFFICE' };
+    expect(await refusal(undone(api, actor, (tx) => tx.project.create({ data: p1 })))).toContain(
+      'audit_record_actor_id_fkey',
+    );
+  });
+
+  it('the actor ends with its transaction, on the same connection', async () => {
+    // One connection, so each step runs where the one before it ran.
+    const single = openService('api', 1);
+    try {
+      // Committed, not undone: a rolled-back transaction would undo even a setting that outlives
+      // it. It writes nothing, and its actor is no user, so a leftover could never write either.
+      const nobody = randomUUID();
+      const first = await single.$write(
+        { actorId: nobody, source: 'BACK_OFFICE', reason: 'First', requestId: 'req-0002' },
+        (tx) => stated(tx),
+      );
+      expect(first).toMatchObject({ actor: nobody, reason: 'First', request: 'req-0002' });
+
+      // The next writer states only an actor and a source: nothing of the first one's is left.
+      const someone = randomUUID();
+      const second = await undone(single, { actorId: someone, source: 'DEVICE' }, (tx) =>
+        stated(tx),
+      );
+      expect(second).toMatchObject({ actor: someone, source: 'DEVICE', device: '', reason: '' });
+      expect(second.request).toBe('');
+
+      const name = `Unattributed ${randomUUID()}`;
+      expect(await refusal(single.project.create({ data: { ...p1, name } }))).toContain(
+        'needs its actor',
+      );
+    } finally {
+      await single.$disconnect();
+    }
+  });
+});
+
+describe('the worker writes as the system actor', () => {
+  it('seeded once by the installer, with itself as the actor', async () => {
+    expect(await api.user.findUnique({ where: { id: systemActorId } })).toMatchObject({
+      name: systemActorName,
+      role: 'SYSTEM',
+      monitorNumber: null,
+      contractorId: null,
+      archivedAt: null,
+    });
+    expect(await api.auditRecord.findMany({ where: { recordId: systemActorId } })).toMatchObject([
+      {
+        tableName: 'user',
+        operation: 'INSERT',
+        actorId: systemActorId,
+        source: 'SYSTEM',
+        domain: 'SECURITY',
+      },
+    ]);
+  });
+
+  it("the worker's login states it", async () => {
+    expect(await undone(worker, systemActor, (tx) => stated(tx))).toEqual({
+      user: 'adms_worker',
+      actor: systemActorId,
+      source: 'SYSTEM',
+      device: '',
+      reason: '',
+      request: '',
+    });
+  });
+
+  it("the API's own login may not: neither the system actor nor source SYSTEM (ADR-276)", async () => {
+    expect(
+      await refusal(undone(api, systemActor, (tx) => tx.project.create({ data: p1 }))),
+    ).toContain(
+      'Only the worker writes as the system actor: adms_api may not state it (a write to project)',
+    );
+    const dana = randomUUID();
+    const claimed: Actor = { actorId: dana, source: 'SYSTEM' };
+    expect(
+      await refusal(
+        undone(api, claimed, (tx) =>
+          tx.user.create({ data: { id: dana, name: 'Dana Reyes', role: 'ADMIN' } }),
+        ),
+      ),
+    ).toContain(
+      'Only the worker writes with source SYSTEM: adms_api may not state it (a write to user)',
+    );
+  });
+
+  it("and is still refused what the worker isn't granted", async () => {
+    expect(
+      await refusal(undone(worker, systemActor, (tx) => tx.project.create({ data: p1 }))),
+    ).toContain('permission denied for table project');
+  });
+});

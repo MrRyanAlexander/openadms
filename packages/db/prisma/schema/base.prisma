@@ -1,0 +1,22 @@
+// Open ADMS database schema (ARCHITECTURE §5, §18; ADR-094, 267, 268).
+// One file per kind of record (adms-data-model §3.1b). Models are PascalCase and singular, fields
+// camelCase; tables and columns are snake_case (spec/CONVENTIONS.md §3).
+//
+// PROVISIONAL (BACKLOG 0.3.1): only the models the database hardening is tested on, with only the
+// fields those tests need. spec/DATA-MODEL.md (BACKLOG 0.2b.2) settles every model and field.
+// Every relation refuses deletes and id changes: nothing is hard-deleted (invariant 1), and an id
+// never changes. Ids are UUIDv7 made by the database (Postgres 18's uuidv7()), so every writer,
+// the audit triggers and tests included, gets one; a field event's comes from the phone instead.
+// The URL comes from prisma.config.js. The client is generated into src/generated/ (git-ignored)
+// by `pnpm generate`, with .ts imports so Node runs it as-is, like the rest of the source (ADR-273).
+
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider            = "prisma-client"
+  output              = "../../src/generated/prisma"
+  moduleFormat        = "esm"
+  importFileExtension = "ts"
+}

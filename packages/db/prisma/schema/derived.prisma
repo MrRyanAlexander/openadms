@@ -1,0 +1,63 @@
+// Derived: the system's conclusions from the evidence, written by the worker only, never by a
+// person; drawn again on every reprocess (adms-data-model §3.1b, §3.1c; invariants 4, 21).
+// Also the invoice lock, a person's mark kept as its own record (ADR-245).
+
+// A load concluded from its collection and disposal events. PROVISIONAL: one collection; a split
+// load's several collections are spec/DATA-MODEL.md's to shape. The haul-out's CompletedHaulOut
+// follows the same shape and joins with it.
+model CompletedLoad {
+  id                String @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  projectId         String @map("project_id") @db.Uuid
+  ticketNumber      String @map("ticket_number")
+  // Unique links: one load's events can't bill twice (invariant 17).
+  collectionEventId String @unique @map("collection_event_id") @db.Uuid
+  disposalEventId   String @unique @map("disposal_event_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  project         Project       @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  collectionEvent FieldEvent    @relation("CollectionEvent", fields: [collectionEventId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  disposalEvent   FieldEvent    @relation("DisposalEvent", fields: [disposalEventId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  transactions    Transaction[]
+  invoiceLock     InvoiceLock?
+
+  @@unique([projectId, ticketNumber])
+  @@map("completed_load")
+}
+
+// One priced line, the current truth: regenerated when its ticket changes, each removed row copied
+// in full to AuditRecord first (ADR-085). PROVISIONAL: a load's lines only; the pay item, rule,
+// contract and operating sub are spec/DATA-MODEL.md's.
+model Transaction {
+  id              String  @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  completedLoadId String  @map("completed_load_id") @db.Uuid
+  // The rule action's # slot (Add transaction #n).
+  slot            Int
+  quantity        Decimal @db.Decimal(14, 4)
+  rate            Decimal @db.Decimal(14, 4)
+  amount          Decimal @db.Decimal(14, 2)
+  primeId         String  @map("prime_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  completedLoad CompletedLoad @relation(fields: [completedLoadId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  prime         Contractor    @relation(fields: [primeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([completedLoadId])
+  @@map("transaction")
+}
+
+// A QC Approved load locked as invoiced; its transactions can't be regenerated until it's unlocked,
+// audited (ADR-057, 090).
+model InvoiceLock {
+  id              String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  completedLoadId String   @unique @map("completed_load_id") @db.Uuid
+  lockedById      String   @map("locked_by_id") @db.Uuid
+  lockedAt        DateTime @default(now()) @map("locked_at") @db.Timestamptz(3)
+
+  completedLoad CompletedLoad @relation(fields: [completedLoadId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  lockedBy      User          @relation(fields: [lockedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@map("invoice_lock")
+}
