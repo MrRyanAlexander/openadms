@@ -1,0 +1,54 @@
+# Open ADMS local reverse proxy (ARCHITECTURE §3, §4; ADR-263).
+# HTTPS only, from Caddy's internal CA, on *.adms.localhost. HTTP requests are redirected to HTTPS
+# (Caddy's automatic HTTPS). The root certificate is copied to infra/local/.generated/ by
+# `pnpm local:up`; trust it in a browser or pass it to curl with --cacert.
+{
+	local_certs
+	skip_install_trust
+	admin 127.0.0.1:2019
+	servers {
+		# Only TCP 443 is published, so don't advertise HTTP/3 over UDP.
+		protocols h1 h2
+	}
+}
+
+(headers) {
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+}
+
+# The stack's own health page. The API and web apps get their own hostnames when they arrive.
+adms.localhost {
+	import headers
+	respond /health "ok" 200
+	respond 404
+}
+
+# The S3-compatible object store (SeaweedFS). Caddy keeps the Host header, so S3 signatures verify.
+s3.adms.localhost {
+	import headers
+	reverse_proxy objectstore:8333
+}
+
+# The mail catcher's inbox (Mailpit), for dev only.
+mail.adms.localhost {
+	import headers
+	reverse_proxy mail:8025
+}
+
+# The routing server (Valhalla): road mileage (ARCHITECTURE §3). Asked by the worker only.
+routing.adms.localhost {
+	import headers
+	reverse_proxy routing:8002
+}
+
+# The address server (Nominatim): address lookup (ARCHITECTURE §3). Asked by the API and the
+# worker only; a phone asks the API.
+addresses.adms.localhost {
+	import headers
+	reverse_proxy addresses:8080
+}
