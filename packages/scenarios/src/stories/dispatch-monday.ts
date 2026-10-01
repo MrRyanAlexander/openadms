@@ -1,0 +1,465 @@
+// The second story (BACKLOG 0.4.3; ADR-281): Monday's dispatch on P1, as far as this build reaches
+// (spec/golden/MISSION.md §1, "Phones and the dispatch board"). Phones are enrolled once; Luis
+// Ortega writes the day's assignments on the board; each monitor's phone takes theirs at the yard.
+// Jo Kim's names the unit rate pay items she does that day (ADR-286). Tariq Patel has none, so the
+// master passcode sets his phone up on the spot: an unplanned assignment, marked. Ana and Kim record ticket 101001 under their assignments; that evening
+// Tariq's phone can't be found and is marked lost. What it proves is the models: the time zone, the
+// Monitor ID, the device with its number block and passcode version, the assignment, and each
+// field event carrying its assignment and setup version. The screens, the sign-in, the sync and
+// the allocator behind these rows are Phases 2 to 4.
+import { projectTime } from '../clock.ts';
+import { uuidv7 } from '../ids.ts';
+import type { Story } from '../runner.ts';
+
+const timeZone = 'America/New_York';
+const at = (time: string): string => `2026-10-12T${time}:00-04:00`;
+const monday = new Date('2026-10-12');
+const day = (date: Date): string => date.toISOString().slice(0, 10);
+
+export const dispatchMonday: Story = {
+  name: 'dispatch-monday',
+  title: 'enrolled phones take the day’s assignments; one is unplanned; one phone is lost',
+  timeZone,
+  start: at('05:30'),
+
+  async run(story) {
+    const { api, clock } = story;
+
+    story.at(at('05:30'), 'Dana Reyes sets up Luis Ortega, P1 and its two sites');
+    // The first user is written with itself as the actor (ADR-270 (4)).
+    const dana = uuidv7(clock.now());
+    const office = await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
+      const danaRow = await tx.user.create({
+        data: { id: dana, name: 'Dana Reyes', role: 'ADMIN' },
+      });
+      const luis = await tx.user.create({ data: { name: 'Luis Ortega', role: 'MANAGER_ANALYST' } });
+      const p1 = await tx.project.create({
+        data: { name: 'Bayline County ROW, Hurricane Delphine', timeZone },
+      });
+      const tdsr = await tx.disposalSite.create({
+        data: { projectId: p1.id, name: 'Marsh Road TDSR' },
+      });
+      const landfill = await tx.disposalSite.create({
+        data: { projectId: p1.id, name: 'Bayline County Landfill' },
+      });
+      return { danaRow, luis, p1: p1.id, tdsr: tdsr.id, landfill: landfill.id };
+    });
+    story.check(
+      'the database issued each of them the next Monitor ID; nobody typed one',
+      [office.danaRow.monitorNumber, office.luis.monitorNumber],
+      ['M000001', 'M000002'],
+    );
+    const luis = office.luis.id;
+
+    story.at(
+      at('05:45'),
+      'The monitors: Ana Brooks, Kim Nguyen (a temp agency’s), Tariq Patel and Jo Kim',
+    );
+    // Their Monitor IDs are the example world's, written as given; a real installation's all come
+    // from the database, as Dana's and Luis's did.
+    const people = await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
+      const agency = await tx.contractor.create({ data: { name: 'Harbor Staffing' } });
+      const ana = await tx.user.create({
+        data: { name: 'Ana Brooks', role: 'MONITOR', monitorNumber: 'M004127' },
+      });
+      const kim = await tx.user.create({
+        data: {
+          name: 'Kim Nguyen',
+          role: 'MONITOR',
+          monitorNumber: 'M004128',
+          employerId: agency.id,
+          employerNumber: 'HS-0417',
+        },
+      });
+      const tariq = await tx.user.create({
+        data: { name: 'Tariq Patel', role: 'MONITOR', monitorNumber: 'M004129' },
+      });
+      const jo = await tx.user.create({
+        data: { name: 'Jo Kim', role: 'MONITOR', monitorNumber: 'M004130' },
+      });
+      return { ana: ana.id, kim: kim.id, tariq: tariq.id, jo: jo.id };
+    });
+    const employed = await api.user.findMany({
+      where: { role: 'MONITOR' },
+      include: { employer: true },
+      orderBy: { monitorNumber: 'asc' },
+    });
+    story.check(
+      'each monitor: their Monitor ID, their employer (a contractor record) and its ID for them',
+      employed.map((person) => [
+        person.name,
+        person.monitorNumber,
+        person.employer?.name ?? null,
+        person.employerNumber,
+      ]),
+      [
+        ['Ana Brooks', 'M004127', null, null],
+        ['Kim Nguyen', 'M004128', 'Harbor Staffing', 'HS-0417'],
+        ['Tariq Patel', 'M004129', null, null],
+        ['Jo Kim', 'M004130', null, null],
+      ],
+    );
+
+    story.at(
+      at('05:50'),
+      'Three phones are enrolled, once: each its own key, no project, no monitor',
+    );
+    const phones = await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
+      const enrol = (name: string) =>
+        tx.device.create({
+          data: { name, publicKey: `story-${name}`, masterPasscodeVersion: 1 },
+        });
+      return {
+        collection: await enrol('P1-COL-1'),
+        tdsrTower: await enrol('P1-TWR-TDSR'),
+        landfillTower: await enrol('P1-TWR-LF'),
+      };
+    });
+    story.check(
+      'each is in service and holds version 1 of the master passcode’s check',
+      Object.values(phones).map((phone) => [
+        phone.name,
+        phone.status,
+        phone.masterPasscodeVersion,
+        phone.outOfServiceAt,
+      ]),
+      [
+        ['P1-COL-1', 'ACTIVE', 1, null],
+        ['P1-TWR-TDSR', 'ACTIVE', 1, null],
+        ['P1-TWR-LF', 'ACTIVE', 1, null],
+      ],
+    );
+    const passcode = await api.auditRecord.findMany({ where: { tableName: 'master_passcode' } });
+    story.check(
+      'the passcode itself is nowhere: the database keeps its slow hash, the audit log not even that',
+      passcode.map((record) => [record.source, (record.newValue as { hash: string }).hash]),
+      [['SYSTEM', '[kept out of the audit]']],
+    );
+
+    story.at(at('05:55'), 'Dana enters two of P1’s unit rate pay items, off the contract');
+    // Only their code and name yet: the payable type, the size band and the rates are Phase 1's.
+    const payItems = await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
+      const enter = (code: string, name: string) =>
+        tx.payItem.create({ data: { projectId: office.p1, code, name } });
+      return {
+        hangers: await enter('HNG-RMV-EA', 'Hanger removal'),
+        leaners: await enter('LNR-RMV-EA-24', 'Leaner removal 6–24 in'),
+      };
+    });
+
+    story.at(
+      at('06:00'),
+      'Luis writes Monday’s board: Ana on collections, Kim at the TDSR tower, Jo on unit rate',
+    );
+    const board = await api.$write({ actorId: luis, source: 'BACK_OFFICE' }, async (tx) => {
+      const planned = { workDate: monday, projectId: office.p1, madeById: luis } as const;
+      const collections = await tx.assignment.create({
+        data: {
+          ...planned,
+          personId: people.ana,
+          fieldEventKinds: ['COLLECTION'],
+          deviceId: phones.collection.id,
+          origin: 'PLANNED',
+        },
+      });
+      const tower = await tx.assignment.create({
+        data: {
+          ...planned,
+          personId: people.kim,
+          fieldEventKinds: ['DISPOSAL'],
+          siteId: office.tdsr,
+          deviceId: phones.tdsrTower.id,
+          origin: 'PLANNED',
+        },
+      });
+      // No phone named: Jo signs in on whichever enrolled phone she picks up.
+      const unitRate = await tx.assignment.create({
+        data: {
+          ...planned,
+          personId: people.jo,
+          fieldEventKinds: ['UNIT_RATE'],
+          origin: 'PLANNED',
+        },
+      });
+      await tx.assignmentPayItem.createMany({
+        data: [payItems.hangers, payItems.leaners].map((payItem) => ({
+          assignmentId: unitRate.id,
+          projectId: office.p1,
+          payItemId: payItem.id,
+        })),
+      });
+      return { collections: collections.id, tower: tower.id, unitRate: unitRate.id };
+    });
+    const joDay = await api.assignment.findUniqueOrThrow({
+      where: { id: board.unitRate },
+      include: { payItems: { include: { payItem: true }, orderBy: { payItem: { code: 'asc' } } } },
+    });
+    story.check(
+      'Jo’s assignment names the unit rate pay items she does today, each one of P1’s own',
+      joDay.payItems.map(({ payItem, archivedAt }) => [payItem.code, payItem.name, archivedAt]),
+      [
+        ['HNG-RMV-EA', 'Hanger removal', null],
+        ['LNR-RMV-EA-24', 'Leaner removal 6–24 in', null],
+      ],
+    );
+
+    story.at(
+      at('06:30'),
+      'At the yard, online, Ana’s phone takes her assignment and a block of load numbers',
+    );
+    await api.$write(
+      { actorId: people.ana, source: 'DEVICE', deviceId: phones.collection.id },
+      (tx) =>
+        tx.numberBlock.create({
+          data: {
+            deviceId: phones.collection.id,
+            projectId: office.p1,
+            series: 'LOAD',
+            firstNumber: 101001,
+            lastNumber: 102000,
+          },
+        }),
+    );
+    const anaPhone = story.phone({
+      name: 'P1-COL-1',
+      deviceId: phones.collection.id,
+      monitorId: people.ana,
+      assignmentId: board.collections,
+      projectId: office.p1,
+      setupVersion: 1,
+      timeZone,
+    });
+    const kimPhone = story.phone({
+      name: 'P1-TWR-TDSR',
+      deviceId: phones.tdsrTower.id,
+      monitorId: people.kim,
+      assignmentId: board.tower,
+      projectId: office.p1,
+      setupVersion: 1,
+      timeZone,
+    });
+    const blocks = await api.numberBlock.findMany({ include: { device: true } });
+    story.check(
+      'the collection phone holds 101001 to 102000 of P1’s load series; a tower issues nothing',
+      blocks.map((block) => [
+        block.device.name,
+        block.series,
+        block.firstNumber,
+        block.lastNumber,
+        block.lastUsedNumber,
+        block.status,
+      ]),
+      [['P1-COL-1', 'LOAD', 101001, 102000, null, 'ISSUED']],
+    );
+
+    story.at(
+      at('06:40'),
+      'Tariq has no assignment: the master passcode sets P1-TWR-LF up for the Landfill tower',
+    );
+    // Made on the phone, its id the phone's own; it reaches the server when the phone syncs.
+    const unplanned = uuidv7(clock.now());
+    await api.$write(
+      { actorId: people.tariq, source: 'DEVICE', deviceId: phones.landfillTower.id },
+      (tx) =>
+        tx.assignment.create({
+          data: {
+            id: unplanned,
+            personId: people.tariq,
+            workDate: monday,
+            projectId: office.p1,
+            fieldEventKinds: ['DISPOSAL', 'HAUL_OUT_DISPOSAL'],
+            siteId: office.landfill,
+            deviceId: phones.landfillTower.id,
+            origin: 'UNPLANNED',
+          },
+        }),
+    );
+    const mondays = await api.assignment.findMany({
+      where: { workDate: monday, projectId: office.p1 },
+      include: { person: true, site: true, device: true, madeBy: true },
+    });
+    story.check(
+      'Monday’s board: three planned by Luis, and Tariq’s, unplanned, marked, with no author',
+      mondays
+        .map((assignment) => [
+          assignment.person.name,
+          day(assignment.workDate),
+          assignment.fieldEventKinds.join(' + '),
+          assignment.site?.name ?? 'no site',
+          assignment.device?.name ?? 'no phone',
+          assignment.origin,
+          assignment.madeBy?.name ?? null,
+        ])
+        .sort(),
+      [
+        ['Ana Brooks', '2026-10-12', 'COLLECTION', 'no site', 'P1-COL-1', 'PLANNED', 'Luis Ortega'],
+        ['Jo Kim', '2026-10-12', 'UNIT_RATE', 'no site', 'no phone', 'PLANNED', 'Luis Ortega'],
+        [
+          'Kim Nguyen',
+          '2026-10-12',
+          'DISPOSAL',
+          'Marsh Road TDSR',
+          'P1-TWR-TDSR',
+          'PLANNED',
+          'Luis Ortega',
+        ],
+        [
+          'Tariq Patel',
+          '2026-10-12',
+          'DISPOSAL + HAUL_OUT_DISPOSAL',
+          'Bayline County Landfill',
+          'P1-TWR-LF',
+          'UNPLANNED',
+          null,
+        ],
+      ],
+    );
+
+    story.at(at('08:15'), 'Ana scans the truck’s badge at 14 Heron St, offline');
+    const collection = anaPhone.begin('LOAD', 'COLLECTION');
+    story.at(
+      at('08:40'),
+      'Ana completes the collection; her phone shows 101001, the first of its block',
+    );
+    anaPhone.complete(collection, {
+      ticketNumber: '101001',
+      endLatitude: '27.94620000',
+      endLongitude: '-82.45870000',
+    });
+    story.at(at('09:05'), 'Kim scans the badge at the Marsh Road TDSR tower, offline');
+    const disposal = kimPhone.begin('LOAD', 'DISPOSAL');
+    story.at(at('09:25'), 'Kim calls the load 80% and scans 101001 last');
+    kimPhone.complete(disposal, {
+      ticketNumber: '101001',
+      endLatitude: '27.99810000',
+      endLongitude: '-82.39120000',
+      loadCall: 80,
+    });
+
+    story.at(at('17:30'), 'Both phones sync at the yard; Ana’s reports the last number it used');
+    story.check(
+      'each sends its one field event',
+      [await kimPhone.sync(story.intake), await anaPhone.sync(story.intake)],
+      [1, 1],
+    );
+    await api.$write(
+      { actorId: people.ana, source: 'DEVICE', deviceId: phones.collection.id },
+      (tx) =>
+        tx.numberBlock.updateMany({
+          where: { deviceId: phones.collection.id, series: 'LOAD' },
+          data: { lastUsedNumber: 101001 },
+        }),
+    );
+    const events = await api.fieldEvent.findMany({
+      include: { assignment: { include: { person: true, site: true } }, project: true },
+      orderBy: { endedAt: 'asc' },
+    });
+    story.check(
+      'each field event carries its assignment (so who, and at which site) and setup version 1',
+      events.map((event) => [
+        event.kind,
+        event.ticketNumber,
+        event.assignment.person.name,
+        event.assignment.site?.name ?? 'no site',
+        event.assignment.origin,
+        event.setupVersion,
+      ]),
+      [
+        ['COLLECTION', '101001', 'Ana Brooks', 'no site', 'PLANNED', 1],
+        ['DISPOSAL', '101001', 'Kim Nguyen', 'Marsh Road TDSR', 'PLANNED', 1],
+      ],
+    );
+    story.check(
+      'each is Monday’s in the project’s time zone, the day its assignment was for',
+      events.map((event) => [
+        projectTime(event.project.timeZone, event.endedAt),
+        event.deviceUtcOffsetMinutes,
+        day(event.assignment.workDate),
+      ]),
+      [
+        ['Mon 12 Oct 08:40', -240, '2026-10-12'],
+        ['Mon 12 Oct 09:25', -240, '2026-10-12'],
+      ],
+    );
+    const [block] = await api.numberBlock.findMany();
+    story.check(
+      'the block knows its last used number; the rest stay the phone’s',
+      [block?.lastUsedNumber, block?.status],
+      [101001, 'ISSUED'],
+    );
+
+    story.at(at('18:10'), 'P1-TWR-LF isn’t handed in and can’t be found: Luis marks it lost');
+    await api.$write(
+      { actorId: luis, source: 'BACK_OFFICE', reason: 'Not handed in at the yard on Monday' },
+      (tx) =>
+        tx.device.update({
+          where: { id: phones.landfillTower.id },
+          data: { status: 'LOST', outOfServiceAt: clock.now() },
+        }),
+    );
+    const lost = await api.device.findUniqueOrThrow({ where: { id: phones.landfillTower.id } });
+    story.check(
+      'it’s out of service from 6:10 pm: what it made later will arrive flagged, never refused',
+      [
+        lost.status,
+        lost.outOfServiceAt === null ? null : projectTime(timeZone, lost.outOfServiceAt),
+      ],
+      ['LOST', 'Mon 12 Oct 18:10'],
+    );
+
+    const names = new Map([
+      [dana, 'Dana Reyes'],
+      [luis, 'Luis Ortega'],
+      [people.ana, 'Ana Brooks'],
+      [people.kim, 'Kim Nguyen'],
+      [people.tariq, 'Tariq Patel'],
+      [people.jo, 'Jo Kim'],
+      [phones.collection.id, 'P1-COL-1'],
+      [phones.tdsrTower.id, 'P1-TWR-TDSR'],
+      [phones.landfillTower.id, 'P1-TWR-LF'],
+    ]);
+    const who = (id: string | null): string => (id === null ? '-' : (names.get(id) ?? id));
+    const audit = await api.auditRecord.findMany({
+      where: {
+        tableName: {
+          in: ['assignment', 'assignment_pay_item', 'pay_item', 'number_block', 'device'],
+        },
+      },
+      orderBy: { id: 'asc' },
+    });
+    story.check(
+      'the audit log says who did each: enrolment, the pay items, the board, the phones’ own writes, the lost phone',
+      audit.map((record) => [
+        record.tableName,
+        record.operation,
+        who(record.actorId),
+        record.source,
+        who(record.deviceId),
+        record.reason,
+      ]),
+      [
+        ['device', 'INSERT', 'Dana Reyes', 'BACK_OFFICE', '-', null],
+        ['device', 'INSERT', 'Dana Reyes', 'BACK_OFFICE', '-', null],
+        ['device', 'INSERT', 'Dana Reyes', 'BACK_OFFICE', '-', null],
+        ['pay_item', 'INSERT', 'Dana Reyes', 'BACK_OFFICE', '-', null],
+        ['pay_item', 'INSERT', 'Dana Reyes', 'BACK_OFFICE', '-', null],
+        ['assignment', 'INSERT', 'Luis Ortega', 'BACK_OFFICE', '-', null],
+        ['assignment', 'INSERT', 'Luis Ortega', 'BACK_OFFICE', '-', null],
+        ['assignment', 'INSERT', 'Luis Ortega', 'BACK_OFFICE', '-', null],
+        ['assignment_pay_item', 'INSERT', 'Luis Ortega', 'BACK_OFFICE', '-', null],
+        ['assignment_pay_item', 'INSERT', 'Luis Ortega', 'BACK_OFFICE', '-', null],
+        ['number_block', 'INSERT', 'Ana Brooks', 'DEVICE', 'P1-COL-1', null],
+        ['assignment', 'INSERT', 'Tariq Patel', 'DEVICE', 'P1-TWR-LF', null],
+        ['number_block', 'UPDATE', 'Ana Brooks', 'DEVICE', 'P1-COL-1', null],
+        [
+          'device',
+          'UPDATE',
+          'Luis Ortega',
+          'BACK_OFFICE',
+          '-',
+          'Not handed in at the yard on Monday',
+        ],
+      ],
+    );
+  },
+};

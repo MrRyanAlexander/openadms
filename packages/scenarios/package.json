@@ -1,0 +1,17 @@
+{
+  "name": "@open-adms/scenarios",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Open ADMS scenario harness and the golden mission (ARCHITECTURE §15).",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "exports": "./dist/index.js",
+  "dependencies": {
+    "@open-adms/db": "workspace:*",
+    "pg": "8.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.6",
+    "@types/pg": "8.23.1"
+  }
+}
