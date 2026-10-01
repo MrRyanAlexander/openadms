@@ -1,0 +1,16 @@
+{
+  "name": "@open-adms/setup",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Open ADMS installer: the setup interview, secrets, roles, migrations, seed (ARCHITECTURE §4).",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "exports": "./dist/index.js",
+  "dependencies": {
+    "pg": "8.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.6",
+    "@types/pg": "8.23.1"
+  }
+}
