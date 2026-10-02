@@ -8,8 +8,10 @@
 > Milestone 1.1 and 1.2 below belong to the historical code (ADR-093). They are kept as the list of
 > behaviours and lessons the rebuild must satisfy, **not** as work to do on `database/`.
 
-> **2026-10-01 (ADR-282…287): every Phase 0 task below is done.** What's left is the user's: the
-> first commit (REQ-002), the approval of `spec/DATA-MODEL.md` and `spec/FLAGS.md`, and the word that
+> **2026-10-01 (ADR-282…287): every Phase 0 task below is done**, and the user made the first commits
+> the same day (REQ-002 ticked, ADR-288) and approved `spec/DATA-MODEL.md` and `spec/FLAGS.md`
+> (ADR-289, 290). The data model's thirteen points were settled the same day (KD-65 closed, ADR-292…295).
+> What's left is the user's: the word that
 > opens Phase 1. Phase 1's milestones are written here once it opens (`NEXT.md`).
 
 ### Milestone 0.1 — Approve the foundation (docs only) — ✅ done 2026-10-01
@@ -77,16 +79,16 @@ don't tick a box on "should work".
   a secret or password; never rotates keys on a resume. Roles and migrations can be stubs until 0.3.
   **Done when:** first run, rerun (resume) and teardown-then-run are each shown working, with output.
 
-### Milestone 0.2b — Spec pages before the schema (ADR-140, ADR-164) — ✅ drafted 2026-10-01; both pages wait for the user's approval
+### Milestone 0.2b — Spec pages before the schema (ADR-140, ADR-164) — ✅ done 2026-10-01: both pages approved by the user (ADR-289, 290); the data model changed at their word (ADR-292…295); KD-65 is closed
 - [x] **0.2b.1** **Naming pass** (ADR-164, user 2026-09-27): a table of every record, field, rule
   criterion, status, type label and export column with a proposed plain name, for the user to
   approve before `spec/DATA-MODEL.md`; "plenty of details we're able to export for each type of thing
   the field is creating". ✅ **2026-09-29: `spec/CONVENTIONS.md`**, an agent default at the user's word
   (ADR-234, 235): the renames, code names, units, the pay item code convention, the example world and
   the retired examples. Export column names are settled with `DATA-MODEL.md` (0.2b.2), from it.
-- [x] **0.2b.2** ✅ **drafted 2026-10-01 (ADR-284): `spec/DATA-MODEL.md`, 688 lines: every record and field, who writes it, what the database refuses, thirteen exports' column names, sixteen agent defaults listed for the user; answers C16–C19, C29, C36, C42–C44 on paper. Waits for the user's approval before Phase 1's schema.** `spec/DATA-MODEL.md` draft (after 0.2b.1; Q-176 answered, ADR-182; round 14–15's data-model
+- [x] **0.2b.2** ✅ **drafted 2026-10-01 (ADR-284): `spec/DATA-MODEL.md`, 688 lines: every record and field, who writes it, what the database refuses, thirteen exports' column names, sixteen agent defaults listed for the user; answers C16–C19, C29, C36, C42–C44 on paper. Waits for the user's approval before Phase 1's schema.** ✅ **Approved by the user 2026-10-01 (ADR-289)**, all sixteen defaults; then laid out one way throughout and checked against the rest of the spec: thirteen points open (KD-65). `spec/DATA-MODEL.md` draft (after 0.2b.1; Q-176 answered, ADR-182; round 14–15's data-model
   answers are in, ADR-174…184; ADR-185 settles haul-out and split halves; ADR-191 the start list and a code's name shown to monitors; ADR-192 the load of stumps; ADR-195 one site per site-working phone; ADR-196 the stump ticket's root ball, its fields and fill: Q-189).
-- [x] **0.2b.3** ✅ **drafted 2026-10-01 (ADR-285): `spec/FLAGS.md`, 67 flags in nine groups, one message shape, what each does to billing, the facts each keeps; four points for the user (which certification bills when the two cert numbers differ; no over-the-legal-limit weight test yet; six codes the agent worded; the date format). Waits for the user's approval of the wording.** `spec/FLAGS.md` draft: every flag's code, trigger, message, still-bills, accept
+- [x] **0.2b.3** ✅ **drafted 2026-10-01 (ADR-285): `spec/FLAGS.md`, 67 flags in nine groups, one message shape, what each does to billing, the facts each keeps; four points for the user (which certification bills when the two cert numbers differ; no over-the-legal-limit weight test yet; six codes the agent worded; the date format). Waits for the user's approval of the wording.** ✅ **Approved by the user 2026-10-01 (ADR-290)**, its §5's four points included. `spec/FLAGS.md` draft: every flag's code, trigger, message, still-bills, accept
   behaviour (ADR-166), ADR.
 
 ### Milestone 0.2c — Rewrite the skills in the present tense (ADR-138, ADR-232, ADR-233) ✅ done 2026-09-29 (ADR-242…253)
@@ -365,6 +367,11 @@ delete one.
   hash (DATA-MODEL §5). The golden mission's GPS points come from the pinned extract (with C30): the
   example world's Bayline County is made up, and its roads stand in from Delaware's until the user
   names another region.
+- **C51. Split haul-outs have no requirement and no golden-mission ticket** (ADR-295). The rule is
+  recorded (`adms-ticket-workflows` §4.4a, `adms-validation` §5.5, DATA-MODEL §5) with an example
+  (ticket 201004), but `REQUIREMENTS.md` has no REQ for it and `spec/golden/MISSION.md` covers
+  only an ordinary haul-out. With Phase 1's milestones: add the REQ beside the split-load ones, and
+  propose a split haul-out for the mission (the user signs off its numbers; never invent coverage).
 - **C20.** The worker's one transaction per group, one run per project, and flagged-and-skipped groups
   (REQ-015, KD-55) use one `$write` per group (ADR-273 (3)).
 
@@ -439,8 +446,8 @@ delete one.
 
 **Housekeeping, any time**
 - **C26.** pnpm 12 when the global pnpm is 11+; Node 26 once it's LTS (ADR-255).
-- **C27.** KD-59: the historical root `docker-compose.yml` and the `.gitignore` sections for `database/`
-  and the placeholder folders are the user's to retire (see C7). **2026-09-30 (ADR-277):** its
+- **C27.** ~~KD-59: the historical root `docker-compose.yml`~~ **retired by the user, with its volume, 2026-10-01 (ADR-291; `pnpm security` 7 passed, 0 failed).** Left, harmless: the `.gitignore` section for `database/`, the user's to drop. *History:* the file and the `.gitignore` sections for `database/`
+  and the placeholder folders were the user's to retire (see C7). **2026-09-30 (ADR-277):** its
   container is stopped (the user ran `compose down`); left: the file, its data volume
   `debrismonitor_kiro_postgres_data` (created 2026-09-23, the historical database's data), and an
   unattached anonymous volume (`428a2944…`, an empty object-store folder from a throw-away container

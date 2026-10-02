@@ -9,7 +9,7 @@
 > requirement) and `spec/VISION.md` §7–§8 (the finished surfaces, and what "done" means). If this
 > page disagrees with them, they win.
 >
-> **Last updated:** 2026-10-01 (Phase 0 closed out) · counts read from the files that day · newest decision: ADR-287.
+> **Last updated:** 2026-10-01 (the data model and the flag catalogue approved; all thirteen points on the data model settled) · counts read from the files that day · newest decision: ADR-295.
 
 **Key:** ✅ done · 🟡 in progress · ⬜ not started · 🔒 gated (doesn't open until the phase before it exits)
 
@@ -20,8 +20,8 @@
 | | |
 |---|---|
 | **Start** | 2026-09-25: the rebuild decision (ADR-093). Security first, the plan is the core, TypeScript end to end with Prisma, the old `database/` code is history |
-| **Now** | **Phase 0, Foundation: every task is done** (ADR-282…287) and its seven exit criteria are met. 16 of its 17 requirements are ticked; the last (REQ-002) waits on your first commit. No product code exists yet; everything built so far is the ground the product stands on. Opening Phase 1 is your call (§6) |
-| **Next task** | None until you open Phase 1. Waiting on you: the first commit, and your approval of `spec/DATA-MODEL.md` and `spec/FLAGS.md` (both drafted 2026-10-01) |
+| **Now** | **Phase 0, Foundation: every task is done** (ADR-282…287) and its seven exit criteria are met. All 17 of its requirements are ticked; the last (REQ-002) with your first commits (ADR-288). You approved the data model and the flag catalogue the same day (ADR-289, 290). No product code exists yet; everything built so far is the ground the product stands on. Opening Phase 1 is your call (§6) |
+| **Next task** | None until you open Phase 1. Nothing else waits on you for Phase 0 |
 | **Finish line** | A firm installs Open ADMS, and its back office and its monitors run a real mission on it: every app built, tested and working |
 | **How "done" is judged** | Not boxes ticked. A deliberately messy mission (the **golden mission**) comes out with the exact statuses, review queue and ledger you signed off, at every layer: engine, then API, then the apps (`spec/VISION.md` §8) |
 
@@ -32,7 +32,7 @@
 | # | Stage | When it's done, you can… | Requirements met | Status |
 |---|---|---|---|---|
 | — | **Design** | Read the whole product on paper: the rules, the spec, the architecture, all approved | 26 rounds of questions, ADR-001…279 | ✅ done 2026-09-29 |
-| **0** | **Foundation** | Start the whole local stack with one command over HTTPS, the mileage and address servers included; watch the database itself refuse what the rules forbid; run a ticket's story from a terminal | 16 of 17 | 🟡 every task done; the last requirement is your first commit (§3, §6) |
+| **0** | **Foundation** | Start the whole local stack with one command over HTTPS, the mileage and address servers included; watch the database itself refuse what the rules forbid; run a ticket's story from a terminal | 17 of 17 | ✅ done 2026-10-01: every task and every requirement, and committed; opening Phase 1 is your call (§6) |
 | — | **The answer key** | Hold the golden mission's signed-off numbers and the acceptance scenarios that every later phase must pass | not counted in REQs | ⬜ draft mission written, numbers not signed off |
 | **1** | **Data core and engine** | Run a whole messy mission from a terminal, no screens, and see the right statuses, flags, ledger and audit trail come out | 0 of 96 | 🔒 |
 | **2** | **API and sync** | Have phones and the back office talk to the server: sign-in, permissions, device enrolment, sync, background jobs, all hardened | 0 of 11 | 🔒 |
@@ -57,7 +57,7 @@ the relative size: Phase 1 is by far the largest piece.
 |---|---|---|---|
 | 0.1 | Approve the architecture, section by section; the agents' guard hook for the new layout | 6 of 6 | ✅ 2026-10-01 |
 | 0.2 | Scaffold: the monorepo, the test runner, the local HTTPS stack, the installer | 4 of 4 | ✅ 2026-09-29 |
-| 0.2b | Spec pages before the schema: naming, `DATA-MODEL.md`, `FLAGS.md` | 3 of 3 drafted | 🟡 all three written; **`DATA-MODEL.md` and `FLAGS.md` wait for your approval** |
+| 0.2b | Spec pages before the schema: naming, `DATA-MODEL.md`, `FLAGS.md` | 3 of 3 | ✅ 2026-10-01: all three approved (ADR-289, 290); the data model changed at your word (ADR-292…295); its thirteen points are all settled |
 | 0.2c | Rewrite every skill in today's rules | all | ✅ 2026-09-29 |
 | 0.3 | The database enforces the rules: roles, grants, no deletes, audit by trigger, row-level security | 4 of 4 | ✅ 2026-09-30 |
 | 0.4 | Prove it end to end: scenario harness, security checks, the device and assignment models | 3 of 3 | ✅ 2026-10-01 |
@@ -66,15 +66,14 @@ the relative size: Phase 1 is by far the largest piece.
 **Phase 0's exit criteria** (`NEXT.md`): all seven are met (2026-10-01, ADR-281). Phase 1 opens when you say so.
 
 **Recorded test state** (2026-10-01, ADR-287, run that day): 26 test files, 317 tests passing; two
-stories pass (`ticket-101001` 15 checks, `dispatch-monday` 13 checks); `pnpm security` 6 checks
-passed, 1 failed (the old root `docker-compose.yml`, see §6).
+stories pass (`ticket-101001` 15 checks, `dispatch-monday` 13 checks); `pnpm security` 7 checks
+passed, 0 failed (run again 2026-10-01, after you retired the old root `docker-compose.yml`, ADR-291).
 
 **Phase 0's requirements, after the close-out (ADR-287):**
 
 | | REQs | Where they stand |
 |---|---|---|
-| Ticked | 001, 005, 007…014, 018…023 (16) | Met and proven by tests or by the approvals on record |
-| Waiting on you | 002 | Everything it asks is done except "lockfiles committed": nothing has ever been committed |
+| Ticked | 001, 002, 005, 007…014, 018…023 (17) | Met and proven by tests or by the approvals on record; 002 by your first commits, the lockfile among them (ADR-288) |
 | Moved to Phase 1 | 003, 015, 017 | The shared rules package fills up as rules are built; reconciliation; the golden mission as the harness's story |
 | Moved to Phase 2 | 004, 006, 016 | A schema for every API payload; every service (the API and apps too) over HTTPS; the sync's "already saved" ledger |
 
@@ -121,11 +120,10 @@ Nothing here blocks the next task. Each is listed with the point where it starts
 
 | What | Why it's yours | Matters by |
 |---|---|---|
-| **A first git commit** | Nothing in this repository has ever been committed; agents don't write to git. **It is also the last open Phase 0 requirement (REQ-002)** | Now: every file is one mistake away from unrecoverable |
-| Retire the old root `docker-compose.yml` | It holds a plain-text password; `pnpm security` fails on it, and staging the whole folder would commit it (KD-59) | Before that first commit |
-| **Approve `spec/DATA-MODEL.md`** | Field names, record shapes and export columns are yours to overturn; its §12 lists sixteen defaults | Before Phase 1's schema |
-| **Approve `spec/FLAGS.md`** | The wording of 67 flags, and one money question: which certification bills a load whose two cert numbers differ (its §5) | Before Phase 1's engine |
-| **Say when Phase 1 opens** | Phase 0's tasks are done; the phase gate is yours | When the three rows above are settled, or sooner if you choose |
+| Commit each response's changes | Agents don't write to git; every file-changing response ends with a block for you to run. The history began 2026-10-01 (nine commits on `phase0-foundation`, ADR-288) | After each response, so no work sits uncommitted |
+| A `main` branch and a remote | The history lives on one branch on this machine only; where it is pushed and what the default branch is are your call | Before anyone else needs the code, and as the only copy's backup |
+| The agent's details on five of your answers | An ROE's scope (debris types and unit rate payable types; no picks, no check); helpers stored one row each; a flag naming the line it is about; a survey number not forced to be unique; a haul-out pile told apart by its debris type and field tag, with a flag when a pile's load call isn't higher than the one before. Each is yours to overturn (`spec/DATA-MODEL.md` §12, 17–21) | Before Phase 1 builds those records |
+| **Say when Phase 1 opens** | Phase 0's tasks are done; the phase gate is yours | Whenever you choose: nothing in Phase 0 is waiting |
 | Sign off the golden mission's numbers | It's the answer key every phase is graded against (`spec/golden/MISSION.md`, a draft today) | Before Phase 1's engine work |
 | The map region for examples | The local stack's built-in map extract is Delaware (small, dated), standing in for the made-up Bayline County (ADR-282). Florida's needs more disk than Docker has on this machine (8 GB) | Before the golden mission's GPS points are picked |
 | Approve the ADR-240 notes in ARCHITECTURE §7–§10 | The approved sections were updated to "enrol once, assignment daily" | Any time; building doesn't wait |

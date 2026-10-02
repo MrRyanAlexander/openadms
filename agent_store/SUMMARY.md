@@ -7,11 +7,13 @@ entries to cite. The reasons live in the ADRs and the skills.
 - **Keep it current:** when you add, amend or supersede an ADR, or open or close a KD, update this
   page **in the same response** (`adms-decisions`).
 - **If this page and a log entry disagree,** the newest ADR wins: fix this page and say so.
-- Updated 2026-10-01, through ADR-287 / KD-64. Rounds 13–26 are answered (ADR-145…228).
+- Updated 2026-10-01, through ADR-295 / KD-65. Rounds 13–26 are answered (ADR-145…228).
   **Phase 0's tasks are all done (ADR-282…287):** the map servers in the local stack, the guard hook
   tested, `spec/DATA-MODEL.md` and `spec/FLAGS.md` drafted, an assignment's pay items, the REQ list
-  closed out (16 of 17; REQ-002 waits on the user's first commit). **The two drafts wait for the
-  user's approval; Phase 1 opens on the user's word.**
+  closed out (17 of 17: REQ-002 ticked with the user's first commits, nine on branch
+  `phase0-foundation`, ADR-288; a git block stages named paths, never `git add .`). **`spec/DATA-MODEL.md` and
+  `spec/FLAGS.md` are approved (ADR-289, 290); all thirteen of the data model's points are settled
+  (KD-65 closed, ADR-292…295); Phase 1 opens on the user's word.**
   **The roadmap, start to finish, in tables: `agent_store/ROADMAP.md`** (ADR-280), the user's page;
   it summarises the state files and is updated at every close-out.
   **Agents leave nothing running** (ADR-277): the local stack is started for a task (`pnpm local:up`)
@@ -460,7 +462,9 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
 - **A truck keyed in by hand** bills the **certification's** capacity; the typed capacity is only
   the monitor's claim, flagged if it differs; no such cert → unbilled and flagged until one exists.
   [154]
-- **Attestation:** the monitor (plus any helpers' IDs, flagged if they don't match a user), then
+- **Attestation:** the certifying monitor makes and measures it; a helper is **picked** from the
+  people assigned to the project with them, or left blank (never typed; `HELPER_NOT_FOUND` is retired,
+  ADR-294, amending 080); then
   a back-office **QC** as "checked by", with a "signatures on file" yes/no. Representatives are
   names only. The paper's barcode isn't used. [080]
 
@@ -499,13 +503,25 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   bare. Each property's share = its estimate ÷ Σ estimates, applied to CY or tonnage. There is no
   divergence check. **Rules run once per property**, on its share (its own zone, address, mileage;
   the load's cert, disposal and load call; *Volume* = its share). [032, 033, 055, 064, 162, 173]
+- **Split haul-outs** (where the project allows split loads): N haul-out collections → 1 haul-out
+  disposal, one collection per **pile** at the TDSR (debris kept apart by the area it came from),
+  `-A`, `-B`… Each gives the **load call so far**; the last is the haul-out's. A pile's part is what
+  it added (10%, 35%, 85% → 10, 25, 50); its CY = capacity × its part, its share of a scale weight =
+  its part ÷ the last call. **Rules run once per pile.** *Agent defaults:* a pile is told by its
+  debris type and field tag; a call not higher than the one before is flagged
+  (`PILE_CALL_NOT_HIGHER`) and nothing bills; the load-call limits judge only the last call. A truck
+  and trailer hauled out and weighed once are split by capacity, flagged and marked as shares, as
+  loads are. [295]
 - **A refused load is not recorded**; a load dumps once and has **one** disposal. [155]
 - **ROEs** are records like tickets: made on a phone (offline) or in the back office; number,
   parcel ID, address, owner, signed + date, **scope** (choices, counts, GPS), photo of the signed
   form. On an ROE-required project **every collection, unit rate ticket and survey carries one**. A
   **post-work survey links to its pre-work survey by ROE number** (flagged if none). A phone-made ROE
-  takes a number from the phone's block unless the paper ROE has one (typed); its scope choices and
-  counts are the firm's ROE form fields; "GPS required" is a setting on the ROE form. [149, 150, 181]
+  takes a number from the phone's block unless the paper ROE has one (typed); its **scope** is
+  picked from what the project already has (its load form's debris types, its unit rate payable
+  types, each with an optional count that is recorded, never checked), and a ticket whose debris
+  type or payable type isn't among them is flagged; no picks, no scope check (ADR-293, amending
+  ADR-181 (6)); "GPS required" is a setting on the ROE form. [149, 150, 181]
 - **Unit rate:** after the crew badge and crew photo, the monitor picks the **pay item** being done
   (the legacy "hazard type") **by name**, never a code: the list shows **each payable type once**
   (Leaners, Hangers, Stumps), the monitor measures, and **the phone works out the payable pay item** in
@@ -791,7 +807,7 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
 - **`NEXT.md`'s Handoff** is where a new agent learns where the product ends up and the road there
   (state, road to done, open areas, how the user works); round history lives in `DECISIONS.md`'s
   session log. [225]
-- **`spec/DATA-MODEL.md` and `spec/FLAGS.md` are drafted, not yet approved.** The first is the
+- **`spec/DATA-MODEL.md` and `spec/FLAGS.md` are approved by the user (2026-10-01, ADR-289, 290).** The first is the
   schema on paper (every record and field, who writes it, what the database refuses, thirteen
   exports' columns), with sixteen agent defaults in its §12: one table per list; no ticket table; a
   completed load tied to its disposal event with a row per collection and `dissolvedAt` instead of a
@@ -800,9 +816,29 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   flag's facts as JSON written by the worker alone; subs as contractors placed on a project; the
   form's own debris type entry on a field event; typed rule criteria; no driver copy on events; an
   ROE number series; the permissions list; a site's short code; the export column names. The second
-  is the catalogue of **67 flags** (code, trigger, message, whether it still bills, the facts it
+  is the catalogue of **67 flags** (67 as approved; `HELPER_NOT_FOUND` retired, ADR-294; `PILE_CALL_NOT_HIGHER` added, ADR-295) (code, trigger, message, whether it still bills, the facts it
   keeps), one message shape ("Ticket 101008: … Flagged for review."), accepting never changes what
-  bills. **Cite neither as a rule until approved**; the skills stay the rules. [140, 284, 285]
+  bills. **Approved with FLAGS §5 (ADR-290):** when a load's two cert numbers differ, the certification
+  on the field event that took the quantity bills it (the disposal; a haul-out's collection), flagged
+  either way; no "over the legal limit" weight test until a limit is given; a message's dates and
+  times are `03-Feb-2027` and 24-hour `21:40`, project time. **Approved with DATA-MODEL (ADR-289):**
+  the driver is on the certification only and a ticket shows it from there, no copy stored on the
+  field event. Field names and flag codes come from these two pages; what a record *means* stays
+  with the skills. **Changed on DATA-MODEL at the user's word (ADR-292):** a pay item names no form (a
+  rule does, so a site's tipping fee can be added by a Load rule and a Haul-out rule; "Pays when"
+  says which forms); the numbering model is `ProjectNumberSeries` (`NumberSeries` is the enum); a
+  field event and a survey keep `roeNumber` as picked or typed beside `roeId`; a unit rate event
+  keeps its `kindOfWorkId`; a quarantined record owns its photos and its field event keeps the
+  phone-made id; a transaction's contract is required. **An ROE's scope (ADR-293)** is rows picked
+  from the project's own setup (`RoeScopeItem`: the load form's debris types, the unit rate payable
+  types, an optional count); a ticket whose debris type or payable type isn't among them is
+  flagged `ROE_OUT_OF_SCOPE`; no rows, no scope check. **Also settled (ADR-294):** a flag carries `billing` (`BILLS` ·
+  `LINE_NOT_BILLED` · `NOT_BILLED`) and the line it is about; an ROE is setup, like a certification
+  (set up, then filled in by a monitor or the back office); a survey's number is typed as written,
+  usually the property's legal identifier, never issued; a scale receipt names the disposal monitor
+  who entered it. **KD-65 is closed (ADR-295):** a completed haul-out has a completed
+  load's shape (a row per collection event) and carries the tandem's `weightIsShare` mark. [140, 284,
+  285, 289, 290, 292, 293, 294, 295]
 - **Status marks** (✅ / ⚠️ / ❓) are changed only by the user, or recorded from their words. [133, 139]
 - **TDSR** = Temporary Debris *Staging* and Reduction Site; DMS means the same thing. [091]
 
@@ -897,6 +933,9 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
 | 281 (8) (an assignment's unit rate pay items left for Phase 1) | 286 | Built: a provisional `PayItem` and `AssignmentPayItem` |
 | 263 (2) (four services in the local stack) | 282 | Six: the routing and address servers joined |
 | 266 (3), (5) (the master passcode's hash in `packages/db/.env`; a lost database put back with nothing asked) | 281 | The hash is kept only in the database; a resume after a lost database asks for the passcode again |
+| 153 (the driver "carried onto" a ticket read as a stored copy) | 289 | No copy is stored on a field event; a ticket shows and exports its certification's driver |
+| 181 (6) (an ROE's scope choices and counts are the firm's own ROE form fields) | 293 | Scope is picked from the project's own setup: the load form's debris types and the unit rate payable types; a count is recorded, never checked |
+| 080 (helpers' IDs typed, flagged when they match no user) | 294 | A helper is picked from the people assigned to the project, or left blank; no flag |
 
 ---
 
@@ -919,7 +958,7 @@ Full text: `DEVIATIONS.md`.
 | **Unit rate** | 27, 28, 44, 30 | No itemised counts or sub-types; unit-count flag ignored; no decimals; HHW disposition trail (low priority, design not yet discussed) |
 | **Splits and scale receipts** | 22, 23, 24, 29 | No estimate or ROE on collections; no scale receipts; no `LB` unit |
 | **Permissions and records** | 25, 37, 40 | No edit permissions; no creating-device field; no invoice lock |
-| **Docs and tooling** | 34, **59**, 63 | README test count (34); the root `docker-compose.yml` is the historical, unhardened one (59); **63**: the `development/` conventions draft is read-only background, its errors listed in CONVENTIONS §8. 33, 58, 61 and 62 closed by the rewrites and the truth-up (ADR-247…253); 57 closed by the `adms-verify` rewrite (ADR-259) |
+| **Docs and tooling** | 34, 63, **65** | README test count (34); 65 closed 2026-10-01: `spec/DATA-MODEL.md`'s thirteen points settled at the user's word (ADR-292…295). 59 closed 2026-10-01: the user retired the root `docker-compose.yml` and its volume, `pnpm security` 7 passed, 0 failed (ADR-291); **63**: the `development/` conventions draft is read-only background, its errors listed in CONVENTIONS §8. 33, 58, 61 and 62 closed by the rewrites and the truth-up (ADR-247…253); 57 closed by the `adms-verify` rewrite (ADR-259) |
 
 **Known later concerns from the Phase 0 build** (not KDs: nothing disagrees with a rule yet) are the
 **carry-forward register** in `BACKLOG.md` (C1…C47, by the task that picks each up; ADR-274; C1–C3
@@ -935,12 +974,12 @@ per-login timeout with Phase 2, TLS with the demo deploy); nothing states the vi
 
 ## 4. Waiting on the user
 
-- **Phase 0's tasks are all done (ADR-282…287); three things are yours:** (1) **the first commit**, which ticks REQ-002, the last Phase 0 REQ (retire the root `docker-compose.yml` first, below); (2) **approve `spec/DATA-MODEL.md`** (its §12) **and `spec/FLAGS.md`** (its §5); (3) **say that Phase 1 opens.** Before Phase 1's engine work the road still asks for the acceptance scenarios, the golden mission's signed-off numbers and Phase 1's milestones in `BACKLOG.md`.
-- **One question that changes money (ADR-285, `spec/FLAGS.md` §5):** when the two cert numbers on a load differ, which certification bills it. The draft's default: the one on the field event that took the quantity (the disposal for a load, the haul-out collection for a haul-out); the ticket is flagged either way.
+- **Phase 0's tasks are all done (ADR-282…287) and committed (ADR-288: the user's first commits, REQ-002 ticked, 17 of 17); both spec pages are approved (ADR-289, 290). Two things are yours:** (1) **nothing blocks**: KD-65 is closed (ADR-292…295). The agent's details on your answers are yours to overturn (DATA-MODEL §12, 17–21: an ROE's scope; helpers as rows; the flag's line fields; a survey number not unique; a haul-out pile told by its debris type and field tag, with a flag when a pile's call isn't higher than the one before); (2) **say that Phase 1 opens.** Also yours, blocking nothing: a `main` branch and a remote (the history is one local branch, `phase0-foundation`). Before Phase 1's engine work the road still asks for the acceptance scenarios, the golden mission's signed-off numbers and Phase 1's milestones in `BACKLOG.md`.
+- ~~One question that changes money (ADR-285, `spec/FLAGS.md` §5): which certification bills a load whose two cert numbers differ.~~ **Answered by the approval (ADR-290):** the one on the field event that took the quantity; the ticket is flagged either way.
 - **The REQ moves are yours to overturn (ADR-287):** REQ-003, 015, 017 now sit in Phase 1 and REQ-004, 006, 016 in Phase 2, because only that phase's work can finish them.
 - **The map region (ADR-282):** the local stack's built-in extract is Delaware (small, dated, in the mission's time zone), standing in for the made-up Bayline County. Say if another region should stand in; Florida's needs more disk than Docker has here (8 GB).
 - **The local installation was re-made on 2026-10-01** (teardown, then a first run, to prove the installer's new paths, as ADR-266's proofs did): its master passcode is a throw-away random value nobody knows. To set your own: `pnpm installer:teardown`, then `pnpm installer`.
-- **Raised 2026-09-30 (ADR-276, KD-59): the historical root `docker-compose.yml`.** It's untracked (staging the folder would commit it), holds a plain-text database password, and its container `debrismonitor_kiro-postgres-1` was running, published on every interface at 5432 (the user stopped it, 2026-09-30). `pnpm security` fails on it until the user retires it; retiring it, its volume `debrismonitor_kiro_postgres_data` and the `.gitignore` sections for `database/` and the placeholder folders is the user's call (C27).
+- ~~Raised 2026-09-30 (ADR-276, KD-59): the historical root `docker-compose.yml`.~~ **Retired by the user, 2026-10-01 (ADR-291):** the file and its volume are gone and `pnpm security` passes whole (7 passed, 0 failed). Never recreate a root compose file. `.gitignore`'s `database/` section stays, harmless, the user's (C27).
 - **Node:** done. fnm gives Node 24.21.0; agents run `eval "$(fnm env --shell zsh)"` first, since their
   shell finds Homebrew's 25.2.1 otherwise (ADR-233).
 - **Agent defaults the user may overturn any time** (formerly readings to confirm): ADR-214, a

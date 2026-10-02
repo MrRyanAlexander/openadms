@@ -41,8 +41,8 @@ All observed and reported, not assumed:
    ADR; `SUMMARY.md` updated (REQ-001). ✅ Done 
 2. Foundation questions answered. ✅ Done 2026-09-25 (Q-90…Q-94, Q-114, Q-115).
 3. Repository scaffolded to the approved layout, dependencies pinned by ADR (REQ-002, REQ-005).
-   ✅ Done (ADR-255…266; REQ-005 ticked, ADR-287). **REQ-002 waits only on the user's first commit**
-   ("lockfiles committed": nothing has ever been committed). REQ-003 and REQ-004 (what the domain and
+   ✅ Done (ADR-255…266; REQ-005 ticked, ADR-287). **REQ-002 ticked 2026-10-01 (ADR-288): the user
+   made the first commits**, the lockfile among them. REQ-003 and REQ-004 (what the domain and
    contracts packages come to hold) moved to Phases 1 and 2 (ADR-287).
 4. The local stack runs with one command over HTTPS; the installer resumes cleanly (REQ-007, 008).
    ✅ Done (ADR-263…266); the routing and address servers joined 2026-10-01 (REQ-022, ADR-282).
@@ -54,14 +54,15 @@ All observed and reported, not assumed:
 6. The scenario harness runs one trivial end-to-end story from a terminal, and the security checks
    run with the tests (REQ-018). (REQ-017, the golden mission as its story, moved to Phase 1, ADR-287.) ✅ The harness part done 2026-09-30 (ADR-275:
    `pnpm scenarios`, story `ticket-101001`, 14 checks); ✅ the security checks done 2026-09-30
-   (ADR-276: `pnpm security`, REQ-018; it fails on one finding, the historical root
-   `docker-compose.yml`, KD-59, until the user retires it).
+   (ADR-276: `pnpm security`, REQ-018; **7 passed, 0 failed** since the user retired the historical
+   root `docker-compose.yml`, 2026-10-01, ADR-291).
 7. Time zone, device and Monitor ID foundations modelled (REQ-019…021). ✅ Done 2026-10-01 (ADR-281,
    286: all three ticked; an assignment names its unit rate pay items).
 
-**All seven are met, and every Phase 0 task is done (2026-10-01, ADR-282…287):** 16 of Phase 0's 17
-REQs are ticked. **What's left is the user's:** the first commit (REQ-002), the approval of
-`spec/DATA-MODEL.md` and `spec/FLAGS.md`, and the word that opens Phase 1.
+**All seven are met, and every Phase 0 task is done (2026-10-01, ADR-282…287):** all 17 of Phase 0's
+REQs are ticked (REQ-002 with the user's first commits, ADR-288), and `spec/DATA-MODEL.md` and
+`spec/FLAGS.md` are approved (ADR-289, 290). The data model's thirteen points are settled (KD-65 closed, ADR-292…295). **What's left is the
+user's:** the word that opens Phase 1.
 
 Only then does **Phase 1 (data core and engine, rebuilt)** open. It must meet every Phase 1 REQ
 and close the rebuild lessons (KD-55, KD-56 and the historical KDs).
@@ -93,8 +94,11 @@ approved it.
 - [x] `spec/RULES.md`: the rule builder spec (ADR-123), extended through ADR-132 (white goods rules in §9), one
       contract per rule (ADR-239). **✅ Approved 2026-09-29** (ADR-269), §7 "Is valid" included.
 - [x] `spec/FROM-BUILD-1.md` (complete; no approval needed): the user's Build 1 answers, verbatim (ADR-102).
-- [x] `spec/DATA-MODEL.md` (ADR-284) and `spec/FLAGS.md` (ADR-285) drafted 2026-10-01. **Not yet
-      approved**: the first lists sixteen agent defaults in its §12, the second four points in its §5.
+- [x] `spec/DATA-MODEL.md` (ADR-284) and `spec/FLAGS.md` (ADR-285) drafted 2026-10-01. **✅ Approved
+      by the user 2026-10-01** (ADR-289, 290): the sixteen defaults of the first and the four points
+      of the second stand. DATA-MODEL was then laid out one way throughout, and checked against the
+      rest of the spec: thirteen points (KD-65). **All settled the same day at the user's word
+      (ADR-292…295).**
 - [ ] `spec/acceptance/`: `AC-…` scenarios from approved part pages; they become scenario-harness
       stories (REQ-017).
 - [ ] `spec/golden/`: the golden mission and its expected ledger; the user signs off the numbers.
@@ -115,7 +119,7 @@ of `DECISIONS.md`.
   and read-only. `spec/ARCHITECTURE.md` is **approved in full**, so **Milestone 0.2 (scaffold) is
   open** (ADR-143), with a step-by-step brief in `BACKLOG.md` (ADR-231). **The skill rewrites
   are done** (Milestone 0.2c, ADR-232, 242, 244, 245, 248…253; every skill but `adms-verify` is
-  current) and so is the docs truth-up (ADR-247). **The monorepo skeleton (0.2.1) is done** (ADR-255…258: pnpm 11 workspace, TypeScript 6.0.3, ESLint + Prettier, `pnpm licences`), **and so is 0.2.2** (ADR-259…261: Vitest 5.0.1 on Vite 8.3.0, Zod in `contracts` → `domain`, `adms-verify` rewritten), **and 0.2.3** (ADR-263, 264: the local stack in `infra/local`, Postgres 18.6, SeaweedFS, Caddy, Mailpit, HTTPS only, `pnpm local:up`), **and 0.2.4** (ADR-265, 266: `pnpm installer`, the four login roles and the database `adms`, one env file per service); **Milestone 0.2 is done.** **0.3.1 is done** (ADR-267, 268: Prisma 7.10.0, nine provisional models, the first migration applied by the installer), **and 0.3.2** (ADR-270: nine guard migrations, proven on a re-created database), **and 0.3.3** (ADR-272: 94 database tests; 26 loosened guards, each caught; `guard_gaps()` fixed forward), **and 0.3.4** (ADR-273: `db.$write(actor, work)`, the Prisma client extension that states the actor; the system actor, `User` role `SYSTEM`, seeded by the installer); **Milestone 0.3 is done**, **and 0.4.1** (ADR-275: the scenario harness, `pnpm scenarios`; each story on its own database, made, migrated, seeded and dropped; the first story, ticket 101001, synced out of order), **and 0.4.2** (ADR-276: the system actor's guard, so the API can't write as it or change it; `pnpm security`, the dependency audit, secrets scan, env files and grant tests with real counts; CIS items for the database), **and 0.4.3** (ADR-281: `MasterPasscode`, `NumberBlock`, a provisional `DisposalSite`, `Assignment`; the device's name, unique key, status and passcode version; a database-issued Monitor ID and an employer; every field event's assignment and setup version; the project's time zone checked; the master passcode's hash kept in the database alone and out of the audit log; a second story, `dispatch-monday`); **Milestone 0.4 is done and Phase 0's seven exit criteria are met.** **2026-10-01, closing Phase 0 out at the user's word (ADR-282…287):** the routing and address servers in the local stack (Valhalla 3.9.0, Nominatim 5.3.2, one pinned Delaware extract; REQ-022); the guard hook tightened and tested (0.1.6, REQ-023); `spec/DATA-MODEL.md` and `spec/FLAGS.md` drafted (0.2b.2, 0.2b.3); an assignment's unit rate pay items (REQ-020); the REQ list closed out (16 of 17; six moved to the phase that finishes each). **Every Phase 0 task is done.** **Every known later concern** from ADR-255…274 is filed in
+  current) and so is the docs truth-up (ADR-247). **The monorepo skeleton (0.2.1) is done** (ADR-255…258: pnpm 11 workspace, TypeScript 6.0.3, ESLint + Prettier, `pnpm licences`), **and so is 0.2.2** (ADR-259…261: Vitest 5.0.1 on Vite 8.3.0, Zod in `contracts` → `domain`, `adms-verify` rewritten), **and 0.2.3** (ADR-263, 264: the local stack in `infra/local`, Postgres 18.6, SeaweedFS, Caddy, Mailpit, HTTPS only, `pnpm local:up`), **and 0.2.4** (ADR-265, 266: `pnpm installer`, the four login roles and the database `adms`, one env file per service); **Milestone 0.2 is done.** **0.3.1 is done** (ADR-267, 268: Prisma 7.10.0, nine provisional models, the first migration applied by the installer), **and 0.3.2** (ADR-270: nine guard migrations, proven on a re-created database), **and 0.3.3** (ADR-272: 94 database tests; 26 loosened guards, each caught; `guard_gaps()` fixed forward), **and 0.3.4** (ADR-273: `db.$write(actor, work)`, the Prisma client extension that states the actor; the system actor, `User` role `SYSTEM`, seeded by the installer); **Milestone 0.3 is done**, **and 0.4.1** (ADR-275: the scenario harness, `pnpm scenarios`; each story on its own database, made, migrated, seeded and dropped; the first story, ticket 101001, synced out of order), **and 0.4.2** (ADR-276: the system actor's guard, so the API can't write as it or change it; `pnpm security`, the dependency audit, secrets scan, env files and grant tests with real counts; CIS items for the database), **and 0.4.3** (ADR-281: `MasterPasscode`, `NumberBlock`, a provisional `DisposalSite`, `Assignment`; the device's name, unique key, status and passcode version; a database-issued Monitor ID and an employer; every field event's assignment and setup version; the project's time zone checked; the master passcode's hash kept in the database alone and out of the audit log; a second story, `dispatch-monday`); **Milestone 0.4 is done and Phase 0's seven exit criteria are met.** **2026-10-01, closing Phase 0 out at the user's word (ADR-282…287):** the routing and address servers in the local stack (Valhalla 3.9.0, Nominatim 5.3.2, one pinned Delaware extract; REQ-022); the guard hook tightened and tested (0.1.6, REQ-023); `spec/DATA-MODEL.md` and `spec/FLAGS.md` drafted (0.2b.2, 0.2b.3); an assignment's unit rate pay items (REQ-020); the REQ list closed out (17 of 17 once the user made the first commits, ADR-288; six moved to the phase that finishes each). **Every Phase 0 task is done.** **Every known later concern** from ADR-255…274 is filed in
   `BACKLOG.md`'s **carry-forward register** (C1…C47) under the task that picks it up (ADR-274): read
   a task's items before starting it.
 - **Product rules:** 26 rounds of questions, **ADR-001…231**. **Discovery is closed (ADR-230, the
@@ -201,7 +205,7 @@ Update it at close-out when a task, milestone or phase closes.
 | # | Step | What it produces | Needs first |
 |---|---|---|---|
 | 1 | **Phase 0 scaffold** (BACKLOG 0.2.1 → 0.2.4) ✅ done (ADR-255…266) | Monorepo with pinned dependencies (AGPL-3.0-compatible), domain and contracts packages with tests, local HTTPS stack, installer | Node 24 LTS on the machine |
-| 2 | **Naming pass ✅ (`spec/CONVENTIONS.md`, ADR-234) → `DATA-MODEL.md` → `FLAGS.md`** (BACKLOG 0.2b) ✅ both drafted 2026-10-01 (ADR-284, 285); **the user's approval is open** | Every record, field, criterion, status and export column named; the schema on paper; every flag's code, trigger, message, still-bills and accept rule; the user may overturn any name | Can run beside step 1 |
+| 2 | **Naming pass ✅ (`spec/CONVENTIONS.md`, ADR-234) → `DATA-MODEL.md` → `FLAGS.md`** (BACKLOG 0.2b) ✅ both drafted and **approved 2026-10-01** (ADR-284, 285, 289, 290); DATA-MODEL's open points are KD-65 | Every record, field, criterion, status and export column named; the schema on paper; every flag's code, trigger, message, still-bills and accept rule; the user may overturn any name | Can run beside step 1 |
 | 3 | **Database hardening** (BACKLOG 0.3) ✅ done (ADR-267, 268, 270…273) | Roles, grants, no deletes, audit triggers, insert-only audit, transaction copy-to-audit, row-level security, each proven by tests | Step 1; minimal provisional models |
 | 4 | **Prove it** (BACKLOG 0.4) ✅ done 2026-10-01 (ADR-275, 276, 281) | Scenario harness with one trivial story; security checks in the test run; time zone, device, Monitor ID models | Steps 1, 3 |
 | 5 | **Truth-up the docs** ✅ done 2026-09-29 (ADR-247…253; KD-33, 58, 61, 62 closed) | `RATE-SHEET.md`, `RULES.md`, `LISTS.md`, parts 01/04/06/07 and the skills rewritten to today's rules, one per response (ADR-138) | Before step 7's engine work |
@@ -216,8 +220,8 @@ Update it at close-out when a task, milestone or phase closes.
   (rules settled, ADR-241); which phase the read-only portal lands in (`VISION.md` §7); each Phase 5
   candidate; `RULES.md` §7 "Is valid"; whether to keep hand re-entry of the ticket number (ADR-209)
   when the field app is built.
-- **Approvals as part of later steps:** `DATA-MODEL.md`, `FLAGS.md` wording, the golden mission's
-  numbers. The names in `spec/CONVENTIONS.md` are agent defaults the user may overturn.
+- **Approvals as part of later steps:** the golden mission's numbers (`DATA-MODEL.md` and
+  `FLAGS.md` are approved, ADR-289, 290). The names in `spec/CONVENTIONS.md` are agent defaults the user may overturn.
 - **Ours, not the user's:** design tasks Q-166 (regional map data) and Q-167 (upgrading an
   installation).
 
@@ -248,15 +252,19 @@ Update it at close-out when a task, milestone or phase closes.
   Desktop's settings. A first `local:up` downloads the map extract (20 MB; the download site answers
   only over IPv4 here, which Node handles) and takes about two minutes; a resume takes about 12 s.
   If every `docker` call answers 500, Docker Desktop's engine is stuck: quit and reopen it.
+- **The repository has a history since 2026-10-01 (ADR-288):** nine commits by the user on branch
+  `phase0-foundation` (`a94cdb6`…`b5329fe`), each a slice of that day's files in Phase 0's build
+  order, so only the newest is a state that was built and tested whole. There is no `main` and no
+  remote yet (both the user's call). Agents still never write to git (ADR-008): end a file-changing
+  response with the user's git block, **staging named paths, never `git add .`**.
 - **`database/` and the placeholder folders (`api/`, `field-webapp/`, `back-office-webapp/`) are no
-  longer in the working folder** (seen 2026-10-01; nothing was ever committed). Never restore them.
+  longer in the working folder** (seen 2026-10-01; they were never committed). Never restore them.
   The docs' "`database/` is historical, read-only" lines stand as the rule if it reappears.
 - **Leave nothing running (ADR-277, the user, 2026-09-30).** Start the local stack with `pnpm
   local:up` when a task needs it; stop it with `pnpm local:down` at close-out (`adms-close-out` §0),
   with throw-away databases, containers and volumes gone. Something stays up only with a line here
   saying what, why and who stops it. **Nothing needs to stay running today.** The historical root
-  stack (KD-59) is stopped; its file and its volume `debrismonitor_kiro_postgres_data` are the user's
-  to retire (C27).
+  stack is gone: the user retired its file and volume on 2026-10-01 (KD-59 closed, ADR-291).
 - **The local installation was re-made on 2026-10-01** (ADR-281: teardown, then a first run, to
   prove the installer's new paths). Its master passcode is a throw-away random value; the user sets
   their own with `pnpm installer:teardown`, then `pnpm installer`. `prisma migrate dev --create-only`
@@ -276,16 +284,16 @@ road to done), then `agent_store/SUMMARY.md`. Product discovery is closed (ADR-2
 rounds of questions.
 
 👉 **Phase 0's tasks are all done (ADR-282…287). There is no next build task until the user says
-Phase 1 opens.** Three things are the user's, and each is waited on, never assumed:
-1. **The first commit** (REQ-002, the last Phase 0 REQ; nothing has ever been committed, and
-   retiring the historical root `docker-compose.yml`, KD-59, comes before it).
-2. **Approve `spec/DATA-MODEL.md`** (its §12: sixteen agent defaults) **and `spec/FLAGS.md`** (its §5:
-   which certification bills a load whose two cert numbers differ; the wording). Read their inline
-   answers in full, record each as an ADR, update the pages and the skills that quote them.
-3. **Say that Phase 1 opens.**
+Phase 1 opens.** All 17 of Phase 0's REQs are ticked (ADR-288) and `spec/DATA-MODEL.md` and
+`spec/FLAGS.md` are approved (ADR-289, 290). Two things are the user's, and each is waited on, never
+assumed:
+1. **Nothing on the data model blocks:** its thirteen points are settled and on the page (KD-65
+   closed, ADR-292…295). The agent's details on the user's answers (DATA-MODEL §12, 17–21) are theirs
+   to overturn; if they do, record an ADR and change the page and the skills that quote it.
+2. **Say that Phase 1 opens.**
 
 **If the user asks for work before then, in this order** (the road's steps 2 and 6, none of it
-Phase 1's engine): (a) apply the user's answers to the two drafts; (b) **`spec/acceptance/`**: the
+Phase 1's engine): (a) a requirement and a golden-mission ticket for a split haul-out (C51); (b) **`spec/acceptance/`**: the
 `AC-…` scenarios from the approved part pages; (c) the **golden mission's numbers** for the user's
 sign-off, with its flag wording taken from `FLAGS.md` and its GPS points from the pinned map extract
 (C30, C50); (d) **Phase 1's milestones in `BACKLOG.md`**, in `ROADMAP.md` §4's build order, each
@@ -294,7 +302,7 @@ includes REQ-003, 015 and 017, ADR-287).
 
 Start every command with `eval "$(fnm env --shell zsh)"`; the checks are **`adms-verify`** (the chain
 is 26 files, 317 tests; `pnpm scenarios` runs two stories), with **`pnpm security`** (ADR-276), which
-fails on the historical root `docker-compose.yml` until the user retires it (KD-59). The database
+now passes whole (7 passed, 0 failed, ADR-291). The database
 tests, the map servers' tests and the stories need `pnpm local:up` first. **The scenario harness is
 there to use** (ADR-275): add a story in `packages/scenarios/src/stories/`.
 

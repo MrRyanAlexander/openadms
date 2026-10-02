@@ -14,12 +14,13 @@ code present *and* covered by a passing test.
 
 > **2026-10-01 (ADR-287), at the user's word that Phase 0 be fully completed:** 17 REQs are
 > Phase 0's own, **16 ticked**. The one left is **REQ-002**, which waits on the user's first commit.
+> **Later that day (ADR-288): the user made the first commits, REQ-002 is ticked, and all 17 are met.**
 > Six REQs that only a later phase's work can finish were moved to that phase, ids and text kept;
 > what Phase 0 delivered for each is in the table at the end of this section.
 
 **Design and approval**
 - [x] **REQ-001** `spec/ARCHITECTURE.md` approved by the user, section by section; each approval recorded as an ADR, and open questions Q-90…Q-94 answered. ✅ *2026-10-01 (ADR-287): every section carries its approval (ADR-104, 139, 141, 143, 144); Q-90…Q-94 are all answered.*
-- [ ] **REQ-002** Repository scaffolded to the approved layout (ARCHITECTURE §18); every dependency pinned and recorded in an ADR; lockfiles committed. — **2026-10-01 (ADR-287): met but for the commit.** The layout is §18's (ADR-255…266), every dependency is pinned with its ADR, the frozen install passes; **nothing in this repository has ever been committed**, and agents don't write to git (ADR-008). Ticked when the user makes the first commit.
+- [x] **REQ-002** Repository scaffolded to the approved layout (ARCHITECTURE §18); every dependency pinned and recorded in an ADR; lockfiles committed. ✅ *2026-10-01 (ADR-288): the user made the first commits (nine, `a94cdb6`…`b5329fe`, branch `phase0-foundation`, 185 files); `pnpm-lock.yaml` is in `fc40b2d`. The layout is §18's (ADR-255…266), every dependency is pinned with its ADR, the frozen install passes (ADR-287).*
 - [x] **REQ-005** Ordinary modelling is a Prisma multi-file schema; the only SQL is the reviewed hardening set (Q-92). *(ADR-094/097)* ✅ *2026-10-01 (ADR-287): nineteen migrations, four Prisma-generated and fifteen the hand-written guard set; no table, column, index or relation is written by hand anywhere (the only other SQL: the installer's logins and databases, `$write`'s actor settings, the story databases).*
 
 **Install and environments**
