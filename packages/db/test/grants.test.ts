@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import { refusedBy } from './support/database.ts';
 import { eachTestRolledBack } from './support/lifecycle.ts';
+import { listTables } from './support/lists.ts';
 
 const tested = eachTestRolledBack();
 
@@ -22,6 +23,10 @@ const tableGrants: Record<string, Record<string, string>> = {
   assignment: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   pay_item: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   assignment_pay_item: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
+  // The firm's lists: configuration, each one (ADR-302).
+  ...Object.fromEntries(
+    listTables.map((table) => [table, { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' }]),
+  ),
   // A version is added, never edited, and the worker has no business reading it (ADR-281).
   master_passcode: { adms_api: 'INSERT SELECT' },
   // The API writes people, so the Monitor ID's default runs as it (ADR-281).
@@ -334,7 +339,7 @@ describe('the worker (adms_worker)', () => {
 });
 
 describe('the read-only login (adms_readonly)', () => {
-  // The new tables too: no viewer view shows them, so none is granted (ADR-281, 286).
+  // The new tables too: no viewer view shows them, so none is granted (ADR-281, 286, 302).
   it.each([
     'user',
     'contractor',
@@ -347,6 +352,7 @@ describe('the read-only login (adms_readonly)', () => {
     'assignment',
     'pay_item',
     'assignment_pay_item',
+    ...listTables,
   ])('may not read %s', async (table) => {
     const { db } = tested;
     await db.as('adms_readonly');

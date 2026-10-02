@@ -4,6 +4,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { eachTestRolledBack } from './support/lifecycle.ts';
+import { listTables } from './support/lists.ts';
 
 const tested = eachTestRolledBack();
 
@@ -24,6 +25,8 @@ const domains: Record<string, string> = {
   completed_load: 'BILLING',
   transaction: 'BILLING',
   invoice_lock: 'BILLING',
+  // The firm's lists: none holds a rate, a login or a ticket (ADR-302).
+  ...Object.fromEntries(listTables.map((table) => [table, 'OPERATIONS'])),
 };
 
 // The columns an audit trigger names so the capture leaves them out of the audit log (ADR-281).
@@ -45,7 +48,18 @@ const triggers = [
   `CREATE TRIGGER audit_record_refuse_truncate BEFORE TRUNCATE ON public.audit_record FOR EACH STATEMENT EXECUTE FUNCTION refuse_audit_change()`,
   // The system actor's row (ADR-276).
   `CREATE TRIGGER user_system_actor BEFORE INSERT OR UPDATE ON public."user" FOR EACH ROW EXECUTE FUNCTION user_system_actor_guard()`,
+  // Only a release writes a list value's key (ADR-302).
+  ...listTables.map(
+    (table) =>
+      `CREATE TRIGGER ${table}_built_in_key BEFORE INSERT OR UPDATE ON public.${table} FOR EACH ROW EXECUTE FUNCTION list_built_in_key_guard()`,
+  ),
 ].sort();
+
+// A built-in value, one with a key, is never archived: the same check on every list (ADR-302).
+const listChecks = listTables.map((table) => ({
+  name: `${table}_built_in_never_archived_check`,
+  definition: 'CHECK (((key IS NULL) OR (archived_at IS NULL)))',
+}));
 
 const viewerQual = '(viewer_sees_project(project_id) AND viewer_sees_every_ticket())';
 const policies = [
@@ -74,7 +88,7 @@ describe('the guards in the catalog', () => {
       `SELECT conname AS name, pg_get_constraintdef(oid) AS definition FROM pg_constraint
        WHERE contype = 'c' AND connamespace = 'public'::regnamespace ORDER BY conname`,
     );
-    expect(rows).toEqual([
+    const checks = [
       {
         name: 'assignment_origin_check',
         definition:
@@ -150,7 +164,9 @@ describe('the guards in the catalog', () => {
         definition:
           "CHECK (((role <> 'SYSTEM'::user_role) OR ((employer_id IS NULL) AND (employer_number IS NULL))))",
       },
-    ]);
+      ...listChecks,
+    ];
+    expect(rows).toEqual(checks.sort((a, b) => (a.name < b.name ? -1 : 1)));
   });
 
   it('row-level security on the four project-scoped tables only, with exactly their policies', async () => {

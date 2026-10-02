@@ -215,12 +215,19 @@ export const ticket101001: Story = {
         ['INSERT', 'Ana Brooks', 'DEVICE', 'P1-COL-1'],
       ],
     );
+    // The seed's rows come first, every one as the system actor: itself, the master passcode, then
+    // what the firm's lists start with (ADR-302; told value by value in packages/db's tests).
+    const afterSeed = audit.findIndex((record) => record.source !== 'SYSTEM');
+    const seeded = audit.slice(0, afterSeed).map((record) => record.tableName);
     story.check(
-      'the whole audit log: the seed’s system actor and master passcode, Dana’s nine setup rows, the two syncs',
-      audit.map((record) => [record.tableName, record.source]),
+      'the audit log opens with the seed: the system actor, the master passcode, the 94 values the firm’s 15 seeded lists start with',
+      [seeded.slice(0, 2), seeded.length - 2, new Set(seeded.slice(2)).size],
+      [['user', 'master_passcode'], 94, 15],
+    );
+    story.check(
+      'and then holds exactly Dana’s nine setup rows and the two syncs',
+      audit.slice(afterSeed).map((record) => [record.tableName, record.source]),
       [
-        ['user', 'SYSTEM'],
-        ['master_passcode', 'SYSTEM'],
         ['user', 'BACK_OFFICE'],
         ['project', 'BACK_OFFICE'],
         ['user', 'BACK_OFFICE'],

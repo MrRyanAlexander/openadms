@@ -215,12 +215,66 @@ describe('guard_table', () => {
     }
   });
 
+  it('guard_list guards a list in one line: a configuration table whose keys only a release writes', async () => {
+    const { db, world } = tested;
+    await newTable(
+      'guard_test_list',
+      `"key" text UNIQUE, "name" text NOT NULL, "archived_at" timestamptz`,
+    );
+    await db.run(`SELECT guard_list('guard_test_list', 'OPERATIONS')`);
+    // Safe to repeat.
+    await db.run(`SELECT guard_list('guard_test_list', 'OPERATIONS')`);
+    expect(await gaps()).toEqual([]);
+    expect(await grantsOn('guard_test_list')).toEqual([
+      'adms_api INSERT',
+      'adms_api SELECT',
+      'adms_api UPDATE',
+      'adms_worker SELECT',
+    ]);
+    await db.actor(world.worker, 'SYSTEM');
+    await db.run(`INSERT INTO "guard_test_list" ("key", "name") VALUES ('BUILT_IN', 'Built in')`);
+    expect(
+      (
+        await db.refused(
+          `UPDATE "guard_test_list" SET "archived_at" = now() WHERE "key" = 'BUILT_IN'`,
+        )
+      ).code,
+    ).toBe(refusedBy.check);
+    await db.as('adms_api');
+    await db.actor(world.admin, 'BACK_OFFICE');
+    await db.run(`INSERT INTO "guard_test_list" ("name") VALUES ('The firm’s own')`);
+    for (const sql of [
+      `INSERT INTO "guard_test_list" ("key", "name") VALUES ('MINE', 'Mine')`,
+      `UPDATE "guard_test_list" SET "key" = 'MINE' WHERE "key" IS NULL`,
+      `UPDATE "guard_test_list" SET "key" = NULL WHERE "key" = 'BUILT_IN'`,
+    ]) {
+      expect((await db.refused(sql)).code, sql).toBe(refusedBy.grant);
+    }
+    expect(
+      await db.run(`UPDATE "guard_test_list" SET "archived_at" = now() WHERE "key" IS NULL`),
+    ).toBe(1);
+  });
+
+  it('guard_list refuses a table that isn’t a list', async () => {
+    const { db } = tested;
+    await newTable('guard_test_setup', `"name" text`);
+    for (const [call, message] of [
+      [`guard_list('guard_test_missing', 'OPERATIONS')`, 'there is no table guard_test_missing'],
+      [`guard_list('guard_test_setup', 'OPERATIONS')`, 'guard_test_setup is not a list'],
+    ] as const) {
+      expect((await db.refused(`SELECT ${call}`)).message, call).toContain(message);
+    }
+    // Refused whole: guard_table's work inside it is undone too.
+    expect(await gaps()).toContain('guard_test_setup: no audit trigger');
+  });
+
   it("is the owner's alone, like guard_gaps()", async () => {
     const { db } = tested;
     for (const login of ['adms_api', 'adms_worker', 'adms_readonly'] as const) {
       await db.as(login);
       for (const call of [
         `guard_table('project', 'CONFIGURATION', 'OPERATIONS')`,
+        `guard_list('site_type', 'OPERATIONS')`,
         'guard_gaps()',
       ]) {
         expect((await db.refused(`SELECT * FROM ${call}`)).code, `${login}: ${call}`).toBe(

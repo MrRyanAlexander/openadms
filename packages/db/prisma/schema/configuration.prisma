@@ -16,6 +16,7 @@ model Project {
   payItems       PayItem[]
   assignments    Assignment[]
   numberBlocks   NumberBlock[]
+  fieldTags      FieldTag[]
   fieldEvents    FieldEvent[]
   completedLoads CompletedLoad[]
 
@@ -298,4 +299,314 @@ model AssignmentPayItem {
 
   @@unique([assignmentId, payItemId])
   @@map("assignment_pay_item")
+}
+
+// ---------------------------------------------------------------------------------------------
+// The firm's lists (spec/LISTS.md Group 1; spec/DATA-MODEL.md §2.3; ADR-070, 194, 302). One table
+// per list, so a picked value is a real foreign key. Every list has the same six columns:
+//   key       set only on a built-in value (STUMPS): the system acts on the key, never the name. The
+//             closed set is packages/domain's; only a release writes one, and a value that has one
+//             is never archived (both held by the lists' guard migration)
+//   name      what people pick; the firm renames it freely
+//   position  the order shown
+// and created_at and archived_at, as all configuration. The firm adds its own values, which have
+// no key; nothing is deleted. The values each list starts with are the seed's (src/list-seeds.ts).
+
+// What a kind of unit rate work has its monitor count (ADR-040, 084, 127).
+enum CountShape {
+  NUMBER
+  ITEM_COUNTS
+  ITEM_HOURS
+
+  @@map("count_shape")
+}
+
+// What a certification certifies: a container, measured, or a crew, never measured; never a
+// vehicle (invariants 8, 10).
+enum CertificationKind {
+  CONTAINER
+  CREW
+
+  @@map("certification_kind")
+}
+
+// What a reason may be picked for (ADR-173): voiding a ticket, a ticket number typed instead of
+// scanned, accepting a flag (ADR-166), a record created in the back office (ADR-156).
+enum ReasonUse {
+  VOID
+  TYPED_NUMBER
+  ACCEPT_FLAG
+  BACK_OFFICE_RECORD
+
+  @@map("reason_use")
+}
+
+// The kind of work a project is (ROW, PARKS, PPDR, WATERWAY; ADR-070).
+model ProgramType {
+  id          String  @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  key         String? @unique
+  name        String
+  position    Int
+  // Every collection, unit rate ticket and survey on such a project carries an ROE (ADR-149); it also
+  // ticks a new project's "Allow split loads" (ADR-137).
+  requiresRoe Boolean @default(false) @map("requires_roe")
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  @@map("program_type")
+}
+
+// What kind of reference a declaration event carries: FEMA's, a state's, a local one, the firm's own
+// (ADR-023).
+model DeclarationReferenceType {
+  id       String  @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  key      String? @unique
+  name     String
+  position Int
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  @@map("declaration_reference_type")
+}
+
+// The firm's library of debris types. A project adds them to its forms, named as the contract names
+// the work, and a monitor picks from the form (ADR-074, 211).
+model DebrisType {
+  id       String  @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  key      String? @unique
+  name     String
+  position Int
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  @@map("debris_type")
+}
+
+// How a reduced debris type was reduced: named on its entry on a form (ADR-214).
+model ReductionMethod {
+  id       String  @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  key      String? @unique
+  name     String
+  position Int
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  @@map("reduction_method")
+}
+
+// The work a pay item prices; every pay item has one, and exports group lines by it (ADR-173, 221).
+model PayableType {
+  id       String  @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  key      String? @unique
+  name     String
+  position Int
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  @@map("payable_type")
+}
+
+// A kind of unit rate work: it picks the capture screen and, for an itemised kind, the item names
+// offered. Each unit rate pay item names one (ADR-127). Stumps is built in (ADR-198).
+model KindOfWork {
+  id         String     @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  key        String?    @unique
+  name       String
+  position   Int
+  // What the monitor counts: a number, a list of items with a count each, or a list of items with
+  // hours each (ADR-040, 084).
+  countShape CountShape @map("count_shape")
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  itemNames ItemName[]
+
+  @@map("kind_of_work")
+}
+
+// An item a monitor may count on a ticket of an itemised kind of work: a washer on White Goods, a
+// skid steer on Crew time (ADR-040, 084).
+model ItemName {
+  id           String  @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  key          String? @unique
+  name         String
+  position     Int
+  kindOfWorkId String  @map("kind_of_work_id") @db.Uuid
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  kindOfWork KindOfWork @relation(fields: [kindOfWorkId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@map("item_name")
+}
+
+// What a certification says was certified: a dump truck, a semi-trailer (ADR-070). A list that
+// describes, so the certification may also carry a typed "other".
+model VehicleType {
+  id        String            @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  key       String?           @unique
+  name      String
+  position  Int
+  // Whether a certification of this type is of a measured container or of a crew, which is never
+  // measured (invariants 8, 10).
+  certifies CertificationKind
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  @@map("vehicle_type")
+}
+
+// What a measured box after the primary is: sideboards, a dog box, wheel wells (ADR-076). Whether
+// the box adds or subtracts, and its shape, are the box's own.
+model VehicleFeature {
+  id       String  @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  key      String? @unique
+  name     String
+  position Int
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  @@map("vehicle_feature")
+}
+
+// What a crew certification certifies: a bucket truck crew, a skid steer crew. The crew is its
+// certification; there is no crew list (ADR-228).
+model CrewType {
+  id       String  @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  key      String? @unique
+  name     String
+  position Int
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  @@map("crew_type")
+}
+
+// What a disposal site is, and what the Disposal site type criterion tests (ADR-190, 215). TDSR/DMS
+// and Final Disposal are built in (ADR-226, 227); what a site does is its own facts.
+model SiteType {
+  id       String  @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  key      String? @unique
+  name     String
+  position Int
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  @@map("site_type")
+}
+
+// The firm's own words for a site (a burn site, grinding), beside the site facts. Labels only: the
+// system does nothing with one (ADR-194, 215). Starts empty.
+model SiteLabel {
+  id       String  @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  key      String? @unique
+  name     String
+  position Int
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  @@map("site_label")
+}
+
+// What happened, on an incident report: the first list after "start incident" (ADR-127).
+model IncidentType {
+  id       String  @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  key      String? @unique
+  name     String
+  position Int
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  subTypes IncidentSubType[]
+
+  @@map("incident_type")
+}
+
+// The firm's own finer kinds under one incident type. Starts empty (ADR-129, 137).
+model IncidentSubType {
+  id             String  @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  key            String? @unique
+  name           String
+  position       Int
+  incidentTypeId String  @map("incident_type_id") @db.Uuid
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  incidentType IncidentType @relation(fields: [incidentTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@map("incident_sub_type")
+}
+
+// Why a person did something that needs a reason: picked from this list, never typed (ADR-173).
+model Reason {
+  id       String      @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  key      String?     @unique
+  name     String
+  position Int
+  // Where it is offered: any of the four uses.
+  uses     ReasonUse[] @default([])
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  @@map("reason")
+}
+
+// What a survey or ROE form is for: the first list after "start survey" (ADR-129). All three it
+// starts with are built in (ADR-149, 150).
+model SurveyWorkType {
+  id       String  @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  key      String? @unique
+  name     String
+  position Int
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  @@map("survey_work_type")
+}
+
+// What a worker was doing in the hours the app can't fill in from their field events: travel,
+// standby, training (ADR-241).
+model ClockActivity {
+  id       String  @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  key      String? @unique
+  name     String
+  position Int
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  @@map("clock_activity")
+}
+
+// The one list that is a project's own: a tag the collecting or unit rate monitor may pick, read
+// only by the Field tag criterion and exports (ADR-216, 218). Starts empty on every project.
+model FieldTag {
+  id        String  @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  key       String? @unique
+  name      String
+  position  Int
+  projectId String  @map("project_id") @db.Uuid
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@map("field_tag")
 }

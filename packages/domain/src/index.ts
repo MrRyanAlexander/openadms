@@ -1,3 +1,6 @@
 // The domain rules shared by phone and server; depends on nothing (ARCHITECTURE §18).
-// Only a wiring probe so far (BACKLOG 0.2.2); the rules arrive in Phase 1.
+// The rules arrive task by task in Phase 1 (BACKLOG, "Active — Phase 1").
+export { builtInKeys, type BuiltInKey, type ListWithBuiltInValues } from './built-in-keys.ts';
+
+// The wiring probe of BACKLOG 0.2.2: `contracts` proves it resolves this package by reading it.
 export const workspace = 'domain';
