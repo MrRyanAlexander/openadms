@@ -129,9 +129,7 @@ describe("a worker's employer", () => {
   it('is a contractor record, with the ID it gives them', async () => {
     const { db, world } = tested;
     await asTheApi();
-    const { id: agency } = await db.one<{ id: string }>(
-      `INSERT INTO "contractor" ("name") VALUES ('Harbor Staffing') RETURNING "id"::text`,
-    );
+    const agency = world.harbor;
     expect(
       await db.run(
         `UPDATE "user" SET "employer_id" = $2, "employer_number" = 'HS-0417' WHERE "id" = $1`,

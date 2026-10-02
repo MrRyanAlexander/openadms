@@ -97,6 +97,8 @@ model Project {
   declarationEvent DeclarationEvent    @relation(fields: [declarationEventId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   programType      ProgramType         @relation(fields: [programTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   kindsOfWork      ProjectKindOfWork[]
+  contractors      ProjectContractor[]
+  contracts        Contract[]
   disposalSites    DisposalSite[]
   payItems         PayItem[]
   assignments      Assignment[]
@@ -128,22 +130,118 @@ model ProjectKindOfWork {
   @@map("project_kind_of_work")
 }
 
+// What a contractor is to the firm: a hauling company, an employer of monitors (a monitoring sub or
+// a temp agency), a crew, or something else (Q-97, spec/FROM-BUILD-1.md).
+enum ContractorKind {
+  HAULER
+  MONITORING
+  CREW
+  OTHER
+
+  @@map("contractor_kind")
+}
+
 // A hauling company, prime or sub, or a monitoring firm or temp agency that employs monitors;
-// firm-wide (adms-data-model §3.1a; Q-97).
+// firm-wide (adms-data-model §3.1a; Q-97). Whether it is a prime or a sub is its place on each
+// project (ProjectContractor), never a fact about the contractor itself.
 model Contractor {
-  id   String @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  name String
+  id           String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  name         String
+  // Whoever adds it says which: there is no default.
+  kind         ContractorKind
+  // Its contact, as a client's: edited freely, audited (the user, ADR-306).
+  contactName  String?        @map("contact_name")
+  contactEmail String?        @map("contact_email")
+  contactPhone String?        @map("contact_phone")
+  // A sub typed twice at certification under two spellings: the back office merges one into the
+  // other, audited. The merged one is archived, never deleted (ADR-108; checks in the guard
+  // migration).
+  mergedIntoId String?        @map("merged_into_id") @db.Uuid
 
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
 
+  mergedInto   Contractor?         @relation("Merged", fields: [mergedIntoId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  merged       Contractor[]        @relation("Merged")
+  // Its place on each project it works on.
+  projects     ProjectContractor[]
+  // The contracts it holds, each as one of its project's primes.
+  contracts    Contract[]
   // A contractor user sees only its own transactions (ADR-169).
-  users        User[]        @relation("ViewerContractor")
+  users        User[]              @relation("ViewerContractor")
   // The people it employs (Q-97).
-  employees    User[]        @relation("Employer")
+  employees    User[]              @relation("Employer")
   transactions Transaction[]
 
   @@map("contractor")
+}
+
+// A contractor's place on a project: a prime, or a sub in the first or second tier under one of the
+// project's primes. There is no third tier (ADR-108).
+enum ContractorPosition {
+  PRIME
+  SUB_TIER_1
+  SUB_TIER_2
+
+  @@map("contractor_position")
+}
+
+// A contractor's place on one project. A project may have several primes; each prime's subs are its
+// own, at most two tiers, never shared: a contractor has one place on a project (ADR-108). A prime
+// is added at setup; a sub's row is made when it's typed in at certification under its prime.
+model ProjectContractor {
+  id           String             @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  projectId    String             @map("project_id") @db.Uuid
+  contractorId String             @map("contractor_id") @db.Uuid
+  position     ContractorPosition
+  // The prime a sub works under, tier 1 and tier 2 alike; a prime names none (a check in the guard
+  // migration).
+  primeId      String?            @map("prime_id") @db.Uuid
+  // On a prime's row, its own contractor again; empty on a sub's (a check in the guard migration).
+  // It is what "the prime" points at: a sub's primeId and a contract's are held to it by a
+  // two-column foreign key, so the database refuses naming anyone but one of this project's primes,
+  // and refuses making a prime a sub while anything names it.
+  asPrimeId    String?            @map("as_prime_id") @db.Uuid
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  // Taken off the project; never deleted.
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  project    Project             @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  contractor Contractor          @relation(fields: [contractorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  prime      ProjectContractor?  @relation("PrimeSubs", fields: [projectId, primeId], references: [projectId, asPrimeId], onDelete: Restrict, onUpdate: Restrict)
+  subs       ProjectContractor[] @relation("PrimeSubs")
+  contracts  Contract[]
+
+  // One place on a project: a sub is never shared by two primes.
+  @@unique([projectId, contractorId])
+  // What a sub's prime and a contract's prime point at.
+  @@unique([projectId, asPrimeId])
+  @@map("project_contractor")
+}
+
+// A name, its prime and an optional link to the signed copy: nothing else, no number, dates or
+// amount (ADR-146). The prime is added to the project first; a prime may hold one contract on a
+// project or several. A pricing rule names one contract and runs only on its prime's tickets
+// (ADR-239).
+model Contract {
+  id            String  @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  projectId     String  @map("project_id") @db.Uuid
+  name          String
+  // One of its own project's primes: the second relation below holds it to that.
+  primeId       String  @map("prime_id") @db.Uuid
+  // Where the signed copy is kept, as the firm wrote it.
+  signedCopyUrl String? @map("signed_copy_url")
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  project    Project           @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  prime      Contractor        @relation(fields: [primeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  primePlace ProjectContractor @relation(fields: [projectId, primeId], references: [projectId, asPrimeId], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([projectId])
+  @@map("contract")
 }
 
 // Where debris legally goes, entered on each project that uses it, never shared (ADR-145).

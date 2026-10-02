@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { refusedBy } from './support/database.ts';
-import { insertOf, projectLike } from './support/example-world.ts';
+import { insertOf, primeOn, projectLike } from './support/example-world.ts';
 import { eachTestRolledBack } from './support/lifecycle.ts';
 import { listTables } from './support/lists.ts';
 
@@ -21,6 +21,9 @@ const tableGrants: Record<string, Record<string, string>> = {
   declaration_event: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   project_kind_of_work: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   contractor: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
+  // A contractor's place on a project, and a contract (ADR-305).
+  project_contractor: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
+  contract: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   user: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   device: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   disposal_site: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
@@ -194,7 +197,11 @@ describe('the API (adms_api)', () => {
     const { db, world } = tested;
     await db.as('adms_api');
     await db.actor(world.admin, 'BACK_OFFICE');
-    expect(await db.run(`INSERT INTO "contractor" ("name") VALUES ('Rivera Trucking')`)).toBe(1);
+    expect(
+      await db.run(
+        `INSERT INTO "contractor" ("name", "kind") VALUES ('Rivera Trucking', 'HAULER')`,
+      ),
+    ).toBe(1);
     expect(
       await db.run(`UPDATE "project" SET "closed_at" = '2027-03-31T23:59:00Z' WHERE "id" = $1`, [
         world.p2,
@@ -335,6 +342,14 @@ describe('the worker (adms_worker)', () => {
         `UPDATE "project_kind_of_work" SET "archived_at" = now() WHERE "project_id" = $1`,
         [world.p1],
       ],
+      insertOf('contractor', { name: 'Rivera Trucking', kind: 'HAULER' }),
+      insertOf('project_contractor', primeOn(world.p2, world.summit)),
+      insertOf('contract', { project_id: world.p1, name: 'A second', prime_id: world.coastline }),
+      [`UPDATE "project_contractor" SET "archived_at" = now() WHERE "project_id" = $1`, [world.p1]],
+      [
+        `UPDATE "contract" SET "name" = 'Another name' WHERE "id" = $1`,
+        [world.contracts.coastlineP1],
+      ],
       [`UPDATE "user" SET "name" = 'Someone else' WHERE "id" = $1`, [world.monitor]],
       [`UPDATE "transaction" SET "amount" = 0 WHERE "id" = $1`, [load.transaction]],
       [
@@ -354,13 +369,15 @@ describe('the worker (adms_worker)', () => {
 });
 
 describe('the read-only login (adms_readonly)', () => {
-  // The new tables too: no viewer view shows them, so none is granted (ADR-281, 286, 302, 303).
+  // The new tables too: no viewer view shows them, so none is granted (ADR-281, 286, 302, 303, 305).
   it.each([
     'user',
     'client',
     'declaration_event',
     'project_kind_of_work',
     'contractor',
+    'project_contractor',
+    'contract',
     'device',
     'invoice_lock',
     'audit_record',

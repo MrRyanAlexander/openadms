@@ -1,9 +1,11 @@
-// P1's first three setup steps, as both of today's stories need them (spec/parts/01-setup.md steps
-// 1–3; spec/golden/MISSION.md §1; ADR-303): the client Bayline County, the declaration event
-// Hurricane Delphine, and the project "Bayline County ROW, Hurricane Delphine" with the kinds of
-// unit rate work it allows. The project's settings start as a new project's do, from the release's
-// policy values (the domain's NewProjectSettings); the firm then ticks Allow split loads, for
-// haul-outs loaded from more than one pile. The whole setup, P2 included, told in the spine's order
+// P1's first four setup steps, as both of today's stories need them (spec/parts/01-setup.md steps
+// 1–4; spec/golden/MISSION.md §1; ADR-303, 305): the client Bayline County, the declaration event
+// Hurricane Delphine, the project "Bayline County ROW, Hurricane Delphine" with the kinds of unit
+// rate work it allows, then its prime, Coastline Haulers LLC, added to the project, and the
+// contract "Coastline, Bayline ROW 2026". The project's settings start as a new project's do, from
+// the release's policy values (the domain's NewProjectSettings); the firm then ticks Allow split
+// loads, for haul-outs loaded from more than one pile. No sub is set up: Rivera Trucking is typed in
+// when its truck is certified (ADR-108). The whole setup, P2 included, told in the spine's order
 // through the API's setup services, is its own story (BACKLOG 1.1.11).
 import type { Prisma } from '@open-adms/db';
 import { NewProjectSettings, type Policy } from '@open-adms/domain';
@@ -15,6 +17,9 @@ export interface P1 {
   readonly client: string;
   readonly declarationEvent: string;
   readonly project: string;
+  // Coastline Haulers LLC, P1's prime, and its contract.
+  readonly prime: string;
+  readonly contract: string;
 }
 
 // Written inside the caller's own piece of work, as whoever it states (Dana Reyes).
@@ -49,5 +54,26 @@ export async function setUpP1(tx: Prisma.TransactionClient, policy: Policy): Pro
   for (const kind of kinds) {
     await tx.projectKindOfWork.create({ data: { projectId: project.id, kindOfWorkId: kind.id } });
   }
-  return { client: client.id, declarationEvent: declarationEvent.id, project: project.id };
+  // The prime is added to the project first, then its contract (ADR-146).
+  const coastline = await tx.contractor.create({
+    data: { name: 'Coastline Haulers LLC', kind: 'HAULER' },
+  });
+  await tx.projectContractor.create({
+    data: {
+      projectId: project.id,
+      contractorId: coastline.id,
+      position: 'PRIME',
+      asPrimeId: coastline.id,
+    },
+  });
+  const contract = await tx.contract.create({
+    data: { projectId: project.id, name: 'Coastline, Bayline ROW 2026', primeId: coastline.id },
+  });
+  return {
+    client: client.id,
+    declarationEvent: declarationEvent.id,
+    project: project.id,
+    prime: coastline.id,
+    contract: contract.id,
+  };
 }

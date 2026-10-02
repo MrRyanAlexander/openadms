@@ -8,7 +8,8 @@
 // field event carrying its assignment and setup version. The screens, the sign-in, the sync and
 // the allocator behind these rows are Phases 2 to 4. It opens with setup's first three steps
 // (ADR-303): the client, the declaration event and the project, whose settings start as the
-// release's policy values.
+// release's policy values; then the fourth (ADR-305): the prime added to the project, and its
+// contract.
 import { projectTime } from '../clock.ts';
 import { uuidv7 } from '../ids.ts';
 import type { Story } from '../runner.ts';
@@ -29,7 +30,7 @@ export const dispatchMonday: Story = {
 
     story.at(
       at('05:30'),
-      'Dana Reyes sets up Luis Ortega; Bayline County, Hurricane Delphine and P1; and its two sites',
+      'Dana Reyes sets up Luis Ortega; Bayline County, Hurricane Delphine and P1; its prime and contract; and its two sites',
     );
     // The first user is written with itself as the actor (ADR-270 (4)).
     const dana = uuidv7(clock.now());
@@ -45,7 +46,14 @@ export const dispatchMonday: Story = {
       const landfill = await tx.disposalSite.create({
         data: { projectId: p1.project, name: 'Bayline County Landfill' },
       });
-      return { danaRow, luis, p1: p1.project, tdsr: tdsr.id, landfill: landfill.id };
+      return {
+        danaRow,
+        luis,
+        p1: p1.project,
+        contract: p1.contract,
+        tdsr: tdsr.id,
+        landfill: landfill.id,
+      };
     });
     const project = await api.project.findUniqueOrThrow({
       where: { id: office.p1 },
@@ -122,6 +130,35 @@ export const dispatchMonday: Story = {
         ['Hangers', 'Leaners', 'Stumps', 'White Goods', 'Crew time'],
       ],
     );
+    const placed = await api.projectContractor.findMany({
+      where: { projectId: office.p1 },
+      include: { contractor: true, prime: true },
+    });
+    const contracts = await api.contract.findMany({
+      where: { projectId: office.p1 },
+      include: { prime: true },
+    });
+    story.check(
+      'AC-01-15 Coastline Haulers LLC, a hauler, is P1’s prime and holds "Coastline, Bayline ROW 2026": a name, its prime and no link to the signed copy yet. No sub is set up',
+      [
+        placed.map((place) => [
+          place.contractor.name,
+          place.contractor.kind,
+          place.position,
+          place.prime === null ? null : place.prime.contractorId,
+        ]),
+        contracts.map((contract) => [
+          contract.id === office.contract,
+          contract.name,
+          contract.prime.name,
+          contract.signedCopyUrl,
+        ]),
+      ],
+      [
+        [['Coastline Haulers LLC', 'HAULER', 'PRIME', null]],
+        [[true, 'Coastline, Bayline ROW 2026', 'Coastline Haulers LLC', null]],
+      ],
+    );
     story.check(
       'the database issued each of them the next Monitor ID; nobody typed one',
       [office.danaRow.monitorNumber, office.luis.monitorNumber],
@@ -136,7 +173,9 @@ export const dispatchMonday: Story = {
     // Their Monitor IDs are the example world's, written as given; a real installation's all come
     // from the database, as Dana's and Luis's did.
     const people = await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
-      const agency = await tx.contractor.create({ data: { name: 'Harbor Staffing' } });
+      const agency = await tx.contractor.create({
+        data: { name: 'Harbor Staffing', kind: 'MONITORING' },
+      });
       const ana = await tx.user.create({
         data: { name: 'Ana Brooks', role: 'MONITOR', monitorNumber: 'M004127' },
       });
@@ -163,18 +202,19 @@ export const dispatchMonday: Story = {
       orderBy: { monitorNumber: 'asc' },
     });
     story.check(
-      'each monitor: their Monitor ID, their employer (a contractor record) and its ID for them',
+      'AC-01-20 each monitor: their Monitor ID, their employer (a contractor record of the monitoring kind) and its ID for them',
       employed.map((person) => [
         person.name,
         person.monitorNumber,
         person.employer?.name ?? null,
+        person.employer?.kind ?? null,
         person.employerNumber,
       ]),
       [
-        ['Ana Brooks', 'M004127', null, null],
-        ['Kim Nguyen', 'M004128', 'Harbor Staffing', 'HS-0417'],
-        ['Tariq Patel', 'M004129', null, null],
-        ['Jo Kim', 'M004130', null, null],
+        ['Ana Brooks', 'M004127', null, null, null],
+        ['Kim Nguyen', 'M004128', 'Harbor Staffing', 'MONITORING', 'HS-0417'],
+        ['Tariq Patel', 'M004129', null, null, null],
+        ['Jo Kim', 'M004130', null, null, null],
       ],
     );
 

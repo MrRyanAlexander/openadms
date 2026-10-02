@@ -24,7 +24,7 @@ export const ticket101001: Story = {
 
     story.at(
       at('06:30'),
-      'Dana Reyes sets up Bayline County, Hurricane Delphine and P1, its TDSR, Ana Brooks, Kim Nguyen, their two phones and their assignments',
+      'Dana Reyes sets up Bayline County, Hurricane Delphine and P1, its prime and contract, its TDSR, Ana Brooks, Kim Nguyen, their two phones and their assignments',
     );
     // The first user is written with itself as the actor (ADR-270 (4)).
     const dana = uuidv7(clock.now());
@@ -223,7 +223,7 @@ export const ticket101001: Story = {
       [['user', 'master_passcode'], 94, 15],
     );
     story.check(
-      'and then holds exactly Dana’s sixteen setup rows (the client, the declaration event, P1 and its five kinds of unit rate work among them) and the two syncs',
+      'and then holds exactly Dana’s nineteen setup rows (the client, the declaration event, P1 and its five kinds of unit rate work, Coastline, its place as P1’s prime and its contract among them) and the two syncs',
       audit.slice(afterSeed).map((record) => [record.tableName, record.source]),
       [
         ['user', 'BACK_OFFICE'],
@@ -235,6 +235,9 @@ export const ticket101001: Story = {
         ['project_kind_of_work', 'BACK_OFFICE'],
         ['project_kind_of_work', 'BACK_OFFICE'],
         ['project_kind_of_work', 'BACK_OFFICE'],
+        ['contractor', 'BACK_OFFICE'],
+        ['project_contractor', 'BACK_OFFICE'],
+        ['contract', 'BACK_OFFICE'],
         ['user', 'BACK_OFFICE'],
         ['user', 'BACK_OFFICE'],
         ['device', 'BACK_OFFICE'],

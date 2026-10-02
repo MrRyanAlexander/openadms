@@ -8,6 +8,10 @@
 //   P2 "Bayline County PPDR, Hurricane Delphine": load 102001 (Coastline)
 // Their program types, and P1's kinds of unit rate work, are picked from the firm's lists as the
 // installer's seed wrote them.
+// Coastline Haulers LLC and Summit Debris Services are P1's two primes, each with its contract;
+// Coastline is P2's prime, with its own contract there. Harbor Staffing, a temp agency, is a
+// contractor of the monitoring kind, on no project (spec/CONVENTIONS.md §6; ADR-305). Subs aren't
+// set up: a test places Rivera Trucking as certification would.
 // Each load is a collection and a disposal event (load call at the tower), its completed load and
 // one transaction for its prime. Nothing is locked as invoiced; a test locks what it needs.
 // Ana Brooks records every event here, on the one phone, under her assignment on each project
@@ -36,6 +40,11 @@ export interface World {
   worker: string;
   coastline: string;
   summit: string;
+  // Harbor Staffing, a temp agency that employs monitors.
+  harbor: string;
+  // "Coastline, Bayline ROW 2026" and "Summit, Bayline ROW 2026" on P1; "Coastline, Bayline PPDR
+  // 2026" on P2.
+  contracts: { coastlineP1: string; summitP1: string; coastlineP2: string };
   // A Coastline Haulers LLC read-only viewer.
   coastlineViewer: string;
   // Bayline County; Hurricane Delphine, DR-9001-FL.
@@ -80,6 +89,33 @@ export function projectLike(
   };
 }
 
+// A prime's place on a project: it names no prime, and carries its own contractor again as the key
+// a sub's prime and a contract's prime are held to (ADR-305).
+export function primeOn(projectId: string, contractorId: string): Record<string, unknown> {
+  return {
+    project_id: projectId,
+    contractor_id: contractorId,
+    position: 'PRIME',
+    as_prime_id: contractorId,
+  };
+}
+
+// A sub's place on a project, as typed in at certification: tier 1 or 2, under one of the project's
+// primes.
+export function subOn(
+  projectId: string,
+  contractorId: string,
+  primeId: string,
+  tier: 1 | 2 = 1,
+): Record<string, unknown> {
+  return {
+    project_id: projectId,
+    contractor_id: contractorId,
+    position: `SUB_TIER_${String(tier)}`,
+    prime_id: primeId,
+  };
+}
+
 // A row without one of its columns, for a test of what the database does when it's left out.
 export function without(row: Record<string, unknown>, column: string): Record<string, unknown> {
   return Object.fromEntries(Object.entries(row).filter(([name]) => name !== column));
@@ -116,8 +152,17 @@ export class ExampleWorld {
     await this.db.actor(admin, 'BACK_OFFICE');
     await this.insert('user', { id: admin, name: 'Dana Reyes', role: 'ADMIN' });
 
-    const coastline = await this.insert('contractor', { name: 'Coastline Haulers LLC' });
-    const summit = await this.insert('contractor', { name: 'Summit Debris Services' });
+    const coastline = await this.insert('contractor', {
+      name: 'Coastline Haulers LLC',
+      kind: 'HAULER',
+      contact_name: 'Coastline Haulers dispatch',
+      contact_phone: '555-0110',
+    });
+    const summit = await this.insert('contractor', {
+      name: 'Summit Debris Services',
+      kind: 'HAULER',
+    });
+    const harbor = await this.insert('contractor', { name: 'Harbor Staffing', kind: 'MONITORING' });
     const monitor = await this.insert('user', { name: 'Ana Brooks', role: 'MONITOR' });
     const coastlineViewer = await this.insert('user', {
       name: 'Coastline Haulers LLC viewer',
@@ -166,6 +211,17 @@ export class ExampleWorld {
       });
     }
 
+    // Each prime is added to the project, then its contract (ADR-146).
+    const contract = async (projectId: string, primeId: string, name: string): Promise<string> => {
+      await this.insert('project_contractor', primeOn(projectId, primeId));
+      return this.insert('contract', { project_id: projectId, name, prime_id: primeId });
+    };
+    const contracts = {
+      coastlineP1: await contract(p1, coastline, 'Coastline, Bayline ROW 2026'),
+      summitP1: await contract(p1, summit, 'Summit, Bayline ROW 2026'),
+      coastlineP2: await contract(p2, coastline, 'Coastline, Bayline PPDR 2026'),
+    };
+
     const site = await this.insert('disposal_site', { project_id: p1, name: 'Marsh Road TDSR' });
     const assignment = (projectId: string): Promise<string> =>
       this.insert('assignment', {
@@ -189,6 +245,8 @@ export class ExampleWorld {
       worker: systemActorId,
       coastline,
       summit,
+      harbor,
+      contracts,
       coastlineViewer,
       ...hub,
       p1,

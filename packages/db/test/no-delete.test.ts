@@ -16,6 +16,8 @@ const rowOf: Record<string, (world: World) => string> = {
   declaration_event: (world) => world.declarationEvent,
   project_kind_of_work: (world) => world.written['project_kind_of_work']?.[0] ?? 'none written',
   contractor: (world) => world.summit,
+  project_contractor: (world) => world.written['project_contractor']?.[0] ?? 'none written',
+  contract: (world) => world.contracts.coastlineP1,
   user: (world) => world.monitor,
   device: (world) => world.device,
   field_event: (world) => world.loads.l101001.collection,

@@ -16,6 +16,9 @@ const domains: Record<string, string> = {
   declaration_event: 'OPERATIONS',
   project_kind_of_work: 'OPERATIONS',
   contractor: 'OPERATIONS',
+  // A contractor's place on a project; and a contract, which a pricing rule names (ADR-305).
+  project_contractor: 'OPERATIONS',
+  contract: 'BILLING',
   user: 'SECURITY',
   device: 'SECURITY',
   disposal_site: 'OPERATIONS',
@@ -104,6 +107,14 @@ describe('the guards in the catalog', () => {
           "CHECK (((person_id <> '00000000-0000-7000-8000-000000000001'::uuid) AND (made_by_id IS DISTINCT FROM '00000000-0000-7000-8000-000000000001'::uuid)))",
       },
       {
+        name: 'contractor_merged_into_another_check',
+        definition: 'CHECK (((merged_into_id IS NULL) OR (merged_into_id <> id)))',
+      },
+      {
+        name: 'contractor_merged_is_archived_check',
+        definition: 'CHECK (((merged_into_id IS NULL) OR (archived_at IS NOT NULL)))',
+      },
+      {
         name: 'device_out_of_service_check',
         definition: "CHECK (((status = 'ACTIVE'::device_status) = (out_of_service_at IS NULL)))",
       },
@@ -139,6 +150,15 @@ describe('the guards in the catalog', () => {
       {
         name: 'project_active_window_check',
         definition: 'CHECK (((active_to IS NULL) OR (active_to >= active_from)))',
+      },
+      {
+        name: 'project_contractor_as_prime_check',
+        definition:
+          'CHECK ((NOT (as_prime_id IS DISTINCT FROM\nCASE\n    WHEN ("position" = \'PRIME\'::contractor_position) THEN contractor_id\n    ELSE NULL::uuid\nEND)))',
+      },
+      {
+        name: 'project_contractor_prime_check',
+        definition: 'CHECK ((("position" = \'PRIME\'::contractor_position) = (prime_id IS NULL)))',
       },
       {
         name: 'project_load_call_limits_check',
