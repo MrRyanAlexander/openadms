@@ -70,7 +70,7 @@ review, QC, invoice lock and batches → the golden mission. Each milestone buil
 
 Carried: C36, C42, C52, and C18's first part. Closes the behaviour of KD-14, 16, 17, 18, 29, 39, 47.
 
-- [x] **1.1.1** ✅ **done 2026-10-01 (ADR-300):** `spec/acceptance/01-setup.md`, 80 scenarios (81 since ADR-301) from
+- [x] **1.1.1** ✅ **done 2026-10-01 (ADR-300):** `spec/acceptance/01-setup.md`, 80 scenarios (81 since ADR-301, 82 since ADR-306) from
   Part 1, each naming its source, where Phase 1 proves it and the task that does; six points nothing
   settles are listed for the task that decides each.
 - [x] **1.1.2** ✅ **done 2026-10-02 (ADR-302):** eighteen list models and three enums, two
@@ -90,7 +90,8 @@ Carried: C36, C42, C52, and C18's first part. Closes the behaviour of KD-14, 16,
   (`client_declaration_event_project`, `guard_client_declaration_event_project`: 24 in all);
   `Policy` and `NewProjectSettings` in `packages/domain`, the release's built-in defaults in
   `packages/domain/policy.env`; no setting has a database default; a new project's time clock
-  starts off (`01-setup.md`, point 2); AC-01-02…08 and 11…14 pass (06 and 11 at the domain, the
+  starts switched off, not offered to its workers until the firm switches it on (`01-setup.md`,
+  point 2; confirmed by the user, ADR-304); AC-01-02…08 and 11…14 pass (06 and 11 at the domain, the
   rest at the database); `guard_gaps()` empty; 55 loosenings each caught; chain 31 files, 562 tests;
   stories 16 and 16 checks. REQ-105b, 105c, 105f, 124d ticked; **REQ-105d and 105j not ticked**
   (their checks and flag: 1.5.7, 1.5.5; C55). **Client, declaration event, and the project in full.** `Client`,
@@ -99,7 +100,18 @@ Carried: C36, C42, C52, and C18's first part. Closes the behaviour of KD-14, 16,
   defaults in `packages/domain`, read from policy values. The example world and both stories move to
   the new shape. **Done when:** AC-01-02…08 and 11…14 pass. *REQ-105b, 105c, 105d, 105f, 105j, 124d;
   REQ-105k's source (its series: 1.3.2).*
-- [ ] **1.1.4** **Contractors on a project, and contracts.** `Contractor.kind` and its merge link,
+- [x] **1.1.4** ✅ **done 2026-10-02 (ADR-305):** `ContractorKind` and `ContractorPosition`,
+  `Contractor.kind` (no default) and `mergedIntoId`, `ProjectContractor` (with `asPrimeId`, the key
+  "the prime" points at) and `Contract`; two migrations (`contractors_on_a_project_and_contracts`,
+  `guard_contractors_on_a_project_and_contracts`: 26 in all); `01-setup.md`'s point 1 settled: the
+  database refuses a contract, or a sub, whose prime isn't one of the project's primes, by a
+  two-column foreign key; AC-01-15…18, 20, 21 pass at the database (and AC-01-78 for these tables);
+  `guard_gaps()` empty; 51 loosenings each caught; stories 16 and 17 checks. **At the user's word
+  the same day (ADR-306): a contractor holds contact details** (`contactName`, `contactEmail`,
+  `contactPhone`, as a client; the migration `contractor_contact`, 27 in all; AC-01-82 added and
+  passing). Chain 32 files, 604 tests. **REQ-106e not ticked** (its subs at certification and what
+  a merge moves: 1.2.3, C56).
+  **Contractors on a project, and contracts.** `Contractor.kind` and its merge link,
   `ProjectContractor` (prime, tier 1, tier 2; one place per project), `Contract`. **Done when:**
   AC-01-15…18, 20, 21 pass. *REQ-106e's tiers (its subs at certification: 1.2.3).*
 - [ ] **1.1.5** **Forms, debris types, field tags, the firm's own fields.** `Form`,
@@ -710,6 +722,20 @@ delete one.
 - **C55. Two REQs this plan said 1.1.3 ticks, left open** (ADR-303 (8)): **REQ-105d** is ticked
   with task 1.5.7 (the ROE flags a program type's *Requires ROE* drives); **REQ-105j** with task
   1.5.5 (the "project not active" flag, which that task already names).
+- **C56. What a contractor merge moves, and who names a prime next** (ADR-305 (2), (4)). **Task
+  1.2.3:** a sub typed in at certification is written as a `ProjectContractor` row under its prime
+  (`subOn`'s shape: tier 1 or 2, `primeId` the prime at either tier; which tier 1 a tier 2 works
+  under is the certification's `firstTierSubId`); decide there what merging two spellings of a sub
+  does to the duplicate's place on each project and to the certifications that name it (today only
+  the link exists: `mergedIntoId`, never itself, the merged row archived), and whether a merge into
+  an already-merged contractor is refused; **REQ-106e is ticked there**, not before. **Tasks 1.1.6
+  and 1.2.3:** `PayItemRate.primeId` and `Certification.primeId` point at the same key as a
+  contract's prime, a two-column foreign key to `project_contractor (project_id, as_prime_id)`, so
+  a rate or a certification can't name a contractor that isn't one of the project's primes.
+  **Task 1.1.11:** the API's setup service is the one place that adds a prime to a project and
+  writes `asPrimeId` with it. **Task 1.1.10 (C18):** a prime's sight of its subs' tickets reads
+  `project_contractor`; and whether any read-only viewer sees a contractor's contact details
+  (ADR-306; ADR-169 keeps personal phone numbers from them).
 - **C20.** The worker's one transaction per group, one run per project, and flagged-and-skipped groups
   (REQ-015, KD-55) use one `$write` per group (ADR-273 (3)).
 

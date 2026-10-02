@@ -149,8 +149,9 @@ approved it.
       (ADR-292…295).**
 - [ ] `spec/acceptance/`: `AC-…` scenarios from approved part pages; they become scenario-harness
       stories (REQ-017). **1 of 9 written (2026-10-01, ADR-300):** `README.md` (how a scenario is
-      written and proven) and `01-setup.md` (81 scenarios; corrected at the user's word, ADR-301;
-      19 passing: 8 by ADR-302, 11 more by ADR-303). Each of the others is the first task of
+      written and proven) and `01-setup.md` (82 scenarios; corrected at the user's word, ADR-301;
+      one added at their word, ADR-306; 26 passing: 8 by ADR-302, 11 more by ADR-303, 6 more by
+      ADR-305, 1 more by ADR-306). Each of the others is the first task of
       the milestone that builds its part (`BACKLOG.md`).
 - [x] `spec/golden/`: the golden mission and its expected ledger. `spec/golden/MISSION.md` written
       (ADR-232): every kind of record and each one's life. A split haul-out, ticket 201004, added
@@ -167,12 +168,12 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-02: Phase 1 is open, four tasks done)
+### Where things stand (2026-10-02: Phase 1 is open, five tasks done)
 - **Phase 1 (data core and engine) is the active phase**, opened by the user on 2026-10-01
   (ADR-299). Its plan is `BACKLOG.md`'s ten milestones and 47 tasks (ADR-300): setup records →
   certifications and capacity → tickets and numbers → sync intake → reconciliation → the rule engine
   → the ledger and audit → review, QC and the lock → the golden mission as a story. **Done so far:**
-  1.0.1 (the plan), 1.1.1 (`spec/acceptance/01-setup.md`, 81 scenarios) and **1.1.2, the firm's
+  1.0.1 (the plan), 1.1.1 (`spec/acceptance/01-setup.md`, 82 scenarios today) and **1.1.2, the firm's
   lists (2026-10-02, ADR-302)**: eighteen list tables (one per list), the six built-in keys as one
   closed set in `packages/domain`, `guard_list` (one line guards a list: only a release writes a
   key, a value with a key is never archived), and the seed's 94 starting values, written once into
@@ -180,13 +181,19 @@ of `DECISIONS.md`.
   (2026-10-02, ADR-303)**: `Client`, `DeclarationEvent`, the whole `Project`, `ProjectKindOfWork`;
   a new project's settings start in `packages/domain` (`NewProjectSettings`) from the **policy
   values**, whose built-in defaults are the committed env file `packages/domain/policy.env`; no
-  setting has a default in the database; the example world and both stories are in the new shape.
+  setting has a default in the database; the example world and both stories are in the new shape;
+  and **1.1.4, contractors on a project, and contracts (2026-10-02, ADR-305; contact details at
+  the user's word the same day, ADR-306)**: a contractor's kind, contact details and merge link, `ProjectContractor` (one place per project: prime, tier 1 or tier 2 under one of
+  the project's primes) and `Contract` (name, prime, optional link); **the database holds "the
+  prime" to one of the project's primes** through `asPrimeId` on the prime's row and two-column
+  foreign keys, with no trigger.
   **Corrected by the user on
   2026-10-02 (ADR-301):** a pay item's code is unique on its project (ADR-147 had read their answer
   backwards), a pay item is its code and its description (no separate name, no "line number"), and
   an exact duplicate of a rule is refused before it is saved; the provisional `pay_item` table and
   its test follow (the twentieth migration). **The first product tables
-  exist** (the lists, the client, the declaration event and the project; 36 models, 24 migrations);
+  exist** (the lists, the client, the declaration event, the project, contractors on a project and
+  contracts; 38 models, 27 migrations);
   the other models are still Phase 0's provisional ones, and `packages/domain` holds the built-in
   keys, the policy values and a new project's settings. Everything
   below this bullet is how Phase 0 got here.
@@ -195,7 +202,7 @@ of `DECISIONS.md`.
   open** (ADR-143), with a step-by-step brief in `BACKLOG.md` (ADR-231). **The skill rewrites
   are done** (Milestone 0.2c, ADR-232, 242, 244, 245, 248…253; every skill but `adms-verify` is
   current) and so is the docs truth-up (ADR-247). **The monorepo skeleton (0.2.1) is done** (ADR-255…258: pnpm 11 workspace, TypeScript 6.0.3, ESLint + Prettier, `pnpm licences`), **and so is 0.2.2** (ADR-259…261: Vitest 5.0.1 on Vite 8.3.0, Zod in `contracts` → `domain`, `adms-verify` rewritten), **and 0.2.3** (ADR-263, 264: the local stack in `infra/local`, Postgres 18.6, SeaweedFS, Caddy, Mailpit, HTTPS only, `pnpm local:up`), **and 0.2.4** (ADR-265, 266: `pnpm installer`, the four login roles and the database `adms`, one env file per service); **Milestone 0.2 is done.** **0.3.1 is done** (ADR-267, 268: Prisma 7.10.0, nine provisional models, the first migration applied by the installer), **and 0.3.2** (ADR-270: nine guard migrations, proven on a re-created database), **and 0.3.3** (ADR-272: 94 database tests; 26 loosened guards, each caught; `guard_gaps()` fixed forward), **and 0.3.4** (ADR-273: `db.$write(actor, work)`, the Prisma client extension that states the actor; the system actor, `User` role `SYSTEM`, seeded by the installer); **Milestone 0.3 is done**, **and 0.4.1** (ADR-275: the scenario harness, `pnpm scenarios`; each story on its own database, made, migrated, seeded and dropped; the first story, ticket 101001, synced out of order), **and 0.4.2** (ADR-276: the system actor's guard, so the API can't write as it or change it; `pnpm security`, the dependency audit, secrets scan, env files and grant tests with real counts; CIS items for the database), **and 0.4.3** (ADR-281: `MasterPasscode`, `NumberBlock`, a provisional `DisposalSite`, `Assignment`; the device's name, unique key, status and passcode version; a database-issued Monitor ID and an employer; every field event's assignment and setup version; the project's time zone checked; the master passcode's hash kept in the database alone and out of the audit log; a second story, `dispatch-monday`); **Milestone 0.4 is done and Phase 0's seven exit criteria are met.** **2026-10-01, closing Phase 0 out at the user's word (ADR-282…287):** the routing and address servers in the local stack (Valhalla 3.9.0, Nominatim 5.3.2, one pinned Delaware extract; REQ-022); the guard hook tightened and tested (0.1.6, REQ-023); `spec/DATA-MODEL.md` and `spec/FLAGS.md` drafted (0.2b.2, 0.2b.3); an assignment's unit rate pay items (REQ-020); the REQ list closed out (17 of 17 once the user made the first commits, ADR-288; six moved to the phase that finishes each). **Every Phase 0 task is done.** **Every known later concern** from ADR-255…274 is filed in
-  `BACKLOG.md`'s **carry-forward register** (C1…C47) under the task that picks it up (ADR-274): read
+  `BACKLOG.md`'s **carry-forward register** (C1…C56) under the task that picks it up (ADR-274): read
   a task's items before starting it.
 - **Product rules:** 26 rounds of questions, **ADR-001…231**. **Discovery is closed (ADR-230, the
   question shot-clock):** no questions are open; ask the user only when the answer changes money,
@@ -366,24 +373,31 @@ rounds of questions.
 
 **Phase 1 is open (ADR-299).** Its plan is `BACKLOG.md`, "Active — Phase 1" (ADR-300): read its
 "Brief for every Phase 1 task" first. **One task per response.** Done: 1.0.1, 1.1.1, 1.1.2 (the
-firm's lists, ADR-302), **1.1.3 (the client, the declaration event and the project in full,
-ADR-303)**; and the user's correction of 2026-10-02 (ADR-301: a pay item's code is unique, it has a
-description and no name, a duplicate rule is refused).
+firm's lists, ADR-302), 1.1.3 (the client, the declaration event and the project in full,
+ADR-303), **1.1.4 (contractors on a project, and contracts, ADR-305, 306)**; and the user's correction
+of 2026-10-02 (ADR-301: a pay item's code is unique, it has a description and no name, a duplicate
+rule is refused).
 
-👉 **Task 1.1.4, contractors on a project, and contracts** (`BACKLOG.md`, Milestone 1.1).
-`Contractor.kind` (`ContractorKind`: `HAULER` · `MONITORING` · `CREW` · `OTHER`) and its merge link
-(`mergedIntoId`); `ProjectContractor` (`ContractorPosition`: `PRIME` · `SUB_TIER_1` · `SUB_TIER_2`;
-one place per project; a sub names its prime, a prime names none); `Contract` (a name, its prime,
-an optional link; nothing else). **The example world and both stories move to the new shape in the
-same task** (Coastline and Summit become P1's primes, Harbor Staffing a contractor of the monitoring
-kind). **Read first:** `spec/DATA-MODEL.md` §2.1 (`Contractor`, `ProjectContractor`) and §3
-"Contracts and forms" (`Contract`), `spec/parts/01-setup.md` step 4, `spec/acceptance/01-setup.md`
-section B and its point 1 (whether the database, or only setup, refuses a contract whose prime isn't
-one of the project's primes: settled in this task's ADR, as an agent default), `adms-data-model`
-§3.1a. **Done when:** AC-01-15…18, 20, 21 pass, named by their IDs (AC-01-19 is a story's, task
-1.2.3); `guard_gaps()` is empty; each new guard's removal is shown caught; the chain is green with
-real counts. REQ-106e's tiers (its subs at certification: 1.2.3). Then 1.1.5: forms, debris types,
-field tags, the firm's own fields.
+👉 **Task 1.1.5, forms, debris types, field tags, the firm's own fields** (`BACKLOG.md`, Milestone
+1.1). `Form` (`FormDocumentType`: `LOAD` · `HAUL_OUT` · `UNIT_RATE` · `CERTIFICATION` · `ROE` ·
+`SURVEY` · `INCIDENT` · `DROP_OFF_LOG`; at most one form of each on a project), `FormDebrisType` (a
+debris type's entry on a form, named as the contract names the work, with *Reduced*, a reduction
+method and *Hidden on phones*; taken off by archiving), `FormDefinition` (a version of the firm's
+added fields: never edited or deleted, guarded like `MasterPasscode`), the project's `FieldTag` list
+in use, and `Assignment.formDocumentTypes` (C42). **Read first:** `spec/DATA-MODEL.md` §3
+"Contracts and forms" (`Form`, `FormDebrisType`, `FormDefinition`) and §4.3, `spec/parts/01-setup.md`
+step 5, `spec/acceptance/01-setup.md` section C, `adms-data-model` §3.1c and §3.2, ADR-160, 211,
+214, 216, 218, 278, and the register's C36 and C42. **Done when:** AC-01-22…30 pass, named by
+their IDs (25 and 26 at the domain: the unreduced-debris warning, and what a phone's lists leave
+out); `guard_gaps()` is empty; each new guard's removal is shown caught; the chain is green with
+real counts. *REQ-101, 105a; C36's definition.* Then 1.1.6: pay items in full.
+
+**"The prime" is one key** (ADR-305): a table that names a prime (`Contract` today; a pay item's
+rate in 1.1.6, a certification in 1.2.3) holds it with a two-column foreign key (project, prime) to
+`project_contractor (project_id, as_prime_id)`, so only one of the project's own primes can be
+named. Whoever adds a prime to a project writes `asPrimeId` = its contractor; a database test uses
+`primeOn(project, contractor)` and `subOn(project, contractor, prime, tier)`
+(`packages/db/test/support/example-world.ts`). A contractor's kind has no default.
 
 **A project is written whole** (ADR-303): no setting has a database default. A story or a service
 starts from `new NewProjectSettings(policy).for(programType)` (`packages/domain`), the policy read
@@ -397,12 +411,14 @@ then `SELECT guard_list('<table>', '<domain>');` in its guard migration; a new b
 `packages/domain`'s `builtInKeys` first, with an ADR (ADR-302).
 
 Start every command with `eval "$(fnm env --shell zsh)"`; the checks are **`adms-verify`** (the chain
-is 31 files, 562 tests; twenty-four migrations; `pnpm scenarios` runs two stories, 16 checks each),
+is 32 files, 604 tests; twenty-seven migrations; `pnpm scenarios` runs two stories, 16 and 17 checks),
 with **`pnpm security`** (7 passed, 0 failed, ADR-291). The database tests, the map servers' tests and
 the stories need `pnpm local:up` first; stop it at close-out (ADR-277). A schema change goes through
 Prisma (`prisma migrate dev --create-only`), a guard into its own empty stub (ADR-113); **try a guard
 migration on a throw-away copy before `pnpm installer` applies it**, since an applied one is never
-edited.
+edited. **Loosened guards can be tried four at a time**, each on its own copy (`adms_mutation_0`…;
+`adms-verify` §1.3): run nothing else against the database, and no `pnpm lint` or `pnpm test`,
+while they go.
 
 **Words and examples everywhere:** `spec/CONVENTIONS.md` (ADR-234, 235). Field names:
 `spec/DATA-MODEL.md`. Flag wording: `spec/FLAGS.md`.
