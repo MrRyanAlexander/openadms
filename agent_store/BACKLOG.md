@@ -85,7 +85,15 @@ Carried: C36, C42, C52, and C18's first part. Closes the behaviour of KD-14, 16,
   LISTS.md leaves open: `01-setup.md`, point 6). A built-in value can't be archived. **Done when:**
   AC-01-31, 32, 34…38 pass as database tests; `guard_gaps()` is empty; the chain is green.
   *REQ-106c; REQ-101 (the library).*
-- [ ] **1.1.3** **Client, declaration event, and the project in full.** `Client`,
+- [x] **1.1.3** ✅ **done 2026-10-02 (ADR-303):** `Client`, `DeclarationEvent`, `TicketNumberSource`,
+  the project's fifteen new columns and `ProjectKindOfWork`; two migrations
+  (`client_declaration_event_project`, `guard_client_declaration_event_project`: 24 in all);
+  `Policy` and `NewProjectSettings` in `packages/domain`, the release's built-in defaults in
+  `packages/domain/policy.env`; no setting has a database default; a new project's time clock
+  starts off (`01-setup.md`, point 2); AC-01-02…08 and 11…14 pass (06 and 11 at the domain, the
+  rest at the database); `guard_gaps()` empty; 55 loosenings each caught; chain 31 files, 562 tests;
+  stories 16 and 16 checks. REQ-105b, 105c, 105f, 124d ticked; **REQ-105d and 105j not ticked**
+  (their checks and flag: 1.5.7, 1.5.5; C55). **Client, declaration event, and the project in full.** `Client`,
   `DeclarationEvent`; `Project` gains its client, declaration event, program type, *Allow split
   loads*, window, ticket-number source, workflows and settings; `ProjectKindOfWork`; the settings'
   defaults in `packages/domain`, read from policy values. The example world and both stories move to
@@ -684,6 +692,24 @@ delete one.
   key, so a plain check constraint can't see it; a guard needs its own migration and test). An
   acceptance scenario: a haul-out that left a landfill is flagged `SITE_NOT_FOR_HAUL_OUTS`; one
   dumped back at the TDSR it left is flagged `HAUL_OUT_DUMPED_AT_TDSR` and not priced.
+- **C53. Where a server app reads the policy values, and whether an installation may override one**
+  (ADR-303 (3)). The release's built-in defaults are `packages/domain/policy.env`; today only the
+  scenario harness reads it (`packages/scenarios/src/policy.ts`). **Task 1.1.11:** the API's setup
+  service that creates a project takes the `Policy` (the harness hands it over; the loader moves
+  beside the service). **Task 1.5.5:** the worker's own thresholds (ARCHITECTURE §10: the clock
+  difference at a sync, and the time checks) join `policyNames` and `policy.env`, each with its ADR.
+  **Phase 2, with the API's configuration:** decide whether a value of the same name in a service's
+  own env overrides the built-in default for the installation, and have `installer:check` report
+  the values in force.
+- **C54. A viewer and the project's setup** (ADR-303 (5)). Task 1.1.10: what a client user, a
+  contractor user and an auditor see of `client`, `declaration_event`, `project_kind_of_work` and
+  the project's new columns (the viewer view shows five columns today), each with its
+  row-level-security decision. **The model `ViewerProject` can't take the table name
+  `viewer_project`: that is already the project's viewer view** (the row-level security guard,
+  ADR-270); 1.1.10 names its table otherwise (`@@map`) and says so in `spec/DATA-MODEL.md`.
+- **C55. Two REQs this plan said 1.1.3 ticks, left open** (ADR-303 (8)): **REQ-105d** is ticked
+  with task 1.5.7 (the ROE flags a program type's *Requires ROE* drives); **REQ-105j** with task
+  1.5.5 (the "project not active" flag, which that task already names).
 - **C20.** The worker's one transaction per group, one run per project, and flagged-and-skipped groups
   (REQ-015, KD-55) use one `$write` per group (ADR-273 (3)).
 
