@@ -60,7 +60,7 @@ describe('a new project’s settings', () => {
     expect(p1).toEqual({ ...settings.for(ppdr) });
   });
 
-  it('the time clock starts off: an add-on the firm switches on (ADR-303)', () => {
+  it('the time clock starts switched off: not offered to workers until the firm switches it on (ADR-303, 304)', () => {
     const settings = new NewProjectSettings(Policy.from(shipped));
     expect([settings.for(row).timeClockEnabled, settings.for(ppdr).timeClockEnabled]).toEqual([
       false,

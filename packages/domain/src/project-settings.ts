@@ -20,7 +20,7 @@ export interface ProjectSettings {
   stumpCheckFillNeedsExposure: boolean;
   // The circle round a site's GPS, for every site without its own shape (ADR-142).
   siteCircleMeters: number;
-  // The optional time clock (ADR-241).
+  // Whether the project offers its workers the time clock, to log their own hours (ADR-241).
   timeClockEnabled: boolean;
 }
 
@@ -48,7 +48,8 @@ export class NewProjectSettings {
       stumpCheckRootBallWider: true,
       stumpCheckFillNeedsExposure: true,
       siteCircleMeters: this.policy.siteCircleMeters,
-      // An add-on the firm switches on for the projects that use it (ADR-241, 303).
+      // Switched off: not offered to the project's workers until the firm switches it on for the
+      // projects that use it (ADR-241, 303, 304).
       timeClockEnabled: false,
     };
   }
