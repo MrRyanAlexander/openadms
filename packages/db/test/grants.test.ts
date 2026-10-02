@@ -4,6 +4,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { refusedBy } from './support/database.ts';
+import { insertOf, projectLike } from './support/example-world.ts';
 import { eachTestRolledBack } from './support/lifecycle.ts';
 import { listTables } from './support/lists.ts';
 
@@ -15,6 +16,10 @@ const logins = ['adms_owner', 'adms_api', 'adms_worker', 'adms_readonly'] as con
 // to anyone, PUBLIC included; the owner, adms_owner, holds its own rights and is left out.
 const tableGrants: Record<string, Record<string, string>> = {
   project: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
+  // Who is paying, what happened, and a project's kinds of unit rate work (ADR-303).
+  client: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
+  declaration_event: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
+  project_kind_of_work: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   contractor: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   user: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   device: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
@@ -318,8 +323,18 @@ describe('the worker (adms_worker)', () => {
          VALUES (uuidv7(), $1, 'LOAD', 'COLLECTION', '101003', $2, $3, $4, 1, now(), now(), -240)`,
         [world.p1, world.monitor, world.device, world.assignments.p1],
       ],
-      [`INSERT INTO "project" ("name", "time_zone") VALUES ('P3', 'America/New_York')`, []],
+      insertOf('project', projectLike(world)),
+      insertOf('client', { name: 'Town of Egret Point' }),
       [`UPDATE "project" SET "closed_at" = now() WHERE "id" = $1`, [world.p1]],
+      [`UPDATE "client" SET "contact_phone" = '555-0142' WHERE "id" = $1`, [world.client]],
+      [
+        `UPDATE "declaration_event" SET "name" = 'Delphine' WHERE "id" = $1`,
+        [world.declarationEvent],
+      ],
+      [
+        `UPDATE "project_kind_of_work" SET "archived_at" = now() WHERE "project_id" = $1`,
+        [world.p1],
+      ],
       [`UPDATE "user" SET "name" = 'Someone else' WHERE "id" = $1`, [world.monitor]],
       [`UPDATE "transaction" SET "amount" = 0 WHERE "id" = $1`, [load.transaction]],
       [
@@ -339,9 +354,12 @@ describe('the worker (adms_worker)', () => {
 });
 
 describe('the read-only login (adms_readonly)', () => {
-  // The new tables too: no viewer view shows them, so none is granted (ADR-281, 286, 302).
+  // The new tables too: no viewer view shows them, so none is granted (ADR-281, 286, 302, 303).
   it.each([
     'user',
+    'client',
+    'declaration_event',
+    'project_kind_of_work',
     'contractor',
     'device',
     'invoice_lock',
@@ -363,13 +381,15 @@ describe('the read-only login (adms_readonly)', () => {
     const { db, world } = tested;
     await db.as('adms_readonly');
     await db.actor(world.admin, 'BACK_OFFICE');
-    for (const sql of [
-      `INSERT INTO "project" ("name", "time_zone") VALUES ('P3', 'America/New_York')`,
-      `UPDATE "field_event" SET "load_call" = 1`,
-      `UPDATE "viewer_project" SET "name" = 'P3'`,
-      `DELETE FROM "transaction"`,
-    ]) {
-      expect((await db.refused(sql)).code, sql).toBe(refusedBy.grant);
+    const attempts: [string, unknown[]][] = [
+      insertOf('project', projectLike(world)),
+      insertOf('client', { name: 'Town of Egret Point' }),
+      [`UPDATE "field_event" SET "load_call" = 1`, []],
+      [`UPDATE "viewer_project" SET "name" = 'P3'`, []],
+      [`DELETE FROM "transaction"`, []],
+    ];
+    for (const [sql, values] of attempts) {
+      expect((await db.refused(sql, values)).code, sql).toBe(refusedBy.grant);
     }
   });
 });

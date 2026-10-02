@@ -9,8 +9,8 @@
 import { projectTime } from '../clock.ts';
 import { uuidv7, uuidv7Time } from '../ids.ts';
 import type { Story } from '../runner.ts';
+import { p1TimeZone as timeZone, setUpP1 } from './p1.ts';
 
-const timeZone = 'America/New_York';
 const at = (time: string): string => `2026-10-12T${time}:00-04:00`;
 
 export const ticket101001: Story = {
@@ -24,15 +24,13 @@ export const ticket101001: Story = {
 
     story.at(
       at('06:30'),
-      'Dana Reyes sets up P1, its TDSR, Ana Brooks, Kim Nguyen, their two phones and their assignments',
+      'Dana Reyes sets up Bayline County, Hurricane Delphine and P1, its TDSR, Ana Brooks, Kim Nguyen, their two phones and their assignments',
     );
     // The first user is written with itself as the actor (ADR-270 (4)).
     const dana = uuidv7(clock.now());
     const setup = await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
       await tx.user.create({ data: { id: dana, name: 'Dana Reyes', role: 'ADMIN' } });
-      const p1 = await tx.project.create({
-        data: { name: 'Bayline County ROW, Hurricane Delphine', timeZone },
-      });
+      const p1 = await setUpP1(tx, story.policy);
       const ana = await tx.user.create({
         data: { name: 'Ana Brooks', role: 'MONITOR', monitorNumber: 'M004127' },
       });
@@ -46,9 +44,9 @@ export const ticket101001: Story = {
         data: { name: 'P1-TWR-TDSR', publicKey: 'story-P1-TWR-TDSR', masterPasscodeVersion: 1 },
       });
       const tdsr = await tx.disposalSite.create({
-        data: { projectId: p1.id, name: 'Marsh Road TDSR' },
+        data: { projectId: p1.project, name: 'Marsh Road TDSR' },
       });
-      const monday = { workDate: new Date('2026-10-12'), projectId: p1.id, madeById: dana };
+      const monday = { workDate: new Date('2026-10-12'), projectId: p1.project, madeById: dana };
       const collections = await tx.assignment.create({
         data: {
           ...monday,
@@ -69,7 +67,7 @@ export const ticket101001: Story = {
         },
       });
       return {
-        p1: p1.id,
+        p1: p1.project,
         ana: ana.id,
         kim: kim.id,
         collectionPhone,
@@ -225,11 +223,18 @@ export const ticket101001: Story = {
       [['user', 'master_passcode'], 94, 15],
     );
     story.check(
-      'and then holds exactly Dana’s nine setup rows and the two syncs',
+      'and then holds exactly Dana’s sixteen setup rows (the client, the declaration event, P1 and its five kinds of unit rate work among them) and the two syncs',
       audit.slice(afterSeed).map((record) => [record.tableName, record.source]),
       [
         ['user', 'BACK_OFFICE'],
+        ['client', 'BACK_OFFICE'],
+        ['declaration_event', 'BACK_OFFICE'],
         ['project', 'BACK_OFFICE'],
+        ['project_kind_of_work', 'BACK_OFFICE'],
+        ['project_kind_of_work', 'BACK_OFFICE'],
+        ['project_kind_of_work', 'BACK_OFFICE'],
+        ['project_kind_of_work', 'BACK_OFFICE'],
+        ['project_kind_of_work', 'BACK_OFFICE'],
         ['user', 'BACK_OFFICE'],
         ['user', 'BACK_OFFICE'],
         ['device', 'BACK_OFFICE'],

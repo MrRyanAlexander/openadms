@@ -57,6 +57,42 @@ async function refusal(write: Promise<unknown>): Promise<string> {
 }
 
 const p1 = { name: 'Bayline County ROW, Hurricane Delphine', timeZone: 'America/New_York' };
+const bayline = { name: 'Bayline County' };
+
+// P1 as it is written (the golden mission §1): under its client and declaration event, made in the
+// same work, its program type and the declaration's reference type picked from the firm's lists.
+async function p1In(tx: Prisma.TransactionClient): Promise<Prisma.ProjectUncheckedCreateInput> {
+  const client = await tx.client.create({ data: bayline });
+  const referenceType = await tx.declarationReferenceType.findFirstOrThrow({
+    where: { name: 'FEMA disaster (DR)' },
+  });
+  const declarationEvent = await tx.declarationEvent.create({
+    data: {
+      name: 'Hurricane Delphine',
+      reference: 'DR-9001-FL',
+      referenceTypeId: referenceType.id,
+    },
+  });
+  const row = await tx.programType.findFirstOrThrow({ where: { name: 'ROW' } });
+  return {
+    ...p1,
+    clientId: client.id,
+    declarationEventId: declarationEvent.id,
+    programTypeId: row.id,
+    allowSplitLoads: true,
+    activeFrom: new Date('2026-10-12'),
+    activeTo: new Date('2027-01-31'),
+    ticketNumberSource: 'GENERATED',
+    workflows: ['LOAD', 'HAUL_OUT', 'UNIT_RATE'],
+    loadCallLowLimit: 5,
+    loadCallHighLimit: 95,
+    stumpFillDepthInches: 31,
+    stumpCheckRootBallWider: true,
+    stumpCheckFillNeedsExposure: true,
+    siteCircleMeters: 200,
+    timeClockEnabled: false,
+  };
+}
 
 describe('a write through $write is audited with its actor', () => {
   it('a person in the back office, with the reason and the request', async () => {
@@ -70,7 +106,7 @@ describe('a write through $write is audited with its actor', () => {
     };
     const { project, records, seen } = await undone(api, actor, async (tx) => {
       await tx.user.create({ data: { id: dana, name: 'Dana Reyes', role: 'ADMIN' } });
-      const project = await tx.project.create({ data: p1 });
+      const project = await tx.project.create({ data: await p1In(tx) });
       const records = await tx.auditRecord.findMany({
         where: { recordId: { in: [dana, project.id] } },
         orderBy: { id: 'asc' },
@@ -127,7 +163,7 @@ describe('a write through $write is audited with its actor', () => {
           masterPasscodeVersion: 1,
         },
       });
-      const project = await tx.project.create({ data: p1 });
+      const project = await tx.project.create({ data: await p1In(tx) });
       const assignment = await tx.assignment.create({
         data: {
           personId: ana,
@@ -189,7 +225,9 @@ describe('a write through $write is audited with its actor', () => {
     const actor: Actor = { actorId: dana, source: 'BACK_OFFICE', reason: 'Wrong time zone' };
     const records = await undone(api, actor, async (tx) => {
       await tx.user.create({ data: { id: dana, name: 'Dana Reyes', role: 'ADMIN' } });
-      const { id } = await tx.project.create({ data: { ...p1, timeZone: 'America/Chicago' } });
+      const { id } = await tx.project.create({
+        data: { ...(await p1In(tx)), timeZone: 'America/Chicago' },
+      });
       await tx.project.update({ where: { id }, data: { timeZone: 'America/New_York' } });
       return tx.auditRecord.findMany({ where: { recordId: id }, orderBy: { id: 'asc' } });
     });
@@ -208,17 +246,17 @@ describe('a write through $write is audited with its actor', () => {
 describe('a write without an actor is refused', () => {
   it('outside $write, by the database', async () => {
     const name = `Unattributed ${randomUUID()}`;
-    expect(await refusal(api.project.create({ data: { ...p1, name } }))).toContain(
-      'A write to project needs its actor: state adms.actor_id before writing',
+    expect(await refusal(api.client.create({ data: { name } }))).toContain(
+      'A write to client needs its actor: state adms.actor_id before writing',
     );
-    expect(await api.project.count({ where: { name } })).toBe(0);
+    expect(await api.client.count({ where: { name } })).toBe(0);
   });
 
   it('with an actor who is not a user', async () => {
     const actor: Actor = { actorId: randomUUID(), source: 'BACK_OFFICE' };
-    expect(await refusal(undone(api, actor, (tx) => tx.project.create({ data: p1 })))).toContain(
-      'audit_record_actor_id_fkey',
-    );
+    expect(
+      await refusal(undone(api, actor, (tx) => tx.client.create({ data: bayline }))),
+    ).toContain('audit_record_actor_id_fkey');
   });
 
   it('the actor ends with its transaction, on the same connection', async () => {
@@ -243,9 +281,7 @@ describe('a write without an actor is refused', () => {
       expect(second.request).toBe('');
 
       const name = `Unattributed ${randomUUID()}`;
-      expect(await refusal(single.project.create({ data: { ...p1, name } }))).toContain(
-        'needs its actor',
-      );
+      expect(await refusal(single.client.create({ data: { name } }))).toContain('needs its actor');
     } finally {
       await single.$disconnect();
     }
@@ -285,9 +321,9 @@ describe('the worker writes as the system actor', () => {
 
   it("the API's own login may not: neither the system actor nor source SYSTEM (ADR-276)", async () => {
     expect(
-      await refusal(undone(api, systemActor, (tx) => tx.project.create({ data: p1 }))),
+      await refusal(undone(api, systemActor, (tx) => tx.client.create({ data: bayline }))),
     ).toContain(
-      'Only the worker writes as the system actor: adms_api may not state it (a write to project)',
+      'Only the worker writes as the system actor: adms_api may not state it (a write to client)',
     );
     const dana = randomUUID();
     const claimed: Actor = { actorId: dana, source: 'SYSTEM' };
@@ -304,7 +340,7 @@ describe('the worker writes as the system actor', () => {
 
   it("and is still refused what the worker isn't granted", async () => {
     expect(
-      await refusal(undone(worker, systemActor, (tx) => tx.project.create({ data: p1 }))),
-    ).toContain('permission denied for table project');
+      await refusal(undone(worker, systemActor, (tx) => tx.client.create({ data: bayline }))),
+    ).toContain('permission denied for table client');
   });
 });

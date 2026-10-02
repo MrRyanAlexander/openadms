@@ -11,6 +11,10 @@ const tested = eachTestRolledBack();
 // Each guarded table and its audit domain (ADR-270 (4)).
 const domains: Record<string, string> = {
   project: 'OPERATIONS',
+  // Who is paying, what happened, a project's kinds of unit rate work (ADR-303).
+  client: 'OPERATIONS',
+  declaration_event: 'OPERATIONS',
+  project_kind_of_work: 'OPERATIONS',
   contractor: 'OPERATIONS',
   user: 'SECURITY',
   device: 'SECURITY',
@@ -133,6 +137,20 @@ describe('the guards in the catalog', () => {
         definition: 'CHECK (((first_number >= 1) AND (first_number <= last_number)))',
       },
       {
+        name: 'project_active_window_check',
+        definition: 'CHECK (((active_to IS NULL) OR (active_to >= active_from)))',
+      },
+      {
+        name: 'project_load_call_limits_check',
+        definition:
+          'CHECK ((((load_call_low_limit IS NULL) OR ((load_call_low_limit >= 0) AND (load_call_low_limit <= 100))) AND ((load_call_high_limit IS NULL) OR ((load_call_high_limit >= 0) AND (load_call_high_limit <= 100)))))',
+      },
+      { name: 'project_site_circle_check', definition: 'CHECK ((site_circle_meters >= 1))' },
+      {
+        name: 'project_stump_fill_depth_check',
+        definition: 'CHECK ((stump_fill_depth_inches >= 1))',
+      },
+      {
         name: 'project_time_zone_known_check',
         definition:
           "CHECK ((('2000-01-01 00:00:00+00'::timestamp with time zone AT TIME ZONE time_zone) IS NOT NULL))",
@@ -142,6 +160,7 @@ describe('the guards in the catalog', () => {
         definition:
           "CHECK (((time_zone = 'UTC'::text) OR (time_zone ~ '^[A-Za-z_]+(/[A-Za-z0-9_+-]+)+$'::text)))",
       },
+      { name: 'project_workflows_check', definition: 'CHECK ((workflows IS NOT NULL))' },
       {
         name: 'user_employer_number_check',
         definition: 'CHECK (((employer_number IS NULL) OR (employer_id IS NOT NULL)))',

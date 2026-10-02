@@ -2,8 +2,12 @@
 // server's administrator inside the test's rolled-back work, with Dana Reyes stated as the actor,
 // so its own inserts are audited like any other. New ids every time, so it never meets real rows.
 //
+// The client Bayline County and the declaration event Hurricane Delphine, DR-9001-FL, with its two
+// projects as the golden mission §1 sets them up (ADR-303):
 //   P1 "Bayline County ROW, Hurricane Delphine": loads 101001 (Coastline) and 101002 (Summit)
 //   P2 "Bayline County PPDR, Hurricane Delphine": load 102001 (Coastline)
+// Their program types, and P1's kinds of unit rate work, are picked from the firm's lists as the
+// installer's seed wrote them.
 // Each load is a collection and a disposal event (load call at the tower), its completed load and
 // one transaction for its prime. Nothing is locked as invoiced; a test locks what it needs.
 // Ana Brooks records every event here, on the one phone, under her assignment on each project
@@ -34,11 +38,63 @@ export interface World {
   summit: string;
   // A Coastline Haulers LLC read-only viewer.
   coastlineViewer: string;
+  // Bayline County; Hurricane Delphine, DR-9001-FL.
+  client: string;
+  declarationEvent: string;
+  // The two program types the projects pick, from the firm's list: ROW (P1), PPDR (P2).
+  programTypes: { row: string; ppdr: string };
   p1: string;
   p2: string;
   loads: { l101001: Load; l101002: Load; l102001: Load };
   // Every row the world wrote, by table, for tests that look at its audit records.
   written: Record<string, string[]>;
+}
+
+// What a project holds besides its name, as P1 has it (the golden mission §1): under the world's
+// client and declaration event, a ROW project on generated numbers, active from 12 October 2026 to
+// 31 January 2027, its settings as a new project starts with them. For a test that writes another
+// project, or changes one column of this one (`more`).
+export function projectLike(
+  world: Pick<World, 'client' | 'declarationEvent' | 'programTypes'>,
+  more: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    name: 'Bayline County PARKS, Hurricane Delphine',
+    client_id: world.client,
+    declaration_event_id: world.declarationEvent,
+    program_type_id: world.programTypes.row,
+    allow_split_loads: false,
+    time_zone: 'America/New_York',
+    active_from: '2026-10-12',
+    active_to: '2027-01-31',
+    ticket_number_source: 'GENERATED',
+    workflows: '{LOAD,HAUL_OUT,UNIT_RATE}',
+    load_call_low_limit: 5,
+    load_call_high_limit: 95,
+    stump_fill_depth_inches: 31,
+    stump_check_root_ball_wider: true,
+    stump_check_fill_needs_exposure: true,
+    site_circle_meters: 200,
+    time_clock_enabled: false,
+    ...more,
+  };
+}
+
+// A row without one of its columns, for a test of what the database does when it's left out.
+export function without(row: Record<string, unknown>, column: string): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(row).filter(([name]) => name !== column));
+}
+
+// The insert of one row, returning its id: the statement and its values, for run(), one() or
+// refused().
+export function insertOf(table: string, row: Record<string, unknown>): [string, unknown[]] {
+  const columns = Object.keys(row);
+  return [
+    `INSERT INTO "${table}" (${columns.map((column) => `"${column}"`).join(', ')})
+     VALUES (${columns.map((_, index) => `$${String(index + 1)}`).join(', ')})
+     RETURNING id::text`,
+    Object.values(row),
+  ];
 }
 
 export class ExampleWorld {
@@ -73,14 +129,42 @@ export class ExampleWorld {
       public_key: 'test-public-key-ana-brooks',
       master_passcode_version: 1,
     });
-    const p1 = await this.insert('project', {
-      name: 'Bayline County ROW, Hurricane Delphine',
-      time_zone: 'America/New_York',
+    const client = await this.insert('client', {
+      name: 'Bayline County',
+      contact_name: 'Bayline County debris manager',
+      contact_phone: '555-0100',
     });
-    const p2 = await this.insert('project', {
-      name: 'Bayline County PPDR, Hurricane Delphine',
-      time_zone: 'America/New_York',
+    const declarationEvent = await this.insert('declaration_event', {
+      name: 'Hurricane Delphine',
+      reference: 'DR-9001-FL',
+      reference_type_id: await this.picked('declaration_reference_type', 'FEMA disaster (DR)'),
     });
+    const programTypes = {
+      row: await this.picked('program_type', 'ROW'),
+      ppdr: await this.picked('program_type', 'PPDR'),
+    };
+    const hub = { client, declarationEvent, programTypes };
+    // P1 is a ROW project; the firm ticked Allow split loads, for haul-outs loaded from more than
+    // one pile. P2 is PPDR, where it starts ticked; only loads are made on it.
+    const p1 = await this.insert(
+      'project',
+      projectLike(hub, { name: 'Bayline County ROW, Hurricane Delphine', allow_split_loads: true }),
+    );
+    const p2 = await this.insert(
+      'project',
+      projectLike(hub, {
+        name: 'Bayline County PPDR, Hurricane Delphine',
+        program_type_id: programTypes.ppdr,
+        allow_split_loads: true,
+        workflows: '{LOAD}',
+      }),
+    );
+    for (const kind of ['Hangers', 'Leaners', 'Stumps', 'White Goods', 'Crew time']) {
+      await this.insert('project_kind_of_work', {
+        project_id: p1,
+        kind_of_work_id: await this.picked('kind_of_work', kind),
+      });
+    }
 
     const site = await this.insert('disposal_site', { project_id: p1, name: 'Marsh Road TDSR' });
     const assignment = (projectId: string): Promise<string> =>
@@ -106,6 +190,7 @@ export class ExampleWorld {
       coastline,
       summit,
       coastlineViewer,
+      ...hub,
       p1,
       p2,
       loads: {
@@ -185,19 +270,22 @@ export class ExampleWorld {
     return { collection, disposal, completedLoad, transaction };
   }
 
+  // A value of one of the firm's lists, by the name it ships with: its id.
+  private async picked(list: string, name: string): Promise<string> {
+    return (
+      await this.db.one<{ id: string }>(`SELECT "id"::text FROM "${list}" WHERE "name" = $1`, [
+        name,
+      ])
+    ).id;
+  }
+
   // Inserts one row and returns its id. An id of null asks the database for a UUIDv7 up front, as
   // a phone makes a field event's own.
   private async insert(table: string, values: Record<string, unknown>): Promise<string> {
     const row = { ...values };
     if (row['id'] === null)
       row['id'] = (await this.db.one<{ id: string }>('SELECT uuidv7()::text AS id')).id;
-    const columns = Object.keys(row);
-    const { id } = await this.db.one<{ id: string }>(
-      `INSERT INTO "${table}" (${columns.map((column) => `"${column}"`).join(', ')})
-       VALUES (${columns.map((_, index) => `$${String(index + 1)}`).join(', ')})
-       RETURNING id::text`,
-      Object.values(row),
-    );
+    const { id } = await this.db.one<{ id: string }>(...insertOf(table, row));
     (this.written[table] ??= []).push(id);
     return id;
   }

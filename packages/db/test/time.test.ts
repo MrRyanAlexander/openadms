@@ -1,14 +1,18 @@
-// REQ-019: every project has an IANA time zone, and every captured time is stored as a UTC instant
-// plus the device's offset and the server's received time (ARCHITECTURE §10; ADR-100, 281). The
-// instants let "which day" be answered in the project's zone, whatever the phone's clock said.
+// REQ-019, and AC-01-07 of spec/acceptance/01-setup.md: every project has an IANA time zone, and
+// every captured time is stored as a UTC instant plus the device's offset and the server's received
+// time (ARCHITECTURE §10; ADR-100, 281). The instants let "which day" be answered in the project's
+// zone, whatever the phone's clock said.
 import { describe, expect, it } from 'vitest';
 
 import { refusedBy } from './support/database.ts';
+import { insertOf, projectLike, without } from './support/example-world.ts';
 import { eachTestRolledBack } from './support/lifecycle.ts';
 
 const tested = eachTestRolledBack();
 
-const newProject = `INSERT INTO "project" ("name", "time_zone") VALUES ('Bayline County PARKS', $1)`;
+// A new project, whole but for the time zone under test.
+const newProject = (timeZone: string): [string, unknown[]] =>
+  insertOf('project', projectLike(tested.world, { time_zone: timeZone }));
 
 describe("a project's time zone", () => {
   it.each([
@@ -19,43 +23,45 @@ describe("a project's time zone", () => {
     'Pacific/Honolulu',
     'Etc/GMT+5',
     'UTC',
-  ])('is an IANA name: %s', async (timeZone) => {
+  ])('AC-01-07 is an IANA name: %s', async (timeZone) => {
     const { db, world } = tested;
     await db.as('adms_api');
     await db.actor(world.admin, 'BACK_OFFICE');
-    expect(await db.run(newProject, [timeZone])).toBe(1);
+    expect(await db.run(...newProject(timeZone))).toBe(1);
   });
 
   it.each(['EST', 'CST6CDT', 'UTC-5', '-05:00', 'GMT'])(
-    'is never an abbreviation or an offset, though the server could compute with it: "%s"',
+    'AC-01-07 is never an abbreviation or an offset, though the server could compute with it: "%s"',
     async (timeZone) => {
       const { db, world } = tested;
       await db.as('adms_api');
       await db.actor(world.admin, 'BACK_OFFICE');
-      expect((await db.refused(newProject, [timeZone])).code).toBe(refusedBy.check);
+      expect((await db.refused(...newProject(timeZone))).code).toBe(refusedBy.check);
     },
   );
 
   it.each(['America/Nowhere', 'Bayline/Marsh_Road', 'Texas time', 'Central', ''])(
-    'is one the server\'s time zone data knows: "%s" is refused',
+    'AC-01-07 is one the server\'s time zone data knows: "%s" is refused',
     async (timeZone) => {
       const { db, world } = tested;
       await db.as('adms_api');
       await db.actor(world.admin, 'BACK_OFFICE');
-      expect(await db.refused(newProject, [timeZone])).toEqual({
+      expect(await db.refused(...newProject(timeZone))).toEqual({
         code: refusedBy.unknownTimeZone,
         message: `time zone "${timeZone}" not recognized`,
       });
     },
   );
 
-  it('is required, and a change to one is checked the same way', async () => {
+  it('AC-01-07 is required, and a change to one is checked the same way', async () => {
     const { db, world } = tested;
     await db.as('adms_api');
     await db.actor(world.admin, 'BACK_OFFICE');
-    expect(
-      (await db.refused(`INSERT INTO "project" ("name") VALUES ('Bayline County PARKS')`)).code,
-    ).toBe(refusedBy.notNull);
+    const missing = await db.refused(
+      ...insertOf('project', without(projectLike(world), 'time_zone')),
+    );
+    expect(missing.code).toBe(refusedBy.notNull);
+    expect(missing.message).toContain('"time_zone"');
     const change = `UPDATE "project" SET "time_zone" = $2 WHERE "id" = $1`;
     expect((await db.refused(change, [world.p1, 'EST'])).code).toBe(refusedBy.check);
     expect(await db.run(change, [world.p1, 'America/Chicago'])).toBe(1);

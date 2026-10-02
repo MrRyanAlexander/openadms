@@ -6,12 +6,14 @@
 // Tariq's phone can't be found and is marked lost. What it proves is the models: the time zone, the
 // Monitor ID, the device with its number block and passcode version, the assignment, and each
 // field event carrying its assignment and setup version. The screens, the sign-in, the sync and
-// the allocator behind these rows are Phases 2 to 4.
+// the allocator behind these rows are Phases 2 to 4. It opens with setup's first three steps
+// (ADR-303): the client, the declaration event and the project, whose settings start as the
+// release's policy values.
 import { projectTime } from '../clock.ts';
 import { uuidv7 } from '../ids.ts';
 import type { Story } from '../runner.ts';
+import { p1TimeZone as timeZone, setUpP1 } from './p1.ts';
 
-const timeZone = 'America/New_York';
 const at = (time: string): string => `2026-10-12T${time}:00-04:00`;
 const monday = new Date('2026-10-12');
 const day = (date: Date): string => date.toISOString().slice(0, 10);
@@ -25,7 +27,10 @@ export const dispatchMonday: Story = {
   async run(story) {
     const { api, clock } = story;
 
-    story.at(at('05:30'), 'Dana Reyes sets up Luis Ortega, P1 and its two sites');
+    story.at(
+      at('05:30'),
+      'Dana Reyes sets up Luis Ortega; Bayline County, Hurricane Delphine and P1; and its two sites',
+    );
     // The first user is written with itself as the actor (ADR-270 (4)).
     const dana = uuidv7(clock.now());
     const office = await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
@@ -33,17 +38,90 @@ export const dispatchMonday: Story = {
         data: { id: dana, name: 'Dana Reyes', role: 'ADMIN' },
       });
       const luis = await tx.user.create({ data: { name: 'Luis Ortega', role: 'MANAGER_ANALYST' } });
-      const p1 = await tx.project.create({
-        data: { name: 'Bayline County ROW, Hurricane Delphine', timeZone },
-      });
+      const p1 = await setUpP1(tx, story.policy);
       const tdsr = await tx.disposalSite.create({
-        data: { projectId: p1.id, name: 'Marsh Road TDSR' },
+        data: { projectId: p1.project, name: 'Marsh Road TDSR' },
       });
       const landfill = await tx.disposalSite.create({
-        data: { projectId: p1.id, name: 'Bayline County Landfill' },
+        data: { projectId: p1.project, name: 'Bayline County Landfill' },
       });
-      return { danaRow, luis, p1: p1.id, tdsr: tdsr.id, landfill: landfill.id };
+      return { danaRow, luis, p1: p1.project, tdsr: tdsr.id, landfill: landfill.id };
     });
+    const project = await api.project.findUniqueOrThrow({
+      where: { id: office.p1 },
+      include: {
+        client: true,
+        declarationEvent: { include: { referenceType: true } },
+        programType: true,
+        kindsOfWork: {
+          include: { kindOfWork: true },
+          orderBy: { kindOfWork: { position: 'asc' } },
+        },
+      },
+    });
+    story.check(
+      'P1 is one body of work for Bayline County under Hurricane Delphine, DR-9001-FL: a ROW project (no ROE), active 12 October 2026 to 31 January 2027, its numbers generated',
+      [
+        project.name,
+        project.client.name,
+        project.declarationEvent.name,
+        project.declarationEvent.reference,
+        project.declarationEvent.referenceType.name,
+        project.programType.name,
+        project.programType.requiresRoe,
+        project.timeZone,
+        day(project.activeFrom),
+        project.activeTo === null ? null : day(project.activeTo),
+        project.ticketNumberSource,
+      ],
+      [
+        'Bayline County ROW, Hurricane Delphine',
+        'Bayline County',
+        'Hurricane Delphine',
+        'DR-9001-FL',
+        'FEMA disaster (DR)',
+        'ROW',
+        false,
+        'America/New_York',
+        '2026-10-12',
+        '2027-01-31',
+        'GENERATED',
+      ],
+    );
+    story.check(
+      'AC-01-11 its settings start as the release’s policy values: load calls flagged at or under 5 and at or over 95, a 200 m site circle, a 31 in stump fill depth, both stump checks on, the time clock off',
+      {
+        loadCallLowLimit: project.loadCallLowLimit,
+        loadCallHighLimit: project.loadCallHighLimit,
+        siteCircleMeters: project.siteCircleMeters,
+        stumpFillDepthInches: project.stumpFillDepthInches,
+        stumpCheckRootBallWider: project.stumpCheckRootBallWider,
+        stumpCheckFillNeedsExposure: project.stumpCheckFillNeedsExposure,
+        timeClockEnabled: project.timeClockEnabled,
+      },
+      {
+        loadCallLowLimit: 5,
+        loadCallHighLimit: 95,
+        siteCircleMeters: 200,
+        stumpFillDepthInches: 31,
+        stumpCheckRootBallWider: true,
+        stumpCheckFillNeedsExposure: true,
+        timeClockEnabled: false,
+      },
+    );
+    story.check(
+      'Dana ticked Allow split loads (a ROW project starts without it); P1 allows loads, haul-outs and unit rate tickets, and five kinds of unit rate work',
+      [
+        project.allowSplitLoads,
+        project.workflows,
+        project.kindsOfWork.map((allowed) => allowed.kindOfWork.name),
+      ],
+      [
+        true,
+        ['LOAD', 'HAUL_OUT', 'UNIT_RATE'],
+        ['Hangers', 'Leaners', 'Stumps', 'White Goods', 'Crew time'],
+      ],
+    );
     story.check(
       'the database issued each of them the next Monitor ID; nobody typed one',
       [office.danaRow.monitorNumber, office.luis.monitorNumber],

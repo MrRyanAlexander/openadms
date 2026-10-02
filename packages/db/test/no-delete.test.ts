@@ -12,6 +12,9 @@ const tested = eachTestRolledBack();
 // Each operational table but "transaction", and a row of it from the example world.
 const rowOf: Record<string, (world: World) => string> = {
   project: (world) => world.p1,
+  client: (world) => world.client,
+  declaration_event: (world) => world.declarationEvent,
+  project_kind_of_work: (world) => world.written['project_kind_of_work']?.[0] ?? 'none written',
   contractor: (world) => world.summit,
   user: (world) => world.monitor,
   device: (world) => world.device,

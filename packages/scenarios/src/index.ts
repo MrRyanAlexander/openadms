@@ -10,6 +10,7 @@ export {
 } from './device.ts';
 export { uuidv7, uuidv7Time } from './ids.ts';
 export { ApiSyncIntake } from './intake.ts';
+export { builtInPolicy } from './policy.ts';
 export {
   Runner,
   type RunOptions,

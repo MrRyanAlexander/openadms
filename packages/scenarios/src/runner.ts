@@ -5,10 +5,12 @@
 import { isDeepStrictEqual } from 'node:util';
 
 import type { Database } from '@open-adms/db';
+import type { Policy } from '@open-adms/domain';
 
 import { projectTime, StoryClock } from './clock.ts';
 import { SimulatedDevice, type PhoneSetup, type SyncIntake } from './device.ts';
 import { ApiSyncIntake } from './intake.ts';
+import { builtInPolicy } from './policy.ts';
 import { StoryDatabase } from './story-database.ts';
 
 export interface Story {
@@ -27,6 +29,8 @@ export interface StoryContext {
   // The services' own clients, on the story's database.
   readonly api: Database;
   readonly worker: Database;
+  // The release's policy values, which a new project's settings start from (ADR-303).
+  readonly policy: Policy;
   // Where phones sync to: the stand-in for the API's sync endpoint.
   readonly intake: SyncIntake;
   // Moves the clock to a time (with its offset) and says what happens then.
@@ -83,6 +87,7 @@ export class Runner {
         clock,
         api,
         worker,
+        policy: builtInPolicy(),
         intake: new ApiSyncIntake(api, clock),
         at(time, what) {
           clock.set(time);

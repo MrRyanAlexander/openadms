@@ -1,26 +1,131 @@
 // Configuration: standing facts that may change, written by the API, audited, archived or
 // closed, never deleted (adms-data-model §3.1b).
 
+// Who is paying: the jurisdiction or agency. Firm-wide and reused across disasters: a county hit
+// again is the same record, picked, never re-created (adms-data-model §3.1a; ADR-023).
+model Client {
+  id           String  @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  name         String
+  // Its contact, edited freely, audited.
+  contactName  String? @map("contact_name")
+  contactEmail String? @map("contact_email")
+  contactPhone String? @map("contact_phone")
+  notes        String?
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  projects Project[]
+
+  @@map("client")
+}
+
+// What happened: the disaster and the reference its work is authorised under. Firm-wide, created
+// once and referenced by any number of projects of any number of clients (ADR-023, 026). Always the
+// declaration event, never a bare "event" (spec/CONVENTIONS.md §2).
+model DeclarationEvent {
+  id              String @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  name            String
+  // As written: DR-9001-FL, or a state, local or internal reference. Text, never parsed.
+  reference       String
+  // What kind of reference it is: picked from the firm's list, never typed (ADR-070).
+  referenceTypeId String @map("reference_type_id") @db.Uuid
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  referenceType DeclarationReferenceType @relation(fields: [referenceTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  projects      Project[]
+
+  @@map("declaration_event")
+}
+
+// Where a project's ticket numbers come from: pre-printed control tickets, their ranges entered at
+// setup, or numbers generated in blocks on each phone (ADR-056). The series and ranges themselves
+// are the numbering models' (spec/DATA-MODEL.md §3, Numbering).
+enum TicketNumberSource {
+  CONTROL
+  GENERATED
+
+  @@map("ticket_number_source")
+}
+
 // One body of work for one client under one declaration event: the hub (adms-data-model §3.1a).
+// A separate project per funder or kind of work; there is no funder field (ADR-148).
+// What each setting starts as on a new project is packages/domain's (NewProjectSettings), from the
+// policy values: no setting has a default here, so every writer says what it set (invariant 16).
 model Project {
-  id       String @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  name     String
+  id                 String             @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  name               String
+  clientId           String             @map("client_id") @db.Uuid
+  declarationEventId String             @map("declaration_event_id") @db.Uuid
+  // The kind of work, from the firm's list. Its "requires ROE" drives the ROE checks (ADR-149).
+  programTypeId      String             @map("program_type_id") @db.Uuid
+  // Whether "normal or split?" is asked; starts ticked where the program type requires ROEs, and
+  // the firm may change it either way (ADR-137).
+  allowSplitLoads    Boolean            @map("allow_split_loads")
   // IANA name, e.g. America/New_York: "which day" questions use it (ADR-100). A check in the guard
   // migrations refuses anything else (ADR-281).
-  timeZone String @map("time_zone")
+  timeZone           String             @map("time_zone")
+  // The active window: calendar days in the project's time zone, judged by a load's time, its
+  // collection's end (ADR-161). A ticket outside it is flagged, never refused; the end may be empty.
+  activeFrom         DateTime           @map("active_from") @db.Date
+  activeTo           DateTime?          @map("active_to") @db.Date
+  ticketNumberSource TicketNumberSource @map("ticket_number_source")
+  // The ticket types it allows (ADR-041).
+  workflows          Workflow[]
+
+  // A load call at or under the low limit, or at or over the high one, is flagged; empty = off.
+  // A 0% call is flagged either way (ADR-164, 181).
+  loadCallLowLimit            Int?    @map("load_call_low_limit")
+  loadCallHighLimit           Int?    @map("load_call_high_limit")
+  // The root-ball height the fill CY is worked out with (ADR-203).
+  stumpFillDepthInches        Int     @map("stump_fill_depth_inches")
+  // The two built-in stump checks: root ball not wider than the stump; fill paid with the root ball
+  // not half exposed. Both still bill (ADR-203).
+  stumpCheckRootBallWider     Boolean @map("stump_check_root_ball_wider")
+  stumpCheckFillNeedsExposure Boolean @map("stump_check_fill_needs_exposure")
+  // The circle round a site's GPS, for every site of the project without its own shape (ADR-142).
+  siteCircleMeters            Int     @map("site_circle_meters")
+  // The optional time clock, per project (ADR-241).
+  timeClockEnabled            Boolean @map("time_clock_enabled")
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   closedAt  DateTime? @map("closed_at") @db.Timestamptz(3)
 
-  disposalSites  DisposalSite[]
-  payItems       PayItem[]
-  assignments    Assignment[]
-  numberBlocks   NumberBlock[]
-  fieldTags      FieldTag[]
-  fieldEvents    FieldEvent[]
-  completedLoads CompletedLoad[]
+  client           Client              @relation(fields: [clientId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  declarationEvent DeclarationEvent    @relation(fields: [declarationEventId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  programType      ProgramType         @relation(fields: [programTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  kindsOfWork      ProjectKindOfWork[]
+  disposalSites    DisposalSite[]
+  payItems         PayItem[]
+  assignments      Assignment[]
+  numberBlocks     NumberBlock[]
+  fieldTags        FieldTag[]
+  fieldEvents      FieldEvent[]
+  completedLoads   CompletedLoad[]
 
+  // "Every project under this declaration", and a client's projects, are one query each (ADR-026).
+  @@index([declarationEventId])
+  @@index([clientId])
   @@map("project")
+}
+
+// One of the kinds of unit rate work a project allows (ADR-127). Taken off the project by
+// archiving, never deleted; put back by clearing the archive.
+model ProjectKindOfWork {
+  id           String @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  projectId    String @map("project_id") @db.Uuid
+  kindOfWorkId String @map("kind_of_work_id") @db.Uuid
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  project    Project    @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  kindOfWork KindOfWork @relation(fields: [kindOfWorkId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([projectId, kindOfWorkId])
+  @@map("project_kind_of_work")
 }
 
 // A hauling company, prime or sub, or a monitoring firm or temp agency that employs monitors;
@@ -354,6 +459,8 @@ model ProgramType {
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
 
+  projects Project[]
+
   @@map("program_type")
 }
 
@@ -367,6 +474,8 @@ model DeclarationReferenceType {
 
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  declarationEvents DeclarationEvent[]
 
   @@map("declaration_reference_type")
 }
@@ -426,6 +535,7 @@ model KindOfWork {
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
 
   itemNames ItemName[]
+  projects  ProjectKindOfWork[]
 
   @@map("kind_of_work")
 }

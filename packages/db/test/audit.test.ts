@@ -4,6 +4,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { refusedBy } from './support/database.ts';
+import { insertOf, projectLike } from './support/example-world.ts';
 import { eachTestRolledBack } from './support/lifecycle.ts';
 
 const tested = eachTestRolledBack();
@@ -112,13 +113,16 @@ describe('capture', () => {
     );
     expect(Object.fromEntries(domains.map((row) => [row.table_name, row.domains]))).toEqual({
       assignment: ['OPERATIONS'],
+      client: ['OPERATIONS'],
       completed_load: ['BILLING'],
       contractor: ['OPERATIONS'],
+      declaration_event: ['OPERATIONS'],
       device: ['SECURITY'],
       disposal_site: ['OPERATIONS'],
       field_event: ['RECORDS'],
       invoice_lock: ['BILLING'],
       project: ['OPERATIONS'],
+      project_kind_of_work: ['OPERATIONS'],
       transaction: ['BILLING'],
       user: ['SECURITY'],
     });
@@ -149,12 +153,10 @@ describe('capture', () => {
 
 describe('a write with no actor or source is refused', () => {
   it('no actor stated', async () => {
-    const { db } = tested;
+    const { db, world } = tested;
     await db.as('adms_api');
     await db.noActor();
-    const refusal = await db.refused(
-      `INSERT INTO "project" ("name", "time_zone") VALUES ('P3', 'America/New_York')`,
-    );
+    const refusal = await db.refused(...insertOf('project', projectLike(world)));
     expect(refusal).toEqual({
       code: refusedBy.grant,
       message: 'A write to project needs its actor: state adms.actor_id before writing',
