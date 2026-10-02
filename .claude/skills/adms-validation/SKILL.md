@@ -2,7 +2,7 @@
 name: adms-validation
 description: Open ADMS checks, flags, statuses, how rules run, and the quantity math, in today's rules. Covers the checks between a ticket's field events and on each event against the setup (certification, place and time, where debris went, quantity, pay item settings, forms, pricing), what is never flagged, how the worker runs a form's rules (one contract per rule, criteria read only the ticket, Add in # order then Remove then Void ticket, a rule's void wins), why no rule or setting may be silently inert, the four statuses and what sets them, timing contradictions, how a flag reads and how a reviewer accepts one, and every quantity formula (capacity × load call, scale weight and a tandem's split, split shares, circumference to diameter, stump CY, fill CY, carried tickets, white goods, crew hours, mileage rounding). Use when writing a check or a flag, the rule engine, a threshold or project setting, status changes, or any quantity math. Setup and workflows live in adms-ticket-workflows, pricing and the ledger in adms-ledger-audit, duplicates and corrections in adms-exceptions.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-244) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-244; the flag catalogue approved, ADR-290; split haul-outs, ADR-295) -->
 
 > **This page states today's rules** (through ADR-243). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
@@ -32,7 +32,8 @@ no database, so each is unit-tested alone; the worker (`apps/worker`) runs them 
 receipt (ARCHITECTURE §18, invariants 11 and 14). **Thresholds are policy**: built-in defaults in
 `.env`, project settings where the firm may change them, never literals, never relaxed to pass a
 test (invariant 16). The flag catalogue (each flag's code, trigger, wording, still-bills and accept
-rule) is `spec/FLAGS.md`, still to be drafted (BACKLOG 0.2b.3); the messages below show the style.
+rule) is `spec/FLAGS.md` (approved 2026-10-01, ADR-290): its codes and wording are the ones to build; the
+messages below show the style.
 
 ## 5.1 Checks between a ticket's field events
 
@@ -70,7 +71,7 @@ amount can be computed (§5.4), except where the table says it doesn't.
 | A collection's end GPS or a unit rate event's GPS **outside the project boundary** | "collected outside the project boundary" | 135, 141 |
 | Inside the boundary but in no zone | "not inside any zone" (the zone is left empty) | 141 |
 | A disposal's (or either haul-out end's) end GPS outside its **site's area**: the project's circle (built-in 200 m, `DISPOSAL_SITE_PROXIMITY_M`, changed in its GIS settings) or the site's own shape | "dumped outside Marsh Road TDSR's area" | 136, 142 |
-| The load's time (its collection's end) outside the project's **active window** | "project not active on 2027-02-03" | 057, 161, 181 |
+| The load's time (its collection's end) outside the project's **active window** | "project not active on 03-Feb-2027" | 057, 161, 181 |
 | A disposal before the site's activation date, or after its set close date | "site not yet active" / "site closed" | 173, 181 |
 | No road route for the mileage | "no road route found; straight-line distance used" | 163 |
 | The times don't make sense: device clock off at sync beyond a threshold, a work time after the server received it, before the phone was set up, a device time zone unlike the project's | a plain message about the time ("device clock was 2 h 14 m off at sync") | 100 |
@@ -116,7 +117,7 @@ every ticket they apply to):
 **Forms** (records, never priced; `adms-ticket-workflows` §4.6):
 | Check | The flag | ADRs |
 |---|---|---|
-| On an ROE project, a collection, unit rate ticket or survey with no ROE, an ROE not on the project, unsigned, or out of scope | flagged; nothing is looked up | 055, 149 |
+| On an ROE project, a collection, unit rate ticket or survey with no ROE, an ROE not on the project, unsigned, or out of scope (the ticket's debris type or payable type isn't among the ROE's scope picks; an ROE with no picks has no scope check, ADR-293) | flagged; nothing is looked up | 055, 149, 293 |
 | A post-work survey with no pre-work survey on its ROE | flagged | 150 |
 | A certification missing one of its five views | flagged (`adms-certifications`) | 179 |
 | A disposal site with no permit | "permit outstanding", on the site | 111 |
@@ -170,7 +171,8 @@ section is how the worker runs them, after the checks, the zone and mileage, and
    transactions (ADR-118, 130, 131). **User, 2026-09-25 (Q-125):** deletes and voids "extend what we
    can do with the results of rules".
 4. **A split runs once per property**, on its share, with its own zone, address and mileage and the
-   load's certification, disposal and load call (ADR-162). A unit rate ticket's pay item is worked
+   load's certification, disposal and load call (ADR-162). **A split haul-out runs once per pile**, on
+   its share, with its own debris type and field tag (ADR-295). A unit rate ticket's pay item is worked
    out again from the bands first (ADR-217).
 5. **A rule's void always wins** (ADR-167): it names the rule as its reason; a person's unvoid lasts
    only until the next reprocess, so the reviewer corrects the data or the rule to keep it. **User,
@@ -274,6 +276,13 @@ weight) is stored apart from what was observed, and the parts **sum exactly** to
 - **Split shares:** each property's share = its estimate ÷ the sum of the estimates, applied to the
   load's CY or tons. Golden mission 102001: 36.0 CY, estimates 12 and 18 → **14.4 CY** and **21.6 CY**
   (ADR-055, 064). Rules then run per property (§5.3).
+- **Split haul-out shares** (ADR-295): each pile records a **running** load call, how full the
+  container is after it; the last is the haul-out's call. A pile's part = its call − the call before
+  it; its CY = capacity × that part ÷ 100; its share of a scale weight = that part ÷ the last call,
+  to two decimals, the remainder given to one pile so the shares sum exactly. `730419`, 110 CY,
+  calls 10%, 35%, 85% → parts 10, 25, 50 → **11.0, 27.5 and 55.0 CY** (93.5 CY); a 24.00-ton weight →
+  **2.82, 7.06 and 14.12 t**. A call not higher than the one before it is flagged and the piles
+  aren't shared out until it's corrected. The load-call limits judge only the last call.
 - **A load that carries tickets:** a load of stumps is **each carried stump's CY, rounded half up to
   a tenth, then added** (4.8 + 7.8 + 12.0 = **24.6 CY**), so the load always equals its stump
   tickets; a load of white goods is **the count of items** on the tickets it carries (ADR-192, 204).

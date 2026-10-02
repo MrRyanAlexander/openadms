@@ -2,7 +2,7 @@
 name: adms-ticket-workflows
 description: Open ADMS ticket workflows and the setup spine, in today's rules. Covers what must exist before any field event (client, declaration event, project, contracts, forms and debris types, pay items, sites, rules, certifications, ROEs), ticket numbers, a ticket's life and statuses, how every capture starts (badge first, number last), Workflow A loads (collection and disposal events to the completed load, split loads, loads that carry tickets), Workflow B haul-outs, Workflow C unit rate (hangers, leaners, stumps and fill, white goods, HHW, crew time), Workflow D forms (ROE, surveys, incidents, citizen drop-off logs), and the order of a reconciliation run. Use when creating, matching or reconciling tickets, or when setting up a project, contract, pay item, site or ROE. Checks and flags live in adms-validation, pricing in adms-ledger-audit, duplicates and corrections in adms-exceptions, phone screens in adms-field-app.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-242; the tower's lookup, ADR-243) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-242; the tower's lookup, ADR-243; an ROE's scope, ADR-293; split haul-outs, ADR-295) -->
 
 > **This page states today's rules** (through ADR-241). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
@@ -19,7 +19,7 @@ know which one you are touching. The first three are fixed in code as their even
 | Workflow | Field events, in field order | Makes the number | Takes the quantity | The worker concludes |
 |---|---|---|---|---|
 | **A. Load** (§4.2) | collection `COL` → disposal `DIS` (a split: one `COL` per property) | the collection | the disposal: a load call, a scale weight, or a count of the tickets it carries | the completed load `CLT` |
-| **B. Haul-out** (§4.4) | haul-out collection `HOC` at the TDSR → haul-out disposal `HOD` at the final site | the haul-out collection | the haul-out collection's load call (a scale weight at the disposal when it is paid by weight) | the completed haul-out `CHO` |
+| **B. Haul-out** (§4.4) | haul-out collection `HOC` at the TDSR → haul-out disposal `HOD` at the final site (a split: one `HOC` per pile, §4.4a) | the haul-out collection | the haul-out collection's load call (a scale weight at the disposal when it is paid by weight) | the completed haul-out `CHO` |
 | **C. Unit rate** (§4.5) | one unit rate event `URT`, complete on its own | the unit rate event | its own count, measurement or hours | its transactions |
 | **D. Forms** (§4.6) | none: ROEs, surveys, incidents and drop-off logs are records, not a ticket's events | their own number where they have one | nothing: never priced | nothing |
 
@@ -311,6 +311,29 @@ contrast, is judged at the tower after settling on the drive in.
   it left (ADR-164).
 - A citizen drop-off pile is billed only when it leaves as an ordinary haul-out (ADR-184).
 
+### 4.4a Split haul-outs (ADR-295)
+
+Where the project **allows split loads** (ADR-137), a haul-out may be loaded from **several piles**:
+debris at a TDSR is sometimes kept apart by the area or zone it came from, and is hauled out and
+costed that way. It works like a split load's collections, with one difference in what the monitor
+gives. **User, 2026-10-01:** "Each new pile or whatever you wanna call it, they start like a new property. But insteaf of just giving and estimate CY, they give an actual load call per pile estimating how much debris is in the trailer after each. So say the first pile is 10% loaded. Then the next is 35% loaded and finally they load a 3rd and mark 85% loaded. That then becomes the final load call, but we use the percentages from each and take the certified CY to know how much each zone/area costs once we get the scale ticket info from the haul out disposal monitor."
+
+- **N haul-out collection events, one haul-out disposal event**: `-A`, `-B`, `-C`…, grouped on the
+  base number; the first is `-A`, never bare; the driver carries the base number (as §4.2a).
+- **Each pile's event** has its own times and GPS, its own debris type and, to tell the pile, its
+  **field tag** from the project's list (*agent default:* the firm adds its areas there; no new
+  list).
+- **Each records a running load call**: how full the container is after that pile. **The last one
+  is the haul-out's load call.** No estimate is taken.
+- **A pile's part is what it added**: its call less the call before it. **Its share = that part ÷
+  the last call**, applied to the CY, or to the scale weight where the haul-out is paid by weight;
+  derived, summing exactly (`adms-validation` §5.5).
+- **Rules run once per pile**, on its share, with its own debris type and field tag.
+- A call that isn't higher than the one before it is flagged, and nothing bills until it's
+  corrected; the load-call limits judge only the last call (`spec/FLAGS.md` §3.5).
+- Example: cert `730419`, 110 CY, calls 10%, 35%, 85% (ticket 201004) → the haul-out is 93.5 CY;
+  the piles 11.0, 27.5 and 55.0 CY. Weighed at 24.00 tons → 2.82, 7.06 and 14.12 tons.
+
 ## 4.5 WORKFLOW C — Unit rate (one field event, no pairing)
 
 Some work isn't volumetric: a leaning tree felled, hangers cut from a canopy, a stump pulled,
@@ -427,7 +450,7 @@ any record too (ADR-156).
 
 | Form | What it records | Rules around it | ADRs |
 |---|---|---|---|
-| **ROE** (Right of Entry) | number (from the phone's block, or typed from the paper ROE), parcel ID, address, owner, signed and the date, **scope** (the firm's ROE form fields: choices, counts, GPS, "GPS required" set on the form), a photo of the signed form | made offline on a phone or in the back office; reaches other phones when they sync. **On an ROE project every collection, unit rate ticket and survey carries one**; missing, unsigned or out of scope is flagged | 055, 149, 181 |
+| **ROE** (Right of Entry) | number (from the phone's block, or typed from the paper ROE), parcel ID, address, owner, signed and the date, **scope** (picked from what the project already has: its load form's debris types and its unit rate payable types, each with an optional count, ADR-293; GPS, with "GPS required" set on the form; the firm's other ROE form fields), a photo of the signed form | made offline on a phone or in the back office; reaches other phones when they sync. **On an ROE project every collection, unit rate ticket and survey carries one**; missing, unsigned or out of scope is flagged | 055, 149, 181 |
 | **Pre-work survey** | a property's condition before work, against false damage claims; its ROE | | 149 |
 | **Post-work survey** | the condition after and the work done; **linked to its pre-work survey by ROE number** | the phone's lists hold the ROEs whose pre-work survey is done, so another monitor can pick one; none is flagged | 150 |
 | **Incident** | type, then sub-type (the firm adds sub-types; none at install), parties, photos, description | **records only: never stops work**, whatever the incident | 052, 137 |

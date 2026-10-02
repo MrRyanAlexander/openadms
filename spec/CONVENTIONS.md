@@ -205,16 +205,16 @@ full. Draw every example from it. Add to it where you need more, and record the 
 | Primes and subs | **Coastline Haulers LLC**, sub **Rivera Trucking**; **Summit Debris Services**, sub **Pinewood Hauling** (the second prime, for two-prime examples) |
 | Contracts | "Coastline, Bayline ROW 2026"; "Summit, Bayline ROW 2026"; "Coastline, Bayline PPDR 2026" |
 | Sites | **Marsh Road TDSR** (TDSR/DMS: takes loads, haul-outs leave here) · **Bayline County Landfill** (Final Disposal: takes loads, charges a tipping fee, short code `BCL`) · **Bayline Transfer Station** (Transfer Station: takes loads) · **Old Quarry Pit** (Other: an ineligible site) |
-| Forms and debris types | P1 load form: Vegetative, C&D. P1 haul-out form: Mulch (reduced, grinding). Field tag list: Mixed |
+| Forms and debris types | P1 load form: Vegetative, C&D. P1 haul-out form: Mulch (reduced, grinding). Field tag list: Mixed; and Zone 1 pile, Zone 2 pile, Zone 3 pile (a TDSR's piles, for the split haul-out example; added 2026-10-01, ADR-295) |
 | Certifications (series from `730415`) | `730415` Coastline dump trailer 65 CY · `730416` Rivera self-loader 48 CY · `730417` Coastline bucket truck crew · `730418` Coastline skid steer crew · `730419` Coastline walking floor 110 CY · `730421` Coastline tandem truck body 30 CY and `730422` its trailer 40 CY (added 2026-09-29 for the tandem example, `adms-scale-receipts`) |
 | Monitors | Ana Brooks `M004127` · Kim Nguyen `M004128` · Tariq Patel `M004129` · Jo Kim `M004130` · Sam Grant `M004131` |
 | Monitoring sub (an employer of monitors) | **Harbor Staffing**, a temp agency; its own ID for Kim Nguyen is `HS-0417` (added 2026-10-01 for the employer example, ADR-281) |
 | Phones | `P1-COL-1` · `P1-TWR-TDSR` · `P1-TWR-LF` · `P1-HO-TDSR` · `P1-UR-1` · `P2-COL-1` · `P2-TWR-TDSR` (the golden mission's dispatch board) |
 | Master passcode (tests and stories only) | `heron-marsh-delphine`, made up; no installation uses it (added 2026-10-01, ADR-281) |
-| Ticket numbers | P1 loads `101001`…; haul-outs `201001`…; unit rate `301001`…; P2 loads `102001`… (a split: `102001-A`, `102001-B`); ROEs `R-0007`, `R-0008` |
+| Ticket numbers | P1 loads `101001`…; haul-outs `201001`… (a split haul-out: `201004-A`, `201004-B`, `201004-C`, with split loads allowed on P1 for the example; added 2026-10-01, ADR-295); unit rate `301001`…; P2 loads `102001`… (a split: `102001-A`, `102001-B`); ROEs `R-0007`, `R-0008` |
 | Addresses | 14 Heron St, 40 Birch Ln, 22 Elm St, 412 and 416 Cedar Ct |
 
-**Flag messages built from it** (the style; `spec/FLAGS.md` will own the wording):
+**Flag messages built from it** (the style; `spec/FLAGS.md` owns the wording, ADR-290):
 - "Ticket 101008: debris type mismatch. Flagged for review."
 - "Ticket 101009: dumped at Old Quarry Pit, an ineligible site. Flagged for review."
 - "Ticket 101010: no pricing rule on a Summit contract matches. Flagged for review."

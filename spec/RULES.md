@@ -35,7 +35,8 @@ a project in this order *(Q-117, ADR-122)*:
    - **a rate for each prime** that works under it, never a copy per prime (ADR-206).
 5. **The rules**, built from all of the above. The builder's dropdowns only ever offer what already
    exists on the project. **The pay item screen's "Pays when"** writes and keeps a rule for each
-   contract whose prime has a rate on the pay item, marked "from pay item HNG-RMV-EA" and edited
+   contract whose prime has a rate on the pay item, on each form it says the pay item pays on (a pay
+   item names no form of its own, so a tipping fee can pay on loads and on haul-outs, ADR-292), marked "from pay item HNG-RMV-EA" and edited
    only there; free-standing rules stay for everything else (removes, voids, date ranges) (ADR-229).
 
 ## 2. What a rule is ✅
@@ -100,6 +101,8 @@ items** (ADR-126).
   ≥ 95% by default, changeable or off), so no rule has to test or ignore them.
 - **Split loads** (ADR-162): rules run **once per property**, on its share: its own zone, address and
   mileage; the load's cert, disposal and load call; *Volume* = its share.
+- **Split haul-outs** (ADR-295): rules run **once per pile**, on its share: its own debris type and
+  field tag; the haul-out's cert, from site and disposal; *Volume* and *Weight* = its share.
 
 ### 4a. Operators — ✅ (ADR-125, Q-119)
 
@@ -190,7 +193,8 @@ When a ticket is reconciled or reprocessed (ADR-086, 090):
    (ADR-085). Tickets **locked as invoiced** are never touched (ADR-090).
 8. **Void ticket** voids the ticket, with the rule named as the reason; audited under the system
    (ADR-118). Unvoiding stays a person's audited action.
-9. A split runs steps 2–7 **once per property**, on its share (ADR-162). **A haul-out dumped at a
+9. A split runs steps 2–7 **once per property**, on its share (ADR-162); a split haul-out **once per
+   pile** (ADR-295). **A haul-out dumped at a
    TDSR** skips the rules until corrected (ADR-226).
 
 ## 7. "Is valid" *(agent default, ADR-247)*

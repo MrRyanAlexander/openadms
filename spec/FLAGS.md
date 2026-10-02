@@ -1,6 +1,6 @@
 # Open ADMS — The flag catalogue
 
-⚠️ **Draft, for the user's approval of the wording** *(BACKLOG 0.2b.3; ADR-285)*
+✅ **Approved** With the user's approval of the wording - 10.01.2026-1345 *(BACKLOG 0.2b.3; ADR-285; the approval is ADR-290; changed since, at the user's word, by ADR-293, 294 and 295)*
 
 ← [Index](INDEX.md)
 
@@ -73,7 +73,7 @@ a monitor's own hours (ADR-100).
 | `CERT_NUMBER_MISMATCH` | The cert numbers on the ticket's events differ, compared exactly | "Ticket 101008: truck number doesn't match (collection 730415, disposal 730416)." | yes, from the certification on the event that took the quantity (§5, 1) | both numbers | 019, 033 |
 | `DISPOSAL_BEFORE_COLLECTION_ENDED` | The disposal started before its collection ended | "Ticket 101008: disposal started 09:12, before its collection ended 09:40." | yes | both times | 053, 100 |
 | `OVERLAPPING_LOADS` | Two collections on one certification with overlapping loading times and no disposal between; raised on both tickets | "Ticket 101031: loading 09:10–09:40 overlaps ticket 101030 on truck 730415." | yes | both tickets' times, the cert number | 027, 053 |
-| `SPLIT_SUFFIX_GAP` | A bare collection beside suffixed ones, or a gap in the suffixes | "Ticket 102001: collections -A and -C, no -B." | yes | the suffixes present | 033, 173 |
+| `SPLIT_SUFFIX_GAP` | A bare collection beside suffixed ones, or a gap in the suffixes: a split load's properties, or a split haul-out's piles | "Ticket 102001: collections -A and -C, no -B." | yes | the suffixes present | 033, 173, 295 |
 | `CARRIED_COUNT_MISMATCH` | On a load that carries tickets, the tower's count differs from the tickets the collection lists | "Ticket 101014: tower counted 3 stumps, the collection lists 4." | yes, from the tickets carried | both counts | 192, 243 |
 
 ### 3.2 The certification
@@ -121,11 +121,15 @@ The system checks where debris went, never where it was headed (ADR-205).
 
 ### 3.5 Quantity
 
+On a split haul-out the load-call flags judge **the last pile's call**, which is the haul-out's; a
+pile's running call is never judged by the limits (ADR-295).
+
 | Code | Raised when | Message | Bills | Facts kept | ADR |
 |---|---|---|---|---|---|
 | `LOAD_CALL_ZERO` | A load call of 0%, whatever the limits | "Ticket 101032: load call 0%. Flagged for review; not billed." | no: 0 CY | the call | 116, 181 |
 | `LOAD_CALL_LOW` | A load call at or under the project's low limit (5% unless changed or off) | "Ticket 101033: load call 4%." | yes | the call, the limit | 164 |
 | `LOAD_CALL_HIGH` | A load call at or over the project's high limit (95% unless changed or off) | "Ticket 101003: load call 96%." | yes | the call, the limit | 164 |
+| `PILE_CALL_NOT_HIGHER` | On a split haul-out, a pile's load call isn't higher than the call of the pile before it, so what it added can't be worked out | "Ticket 201004: pile -B's load call 30% is not higher than pile -A's 35%. Flagged for review; not billed." | no: the piles' shares can't be worked out | every pile's call | 295 |
 | `QUANTITY_MISSING_FOR_PAY_ITEM` | A rule's pay item needs a quantity the ticket doesn't have (per ton, no scale weight; a zero net) | "Ticket 101012: TIP-FEE-TN-BCL is priced per ton, but the load has no scale weight." | that line no | the pay item, its unit | 223 |
 | `SHARED_SCALE_WEIGHT` | One scale receipt on two containers' disposals: the weight is split by certified capacity. Raised on both tickets | "Ticket 101050: one scale weight shared by two containers, split by certified capacity (7.33 of 17.10 tons)." | yes, at its share | the receipt, both capacities, the net | 175 |
 | `RECEIPT_TWO_DEBRIS_TYPES` | The tickets on one scale receipt carry different debris types. Raised on both | "Ticket 101052: scale receipt BCL-88241 covers two debris types (Vegetative, C&D). Flagged for review; its weight is not used." | weight lines no | the receipt, both entries | 069 |
@@ -161,14 +165,18 @@ A flag here sits on the record it's about; it never touches a ticket's status.
 | `ROE_MISSING` | On an ROE project, a collection, unit rate ticket or survey with no ROE | "Ticket 102002: no ROE." | the program type's setting | 149 |
 | `ROE_NOT_ON_PROJECT` | Its ROE isn't one of the project's | "Ticket 102003: ROE R-0099 is not on this project." | the ROE number | 149 |
 | `ROE_UNSIGNED` | Its ROE isn't signed | "Ticket 102004: ROE R-0008 is not signed." | the ROE | 149 |
-| `ROE_OUT_OF_SCOPE` | The work is outside the ROE's scope | "Ticket 102005: outside the scope of ROE R-0008." | the ROE's scope, the work | 055, 149 |
+| `ROE_OUT_OF_SCOPE` | Its ROE has a scope and the work isn't in it: a collection's debris type, or a unit rate ticket's payable type, isn't among the ROE's scope picks. An ROE with no scope picked is never flagged for scope | "Ticket 102005: outside the scope of ROE R-0008." | the ROE's scope, the work | 055, 149, 293 |
 | `NO_PRE_WORK_SURVEY` | A post-work survey with no pre-work survey on its ROE | "Survey on ROE R-0008: no pre-work survey." | the ROE | 150 |
 | `CERTIFICATION_PHOTO_MISSING` | A certification without one of its five views | "Certification 730416: no left side photo." | the views present | 179 |
-| `HELPER_NOT_FOUND` | A helper's ID typed on a certification matches no user | "Certification 730416: helper M009999 not found." | the ID | 080 |
 | `REVIEW_ORIGINAL_CERTIFICATION` | A mistake was corrected in a certification copied to another project: the original is flagged | "Certification 730416: its copy 880112 on Bayline County PPDR was corrected." | both numbers | 152 |
 | `PERMIT_OUTSTANDING` | A disposal site with no permit | "Marsh Road TDSR: permit outstanding." | | 111 |
 
 A ticket's ROE flags still bill.
+
+**Retired:** `HELPER_NOT_FOUND` (ADR-294). A certification's helper is picked from the people assigned
+to the project, never typed, so an ID that matches no user can't happen.
+
+**Added:** `PILE_CALL_NOT_HIGHER` (§3.5, ADR-295; the agent's wording). The catalogue is 67 flags.
 
 ### 3.8 Pricing
 
@@ -201,23 +209,24 @@ trail is the backstop (ADR-051).
 
 ---
 
-## 5. For your decision
+## 5. Decided with the approval (ADR-290)
 
-The wording above is the draft; say what to change. Three points are more than wording:
+The user approved this page on 2026-10-01 without changing a word, so the wording above stands, and
+so do these four points, each of which was more than wording:
 
 1. **When the two cert numbers on a load differ, which certification bills it.** Nothing recorded
    says. This page's default: the certification on the field event that took the quantity (the
    disposal for a load, the haul-out collection for a haul-out), for its capacity and its prime;
-   the ticket is flagged either way, and a reviewer corrects the wrong number. It changes money, so
-   it is yours to confirm.
+   the ticket is flagged either way, and a reviewer corrects the wrong number. It changes money;
+   approved with the page.
 2. **`SCALE_WEIGHT_UNUSABLE` has no "over the vehicle's legal limit" test.** `adms-scale-receipts`
    names a net "beyond the vehicle's legal limit" as an error to flag, but no limit is recorded
    anywhere, and a threshold is policy. This page flags only a net below zero or one that can't be
-   worked out, until you give the limit.
+   worked out, until a limit is given.
 3. **Codes added from the rules that had no wording yet:** `OVERLAPPING_LOADS`, `DECIMAL_COUNT`,
-   `REVIEW_ORIGINAL_CERTIFICATION`, `HELPER_NOT_FOUND`, `WORK_TIME_BEFORE_ENROLMENT` ("before the
+   `REVIEW_ORIGINAL_CERTIFICATION`, `HELPER_NOT_FOUND` (since retired, ADR-294), `WORK_TIME_BEFORE_ENROLMENT` ("before the
    device was set up" in ARCHITECTURE §10, read as enrolment since ADR-240), `NOT_PROCESSED`. Their
    messages are the agent's.
 4. **Dates and times in a message** follow the report format of `spec/CONVENTIONS.md` §3
    (`03-Feb-2027`, 24-hour `21:40`, in the project's time zone). The earlier style examples in the
-   skills and ARCHITECTURE §10 ("2027-02-03", "9:40 pm") follow this page once you approve it.
+   skills and ARCHITECTURE §10 ("2027-02-03", "9:40 pm") follow this page (changed with the approval, ADR-290).

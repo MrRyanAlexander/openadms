@@ -715,8 +715,8 @@ test suite that any client, including the scenario harness, must pass.
   difference on the sync, and if it's beyond a threshold (in `.env`), flags that sync's records:
   "Ticket 101008: device clock was 2 h 14 m off at sync. Flagged for review."
 - **Checks that flag, never block** (thresholds in `.env`):
-  - a work time **after** the server received the record ("Ticket 101008: work time 9:40 pm is
-    after it was received at 8:15 pm");
+  - a work time **after** the server received the record ("Ticket 101008: work time 21:40 is
+    after it was received at 20:15": the times as `spec/FLAGS.md` words them, ADR-290);
   - a work time before the device was set up;
   - a device time zone different from the project's;
   - the existing contradictions (a disposal before its collection ended, overlapping loads on one

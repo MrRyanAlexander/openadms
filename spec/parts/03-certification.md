@@ -52,9 +52,10 @@ works on the project.
    `adms-certifications` §3A.3 (ADR-076, 078, 082, 087).
 9. **Photographs: five** (operator with the placard; interior or back; right side; left side;
    front) (ADR-179).
-10. **Attest:** the certifying monitor is recorded automatically; helpers' IDs may be typed (one that
-    matches no user is flagged); the **client and contractor representatives' names** are typed
-    (names only) (ADR-080).
+10. **Attest:** the certifying monitor, who makes and measures it, is recorded automatically; a
+    **helper is picked** from the people assigned to the project with them, or left blank (ADR-294);
+    the **client and contractor representatives' names** are typed (names only) (ADR-080). The back
+    office audits it at QC.
 11. **Placard and badge:** the number goes on the placard on the container and on the driver's
     **badge**, which monitors scan at **New** on every field event (ADR-056, 209).
 12. **QC (back office, later):** the certification starts at **QC Review**; a back-office user sets

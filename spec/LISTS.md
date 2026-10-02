@@ -75,7 +75,8 @@ These look like pick-lists on a screen but are full records that admins already 
 reuse: **clients, declaration events, contractors, contracts, pay items, rules, disposal
 sites, ROEs, users, certifications.** A firm's **added form fields** on surveys, ROE forms,
 incidents and drop-off logs (text, number, yes/no, pick from a list, photo) are records too
-(ADR-160); an ROE's scope choices and counts are these (ADR-181).
+(ADR-160). An ROE's **scope choices** are not these: they are picked from what the project already
+has, its load form's debris types and its unit rate payable types (ADR-293, amending ADR-181).
 
 **Contractor tiers aren't a list either:** a project may have several primes, and each prime's
 subs are its own, in **at most two tiers**, typed in at certification under the prime (ADR-108).

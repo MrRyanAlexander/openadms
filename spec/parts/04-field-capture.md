@@ -91,6 +91,14 @@ site picks the debris type on its own, takes the **scale weight** only where its
 the haul-out is paid by weight (then the loading end's call is kept, unbilled), and photographs the
 empty bed (ADR-223, 243). **A haul-out never dumps at a TDSR** (ADR-226).
 
+**A split haul-out** (ADR-295), where the project allows split loads: debris kept apart at the TDSR by
+the area it came from is loaded from several piles. Each pile is a haul-out collection event of its
+own, `-A`, `-B`, `-C`…, started like a new property on a split load, with its own debris type and
+field tag. Instead of an estimate the monitor gives **the load call so far**: 10% after the first
+pile, 35% after the second, 85% after the third. The last is the haul-out's load call; each pile's
+part is what it added (10, 25, 50), which shares out the CY, or the scale weight where the haul-out
+is paid by weight.
+
 ## Workflow C — unit rate (`URT`, one event, no pairing)
 
 1. **New**: scan the **crew badge**; it stays on the phone until the monitor changes crew (ADR-111).

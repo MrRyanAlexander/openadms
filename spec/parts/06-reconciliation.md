@@ -33,7 +33,7 @@ map version, a site's shape or GPS) queues every **un-invoiced** ticket it touch
    |---|---|---|
    | one of a pair | the other hasn't arrived (a preload is normal) | `PENDING`, listed, **never flagged for waiting, never expires**; the event it has is checked and its flags show (ADR-053, 244) |
    | a collection and a disposal (or a haul-out's two) | a load (a haul-out) | checked (step 3) |
-   | collections `-A`, `-B`… and one disposal | a split | checked as one load; a bare collection beside suffixed ones, or a gap in the suffixes, is flagged (ADR-033, 173) |
+   | collections `-A`, `-B`… and one disposal | a split: a load's properties, or a haul-out's piles (ADR-295) | checked as one load; a bare collection beside suffixed ones, or a gap in the suffixes, is flagged (ADR-033, 173) |
    | one unit rate event | a unit rate ticket | checked alone; no pairing, no mileage |
 
 3. **Check** (`adms-validation` §5.1–§5.2): between the events, the debris type (exact entry), the
@@ -50,7 +50,7 @@ map version, a site's shape or GPS) queues every **un-invoiced** ticket it touch
    route → the straight line, flagged (ADR-110, 135, 141, 163, 208). A split's mileage is per property.
 5. **Work out the quantity** (`adms-validation` §5.5): capacity × load call; the scale weight (a
    tandem's split by certified capacity); the count of the tickets a load carries; per property on a
-   split; for unit rate, the pay item again from the bands.
+   split (per pile on a split haul-out, by what each pile added to the load call, ADR-295); for unit rate, the pay item again from the bands.
 6. **Run the rules** of the ticket's form whose contract its prime holds, plus the form's rules with
    no contract; *Add transaction* in # order, then *Remove*, then *Void ticket*; per property on a
    split (`adms-validation` §5.3, [Part 7](07-pricing-ledger-audit.md), [`spec/RULES.md`](../RULES.md)).

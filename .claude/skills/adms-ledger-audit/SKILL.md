@@ -2,7 +2,7 @@
 name: adms-ledger-audit
 description: Open ADMS money and the permanent record, in today's rules. Covers pay items (the only place a rate lives, one rate per prime), how a ticket is priced (the rules of its form that name its prime's contract, Add transaction in # order, Remove, Void ticket), quantity and rate, the Transaction ledger (the current truth, regenerated per ticket, each removed row copied to the audit log first), rate and rule changes, the append-only AuditRecord written by the database, QC status, the invoice lock and invoice batches, and the client package. Use when touching pay items, rates, transactions, pricing, the audit trail, QC, invoicing or anything that must leave an immutable trail. The rule builder's screens and every criterion are spec/RULES.md; how the worker runs rules and the pricing flags are adms-validation §5.3.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-249) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-249; a pay item names no form, ADR-292) -->
 
 > **This page states today's rules** (through ADR-248). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
@@ -45,7 +45,9 @@ label on a pay item** (ADR-246): the # slot keeps a load's lines apart, the site
 tipping fee pay item tells a fee line (ADR-222), and the payable type groups lines.
 
 **Setup made easier, model unchanged** (ADR-229): the pay item screen has a **"Pays when"** part;
-saving it **writes and keeps its own rule**, one per contract whose prime has a rate on the pay item,
+saving it **writes and keeps its own rule**, one per contract whose prime has a rate on the pay item
+and per form it pays on (a pay item names no form: a site's tipping fee is added by a Load rule and
+a Haul-out rule, ADR-292),
 marked "from pay item HNG-RMV-EA" and edited only there; free-standing rules stay for everything else
 (removes, voids, date ranges). A **setup check** lists gaps before the field day, and every rule or
 pay item change shows **what it would change** first. A firm **library** and **copy from a past
@@ -81,7 +83,8 @@ How the worker runs the rules is `adms-validation` §5.3; the builder and every 
 3. ***Add transaction #n*** actions run **in # order** (#1, #2…), then every ***Remove transaction
    #n***, then any ***Void ticket*** (naming the rule). The # is the line's **slot** (ADR-118, 130,
    131).
-4. **A split is priced once per property**, on its share (ADR-162). **A haul-out dumped at a TDSR** is
+4. **A split is priced once per property**, on its share (ADR-162); a split haul-out once per pile,
+   on its share (ADR-295). **A haul-out dumped at a TDSR** is
    priced no further until corrected (ADR-226).
 
 **The pricing flags** (wording in `adms-validation` §5.2): no rule of the ticket's prime creates a

@@ -139,7 +139,9 @@ like the waypoint button, starts the next collection event in the chain, `-B`, `
 the current one, with fresh time and location; each asks **"what ROE is this ticket for?"** and the
 monitor's **estimate** in CY for that property (ADR-032, 055). The chain closes out the way any
 collection does. **The driver carries one barcode, the base number**; the tower never sees the
-suffixes (`adms-exceptions` Scenario D).
+suffixes (`adms-exceptions` Scenario D). **A haul-out collection splits the same way** (ADR-295): each
+pile is the next event in the chain, with its own debris type and field tag, and instead of an
+estimate the monitor gives **the load call so far**; the last is the haul-out's.
 
 ## 4A.4 Capture rules
 

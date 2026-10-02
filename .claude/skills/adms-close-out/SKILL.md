@@ -18,8 +18,7 @@ After the last verification run, and before the summary:
   why, and who stops it. Otherwise the next agent starts it with `pnpm local:up`.
 - If the permission check refuses a stop or a removal, say so in Flags and give the user the
   command; never leave it unmentioned.
-- Never stop or remove what you didn't start (the user's own containers, the historical root
-  compose stack, KD-59): report it in Flags instead.
+- Never stop or remove what you didn't start (the user's own containers): report it in Flags instead.
 
 ## 1. Update state first
 

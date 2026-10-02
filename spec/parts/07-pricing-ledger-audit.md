@@ -45,7 +45,7 @@ setup decides which price a contract means**; Open ADMS never chooses (ADR-197, 
 6. **Write each `Transaction`**: the ticket (and the split property), the rule and its #, the pay
    item, the quantity, the rate, the cost, the contract, **the prime and the operating sub**
    (ADR-081, 212). **`COMPLETED` and `MANUAL_REVIEW` tickets both bill** where an amount can be
-   computed (ADR-060). A split writes its lines **per property** (ADR-162).
+   computed (ADR-060). A split writes its lines **per property** (ADR-162); a split haul-out **per pile** (ADR-295).
 7. **Flags from pricing**: no rule of the ticket's prime creates a line ("Ticket 101010: no pricing
    rule on a Summit contract matches. Flagged for review."); two creates of the same # (neither
    bills); a line whose pay item needs a quantity the load doesn't have; a tipping fee site with no

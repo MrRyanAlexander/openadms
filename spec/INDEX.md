@@ -20,7 +20,7 @@ what's still open.
 | **See** one whole mission: every kind of record, each one's life, the ledger | `spec/golden/MISSION.md` (draft) |
 | **Name** a thing, or write an example, fixture or seed | `spec/CONVENTIONS.md`: today's words, code names, the pay item code convention, the example world |
 | **Know** how it's built and secured | Chapter 4a: `spec/ARCHITECTURE.md` |
-| **Find** a record's fields, or a flag's code and wording | `spec/DATA-MODEL.md` · `spec/FLAGS.md` (drafts, ADR-284, 285) |
+| **Find** a record's fields, or a flag's code and wording | `spec/DATA-MODEL.md` · `spec/FLAGS.md` (approved 2026-10-01, ADR-289, 290) |
 | **Build** the next thing, or see where it ends up | Chapter 4: `agent_store/NEXT.md` has the one next task and the road to done |
 | **Maintain** it: fix, change, or answer a question | Chapter 5 |
 

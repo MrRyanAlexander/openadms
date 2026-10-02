@@ -2,7 +2,7 @@
 name: adms-certifications
 description: Open ADMS certifications, in today's rules. Read before touching any certification code. Covers why a certification certifies a container or a crew and never a vehicle (a crew is its certification), why both share one base, the exact capacity math (whole inches, a primary box plus add/subtract boxes with optional ÷2, a two-length hoist, a round bottom, a radius corner, rounded to hundredths each step, ÷46,656, then a whole CY half up), why the cert number IS the placard and badge number (system-issued from the project's series in phone blocks, or pre-printed; unique per project), how it reaches a field event, the lifecycle (tag expiry, revoke, replace, copy to another project, a truck keyed in by hand; never ends on its own), attestation and QC, five photos, and the real paper form. Use when working on certifications, placards, badges, cert numbers, containers, crews or capacity.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-250) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-250; the driver shown from the certification, ADR-289; helpers picked, ADR-294) -->
 
 > **This page states today's rules** (through ADR-249). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
@@ -177,8 +177,9 @@ typed 60, certified 65") (ADR-154).
      certification, which means we flag the ticket with a message about the certication issue."
    - **revoked from a date**, by an admin, with a reason;
    - **replaced** by a new certification (below).
-   **A driver's licence flags nothing** (ADR-153): the driver is recorded on the certification only
-   and copied onto its field events; there is no driver list.
+   **A driver's licence flags nothing** (ADR-153): the driver is recorded on the certification only;
+   a ticket shows and exports its certification's driver, and no copy is stored on the field event
+   (`spec/DATA-MODEL.md` §12, default 12, approved by ADR-289); there is no driver list.
 4. **Changes** (ADR-079, 082, 152):
    - **A measurement mistake** → correct the certification in place (audited); its tickets
      reprocess; invoiced ones are unlocked first.
@@ -192,8 +193,10 @@ typed 60, certified 65") (ADR-154).
      number. Created a reference to the old. If a mistake is later found in the copied version, the
      older version is flagged for review."
    - **Never deleted**: it is the evidence that a measurement was taken (invariant 1).
-5. **Attestation and QC** (ADR-080, 107): the certifying monitor is recorded automatically; helpers'
-   IDs may be typed (one that matches no user is flagged); the **client and contractor
+5. **Attestation and QC** (ADR-080, 107): the certifying monitor, who makes and
+   measures it, is recorded automatically; a **helper is picked** from the people assigned to the
+   project with them, or left blank (never typed, so nothing is flagged; ADR-294, amending ADR-080);
+   the **client and contractor
    representatives are names only**. The certification starts at **QC Review**; a back-office user
    sets QC Approved / QC Issues / QC Void, is recorded as **checked by**, and marks whether
    **signatures are on file** (kept elsewhere). **It is usable before QC** (ADR-052). It is QC'd on
@@ -220,12 +223,12 @@ city's disaster; cited as the source document). What it records, and what the sy
 |---|---|---|
 | Header | a pre-printed barcode and number; **Capacity** (whole CY, or "Ø CREW"); **Vehicle I.D.** = the same number | the number is the cert number (§3A.4); **the paper's barcode isn't used**, the driver's badge is scanned (ADR-056, 080) |
 | General | Applicant (client) · Disaster # · Contractor · 1st tier sub · 2nd tier sub · Date · Time | the client and declaration event come from the project; **the monitor picks the prime and types the sub into tier 1 or 2** (ADR-108); date and time kept |
-| Driver | Name · Phone · Licence # · State · Expiration | kept on the certification, copied onto its field events; **the licence flags nothing** (ADR-153) |
+| Driver | Name · Phone · Licence # · State · Expiration | kept on the certification and shown on its tickets from there (ADR-289); **the licence flags nothing** (ADR-153) |
 | Vehicle | Tag # (plate) · State · Expiration | kept; **tag expiry flags** later field events (ADR-079, 153) |
 | Vehicle type / features | checklists with "Other" (typed) | the firm's extendable lists (ADR-070); features label the measured boxes |
 | Measurement | whole inches; primary box; add/deduct boxes typed A–F with ÷2; round bottom; ÷ 46,656 | exactly §3A.3 |
 | Sketch | side and end views, one per box | the five photos (ADR-179) |
-| Attestation | measured / calculated / checked by (I.D. #s); applicant rep (name, I.D., signature); contractor rep (name, signature) | the certifying monitor (+ helpers' IDs), back-office **QC = checked by**, the representatives' **names only**, "signatures on file" yes/no (ADR-080) |
+| Attestation | measured / calculated / checked by (I.D. #s); applicant rep (name, I.D., signature); contractor rep (name, signature) | the certifying monitor (+ any helper, picked: ADR-294), back-office **QC = checked by** (the audit), the representatives' **names only**, "signatures on file" yes/no (ADR-080) |
 | Copies | white / green / yellow / pink / gold | **not kept**: paper-era practice (ADR-080) |
 
 **A crew truck uses the same form**: vehicle type Other ("Bucket"), capacity **Ø CREW**, measurements

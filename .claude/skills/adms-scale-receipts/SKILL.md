@@ -2,7 +2,7 @@
 name: adms-scale-receipts
 description: Open ADMS scale receipts, in today's rules. Covers when a scale receipt exists at all (destination decides, the contract decides whether it matters), what one actually is (a hand-transcribed third-party paper, a real weighing or only a lineage token), why it is its own record referenced by several field events and consumed once, one quantity never both (the tower takes the weight instead of a load call where the site's lookup says the paying pay items are by weight), one weight shared by a tandem split by certified capacity and flagged, why there is no weight-vs-load-call check, and the cases to handle rather than assume. Use when touching weights, tonnage, TN billing, scale receipt numbers, final disposal sites or tandems.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-252) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-252; haul-outs, ADR-295) -->
 
 > **This page states today's rules** (through ADR-251). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
@@ -49,7 +49,10 @@ against CY". So **there is no weight-vs-load-call check**, and no tons-per-CY co
   and that line bills nothing, so the firm fixes its setup or its operations (ADR-223).
 - **A haul-out** always takes its load call at the loading end (it can't know where the truck goes);
   its disposal takes the weight where its site's lookup, read from the haul-out form's rules, says the
-  haul-out is paid by weight, and then the loading end's call is kept, unbilled (ADR-013, 227).
+  haul-out is paid by weight, and then the loading end's call is kept, unbilled (ADR-013, 227). A truck and
+  trailer hauled out and weighed once are split by certified capacity, flagged and marked as shares
+  exactly as loads are; a split haul-out's piles share the weight by what each pile added to the load
+  call (ADR-295).
 - **Fees never make a phone ask for anything** (ADR-224).
 
 ## What a scale receipt actually is (ADR-038)

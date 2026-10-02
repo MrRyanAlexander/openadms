@@ -4,7 +4,7 @@
 
 > **Draft (ADR-232).** Agent-written from `agent_store/SUMMARY.md`, through ADR-235. **The names,
 > rates and flag wording are placeholders**: the user signs off the numbers (`NEXT.md`, road step 6)
-> and `spec/FLAGS.md` will own the exact messages. If this page and SUMMARY disagree, SUMMARY wins.
+> and `spec/FLAGS.md` owns the exact messages (approved, ADR-290). If this page and SUMMARY disagree, SUMMARY wins.
 > **Names, codes and example values follow `spec/CONVENTIONS.md`** (ADR-234, ADR-235): this mission
 > *is* the example world (§6 there), and its pay items follow the convention (§5).
 

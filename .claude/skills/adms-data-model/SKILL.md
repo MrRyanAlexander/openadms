@@ -2,7 +2,7 @@
 name: adms-data-model
 description: Open ADMS data model, in today's rules. Covers the records and how they link (Client → DeclarationEvent → Project, contractors and contracts, forms and debris types, pay items with a rate per prime, rules naming one contract, sites, certifications, users, devices and assignments, time-clock entries, FieldEvent and the CompletedLoad / CompletedHaulOut drawn from it, transactions, flags, AuditRecord), why reference data is editable, evidence correctable only by permission and the derived records and audit never by a person, which lists are fixed in code and which the firm extends (built-in keys plus the firm's own values), identifiers, uniqueness, coordinates and time, and which package and database role may write what. Use when touching the Prisma schema, adding or changing a model, a list, a relation or a constraint, or deciding where a write belongs. Field names are spec/DATA-MODEL.md's; what each setup record and field event holds is adms-ticket-workflows.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-245; ADR-246; the Phase 0 models built, ADR-281; the pay item's first shape and `spec/DATA-MODEL.md` drafted, ADR-284, 286) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-245; ADR-246; the Phase 0 models built, ADR-281; the pay item's first shape and `spec/DATA-MODEL.md` drafted, ADR-284, 286; the page approved, ADR-289) -->
 
 > **This page states today's rules** (through ADR-246). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
@@ -16,7 +16,7 @@ description: Open ADMS data model, in today's rules. Covers the records and how 
 only what the Phase 0 hardening tests and REQ-019…021 need). The schema is a Prisma multi-file schema in `packages/db`
 (ARCHITECTURE §18), written in Phase 0 and Phase 1; this page is the model it must follow. **Model names** below
 are the agent defaults of `spec/CONVENTIONS.md` §3; **field names** are settled in
-`spec/DATA-MODEL.md` (drafted 2026-10-01, ADR-284; **a draft until the user approves it**), which may
+`spec/DATA-MODEL.md` (drafted 2026-10-01, ADR-284; **approved by the user 2026-10-01**, ADR-289; changed at their word by ADR-292…295; KD-65 is closed), which may
 refine a model's shape but not a rule here. What
 each setup record holds, field by field in plain words, is `adms-ticket-workflows` §4.0; what each
 field event records is its §4.2–§4.5.
@@ -51,7 +51,8 @@ events and no state rebuilt by replaying a log (agent default, ADR-236).
      FieldEvent  kind COLLECTION · DISPOSAL · HAUL_OUT_COLLECTION · HAUL_OUT_DISPOSAL · UNIT_RATE
        grouped as a ticket on project + workflow + bare number; each records its assignment,
        device, monitor, certification and setup version
-     forms: ROEs, surveys, incidents, drop-off logs (+ the firm's added fields) · photos · quarantine
+     forms: surveys, incidents, drop-off logs (+ the firm's added fields) · photos · quarantine
+     (an ROE is setup, with the certifications above: ADR-294)
                                │
    DERIVED (the worker only) ──┼──────────────────────────────────────────────────────────────
      CompletedLoad · CompletedHaulOut   (unique links to their field events)
@@ -105,7 +106,7 @@ may, when these are confused (ARCHITECTURE §2, "who writes what").
 
 | | **Configuration** (reference data) | **Evidence** | **Derived** | **Audit** |
 |---|---|---|---|---|
-| Examples | `Client`, `DeclarationEvent`, `Project`, `Contractor`, `Contract`, `Form`, `PayItem`, `Rule`, `DisposalSite`, `Certification`, `User`, `Device`, `Assignment`, the firm's lists | `FieldEvent`s, ROEs, surveys, incidents, drop-off logs, photo metadata, time-clock entries, quarantined syncs | `CompletedLoad`, `CompletedHaulOut`, `Transaction`, flags, reconciliation runs | `AuditRecord` |
+| Examples | `Client`, `DeclarationEvent`, `Project`, `Contractor`, `Contract`, `Form`, `PayItem`, `Rule`, `DisposalSite`, `Certification`, `Roe` (set up, then filled in by a monitor or the back office: ADR-294), `User`, `Device`, `Assignment`, the firm's lists | `FieldEvent`s, surveys, incidents, drop-off logs, photo metadata, time-clock entries, quarantined syncs | `CompletedLoad`, `CompletedHaulOut`, `Transaction`, flags, reconciliation runs | `AuditRecord` |
 | Describes | a standing fact that may change | what a person saw, at a moment | the system's conclusion from the evidence and setup | every change, with its actor |
 | Written by | the API (the back office; phones for certifications and new monitors), audited | the API: inserted at sync, or by the back office with a person and a reason (ADR-156); corrected in place | **the worker only**, never a person (invariant 4) | **database triggers only** |
 | Edited? | **Yes**, routine, audited | **By permission**: any captured field, GPS and times included, prior value kept (ADR-051); never by the monitor after their shift ends (ADR-240); a ticket locked as invoiced is unlocked first (ADR-057) | never by hand: **drawn again** on every reprocess; transactions **regenerated**, each removed row copied in full to `AuditRecord` first (ADR-085) | **never**, by anyone |
@@ -140,7 +141,7 @@ changed" (ADR-166).
 |---|---|---|---|---|
 | `COLLECTION` | `COL` | load | ✅ (one per split suffix) | (lists the tickets a load carries) |
 | `DISPOSAL` | `DIS` | load | | ✅ load call, scale weight, or count |
-| `HAUL_OUT_COLLECTION` | `HOC` | haul-out | ✅ | ✅ load call |
+| `HAUL_OUT_COLLECTION` | `HOC` | haul-out | ✅ (one per split suffix: a pile, ADR-295) | ✅ load call (a running call on a split) |
 | `HAUL_OUT_DISPOSAL` | `HOD` | haul-out | | (scale weight where paid by weight) |
 | `UNIT_RATE` | `URT` | unit rate | ✅ | ✅ its count, measurement or hours |
 
@@ -174,7 +175,8 @@ changed" (ADR-166).
 load's own number, its events (**unique links**, so one load can't bill twice, invariant 17), the
 zone and mileage attached (with the map version and the map data's date, ADR-110, 141), QC status,
 the invoice lock. A split's collections share one completed load, priced per property (ADR-055,
-162). **Only the worker writes them**; no person and no API path can (invariant 4). A unit rate
+162); a split haul-out's collections, one per pile, share one completed haul-out the same way,
+priced per pile (ADR-295). **Only the worker writes them**; no person and no API path can (invariant 4). A unit rate
 ticket has no completed record: its one event is the ticket.
 
 **`Transaction`** is one priced line: the ticket (and the split property), the rule and its #

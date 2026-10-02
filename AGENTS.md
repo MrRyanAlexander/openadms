@@ -113,7 +113,7 @@ the option that keeps the firm's choice open, record an ADR marked "agent defaul
 | `development/` | ❌ read-only reference. Its truck-capacity section is **wrong**; never use it |
 | `apps/`, `packages/`, `infra/`, `tools/` (ARCHITECTURE §18) | ✅ open for the scaffold (ADR-143), built in `BACKLOG.md` order; every dependency pinned by an ADR, lockfiles committed |
 | Root monorepo files: `package.json`, `pnpm-workspace.yaml`, `tsconfig.json` + `tsconfig.base.json`, `eslint.config.js`, `vitest.config.js`, `.nvmrc`, `.editorconfig`, `LICENSE`, `.gitignore` | ✅ for the scaffold (ADR-231, 255, 259) |
-| `pnpm-lock.yaml`; `README.md`; the root `docker-compose.yml` | ❌ by hand: pnpm writes the lockfile; the README is the user's; the root compose file is the historical stack, the user's to retire (KD-59) |
+| `pnpm-lock.yaml`; `README.md`; the root `docker-compose.yml` | ❌ by hand: pnpm writes the lockfile; the README is the user's; a root compose file was the historical stack, retired by the user (KD-59, closed): never recreate one, the local stack is `infra/local/compose.yaml` |
 | `api/`, `field-webapp/`, `back-office-webapp/` | 🔒 old placeholders (gone from the working folder; never recreate them: the layout is ARCHITECTURE §18) |
 | `**/node_modules/`, `**/.venv/`, `**/.pytest_cache/`, `**/__pycache__/`, `.git/`; generated: `**/dist/`, `**/src/generated/`, `**/.generated/`, `**/.cache/`, `**/.state/` | ❌ never (change the source, rerun the tool) |
 | `**/prisma/migrations/*.sql` | ❌ never edit a generated or applied migration; a guard migration is written only into Prisma's empty `--create-only` stub, reviewed and tested (ADR-113, enforced by the hook) |
