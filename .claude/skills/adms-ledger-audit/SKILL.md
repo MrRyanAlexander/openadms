@@ -2,7 +2,7 @@
 name: adms-ledger-audit
 description: Open ADMS money and the permanent record, in today's rules. Covers pay items (the only place a rate lives, one rate per prime), how a ticket is priced (the rules of its form that name its prime's contract, Add transaction in # order, Remove, Void ticket), quantity and rate, the Transaction ledger (the current truth, regenerated per ticket, each removed row copied to the audit log first), rate and rule changes, the append-only AuditRecord written by the database, QC status, the invoice lock and invoice batches, and the client package. Use when touching pay items, rates, transactions, pricing, the audit trail, QC, invoicing or anything that must leave an immutable trail. The rule builder's screens and every criterion are spec/RULES.md; how the worker runs rules and the pricing flags are adms-validation §5.3.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-249; a pay item names no form, ADR-292) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-249; a pay item names no form, ADR-292; a unique code and a description, a duplicate rule refused, ADR-301) -->
 
 > **This page states today's rules** (through ADR-248). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
@@ -27,10 +27,9 @@ of the paper contract in by hand (ADR-089, 109). Each pay item holds:
 
 | Field | What it is | ADRs |
 |---|---|---|
-| **Code** | The firm's own string; setup **suggests** one from the convention (`VEG-HAUL-CY-15`, `TIP-FEE-CY-BCL`), never forces it. Codes and names may repeat: a dated rate change can be a second `VEG-HAUL-CY-15` with *Ticket date* criteria on the two rules | 109, 147, 235 |
-| **Name** | What people read ("ROW VEG haul 0–15 mi") | 207 |
+| **Code** | The firm's own string; setup **suggests** one from the convention (`VEG-HAUL-CY-15`, `TIP-FEE-CY-BCL`), never forces it. **Unique on its project**, archived pay items included: a rate that changes from a date is a second pay item with a code of its own, whatever the firm calls it, with *Ticket date* criteria on the two rules. **User, 2026-10-02:** "The "code" is the number+chars you assign it. This must be unique per project." | 109, 235, 301 |
+| **Description** | What the work is, in the firm's own words ("ROW VEG haul 0–15 mi"), shown with the code wherever a pay item is listed or exported. Nothing reads it; two may share one. There is no separate name. **User, 2026-10-02:** "The code should be unique, but the decription should be whatever the firm wants to make it." | 207, 301 |
 | **Payable type** | **The work** it prices, from the firm's list; each pay item is a priced line of it (the same work at two rates by distance is two pay items of one payable type). Every pay item has one, loads, haul-outs and fees included; exported as the type column | 173, 207, 221, 239 |
-| **Description** | The contract's words and line number, so every rate traces back to the contract | 207 |
 | **Unit of Measure** | A billing unit (`CY` `TN` `EA` `LB` `HR` `CREW_DAY` `TBN`); `TN` or `LB` means the load is weighed | 221, 223 |
 | **Size band** | From, to: its place among the pay items of one payable type (the phone and the engine pick the pay item by it) | 210, 213, 217 |
 | **Capture settings** | "Count is always 1", "GPS required", "Measurement required", "Decimals allowed", photos required, "Monitor may mark ineligible", quantity "from the tickets it carries"; for crew time, how hours become a quantity | 087, 157, 192, 210 |
@@ -212,3 +211,8 @@ What this page used to say, and why it changed. Never build from the left-hand s
   pay item, the example world (ADR-234, 235, 237).
 - Round 13–22 and ADR-239 ⚠️ notes stacked on the historical body → absorbed; rewritten in the present
   tense (ADR-138, 249).
+- "Codes and names may repeat" (a dated rate change as a second pay item with the same code), a pay
+  item's separate name, and a description holding "the contract's words and line number" → the code
+  is unique on its project; a pay item's texts are its code and its description, the firm's own
+  words; "line number" was never the user's. ADR-147 had read the user's "Yes" to an either-or
+  question the wrong way round (ADR-147, 207, 235 → 301).

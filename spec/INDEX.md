@@ -18,6 +18,7 @@ what's still open.
 | **Know** what Open ADMS is | Chapter 1, then `spec/VISION.md`, then the `adms-domain` skill |
 | **Know** how one part works | Chapter 2 to find the part, then its page in `spec/parts/` |
 | **See** one whole mission: every kind of record, each one's life, the ledger | `spec/golden/MISSION.md` (approved, ADR-297) |
+| **Check** what a part must do, as scenarios a test passes or fails | `spec/acceptance/` (draft, ADR-300): one file per part, written before the part is built |
 | **Name** a thing, or write an example, fixture or seed | `spec/CONVENTIONS.md`: today's words, code names, the pay item code convention, the example world |
 | **Know** how it's built and secured | Chapter 4a: `spec/ARCHITECTURE.md` |
 | **Find** a record's fields, or a flag's code and wording | `spec/DATA-MODEL.md` · `spec/FLAGS.md` (approved 2026-10-01, ADR-289, 290) |
@@ -113,9 +114,10 @@ A mission flows through the parts in this order:
 | 8 | **Review & correct** | One review queue: correct, renumber, void, accept flags, QC; reprocess | [08-review-and-corrections](parts/08-review-and-corrections.md) | `adms-exceptions`, `adms-validation` §5.4b | `apps/api`, `apps/back-office` | 1 (data), 4 (UI) |
 | 9 | **Invoice, deliver & close out** | Lock QC Approved tickets as invoiced (in batches), build the client package, close the project | [09-invoice-deliver-closeout](parts/09-invoice-deliver-closeout.md) | `adms-ledger-audit` | `apps/api`, `apps/back-office` | 1 (data), 4 (UI) |
 
-The product isn't built yet: Phase 0 has the scaffold, the local HTTPS stack, the installer and a
-provisional database schema (ADR-255…268). The code in `database/` is historical and never built on
-(ADR-093).
+The product isn't built yet: Phase 0 left the scaffold, the local HTTPS stack, the installer, the
+database's guards and a provisional schema (ADR-255…287). **Phase 1, open since 2026-10-01
+(ADR-299), builds the data and the engine of every part**, in `agent_store/BACKLOG.md` order. The
+code in `database/` is historical and never built on (ADR-093).
 
 **There is no USACE mode** (ADR-077): every project uses the same parts and rules; the only
 USACE-specific capture is an optional "USACE approved" flag on the load call.
@@ -147,8 +149,8 @@ Each page in `spec/parts/` has the same shape, so you always know where to look:
 | `spec/ARCHITECTURE.md` §18 | The rebuild's layout (`apps/`, `packages/`, `infra/`, `tools/`); `database/AGENTS.md` describes only the historical tree |
 | `adms-verify` skill | How to prove it works — real output only |
 
-Phases: **0** foundation (active: architecture and security approved, scaffold, database
-hardening, scenario harness) → **1** data core + engine (rebuilt) → **2** HTTP API → **3** field
+Phases: **0** foundation (done 2026-10-01: architecture and security approved, scaffold, database
+hardening, scenario harness) → **1** data core + engine, rebuilt (**active**, ADR-299) → **2** HTTP API → **3** field
 app (browser, then iPhone, then Android) → **4** back office → **5** later features + the demo
 deploy. The part pages say which phase owns each step. The code in `database/` is **historical**
 (ADR-093); nothing is built on it.
@@ -200,8 +202,9 @@ Code is written against it in `BACKLOG.md` order, each dependency pinned by an A
 | `spec/FROM-BUILD-1.md` | The user's own answers from Build 1, verbatim (no code from it) | Kept as written; agent adds where each lands |
 | `spec/golden/MISSION.md` | The golden mission: one worked mission, every kind of record, its statuses, flags and ledger | Approved, numbers included (ADR-297) |
 | `spec/LISTS.md` | Every pick-list: which a firm can extend after install, which are fixed, and why | Approved (ADR-269) |
-| `spec/DATA-MODEL.md` | The schema on paper: every record, its fields, who may write it, what the database refuses, the export columns | **Draft** (ADR-284); agent drafts, user approves |
-| `spec/FLAGS.md` | The flag catalogue: every flag's code, trigger, message, whether it still bills, the facts it keeps | **Draft** (ADR-285); agent drafts, user approves the wording |
+| `spec/DATA-MODEL.md` | The schema on paper: every record, its fields, who may write it, what the database refuses, the export columns | Approved (ADR-289; changed at the user's word, ADR-292…295) |
+| `spec/FLAGS.md` | The flag catalogue: every flag's code, trigger, message, whether it still bills, the facts it keeps | Approved (ADR-290) |
+| `spec/acceptance/*.md` | The acceptance scenarios: what each part must do, each naming the decision it restates and where a test proves it | **Draft** (ADR-300); agent drafts part by part, user approves |
 | `.claude/skills/adms-*/SKILL.md` | Domain rules and their reasons, one topic each | User-owned; agent edits only to record a user decision, marked with its ADR |
 | `agent_store/SUMMARY.md` | What's decided and open **now**, on one page | Agent, kept current |
 | `agent_store/*.md` | Build state, decisions, deviations, requirements | Agent |

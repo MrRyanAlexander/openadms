@@ -3,7 +3,7 @@ name: adms-domain
 description: Open ADMS domain grounding and glossary. Read this before your first task in any conversation, and before explaining or demonstrating the domain. Covers what an ADMS is, why a load is recorded as two field events by two monitors who cannot see each other, joined on the ticket number, the load call, who's who (the firm that installs it, its users, client users, the outside parties it keeps records of), a ticket's life from setup to the client package, why nothing is deleted, the glossary in today's terms, the system invariants, and where the product is headed.
 ---
 
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-232; field events and pay items, ADR-236, 237; contracts on rules, assignments, time clock, ADR-239…241) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-232; field events and pay items, ADR-236, 237; contracts on rules, assignments, time clock, ADR-239…241; a pay item's unique code and description, ADR-301) -->
 
 > **This page states today's rules** (through ADR-241). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
@@ -252,7 +252,7 @@ Every step writes `AuditRecord`. A unit rate ticket skips pairing; a form never 
 | **Master passcode** | One per firm; opens phone setup and the supervisor's actions (§1.4) (ADR-095, 106) |
 | **Mileage** | The road distance of the shortest route on public roads from the collection's end GPS (snapped to the nearest road) to **the disposal site's own GPS**, from our own routing server; no route → straight line, flagged (ADR-110, 163, 208) |
 | **Monitor / Monitor ID** | A field observer who makes records; the system issues the ID (`M004127`), usable as their username (ADR-105, 120) |
-| **Pay item** | A payable thing (the legacy "Service"; renamed by ADR-237, see History): the public-works word for a priced line of the contract as set up: its **code** (the firm's string; setup suggests one from the convention, e.g. `VEG-HAUL-CY-15`, `HNG-RMV-EA`, `spec/CONVENTIONS.md` §5), name, payable type, description, Unit of Measure, size band, capture settings, and **a rate for each prime**. The only place a rate lives. **A load carries no pay item**; a unit rate ticket carries one, worked out from the monitor's payable type and measurement (ADR-206, 207, 213, 221) |
+| **Pay item** | A payable thing (the legacy "Service"; renamed by ADR-237, see History): the public-works word for a priced line of the contract as set up: its **code** (the firm's string; setup suggests one from the convention, e.g. `VEG-HAUL-CY-15`, `HNG-RMV-EA`, `spec/CONVENTIONS.md` §5; **unique on its project**, ADR-301), its description (the firm's own words for the work; there is no separate name), payable type, Unit of Measure, size band, capture settings, and **a rate for each prime**. The only place a rate lives. **A load carries no pay item**; a unit rate ticket carries one, worked out from the monitor's payable type and measurement (ADR-206, 207, 213, 221) |
 | **Payable type** | **The work** a pay item prices (each pay item is a priced line of it: one work at two rates by distance is two pay items). What a pay item pays for, from the firm's list (the legacy "Classification"; seeded from USACE's umbrella debris types: Vegetative, C&D, Leaners, Hangers, Stumps…): what the unit rate monitor's list shows, each once; exported as a type column. Every pay item has one (ADR-173, 207, 213, 221, 234) |
 | **Preload** | A load collected one day and dumped the next. Normal, not flagged; it counts on its collection's day (ADR-053, 161) |
 | **Program type** | The kind of work (ROW, PARKS, PPDR, WATERWAY, firm-extendable), each with a "requires ROE" setting (ADR-070) |
@@ -370,3 +370,5 @@ What this page used to say, and why it changed. Never build from the left-hand s
   syncs → enrolled once, the day's **assignment** from the dispatch board, sync whenever there's
   signal, reopenable until the shift ends (ADR-240). Time clock for monitors → anyone with an
   assignment (ADR-241).
+- A pay item with a code, a name and a description → a code, unique on its project, and a
+  description, both the firm's own (ADR-301, correcting ADR-147's reading of Q-139).

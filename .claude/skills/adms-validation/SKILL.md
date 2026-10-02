@@ -22,8 +22,8 @@ worker draws everything again (`adms-exceptions`).
 **Flag, never block** (ADR-052, invariant 19). After setup nothing refuses field work or a record
 over eligibility: every problem is a **flag**, a plain message on the ticket, and the ticket goes to
 review. The only rejection at sync is a duplicate number, quarantined in full (ADR-022,
-`adms-exceptions` §4.3a). Setup itself may refuse a bad setting, such as overlapping size bands
-(ADR-217).
+`adms-exceptions` §4.3a). Setup itself may refuse a bad setting: overlapping size bands (ADR-217), a pay item code the
+project already has, an exact copy of a rule (ADR-301).
 
 **Where it lives.** Every check and formula lives **once, in `packages/domain`**, as plain classes
 that take a ticket's field events and the setup and return flags or quantities. The package touches

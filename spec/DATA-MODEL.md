@@ -1,6 +1,6 @@
 # Open ADMS — The data model
 
-✅ **Approved** With the user's approval of the wording - 10.01.2026-1345 *(BACKLOG 0.2b.2; ADR-284; the approval is ADR-289; changed since, at the user's word, by ADR-292…295)*
+✅ **Approved** With the user's approval of the wording - 10.01.2026-1345 *(BACKLOG 0.2b.2; ADR-284; the approval is ADR-289; changed since, at the user's word, by ADR-292…295 and ADR-301)*
 
 ← [Index](INDEX.md)
 
@@ -390,10 +390,9 @@ be added by a Load rule and by a Haul-out rule. A unit rate pay item is known by
 |---|---|---|
 | **id** | uuid | |
 | **projectId** | → `Project` | |
-| **code** | text | The firm's string; setup suggests one (`VEG-HAUL-CY-15`); never unique: a dated rate change may be a second one (ADR-147, 235) |
-| **name** | text | "ROW VEG haul 0–15 mi"; two may share a name |
+| **code** | text | The firm's string; setup suggests one (`VEG-HAUL-CY-15`) and forces none. **Unique with the project**, archived pay items included: a rate that changes from a date is a second pay item with a code of its own, the firm's choice (ADR-235, 301) |
+| **description** | text | What the work is, in the firm's own words ("ROW VEG haul 0–15 mi"); shown with the code wherever a pay item is listed or exported; nothing reads it, and two may share one (ADR-301; there is no separate name) |
 | **payableTypeId** | → `PayableType` | The work it prices; every pay item has one (ADR-221) |
-| description | text | The contract's words and line number |
 | **unit** | enum `BillingUnit` | `CY` · `TN` · `EA` · `LB` · `HR` · `CREW_DAY` · `TBN`; `TN` or `LB` means the load is weighed (ADR-223) |
 | kindOfWorkId | → `KindOfWork` | Required on a unit rate pay item (ADR-127) |
 | bandFrom, bandTo | decimal(8,1) | The size band, in inches; bands of one payable type never overlap (setup refuses, ADR-217) |
@@ -1295,6 +1294,8 @@ Never relaxed to pass a test (ARCHITECTURE §5.4). ✅ = built today.
 | A phone's record carries its device, assignment and setup version; a back-office one its person and reason | check |
 | One disposal per completed load or haul-out; one live completed record per collection event | unique keys (the second partial: `WHERE dissolved_at IS NULL`, in a guard migration) |
 | A cert number once per project; a receipt number once per project; an ROE number once per project | unique keys |
+| A pay item's code once per project (ADR-301) | ✅ unique key |
+| A rule that is an exact copy of another (same form, contract, criteria and actions, whatever its name) | the API at setup, before it is saved (ADR-301) |
 | A transaction # once per ticket (and property or pile) | unique key |
 | A crew certification has no capacity and no boxes; a container has both | check |
 | A project's time zone is an IANA name; no time without its zone | ✅ checks, a test |
@@ -1365,7 +1366,7 @@ A new value in any of them is a code change with an ADR (`spec/LISTS.md` Group 2
 | `Device`, `MasterPasscode`, `NumberBlock` | As built; a key's revocation; the overlap refusal |
 | `DisposalSite` | Gains its type, facts, permit, GPS, dates, labels, area versions, tipping fee link |
 | `Assignment` | Gains `formDocumentTypes`; its pay items are built (ADR-286) |
-| `PayItem` (code, name only) | Gains every field of §3, its rates and steps |
+| `PayItem` (code and description only, the code unique on its project, ADR-301) | Gains every other field of §3, its rates and steps |
 | `FieldEvent` | Gains the shared and kind-specific columns of §4.1; `deviceId`, `assignmentId`, `setupVersion` become optional for a back-office-created record |
 | `CompletedLoad` | Its one collection link moves to `CompletedLoadCollection`; gains its quantity and `dissolvedAt` |
 | `Transaction` | Gains its rule, pay item, contract, operating sub, unit, property and the two other ticket links; the delete guard follows the lock through them |
@@ -1430,7 +1431,7 @@ mileage, mileage_source, map_data_date, open_flags, amount
 ```text
 project, ticket_number, status, qc_status, invoice_batch, locked_at, work_date,
 prime, operating_sub, cert_number, crew_type,
-kind_of_work, payable_type, pay_item_code, pay_item_name, pay_item_description,
+kind_of_work, payable_type, pay_item_code, pay_item_description,
 printed_pay_item_code,
 unit_count, measurement_in, measured_as, diameter_in, root_ball_in, root_ball_half_exposed,
 fill_cy, survey_number, marked_ineligible, items, field_tag, roe_number,
@@ -1441,7 +1442,7 @@ monitor_id, started_at, ended_at, address, latitude, longitude, zone, open_flags
 
 ```text
 project, workflow, ticket_number, split_suffix, transaction_number,
-pay_item_code, pay_item_name, pay_item_description, payable_type, unit, quantity, rate, amount,
+pay_item_code, pay_item_description, payable_type, unit, quantity, rate, amount,
 contract, prime, operating_sub, rule, ticket_date, status, qc_status, invoice_batch, locked_at
 ```
 

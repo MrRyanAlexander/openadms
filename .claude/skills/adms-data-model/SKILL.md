@@ -2,7 +2,7 @@
 name: adms-data-model
 description: Open ADMS data model, in today's rules. Covers the records and how they link (Client → DeclarationEvent → Project, contractors and contracts, forms and debris types, pay items with a rate per prime, rules naming one contract, sites, certifications, users, devices and assignments, time-clock entries, FieldEvent and the CompletedLoad / CompletedHaulOut drawn from it, transactions, flags, AuditRecord), why reference data is editable, evidence correctable only by permission and the derived records and audit never by a person, which lists are fixed in code and which the firm extends (built-in keys plus the firm's own values), identifiers, uniqueness, coordinates and time, and which package and database role may write what. Use when touching the Prisma schema, adding or changing a model, a list, a relation or a constraint, or deciding where a write belongs. Field names are spec/DATA-MODEL.md's; what each setup record and field event holds is adms-ticket-workflows.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-245; ADR-246; the Phase 0 models built, ADR-281; the pay item's first shape and `spec/DATA-MODEL.md` drafted, ADR-284, 286; the page approved, ADR-289) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-245; ADR-246; the Phase 0 models built, ADR-281; the pay item's first shape and `spec/DATA-MODEL.md` drafted, ADR-284, 286; the page approved, ADR-289; a pay item's unique code and description, ADR-301) -->
 
 > **This page states today's rules** (through ADR-246). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
@@ -205,8 +205,8 @@ regenerated when its ticket changes; details in `adms-ledger-audit`.
   column. `NumberBlock`: device, project, series, first, last, last used, how it ended. `Assignment`:
   person, `workDate`, project, `fieldEventKinds`, `certifying`, an optional site (one of its own
   project's) and phone, `origin` (`PLANNED · UNPLANNED`), `madeById`; its unit rate pay items are
-  `AssignmentPayItem` rows, each a provisional `PayItem` (project, code, name) of its own project
-  (ADR-286); its forms join with the form model. `MasterPasscode`: a version and its slow hash, never edited, read only by
+  `AssignmentPayItem` rows, each a provisional `PayItem` (project, code, description; the code unique
+  on its project, ADR-301) of its own project (ADR-286); its forms join with the form model. `MasterPasscode`: a version and its slow hash, never edited, read only by
   the API. A field event's `assignmentId` and `setupVersion` are required captured columns.
 
 ## 3.2 Fixed in code, or the firm's to extend
@@ -372,3 +372,5 @@ What this page used to say, and why it changed. Never build from the left-hand s
 - Round 13–22 ⚠️ notes and the ADR-236…243 note stacked on the historical body → absorbed:
   `FieldEvent`, `Assignment`, `ClockEntry`, the contract on the rule; rewritten in the present tense
   (ADR-138, 243, 245).
+- The provisional `PayItem` as project, code and name, neither unique → project, code (unique on its
+  project) and description (ADR-286 → 301).

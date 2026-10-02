@@ -59,10 +59,11 @@ edited any time after (a change reprocesses the un-invoiced tickets it touches, 
    Reduced is added to the haul-out form (ADR-211, 214). The **kinds of unit rate work** the project
    allows (ADR-127). **Field tags**, a project list starting empty (ADR-216, 218).
 6. **Pay items.** Read the **line items off the paper contract** and enter each: its **code** (setup
-   suggests one, `VEG-HAUL-CY-15`, never forces it), name, **payable type** (the work it prices),
-   description (the contract's words and line number), **Unit of Measure** (`TN` or `LB` means the
-   load is weighed), a **size band** where one payable type has several pay items, its capture
-   settings, and **a rate for each prime** (ADR-206, 207, 213, 221, 223, 235). A contract usually
+   suggests one, `VEG-HAUL-CY-15`, never forces it; **unique on the project**), its **description**
+   (what the work is, in the firm's own words), **payable type** (the work it prices), **Unit of
+   Measure** (`TN` or `LB` means the load is weighed), a **size band** where one payable type has
+   several pay items, its capture settings, and **a rate for each prime** (ADR-206, 207, 213, 221,
+   223, 235, 301). A rate that changes from a date is a second pay item with a code of its own. A contract usually
    prices a line per CY and per ton; the firm enters the pay items it needs and its rules pick
    (ADR-202). There is no fee label on a pay item (ADR-246).
 7. **Disposal sites.** Entered **on each project** that uses one (ADR-145): a **site type**
@@ -79,7 +80,9 @@ edited any time after (a change reprocesses the un-invoiced tickets it touches, 
    on tickets of its prime; blank only on a rule that just removes or voids), **criteria** (all must
    hold; each value picked or typed), **actions** *Add transaction #n* (a pay item), *Remove
    transaction #n*, *Void ticket*; Active; Show matches; Reprocess (ADR-109, 118, 125, 239). The pay
-   item screen's **"Pays when"** writes and keeps most rules for the firm (ADR-229).
+   item screen's **"Pays when"** writes and keeps most rules for the firm (ADR-229). **A rule that is
+   an exact copy of another** (same form, contract, criteria and actions, whatever it is named) **is
+   refused before it's saved**, with an error naming the rule it copies (ADR-301).
 9. **Certifications.** On a phone whose assignment includes certifying ([Part 3](03-certification.md),
    ADR-240).
 10. **ROEs.** Where the program type requires them, in the back office or on a phone

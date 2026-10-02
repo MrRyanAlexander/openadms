@@ -1,0 +1,163 @@
+# Acceptance scenarios — Part 1, Set up the project
+
+✅ ** Approved**: agent-written (ADR-300); the user approves.
+
+← [Acceptance scenarios](README.md) · The part page: [Part 1 — Set up](../parts/01-setup.md)
+
+> Each scenario restates a recorded rule; **From** names it. Values are the example world's
+> (`spec/CONVENTIONS.md` §6; the golden mission §1): Gates Disaster Recovery's admin **Dana Reyes**
+> sets up **P1** "Bayline County ROW, Hurricane Delphine" and **P2** "Bayline County PPDR, Hurricane
+> Delphine" for the client Bayline County, with the prime Coastline Haulers. How to read the columns:
+> [README](README.md). Certifications (step 9) are in `03-certification.md`; ROEs (step 10) in
+> `04-field-capture.md`; dispatch in `02-people-and-devices.md`.
+
+**Throughout:** every write below is made by a named person and is audited by the database with
+that person as its actor (REQ-011, built in Phase 0); nothing is deleted.
+
+---
+
+## A. Client, declaration event, project (steps 1–3)
+
+| ID | Scenario | From | Proven at | Passing |
+|---|---|---|---|---|
+| AC-01-01 | **Given** Bayline County is already a client, **when** Dana sets up P1 and then P2, **then** both projects point at that one client record; none is created | ADR-023 · REQ-105b | story (1.1.11) | |
+| AC-01-02 | **Given** Bayline County's contact phone has changed, **when** Dana updates it, **then** the client keeps its record, the new value is saved, and the audit log holds one record of the change with the prior value and Dana as actor | ADR-023, 025 · REQ-105e | database (1.1.3) | |
+| AC-01-03 | **Given** Hurricane Delphine, `DR-9001-FL`, exists as a declaration event with reference type "FEMA disaster (DR)", **when** P1, P2 and the Town of Egret Point's project are set up under it, **then** all three point at the one declaration event, and "every project under this declaration" finds all three across both clients | ADR-023, 026 · REQ-105c, 105f | database (1.1.3) | |
+| AC-01-04 | **When** Dana creates a declaration event for a local emergency, with the reference as the county wrote it and the reference type "Local", **then** it is saved; the reference is text as written, and its type is picked from the firm's list, never typed | ADR-023, 070 · REQ-105c | database (1.1.3) | |
+| AC-01-05 | **Given** the same client and declaration event, **when** the firm does ROW work and PPDR work, **then** it sets up two projects (P1, P2); a project has no funder field to put both on one | ADR-148 | database (1.1.3) | |
+| AC-01-06 | **Given** the program type PPDR has *Requires ROE* ticked and ROW does not, **when** Dana starts a new PPDR project, **then** *Allow split loads* starts ticked; on a new ROW project it starts unticked; she may change either (P1, a ROW project, ticks it for haul-outs loaded from more than one pile) | ADR-070, 137 · REQ-105d, 124d | domain (1.1.3) | |
+| AC-01-07 | **When** Dana gives P1 the time zone `America/New_York`, **then** it is saved; `EST`, `-05:00` or a blank is refused by the database | ADR-100, 281 · REQ-019 | database (built, ADR-281; takes this ID in 1.1.3) | |
+| AC-01-08 | **When** Dana sets P1's active window to 12 October 2026 → 31 January 2027, **then** it is saved; she may leave the end empty and change either date later, audited. Nothing here refuses a ticket outside the window: that is a flag (Part 6) | ADR-057, 161 · REQ-105j | database (1.1.3) | |
+| AC-01-09 | **When** Dana picks P1's ticket-number source, **then** it is one of two: **control tickets**, with the pre-printed ranges entered, or **generated**, with a series for each workflow (load, haul-out, unit rate). P1 is generated. Unit rate numbers are generated on every project | ADR-056, 062 · REQ-105k | database (1.3.2) | |
+| AC-01-10 | **When** Dana sets P1's cert-number series to start at `730415`, **then** system-issued cert numbers on P1 count up from it by one | ADR-102 (Q-96) · REQ-106a | database (1.3.2) | |
+| AC-01-11 | **When** a project is created and Dana changes no setting, **then** its load-call limits are 5 and 95 and its site circle is 200 m (the built-in defaults, read from `.env`, never a number in code), its stump fill depth is 31 in, and both stump checks are on | ADR-142, 164, 181, 203 · invariant 16 | domain (1.1.3) | |
+| AC-01-12 | **When** Dana changes P1's load-call limits to 10 and 90, or clears them to switch them off, **then** the change is saved and audited. A 0% load call is still flagged with the limits off (Part 6) | ADR-164, 181 | database (1.1.3) | |
+| AC-01-13 | **When** Dana sets P1 up, **then** she says which ticket types it allows (load, haul-out, unit rate) and which kinds of unit rate work (Hangers, Leaners, Stumps, White Goods, Crew time) | ADR-041, 127 · REQ-105a | database (1.1.3) | |
+| AC-01-14 | **Given** a project whose work is finished, **when** Dana closes it, **then** it carries its close time and every record under it is still there; a delete of the project is refused by the database for every login | ADR-007 · REQ-108, 010 | database (1.1.3) | |
+
+## B. Contractors and contracts (step 4)
+
+| ID | Scenario | From | Proven at | Passing |
+|---|---|---|---|---|
+| AC-01-15 | **Given** Coastline Haulers is a contractor record, **when** Dana adds it to P1 as a prime and then creates the contract "Coastline, Bayline ROW 2026", **then** the contract holds a name, its prime and an optional link to the signed copy, and nothing else: no number, dates or amount | ADR-146 | database (1.1.4) | |
+| AC-01-16 | **When** Dana adds Summit Debris Services to P1 as a second prime with its own contract "Summit, Bayline ROW 2026", **then** P1 has two primes and two contracts | ADR-108 · REQ-106e | database (1.1.4) | |
+| AC-01-17 | **Given** Rivera Trucking was typed in at certification as a sub under Coastline on P1, **when** anyone tries to place Rivera under Summit on P1 as well, **then** the database refuses it: a contractor has one place on a project, and a sub is never shared by two primes | ADR-108 · REQ-106e | database (1.1.4) | |
+| AC-01-18 | **When** a sub is placed on a project, **then** it is tier 1 or tier 2 and names the prime it works under; a prime names none. A third tier doesn't exist | ADR-108 · REQ-106e | database (1.1.4) | |
+| AC-01-19 | **When** Dana sets up P1, **then** no screen or step asks her for subs: Rivera appears on P1 only once its truck is certified (Part 3) | ADR-108 | story (1.2.3) | |
+| AC-01-20 | **When** Harbor Staffing, a temp agency that employs monitors, is added, **then** it is a contractor of the monitoring kind; a contractor's kind is one of hauler, monitoring, crew, other | ADR-102 (Q-97) | database (1.1.4) | |
+| AC-01-21 | **Given** the same sub was typed twice at certification under two spellings, **when** the back office merges them, **then** one is marked as merged into the other and archived, the merge is audited, and neither is deleted | ADR-108 · REQ-106e | database (1.1.4) | |
+
+## C. Forms, debris types, field tags (step 5)
+
+| ID | Scenario | From | Proven at | Passing |
+|---|---|---|---|---|
+| AC-01-22 | **When** Dana sets P1's forms, **then** each form is for one document type (load, haul-out, unit rate ticket, truck certificate, ROE, survey, incident, drop-off log) and P1 has at most one form of each; a second load form on P1 is refused by the database | ADR-211 · REQ-105a | database (1.1.5) | |
+| AC-01-23 | **When** Dana adds Vegetative and C&D to P1's load form, **then** those two are what a load's monitors pick from on P1; a debris type in the firm's library that she didn't add isn't on the form | ADR-074, 211 · REQ-101 | database (1.1.5) | |
+| AC-01-24 | **Given** the contract names "Mulch" and "Ash" as two kinds of hauled-out material, **when** Dana adds both to the firm's library and to the haul-out form, **then** they are two entries, each with its own *Reduced*, reduction method and *Hidden on phones*; P1's Mulch is Reduced, by Grinding | ADR-211, 214 · REQ-101 | database (1.1.5) | |
+| AC-01-25 | **When** Dana adds C&D, not marked *Reduced*, to the haul-out form, **then** it is saved and she is warned; it is never refused | ADR-214 (agent default) | domain (1.1.5) | |
+| AC-01-26 | **Given** C&D on P1's load form is marked *Hidden on phones*, **when** a phone's lists are built, **then** C&D is not on them; field events that already carry C&D keep it | ADR-214 | domain (1.1.5); the phone's lists: API (Phase 2) | |
+| AC-01-27 | **Given** a debris type's entry on a form is no longer wanted, **when** Dana takes it off, **then** it is archived, never deleted, and field events that point at it still do | ADR-007, 211 · REQ-105e | database (1.1.5) | |
+| AC-01-28 | **Given** a new project, **then** its field tag list is empty; **when** Dana adds Mixed, Zone 1 pile, Zone 2 pile and Zone 3 pile to P1, **then** those four are P1's and no other project's | ADR-216, 218 · REQ-106c | database (1.1.5) | |
+| AC-01-29 | **When** Dana adds the field "Police report number" to P1's incident form, **then** that is version 1 of the form's definition; **when** she adds a second field, **then** that is version 2, and version 1 is still there, unchanged: the database refuses an edit or a delete of a definition version | ADR-160, 278 · REQ-107 | database (1.1.5) | |
+| AC-01-30 | **When** Dana switches incidents and drop-off logs on for P1, **then** each is on for that project only; "GPS required" is a setting on the project's ROE form | ADR-181, 188 | database (1.1.5) | |
+
+## D. The firm's lists (step 11; `spec/LISTS.md`)
+
+| ID | Scenario | From | Proven at | Passing |
+|---|---|---|---|---|
+| AC-01-31 | **Given** a fresh installation, **then** each of the firm's lists holds the values `spec/LISTS.md` Group 1 says it starts with (program types ROW · PARKS · PPDR · WATERWAY, with *Requires ROE* on PPDR as the golden mission has it; reduction methods Grinding · Incineration · Compaction; site types TDSR/DMS · Final Disposal · Transfer Station · Other; and the rest), and site labels, incident sub-types and every project's field tags start empty | ADR-070, 137; `spec/LISTS.md` · REQ-106c | database (1.1.2) | |
+| AC-01-32 | **Given** the built-in values (the kind of work Stumps; the site types TDSR/DMS and Final Disposal; the work types Pre-work, Post-work and ROE), **then** each has a fixed key (`STUMPS`, `TDSR`, `FINAL_DISPOSAL`, `PRE_WORK`, `POST_WORK`, `ROE`) and a firm's own value has none | ADR-194, 198, 226, 227 · REQ-106c | database (1.1.2) | |
+| AC-01-33 | **When** Dana renames "Stumps" to "Stump removal", **then** the rename is saved and audited, the key stays `STUMPS`, and nothing the system does for stump tickets changes | ADR-194 · REQ-106c | domain (1.5.7), with the first behaviour hung on the key | |
+| AC-01-34 | **When** anyone tries to archive a built-in value, **then** it is refused; a firm's own value is archived freely | ADR-194 · REQ-106c | database (1.1.2) | |
+| AC-01-35 | **When** Dana adds the debris type "Marine-Vegetative", renames it, then archives it, **then** each step is audited; once archived it is off every new pick and still on every record that has it; a delete is refused by the database | ADR-070, 074 · REQ-106c | database (1.1.2) | |
+| AC-01-36 | **Given** the reason "Barcode damaged" is offered for a typed ticket number only, **then** it isn't offered when voiding a ticket or accepting a flag; each reason says which of the four uses it is offered for | ADR-173 · REQ-106c | database (1.1.2) | |
+| AC-01-37 | **Given** the incident type Property damage, **when** Dana adds the sub-type "Mailbox struck" under it, **then** it is offered under Property damage and under no other type | ADR-129, 137 · REQ-106c | database (1.1.2) | |
+| AC-01-38 | **Given** a kind of unit rate work, **then** it carries its count shape (a number, an itemised list of counts, or an itemised list of hours), and its item names (Skid Steer, Truck under Crew time) belong to that kind | ADR-040, 084, 127 · REQ-106c, 112b | database (1.1.2) | |
+
+## E. Pay items (step 6)
+
+| ID | Scenario | From | Proven at | Passing |
+|---|---|---|---|---|
+| AC-01-39 | **When** Dana enters the contract's price for hauling vegetative debris 0–15 miles as a pay item, **then** it holds its code (`VEG-HAUL-CY-15`), its description ("ROW VEG haul 0–15 mi"), its payable type (Vegetative), Unit of Measure (`CY`), its capture settings, and a rate for each prime (Coastline $7.50). The code and the description are both typed by the firm; a pay item has no other name, and a code with no description is refused | ADR-206, 207, 221, 301 · REQ-102 | database (1.1.6) | |
+| AC-01-40 | **When** Dana types a code that doesn't follow the suggested convention, **then** it is saved as typed, so long as no other pay item on the project has it: the convention is offered, never forced | ADR-235, 301 | database (1.1.6); the suggestion itself: back office (Phase 4) | |
+| AC-01-41 | **Given** `VEG-HAUL-CY-15` exists on P1, **when** Dana enters a second pay item with the code `VEG-HAUL-CY-15` for a rate that changes from a date, **then** the database refuses it, whatever its description, and still refuses it once the first is archived: **a code is unique on its project**. **When** she gives the second a code of her own choosing (`VEG-HAUL-CY-15-B`), **then** it is saved, with the first one's description if she likes; nothing forces what she calls it. P2 may have its own `VEG-HAUL-CY-15` | ADR-301 (correcting ADR-147) · REQ-102 | database (built 2026-10-02, `assignments.test.ts`) | database |
+| AC-01-42 | **Given** Summit joins P1, **when** Dana gives `VEG-HAUL-CY-15` Summit's rate, **then** the one pay item holds two rates, one per prime; there is no second copy of the pay item, and a second rate for the same prime on it is refused by the database | ADR-206 · REQ-102 | database (1.1.6) | |
+| AC-01-43 | **When** Dana tries to save a pay item with no payable type, **then** it is refused: every pay item has one, on loads, haul-outs and fees alike | ADR-221 · REQ-102 | database (1.1.6) | |
+| AC-01-44 | **When** Dana picks a pay item's Unit of Measure, **then** it is one of `CY` `TN` `EA` `LB` `HR` `CREW_DAY` `TBN`; a pay item has no "requires weight" box, no fee label and no debris type: `TN` or `LB` is what says the load is weighed | ADR-221, 223, 246 · REQ-102, 112d | database (1.1.6) | |
+| AC-01-45 | **Given** Leaners has `LNR-RMV-EA-24` (6–24 in) and `LNR-RMV-EA-99` (24.1–99 in), **when** Dana adds a third Leaners pay item with the band 20–30 in, **then** setup refuses it and names the bands it overlaps | ADR-213, 217 | domain (1.1.6) | |
+| AC-01-46 | **Given** Stumps has only `STP-RMV-EA-36` (24–36 in), **when** Dana adds a Stumps pay item with the band 40–48 in, **then** it is saved and she is warned that 36.1–39.9 in falls in no band | ADR-217 | domain (1.1.6) | |
+| AC-01-47 | **When** Dana enters a unit rate pay item, **then** it names its kind of work (Hangers for `HNG-RMV-EA`); a pay item with no kind of work is not a unit rate pay item | ADR-127, 292 · REQ-112b | database (1.1.6) | |
+| AC-01-48 | **When** Dana ticks "Measurement required" and "Monitor may mark ineligible" on `LNR-RMV-EA-24`, **then** both are kept on the pay item; every ticked capture setting is one the worker checks (Part 6), none is stored and ignored | ADR-157, 158, 210; KD-28 · REQ-112c | database (1.1.6); the checks: domain (1.5.7) | |
+| AC-01-49 | **When** Dana enters `WG-FRN-EA-STG` (freon staged) with no rate for any prime, **then** it is saved: a pay item with no rate is a $0 pay item, not an error | ADR-128 | database (1.1.6) | |
+| AC-01-50 | **When** Dana enters a crew-time pay item, **then** she says how hours become a quantity: per hour (`CREW-TIME-HR`), a crew day by exact division (day length, 12 h unless changed), or a crew day in steps | ADR-084, 087 · REQ-112e | database (1.1.6) | |
+| AC-01-51 | **When** Dana changes Coastline's rate on `VEG-HAUL-CY-15`, **then** the pay item holds the new rate and the audit log holds the change with the prior $7.50; there is no rate history table | ADR-090 · REQ-105e; invariant 7 | database (1.1.6) | |
+
+## F. Disposal sites and the project map (steps 3 and 7)
+
+| ID | Scenario | From | Proven at | Passing |
+|---|---|---|---|---|
+| AC-01-52 | **Given** Marsh Road TDSR is on P1, **when** P2 uses it too, **then** Dana enters it again on P2: a site belongs to one project and is never shared | ADR-145 · REQ-105q | database (1.1.7) | |
+| AC-01-53 | **When** Dana enters Bayline County Landfill on P1, **then** it holds its site type (Final Disposal), the four site facts (*Takes loads* ✓, *Charges a tipping fee* ✓, the others unticked), its GPS as exact decimals, an activation date, an optional close date, an optional permit number and its short code `BCL` | ADR-005, 173, 208, 215 · REQ-104, 105q | database (1.1.7) | |
+| AC-01-54 | **When** Dana ticks *Haul-outs leave here* on Bayline County Landfill (Final Disposal), **then** setup refuses it; on Marsh Road TDSR (TDSR/DMS) it is saved. **When** she tries to change Marsh Road's type away from TDSR/DMS while it is ticked, **then** setup refuses that too | ADR-298 (agent default) · REQ-105q | domain (1.1.7) | |
+| AC-01-55 | **When** Dana saves Marsh Road TDSR with no permit number, **then** it is saved and field work there is never refused; the site is flagged "Marsh Road TDSR: permit outstanding." (the flag: Part 6) | ADR-111 · REQ-105n | database (1.1.7); the flag: domain (1.5.6) | |
+| AC-01-56 | **Given** P1's site circle is 200 m, **when** Dana changes it to 300 m in the GIS settings, **then** every P1 site without its own shape uses 300 m: one size per project. **When** she draws Marsh Road its own shape, **then** that site uses the shape and ignores the circle, and the shape is kept as a dated version; a later shape is a new version, the earlier one kept | ADR-136, 142, 144 · REQ-105q, 123 | database (1.1.7) | |
+| AC-01-57 | **When** Dana ticks *Charges a tipping fee* on Bayline County Landfill and writes its tipping fee pay item `TIP-FEE-CY-BCL`, **then** the site keeps the link to that pay item, which is how a fee line is told from a hauling line | ADR-220, 222 · REQ-105q | database (1.1.7) | |
+| AC-01-58 | **When** Dana gives a site the firm's own label "burn site", **then** it is kept and changes nothing the system does | ADR-194, 215 | database (1.1.7) | |
+| AC-01-59 | **When** Dana loads P1's map (a boundary and its zones), **then** it is map version 1; **when** she loads a corrected map, **then** that is version 2 and version 1 is still there: the database refuses an edit or a delete of a map version | ADR-135, 141 · REQ-124b | database (1.1.7) | |
+
+## G. Rules (step 8; `spec/RULES.md`)
+
+| ID | Scenario | From | Proven at | Passing |
+|---|---|---|---|---|
+| AC-01-60 | **When** Dana writes the rule "Debris type EQUALS Vegetative, Mileage AT MOST 15.0 → Add transaction 1, `VEG-HAUL-CY-15`" on P1's load form, **then** it belongs to that one form and names one contract, "Coastline, Bayline ROW 2026" | ADR-018, 211, 239 · REQ-125a, 131c | database (1.1.8) | |
+| AC-01-61 | **When** a rule has an *Add transaction* and no contract, **then** it is saved, is not valid, and never runs; a rule with only *Remove transaction* or *Void ticket* may leave the contract blank and is valid | ADR-239; `spec/RULES.md` §7 · REQ-125 | domain (1.1.8) | |
+| AC-01-62 | **Given** `spec/RULES.md` §7's four conditions, **when** a rule misses any one (no criterion; no action; a criterion that doesn't apply to its form; a picked value since archived; an *Add transaction* with no # or no pay item; a *Remove transaction* with no #), **then** it is not valid, the reason is given, and it never runs. "Is valid" is worked out, never stored or typed | `spec/RULES.md` §7 (ADR-247) · REQ-125b | domain (1.1.8) | |
+| AC-01-63 | **When** Dana builds a rule on the load form, **then** the criteria offered are the load form's column of `spec/RULES.md` §4: *Pay item*, *Unit count*, *Measurement*, *Item* and *From site* are not among them; on the unit rate form *Mileage*, *Debris type* and *Disposal site* are not | ADR-109; `spec/RULES.md` §4 · REQ-125b | domain (1.1.8) | |
+| AC-01-64 | **When** a criterion takes a picked value (*Debris type*, *Disposal site*, *Pay item*…), **then** the value is one that exists on the project (the form's debris types, the project's sites, its pay items); a typed criterion (*Mileage*, *Ticket date*, *Collection address*) takes a number, a date or text. Each criterion takes only the operators `spec/RULES.md` §4a gives its kind of value | ADR-125, 135; `spec/RULES.md` §4, §4a · REQ-131c | database and domain (1.1.8) | |
+| AC-01-65 | **When** Dana saves two load rules that both add transaction 1, one with Mileage BETWEEN 0 and 15 and one with Mileage BETWEEN 15 and 30, **then** both are saved and she is warned that the ranges overlap at 15.0; nothing is refused | ADR-125; `spec/RULES.md` §4a · REQ-131c | domain (1.1.8) | |
+| AC-01-66 | **Given** `HNG-RMV-EA` has a Coastline rate, **when** Dana fills in its "Pays when" for the unit rate form, **then** a rule is written naming Coastline's contract, named from the pay item's code and description and marked as from pay item `HNG-RMV-EA`; it can be changed only from the pay item | ADR-229, 239, 301 | domain (1.1.8); the screen: back office (Phase 4) | |
+| AC-01-67 | **Given** `TIP-FEE-CY-BCL` names no form, **when** its "Pays when" says it pays on loads and on haul-outs, **then** two rules are written, one on each form (on P1 each adds transaction 2, as the golden mission's two tipping fee rules do) | ADR-222, 292 | domain (1.1.8) | |
+| AC-01-68 | **Given** Summit is P1's second prime, **when** Dana prices Summit's work, **then** she writes Summit's own rules naming "Summit, Bayline ROW 2026"; the pay items aren't copied, and no rule needs a *Contractor* criterion | ADR-206, 239 | story (1.7.2) | |
+| AC-01-81 | **Given** the rule "VEG-HAUL-CY-15 - ROW VEG haul 0–15 mi" exists on P1's load form (AC-01-60), **when** Dana saves another rule on that form with the same contract, the same criteria and the same action under a different name, **then** it is not saved, and she is told why: "Not saved: this rule is the same as "VEG-HAUL-CY-15 - ROW VEG haul 0–15 mi"." The same happens with the criteria entered in another order, with the copy's Active unticked, and when she edits a different rule into that copy. **When** one criterion differs (Mileage AT MOST 10.0), **then** it is saved, with the warning of AC-01-65 | ADR-301 · REQ-131c | domain (1.1.8) | |
+
+## H. The setup check, and what each site's phones ask for
+
+| ID | Scenario | From | Proven at | Passing |
+|---|---|---|---|---|
+| AC-01-69 | **Given** P1 exactly as the golden mission §1 sets it up, **when** the setup check runs, **then** it lists none of these: a tipping fee site with no fee pay item, a debris type no rule pays, a prime with no rate, overlapping bands, an invalid active rule | ADR-229; `spec/RULES.md` §7 · REQ-125b, 125c | domain (1.6.4) | |
+| AC-01-70 | **Given** Bayline County Landfill is ticked *Charges a tipping fee* and has no tipping fee pay item linked, **when** the setup check runs, **then** it lists the site | ADR-222, 229 · REQ-125c | domain (1.6.4) | |
+| AC-01-71 | **Given** Ash is added to P1's haul-out form and no rule on that form can pay it, **when** the setup check runs, **then** it lists Ash | ADR-229 · REQ-125c | domain (1.6.4) | |
+| AC-01-72 | **Given** Summit has a contract on P1 and a rule that adds `VEG-HAUL-CY-15`, which holds no rate for Summit, **when** the setup check runs, **then** it lists the pay item and the prime | ADR-212, 229 · REQ-125c | domain (1.6.4) | |
+| AC-01-73 | **Given** an active rule that is not valid (AC-01-62), **when** the setup check runs, **then** it lists the rule and why, so none is silently inert | ADR-229; KD-15 · REQ-125b | domain (1.6.4) | |
+| AC-01-74 | **Given** P1's rules, **when** the system works out what each site's phones ask for, **then**: a load at Marsh Road TDSR, Vegetative or C&D, Coastline → **the load call** (the rules that could pay it there are per CY); a load at Bayline County Landfill → **the load call** (its tipping fee pay item is left out of the working); a haul-out disposal of Mulch at Bayline County Landfill → **nothing more** (the load call was taken at the TDSR); a haul-out disposal of Mulch at Cypress Creek Landfill → **the scale weight** (the only rule that could pay it there is per ton) | ADR-223, 227, 243, 297; golden mission §1 · REQ-124f | domain (1.6.4) | |
+| AC-01-75 | **Given** every rule that could pay a load of one debris type at a site adds a pay item whose quantity comes from the tickets the load carries, **then** that site's phones ask for **a count** of the items on the truck, not a load call or a weight | ADR-215, 243 (agent default) · REQ-124f | domain (1.6.4) | |
+| AC-01-76 | **Given** at one site Coastline's rules pay Vegetative loads per ton and Summit's pay them per CY, **then** the answer follows the truck's prime: the scale weight for a Coastline truck, the load call for a Summit truck | ADR-227 · REQ-124f | domain (1.6.4) | |
+| AC-01-77 | **Given** the lookup of AC-01-74, **when** Dana changes a rule or a pay item, **then** it is worked out again; reconciling tickets never changes it | ADR-227 · REQ-124f | domain (1.6.4) | |
+
+## I. Changing setup, and what setup may refuse
+
+| ID | Scenario | From | Proven at | Passing |
+|---|---|---|---|---|
+| AC-01-78 | **Given** any setup record (a client, a declaration event, a contractor, a contract, a form, a pay item, a site, a rule, a list value), **when** a permitted person edits it, **then** the edit is saved and audited with the prior value; **when** they no longer want it, **then** it is archived (a project is closed); a delete is refused by the database for every login | ADR-007, 025 · REQ-105e, 108, 010 | database (1.1.2…1.1.8, each for its tables) | |
+| AC-01-79 | **Given** the golden mission's §1, **when** the whole of P1's and P2's setup is written in the order of the spine (client, declaration event, project; then contractors and contracts, forms, pay items, sites, rules), **then** every record exists as the mission states it and the audit log holds one record per write, each with the person who made it as its actor | golden mission §1 · REQ-105, 142 | story (1.1.11) | |
+| AC-01-80 | **Given** the setup is done, **then** the only things setup itself refused were a bad setting: overlapping size bands (AC-01-45), *Haul-outs leave here* off a TDSR (AC-01-54), an exact copy of a rule (AC-01-81), and what the database's own constraints refuse (a time zone that isn't an IANA name, a second form of one document type, a second rate for one prime, a pay item code the project already has). Everything else that looks wrong is saved with a warning or left to the setup check; and once setup is in place **nothing refuses field work** | ADR-052, 217, 298, 301 · invariant 19 | story (1.1.11) | |
+
+---
+
+## Left to the task that builds it
+
+Nothing recorded settles these, so no scenario asserts them. Each is decided in the ADR of the task
+named, as an agent default the user may overturn; none changes money, evidence or a monitor's work.
+
+| # | What isn't settled | Decided with |
+|---|---|---|
+| 1 | Whether the database, or only setup, refuses a contract whose prime isn't one of the project's primes ("the contractor is added to the project first", ADR-146) | 1.1.4 |
+| 2 | Whether a new project's time clock starts on or off (ADR-241 says only "optional per project") | 1.1.3 |
+| 3 | How the setup check's "a prime with no rate" treats a pay item that is $0 on purpose (`WG-FRN-EA-STG`, ADR-128), so it isn't listed as a gap every day | 1.6.4 |
+| 4 | Whether a gap in a payable type's size bands is only warned at entry (ADR-217) or also listed by the setup check | 1.6.4 |
+| 5 | In which formats a map and a site's shape are taken in Phase 1 (the model stores GeoJSON; uploads of a shapefile or KML and an Esri layer link are REQ-124b's) | 1.1.7 |
+| 6 | The seed values where `spec/LISTS.md` gives none or ends in "…": the default reasons for each use, the itemised item names, and which seeded program types besides PPDR start with *Requires ROE* ticked | 1.1.2 |
+
+**Not in Phase 1** (their rules are recorded; their screens are the back office's, Phase 4, REQ-401,
+404): the suggested pay item code, the firm library and "copy from a past project" (ADR-228), *Show
+matches* and "what it would change" (ADR-229).

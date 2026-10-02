@@ -2104,9 +2104,11 @@ Contract" means that one; a rule that bills to the other contract names it.
 *Refs:* ADR-081, ADR-108, ADR-109, ADR-118; `spec/RULES.md` §5.
 
 ### ✅ Q-139 — A rate that changes from a date
-*(ADR-147)* **Decided:** the firm sets this up however it needs (e.g. a second `3A` plus *Ticket
-date* criteria); nothing forces a pattern; two codes may share a name. Two rules writing the same
-slot on a ticket stays flagged (ADR-118).
+*(ADR-147, corrected by ADR-301)* **Decided:** the firm sets this up however it needs (e.g. a
+second pay item, with a code of its own that the firm chooses, plus *Ticket date* criteria); nothing
+forces a pattern or a name; **a code is unique on its project** (ADR-147 had read the "Yes" below
+the wrong way round, as "two codes may share a name"). An exact duplicate of a rule is refused
+before it's saved, and two rules writing the same slot on a ticket stays flagged (ADR-118, 301).
 
 Changing a service code's rate reprices every ticket not locked as invoiced. That's right for
 fixing a wrong rate. It isn't right for a contract change that raises a rate **from a date**.
@@ -2119,13 +2121,23 @@ Tickets from 1–14 October aren't invoiced yet. Editing `3A`'s rate would repri
 Editing a rate stays the way to fix a mistake. That needs one answer from you: **may two service
 codes on a project share the name `3A`**, or should the second be named e.g. `3A-2`?
 
-> **User:** Yes but we don't want to make anything that forces this onto the firm. We would however
-> want to flag if there are two rules matching the same thing. So if we already have a transaction
-> in slot 1 a ticket and then we get another for it in the same slot, we'd know it's likely an issue
-> and flag it. This way allows for more flexibility on the firm side to set things up how they need
-> to use it, vs ridgid setup on on dev side.
+> **User, 2026-10-02 (the corrected answer, as they wrote it into this entry; ADR-301):** Yes (the
+> second should be named e.g. `3A-2`) but we don't want to make anything that forces this onto the
+> firm - we dont want to force this `3A-2` prefix naming - we want to let them decide what to nme it.
+> We would however want to flag if there are two rules matching the same thing (same details, same
+> name, i.e., a duplicate rule). So if we already have a transaction in slot 1 a ticket and then we
+> get another for it in the same slot, we'd know it's likely an issue and flag it. This way allows
+> for more flexibility on the firm side to set things up how they need to use it, vs ridgid setup on
+> on dev side.
 
-*Refs:* ADR-090, ADR-109, ADR-125; `spec/RULES.md` §4.
+> **User, 2026-09-27 (the first answer, which ADR-147 read as "yes, they may share a name"):** Yes
+> but we don't want to make anything that forces this onto the firm. We would however want to flag
+> if there are two rules matching the same thing. So if we already have a transaction in slot 1 a
+> ticket and then we get another for it in the same slot, we'd know it's likely an issue and flag
+> it. This way allows for more flexibility on the firm side to set things up how they need to use
+> it, vs ridgid setup on on dev side.
+
+*Refs:* ADR-090, ADR-109, ADR-125, ADR-301; `spec/RULES.md` §4.
 
 ### ✅ Q-140 — Work paid by different funders
 *(ADR-148)* **Decided:** a separate project per funder or kind of work; no funder field.
@@ -3466,7 +3478,7 @@ Which is right: (a) the proposal, (b) the alternative, or (c) something else?
 
 *Refs:* ADR-056 (number then badge), ADR-071 (the disposal phone's truck list), ADR-081 and ADR-108
 (a rule's contractor is the prime; subs are certified under a prime), ADR-111 (crew badge), ADR-147
-(two codes may share a name), ADR-154 (a keyed-in truck), ADR-174 (one set of rules per prime),
+(a dated rate change is the firm's own setup; its "two codes may share a name" is corrected by ADR-301), ADR-154 (a keyed-in truck), ADR-174 (one set of rules per prime),
 ADR-175, ADR-182, ADR-185, ADR-186.
 
 ### ✅ Q-183 — Stumps: what exactly does the monitor measure?

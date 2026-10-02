@@ -62,7 +62,7 @@ these.
 
 **P1 pay items** (Coastline's rate on each; one pay item holds a rate per prime):
 
-| Code | Name | Payable type | Unit | Size band | Coastline rate |
+| Code | Description | Payable type | Unit | Size band | Coastline rate |
 |---|---|---|---|---|---|
 | `VEG-HAUL-CY-15` | ROW VEG haul 0–15 mi | Vegetative | CY | | $7.50 |
 | `VEG-HAUL-CY-30` | ROW VEG haul 15.1–30 mi | Vegetative | CY | | $8.90 |

@@ -149,8 +149,9 @@ so exports line up with USACE's general debris type without a USACE mode (ADR-07
 
 ## 5. Pay item code convention
 
-**A default, never forced.** The firm may type any code its contract uses (ADR-147 stands: setup
-takes any string). But Open ADMS now **offers a published standard**, as the user first asked for in
+**A default, never forced.** The firm may type any code its contract uses: setup takes any string,
+as long as no other pay item on the project already has it (**a code is unique on its project**,
+ADR-301). But Open ADMS now **offers a published standard**, as the user first asked for in
 Build 1 (`spec/FROM-BUILD-1.md` §6: "Make up a standard we can use over and over on projects and
 publish so others can adopt it easily"). Setup suggests a code from it. Every example, seed and test
 uses it. This amends ADR-109's "no convention" (ADR-235).
@@ -165,15 +166,18 @@ characters.
 | **UNIT** | a billing unit key (§4) |
 | **DETAIL**: only when needed | a distance band's top mile (`15` = up to 15.0 mi) · a size band's top inch (`24` = up to 24 in) · a site's short code (`BCL`) · a place (`OUT` = outside the county) · a state (`STG` = staged) |
 
-**The name** is what people read on screens, receipts and exports. It is short and readable, with the
-program where the firm runs more than one: "ROW VEG haul 0–15 mi", "Leaner removal 6–24 in", "Tipping
-fee, Bayline County Landfill". **The description** carries the contract's own words and line number
-("Line 3: vegetative debris, curbside pickup and haul, 0–15 miles"), so every rate traces back to the
-contract.
+**The description** is the pay item's only other text (ADR-301; there is no separate name): what the
+work is, in the firm's own words, shown with the code wherever a pay item is listed or exported. The
+examples keep it short and readable, with the program where the firm runs more than one: "ROW VEG haul
+0–15 mi", "Leaner removal 6–24 in", "Tipping fee, Bayline County Landfill". The firm may write
+whatever it wants there; nothing reads it.
+
+**A rate that changes from a date** is a second pay item with a code of its own, the firm's choice
+(ADR-301). The examples use `VEG-HAUL-CY-15-B`.
 
 **The example set** (also the golden mission's, `spec/golden/MISSION.md` §1):
 
-| Code | Name | Payable type | Unit |
+| Code | Description | Payable type | Unit |
 |---|---|---|---|
 | `VEG-HAUL-CY-15` / `VEG-HAUL-CY-30` | ROW VEG haul 0–15 mi / 15.1–30 mi | Vegetative | CY |
 | `VEG-HAUL-TN-15` | ROW VEG haul 0–15 mi, by weight | Vegetative | TN |
@@ -213,6 +217,8 @@ full. Draw every example from it. Add to it where you need more, and record the 
 | Master passcode (tests and stories only) | `heron-marsh-delphine`, made up; no installation uses it (added 2026-10-01, ADR-281) |
 | Ticket numbers | P1 loads `101001`…; haul-outs `201001`… (a split haul-out: `201004-A`, `201004-B`, `201004-C`, with split loads allowed on P1 for the example; added 2026-10-01, ADR-295; dumped and weighed at Cypress Creek Landfill, 24.00 tons, ADR-297); unit rate `301001`…; P2 loads `102001`… (a split: `102001-A`, `102001-B`); ROEs `R-0007`, `R-0008` |
 | Addresses | 14 Heron St, 40 Birch Ln, 22 Elm St, 412 and 416 Cedar Ct |
+| A second client | **Town of Egret Point**, with its own project "Egret Point ROW, Hurricane Delphine" under the same declaration event: for examples of one declaration event shared by two clients (added 2026-10-01 for the acceptance scenarios, ADR-300) |
+| A firm's own form field | "Police report number" (text), added to P1's incident form (added 2026-10-01 for the acceptance scenarios, ADR-300) |
 
 **Flag messages built from it** (the style; `spec/FLAGS.md` owns the wording, ADR-290):
 - "Ticket 101008: debris type mismatch. Flagged for review."

@@ -24,9 +24,9 @@ a project in this order *(Q-117, ADR-122)*:
 4. **The pay items.** Each is added by hand from the contract's line items. A pay item is **the
    thing that denotes payable work**: there is no separate "work item" behind it (ADR-122). Each has:
    - a **code** the firm names itself (`VEG-HAUL-CY-15`, `HNG-RMV-EA`, `TIP-FEE-CY-BCL`…; a
-     convention is suggested, never forced, ADR-235), and a name; two may share a name (ADR-147);
-   - its **payable type** (the work it prices, from the firm's list) and a **description** (the
-     contract's words and line number);
+     convention is suggested, never forced, ADR-235), **unique on its project** (ADR-301), and a
+     **description**: what the work is, in the firm's own words ("ROW VEG haul 0–15 mi");
+   - its **payable type** (the work it prices, from the firm's list);
    - its **Unit of Measure** (a billing unit; `TN` or `LB` means the load is weighed, ADR-221, 223)
      and a **size band** where the payable type has several (ADR-213);
    - its **capture settings** ("Count is always 1", "GPS required", "Measurement required",
@@ -45,7 +45,7 @@ a project in this order *(Q-117, ADR-122)*:
 |---|---|
 | **Project** | The project it belongs to |
 | **Form** | The project's form for one ticket type: load, haul-out, unit rate (ADR-018, 211: the legacy "Document Format" is the form) |
-| **Name** | Free text, e.g. `VEG-HAUL-CY-15 - ROW VEG haul 0–15 mi` |
+| **Name** | Free text, the firm's own; usually named to match its pay item, e.g. `VEG-HAUL-CY-15 - ROW VEG haul 0–15 mi`. A rule "Pays when" writes is named from its pay item (ADR-301) |
 | **Contract** | One of the project's contracts; the rule runs only on tickets whose prime holds it. Blank only on a rule with no *Add transaction* (ADR-239) |
 | **Active** | On or off |
 | **Is valid** | Computed by the system (§7), never typed |
@@ -122,6 +122,13 @@ TDSR, Bayline Transfer Station*).
 - **BETWEEN includes both ends** (`Mileage BETWEEN 0 and 15` matches 15.0). When two rules' ranges
   overlap on the same transaction # (0–15 and 15–30 both creating #1), the builder **warns**; it
   never refuses the save. At run time a ticket caught by both is flagged (§6.4).
+- **An exact duplicate of a rule is refused before it is saved** ✅ *(user, 2026-10-02; ADR-301)*,
+  with an error naming the rule it copies ("Not saved: this rule is the same as "VEG-HAUL-CY-15 -
+  ROW VEG haul 0–15 mi"."), so nobody goes on building from it. Two rules are the same when they are
+  on the same form, name the same contract (or both none) and have the same criteria and the same
+  actions, in any order; **the rule's name and its Active tick are ignored**, and it is compared with
+  every rule of the project that isn't archived, inactive ones included. An edit that would turn a
+  rule into a copy of another is refused the same way. *(The details are an agent default.)*
 - **Mileage is rounded half up to tenths of a mile** before any rule compares it (15.04 → 15.0,
   15.05 → 15.1). The unrounded distance is stored too. The rounding lives in one place (the shared
   domain package), so Show matches and the engine always agree.
@@ -143,10 +150,11 @@ payable type groups them in exports (ADR-118, 246).
 ✅ **No *Flag* action** (ADR-164): project-wide settings raise flags, not rules. **A rule's Void
 ticket always wins** (ADR-167): a person's unvoid lasts until the next reprocess unless the data or
 the rule is changed. **Contracts** are a name, a prime and a link (ADR-146); **a rule names one** and
-runs only on tickets of its prime, so each prime still gets its own rules (ADR-239). **Two pay items
-may share a name** (ADR-147); a dated rate change is the firm's own setup, e.g. a second
-`VEG-HAUL-CY-15` with *Ticket date ON OR AFTER 15 Oct* on its rule and *ON OR BEFORE 14 Oct* on the
-old one; two creates of the same # stay flagged.
+runs only on tickets of its prime, so each prime still gets its own rules (ADR-239). **A pay item's
+code is unique on its project** (ADR-301, correcting ADR-147); a dated rate change is the firm's own
+setup, e.g. a second pay item with a code the firm chooses (say `VEG-HAUL-CY-15-B`) and *Ticket date
+ON OR AFTER 15 Oct* on its rule, *ON OR BEFORE 14 Oct* on the old one; two creates of the same #
+stay flagged.
 
 ✅ **A stump ticket's fill** (ADR-198, ADR-203) is an ordinary rule with no root-ball criteria:
 *Pay item = the stump pay item* → `Add transaction 2`, the fill pay item (`STP-FILL-CY`), quantity

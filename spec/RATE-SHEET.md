@@ -23,9 +23,9 @@ prime outside Open ADMS and aren't set up.
    project (P1); its "Right of Entry personal property" lines on a separate PPDR project (P2) with
    ROEs.
 2. **Each priced line becomes a pay item**: a code (the suggested convention gives `VEG-HAUL-CY-15`,
-   `spec/CONVENTIONS.md` §5), a name, a **payable type** (the work), the line's number and words in
-   the **description**, a **Unit of Measure**, and **Coastline's rate** (a second prime's rate goes on
-   the same pay item, never a copy) (ADR-206, 207, 235).
+   `spec/CONVENTIONS.md` §5; unique on the project), a **description** in the firm's own words, a
+   **payable type** (the work), a **Unit of Measure**, and **Coastline's rate** (a second prime's rate
+   goes on the same pay item, never a copy) (ADR-206, 207, 235, 301).
 3. **The monitor never sees a pay item on a load**: they pick the **debris type** (Vegetative, C&D,
    Mulch…) by name, and on unit rate work the **payable type** (Leaners, Stumps…) by name
    (ADR-207, 213).
