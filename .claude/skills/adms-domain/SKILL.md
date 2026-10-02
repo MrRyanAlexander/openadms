@@ -298,7 +298,8 @@ Breaking one is a defect whatever the tests say. Numbers are stable; other docs 
 14. **Distance is geodesic**, in one TypeScript module; never Euclidean.
 15. **Coordinates are exact decimals** (WGS84), never floats.
 16. **Thresholds are policy**: built-in defaults in `.env`, project settings where the firm may change
-    them; never literals, **never relaxed to pass a test**.
+    them; never literals, **never relaxed to pass a test**. (Built, ADR-303: the release's built-in
+    defaults are the env file `packages/domain/policy.env`, read by the domain's `Policy`.)
 17. **A pair's links on its completed record stay unique**: they stop the same load billing twice.
 18. **Schema changes go through Prisma migrations**; never edit a generated or applied migration
     (ADR-113).

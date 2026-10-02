@@ -2,7 +2,7 @@
 name: adms-data-model
 description: Open ADMS data model, in today's rules. Covers the records and how they link (Client → DeclarationEvent → Project, contractors and contracts, forms and debris types, pay items with a rate per prime, rules naming one contract, sites, certifications, users, devices and assignments, time-clock entries, FieldEvent and the CompletedLoad / CompletedHaulOut drawn from it, transactions, flags, AuditRecord), why reference data is editable, evidence correctable only by permission and the derived records and audit never by a person, which lists are fixed in code and which the firm extends (built-in keys plus the firm's own values), identifiers, uniqueness, coordinates and time, and which package and database role may write what. Use when touching the Prisma schema, adding or changing a model, a list, a relation or a constraint, or deciding where a write belongs. Field names are spec/DATA-MODEL.md's; what each setup record and field event holds is adms-ticket-workflows.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-245; ADR-246; the Phase 0 models built, ADR-281; the pay item's first shape and `spec/DATA-MODEL.md` drafted, ADR-284, 286; the page approved, ADR-289; a pay item's unique code and description, ADR-301; the firm's lists built, ADR-302) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-245; ADR-246; the Phase 0 models built, ADR-281; the pay item's first shape and `spec/DATA-MODEL.md` drafted, ADR-284, 286; the page approved, ADR-289; a pay item's unique code and description, ADR-301; the firm's lists built, ADR-302; the client, the declaration event and the project built, ADR-303) -->
 
 > **This page states today's rules** (through ADR-246). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
@@ -14,7 +14,8 @@ description: Open ADMS data model, in today's rules. Covers the records and how 
 
 **The schema is being built in Phase 1's order** (`BACKLOG.md`): Phase 0's fifteen provisional
 models in `packages/db/prisma/schema/` (ADR-268, 281, 286: only what the hardening tests and
-REQ-019…021 need) and, built in full, the firm's eighteen lists (ADR-302; §3.2). The schema is a Prisma multi-file schema in `packages/db`
+REQ-019…021 need) and, built in full, the firm's eighteen lists (ADR-302; §3.2) and `Client`,
+`DeclarationEvent`, `Project` and `ProjectKindOfWork` (ADR-303; §3.1a). The schema is a Prisma multi-file schema in `packages/db`
 (ARCHITECTURE §18), written in Phase 0 and Phase 1; this page is the model it must follow. **Model names** below
 are the agent defaults of `spec/CONVENTIONS.md` §3; **field names** are settled in
 `spec/DATA-MODEL.md` (drafted 2026-10-01, ADR-284; **approved by the user 2026-10-01**, ADR-289; changed at their word by ADR-292…295; KD-65 is closed), which may
@@ -85,6 +86,14 @@ lengths of time (ADR-023).
   work**, and no funder field (ADR-148). **User, 2026-09-27 (Q-140):** "We create separate projects
   for each of those. If we comingle the data FEMA will regect it." Every project has a **time zone**
   (ADR-100); its settings, map and number series are listed in `adms-ticket-workflows` §4.0.
+  **Built (ADR-303):** no setting has a default in the database. What a new project's settings
+  start as is `packages/domain`'s `NewProjectSettings` (*Allow split loads* from the program type's
+  "requires ROE"; both stump checks on; the time clock off, agent default), its numbers read from
+  the **policy values**: `packages/domain/policy.env`, the release's built-in defaults
+  (`LOAD_CALL_LOW_LIMIT` 5, `LOAD_CALL_HIGH_LIMIT` 95, `DISPOSAL_SITE_PROXIMITY_M` 200,
+  `STUMP_FILL_DEPTH_INCHES` 31), handed to the domain's `Policy` by whoever creates the project
+  (invariant 16). A project's kinds of unit rate work are `ProjectKindOfWork` rows, taken off by
+  archiving.
 
 **Contractors and contracts** (ADR-081, 108, 146, 239):
 - A **`Contractor`** is a firm-wide record, added to each project it works on. It is a **prime** or a
@@ -385,3 +394,6 @@ What this page used to say, and why it changed. Never build from the left-hand s
   project) and description (ADR-286 → 301).
 - "Storage shape … is an ADR when the first list is built"; "only a provisional schema exists" → one
   table per list, built with its guards and starting values (ADR-302).
+- The provisional `Project` as a name and a time zone → the project in full, under its client and
+  declaration event, its settings' starting values in `packages/domain` from the policy values
+  (ADR-303).

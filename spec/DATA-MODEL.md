@@ -13,8 +13,9 @@
 > `spec/CONVENTIONS.md` §3; examples come from its example world (`spec/golden/MISSION.md`).
 >
 > **What exists today.** Thirteen provisional models are built (ADR-268, 281), plus the pay item's
-> first shape (ADR-286) and, in full, the firm's eighteen lists of §2.3 (ADR-302). §10 says, model
-> by model, what Phase 1 changes.
+> first shape (ADR-286) and, in full, the firm's eighteen lists of §2.3 (ADR-302) and the client,
+> the declaration event and the project of §2.1 and §3 (ADR-303). §10 says, model by model, what
+> Phase 1 changes.
 
 **How to read a record.** Every record on this page is laid out the same way (ADR-289): its name,
 one line saying what kind of record it is (§1) and what it is for, then one table of its fields.
@@ -89,7 +90,7 @@ one line saying what kind of record it is (§1) and what it is for, then one tab
 
 #### `Client`
 
-*Configuration.* The jurisdiction paying. Reused across disasters (ADR-023).
+*Configuration, built (ADR-303).* The jurisdiction paying. Reused across disasters (ADR-023).
 
 | Field | Type | Notes |
 |---|---|---|
@@ -102,8 +103,8 @@ one line saying what kind of record it is (§1) and what it is for, then one tab
 
 #### `DeclarationEvent`
 
-*Configuration.* The disaster and its reference; shared by every client's projects under it
-(ADR-023, 026). Always "declaration event", never a bare "event".
+*Configuration, built (ADR-303).* The disaster and its reference; shared by every client's
+projects under it (ADR-023, 026). Always "declaration event", never a bare "event".
 
 | Field | Type | Notes |
 |---|---|---|
@@ -291,7 +292,10 @@ that uses it (`vehicleTypeOther`), which an admin can promote into the list (ADR
 
 #### `Project`
 
-*Configuration, built in part.* The hub.
+*Configuration, built (ADR-303).* The hub. **No setting has a default in the database**: what a
+new project's settings start as is `packages/domain`'s (`NewProjectSettings`), its numbers read from
+the policy values (`packages/domain/policy.env`, the release's built-in defaults), so whoever
+creates a project says what it starts as (invariant 16, ADR-303).
 
 | Field | Type | Notes |
 |---|---|---|
@@ -303,25 +307,26 @@ that uses it (`vehicleTypeOther`), which an admin can promote into the list (ADR
 | **allowSplitLoads** | bool | Ticked for a new project where the program type requires ROEs (ADR-137) |
 | **timeZone** | text | An IANA name, checked by the database (ADR-281) |
 | **activeFrom** | date | The active window, judged by a load's time (ADR-161) |
-| activeTo | date | |
+| activeTo | date | Empty, or never before `activeFrom` (a check) |
 | **ticketNumberSource** | enum `TicketNumberSource` | `CONTROL` · `GENERATED` (ADR-056) |
-| **workflows** | `Workflow[]` | The ticket types it allows (ADR-041) |
-| loadCallLowLimit, loadCallHighLimit | int | Flag at or under 5, at or over 95; empty = off; the defaults come from `.env` (ADR-164) |
-| **stumpFillDepthInches** | int | Default 31 (ADR-203) |
-| **stumpCheckRootBallWider**, **stumpCheckFillNeedsExposure** | bool | The two built-in stump checks, on by default (ADR-203) |
-| **siteCircleMeters** | int | Default 200 (`DISPOSAL_SITE_PROXIMITY_M`), ADR-142 |
-| **timeClockEnabled** | bool | ADR-241 |
+| **workflows** | `Workflow[]` | The ticket types it allows (ADR-041); may be empty, never missing (a check) |
+| loadCallLowLimit, loadCallHighLimit | int | Flag at or under 5, at or over 95; empty = off; each 0–100 (a check); a new project starts with the policy values `LOAD_CALL_LOW_LIMIT`, `LOAD_CALL_HIGH_LIMIT` (ADR-164, 303) |
+| **stumpFillDepthInches** | int | A new project starts with the policy value `STUMP_FILL_DEPTH_INCHES`, 31 (ADR-203, 303); at least 1 (a check) |
+| **stumpCheckRootBallWider**, **stumpCheckFillNeedsExposure** | bool | The two built-in stump checks; a new project starts with both on (ADR-203) |
+| **siteCircleMeters** | int | A new project starts with the policy value `DISPOSAL_SITE_PROXIMITY_M`, 200 (ADR-142, 303); at least 1 (a check) |
+| **timeClockEnabled** | bool | ADR-241; a new project starts with it off (*agent default*, ADR-303) |
 | **createdAt** | instant | |
 | closedAt | instant | |
 
 #### `ProjectKindOfWork`
 
-*Configuration.* The kinds of unit rate work the project allows (ADR-127).
+*Configuration, built (ADR-303).* The kinds of unit rate work the project allows (ADR-127).
 
 | Field | Type | Notes |
 |---|---|---|
-| **projectId** | → `Project` | |
+| **projectId** | → `Project` | Unique with `kindOfWorkId` |
 | **kindOfWorkId** | → `KindOfWork` | |
+| archivedAt | instant | Takes one off the project; cleared, it's back (*agent default*, ADR-303, as `AssignmentPayItem`) |
 
 ### Contracts and forms
 
@@ -1303,6 +1308,8 @@ Never relaxed to pass a test (ARCHITECTURE §5.4). ✅ = built today.
 | A transaction # once per ticket (and property or pile) | unique key |
 | A crew certification has no capacity and no boxes; a container has both | check |
 | A project's time zone is an IANA name; no time without its zone | ✅ checks, a test |
+| A project's active window never ends before it starts; its load-call limits are empty or 0–100; its stump fill depth and site circle are at least 1; its ticket types are never missing (ADR-303) | ✅ checks |
+| A kind of unit rate work is on a project once | ✅ unique key |
 | The Monitor ID is issued, well-formed, unique; the system actor is one fixed row and never a person | ✅ |
 | An assignment's site, a field event's site and an assignment's pay items are their own project's | two-column foreign keys (✅ for the first and third) |
 | Number blocks of one series never overlap | an exclusion constraint (needs `btree_gist`: its own ADR, C43) |
@@ -1341,7 +1348,7 @@ A new value in any of them is a code change with an ADR (`spec/LISTS.md` Group 2
 | `RecordSource` | `DEVICE` · `BACK_OFFICE` | `FieldEvent`, `Roe`, the forms |
 | `MeasuredAs` | `CIRCUMFERENCE` · `DIAMETER` | `FieldEvent` |
 | `AddressSource` | `LOOKED_UP` · `TYPED` | `FieldEvent` |
-| `TicketNumberSource` | `CONTROL` · `GENERATED` | `Project` |
+| `TicketNumberSource` ✅ | `CONTROL` · `GENERATED` | `Project` |
 | `QuantitySource` | `LOAD_CALL` · `SCALE_WEIGHT` · `CARRIED_TICKETS` | `CompletedLoad`, `CompletedHaulOut` |
 | `MileageSource` | `ROAD_ROUTE` · `STRAIGHT_LINE` | `CompletedLoadCollection`, `CompletedHaulOutCollection` |
 | `MapSource` | `UPLOAD` · `ESRI_LAYER` · `DRAWN` | `MapVersion` |
@@ -1364,7 +1371,7 @@ A new value in any of them is a code change with an ADR (`spec/LISTS.md` Group 2
 
 | Model today | Phase 1 change |
 |---|---|
-| `Project` | Gains its client, declaration event, program type, window, number source and settings (§3) |
+| `Project` | ✅ built 2026-10-02 (ADR-303): its client, declaration event, program type, window, number source and settings (§3), with `Client`, `DeclarationEvent` and `ProjectKindOfWork` |
 | `Contractor` | Gains its kind, contact and merge link; `ProjectContractor` is new |
 | `User` | Gains viewer kind, contact, permissions and viewer projects; sign-in's columns in Phase 2 |
 | `Device`, `MasterPasscode`, `NumberBlock` | As built; a key's revocation; the overlap refusal |
