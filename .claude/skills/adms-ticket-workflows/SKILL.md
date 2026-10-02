@@ -307,11 +307,18 @@ contrast, is judged at the tower after settling on the drive in.
   further** until a reviewer corrects it. **User, 2026-09-29 (Q-212):** "A HAUL OUT SHOULD NEVER GO
   TO A TDSR, ONLY LEAVE ONE." (ADR-226). A tipping fee is checked on haul-outs **dumped** at a site
   that charges one (ADR-226). A haul-out from a prior date is not flagged (ADR-205).
+- **A haul-out is reduced debris leaving a TDSR for a different site** (ADR-298). **User,
+  2026-10-01:** "we never take derbsi from one site back to the same site, but we need to make sure we arent taking it from one "landfill" site to another "landfill" site as well. Haulout is reduced debris and it must have originated from some type of TDRS." So
+  *Haul-outs leave here* can be ticked **only on a site whose type is the built-in TDSR/DMS**
+  (setup, *agent default*): a haul-out leaving a landfill, or any other site, is then always
+  flagged as leaving a site not marked for it, and one dumped back at the site it left is a
+  haul-out dumped at a TDSR. Two final sites on a project are two destinations, never a leg
+  between them.
 - **Rules** on the haul-out form: *Disposal site* is the final site, and a criterion tests the TDSR
   it left (ADR-164).
 - A citizen drop-off pile is billed only when it leaves as an ordinary haul-out (ADR-184).
 
-### 4.4a Split haul-outs (ADR-295)
+### 4.4a Split haul-outs (ADR-295, 297)
 
 Where the project **allows split loads** (ADR-137), a haul-out may be loaded from **several piles**:
 debris at a TDSR is sometimes kept apart by the area or zone it came from, and is hauled out and
@@ -331,8 +338,16 @@ gives. **User, 2026-10-01:** "Each new pile or whatever you wanna call it, they 
 - **Rules run once per pile**, on its share, with its own debris type and field tag.
 - A call that isn't higher than the one before it is flagged, and nothing bills until it's
   corrected; the load-call limits judge only the last call (`spec/FLAGS.md` §3.5).
-- Example: cert `730419`, 110 CY, calls 10%, 35%, 85% (ticket 201004) → the haul-out is 93.5 CY;
-  the piles 11.0, 27.5 and 55.0 CY. Weighed at 24.00 tons → 2.82, 7.06 and 14.12 tons.
+- **Paid by the CY or by the scale's weight, as the firm's setup says** (ADR-297), exactly as a
+  split load's shares are applied to its CY or its tonnage: the haul-out pay item's Unit of Measure
+  decides, and the firm's rules pick the pay item (ADR-202, 223). A haul-out usually ends at a scale
+  house, so the weight is the common case. **User, 2026-10-01 (as a firm):** "As for the haul out split load weight, aren't we able (thinking as a firm) to setup the project to handle either or? And with that in mind when it comes to haul out, because it is goint to a scale house most of the time we will often want to use that scales tonnage instead of the load call percentages). now if you think back to how we setup load collections with split tickets for private property and such... How we take those CY amounts the monitor gives us and calculate the split totals? And in some cases we would want to get a scale weight for those? Same with haul out... we want to model it like that." The load
+  calls are taken either way: they set each pile's share, and the weight is what's billed.
+- Example (golden mission §2, ticket 201004): cert `730419`, 110 CY, calls 10%, 35%, 85% → parts
+  10, 25, 50. Dumped at Cypress Creek Landfill, where the mission's rules pay mulch by the ton, and
+  weighed at 24.00 tons → 2.82, 7.06 and 14.12 tons, one `MULCH-HO-TN` line per pile. Its CY (93.5;
+  the piles 11.0, 27.5 and 55.0) is kept, unbilled; dumped at Bayline County Landfill, where the
+  rules pay by the CY, those would be the billed quantities.
 
 ## 4.5 WORKFLOW C — Unit rate (one field event, no pairing)
 

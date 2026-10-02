@@ -17,7 +17,7 @@ what's still open.
 |---|---|
 | **Know** what Open ADMS is | Chapter 1, then `spec/VISION.md`, then the `adms-domain` skill |
 | **Know** how one part works | Chapter 2 to find the part, then its page in `spec/parts/` |
-| **See** one whole mission: every kind of record, each one's life, the ledger | `spec/golden/MISSION.md` (draft) |
+| **See** one whole mission: every kind of record, each one's life, the ledger | `spec/golden/MISSION.md` (approved, ADR-297) |
 | **Name** a thing, or write an example, fixture or seed | `spec/CONVENTIONS.md`: today's words, code names, the pay item code convention, the example world |
 | **Know** how it's built and secured | Chapter 4a: `spec/ARCHITECTURE.md` |
 | **Find** a record's fields, or a flag's code and wording | `spec/DATA-MODEL.md` · `spec/FLAGS.md` (approved 2026-10-01, ADR-289, 290) |
@@ -198,7 +198,7 @@ Code is written against it in `BACKLOG.md` order, each dependency pinned by an A
 | `spec/RULES.md` | The back office's rule builder and how rules price tickets | Approved (ADR-269) |
 | `spec/RATE-SHEET.md` | A real prime contractor rate sheet set up line by line as pay items and rules | Approved (ADR-269) |
 | `spec/FROM-BUILD-1.md` | The user's own answers from Build 1, verbatim (no code from it) | Kept as written; agent adds where each lands |
-| `spec/golden/MISSION.md` | The golden mission: one worked mission, every kind of record, its statuses, flags and ledger | Agent drafts, user signs off the numbers |
+| `spec/golden/MISSION.md` | The golden mission: one worked mission, every kind of record, its statuses, flags and ledger | Approved, numbers included (ADR-297) |
 | `spec/LISTS.md` | Every pick-list: which a firm can extend after install, which are fixed, and why | Approved (ADR-269) |
 | `spec/DATA-MODEL.md` | The schema on paper: every record, its fields, who may write it, what the database refuses, the export columns | **Draft** (ADR-284); agent drafts, user approves |
 | `spec/FLAGS.md` | The flag catalogue: every flag's code, trigger, message, whether it still bills, the facts it keeps | **Draft** (ADR-285); agent drafts, user approves the wording |

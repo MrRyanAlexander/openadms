@@ -70,7 +70,9 @@ edited any time after (a change reprocesses the un-invoiced tickets it touches, 
    *Haul-outs leave here*, *Charges a tipping fee*, *Ineligible site*, the firm's own labels, its
    **GPS**, its **area** (the project's circle or its own shape, drawn or uploaded), a **permit** (a
    missing one is flagged as outstanding, never blocked), an **activation date** and an optional
-   **close date** (ADR-111, 136, 142, 173, 215). Ticking *Charges a tipping fee* leads the firm to
+   **close date** (ADR-111, 136, 142, 173, 215). *Haul-outs leave here* can be ticked only on a
+   TDSR/DMS site: a haul-out is reduced debris leaving a TDSR, never a trip from one landfill to
+   another or back to the site it left (ADR-298). Ticking *Charges a tipping fee* leads the firm to
    write the site's **tipping fee pay item** (a rate per prime) and its rule there and then; the site
    keeps the link (ADR-222).
 8. **Rules** ([`spec/RULES.md`](../RULES.md)). Per form: a name, **one contract** (the rule runs only

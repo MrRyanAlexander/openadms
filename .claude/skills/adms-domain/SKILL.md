@@ -77,7 +77,7 @@ from nowhere. **A ticket is its number and the events recorded under it.**
 | Workflow | Events, in field order | Makes the number | Takes the quantity | The system concludes |
 |---|---|---|---|---|
 | **Load** | collection `COL` → disposal `DIS` (a split: one `COL` per property, `-A`, `-B`…) | the collection | the disposal: load call or scale weight | the completed load `CLT` |
-| **Haul-out** | haul-out collection `HOC` at the TDSR → haul-out disposal `HOD` at the final site | the haul-out collection | the haul-out collection: its load call from the tower (flipped from a load); the disposal confirms it dumped and left empty | the completed haul-out `CHO` |
+| **Haul-out** | haul-out collection `HOC` at the TDSR → haul-out disposal `HOD` at the final site (a split: one `HOC` per pile, `-A`, `-B`…, ADR-295) | the haul-out collection | the haul-out collection: its load call from the tower (flipped from a load); the disposal confirms it dumped and left empty | the completed haul-out `CHO` |
 | **Unit rate** | one unit rate event `URT`, complete on its own | the unit rate event | its own count, measurement or hours | its transactions |
 
 **The events are the evidence; everything else is the system's conclusion from them.** The
@@ -244,7 +244,7 @@ Every step writes `AuditRecord`. A unit rate ticket skips pairing; a form never 
 | **FDS / TDSR** | Final Disposal Site / Temporary Debris **Staging** and Reduction Site (DMS means the same). Debris is reduced at a TDSR and hauled out to an FDS; a haul-out never dumps at a TDSR (ADR-091, 226) |
 | **Flag** | How every problem is raised after setup: a plain message ("Ticket 101008: debris type mismatch. Flagged for review."), never a refusal. A reviewer fixes it or **accepts** it with a reason (ADR-052, 166) |
 | **Form** | The legacy "Document Format": a project picks one per document type (load, haul-out, unit rate, truck certificate…); debris types are added to it. Surveys, ROE forms and incidents may carry the firm's own fields (ADR-160, 211) |
-| **Haul-out** | The second leg: debris leaving a TDSR for final disposal. Load call at the loading end (§1.2, §1.3) |
+| **Haul-out** | The second leg: debris leaving a TDSR for final disposal. Load call at the loading end (§1.2, §1.3). Where the project allows split loads it may be loaded from several **piles**: one haul-out collection per pile (`-A`, `-B`…), each giving the load call so far; the last is the haul-out's, and rules run per pile (ADR-295; golden mission 201004) |
 | **Installation** | One firm's running copy of Open ADMS (never "instance") (ADR-112) |
 | **Invoice lock / batch** | "Invoicing" means locking QC Approved tickets as invoiced, optionally grouped in a named batch; a locked ticket is unlocked (audited) before an edit (ADR-057, 121, 228) |
 | **Load call** | §1.3 |

@@ -178,7 +178,7 @@ contract.
 | `VEG-HAUL-CY-15` / `VEG-HAUL-CY-30` | ROW VEG haul 0–15 mi / 15.1–30 mi | Vegetative | CY |
 | `VEG-HAUL-TN-15` | ROW VEG haul 0–15 mi, by weight | Vegetative | TN |
 | `CD-HAUL-CY-15` | ROW C&D haul 0–15 mi | C&D | CY |
-| `MULCH-HO-CY` | Mulch haul-out to FDS | Vegetative | CY |
+| `MULCH-HO-CY` / `MULCH-HO-TN` | Mulch haul-out to FDS / by weight | Vegetative | CY / TN |
 | `TIP-FEE-CY-BCL` / `TIP-FEE-TN-BCL` | Tipping fee, Bayline County Landfill (per CY / per ton) | Tipping fee | CY / TN |
 | `HNG-RMV-EA` | Hanger removal | Hangers | EA |
 | `LNR-RMV-EA-24` / `LNR-RMV-EA-99` | Leaner removal 6–24 in / 24.1–99 in | Leaners | EA |
@@ -204,14 +204,14 @@ full. Draw every example from it. Add to it where you need more, and record the 
 | Projects | **P1** "Bayline County ROW, Hurricane Delphine" (ROW); **P2** "Bayline County PPDR, Hurricane Delphine" (PPDR, ROE required) |
 | Primes and subs | **Coastline Haulers LLC**, sub **Rivera Trucking**; **Summit Debris Services**, sub **Pinewood Hauling** (the second prime, for two-prime examples) |
 | Contracts | "Coastline, Bayline ROW 2026"; "Summit, Bayline ROW 2026"; "Coastline, Bayline PPDR 2026" |
-| Sites | **Marsh Road TDSR** (TDSR/DMS: takes loads, haul-outs leave here) · **Bayline County Landfill** (Final Disposal: takes loads, charges a tipping fee, short code `BCL`) · **Bayline Transfer Station** (Transfer Station: takes loads) · **Old Quarry Pit** (Other: an ineligible site) |
+| Sites | **Marsh Road TDSR** (TDSR/DMS: takes loads, haul-outs leave here) · **Bayline County Landfill** (Final Disposal: takes loads, charges a tipping fee, short code `BCL`) · **Bayline Transfer Station** (Transfer Station: takes loads) · **Old Quarry Pit** (Other: an ineligible site) · **Cypress Creek Landfill** (Final Disposal: takes loads, no tipping fee, short code `CCL`; it has a scale house and mulch hauled there is paid by the ton, scale receipt `CCL-51207`; added 2026-10-01 for the golden mission's weighed split haul-out, ADR-297) |
 | Forms and debris types | P1 load form: Vegetative, C&D. P1 haul-out form: Mulch (reduced, grinding). Field tag list: Mixed; and Zone 1 pile, Zone 2 pile, Zone 3 pile (a TDSR's piles, for the split haul-out example; added 2026-10-01, ADR-295) |
 | Certifications (series from `730415`) | `730415` Coastline dump trailer 65 CY · `730416` Rivera self-loader 48 CY · `730417` Coastline bucket truck crew · `730418` Coastline skid steer crew · `730419` Coastline walking floor 110 CY · `730421` Coastline tandem truck body 30 CY and `730422` its trailer 40 CY (added 2026-09-29 for the tandem example, `adms-scale-receipts`) |
-| Monitors | Ana Brooks `M004127` · Kim Nguyen `M004128` · Tariq Patel `M004129` · Jo Kim `M004130` · Sam Grant `M004131` |
+| Monitors | Ana Brooks `M004127` · Kim Nguyen `M004128` · Tariq Patel `M004129` · Jo Kim `M004130` · Sam Grant `M004131` · Lee Morgan `M004132` (added 2026-10-01, ADR-297) |
 | Monitoring sub (an employer of monitors) | **Harbor Staffing**, a temp agency; its own ID for Kim Nguyen is `HS-0417` (added 2026-10-01 for the employer example, ADR-281) |
-| Phones | `P1-COL-1` · `P1-TWR-TDSR` · `P1-TWR-LF` · `P1-HO-TDSR` · `P1-UR-1` · `P2-COL-1` · `P2-TWR-TDSR` (the golden mission's dispatch board) |
+| Phones | `P1-COL-1` · `P1-TWR-TDSR` · `P1-TWR-LF` · `P1-HO-TDSR` · `P1-TWR-CCL` · `P1-UR-1` · `P2-COL-1` · `P2-TWR-TDSR` (the golden mission's dispatch board) |
 | Master passcode (tests and stories only) | `heron-marsh-delphine`, made up; no installation uses it (added 2026-10-01, ADR-281) |
-| Ticket numbers | P1 loads `101001`…; haul-outs `201001`… (a split haul-out: `201004-A`, `201004-B`, `201004-C`, with split loads allowed on P1 for the example; added 2026-10-01, ADR-295); unit rate `301001`…; P2 loads `102001`… (a split: `102001-A`, `102001-B`); ROEs `R-0007`, `R-0008` |
+| Ticket numbers | P1 loads `101001`…; haul-outs `201001`… (a split haul-out: `201004-A`, `201004-B`, `201004-C`, with split loads allowed on P1 for the example; added 2026-10-01, ADR-295; dumped and weighed at Cypress Creek Landfill, 24.00 tons, ADR-297); unit rate `301001`…; P2 loads `102001`… (a split: `102001-A`, `102001-B`); ROEs `R-0007`, `R-0008` |
 | Addresses | 14 Heron St, 40 Birch Ln, 22 Elm St, 412 and 416 Cedar Ct |
 
 **Flag messages built from it** (the style; `spec/FLAGS.md` owns the wording, ADR-290):

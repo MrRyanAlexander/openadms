@@ -85,7 +85,7 @@ to go where it went" (ADR-205, 215):
 | Check | The flag | ADRs |
 |---|---|---|
 | A load dumped at a site not marked **Takes loads** | "dumped at Old Quarry Pit, which isn't marked Takes loads" | 205, 215 |
-| A haul-out leaving a site not marked **Haul-outs leave here** | "left Bayline Transfer Station, which isn't marked Haul-outs leave here" | 205, 215 |
+| A haul-out leaving a site not marked **Haul-outs leave here**. Only a TDSR/DMS site can be marked (setup, ADR-298), so this catches every haul-out that didn't leave a TDSR, a landfill-to-landfill one included | "left Bayline Transfer Station, which isn't marked Haul-outs leave here" | 205, 215, 298 |
 | A load dumped at an **Ineligible site** | "dumped at Old Quarry Pit, an ineligible site"; still bills | 215 |
 | A load or haul-out **dumped** at a site that **Charges a tipping fee**, with no line for that site's tipping fee pay item: a **missing rule**, never a mismatch. Never checked on a haul-out leaving the site or unit rate work there | "dumped at Bayline County Landfill, which charges a tipping fee, but no rule on this project gives it one" | 222, 226 |
 | A **haul-out dumped at a TDSR** (its site type's built-in key). **User, 2026-09-29 (Q-212):** "A HAUL OUT SHOULD NEVER GO TO A TDSR, ONLY LEAVE ONE. SHOULD BE FLAGGED AND NOT PROCESSED MORE." | "a haul-out dumped at Marsh Road TDSR, a TDSR. Flagged for review; not priced." **Priced no further** (no lines) until corrected | 226 |
@@ -279,9 +279,9 @@ weight) is stored apart from what was observed, and the parts **sum exactly** to
 - **Split haul-out shares** (ADR-295): each pile records a **running** load call, how full the
   container is after it; the last is the haul-out's call. A pile's part = its call − the call before
   it; its CY = capacity × that part ÷ 100; its share of a scale weight = that part ÷ the last call,
-  to two decimals, the remainder given to one pile so the shares sum exactly. `730419`, 110 CY,
-  calls 10%, 35%, 85% → parts 10, 25, 50 → **11.0, 27.5 and 55.0 CY** (93.5 CY); a 24.00-ton weight →
-  **2.82, 7.06 and 14.12 t**. A call not higher than the one before it is flagged and the piles
+  to two decimals, the remainder given to one pile so the shares sum exactly. Golden mission 201004: `730419`, 110 CY,
+  calls 10%, 35%, 85% → parts 10, 25, 50 → **11.0, 27.5 and 55.0 CY** (93.5 CY); the mission pays it
+  by weight (ADR-297), and its 24.00-ton scale weight → **2.82, 7.06 and 14.12 t**, the billed quantities. A call not higher than the one before it is flagged and the piles
   aren't shared out until it's corrected. The load-call limits judge only the last call.
 - **A load that carries tickets:** a load of stumps is **each carried stump's CY, rounded half up to
   a tenth, then added** (4.8 + 7.8 + 12.0 = **24.6 CY**), so the load always equals its stump

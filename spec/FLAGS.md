@@ -111,6 +111,11 @@ Judged at the **work time**, never "now" (ADR-048).
 
 The system checks where debris went, never where it was headed (ADR-205).
 
+A haul-out is reduced debris leaving a TDSR for a different site (ADR-298). Setup lets *Haul-outs
+leave here* be ticked only on a TDSR/DMS site, so the two haul-out flags below, unchanged, catch
+every other trip: one that left a landfill or any site that isn't a TDSR (`SITE_NOT_FOR_HAUL_OUTS`),
+and one dumped at a TDSR, the site it left included (`HAUL_OUT_DUMPED_AT_TDSR`).
+
 | Code | Raised when | Message | Bills | Facts kept | ADR |
 |---|---|---|---|---|---|
 | `SITE_DOES_NOT_TAKE_LOADS` | A load dumped at a site not marked *Takes loads* | "Ticket 101013: dumped at Old Quarry Pit, which isn't marked Takes loads." | yes | the site, the fact | 205, 215 |

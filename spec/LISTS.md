@@ -65,7 +65,7 @@ not rigidity for its own sake: each value *is* a piece of behaviour.
 | **Statuses** | Pending · Completed · Manual review · Void | The engine and the billing rules are written against them (ADR-060) |
 | **QC statuses** | QC Review · QC Approved · QC Issues · QC Void | Set only by people; only QC Approved locks (ADR-107, 121) |
 | **Billing units** | `CY` · `TN` · `EA` · `LB` · `HR` · `CREW_DAY` · `TBN` | Each unit has its own quantity math (capacity × load call, apportioned weight, count, pounds, hours…; `spec/CONVENTIONS.md` §4). A firm names and prices **pay items** freely; the unit underneath must be one the engine knows |
-| **Site facts** | Takes loads · Haul-outs leave here · Charges a tipping fee · Ineligible site (yes/no on each site) | Each drives a check or the tipping fee pay item (ADR-215, 222) |
+| **Site facts** | Takes loads · Haul-outs leave here · Charges a tipping fee · Ineligible site (yes/no on each site) | Each drives a check or the tipping fee pay item (ADR-215, 222). *Haul-outs leave here* can be ticked only on a site of the built-in TDSR/DMS type (ADR-298) |
 | **Rule actions** | *Add transaction #n* · *Remove transaction #n* · *Void ticket* | The engine applies them in a fixed order (ADR-118, 131) |
 | **User roles** | Admin · Manager/analyst · Monitor · Read-only viewer | Permissions are enforced in code (ADR-050) |
 

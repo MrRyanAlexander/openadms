@@ -505,7 +505,7 @@ for that prime (a $0 line, flagged, ADR-212). A rate's history is the audit log.
 | **name** | text | "Bayline County Landfill" |
 | shortCode | text | `BCL`: what setup offers in a suggested pay item code (*agent default*) |
 | **siteTypeId** | → `SiteType` | What *Disposal site type* tests |
-| **takesLoads**, **haulOutsLeaveHere**, **chargesTippingFee**, **ineligibleSite** | bool | The four site facts (ADR-215) |
+| **takesLoads**, **haulOutsLeaveHere**, **chargesTippingFee**, **ineligibleSite** | bool | The four site facts (ADR-215). `haulOutsLeaveHere` only on a site whose type is the built-in TDSR/DMS: setup refuses it elsewhere (ADR-298, *agent default*; whether the database refuses it too is settled with the site's real model, C52) |
 | permitNumber | text | Empty = "permit outstanding", flagged, never blocking (ADR-111) |
 | **latitude**, **longitude** | decimal(38,8) | Entered with the site; where mileage ends (ADR-208) |
 | **activationDate** | date | ADR-173 |
