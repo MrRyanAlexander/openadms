@@ -62,13 +62,17 @@ model DisposalSite {
 // A priced line of the contract as the firm sets it up: the only place a rate lives (ADR-206, 237).
 // PROVISIONAL: only what an assignment's unit rate pay items need (REQ-020; ADR-286). Its payable
 // type, unit, size band, capture settings and its rate for each prime are spec/DATA-MODEL.md §3's
-// and come with Phase 1. Two may share a code or a name (ADR-147), so neither is unique.
+// and come with Phase 1. It has two texts, both the firm's own: its code, unique on its project,
+// and its description (ADR-301).
 model PayItem {
-  id        String @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  projectId String @map("project_id") @db.Uuid
-  // The firm's own string; setup suggests one from the convention (VEG-HAUL-CY-15), ADR-235.
-  code      String
-  name      String
+  id          String @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  projectId   String @map("project_id") @db.Uuid
+  // The firm's own string; setup suggests one from the convention (VEG-HAUL-CY-15), ADR-235. No two
+  // pay items of a project share one, archived ones included: a rate that changes from a date is a
+  // second pay item with a code of its own, whatever the firm calls it (ADR-301).
+  code        String
+  // What the work is, in the firm's own words ("ROW VEG haul 0–15 mi"); shown beside the code.
+  description String
 
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
@@ -78,6 +82,7 @@ model PayItem {
 
   // So an assignment's pay items can only be its own project's (its relation's target).
   @@unique([projectId, id])
+  @@unique([projectId, code])
   @@map("pay_item")
 }
 

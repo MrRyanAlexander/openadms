@@ -137,10 +137,10 @@ export const dispatchMonday: Story = {
     );
 
     story.at(at('05:55'), 'Dana enters two of P1’s unit rate pay items, off the contract');
-    // Only their code and name yet: the payable type, the size band and the rates are Phase 1's.
+    // Only their code and description yet: the payable type, the size band and the rates are Phase 1's.
     const payItems = await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
-      const enter = (code: string, name: string) =>
-        tx.payItem.create({ data: { projectId: office.p1, code, name } });
+      const enter = (code: string, description: string) =>
+        tx.payItem.create({ data: { projectId: office.p1, code, description } });
       return {
         hangers: await enter('HNG-RMV-EA', 'Hanger removal'),
         leaners: await enter('LNR-RMV-EA-24', 'Leaner removal 6–24 in'),
@@ -196,7 +196,11 @@ export const dispatchMonday: Story = {
     });
     story.check(
       'Jo’s assignment names the unit rate pay items she does today, each one of P1’s own',
-      joDay.payItems.map(({ payItem, archivedAt }) => [payItem.code, payItem.name, archivedAt]),
+      joDay.payItems.map(({ payItem, archivedAt }) => [
+        payItem.code,
+        payItem.description,
+        archivedAt,
+      ]),
       [
         ['HNG-RMV-EA', 'Hanger removal', null],
         ['LNR-RMV-EA-24', 'Leaner removal 6–24 in', null],

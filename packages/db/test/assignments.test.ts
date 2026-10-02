@@ -173,11 +173,11 @@ describe('an assignment', () => {
 });
 
 describe("an assignment's unit rate pay items", () => {
-  // A pay item, as far as this build holds one: its project, the firm's code and its name.
-  async function payItem(project: string, code: string, name: string): Promise<string> {
+  // A pay item, as far as this build holds one: its project, the firm's code and its description.
+  async function payItem(project: string, code: string, description: string): Promise<string> {
     const { id } = await tested.db.one<{ id: string }>(
-      `INSERT INTO "pay_item" ("project_id", "code", "name") VALUES ($1, $2, $3) RETURNING "id"::text`,
-      [project, code, name],
+      `INSERT INTO "pay_item" ("project_id", "code", "description") VALUES ($1, $2, $3) RETURNING "id"::text`,
+      [project, code, description],
     );
     return id;
   }
@@ -292,7 +292,7 @@ describe("an assignment's unit rate pay items", () => {
     expect(
       (
         await db.refused(
-          `INSERT INTO "pay_item" ("project_id", "code", "name") VALUES ($1, 'X', 'X')`,
+          `INSERT INTO "pay_item" ("project_id", "code", "description") VALUES ($1, 'X', 'X')`,
           [world.p1],
         )
       ).code,
@@ -304,22 +304,47 @@ describe("an assignment's unit rate pay items", () => {
 });
 
 describe('a pay item', () => {
-  it('may share its code and its name with another: a dated rate change is the firm’s own setup', async () => {
+  it('AC-01-41 keeps its code to itself on its project: a second pay item with that code is refused', async () => {
     const { db, world } = tested;
     await asTheApi();
-    const add = `INSERT INTO "pay_item" ("project_id", "code", "name") VALUES ($1, 'VEG-HAUL-CY-15', 'ROW VEG haul 0–15 mi')`;
-    expect(await db.run(add, [world.p1])).toBe(1);
-    expect(await db.run(add, [world.p1])).toBe(1);
+    const add = `INSERT INTO "pay_item" ("project_id", "code", "description") VALUES ($1, $2, $3)`;
+    expect(await db.run(add, [world.p1, 'VEG-HAUL-CY-15', 'ROW VEG haul 0–15 mi'])).toBe(1);
+    // The same code again is refused, whatever it is described as (ADR-301)…
+    const again = [world.p1, 'VEG-HAUL-CY-15', 'ROW VEG haul 0–15 mi, from 15 Oct'];
+    expect((await db.refused(add, again)).code).toBe(refusedBy.unique);
+    // …and stays taken once the first is archived: old tickets and the audit log still name it.
+    expect(
+      await db.run(`UPDATE "pay_item" SET "archived_at" = now() WHERE "code" = $1`, [again[1]]),
+    ).toBe(1);
+    expect((await db.refused(add, again)).code).toBe(refusedBy.unique);
+    // A rate that changes from a date is a second pay item with a code of its own, the firm's choice;
+    // its description is whatever the firm wants, the first one's words included.
+    expect(await db.run(add, [world.p1, 'VEG-HAUL-CY-15-B', 'ROW VEG haul 0–15 mi'])).toBe(1);
+    // A code is its project's: another project may use the same one.
+    expect(await db.run(add, [world.p2, 'VEG-HAUL-CY-15', 'ROW VEG haul 0–15 mi'])).toBe(1);
   });
 
   it('belongs to a project, and is archived, never deleted', async () => {
     const { db, world } = tested;
     await asTheApi();
     expect(
-      (await db.refused(`INSERT INTO "pay_item" ("code", "name") VALUES ('HNG-RMV-EA', 'x')`)).code,
+      (
+        await db.refused(
+          `INSERT INTO "pay_item" ("code", "description") VALUES ('HNG-RMV-EA', 'x')`,
+        )
+      ).code,
+    ).toBe(refusedBy.notNull);
+    // It says what the work is: a code with no description is refused.
+    expect(
+      (
+        await db.refused(
+          `INSERT INTO "pay_item" ("project_id", "code") VALUES ($1, 'HNG-RMV-EA')`,
+          [world.p1],
+        )
+      ).code,
     ).toBe(refusedBy.notNull);
     const { id } = await db.one<{ id: string }>(
-      `INSERT INTO "pay_item" ("project_id", "code", "name") VALUES ($1, 'HNG-RMV-EA', 'Hanger removal') RETURNING "id"::text`,
+      `INSERT INTO "pay_item" ("project_id", "code", "description") VALUES ($1, 'HNG-RMV-EA', 'Hanger removal') RETURNING "id"::text`,
       [world.p1],
     );
     expect(await db.run(`UPDATE "pay_item" SET "archived_at" = now() WHERE "id" = $1`, [id])).toBe(
