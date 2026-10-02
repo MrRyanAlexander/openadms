@@ -39,13 +39,14 @@ that person as its actor (REQ-011, built in Phase 0); nothing is deleted.
 
 | ID | Scenario | From | Proven at | Passing |
 |---|---|---|---|---|
-| AC-01-15 | **Given** Coastline Haulers is a contractor record, **when** Dana adds it to P1 as a prime and then creates the contract "Coastline, Bayline ROW 2026", **then** the contract holds a name, its prime and an optional link to the signed copy, and nothing else: no number, dates or amount | ADR-146 | database (1.1.4) | |
-| AC-01-16 | **When** Dana adds Summit Debris Services to P1 as a second prime with its own contract "Summit, Bayline ROW 2026", **then** P1 has two primes and two contracts | ADR-108 · REQ-106e | database (1.1.4) | |
-| AC-01-17 | **Given** Rivera Trucking was typed in at certification as a sub under Coastline on P1, **when** anyone tries to place Rivera under Summit on P1 as well, **then** the database refuses it: a contractor has one place on a project, and a sub is never shared by two primes | ADR-108 · REQ-106e | database (1.1.4) | |
-| AC-01-18 | **When** a sub is placed on a project, **then** it is tier 1 or tier 2 and names the prime it works under; a prime names none. A third tier doesn't exist | ADR-108 · REQ-106e | database (1.1.4) | |
+| AC-01-15 | **Given** Coastline Haulers is a contractor record, **when** Dana adds it to P1 as a prime and then creates the contract "Coastline, Bayline ROW 2026", **then** the contract holds a name, its prime and an optional link to the signed copy, and nothing else: no number, dates or amount | ADR-146 | database (1.1.4) | database |
+| AC-01-16 | **When** Dana adds Summit Debris Services to P1 as a second prime with its own contract "Summit, Bayline ROW 2026", **then** P1 has two primes and two contracts | ADR-108 · REQ-106e | database (1.1.4) | database |
+| AC-01-17 | **Given** Rivera Trucking was typed in at certification as a sub under Coastline on P1, **when** anyone tries to place Rivera under Summit on P1 as well, **then** the database refuses it: a contractor has one place on a project, and a sub is never shared by two primes | ADR-108 · REQ-106e | database (1.1.4) | database |
+| AC-01-18 | **When** a sub is placed on a project, **then** it is tier 1 or tier 2 and names the prime it works under; a prime names none. A third tier doesn't exist | ADR-108 · REQ-106e | database (1.1.4) | database |
 | AC-01-19 | **When** Dana sets up P1, **then** no screen or step asks her for subs: Rivera appears on P1 only once its truck is certified (Part 3) | ADR-108 | story (1.2.3) | |
-| AC-01-20 | **When** Harbor Staffing, a temp agency that employs monitors, is added, **then** it is a contractor of the monitoring kind; a contractor's kind is one of hauler, monitoring, crew, other | ADR-102 (Q-97) | database (1.1.4) | |
-| AC-01-21 | **Given** the same sub was typed twice at certification under two spellings, **when** the back office merges them, **then** one is marked as merged into the other and archived, the merge is audited, and neither is deleted | ADR-108 · REQ-106e | database (1.1.4) | |
+| AC-01-20 | **When** Harbor Staffing, a temp agency that employs monitors, is added, **then** it is a contractor of the monitoring kind; a contractor's kind is one of hauler, monitoring, crew, other | ADR-102 (Q-97) | database (1.1.4) | database |
+| AC-01-21 | **Given** the same sub was typed twice at certification under two spellings, **when** the back office merges them, **then** one is marked as merged into the other and archived, the merge is audited, and neither is deleted | ADR-108 · REQ-106e | database (1.1.4) | database |
+| AC-01-82 | **Given** Coastline Haulers' contact phone has changed, **when** Dana updates it, **then** the contractor keeps its record, the new value is saved, and the audit log holds one record of the change with the prior value and Dana as actor. A contractor holds a contact name, email and phone, as a client does; each is optional, so a sub typed in at certification needs none | ADR-306 · REQ-105e | database (1.1.4) | database |
 
 ## C. Forms, debris types, field tags (step 5)
 
@@ -140,7 +141,7 @@ that person as its actor (REQ-011, built in Phase 0); nothing is deleted.
 |---|---|---|---|---|
 | AC-01-78 | **Given** any setup record (a client, a declaration event, a contractor, a contract, a form, a pay item, a site, a rule, a list value), **when** a permitted person edits it, **then** the edit is saved and audited with the prior value; **when** they no longer want it, **then** it is archived (a project is closed); a delete is refused by the database for every login | ADR-007, 025 · REQ-105e, 108, 010 | database (1.1.2…1.1.8, each for its tables) | |
 | AC-01-79 | **Given** the golden mission's §1, **when** the whole of P1's and P2's setup is written in the order of the spine (client, declaration event, project; then contractors and contracts, forms, pay items, sites, rules), **then** every record exists as the mission states it and the audit log holds one record per write, each with the person who made it as its actor | golden mission §1 · REQ-105, 142 | story (1.1.11) | |
-| AC-01-80 | **Given** the setup is done, **then** the only things setup itself refused were a bad setting: overlapping size bands (AC-01-45), *Haul-outs leave here* off a TDSR (AC-01-54), an exact copy of a rule (AC-01-81), and what the database's own constraints refuse (a time zone that isn't an IANA name, a second form of one document type, a second rate for one prime, a pay item code the project already has). Everything else that looks wrong is saved with a warning or left to the setup check; and once setup is in place **nothing refuses field work** | ADR-052, 217, 298, 301 · invariant 19 | story (1.1.11) | |
+| AC-01-80 | **Given** the setup is done, **then** the only things setup itself refused were a bad setting: overlapping size bands (AC-01-45), *Haul-outs leave here* off a TDSR (AC-01-54), an exact copy of a rule (AC-01-81), and what the database's own constraints refuse (a time zone that isn't an IANA name, a second form of one document type, a second rate for one prime, a pay item code the project already has, a second place for one contractor on a project, a contract whose prime isn't one of the project's primes). Everything else that looks wrong is saved with a warning or left to the setup check; and once setup is in place **nothing refuses field work** | ADR-052, 217, 298, 301, 305 · invariant 19 | story (1.1.11) | |
 
 ---
 
@@ -151,8 +152,8 @@ named, as an agent default the user may overturn; none changes money, evidence o
 
 | # | What isn't settled | Decided with |
 |---|---|---|
-| 1 | Whether the database, or only setup, refuses a contract whose prime isn't one of the project's primes ("the contractor is added to the project first", ADR-146) | 1.1.4 |
-| 2 | ~~Whether a new project's time clock starts on or off (ADR-241 says only "optional per project")~~ **Settled 2026-10-02 (ADR-303, agent default):** off; the firm switches it on for the projects that use it | 1.1.3 ✅ |
+| 1 | ~~Whether the database, or only setup, refuses a contract whose prime isn't one of the project's primes ("the contractor is added to the project first", ADR-146)~~ **Settled 2026-10-02 (ADR-305, agent default):** the database refuses it, by a foreign key; the same key holds the prime a sub names to one of the project's primes | 1.1.4 ✅ |
+| 2 | ~~Whether a new project's time clock starts on or off (ADR-241 says only "optional per project")~~ **Settled 2026-10-02 (ADR-303; confirmed by the user, ADR-304):** switched off, so the project doesn't offer its workers the option to log their hours until the firm switches it on | 1.1.3 ✅ |
 | 3 | How the setup check's "a prime with no rate" treats a pay item that is $0 on purpose (`WG-FRN-EA-STG`, ADR-128), so it isn't listed as a gap every day | 1.6.4 |
 | 4 | Whether a gap in a payable type's size bands is only warned at entry (ADR-217) or also listed by the setup check | 1.6.4 |
 | 5 | In which formats a map and a site's shape are taken in Phase 1 (the model stores GeoJSON; uploads of a shapefile or KML and an Esri layer link are REQ-124b's) | 1.1.7 |

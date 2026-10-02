@@ -13,9 +13,9 @@
 > `spec/CONVENTIONS.md` §3; examples come from its example world (`spec/golden/MISSION.md`).
 >
 > **What exists today.** Thirteen provisional models are built (ADR-268, 281), plus the pay item's
-> first shape (ADR-286) and, in full, the firm's eighteen lists of §2.3 (ADR-302) and the client,
-> the declaration event and the project of §2.1 and §3 (ADR-303). §10 says, model by model, what
-> Phase 1 changes.
+> first shape (ADR-286) and, in full, the firm's eighteen lists of §2.3 (ADR-302), the client,
+> the declaration event and the project of §2.1 and §3 (ADR-303), and the contractor, its place
+> on a project and the contract (ADR-305). §10 says, model by model, what Phase 1 changes.
 
 **How to read a record.** Every record on this page is laid out the same way (ADR-289): its name,
 one line saying what kind of record it is (§1) and what it is for, then one table of its fields.
@@ -117,21 +117,23 @@ projects under it (ADR-023, 026). Always "declaration event", never a bare "even
 
 #### `Contractor`
 
-*Configuration, built.* A hauling company, or an employer of monitors (Q-97).
+*Configuration, built (ADR-305, 306).* A hauling company, or an employer of monitors (Q-97). Whether it
+is a prime or a sub is its place on each project (`ProjectContractor`), never a fact of its own.
 
 | Field | Type | Notes |
 |---|---|---|
 | **id** | uuid | |
 | **name** | text | |
-| **kind** | enum `ContractorKind` | `HAULER` · `MONITORING` · `CREW` · `OTHER` (Q-97, `FROM-BUILD-1.md`) |
-| mergedIntoId | → `Contractor` | A sub typed twice at certification, merged by the back office, audited (ADR-108); the merged row is archived, never deleted |
+| **kind** | enum `ContractorKind` | `HAULER` · `MONITORING` · `CREW` · `OTHER` (Q-97, `FROM-BUILD-1.md`). No default: whoever adds it says which (ADR-305) |
+| contactName, contactEmail, contactPhone | text | Edited freely, audited, as a client's; each optional (the user, ADR-306) |
+| mergedIntoId | → `Contractor` | A sub typed twice at certification, merged by the back office, audited (ADR-108); the merged row is archived, never deleted. Never itself, and a merged row is archived for as long as it is merged (checks, ADR-305) |
 | **createdAt** | instant | |
 | archivedAt | instant | |
 
 #### `ProjectContractor`
 
-*Configuration.* A contractor's place on one project. A project may have several primes; a sub
-belongs to one prime, at most two tiers, never shared (ADR-108).
+*Configuration, built (ADR-305).* A contractor's place on one project. A project may have several
+primes; a sub belongs to one prime, at most two tiers, never shared (ADR-108).
 
 | Field | Type | Notes |
 |---|---|---|
@@ -139,7 +141,8 @@ belongs to one prime, at most two tiers, never shared (ADR-108).
 | **projectId** | → `Project` | Unique with `contractorId`: a contractor has one place on a project |
 | **contractorId** | → `Contractor` | |
 | **position** | enum `ContractorPosition` | `PRIME` · `SUB_TIER_1` · `SUB_TIER_2` |
-| primeId | → `Contractor` | The prime it works under; required for a sub, empty for a prime (check) |
+| primeId | → `Contractor` | The prime it works under, tier 1 and tier 2 alike; required for a sub, empty for a prime (check). **One of this project's primes**: with `projectId` it is a two-column foreign key to that prime's row (its `projectId`, `asPrimeId`), so a sub can't name a sub, a contractor of another project, or itself (ADR-305) |
+| asPrimeId | uuid | On a prime's row, its own contractor again; empty on a sub's (check). Unique with `projectId`: the key that "the prime" points at, here and on `Contract`. A prime that a sub or a contract names can't be made a sub (*agent default*, ADR-305) |
 | **createdAt** | instant | A sub's row is made when it's typed in at certification |
 | archivedAt | instant | |
 
@@ -314,7 +317,7 @@ creates a project says what it starts as (invariant 16, ADR-303).
 | **stumpFillDepthInches** | int | A new project starts with the policy value `STUMP_FILL_DEPTH_INCHES`, 31 (ADR-203, 303); at least 1 (a check) |
 | **stumpCheckRootBallWider**, **stumpCheckFillNeedsExposure** | bool | The two built-in stump checks; a new project starts with both on (ADR-203) |
 | **siteCircleMeters** | int | A new project starts with the policy value `DISPOSAL_SITE_PROXIMITY_M`, 200 (ADR-142, 303); at least 1 (a check) |
-| **timeClockEnabled** | bool | ADR-241; a new project starts with it off (*agent default*, ADR-303) |
+| **timeClockEnabled** | bool | Whether the project offers its workers the time clock (ADR-241). A new project starts with it switched off; the firm switches it on (ADR-303; confirmed by the user, ADR-304) |
 | **createdAt** | instant | |
 | closedAt | instant | |
 
@@ -332,16 +335,17 @@ creates a project says what it starts as (invariant 16, ADR-303).
 
 #### `Contract`
 
-*Configuration.* A name, its prime and an optional link. Nothing else: no number, dates or amount
-(ADR-146).
+*Configuration, built (ADR-305).* A name, its prime and an optional link. Nothing else: no number,
+dates or amount (ADR-146). A prime may hold one contract on a project or several.
 
 | Field | Type | Notes |
 |---|---|---|
 | **id** | uuid | |
 | **projectId** | → `Project` | |
 | **name** | text | "Coastline, Bayline ROW 2026" |
-| **primeId** | → `Contractor` | |
-| signedCopyUrl | text | |
+| **primeId** | → `Contractor` | **One of its own project's primes**: with `projectId`, a two-column foreign key to that prime's row on `ProjectContractor` (its `projectId`, `asPrimeId`), so the contractor is added to the project first and the database refuses a contract whose prime is a sub or isn't on the project (ADR-146, 305) |
+| signedCopyUrl | text | As the firm wrote it |
+| **createdAt** | instant | When the record was made; not a date of the contract |
 | archivedAt | instant | |
 
 #### `Form`
@@ -1310,6 +1314,9 @@ Never relaxed to pass a test (ARCHITECTURE §5.4). ✅ = built today.
 | A project's time zone is an IANA name; no time without its zone | ✅ checks, a test |
 | A project's active window never ends before it starts; its load-call limits are empty or 0–100; its stump fill depth and site circle are at least 1; its ticket types are never missing (ADR-303) | ✅ checks |
 | A kind of unit rate work is on a project once | ✅ unique key |
+| A contractor has one place on a project, so a sub is never shared by two primes (ADR-108) | ✅ unique key |
+| The prime a sub names, and a contract's prime, is one of that project's primes; a prime that a sub or a contract names can't be made a sub (ADR-108, 146, 305) | ✅ two-column foreign keys to the prime's row |
+| A sub names its prime and a prime names none; a prime's row, and only a prime's, carries its own contractor as `asPrimeId`; a merged contractor is merged into another record and is archived (ADR-305) | ✅ checks |
 | The Monitor ID is issued, well-formed, unique; the system actor is one fixed row and never a person | ✅ |
 | An assignment's site, a field event's site and an assignment's pay items are their own project's | two-column foreign keys (✅ for the first and third) |
 | Number blocks of one series never overlap | an exclusion constraint (needs `btree_gist`: its own ADR, C43) |
@@ -1333,8 +1340,8 @@ A new value in any of them is a code change with an ADR (`spec/LISTS.md` Group 2
 | `NumberBlockStatus` ✅ | `ISSUED` · `RECLAIMED` · `RETIRED` | `NumberBlock` |
 | `AssignmentOrigin` ✅ | `PLANNED` · `UNPLANNED` | `Assignment` |
 | The audit's three ✅ | operation `INSERT` · `UPDATE` · `DELETE`; source `DEVICE` · `BACK_OFFICE` · `SYSTEM`; domain `SECURITY` · `BILLING` · `OPERATIONS` · `RECORDS` | `AuditRecord` |
-| `ContractorKind` | `HAULER` · `MONITORING` · `CREW` · `OTHER` | `Contractor` |
-| `ContractorPosition` | `PRIME` · `SUB_TIER_1` · `SUB_TIER_2` | `ProjectContractor` |
+| `ContractorKind` ✅ | `HAULER` · `MONITORING` · `CREW` · `OTHER` | `Contractor` |
+| `ContractorPosition` ✅ | `PRIME` · `SUB_TIER_1` · `SUB_TIER_2` | `ProjectContractor` |
 | `ViewerKind` | `CLIENT` · `CONTRACTOR` · `AUDITOR` | `User` |
 | `Permission` | `CORRECT` · `RENUMBER` · `VOID` · `ACCEPT_FLAG` · `QC` · `LOCK_INVOICED` · `UNLOCK_INVOICED` · `APPROVE_HOURS` · `SETUP` · `DISPATCH` | `UserPermission` |
 | `ReasonUse` ✅ | `VOID` · `TYPED_NUMBER` · `ACCEPT_FLAG` · `BACK_OFFICE_RECORD` | `Reason` |
@@ -1372,7 +1379,7 @@ A new value in any of them is a code change with an ADR (`spec/LISTS.md` Group 2
 | Model today | Phase 1 change |
 |---|---|
 | `Project` | ✅ built 2026-10-02 (ADR-303): its client, declaration event, program type, window, number source and settings (§3), with `Client`, `DeclarationEvent` and `ProjectKindOfWork` |
-| `Contractor` | Gains its kind, contact and merge link; `ProjectContractor` is new |
+| `Contractor` | ✅ built 2026-10-02 (ADR-305, 306): its kind, contact and merge link, with `ProjectContractor` and `Contract` |
 | `User` | Gains viewer kind, contact, permissions and viewer projects; sign-in's columns in Phase 2 |
 | `Device`, `MasterPasscode`, `NumberBlock` | As built; a key's revocation; the overlap refusal |
 | `DisposalSite` | Gains its type, facts, permit, GPS, dates, labels, area versions, tipping fee link |
@@ -1573,6 +1580,7 @@ user approved the page on 2026-10-01 without changing one, so all sixteen stand.
 | 19 | **A flag names the line it is about** (`slot`, `payItemId`) beside its three-way `billing` | A ticket with several lines must show which one doesn't bill (ADR-294) |
 | 20 | **A survey number is not unique** | It names the property, and a property has a pre-work and a post-work survey (ADR-294) |
 | 21 | **A completed haul-out has a completed load's shape**: tied to its disposal event, a row per collection event (per pile on a split), mileage on that row. **A pile is told from another by its debris type and its field tag** | The user: haul-outs "follow that same format" (ADR-295). The field tag is the firm's own project list, so piles need no new list |
+| 22 | **A prime's row on `ProjectContractor` carries its own contractor again as `asPrimeId`**, unique with the project, and "the prime" everywhere is a two-column foreign key to it (ADR-305) | The database then refuses a sub under a sub, a sub shared or borrowed from another project, and a contract whose prime isn't one of the project's primes, with no trigger and no hand-written rule; the tables that name a prime need no extra column |
 
 **Carried items this page answers:**
 

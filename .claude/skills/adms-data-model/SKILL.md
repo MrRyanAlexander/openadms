@@ -2,7 +2,7 @@
 name: adms-data-model
 description: Open ADMS data model, in today's rules. Covers the records and how they link (Client → DeclarationEvent → Project, contractors and contracts, forms and debris types, pay items with a rate per prime, rules naming one contract, sites, certifications, users, devices and assignments, time-clock entries, FieldEvent and the CompletedLoad / CompletedHaulOut drawn from it, transactions, flags, AuditRecord), why reference data is editable, evidence correctable only by permission and the derived records and audit never by a person, which lists are fixed in code and which the firm extends (built-in keys plus the firm's own values), identifiers, uniqueness, coordinates and time, and which package and database role may write what. Use when touching the Prisma schema, adding or changing a model, a list, a relation or a constraint, or deciding where a write belongs. Field names are spec/DATA-MODEL.md's; what each setup record and field event holds is adms-ticket-workflows.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-245; ADR-246; the Phase 0 models built, ADR-281; the pay item's first shape and `spec/DATA-MODEL.md` drafted, ADR-284, 286; the page approved, ADR-289; a pay item's unique code and description, ADR-301; the firm's lists built, ADR-302; the client, the declaration event and the project built, ADR-303) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-245; ADR-246; the Phase 0 models built, ADR-281; the pay item's first shape and `spec/DATA-MODEL.md` drafted, ADR-284, 286; the page approved, ADR-289; a pay item's unique code and description, ADR-301; the firm's lists built, ADR-302; the client, the declaration event and the project built, ADR-303; contractors on a project and contracts built, ADR-305; a contractor's contact details, ADR-306) -->
 
 > **This page states today's rules** (through ADR-246). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
@@ -14,8 +14,9 @@ description: Open ADMS data model, in today's rules. Covers the records and how 
 
 **The schema is being built in Phase 1's order** (`BACKLOG.md`): Phase 0's fifteen provisional
 models in `packages/db/prisma/schema/` (ADR-268, 281, 286: only what the hardening tests and
-REQ-019…021 need) and, built in full, the firm's eighteen lists (ADR-302; §3.2) and `Client`,
-`DeclarationEvent`, `Project` and `ProjectKindOfWork` (ADR-303; §3.1a). The schema is a Prisma multi-file schema in `packages/db`
+REQ-019…021 need) and, built in full, the firm's eighteen lists (ADR-302; §3.2), `Client`,
+`DeclarationEvent`, `Project` and `ProjectKindOfWork` (ADR-303; §3.1a), and `Contractor`,
+`ProjectContractor` and `Contract` (ADR-305; §3.1a). The schema is a Prisma multi-file schema in `packages/db`
 (ARCHITECTURE §18), written in Phase 0 and Phase 1; this page is the model it must follow. **Model names** below
 are the agent defaults of `spec/CONVENTIONS.md` §3; **field names** are settled in
 `spec/DATA-MODEL.md` (drafted 2026-10-01, ADR-284; **approved by the user 2026-10-01**, ADR-289; changed at their word by ADR-292…295; KD-65 is closed), which may
@@ -108,6 +109,21 @@ lengths of time (ADR-023).
 - **A `Rule` names one contract** and runs only on tickets whose prime (from the certification)
   holds it; a rule with only *Remove transaction* / *Void ticket* may leave it blank (agent default).
   A `Transaction` records the contract, its prime and the operating sub (ADR-081, 212, 239).
+- **Built (ADR-305):** a `Contractor` has a **kind** (`ContractorKind`: `HAULER` · `MONITORING` ·
+  `CREW` · `OTHER`; no default, whoever adds it says which), **contact details** (a contact name,
+  email and phone, each optional, edited freely and audited, as a client's; **User, 2026-10-02:** "A
+  contractor should hold contact details", ADR-306) and a merge link (`mergedIntoId`: never
+  itself, and a merged row is archived). Whether it is a prime or a sub is **its place on a
+  project**, a `ProjectContractor` row (`ContractorPosition`: `PRIME` · `SUB_TIER_1` · `SUB_TIER_2`):
+  one place per project, so a sub is never shared; a sub names its prime (tier 1 and tier 2 alike),
+  a prime names none. **The database holds "the prime" to one of the project's primes** (agent
+  default): a prime's row carries its own contractor again as `asPrimeId`, and a sub's `primeId` and
+  a `Contract`'s are two-column foreign keys to it, so a sub under a sub, a contractor of another
+  project and a contract written before its prime is on the project are all refused, and a prime
+  that a sub or a contract names can't be made a sub. **Whoever adds a prime writes `asPrimeId` =
+  its contractor**; a later table that names a prime (a rate, a certification) points at the same
+  key. A place is taken off a project by archiving. What a merge moves (the duplicate's place, its
+  certifications) is the certification task's (BACKLOG C56).
 
 ## 3.1b Four kinds of record, four ways to change
 
@@ -397,3 +413,6 @@ What this page used to say, and why it changed. Never build from the left-hand s
 - The provisional `Project` as a name and a time zone → the project in full, under its client and
   declaration event, its settings' starting values in `packages/domain` from the policy values
   (ADR-303).
+- The provisional `Contractor` as a name → its kind and merge link, its place on each project
+  (`ProjectContractor`) and the `Contract`, with "the prime" held to one of the project's primes by
+  the database (ADR-305).
