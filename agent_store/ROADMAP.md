@@ -9,7 +9,7 @@
 > requirement) and `spec/VISION.md` §7–§8 (the finished surfaces, and what "done" means). If this
 > page disagrees with them, they win.
 >
-> **Last updated:** 2026-10-01 (split haul-outs given their two requirements; the golden mission approved, with its split haul-out weighed; a haul-out leaves only a TDSR) · counts read from the files that day · newest decision: ADR-298.
+> **Last updated:** 2026-10-02 (your correction: a pay item's code is unique on its project, it has a description and no separate name, and an exact duplicate of a rule is refused before it's saved) · counts read from the files that day · newest decision: ADR-301.
 
 **Key:** ✅ done · 🟡 in progress · ⬜ not started · 🔒 gated (doesn't open until the phase before it exits)
 
@@ -20,8 +20,8 @@
 | | |
 |---|---|
 | **Start** | 2026-09-25: the rebuild decision (ADR-093). Security first, the plan is the core, TypeScript end to end with Prisma, the old `database/` code is history |
-| **Now** | **Phase 0, Foundation: every task is done** (ADR-282…287) and its seven exit criteria are met. All 17 of its requirements are ticked; the last (REQ-002) with your first commits (ADR-288). You approved the data model and the flag catalogue the same day (ADR-289, 290). No product code exists yet; everything built so far is the ground the product stands on. Opening Phase 1 is your call (§6) |
-| **Next task** | None until you open Phase 1. Nothing else waits on you for Phase 0 |
+| **Now** | **Phase 1, Data core and engine: open since 2026-10-01, at your word** (ADR-299). Its plan is written: ten milestones, 47 tasks, one per response (ADR-300; §3). Two tasks are done, both on paper: the plan, and the acceptance scenarios for setup (81). No product code exists yet; Phase 0's foundation is what it will stand on |
+| **Next task** | **1.1.2, the firm's lists**: the eighteen pick-lists a firm extends, in the database, seeded and guarded. The first product tables |
 | **Finish line** | A firm installs Open ADMS, and its back office and its monitors run a real mission on it: every app built, tested and working |
 | **How "done" is judged** | Not boxes ticked. A deliberately messy mission (the **golden mission**) comes out with the exact statuses, review queue and ledger you signed off, at every layer: engine, then API, then the apps (`spec/VISION.md` §8) |
 
@@ -32,9 +32,9 @@
 | # | Stage | When it's done, you can… | Requirements met | Status |
 |---|---|---|---|---|
 | — | **Design** | Read the whole product on paper: the rules, the spec, the architecture, all approved | 26 rounds of questions, ADR-001…279 | ✅ done 2026-09-29 |
-| **0** | **Foundation** | Start the whole local stack with one command over HTTPS, the mileage and address servers included; watch the database itself refuse what the rules forbid; run a ticket's story from a terminal | 17 of 17 | ✅ done 2026-10-01: every task and every requirement, and committed; opening Phase 1 is your call (§6) |
-| — | **The answer key** | Hold the golden mission's signed-off numbers and the acceptance scenarios that every later phase must pass | not counted in REQs | 🟡 the golden mission is approved, numbers included (2026-10-01, ADR-297: P1 $5,548.25 on 19 lines, P2 $324.00); the acceptance scenarios aren't written yet |
-| **1** | **Data core and engine** | Run a whole messy mission from a terminal, no screens, and see the right statuses, flags, ledger and audit trail come out | 0 of 98 | 🔒 |
+| **0** | **Foundation** | Start the whole local stack with one command over HTTPS, the mileage and address servers included; watch the database itself refuse what the rules forbid; run a ticket's story from a terminal | 17 of 17 | ✅ done 2026-10-01: every task and every requirement, and committed |
+| — | **The answer key** | Hold the golden mission's signed-off numbers and the acceptance scenarios that every later phase must pass | not counted in REQs | 🟡 the golden mission is approved, numbers included (2026-10-01, ADR-297: P1 $5,548.25 on 19 lines, P2 $324.00); the acceptance scenarios are written part by part, each before the code it judges (ADR-300): 1 of 9 files, 81 scenarios, 1 passing |
+| **1** | **Data core and engine** | Run a whole messy mission from a terminal, no screens, and see the right statuses, flags, ledger and audit trail come out | 0 of 98 | 🟡 open since 2026-10-01 (ADR-299): 2 of 47 tasks |
 | **2** | **API and sync** | Have phones and the back office talk to the server: sign-in, permissions, device enrolment, sync, background jobs, all hardened | 0 of 11 | 🔒 |
 | **3** | **Field app** | Hand a monitor a phone: enrol it, take the day's assignment, capture every kind of field event offline for days, scan, print, sync. Browser first, then iPhone, then Android | 0 of 25 | 🔒 |
 | **4** | **Back office and read-only portal** | Set up a project, dispatch the day, review and correct, QC, lock as invoiced, export; clients, contractors and auditors see their own projects | 0 of 18 | 🔒 |
@@ -51,7 +51,33 @@ the relative size: Phase 1 is by far the largest piece.
 
 ---
 
-## 3. Phase 0, Foundation: the active phase
+## 3. Phase 1, Data core and engine: the active phase
+
+Opened 2026-10-01 at your word (ADR-299). The plan is `BACKLOG.md`'s (ADR-300). Each milestone
+starts by writing its part's acceptance scenarios, so the answer exists before the code.
+
+| Milestone | What it is | When it's done, you can… | Tasks | Status |
+|---|---|---|---|---|
+| 1.0 | Open the phase: the plan | Read every Phase 1 task, with the requirements each one meets | 1 of 1 | ✅ 2026-10-01 |
+| 1.1 | Setup records | See a whole project's setup in the database: client, declaration event, project, contractors and contracts, forms and debris types, pay items with a rate per prime, sites, the map, rules | 1 of 11 | 🟡 the setup scenarios are written (81); next, the firm's lists |
+| 1.2 | Certifications and capacity | Give it a container's measured boxes and get the paper form's capacity, to the cubic yard | 0 of 3 | ⬜ |
+| 1.3 | Tickets and numbers | Record every kind of field event, with numbers no two phones can share | 0 of 7 | ⬜ |
+| 1.4 | Sync intake with quarantine | Send a day's field events in any order; a duplicate is held in full for a person, never lost | 0 of 2 | ⬜ |
+| 1.5 | Reconciliation | Watch tickets pair up on their number and come out pending, completed or flagged for review, each flag in the catalogue's own words | 0 of 9 | ⬜ |
+| 1.6 | The rule engine | Have the firm's rules pick the pay items, the same way every time; see the setup check list the gaps | 0 of 4 | ⬜ |
+| 1.7 | The ledger and audit | See every billed line, regenerated when a ticket changes, the old one kept in the audit log | 0 of 2 | ⬜ |
+| 1.8 | Review, QC, the invoice lock and batches | Correct, renumber, void, accept a flag, QC and lock, each audited, each reprocessing the ticket | 0 of 5 | ⬜ |
+| 1.9 | The golden mission | Run the mission you approved from a terminal and get its numbers: P1 $5,548.25 on 19 lines, P2 $324.00 | 0 of 3 | ⬜ |
+
+**Phase 1's exit criteria** (`NEXT.md`): the golden mission as a story; every Phase 1 scenario
+passing; all 98 requirements ticked from real runs; the old code's lessons closed; every new table
+guarded and tested; the whole check chain green; every rule in one shared place.
+
+**Scenarios passing** (the measure of done, `spec/VISION.md` §8): 1 of 81 written so far (AC-01-41, a pay item's code is unique on its project, at the database; ADR-301).
+
+---
+
+## 3a. Phase 0, Foundation: done 2026-10-01
 
 | Milestone | What it is | Tasks | Status |
 |---|---|---|---|
@@ -63,7 +89,7 @@ the relative size: Phase 1 is by far the largest piece.
 | 0.4 | Prove it end to end: scenario harness, security checks, the device and assignment models | 3 of 3 | ✅ 2026-10-01 |
 | — | Closing out (ADR-282…287): the mileage and address servers in the local stack; an assignment's pay items; the requirement list | all | ✅ 2026-10-01 |
 
-**Phase 0's exit criteria** (`NEXT.md`): all seven are met (2026-10-01, ADR-281). Phase 1 opens when you say so.
+**Phase 0's exit criteria** (`NEXT.md`): all seven are met (2026-10-01, ADR-281). You opened Phase 1 the same day (ADR-299).
 
 **Recorded test state** (2026-10-01, ADR-287, run that day): 26 test files, 317 tests passing; two
 stories pass (`ticket-101001` 15 checks, `dispatch-monday` 13 checks); `pnpm security` 7 checks
@@ -94,8 +120,8 @@ work, and what Phase 0 delivered for each is listed in `REQUIREMENTS.md`.
 | **5b. Later features** | "USACE approved" flag on the load call · hazard tree workflow · Esri feature service · parcel lifecycle · live scale-house link · volume-reduction tracking · daily QC and expenditure reports · the HHW trail | Each confirmed by you before it's built |
 
 Phase 1 by area (98 requirements; two added for split haul-outs, ADR-296): schema and data model 35 · reconciliation engine 36 · ticket
-workflows 12 · ledger and audit 8 · verification 4 · carried from Phase 0, 3. **Phase 1's task-by-task milestones aren't
-written yet**: `BACKLOG.md` holds only the active phase, and gets Phase 1's when Phase 0 exits.
+workflows 12 · ledger and audit 8 · verification 4 · carried from Phase 0, 3. **Phase 1's task-by-task milestones are
+in `BACKLOG.md`** (ADR-300) and summarised in §3: every one of the 98 is named by the task that meets it.
 
 ---
 
@@ -107,7 +133,7 @@ written yet**: `BACKLOG.md` holds only the active phase, and gets Phase 1's when
 |---|---|---|---|
 | Unit | The shared rules: capacity math, volume, split shares, time, number blocks | Phase 1 | 🟡 runner wired, first tests only |
 | Database | Every grant and every refusal; audit can't be forged or edited | Phase 0 | ✅ in place, grows with each new table |
-| Scenario harness | Whole missions told as stories; exact statuses, queue and ledger | Phases 0–1 | 🟡 harness runs two small stories (ticket 101001; Monday's dispatch, with a unit rate monitor's pay items); the golden mission is Phase 1's |
+| Scenario harness | Whole missions told as stories; exact statuses, queue and ledger | Phases 0–1 | 🟡 harness runs two small stories (ticket 101001; Monday's dispatch, with a unit rate monitor's pay items); the golden mission is Phase 1's last milestone (1.9) |
 | API | Sign-in, permissions, CORS, rate limits, the sync contract | Phase 2 | ⬜ |
 | Browser end-to-end | The web apps and the field app's browser build | Phases 3–4 | ⬜ |
 | On device | iPhone, then Android: airplane mode, printing, scanning, camera, encryption, turn in | Phase 3 | ⬜ |
@@ -122,8 +148,9 @@ Nothing here blocks the next task. Each is listed with the point where it starts
 |---|---|---|
 | Commit each response's changes | Agents don't write to git; every file-changing response ends with a block for you to run. The history began 2026-10-01 (nine commits on `phase0-foundation`, ADR-288) | After each response, so no work sits uncommitted |
 | A `main` branch and a remote | The history lives on one branch on this machine only; where it is pushed and what the default branch is are your call | Before anyone else needs the code, and as the only copy's backup |
-| The agent's details on five of your answers | An ROE's scope (debris types and unit rate payable types; no picks, no check); helpers stored one row each; a flag naming the line it is about; a survey number not forced to be unique; a haul-out pile told apart by its debris type and field tag, with a flag when a pile's load call isn't higher than the one before. Each is yours to overturn (`spec/DATA-MODEL.md` §12, 17–21) | Before Phase 1 builds those records |
-| **Say when Phase 1 opens** | Phase 0's tasks are done; the phase gate is yours | Whenever you choose: nothing in Phase 0 is waiting |
+| The agent's details on five of your answers | An ROE's scope (debris types and unit rate payable types; no picks, no check); helpers stored one row each; a flag naming the line it is about; a survey number not forced to be unique; a haul-out pile told apart by its debris type and field tag, with a flag when a pile's load call isn't higher than the one before. Each is yours to overturn (`spec/DATA-MODEL.md` §12, 17–21) | Before Phase 1 builds those records: certifications in milestone 1.2, ROEs and surveys in 1.3, flags and haul-outs in 1.5 |
+| ~~Say when Phase 1 opens~~ | ✅ Done 2026-10-01 (ADR-299) | |
+| The acceptance scenarios, as they're written | They are drafts until you approve them; the first is `spec/acceptance/01-setup.md` (81 scenarios; you marked it partially approved, and your first correction is in, ADR-301). The plan writes one file per part, each just before that part is built, instead of all nine first: say so if you want all nine first (ADR-300). Six setup details nothing settles are listed at the end of that file, each decided as a default by the task named | Any time; building doesn't wait (ADR-230) |
 | ~~Sign off the golden mission's numbers~~ | ✅ Done 2026-10-01 (ADR-297): you approved the mission with its split haul-out weighed. What the agent added to P1's setup to tell it that way is yours to change: a second landfill with a scale house (Cypress Creek), a per-ton mulch haul-out pay item at a made-up $20.00, two haul-out rules that pick by where it's dumped, and a sixth monitor | Any time; a change to an approved number is recorded as a decision |
 | The map region for examples | The local stack's built-in map extract is Delaware (small, dated), standing in for the made-up Bayline County (ADR-282). Florida's needs more disk than Docker has on this machine (8 GB) | Before the golden mission's GPS points are picked |
 | Approve the ADR-240 notes in ARCHITECTURE §7–§10 | The approved sections were updated to "enrol once, assignment daily" | Any time; building doesn't wait |
@@ -138,7 +165,8 @@ Nothing here blocks the next task. Each is listed with the point where it starts
 |---|---|
 | A task closes | §3's task count and "next" |
 | A milestone or phase closes | Its row's status in §2 and §3; the test state |
-| A phase opens | Add its milestone table (like §3), from `BACKLOG.md` |
+| A phase opens | Add its milestone table (like §3), from `BACKLOG.md`; the phase before it keeps its table under it |
+| A scenario file is written, or scenarios pass | §3's "Scenarios passing" line and the answer key's row in §2 |
 | Requirements are ticked | The counts in §2 |
 | Something new waits on the user, or stops waiting | §6 |
 

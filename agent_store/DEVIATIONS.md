@@ -17,7 +17,8 @@ check them rather than re-deriving an answer.
 ## ⚠️ Known Deviations — code vs. the domain skills
 
 Real, verified gaps. **Do not silently "fix" either side.** Work them through
-`agent_store/BACKLOG.md` Milestone 1.2, and record the resolution as a new ADR.
+`agent_store/BACKLOG.md` (the historical Milestone H1.2 keeps each one's detail; Phase 1's milestones name
+the KDs each closes, ADR-300), and record the resolution as a new ADR.
 
 | KD | Status | Where | The gap |
 |:---|:---|:---|:---|

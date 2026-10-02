@@ -8,9 +8,12 @@ code present *and* covered by a passing test.
 > the historical code was cleared**: the rebuild re-earns each one. Where a REQ named a historical
 > file or tool, it is re-scoped to the rebuild's equivalent. **Phase 0 (Foundation) is now active**;
 > Phase 1 is the data core and engine, built on Phase 0. Phases 2–5 are in `REQUIREMENTS-LATER.md`.
+>
+> **2026-10-01 (ADR-299): Phase 0 is done (17 of 17) and the user opened Phase 1, now active.** Each
+> of its 98 REQs is named by the `BACKLOG.md` task that ticks it (ADR-300).
 
 ---
-## Phase 0 — Foundation and security ← **ACTIVE** *(ADR-093…103, `spec/ARCHITECTURE.md`)*
+## Phase 0 — Foundation and security ✅ done 2026-10-01 *(ADR-093…103, `spec/ARCHITECTURE.md`)*
 
 > **2026-10-01 (ADR-287), at the user's word that Phase 0 be fully completed:** 17 REQs are
 > Phase 0's own, **16 ticked**. The one left is **REQ-002**, which waits on the user's first commit.
@@ -58,7 +61,7 @@ code present *and* covered by a passing test.
 | REQ-016 (the server's idempotency ledger) | Phase 2, `REQUIREMENTS-LATER.md` | Every field event's id is made on the phone (ADR-268); the harness's phones keep it across a retry (ADR-275) |
 
 ---
-## Phase 1 — Data core and reconciliation engine *(rebuilt on Phase 0)*
+## Phase 1 — Data core and reconciliation engine ← **ACTIVE** *(rebuilt on Phase 0; opened 2026-10-01, ADR-299)*
 
 **Carried from Phase 0** *(ADR-287)*
 - [ ] **REQ-003** One shared TypeScript **domain** package holds every rule that must give the same answer on the phone and the server (capacity math, load-call volume, apportionment and split shares, number blocks, time rules), as readable classes, with unit tests from the paper-form examples. *(ADR-094)* — the package and its test wiring exist (ADR-261).
@@ -75,7 +78,7 @@ code present *and* covered by a passing test.
 
 **Schema & data model**
 - [ ] **REQ-101** Debris types are the firm's **extendable list** (seeded with the 12 USACE umbrella types), **added to each project's forms**, named as the contract names the work, each entry with *Reduced*, a reduction method and *Hidden on phones*; monitors pick, never type. *(ADR-074, 211, 214, KD-47)*
-- [ ] **REQ-102** `PayItem` is **the only place a rate lives**: code, name, payable type, description, Unit of Measure, size band, capture settings, and **a rate for each prime**; no debris type, no copy per prime, no fee label, no "requires weight". *(ADR-002, 206, 207, 213, 221, 223, 246)*
+- [ ] **REQ-102** `PayItem` is **the only place a rate lives**: its code (**unique on its project**), its description (the firm's own words; no separate name), payable type, Unit of Measure, size band, capture settings, and **a rate for each prime**; no debris type, no copy per prime, no fee label, no "requires weight". *(ADR-002, 206, 207, 213, 221, 223, 246, 301)* — the unique code and the description are built (ADR-301).
 - [ ] **REQ-103** Split fields (the suffix and the property's estimate) sit on a **collection event**, both-or-neither, enforced in the schema and the contracts package. *(ADR-006, 032, 055)*
 - [ ] **REQ-104** All coordinates `Decimal(38,8)` under WGS84. *(ADR-005)*
 - [ ] **REQ-105** `Project` is the hub: contracts, forms, pay items, sites, rules, certifications, ROEs, assignments, field events, completed records, transactions.
@@ -169,7 +172,7 @@ code present *and* covered by a passing test.
 - [ ] **REQ-130** `AuditRecord` is an append-only model. *(ADR-007; `Transaction` is regenerated, ADR-085, see REQ-105h)*
 - [ ] **REQ-131a** Pricing per ADR-109/118/239 (revised 2026-09-29, ADR-246): every passing rule of the ticket's prime runs; each *Add transaction* writes one transaction in its # slot; two creates of the same # and no-match are flagged; there are no fee kinds; a unit rate ticket carries one pay item, its quantity per ADR-126/128; splits per property, split haul-outs per pile. *(ADR-047/089 → 109, 118, 124, 239, 246, 295; KD-36, KD-38, KD-54)*
 - [ ] **REQ-131d** Pricing is **deterministic**: matching rules create transactions in # order (#1, then #2…), and reprocessing the same ticket under the same rules gives identical transactions every time, proven by a test that runs it twice. All passing rules are found, creates run in # order, then removes, then voids; criteria read only the ticket. *(ADR-130, ADR-131)*
-- [ ] **REQ-131c** The back office's rule builder stores rules as `spec/RULES.md` specifies (form, name, one contract, criteria with the §4a operators and a picked or typed value per §4, actions, Active, Is valid), BETWEEN inclusive with an overlap warning, mileage compared in tenths; a transaction takes the pay item's rate for the rule's contract's prime, and a pay item with no rate for that prime writes a $0 line, flagged. *(ADR-109, 118, 122, 123, 125, 212, 239)*
+- [ ] **REQ-131c** The back office's rule builder stores rules as `spec/RULES.md` specifies (form, name, one contract, criteria with the §4a operators and a picked or typed value per §4, actions, Active, Is valid), BETWEEN inclusive with an overlap warning, **an exact duplicate of a rule refused before it is saved** (ADR-301), mileage compared in tenths; a transaction takes the pay item's rate for the rule's contract's prime, and a pay item with no rate for that prime writes a $0 line, flagged. *(ADR-109, 118, 122, 123, 125, 212, 239)*
 - [ ] **REQ-131b** A rate or rule change regenerates the transactions of every affected ticket not locked as invoiced. *(ADR-090)*
 - [ ] **REQ-131** **Every reconciled ticket that bills writes its `Transaction` rows.** *(KD-01 — blocks phase exit)*
 - [ ] **REQ-132** **Every reconciliation outcome, all three workflows, success and flag, writes an `AuditRecord` reflecting the true resulting status.** *(KD-04, KD-05)*

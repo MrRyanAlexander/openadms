@@ -3,16 +3,307 @@
 > Milestone detail for the active phase. Read when picking up new work; the single active task
 > is in `agent_store/NEXT.md`. Tick boxes as you complete them.
 
-## Active — Phase 0: Foundation *(ADR-103)*
+## Active — Phase 1: Data core and engine, rebuilt *(opened by the user 2026-10-01, ADR-299; this plan is ADR-300)*
 
-> Milestone 1.1 and 1.2 below belong to the historical code (ADR-093). They are kept as the list of
-> behaviours and lessons the rebuild must satisfy, **not** as work to do on `database/`.
+**What Phase 1 is.** The whole product without a screen or an endpoint: every setup record, the
+certification and its capacity, field events and their numbers, sync intake with quarantine,
+reconciliation, the rule engine, the ledger and audit, review, QC and the invoice lock. **Done when
+the golden mission runs from a terminal and comes out with the statuses, review queue, ledger and
+audit trail the user signed off** (`spec/golden/MISSION.md`: P1 $5,548.25 on 19 lines, P2 $324.00),
+every Phase 1 scenario in `spec/acceptance/` passes at the engine, and all 98 Phase 1 REQs are
+ticked from runs that were seen. Exit criteria: `NEXT.md`.
+
+**The order** is `ROADMAP.md` §4's: setup records → certifications and capacity → tickets and
+numbers → sync intake with quarantine → reconciliation → the rule engine → the ledger and audit →
+review, QC, invoice lock and batches → the golden mission. Each milestone builds one part of
+`spec/INDEX.md`'s book.
+
+### Brief for every Phase 1 task (ADR-300)
+
+- **One task per response.** Each ends with real observed output (`adms-verify`), the close-out
+  (`adms-close-out`) and the user's git block with named paths. Don't tick a box on "should work".
+- **Read first:** the task's part page and its acceptance file (`spec/acceptance/`); the records in
+  **`spec/DATA-MODEL.md`** (every model, field and enum name comes from it, never from memory or
+  prose); the owning skill; the flag wording in `spec/FLAGS.md`; the task's carried items in the
+  register below. Examples, fixtures and seeds: `spec/CONVENTIONS.md` §6 and the golden mission.
+- **Inside a milestone:** the part's acceptance scenarios first, then the schema, then the rules,
+  then the story. **No milestone's code starts before its part's scenarios are written.**
+- **A schema task:** the model in the right `.prisma` file (by kind of record) → Prisma writes the
+  migration (`prisma migrate dev --create-only --name <what>` in `packages/db`; never hand-written
+  SQL for a table, column, index or relation) → a guard migration in its own empty `--create-only`
+  stub: `SELECT guard_table('<table>', '<CONFIGURATION|MARK|EVIDENCE|DERIVED>', '<domain>'[, …]);`
+  and any check the model needs (ADR-113, 271) → applied by `pnpm installer` → the exact lists in
+  `grants.test.ts` and `catalog.test.ts` extended → **a row-level-security decision** for each table
+  a viewer sees (C18, C22) → the example world (`packages/db/test/support/example-world.ts`)
+  extended → tests named by scenario ID → each new guard's removal shown caught on a throw-away
+  copy (as ADR-272). `prisma migrate dev` wants a terminal when a migration carries a warning
+  (`adms-verify`, "The schema").
+- **A provisional model that changes shape** takes its tests and both stories with it in the same
+  task. A test is rewritten for the new shape, never loosened; a threshold or a unique key is never
+  relaxed to pass.
+- **A rule task** (`packages/domain`): plain classes, no Postgres, no dependency; unit tests named
+  by scenario ID, their numbers from the golden mission or a skill's worked example; thresholds from
+  settings, never literals (invariant 16).
+- **Where the code lives** (ARCHITECTURE §2, §18; settled for each kind of code by the ADR of the
+  first task that writes it): every rule in `packages/domain`; the reconciliation run in
+  `apps/worker`, as `adms_worker`; what a phone or a person writes (intake, setup, corrections,
+  marks) as plain service classes in `apps/api`, as `adms_api`, with no HTTP until Phase 2 wraps
+  them; all through `db.$write(actor, …)`. The scenario harness drives both.
+- **Every dependency and every Postgres extension gets an ADR first** (exact version, licence,
+  maintenance; `pnpm licences` and `pnpm security` after).
+- **Not Phase 1's:** endpoints, sign-in columns and the sync contract (Phase 2); the phone (Phase
+  3); screens, exports and the time clock's tables (Phases 3–4). Don't build ahead.
+- **A REQ is ticked, and a scenario marked passing, only from a run you saw.**
+- Docker's disk here is 8 GB (`NEXT.md`, Tools and housekeeping); stop the stack at close-out.
+
+### Milestone 1.0 — Open the phase
+- [x] **1.0.1** ✅ **done 2026-10-01 (ADR-299, 300):** the phase opened at the user's word; this
+  plan; `spec/acceptance/README.md` (how a scenario is written and proven).
+
+### Milestone 1.1 — Setup records (Part 1; DATA-MODEL §2, §3)
+
+> **2026-10-02, the user's correction (ADR-301), done outside the task order because a Phase 0 test
+> stated the old reading:** a pay item's code is unique on its project and it has a description, no
+> name (one Prisma migration, the test now AC-01-41, the story `dispatch-monday`); every page and
+> skill that said codes may repeat, or "the contract's words and line number", corrected; an exact
+> duplicate of a rule is to be refused before save (built in 1.1.8).
+
+Carried: C36, C42, C52, and C18's first part. Closes the behaviour of KD-14, 16, 17, 18, 29, 39, 47.
+
+- [x] **1.1.1** ✅ **done 2026-10-01 (ADR-300):** `spec/acceptance/01-setup.md`, 80 scenarios (81 since ADR-301) from
+  Part 1, each naming its source, where Phase 1 proves it and the task that does; six points nothing
+  settles are listed for the task that decides each.
+- [ ] **1.1.2** **The firm's lists.** The eighteen list tables of DATA-MODEL §2.3 (one table per
+  list, §12 default 1, approved), each with its own columns and its three enums (`CountShape`,
+  `ReasonUse`, and `VehicleType.certifies`); the built-in keys as one closed set in
+  `packages/domain`; the seed values of `spec/LISTS.md` written by the installer's seed, so an
+  upgrade can add a built-in value without touching the firm's own (the ADR settles the seeds
+  LISTS.md leaves open: `01-setup.md`, point 6). A built-in value can't be archived. **Done when:**
+  AC-01-31, 32, 34…38 pass as database tests; `guard_gaps()` is empty; the chain is green.
+  *REQ-106c; REQ-101 (the library).*
+- [ ] **1.1.3** **Client, declaration event, and the project in full.** `Client`,
+  `DeclarationEvent`; `Project` gains its client, declaration event, program type, *Allow split
+  loads*, window, ticket-number source, workflows and settings; `ProjectKindOfWork`; the settings'
+  defaults in `packages/domain`, read from policy values. The example world and both stories move to
+  the new shape. **Done when:** AC-01-02…08 and 11…14 pass. *REQ-105b, 105c, 105d, 105f, 105j, 124d;
+  REQ-105k's source (its series: 1.3.2).*
+- [ ] **1.1.4** **Contractors on a project, and contracts.** `Contractor.kind` and its merge link,
+  `ProjectContractor` (prime, tier 1, tier 2; one place per project), `Contract`. **Done when:**
+  AC-01-15…18, 20, 21 pass. *REQ-106e's tiers (its subs at certification: 1.2.3).*
+- [ ] **1.1.5** **Forms, debris types, field tags, the firm's own fields.** `Form`,
+  `FormDebrisType`, `FormDefinition` (a version never edited or deleted, guarded like
+  `MasterPasscode`), `FieldTag`'s project list in use, `Assignment.formDocumentTypes` (C42). **Done
+  when:** AC-01-22…30 pass. *REQ-101, 105a; C36's definition.*
+- [ ] **1.1.6** **Pay items in full.** `PayItem`'s every other field (its code, unique on its
+  project, and its description are built, ADR-301; AC-01-41 passes), `PayItemRate` (one per prime),
+  `PayItemCrewDayStep`; the size-band rule in `packages/domain` (bands of one payable type can't
+  overlap; a gap warns). `AssignmentPayItem` and `dispatch-monday` follow. **Done when:**
+  AC-01-39…51 pass. *REQ-102, 112d; C42's pay item.*
+- [ ] **1.1.7** **Disposal sites in full, and the project map.** `DisposalSite`'s type, four facts,
+  permit, GPS, dates, short code and tipping fee link; `DisposalSiteLabel`, `SiteAreaVersion`;
+  `MapVersion` and `Zone` (never edited or deleted); *Haul-outs leave here* only on a TDSR/DMS site
+  (C52: the ADR says whether the database refuses it too). The ADR settles the formats a shape is
+  taken in (`01-setup.md`, point 5). **Done when:** AC-01-52…59 pass. *REQ-104, 105q; REQ-105n's
+  site (its flag: 1.5.6); C42's site.*
+- [ ] **1.1.8** **Rules.** `Rule`, `RuleCriterion`, `RuleCriterionPick`, `RuleAction`,
+  `RuleActionItem` with `RuleCriterionKey`, `RuleOperator`, `RuleActionKind`, `QuantityFrom`; in
+  `packages/domain`: which criteria and operators a form takes (`spec/RULES.md` §4, §4a), "Is valid"
+  (§7), the overlap warning, **the refusal of an exact duplicate of a rule before it is saved**
+  (ADR-301), and the rules a pay item's "Pays when" writes. **Done when:** AC-01-60…67 and 81 pass. *REQ-125a; REQ-131c's storage (its rates: 1.6.3).*
+- [ ] **1.1.9** `spec/acceptance/02-people-and-devices.md`, from Part 2: what Phase 0 built is
+  marked as built; what waits for Phases 2–4 names its phase.
+- [ ] **1.1.10** **People's permissions and viewers.** `UserPermission`, `ViewerProject`,
+  `User.viewerKind` and contact fields, `Device.keyRevokedAt` (its refusal is Phase 2's, C47);
+  row-level security for every setup table a viewer sees (C18). **Done when:** the Part 2 scenarios
+  marked for the database pass.
+- [ ] **1.1.11** **The example world's setup as a story.** The golden mission's §1, P1 and P2,
+  written in the spine's order through the API's setup services as the people who make it; every
+  record asserted, one audit record per write. **Done when:** `pnpm scenarios` runs it (AC-01-01,
+  78…80). *REQ-105e, 108; REQ-142's setup part; C30's first part.*
+
+### Milestone 1.2 — Certifications and capacity (Part 3)
+
+Closes the behaviour of KD-10, 11, 45, 46, 48.
+
+- [ ] **1.2.1** `spec/acceptance/03-certification.md`, from Part 3 and `adms-certifications`, the
+  capacity examples taken from §3A.3 and the paper form, never from `development/`.
+- [ ] **1.2.2** **Capacity math in `packages/domain`**, exactly `adms-certifications` §3A.3: whole
+  inches, the primary box and boxes 1…N, each shape, add or subtract, hundredths at each step,
+  ÷ 46,656, a whole CY half up; no override. **Done when:** every worked example of §3A.3
+  passes as a unit test, and the example world's three containers are given measured boxes that work
+  out to their 65, 48 and 110 CY (recorded in `spec/CONVENTIONS.md` §6; the mission states only the
+  capacities); a crew has none. *REQ-106d; REQ-003's first rule.*
+- [ ] **1.2.3** **The certification's records.** `Certification` (container or crew; unique per
+  project by cert number; prime and subs; driver, tag; who certified; replaces, copied from, revoked
+  from), `CertificationBox`, `CertificationHelper`; a sub typed in at certification becomes a
+  `ProjectContractor` row under its prime (AC-01-19). **Done when:** Part 3's database scenarios
+  pass. *REQ-106, 106b, 106e; REQ-106a's uniqueness; REQ-106f's records (its flags: 1.5.5).*
+
+### Milestone 1.3 — Tickets and numbers (Part 4, the data)
+
+Carried: C43, C44, C36's answers. Closes the behaviour of KD-13, 22, 23, 24, 27, 37, 41, 43, 44.
+
+- [ ] **1.3.1** `spec/acceptance/04-field-capture.md`, from Part 4, `adms-ticket-workflows`
+  §4.0a–§4.6 and `adms-field-app`: what each field event records; the phone's screens name Phase 3.
+- [ ] **1.3.2** **Numbering.** `ProjectNumberSeries`, `ControlRange`, `NumberSeries` gains `ROE`;
+  blocks of one series never overlap (an exclusion constraint needs the `btree_gist` extension: its
+  ADR first, C43); the number rules in `packages/domain` (100,001 to 9,999,999, 1,000-number ticket
+  blocks, 100-number cert blocks, issued in order, reclaimed, retired); the server's allocator.
+  **Done when:** two phones can never hold the same number, proven as a database test. *REQ-105k,
+  106a, 114.*
+- [ ] **1.3.3** **`FieldEvent`, what every kind records.** The shared columns of DATA-MODEL §4.1
+  (1): the source, a back-office-created record's person and reason with no phone, assignment or
+  setup version (C44, with its check), the typed number and its reason, the certification as scanned
+  and as found, the site, both GPS ends, the address. `guard_table` rerun; both stories follow.
+  *REQ-105i, 115.*
+- [ ] **1.3.4** **`FieldEvent`, what each kind records.** The kind-specific columns of §4.1 (2),
+  each empty on every other kind by a check; a split load's suffix and estimate both or neither; a
+  haul-out collection's suffix with its running call; `FieldEventItem`, `CarriedTicket`; the same
+  both-or-neither rule in `packages/contracts`. *REQ-103, 105o, 110, 111, 111a, 112, 112a, 112b;
+  REQ-112e's capture.*
+- [ ] **1.3.5** **Scale receipts and photos.** `ScaleReceipt` (unique per project by receipt
+  number; never confusable with a ticket number), `Photo` (exactly one owner). *REQ-126a.*
+- [ ] **1.3.6** **ROEs and forms.** `Roe`, `RoeScopeItem`, `Survey`, `Incident`, `DropOffLog`, each
+  with its answers and the definition version answered; the answers' schema made from the definition
+  in `packages/contracts` (C36). *REQ-107.*
+- [ ] **1.3.7** **The harness's phones capture every kind.** Badge first, the number last and
+  re-entered; a unit rate pay item worked out from the bands by the one rule the phone and the
+  server share. Story: a day of P1's field events, every kind, landing `PENDING`. *REQ-112g, 120a;
+  REQ-112f's phone part.*
+
+### Milestone 1.4 — Sync intake with quarantine (Part 5)
+
+Carried: C31's first part. Closes the behaviour of KD-56.
+
+- [ ] **1.4.1** `spec/acceptance/05-sync.md`, from Part 5 and `adms-exceptions` §4.3a: what Phase
+  1's intake does; the endpoint, the idempotency ledger and the manifest name Phase 2.
+- [ ] **1.4.2** **Intake.** `QuarantinedRecord`; every field event received, in any order, in
+  bursts; a second event of one kind on one ticket quarantined in full, never dropped, merged or
+  acknowledged as saved; a retry of the same phone-made id is the same record; an out-of-service
+  phone's work received. The harness's stand-in (`packages/scenarios/src/intake.ts`) gives way to
+  it. *REQ-120b, 120h; REQ-124c's receiving part.*
+
+### Milestone 1.5 — Reconciliation (Part 6)
+
+Carried: C16, C20, C50, C52's scenarios. Closes the behaviour of KD-02, 04, 05, 06, 12, 19, 28, 35,
+42, 50, 55.
+
+- [ ] **1.5.1** `spec/acceptance/06-reconciliation.md`, from Part 6, `adms-validation` and
+  `spec/FLAGS.md`: one scenario at least for each of the 67 flags and each thing never flagged.
+- [ ] **1.5.2** **The derived records.** `CompletedLoad` and `CompletedLoadCollection`,
+  `CompletedHaulOut` and `CompletedHaulOutCollection` (one disposal each; one live row per
+  collection event, the partial unique key in a guard migration; `dissolvedAt`), `Flag` with
+  `FlagCode` and `FlagBilling`, `ReconciliationRun`, `ReconciliationDecision`; the worker's columns
+  on a field event (zone, map version, worked-out pay item). Today's `CompletedLoad`, its tests and
+  `guard_transaction_delete` follow. *REQ-113, 116.*
+- [ ] **1.5.3** **Grouping and status, in `packages/domain`.** A ticket's events grouped on project
+  + workflow + bare number, ordered by field time, the kind never used to find a partner; the
+  group's shape (a split's suffixes); an event missing → `PENDING`, listed, never flagged, never
+  expiring. *REQ-120, 120b1, 120e, 120f, 127, 129.*
+- [ ] **1.5.4** **Quantities, in `packages/domain`** (`adms-validation` §5.5). Capacity × load
+  call; a split load's shares by estimate; a split haul-out's piles by what each added; a tandem's
+  one weight by certified capacity; the carried tickets' count and a load of stumps' CY; a
+  circumference to a diameter; the stump's fill; each summing exactly. **Done when:** the mission's
+  quantities come out to the digit (52.0, 36.0, 62.4, 24.0, 45.5, 28.8, 99.0 CY; 14.4 and 21.6 CY;
+  2.82, 7.06 and 14.12 tons; 18.0 in; 4.8 CY). *REQ-120i, 120j, 126, 126b, 126d, 126e.*
+- [ ] **1.5.5** **Checks and flags, between events and on the certification.** The flag catalogue as
+  one closed set with each message word for word from `spec/FLAGS.md`; `FLAGS.md` §3.1, §3.2 and the
+  time flags of §3.3; the facts a flag keeps and their hash. *REQ-105j, 120d, 122, 122a, 129a;
+  REQ-106f's flags; REQ-124c's flag.*
+- [ ] **1.5.6** **Checks on place.** The one geodesic module; a point in a circle, a shape, the
+  boundary, a zone; `FLAGS.md` §3.3's place flags and §3.4 (where the debris went; a haul-out that
+  left a landfill, or was dumped at a TDSR: C52); a site's dates and permit. Any library needs its
+  ADR. *REQ-123, 124b, 124e, 128; REQ-105n's flag.*
+- [ ] **1.5.7** **Checks on quantity, the pay item's settings, unit rate work and forms.**
+  `FLAGS.md` §3.5…§3.7: the load-call limits, the pay item worked out again from the bands, the
+  stump checks, crew hours across a day, the ROE flags. A renamed built-in value changes nothing
+  (AC-01-33). *REQ-112c; REQ-112f's engine part.*
+- [ ] **1.5.8** **Mileage.** What the worker asks Valhalla and Nominatim (C50): the snap to the
+  nearest road, the shortest route on public roads, the address of the snapped point; stored
+  unrounded with the map data's date and hash; no route → the straight line, flagged; recomputed
+  only when an end moves. The mission's GPS points are picked from the pinned extract here.
+  *REQ-126f.*
+- [ ] **1.5.9** **The worker's run.** One ticket, one database transaction; one run per project at
+  a time, by a database lock; a ticket that errors flagged and skipped; unchanged input changes
+  nothing; each decision recorded; whether the worker states a person for a reprocess they asked for
+  (C20). Story: P1's loads and haul-outs reconciled, unpriced, with their statuses and flags.
+  *REQ-015, 121, 132.*
+
+### Milestone 1.6 — The rule engine (Part 7, the rules)
+
+Closes the behaviour of KD-15, 36, 38, 54.
+
+- [ ] **1.6.1** `spec/acceptance/07-pricing-ledger-audit.md`, from Part 7, `adms-ledger-audit`,
+  `spec/RULES.md` and `spec/RATE-SHEET.md`.
+- [ ] **1.6.2** **Criteria, in `packages/domain`.** Each criterion reading its named field event,
+  each operator, BETWEEN with both ends, mileage in tenths half up; only the active, valid rules of
+  the ticket's form whose contract's prime is the ticket's, or with no contract. *REQ-125, 125b.*
+- [ ] **1.6.3** **Actions to lines, in `packages/domain`.** Every passing rule found; adds in #
+  order, then removes, then voids; one line per add; two adds of one # and no line at all flagged;
+  the quantity by the pay item's unit (crew time's highest item, an itemised ticket's chosen items,
+  the fill CY, TBN); the rate of the rule's contract's prime, a $0 line where it has none; per
+  property on a split, per pile on a split haul-out; the same answer every time, proven by running
+  it twice. *REQ-112e, 112f, 131a, 131c, 131d.*
+- [ ] **1.6.4** **The setup check, and what each site's phones ask for.** AC-01-69…77; the two
+  points `01-setup.md` leaves to it. *REQ-124f, 125c.*
+
+### Milestone 1.7 — The ledger and audit (Part 7, the money)
+
+Carried: C16, C17, C18. Closes the behaviour of KD-01, 26, 49, 52, 53.
+
+- [ ] **1.7.1** **`Transaction` in full.** Its three kinds of ticket (exactly one), the property or
+  pile, slot, rule, pay item, contract, prime and operating sub, unit; a # once per ticket and
+  property or pile; the delete guard following the invoice lock through all three; what a
+  contractor viewer sees (its own prime's lines, its subs' included). *REQ-106g, 130, 133.*
+- [ ] **1.7.2** **The worker prices.** A ticket's lines regenerated: each removed row copied in
+  full to the audit log first, then the new ones written, in the ticket's one transaction; a void
+  removes them; a rate or rule change queues every un-invoiced ticket it touches; a `COMPLETED`
+  ticket reprocessed in place. Story: P1's Monday and Tuesday priced; two primes (AC-01-68).
+  *REQ-105l, 131, 131b.*
+
+### Milestone 1.8 — Review, QC, invoice lock and batches (Parts 8 and 9)
+
+Carried: C17, C19. Closes the behaviour of KD-25, 40.
+
+- [ ] **1.8.1** `spec/acceptance/08-review-and-corrections.md` and
+  `09-invoice-deliver-closeout.md`, from Parts 8 and 9 and `adms-exceptions`.
+- [ ] **1.8.2** **People's marks.** `QcMark`, `InvoiceLock` in full (the unlock kept on its row),
+  `InvoiceBatch`, `FlagAcceptance`, `TicketVoid`; each written by the API, never touching a derived
+  row. *REQ-105m's record; REQ-105h's lock.*
+- [ ] **1.8.3** **Corrections and renumbering.** Any captured field corrected in place by
+  permission, the prior value kept; a renumber of real work; a quarantined record resolved, keeping
+  its phone-made id and its photos; each reprocessing the ticket. *REQ-105g, 120c.*
+- [ ] **1.8.4** **Void, unvoid, accept.** A person's void with a reason; a rule's void, which wins
+  on every reprocess; an unvoid; a flag accepted with a reason, not raised again unless its facts
+  change; every flag fixed or accepted → `COMPLETED`. *REQ-105p, 120g, 129b.*
+- [ ] **1.8.5** **QC, the lock and batches.** QC set by people only, on the completed load or
+  haul-out, a unit rate ticket, a form, a certification; only QC Approved locks; a named batch; a
+  locked ticket untouched by a reprocess until an audited unlock. *REQ-105h, 105m.*
+
+### Milestone 1.9 — Prove it: the golden mission
+
+Carried: C28, C29, C30, C51's two scenarios.
+
+- [ ] **1.9.1** **The golden mission as a story**, whole: its setup, both days, the late sync, the
+  renumber, the accepted flag, the two voids, the split load, the weighed split haul-out, QC, the
+  lock and batch; the exact statuses, review queue, ledger and audit rows. A change to an approved
+  number needs the user's word. *REQ-017, 142, 143.*
+- [ ] **1.9.2** **The scenarios the mission leaves out, as stories**, and a count: how many
+  scenario IDs have a passing test, by part. Among them the split haul-out paid by the CY (six
+  lines, $850.85) and the pile whose call isn't higher (C51).
+- [ ] **1.9.3** **Phase exit.** Every Phase 1 REQ ticked or re-filed with an ADR; REQ-003, 105,
+  128, 140 and 141 from the final run; each KD named above closed in `DEVIATIONS.md`; `guard_gaps()`
+  empty; `pnpm security` passing; the CIS items for the new tables; `REQUIREMENTS-LATER.md`'s Phase
+  2 refreshed against `SUMMARY.md` before Phase 2 is offered to the user.
+
+---
+
+## Done — Phase 0: Foundation *(ADR-103)*
 
 > **2026-10-01 (ADR-282…287): every Phase 0 task below is done**, and the user made the first commits
 > the same day (REQ-002 ticked, ADR-288) and approved `spec/DATA-MODEL.md` and `spec/FLAGS.md`
 > (ADR-289, 290). The data model's thirteen points were settled the same day (KD-65 closed, ADR-292…295).
-> What's left is the user's: the word that
-> opens Phase 1. Phase 1's milestones are written here once it opens (`NEXT.md`).
+> **The user opened Phase 1 on 2026-10-01 (ADR-299).**
 
 ### Milestone 0.1 — Approve the foundation (docs only) — ✅ done 2026-10-01
 - [x] **0.1.1** ARCHITECTURE §1–§3 (principles, layers + write boundary, stack) approved 2026-09-26 (ADR-143); routing (ADR-119), project map (ADR-141). Only §3's site-area details wait (Q-136).
@@ -325,6 +616,7 @@ delete one.
   Fields from `adms-field-app` and ARCHITECTURE §7; never invented.~~ **Done (ADR-281 (4)):** no details column; no rule has a phone report anything but its key and, at a sync, its clock.
 
 **For `spec/DATA-MODEL.md` (0.2b.2) and Phase 1** — *2026-10-01: the draft (ADR-284) answers C16–C19, C29, C36 and C42–C44 on paper (its §12); each stays here until Phase 1 builds it.*
+*2026-10-01 (ADR-300), Phase 1 open: the task that picks each up: C36 → 1.1.5 (the definition), 1.3.6 (the answers); C42 → 1.1.5, 1.1.6, 1.1.7; C52 → 1.1.7 (setup), 1.5.6 (the flags); C18 → 1.1.10, 1.7.1; C43 → 1.3.2; C44 → 1.3.3; C16 → 1.5.2, 1.7.1; C50 → 1.5.8; C20 → 1.5.9; C17 → 1.7.1, 1.8.2; C19 → 1.8.2; C29, C30 → 1.9.1; C51's two scenarios → 1.9.2; C28 → 1.9.3; C31's stand-in → 1.4.2.*
 - **C36. The storage shape of the firm's added fields** (ADR-278, at the user's word): a versioned
   form definition per record kind, one JSONB answers column per record keyed by field ID plus the
   definition version, a schema generated from the definition in `packages/contracts`, Prisma's `Json`
@@ -344,7 +636,7 @@ delete one.
 - **C29. Times the database stamps itself** (`audit_record.occurred_at`, `created_at`, `enrolled_at`) use its own clock, not the story's (ADR-275): a story asserts the audit log's order, not its times. If the golden mission must assert them, decide then (e.g. the API stating the time it writes).
 - **C30. The golden mission as a story** (REQ-017 stays open until it runs; REQ-142, REQ-143): its setup, days, reviews, ledger and audit rows asserted exactly; the worker's writes through the `worker` client as `systemActor`; add stories to `packages/scenarios/src/stories/index.ts`.
 - **C42. The assignment's forms; the real pay item and site** (ADR-281 (8)). ~~REQ-020's "work: … unit rate
-  pay items"~~ **done (ADR-286): a provisional `PayItem` (project, code, name) and `AssignmentPayItem`;
+  pay items"~~ **done (ADR-286): a provisional `PayItem` (project, code, name; since ADR-301 its code is unique on its project and it has a description, not a name) and `AssignmentPayItem`;
   REQ-020 ticked.** Still to come: the forms an assignment names (incidents, drop-off logs, surveys,
   ROEs: `formDocumentTypes`, DATA-MODEL §2.2); `PayItem`'s real fields and its rate per prime
   (REQ-102, DATA-MODEL §3); the check that a named pay item is a unit rate one. `DisposalSite` is
@@ -477,43 +769,47 @@ delete one.
 
 ## Historical — Phase 1 closeout on `database/` *(superseded by ADR-093/103; kept as rebuild requirements)*
 
-### Milestone 1.1 — Baseline verification (do this first, every session on a fresh clone)
-- [ ] **1.1.1** `docker compose up -d`; confirm the Postgres healthcheck passes.
-- [ ] **1.1.2** `cd database && npm install && npm run db:migrate` — confirm all migrations apply clean.
-- [ ] **1.1.3** `cd database && npm run typecheck` — confirm zero errors.
-- [ ] **1.1.4** `cd database/python && python -m pytest tests/ -v` — confirm 71 pass. Record the
+> Its milestones and tasks are numbered **H1.x** (relabelled 2026-10-01, ADR-300) so they are never
+> taken for Phase 1's milestones 1.0…1.9 above. They belong to the historical code (ADR-093) and are
+> kept as the list of behaviours and lessons the rebuild must satisfy, **not** as work to do.
+
+### Milestone H1.1 — Baseline verification (do this first, every session on a fresh clone)
+- [ ] **H1.1.1** `docker compose up -d`; confirm the Postgres healthcheck passes.
+- [ ] **H1.1.2** `cd database && npm install && npm run db:migrate` — confirm all migrations apply clean.
+- [ ] **H1.1.3** `cd database && npm run typecheck` — confirm zero errors.
+- [ ] **H1.1.4** `cd database/python && python -m pytest tests/ -v` — confirm 71 pass. Record the
       real number; if it differs from 71, update this file and note why.
-- [ ] **1.1.5** `cd database && npm run db:seed`, then `curl http://localhost:8001/health` with the
+- [ ] **H1.1.5** `cd database && npm run db:seed`, then `curl http://localhost:8001/health` with the
       engine running — confirm end-to-end reconciliation produces both matched and failed tickets.
 
-### Milestone 1.2 — Close the known deviations
+### Milestone H1.2 — Close the known deviations
 Each of these is a real gap between the domain skills and the code, tracked in `agent_store/DEVIATIONS.md`.
 Do **not** start one without reading its Known Deviation entry first.
 
-- [ ] **1.2.1** **KD-01 — reconciler writes no `Transaction`.** The engine sets tickets to
+- [ ] **H1.2.1** **KD-01 — reconciler writes no `Transaction`.** The engine sets tickets to
       `MATCHED` and writes `LoadTicket` / `HaulOutTicket`, but nothing ever writes the financial
       ledger row. `transactionService.createTransaction` exists and is never called from the
       reconciliation path. Decide and implement the write path (Python direct vs. Node callback),
       record the decision as an ADR, and cover it with a DB integration test.
-- [ ] **1.2.2** **KD-02 — `_validate_disposal` has an inconsistent return type.** It returns
+- [ ] **H1.2.2** **KD-02 — `_validate_disposal` has an inconsistent return type.** It returns
       `list[ValidationError]` on its two early returns (`CERT_NOT_FOUND`, `SITE_NOT_FOUND`) but
       the tuple `(errors, cert)` on the normal path. `reconcile_load_pair` papers over this with an `isinstance` check. Normalise to
       a single return shape and delete the workaround.
-- [ ] **1.2.3** ⚠️ **Moot if the Q-13 status proposal is accepted** (every engine failure → review). **KD-03 — haul-out escalation set differs from the load workflow.**
+- [ ] **H1.2.3** ⚠️ **Moot if the Q-13 status proposal is accepted** (every engine failure → review). **KD-03 — haul-out escalation set differs from the load workflow.**
       `ROUTE_DRIFT_EXCEEDED` softens to `MANUAL_REVIEW` in `reconcile_load_pair` but hard-`FAILED`s
       in `reconcile_haul_out_pair`. Confirm with the user whether this asymmetry is intended
       policy; either document it as intentional in domain-skill terms via an ADR, or unify it.
-- [ ] **1.2.4** **KD-04 — haul-out failures write no audit record.**
+- [ ] **H1.2.4** **KD-04 — haul-out failures write no audit record.**
       `reconcile_load_pair` calls `_audit_recon_failure` for both halves; `reconcile_haul_out_pair`
       and `reconcile_unit_rate` do not. Invariant 3 says every mutation is audited. Fix.
-- [ ] **1.2.5** **KD-05 — `_audit_recon_failure` hard-codes `"FAILED"`** in its `newValue` payload
+- [ ] **H1.2.5** **KD-05 — `_audit_recon_failure` hard-codes `"FAILED"`** in its `newValue` payload
       even when the actual outcome was `MANUAL_REVIEW`, so the audit trail misreports the status.
       Pass the real status through.
-- [ ] **1.2.6** **KD-06 — orphan disposals are invisible.** The load cycle iterates collections
+- [ ] **H1.2.6** **KD-06 — orphan disposals are invisible.** The load cycle iterates collections
       only, so a `DisposalTicket` with no matching collection stays `PENDING` silently forever.
       Per the `adms-exceptions` skill §4.3 that is a fraud signal. Surface it in the `ReconcileResult` summary.
 
-- [ ] **1.2.7** **KD-10 — cert numbers.** ⚠️ **Reframed by ADR-045 (2026-09-24):** a supplied number
+- [ ] **H1.2.7** **KD-10 — cert numbers.** ⚠️ **Reframed by ADR-045 (2026-09-24):** a supplied number
       from pre-printed certification paper is valid; uniqueness is `@@unique([projectId, certNumber])`;
       add a system issuer for when none is supplied, and don't reject supplied numbers. Text below
       predates that. Per ADR-016 the cert number
@@ -526,12 +822,12 @@ Do **not** start one without reading its Known Deviation entry first.
       `"CERT-TRK-001"` style values). **Decide and record in an ADR:** the number format
       (short human-legible like `10090`, per the `adms-ledger-audit` skill §6.3) and whether uniqueness is
       global or per-project.
-- [ ] **1.2.8** **KD-11 — `ContainerType` cannot express real configurations.** `SELF_LOADER |
+- [ ] **H1.2.8** **KD-11 — `ContainerType` cannot express real configurations.** `SELF_LOADER |
       TRAILER` does not cover a tandem dump truck, a pickup pulling a trailer, or an integral
       built-in bed (the `adms-certifications` skill §3A.1). **Blocked pending a user decision on the taxonomy** —
       do not guess at enum values. Resolve before Phase 3 builds a picker against it.
 
-- [ ] **1.2.9** **KD-13 → KD-12 — re-base pairing on the ticket number.** One change, in order:
+- [ ] **H1.2.9** **KD-13 → KD-12 — re-base pairing on the ticket number.** One change, in order:
       (a) make the generator emit a bare number (no `COL-`/`DIS-` prefix, no date — ADR-046) and call it **only** on the
       collection-side creates — `CollectionTicket`, `HaulOutCollectionTicket`, `UnitRateTicket`;
       (b) make `createDisposalTicket` / `createHaulOutDisposalTicket` **accept** the scanned
@@ -542,32 +838,32 @@ Do **not** start one without reading its Known Deviation entry first.
       ⚠️ **Revised by ADR-062:** the constraints change from global `@unique` to
       `@@unique([projectId, ticketNumber])` (KD-43) — still what rejects a duplicate at sync, now per
       project. Reconciled records carry the load's own number (no `LDT`/`HOT`); labels are display only.
-- [ ] **1.2.9a** **ADR-022 — quarantine rejected sync payloads.** A duplicate-number insert must
+- [ ] **H1.2.9a** **ADR-022 — quarantine rejected sync payloads.** A duplicate-number insert must
       persist the rejected record in full with its rejection reason and the id of the record
       holding the number, surface it in a review queue, and **never** acknowledge it to the device
       as saved. Silently dropping it destroys evidence of real work and permanently unbills a
       legitimate load. Needs a quarantine model — flag the schema addition before building it.
-- [ ] **1.2.10** **Duplicate and orphan shapes (the `adms-exceptions` skill §4.3a).** Cover the table at the
+- [ ] **H1.2.10** **Duplicate and orphan shapes (the `adms-exceptions` skill §4.3a).** Cover the table at the
       end of §4.3a with tests: duplicate disposal (canonical), duplicate collection (escalate —
       an issuance defect, not a keying slip), ageing collection orphans, and disposal-with-no-
       collection (strongest fraud signal — never auto-resolve). A 3+ group in the queue should be
       unreachable under ADR-021; assert that, and if one is ever seen, route every member to
       `MANUAL_REVIEW` and bill nothing.
-- [ ] **1.2.11** ⚠️ **Widened by ADR-051:** any captured field is correctable, not only the number —
-      see 1.2.21. **Reviewer ticket-number correction (ADR-020).** The one permitted post-submission
+- [ ] **H1.2.11** ⚠️ **Widened by ADR-051:** any captured field is correctable, not only the number —
+      see H1.2.21. **Reviewer ticket-number correction (ADR-020).** The one permitted post-submission
       field change. Service function, `MANUAL_REVIEW`-only, rejects `MATCHED`/billed tickets,
       writes an `AuditRecord` under the **reviewer's** user id retaining the prior number, and
       returns the affected records to `PENDING` for the next sweep. Must not be callable to edit
       any other field.
-- [ ] **1.2.12** **KD-15 — silent no-op rules.** Evaluate rules for `HAUL_OUT_DISPOSAL`. Then
+- [ ] **H1.2.12** **KD-15 — silent no-op rules.** Evaluate rules for `HAUL_OUT_DISPOSAL`. Then
       **decide** what `LOAD` / `HAUL_OUT`-targeted rules mean — run them post-pairing against the
       joined record, or reject the type at rule creation. Accepting a rule and never running it is
       not an option; add a test asserting every `TicketType` a rule may target is actually reached.
-- [ ] **1.2.13** **KD-14 — project-enabled ticket types.** Add the `Project → TicketType` relation
+- [ ] **H1.2.13** **KD-14 — project-enabled ticket types.** Add the `Project → TicketType` relation
       per ADR-018 and the First Principles model, enforce it at ticket creation in
       `ticketService.ts`, and constrain rule authoring to the enabled set.
 
-- [ ] **1.2.14** **KD-16 — split the org model.** Per ADR-023/024: add `DeclarationEvent`
+- [ ] **H1.2.14** **KD-16 — split the org model.** Per ADR-023/024: add `DeclarationEvent`
       (event name + flexible `declarationRef` like `DR-9001-FL` + reference type + incident
       dates), add `programType` to `Project` (`ROW | PARKS | PPDR | WATERWAY`), and derive
       `requireRoe` from `programType` instead of carrying it on `Program`. ⚠️ **This is a
@@ -577,39 +873,39 @@ Do **not** start one without reading its Known Deviation entry first.
       `DeclarationEvent` is a shared global object, so today's FK shape (`Project.clientId` +
       `Project.programId`) is already right: `Program` becomes `DeclarationEvent`, `programType`
       moves onto `Project`.
-- [ ] **1.2.15** **KD-17 — confirm the `ProgramType` value set.** User-confirmed: `ROW`, `PARKS`,
+- [ ] **H1.2.15** **KD-17 — confirm the `ProgramType` value set.** User-confirmed: `ROW`, `PARKS`,
       `PPDR`, `WATERWAY`. `CPDR` and `DEMOLITION` have reference-doc support. §3.1a now carries a
       fuller proposed set grouped by disaster context (hurricane, flood, wildfire, common,
       man-made/mass-casualty) — all still **proposals**. **Do not populate the enum unilaterally**;
       a wrong value set propagates into ROE logic, rule authoring and field-app project setup.
-- [ ] ~~**1.2.15a**~~ ⚫ **Dropped — ADR-052:** incidents never stop work; no holds. **KD-21 — stop-work holds.** ⚠️ **Do not build from the notes in §3.1a.** The
+- [ ] ~~**H1.2.15a**~~ ⚫ **Dropped — ADR-052:** incidents never stop work; no holds. **KD-21 — stop-work holds.** ⚠️ **Do not build from the notes in §3.1a.** The
       human-remains protocol halts an *area*, not a record, and the requirements vary by
       jurisdiction, contract and event type. Get the governing protocol from the user first.
-- [ ] **1.2.16** **KD-18 — add reference-data update paths.** Per ADR-025 reference data is
+- [ ] **H1.2.16** **KD-18 — add reference-data update paths.** Per ADR-025 reference data is
       legitimately editable. `referenceDataService` has create/archive but no update, yet the
       primary flow is *select an existing client and update its contact details* (ADR-023). Add
       audited `update*` functions for `Client`, `Contractor`, `Contract`, `DisposalSite`. Keep
       soft-archive; add no delete path. Do **not** extend this to tickets or certifications.
-- [ ] **1.2.17** **Enforce ROE by program type.** ⚠️ **Revised by ADR-052/055: flag, never block.** Once
+- [ ] **H1.2.17** **Enforce ROE by program type.** ⚠️ **Revised by ADR-052/055: flag, never block.** Once
       `programType` exists, a ticket on a project that requires ROEs is **flagged for review** after
       reconcile when its ROE is missing, unsigned or out of scope. (Original: must block ticket creation against a parcel with no signed ROE.) Today
       `Program.requireRoe` is stored and never enforced anywhere in `ticketService.ts` — the same
       silent-no-op class as KD-15.
 
-- [ ] **1.2.18** **KD-19 (reframed) — group on the BASE ticket number.** Per ADR-032/033 splits
+- [ ] **H1.2.18** **KD-19 (reframed) — group on the BASE ticket number.** Per ADR-032/033 splits
       are N collections → 1 disposal for PPDR/ROE work, each with a distinct suffixed number, so
       **there is no uniqueness conflict** — do not change any `@unique` constraint. The work is
       the grouping rule: strip any `-A`..`-Z` suffix to form the group key, accept N collections
       (N≥1) + exactly one disposal, require split members to share cert / debris type / zone, and
       route ambiguous shapes (two disposals on a base, suffix gaps, orphan chains) to
       `MANUAL_REVIEW`. Test a 5-member chain end to end.
-- [ ] **1.2.18a** **KD-22 / KD-23 — per-property attribution on splits.** Add
+- [ ] **H1.2.18a** **KD-22 / KD-23 — per-property attribution on splits.** Add
       `monitorEstimatedCy` and `roeId` to `CollectionTicket`. The estimate is an **observation**,
       so it is immutable after submission (invariant 5) — unlike apportioned tonnage. Make the
       field conditional on `programType` requiring ROEs (ADR-024) once KD-16/17 land. Then add the
       cross-check: `Σ estimates` vs `capacity × load call`, tolerance from `.env`, divergence to
       review.
-- [ ] **1.2.18b** **KD-24 — scale receipts.** ⚠️ Read §4.3a *When does a scale receipt exist at
+- [ ] **H1.2.18b** **KD-24 — scale receipts.** ⚠️ Read §4.3a *When does a scale receipt exist at
       all?* first — most loads legitimately have none, and validating unconditionally would fail
       the majority of honest work.
       **(a) Conditionality (ADR-036):** a TDSR load never has one; an FDS load has one only if the
@@ -627,21 +923,21 @@ Do **not** start one without reading its Known Deviation entry first.
       tare/gross configuration mismatch rejected rather than computed, two debris types on one
       receipt voided by default, duplicate receipt numbers (transcription, not scanning).
       Tons-per-CY factors are **configuration** — do not invent values.
-- [ ] ~~**1.2.19**~~ ⚫ **Dropped — ADR-053:** no grace period, no ageing. **KD-20 — age-based orphan detection, in field time.** Per ADR-029/030, add a
+- [ ] ~~**H1.2.19**~~ ⚫ **Dropped — ADR-053:** no grace period, no ageing. **KD-20 — age-based orphan detection, in field time.** Per ADR-029/030, add a
       configurable grace period computed from `loadEndTime` / `disposalStartTime` — **never from
       server `createdAt`**, which under EOD sync is an accident of which tablet found signal
       first. Surface only aged unpartnered tickets; `PENDING` is never alerted on directly.
       Threshold must tolerate a device dark for days. Keep it out of the reconciler's hot path.
-- [ ] **1.2.19a** **ADR-030 — make the reconciler safe for bursty, non-monotonic input.** EOD sync
+- [ ] **H1.2.19a** **ADR-030 — make the reconciler safe for bursty, non-monotonic input.** EOD sync
       means the worker idles for hours then meets a full day's volume at once, and a device flat
       for two days injects old work behind newer work. Assert the engine never orders by arrival,
       never treats a late arrival as suspicious, and has no "already processed later work" reject
       path. Test with an out-of-order batch.
-- [ ] **1.2.20** **Void path for phantom tickets (ADR-028/051).** Needs a `VOID` state (status set
+- [ ] **H1.2.20** **Void path for phantom tickets (ADR-028/051).** Needs a `VOID` state (status set
       pending Q-13) with a required reason, unlockable only by an audited override. Retains the record and its audit trail. Distinct from renumbering and from
       archiving. Service function, audited, reviewer-only, never reachable by the engine.
 
-- [ ] **1.2.21** **KD-25 / KD-26 — authorized corrections (ADR-039).** ⚠️ **KD-26 must be settled
+- [ ] **H1.2.21** **KD-25 / KD-26 — authorized corrections (ADR-039).** ⚠️ **KD-26 must be settled
       before any edit path ships.** (a) Add an edit-permission model to `User` — "sufficiently
       privileged" currently means nothing. (b) Add audited `update*` paths for tickets, certs,
       surveys and incidents, each capturing `priorValue` **before** the write, under the real
@@ -651,22 +947,22 @@ Do **not** start one without reading its Known Deviation entry first.
       answered, block edits on reconciled/billed tickets rather than letting ticket and ledger
       silently desynchronise. ⚠️ **ADR-051/057:** every captured field is editable; tickets lock as
       invoiced and unlock by audited action; mechanism proposal in Q-26.
-- [ ] **1.2.22** **KD-27 — itemized unit counts and unit rate sub-types (ADR-040/041).**
+- [ ] **H1.2.22** **KD-27 — itemized unit counts and unit rate sub-types (ADR-040/041).**
       (a) Add a JSONB item breakdown to `UnitRateTicket` alongside the integer `unitCount`, so
       `{paint_cans: 4, propane_tanks: 10}` is expressible. (b) Extend project enablement so
       `UNIT_RATE` carries a **sub-type set** (hangers, leaners, stumps, HHW, white goods), which
       determines the payload shape. Depends on KD-14. ⚠️ Keep `PayItem` decoupled from ticket
       types — it must **not** gain a `ticketType`; the `Rule` makes that link.
-- [ ] **1.2.23** **KD-28 — enforce `PayItem.requireUnitCount`.** The flag exists and defaults
+- [ ] **H1.2.23** **KD-28 — enforce `PayItem.requireUnitCount`.** The flag exists and defaults
       correctly but nothing reads it. Same silent-no-op class as KD-15 and `requireRoe` — a
       control an admin believes is active that is not. Enforce at the service boundary and in
       reconciliation; add a test asserting a count-requiring code rejects a countless ticket.
-- [ ] **1.2.24** **KD-29 — add a pound billing unit.** HHW is billed by the pound on most
+- [ ] **H1.2.24** **KD-29 — add a pound billing unit.** HHW is billed by the pound on most
       contracts and `BillingUnit` has no `LB`; `TON` is the wrong granularity for a box of paint
       cans. Small migration. Also decide whether `TBN` is doing real work or is dead weight.
 
-### Milestone 1.3 — Documentation truth-up
-- [ ] **1.3.1** Confirm `README.md` reflects the `database/`-rooted paths and the real test count.
-- [ ] **1.3.2** Confirm every model name used in the domain skills still matches `schema.prisma`
+### Milestone H1.3 — Documentation truth-up
+- [ ] **H1.3.1** Confirm `README.md` reflects the `database/`-rooted paths and the real test count.
+- [ ] **H1.3.2** Confirm every model name used in the domain skills still matches `schema.prisma`
       after any schema change made in this phase.
 

@@ -5,7 +5,58 @@
 > the bottom accurate. Milestone detail lives in `agent_store/BACKLOG.md`.
 
 
-## Active Phase — `PHASE 0: FOUNDATION` *(ADR-093, ADR-103)*
+## Active Phase — `PHASE 1: DATA CORE AND ENGINE, REBUILT` *(opened by the user 2026-10-01, ADR-299)*
+
+**User, 2026-10-01:** "phase 1 is open, begin working on the next task".
+
+**What it is.** The whole product without a screen or an endpoint: setup records, certifications and
+capacity, field events and their numbers, sync intake with quarantine, reconciliation, the rule
+engine, the ledger and audit, review, QC and the invoice lock, rebuilt in TypeScript with Prisma on
+Phase 0's foundation (ADR-093, 094).
+
+**Objective.** The golden mission runs from a terminal and comes out with the statuses, review
+queue, ledger and audit trail the user approved (`spec/golden/MISSION.md`, ADR-297).
+
+**The plan.** `BACKLOG.md`, "Active — Phase 1": ten milestones, 47 tasks, **one task per response**
+(ADR-300). Each milestone opens with its part's acceptance scenarios (`spec/acceptance/`), then the
+schema from `spec/DATA-MODEL.md`, then the rules, then its story.
+
+**Scope boundary.**
+- **In:** `packages/db` (schema, guard migrations, tests), `packages/domain` (every rule),
+  `packages/contracts`, `packages/scenarios` (stories), `apps/worker` (the reconciliation run),
+  `apps/api` (service classes only: no HTTP, no sign-in), `tools/`, `spec/acceptance/`.
+- **Not Phase 1's:** endpoints, sign-in and the sync contract (Phase 2); the phone (Phase 3);
+  screens, exports and the time clock's tables (Phases 3–4). Say which phase and ask; never widen
+  silently.
+- `database/` and `development/` stay read-only history and reference.
+
+**Environment.** Node 24 through fnm (`eval "$(fnm env --shell zsh)"` first), pnpm 11, TypeScript
+6.0.3, Prisma 7.10.0, Postgres 18.6 in the local stack (`pnpm local:up`; stopped at every close-out).
+
+---
+
+## Exit criteria for Phase 1 *(ADR-299)*
+
+All observed and reported, not assumed:
+
+1. **The golden mission runs as a story** with the exact statuses, review queue, ledger (P1
+   $5,548.25 on 19 lines; P2 $324.00) and audit rows the user approved (REQ-017, 142, 143).
+2. **Every Phase 1 acceptance scenario passes at the engine**, reported as N of M (VISION §8).
+3. **All 98 Phase 1 REQs** ticked from runs that were seen, or re-filed with an ADR.
+4. **The rebuild lessons hold:** the behaviour of KD-01, 04, 05, 10, 12, 13, 15, 55 and 56 right and
+   verified; every other rebuild-lesson KD closed or re-filed.
+5. **The database still enforces the rules:** every new table guarded, every grant and refusal
+   tested, a row-level-security decision for each table a viewer sees, `guard_gaps()` empty,
+   `pnpm security` passing.
+6. **The chain is green** with real counts: typecheck, lint, licences, tests, stories.
+7. **Rules live once:** none outside `packages/domain`, and nothing in it touches Postgres
+   (REQ-003, 128).
+
+Only then is **Phase 2 (API and sync)** offered to the user to open.
+
+---
+
+## Phase 0: Foundation — ✅ done 2026-10-01 *(ADR-093, ADR-103; kept as the record)*
 
 **Why this phase exists.** On 2026-09-25 the user decided:
 - **security comes first**, at every layer;
@@ -61,11 +112,8 @@ All observed and reported, not assumed:
 
 **All seven are met, and every Phase 0 task is done (2026-10-01, ADR-282…287):** all 17 of Phase 0's
 REQs are ticked (REQ-002 with the user's first commits, ADR-288), and `spec/DATA-MODEL.md` and
-`spec/FLAGS.md` are approved (ADR-289, 290). The data model's thirteen points are settled (KD-65 closed, ADR-292…295). **What's left is the
-user's:** the word that opens Phase 1.
-
-Only then does **Phase 1 (data core and engine, rebuilt)** open. It must meet every Phase 1 REQ
-and close the rebuild lessons (KD-55, KD-56 and the historical KDs).
+`spec/FLAGS.md` are approved (ADR-289, 290). The data model's thirteen points are settled (KD-65 closed, ADR-292…295). **The user opened Phase 1
+on 2026-10-01 (ADR-299)**; its exit criteria are above.
 
 ---
 
@@ -100,7 +148,9 @@ approved it.
       rest of the spec: thirteen points (KD-65). **All settled the same day at the user's word
       (ADR-292…295).**
 - [ ] `spec/acceptance/`: `AC-…` scenarios from approved part pages; they become scenario-harness
-      stories (REQ-017).
+      stories (REQ-017). **1 of 9 written (2026-10-01, ADR-300):** `README.md` (how a scenario is
+      written and proven) and `01-setup.md` (81 scenarios; corrected at the user's word, ADR-301). Each of the others is the first task of
+      the milestone that builds its part (`BACKLOG.md`).
 - [x] `spec/golden/`: the golden mission and its expected ledger. `spec/golden/MISSION.md` written
       (ADR-232): every kind of record and each one's life. A split haul-out, ticket 201004, added
       (ADR-296) and told as a weighed one at the user's word (ADR-297). **✅ Approved by the user
@@ -116,7 +166,18 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-09-29)
+### Where things stand (2026-10-01: Phase 1 is open)
+- **Phase 1 (data core and engine) is the active phase**, opened by the user on 2026-10-01
+  (ADR-299). Its plan is `BACKLOG.md`'s ten milestones and 47 tasks (ADR-300): setup records →
+  certifications and capacity → tickets and numbers → sync intake → reconciliation → the rule engine
+  → the ledger and audit → review, QC and the lock → the golden mission as a story. **Done so far:**
+  1.0.1 (the plan) and 1.1.1 (`spec/acceptance/01-setup.md`, 81 scenarios). **Corrected by the user on
+  2026-10-02 (ADR-301):** a pay item's code is unique on its project (ADR-147 had read their answer
+  backwards), a pay item is its code and its description (no separate name, no "line number"), and
+  an exact duplicate of a rule is refused before it is saved; the provisional `pay_item` table and
+  its test follow (the twentieth migration). **No product code
+  exists yet**: the schema is still Phase 0's fifteen provisional models, and `packages/domain`
+  holds only its wiring probe. Everything below this bullet is how Phase 0 got here.
 - **Phase 0 (Foundation).** The skeleton exists (placeholders only); no product code yet. `database/` is historical
   and read-only. `spec/ARCHITECTURE.md` is **approved in full**, so **Milestone 0.2 (scaffold) is
   open** (ADR-143), with a step-by-step brief in `BACKLOG.md` (ADR-231). **The skill rewrites
@@ -171,8 +232,8 @@ The firm's setup decides how things play out (ADR-197), and there are **two side
 monitor enters only the main ticket, the system and the back office do the rest.
 - **Setup:** client → declaration event → project; contractors and **contracts** (name, prime,
   link); **forms** with their **debris types**, named as the contract names the work (ADR-211, 214);
-  **pay items** (code, name, **payable type** = the work, Unit of Measure, size band, capture
-  settings, **a rate per prime**; ADR-206, 207, 221, 237); **sites** (site type + Takes loads ·
+  **pay items** (a code unique on the project, a description, **payable type** = the work, Unit of
+  Measure, size band, capture settings, **a rate per prime**; ADR-206, 207, 221, 237, 301); **sites** (site type + Takes loads ·
   Haul-outs leave here · Charges a tipping fee · Ineligible site; ADR-215, 222); field tags; the
   project map; **rules** per form, **naming one contract** and running only on its prime's tickets:
   criteria → *Add / Remove transaction #n*, *Void ticket* (ADR-109, 130, 239).
@@ -211,8 +272,8 @@ Update it at close-out when a task, milestone or phase closes.
 | 3 | **Database hardening** (BACKLOG 0.3) ✅ done (ADR-267, 268, 270…273) | Roles, grants, no deletes, audit triggers, insert-only audit, transaction copy-to-audit, row-level security, each proven by tests | Step 1; minimal provisional models |
 | 4 | **Prove it** (BACKLOG 0.4) ✅ done 2026-10-01 (ADR-275, 276, 281) | Scenario harness with one trivial story; security checks in the test run; time zone, device, Monitor ID models | Steps 1, 3 |
 | 5 | **Truth-up the docs** ✅ done 2026-09-29 (ADR-247…253; KD-33, 58, 61, 62 closed) | `RATE-SHEET.md`, `RULES.md`, `LISTS.md`, parts 01/04/06/07 and the skills rewritten to today's rules, one per response (ADR-138) | Before step 7's engine work |
-| 6 | **Acceptance scenarios + golden mission** | `spec/acceptance/`, `spec/golden/` with the user's signed-off numbers | Steps 2, 5 |
-| 7 | **Phase 1: data core + engine, rebuilt** | Setup records, certifications and capacity, tickets and numbers, sync intake with quarantine, reconciliation, the rule engine, the ledger and audit, review, QC, invoice lock and batches; KD-01, 04, 05, 10, 12, 13, 15, 55, 56 closed; the golden mission passing at the engine | Steps 3–6; refresh `REQUIREMENTS.md` against `SUMMARY.md` first (KD-61) |
+| 6 | **Acceptance scenarios + golden mission** 🟡 the mission is approved (ADR-297); the scenarios are written part by part, each before its milestone's code (ADR-300): 1 of 9 files | `spec/acceptance/`, `spec/golden/` with the user's signed-off numbers | Steps 2, 5 |
+| 7 | **Phase 1: data core + engine, rebuilt** 🟡 open since 2026-10-01 (ADR-299); `BACKLOG.md` has its 47 tasks | Setup records, certifications and capacity, tickets and numbers, sync intake with quarantine, reconciliation, the rule engine, the ledger and audit, review, QC, invoice lock and batches; KD-01, 04, 05, 10, 12, 13, 15, 55, 56 closed; the golden mission passing at the engine | Steps 3–6; refresh `REQUIREMENTS.md` against `SUMMARY.md` first (KD-61) |
 | 8 | **Phases 2–5** | API and sync → field app (browser, iPhone, Android) → back office (setup screens with the setup check, rule builder, review queue, exports, viewers) → later features and the demo deploy | Each phase's REQs refreshed before it opens |
 
 ### What is still to be asked (so nothing is guessed later)
@@ -237,6 +298,12 @@ Update it at close-out when a task, milestone or phase closes.
   ADR in the same response; update `SUMMARY.md`, the owning skill, `spec/RULES.md` and the part pages.
 - They answer wearing **different hats**: a firm setting up, a monitor in the field, the back office
   (ADR-224). Note which, and design each side for its own user.
+- **A "yes" to an either-or question is read back before it is recorded.** Q-139 asked "may two
+  share the name, or should the second be named `3A-2`?"; the answer began "Yes", an agent took it
+  for the first half, and the wrong rule stood for five days until an acceptance scenario showed it
+  to the user (ADR-147 → 301). Say which half you understood, in one line, and never ask two
+  things in one question. A scenario in `spec/acceptance/` is where the user catches such a
+  misreading: write them plainly.
 - Write questions that stand alone: plain words, **a story told as a table of what happens to each
   ticket**, then the question, refs at the end. No paraphrase ("TOO MUCH PARAPHRASING"). Give ticket
   numbers that make sense (a haul-out has its own number). When their numbers don't add up, show the
@@ -285,31 +352,28 @@ Update it at close-out when a task, milestone or phase closes.
 road to done), then `agent_store/SUMMARY.md`. Product discovery is closed (ADR-230): don't open new
 rounds of questions.
 
-👉 **Phase 0's tasks are all done (ADR-282…287). There is no next build task until the user says
-Phase 1 opens.** All 17 of Phase 0's REQs are ticked (ADR-288) and `spec/DATA-MODEL.md` and
-`spec/FLAGS.md` are approved (ADR-289, 290). Two things are the user's, and each is waited on, never
-assumed:
-1. **Nothing on the data model blocks:** its thirteen points are settled and on the page (KD-65
-   closed, ADR-292…295). The agent's details on the user's answers (DATA-MODEL §12, 17–21) are theirs
-   to overturn; if they do, record an ADR and change the page and the skills that quote it.
-2. **Say that Phase 1 opens.**
+**Phase 1 is open (ADR-299).** Its plan is `BACKLOG.md`, "Active — Phase 1" (ADR-300): read its
+"Brief for every Phase 1 task" first. **One task per response.** Done: 1.0.1, 1.1.1; and the user's
+correction of 2026-10-02 (ADR-301: a pay item's code is unique, it has a description and no name,
+a duplicate rule is refused).
 
-**If the user asks for work before then, in this order** (the road's steps 2 and 6, none of it
-Phase 1's engine; the split haul-out's requirements and mission ticket are done and **the golden
-mission is approved, numbers included**, ADR-296, 297, C51): (a) **`spec/acceptance/`**: the `AC-…`
-scenarios from the approved part pages, among them the two split haul-outs the mission leaves out
-(one paid by the CY, one with a pile whose call isn't higher than the one before; `BACKLOG.md`
-C51); (b) **Phase 1's milestones in `BACKLOG.md`**, in `ROADMAP.md` §4's build order, each with its
-carried items (C16–C20, C29, C30, C36, C42–C44, C50) and the REQs it ticks (Phase 1 holds 98; it
-includes REQ-003, 015 and 017, ADR-287, and REQ-111a and 120j, ADR-296). The mission's GPS points
-(from the pinned map extract) and its flag messages word for word from `FLAGS.md` come when it
-becomes a story (C30, C50); a change to any approved mission number needs the user's word.
+👉 **Task 1.1.2, the firm's lists** (`BACKLOG.md`, Milestone 1.1). The eighteen list tables of
+`spec/DATA-MODEL.md` §2.3 (one table per list; the same six columns plus each list's own), the
+built-in keys (`STUMPS`, `TDSR`, `FINAL_DISPOSAL`, `PRE_WORK`, `POST_WORK`, `ROE`) as one closed set
+in `packages/domain`, the seed values of `spec/LISTS.md` Group 1 written by the installer's seed,
+each table guarded in one line (`guard_table`, ADR-271), and a built-in value that can't be
+archived. **Read first:** `spec/LISTS.md`, DATA-MODEL §1 and §2.3, `adms-data-model` §3.2,
+`spec/acceptance/01-setup.md` section D and its point 6 (the seeds LISTS.md leaves open are settled
+in this task's ADR, as an agent default). **Done when:** AC-01-31, 32 and 34…38 pass as database
+tests named by their IDs, `guard_gaps()` is empty, each new guard's removal is shown caught, and the
+chain is green with real counts. Ticks REQ-106c, and REQ-101's library part.
+Then 1.1.3: client, declaration event and the project in full.
 
 Start every command with `eval "$(fnm env --shell zsh)"`; the checks are **`adms-verify`** (the chain
-is 26 files, 317 tests; `pnpm scenarios` runs two stories), with **`pnpm security`** (ADR-276), which
-now passes whole (7 passed, 0 failed, ADR-291). The database
-tests, the map servers' tests and the stories need `pnpm local:up` first. **The scenario harness is
-there to use** (ADR-275): add a story in `packages/scenarios/src/stories/`.
+is 26 files, 317 tests; twenty migrations; `pnpm scenarios` runs two stories), with **`pnpm security`**
+(7 passed, 0 failed, ADR-291). The database tests, the map servers' tests and the stories need `pnpm local:up`
+first; stop it at close-out (ADR-277). A schema change goes through Prisma (`prisma migrate dev
+--create-only`), a guard into its own empty stub (ADR-113).
 
-**Words and examples everywhere:** `spec/CONVENTIONS.md` (ADR-234, 235; the naming pass, 0.2b.1,
-done). The spec truth-up is done (ADR-247).
+**Words and examples everywhere:** `spec/CONVENTIONS.md` (ADR-234, 235). Field names:
+`spec/DATA-MODEL.md`. Flag wording: `spec/FLAGS.md`.
