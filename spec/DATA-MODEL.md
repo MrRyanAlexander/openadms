@@ -68,7 +68,7 @@ one line saying what kind of record it is (§1) and what it is for, then one tab
 | **The firm's lists** | One table per list (§2.3): a real foreign key wherever a value is picked | *agent default* |
 | **Leaving** | Configuration is archived (`archivedAt`), a project closed (`closedAt`), a ticket voided. No row is ever deleted, except a `Transaction` by regeneration (copied to the audit log first) | ADR-085 |
 | **Free text** | Every record a person makes takes `notes` | ADR-160 |
-| **The firm's own fields** | One `answers` JSONB column plus the `formDefinitionId` it answered (§4.5). **Nothing the engine, a rule or a flag reads is ever in JSONB** | ADR-278 |
+| **The firm's own fields** | One `answers` JSONB column plus the `formDefinitionId` it answered (§4.3). **Nothing the engine, a rule or a flag reads is ever in JSONB** | ADR-278 |
 | **Shapes on a map** | GeoJSON geometry in longitude and latitude, with its bounding box: fixed-shape data the engine reads, as ARCHITECTURE §3 approved | ADR-141 |
 
 **Four kinds of record** (`adms-data-model` §3.1b), each guarded in the database by its kind

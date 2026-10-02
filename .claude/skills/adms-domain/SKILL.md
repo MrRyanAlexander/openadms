@@ -3,9 +3,9 @@ name: adms-domain
 description: Open ADMS domain grounding and glossary. Read this before your first task in any conversation, and before explaining or demonstrating the domain. Covers what an ADMS is, why a load is recorded as two field events by two monitors who cannot see each other, joined on the ticket number, the load call, who's who (the firm that installs it, its users, client users, the outside parties it keeps records of), a ticket's life from setup to the client package, why nothing is deleted, the glossary in today's terms, the system invariants, and where the product is headed.
 ---
 
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-232; field events and pay items, ADR-236, 237; contracts on rules, assignments, time clock, ADR-239…241; a pay item's unique code and description, ADR-301) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-232; field events and pay items, ADR-236, 237; contracts on rules, assignments, time clock, ADR-239…241; a pay item's unique code and description, ADR-301; the policy values built, ADR-303) -->
 
-> **This page states today's rules** (through ADR-241). Each rule cites its ADR; what changed is in
+> **This page states today's rules** (last changed by ADR-303, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
 > `agent_store/SUMMARY.md` disagree, SUMMARY wins: log a KD (`adms-decisions`). The worked example
 > of all of it is `spec/golden/MISSION.md`. **Names and examples** follow `spec/CONVENTIONS.md`

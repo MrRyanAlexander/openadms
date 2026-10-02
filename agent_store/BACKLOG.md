@@ -68,7 +68,8 @@ review, QC, invoice lock and batches → the golden mission. Each milestone buil
 > skill that said codes may repeat, or "the contract's words and line number", corrected; an exact
 > duplicate of a rule is to be refused before save (built in 1.1.8).
 
-Carried: C36, C42, C52, and C18's first part. Closes the behaviour of KD-14, 16, 17, 18, 29, 39, 47.
+Carried: C36, C42, C52, and C18's first part; C54 (1.1.10) and C53's first part (1.1.11), filed
+by ADR-303 (named here by ADR-307). Closes the behaviour of KD-14, 16, 17, 18, 29, 39, 47.
 
 - [x] **1.1.1** ✅ **done 2026-10-01 (ADR-300):** `spec/acceptance/01-setup.md`, 80 scenarios (81 since ADR-301, 82 since ADR-306) from
   Part 1, each naming its source, where Phase 1 proves it and the task that does; six points nothing
@@ -147,7 +148,8 @@ Carried: C36, C42, C52, and C18's first part. Closes the behaviour of KD-14, 16,
 
 ### Milestone 1.2 — Certifications and capacity (Part 3)
 
-Closes the behaviour of KD-10, 11, 45, 46, 48.
+Carried: C56 (1.2.3), filed by ADR-305 (named here by ADR-307). Closes the behaviour of KD-10, 11,
+45, 46, 48.
 
 - [ ] **1.2.1** `spec/acceptance/03-certification.md`, from Part 3 and `adms-certifications`, the
   capacity examples taken from §3A.3 and the paper form, never from `development/`.
@@ -209,8 +211,9 @@ Carried: C31's first part. Closes the behaviour of KD-56.
 
 ### Milestone 1.5 — Reconciliation (Part 6)
 
-Carried: C16, C20, C50, C52's scenarios. Closes the behaviour of KD-02, 04, 05, 06, 12, 19, 28, 35,
-42, 50, 55.
+Carried: C16, C20, C50, C52's scenarios; C53's second part (1.5.5) and C55 (1.5.5, 1.5.7), filed by
+ADR-303 (named here by ADR-307). Closes the behaviour of KD-02, 04, 05, 06, 12, 19, 28, 35, 42, 50,
+55.
 
 - [ ] **1.5.1** `spec/acceptance/06-reconciliation.md`, from Part 6, `adms-validation` and
   `spec/FLAGS.md`: one scenario at least for each of the 67 flags and each thing never flagged.
@@ -640,7 +643,8 @@ delete one.
   Fields from `adms-field-app` and ARCHITECTURE §7; never invented.~~ **Done (ADR-281 (4)):** no details column; no rule has a phone report anything but its key and, at a sync, its clock.
 
 **For `spec/DATA-MODEL.md` (0.2b.2) and Phase 1** — *2026-10-01: the draft (ADR-284) answers C16–C19, C29, C36 and C42–C44 on paper (its §12); each stays here until Phase 1 builds it.*
-*2026-10-01 (ADR-300), Phase 1 open: the task that picks each up: C36 → 1.1.5 (the definition), 1.3.6 (the answers); C42 → 1.1.5, 1.1.6, 1.1.7; C52 → 1.1.7 (setup), 1.5.6 (the flags); C18 → 1.1.10, 1.7.1; C43 → 1.3.2; C44 → 1.3.3; C16 → 1.5.2, 1.7.1; C50 → 1.5.8; C20 → 1.5.9; C17 → 1.7.1, 1.8.2; C19 → 1.8.2; C29, C30 → 1.9.1; C51's two scenarios → 1.9.2; C28 → 1.9.3; C31's stand-in → 1.4.2.*
+*2026-10-01 (ADR-300), Phase 1 open: the task that picks each up: C36 → 1.1.5 (the definition), 1.3.6 (the answers); C42 → 1.1.5, 1.1.6, 1.1.7; C52 → 1.1.7 (setup), 1.5.6 (the flags); C18 → 1.1.10, 1.7.1; C43 → 1.3.2; C44 → 1.3.3; C16 → 1.5.2, 1.7.1; C50 → 1.5.8; C20 → 1.5.9; C17 → 1.7.1, 1.8.2; C19 → 1.8.2; C29, C30 → 1.9.1; C51's two scenarios → 1.9.2; C28 → 1.9.3; C31's stand-in → 1.4.2. Filed since (ADR-303, 305; added here by ADR-307): C53 →
+1.1.11, 1.5.5 (and Phase 2); C54 → 1.1.10; C55 → 1.5.5, 1.5.7; C56 → 1.2.3.*
 - **C36. The storage shape of the firm's added fields** (ADR-278, at the user's word): a versioned
   form definition per record kind, one JSONB answers column per record keyed by field ID plus the
   definition version, a schema generated from the definition in `packages/contracts`, Prisma's `Json`

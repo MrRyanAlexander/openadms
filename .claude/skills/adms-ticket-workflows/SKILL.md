@@ -2,9 +2,9 @@
 name: adms-ticket-workflows
 description: Open ADMS ticket workflows and the setup spine, in today's rules. Covers what must exist before any field event (client, declaration event, project, contracts, forms and debris types, pay items, sites, rules, certifications, ROEs), ticket numbers, a ticket's life and statuses, how every capture starts (badge first, number last), Workflow A loads (collection and disposal events to the completed load, split loads, loads that carry tickets), Workflow B haul-outs, Workflow C unit rate (hangers, leaners, stumps and fill, white goods, HHW, crew time), Workflow D forms (ROE, surveys, incidents, citizen drop-off logs), and the order of a reconciliation run. Use when creating, matching or reconciling tickets, or when setting up a project, contract, pay item, site or ROE. Checks and flags live in adms-validation, pricing in adms-ledger-audit, duplicates and corrections in adms-exceptions, phone screens in adms-field-app.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-242; the tower's lookup, ADR-243; an ROE's scope, ADR-293; split haul-outs, ADR-295; a pay item's unique code and description, a duplicate rule refused, ADR-301) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-242; the tower's lookup, ADR-243; an ROE's scope, ADR-293; split haul-outs, ADR-295; a pay item's unique code and description, a duplicate rule refused, ADR-301; a contractor's contact details, ADR-306) -->
 
-> **This page states today's rules** (through ADR-241). Each rule cites its ADR; what changed is in
+> **This page states today's rules** (last changed by ADR-306, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
 > `agent_store/SUMMARY.md` disagree, SUMMARY wins: log a KD (`adms-decisions`). The worked example
 > is `spec/golden/MISSION.md`; names and examples follow `spec/CONVENTIONS.md`. The words (field

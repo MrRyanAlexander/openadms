@@ -5,7 +5,7 @@ description: Run the Open ADMS verification chain and report real observed outpu
 
 <!-- skill-status: current (rewritten 2026-09-29, ADR-259; the local stack added, ADR-263; the installer, ADR-266; migrations through it, ADR-268; the database tests, ADR-272; the actor extension and the seed, ADR-273; the scenario harness, ADR-275; the security checks, ADR-276; the Phase 0 models and the master passcode in the database, ADR-281; the map servers, the guard hook's tests and the assignment's pay items, ADR-282, 283, 286; the twentieth migration, ADR-301; the firm's lists, ADR-302; the client, the declaration event and the project, and the policy values, ADR-303; contractors on a project and contracts, ADR-305, 306; the historical chain is under History) -->
 
-> **This page states today's chain** (through ADR-287). The rule never changes: **report real
+> **This page states today's chain** (last changed by ADR-306, as its status line lists). The rule never changes: **report real
 > observed output, never "should pass".** The layers still to come are listed at the end of Part 1;
 > the historical chain for `database/` is under History and is never run.
 
@@ -35,7 +35,7 @@ pnpm security                    # audit, secrets scan, env files, grant tests (
 | `pnpm lint` | ESLint's type-checked rules (floating promises, `any`, unsafe access…) on all code and tests; Prettier formatting (ADR-257) | `All matched files use Prettier code style!`, exit 0 |
 | `pnpm licences` | No licence refused or undecided (ADR-258, 260) | `357 packages: 357 allowed, 0 refused, 0 undecided.` The package count moves with dependencies; **0 refused, 0 undecided** doesn't |
 | `pnpm scenarios` | Every story passes on its own database, which is dropped afterwards (ADR-275; needs the local stack and the installation) | per story `passed: N checks, N passed, 0 failed` (`ticket-101001`: 16; `dispatch-monday`: 17), then `Stories: 2 passed, 0 failed.`, exit 0 |
-| `pnpm security` | The dependency audit, the secrets scan, the env files and the grant tests, with real counts; never prints a secret (§1.5; needs the registry, the local stack and the installation) | `✓ 0 open advisories` (3 accepted by id), secretlint `0 found`, the installation's own secrets `0 found`, env files `✓ every one ignored by git and untracked`, the grant tests `19 files, 463 tests: 463 passed` (205 files scanned for secrets on 2026-10-02). **It ends `Security checks: 7 passed, 0 failed.`, exit 0** (since the user retired the historical root `docker-compose.yml`, 2026-10-01; KD-59 closed, ADR-291). Any ✗ is a finding |
+| `pnpm security` | The dependency audit, the secrets scan, the env files and the grant tests, with real counts; never prints a secret (§1.5; needs the registry, the local stack and the installation) | `✓ 0 open advisories` (3 accepted by id), secretlint `0 found`, the installation's own secrets `0 found`, env files `✓ every one ignored by git and untracked`, the grant tests `19 files, 463 tests: 463 passed` (209 files scanned for secrets on 2026-10-02, after ADR-306). **It ends `Security checks: 7 passed, 0 failed.`, exit 0** (since the user retired the historical root `docker-compose.yml`, 2026-10-01; KD-59 closed, ADR-291). Any ✗ is a finding |
 
 **The local stack** (ADR-263; Docker running). Run it after a change to `infra/local`, and before any
 work that needs the database or the object store:

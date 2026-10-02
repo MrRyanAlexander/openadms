@@ -4,7 +4,7 @@ description: Open ADMS data model, in today's rules. Covers the records and how 
 ---
 <!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-245; ADR-246; the Phase 0 models built, ADR-281; the pay item's first shape and `spec/DATA-MODEL.md` drafted, ADR-284, 286; the page approved, ADR-289; a pay item's unique code and description, ADR-301; the firm's lists built, ADR-302; the client, the declaration event and the project built, ADR-303; contractors on a project and contracts built, ADR-305; a contractor's contact details, ADR-306) -->
 
-> **This page states today's rules** (through ADR-246). Each rule cites its ADR; what changed is in
+> **This page states today's rules** (last changed by ADR-306, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
 > `agent_store/SUMMARY.md` disagree, SUMMARY wins: log a KD (`adms-decisions`). The worked example
 > is `spec/golden/MISSION.md`; names and examples follow `spec/CONVENTIONS.md` (§3 for code names).
@@ -194,8 +194,8 @@ changed" (ADR-166).
   per record kind and stored answers, exported, never read by the engine or rules (ADR-160, 188).
   The answers are **one JSONB column per record, keyed by field ID, with the definition version
   answered**; the definition is versioned, never edited. Nothing the engine, a rule or a flag reads
-  lives in JSONB: such a value is promoted to a real column (ADR-278; details an agent default
-  until `spec/DATA-MODEL.md`).
+  lives in JSONB: such a value is promoted to a real column (ADR-278; the details are
+  `spec/DATA-MODEL.md`'s `FormDefinition` and §4.3, approved, ADR-289; see KD-66 before 1.1.5).
 
 **`CompletedLoad` and `CompletedHaulOut`** are what the worker concludes from a ticket's events: the
 load's own number, its events (**unique links**, so one load can't bill twice, invariant 17), the

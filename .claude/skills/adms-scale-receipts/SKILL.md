@@ -4,7 +4,7 @@ description: Open ADMS scale receipts, in today's rules. Covers when a scale rec
 ---
 <!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-252; haul-outs, ADR-295) -->
 
-> **This page states today's rules** (through ADR-251). Each rule cites its ADR; what changed is in
+> **This page states today's rules** (last changed by ADR-295, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
 > `agent_store/SUMMARY.md` disagree, SUMMARY wins: log a KD (`adms-decisions`). Names and examples
 > follow `spec/CONVENTIONS.md`. The industry says "scale ticket"; **it is not a ticket** and never

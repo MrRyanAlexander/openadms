@@ -2,7 +2,7 @@
 name: adms-close-out
 description: Close out an Open ADMS response that changed files. Covers leaving nothing running (the local stack stopped, throw-away databases, containers and volumes gone), the required execution summary format, which agent_store state files to tick, the flags section, the next atomic task pointer, and the copy-paste git block the user runs themselves. Use as the final step of any task that modified files.
 ---
-<!-- skill-status: current (checked 2026-09-29, ADR-253; leave nothing running, ADR-277) -->
+<!-- skill-status: current (checked 2026-09-29, ADR-253; leave nothing running, ADR-277; the roadmap, ADR-280) -->
 
 ## 0. Leave nothing running (ADR-277)
 

@@ -2,9 +2,9 @@
 name: adms-validation
 description: Open ADMS checks, flags, statuses, how rules run, and the quantity math, in today's rules. Covers the checks between a ticket's field events and on each event against the setup (certification, place and time, where debris went, quantity, pay item settings, forms, pricing), what is never flagged, how the worker runs a form's rules (one contract per rule, criteria read only the ticket, Add in # order then Remove then Void ticket, a rule's void wins), why no rule or setting may be silently inert, the four statuses and what sets them, timing contradictions, how a flag reads and how a reviewer accepts one, and every quantity formula (capacity × load call, scale weight and a tandem's split, split shares, circumference to diameter, stump CY, fill CY, carried tickets, white goods, crew hours, mileage rounding). Use when writing a check or a flag, the rule engine, a threshold or project setting, status changes, or any quantity math. Setup and workflows live in adms-ticket-workflows, pricing and the ledger in adms-ledger-audit, duplicates and corrections in adms-exceptions.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-244; the flag catalogue approved, ADR-290; split haul-outs, ADR-295) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-244; the flag catalogue approved, ADR-290; split haul-outs, ADR-295; a split haul-out's pile weights, ADR-297; *Haul-outs leave here* only on a TDSR, ADR-298; a duplicate rule refused, ADR-301) -->
 
-> **This page states today's rules** (through ADR-243). Each rule cites its ADR; what changed is in
+> **This page states today's rules** (last changed by ADR-301, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
 > `agent_store/SUMMARY.md` disagree, SUMMARY wins: log a KD (`adms-decisions`). The worked example
 > is `spec/golden/MISSION.md`; names and examples follow `spec/CONVENTIONS.md`. The words (field
