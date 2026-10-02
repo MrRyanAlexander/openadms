@@ -367,11 +367,27 @@ delete one.
   hash (DATA-MODEL §5). The golden mission's GPS points come from the pinned extract (with C30): the
   example world's Bayline County is made up, and its roads stand in from Delaware's until the user
   names another region.
-- **C51. Split haul-outs have no requirement and no golden-mission ticket** (ADR-295). The rule is
+- ~~**C51. Split haul-outs have no requirement and no golden-mission ticket** (ADR-295). The rule is
   recorded (`adms-ticket-workflows` §4.4a, `adms-validation` §5.5, DATA-MODEL §5) with an example
   (ticket 201004), but `REQUIREMENTS.md` has no REQ for it and `spec/golden/MISSION.md` covers
   only an ordinary haul-out. With Phase 1's milestones: add the REQ beside the split-load ones, and
-  propose a split haul-out for the mission (the user signs off its numbers; never invent coverage).
+  propose a split haul-out for the mission (the user signs off its numbers; never invent coverage).~~
+  **Done (ADR-296, 297):** REQ-111a and REQ-120j; golden mission ticket 201004, weighed at the
+  user's word (three piles, 24.00 tons at Cypress Creek Landfill, three lines, $480.00; P1's ledger
+  $5,548.25 on 19 lines); **the mission is approved, numbers included (ADR-297).** **Left for the
+  tasks that pick them up:** **two acceptance scenarios** for `spec/acceptance/`, since neither is
+  in the mission: a split haul-out paid by the CY (the same piles dumped at Bayline County Landfill:
+  11.0, 27.5, 55.0 CY, six lines, $850.85) and a pile whose call isn't higher than the one before
+  (`PILE_CALL_NOT_HIGHER`); as a story (C30), the haul-out phone's numbers run 201001 then 201004
+  (201002 and 201003 are the flag catalogue's examples), which a story states itself, as today's
+  stories do, and the story seeds the mission's second landfill, its per-ton pay item and its sixth
+  monitor (`spec/CONVENTIONS.md` §6).
+- **C52. *Haul-outs leave here* only on a TDSR/DMS site** (ADR-298). With `DisposalSite`'s real
+  model (C42): setup refuses the mark on any other site type and refuses changing a marked site's
+  type; decide whether the database refuses it too (the type is a list row acted on by its fixed
+  key, so a plain check constraint can't see it; a guard needs its own migration and test). An
+  acceptance scenario: a haul-out that left a landfill is flagged `SITE_NOT_FOR_HAUL_OUTS`; one
+  dumped back at the TDSR it left is flagged `HAUL_OUT_DUMPED_AT_TDSR` and not priced.
 - **C20.** The worker's one transaction per group, one run per project, and flagged-and-skipped groups
   (REQ-015, KD-55) use one `$write` per group (ADR-273 (3)).
 

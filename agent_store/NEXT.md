@@ -101,9 +101,11 @@ approved it.
       (ADR-292…295).**
 - [ ] `spec/acceptance/`: `AC-…` scenarios from approved part pages; they become scenario-harness
       stories (REQ-017).
-- [ ] `spec/golden/`: the golden mission and its expected ledger; the user signs off the numbers.
-      **Draft `spec/golden/MISSION.md` written (ADR-232)**: every kind of record and each one's
-      life; names, rates and flag wording are placeholders.
+- [x] `spec/golden/`: the golden mission and its expected ledger. `spec/golden/MISSION.md` written
+      (ADR-232): every kind of record and each one's life. A split haul-out, ticket 201004, added
+      (ADR-296) and told as a weighed one at the user's word (ADR-297). **✅ Approved by the user
+      2026-10-01, numbers included (ADR-297):** P1's ledger $5,548.25 on 19 lines, P2's $324.00.
+      Its GPS points and word-for-word flag messages come when it becomes a story (C30, C50).
 
 ---
 
@@ -220,8 +222,8 @@ Update it at close-out when a task, milestone or phase closes.
   (rules settled, ADR-241); which phase the read-only portal lands in (`VISION.md` §7); each Phase 5
   candidate; `RULES.md` §7 "Is valid"; whether to keep hand re-entry of the ticket number (ADR-209)
   when the field app is built.
-- **Approvals as part of later steps:** the golden mission's numbers (`DATA-MODEL.md` and
-  `FLAGS.md` are approved, ADR-289, 290). The names in `spec/CONVENTIONS.md` are agent defaults the user may overturn.
+- **Approvals as part of later steps:** none left for the spec pages (`DATA-MODEL.md` and
+  `FLAGS.md` are approved, ADR-289, 290; the golden mission and its numbers, ADR-297). The names in `spec/CONVENTIONS.md` are agent defaults the user may overturn.
 - **Ours, not the user's:** design tasks Q-166 (regional map data) and Q-167 (upgrading an
   installation).
 
@@ -293,12 +295,15 @@ assumed:
 2. **Say that Phase 1 opens.**
 
 **If the user asks for work before then, in this order** (the road's steps 2 and 6, none of it
-Phase 1's engine): (a) a requirement and a golden-mission ticket for a split haul-out (C51); (b) **`spec/acceptance/`**: the
-`AC-…` scenarios from the approved part pages; (c) the **golden mission's numbers** for the user's
-sign-off, with its flag wording taken from `FLAGS.md` and its GPS points from the pinned map extract
-(C30, C50); (d) **Phase 1's milestones in `BACKLOG.md`**, in `ROADMAP.md` §4's build order, each
-with its carried items (C16–C20, C29, C30, C36, C42–C44, C50) and the REQs it ticks (Phase 1 now
-includes REQ-003, 015 and 017, ADR-287).
+Phase 1's engine; the split haul-out's requirements and mission ticket are done and **the golden
+mission is approved, numbers included**, ADR-296, 297, C51): (a) **`spec/acceptance/`**: the `AC-…`
+scenarios from the approved part pages, among them the two split haul-outs the mission leaves out
+(one paid by the CY, one with a pile whose call isn't higher than the one before; `BACKLOG.md`
+C51); (b) **Phase 1's milestones in `BACKLOG.md`**, in `ROADMAP.md` §4's build order, each with its
+carried items (C16–C20, C29, C30, C36, C42–C44, C50) and the REQs it ticks (Phase 1 holds 98; it
+includes REQ-003, 015 and 017, ADR-287, and REQ-111a and 120j, ADR-296). The mission's GPS points
+(from the pinned map extract) and its flag messages word for word from `FLAGS.md` come when it
+becomes a story (C30, C50); a change to any approved mission number needs the user's word.
 
 Start every command with `eval "$(fnm env --shell zsh)"`; the checks are **`adms-verify`** (the chain
 is 26 files, 317 tests; `pnpm scenarios` runs two stories), with **`pnpm security`** (ADR-276), which

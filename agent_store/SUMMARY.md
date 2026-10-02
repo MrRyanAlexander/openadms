@@ -1,13 +1,15 @@
 # Open ADMS — Current decisions and gaps, at a glance
 
 **The present tense of the project on one page.** `DECISIONS.md` and `DEVIATIONS.md` are the full
-history, with 287 ADRs and 64 KDs, many superseded. This page says what is true **now** and which
+history, with 298 ADRs and 65 KDs, many superseded. This page says what is true **now** and which
 entries to cite. The reasons live in the ADRs and the skills.
 
 - **Keep it current:** when you add, amend or supersede an ADR, or open or close a KD, update this
   page **in the same response** (`adms-decisions`).
 - **If this page and a log entry disagree,** the newest ADR wins: fix this page and say so.
-- Updated 2026-10-01, through ADR-295 / KD-65. Rounds 13–26 are answered (ADR-145…228).
+- Updated 2026-10-01, through ADR-298 / KD-65. Rounds 13–26 are answered (ADR-145…228).
+  **The golden mission (`spec/golden/MISSION.md`) is approved by the user, numbers included
+  (ADR-297):** P1's ledger is $5,548.25 on 19 lines, P2's $324.00.
   **Phase 0's tasks are all done (ADR-282…287):** the map servers in the local stack, the guard hook
   tested, `spec/DATA-MODEL.md` and `spec/FLAGS.md` drafted, an assignment's pay items, the REQ list
   closed out (17 of 17: REQ-002 ticked with the user's first commits, nine on branch
@@ -234,7 +236,10 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   line; a load dumped there with no line for its tipping fee pay item is flagged as a **missing rule**, never a
   mismatch, ADR-222; checked on loads and haul-outs **dumped** there, never on a haul-out leaving it or
   unit rate work there; **a haul-out dumped at a TDSR** is flagged and priced no further, since a
-  haul-out only leaves a TDSR, ADR-226),
+  haul-out only leaves a TDSR, ADR-226; **a haul-out is reduced debris leaving a TDSR for a
+  different site, never back to the site it left and never from one final disposal site to another:
+  *Haul-outs leave here* can be ticked only on a site of the built-in TDSR/DMS type** (setup refuses
+  it elsewhere, agent default), so a haul-out that left anything else is always flagged, ADR-298),
   **Ineligible site** (a load dumped there is flagged and still bills); plus the firm's own labels. The
   legacy **Critical** box is left out (ADR-219). These **replace** the options Disposal · Haul-out · Staging ·
   Citizen drop-off · HHW: a load that needs no load call measures its quantity **from the tickets it
@@ -511,7 +516,18 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   debris type and field tag; a call not higher than the one before is flagged
   (`PILE_CALL_NOT_HIGHER`) and nothing bills; the load-call limits judge only the last call. A truck
   and trailer hauled out and weighed once are split by capacity, flagged and marked as shares, as
-  loads are. [295]
+  loads are. [295] **Paid by the CY or by the scale's weight, as the firm's setup says** (the user, as a
+  firm): the pay item's Unit of Measure decides and the firm's rules pick it, exactly as a split
+  load's shares apply to its CY or its tonnage; a haul-out usually ends at a scale house, so the
+  weight is the common case; the load calls are taken either way and set the shares. [297]
+  **Required and in the golden mission:** REQ-111a (the shape) and REQ-120j (the shares); mission
+  ticket **201004**, approved: 110 CY, calls 10%, 35%, 85%, dumped at Cypress Creek Landfill and
+  weighed at 24.00 tons → 2.82, 7.06 and 14.12 tons, one `MULCH-HO-TN` line per pile at $20.00,
+  three lines, $480.00; its CY (11.0, 27.5, 55.0) kept, unbilled. P1 ticks *Allow split loads* and
+  holds both `MULCH-HO-CY` and `MULCH-HO-TN`, its haul-out rules picking by *Disposal site* (201001,
+  to Bayline County Landfill, stays by the CY). *Agent defaults:* the second landfill, its per-ton
+  rate and its monitor; no flagged pile; numbered 201004. A split haul-out paid by the CY and one
+  with a pile that isn't higher are acceptance scenarios, not mission tickets. [296, 297]
 - **A refused load is not recorded**; a load dumps once and has **one** disposal. [155]
 - **ROEs** are records like tickets: made on a phone (offline) or in the back office; number,
   parcel ID, address, owner, signed + date, **scope** (choices, counts, GPS), photo of the signed
@@ -783,7 +799,7 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   skill's body**; this page breaks ties. `adms-verify` holds the rebuild's check chain, the historical
   one under its History (ADR-259). The Build 1 copy (`old_openadms(do not copy)/`) was removed by the user;
   never port from it if it reappears. **The trust order holds for every answer, explanation or demo,
-  not only code.** To explain or demo the domain, use **`spec/golden/MISSION.md`** (draft). **The
+  not only code.** To explain or demo the domain, use **`spec/golden/MISSION.md`** (approved, ADR-297). **The
   spec pages** (`spec/parts/01…09`, `RULES.md`, `RATE-SHEET.md`, `INDEX.md`, `LISTS.md`) and the
   REQs are in today's rules too (ADR-246, 247). [102, 133, 138, 232, 233, 247]
 - **Debris type** is the word (ADR-234); "debris class" (the legacy's word, ADR-233) is the same one
@@ -935,6 +951,7 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
 | 266 (3), (5) (the master passcode's hash in `packages/db/.env`; a lost database put back with nothing asked) | 281 | The hash is kept only in the database; a resume after a lost database asks for the passcode again |
 | 153 (the driver "carried onto" a ticket read as a stored copy) | 289 | No copy is stored on a field event; a ticket shows and exports its certification's driver |
 | 181 (6) (an ROE's scope choices and counts are the firm's own ROE form fields) | 293 | Scope is picked from the project's own setup: the load form's debris types and the unit rate payable types; a count is recorded, never checked |
+| 296 (a) (the golden mission's split haul-out paid by the CY: six lines, $850.85; P1 $5,919.10 on 22 lines) | 297 | Paid by the scale's weight: three lines, $480.00; P1 $5,548.25 on 19 lines; the mission approved |
 | 080 (helpers' IDs typed, flagged when they match no user) | 294 | A helper is picked from the people assigned to the project, or left blank; no flag |
 
 ---
@@ -962,7 +979,7 @@ Full text: `DEVIATIONS.md`.
 
 **Known later concerns from the Phase 0 build** (not KDs: nothing disagrees with a rule yet) are the
 **carry-forward register** in `BACKLOG.md` (C1…C47, by the task that picks each up; ADR-274; C1–C3
-done by ADR-275; C4–C9 by ADR-276; C42's pay items by ADR-286; C48–C50 filed by ADR-282: the demo's map servers, the rest of Q-166, what the worker asks the map servers; C12–C15 and C37 by ADR-281, which filed C42–C47: the assignment's pay items and forms, numbering, back-office-created events, the actor for a master-passcode act, a phone's other times, a device key's revocation). Among them: `installer:teardown` doesn't drop a leftover story database (C28); no statement timeout or TLS yet (C10: a
+done by ADR-275; C4–C9 by ADR-276; C42's pay items by ADR-286; C51, the split haul-out's requirements and mission ticket, filed by ADR-295 and done by ADR-296, 297; C48–C50 filed by ADR-282: the demo's map servers, the rest of Q-166, what the worker asks the map servers; C12–C15 and C37 by ADR-281, which filed C42–C47: the assignment's pay items and forms, numbering, back-office-created events, the actor for a master-passcode act, a phone's other times, a device key's revocation). Among them: `installer:teardown` doesn't drop a leftover story database (C28); no statement timeout or TLS yet (C10: a
 per-login timeout with Phase 2, TLS with the demo deploy); nothing states the viewer yet (C22). Read a task's items before starting it.
 
 **Phase 0 exit** is in `NEXT.md`. **Phase 1 exit** (the rebuild) needs, at minimum, the behaviour of
@@ -974,7 +991,7 @@ per-login timeout with Phase 2, TLS with the demo deploy); nothing states the vi
 
 ## 4. Waiting on the user
 
-- **Phase 0's tasks are all done (ADR-282…287) and committed (ADR-288: the user's first commits, REQ-002 ticked, 17 of 17); both spec pages are approved (ADR-289, 290). Two things are yours:** (1) **nothing blocks**: KD-65 is closed (ADR-292…295). The agent's details on your answers are yours to overturn (DATA-MODEL §12, 17–21: an ROE's scope; helpers as rows; the flag's line fields; a survey number not unique; a haul-out pile told by its debris type and field tag, with a flag when a pile's call isn't higher than the one before); (2) **say that Phase 1 opens.** Also yours, blocking nothing: a `main` branch and a remote (the history is one local branch, `phase0-foundation`). Before Phase 1's engine work the road still asks for the acceptance scenarios, the golden mission's signed-off numbers and Phase 1's milestones in `BACKLOG.md`.
+- **Phase 0's tasks are all done (ADR-282…287) and committed (ADR-288: the user's first commits, REQ-002 ticked, 17 of 17); both spec pages are approved (ADR-289, 290). Two things are yours:** (1) **nothing blocks**: KD-65 is closed (ADR-292…295). The agent's details on your answers are yours to overturn (DATA-MODEL §12, 17–21: an ROE's scope; helpers as rows; the flag's line fields; a survey number not unique; a haul-out pile told by its debris type and field tag, with a flag when a pile's call isn't higher than the one before); (2) **say that Phase 1 opens.** Also yours, blocking nothing: a `main` branch and a remote (the history is one local branch, `phase0-foundation`). Before Phase 1's engine work the road still asks for the acceptance scenarios and Phase 1's milestones in `BACKLOG.md`. **The golden mission is approved (ADR-297), with the split haul-out required and in it (ADR-296, C51 done):** REQ-111a, REQ-120j and ticket 201004, weighed (three lines, $480.00; P1's ledger $5,548.25 on 19 lines). What the agent added to P1's setup to tell it your way is yours to change: the second landfill (Cypress Creek), the per-ton pay item `MULCH-HO-TN` at a made-up $20.00, the two haul-out rules that pick by disposal site, and a sixth monitor.
 - ~~One question that changes money (ADR-285, `spec/FLAGS.md` §5): which certification bills a load whose two cert numbers differ.~~ **Answered by the approval (ADR-290):** the one on the field event that took the quantity; the ticket is flagged either way.
 - **The REQ moves are yours to overturn (ADR-287):** REQ-003, 015, 017 now sit in Phase 1 and REQ-004, 006, 016 in Phase 2, because only that phase's work can finish them.
 - **The map region (ADR-282):** the local stack's built-in extract is Delaware (small, dated, in the mission's time zone), standing in for the made-up Bayline County. Say if another region should stand in; Florida's needs more disk than Docker has here (8 GB).
@@ -993,7 +1010,7 @@ per-login timeout with Phase 2, TLS with the demo deploy); nothing states the vi
   field event it reads; **ADR-240, a finished field event is reopenable until the monitor ends the
   shift** (the one that touches the monitor's work and the evidence); ADR-241, no hourly rates or pay
   in Open ADMS, and viewers don't see hours; ADR-243, the site's lookup also answers "count the carried
-  tickets", and the worker (not the tower phone) compares the count with the collection's list; ADR-244, a rule's *Debris type* reads the collection's, and a `PENDING` ticket shows its one event's flags; ADR-245, people's marks on derived records (QC status, the invoice lock, a flag's acceptance) are their own records keyed to the record they mark; ADR-278, the details of how firm-added fields are stored (one JSONB answers column per record, a versioned form definition); ADR-280, the roadmap page's place and name, its finish line drawn after the deploy and before the later features, and no dates; ADR-255, the licence field `AGPL-3.0-only` rather than `-or-later`; ADR-262, `pnpm licences` still checks every installed package, not only shipped ones; ADR-263, the local stack's hostnames, Postgres on port 55432, `local:down` keeping the data and the helper's command names; ADR-268, the provisional schema's shapes (database-made UUIDv7 ids, RESTRICT foreign keys, text ticket numbers, an empty split suffix, `User.monitorNumber` for the Monitor ID, the `UserRole` keys); ADR-273, the system actor (role `SYSTEM`, its fixed id and the name "Open ADMS (system)", seeded by the installer) and the tests reaching a login through the service's own env file; ADR-275, a new database per story (not a copy of `adms`), dropped afterwards, the `pnpm scenarios` command and the story's names; ADR-282, the map servers (the images, Delaware as the built-in extract, address lookup only, the hostnames, the two settings); ADR-283, the hook's new rules (env files unreadable to agents, generated paths, failing closed without `jq`); ADR-284, `spec/DATA-MODEL.md`'s sixteen defaults; ADR-285, `spec/FLAGS.md`'s codes and wording; ADR-286, the provisional pay item and an assignment that names pay items staying on its project; ADR-287, the six moved REQs; ADR-281, the Phase 0 models' shapes (a Monitor ID issued to every person written without one, from `M000001`; the device's name and no details column; an unplanned assignment with no author; no uniqueness on person or phone and day; the provisional `DisposalSite`; the number block's series and statuses; the time zone checks; the master passcode asked again when the database is lost); ADR-276, the worker still free to state a person, every audit advisory failing the run unless accepted by id, secretlint as the scanner (with our own two checks), the three accepted Prisma-CLI advisories and seven dev-tool licences allowed by version; ADR-266, the installer's command names (`pnpm installer`…), its three questions, **a master passcode of 8 to 128 characters** (NIST's floor, no breached-list screening yet), the env file locations, the database name `adms`, and stopping rather than remaking a lost secret; ADR-247, `spec/RULES.md` §7 "Is valid" (with the setup check listing every invalid active rule) and the white goods example code `WG-HAUL-EA-60`. Design tasks (ours): Q-166, Q-167.
+  tickets", and the worker (not the tower phone) compares the count with the collection's list; ADR-244, a rule's *Debris type* reads the collection's, and a `PENDING` ticket shows its one event's flags; ADR-245, people's marks on derived records (QC status, the invoice lock, a flag's acceptance) are their own records keyed to the record they mark; ADR-278, the details of how firm-added fields are stored (one JSONB answers column per record, a versioned form definition); ADR-280, the roadmap page's place and name, its finish line drawn after the deploy and before the later features, and no dates; ADR-255, the licence field `AGPL-3.0-only` rather than `-or-later`; ADR-262, `pnpm licences` still checks every installed package, not only shipped ones; ADR-263, the local stack's hostnames, Postgres on port 55432, `local:down` keeping the data and the helper's command names; ADR-268, the provisional schema's shapes (database-made UUIDv7 ids, RESTRICT foreign keys, text ticket numbers, an empty split suffix, `User.monitorNumber` for the Monitor ID, the `UserRole` keys); ADR-273, the system actor (role `SYSTEM`, its fixed id and the name "Open ADMS (system)", seeded by the installer) and the tests reaching a login through the service's own env file; ADR-275, a new database per story (not a copy of `adms`), dropped afterwards, the `pnpm scenarios` command and the story's names; ADR-282, the map servers (the images, Delaware as the built-in extract, address lookup only, the hostnames, the two settings); ADR-283, the hook's new rules (env files unreadable to agents, generated paths, failing closed without `jq`); ADR-284, `spec/DATA-MODEL.md`'s sixteen defaults; ADR-285, `spec/FLAGS.md`'s codes and wording; ADR-286, the provisional pay item and an assignment that names pay items staying on its project; ADR-287, the six moved REQs; ADR-298, *Haul-outs leave here* tickable only on a TDSR/DMS site, refused in setup elsewhere; ADR-296, 297, the golden mission's split haul-out with no flagged pile and numbered 201004, and what P1's setup gained for it (Cypress Creek Landfill, `MULCH-HO-TN` at $20.00, the haul-out rules picking by disposal site, a sixth monitor); ADR-281, the Phase 0 models' shapes (a Monitor ID issued to every person written without one, from `M000001`; the device's name and no details column; an unplanned assignment with no author; no uniqueness on person or phone and day; the provisional `DisposalSite`; the number block's series and statuses; the time zone checks; the master passcode asked again when the database is lost); ADR-276, the worker still free to state a person, every audit advisory failing the run unless accepted by id, secretlint as the scanner (with our own two checks), the three accepted Prisma-CLI advisories and seven dev-tool licences allowed by version; ADR-266, the installer's command names (`pnpm installer`…), its three questions, **a master passcode of 8 to 128 characters** (NIST's floor, no breached-list screening yet), the env file locations, the database name `adms`, and stopping rather than remaking a lost secret; ADR-247, `spec/RULES.md` §7 "Is valid" (with the setup check listing every invalid active rule) and the white goods example code `WG-HAUL-EA-60`. Design tasks (ours): Q-166, Q-167.
 - **Approval:** the ADR-240 notes in ARCHITECTURE §7–§10 (the approved sections now say "enrol once,
   assignment daily"; building doesn't wait on it, ADR-230).
 - **Naming pass** (ADR-164): **done as an agent default** at the user's word (ADR-234):
@@ -1004,9 +1021,8 @@ per-login timeout with Phase 2, TLS with the demo deploy); nothing states the vi
   `spec/RATE-SHEET.md` (its gap warning and name-only setup warning included), after the agent's
   review against the field events, pay items, the engine and the enrol-once phone model; its small
   updates are listed in ADR-269. `spec/ARCHITECTURE.md` was approved in full earlier (ADR-143, 144).
-  Still to approve: the ADR-240 notes in ARCHITECTURE §7–§10 (above) and the golden mission's
-  numbers.
+  Still to approve: the ADR-240 notes in ARCHITECTURE §7–§10 (above). **The golden mission is
+  approved, numbers included (2026-10-01, ADR-297).**
 - **Reading, when you have time:** every rewritten skill is ready (ADR-242…253), and the rewritten
-  spec pages (ADR-247). Also the draft **`spec/golden/MISSION.md`** (names, rates, flag wording are
-  placeholders).
+  spec pages (ADR-247).
 - Optional: a README fix for KD-34 (the README is currently missing).
