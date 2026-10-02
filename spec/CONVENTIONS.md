@@ -219,6 +219,7 @@ full. Draw every example from it. Add to it where you need more, and record the 
 | Addresses | 14 Heron St, 40 Birch Ln, 22 Elm St, 412 and 416 Cedar Ct |
 | A second client | **Town of Egret Point**, with its own project "Egret Point ROW, Hurricane Delphine" under the same declaration event: for examples of one declaration event shared by two clients (added 2026-10-01 for the acceptance scenarios, ADR-300) |
 | A firm's own form field | "Police report number" (text), added to P1's incident form (added 2026-10-01 for the acceptance scenarios, ADR-300) |
+| The firm's own list values | Debris type **Marine-Vegetative** (the user's own example, `spec/LISTS.md`), renamed "Marine Vegetative"; incident sub-type **Mailbox struck** under Property damage; reason **Barcode damaged** (a typed ticket number). For tests of a list's own columns: a reason "Monitor's mistake", a kind of work "Fencing", an item "Chainsaw", vehicle types "Bucket truck" (a crew) and "Flatbed" (added 2026-10-02 for the lists' tests, ADR-302) |
 
 **Flag messages built from it** (the style; `spec/FLAGS.md` owns the wording, ADR-290):
 - "Ticket 101008: debris type mismatch. Flagged for review."

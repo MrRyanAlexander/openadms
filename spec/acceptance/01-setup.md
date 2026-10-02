@@ -65,14 +65,14 @@ that person as its actor (REQ-011, built in Phase 0); nothing is deleted.
 
 | ID | Scenario | From | Proven at | Passing |
 |---|---|---|---|---|
-| AC-01-31 | **Given** a fresh installation, **then** each of the firm's lists holds the values `spec/LISTS.md` Group 1 says it starts with (program types ROW · PARKS · PPDR · WATERWAY, with *Requires ROE* on PPDR as the golden mission has it; reduction methods Grinding · Incineration · Compaction; site types TDSR/DMS · Final Disposal · Transfer Station · Other; and the rest), and site labels, incident sub-types and every project's field tags start empty | ADR-070, 137; `spec/LISTS.md` · REQ-106c | database (1.1.2) | |
-| AC-01-32 | **Given** the built-in values (the kind of work Stumps; the site types TDSR/DMS and Final Disposal; the work types Pre-work, Post-work and ROE), **then** each has a fixed key (`STUMPS`, `TDSR`, `FINAL_DISPOSAL`, `PRE_WORK`, `POST_WORK`, `ROE`) and a firm's own value has none | ADR-194, 198, 226, 227 · REQ-106c | database (1.1.2) | |
+| AC-01-31 | **Given** a fresh installation, **then** each of the firm's lists holds the values `spec/LISTS.md` Group 1 says it starts with (program types ROW · PARKS · PPDR · WATERWAY, with *Requires ROE* on PPDR as the golden mission has it; reduction methods Grinding · Incineration · Compaction; site types TDSR/DMS · Final Disposal · Transfer Station · Other; and the rest), and site labels, incident sub-types and every project's field tags start empty | ADR-070, 137; `spec/LISTS.md` · REQ-106c | database (1.1.2) | database |
+| AC-01-32 | **Given** the built-in values (the kind of work Stumps; the site types TDSR/DMS and Final Disposal; the work types Pre-work, Post-work and ROE), **then** each has a fixed key (`STUMPS`, `TDSR`, `FINAL_DISPOSAL`, `PRE_WORK`, `POST_WORK`, `ROE`) and a firm's own value has none | ADR-194, 198, 226, 227 · REQ-106c | database (1.1.2) | database |
 | AC-01-33 | **When** Dana renames "Stumps" to "Stump removal", **then** the rename is saved and audited, the key stays `STUMPS`, and nothing the system does for stump tickets changes | ADR-194 · REQ-106c | domain (1.5.7), with the first behaviour hung on the key | |
-| AC-01-34 | **When** anyone tries to archive a built-in value, **then** it is refused; a firm's own value is archived freely | ADR-194 · REQ-106c | database (1.1.2) | |
-| AC-01-35 | **When** Dana adds the debris type "Marine-Vegetative", renames it, then archives it, **then** each step is audited; once archived it is off every new pick and still on every record that has it; a delete is refused by the database | ADR-070, 074 · REQ-106c | database (1.1.2) | |
-| AC-01-36 | **Given** the reason "Barcode damaged" is offered for a typed ticket number only, **then** it isn't offered when voiding a ticket or accepting a flag; each reason says which of the four uses it is offered for | ADR-173 · REQ-106c | database (1.1.2) | |
-| AC-01-37 | **Given** the incident type Property damage, **when** Dana adds the sub-type "Mailbox struck" under it, **then** it is offered under Property damage and under no other type | ADR-129, 137 · REQ-106c | database (1.1.2) | |
-| AC-01-38 | **Given** a kind of unit rate work, **then** it carries its count shape (a number, an itemised list of counts, or an itemised list of hours), and its item names (Skid Steer, Truck under Crew time) belong to that kind | ADR-040, 084, 127 · REQ-106c, 112b | database (1.1.2) | |
+| AC-01-34 | **When** anyone tries to archive a built-in value, **then** it is refused; a firm's own value is archived freely | ADR-194 · REQ-106c | database (1.1.2) | database |
+| AC-01-35 | **When** Dana adds the debris type "Marine-Vegetative", renames it, then archives it, **then** each step is audited; once archived it is off every new pick and still on every record that has it; a delete is refused by the database | ADR-070, 074 · REQ-106c | database (1.1.2) | database |
+| AC-01-36 | **Given** the reason "Barcode damaged" is offered for a typed ticket number only, **then** it isn't offered when voiding a ticket or accepting a flag; each reason says which of the four uses it is offered for | ADR-173 · REQ-106c | database (1.1.2) | database |
+| AC-01-37 | **Given** the incident type Property damage, **when** Dana adds the sub-type "Mailbox struck" under it, **then** it is offered under Property damage and under no other type | ADR-129, 137 · REQ-106c | database (1.1.2) | database |
+| AC-01-38 | **Given** a kind of unit rate work, **then** it carries its count shape (a number, an itemised list of counts, or an itemised list of hours), and its item names (Skid Steer, Truck under Crew time) belong to that kind | ADR-040, 084, 127 · REQ-106c, 112b | database (1.1.2) | database |
 
 ## E. Pay items (step 6)
 
@@ -156,7 +156,7 @@ named, as an agent default the user may overturn; none changes money, evidence o
 | 3 | How the setup check's "a prime with no rate" treats a pay item that is $0 on purpose (`WG-FRN-EA-STG`, ADR-128), so it isn't listed as a gap every day | 1.6.4 |
 | 4 | Whether a gap in a payable type's size bands is only warned at entry (ADR-217) or also listed by the setup check | 1.6.4 |
 | 5 | In which formats a map and a site's shape are taken in Phase 1 (the model stores GeoJSON; uploads of a shapefile or KML and an Esri layer link are REQ-124b's) | 1.1.7 |
-| 6 | The seed values where `spec/LISTS.md` gives none or ends in "…": the default reasons for each use, the itemised item names, and which seeded program types besides PPDR start with *Requires ROE* ticked | 1.1.2 |
+| 6 | ~~The seed values where `spec/LISTS.md` gives none or ends in "…": the default reasons for each use, the itemised item names, and which seeded program types besides PPDR start with *Requires ROE* ticked~~ **Settled 2026-10-02 (ADR-302, agent default):** only PPDR; the item names and reasons are in `spec/LISTS.md`, "What ships" | 1.1.2 ✅ |
 
 **Not in Phase 1** (their rules are recorded; their screens are the back office's, Phase 4, REQ-401,
 404): the suggested pay item code, the firm library and "copy from a past project" (ADR-228), *Show

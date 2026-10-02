@@ -139,6 +139,35 @@ list table) is an engineering choice to record as an ADR when the first one is b
 the shape, a value that drives behaviour carries that behaviour as a column, and no list value
 is ever hard-deleted.
 
+**Built 2026-10-02 (ADR-302, agent default):** one table per list (`spec/DATA-MODEL.md` §2.3). The
+built-in keys are one closed set in `packages/domain`; the database lets only a release write a key
+and refuses archiving a value that has one; a new list is guarded in one line (`guard_list`).
+
+## What ships *(ADR-302; agent defaults where the table above gives none or ends in "…")*
+
+The installer's seed writes these once, into an empty list. After that every value is the firm's to
+rename, reorder, archive and add to; the seed never touches a list again, except to add a built-in
+value a later release brings. The user may overturn any of them.
+
+| List | Starts with |
+|---|---|
+| Program types | ROW · PARKS · PPDR · WATERWAY. **Only PPDR starts with *Requires ROE* ticked** (private property; the other three are public property) |
+| Declaration reference types | FEMA disaster (DR) · FEMA emergency (EM) · State · Local · Internal |
+| Debris types | C&D · Vegetative · Metals · Concrete · White Goods · Titled Property (vehicles and vessels) · HHW · RACM · Soil · Leaners · Hangers · Stumps (`spec/CONVENTIONS.md` §4) |
+| Payable types | The same twelve, then Crew time · Tipping fee |
+| Reduction methods | Grinding · Incineration · Compaction |
+| Kinds of unit rate work | Hangers, Leaners, **Stumps** (key `STUMPS`): a number · HHW, White Goods: counts by item · Crew time: hours by item |
+| Item names | HHW: Paint cans · Propane tanks · Pesticide. White Goods: Washer · Dryer · Fridge, freon recovered · Fridge, no freon · Fridge, freon staged · Oven · Microwave (the names `spec/RULES.md` §9 uses). Crew time: Skid Steer · Truck · Sign |
+| Vehicle types | Dump Truck · Semi-Trailer · Hydraulic Dump Trailer · Non-Hydraulic Dump Trailer · Self-Loading Truck, each certifying a measured container. "Other (typed)" is not a value: it is the text beside the pick |
+| Vehicle features | Sideboards · Tail Gate Extension · Dog Box · Wheel Wells · Curved/Angled Sides/Floor ("Other (typed)" as above) |
+| Crew types | Bucket Truck · Skid Steer |
+| Disposal site types | **TDSR/DMS** (key `TDSR`) · **Final Disposal** (key `FINAL_DISPOSAL`) · Transfer Station · Other |
+| Incident types | Property damage · Personal injury · Near miss · Equipment failure · Environmental · Other |
+| Reasons | Voiding: Duplicate ticket · Work never happened · Not eligible work. A typed ticket number: Barcode damaged · Scanner not working. Accepting a flag: Photos confirm · Confirmed with the monitor. A record created in the back office: Device failed · Device lost. Each is offered for that one use; the firm may offer one for several |
+| Survey / ROE work types | **Pre-work survey** (key `PRE_WORK`) · **Post-work survey** (key `POST_WORK`) · **ROE** (key `ROE`) |
+| Time-clock activities | Travel · Standby · Training |
+| Site labels · incident sub-types · field tags | Empty |
+
 ---
 
 ## User notes (2026-09-24), kept verbatim

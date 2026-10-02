@@ -2,7 +2,7 @@
 name: adms-data-model
 description: Open ADMS data model, in today's rules. Covers the records and how they link (Client → DeclarationEvent → Project, contractors and contracts, forms and debris types, pay items with a rate per prime, rules naming one contract, sites, certifications, users, devices and assignments, time-clock entries, FieldEvent and the CompletedLoad / CompletedHaulOut drawn from it, transactions, flags, AuditRecord), why reference data is editable, evidence correctable only by permission and the derived records and audit never by a person, which lists are fixed in code and which the firm extends (built-in keys plus the firm's own values), identifiers, uniqueness, coordinates and time, and which package and database role may write what. Use when touching the Prisma schema, adding or changing a model, a list, a relation or a constraint, or deciding where a write belongs. Field names are spec/DATA-MODEL.md's; what each setup record and field event holds is adms-ticket-workflows.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-245; ADR-246; the Phase 0 models built, ADR-281; the pay item's first shape and `spec/DATA-MODEL.md` drafted, ADR-284, 286; the page approved, ADR-289; a pay item's unique code and description, ADR-301) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-245; ADR-246; the Phase 0 models built, ADR-281; the pay item's first shape and `spec/DATA-MODEL.md` drafted, ADR-284, 286; the page approved, ADR-289; a pay item's unique code and description, ADR-301; the firm's lists built, ADR-302) -->
 
 > **This page states today's rules** (through ADR-246). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
@@ -12,8 +12,9 @@ description: Open ADMS data model, in today's rules. Covers the records and how 
 
 # PART 3 — THE DATA MODEL
 
-**Only a provisional schema exists** (ADR-268, 281, 286: fifteen models in `packages/db/prisma/schema/`,
-only what the Phase 0 hardening tests and REQ-019…021 need). The schema is a Prisma multi-file schema in `packages/db`
+**The schema is being built in Phase 1's order** (`BACKLOG.md`): Phase 0's fifteen provisional
+models in `packages/db/prisma/schema/` (ADR-268, 281, 286: only what the hardening tests and
+REQ-019…021 need) and, built in full, the firm's eighteen lists (ADR-302; §3.2). The schema is a Prisma multi-file schema in `packages/db`
 (ARCHITECTURE §18), written in Phase 0 and Phase 1; this page is the model it must follow. **Model names** below
 are the agent defaults of `spec/CONVENTIONS.md` §3; **field names** are settled in
 `spec/DATA-MODEL.md` (drafted 2026-10-01, ADR-284; **approved by the user 2026-10-01**, ADR-289; changed at their word by ADR-292…295; KD-65 is closed), which may
@@ -260,8 +261,16 @@ an ADR):
   by. **Code, rules and phones test the key, never the name**, and a test proves a rename changes no
   behaviour. New behaviour means a new built-in value in a release, with an ADR. How to code, keep
   and explain it: `spec/LISTS.md`.
-- **Storage shape** (one table per list or one shared table) is an ADR when the first list is built
-  (`spec/LISTS.md`, build note).
+- **Storage shape: one table per list, built** (ADR-302; `spec/DATA-MODEL.md` §2.3): each has a key,
+  a name, a position and its own columns. **The built-in keys are one closed set in
+  `packages/domain`** (`builtInKeys`: `STUMPS`; `TDSR`, `FINAL_DISPOSAL`; `PRE_WORK`, `POST_WORK`,
+  `ROE`), and `packages/db` depends on `domain` for its types, so the seed can write no other key.
+  **The database keeps two rules itself:** only a release (`adms_owner`: the migrations and the
+  seed) writes a key, and a value with a key is never archived. **A new list** is a model in
+  `configuration.prisma` and one line in a guard migration: `SELECT guard_list('site_type',
+  'OPERATIONS');` (`guard_table` plus those two rules). **The seed** writes a list's starting values
+  once, into an empty list (`packages/db/src/list-seeds.ts`; `spec/LISTS.md`, "What ships"); a list
+  the firm has touched gets only a built-in value it lacks.
 - **A pay item carries no fee label** (ADR-246): the transaction # slot keeps a load's lines apart,
   the site's link to its tipping fee pay item tells a fee line, and the payable type groups lines.
 
@@ -374,3 +383,5 @@ What this page used to say, and why it changed. Never build from the left-hand s
   (ADR-138, 243, 245).
 - The provisional `PayItem` as project, code and name, neither unique → project, code (unique on its
   project) and description (ADR-286 → 301).
+- "Storage shape … is an ADR when the first list is built"; "only a provisional schema exists" → one
+  table per list, built with its guards and starting values (ADR-302).

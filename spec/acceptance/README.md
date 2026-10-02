@@ -19,7 +19,7 @@ One file per part page, written **before the code of the milestone that builds t
 
 | Part | File | Scenarios | Written | Passing at the engine |
 |---|---|---|---|---|
-| 1 Set up | [01-setup.md](01-setup.md) | 81 | 2026-10-01; AC-01-39…41, 66, 80 corrected and AC-01-81 added 2026-10-02 (ADR-301) | 1 (AC-01-41, at the database) |
+| 1 Set up | [01-setup.md](01-setup.md) | 81 | 2026-10-01; AC-01-39…41, 66, 80 corrected and AC-01-81 added 2026-10-02 (ADR-301) | 8, all at the database: AC-01-41 (ADR-301); AC-01-31, 32, 34…38, the firm's lists (2026-10-02, ADR-302) |
 | 2 People and devices | `02-people-and-devices.md` | | with task 1.1.9 | |
 | 3 Certify | `03-certification.md` | | with task 1.2.1 | |
 | 4 Capture | `04-field-capture.md` | | with task 1.3.1 | |

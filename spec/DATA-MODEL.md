@@ -13,7 +13,8 @@
 > `spec/CONVENTIONS.md` §3; examples come from its example world (`spec/golden/MISSION.md`).
 >
 > **What exists today.** Thirteen provisional models are built (ADR-268, 281), plus the pay item's
-> first shape (ADR-286). §10 says, model by model, what Phase 1 changes.
+> first shape (ADR-286) and, in full, the firm's eighteen lists of §2.3 (ADR-302). §10 says, model
+> by model, what Phase 1 changes.
 
 **How to read a record.** Every record on this page is laid out the same way (ADR-289): its name,
 one line saying what kind of record it is (§1) and what it is for, then one table of its fields.
@@ -243,13 +244,14 @@ permission"; an admin needs none.
 ### 2.3 The firm's lists
 
 One table per list (*agent default*; `spec/LISTS.md`'s build note leaves the storage to an ADR when
-the first is built, and this is the proposal). Every list table has the same six columns, plus the
-settings its values carry:
+the first is built, and this is the proposal). **Built 2026-10-02 (ADR-302):** all eighteen, their
+guards (`guard_list`, one line each) and what each starts with (`spec/LISTS.md`, "What ships"). Every
+list table has the same six columns, plus the settings its values carry:
 
 | Column | Type | Notes |
 |---|---|---|
 | **id** | uuid | |
-| key | text, unique | Set only on a **built-in value** (`STUMPS`); code tests it, never the name; a built-in value is never archived (ADR-194) |
+| key | text, unique | Set only on a **built-in value** (`STUMPS`); code tests it, never the name; a built-in value is never archived (ADR-194). The keys are one closed set in `packages/domain`; the database lets only a release (the migrations and the seed) write one (ADR-302) |
 | **name** | text | What people pick; renamed freely, audited |
 | **position** | int | The order shown |
 | **createdAt** | instant | |
@@ -266,7 +268,7 @@ The eighteen lists:
 | `PayableType` | | |
 | `KindOfWork` | **countShape** enum (`NUMBER` · `ITEM_COUNTS` · `ITEM_HOURS`) | `STUMPS` (ADR-198) |
 | `ItemName` | **kindOfWorkId** | |
-| `VehicleType` | **certifies** enum (`CONTAINER` · `CREW`) | |
+| `VehicleType` | **certifies** enum `CertificationKind` (`CONTAINER` · `CREW`; the set a certification's `kind` uses, ADR-302) | |
 | `VehicleFeature` | | |
 | `CrewType` | | |
 | `SiteType` | | `TDSR` (a haul-out dumped at one, ADR-226) · `FINAL_DISPOSAL` (the optional receipt number, ADR-227) |
@@ -1295,6 +1297,8 @@ Never relaxed to pass a test (ARCHITECTURE §5.4). ✅ = built today.
 | One disposal per completed load or haul-out; one live completed record per collection event | unique keys (the second partial: `WHERE dissolved_at IS NULL`, in a guard migration) |
 | A cert number once per project; a receipt number once per project; an ROE number once per project | unique keys |
 | A pay item's code once per project (ADR-301) | ✅ unique key |
+| A list value with a key (a built-in value) is never archived; a key appears once in its list (ADR-194, 302) | ✅ a check and a unique key on every list |
+| Only a release writes a list value's key: no other login adds a row with one, or gives, changes or removes one (ADR-302) | ✅ a trigger on every list |
 | A rule that is an exact copy of another (same form, contract, criteria and actions, whatever its name) | the API at setup, before it is saved (ADR-301) |
 | A transaction # once per ticket (and property or pile) | unique key |
 | A crew certification has no capacity and no boxes; a container has both | check |
@@ -1326,12 +1330,12 @@ A new value in any of them is a code change with an ADR (`spec/LISTS.md` Group 2
 | `ContractorPosition` | `PRIME` · `SUB_TIER_1` · `SUB_TIER_2` | `ProjectContractor` |
 | `ViewerKind` | `CLIENT` · `CONTRACTOR` · `AUDITOR` | `User` |
 | `Permission` | `CORRECT` · `RENUMBER` · `VOID` · `ACCEPT_FLAG` · `QC` · `LOCK_INVOICED` · `UNLOCK_INVOICED` · `APPROVE_HOURS` · `SETUP` · `DISPATCH` | `UserPermission` |
-| `ReasonUse` | `VOID` · `TYPED_NUMBER` · `ACCEPT_FLAG` · `BACK_OFFICE_RECORD` | `Reason` |
+| `ReasonUse` ✅ | `VOID` · `TYPED_NUMBER` · `ACCEPT_FLAG` · `BACK_OFFICE_RECORD` | `Reason` |
 | `FormDocumentType` | `LOAD` · `HAUL_OUT` · `UNIT_RATE` · `CERTIFICATION` · `ROE` · `SURVEY` · `INCIDENT` · `DROP_OFF_LOG` | `Form`, `Assignment` |
 | `BillingUnit` | `CY` · `TN` · `EA` · `LB` · `HR` · `CREW_DAY` · `TBN` | `PayItem`, `Transaction` |
 | `CrewTimeConversion` | `PER_HOUR` · `PER_DAY_EXACT` · `PER_DAY_STEPS` | `PayItem` |
-| `CountShape` | `NUMBER` · `ITEM_COUNTS` · `ITEM_HOURS` | `KindOfWork` |
-| `CertificationKind` | `CONTAINER` · `CREW` | `Certification` |
+| `CountShape` ✅ | `NUMBER` · `ITEM_COUNTS` · `ITEM_HOURS` | `KindOfWork` |
+| `CertificationKind` ✅ | `CONTAINER` · `CREW` | `Certification`, `VehicleType.certifies` (ADR-302) |
 | `BoxShape` | `RECTANGLE` · `TRIANGLE` · `TWO_LENGTH_HOIST` · `ROUND_BOTTOM` · `RADIUS_CORNER` | `CertificationBox` |
 | `BoxSign` | `ADD` · `SUBTRACT` | `CertificationBox` |
 | `RecordSource` | `DEVICE` · `BACK_OFFICE` | `FieldEvent`, `Roe`, the forms |
@@ -1372,6 +1376,7 @@ A new value in any of them is a code change with an ADR (`spec/LISTS.md` Group 2
 | `Transaction` | Gains its rule, pay item, contract, operating sub, unit, property and the two other ticket links; the delete guard follows the lock through them |
 | `InvoiceLock` | Gains the unlock columns, the batch and the two other targets |
 | `AuditRecord` | As built |
+| The firm's eighteen lists (§2.3) | ✅ built 2026-10-02 as this page has them (ADR-302) |
 | *New* | Everything else on this page, in `BACKLOG.md`'s Phase 1 order; each table guarded in one line (ADR-271) |
 
 ---
