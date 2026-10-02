@@ -9,7 +9,7 @@
 > requirement) and `spec/VISION.md` §7–§8 (the finished surfaces, and what "done" means). If this
 > page disagrees with them, they win.
 >
-> **Last updated:** 2026-10-02 (your correction: a pay item's code is unique on its project, it has a description and no separate name, and an exact duplicate of a rule is refused before it's saved) · counts read from the files that day · newest decision: ADR-301.
+> **Last updated:** 2026-10-02 (task 1.1.2 done: the firm's lists are in the database, seeded and guarded; earlier that day, your correction: a pay item's code is unique on its project, it has a description and no separate name, and an exact duplicate of a rule is refused before it's saved) · counts read from the files that day · newest decision: ADR-302.
 
 **Key:** ✅ done · 🟡 in progress · ⬜ not started · 🔒 gated (doesn't open until the phase before it exits)
 
@@ -20,8 +20,8 @@
 | | |
 |---|---|
 | **Start** | 2026-09-25: the rebuild decision (ADR-093). Security first, the plan is the core, TypeScript end to end with Prisma, the old `database/` code is history |
-| **Now** | **Phase 1, Data core and engine: open since 2026-10-01, at your word** (ADR-299). Its plan is written: ten milestones, 47 tasks, one per response (ADR-300; §3). Two tasks are done, both on paper: the plan, and the acceptance scenarios for setup (81). No product code exists yet; Phase 0's foundation is what it will stand on |
-| **Next task** | **1.1.2, the firm's lists**: the eighteen pick-lists a firm extends, in the database, seeded and guarded. The first product tables |
+| **Now** | **Phase 1, Data core and engine: open since 2026-10-01, at your word** (ADR-299). Its plan is written: ten milestones, 47 tasks, one per response (ADR-300; §3). Three tasks are done: the plan, the acceptance scenarios for setup (81), and **the firm's lists** (ADR-302): the first product tables, eighteen of them, with what each list starts with, and the database itself refusing to archive a built-in value or let anyone but a release write its key |
+| **Next task** | **1.1.3, client, declaration event and the project in full**: who is paying, what happened, and the project with its program type, window, ticket-number source, workflows and settings |
 | **Finish line** | A firm installs Open ADMS, and its back office and its monitors run a real mission on it: every app built, tested and working |
 | **How "done" is judged** | Not boxes ticked. A deliberately messy mission (the **golden mission**) comes out with the exact statuses, review queue and ledger you signed off, at every layer: engine, then API, then the apps (`spec/VISION.md` §8) |
 
@@ -33,8 +33,8 @@
 |---|---|---|---|---|
 | — | **Design** | Read the whole product on paper: the rules, the spec, the architecture, all approved | 26 rounds of questions, ADR-001…279 | ✅ done 2026-09-29 |
 | **0** | **Foundation** | Start the whole local stack with one command over HTTPS, the mileage and address servers included; watch the database itself refuse what the rules forbid; run a ticket's story from a terminal | 17 of 17 | ✅ done 2026-10-01: every task and every requirement, and committed |
-| — | **The answer key** | Hold the golden mission's signed-off numbers and the acceptance scenarios that every later phase must pass | not counted in REQs | 🟡 the golden mission is approved, numbers included (2026-10-01, ADR-297: P1 $5,548.25 on 19 lines, P2 $324.00); the acceptance scenarios are written part by part, each before the code it judges (ADR-300): 1 of 9 files, 81 scenarios, 1 passing |
-| **1** | **Data core and engine** | Run a whole messy mission from a terminal, no screens, and see the right statuses, flags, ledger and audit trail come out | 0 of 98 | 🟡 open since 2026-10-01 (ADR-299): 2 of 47 tasks |
+| — | **The answer key** | Hold the golden mission's signed-off numbers and the acceptance scenarios that every later phase must pass | not counted in REQs | 🟡 the golden mission is approved, numbers included (2026-10-01, ADR-297: P1 $5,548.25 on 19 lines, P2 $324.00); the acceptance scenarios are written part by part, each before the code it judges (ADR-300): 1 of 9 files, 81 scenarios, 8 passing |
+| **1** | **Data core and engine** | Run a whole messy mission from a terminal, no screens, and see the right statuses, flags, ledger and audit trail come out | 1 of 98 | 🟡 open since 2026-10-01 (ADR-299): 3 of 47 tasks |
 | **2** | **API and sync** | Have phones and the back office talk to the server: sign-in, permissions, device enrolment, sync, background jobs, all hardened | 0 of 11 | 🔒 |
 | **3** | **Field app** | Hand a monitor a phone: enrol it, take the day's assignment, capture every kind of field event offline for days, scan, print, sync. Browser first, then iPhone, then Android | 0 of 25 | 🔒 |
 | **4** | **Back office and read-only portal** | Set up a project, dispatch the day, review and correct, QC, lock as invoiced, export; clients, contractors and auditors see their own projects | 0 of 18 | 🔒 |
@@ -59,7 +59,7 @@ starts by writing its part's acceptance scenarios, so the answer exists before t
 | Milestone | What it is | When it's done, you can… | Tasks | Status |
 |---|---|---|---|---|
 | 1.0 | Open the phase: the plan | Read every Phase 1 task, with the requirements each one meets | 1 of 1 | ✅ 2026-10-01 |
-| 1.1 | Setup records | See a whole project's setup in the database: client, declaration event, project, contractors and contracts, forms and debris types, pay items with a rate per prime, sites, the map, rules | 1 of 11 | 🟡 the setup scenarios are written (81); next, the firm's lists |
+| 1.1 | Setup records | See a whole project's setup in the database: client, declaration event, project, contractors and contracts, forms and debris types, pay items with a rate per prime, sites, the map, rules | 2 of 11 | 🟡 the setup scenarios are written (81) and the firm's lists are built (ADR-302); next, client, declaration event and the project |
 | 1.2 | Certifications and capacity | Give it a container's measured boxes and get the paper form's capacity, to the cubic yard | 0 of 3 | ⬜ |
 | 1.3 | Tickets and numbers | Record every kind of field event, with numbers no two phones can share | 0 of 7 | ⬜ |
 | 1.4 | Sync intake with quarantine | Send a day's field events in any order; a duplicate is held in full for a person, never lost | 0 of 2 | ⬜ |
@@ -73,7 +73,11 @@ starts by writing its part's acceptance scenarios, so the answer exists before t
 passing; all 98 requirements ticked from real runs; the old code's lessons closed; every new table
 guarded and tested; the whole check chain green; every rule in one shared place.
 
-**Scenarios passing** (the measure of done, `spec/VISION.md` §8): 1 of 81 written so far (AC-01-41, a pay item's code is unique on its project, at the database; ADR-301).
+**Scenarios passing** (the measure of done, `spec/VISION.md` §8): 8 of 81 written so far, all at the database: AC-01-41 (a pay item's code is unique on its project; ADR-301) and the firm's lists, AC-01-31, 32, 34, 35, 36, 37, 38 (ADR-302).
+
+**Recorded test state** (2026-10-02, ADR-302, run that day): 28 test files, 485 tests passing; two
+stories pass (`ticket-101001` 16 checks, `dispatch-monday` 13 checks); `pnpm security` 7 checks
+passed, 0 failed; 29 loosened guards, each caught.
 
 ---
 

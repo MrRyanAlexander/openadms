@@ -149,7 +149,8 @@ approved it.
       (ADR-292…295).**
 - [ ] `spec/acceptance/`: `AC-…` scenarios from approved part pages; they become scenario-harness
       stories (REQ-017). **1 of 9 written (2026-10-01, ADR-300):** `README.md` (how a scenario is
-      written and proven) and `01-setup.md` (81 scenarios; corrected at the user's word, ADR-301). Each of the others is the first task of
+      written and proven) and `01-setup.md` (81 scenarios; corrected at the user's word, ADR-301;
+      8 passing at the database, ADR-302). Each of the others is the first task of
       the milestone that builds its part (`BACKLOG.md`).
 - [x] `spec/golden/`: the golden mission and its expected ledger. `spec/golden/MISSION.md` written
       (ADR-232): every kind of record and each one's life. A split haul-out, ticket 201004, added
@@ -166,18 +167,23 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-01: Phase 1 is open)
+### Where things stand (2026-10-02: Phase 1 is open, three tasks done)
 - **Phase 1 (data core and engine) is the active phase**, opened by the user on 2026-10-01
   (ADR-299). Its plan is `BACKLOG.md`'s ten milestones and 47 tasks (ADR-300): setup records →
   certifications and capacity → tickets and numbers → sync intake → reconciliation → the rule engine
   → the ledger and audit → review, QC and the lock → the golden mission as a story. **Done so far:**
-  1.0.1 (the plan) and 1.1.1 (`spec/acceptance/01-setup.md`, 81 scenarios). **Corrected by the user on
+  1.0.1 (the plan), 1.1.1 (`spec/acceptance/01-setup.md`, 81 scenarios) and **1.1.2, the firm's
+  lists (2026-10-02, ADR-302)**: eighteen list tables (one per list), the six built-in keys as one
+  closed set in `packages/domain`, `guard_list` (one line guards a list: only a release writes a
+  key, a value with a key is never archived), and the seed's 94 starting values, written once into
+  an empty list. **Corrected by the user on
   2026-10-02 (ADR-301):** a pay item's code is unique on its project (ADR-147 had read their answer
   backwards), a pay item is its code and its description (no separate name, no "line number"), and
   an exact duplicate of a rule is refused before it is saved; the provisional `pay_item` table and
-  its test follow (the twentieth migration). **No product code
-  exists yet**: the schema is still Phase 0's fifteen provisional models, and `packages/domain`
-  holds only its wiring probe. Everything below this bullet is how Phase 0 got here.
+  its test follow (the twentieth migration). **The first product tables
+  exist** (the lists; 33 models, 22 migrations); the other models are still Phase 0's fifteen
+  provisional ones, and `packages/domain` holds the built-in keys and nothing else yet. Everything
+  below this bullet is how Phase 0 got here.
 - **Phase 0 (Foundation).** The skeleton exists (placeholders only); no product code yet. `database/` is historical
   and read-only. `spec/ARCHITECTURE.md` is **approved in full**, so **Milestone 0.2 (scaffold) is
   open** (ADR-143), with a step-by-step brief in `BACKLOG.md` (ADR-231). **The skill rewrites
@@ -353,27 +359,35 @@ road to done), then `agent_store/SUMMARY.md`. Product discovery is closed (ADR-2
 rounds of questions.
 
 **Phase 1 is open (ADR-299).** Its plan is `BACKLOG.md`, "Active — Phase 1" (ADR-300): read its
-"Brief for every Phase 1 task" first. **One task per response.** Done: 1.0.1, 1.1.1; and the user's
-correction of 2026-10-02 (ADR-301: a pay item's code is unique, it has a description and no name,
-a duplicate rule is refused).
+"Brief for every Phase 1 task" first. **One task per response.** Done: 1.0.1, 1.1.1, **1.1.2 (the
+firm's lists, ADR-302)**; and the user's correction of 2026-10-02 (ADR-301: a pay item's code is
+unique, it has a description and no name, a duplicate rule is refused).
 
-👉 **Task 1.1.2, the firm's lists** (`BACKLOG.md`, Milestone 1.1). The eighteen list tables of
-`spec/DATA-MODEL.md` §2.3 (one table per list; the same six columns plus each list's own), the
-built-in keys (`STUMPS`, `TDSR`, `FINAL_DISPOSAL`, `PRE_WORK`, `POST_WORK`, `ROE`) as one closed set
-in `packages/domain`, the seed values of `spec/LISTS.md` Group 1 written by the installer's seed,
-each table guarded in one line (`guard_table`, ADR-271), and a built-in value that can't be
-archived. **Read first:** `spec/LISTS.md`, DATA-MODEL §1 and §2.3, `adms-data-model` §3.2,
-`spec/acceptance/01-setup.md` section D and its point 6 (the seeds LISTS.md leaves open are settled
-in this task's ADR, as an agent default). **Done when:** AC-01-31, 32 and 34…38 pass as database
-tests named by their IDs, `guard_gaps()` is empty, each new guard's removal is shown caught, and the
-chain is green with real counts. Ticks REQ-106c, and REQ-101's library part.
-Then 1.1.3: client, declaration event and the project in full.
+👉 **Task 1.1.3, client, declaration event and the project in full** (`BACKLOG.md`, Milestone 1.1).
+`Client` and `DeclarationEvent` (its `referenceTypeId` → the `DeclarationReferenceType` list, built);
+`Project` gains its client, declaration event, program type (→ `ProgramType`, built), *Allow split
+loads*, active window, ticket-number source, workflows and settings; `ProjectKindOfWork` (→
+`KindOfWork`, built); the settings' defaults in `packages/domain`, read from policy values, never
+literals (invariant 16). **The example world and both stories move to the new shape in the same
+task.** **Read first:** `spec/DATA-MODEL.md` §2.1 and §3 "The project", `spec/parts/01-setup.md`
+steps 1–3, `spec/acceptance/01-setup.md` section A and its point 2 (whether a new project's time
+clock starts on or off: settled in this task's ADR, as an agent default), `adms-data-model` §3.1a.
+**Done when:** AC-01-02…08 and 11…14 pass (AC-01-07 is built and takes its ID here), named by their
+IDs; `guard_gaps()` is empty; each new guard's removal is shown caught; the chain is green with real
+counts. Ticks REQ-105b, 105c, 105d, 105f, 105j, 124d; REQ-105k's source.
+Then 1.1.4: contractors on a project, and contracts.
+
+**A new list** (if a task needs one) is a model in `configuration.prisma` with the six list columns,
+then `SELECT guard_list('<table>', '<domain>');` in its guard migration; a new built-in key goes in
+`packages/domain`'s `builtInKeys` first, with an ADR (ADR-302).
 
 Start every command with `eval "$(fnm env --shell zsh)"`; the checks are **`adms-verify`** (the chain
-is 26 files, 317 tests; twenty migrations; `pnpm scenarios` runs two stories), with **`pnpm security`**
-(7 passed, 0 failed, ADR-291). The database tests, the map servers' tests and the stories need `pnpm local:up`
-first; stop it at close-out (ADR-277). A schema change goes through Prisma (`prisma migrate dev
---create-only`), a guard into its own empty stub (ADR-113).
+is 28 files, 485 tests; twenty-two migrations; `pnpm scenarios` runs two stories, 16 and 13 checks),
+with **`pnpm security`** (7 passed, 0 failed, ADR-291). The database tests, the map servers' tests and
+the stories need `pnpm local:up` first; stop it at close-out (ADR-277). A schema change goes through
+Prisma (`prisma migrate dev --create-only`), a guard into its own empty stub (ADR-113); **try a guard
+migration on a throw-away copy before `pnpm installer` applies it**, since an applied one is never
+edited.
 
 **Words and examples everywhere:** `spec/CONVENTIONS.md` (ADR-234, 235). Field names:
 `spec/DATA-MODEL.md`. Flag wording: `spec/FLAGS.md`.

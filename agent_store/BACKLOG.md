@@ -73,7 +73,11 @@ Carried: C36, C42, C52, and C18's first part. Closes the behaviour of KD-14, 16,
 - [x] **1.1.1** ✅ **done 2026-10-01 (ADR-300):** `spec/acceptance/01-setup.md`, 80 scenarios (81 since ADR-301) from
   Part 1, each naming its source, where Phase 1 proves it and the task that does; six points nothing
   settles are listed for the task that decides each.
-- [ ] **1.1.2** **The firm's lists.** The eighteen list tables of DATA-MODEL §2.3 (one table per
+- [x] **1.1.2** ✅ **done 2026-10-02 (ADR-302):** eighteen list models and three enums, two
+  migrations (`the_firms_lists`, `guard_the_firms_lists`: 22 in all), `builtInKeys` in
+  `packages/domain`, `guard_list` (one line per list), the seed's 94 starting values; AC-01-31, 32,
+  34…38 pass at the database (and AC-01-78 for these tables); `guard_gaps()` empty; 29 loosenings
+  each caught; chain 28 files, 485 tests. **The firm's lists.** The eighteen list tables of DATA-MODEL §2.3 (one table per
   list, §12 default 1, approved), each with its own columns and its three enums (`CountShape`,
   `ReasonUse`, and `VehicleType.certifies`); the built-in keys as one closed set in
   `packages/domain`; the seed values of `spec/LISTS.md` written by the installer's seed, so an
