@@ -197,7 +197,18 @@ Carried: C56 (1.2.3), filed by ADR-305 (named here by ADR-307). Closes the behav
   passes as a unit test, and the example world's three containers are given measured boxes that work
   out to their 65, 48 and 110 CY (recorded in `spec/CONVENTIONS.md` §6; the mission states only the
   capacities); a crew has none. *REQ-106d; REQ-003's first rule.*
-- [ ] **1.2.3** **The certification's records.** `Certification` (container or crew; unique per
+- [x] **1.2.3** ✅ **done 2026-10-03 (ADR-321):** `Certification`, `CertificationBox`,
+  `CertificationHelper`, `BoxShape`, `BoxSign`; three migrations (`certifications`, its guard, and
+  `map_version_loaded_at_default_prisma_reads_back`, KD-70: 43 in all); a box repeats its
+  certification's kind, so only a container holds one, and two deferred constraint triggers hold a
+  container to its primary box; a sub held to its own prime's place by a three-column foreign key;
+  `guard_viewer` on all three, the driver's phone and licence number hidden; `CertificationSubs`,
+  `CertificationChanges` and `ContractorMerge` in `packages/domain` (17 tests); the service
+  `Certifications` (`apps/api/src/certification/`), `SubPlaces` and `ContractorSetup.merge`; the
+  story `certification` (27 checks). 25 scenarios pass, and AC-03-22, 26, 29 in full (36 of 60);
+  AC-01-19 passes; `guard_gaps()` empty; 41 loosenings each caught; chain 47 files, 956 tests.
+  REQ-106, 106b, 106d, 106e ticked; REQ-106a and 106f in part (blocks: 1.3.2; flags: 1.5.5).
+  **The certification's records.** `Certification` (container or crew; unique per
   project by cert number; prime and subs; driver, tag; who certified; replaces, copied from, revoked
   from), `CertificationBox`, `CertificationHelper`; a sub typed in at certification becomes a
   `ProjectContractor` row under its prime (AC-01-19). **Done when:** Part 3's database scenarios
@@ -683,7 +694,7 @@ delete one.
 
 **For `spec/DATA-MODEL.md` (0.2b.2) and Phase 1** — *2026-10-01: the draft (ADR-284) answers C16–C19, C29, C36 and C42–C44 on paper (its §12); each stays here until Phase 1 builds it.*
 *2026-10-01 (ADR-300), Phase 1 open: the task that picks each up: C36 → 1.1.5 (the definition), 1.3.6 (the answers); C42 → 1.1.5, 1.1.6, 1.1.7; C52 → 1.1.7 (setup) ✅, 1.5.6 (the flags); C18 → 1.1.10, 1.7.1; C43 → 1.3.2; C44 → 1.3.3; C16 → 1.5.2, 1.7.1; C50 → 1.5.8; C20 → 1.5.9; C17 → 1.7.1, 1.8.2; C19 → 1.8.2; C29, C30 → 1.9.1; C51's two scenarios → 1.9.2; C28 → 1.9.3; C31's stand-in → 1.4.2. Filed since (ADR-303, 305; added here by ADR-307): C53 →
-1.1.11, 1.5.5 (and Phase 2); C54 → 1.1.10; C55 → 1.5.5, 1.5.7; C56 → 1.2.3. Filed by ADR-311: C57 → 1.1.11, 1.5.6. Filed by ADR-313: C58 → 1.1.11, 1.6.1, 1.6.4. Filed by ADR-315: C59 → every schema task, 1.2.3, 1.3.3, 1.7.1, Phase 2. Filed by ADR-317: C61 → 1.2.2, 1.2.3, 1.5.5, 1.8.2, 1.9.1.*
+1.1.11, 1.5.5 (and Phase 2); C54 → 1.1.10; C55 → 1.5.5, 1.5.7; C56 → 1.2.3. Filed by ADR-311: C57 → 1.1.11, 1.5.6. Filed by ADR-313: C58 → 1.1.11, 1.6.1, 1.6.4. Filed by ADR-315: C59 → every schema task, 1.2.3, 1.3.3, 1.7.1, Phase 2. Filed by ADR-317: C61 → 1.2.2, 1.2.3, 1.5.5, 1.8.2, 1.9.1. Filed by ADR-321: C62 → 1.3.2, 1.3.3, Milestone 1.3, 1.5.5, 1.7.1, 1.8.2, 1.8.3, Phase 2.*
 - **C36. The storage shape of the firm's added fields** (ADR-278, at the user's word): a versioned
   form definition per record kind, one JSONB answers column per record keyed by field ID plus the
   definition version, a schema generated from the definition in `packages/contracts`, Prisma's `Json`
@@ -771,7 +782,7 @@ delete one.
 - **C55. Two REQs this plan said 1.1.3 ticks, left open** (ADR-303 (8)): **REQ-105d** is ticked
   with task 1.5.7 (the ROE flags a program type's *Requires ROE* drives); **REQ-105j** with task
   1.5.5 (the "project not active" flag, which that task already names).
-- **C56. What a contractor merge moves, and who names a prime next** (ADR-305 (2), (4)). **Task
+- **C56 (✅ done, ADR-321: a typed sub's place, `SubPlaces`; the merge, `ContractorSetup.merge`; a certification's prime and subs held by foreign keys). What a contractor merge moves, and who names a prime next** (ADR-305 (2), (4)). **Task
   1.2.3:** a sub typed in at certification is written as a `ProjectContractor` row under its prime
   (`subOn`'s shape: tier 1 or 2, `primeId` the prime at either tier; which tier 1 a tier 2 works
   under is the certification's `firstTierSubId`); decide there what merging two spellings of a sub
@@ -808,8 +819,9 @@ delete one.
   schema task:** a new table a client user or an auditor should see gets `SELECT guard_viewer(…)`
   in its guard migration and a row in `packages/db/test/support/viewers.ts`; one nobody should see
   goes in that file's `unseenTables`; a viewed table that gains a column reruns `guard_viewer`.
-  **Task 1.2.3** (certifications): a certification's viewer sight, without the driver's licence
-  number (AC-02-71's other half). **Task 1.3.3** (field events in full): who recorded a ticket, by
+  ~~**Task 1.2.3** (certifications): a certification's viewer sight, without the driver's licence
+  number (AC-02-71's other half).~~ ✅ done, ADR-321 (a contractor user's sight of its own
+  certifications: 1.7.1). **Task 1.3.3** (field events in full): who recorded a ticket, by
   name and Monitor ID, for a client user and an auditor (no viewer reads `user` today), and the
   ticket's viewer view in its real shape. **Tasks 1.2.3 and 1.7.1** (C18): what a contractor user
   needs of setup to read its own tickets and transactions (a debris type's, a site's, a pay item's
@@ -822,8 +834,9 @@ delete one.
   refusal by the database's constraints to an answer, and add people's own services. **The task
   that first sets up a crew-day pay item:** its day length starts at the policy value
   `CREW_DAY_HOURS` in `PayItemSetup` (today the caller states it). **Each later list a firm adds
-  to** gets its method on `ListSetup` with the task that needs it. **Task 1.2.3:** a sub typed in
-  at certification is written by a service beside `ContractorSetup.addPrime`. **Task 1.9.x (the
+  to** gets its method on `ListSetup` with the task that needs it. ~~**Task 1.2.3:** a sub typed in
+  at certification is written by a service beside `ContractorSetup.addPrime`.~~ ✅ done, ADR-321
+  (`SubPlaces`). **Task 1.9.x (the
   golden mission):** whether P2 has a map (102001's zone), and the phones, people and viewers of
   §1, written through services. **Any guard that tells "the same piece of work" by a time**
   needs that column stamped by the database (`dbgenerated`), never `@default(now())` (KD-68).
@@ -832,7 +845,7 @@ delete one.
   ~~**Task 1.2.2:** a zero or missing measurement, boxes that subtract more than the primary holds;
   which roundings are "a step" inside one shape's formula; and the measured boxes of `730415`,
   `730416` and `730419` recorded in `spec/CONVENTIONS.md` §6.~~ ✅ done, ADR-320 (no capacity and a
-  plain reason; every operation a step). **Task 1.2.3** (and from ADR-320: what its service does
+  plain reason; every operation a step). **Task 1.2.3 ✅ done, ADR-321** (and from ADR-320: what its service does
   with measurements that give no capacity, whether the database takes a 0 CY container, and the
   example world's boxes written into `example-world.ts` from CONVENTIONS §6): **also** how the database
   holds "a container has boxes"; a certification's subs held to its own prime's; a typed sub that
@@ -845,6 +858,25 @@ delete one.
   does to its tickets. ~~**Task 1.9.1 (KD-69):** ticket 102001's cert number on P2 needs the user's
   word~~ **answered (ADR-318):** P2 has its own certification `730416` (Rivera's self-loader, 48
   CY), which task 1.2.3 writes into the example world.
+- **C62. What the certification's records left for later** (ADR-321). **Task 1.3.2** (numbering):
+  the cert number is the caller's today; the allocator issues it from the project's series, in
+  100-number blocks per certifying phone (REQ-106a), and `Certifications.copy` takes the other
+  project's next number from it. **Task 1.3.3** (field events in full): a field event's
+  `certificationId` and its own copy of the number (AC-03-40); no driver column on it (AC-03-16's
+  other half). **Milestone 1.3, with `Photo`:** a certification's five views, and whether a copy
+  points at the original's photographs or holds its own (C61 point 14). **Task 1.5.5** (the
+  flags): tag expired, revoked, replaced ("replaced on" is the new certification's certified time
+  as a day in the project's time zone; whether work on that same day is flagged is decided there),
+  no certification, typed capacity, a missing photograph; nothing flags a certification made
+  without a certifying assignment. **Task 1.7.1:** a transaction's prime and operating sub from the
+  certification (the lowest tier filled), and a contractor user's sight of its own certifications
+  (C18). **Task 1.8.2:** the QC mark; `signaturesOnFile` is set by `Certifications.signaturesOnFile`
+  today. **Task 1.8.3:** after `Certifications.measure`, every ticket on the certification
+  reprocesses, an invoiced one unlocked first (AC-03-52); a corrected copy flags its original
+  (AC-03-57). **Phase 2:** only an admin revokes; the sync endpoint wraps `certify`; a merge that
+  finds rule picks, employers or viewers naming the duplicate says so (today they are left as they
+  are). **Any later migration:** `prisma migrate dev --create-only` must give an empty stub; if it
+  carries a line nobody asked for, a `dbgenerated` default is being read back differently (KD-70).
 - **C20.** The worker's one transaction per group, one run per project, and flagged-and-skipped groups
   (REQ-015, KD-55) use one `$write` per group (ADR-273 (3)).
 

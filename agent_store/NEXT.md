@@ -68,8 +68,8 @@ question rounds) moved word for word to `DECISIONS.md`'s scratchpad, "Moved from
 2026-10-02"; `ROADMAP.md` §3a keeps the table.
 
 **Still live from the spec track:** `spec/acceptance/` is 3 of 9 files (`01-setup.md`: 82
-scenarios, 64 passing and AC-01-27, 48, 55 and 80 in part, after 1.1.11; `02-people-and-devices.md`: 74
-scenarios, 35 passing at the database and four in part after 1.1.10, ADR-315; `03-certification.md`: 60 scenarios, 8 passing at the domain and 3 in part after 1.2.2, ADR-320); each other file is the first task of the milestone that builds its part
+scenarios, 65 passing (AC-01-19 since 1.2.3) and AC-01-27, 48, 55 and 80 in part; `02-people-and-devices.md`: 74
+scenarios, 35 passing at the database and four in part after 1.1.10, ADR-315; `03-certification.md`: 60 scenarios, 36 passing and 1 in part after 1.2.3, ADR-321); each other file is the first task of the milestone that builds its part
 (ADR-300).
 
 ---
@@ -81,7 +81,7 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-03: Phase 1 is open, thirteen tasks done; Milestone 1.1 is done, 1.2 begun)
+### Where things stand (2026-10-03: Phase 1 is open, fifteen tasks done; Milestones 1.1 and 1.2 are done)
 - **Phase 1 (data core and engine) is the active phase**, opened by the user on 2026-10-01
   (ADR-299). Its plan is `BACKLOG.md`'s ten milestones and 47 tasks (ADR-300): setup records →
   certifications and capacity → tickets and numbers → sync intake → reconciliation → the rule engine
@@ -138,15 +138,21 @@ of `DECISIONS.md`.
   (2026-10-03, ADR-320)**: `Capacity` in `packages/domain`, the paper form's method in exact
   hundredths, every operation a step; a zero, missing or fractional measurement, or boxes that
   subtract it all, give no capacity and a plain reason; the three containers' boxes are in
-  `spec/CONVENTIONS.md` §6.
+  `spec/CONVENTIONS.md` §6; and **1.2.3, the certification's records (2026-10-03, ADR-321:
+  Milestone 1.2 is done)**: `Certification`, `CertificationBox`, `CertificationHelper`; only a
+  container holds boxes, and it always has its primary one; a sub is held to its own prime's place
+  on the project; the service `Certifications` (`apps/api/src/certification/`) certifies as the
+  monitor from their phone, works the capacity out and never takes one typed, places a typed sub,
+  and corrects, revokes and copies; `ContractorSetup.merge` merges two spellings of a sub; the
+  story `certification` (27 checks). Found and closed on the way: KD-70 (below, under Tools).
   **Corrected by the user on
   2026-10-02 (ADR-301):** a pay item's code is unique on its project (ADR-147 had read their answer
   backwards), a pay item is its code and its description (no separate name, no "line number"), and
   an exact duplicate of a rule is refused before it is saved; the provisional `pay_item` table and
   its test follow (the twentieth migration). **The first product tables
   exist** (the lists, the client, the declaration event, the project, contractors on a project,
-  contracts, forms, pay items, sites, the project map, rules, permissions and viewers; 55 models,
-  39 migrations);
+  contracts, forms, pay items, sites, the project map, rules, permissions and viewers,
+  certifications; 58 models, 43 migrations);
   the other models are still Phase 0's provisional ones, and `packages/domain` holds the built-in
   keys, the policy values and a new project's settings.
 - **Phase 0 (Foundation) is done** (2026-10-01, ADR-281…288): the monorepo, the local HTTPS stack
@@ -258,6 +264,12 @@ Update it at close-out when a task, milestone or phase closes.
   Say "set up", never "provision".
 
 ### Tools and housekeeping
+- **A guard's `--create-only` stub must come out empty (KD-70, seen 2026-10-03).** Prisma read
+  `MapVersion.loadedAt`'s default `CURRENT_TIMESTAMP` back as its own `now()` and wrote the default
+  again into every later migration, the guard's stub included; the hook then rightly refused
+  writing into it. The default is now `transaction_timestamp()`. If a stub ever carries a line
+  nobody asked for, find the `dbgenerated` default Prisma is reading back differently and fix
+  that; never write around the hook.
 - **Docker on this machine (seen 2026-10-01, ADR-282).** Docker Desktop's disk is **8 GB**; the local
   stack's six images take about 4.4 GB and its data about 0.5 GB, leaving under 1 GB. If a `local:up`
   fails with "No space left on device", free space before retrying (the user's build cache, about
@@ -311,25 +323,35 @@ types, field tags, the firm's own fields, ADR-308), 1.1.6 (pay items in full, AD
 (disposal sites in full and the project map, ADR-311; `btree_gist`, ADR-310), 1.1.8 (rules,
 ADR-313), 1.1.9 (the acceptance scenarios for people and devices, ADR-314), 1.1.10 (people's
 permissions and viewers, ADR-315), **1.1.11 (the example world's setup as a story, ADR-316:
-Milestone 1.1 is done)**, **1.2.1 (the acceptance scenarios for certifications, ADR-317: 60)**, **1.2.2 (the capacity math, ADR-320: `Capacity` in `packages/domain`)**; and the user's correction of 2026-10-02 (ADR-301: a pay item's code is unique, it has a
-description and no name, a duplicate rule is refused).
+Milestone 1.1 is done)**, **1.2.1 (the acceptance scenarios for certifications, ADR-317: 60)**,
+**1.2.2 (the capacity math, ADR-320: `Capacity` in `packages/domain`)**, **1.2.3 (the
+certification's records, ADR-321: Milestone 1.2 is done)**; and the user's correction of
+2026-10-02 (ADR-301: a pay item's code is unique, it has a description and no name, a duplicate
+rule is refused).
 
-👉 **Task 1.2.3, the certification's records** (`BACKLOG.md`, Milestone 1.2): `Certification`
-(container or crew; unique per project by cert number; prime and subs; driver, tag; who certified;
-replaces, copied from, revoked from), `CertificationBox`, `CertificationHelper`, from
-`spec/DATA-MODEL.md` §3; a schema task (the brief's list: Prisma's migration, the guard in its own
-stub, `guard_viewer` and C59, the example world, tests by scenario ID, each guard's removal shown
-caught), with the service that writes a certification and a sub typed in at certification beside
-`ContractorSetup.addPrime`. **Its scenarios** are the 25 of `spec/acceptance/03-certification.md`
-marked 1.2.3, and the database's half of AC-03-22, 26 and 29. **Carried:** C56, C59, C60 and C61's
-twelve points for it; it gives P2 its own certification `730416` (ADR-318). **From 1.2.2
-(ADR-320):** a container's `capacityCy` is never typed: the service calls `packages/domain`'s
-`new Capacity(kind, boxes).work()` with the boxes as `CertificationBox` keeps them and saves its
-`capacityCy`; the task decides what the service does when the reading gives no capacity (a zero,
-missing or fractional measurement, boxes that subtract it all), and whether the database takes a
-0 CY container; the example world's `730415`, `730416` and `730419` take their boxes from
-`spec/CONVENTIONS.md` §6 (65, 48, 110 CY). Then 1.3.1 (the acceptance scenarios for tickets and
-numbers).
+👉 **Task 1.3.1, the acceptance scenarios for tickets and numbers** (`BACKLOG.md`, Milestone 1.3):
+`spec/acceptance/04-field-capture.md`, from Part 4 (`spec/parts/`), `adms-ticket-workflows`
+§4.0a–§4.6 and `adms-field-app`: what each field event records; the phone's screens name Phase 3.
+A docs task, as 1.1.1, 1.1.9 and 1.2.1 were: each scenario restates a recorded rule and names the
+task that proves it (1.3.2…1.3.7, later milestones, Phases 2–4); values from the example world and
+the golden mission; what nothing settles is listed for the task that decides it, never asserted.
+**Carried:** C43, C44, C36's answers, and C62's parts for 1.3.2 and 1.3.3 (cert-number blocks; a
+field event's certification and its copy of the number). No code, so no chain run and no stack.
+Then 1.3.2 (numbering).
+
+**Certifications** (ADR-321): the example world has Sam Grant (`world.certifier`), Lee Morgan
+(`world.helper`), the phone `P1-HO-TDSR` (`world.certifyingDevice`), their assignments
+(`world.certifyingAssignments`), Rivera Trucking (`world.rivera`) under Coastline on P1 and P2,
+P1's five certifications with their boxes and P2's own `730416` (`world.certifications`). A test
+writes another with `certificationLike(world, …)`, `crewLike` and `boxLike(id, position, …)`
+(`packages/db/test/support/example-world.ts`); **a container is written with its primary box**:
+the check is deferred to the end of the piece of work, and a test asks it with `SET CONSTRAINTS
+ALL IMMEDIATE` (the world does, once built, so a `TRUNCATE` in a test isn't met by pending trigger
+events). A box repeats its certification's `kind` (`CONTAINER`). **A later table that names a sub**
+points at `project_contractor (project_id, contractor_id, prime_id)`. The service is
+`Certifications` (`apps/api/src/certification/certifications.ts`): `certify` is written as the
+certifying monitor, source `DEVICE`, through `SetupService.writeAs`; the story `certification`
+is the model for a story that needs certified trucks. The cert number is the caller's until 1.3.2.
 
 **Services** (ADR-316): what a person or a phone writes is a plain class in
 `apps/api/src/<part>/` (today `setup/`), given the API's database client, a clock and, where
@@ -398,7 +420,7 @@ then `SELECT guard_list('<table>', '<domain>');` in its guard migration; a new b
 `packages/domain`'s `builtInKeys` first, with an ADR (ADR-302).
 
 Start every command with `eval "$(fnm env --shell zsh)"`; the checks are **`adms-verify`** (the chain
-is 45 files, 891 tests; forty migrations; `pnpm scenarios` runs three stories, 16, 18 and 51 checks),
+is 47 files, 956 tests; forty-three migrations; `pnpm scenarios` runs four stories, 16, 18, 51 and 27 checks),
 with **`pnpm security`** (7 passed, 0 failed, ADR-291). The database tests, the map servers' tests and
 the stories need `pnpm local:up` first; stop it at close-out (ADR-277). A schema change goes through
 Prisma (`prisma migrate dev --create-only`), a guard into its own empty stub (ADR-113); **try a guard

@@ -1,13 +1,13 @@
 # Open ADMS — Current decisions and gaps, at a glance
 
 **The present tense of the project on one page.** `DECISIONS.md` and `DEVIATIONS.md` are the full
-history, with 319 ADRs and 69 KDs, many superseded. This page says what is true **now** and which
+history, with 321 ADRs and 70 KDs, many superseded. This page says what is true **now** and which
 entries to cite. The reasons live in the ADRs and the skills.
 
 - **Keep it current:** when you add, amend or supersede an ADR, or open or close a KD, update this
   page **in the same response** (`adms-decisions`).
 - **If this page and a log entry disagree,** the newest ADR wins: fix this page and say so.
-- Updated 2026-10-03, through ADR-320 / KD-69. Rounds 13–26 are answered (ADR-145…228).
+- Updated 2026-10-03, through ADR-321 / KD-70. Rounds 13–26 are answered (ADR-145…228).
   **Phase 1 (data core and engine, rebuilt) is open, at the user's word (ADR-299).** Its plan is
   `BACKLOG.md`'s ten milestones and 47 tasks, one task per response, each milestone opening with
   its part's acceptance scenarios in `spec/acceptance/` (ADR-300). Done: the plan,
@@ -56,7 +56,12 @@ entries to cite. The reasons live in the ADRs and the skills.
   **1.2.2, the capacity math** (ADR-320: `Capacity` in `packages/domain`, exact hundredths, 24
   tests; AC-03-21, 23, 24, 25, 27, 28, 31, 32 pass and 22, 26, 29 in part; the three containers'
   boxes in `spec/CONVENTIONS.md` §6).
-  **Next: task 1.2.3, the certification's records.**
+  **1.2.3, the certification's records** (ADR-321: `Certification`, `CertificationBox`,
+  `CertificationHelper`; a container holds boxes and a capacity, a crew neither; one number,
+  unique on its project; a sub typed at certification placed under its prime; replaced, copied,
+  revoked, never deleted; the service `Certifications` and the story `certification`; 36 of Part
+  3's 60 scenarios pass; KD-70 found and closed). **Milestone 1.2 is done.**
+  **Next: task 1.3.1, the acceptance scenarios for tickets and numbers.**
   **Corrected by the user 2026-10-02 (ADR-301):** a pay item's **code is unique on its project**
   (ADR-147 had it backwards); a pay item is its code and its **description**, with no separate name
   and no "line number"; **an exact duplicate of a rule is refused before it is saved**.
@@ -346,6 +351,46 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   (40 migrations): Prisma's client fills `@default(now())` itself, so no guard compares such a
   column with `now()` (KD-68). The story `setup` runs it all: `pnpm scenarios` runs three stories
   (16, 18, 51 checks). *Agent defaults.* [316]
+- **Certifications are built (2026-10-03, task 1.2.3):** `Certification` (every field of
+  DATA-MODEL §3; its id the phone's; **no archive**: replaced, revoked or QC Void, it stays),
+  `CertificationBox` and `CertificationHelper` (each taken off by archiving). **The database
+  refuses:** a second certification of one number on a project (the same number on another
+  project is fine, ADR-318); a blank number; a container with no capacity or a negative one (**0 CY
+  is taken**), a crew with a capacity, a crew type on a container; **a box on a crew** (the box
+  repeats its certification's kind, held by a foreign key) and **a container with no primary box**
+  (two deferred constraint triggers, asked when the piece of work ends); a primary that isn't a
+  rectangle that adds, or is archived; a box after it with no feature or with both a picked and a
+  typed one; a radius corner that adds; a shape holding another shape's measurements, or one under
+  1 (integers, so no fraction of an inch); a prime that isn't one of the project's primes; **a sub
+  that isn't placed on that project under that prime** (three-column foreign keys to
+  `project_contractor (project_id, contractor_id, prime_id)`, a new unique key), a second tier
+  with no first, one contractor in both; a "replaces" with no reason, of another project's
+  certification, of itself, or of one already replaced; a revocation without its date, reason and
+  person; the system actor as certifier, revoker or helper; a helper twice. **Not held by the
+  database:** which tier a sub's place is, a vehicle type's *certifies* against the kind, a
+  certifying assignment, a helper's assignment (flag, never block). Audited in **billing** (the
+  capacity is what loads bill by), helpers in operations. **A client user and an auditor see**
+  their projects' certifications, boxes and helpers, never the driver's phone or licence number; a
+  contractor user none yet (1.7.1). **In `packages/domain`:** `CertificationSubs` (a typed name is
+  matched to the firm's contractors ignoring case and spacing; placed as typed it is named, known
+  elsewhere in the firm it is placed, unknown it is a new contractor, a hauler on a container and
+  a crew on a crew; **a name that already has another place on the project is never moved: the
+  certification is saved under a separate contractor of that name, with the warning
+  `SUB_PLACED_ELSEWHERE`**), `CertificationChanges` (a replacement and a revocation say why; a copy
+  goes to another project where its prime is a prime) and `ContractorMerge` (the kept record takes
+  the duplicate's place on each project; refused into itself, of a merged record, into an archived
+  one, of a prime, or where the two are placed differently on one project). **In `apps/api`:**
+  `Certifications` (`src/certification/`): `certify`, written as the certifying monitor from their
+  phone (source `DEVICE`), the capacity worked out by `Capacity` and never typed, **measurements
+  that give no capacity refused with nothing saved**; `measure` (a box corrected in place, the
+  capacity worked out again); `signaturesOnFile`; `revoke`; `copy` (to another project, the
+  original's measurements and subs, a number the caller states); `SubPlaces` and
+  `ContractorSetup.merge` (the certifications that named the duplicate name the kept one). **"Replaced on" is the new certification's certified time**, as a day in the project's time
+  zone. The cert number is the caller's until the allocator (1.3.2). The story `certification`
+  runs it: `pnpm scenarios` runs four stories (16, 18, 51, 27 checks). Fifty-eight models,
+  forty-three migrations. **`MapVersion.loadedAt`'s default is `transaction_timestamp()`** (KD-70:
+  Prisma read `CURRENT_TIMESTAMP` back as its own `now()` and wrote it into every later
+  migration). Left for later: C62. *Agent defaults.* [321]
 - **The map servers are in the local stack (REQ-022):** `routing` (**Valhalla 3.9.0**) and
   `addresses` (**Nominatim 5.3.2**, mediagis's image), pinned by tag and digest, reached **only
   through Caddy over HTTPS** (`https://routing.adms.localhost`, `https://addresses.adms.localhost`),
@@ -1257,13 +1302,28 @@ per-login timeout with Phase 2, TLS with the demo deploy); nothing states the vi
 minimum, the behaviour of **01, 04, 05, 10, 12, 13, 15, 55, 56** right and verified. `BACKLOG.md`'s
 Phase 1 milestones name the KDs each closes (ADR-300).
 
-**Closed:** 03, 07, 08, 09, 20, 21, 31, 32, 33, 51, 57, 58, 60, 61, 62, 64, 65, 66, 69.
+**Closed:** 03, 07, 08, 09, 20, 21, 31, 32, 33, 51, 57, 58, 60, 61, 62, 64, 65, 66, 68, 69, 70
+(70, 2026-10-03, ADR-321: Prisma wrote `map_version.loaded_at`'s default again into every later
+migration; the default is now `transaction_timestamp()`). **Milestone 1.2 built the behaviour
+of KD-11, 45, 46 and 48, and KD-10's uniqueness** (its issuer: 1.3.2), each under a test named by
+its scenario.
 
 ---
 
 ## 4. Waiting on the user
 
-**Nothing blocks the next task (1.2.3, the certification's records).**
+**Nothing blocks the next task (1.3.1, the acceptance scenarios for tickets and numbers).**
+- **From task 1.2.3 (ADR-321), yours to overturn:** **a sub typed at certification whose name
+  already has another place on the project** (another prime's sub, or the other tier) is saved as
+  a separate contractor of that name under the prime picked, with a warning, never refused and
+  never moved; **a new sub is a hauler** where a container was certified and **a crew** where a
+  crew was; **a merge** moves the certifications to the kept contractor and is refused where the
+  two are placed differently on one project; **"replaced on" is the day the new certification was
+  made**, and a certification is replaced once; **a 0 CY container is saved**; measurements that
+  give no capacity are refused when certifying; **nothing checks that the certifying monitor's
+  assignment includes certifying**, or that a helper was assigned that day; a vehicle type isn't
+  required, and isn't held to container or crew; a certification's changes are read with
+  **billing**'s; a contractor user sees no certification yet.
 - **From task 1.2.2 (ADR-320), yours to overturn:** in the capacity math, **a measurement of zero
   or left blank gives no capacity** and names the box (it is never read as nought), and so do boxes
   that subtract as much as the primary holds; **every operation is "a step"** for the hundredths
