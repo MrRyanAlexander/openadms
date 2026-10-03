@@ -659,7 +659,7 @@ deleted** (ADR-135, 141).
 | **westLongitude**, **southLatitude**, **eastLongitude**, **northLatitude** | decimal(38,8) | The shape's bounding box (§1) |
 | uploadedFileKey | text | |
 | **loadedById** | → `User` | |
-| **loadedAt** | instant | When it was saved |
+| **loadedAt** | instant | When it was saved: **the database's own time**, never the client's (`dbgenerated`), since the guard that takes a zone only with its version compares it with the transaction's (ADR-316, KD-68) |
 
 #### `Zone`
 
