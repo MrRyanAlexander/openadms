@@ -158,7 +158,7 @@ by ADR-303 (named here by ADR-307). Closes the behaviour of KD-14, 16, 17, 18, 2
   `guard_map_shapes_hold_their_type`: 35 in all). AC-01-52, 53, 56…59 pass at the database, 54 at
   the domain and the database, 55 in part (its flag: 1.5.6); AC-01-45 at the database too.
   *REQ-104, 105q ticked; C42's site done.* **Disposal sites in full, and the project map.**
-- [ ] **1.1.8** **Rules.** `Rule`, `RuleCriterion`, `RuleCriterionPick`, `RuleAction`,
+- [x] **1.1.8** ✅ **done 2026-10-03 (ADR-313):** the five models with their guards (two migrations, `rules` and `guard_rules`: 37 in all; 53 models); a rule held to a ticket form and a contract of its own project, a picked value to the rule's own project and form, an operator to its criterion's kind, by foreign keys and checks; in `packages/domain`, `RuleCriteria`, `RuleValidity`, `ProjectRules` (the copy refused, the overlap warned, a "Pays when" rule changed only from its pay item) and `PaysWhen`. AC-01-60 passes at the database, 61…67 and 81 at the domain, 64 at both, and AC-01-78 for every setup table; `guard_gaps()` empty; 35 loosenings each caught; chain 41 files, 834 tests. *REQ-125a ticked; REQ-131c's storage built (it stays open for its rates, 1.6.3).* **Rules.** `Rule`, `RuleCriterion`, `RuleCriterionPick`, `RuleAction`,
   `RuleActionItem` with `RuleCriterionKey`, `RuleOperator`, `RuleActionKind`, `QuantityFrom`; in
   `packages/domain`: which criteria and operators a form takes (`spec/RULES.md` §4, §4a), "Is valid"
   (§7), the overlap warning, **the refusal of an exact duplicate of a rule before it is saved**
@@ -673,7 +673,7 @@ delete one.
 
 **For `spec/DATA-MODEL.md` (0.2b.2) and Phase 1** — *2026-10-01: the draft (ADR-284) answers C16–C19, C29, C36 and C42–C44 on paper (its §12); each stays here until Phase 1 builds it.*
 *2026-10-01 (ADR-300), Phase 1 open: the task that picks each up: C36 → 1.1.5 (the definition), 1.3.6 (the answers); C42 → 1.1.5, 1.1.6, 1.1.7; C52 → 1.1.7 (setup) ✅, 1.5.6 (the flags); C18 → 1.1.10, 1.7.1; C43 → 1.3.2; C44 → 1.3.3; C16 → 1.5.2, 1.7.1; C50 → 1.5.8; C20 → 1.5.9; C17 → 1.7.1, 1.8.2; C19 → 1.8.2; C29, C30 → 1.9.1; C51's two scenarios → 1.9.2; C28 → 1.9.3; C31's stand-in → 1.4.2. Filed since (ADR-303, 305; added here by ADR-307): C53 →
-1.1.11, 1.5.5 (and Phase 2); C54 → 1.1.10; C55 → 1.5.5, 1.5.7; C56 → 1.2.3. Filed by ADR-311: C57 → 1.1.11, 1.5.6.*
+1.1.11, 1.5.5 (and Phase 2); C54 → 1.1.10; C55 → 1.5.5, 1.5.7; C56 → 1.2.3. Filed by ADR-311: C57 → 1.1.11, 1.5.6. Filed by ADR-313: C58 → 1.1.11, 1.6.1, 1.6.4.*
 - **C36. The storage shape of the firm's added fields** (ADR-278, at the user's word): a versioned
   form definition per record kind, one JSONB answers column per record keyed by field ID plus the
   definition version, a schema generated from the definition in `packages/contracts`, Prisma's `Json`
@@ -785,6 +785,15 @@ delete one.
   (the zone and site-area checks):** point-in-polygon in the same module, a point on an edge
   inside (ARCHITECTURE §3), the box as a quick first test. A shapefile, KML and an Esri layer link
   are REQ-124b's import in the back office (Phase 4), with their libraries' ADRs.
+- **C58. What the rules' build left for later** (ADR-313 (8), (10)). **Task 1.1.11** (the setup
+  story through the API's services): the service that saves a rule calls `ProjectRules.check` first
+  and saves nothing on a refusal; the pay item service matches `PaysWhen.rules(…)` to the rules the
+  pay item already keeps (change, add, archive), and gives each picked value its `gone` (archived,
+  or a zone name the current map lacks). **Task 1.6.1** (the engine): an *Item* line compares the
+  count of its one picked item, IS EMPTY / IS NOT EMPTY ask whether the ticket lists it; the same #
+  added twice by one rule is flagged like two rules adding it. **Task 1.6.4** (the setup check):
+  decide what an archived pay item, contract or form does to a rule that names it (`spec/RULES.md`
+  §7 speaks only of a criterion's value), and list it.
 - **C20.** The worker's one transaction per group, one run per project, and flagged-and-skipped groups
   (REQ-015, KD-55) use one `$write` per group (ADR-273 (3)).
 

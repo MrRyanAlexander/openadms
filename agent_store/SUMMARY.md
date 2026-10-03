@@ -1,13 +1,13 @@
 # Open ADMS — Current decisions and gaps, at a glance
 
 **The present tense of the project on one page.** `DECISIONS.md` and `DEVIATIONS.md` are the full
-history, with 308 ADRs and 66 KDs, many superseded. This page says what is true **now** and which
+history, with 313 ADRs and 67 KDs, many superseded. This page says what is true **now** and which
 entries to cite. The reasons live in the ADRs and the skills.
 
 - **Keep it current:** when you add, amend or supersede an ADR, or open or close a KD, update this
   page **in the same response** (`adms-decisions`).
 - **If this page and a log entry disagree,** the newest ADR wins: fix this page and say so.
-- Updated 2026-10-02, through ADR-309 / KD-66. Rounds 13–26 are answered (ADR-145…228).
+- Updated 2026-10-03, through ADR-313 / KD-67. Rounds 13–26 are answered (ADR-145…228).
   **Phase 1 (data core and engine, rebuilt) is open, at the user's word (ADR-299).** Its plan is
   `BACKLOG.md`'s ten milestones and 47 tasks, one task per response, each milestone opening with
   its part's acceptance scenarios in `spec/acceptance/` (ADR-300). Done: the plan,
@@ -28,7 +28,12 @@ entries to cite. The reasons live in the ADRs and the skills.
   type, facts, GPS, dates, labels, tipping fee pay items, own shapes; map versions and zones, never
   edited; the database refuses *Haul-outs leave here* off a TDSR/DMS site; shapes as GeoJSON) and,
   at the user's word, **the `btree_gist` extension** (ADR-310: the database refuses overlapping size
-  bands). 52 of the 82 scenarios pass, and AC-01-27, 48 and 55 in part. **Next: task 1.1.8, rules.**
+  bands) and **1.1.8, rules** (ADR-313: a rule on one of its project's ticket forms, naming one of
+  its contracts; its criteria, picked values, actions and chosen items; the database holds a picked
+  value to the rule's own project and an operator to its criterion's kind; `packages/domain` says
+  which criteria a form takes, works out "Is valid", refuses an exact copy, warns of an overlap and
+  writes a pay item's "Pays when" rules). 62 of the 82 scenarios pass, and AC-01-27, 48 and 55 in
+  part. **Next: task 1.1.9, the acceptance scenarios for people and devices.**
   **Corrected by the user 2026-10-02 (ADR-301):** a pay item's **code is unique on its project**
   (ADR-147 had it backwards); a pay item is its code and its **description**, with no separate name
   and no "line number"; **an exact duplicate of a rule is refused before it is saved**.
@@ -257,6 +262,28 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   only** (a shapefile, KML and an Esri layer: REQ-124b, Phase 4); reading a shape and its box, and
   point-in-polygon, are the domain's later (C57). The site circle stays one project setting. Forty-eight
   models, thirty-five migrations. *Agent defaults, except the several fee links, which the user confirmed.* [310, 311, 312]
+- **Rules (built 2026-10-03, task 1.1.8):** `Rule` (its project, **one of that project's load,
+  haul-out or unit rate forms**, held by one foreign key with the form's document type repeated; a
+  name; **one of the project's contracts**, or none; Active, with no default; the pay item whose
+  "Pays when" wrote it), `RuleCriterion` (its place, criterion, operator, a typed number, date or
+  text), `RuleCriterionPick`, `RuleAction` (*Add transaction* # and pay item, *Remove transaction* #,
+  *Void ticket*; *Quantity from* stated on every Add) and `RuleActionItem`; every line is taken off
+  by archiving. **The database refuses** an operator that isn't its criterion's kind's, a value that
+  isn't its operator's (BETWEEN lower end first), a pick that doesn't fill the one column its
+  criterion picks from, and **a picked value that isn't the rule's own project's** (a contractor on
+  the project; a debris type of the rule's own form; a field tag, site or pay item of the project);
+  a zone is picked by name. **What `spec/RULES.md` §7 calls not valid is saved and never runs**
+  ("Is valid" is no column). **In `packages/domain`:** `RuleCriteria` (the criteria a form takes,
+  each one's kind of value and operators), `RuleValidity` (§7, every reason in plain words),
+  `ProjectRules.check` (refuses an exact copy, "Not saved: this rule is the same as "…"."; refuses a
+  change in the rule builder to a rule a pay item wrote; **warns**, code `RULES_OVERLAP`, when two
+  rules of one form and contract add the same # and nothing in their criteria keeps them apart,
+  naming where a shared range overlaps) and `PaysWhen` (one rule per form the pay item pays on and
+  per contract whose prime has a rate, named "`<code> - <description>`"). **An *Item* line is one
+  picked item and a number operator on its count**; the list operators aren't taken on *Item*.
+  Audited in billing; no read-only viewer sees a rule (task 1.1.10). Not decided: what an archived
+  pay item, contract or form does to a rule naming it (the setup check, 1.6.4). Fifty-three models,
+  thirty-seven migrations. *Agent defaults.* [313]
 - **The map servers are in the local stack (REQ-022):** `routing` (**Valhalla 3.9.0**) and
   `addresses` (**Nominatim 5.3.2**, mediagis's image), pinned by tag and digest, reached **only
   through Caddy over HTTPS** (`https://routing.adms.localhost`, `https://addresses.adms.localhost`),

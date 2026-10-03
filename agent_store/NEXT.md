@@ -68,7 +68,7 @@ question rounds) moved word for word to `DECISIONS.md`'s scratchpad, "Moved from
 2026-10-02"; `ROADMAP.md` §3a keeps the table.
 
 **Still live from the spec track:** `spec/acceptance/` is 1 of 9 files (`01-setup.md`: 82
-scenarios, 52 passing and AC-01-27, 48 and 55 in part, after 1.1.7); each other file is the first task of the milestone that builds its part
+scenarios, 62 passing and AC-01-27, 48 and 55 in part, after 1.1.8); each other file is the first task of the milestone that builds its part
 (ADR-300).
 
 ---
@@ -80,7 +80,7 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-02: Phase 1 is open, eight tasks done)
+### Where things stand (2026-10-03: Phase 1 is open, nine tasks done)
 - **Phase 1 (data core and engine) is the active phase**, opened by the user on 2026-10-01
   (ADR-299). Its plan is `BACKLOG.md`'s ten milestones and 47 tasks (ADR-300): setup records →
   certifications and capacity → tickets and numbers → sync intake → reconciliation → the rule engine
@@ -113,20 +113,24 @@ of `DECISIONS.md`.
   own shapes; map versions and zones, never edited, a zone only with its version; the database
   refuses *Haul-outs leave here* off a TDSR/DMS site (C52); shapes as GeoJSON (C57 for reading
   them); and, **at the user's word, `btree_gist`** (ADR-310), so the database refuses overlapping
-  size bands too.
+  size bands too; and **1.1.8, rules (2026-10-03, ADR-313)**: `Rule`, `RuleCriterion`,
+  `RuleCriterionPick`, `RuleAction`, `RuleActionItem`; a rule held to a ticket form and a contract
+  of its own project, a picked value to the rule's own project and form, an operator to its
+  criterion's kind; in `packages/domain`, which criteria a form takes, "Is valid", the refusal of
+  an exact copy, the overlap warning and the rules a pay item's "Pays when" writes.
   **Corrected by the user on
   2026-10-02 (ADR-301):** a pay item's code is unique on its project (ADR-147 had read their answer
   backwards), a pay item is its code and its description (no separate name, no "line number"), and
   an exact duplicate of a rule is refused before it is saved; the provisional `pay_item` table and
   its test follow (the twentieth migration). **The first product tables
   exist** (the lists, the client, the declaration event, the project, contractors on a project,
-  contracts, forms, pay items, sites and the project map; 48 models, 35 migrations);
+  contracts, forms, pay items, sites, the project map and rules; 53 models, 37 migrations);
   the other models are still Phase 0's provisional ones, and `packages/domain` holds the built-in
   keys, the policy values and a new project's settings.
 - **Phase 0 (Foundation) is done** (2026-10-01, ADR-281…288): the monorepo, the local HTTPS stack
   with the map servers, the installer, the hardened database, the scenario harness and the security
   checks. How it got there moved to `DECISIONS.md`'s scratchpad (ADR-307). **Every known later
-  concern** is in `BACKLOG.md`'s **carry-forward register** (C1…C56) under the task that picks it
+  concern** is in `BACKLOG.md`'s **carry-forward register** (C1…C58) under the task that picks it
   up (ADR-274): read a task's items before starting it.
 - **Product rules:** 26 rounds of questions, **ADR-001…231**. **Discovery is closed (ADR-230, the
   question shot-clock):** no questions are open; ask the user only when the answer changes money,
@@ -239,6 +243,12 @@ Update it at close-out when a task, milestone or phase closes.
   Desktop's settings. A first `local:up` downloads the map extract (20 MB; the download site answers
   only over IPv4 here, which Node handles) and takes about two minutes; a resume takes about 12 s.
   If every `docker` call answers 500, Docker Desktop's engine is stuck: quit and reopen it.
+  **Seen 2026-10-03 (ADR-313):** four throw-away copies of `adms` made at once filled the disk and
+  stopped Postgres (each copy is about 85 MB, and `CREATE DATABASE` writes the whole copy to the
+  write-ahead log, which grew to 0.5 GB). It came back by itself once space was freed (the routing
+  server's volume, rebuilt by the next `up`, removed while its container was stopped), with nothing
+  lost. **Try loosened guards two at a time here, not four,** each copy made with `STRATEGY
+  FILE_COPY` and followed by a `CHECKPOINT` after its drop (`adms-verify` §1.3).
 - **The repository has a history since 2026-10-01 (ADR-288):** nine commits by the user on branch
   `phase0-foundation` (`a94cdb6`…`b5329fe`), each a slice of that day's files in Phase 0's build
   order, so only the newest is a state that was built and tested whole; Phase 1's on
@@ -275,26 +285,32 @@ rounds of questions.
 "Brief for every Phase 1 task" first. **One task per response.** Done: 1.0.1, 1.1.1, 1.1.2 (the
 firm's lists, ADR-302), 1.1.3 (the client, the declaration event and the project in full,
 ADR-303), 1.1.4 (contractors on a project, and contracts, ADR-305, 306), 1.1.5 (forms, debris
-types, field tags, the firm's own fields, ADR-308), 1.1.6 (pay items in full, ADR-309), **1.1.7
-(disposal sites in full and the project map, ADR-311; `btree_gist`, ADR-310)**; and the user's
-correction
-of 2026-10-02 (ADR-301: a pay item's code is unique, it has a description and no name, a duplicate
-rule is refused).
+types, field tags, the firm's own fields, ADR-308), 1.1.6 (pay items in full, ADR-309), 1.1.7
+(disposal sites in full and the project map, ADR-311; `btree_gist`, ADR-310), **1.1.8 (rules,
+ADR-313)**; and the user's correction of 2026-10-02 (ADR-301: a pay item's code is unique, it has a
+description and no name, a duplicate rule is refused).
 
-👉 **Task 1.1.8, rules** (`BACKLOG.md`, Milestone 1.1). `Rule`, `RuleCriterion`,
-`RuleCriterionPick`, `RuleAction`, `RuleActionItem` with `RuleCriterionKey`, `RuleOperator`,
-`RuleActionKind`, `QuantityFrom`; in `packages/domain`: which criteria and operators a form takes
-(`spec/RULES.md` §4, §4a), "Is valid" (§7), the overlap warning, **the refusal of an exact duplicate
-of a rule before it is saved** (ADR-301), and the rules a pay item's "Pays when" writes. A rule
-names one contract, held to its project's contracts; a picked value is one that exists on the
-project (a *Disposal site* pick points at `disposal_site (project_id, id)`; a *Zone* pick is a name
-on the project's current map version, ADR-141 (6)). **Read first:** `spec/DATA-MODEL.md` §3
-"Rules", `spec/RULES.md`, `spec/parts/01-setup.md` step 8, `spec/acceptance/01-setup.md` section G
-(AC-01-60…68, 81), ADR-109, 118, 125, 130, 174, 229, 239, 301. **Done when:** AC-01-60…67 and 81
-pass, named by their IDs; `guard_gaps()` is empty; each new guard's removal is shown caught (and
-its tests run on the throw-away copy before `pnpm installer` applies it, not only the SQL: ADR-311
-(9)); the chain is green with real counts. *REQ-125a; REQ-131c's storage (its rates: 1.6.3).* Then
-1.1.9: `spec/acceptance/02-people-and-devices.md`.
+👉 **Task 1.1.9, the acceptance scenarios for people and devices** (`BACKLOG.md`, Milestone 1.1).
+Write `spec/acceptance/02-people-and-devices.md` from Part 2 (`spec/parts/02-people-and-devices.md`),
+as `01-setup.md` is written (`spec/acceptance/README.md` says how): each scenario restates a
+recorded rule and names it, in the example world's values; **what Phase 0 built is marked as built**
+(enrolment's models, the Monitor ID, devices, the master passcode's place, assignments and their
+pay items and forms: ADR-281, 286, 308, 309, with the tests that prove each), and **what waits for
+Phases 2–4 names its phase** (sign-in, the login list, the sync contract, the dispatch board's
+screen, the time clock's tables). The scenarios 1.1.10 must make pass (permissions, viewers,
+row-level security for the setup tables, C18, C54) are marked for the database. **Read first:**
+Part 2, `adms-field-app`, ARCHITECTURE §7–§8, ADR-095, 105, 106, 120, 145, 169, 170, 240, 241, 281.
+A docs task: nothing is built; **Done when** the file exists, every scenario names its source and
+where it is proven, and anything nothing settles is listed for the task that decides it. Then
+1.1.10: people's permissions and viewers.
+
+**Rules** (ADR-313): the example world's P1 has the golden mission's first rule in full
+(`world.rule`: its id, its two criteria, its action); a test writes more with `ruleLike`,
+`criterionLike`, `pickLike` and `actionLike` (`packages/db/test/support/example-world.ts`). A rule
+repeats its form's `document_type`; a criterion line its rule's project and form; a pick its line's
+project, form and criterion; an action its rule's project. The domain's `ProjectRules.check(rule,
+changedFrom)` is what a setup service calls before it saves a rule (1.1.11); `PaysWhen.rules(…)`
+returns the rules a pay item keeps, and matching them to the ones already saved is that service's.
 
 **Sites and the map** (ADR-310, 311): the example world's P1 has Marsh Road TDSR (`world.site`)
 and Bayline County Landfill (`world.landfill`) in full, with `world.siteTypes`; a test writes
@@ -335,14 +351,14 @@ then `SELECT guard_list('<table>', '<domain>');` in its guard migration; a new b
 `packages/domain`'s `builtInKeys` first, with an ADR (ADR-302).
 
 Start every command with `eval "$(fnm env --shell zsh)"`; the checks are **`adms-verify`** (the chain
-is 39 files, 724 tests; thirty-five migrations; `pnpm scenarios` runs two stories, 16 and 18 checks),
+is 41 files, 834 tests; thirty-seven migrations; `pnpm scenarios` runs two stories, 16 and 18 checks),
 with **`pnpm security`** (7 passed, 0 failed, ADR-291). The database tests, the map servers' tests and
 the stories need `pnpm local:up` first; stop it at close-out (ADR-277). A schema change goes through
 Prisma (`prisma migrate dev --create-only`), a guard into its own empty stub (ADR-113); **try a guard
 migration on a throw-away copy before `pnpm installer` applies it**, since an applied one is never
-edited. **Loosened guards can be tried four at a time**, each on its own copy (`adms_mutation_0`…;
-`adms-verify` §1.3): run nothing else against the database, and no `pnpm lint` or `pnpm test`,
-while they go.
+edited. **Loosened guards are tried two at a time on this machine**, each on its own copy
+(`adms_mutation_0`, `_1`; `adms-verify` §1.3; four at once filled Docker's disk on 2026-10-03): run
+nothing else against the database, and no `pnpm lint` or `pnpm test`, while they go.
 
 **Words and examples everywhere:** `spec/CONVENTIONS.md` (ADR-234, 235). Field names:
 `spec/DATA-MODEL.md`. Flag wording: `spec/FLAGS.md`.
