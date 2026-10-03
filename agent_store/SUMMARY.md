@@ -1,13 +1,13 @@
 # Open ADMS — Current decisions and gaps, at a glance
 
 **The present tense of the project on one page.** `DECISIONS.md` and `DEVIATIONS.md` are the full
-history, with 316 ADRs and 68 KDs, many superseded. This page says what is true **now** and which
+history, with 319 ADRs and 69 KDs, many superseded. This page says what is true **now** and which
 entries to cite. The reasons live in the ADRs and the skills.
 
 - **Keep it current:** when you add, amend or supersede an ADR, or open or close a KD, update this
   page **in the same response** (`adms-decisions`).
 - **If this page and a log entry disagree,** the newest ADR wins: fix this page and say so.
-- Updated 2026-10-03, through ADR-316 / KD-68. Rounds 13–26 are answered (ADR-145…228).
+- Updated 2026-10-03, through ADR-319 / KD-69. Rounds 13–26 are answered (ADR-145…228).
   **Phase 1 (data core and engine, rebuilt) is open, at the user's word (ADR-299).** Its plan is
   `BACKLOG.md`'s ten milestones and 47 tasks, one task per response, each milestone opening with
   its part's acceptance scenarios in `spec/acceptance/` (ADR-300). Done: the plan,
@@ -47,7 +47,13 @@ entries to cite. The reasons live in the ADRs and the skills.
   one class per group of setup records, each call one `$write` as the person; the story `setup`
   writes P1 and P2 in the spine's order, 51 checks; `MapShapes` in `packages/domain`; a map
   version's loaded time is the database's, KD-68 closed). **Milestone 1.1 is done.**
-  **Next: task 1.2.1, `spec/acceptance/03-certification.md`.**
+  **1.2.1, the acceptance scenarios for certifications** (ADR-317:
+  `spec/acceptance/03-certification.md`, 60 scenarios, none passing yet; 11 are the capacity math's
+  (1.2.2), 25 the records' (1.2.3); every capacity example is `adms-certifications` §3A.3's or worked
+  on the page; fourteen unsettled points listed for the task that decides each, C61; **KD-69 closed by the
+  user, ADR-318**: the golden mission's 102001 scanning `730416` on P2 stands, since a cert number
+  is unique per project only).
+  **Next: task 1.2.2, the capacity math in `packages/domain`.**
   **Corrected by the user 2026-10-02 (ADR-301):** a pay item's **code is unique on its project**
   (ADR-147 had it backwards); a pay item is its code and its **description**, with no separate name
   and no "line number"; **an exact duplicate of a rule is refused before it is saved**.
@@ -671,7 +677,9 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
 ### Certification — `adms-certifications`
 - It certifies a **container or a crew, never a vehicle**. **One number:** cert = placard =
   badge, pre-printed or system-issued, unique per project. Tickets copy it. [015, 016, 017, 045,
-  056]
+  056] **Unique per project only** (the user, ADR-318): the same number on two projects is
+  ordinary, never flagged or refused; the golden mission's P2 has its own `730416`. A **copy** to another project still takes a new
+  number, never the placard's (confirmed by the user). [318, 319]
 - **System-issued cert numbers** come from a per-project series set at project creation, seeded
   with a number that doesn't look made up (e.g. `730415`), counting up by one; a tandem gets
   consecutive numbers. (Q-96, Build 1 answer) [102]
@@ -1230,7 +1238,7 @@ Full text: `DEVIATIONS.md`.
 | **Unit rate** | 27, 28, 44, 30 | No itemised counts or sub-types; unit-count flag ignored; no decimals; HHW disposition trail (low priority, design not yet discussed) |
 | **Splits and scale receipts** | 22, 23, 24, 29 | No estimate or ROE on collections; no scale receipts; no `LB` unit |
 | **Permissions and records** | 25, 37, 40 | No edit permissions; no creating-device field; no invoice lock |
-| **Docs and tooling** | 34, 63, 65, 66 | README test count (34); 66 closed 2026-10-02 (ADR-308): task 1.1.5's six open points settled as agent defaults, as recommended; 65 closed 2026-10-01: `spec/DATA-MODEL.md`'s thirteen points settled at the user's word (ADR-292…295). 59 closed 2026-10-01: the user retired the root `docker-compose.yml` and its volume, `pnpm security` 7 passed, 0 failed (ADR-291); **63**: the `development/` conventions draft is read-only background, its errors listed in CONVENTIONS §8. 33, 58, 61 and 62 closed by the rewrites and the truth-up (ADR-247…253); 57 closed by the `adms-verify` rewrite (ADR-259) |
+| **Docs and tooling** | 34, 63, 65, 66 | 69 closed 2026-10-03 by the user (ADR-318): the golden mission's P2 ticket 102001 scanning cert `730416` stands, a cert number being unique per project only. README test count (34); 66 closed 2026-10-02 (ADR-308): task 1.1.5's six open points settled as agent defaults, as recommended; 65 closed 2026-10-01: `spec/DATA-MODEL.md`'s thirteen points settled at the user's word (ADR-292…295). 59 closed 2026-10-01: the user retired the root `docker-compose.yml` and its volume, `pnpm security` 7 passed, 0 failed (ADR-291); **63**: the `development/` conventions draft is read-only background, its errors listed in CONVENTIONS §8. 33, 58, 61 and 62 closed by the rewrites and the truth-up (ADR-247…253); 57 closed by the `adms-verify` rewrite (ADR-259) |
 
 **Known later concerns from the Phase 0 build** (not KDs: nothing disagrees with a rule yet) are the
 **carry-forward register** in `BACKLOG.md` (C1…C56, by the task that picks each up; ADR-274; C1–C3
@@ -1241,13 +1249,17 @@ per-login timeout with Phase 2, TLS with the demo deploy); nothing states the vi
 minimum, the behaviour of **01, 04, 05, 10, 12, 13, 15, 55, 56** right and verified. `BACKLOG.md`'s
 Phase 1 milestones name the KDs each closes (ADR-300).
 
-**Closed:** 03, 07, 08, 09, 20, 21, 31, 32, 33, 51, 57, 58, 60, 61, 62, 64, 65, 66.
+**Closed:** 03, 07, 08, 09, 20, 21, 31, 32, 33, 51, 57, 58, 60, 61, 62, 64, 65, 66, 69.
 
 ---
 
 ## 4. Waiting on the user
 
-**Nothing blocks the next task (1.2.1, the acceptance scenarios for certifications).**
+**Nothing blocks the next task (1.2.2, the capacity math).**
+- **From task 1.2.1 (ADR-317), yours to overturn:** `spec/acceptance/03-certification.md` is a
+  draft until you approve it; what it added to the example world (Sam Grant certifying on Saturday
+  10 October 2026 with Lee Morgan as helper; a tier 2 sub, Tidewater Hauling; a pre-printed number
+  `88120`); and its fourteen unsettled points, each to be a default of the task named there.
 - **From task 1.1.11 (ADR-316), yours to overturn:** what the story added to the example world
   (`spec/CONVENTIONS.md` §6): **P2's setup beyond the mission's words** (loads only; a load, an ROE
   and a survey form, the ROE form with GPS required; one rule; no map), **the fill and freon pay

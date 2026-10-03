@@ -184,8 +184,11 @@ by ADR-303 (named here by ADR-307). Closes the behaviour of KD-14, 16, 17, 18, 2
 Carried: C56 (1.2.3), filed by ADR-305 (named here by ADR-307). Closes the behaviour of KD-10, 11,
 45, 46, 48.
 
-- [ ] **1.2.1** `spec/acceptance/03-certification.md`, from Part 3 and `adms-certifications`, the
-  capacity examples taken from §3A.3 and the paper form, never from `development/`.
+- [x] **1.2.1** ✅ **done 2026-10-03 (ADR-317):** `spec/acceptance/03-certification.md`, from Part 3 and `adms-certifications`, the
+  capacity examples taken from §3A.3 and the paper form, never from `development/`. 60 scenarios;
+  fourteen points nothing settles listed for the task that decides each (1.2.2: two; 1.2.3: most);
+  KD-69 raised (the mission's 102001 scans `730416` on P2; a copy gets a new number) and closed
+  by the user the same day (ADR-318: the mission stands; a cert number is unique per project only).
 - [ ] **1.2.2** **Capacity math in `packages/domain`**, exactly `adms-certifications` §3A.3: whole
   inches, the primary box and boxes 1…N, each shape, add or subtract, hundredths at each step,
   ÷ 46,656, a whole CY half up; no override. **Done when:** every worked example of §3A.3
@@ -678,7 +681,7 @@ delete one.
 
 **For `spec/DATA-MODEL.md` (0.2b.2) and Phase 1** — *2026-10-01: the draft (ADR-284) answers C16–C19, C29, C36 and C42–C44 on paper (its §12); each stays here until Phase 1 builds it.*
 *2026-10-01 (ADR-300), Phase 1 open: the task that picks each up: C36 → 1.1.5 (the definition), 1.3.6 (the answers); C42 → 1.1.5, 1.1.6, 1.1.7; C52 → 1.1.7 (setup) ✅, 1.5.6 (the flags); C18 → 1.1.10, 1.7.1; C43 → 1.3.2; C44 → 1.3.3; C16 → 1.5.2, 1.7.1; C50 → 1.5.8; C20 → 1.5.9; C17 → 1.7.1, 1.8.2; C19 → 1.8.2; C29, C30 → 1.9.1; C51's two scenarios → 1.9.2; C28 → 1.9.3; C31's stand-in → 1.4.2. Filed since (ADR-303, 305; added here by ADR-307): C53 →
-1.1.11, 1.5.5 (and Phase 2); C54 → 1.1.10; C55 → 1.5.5, 1.5.7; C56 → 1.2.3. Filed by ADR-311: C57 → 1.1.11, 1.5.6. Filed by ADR-313: C58 → 1.1.11, 1.6.1, 1.6.4. Filed by ADR-315: C59 → every schema task, 1.2.3, 1.3.3, 1.7.1, Phase 2.*
+1.1.11, 1.5.5 (and Phase 2); C54 → 1.1.10; C55 → 1.5.5, 1.5.7; C56 → 1.2.3. Filed by ADR-311: C57 → 1.1.11, 1.5.6. Filed by ADR-313: C58 → 1.1.11, 1.6.1, 1.6.4. Filed by ADR-315: C59 → every schema task, 1.2.3, 1.3.3, 1.7.1, Phase 2. Filed by ADR-317: C61 → 1.2.2, 1.2.3, 1.5.5, 1.8.2, 1.9.1.*
 - **C36. The storage shape of the firm's added fields** (ADR-278, at the user's word): a versioned
   form definition per record kind, one JSONB answers column per record keyed by field ID plus the
   definition version, a schema generated from the definition in `packages/contracts`, Prisma's `Json`
@@ -822,6 +825,21 @@ delete one.
   golden mission):** whether P2 has a map (102001's zone), and the phones, people and viewers of
   §1, written through services. **Any guard that tells "the same piece of work" by a time**
   needs that column stamped by the database (`dbgenerated`), never `@default(now())` (KD-68).
+- **C61. What the certification scenarios left for the tasks that build them** (ADR-317;
+  `spec/acceptance/03-certification.md`, "Left to the task that builds it", fourteen points).
+  **Task 1.2.2:** a zero or missing measurement, boxes that subtract more than the primary holds;
+  which roundings are "a step" inside one shape's formula; and the measured boxes of `730415`,
+  `730416` and `730419` recorded in `spec/CONVENTIONS.md` §6. **Task 1.2.3:** how the database
+  holds "a container has boxes"; a certification's subs held to its own prime's; a typed sub that
+  is another prime's; what a merge moves (C56); a vehicle type's *certifies* against the kind;
+  whether a certifying assignment or a helper's assignment is checked; the date "replaced on" is;
+  a contractor user's sight (C59); the audit domain; a copy's photographs; and the example world's
+  certifying assignment (Sam Grant, Saturday 10 October 2026, with Lee Morgan), Tidewater Hauling
+  and `730420`. **Task 1.5.5:** whether a tag is expired on its expiry date or the day after, and
+  which of a field event's times is the work time. **Task 1.8.2:** what QC Void on a certification
+  does to its tickets. ~~**Task 1.9.1 (KD-69):** ticket 102001's cert number on P2 needs the user's
+  word~~ **answered (ADR-318):** P2 has its own certification `730416` (Rivera's self-loader, 48
+  CY), which task 1.2.3 writes into the example world.
 - **C20.** The worker's one transaction per group, one run per project, and flagged-and-skipped groups
   (REQ-015, KD-55) use one `$write` per group (ADR-273 (3)).
 
