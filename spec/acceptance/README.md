@@ -20,7 +20,7 @@ One file per part page, written **before the code of the milestone that builds t
 | Part | File | Scenarios | Written | Passing at the engine |
 |---|---|---|---|---|
 | 1 Set up | [01-setup.md](01-setup.md) | 82 | 2026-10-01; AC-01-39…41, 66, 80 corrected and AC-01-81 added 2026-10-02 (ADR-301); AC-01-82 added (ADR-306); AC-01-80 extended (ADR-308) | 34, and AC-01-27 in part: AC-01-41 (ADR-301); AC-01-31, 32, 34…38, the firm's lists (2026-10-02, ADR-302); AC-01-02…08 and 11…14, the client, the declaration event and the project (2026-10-02, ADR-303: AC-01-06 and 11 at the domain, the others at the database); AC-01-15…18, 20, 21 and 82, contractors and contracts (ADR-305, 306); AC-01-22…26 and 28…30, forms, debris types, field tags and the firm's own fields (ADR-308: 25 and 26 at the domain, the others at the database; AC-01-27's field events: 1.3.4) |
-| 2 People and devices | `02-people-and-devices.md` | | with task 1.1.9 | |
+| 2 People and devices | [02-people-and-devices.md](02-people-and-devices.md) | 74 | 2026-10-03 (ADR-314) | 28 at the database, as Phase 0 built them (each under the test the file names; it takes its ID in task 1.1.10), and AC-02-38 and 49 in part. 28 of the 74 are for Phases 2–4 only |
 | 3 Certify | `03-certification.md` | | with task 1.2.1 | |
 | 4 Capture | `04-field-capture.md` | | with task 1.3.1 | |
 | 5 Sync | `05-sync.md` | | with task 1.4.1 | |
