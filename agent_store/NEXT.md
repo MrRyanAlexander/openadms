@@ -68,7 +68,7 @@ question rounds) moved word for word to `DECISIONS.md`'s scratchpad, "Moved from
 2026-10-02"; `ROADMAP.md` §3a keeps the table.
 
 **Still live from the spec track:** `spec/acceptance/` is 1 of 9 files (`01-setup.md`: 82
-scenarios, 45 passing and AC-01-27 and 48 in part, after 1.1.6); each other file is the first task of the milestone that builds its part
+scenarios, 52 passing and AC-01-27, 48 and 55 in part, after 1.1.7); each other file is the first task of the milestone that builds its part
 (ADR-300).
 
 ---
@@ -80,7 +80,7 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-02: Phase 1 is open, seven tasks done)
+### Where things stand (2026-10-02: Phase 1 is open, eight tasks done)
 - **Phase 1 (data core and engine) is the active phase**, opened by the user on 2026-10-01
   (ADR-299). Its plan is `BACKLOG.md`'s ten milestones and 47 tasks (ADR-300): setup records →
   certifications and capacity → tickets and numbers → sync intake → reconciliation → the rule engine
@@ -108,14 +108,19 @@ of `DECISIONS.md`.
   crew time's conversion and day length), `PayItemRate` (one per prime, held to the project's
   primes) and `PayItemCrewDayStep`; an assignment names only unit rate pay items (C42);
   `SizeBands` in `packages/domain` (an overlap refused, a gap warned) and the policy value
-  `CREW_DAY_HOURS=12`.
+  `CREW_DAY_HOURS=12`; and **1.1.7, disposal sites in full, and the project map (2026-10-02,
+  ADR-311)**: a site's type, facts, GPS, dates, labels, **several tipping fee pay items** (KD-67; confirmed by the user, ADR-312),
+  own shapes; map versions and zones, never edited, a zone only with its version; the database
+  refuses *Haul-outs leave here* off a TDSR/DMS site (C52); shapes as GeoJSON (C57 for reading
+  them); and, **at the user's word, `btree_gist`** (ADR-310), so the database refuses overlapping
+  size bands too.
   **Corrected by the user on
   2026-10-02 (ADR-301):** a pay item's code is unique on its project (ADR-147 had read their answer
   backwards), a pay item is its code and its description (no separate name, no "line number"), and
   an exact duplicate of a rule is refused before it is saved; the provisional `pay_item` table and
   its test follow (the twentieth migration). **The first product tables
   exist** (the lists, the client, the declaration event, the project, contractors on a project,
-  contracts, forms and pay items; 43 models, 31 migrations);
+  contracts, forms, pay items, sites and the project map; 48 models, 35 migrations);
   the other models are still Phase 0's provisional ones, and `packages/domain` holds the built-in
   keys, the policy values and a new project's settings.
 - **Phase 0 (Foundation) is done** (2026-10-01, ADR-281…288): the monorepo, the local HTTPS stack
@@ -270,26 +275,34 @@ rounds of questions.
 "Brief for every Phase 1 task" first. **One task per response.** Done: 1.0.1, 1.1.1, 1.1.2 (the
 firm's lists, ADR-302), 1.1.3 (the client, the declaration event and the project in full,
 ADR-303), 1.1.4 (contractors on a project, and contracts, ADR-305, 306), 1.1.5 (forms, debris
-types, field tags, the firm's own fields, ADR-308), **1.1.6 (pay items in full, ADR-309)**; and the
-user's correction
+types, field tags, the firm's own fields, ADR-308), 1.1.6 (pay items in full, ADR-309), **1.1.7
+(disposal sites in full and the project map, ADR-311; `btree_gist`, ADR-310)**; and the user's
+correction
 of 2026-10-02 (ADR-301: a pay item's code is unique, it has a description and no name, a duplicate
 rule is refused).
 
-👉 **Task 1.1.7, disposal sites in full, and the project map** (`BACKLOG.md`, Milestone 1.1).
-`DisposalSite`'s type, four facts, permit, GPS, activation and close dates, short code and tipping
-fee link (`tippingFeePayItemId`, one of the site's own project's pay items: `pay_item (project_id,
-id)` is the key to point at); `DisposalSiteLabel`, `SiteAreaVersion`; `MapVersion` and `Zone`
-(never edited or deleted: `refuse_edit()`, ADR-308, may be reused); *Haul-outs leave here* only on a
-TDSR/DMS site (C52: the ADR says whether the database refuses it too). The provisional
-`DisposalSite` (project and name) changes shape: the example world, both stories and every test that
-writes a site follow. The ADR settles the formats a shape is taken in (`01-setup.md`, point 5).
-**Read first:** `spec/DATA-MODEL.md` §3 "Sites and the map", `spec/parts/01-setup.md` step 7,
-`spec/acceptance/01-setup.md` section F (AC-01-52…59), ARCHITECTURE §3 (shapes, GeoJSON), the
-golden mission's P1 sites, ADR-111, 136, 141, 142, 145, 173, 190, 208, 215, 222, 226, 227, and the
-register's C42 (the real site) and C52. **Done when:** AC-01-52…59 pass, named by their IDs (54 at
-the domain); `guard_gaps()` is empty; each new guard's removal is shown caught; the chain is green
-with real counts. *REQ-104, 105q; REQ-105n's site (its flag: 1.5.6); C42's site.* Then 1.1.8:
-rules.
+👉 **Task 1.1.8, rules** (`BACKLOG.md`, Milestone 1.1). `Rule`, `RuleCriterion`,
+`RuleCriterionPick`, `RuleAction`, `RuleActionItem` with `RuleCriterionKey`, `RuleOperator`,
+`RuleActionKind`, `QuantityFrom`; in `packages/domain`: which criteria and operators a form takes
+(`spec/RULES.md` §4, §4a), "Is valid" (§7), the overlap warning, **the refusal of an exact duplicate
+of a rule before it is saved** (ADR-301), and the rules a pay item's "Pays when" writes. A rule
+names one contract, held to its project's contracts; a picked value is one that exists on the
+project (a *Disposal site* pick points at `disposal_site (project_id, id)`; a *Zone* pick is a name
+on the project's current map version, ADR-141 (6)). **Read first:** `spec/DATA-MODEL.md` §3
+"Rules", `spec/RULES.md`, `spec/parts/01-setup.md` step 8, `spec/acceptance/01-setup.md` section G
+(AC-01-60…68, 81), ADR-109, 118, 125, 130, 174, 229, 239, 301. **Done when:** AC-01-60…67 and 81
+pass, named by their IDs; `guard_gaps()` is empty; each new guard's removal is shown caught (and
+its tests run on the throw-away copy before `pnpm installer` applies it, not only the SQL: ADR-311
+(9)); the chain is green with real counts. *REQ-125a; REQ-131c's storage (its rates: 1.6.3).* Then
+1.1.9: `spec/acceptance/02-people-and-devices.md`.
+
+**Sites and the map** (ADR-310, 311): the example world's P1 has Marsh Road TDSR (`world.site`)
+and Bayline County Landfill (`world.landfill`) in full, with `world.siteTypes`; a test writes
+another with `siteLike(world, siteTypeId, …)`, a TDSR/DMS one stating `site_type_key: 'TDSR'`; both
+stories write them through `setUpP1Sites` (`packages/scenarios/src/stories/p1.ts`). A site's
+tipping fee pay items are `DisposalSiteTippingFee` rows. **`btree_gist` lives in the schema
+`extensions`**, which no runtime login may use; Prisma's shadow database drops it before each
+replay (`prisma.config.js`, `initShadowDb`), so `prisma migrate dev` works as before.
 
 **Pay items** (ADR-309): the example world's P1 has six of the golden mission's pay items with
 Coastline's rates (`world.payItems`, `world.rates`, `world.payableTypes`, `world.kindsOfWork`); a
@@ -299,7 +312,7 @@ database default. An assignment's pay item repeats its `kindOfWorkId`.
 **Forms** (ADR-308): a row that belongs only on some kinds of form (`FormDebrisType` on a load or
 haul-out form, `FormDefinition` on an ROE, survey, incident or drop-off log form) repeats its form's
 `documentType`, held by a check and a two-column foreign key to `form (id, document_type)`. A
-version that is never edited uses `refuse_edit()` (map versions and zones, 1.1.7, may reuse it). The
+version that is never edited uses `refuse_edit()` (as map versions, zones and site shapes do since 1.1.7). The
 example world's P1 has a load form (Vegetative, C&D), a haul-out form and an incident form
 (`world.forms`, `world.formDebrisTypes`).
 
@@ -322,7 +335,7 @@ then `SELECT guard_list('<table>', '<domain>');` in its guard migration; a new b
 `packages/domain`'s `builtInKeys` first, with an ADR (ADR-302).
 
 Start every command with `eval "$(fnm env --shell zsh)"`; the checks are **`adms-verify`** (the chain
-is 37 files, 687 tests; thirty-one migrations; `pnpm scenarios` runs two stories, 16 and 18 checks),
+is 39 files, 724 tests; thirty-five migrations; `pnpm scenarios` runs two stories, 16 and 18 checks),
 with **`pnpm security`** (7 passed, 0 failed, ADR-291). The database tests, the map servers' tests and
 the stories need `pnpm local:up` first; stop it at close-out (ADR-277). A schema change goes through
 Prisma (`prisma migrate dev --create-only`), a guard into its own empty stub (ADR-113); **try a guard

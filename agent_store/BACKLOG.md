@@ -147,12 +147,17 @@ by ADR-303 (named here by ADR-307). Closes the behaviour of KD-14, 16, 17, 18, 2
   `PayItemCrewDayStep`; the size-band rule in `packages/domain` (bands of one payable type can't
   overlap; a gap warns). `AssignmentPayItem` and `dispatch-monday` follow. **Done when:**
   AC-01-39…51 pass. *REQ-102, 112d; C42's pay item.*
-- [ ] **1.1.7** **Disposal sites in full, and the project map.** `DisposalSite`'s type, four facts,
-  permit, GPS, dates, short code and tipping fee link; `DisposalSiteLabel`, `SiteAreaVersion`;
-  `MapVersion` and `Zone` (never edited or deleted); *Haul-outs leave here* only on a TDSR/DMS site
-  (C52: the ADR says whether the database refuses it too). The ADR settles the formats a shape is
-  taken in (`01-setup.md`, point 5). **Done when:** AC-01-52…59 pass. *REQ-104, 105q; REQ-105n's
-  site (its flag: 1.5.6); C42's site.*
+- [x] **1.1.7** ✅ **done 2026-10-02 (ADR-310, 311):** `DisposalSite` in full (type and the type's
+  key, four facts, permit, GPS, dates, short code), `DisposalSiteLabel`, `DisposalSiteTippingFee`
+  (several per site, in place of DATA-MODEL's one link: KD-67, confirmed by the user, ADR-312), `SiteAreaVersion`, `MapVersion`,
+  `Zone` (never edited or deleted; a zone only with its version); `SiteAreaSource`, `MapSource`;
+  the database refuses *Haul-outs leave here* off a TDSR/DMS site (C52 settled), and setup says so
+  first (`SiteFacts` in `packages/domain`); shapes as GeoJSON (point 5 settled); and, at the user's
+  word, `btree_gist` and the database's refusal of overlapping size bands (ADR-310). Four migrations
+  (`disposal_sites_and_the_project_map`, its guard, `guard_size_bands_never_overlap`,
+  `guard_map_shapes_hold_their_type`: 35 in all). AC-01-52, 53, 56…59 pass at the database, 54 at
+  the domain and the database, 55 in part (its flag: 1.5.6); AC-01-45 at the database too.
+  *REQ-104, 105q ticked; C42's site done.* **Disposal sites in full, and the project map.**
 - [ ] **1.1.8** **Rules.** `Rule`, `RuleCriterion`, `RuleCriterionPick`, `RuleAction`,
   `RuleActionItem` with `RuleCriterionKey`, `RuleOperator`, `RuleActionKind`, `QuantityFrom`; in
   `packages/domain`: which criteria and operators a form takes (`spec/RULES.md` §4, §4a), "Is valid"
@@ -667,8 +672,8 @@ delete one.
   Fields from `adms-field-app` and ARCHITECTURE §7; never invented.~~ **Done (ADR-281 (4)):** no details column; no rule has a phone report anything but its key and, at a sync, its clock.
 
 **For `spec/DATA-MODEL.md` (0.2b.2) and Phase 1** — *2026-10-01: the draft (ADR-284) answers C16–C19, C29, C36 and C42–C44 on paper (its §12); each stays here until Phase 1 builds it.*
-*2026-10-01 (ADR-300), Phase 1 open: the task that picks each up: C36 → 1.1.5 (the definition), 1.3.6 (the answers); C42 → 1.1.5, 1.1.6, 1.1.7; C52 → 1.1.7 (setup), 1.5.6 (the flags); C18 → 1.1.10, 1.7.1; C43 → 1.3.2; C44 → 1.3.3; C16 → 1.5.2, 1.7.1; C50 → 1.5.8; C20 → 1.5.9; C17 → 1.7.1, 1.8.2; C19 → 1.8.2; C29, C30 → 1.9.1; C51's two scenarios → 1.9.2; C28 → 1.9.3; C31's stand-in → 1.4.2. Filed since (ADR-303, 305; added here by ADR-307): C53 →
-1.1.11, 1.5.5 (and Phase 2); C54 → 1.1.10; C55 → 1.5.5, 1.5.7; C56 → 1.2.3.*
+*2026-10-01 (ADR-300), Phase 1 open: the task that picks each up: C36 → 1.1.5 (the definition), 1.3.6 (the answers); C42 → 1.1.5, 1.1.6, 1.1.7; C52 → 1.1.7 (setup) ✅, 1.5.6 (the flags); C18 → 1.1.10, 1.7.1; C43 → 1.3.2; C44 → 1.3.3; C16 → 1.5.2, 1.7.1; C50 → 1.5.8; C20 → 1.5.9; C17 → 1.7.1, 1.8.2; C19 → 1.8.2; C29, C30 → 1.9.1; C51's two scenarios → 1.9.2; C28 → 1.9.3; C31's stand-in → 1.4.2. Filed since (ADR-303, 305; added here by ADR-307): C53 →
+1.1.11, 1.5.5 (and Phase 2); C54 → 1.1.10; C55 → 1.5.5, 1.5.7; C56 → 1.2.3. Filed by ADR-311: C57 → 1.1.11, 1.5.6.*
 - **C36. The storage shape of the firm's added fields** (ADR-278, at the user's word): a versioned
   form definition per record kind, one JSONB answers column per record keyed by field ID plus the
   definition version, a schema generated from the definition in `packages/contracts`, Prisma's `Json`
@@ -687,20 +692,22 @@ delete one.
 - **C19.** Where a person's **void** is recorded (the status column is the worker's today; ADR-270 (2)).
 - **C29. Times the database stamps itself** (`audit_record.occurred_at`, `created_at`, `enrolled_at`) use its own clock, not the story's (ADR-275): a story asserts the audit log's order, not its times. If the golden mission must assert them, decide then (e.g. the API stating the time it writes).
 - **C30. The golden mission as a story** (REQ-017 stays open until it runs; REQ-142, REQ-143): its setup, days, reviews, ledger and audit rows asserted exactly; the worker's writes through the `worker` client as `systemActor`; add stories to `packages/scenarios/src/stories/index.ts`.
-- **C42. The assignment's forms; the real pay item and site** (ADR-281 (8)). ~~REQ-020's "work: … unit rate
+- **C42. The assignment's forms; the real pay item and site** (ADR-281 (8)). **The site done
+  (ADR-311)**; what is left is a field event's own site and a contractor's kind (below). ~~REQ-020's "work: … unit rate
   pay items"~~ **done (ADR-286): a provisional `PayItem` (project, code, name; since ADR-301 its code is unique on its project and it has a description, not a name) and `AssignmentPayItem`;
   REQ-020 ticked.** ~~The forms an assignment names~~ **done (ADR-308): `formDocumentTypes`, held to
   ROEs, surveys, incidents and drop-off logs.** ~~`PayItem`'s real fields and its rate per prime
   (REQ-102, DATA-MODEL §3); the check that a named pay item is a unit rate one~~ **done (ADR-309):
   every field, a rate per prime, and a three-column foreign key that names only a unit rate pay
-  item.** Still to come: `DisposalSite` is
-  provisional (project and name): its site type, facts, permit, GPS, area and dates are DATA-MODEL's,
-  and so is a field event's own site (each record keeps the site it was made at, ADR-195). A
+  item.** ~~`DisposalSite` is
+  provisional (project and name): its site type, facts, permit, GPS, area and dates are DATA-MODEL's~~
+  **done (ADR-311).** Still to come: a field event's own site (each record keeps the site it was made at, ADR-195). A
   contractor's kind (hauler, monitoring, crew, other; Q-97) comes with `Contractor`'s real shape.
 - **C43. Numbering** (ADR-281 (5)): `NumberBlock` holds only a block's range, last used number and
   how it ended. Still to come with tickets and numbers: the project's series and control ranges, the
   allocator (the server is the only one, ADR-065), **a database refusal of overlapping blocks** (an
-  exclusion constraint needs the `btree_gist` extension: its own ADR), which block an ROE's number comes
+  exclusion constraint; **`btree_gist` is in since ADR-310**, in the schema `extensions`, so no ADR
+  of its own is needed: `pay_item_bands_never_overlap` is the idiom), which block an ROE's number comes
   from (ADR-181), and where a firm's Monitor ID series starts if it isn't `M000001`.
 - **C44. Back-office-created field events** (ADR-156; ADR-281 (9)): they have no phone and no
   assignment, so `FieldEvent.deviceId`, `assignmentId` and `setupVersion` become optional for them (with
@@ -728,7 +735,9 @@ delete one.
   (201002 and 201003 are the flag catalogue's examples), which a story states itself, as today's
   stories do, and the story seeds the mission's second landfill, its per-ton pay item and its sixth
   monitor (`spec/CONVENTIONS.md` §6).
-- **C52. *Haul-outs leave here* only on a TDSR/DMS site** (ADR-298). With `DisposalSite`'s real
+- **C52. *Haul-outs leave here* only on a TDSR/DMS site** (ADR-298). **Setup half done (ADR-311):**
+  the database refuses it too, and refuses changing a marked site's type (`siteTypeKey`, a check);
+  `SiteFacts` says so in setup. The two flags are 1.5.6's. With `DisposalSite`'s real
   model (C42): setup refuses the mark on any other site type and refuses changing a marked site's
   type; decide whether the database refuses it too (the type is a list row acted on by its fixed
   key, so a plain check constraint can't see it; a guard needs its own migration and test). An
@@ -766,6 +775,16 @@ delete one.
   writes `asPrimeId` with it. **Task 1.1.10 (C18):** a prime's sight of its subs' tickets reads
   `project_contractor`; and whether any read-only viewer sees a contractor's contact details
   (ADR-306; ADR-169 keeps personal phone numbers from them).
+- **C57. Reading a shape, its bounding box, and point-in-polygon** (ADR-311 (6)). The database
+  keeps a GeoJSON `Polygon` or `MultiPolygon` and four bounding-box columns, and checks only that the
+  shape holds its type and coordinates and that the box is on the earth; **whoever writes a shape
+  works out its box**. **Task 1.1.11** (the setup story through the API's services, which load P1's
+  map): a `packages/domain` reader that takes a GeoJSON geometry, Feature or FeatureCollection,
+  refuses anything but closed polygon rings in WGS84 ranges, merges features of one zone name into a
+  MultiPolygon, and gives the bounding box (no dependency, or one pinned by an ADR). **Task 1.5.x
+  (the zone and site-area checks):** point-in-polygon in the same module, a point on an edge
+  inside (ARCHITECTURE §3), the box as a quick first test. A shapefile, KML and an Esri layer link
+  are REQ-124b's import in the back office (Phase 4), with their libraries' ADRs.
 - **C20.** The worker's one transaction per group, one run per project, and flagged-and-skipped groups
   (REQ-015, KD-55) use one `$write` per group (ADR-273 (3)).
 
