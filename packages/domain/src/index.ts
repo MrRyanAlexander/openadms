@@ -2,6 +2,18 @@
 // The rules arrive task by task in Phase 1 (BACKLOG, "Active — Phase 1").
 export { builtInKeys, type BuiltInKey, type ListWithBuiltInValues } from './built-in-keys.ts';
 export {
+  Capacity,
+  boxShapes,
+  boxSigns,
+  type BoxShape,
+  type BoxSign,
+  type BoxVolume,
+  type CapacityReading,
+  type CapacityRefusal,
+  type CertificationKind,
+  type MeasuredBox,
+} from './capacity.ts';
+export {
   DebrisTypeEntries,
   type DebrisTypeEntry,
   type DebrisTypeFormKind,
