@@ -19,6 +19,10 @@ const domains: Record<string, string> = {
   // A contractor's place on a project; and a contract, which a pricing rule names (ADR-305).
   project_contractor: 'OPERATIONS',
   contract: 'BILLING',
+  // A project's forms, the debris types on them, and the firm's own fields (ADR-308).
+  form: 'OPERATIONS',
+  form_debris_type: 'OPERATIONS',
+  form_definition: 'OPERATIONS',
   user: 'SECURITY',
   device: 'SECURITY',
   disposal_site: 'OPERATIONS',
@@ -26,6 +30,10 @@ const domains: Record<string, string> = {
   assignment: 'OPERATIONS',
   // Where a rate will live: its changes are the billing reviewer's to read (ADR-286).
   pay_item: 'BILLING',
+  // A pay item's rate for each prime, and a crew day's steps: where a rate and its quantity live
+  // (ADR-309).
+  pay_item_rate: 'BILLING',
+  pay_item_crew_day_step: 'BILLING',
   assignment_pay_item: 'OPERATIONS',
   master_passcode: 'SECURITY',
   field_event: 'RECORDS',
@@ -53,6 +61,8 @@ const triggers = [
   ]),
   `CREATE TRIGGER audit_record_refuse_change BEFORE DELETE OR UPDATE ON public.audit_record FOR EACH ROW EXECUTE FUNCTION refuse_audit_change()`,
   `CREATE TRIGGER audit_record_refuse_truncate BEFORE TRUNCATE ON public.audit_record FOR EACH STATEMENT EXECUTE FUNCTION refuse_audit_change()`,
+  // A definition's version is never edited (ADR-308).
+  `CREATE TRIGGER form_definition_refuse_edit BEFORE UPDATE ON public.form_definition FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
   // The system actor's row (ADR-276).
   `CREATE TRIGGER user_system_actor BEFORE INSERT OR UPDATE ON public."user" FOR EACH ROW EXECUTE FUNCTION user_system_actor_guard()`,
   // Only a release writes a list value's key (ADR-302).
@@ -97,6 +107,11 @@ describe('the guards in the catalog', () => {
     );
     const checks = [
       {
+        name: 'assignment_form_document_types_check',
+        definition:
+          "CHECK (((form_document_types IS NOT NULL) AND (form_document_types <@ ARRAY['ROE'::form_document_type, 'SURVEY'::form_document_type, 'INCIDENT'::form_document_type, 'DROP_OFF_LOG'::form_document_type])))",
+      },
+      {
         name: 'assignment_origin_check',
         definition:
           "CHECK ((((origin = 'PLANNED'::assignment_origin) AND (made_by_id IS NOT NULL)) OR ((origin = 'UNPLANNED'::assignment_origin) AND (made_by_id IS NULL) AND (device_id IS NOT NULL))))",
@@ -132,6 +147,26 @@ describe('the guards in the catalog', () => {
         name: 'field_event_monitor_check',
         definition: "CHECK ((monitor_id <> '00000000-0000-7000-8000-000000000001'::uuid))",
       },
+      {
+        name: 'form_debris_type_document_type_check',
+        definition:
+          "CHECK ((document_type = ANY (ARRAY['LOAD'::form_document_type, 'HAUL_OUT'::form_document_type])))",
+      },
+      {
+        name: 'form_definition_document_type_check',
+        definition:
+          "CHECK ((document_type = ANY (ARRAY['ROE'::form_document_type, 'SURVEY'::form_document_type, 'INCIDENT'::form_document_type, 'DROP_OFF_LOG'::form_document_type])))",
+      },
+      {
+        name: 'form_definition_fields_check',
+        definition: "CHECK ((jsonb_typeof(fields) = 'array'::text))",
+      },
+      { name: 'form_definition_version_check', definition: 'CHECK ((version >= 1))' },
+      {
+        name: 'form_gps_required_check',
+        definition:
+          "CHECK (((document_type = 'ROE'::form_document_type) = (gps_required IS NOT NULL)))",
+      },
       { name: 'master_passcode_hash_check', definition: "CHECK ((hash ~~ '$argon2id$%'::text))" },
       { name: 'master_passcode_version_check', definition: 'CHECK ((version >= 1))' },
       {
@@ -147,6 +182,31 @@ describe('the guards in the catalog', () => {
         name: 'number_block_range_check',
         definition: 'CHECK (((first_number >= 1) AND (first_number <= last_number)))',
       },
+      {
+        name: 'pay_item_band_check',
+        definition:
+          'CHECK ((((band_from IS NULL) OR (band_from >= (0)::numeric)) AND ((band_to IS NULL) OR (band_to >= (0)::numeric)) AND ((band_from IS NULL) OR (band_to IS NULL) OR (band_from <= band_to))))',
+      },
+      {
+        name: 'pay_item_crew_day_hours_check',
+        definition:
+          "CHECK ((((NOT (crew_time_conversion IS DISTINCT FROM 'PER_DAY_EXACT'::crew_time_conversion)) = (crew_day_hours IS NOT NULL)) AND ((crew_day_hours IS NULL) OR ((crew_day_hours > (0)::numeric) AND (crew_day_hours <= (24)::numeric)))))",
+      },
+      {
+        name: 'pay_item_crew_day_step_hours_check',
+        definition:
+          'CHECK (((from_hours >= (0)::numeric) AND (from_hours <= to_hours) AND (to_hours <= (24)::numeric)))',
+      },
+      {
+        name: 'pay_item_crew_day_step_quantity_check',
+        definition: 'CHECK ((quantity >= (0)::numeric))',
+      },
+      {
+        name: 'pay_item_crew_time_conversion_check',
+        definition:
+          "CHECK ((((unit = 'HR'::billing_unit) AND (NOT (crew_time_conversion IS DISTINCT FROM 'PER_HOUR'::crew_time_conversion))) OR ((unit = 'CREW_DAY'::billing_unit) AND (crew_time_conversion IS NOT NULL) AND (crew_time_conversion <> 'PER_HOUR'::crew_time_conversion)) OR ((unit <> ALL (ARRAY['HR'::billing_unit, 'CREW_DAY'::billing_unit])) AND (crew_time_conversion IS NULL))))",
+      },
+      { name: 'pay_item_rate_rate_check', definition: 'CHECK ((rate >= (0)::numeric))' },
       {
         name: 'project_active_window_check',
         definition: 'CHECK (((active_to IS NULL) OR (active_to >= active_from)))',

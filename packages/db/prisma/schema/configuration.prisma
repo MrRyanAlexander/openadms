@@ -99,6 +99,7 @@ model Project {
   kindsOfWork      ProjectKindOfWork[]
   contractors      ProjectContractor[]
   contracts        Contract[]
+  forms            Form[]
   disposalSites    DisposalSite[]
   payItems         PayItem[]
   assignments      Assignment[]
@@ -167,6 +168,8 @@ model Contractor {
   projects     ProjectContractor[]
   // The contracts it holds, each as one of its project's primes.
   contracts    Contract[]
+  // Its rate on each pay item, as one of the project's primes (ADR-206).
+  payItemRates PayItemRate[]
   // A contractor user sees only its own transactions (ADR-169).
   users        User[]              @relation("ViewerContractor")
   // The people it employs (Q-97).
@@ -212,6 +215,7 @@ model ProjectContractor {
   prime      ProjectContractor?  @relation("PrimeSubs", fields: [projectId, primeId], references: [projectId, asPrimeId], onDelete: Restrict, onUpdate: Restrict)
   subs       ProjectContractor[] @relation("PrimeSubs")
   contracts  Contract[]
+  rates      PayItemRate[]
 
   // One place on a project: a sub is never shared by two primes.
   @@unique([projectId, contractorId])
@@ -244,6 +248,103 @@ model Contract {
   @@map("contract")
 }
 
+// What a form is for (ADR-211): the three workflows' tickets, a truck certificate, and the four
+// kinds of record that are never a ticket's events (ADR-236).
+enum FormDocumentType {
+  LOAD
+  HAUL_OUT
+  UNIT_RATE
+  CERTIFICATION
+  ROE
+  SURVEY
+  INCIDENT
+  DROP_OFF_LOG
+
+  @@map("form_document_type")
+}
+
+// A project's form for one document type, the legacy "Document Format" (ADR-211): at most one of
+// each on a project, archived ones included. Debris types are added to a load or haul-out form;
+// the firm's own fields to an ROE, survey, incident or drop-off log form (ADR-160, 188, 308).
+model Form {
+  id           String           @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  projectId    String           @map("project_id") @db.Uuid
+  name         String
+  documentType FormDocumentType @map("document_type")
+  // Read on the forms that aren't a workflow's: incidents and drop-off logs are switched on per
+  // project (ADR-188). Whether a load, haul-out or unit rate form is used is the project's
+  // workflows' to say (ADR-041, 308).
+  enabled      Boolean
+  // "GPS required": a setting of the ROE form alone, which states it (ADR-181; a check in the
+  // guard migration).
+  gpsRequired  Boolean?         @map("gps_required")
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  project     Project          @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  debrisTypes FormDebrisType[]
+  definitions FormDefinition[]
+
+  @@unique([projectId, documentType])
+  // What a debris type's entry and a definition point at, so each is held to the forms it belongs
+  // on, and a form's document type can't change under them.
+  @@unique([id, documentType])
+  @@map("form")
+}
+
+// A debris type added to a load or haul-out form, named as the contract names the work: Mulch and
+// Ash are two entries (ADR-211, 214). A field event points at the entry, so a rule's Debris type
+// matches the exact entry (ADR-226). Taken off by archiving; never deleted.
+model FormDebrisType {
+  id                String           @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  formId            String           @map("form_id") @db.Uuid
+  // Its form's, again: LOAD or HAUL_OUT, held by a check and by the relation to the form.
+  documentType      FormDocumentType @map("document_type")
+  // From the firm's library.
+  debrisTypeId      String           @map("debris_type_id") @db.Uuid
+  // Already reduced: a helper for rules, reports and checks. Not ticked on a haul-out form, setup
+  // warns and saves it (packages/domain's DebrisTypeEntries; ADR-214).
+  reduced           Boolean
+  reductionMethodId String?          @map("reduction_method_id") @db.Uuid
+  // Off the phones' list for this form; field events that carry it keep it (ADR-214).
+  hiddenOnPhones    Boolean          @map("hidden_on_phones")
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  form            Form             @relation(fields: [formId, documentType], references: [id, documentType], onDelete: Restrict, onUpdate: Restrict)
+  debrisType      DebrisType       @relation(fields: [debrisTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  reductionMethod ReductionMethod? @relation(fields: [reductionMethodId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([formId, debrisTypeId])
+  @@map("form_debris_type")
+}
+
+// One version of the firm's added fields on a project's ROE, survey, incident or drop-off log form
+// (ADR-160, 188, 278, 308). A change is a new version, numbered from 1; a version is never edited
+// or deleted (the guard migration). Each record made on the form keeps the version it answered.
+// Nothing the engine, a rule or a flag reads is ever in it.
+model FormDefinition {
+  id           String           @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  formId       String           @map("form_id") @db.Uuid
+  // Its form's, again: one of the four, held by a check and by the relation to the form.
+  documentType FormDocumentType @map("document_type")
+  version      Int
+  // Each field's stable id, label, type, whether it's required, and a pick's choices: the shape is
+  // packages/contracts' formDefinitionFields.
+  fields       Json
+  createdById  String           @map("created_by_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  form      Form @relation(fields: [formId, documentType], references: [id, documentType], onDelete: Restrict, onUpdate: Restrict)
+  createdBy User @relation("FormDefinitionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([formId, version])
+  @@map("form_definition")
+}
+
 // Where debris legally goes, entered on each project that uses it, never shared (ADR-145).
 // PROVISIONAL: only what an assignment's site needs. Its site type, facts, permit, GPS, area and
 // dates are spec/DATA-MODEL.md's (adms-ticket-workflows §4.0).
@@ -263,31 +364,127 @@ model DisposalSite {
   @@map("disposal_site")
 }
 
+// A pay item's Unit of Measure (spec/CONVENTIONS.md §4; ADR-221, 223): TN or LB means the load is
+// weighed. TBN bills nothing until a price is agreed (Q-22).
+enum BillingUnit {
+  CY
+  TN
+  EA
+  LB
+  HR
+  CREW_DAY
+  TBN
+
+  @@map("billing_unit")
+}
+
+// How a crew-time ticket's hours become a quantity: per hour; a crew day by exact division by the
+// day length; or a crew day in the steps the firm sets. The only three (ADR-087).
+enum CrewTimeConversion {
+  PER_HOUR
+  PER_DAY_EXACT
+  PER_DAY_STEPS
+
+  @@map("crew_time_conversion")
+}
+
 // A priced line of the contract as the firm sets it up: the only place a rate lives (ADR-206, 237).
-// PROVISIONAL: only what an assignment's unit rate pay items need (REQ-020; ADR-286). Its payable
-// type, unit, size band, capture settings and its rate for each prime are spec/DATA-MODEL.md §3's
-// and come with Phase 1. It has two texts, both the firm's own: its code, unique on its project,
-// and its description (ADR-301).
+// It names no form: a rule does, so one pay item can be added by a Load rule and a Haul-out rule
+// (ADR-292). A unit rate pay item is known by its kind of work (ADR-127). Its rate for each prime
+// is PayItemRate's; no setting has a default here, so every writer says what it set (ADR-303).
 model PayItem {
-  id          String @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  projectId   String @map("project_id") @db.Uuid
+  id                         String              @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  projectId                  String              @map("project_id") @db.Uuid
   // The firm's own string; setup suggests one from the convention (VEG-HAUL-CY-15), ADR-235. No two
   // pay items of a project share one, archived ones included: a rate that changes from a date is a
   // second pay item with a code of its own, whatever the firm calls it (ADR-301).
-  code        String
+  code                       String
   // What the work is, in the firm's own words ("ROW VEG haul 0–15 mi"); shown beside the code.
-  description String
+  description                String
+  // The work it prices, from the firm's list: what a unit rate monitor picks, and what exports
+  // group lines by. Every pay item has one, on loads, haul-outs and fees alike (ADR-221).
+  payableTypeId              String              @map("payable_type_id") @db.Uuid
+  unit                       BillingUnit
+  // Set on a unit rate pay item, and only there (ADR-127, 292).
+  kindOfWorkId               String?             @map("kind_of_work_id") @db.Uuid
+  // The size band, in inches, both ends included; either end may be open. Among the pay items of
+  // one payable type the band picks the pay item, and bands never overlap (packages/domain's
+  // SizeBands refuses them); a lone pay item's band only flags (ADR-210, 213, 217).
+  bandFrom                   Decimal?            @map("band_from") @db.Decimal(8, 1)
+  bandTo                     Decimal?            @map("band_to") @db.Decimal(8, 1)
+  // The capture settings: each one ticked is checked by the worker, none is stored and ignored
+  // (ADR-157, 192, 207, 210; KD-28).
+  countIsAlwaysOne           Boolean             @map("count_is_always_one")
+  gpsRequired                Boolean             @map("gps_required")
+  measurementRequired        Boolean             @map("measurement_required")
+  decimalsAllowed            Boolean             @map("decimals_allowed")
+  photosRequired             Boolean             @map("photos_required")
+  monitorMayMarkIneligible   Boolean             @map("monitor_may_mark_ineligible")
+  quantityFromCarriedTickets Boolean             @map("quantity_from_carried_tickets")
+  // How hours become a quantity: on an HR or CREW_DAY pay item, and only there; the day length on a
+  // crew day by exact division, and only there (checks in the guard migration). A new one's day
+  // length starts at the policy value CREW_DAY_HOURS (ADR-087, 309).
+  crewTimeConversion         CrewTimeConversion? @map("crew_time_conversion")
+  crewDayHours               Decimal?            @map("crew_day_hours") @db.Decimal(4, 2)
 
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
 
-  project     Project             @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  assignments AssignmentPayItem[]
+  project      Project              @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  payableType  PayableType          @relation(fields: [payableTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  kindOfWork   KindOfWork?          @relation(fields: [kindOfWorkId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  rates        PayItemRate[]
+  crewDaySteps PayItemCrewDayStep[]
+  assignments  AssignmentPayItem[]
 
-  // So an assignment's pay items can only be its own project's (its relation's target).
+  // So a rate can only be its own project's pay item's (its relation's target).
   @@unique([projectId, id])
+  // So an assignment names only its own project's unit rate pay items: its relation names the kind
+  // of work too, which a pay item that isn't a unit rate one doesn't have (C42).
+  @@unique([projectId, id, kindOfWorkId])
   @@unique([projectId, code])
   @@map("pay_item")
+}
+
+// One step of a crew day paid in steps: hours from, to (both included), and the quantity they bill
+// (1.5–4.5 h = 0.25 of a day). Read only on a pay item paid PER_DAY_STEPS (ADR-087).
+model PayItemCrewDayStep {
+  id        String  @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  payItemId String  @map("pay_item_id") @db.Uuid
+  fromHours Decimal @map("from_hours") @db.Decimal(4, 2)
+  toHours   Decimal @map("to_hours") @db.Decimal(4, 2)
+  quantity  Decimal @db.Decimal(14, 4)
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  payItem PayItem @relation(fields: [payItemId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([payItemId, fromHours])
+  @@map("pay_item_crew_day_step")
+}
+
+// A pay item's rate for one prime: one pay item holds a rate for each prime, never a copy per prime
+// (ADR-206). No row is no rate: a $0 line (ADR-128, 212). A rate's history is the audit log; there
+// is no rate history table (ADR-090).
+model PayItemRate {
+  id        String  @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  projectId String  @map("project_id") @db.Uuid
+  payItemId String  @map("pay_item_id") @db.Uuid
+  // One of the pay item's project's primes: the third relation below holds it to that (ADR-305).
+  primeId   String  @map("prime_id") @db.Uuid
+  rate      Decimal @db.Decimal(14, 4)
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  // Taken off; put back by clearing the archive, never a second row for the same prime.
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  payItem    PayItem           @relation(fields: [projectId, payItemId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  prime      Contractor        @relation(fields: [primeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  primePlace ProjectContractor @relation(fields: [projectId, primeId], references: [projectId, asPrimeId], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([payItemId, primeId])
+  @@map("pay_item_rate")
 }
 
 enum UserRole {
@@ -321,10 +518,11 @@ model User {
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
 
-  contractor      Contractor?   @relation("ViewerContractor", fields: [contractorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  employer        Contractor?   @relation("Employer", fields: [employerId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  assignments     Assignment[]  @relation("AssignmentPerson")
-  assignmentsMade Assignment[]  @relation("AssignmentMadeBy")
+  contractor      Contractor?      @relation("ViewerContractor", fields: [contractorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  employer        Contractor?      @relation("Employer", fields: [employerId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  assignments     Assignment[]     @relation("AssignmentPerson")
+  assignmentsMade Assignment[]     @relation("AssignmentMadeBy")
+  formDefinitions FormDefinition[] @relation("FormDefinitionCreatedBy")
   fieldEvents     FieldEvent[]
   invoiceLocks    InvoiceLock[]
   auditRecords    AuditRecord[]
@@ -442,27 +640,29 @@ enum AssignmentOrigin {
 
 // One person's work for a day: who works where, on what (ADR-240). A phone takes it at sign-in;
 // what the phone may make comes from it. It never expires and never stops work.
-// Its unit rate pay items are AssignmentPayItem's (ADR-286). PROVISIONAL: the forms it names join
-// with the form model (Phase 1).
+// Its unit rate pay items are AssignmentPayItem's (ADR-286).
 model Assignment {
   // Made by the database for one written on the board; an unplanned one's comes from the phone,
   // so the field events recorded under it before it syncs can name it.
-  id              String           @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  personId        String           @map("person_id") @db.Uuid
+  id                String             @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  personId          String             @map("person_id") @db.Uuid
   // The day, in the project's time zone.
-  workDate        DateTime         @map("work_date") @db.Date
-  projectId       String           @map("project_id") @db.Uuid
+  workDate          DateTime           @map("work_date") @db.Date
+  projectId         String             @map("project_id") @db.Uuid
   // Their work: the kinds of field event they may record, and whether they certify (ADR-151).
-  fieldEventKinds FieldEventKind[] @default([]) @map("field_event_kinds")
-  certifying      Boolean          @default(false)
+  fieldEventKinds   FieldEventKind[]   @default([]) @map("field_event_kinds")
+  certifying        Boolean            @default(false)
+  // The forms they may make that aren't a ticket's: ROEs, surveys, incidents, drop-off logs (C42;
+  // a check in the guard migration holds it to those four, ADR-308).
+  formDocumentTypes FormDocumentType[] @default([]) @map("form_document_types")
   // One site, where the work is at one: a tower, either haul-out end, a drop-off log. A curb
   // collection has none (ADR-195).
-  siteId          String?          @map("site_id") @db.Uuid
+  siteId            String?            @map("site_id") @db.Uuid
   // The phone: named on the board, or the one that took it. An unplanned one always has its phone.
-  deviceId        String?          @map("device_id") @db.Uuid
-  origin          AssignmentOrigin
+  deviceId          String?            @map("device_id") @db.Uuid
+  origin            AssignmentOrigin
   // Who wrote it on the board. An unplanned one has no author: the master passcode isn't a person.
-  madeById        String?          @map("made_by_id") @db.Uuid
+  madeById          String?            @map("made_by_id") @db.Uuid
 
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   // Withdrawn from the board; never deleted.
@@ -493,12 +693,15 @@ model AssignmentPayItem {
   // another project can never be on the assignment.
   projectId    String @map("project_id") @db.Uuid
   payItemId    String @map("pay_item_id") @db.Uuid
+  // The pay item's kind of work, again: required here, so only a unit rate pay item can be named
+  // (C42; ADR-292, 309).
+  kindOfWorkId String @map("kind_of_work_id") @db.Uuid
 
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
 
   assignment Assignment @relation(fields: [projectId, assignmentId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
-  payItem    PayItem    @relation(fields: [projectId, payItemId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  payItem    PayItem    @relation(fields: [projectId, payItemId, kindOfWorkId], references: [projectId, id, kindOfWorkId], onDelete: Restrict, onUpdate: Restrict)
 
   @@unique([assignmentId, payItemId])
   @@map("assignment_pay_item")
@@ -589,6 +792,8 @@ model DebrisType {
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
 
+  formEntries FormDebrisType[]
+
   @@map("debris_type")
 }
 
@@ -602,6 +807,8 @@ model ReductionMethod {
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
 
+  formEntries FormDebrisType[]
+
   @@map("reduction_method")
 }
 
@@ -614,6 +821,8 @@ model PayableType {
 
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  payItems PayItem[]
 
   @@map("payable_type")
 }
@@ -634,6 +843,7 @@ model KindOfWork {
 
   itemNames ItemName[]
   projects  ProjectKindOfWork[]
+  payItems  PayItem[]
 
   @@map("kind_of_work")
 }

@@ -12,6 +12,13 @@
 // Coastline is P2's prime, with its own contract there. Harbor Staffing, a temp agency, is a
 // contractor of the monitoring kind, on no project (spec/CONVENTIONS.md §6; ADR-305). Subs aren't
 // set up: a test places Rivera Trucking as certification would.
+// P1 has a load form with Vegetative and C&D on it (the golden mission §1), a haul-out form and an
+// incident form, switched on (ADR-308). Mulch isn't in the firm's library as the seed writes it, and
+// P1's field tags start empty, so a test adds those as Dana would.
+// P1's pay items are six of the golden mission's §1, each with Coastline's rate and none with
+// Summit's: VEG-HAUL-CY-15 ($7.50), HNG-RMV-EA ($68.00), LNR-RMV-EA-24 and -99 (6–24 and 24.1–99
+// in; $95.00, $185.00), STP-RMV-EA-36 (24–36 in; $110.00) and CREW-TIME-HR ($150.00, per hour)
+// (ADR-206, 309). The rest of the table a test adds as Dana would; P2 has none.
 // Each load is a collection and a disposal event (load call at the tower), its completed load and
 // one transaction for its prime. Nothing is locked as invoiced; a test locks what it needs.
 // Ana Brooks records every event here, on the one phone, under her assignment on each project
@@ -25,6 +32,15 @@ export interface Load {
   disposal: string;
   completedLoad: string;
   transaction: string;
+}
+
+export interface PayItems {
+  vegHaul15: string;
+  hangers: string;
+  leaners24: string;
+  leaners99: string;
+  stumps36: string;
+  crewTime: string;
 }
 
 export interface World {
@@ -45,6 +61,21 @@ export interface World {
   // "Coastline, Bayline ROW 2026" and "Summit, Bayline ROW 2026" on P1; "Coastline, Bayline PPDR
   // 2026" on P2.
   contracts: { coastlineP1: string; summitP1: string; coastlineP2: string };
+  // P1's forms, and the debris types on its load form.
+  forms: { load: string; haulOut: string; incident: string };
+  formDebrisTypes: { vegetative: string; cd: string };
+  // The payable types and kinds of unit rate work P1's pay items pick, from the firm's lists.
+  payableTypes: {
+    vegetative: string;
+    hangers: string;
+    leaners: string;
+    stumps: string;
+    crewTime: string;
+  };
+  kindsOfWork: { hangers: string; leaners: string; stumps: string; crewTime: string };
+  // P1's pay items, and Coastline's rate on each.
+  payItems: PayItems;
+  rates: PayItems;
   // A Coastline Haulers LLC read-only viewer.
   coastlineViewer: string;
   // Bayline County; Hurricane Delphine, DR-9001-FL.
@@ -85,6 +116,31 @@ export function projectLike(
     stump_check_fill_needs_exposure: true,
     site_circle_meters: 200,
     time_clock_enabled: false,
+    ...more,
+  };
+}
+
+// A pay item as Dana enters one off the contract: P1's VEG-HAUL-CY-30, "ROW VEG haul 15.1–30 mi",
+// payable type Vegetative, by the CY, no band, every capture setting stated and none ticked (no
+// setting has a database default, ADR-303, 309). For a test that writes another pay item, or
+// changes one column of this one (`more`).
+export function payItemLike(
+  world: Pick<World, 'p1' | 'payableTypes'>,
+  more: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    project_id: world.p1,
+    code: 'VEG-HAUL-CY-30',
+    description: 'ROW VEG haul 15.1–30 mi',
+    payable_type_id: world.payableTypes.vegetative,
+    unit: 'CY',
+    count_is_always_one: false,
+    gps_required: false,
+    measurement_required: false,
+    decimals_allowed: false,
+    photos_required: false,
+    monitor_may_mark_ineligible: false,
+    quantity_from_carried_tickets: false,
     ...more,
   };
 }
@@ -210,6 +266,19 @@ export class ExampleWorld {
         kind_of_work_id: await this.picked('kind_of_work', kind),
       });
     }
+    const kindsOfWork = {
+      hangers: await this.picked('kind_of_work', 'Hangers'),
+      leaners: await this.picked('kind_of_work', 'Leaners'),
+      stumps: await this.picked('kind_of_work', 'Stumps'),
+      crewTime: await this.picked('kind_of_work', 'Crew time'),
+    };
+    const payableTypes = {
+      vegetative: await this.picked('payable_type', 'Vegetative'),
+      hangers: await this.picked('payable_type', 'Hangers'),
+      leaners: await this.picked('payable_type', 'Leaners'),
+      stumps: await this.picked('payable_type', 'Stumps'),
+      crewTime: await this.picked('payable_type', 'Crew time'),
+    };
 
     // Each prime is added to the project, then its contract (ADR-146).
     const contract = async (projectId: string, primeId: string, name: string): Promise<string> => {
@@ -220,6 +289,87 @@ export class ExampleWorld {
       coastlineP1: await contract(p1, coastline, 'Coastline, Bayline ROW 2026'),
       summitP1: await contract(p1, summit, 'Summit, Bayline ROW 2026'),
       coastlineP2: await contract(p2, coastline, 'Coastline, Bayline PPDR 2026'),
+    };
+
+    // P1's forms: one per document type it uses (ADR-211). The load form's debris types, from the
+    // firm's library, none reduced or hidden (the golden mission §1).
+    const form = (documentType: string, name: string): Promise<string> =>
+      this.insert('form', { project_id: p1, name, document_type: documentType, enabled: true });
+    const forms = {
+      load: await form('LOAD', 'Load'),
+      haulOut: await form('HAUL_OUT', 'Haul-out'),
+      incident: await form('INCIDENT', 'Incident'),
+    };
+    const onLoadForm = async (debrisType: string): Promise<string> =>
+      this.insert('form_debris_type', {
+        form_id: forms.load,
+        document_type: 'LOAD',
+        debris_type_id: await this.picked('debris_type', debrisType),
+        reduced: false,
+        hidden_on_phones: false,
+      });
+    const formDebrisTypes = {
+      vegetative: await onLoadForm('Vegetative'),
+      cd: await onLoadForm('C&D'),
+    };
+
+    // P1's pay items, as the golden mission §1 has them, each with Coastline's rate.
+    const enter = (code: string, more: Record<string, unknown>): Promise<string> =>
+      this.insert('pay_item', payItemLike({ p1, payableTypes }, { code, ...more }));
+    const unitRate = (kind: keyof typeof kindsOfWork): Record<string, unknown> => ({
+      payable_type_id: payableTypes[kind],
+      kind_of_work_id: kindsOfWork[kind],
+      unit: 'EA',
+      count_is_always_one: true,
+      photos_required: true,
+    });
+    const payItems: PayItems = {
+      vegHaul15: await enter('VEG-HAUL-CY-15', { description: 'ROW VEG haul 0–15 mi' }),
+      hangers: await enter('HNG-RMV-EA', { ...unitRate('hangers'), description: 'Hanger removal' }),
+      leaners24: await enter('LNR-RMV-EA-24', {
+        ...unitRate('leaners'),
+        description: 'Leaner removal 6–24 in',
+        band_from: '6.0',
+        band_to: '24.0',
+        measurement_required: true,
+      }),
+      leaners99: await enter('LNR-RMV-EA-99', {
+        ...unitRate('leaners'),
+        description: 'Leaner removal 24.1–99 in',
+        band_from: '24.1',
+        band_to: '99.0',
+        measurement_required: true,
+      }),
+      stumps36: await enter('STP-RMV-EA-36', {
+        ...unitRate('stumps'),
+        description: 'Stump removal 24–36 in',
+        band_from: '24.0',
+        band_to: '36.0',
+        measurement_required: true,
+      }),
+      crewTime: await enter('CREW-TIME-HR', {
+        ...unitRate('crewTime'),
+        description: 'Crew time, skid steer crew',
+        unit: 'HR',
+        count_is_always_one: false,
+        decimals_allowed: true,
+        crew_time_conversion: 'PER_HOUR',
+      }),
+    };
+    const rateOf = (payItemId: string, rate: string): Promise<string> =>
+      this.insert('pay_item_rate', {
+        project_id: p1,
+        pay_item_id: payItemId,
+        prime_id: coastline,
+        rate,
+      });
+    const rates: PayItems = {
+      vegHaul15: await rateOf(payItems.vegHaul15, '7.5000'),
+      hangers: await rateOf(payItems.hangers, '68.0000'),
+      leaners24: await rateOf(payItems.leaners24, '95.0000'),
+      leaners99: await rateOf(payItems.leaners99, '185.0000'),
+      stumps36: await rateOf(payItems.stumps36, '110.0000'),
+      crewTime: await rateOf(payItems.crewTime, '150.0000'),
     };
 
     const site = await this.insert('disposal_site', { project_id: p1, name: 'Marsh Road TDSR' });
@@ -247,6 +397,12 @@ export class ExampleWorld {
       summit,
       harbor,
       contracts,
+      forms,
+      formDebrisTypes,
+      payableTypes,
+      kindsOfWork,
+      payItems,
+      rates,
       coastlineViewer,
       ...hub,
       p1,

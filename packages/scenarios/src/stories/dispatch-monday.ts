@@ -1,7 +1,8 @@
 // The second story (BACKLOG 0.4.3; ADR-281): Monday's dispatch on P1, as far as this build reaches
 // (spec/golden/MISSION.md §1, "Phones and the dispatch board"). Phones are enrolled once; Luis
 // Ortega writes the day's assignments on the board; each monitor's phone takes theirs at the yard.
-// Jo Kim's names the unit rate pay items she does that day (ADR-286). Tariq Patel has none, so the
+// Jo Kim's names the unit rate pay items she does that day (ADR-286), which Dana enters first with
+// Coastline's rates (ADR-309). Tariq Patel has none, so the
 // master passcode sets his phone up on the spot: an unplanned assignment, marked. Ana and Kim record ticket 101001 under their assignments; that evening
 // Tariq's phone can't be found and is marked lost. What it proves is the models: the time zone, the
 // Monitor ID, the device with its number block and passcode version, the assignment, and each
@@ -50,6 +51,7 @@ export const dispatchMonday: Story = {
         danaRow,
         luis,
         p1: p1.project,
+        prime: p1.prime,
         contract: p1.contract,
         tdsr: tdsr.id,
         landfill: landfill.id,
@@ -254,16 +256,92 @@ export const dispatchMonday: Story = {
       [['SYSTEM', '[kept out of the audit]']],
     );
 
-    story.at(at('05:55'), 'Dana enters two of P1’s unit rate pay items, off the contract');
-    // Only their code and description yet: the payable type, the size band and the rates are Phase 1's.
+    story.at(
+      at('05:55'),
+      'Dana enters two of P1’s unit rate pay items off the contract, with Coastline’s rates',
+    );
+    // As the golden mission §1 has them: each names its payable type and kind of work, by the EA,
+    // one each, photos required; the leaner's band is 6–24 in, measured. Every capture setting is
+    // stated: none has a default (ADR-309).
     const payItems = await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
-      const enter = (code: string, description: string) =>
-        tx.payItem.create({ data: { projectId: office.p1, code, description } });
+      const enter = async (
+        code: string,
+        description: string,
+        work: string,
+        rate: string,
+        band?: { from: string; to: string },
+      ) => {
+        const payableType = await tx.payableType.findFirstOrThrow({ where: { name: work } });
+        const kindOfWork = await tx.kindOfWork.findFirstOrThrow({ where: { name: work } });
+        const payItem = await tx.payItem.create({
+          data: {
+            projectId: office.p1,
+            code,
+            description,
+            payableTypeId: payableType.id,
+            kindOfWorkId: kindOfWork.id,
+            unit: 'EA',
+            bandFrom: band?.from ?? null,
+            bandTo: band?.to ?? null,
+            countIsAlwaysOne: true,
+            gpsRequired: false,
+            measurementRequired: band !== undefined,
+            decimalsAllowed: false,
+            photosRequired: true,
+            monitorMayMarkIneligible: false,
+            quantityFromCarriedTickets: false,
+          },
+        });
+        await tx.payItemRate.create({
+          data: { projectId: office.p1, payItemId: payItem.id, primeId: office.prime, rate },
+        });
+        return { id: payItem.id, kindOfWorkId: kindOfWork.id };
+      };
       return {
-        hangers: await enter('HNG-RMV-EA', 'Hanger removal'),
-        leaners: await enter('LNR-RMV-EA-24', 'Leaner removal 6–24 in'),
+        hangers: await enter('HNG-RMV-EA', 'Hanger removal', 'Hangers', '68.00'),
+        leaners: await enter('LNR-RMV-EA-24', 'Leaner removal 6–24 in', 'Leaners', '95.00', {
+          from: '6',
+          to: '24',
+        }),
       };
     });
+    const entered = await api.payItem.findMany({
+      where: { projectId: office.p1 },
+      include: { payableType: true, kindOfWork: true, rates: { include: { prime: true } } },
+      orderBy: { code: 'asc' },
+    });
+    story.check(
+      'each pay item holds its payable type, kind of work, Unit of Measure, band and one rate per prime',
+      entered.map((payItem) => [
+        payItem.code,
+        payItem.payableType.name,
+        payItem.kindOfWork?.name,
+        payItem.unit,
+        payItem.bandFrom?.toFixed(1) ?? null,
+        payItem.bandTo?.toFixed(1) ?? null,
+        payItem.rates.map((rate) => [rate.prime.name, rate.rate.toFixed(2)]),
+      ]),
+      [
+        [
+          'HNG-RMV-EA',
+          'Hangers',
+          'Hangers',
+          'EA',
+          null,
+          null,
+          [['Coastline Haulers LLC', '68.00']],
+        ],
+        [
+          'LNR-RMV-EA-24',
+          'Leaners',
+          'Leaners',
+          'EA',
+          '6.0',
+          '24.0',
+          [['Coastline Haulers LLC', '95.00']],
+        ],
+      ],
+    );
 
     story.at(
       at('06:00'),
@@ -304,6 +382,8 @@ export const dispatchMonday: Story = {
           assignmentId: unitRate.id,
           projectId: office.p1,
           payItemId: payItem.id,
+          // A unit rate pay item's own kind of work: no other can be named (C42).
+          kindOfWorkId: payItem.kindOfWorkId,
         })),
       });
       return { collections: collections.id, tower: tower.id, unitRate: unitRate.id };
@@ -544,7 +624,14 @@ export const dispatchMonday: Story = {
     const audit = await api.auditRecord.findMany({
       where: {
         tableName: {
-          in: ['assignment', 'assignment_pay_item', 'pay_item', 'number_block', 'device'],
+          in: [
+            'assignment',
+            'assignment_pay_item',
+            'pay_item',
+            'pay_item_rate',
+            'number_block',
+            'device',
+          ],
         },
       },
       orderBy: { id: 'asc' },
@@ -564,7 +651,9 @@ export const dispatchMonday: Story = {
         ['device', 'INSERT', 'Dana Reyes', 'BACK_OFFICE', '-', null],
         ['device', 'INSERT', 'Dana Reyes', 'BACK_OFFICE', '-', null],
         ['pay_item', 'INSERT', 'Dana Reyes', 'BACK_OFFICE', '-', null],
+        ['pay_item_rate', 'INSERT', 'Dana Reyes', 'BACK_OFFICE', '-', null],
         ['pay_item', 'INSERT', 'Dana Reyes', 'BACK_OFFICE', '-', null],
+        ['pay_item_rate', 'INSERT', 'Dana Reyes', 'BACK_OFFICE', '-', null],
         ['assignment', 'INSERT', 'Luis Ortega', 'BACK_OFFICE', '-', null],
         ['assignment', 'INSERT', 'Luis Ortega', 'BACK_OFFICE', '-', null],
         ['assignment', 'INSERT', 'Luis Ortega', 'BACK_OFFICE', '-', null],

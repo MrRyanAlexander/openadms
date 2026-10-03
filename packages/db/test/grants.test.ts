@@ -24,12 +24,20 @@ const tableGrants: Record<string, Record<string, string>> = {
   // A contractor's place on a project, and a contract (ADR-305).
   project_contractor: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   contract: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
+  // A project's forms and the debris types on them; a definition's version is added, never
+  // edited (ADR-308).
+  form: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
+  form_debris_type: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
+  form_definition: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },
   user: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   device: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   disposal_site: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   number_block: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   assignment: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   pay_item: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
+  // A pay item's rate for each prime, and a crew day's steps (ADR-309).
+  pay_item_rate: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
+  pay_item_crew_day_step: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   assignment_pay_item: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   // The firm's lists: configuration, each one (ADR-302).
   ...Object.fromEntries(
@@ -369,7 +377,8 @@ describe('the worker (adms_worker)', () => {
 });
 
 describe('the read-only login (adms_readonly)', () => {
-  // The new tables too: no viewer view shows them, so none is granted (ADR-281, 286, 302, 303, 305).
+  // The new tables too: no viewer view shows them, so none is granted (ADR-281, 286, 302, 303, 305,
+  // 308).
   it.each([
     'user',
     'client',
@@ -378,6 +387,9 @@ describe('the read-only login (adms_readonly)', () => {
     'contractor',
     'project_contractor',
     'contract',
+    'form',
+    'form_debris_type',
+    'form_definition',
     'device',
     'invoice_lock',
     'audit_record',
@@ -386,6 +398,8 @@ describe('the read-only login (adms_readonly)', () => {
     'disposal_site',
     'assignment',
     'pay_item',
+    'pay_item_rate',
+    'pay_item_crew_day_step',
     'assignment_pay_item',
     ...listTables,
   ])('may not read %s', async (table) => {

@@ -12,14 +12,15 @@ import { builtInPolicy } from '../src/policy.ts';
 const policyFile = new URL('../../domain/policy.env', import.meta.url);
 
 describe('the release’s policy values', () => {
-  it('AC-01-11 are the built-in defaults: load calls flagged at or under 5 and at or over 95 (ADR-164), a 200 m site circle (ADR-142), a 31 in stump fill depth (ADR-203)', () => {
+  it('AC-01-11 are the built-in defaults: load calls flagged at or under 5 and at or over 95 (ADR-164), a 200 m site circle (ADR-142), a 31 in stump fill depth (ADR-203); AC-01-50 a 12 h crew day (ADR-087)', () => {
     const policy = builtInPolicy();
     expect([
       policy.loadCallLowLimit,
       policy.loadCallHighLimit,
       policy.siteCircleMeters,
       policy.stumpFillDepthInches,
-    ]).toEqual([5, 95, 200, 31]);
+      policy.crewDayHours,
+    ]).toEqual([5, 95, 200, 31, 12]);
   });
 
   it('are written in the env file under the domain’s names, and nothing else is in it', () => {
