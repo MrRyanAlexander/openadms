@@ -73,18 +73,18 @@ total is divided by 46,656 (36³); the capacity is that to the nearest whole cub
 
 | ID | Scenario | From | Proven at | Passing |
 |---|---|---|---|---|
-| AC-03-21 | **Given** a primary box 240 × 90 × 60 = 1,296,000; sideboards 240 × 90 × 12 = 259,200, **added**; a dog box 30 × 90 × 40 = 108,000, **÷2** = 54,000, **subtracted**, **then** the total is 1,501,200 cu in, ÷ 46,656 = 32.18, and the capacity is **32 CY** | §3A.3's worked example; ADR-076 · REQ-106d | domain (1.2.2) | |
-| AC-03-22 | **When** a measurement is given with a fraction of an inch (59.5), **then** it isn't taken: every measurement is a whole number of inches | §3A.3; ADR-076 · REQ-106d | domain (1.2.2); the columns: database (1.2.3) | |
-| AC-03-23 | **Given** a box marked ÷2 (a triangle) of 30 × 90 × 40, **then** it is 108,000 ÷ 2 = **54,000.00 cu in**; unmarked (a rectangle) it is 108,000.00 | §3A.3; ADR-076 · REQ-106d | domain (1.2.2) | |
-| AC-03-24 | **Given** a hoist box with two lengths, 30 and 21, 20 wide and 36 high, **then** its length is (30 + 21) ÷ 2 = 25.50 and it is 25.50 × 20 × 36 = **18,360.00 cu in**; the monitor enters both lengths | §3A.3; ADR-082, 087 · REQ-106d | domain (1.2.2) | |
-| AC-03-25 | **Given** a round bottom of diameter 90 and length 240, **then** it is a half cylinder with π as 3.14: 90 ÷ 2 = 45; 45² = 2,025; × 3.14 = 6,358.50; × 240 = 1,526,040.00; ÷ 2 = **763,020.00 cu in** (never 763,407, which is what a longer π gives) | §3A.3; Q-68 (ADR-076, 078) · REQ-106d | domain (1.2.2) | |
-| AC-03-26 | **Given** radius corners of R 12 with a run of 60, two of them, **then** they are (12 × 12 − 3.14 × 12 × 12 ÷ 4) = 144 − 113.04 = 30.96; × 60 = 1,857.60; × 2 = **3,715.20 cu in**, and a radius corner is always subtracted: one marked "add" is refused | §3A.3's example; ADR-087 (Q-78) · REQ-106d | domain (1.2.2); the sign: database (1.2.3) | |
-| AC-03-27 | **Given** radius corners of R 5 with a run of 48, four of them, **then** each step is rounded to hundredths before the next: 5 × 5 = 25; 3.14 × 25 ÷ 4 = 19.625 → 19.63; 25 − 19.63 = 5.37; × 48 = 257.76; × 4 = **1,031.04 cu in** (never 1,032.00, which is what rounding only at the end gives) | §3A.3 ("round to hundredths after each step"); ADR-078, 082 · REQ-106d | domain (1.2.2) | |
-| AC-03-28 | **Given** a primary box 240 × 90 × 70 = 1,512,000 and a box 21 × 20 × 10 = 4,200 added, **then** 1,516,200 ÷ 46,656 = 32.4974… → 32.50 → **33 CY**: hundredths first, then a whole CY with .5 up. **Given** the primary box alone, **then** 1,512,000 ÷ 46,656 = 32.4074… → 32.41 → **32 CY** | §3A.3; Q-79 (ADR-082) · REQ-106d | domain (1.2.2) | |
-| AC-03-29 | **Given** a container with a primary box and seven more, **then** all are taken (there is no limit on their number) and each is kept, in order, with its feature, its shape (rectangle, triangle, two-length hoist, round bottom, radius corner), add or subtract, and its measurements, so the capacity can be worked out again from the record | §3A.3 ("store the boxes"); `spec/DATA-MODEL.md` §3 · REQ-106d | domain (1.2.2); database (1.2.3) | |
+| AC-03-21 | **Given** a primary box 240 × 90 × 60 = 1,296,000; sideboards 240 × 90 × 12 = 259,200, **added**; a dog box 30 × 90 × 40 = 108,000, **÷2** = 54,000, **subtracted**, **then** the total is 1,501,200 cu in, ÷ 46,656 = 32.18, and the capacity is **32 CY** | §3A.3's worked example; ADR-076 · REQ-106d | domain (1.2.2) | domain (2026-10-03, ADR-320) |
+| AC-03-22 | **When** a measurement is given with a fraction of an inch (59.5), **then** it isn't taken: every measurement is a whole number of inches | §3A.3; ADR-076 · REQ-106d | domain (1.2.2); the columns: database (1.2.3) | domain (2026-10-03, ADR-320); the database's part with 1.2.3 |
+| AC-03-23 | **Given** a box marked ÷2 (a triangle) of 30 × 90 × 40, **then** it is 108,000 ÷ 2 = **54,000.00 cu in**; unmarked (a rectangle) it is 108,000.00 | §3A.3; ADR-076 · REQ-106d | domain (1.2.2) | domain (2026-10-03, ADR-320) |
+| AC-03-24 | **Given** a hoist box with two lengths, 30 and 21, 20 wide and 36 high, **then** its length is (30 + 21) ÷ 2 = 25.50 and it is 25.50 × 20 × 36 = **18,360.00 cu in**; the monitor enters both lengths | §3A.3; ADR-082, 087 · REQ-106d | domain (1.2.2) | domain (2026-10-03, ADR-320) |
+| AC-03-25 | **Given** a round bottom of diameter 90 and length 240, **then** it is a half cylinder with π as 3.14: 90 ÷ 2 = 45; 45² = 2,025; × 3.14 = 6,358.50; × 240 = 1,526,040.00; ÷ 2 = **763,020.00 cu in** (never 763,407, which is what a longer π gives) | §3A.3; Q-68 (ADR-076, 078) · REQ-106d | domain (1.2.2) | domain (2026-10-03, ADR-320) |
+| AC-03-26 | **Given** radius corners of R 12 with a run of 60, two of them, **then** they are (12 × 12 − 3.14 × 12 × 12 ÷ 4) = 144 − 113.04 = 30.96; × 60 = 1,857.60; × 2 = **3,715.20 cu in**, and a radius corner is always subtracted: one marked "add" is refused | §3A.3's example; ADR-087 (Q-78) · REQ-106d | domain (1.2.2); the sign: database (1.2.3) | domain (2026-10-03, ADR-320); the database's part with 1.2.3 |
+| AC-03-27 | **Given** radius corners of R 5 with a run of 48, four of them, **then** each step is rounded to hundredths before the next: 5 × 5 = 25; 3.14 × 25 ÷ 4 = 19.625 → 19.63; 25 − 19.63 = 5.37; × 48 = 257.76; × 4 = **1,031.04 cu in** (never 1,032.00, which is what rounding only at the end gives) | §3A.3 ("round to hundredths after each step"); ADR-078, 082 · REQ-106d | domain (1.2.2) | domain (2026-10-03, ADR-320) |
+| AC-03-28 | **Given** a primary box 240 × 90 × 70 = 1,512,000 and a box 21 × 20 × 10 = 4,200 added, **then** 1,516,200 ÷ 46,656 = 32.4974… → 32.50 → **33 CY**: hundredths first, then a whole CY with .5 up. **Given** the primary box alone, **then** 1,512,000 ÷ 46,656 = 32.4074… → 32.41 → **32 CY** | §3A.3; Q-79 (ADR-082) · REQ-106d | domain (1.2.2) | domain (2026-10-03, ADR-320) |
+| AC-03-29 | **Given** a container with a primary box and seven more, **then** all are taken (there is no limit on their number) and each is kept, in order, with its feature, its shape (rectangle, triangle, two-length hoist, round bottom, radius corner), add or subtract, and its measurements, so the capacity can be worked out again from the record | §3A.3 ("store the boxes"); `spec/DATA-MODEL.md` §3 · REQ-106d | domain (1.2.2); database (1.2.3) | domain (2026-10-03, ADR-320); the database's part with 1.2.3 |
 | AC-03-30 | **Given** any container, **then** nobody types its capacity: the certification's capacity is what its boxes work out to, and a wrong capacity is fixed only by fixing a measurement | ADR-076; Q-68 · REQ-106d | story (1.2.3) | |
-| AC-03-31 | **Given** the measured boxes of `730415`, `730416` and `730419` (recorded in `spec/CONVENTIONS.md` §6 by task 1.2.2), **then** they work out to **65**, **48** and **110 CY**, the capacities the golden mission bills on | golden mission §1; `BACKLOG.md` 1.2.2 · REQ-106d | domain (1.2.2) | |
-| AC-03-32 | **Given** crew `730417`, **then** the capacity math has nothing to measure and gives no capacity: not zero, none | invariant 10; ADR-076 · REQ-126 | domain (1.2.2) | |
+| AC-03-31 | **Given** the measured boxes of `730415`, `730416` and `730419` (recorded in `spec/CONVENTIONS.md` §6 by task 1.2.2), **then** they work out to **65**, **48** and **110 CY**, the capacities the golden mission bills on | golden mission §1; `BACKLOG.md` 1.2.2 · REQ-106d | domain (1.2.2) | domain (2026-10-03, ADR-320) |
+| AC-03-32 | **Given** crew `730417`, **then** the capacity math has nothing to measure and gives no capacity: not zero, none | invariant 10; ADR-076 · REQ-126 | domain (1.2.2) | domain (2026-10-03, ADR-320) |
 | AC-03-33 | **Given** ticket 101001 on `730415` with a load call of 80%, **then** it bills 65 × 80 ÷ 100 = **52.0 CY**: the whole-CY capacity times the load call | `adms-validation` §5.5; golden mission §2 · REQ-126 | domain (1.5.4); story (1.9.1) | |
 
 ## E. Photographs, attestation and QC (steps 9, 10, 12)
@@ -138,8 +138,10 @@ total is divided by 46,656 (36³); the capacity is that to the nearest whole cub
 
 ## The count
 
-**60 scenarios**, none passing yet: nothing of Part 3 is built (the capacity math is task 1.2.2's,
-the records task 1.2.3's).
+**60 scenarios**, **8 passing at the domain and 3 more in part** (2026-10-03, ADR-320, task 1.2.2:
+the capacity math, `packages/domain`'s `Capacity`, each under a test named by its ID): AC-03-21,
+23, 24, 25, 27, 28, 31 and 32; AC-03-22, 26 and 29 pass at the domain and wait for the database's
+part. The records are task 1.2.3's.
 
 | Where it is first proven | Scenarios | How many |
 |---|---|---|
@@ -159,8 +161,8 @@ or a monitor's work (ADR-230).
 
 | # | What isn't settled | Decided with |
 |---|---|---|
-| 1 | What the capacity math does with a measurement of zero, a box with a measurement missing, or boxes that subtract more than the primary holds | 1.2.2 |
-| 2 | Which roundings of §3A.3 are "a step" inside one shape's formula, beyond the cases worked above (AC-03-24…27), and that the hundredths rounding is half up everywhere as Q-79's is | 1.2.2 |
+| 1 | ~~What the capacity math does with a measurement of zero, a box with a measurement missing, or boxes that subtract more than the primary holds~~ **Decided (ADR-320, agent default):** none of them gives a capacity. A zero, missing or fractional measurement is named ("Box 1 (two-length hoist): its second length is missing. Every measurement is a whole number of inches, 1 or more."); boxes that subtract as much as the primary holds, or more, show their lines and total and give none. The math never guesses; whether such a certification is saved is 1.2.3's | 1.2.2 ✅ |
+| 2 | ~~Which roundings of §3A.3 are "a step" inside one shape's formula, beyond the cases worked above (AC-03-24…27), and that the hundredths rounding is half up everywhere as Q-79's is~~ **Decided (ADR-320, agent default):** every single operation, in the order §3A.3 writes the formula, is a step, rounded half up. With whole inches only a round bottom (after × 3.14 and after ÷ 2), a radius corner (after ÷ 4) and the ÷ 46,656 can round at all | 1.2.2 ✅ |
 | 3 | How the database holds "a container has boxes" (a check on one row can't see another table), and that position 0 is the one primary | 1.2.3 |
 | 4 | Whether the database, or only the service, holds a certification's subs to subs placed under its own prime on its own project, and refuses a tier 2 with no tier 1 | 1.2.3 (C56) |
 | 5 | What happens when a monitor types a sub that is already another prime's sub on the project (AC-01-17 refuses the second place; the certification itself must still be saved) | 1.2.3 (C56) |
