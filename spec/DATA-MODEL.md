@@ -12,10 +12,11 @@
 > record holds; `adms-certifications` §3A.2–§3A.3 the certification). Names follow
 > `spec/CONVENTIONS.md` §3; examples come from its example world (`spec/golden/MISSION.md`).
 >
-> **What exists today.** Thirteen provisional models are built (ADR-268, 281), plus the pay item's
-> first shape (ADR-286) and, in full, the firm's eighteen lists of §2.3 (ADR-302), the client,
-> the declaration event and the project of §2.1 and §3 (ADR-303), and the contractor, its place
-> on a project and the contract (ADR-305). §10 says, model by model, what Phase 1 changes.
+> **What exists today.** Thirteen provisional models are built (ADR-268, 281), plus, in full, the
+> firm's eighteen lists of §2.3 (ADR-302), the client, the declaration event and the project of
+> §2.1 and §3 (ADR-303), the contractor, its place on a project and the contract (ADR-305), the
+> forms and what sits on them (ADR-308), and pay items with their rates and steps (ADR-309). §10
+> says, model by model, what Phase 1 changes.
 
 **How to read a record.** Every record on this page is laid out the same way (ADR-289): its name,
 one line saying what kind of record it is (§1) and what it is for, then one table of its fields.
@@ -227,7 +228,7 @@ permission"; an admin needs none.
 | **projectId** | → `Project` | |
 | **fieldEventKinds** | `FieldEventKind[]` | The kinds of field event they may record |
 | **certifying** | bool | |
-| **formDocumentTypes** | `FormDocumentType[]` | The forms they may make: ROEs, surveys, incidents, drop-off logs (C42) |
+| **formDocumentTypes** | `FormDocumentType[]` | The forms they may make: ROEs, surveys, incidents, drop-off logs (C42). **Built (ADR-308):** a check holds it to those four (a ticket's kinds are `fieldEventKinds`, certifying is `certifying`); none is an empty list |
 | siteId | → `DisposalSite` (same project) | One site, where the work is at one |
 | deviceId | → `Device` | Named on the board, or the phone that took it |
 | **origin** | enum `AssignmentOrigin` | `PLANNED` (with its author) or `UNPLANNED` (no author, always its phone) |
@@ -243,6 +244,7 @@ permission"; an admin needs none.
 |---|---|---|
 | **assignmentId** | → `Assignment` | Of the assignment's own project |
 | **payItemId** | → `PayItem` | Of the assignment's own project |
+| **kindOfWorkId** | → `KindOfWork` | The pay item's, again, held to it by a three-column foreign key (project, pay item, kind of work): only a unit rate pay item can be named, and a named one keeps its kind of work (C42; *agent default*, ADR-309) |
 | archivedAt | instant | Takes one off |
 
 ### 2.3 The firm's lists
@@ -350,41 +352,52 @@ dates or amount (ADR-146). A prime may hold one contract on a project or several
 
 #### `Form`
 
-*Configuration.* A project's form for one document type (ADR-211).
+*Configuration, built (ADR-308).* A project's form for one document type (ADR-211).
 
 | Field | Type | Notes |
 |---|---|---|
 | **id** | uuid | |
-| **projectId** | → `Project` | Unique with `documentType` |
+| **projectId** | → `Project` | Unique with `documentType`, archived forms included: at most one form of each on a project |
 | **name** | text | |
-| **documentType** | enum `FormDocumentType` | `LOAD` · `HAUL_OUT` · `UNIT_RATE` · `CERTIFICATION` · `ROE` · `SURVEY` · `INCIDENT` · `DROP_OFF_LOG` |
-| **enabled** | bool | Incidents and drop-off logs are switched on per project (ADR-188) |
-| gpsRequired | bool | On the ROE form (ADR-181) |
+| **documentType** | enum `FormDocumentType` | `LOAD` · `HAUL_OUT` · `UNIT_RATE` · `CERTIFICATION` · `ROE` · `SURVEY` · `INCIDENT` · `DROP_OFF_LOG`. Also unique with `id`: the key a debris type's entry and a definition point at, so neither sits on the wrong kind of form and the type can't change under them |
+| **enabled** | bool | Incidents and drop-off logs are switched on per project (ADR-188). No default. **Read only on the forms that aren't a workflow's**: whether a load, haul-out or unit rate form is used is `Project.workflows`' to say (ADR-041, 308) |
+| gpsRequired | bool | The ROE form's setting (ADR-181): stated on it, and on no other form (a check, ADR-308) |
+| **createdAt** | instant | As every configuration record (§1, *Leaving*) |
+| archivedAt | instant | |
 
 #### `FormDebrisType`
 
-*Configuration.* A debris type added to a load or haul-out form (ADR-211, 214). **A field event
-points at this entry**, so a rule's *Debris type* matches the exact entry (ADR-226).
+*Configuration, built (ADR-308).* A debris type added to a load or haul-out form (ADR-211, 214).
+**A field event points at this entry** (from BACKLOG 1.3.4), so a rule's *Debris type* matches the
+exact entry (ADR-226). What a phone's list offers (not archived, not hidden) and setup's warning for
+an entry not marked *Reduced* on the haul-out form are `packages/domain`'s `DebrisTypeEntries`.
 
 | Field | Type | Notes |
 |---|---|---|
+| **id** | uuid | |
 | **formId** | → `Form` | Unique with `debrisTypeId` |
+| **documentType** | enum `FormDocumentType` | Its form's, again: `LOAD` or `HAUL_OUT` (a check), held to the form's own by a two-column foreign key with `formId` (ADR-308) |
 | **debrisTypeId** | → `DebrisType` | The firm's library value |
-| **reduced** | bool | |
+| **reduced** | bool | No default |
 | reductionMethodId | → `ReductionMethod` | |
-| **hiddenOnPhones** | bool | |
-| archivedAt | instant | |
+| **hiddenOnPhones** | bool | No default |
+| **createdAt** | instant | |
+| archivedAt | instant | Taken off the form; put back by clearing it |
 
 #### `FormDefinition`
 
-*Configuration.* The firm's added fields on a survey, ROE, incident or drop-off log form (ADR-160,
-278). A change is a new version; a version is never edited (guarded like `MasterPasscode`).
+*Configuration, built (ADR-308).* The firm's added fields on a survey, ROE, incident or drop-off log
+form (ADR-160, 278): **per project form** (reuse across projects is "copy from a past project",
+ADR-228). A change is a new version; a version is never edited or deleted: the API may only add and
+read one, and a trigger refuses an edit by anyone (`refuse_edit`).
 
 | Field | Type | Notes |
 |---|---|---|
+| **id** | uuid | |
 | **formId** | → `Form` | |
-| **version** | int | |
-| **fields** | JSONB | Each field's stable id, label, type (`TEXT` · `NUMBER` · `YES_NO` · `PICK` · `PHOTO`), required, its choices |
+| **documentType** | enum `FormDocumentType` | Its form's, again: `ROE`, `SURVEY`, `INCIDENT` or `DROP_OFF_LOG` (a check: the four records with an `answers` column), held to the form's own by a two-column foreign key with `formId` (ADR-308) |
+| **version** | int | From 1; unique with `formId` |
+| **fields** | JSONB | A list (a check): each field's stable id, label, type (`TEXT` · `NUMBER` · `YES_NO` · `PICK` · `PHOTO`), required, and a pick's choices. The shape is `packages/contracts`' `formDefinitionFields` (ids once each; choices on a pick only) |
 | **createdById** | → `User` | |
 | **createdAt** | instant | |
 
@@ -392,7 +405,7 @@ points at this entry**, so a rule's *Debris type* matches the exact entry (ADR-2
 
 #### `PayItem`
 
-*Configuration, provisional shape built (ADR-286).* A priced line; **the only place a rate lives**.
+*Configuration, built (ADR-309).* A priced line; **the only place a rate lives**.
 **It names no form: a rule does** (`Rule.formId`), so one pay item, such as a site's tipping fee, can
 be added by a Load rule and by a Haul-out rule. A unit rate pay item is known by its `kindOfWorkId`
 (ADR-292).
@@ -406,33 +419,41 @@ be added by a Load rule and by a Haul-out rule. A unit rate pay item is known by
 | **payableTypeId** | → `PayableType` | The work it prices; every pay item has one (ADR-221) |
 | **unit** | enum `BillingUnit` | `CY` · `TN` · `EA` · `LB` · `HR` · `CREW_DAY` · `TBN`; `TN` or `LB` means the load is weighed (ADR-223) |
 | kindOfWorkId | → `KindOfWork` | Required on a unit rate pay item (ADR-127) |
-| bandFrom, bandTo | decimal(8,1) | The size band, in inches; bands of one payable type never overlap (setup refuses, ADR-217) |
-| **countIsAlwaysOne**, **gpsRequired**, **measurementRequired**, **decimalsAllowed**, **photosRequired**, **monitorMayMarkIneligible**, **quantityFromCarriedTickets** | bool | The capture settings (ADR-157, 192, 207, 210) |
-| crewTimeConversion | enum `CrewTimeConversion` | `PER_HOUR` · `PER_DAY_EXACT` · `PER_DAY_STEPS` (ADR-087) |
-| crewDayHours | decimal(4,2) | Default 12 |
+| bandFrom, bandTo | decimal(8,1) | The size band, in inches, both ends included; either may be open ("24 in and up"). Never below nought, the from no more than the to (a check). Bands of one payable type never overlap: setup refuses, by the domain's `SizeBands`, and warns of a gap (ADR-217, 309) |
+| **countIsAlwaysOne**, **gpsRequired**, **measurementRequired**, **decimalsAllowed**, **photosRequired**, **monitorMayMarkIneligible**, **quantityFromCarriedTickets** | bool | The capture settings (ADR-157, 192, 207, 210); no default, so every writer states each (ADR-303, 309) |
+| crewTimeConversion | enum `CrewTimeConversion` | `PER_HOUR` · `PER_DAY_EXACT` · `PER_DAY_STEPS` (ADR-087). Set on an `HR` pay item (`PER_HOUR`) or a `CREW_DAY` one (either day conversion), and on no other (a check, ADR-309) |
+| crewDayHours | decimal(4,2) | The day length on a `PER_DAY_EXACT` pay item, and only there (a check): more than 0, at most 24. A new one starts at the policy value `CREW_DAY_HOURS`, 12 (ADR-087, 309) |
 | **createdAt** | instant | |
 | archivedAt | instant | |
 
 #### `PayItemCrewDayStep`
 
-*Configuration.* The steps of a crew day paid in steps (1.5–4.5 h = 0.25…).
+*Configuration, built (ADR-309).* The steps of a crew day paid in steps (1.5–4.5 h = 0.25…). Read
+only on a `PER_DAY_STEPS` pay item.
 
 | Field | Type | Notes |
 |---|---|---|
-| **payItemId** | → `PayItem` | |
-| fromHours, toHours | *open* | |
-| quantity | *open* | |
+| **id** | uuid | |
+| **payItemId** | → `PayItem` | A step's from hours once per pay item (unique) |
+| **fromHours**, **toHours** | decimal(4,2) | Both included; 0 ≤ from ≤ to ≤ 24 (a check; *agent default*, ADR-309) |
+| **quantity** | decimal(14,4) | What the step bills, nought or more (a check) |
+| **createdAt** | instant | |
+| archivedAt | instant | |
 
 #### `PayItemRate`
 
-*Configuration.* One rate for each prime, never a copy of the pay item (ADR-206). No row = no rate
-for that prime (a $0 line, flagged, ADR-212). A rate's history is the audit log.
+*Configuration, built (ADR-309).* One rate for each prime, never a copy of the pay item (ADR-206).
+No row = no rate for that prime (a $0 line, flagged, ADR-212). A rate's history is the audit log.
 
 | Field | Type | Notes |
 |---|---|---|
-| **payItemId** | → `PayItem` | Unique with `primeId` |
-| **primeId** | → `Contractor` | |
-| **rate** | decimal(14,4) | |
+| **id** | uuid | |
+| **projectId** | → `Project` | The pay item's: both its relations name it (ADR-305, 309) |
+| **payItemId** | → `PayItem` | Unique with `primeId`; of the same project (a two-column foreign key) |
+| **primeId** | → `Contractor` | One of the project's primes, held by a two-column foreign key to `ProjectContractor (projectId, asPrimeId)` (ADR-305): never a sub, nor a contractor not on the project |
+| **rate** | decimal(14,4) | Nought or more (a check) |
+| **createdAt** | instant | |
+| archivedAt | instant | Takes a prime's rate off; cleared, it's back (*agent default*, ADR-309) |
 
 ### Rules (`spec/RULES.md`)
 
@@ -1306,6 +1327,9 @@ Never relaxed to pass a test (ARCHITECTURE §5.4). ✅ = built today.
 | One disposal per completed load or haul-out; one live completed record per collection event | unique keys (the second partial: `WHERE dissolved_at IS NULL`, in a guard migration) |
 | A cert number once per project; a receipt number once per project; an ROE number once per project | unique keys |
 | A pay item's code once per project (ADR-301) | ✅ unique key |
+| One rate per prime on a pay item, and only for one of the pay item's own project's primes (ADR-206, 305, 309) | ✅ a unique key and two-column foreign keys |
+| A size band is never below nought or backwards; crew time's conversion only on an `HR` or `CREW_DAY` pay item, its day length only on an exact one, at most 24 h; a crew day's step within a day; a rate and a step's quantity nought or more (ADR-087, 309) | ✅ checks |
+| An assignment names only unit rate pay items (C42) | ✅ a three-column foreign key to the pay item's project, id and kind of work (ADR-309) |
 | A list value with a key (a built-in value) is never archived; a key appears once in its list (ADR-194, 302) | ✅ a check and a unique key on every list |
 | Only a release writes a list value's key: no other login adds a row with one, or gives, changes or removes one (ADR-302) | ✅ a trigger on every list |
 | A rule that is an exact copy of another (same form, contract, criteria and actions, whatever its name) | the API at setup, before it is saved (ADR-301) |
@@ -1320,7 +1344,7 @@ Never relaxed to pass a test (ARCHITECTURE §5.4). ✅ = built today.
 | The Monitor ID is issued, well-formed, unique; the system actor is one fixed row and never a person | ✅ |
 | An assignment's site, a field event's site and an assignment's pay items are their own project's | two-column foreign keys (✅ for the first and third) |
 | Number blocks of one series never overlap | an exclusion constraint (needs `btree_gist`: its own ADR, C43) |
-| Size bands of one payable type never overlap | the API at setup (ADR-217); the worker flags what slips through |
+| Size bands of one payable type never overlap | setup, before it saves, by `packages/domain`'s `SizeBands`, which also warns of a gap (ADR-217, 309); the worker flags what slips through |
 | Nothing is deleted; audit is append-only; every write states its actor; a transaction's delete is copied first and refused when locked; viewers see only their own projects | ✅ the guard migrations (ADR-270…276) |
 
 ---
@@ -1346,8 +1370,8 @@ A new value in any of them is a code change with an ADR (`spec/LISTS.md` Group 2
 | `Permission` | `CORRECT` · `RENUMBER` · `VOID` · `ACCEPT_FLAG` · `QC` · `LOCK_INVOICED` · `UNLOCK_INVOICED` · `APPROVE_HOURS` · `SETUP` · `DISPATCH` | `UserPermission` |
 | `ReasonUse` ✅ | `VOID` · `TYPED_NUMBER` · `ACCEPT_FLAG` · `BACK_OFFICE_RECORD` | `Reason` |
 | `FormDocumentType` | `LOAD` · `HAUL_OUT` · `UNIT_RATE` · `CERTIFICATION` · `ROE` · `SURVEY` · `INCIDENT` · `DROP_OFF_LOG` | `Form`, `Assignment` |
-| `BillingUnit` | `CY` · `TN` · `EA` · `LB` · `HR` · `CREW_DAY` · `TBN` | `PayItem`, `Transaction` |
-| `CrewTimeConversion` | `PER_HOUR` · `PER_DAY_EXACT` · `PER_DAY_STEPS` | `PayItem` |
+| `BillingUnit` ✅ | `CY` · `TN` · `EA` · `LB` · `HR` · `CREW_DAY` · `TBN` | `PayItem`, `Transaction` |
+| `CrewTimeConversion` ✅ | `PER_HOUR` · `PER_DAY_EXACT` · `PER_DAY_STEPS` | `PayItem` |
 | `CountShape` ✅ | `NUMBER` · `ITEM_COUNTS` · `ITEM_HOURS` | `KindOfWork` |
 | `CertificationKind` ✅ | `CONTAINER` · `CREW` | `Certification`, `VehicleType.certifies` (ADR-302) |
 | `BoxShape` | `RECTANGLE` · `TRIANGLE` · `TWO_LENGTH_HOIST` · `ROUND_BOTTOM` · `RADIUS_CORNER` | `CertificationBox` |
@@ -1383,8 +1407,8 @@ A new value in any of them is a code change with an ADR (`spec/LISTS.md` Group 2
 | `User` | Gains viewer kind, contact, permissions and viewer projects; sign-in's columns in Phase 2 |
 | `Device`, `MasterPasscode`, `NumberBlock` | As built; a key's revocation; the overlap refusal |
 | `DisposalSite` | Gains its type, facts, permit, GPS, dates, labels, area versions, tipping fee link |
-| `Assignment` | Gains `formDocumentTypes`; its pay items are built (ADR-286) |
-| `PayItem` (code and description only, the code unique on its project, ADR-301) | Gains every other field of §3, its rates and steps |
+| `Assignment` | ✅ `formDocumentTypes` built (ADR-308); its pay items (ADR-286), held to unit rate ones (ADR-309) |
+| `PayItem` | ✅ built 2026-10-02 (ADR-309): every field of §3, with `PayItemRate` and `PayItemCrewDayStep`; `AssignmentPayItem` gains the pay item's kind of work |
 | `FieldEvent` | Gains the shared and kind-specific columns of §4.1; `deviceId`, `assignmentId`, `setupVersion` become optional for a back-office-created record |
 | `CompletedLoad` | Its one collection link moves to `CompletedLoadCollection`; gains its quantity and `dissolvedAt` |
 | `Transaction` | Gains its rule, pay item, contract, operating sub, unit, property and the two other ticket links; the delete guard follows the lock through them |
@@ -1581,6 +1605,9 @@ user approved the page on 2026-10-01 without changing one, so all sixteen stand.
 | 20 | **A survey number is not unique** | It names the property, and a property has a pre-work and a post-work survey (ADR-294) |
 | 21 | **A completed haul-out has a completed load's shape**: tied to its disposal event, a row per collection event (per pile on a split), mileage on that row. **A pile is told from another by its debris type and its field tag** | The user: haul-outs "follow that same format" (ADR-295). The field tag is the firm's own project list, so piles need no new list |
 | 22 | **A prime's row on `ProjectContractor` carries its own contractor again as `asPrimeId`**, unique with the project, and "the prime" everywhere is a two-column foreign key to it (ADR-305) | The database then refuses a sub under a sub, a sub shared or borrowed from another project, and a contract whose prime isn't one of the project's primes, with no trigger and no hand-written rule; the tables that name a prime need no extra column |
+| 23 | **A pay item's rate has its own id, project, created and archived times**; a prime's rate is taken off by archiving and put back by clearing it, never a second row (ADR-309) | §1's *Keys* and *Leaving* for every configuration record; the project lets the prime be held by ADR-305's key |
+| 24 | **A crew day's step is hours to the quarter (`decimal(4,2)`) within one day, its quantity `decimal(14,4)`, its from hours once per pay item** (ADR-309) | The hours are captured to the quarter (ADR-084); a quantity is §1's quantity |
+| 25 | **An assignment's pay item repeats the pay item's kind of work** (ADR-309) | So the database itself refuses a pay item that isn't a unit rate one (C42), by a foreign key, no trigger (as ADR-305 and 308) |
 
 **Carried items this page answers:**
 
