@@ -605,7 +605,7 @@ describe('the forms an assignment names', () => {
       [assignmentId],
     );
 
-  it('none until the board names some; Jo Kim’s incidents, Kim Nguyen’s drop-off logs, a crew’s ROEs and surveys', async () => {
+  it('AC-02-27 none until the board names some; Jo Kim’s incidents, Kim Nguyen’s drop-off logs, a crew’s ROEs and surveys', async () => {
     const { db, world } = tested;
     expect(await formsOf(world.assignments.p1)).toEqual({ forms: [] });
     await asTheApi();
@@ -623,7 +623,7 @@ describe('the forms an assignment names', () => {
     });
   });
 
-  it('only the four that aren’t a ticket’s: a load, haul-out or unit rate form is a field event kind, a certification is certifying; none at all is an empty list', async () => {
+  it('AC-02-27 only the four that aren’t a ticket’s: a load, haul-out or unit rate form is a field event kind, a certification is certifying; none at all is an empty list', async () => {
     const { db, world } = tested;
     await asTheApi();
     for (const named of ['{LOAD}', '{INCIDENT,HAUL_OUT}', '{UNIT_RATE}', '{CERTIFICATION}', null]) {

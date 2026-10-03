@@ -263,7 +263,8 @@ describe('coordinates (REQ-104)', () => {
        WHERE table_schema = 'public' AND (column_name LIKE '%latitude' OR column_name LIKE '%longitude')
        ORDER BY 1`,
     );
-    expect(columns.map((column) => column.name)).toEqual([
+    // Each table's, and its viewer view's (ADR-315): a view shows the column as it is kept.
+    const kept = [
       'disposal_site.latitude',
       'disposal_site.longitude',
       'field_event.end_latitude',
@@ -276,13 +277,14 @@ describe('coordinates (REQ-104)', () => {
       'site_area_version.north_latitude',
       'site_area_version.south_latitude',
       'site_area_version.west_longitude',
-      'viewer_field_event.end_latitude',
-      'viewer_field_event.end_longitude',
       'zone.east_longitude',
       'zone.north_latitude',
       'zone.south_latitude',
       'zone.west_longitude',
-    ]);
+    ];
+    expect(columns.map((column) => column.name).sort()).toEqual(
+      [...kept, ...kept.map((name) => `viewer_${name}`)].sort(),
+    );
     expect(columns.filter((column) => column.type !== 'numeric(38,8)')).toEqual([]);
   });
 });

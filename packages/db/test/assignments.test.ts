@@ -58,7 +58,7 @@ async function refusedAssignment(written: Written): Promise<string> {
 }
 
 describe('an assignment', () => {
-  it('says who works where, on what: the tower at Marsh Road, a curb collection with no site', async () => {
+  it('AC-02-24 says who works where, on what: the tower at Marsh Road, a curb collection with no site', async () => {
     const { db, world } = tested;
     await asTheApi();
     const tower = await assign({ kinds: '{DISPOSAL}', site: world.site });
@@ -89,7 +89,7 @@ describe('an assignment', () => {
     ]);
   });
 
-  it('is at one of its own project’s sites, never another project’s', async () => {
+  it('AC-02-25 is at one of its own project’s sites, never another project’s', async () => {
     const { db, world } = tested;
     await asTheApi();
     // P2 enters the same landfill as its own site (ADR-145); P1's assignments can't use it.
@@ -111,7 +111,7 @@ describe('an assignment', () => {
     expect(await db.run(move, [onP2, world.p1, world.site])).toBe(1);
   });
 
-  it('written on the board says who wrote it; an unplanned one has no author and always its phone', async () => {
+  it('AC-02-26 written on the board says who wrote it; an unplanned one has no author and always its phone', async () => {
     await asTheApi();
     expect(await refusedAssignment({ origin: 'PLANNED', madeBy: null })).toBe(refusedBy.check);
     expect(await refusedAssignment({ origin: 'UNPLANNED' })).toBe(refusedBy.check);
@@ -124,13 +124,13 @@ describe('an assignment', () => {
     await assign({ origin: 'PLANNED' });
   });
 
-  it("names only work a phone can record: the kinds are the field event's own", async () => {
+  it("AC-02-27 names only work a phone can record: the kinds are the field event's own", async () => {
     await asTheApi();
     expect(await refusedAssignment({ kinds: '{TOWER}' })).toBe(refusedBy.badValue);
     await assign({ kinds: '{HAUL_OUT_COLLECTION,HAUL_OUT_DISPOSAL,UNIT_RATE}' });
   });
 
-  it('is for a person and written by a person, never the system actor', async () => {
+  it('AC-02-28 is for a person and written by a person, never the system actor', async () => {
     await asTheApi();
     expect(await refusedAssignment({ person: systemActorId })).toBe(refusedBy.check);
     expect(await refusedAssignment({ madeBy: systemActorId })).toBe(refusedBy.check);
@@ -139,7 +139,7 @@ describe('an assignment', () => {
     );
   });
 
-  it('never stops a second one: two projects in a day are two assignments, on two phones', async () => {
+  it('AC-02-29 never stops a second one: two projects in a day are two assignments, on two phones', async () => {
     const { db, world } = tested;
     await asTheApi();
     const { id: second } = await db.one<{ id: string }>(
@@ -152,7 +152,7 @@ describe('an assignment', () => {
     await assign({ project: world.p1 });
   });
 
-  it('is withdrawn, never deleted; the worker reads it and writes nothing', async () => {
+  it('AC-02-30 is withdrawn, never deleted; the worker reads it and writes nothing', async () => {
     const { db, world } = tested;
     await asTheApi();
     const id = await assign();
@@ -219,7 +219,7 @@ describe("an assignment's unit rate pay items", () => {
     ).id;
   }
 
-  it('are the ones the person does that day: hangers and leaners for the unit rate monitor', async () => {
+  it('AC-02-31 are the ones the person does that day: hangers and leaners for the unit rate monitor', async () => {
     const { db, world } = tested;
     await asTheApi();
     const unitRate = await assign({ kinds: '{UNIT_RATE}', device: null });
@@ -231,7 +231,7 @@ describe("an assignment's unit rate pay items", () => {
     ]);
   });
 
-  it('C42 are unit rate pay items only: a hauling pay item has no kind of work to name', async () => {
+  it('AC-02-31 C42 are unit rate pay items only: a hauling pay item has no kind of work to name', async () => {
     const { db, world } = tested;
     await asTheApi();
     const unitRate = await assign({ kinds: '{UNIT_RATE}' });
@@ -265,7 +265,7 @@ describe("an assignment's unit rate pay items", () => {
     ).toBe(refusedBy.restrict);
   });
 
-  it('are its own project’s, never another project’s', async () => {
+  it('AC-02-31 are its own project’s, never another project’s', async () => {
     const { db, world } = tested;
     await asTheApi();
     const onP1 = await assign({ kinds: '{UNIT_RATE}' });
@@ -291,7 +291,7 @@ describe("an assignment's unit rate pay items", () => {
     ).toBe(refusedBy.restrict);
   });
 
-  it('name each pay item once; one is taken off by archiving and put back, never deleted', async () => {
+  it('AC-02-32 name each pay item once; one is taken off by archiving and put back, never deleted', async () => {
     const { db, world } = tested;
     await asTheApi();
     const hangers = world.payItems.hangers;
@@ -316,7 +316,7 @@ describe("an assignment's unit rate pay items", () => {
     );
   });
 
-  it('are audited: who put which pay item on whose day', async () => {
+  it('AC-02-32 are audited: who put which pay item on whose day', async () => {
     const { db, world } = tested;
     await asTheApi();
     const hangers = await p2Hangers();
@@ -364,7 +364,7 @@ describe('a field event', () => {
      VALUES (uuidv7(), $1, 'LOAD', 'COLLECTION', '101050', $2, $3, '2026-10-13T13:00:00Z',
        '2026-10-13T13:25:00Z', -240${values})`;
 
-  it('carries its assignment and the setup version of the phone’s lists', async () => {
+  it('AC-02-43 carries its assignment and the setup version of the phone’s lists', async () => {
     const { db, world } = tested;
     await db.as('adms_api');
     await db.actor(world.monitor, 'DEVICE', { deviceId: world.device });
@@ -399,7 +399,7 @@ describe('a field event', () => {
     ).toEqual({ assignment: world.assignments.p1, setup_version: 3 });
   });
 
-  it('has both corrected by permission, like any captured field; never by the worker', async () => {
+  it('AC-02-43 has both corrected by permission, like any captured field; never by the worker', async () => {
     const { db, world } = tested;
     const event = world.loads.l101001.collection;
     await asTheApi();
@@ -421,7 +421,7 @@ describe('a field event', () => {
     expect((await db.refused(correct, [event, world.assignments.p1])).code).toBe(refusedBy.grant);
   });
 
-  it('is never recorded by the system actor', async () => {
+  it('AC-02-43 is never recorded by the system actor', async () => {
     const { db, world } = tested;
     await asTheApi();
     expect(

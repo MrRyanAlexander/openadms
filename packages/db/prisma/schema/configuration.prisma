@@ -108,6 +108,8 @@ model Project {
   fieldTags        FieldTag[]
   fieldEvents      FieldEvent[]
   completedLoads   CompletedLoad[]
+  // The read-only viewers who may see it.
+  viewers          ViewerProject[]
 
   // "Every project under this declaration", and a client's projects, are one query each (ADR-026).
   @@index([declarationEventId])
@@ -886,27 +888,48 @@ enum UserRole {
   @@map("user_role")
 }
 
-// A person with a login; firm-wide, not project-scoped (ADR-050, 105, 169).
+// What kind of read-only viewer a person is (ADR-050, 169): a client user and an auditor see the
+// whole of the projects they are given; a contractor user only its own contractor's tickets and
+// transactions there.
+enum ViewerKind {
+  CLIENT
+  CONTRACTOR
+  AUDITOR
+
+  @@map("viewer_kind")
+}
+
+// A person with a login; firm-wide, not project-scoped (ADR-050, 105, 169): someone who works on
+// two projects is one record.
 model User {
-  id             String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  id             String      @id @default(dbgenerated("uuidv7()")) @db.Uuid
   name           String
   role           UserRole
+  // Stated on a read-only viewer, and only there (a check in the guard migration, ADR-315).
+  viewerKind     ViewerKind? @map("viewer_kind")
+  // Their contact, each optional. No read-only viewer ever reads either; a monitor's phone is
+  // shown to admins only, which is the API's to keep (ADR-169).
+  email          String?
+  phone          String?
   // The Monitor ID (M004127), a business number, never a key (spec/CONVENTIONS.md §3). The system
   // issues it (REQ-021): a person written without one gets the next from the database. Every
   // monitor has one; the system actor never does (checks in the guard migrations, ADR-276, 281).
-  monitorNumber  String?  @unique @default(dbgenerated("next_monitor_number()")) @map("monitor_number")
-  // Set for a contractor's read-only viewer (ADR-169).
-  contractorId   String?  @map("contractor_id") @db.Uuid
+  monitorNumber  String?     @unique @default(dbgenerated("next_monitor_number()")) @map("monitor_number")
+  // A contractor user's contractor: set on one, and only there (ADR-169; a check in the guard
+  // migration, ADR-315).
+  contractorId   String?     @map("contractor_id") @db.Uuid
   // Who employs them, when it isn't the firm itself: a monitoring firm or temp agency, always a
   // contractor record, never typed text; and the ID that employer gives them, if any (Q-97).
-  employerId     String?  @map("employer_id") @db.Uuid
-  employerNumber String?  @map("employer_number")
+  employerId     String?     @map("employer_id") @db.Uuid
+  employerNumber String?     @map("employer_number")
 
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
 
   contractor      Contractor?       @relation("ViewerContractor", fields: [contractorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   employer        Contractor?       @relation("Employer", fields: [employerId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  permissions     UserPermission[]
+  viewerProjects  ViewerProject[]
   assignments     Assignment[]      @relation("AssignmentPerson")
   assignmentsMade Assignment[]      @relation("AssignmentMadeBy")
   formDefinitions FormDefinition[]  @relation("FormDefinitionCreatedBy")
@@ -917,6 +940,58 @@ model User {
   auditRecords    AuditRecord[]
 
   @@map("user")
+}
+
+// What a manager/analyst can be granted (ADR-050; spec/DATA-MODEL.md §2.2): one closed set, fixed
+// in code. An admin needs none.
+enum Permission {
+  CORRECT
+  RENUMBER
+  VOID
+  ACCEPT_FLAG
+  QC
+  LOCK_INVOICED
+  UNLOCK_INVOICED
+  APPROVE_HOURS
+  SETUP
+  DISPATCH
+
+  @@map("permission")
+}
+
+// One permission granted to one person: each its own row, once. Taken away by archiving, given
+// back by clearing the archive, never deleted and never a second row (ADR-315). Who granted it,
+// and who took it away, is the audit record's actor.
+model UserPermission {
+  id         String     @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId     String     @map("user_id") @db.Uuid
+  permission Permission
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([userId, permission])
+  @@map("user_permission")
+}
+
+// One project a read-only viewer may see: each project once. Row-level security reads it (ADR-169,
+// 315). Taken away by archiving. Its table is user_viewer_project: viewer_project is the project's
+// viewer view (ADR-270, 315).
+model ViewerProject {
+  id        String @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId    String @map("user_id") @db.Uuid
+  projectId String @map("project_id") @db.Uuid
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([userId, projectId])
+  @@map("user_viewer_project")
 }
 
 // The firm's one master passcode (ADR-106), kept only as its slow hash (ARCHITECTURE §7.5). A
@@ -961,6 +1036,10 @@ model Device {
   // Its removal time: what it made after this arrives flagged, never refused (ADR-134). Set
   // exactly when it's lost or retired (a check in the guard migrations).
   outOfServiceAt        DateTime?    @map("out_of_service_at") @db.Timestamptz(3)
+  // When its key was revoked: once a lost or retired phone has synced, been confirmed and wiped
+  // (ARCHITECTURE §7.4; C47). Only a phone out of service has one (a check in the guard
+  // migration); refusing the key is the API's (Phase 2).
+  keyRevokedAt          DateTime?    @map("key_revoked_at") @db.Timestamptz(3)
 
   masterPasscode MasterPasscode @relation(fields: [masterPasscodeVersion], references: [version], onDelete: Restrict, onUpdate: Restrict)
   numberBlocks   NumberBlock[]

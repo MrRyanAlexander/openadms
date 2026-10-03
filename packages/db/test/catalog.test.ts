@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import { eachTestRolledBack } from './support/lifecycle.ts';
 import { listTables } from './support/lists.ts';
+import { viewedTables, viewerSights } from './support/viewers.ts';
 
 const tested = eachTestRolledBack();
 
@@ -24,6 +25,9 @@ const domains: Record<string, string> = {
   form_debris_type: 'OPERATIONS',
   form_definition: 'OPERATIONS',
   user: 'SECURITY',
+  // Who may do what, and who may see which project: the security reviewer's to read (ADR-315).
+  user_permission: 'SECURITY',
+  user_viewer_project: 'SECURITY',
   device: 'SECURITY',
   disposal_site: 'OPERATIONS',
   // A site's labels and own shape, and the project map; a site's tipping fee pay item tells a fee
@@ -100,9 +104,15 @@ const listChecks = listTables.map((table) => ({
 }));
 
 const viewerQual = '(viewer_sees_project(project_id) AND viewer_sees_every_ticket())';
+// The four tables of the row-level security guard (ADR-270), and every setup table a client user
+// or an auditor sees (ADR-315).
+const secured = ['completed_load', 'field_event', 'project', 'transaction', ...viewedTables].sort();
 const policies = [
-  ...['completed_load', 'field_event', 'project', 'transaction'].map(
+  ...secured.map(
     (table) => `${table}_services PERMISSIVE {adms_api,adms_worker} ALL USING true CHECK true`,
+  ),
+  ...Object.entries(viewerSights).map(
+    ([table, { seen }]) => `${table}_viewer PERMISSIVE {adms_readonly} SELECT USING ${seen}`,
   ),
   `completed_load_viewer PERMISSIVE {adms_readonly} SELECT USING ${viewerQual}`,
   `field_event_viewer PERMISSIVE {adms_readonly} SELECT USING ${viewerQual}`,
@@ -155,6 +165,11 @@ describe('the guards in the catalog', () => {
       {
         name: 'contractor_merged_is_archived_check',
         definition: 'CHECK (((merged_into_id IS NULL) OR (archived_at IS NOT NULL)))',
+      },
+      {
+        name: 'device_key_revoked_check',
+        definition:
+          'CHECK (((key_revoked_at IS NULL) OR ((out_of_service_at IS NOT NULL) AND (key_revoked_at >= out_of_service_at))))',
       },
       {
         name: 'device_out_of_service_check',
@@ -344,6 +359,10 @@ describe('the guards in the catalog', () => {
         definition: "CHECK (((monitor_number IS NULL) OR (monitor_number ~ '^M[0-9]{6,}$'::text)))",
       },
       {
+        name: 'user_permission_system_actor_check',
+        definition: "CHECK ((user_id <> '00000000-0000-7000-8000-000000000001'::uuid))",
+      },
+      {
         name: 'user_system_actor_check',
         definition:
           "CHECK (((role <> 'SYSTEM'::user_role) OR ((id = '00000000-0000-7000-8000-000000000001'::uuid) AND (monitor_number IS NULL) AND (contractor_id IS NULL))))",
@@ -352,6 +371,20 @@ describe('the guards in the catalog', () => {
         name: 'user_system_actor_employer_check',
         definition:
           "CHECK (((role <> 'SYSTEM'::user_role) OR ((employer_id IS NULL) AND (employer_number IS NULL))))",
+      },
+      // A read-only viewer says what kind it is; a contractor user names its contractor (ADR-315).
+      {
+        name: 'user_viewer_contractor_check',
+        definition:
+          "CHECK (((NOT (viewer_kind IS DISTINCT FROM 'CONTRACTOR'::viewer_kind)) = (contractor_id IS NOT NULL)))",
+      },
+      {
+        name: 'user_viewer_kind_check',
+        definition: "CHECK (((role = 'READ_ONLY_VIEWER'::user_role) = (viewer_kind IS NOT NULL)))",
+      },
+      {
+        name: 'user_viewer_project_system_actor_check',
+        definition: "CHECK ((user_id <> '00000000-0000-7000-8000-000000000001'::uuid))",
       },
       ...listChecks,
     ];
@@ -372,18 +405,13 @@ describe('the guards in the catalog', () => {
     ]);
   });
 
-  it('row-level security on the four project-scoped tables only, with exactly their policies', async () => {
-    const secured = await tested.db.rows<{ name: string; forced: boolean }>(
+  it('AC-02-70 row-level security on the ticket tables and on every setup table a viewer sees, with exactly their policies', async () => {
+    const found = await tested.db.rows<{ name: string; forced: boolean }>(
       `SELECT relname AS name, relforcerowsecurity AS forced FROM pg_class
        WHERE relnamespace = 'public'::regnamespace AND relkind IN ('r', 'p') AND relrowsecurity
        ORDER BY relname`,
     );
-    expect(secured).toEqual(
-      ['completed_load', 'field_event', 'project', 'transaction'].map((name) => ({
-        name,
-        forced: false,
-      })),
-    );
+    expect(found).toEqual(secured.map((name) => ({ name, forced: false })));
     const rows = await tested.db.rows<{ policy: string }>(
       `SELECT policyname || ' ' || permissive || ' ' || roles::text || ' ' || cmd
          || coalesce(' USING ' || qual, '') || coalesce(' CHECK ' || with_check, '') AS policy
@@ -392,19 +420,58 @@ describe('the guards in the catalog', () => {
     expect(rows.map((row) => row.policy).sort()).toEqual(policies);
   });
 
-  it('the viewer views run as the viewer, behind a security barrier', async () => {
+  it("the viewer views run as the viewer, behind a security barrier; the project's setup alone asks the viewer's question itself", async () => {
     const rows = await tested.db.rows<{ name: string; options: string[] }>(
       `SELECT relname AS name, reloptions AS options FROM pg_class
        WHERE relnamespace = 'public'::regnamespace AND relkind IN ('v', 'm') ORDER BY relname`,
     );
+    const asTheViewer = [
+      'viewer_completed_load',
+      'viewer_field_event',
+      'viewer_project',
+      'viewer_transaction',
+      ...viewedTables.map((table) => `viewer_${table}`),
+    ].map((name) => ({ name, options: ['security_invoker=true', 'security_barrier=true'] }));
     expect(rows).toEqual(
-      ['viewer_completed_load', 'viewer_field_event', 'viewer_project', 'viewer_transaction'].map(
-        (name) => ({ name, options: ['security_invoker=true', 'security_barrier=true'] }),
+      [...asTheViewer, { name: 'viewer_project_setup', options: ['security_barrier=true'] }].sort(
+        (a, b) => (a.name < b.name ? -1 : 1),
       ),
     );
+    // Row-level security can't tell columns apart, so the one view that shows a project's settings
+    // runs with the owner's rights and holds the question in its own WHERE (ADR-315).
+    const setup = await tested.db.one<{ definition: string; owner: string }>(
+      `SELECT pg_get_viewdef('viewer_project_setup'::regclass) AS definition,
+         pg_get_userbyid(relowner) AS owner
+       FROM pg_class WHERE oid = 'viewer_project_setup'::regclass`,
+    );
+    expect(setup.owner).toBe('adms_owner');
+    expect(setup.definition.split('\n').map((line) => line.trim())).toEqual([
+      'SELECT id,',
+      'name,',
+      'client_id,',
+      'declaration_event_id,',
+      'program_type_id,',
+      'allow_split_loads,',
+      'time_zone,',
+      'active_from,',
+      'active_to,',
+      'ticket_number_source,',
+      'workflows,',
+      'load_call_low_limit,',
+      'load_call_high_limit,',
+      'stump_fill_depth_inches,',
+      'stump_check_root_ball_wider,',
+      'stump_check_fill_needs_exposure,',
+      'site_circle_meters,',
+      'time_clock_enabled,',
+      'created_at,',
+      'closed_at',
+      'FROM project',
+      'WHERE (viewer_sees_project(id) AND viewer_sees_every_ticket());',
+    ]);
   });
 
-  it("only three functions run with the owner's rights, and every function pins its search path", async () => {
+  it("only six functions run with the owner's rights, and every function pins its search path", async () => {
     const rows = await tested.db.rows<{ name: string; definer: boolean; config: string[] | null }>(
       `SELECT proname AS name, prosecdef AS definer, proconfig AS config FROM pg_proc
        WHERE pronamespace = 'public'::regnamespace ORDER BY proname`,
@@ -412,7 +479,11 @@ describe('the guards in the catalog', () => {
     expect(rows.filter((row) => row.definer).map((row) => row.name)).toEqual([
       'audit_capture',
       'transaction_delete_to_audit',
+      // Who the viewer of a request is, read from their own record (ADR-315).
+      'viewer_is_contractor',
+      'viewer_sees_every_ticket',
       'viewer_sees_load_project',
+      'viewer_sees_project',
     ]);
     expect(
       rows.filter((row) => !(row.config ?? []).includes('search_path=pg_catalog, public')),

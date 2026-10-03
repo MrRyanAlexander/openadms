@@ -135,6 +135,7 @@ describe('capture', () => {
       rule_criterion_pick: ['BILLING'],
       transaction: ['BILLING'],
       user: ['SECURITY'],
+      user_viewer_project: ['SECURITY'],
     });
     const counts = await db.one<{ records: number; rows: number }>(
       `SELECT count(*)::int AS records, count(DISTINCT "record_id")::int AS rows

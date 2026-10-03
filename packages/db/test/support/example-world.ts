@@ -33,6 +33,9 @@
 // Ana Brooks records every event here, on the one phone, under her assignment on each project
 // (Monday 12 October 2026, written on the board by Dana). The phone holds version 1 of the master
 // passcode, which the installer's seed keeps (ADR-281).
+// Three read-only viewers, issued by Dana (ADR-169, 315): Bayline County's client user, given P1;
+// an auditor, given P1 and P2; and Coastline Haulers' contractor user, given P1. A test issues
+// another with `viewerLike` and `given`.
 import { systemActorId } from '../../src/system-actor.ts';
 import type { GuardedDatabase } from './database.ts';
 
@@ -91,8 +94,11 @@ export interface World {
   rates: PayItems;
   // P1's rule VEG-HAUL-CY-15: the rule, its two criteria and its action.
   rule: { id: string; debrisType: string; mileage: string; add: string };
-  // A Coastline Haulers LLC read-only viewer.
+  // Coastline Haulers LLC's contractor user, given P1.
   coastlineViewer: string;
+  // Bayline County's client user, given P1; an auditor, given P1 and P2.
+  clientViewer: string;
+  auditor: string;
   // Bayline County; Hurricane Delphine, DR-9001-FL.
   client: string;
   declarationEvent: string;
@@ -263,6 +269,26 @@ export function actionLike(
   };
 }
 
+// A read-only viewer as Dana issues one: a client user or an auditor, or a contractor user with
+// its contractor (ADR-169, 315).
+export function viewerLike(
+  name: string,
+  kind: 'CLIENT' | 'AUDITOR' | 'CONTRACTOR',
+  contractorId?: string,
+): Record<string, unknown> {
+  return {
+    name,
+    role: 'READ_ONLY_VIEWER',
+    viewer_kind: kind,
+    ...(contractorId === undefined ? {} : { contractor_id: contractorId }),
+  };
+}
+
+// One project a viewer is given.
+export function given(viewerId: string, projectId: string): Record<string, unknown> {
+  return { user_id: viewerId, project_id: projectId };
+}
+
 // A prime's place on a project: it names no prime, and carries its own contractor again as the key
 // a sub's prime and a contract's prime are held to (ADR-305).
 export function primeOn(projectId: string, contractorId: string): Record<string, unknown> {
@@ -338,11 +364,15 @@ export class ExampleWorld {
     });
     const harbor = await this.insert('contractor', { name: 'Harbor Staffing', kind: 'MONITORING' });
     const monitor = await this.insert('user', { name: 'Ana Brooks', role: 'MONITOR' });
-    const coastlineViewer = await this.insert('user', {
-      name: 'Coastline Haulers LLC viewer',
-      role: 'READ_ONLY_VIEWER',
-      contractor_id: coastline,
-    });
+    const coastlineViewer = await this.insert(
+      'user',
+      viewerLike('Coastline Haulers LLC viewer', 'CONTRACTOR', coastline),
+    );
+    const clientViewer = await this.insert(
+      'user',
+      viewerLike('Bayline County debris manager', 'CLIENT'),
+    );
+    const auditor = await this.insert('user', viewerLike('Auditor', 'AUDITOR'));
     const device = await this.insert('device', {
       name: 'P1-COL-1',
       public_key: 'test-public-key-ana-brooks',
@@ -554,6 +584,10 @@ export class ExampleWorld {
         made_by_id: admin,
       });
     const assignments = { p1: await assignment(p1), p2: await assignment(p2) };
+    await this.insert('user_viewer_project', given(coastlineViewer, p1));
+    await this.insert('user_viewer_project', given(clientViewer, p1));
+    await this.insert('user_viewer_project', given(auditor, p1));
+    await this.insert('user_viewer_project', given(auditor, p2));
 
     const place = { monitor, device };
     return {
@@ -577,6 +611,8 @@ export class ExampleWorld {
       rates,
       rule,
       coastlineViewer,
+      clientViewer,
+      auditor,
       ...hub,
       p1,
       p2,

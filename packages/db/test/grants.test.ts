@@ -7,6 +7,7 @@ import { refusedBy } from './support/database.ts';
 import { insertOf, primeOn, projectLike } from './support/example-world.ts';
 import { eachTestRolledBack } from './support/lifecycle.ts';
 import { listTables } from './support/lists.ts';
+import { unseenTables, viewedTables, viewerSights } from './support/viewers.ts';
 
 const tested = eachTestRolledBack();
 
@@ -30,6 +31,9 @@ const tableGrants: Record<string, Record<string, string>> = {
   form_debris_type: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   form_definition: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },
   user: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
+  // A person's permissions, and a read-only viewer's projects (ADR-315).
+  user_permission: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
+  user_viewer_project: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   device: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   disposal_site: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   // A site's labels and tipping fee pay items; a site's own shape, and the project map, added in
@@ -69,6 +73,11 @@ const tableGrants: Record<string, Record<string, string>> = {
   viewer_field_event: { adms_readonly: 'SELECT' },
   viewer_completed_load: { adms_readonly: 'SELECT' },
   viewer_transaction: { adms_readonly: 'SELECT' },
+  // A project's setup, for a client user and an auditor (ADR-315).
+  viewer_project_setup: { adms_readonly: 'SELECT' },
+  ...Object.fromEntries(
+    viewedTables.map((table) => [`viewer_${table}`, { adms_readonly: 'SELECT' }]),
+  ),
 };
 
 // A field event's captured columns: what the API corrects. Never its id, the server's received
@@ -161,6 +170,21 @@ describe('the grants, exactly as the catalog holds them', () => {
   });
 
   it('on single columns', async () => {
+    // A setup table a viewer sees: every column but the ones no viewer reads (ADR-315).
+    const setupColumns = await tested.db.rows<{ grant: string }>(
+      `SELECT c.relname || '.' || att.attname || ' adms_readonly SELECT' AS grant
+       FROM pg_class c
+       JOIN pg_attribute att ON att.attrelid = c.oid AND att.attnum > 0 AND NOT att.attisdropped
+       WHERE c.relnamespace = 'public'::regnamespace AND c.relname = ANY($1)`,
+      [viewedTables],
+    );
+    const hidden = new Set(
+      Object.entries(viewerSights).flatMap(([table, sight]) =>
+        sight.hidden.map((column) => `${table}.${column} adms_readonly SELECT`),
+      ),
+    );
+    const shown = setupColumns.map((row) => row.grant).filter((grant) => !hidden.has(grant));
+    expect(setupColumns.length - shown.length).toBe(hidden.size);
     const rows = await tested.db.rows<{ grant: string }>(
       `SELECT c.relname || '.' || att.attname || ' ' || ${grantee} || ' ' || a.privilege_type AS grant
        FROM pg_class c
@@ -168,7 +192,7 @@ describe('the grants, exactly as the catalog holds them', () => {
        CROSS JOIN LATERAL aclexplode(att.attacl) a
        WHERE c.relnamespace = 'public'::regnamespace AND a.grantee <> c.relowner`,
     );
-    expect(rows.map((row) => row.grant).sort()).toEqual(columnGrants);
+    expect(rows.map((row) => row.grant).sort()).toEqual([...columnGrants, ...shown].sort());
   });
 
   it('on functions: nothing callable by anyone but the viewer questions and the Monitor ID issuer', async () => {
@@ -418,48 +442,23 @@ describe('the worker (adms_worker)', () => {
 });
 
 describe('the read-only login (adms_readonly)', () => {
-  // The new tables too: no viewer view shows them, so none is granted (ADR-281, 286, 302, 303, 305,
-  // 308, 309, 311).
-  it.each([
-    'user',
-    'client',
-    'declaration_event',
-    'project_kind_of_work',
-    'contractor',
-    'project_contractor',
-    'contract',
-    'form',
-    'form_debris_type',
-    'form_definition',
-    'device',
-    'invoice_lock',
-    'audit_record',
-    'master_passcode',
-    'number_block',
-    'disposal_site',
-    'disposal_site_label',
-    'disposal_site_tipping_fee',
-    'site_area_version',
-    'map_version',
-    'zone',
-    'assignment',
-    'pay_item',
-    'pay_item_rate',
-    'pay_item_crew_day_step',
-    'assignment_pay_item',
-    'rule',
-    'rule_criterion',
-    'rule_criterion_pick',
-    'rule_action',
-    'rule_action_item',
-    ...listTables,
-  ])('may not read %s', async (table) => {
+  // No viewer view shows them, so none is granted (ADR-281, 286, 315).
+  it.each(unseenTables)('AC-02-68 may not read %s', async (table) => {
     const { db } = tested;
     await db.as('adms_readonly');
     expect((await db.refused(`SELECT 1 FROM "${table}"`)).code).toBe(refusedBy.grant);
   });
 
-  it('may not write anything', async () => {
+  // A setup table a viewer sees is granted, and shows nothing until a viewer is stated (ADR-315).
+  it.each(viewedTables)('reads no row of %s with no viewer stated', async (table) => {
+    const { db } = tested;
+    await db.noViewer();
+    await db.as('adms_readonly');
+    expect(await db.rows(`SELECT 1 FROM "${table}"`)).toEqual([]);
+    expect(await db.rows(`SELECT 1 FROM "viewer_${table}"`)).toEqual([]);
+  });
+
+  it('AC-02-67 may not write anything', async () => {
     const { db, world } = tested;
     await db.as('adms_readonly');
     await db.actor(world.admin, 'BACK_OFFICE');

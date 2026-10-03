@@ -275,6 +275,7 @@ describe('guard_table', () => {
       for (const call of [
         `guard_table('project', 'CONFIGURATION', 'OPERATIONS')`,
         `guard_list('site_type', 'OPERATIONS')`,
+        `guard_viewer('pay_item', 'PROJECT')`,
         'guard_gaps()',
       ]) {
         expect((await db.refused(`SELECT * FROM ${call}`)).code, `${login}: ${call}`).toBe(

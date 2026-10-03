@@ -715,7 +715,7 @@ describe('changing a rule', () => {
     },
   );
 
-  it('AC-01-78 only the API writes a rule: the worker reads them, a read-only viewer sees none', async () => {
+  it('AC-01-78 only the API writes a rule: the worker reads them, a read-only request that states no viewer sees none', async () => {
     const { db, world } = tested;
     await db.as('adms_worker');
     await db.actor(world.worker, 'SYSTEM');
@@ -725,7 +725,9 @@ describe('changing a rule', () => {
       (await db.refused(`UPDATE "rule" SET "active" = false WHERE "id" = $1`, [world.rule.id]))
         .code,
     ).toBe(refusedBy.grant);
+    // A client user and an auditor see their own projects' rules (ADR-315, viewers.test.ts).
+    await db.noViewer();
     await db.as('adms_readonly');
-    expect((await db.refused(`SELECT 1 FROM "rule"`)).code).toBe(refusedBy.grant);
+    expect(await db.rows(`SELECT 1 FROM "rule"`)).toEqual([]);
   });
 });
