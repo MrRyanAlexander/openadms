@@ -46,6 +46,12 @@ const tableGrants: Record<string, Record<string, string>> = {
   pay_item_rate: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   pay_item_crew_day_step: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   assignment_pay_item: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
+  // A rule, its criteria and picked values, its actions and chosen items (ADR-313).
+  rule: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
+  rule_criterion: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
+  rule_criterion_pick: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
+  rule_action: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
+  rule_action_item: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   // The firm's lists: configuration, each one (ADR-302).
   ...Object.fromEntries(
     listTables.map((table) => [table, { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' }]),
@@ -441,6 +447,11 @@ describe('the read-only login (adms_readonly)', () => {
     'pay_item_rate',
     'pay_item_crew_day_step',
     'assignment_pay_item',
+    'rule',
+    'rule_criterion',
+    'rule_criterion_pick',
+    'rule_action',
+    'rule_action_item',
     ...listTables,
   ])('may not read %s', async (table) => {
     const { db } = tested;

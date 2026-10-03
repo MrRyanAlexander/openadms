@@ -217,6 +217,7 @@ model ProjectContractor {
   subs       ProjectContractor[] @relation("PrimeSubs")
   contracts  Contract[]
   rates      PayItemRate[]
+  rulePicks  RuleCriterionPick[]
 
   // One place on a project: a sub is never shared by two primes.
   @@unique([projectId, contractorId])
@@ -244,7 +245,10 @@ model Contract {
   project    Project           @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   prime      Contractor        @relation(fields: [primeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   primePlace ProjectContractor @relation(fields: [projectId, primeId], references: [projectId, asPrimeId], onDelete: Restrict, onUpdate: Restrict)
+  rules      Rule[]
 
+  // So a rule names only one of its own project's contracts (its relation's target).
+  @@unique([projectId, id])
   @@index([projectId])
   @@map("contract")
 }
@@ -286,8 +290,11 @@ model Form {
   project     Project          @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   debrisTypes FormDebrisType[]
   definitions FormDefinition[]
+  rules       Rule[]
 
   @@unique([projectId, documentType])
+  // What a rule points at: its own project's form, with its document type (ADR-313).
+  @@unique([projectId, id, documentType])
   // What a debris type's entry and a definition point at, so each is held to the forms it belongs
   // on, and a form's document type can't change under them.
   @@unique([id, documentType])
@@ -314,11 +321,14 @@ model FormDebrisType {
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
 
-  form            Form             @relation(fields: [formId, documentType], references: [id, documentType], onDelete: Restrict, onUpdate: Restrict)
-  debrisType      DebrisType       @relation(fields: [debrisTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  reductionMethod ReductionMethod? @relation(fields: [reductionMethodId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  form            Form                @relation(fields: [formId, documentType], references: [id, documentType], onDelete: Restrict, onUpdate: Restrict)
+  debrisType      DebrisType          @relation(fields: [debrisTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  reductionMethod ReductionMethod?    @relation(fields: [reductionMethodId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  rulePicks       RuleCriterionPick[]
 
   @@unique([formId, debrisTypeId])
+  // So a rule's Debris type picks only an entry of the rule's own form (its relation's target).
+  @@unique([formId, id])
   @@map("form_debris_type")
 }
 
@@ -388,8 +398,9 @@ model DisposalSite {
   tippingFees  DisposalSiteTippingFee[]
   areaVersions SiteAreaVersion[]
   assignments  Assignment[]
+  rulePicks    RuleCriterionPick[]
 
-  // So an assignment's site, and a tipping fee's, can only be one of its own project's.
+  // So an assignment's site, a tipping fee's and a rule's pick can only be one of its own project's.
   @@unique([projectId, id])
   @@map("disposal_site")
 }
@@ -594,8 +605,12 @@ model PayItem {
   crewDaySteps PayItemCrewDayStep[]
   assignments  AssignmentPayItem[]
   tippingFeeAt DisposalSiteTippingFee[]
+  // The rules its "Pays when" wrote; the actions that add it; the criteria that pick it.
+  rulesWritten Rule[]
+  ruleActions  RuleAction[]
+  rulePicks    RuleCriterionPick[]
 
-  // So a rate can only be its own project's pay item's (its relation's target).
+  // So a rate, and a rule's pay item, can only be its own project's pay item (its relation's target).
   @@unique([projectId, id])
   // So an assignment names only its own project's unit rate pay items: its relation names the kind
   // of work too, which a pay item that isn't a unit rate one doesn't have (C42).
@@ -643,6 +658,220 @@ model PayItemRate {
 
   @@unique([payItemId, primeId])
   @@map("pay_item_rate")
+}
+
+// What a rule's criterion reads on a ticket (spec/RULES.md §4): which form takes which, and whether
+// its value is picked or typed, is packages/domain's RuleCriteria.
+enum RuleCriterionKey {
+  TICKET_DATE
+  CONTRACTOR
+  DEBRIS_TYPE
+  FIELD_TAG
+  WEIGHT
+  VOLUME
+  COLLECTION_ADDRESS
+  ZONE
+  DISPOSAL_SITE
+  FROM_SITE
+  DISPOSAL_SITE_TYPE
+  MILEAGE
+  PAY_ITEM
+  UNIT_COUNT
+  MEASUREMENT
+  ITEM
+
+  @@map("rule_criterion_key")
+}
+
+// How a criterion compares (spec/RULES.md §4a; ADR-125): each kind of value takes its own.
+enum RuleOperator {
+  EQUALS
+  NOT_EQUALS
+  IS_ONE_OF
+  IS_NOT_ONE_OF
+  BETWEEN
+  AT_LEAST
+  AT_MOST
+  MORE_THAN
+  LESS_THAN
+  ON
+  NOT_ON
+  ON_OR_BEFORE
+  ON_OR_AFTER
+  CONTAINS
+  STARTS_WITH
+  IS_EMPTY
+  IS_NOT_EMPTY
+
+  @@map("rule_operator")
+}
+
+// The only three things a rule does to a ticket that meets its criteria (ADR-118, 164).
+enum RuleActionKind {
+  ADD_TRANSACTION
+  REMOVE_TRANSACTION
+  VOID_TICKET
+
+  @@map("rule_action_kind")
+}
+
+// Which items of an itemised unit rate ticket an Add transaction counts (ADR-128).
+enum QuantityFrom {
+  ALL_ITEMS
+  CHOSEN_ITEMS
+
+  @@map("quantity_from")
+}
+
+// The firm's own pricing tool (spec/RULES.md §2): on one of its project's load, haul-out or unit
+// rate forms, naming one of the project's contracts, it runs only on tickets of that contract's
+// prime (ADR-239). The contract is empty only on a rule with no Add transaction; a rule that isn't
+// valid is saved all the same and never runs, and "Is valid" is worked out, never stored
+// (packages/domain's RuleValidity; spec/RULES.md §7). An exact copy of another rule is refused by
+// setup before it is saved (packages/domain's ProjectRules; ADR-301). Archived, never deleted.
+model Rule {
+  id            String           @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  projectId     String           @map("project_id") @db.Uuid
+  formId        String           @map("form_id") @db.Uuid
+  // Its form's, again: LOAD, HAUL_OUT or UNIT_RATE, held by a check and by the relation to the form.
+  documentType  FormDocumentType @map("document_type")
+  // The firm's free text, usually matched to its pay item (ADR-301).
+  name          String
+  contractId    String?          @map("contract_id") @db.Uuid
+  active        Boolean
+  // Written by that pay item's "Pays when" and changed only there (ADR-229).
+  fromPayItemId String?          @map("from_pay_item_id") @db.Uuid
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  form        Form            @relation(fields: [projectId, formId, documentType], references: [projectId, id, documentType], onDelete: Restrict, onUpdate: Restrict)
+  contract    Contract?       @relation(fields: [projectId, contractId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  fromPayItem PayItem?        @relation(fields: [projectId, fromPayItemId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  criteria    RuleCriterion[]
+  actions     RuleAction[]
+
+  // What a criterion and an action point at, so each repeats its rule's own project and form.
+  @@unique([id, projectId, formId])
+  @@unique([id, projectId])
+  @@index([projectId, formId])
+  @@map("rule")
+}
+
+// One line of a rule's "ifs": all of a rule's lines must hold (spec/RULES.md §3). Real columns,
+// never JSON: the engine reads them (ADR-278). A typed value sits in the columns of its kind; a
+// picked one in RuleCriterionPick rows. Which operator a criterion takes, and which value columns
+// an operator fills, are checks in the guard migration. Taken off a rule by archiving.
+model RuleCriterion {
+  id         String           @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  ruleId     String           @map("rule_id") @db.Uuid
+  // The rule's, again, so a pick is held to the rule's own project and form.
+  projectId  String           @map("project_id") @db.Uuid
+  formId     String           @map("form_id") @db.Uuid
+  position   Int
+  criterion  RuleCriterionKey
+  operator   RuleOperator
+  // The typed value where it is a number (an item's count included); the to only on BETWEEN.
+  numberFrom Decimal?         @map("number_from") @db.Decimal(14, 4)
+  numberTo   Decimal?         @map("number_to") @db.Decimal(14, 4)
+  // Where it is a date: a calendar day in the project's time zone.
+  dateFrom   DateTime?        @map("date_from") @db.Date
+  dateTo     DateTime?        @map("date_to") @db.Date
+  // Where it is text.
+  text       String?
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  rule  Rule                @relation(fields: [ruleId, projectId, formId], references: [id, projectId, formId], onDelete: Restrict, onUpdate: Restrict)
+  picks RuleCriterionPick[]
+
+  @@unique([ruleId, position])
+  // What a pick points at: its criterion line, with the line's project, form and criterion.
+  @@unique([id, projectId, formId, criterion])
+  @@map("rule_criterion")
+}
+
+// One picked value of a criterion: exactly the one column its criterion picks from is filled (a
+// check in the guard migration), and what it names is the rule's own project's: a contractor on the
+// project, a debris type of the rule's form, one of the project's field tags, sites or pay items
+// (the relations below). A site type and an item name are the firm's lists'. A zone is matched by
+// name, since map versions change: that the name is on the project's current map is setup's to
+// say (ADR-141 (6)). Taken off by archiving.
+model RuleCriterionPick {
+  id               String           @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  criterionId      String           @map("criterion_id") @db.Uuid
+  // The criterion line's, again.
+  projectId        String           @map("project_id") @db.Uuid
+  formId           String           @map("form_id") @db.Uuid
+  criterion        RuleCriterionKey
+  contractorId     String?          @map("contractor_id") @db.Uuid
+  formDebrisTypeId String?          @map("form_debris_type_id") @db.Uuid
+  fieldTagId       String?          @map("field_tag_id") @db.Uuid
+  // A Disposal site or a From site criterion's.
+  disposalSiteId   String?          @map("disposal_site_id") @db.Uuid
+  siteTypeId       String?          @map("site_type_id") @db.Uuid
+  payItemId        String?          @map("pay_item_id") @db.Uuid
+  itemNameId       String?          @map("item_name_id") @db.Uuid
+  zoneName         String?          @map("zone_name")
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  line           RuleCriterion      @relation(fields: [criterionId, projectId, formId, criterion], references: [id, projectId, formId, criterion], onDelete: Restrict, onUpdate: Restrict)
+  contractor     ProjectContractor? @relation(fields: [projectId, contractorId], references: [projectId, contractorId], onDelete: Restrict, onUpdate: Restrict)
+  formDebrisType FormDebrisType?    @relation(fields: [formId, formDebrisTypeId], references: [formId, id], onDelete: Restrict, onUpdate: Restrict)
+  fieldTag       FieldTag?          @relation(fields: [projectId, fieldTagId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  disposalSite   DisposalSite?      @relation(fields: [projectId, disposalSiteId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  siteType       SiteType?          @relation(fields: [siteTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  payItem        PayItem?           @relation(fields: [projectId, payItemId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  itemName       ItemName?          @relation(fields: [itemNameId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([criterionId])
+  @@map("rule_criterion_pick")
+}
+
+// What happens to a ticket that meets every criterion (spec/RULES.md §5): Add transaction #n with a
+// pay item, Remove transaction #n, or Void ticket. The # is the transaction's slot on the ticket.
+// An Add with no # or no pay item, and a Remove with no #, are saved and make the rule not valid
+// (spec/RULES.md §7). Taken off a rule by archiving.
+model RuleAction {
+  id           String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  ruleId       String         @map("rule_id") @db.Uuid
+  // The rule's, again, so the pay item it adds is the rule's own project's.
+  projectId    String         @map("project_id") @db.Uuid
+  kind         RuleActionKind
+  slot         Int?
+  payItemId    String?        @map("pay_item_id") @db.Uuid
+  // Stated on an Add transaction, and only there: every item, or the chosen ones (ADR-128).
+  quantityFrom QuantityFrom?  @map("quantity_from")
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  rule    Rule             @relation(fields: [ruleId, projectId], references: [id, projectId], onDelete: Restrict, onUpdate: Restrict)
+  payItem PayItem?         @relation(fields: [projectId, payItemId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  items   RuleActionItem[]
+
+  @@index([ruleId])
+  @@map("rule_action")
+}
+
+// One chosen item of an Add transaction whose quantity is from chosen items (ADR-128): the rules,
+// never a setting on the item, say which items count toward which pay item.
+model RuleActionItem {
+  id         String @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  actionId   String @map("action_id") @db.Uuid
+  itemNameId String @map("item_name_id") @db.Uuid
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  action   RuleAction @relation(fields: [actionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  itemName ItemName   @relation(fields: [itemNameId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([actionId, itemNameId])
+  @@map("rule_action_item")
 }
 
 enum UserRole {
@@ -1020,7 +1249,9 @@ model ItemName {
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
 
-  kindOfWork KindOfWork @relation(fields: [kindOfWorkId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  kindOfWork      KindOfWork          @relation(fields: [kindOfWorkId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  rulePicks       RuleCriterionPick[]
+  ruleActionItems RuleActionItem[]
 
   @@map("item_name")
 }
@@ -1081,8 +1312,9 @@ model SiteType {
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
 
-  sites     DisposalSite[] @relation("DisposalSiteType")
-  sitesKeys DisposalSite[] @relation("DisposalSiteTypeKey")
+  sites     DisposalSite[]      @relation("DisposalSiteType")
+  sitesKeys DisposalSite[]      @relation("DisposalSiteTypeKey")
+  rulePicks RuleCriterionPick[]
 
   // What a site's type and its key, together, point at (ADR-298, 311).
   @@unique([id, key])
@@ -1191,7 +1423,10 @@ model FieldTag {
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  project   Project             @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  rulePicks RuleCriterionPick[]
 
+  // So a rule's Field tag picks only one of its own project's (its relation's target).
+  @@unique([projectId, id])
   @@map("field_tag")
 }

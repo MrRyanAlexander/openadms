@@ -19,6 +19,10 @@
 // Summit's: VEG-HAUL-CY-15 ($7.50), HNG-RMV-EA ($68.00), LNR-RMV-EA-24 and -99 (6–24 and 24.1–99
 // in; $95.00, $185.00), STP-RMV-EA-36 (24–36 in; $110.00) and CREW-TIME-HR ($150.00, per hour)
 // (ADR-206, 309). The rest of the table a test adds as Dana would; P2 has none.
+// P1 has the first of the golden mission's rules, written in full (ADR-313): on its load form,
+// naming "Coastline, Bayline ROW 2026", "VEG-HAUL-CY-15 - ROW VEG haul 0–15 mi": Debris type EQUALS
+// Vegetative, Mileage AT MOST 15.0 → Add transaction 1, VEG-HAUL-CY-15. The rest a test writes as
+// Dana would, with `ruleLike`, `criterionLike`, `pickLike` and `actionLike`.
 // Each load is a collection and a disposal event (load call at the tower), its completed load and
 // one transaction for its prime. Nothing is locked as invoiced; a test locks what it needs.
 // P1's sites are two of the golden mission's §1, entered in full (ADR-215, 311): Marsh Road TDSR
@@ -85,6 +89,8 @@ export interface World {
   // P1's pay items, and Coastline's rate on each.
   payItems: PayItems;
   rates: PayItems;
+  // P1's rule VEG-HAUL-CY-15: the rule, its two criteria and its action.
+  rule: { id: string; debrisType: string; mileage: string; add: string };
   // A Coastline Haulers LLC read-only viewer.
   coastlineViewer: string;
   // Bayline County; Hurricane Delphine, DR-9001-FL.
@@ -175,6 +181,84 @@ export function siteLike(
     latitude: '27.95010000',
     longitude: '-82.44730000',
     activation_date: '2026-10-12',
+    ...more,
+  };
+}
+
+// A rule as Dana writes one on P1's load form, naming Coastline's contract: active, and with no
+// lines yet. A rule repeats its form's document type (ADR-313). For a test that writes another
+// rule, or changes one column of this one (`more`).
+export function ruleLike(
+  world: Pick<World, 'p1' | 'forms' | 'contracts'>,
+  more: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    project_id: world.p1,
+    form_id: world.forms.load,
+    document_type: 'LOAD',
+    name: 'VEG-HAUL-CY-30 - ROW VEG haul 15.1–30 mi',
+    contract_id: world.contracts.coastlineP1,
+    active: true,
+    ...more,
+  };
+}
+
+// One line of a rule's "ifs": it repeats its rule's project and form, P1 and its load form unless
+// `more` says otherwise.
+export function criterionLike(
+  world: Pick<World, 'p1' | 'forms'>,
+  ruleId: string,
+  position: number,
+  criterion: string,
+  operator: string,
+  more: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    rule_id: ruleId,
+    project_id: world.p1,
+    form_id: world.forms.load,
+    position,
+    criterion,
+    operator,
+    ...more,
+  };
+}
+
+// One picked value of a criterion line: it repeats its line's project, form and criterion, and
+// fills the one column that criterion picks from (`value`).
+export function pickLike(
+  world: Pick<World, 'p1' | 'forms'>,
+  criterionId: string,
+  criterion: string,
+  value: Record<string, unknown>,
+  more: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    criterion_id: criterionId,
+    project_id: world.p1,
+    form_id: world.forms.load,
+    criterion,
+    ...value,
+    ...more,
+  };
+}
+
+// An action of a rule on P1: Add transaction #slot with a pay item, its quantity from every item,
+// unless `more` says otherwise.
+export function actionLike(
+  world: Pick<World, 'p1'>,
+  ruleId: string,
+  slot: number | null,
+  payItemId: string | null,
+  more: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    rule_id: ruleId,
+    project_id: world.p1,
+    kind: 'ADD_TRANSACTION',
+    slot,
+    pay_item_id: payItemId,
+    quantity_from: 'ALL_ITEMS',
     ...more,
   };
 }
@@ -434,6 +518,31 @@ export class ExampleWorld {
         longitude: '-82.32160000',
       }),
     );
+    // P1's first rule, as the golden mission §1 has it (ADR-239, 313).
+    const setup = { p1, forms, contracts };
+    const ruleId = await this.insert(
+      'rule',
+      ruleLike(setup, { name: 'VEG-HAUL-CY-15 - ROW VEG haul 0–15 mi' }),
+    );
+    const debrisType = await this.insert(
+      'rule_criterion',
+      criterionLike(setup, ruleId, 1, 'DEBRIS_TYPE', 'EQUALS'),
+    );
+    await this.insert(
+      'rule_criterion_pick',
+      pickLike(setup, debrisType, 'DEBRIS_TYPE', {
+        form_debris_type_id: formDebrisTypes.vegetative,
+      }),
+    );
+    const rule = {
+      id: ruleId,
+      debrisType,
+      mileage: await this.insert(
+        'rule_criterion',
+        criterionLike(setup, ruleId, 2, 'MILEAGE', 'AT_MOST', { number_from: '15.0000' }),
+      ),
+      add: await this.insert('rule_action', actionLike(setup, ruleId, 1, payItems.vegHaul15)),
+    };
     const assignment = (projectId: string): Promise<string> =>
       this.insert('assignment', {
         person_id: monitor,
@@ -466,6 +575,7 @@ export class ExampleWorld {
       kindsOfWork,
       payItems,
       rates,
+      rule,
       coastlineViewer,
       ...hub,
       p1,

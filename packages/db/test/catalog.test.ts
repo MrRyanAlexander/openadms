@@ -42,6 +42,13 @@ const domains: Record<string, string> = {
   pay_item_rate: 'BILLING',
   pay_item_crew_day_step: 'BILLING',
   assignment_pay_item: 'OPERATIONS',
+  // A rule decides what a ticket bills: its changes, line by line, are the billing reviewer's to
+  // read (ADR-313).
+  rule: 'BILLING',
+  rule_criterion: 'BILLING',
+  rule_criterion_pick: 'BILLING',
+  rule_action: 'BILLING',
+  rule_action_item: 'BILLING',
   master_passcode: 'SECURITY',
   field_event: 'RECORDS',
   completed_load: 'BILLING',
@@ -283,6 +290,47 @@ describe('the guards in the catalog', () => {
           "CHECK (((time_zone = 'UTC'::text) OR (time_zone ~ '^[A-Za-z_]+(/[A-Za-z0-9_+-]+)+$'::text)))",
       },
       { name: 'project_workflows_check', definition: 'CHECK ((workflows IS NOT NULL))' },
+      // Rules: which operator a criterion takes, where a typed value sits, what a pick fills,
+      // what an action holds (ADR-313).
+      {
+        name: 'rule_action_pay_item_check',
+        definition:
+          "CHECK ((((kind = 'ADD_TRANSACTION'::rule_action_kind) OR (pay_item_id IS NULL)) IS TRUE))",
+      },
+      {
+        name: 'rule_action_quantity_from_check',
+        definition:
+          "CHECK ((((kind = 'ADD_TRANSACTION'::rule_action_kind) = (quantity_from IS NOT NULL)) IS TRUE))",
+      },
+      {
+        name: 'rule_action_slot_check',
+        definition:
+          "CHECK (((((slot IS NULL) OR (slot >= 1)) AND ((kind <> 'VOID_TICKET'::rule_action_kind) OR (slot IS NULL))) IS TRUE))",
+      },
+      {
+        name: 'rule_criterion_operator_check',
+        definition:
+          "CHECK ((((operator = ANY (ARRAY['IS_EMPTY'::rule_operator, 'IS_NOT_EMPTY'::rule_operator])) OR\nCASE\n    WHEN (criterion = ANY (ARRAY['CONTRACTOR'::rule_criterion_key, 'DEBRIS_TYPE'::rule_criterion_key, 'FIELD_TAG'::rule_criterion_key, 'ZONE'::rule_criterion_key, 'DISPOSAL_SITE'::rule_criterion_key, 'FROM_SITE'::rule_criterion_key, 'DISPOSAL_SITE_TYPE'::rule_criterion_key, 'PAY_ITEM'::rule_criterion_key])) THEN (operator = ANY (ARRAY['EQUALS'::rule_operator, 'NOT_EQUALS'::rule_operator, 'IS_ONE_OF'::rule_operator, 'IS_NOT_ONE_OF'::rule_operator]))\n    WHEN (criterion = ANY (ARRAY['WEIGHT'::rule_criterion_key, 'VOLUME'::rule_criterion_key, 'MILEAGE'::rule_criterion_key, 'UNIT_COUNT'::rule_criterion_key, 'MEASUREMENT'::rule_criterion_key, 'ITEM'::rule_criterion_key])) THEN (operator = ANY (ARRAY['EQUALS'::rule_operator, 'NOT_EQUALS'::rule_operator, 'BETWEEN'::rule_operator, 'AT_LEAST'::rule_operator, 'AT_MOST'::rule_operator, 'MORE_THAN'::rule_operator, 'LESS_THAN'::rule_operator]))\n    WHEN (criterion = 'TICKET_DATE'::rule_criterion_key) THEN (operator = ANY (ARRAY['ON'::rule_operator, 'NOT_ON'::rule_operator, 'BETWEEN'::rule_operator, 'ON_OR_BEFORE'::rule_operator, 'ON_OR_AFTER'::rule_operator]))\n    WHEN (criterion = 'COLLECTION_ADDRESS'::rule_criterion_key) THEN (operator = ANY (ARRAY['EQUALS'::rule_operator, 'NOT_EQUALS'::rule_operator, 'CONTAINS'::rule_operator, 'STARTS_WITH'::rule_operator]))\n    ELSE false\nEND) IS TRUE))",
+      },
+      {
+        name: 'rule_criterion_pick_value_check',
+        definition:
+          "CHECK (((((contractor_id IS NOT NULL) = (criterion = 'CONTRACTOR'::rule_criterion_key)) AND ((form_debris_type_id IS NOT NULL) = (criterion = 'DEBRIS_TYPE'::rule_criterion_key)) AND ((field_tag_id IS NOT NULL) = (criterion = 'FIELD_TAG'::rule_criterion_key)) AND ((disposal_site_id IS NOT NULL) = (criterion = ANY (ARRAY['DISPOSAL_SITE'::rule_criterion_key, 'FROM_SITE'::rule_criterion_key]))) AND ((site_type_id IS NOT NULL) = (criterion = 'DISPOSAL_SITE_TYPE'::rule_criterion_key)) AND ((pay_item_id IS NOT NULL) = (criterion = 'PAY_ITEM'::rule_criterion_key)) AND ((item_name_id IS NOT NULL) = (criterion = 'ITEM'::rule_criterion_key)) AND ((zone_name IS NOT NULL) = (criterion = 'ZONE'::rule_criterion_key)) AND ((zone_name IS NULL) OR (zone_name <> ''::text)) AND (num_nonnulls(contractor_id, form_debris_type_id, field_tag_id, disposal_site_id, site_type_id, pay_item_id, item_name_id, zone_name) = 1)) IS TRUE))",
+      },
+      {
+        name: 'rule_criterion_position_check',
+        definition: 'CHECK (("position" >= 1))',
+      },
+      {
+        name: 'rule_criterion_value_check',
+        definition:
+          "CHECK ((\nCASE\n    WHEN (operator = ANY (ARRAY['IS_EMPTY'::rule_operator, 'IS_NOT_EMPTY'::rule_operator])) THEN (num_nonnulls(number_from, number_to, date_from, date_to, text) = 0)\n    WHEN (criterion = ANY (ARRAY['WEIGHT'::rule_criterion_key, 'VOLUME'::rule_criterion_key, 'MILEAGE'::rule_criterion_key, 'UNIT_COUNT'::rule_criterion_key, 'MEASUREMENT'::rule_criterion_key, 'ITEM'::rule_criterion_key])) THEN ((number_from IS NOT NULL) AND ((operator = 'BETWEEN'::rule_operator) = (number_to IS NOT NULL)) AND ((number_to IS NULL) OR (number_from <= number_to)) AND (num_nonnulls(date_from, date_to, text) = 0))\n    WHEN (criterion = 'TICKET_DATE'::rule_criterion_key) THEN ((date_from IS NOT NULL) AND ((operator = 'BETWEEN'::rule_operator) = (date_to IS NOT NULL)) AND ((date_to IS NULL) OR (date_from <= date_to)) AND (num_nonnulls(number_from, number_to, text) = 0))\n    WHEN (criterion = 'COLLECTION_ADDRESS'::rule_criterion_key) THEN ((text IS NOT NULL) AND (text <> ''::text) AND (num_nonnulls(number_from, number_to, date_from, date_to) = 0))\n    ELSE (num_nonnulls(number_from, number_to, date_from, date_to, text) = 0)\nEND IS TRUE))",
+      },
+      {
+        name: 'rule_document_type_check',
+        definition:
+          "CHECK ((document_type = ANY (ARRAY['LOAD'::form_document_type, 'HAUL_OUT'::form_document_type, 'UNIT_RATE'::form_document_type])))",
+      },
       {
         name: 'user_employer_number_check',
         definition: 'CHECK (((employer_number IS NULL) OR (employer_id IS NOT NULL)))',
