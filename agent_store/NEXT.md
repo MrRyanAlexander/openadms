@@ -69,7 +69,7 @@ question rounds) moved word for word to `DECISIONS.md`'s scratchpad, "Moved from
 
 **Still live from the spec track:** `spec/acceptance/` is 3 of 9 files (`01-setup.md`: 82
 scenarios, 64 passing and AC-01-27, 48, 55 and 80 in part, after 1.1.11; `02-people-and-devices.md`: 74
-scenarios, 35 passing at the database and four in part after 1.1.10, ADR-315; `03-certification.md`: 60 scenarios, none passing yet, ADR-317); each other file is the first task of the milestone that builds its part
+scenarios, 35 passing at the database and four in part after 1.1.10, ADR-315; `03-certification.md`: 60 scenarios, 8 passing at the domain and 3 in part after 1.2.2, ADR-320); each other file is the first task of the milestone that builds its part
 (ADR-300).
 
 ---
@@ -134,7 +134,11 @@ of `DECISIONS.md`.
   **1.2.1, the acceptance scenarios for certifications (2026-10-03, ADR-317)**: 60 scenarios, each
   naming the task that proves it; fourteen points nothing settles listed (C61); **KD-69, closed by
   the user (ADR-318):** the golden mission's 102001 scanning `730416` on P2 stands; a cert number
-  is unique per project only, so P2 has its own `730416`.
+  is unique per project only, so P2 has its own `730416`; and **1.2.2, the capacity math
+  (2026-10-03, ADR-320)**: `Capacity` in `packages/domain`, the paper form's method in exact
+  hundredths, every operation a step; a zero, missing or fractional measurement, or boxes that
+  subtract it all, give no capacity and a plain reason; the three containers' boxes are in
+  `spec/CONVENTIONS.md` §6.
   **Corrected by the user on
   2026-10-02 (ADR-301):** a pay item's code is unique on its project (ADR-147 had read their answer
   backwards), a pay item is its code and its description (no separate name, no "line number"), and
@@ -307,23 +311,25 @@ types, field tags, the firm's own fields, ADR-308), 1.1.6 (pay items in full, AD
 (disposal sites in full and the project map, ADR-311; `btree_gist`, ADR-310), 1.1.8 (rules,
 ADR-313), 1.1.9 (the acceptance scenarios for people and devices, ADR-314), 1.1.10 (people's
 permissions and viewers, ADR-315), **1.1.11 (the example world's setup as a story, ADR-316:
-Milestone 1.1 is done)**, **1.2.1 (the acceptance scenarios for certifications, ADR-317: 60)**; and the user's correction of 2026-10-02 (ADR-301: a pay item's code is unique, it has a
+Milestone 1.1 is done)**, **1.2.1 (the acceptance scenarios for certifications, ADR-317: 60)**, **1.2.2 (the capacity math, ADR-320: `Capacity` in `packages/domain`)**; and the user's correction of 2026-10-02 (ADR-301: a pay item's code is unique, it has a
 description and no name, a duplicate rule is refused).
 
-👉 **Task 1.2.2, the capacity math in `packages/domain`** (`BACKLOG.md`, Milestone 1.2): exactly
-`adms-certifications` §3A.3 (whole inches; the primary box and boxes 1…N; rectangle, ÷2 triangle,
-two-length hoist, round bottom with 3.14, radius corner; add or subtract; hundredths, half up, at
-each step; ÷ 46,656; a whole CY, .5 up; no override; a crew has none), never `development/`.
-**Its tests are AC-03-21…29, 31 and 32** of `spec/acceptance/03-certification.md`, each named by
-its ID, with the figures on that page. **It also** gives the example world's three containers
-measured boxes that work out to 65, 48 and 110 CY and records them in `spec/CONVENTIONS.md` §6
-(AC-03-31), and decides C61's two points for it (a zero or missing measurement, boxes that subtract
-more than the primary holds; what counts as "a step" inside one shape's formula) as agent defaults
-in its ADR. A rule task: plain classes, no Postgres, no dependency; the local stack isn't needed
-for the domain's own tests. **Read first:** the skill's §3A.3 and §3A.8, the scenarios' section D,
-`spec/DATA-MODEL.md`'s `CertificationBox` (the shapes and measurements the math takes). Then 1.2.3
-(the certification's records: C56, C59, C60, C61; it gives P2 its own certification `730416`,
-ADR-318).
+👉 **Task 1.2.3, the certification's records** (`BACKLOG.md`, Milestone 1.2): `Certification`
+(container or crew; unique per project by cert number; prime and subs; driver, tag; who certified;
+replaces, copied from, revoked from), `CertificationBox`, `CertificationHelper`, from
+`spec/DATA-MODEL.md` §3; a schema task (the brief's list: Prisma's migration, the guard in its own
+stub, `guard_viewer` and C59, the example world, tests by scenario ID, each guard's removal shown
+caught), with the service that writes a certification and a sub typed in at certification beside
+`ContractorSetup.addPrime`. **Its scenarios** are the 25 of `spec/acceptance/03-certification.md`
+marked 1.2.3, and the database's half of AC-03-22, 26 and 29. **Carried:** C56, C59, C60 and C61's
+twelve points for it; it gives P2 its own certification `730416` (ADR-318). **From 1.2.2
+(ADR-320):** a container's `capacityCy` is never typed: the service calls `packages/domain`'s
+`new Capacity(kind, boxes).work()` with the boxes as `CertificationBox` keeps them and saves its
+`capacityCy`; the task decides what the service does when the reading gives no capacity (a zero,
+missing or fractional measurement, boxes that subtract it all), and whether the database takes a
+0 CY container; the example world's `730415`, `730416` and `730419` take their boxes from
+`spec/CONVENTIONS.md` §6 (65, 48, 110 CY). Then 1.3.1 (the acceptance scenarios for tickets and
+numbers).
 
 **Services** (ADR-316): what a person or a phone writes is a plain class in
 `apps/api/src/<part>/` (today `setup/`), given the API's database client, a clock and, where
@@ -392,7 +398,7 @@ then `SELECT guard_list('<table>', '<domain>');` in its guard migration; a new b
 `packages/domain`'s `builtInKeys` first, with an ADR (ADR-302).
 
 Start every command with `eval "$(fnm env --shell zsh)"`; the checks are **`adms-verify`** (the chain
-is 44 files, 867 tests; forty migrations; `pnpm scenarios` runs three stories, 16, 18 and 51 checks),
+is 45 files, 891 tests; forty migrations; `pnpm scenarios` runs three stories, 16, 18 and 51 checks),
 with **`pnpm security`** (7 passed, 0 failed, ADR-291). The database tests, the map servers' tests and
 the stories need `pnpm local:up` first; stop it at close-out (ADR-277). A schema change goes through
 Prisma (`prisma migrate dev --create-only`), a guard into its own empty stub (ADR-113); **try a guard

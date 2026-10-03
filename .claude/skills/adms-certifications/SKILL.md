@@ -210,7 +210,9 @@ typed 60, certified 65") (ADR-154).
 The capacity math and the number blocks in `packages/domain` (shared by the phone and the server);
 the certification records in `packages/db`; certifying on the phone in `apps/field` (Phase 3); the
 certification screens and QC in `apps/back-office` (Phase 4, REQ-403). The requirements are REQ-106,
-106a, 106b, 106d, 106e, 106f. Nothing is built yet (ADR-093).
+106a, 106b, 106d, 106e, 106f. **Built so far:** the capacity math, `packages/domain`'s `Capacity`
+(ADR-320: exact hundredths, every operation a step; a zero, missing or fractional measurement gives
+no capacity and a reason; agent defaults).
 
 ---
 

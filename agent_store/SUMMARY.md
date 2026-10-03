@@ -7,7 +7,7 @@ entries to cite. The reasons live in the ADRs and the skills.
 - **Keep it current:** when you add, amend or supersede an ADR, or open or close a KD, update this
   page **in the same response** (`adms-decisions`).
 - **If this page and a log entry disagree,** the newest ADR wins: fix this page and say so.
-- Updated 2026-10-03, through ADR-319 / KD-69. Rounds 13–26 are answered (ADR-145…228).
+- Updated 2026-10-03, through ADR-320 / KD-69. Rounds 13–26 are answered (ADR-145…228).
   **Phase 1 (data core and engine, rebuilt) is open, at the user's word (ADR-299).** Its plan is
   `BACKLOG.md`'s ten milestones and 47 tasks, one task per response, each milestone opening with
   its part's acceptance scenarios in `spec/acceptance/` (ADR-300). Done: the plan,
@@ -53,7 +53,10 @@ entries to cite. The reasons live in the ADRs and the skills.
   on the page; fourteen unsettled points listed for the task that decides each, C61; **KD-69 closed by the
   user, ADR-318**: the golden mission's 102001 scanning `730416` on P2 stands, since a cert number
   is unique per project only).
-  **Next: task 1.2.2, the capacity math in `packages/domain`.**
+  **1.2.2, the capacity math** (ADR-320: `Capacity` in `packages/domain`, exact hundredths, 24
+  tests; AC-03-21, 23, 24, 25, 27, 28, 31, 32 pass and 22, 26, 29 in part; the three containers'
+  boxes in `spec/CONVENTIONS.md` §6).
+  **Next: task 1.2.3, the certification's records.**
   **Corrected by the user 2026-10-02 (ADR-301):** a pay item's **code is unique on its project**
   (ADR-147 had it backwards); a pay item is its code and its **description**, with no separate name
   and no "line number"; **an exact duplicate of a rule is refused before it is saved**.
@@ -686,7 +689,12 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
 - **Capacity:** whole inches; a primary box plus boxes 1…N (rectangle, ÷2 triangle, two-length
   hoist, round bottom with 3.14, radius corner), each added or subtracted; round to hundredths at
   **each step**; ÷ 46,656; then a whole CY with .5 up. **No override.** Exactly §3A.3, and never
-  the `development/` spec's truck section. [076, 078, 082, 087]
+  the `development/` spec's truck section. [076, 078, 082, 087] **Built** as `packages/domain`'s
+  `Capacity` (kind and boxes in; the whole CY and the sheet's lines out), in exact hundredths:
+  **every single operation of a shape's formula is a step**, rounded half up; a zero, missing or
+  fractional measurement, a radius corner marked add, or boxes that subtract as much as the primary
+  holds give **no capacity and a plain reason, never a guess**; a crew has none. Whether such a
+  certification is saved is its service's (1.2.3). *(agent default)* [320]
 - A certification **never ends on its own**. **Tag expiry**, **revoked from a date** (admin, with a
   reason) and **replaced** (a modified truck gets a new cert and a "replaces" link) only flag later
   tickets, with a message to review the certification. **A driver's licence flags nothing**; the
@@ -1255,7 +1263,13 @@ Phase 1 milestones name the KDs each closes (ADR-300).
 
 ## 4. Waiting on the user
 
-**Nothing blocks the next task (1.2.2, the capacity math).**
+**Nothing blocks the next task (1.2.3, the certification's records).**
+- **From task 1.2.2 (ADR-320), yours to overturn:** in the capacity math, **a measurement of zero
+  or left blank gives no capacity** and names the box (it is never read as nought), and so do boxes
+  that subtract as much as the primary holds; **every operation is "a step"** for the hundredths
+  rounding (it only matters in a round bottom, a radius corner and the ÷ 46,656); a container
+  under half a cubic yard works out to 0 CY; and the made-up measured boxes of `730415`, `730416`
+  and `730419` (`spec/CONVENTIONS.md` §6).
 - **From task 1.2.1 (ADR-317), yours to overturn:** `spec/acceptance/03-certification.md` is a
   draft until you approve it; what it added to the example world (Sam Grant certifying on Saturday
   10 October 2026 with Lee Morgan as helper; a tier 2 sub, Tidewater Hauling; a pre-printed number

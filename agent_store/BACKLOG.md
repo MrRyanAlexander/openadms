@@ -189,7 +189,9 @@ Carried: C56 (1.2.3), filed by ADR-305 (named here by ADR-307). Closes the behav
   fourteen points nothing settles listed for the task that decides each (1.2.2: two; 1.2.3: most);
   KD-69 raised (the mission's 102001 scans `730416` on P2; a copy gets a new number) and closed
   by the user the same day (ADR-318: the mission stands; a cert number is unique per project only).
-- [ ] **1.2.2** **Capacity math in `packages/domain`**, exactly `adms-certifications` §3A.3: whole
+- [x] **1.2.2** ✅ **done 2026-10-03 (ADR-320):** `Capacity` in `packages/domain/src/capacity.ts`, exact
+  hundredths, 24 tests (AC-03-21…29, 31, 32 by ID); the three containers' boxes in
+  `spec/CONVENTIONS.md` §6; C61's two points decided as agent defaults. **Capacity math in `packages/domain`**, exactly `adms-certifications` §3A.3: whole
   inches, the primary box and boxes 1…N, each shape, add or subtract, hundredths at each step,
   ÷ 46,656, a whole CY half up; no override. **Done when:** every worked example of §3A.3
   passes as a unit test, and the example world's three containers are given measured boxes that work
@@ -827,9 +829,12 @@ delete one.
   needs that column stamped by the database (`dbgenerated`), never `@default(now())` (KD-68).
 - **C61. What the certification scenarios left for the tasks that build them** (ADR-317;
   `spec/acceptance/03-certification.md`, "Left to the task that builds it", fourteen points).
-  **Task 1.2.2:** a zero or missing measurement, boxes that subtract more than the primary holds;
+  ~~**Task 1.2.2:** a zero or missing measurement, boxes that subtract more than the primary holds;
   which roundings are "a step" inside one shape's formula; and the measured boxes of `730415`,
-  `730416` and `730419` recorded in `spec/CONVENTIONS.md` §6. **Task 1.2.3:** how the database
+  `730416` and `730419` recorded in `spec/CONVENTIONS.md` §6.~~ ✅ done, ADR-320 (no capacity and a
+  plain reason; every operation a step). **Task 1.2.3** (and from ADR-320: what its service does
+  with measurements that give no capacity, whether the database takes a 0 CY container, and the
+  example world's boxes written into `example-world.ts` from CONVENTIONS §6): **also** how the database
   holds "a container has boxes"; a certification's subs held to its own prime's; a typed sub that
   is another prime's; what a merge moves (C56); a vehicle type's *certifies* against the kind;
   whether a certifying assignment or a helper's assignment is checked; the date "replaced on" is;
