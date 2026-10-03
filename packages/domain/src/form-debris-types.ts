@@ -21,9 +21,11 @@ export interface DebrisTypeEntry {
 // A warning setup shows as it saves; the record is saved either way (ADR-052, 214, 217): a debris
 // type not marked Reduced on the haul-out form; a stretch between a payable type's size bands that
 // falls in none (size-bands.ts); two rules that add the same transaction # on a ticket both could
-// meet (rules.ts; ADR-125).
+// meet (rules.ts; ADR-125); a sub typed at certification whose name already has another place on
+// the project (certifications.ts; ADR-321).
 export interface SetupWarning {
-  readonly code: 'UNREDUCED_ON_HAUL_OUT' | 'SIZE_BAND_GAP' | 'RULES_OVERLAP';
+  readonly code:
+    'UNREDUCED_ON_HAUL_OUT' | 'SIZE_BAND_GAP' | 'RULES_OVERLAP' | 'SUB_PLACED_ELSEWHERE';
   readonly message: string;
 }
 

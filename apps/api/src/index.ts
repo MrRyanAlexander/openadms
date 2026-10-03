@@ -1,9 +1,21 @@
 // The API (ARCHITECTURE §6, §18). Phase 1 builds what a person or a phone writes as plain service
 // classes, with no HTTP and no sign-in: each takes the service's own database client (the login
 // adms_api) and writes through db.$write as the person it is told. Phase 2 wraps them in endpoints
-// (ADR-316). The setup services are spec/parts/01-setup.md's steps, one class per group of records.
+// (ADR-316). The setup services are spec/parts/01-setup.md's steps, one class per group of records;
+// certifying is spec/parts/03-certification.md's (ADR-321).
+export {
+  Certifications,
+  type BoxInput,
+  type BoxMeasurements,
+  type NewCertification,
+} from './certification/certifications.ts';
 export { builtInPolicy } from './policy.ts';
-export { ContractorSetup, type NewContract, type NewContractor } from './setup/contractor-setup.ts';
+export {
+  ContractorSetup,
+  SubPlaces,
+  type NewContract,
+  type NewContractor,
+} from './setup/contractor-setup.ts';
 export { FormSetup, type NewForm, type NewFormDebrisType } from './setup/form-setup.ts';
 export { ListSetup } from './setup/list-setup.ts';
 export {

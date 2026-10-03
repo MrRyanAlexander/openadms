@@ -8,7 +8,7 @@
 // back. What the database's own constraints refuse (a second form of one document type, a pay
 // item code the project already has…) isn't caught here: the call throws, and nothing is saved.
 // Who may do setup (an admin, or a manager/analyst granted it) is read at sign-in, Phase 2.
-import type { Database, Prisma } from '@open-adms/db';
+import type { Actor, Database, Prisma } from '@open-adms/db';
 import type { SetupWarning } from '@open-adms/domain';
 
 // A setting setup won't save, and why.
@@ -47,14 +47,22 @@ export abstract class SetupService {
     this.clock = clock;
   }
 
-  // Runs the work as the person, in one database transaction.
-  protected async write<T>(
+  // Runs the work as the person, from the back office, in one database transaction.
+  protected write<T>(
     person: string,
+    work: (tx: Prisma.TransactionClient, warn: Warn) => Promise<T>,
+  ): Promise<Outcome<T>> {
+    return this.writeAs({ actorId: person, source: 'BACK_OFFICE' }, work);
+  }
+
+  // The same, as whoever is stated: a monitor on a phone states the phone too (ADR-321).
+  protected async writeAs<T>(
+    actor: Actor,
     work: (tx: Prisma.TransactionClient, warn: Warn) => Promise<T>,
   ): Promise<Outcome<T>> {
     const warnings: SetupWarning[] = [];
     try {
-      const record = await this.db.$write({ actorId: person, source: 'BACK_OFFICE' }, (tx) =>
+      const record = await this.db.$write(actor, (tx) =>
         work(tx, (more) => {
           warnings.push(...more);
         }),

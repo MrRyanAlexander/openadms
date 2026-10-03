@@ -14,6 +14,19 @@ export {
   type MeasuredBox,
 } from './capacity.ts';
 export {
+  CertificationChanges,
+  CertificationSubs,
+  ContractorMerge,
+  type CertificationRefusal,
+  type ContractorPlace,
+  type KnownContractor,
+  type MergeMove,
+  type MergeParty,
+  type MergeRefusal,
+  type SubPlacement,
+  type SubTier,
+} from './certifications.ts';
+export {
   DebrisTypeEntries,
   type DebrisTypeEntry,
   type DebrisTypeFormKind,
