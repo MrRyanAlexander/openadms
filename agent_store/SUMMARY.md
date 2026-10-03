@@ -1,13 +1,13 @@
 # Open ADMS — Current decisions and gaps, at a glance
 
 **The present tense of the project on one page.** `DECISIONS.md` and `DEVIATIONS.md` are the full
-history, with 315 ADRs and 67 KDs, many superseded. This page says what is true **now** and which
+history, with 316 ADRs and 68 KDs, many superseded. This page says what is true **now** and which
 entries to cite. The reasons live in the ADRs and the skills.
 
 - **Keep it current:** when you add, amend or supersede an ADR, or open or close a KD, update this
   page **in the same response** (`adms-decisions`).
 - **If this page and a log entry disagree,** the newest ADR wins: fix this page and say so.
-- Updated 2026-10-03, through ADR-315 / KD-67. Rounds 13–26 are answered (ADR-145…228).
+- Updated 2026-10-03, through ADR-316 / KD-68. Rounds 13–26 are answered (ADR-145…228).
   **Phase 1 (data core and engine, rebuilt) is open, at the user's word (ADR-299).** Its plan is
   `BACKLOG.md`'s ten milestones and 47 tasks, one task per response, each milestone opening with
   its part's acceptance scenarios in `spec/acceptance/` (ADR-300). Done: the plan,
@@ -43,7 +43,11 @@ entries to cite. The reasons live in the ADRs and the skills.
   a client user and an auditor see their projects' whole setup, a contractor user none of it; no
   viewer a contact or a person; a phone's revoked key's time). 35 of Part 2's 74 scenarios pass at
   the database, four more in part, each under a test named by its ID.
-  **Next: task 1.1.11, the example world's setup as a story.**
+  **1.1.11, the example world's setup as a story** (ADR-316: the first services in `apps/api`,
+  one class per group of setup records, each call one `$write` as the person; the story `setup`
+  writes P1 and P2 in the spine's order, 51 checks; `MapShapes` in `packages/domain`; a map
+  version's loaded time is the database's, KD-68 closed). **Milestone 1.1 is done.**
+  **Next: task 1.2.1, `spec/acceptance/03-certification.md`.**
   **Corrected by the user 2026-10-02 (ADR-301):** a pay item's **code is unique on its project**
   (ADR-147 had it backwards); a pay item is its code and its **description**, with no separate name
   and no "line number"; **an exact duplicate of a rule is refused before it is saved**.
@@ -318,6 +322,21 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   client's notes, a map's uploaded file key, or any person, permission, phone, assignment, number
   block or the master passcode. Fifty-five models, thirty-nine migrations. Left for later: C59.
   *Agent defaults.* [315]
+- **The API's setup services, and where services live (built 2026-10-03, task 1.1.11):**
+  `apps/api/src/<part>/`, plain classes, no HTTP, no sign-in, each given the API's database client,
+  a clock and, where needed, the policy values (read by `apps/api/src/policy.ts`). `setup/`:
+  `ProjectSetup`, `ContractorSetup`, `ListSetup`, `FormSetup`, `PayItemSetup`, `SiteSetup`,
+  `RuleSetup`. **One call is one thing a person does and one `db.$write` as that person**; it
+  answers saved (the record, any warnings) or refused (the domain's code and message; nothing
+  saved); a refusal by the database's own constraints throws. **Permissions aren't read yet**
+  (Phase 2). Every rule stays in `packages/domain` and is called before a save. `addPrime` is the
+  one place that writes `asPrimeId`. A pay item's "Pays when" is matched to the rules it keeps
+  (archive, add, change, leave); a changed rule's lines are archived and written anew, never
+  edited. **`MapShapes`** (`packages/domain`) reads GeoJSON into a Polygon or MultiPolygon with its
+  bounding box, and refuses the rest. **A map version's `loadedAt` is the database's own time**
+  (40 migrations): Prisma's client fills `@default(now())` itself, so no guard compares such a
+  column with `now()` (KD-68). The story `setup` runs it all: `pnpm scenarios` runs three stories
+  (16, 18, 51 checks). *Agent defaults.* [316]
 - **The map servers are in the local stack (REQ-022):** `routing` (**Valhalla 3.9.0**) and
   `addresses` (**Nominatim 5.3.2**, mediagis's image), pinned by tag and digest, reached **only
   through Caddy over HTTPS** (`https://routing.adms.localhost`, `https://addresses.adms.localhost`),
@@ -1228,7 +1247,14 @@ Phase 1 milestones name the KDs each closes (ADR-300).
 
 ## 4. Waiting on the user
 
-**Nothing blocks the next task (1.1.11, the example world's setup as a story).**
+**Nothing blocks the next task (1.2.1, the acceptance scenarios for certifications).**
+- **From task 1.1.11 (ADR-316), yours to overturn:** what the story added to the example world
+  (`spec/CONVENTIONS.md` §6): **P2's setup beyond the mission's words** (loads only; a load, an ROE
+  and a survey form, the ROE form with GPS required; one rule; no map), **the fill and freon pay
+  items have no kind of work** (no monitor picks them), each pay item's capture settings, Cypress
+  Creek Landfill's GPS and permit. And **AC-01-80 names three things setup refuses; setup refuses
+  five** (also a change in the rule builder to a rule a pay item wrote, ADR-313, and a map file
+  it can't read): the scenario's wording is yours to extend.
 What was answered or done moved word for word to `DECISIONS.md`'s scratchpad, "Moved from
 SUMMARY.md, 2026-10-02" (ADR-307). Yours whenever you like; none of it blocks building (ADR-230):
 

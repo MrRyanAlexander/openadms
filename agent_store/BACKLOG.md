@@ -174,7 +174,7 @@ by ADR-303 (named here by ADR-307). Closes the behaviour of KD-14, 16, 17, 18, 2
   file names each test; a rename, never a loosening). It decides the file's points 1…6 (how a
   permission is taken away, what a contractor user sees of setup, contact details, a contractor
   user with no contractor, the audit domain, `ViewerProject`'s table name).
-- [ ] **1.1.11** **The example world's setup as a story.** The golden mission's §1, P1 and P2,
+- [x] **1.1.11** ✅ **done 2026-10-03 (ADR-316):** seven setup services in `apps/api/src/setup/` and the policy loader; `MapShapes` in `packages/domain`; the story `setup` (51 checks: P1 by Dana, P2 by Luis, every record as the mission's §1, one audit record per row, thirteen refusals); a map version's loaded time stamped by the database (the fortieth migration; KD-68 closed); AC-01-01 and 79 pass, AC-01-80 in part; REQ-105e, 108 ticked; chain 44 files, 867 tests; stories 16, 18, 51. **The example world's setup as a story.** The golden mission's §1, P1 and P2,
   written in the spine's order through the API's setup services as the people who make it; every
   record asserted, one audit record per write. **Done when:** `pnpm scenarios` runs it (AC-01-01,
   78…80). *REQ-105e, 108; REQ-142's setup part; C30's first part.*
@@ -695,7 +695,7 @@ delete one.
   of them** (fail closed); a prime's view of its subs' transactions comes with the operating sub
   (ADR-270 (7)).
 - **C19.** Where a person's **void** is recorded (the status column is the worker's today; ADR-270 (2)).
-- **C29. Times the database stamps itself** (`audit_record.occurred_at`, `created_at`, `enrolled_at`) use its own clock, not the story's (ADR-275): a story asserts the audit log's order, not its times. If the golden mission must assert them, decide then (e.g. the API stating the time it writes).
+- **C29. Times the database stamps itself** (`audit_record.occurred_at`; **not** `created_at` or `enrolled_at`, which Prisma's client fills with the app's clock, KD-68) use its own clock, not the story's (ADR-275): a story asserts the audit log's order, not its times. If the golden mission must assert them, decide then (e.g. the API stating the time it writes).
 - **C30. The golden mission as a story** (REQ-017 stays open until it runs; REQ-142, REQ-143): its setup, days, reviews, ledger and audit rows asserted exactly; the worker's writes through the `worker` client as `systemActor`; add stories to `packages/scenarios/src/stories/index.ts`.
 - **C42. The assignment's forms; the real pay item and site** (ADR-281 (8)). **The site done
   (ADR-311)**; what is left is a field event's own site and a contractor's kind (below). ~~REQ-020's "work: … unit rate
@@ -748,7 +748,7 @@ delete one.
   key, so a plain check constraint can't see it; a guard needs its own migration and test). An
   acceptance scenario: a haul-out that left a landfill is flagged `SITE_NOT_FOR_HAUL_OUTS`; one
   dumped back at the TDSR it left is flagged `HAUL_OUT_DUMPED_AT_TDSR` and not priced.
-- **C53. Where a server app reads the policy values, and whether an installation may override one**
+- **C53 (first part ✅ done, ADR-316: `apps/api/src/policy.ts`, handed to `ProjectSetup`). Where a server app reads the policy values, and whether an installation may override one**
   (ADR-303 (3)). The release's built-in defaults are `packages/domain/policy.env`; today only the
   scenario harness reads it (`packages/scenarios/src/policy.ts`). **Task 1.1.11:** the API's setup
   service that creates a project takes the `Policy` (the harness hands it over; the loader moves
@@ -780,7 +780,7 @@ delete one.
   writes `asPrimeId` with it. **Task 1.1.10 (C18):** a prime's sight of its subs' tickets reads
   `project_contractor`; and whether any read-only viewer sees a contractor's contact details
   (ADR-306; ADR-169 keeps personal phone numbers from them).
-- **C57. Reading a shape, its bounding box, and point-in-polygon** (ADR-311 (6)). The database
+- **C57 (the reader ✅ done, ADR-316: `MapShapes`; point-in-polygon is still 1.5.x's). Reading a shape, its bounding box, and point-in-polygon** (ADR-311 (6)). The database
   keeps a GeoJSON `Polygon` or `MultiPolygon` and four bounding-box columns, and checks only that the
   shape holds its type and coordinates and that the box is on the earth; **whoever writes a shape
   works out its box**. **Task 1.1.11** (the setup story through the API's services, which load P1's
@@ -790,7 +790,7 @@ delete one.
   (the zone and site-area checks):** point-in-polygon in the same module, a point on an edge
   inside (ARCHITECTURE §3), the box as a quick first test. A shapefile, KML and an Esri layer link
   are REQ-124b's import in the back office (Phase 4), with their libraries' ADRs.
-- **C58. What the rules' build left for later** (ADR-313 (8), (10)). **Task 1.1.11** (the setup
+- **C58 (task 1.1.11's part ✅ done, ADR-316). What the rules' build left for later** (ADR-313 (8), (10)). **Task 1.1.11** (the setup
   story through the API's services): the service that saves a rule calls `ProjectRules.check` first
   and saves nothing on a refusal; the pay item service matches `PaysWhen.rules(…)` to the rules the
   pay item already keeps (change, add, archive), and gives each picked value its `gone` (archived,
@@ -812,6 +812,16 @@ delete one.
   **Phase 2:** the API states `adms.viewer_id` on every `adms_readonly` request (C22); it reads a
   manager/analyst's permissions that aren't archived, and only on a manager/analyst (the database
   doesn't tie a grant to a role); it never gives a viewer a project or a kind the admin didn't.
+- **C60. What the setup services left for later** (ADR-316 (2), (9)). **Phase 2:** the endpoints
+  read who may do setup (an admin, or a manager/analyst granted Setup) before a call, map a
+  refusal by the database's constraints to an answer, and add people's own services. **The task
+  that first sets up a crew-day pay item:** its day length starts at the policy value
+  `CREW_DAY_HOURS` in `PayItemSetup` (today the caller states it). **Each later list a firm adds
+  to** gets its method on `ListSetup` with the task that needs it. **Task 1.2.3:** a sub typed in
+  at certification is written by a service beside `ContractorSetup.addPrime`. **Task 1.9.x (the
+  golden mission):** whether P2 has a map (102001's zone), and the phones, people and viewers of
+  §1, written through services. **Any guard that tells "the same piece of work" by a time**
+  needs that column stamped by the database (`dbgenerated`), never `@default(now())` (KD-68).
 - **C20.** The worker's one transaction per group, one run per project, and flagged-and-skipped groups
   (REQ-015, KD-55) use one `$write` per group (ADR-273 (3)).
 

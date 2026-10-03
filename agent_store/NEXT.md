@@ -68,7 +68,7 @@ question rounds) moved word for word to `DECISIONS.md`'s scratchpad, "Moved from
 2026-10-02"; `ROADMAP.md` §3a keeps the table.
 
 **Still live from the spec track:** `spec/acceptance/` is 2 of 9 files (`01-setup.md`: 82
-scenarios, 62 passing and AC-01-27, 48 and 55 in part, after 1.1.8; `02-people-and-devices.md`: 74
+scenarios, 64 passing and AC-01-27, 48, 55 and 80 in part, after 1.1.11; `02-people-and-devices.md`: 74
 scenarios, 35 passing at the database and four in part after 1.1.10, ADR-315); each other file is the first task of the milestone that builds its part
 (ADR-300).
 
@@ -81,7 +81,7 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-03: Phase 1 is open, eleven tasks done)
+### Where things stand (2026-10-03: Phase 1 is open, twelve tasks done; Milestone 1.1 is done)
 - **Phase 1 (data core and engine) is the active phase**, opened by the user on 2026-10-01
   (ADR-299). Its plan is `BACKLOG.md`'s ten milestones and 47 tasks (ADR-300): setup records →
   certifications and capacity → tickets and numbers → sync intake → reconciliation → the rule engine
@@ -126,7 +126,11 @@ of `DECISIONS.md`.
   and contractor held by checks; **the database reads what a viewer may see from their own record**
   (the API states only `adms.viewer_id`); `guard_viewer`, one line per table, gives 41 setup tables
   and lists their row-level security: a client user and an auditor see their projects' whole
-  setup, a contractor user none, no viewer a contact or a person; `Device.keyRevokedAt`.
+  setup, a contractor user none, no viewer a contact or a person; `Device.keyRevokedAt`; and **1.1.11, the example world's setup as a story (2026-10-03,
+  ADR-316)**: the first services in `apps/api` (`src/setup/`, one class per group of setup
+  records, each call one `db.$write` as the person, answering saved or refused), `MapShapes` in
+  `packages/domain`, and the story `setup` (P1 by Dana, P2 by Luis, 51 checks); the story found
+  that no zone could be written through Prisma, fixed by the fortieth migration (KD-68).
   **Corrected by the user on
   2026-10-02 (ADR-301):** a pay item's code is unique on its project (ADR-147 had read their answer
   backwards), a pay item is its code and its description (no separate name, no "line number"), and
@@ -297,22 +301,28 @@ firm's lists, ADR-302), 1.1.3 (the client, the declaration event and the project
 ADR-303), 1.1.4 (contractors on a project, and contracts, ADR-305, 306), 1.1.5 (forms, debris
 types, field tags, the firm's own fields, ADR-308), 1.1.6 (pay items in full, ADR-309), 1.1.7
 (disposal sites in full and the project map, ADR-311; `btree_gist`, ADR-310), 1.1.8 (rules,
-ADR-313), 1.1.9 (the acceptance scenarios for people and devices, ADR-314), **1.1.10 (people's
-permissions and viewers, ADR-315)**; and the user's correction of 2026-10-02 (ADR-301: a pay item's code is unique, it has a
+ADR-313), 1.1.9 (the acceptance scenarios for people and devices, ADR-314), 1.1.10 (people's
+permissions and viewers, ADR-315), **1.1.11 (the example world's setup as a story, ADR-316:
+Milestone 1.1 is done)**; and the user's correction of 2026-10-02 (ADR-301: a pay item's code is unique, it has a
 description and no name, a duplicate rule is refused).
 
-👉 **Task 1.1.11, the example world's setup as a story** (`BACKLOG.md`, Milestone 1.1). The golden
-mission's §1, P1 and P2, written in the spine's order **through the API's setup services** (plain
-service classes in `apps/api`, as `adms_api`, through `db.$write(actor, …)`; no HTTP) as the people
-who make it; every record asserted, one audit record per write. **Read first:**
-`spec/golden/MISSION.md` §1, `spec/acceptance/01-setup.md` (AC-01-01, 78…80), the brief's "Where
-the code lives", and the register's C30 (first part), C53 (first part), C56, C57, C58 and C59:
-the setup service is the one place that adds a prime (and writes `asPrimeId`), starts a project
-from `NewProjectSettings`, calls `SizeBands`, `SiteFacts`, `DebrisTypeEntries` and
-`ProjectRules.check` before it saves, and matches `PaysWhen.rules(…)` to the rules a pay item
-keeps. **Done when:** `pnpm scenarios` runs it. *REQ-105e, 108; REQ-142's setup part.* It is the
-first task that writes code in `apps/api`: its ADR settles where each kind of service lives. Then
-Milestone 1.2 opens with 1.2.1, `spec/acceptance/03-certification.md`.
+👉 **Task 1.2.1, `spec/acceptance/03-certification.md`** (`BACKLOG.md`, Milestone 1.2): the
+acceptance scenarios for certifications, from Part 3 (`spec/parts/03-certification.md`) and
+`adms-certifications`, the capacity examples taken from §3A.3 and the paper form, never from
+`development/`. Docs only: no code before the scenarios (the brief). **Read first:** the part page,
+the skill, `spec/acceptance/README.md` (how a scenario is written), `02-people-and-devices.md` as
+the newest model, and the register's C56 and C59 (task 1.2.3's parts) and C60. Then 1.2.2 (the
+capacity math in `packages/domain`) and 1.2.3 (the certification's records).
+
+**Services** (ADR-316): what a person or a phone writes is a plain class in
+`apps/api/src/<part>/` (today `setup/`), given the API's database client, a clock and, where
+needed, the policy values; one call is one `db.$write` as the person and answers `saved` (the
+record, any warnings) or `refused` (the domain's code and message; nothing saved); every rule is
+`packages/domain`'s, called before the save; no service reads permissions yet (Phase 2). A story
+drives them (`packages/scenarios/src/stories/setup.ts` is the model). **Inside a transaction read
+one query at a time** (no query with several included relations: Prisma runs them in parallel on
+the one connection). **A column a guard compares with `now()` is `@default(dbgenerated(…))`**,
+never `@default(now())`, which Prisma's client fills with the app's clock (KD-68).
 
 **People and viewers** (ADR-315): the example world has three read-only viewers
 (`world.clientViewer`, given P1; `world.auditor`, given P1 and P2; `world.coastlineViewer`, a
@@ -371,7 +381,7 @@ then `SELECT guard_list('<table>', '<domain>');` in its guard migration; a new b
 `packages/domain`'s `builtInKeys` first, with an ADR (ADR-302).
 
 Start every command with `eval "$(fnm env --shell zsh)"`; the checks are **`adms-verify`** (the chain
-is 43 files, 859 tests; thirty-nine migrations; `pnpm scenarios` runs two stories, 16 and 18 checks),
+is 44 files, 867 tests; forty migrations; `pnpm scenarios` runs three stories, 16, 18 and 51 checks),
 with **`pnpm security`** (7 passed, 0 failed, ADR-291). The database tests, the map servers' tests and
 the stories need `pnpm local:up` first; stop it at close-out (ADR-277). A schema change goes through
 Prisma (`prisma migrate dev --create-only`), a guard into its own empty stub (ADR-113); **try a guard
