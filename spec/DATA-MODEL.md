@@ -161,9 +161,9 @@ primes; a sub belongs to one prime, at most two tiers, never shared (ADR-108).
 | monitorNumber | text, unique | The Monitor ID (`M004127`), issued by the database; every monitor has one (ADR-281) |
 | employerId | → `Contractor` | Who employs them when it isn't the firm |
 | employerNumber | text | That employer's own ID for them (`HS-0417`) |
-| contractorId | → `Contractor` | A contractor user's contractor: what they may see (ADR-169) |
-| viewerKind | enum `ViewerKind` | `CLIENT` · `CONTRACTOR` · `AUDITOR`, on a read-only viewer only |
-| email, phone | text | A monitor's phone is shown to admins only (ADR-169) |
+| contractorId | → `Contractor` | A contractor user's contractor: what they may see (ADR-169). **Built (ADR-315):** set on a contractor user and on nobody else (check) |
+| viewerKind | enum `ViewerKind` | `CLIENT` · `CONTRACTOR` · `AUDITOR`, on a read-only viewer only. **Built (ADR-315):** every read-only viewer states it, nobody else does (check) |
+| email, phone | text | Each optional. A monitor's phone is shown to admins only (ADR-169). **Built (ADR-315):** no read-only viewer reads either: the read-only login has no grant on `user` at all |
 | **createdAt** | instant | |
 | archivedAt | instant | |
 | *Phase 2:* passwordHash, twoStepSecret, lockedUntil… | | Sign-in's columns, each kept out of the audit log like the master passcode's hash (C21) |
@@ -176,17 +176,45 @@ permission"; an admin needs none.
 
 | Field | Type | Notes |
 |---|---|---|
-| **userId** | → `User` | Unique with `permission` |
+| **id** | uuid | |
+| **userId** | → `User` | Unique with `permission`. Never the system actor (check) |
 | **permission** | enum `Permission` | `CORRECT` · `RENUMBER` · `VOID` · `ACCEPT_FLAG` · `QC` · `LOCK_INVOICED` · `UNLOCK_INVOICED` · `APPROVE_HOURS` · `SETUP` · `DISPATCH` |
+| **createdAt** | instant | |
+| archivedAt | instant | **Taken away by archiving, given back by clearing it**: never deleted, never a second row (*agent default*, ADR-315) |
+
+**Built (ADR-315).** Who granted or took it away is the audit record's actor; audited in the
+security domain. Whether the person is a manager/analyst is the API's to check (a row on anyone
+else grants nothing): the database doesn't tie a grant to a role, so a role can change.
 
 #### `ViewerProject`
 
-*Configuration.* The projects a read-only viewer may see. Row-level security reads it (ADR-169).
+*Configuration, built (ADR-315).* The projects a read-only viewer may see. Row-level security
+reads it (ADR-169). **Its table is `user_viewer_project`**: `viewer_project` is the project's
+viewer view (ADR-270; C54).
 
 | Field | Type | Notes |
 |---|---|---|
-| **userId** | → `User` | Unique with `projectId` |
+| **id** | uuid | |
+| **userId** | → `User` | Unique with `projectId`. Never the system actor (check) |
 | **projectId** | → `Project` | |
+| **createdAt** | instant | |
+| archivedAt | instant | A project is taken away by archiving (*agent default*, ADR-315) |
+
+**How row-level security reads it (ADR-315).** The API states only **who is looking**
+(`adms.viewer_id`, C22); the database reads the rest from that person's own record: they must be a
+read-only viewer who isn't archived; their projects are their `ViewerProject` rows that aren't
+archived; a client user or an auditor sees the whole of those projects; a contractor user only its
+`contractorId`'s transactions. Anyone else stated, or nobody, sees nothing.
+
+**What a viewer sees of setup (ADR-315; C54).** A client user and an auditor: their projects'
+whole setup, through one viewer view per table (`viewer_<table>`), each with row-level security,
+and the project with its settings through `viewer_project_setup`; the firm's lists; the client,
+the declaration event and the contractors their projects name, **without any contact name, email
+or phone**, a client's notes, or a map's uploaded file key. A contractor user: the project's name,
+time zone and dates (`viewer_project`), and nothing else of its setup (*agent defaults*). A new
+setup table is given its viewer sight in one line, `SELECT guard_viewer('<table>', '<PROJECT|
+PART_OF|NAMED_BY|FIRM>'[, …]);`. No viewer reads a person, a permission, a phone, an assignment,
+a number block or the master passcode.
 
 #### `Device`
 
@@ -201,7 +229,7 @@ permission"; an admin needs none.
 | **masterPasscodeVersion** | int → `MasterPasscode.version` | The passcode version the phone holds |
 | **enrolledAt** | instant | |
 | outOfServiceAt | instant | Work made after it arrives flagged (ADR-134) |
-| keyRevokedAt | instant | *New in Phase 1:* its key refused once a lost or retired phone is wiped (C47) |
+| keyRevokedAt | instant | **Built (ADR-315):** when its key was revoked, once a lost or retired phone is wiped; only on a phone out of service, never before its removal time (check). Refusing the key is the API's (Phase 2, C47) |
 
 #### `MasterPasscode`
 
@@ -1400,6 +1428,10 @@ Never relaxed to pass a test (ARCHITECTURE §5.4). ✅ = built today.
 | A site's tipping fee pay item is its own project's; a label and a fee once per site (ADR-311) | ✅ two-column foreign keys, unique keys |
 | A site's shape, a map version and its zones are never edited; a zone is written only with its version; versions count from 1, once each; every shape a Polygon or MultiPolygon with its bounding box on the earth (ADR-141, 144, 311) | ✅ no update grant and `refuse_edit()`, a trigger, unique keys, checks |
 | Nothing is deleted; audit is append-only; every write states its actor; a transaction's delete is copied first and refused when locked; viewers see only their own projects | ✅ the guard migrations (ADR-270…276) |
+| A permission once per person; a project once per viewer; neither for the system actor (ADR-315) | ✅ unique keys and checks |
+| A read-only viewer states its kind and nobody else does; a contractor user names its contractor and nobody else does (ADR-315) | ✅ checks |
+| A phone's key is revoked only once it is out of service, never before its removal time (ADR-315) | ✅ check |
+| A client user and an auditor read only their own projects' setup; a contractor user none of it; no viewer a contact, a phone number or a person (ADR-315) | ✅ row-level security and column grants (`guard_viewer`) |
 
 ---
 
@@ -1458,7 +1490,7 @@ A new value in any of them is a code change with an ADR (`spec/LISTS.md` Group 2
 |---|---|
 | `Project` | ✅ built 2026-10-02 (ADR-303): its client, declaration event, program type, window, number source and settings (§3), with `Client`, `DeclarationEvent` and `ProjectKindOfWork` |
 | `Contractor` | ✅ built 2026-10-02 (ADR-305, 306): its kind, contact and merge link, with `ProjectContractor` and `Contract` |
-| `User` | Gains viewer kind, contact, permissions and viewer projects; sign-in's columns in Phase 2 |
+| `User` | ✅ viewer kind, contact, permissions and viewer projects (ADR-315); sign-in's columns in Phase 2 |
 | `Device`, `MasterPasscode`, `NumberBlock` | As built; a key's revocation; the overlap refusal |
 | `DisposalSite` | ✅ built 2026-10-02 (ADR-311): its type (and the type's key), facts, permit, GPS, dates, with `DisposalSiteLabel`, `DisposalSiteTippingFee`, `SiteAreaVersion`, and the project map, `MapVersion` and `Zone` |
 | `Assignment` | ✅ `formDocumentTypes` built (ADR-308); its pay items (ADR-286), held to unit rate ones (ADR-309) |

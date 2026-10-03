@@ -40,7 +40,8 @@ Decides who can do what, and on which phone:
    a contractor record, and a subcontracted monitoring firm or temp agency is a contractor of the
    monitoring kind (Q-97).
 2. **Grant permissions** to a manager/analyst: correct, renumber, void, accept flags, QC, lock and
-   unlock as invoiced (ADR-050).
+   unlock as invoiced (ADR-050). Each is its own grant; one is taken away by archiving it, never
+   deleted, and every grant and removal is audited (*agent default*, ADR-315).
 3. **Enrol a phone, once** (online, master passcode): it makes its **device key** and joins the
    firm's phones, with no project and no monitor (ADR-240; ARCHITECTURE §7.4). Its data is
    **encrypted** and **never backed up**, bound to that phone (ADR-096).
@@ -87,6 +88,11 @@ Decides who can do what, and on which phone:
     it is received: what it made **after** its removal time arrives **flagged**; then its number
     block is retired and it's wiped, and only then refused (ADR-065, 134).
 14. **Issue read-only logins** to a client, contractor or auditor for their projects (ADR-169).
+    The admin says what kind of viewer it is, which projects it sees, and a contractor user's
+    contractor; a project is taken away by archiving. A client user and an auditor see their
+    projects' whole setup too; **a contractor user sees none of it** (only the project's name and
+    dates), and no viewer sees a client's or a contractor's contact details (*agent defaults*,
+    ADR-315).
 
 Every record says who made it and on which phone, under which assignment and setup version; a
 back-office-created record says who and why; a temporary session says so (ADR-156, 240).
