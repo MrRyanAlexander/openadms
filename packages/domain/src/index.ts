@@ -8,6 +8,7 @@ export {
   type SetupWarning,
 } from './form-debris-types.ts';
 export { Policy, policyNames, type PolicyName } from './policy.ts';
+export { SiteFacts, type SiteRefusal, type SiteSetting } from './site-facts.ts';
 export { SizeBands, type BandCheck, type BandedPayItem, type SetupRefusal } from './size-bands.ts';
 export {
   NewProjectSettings,
