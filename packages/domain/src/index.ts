@@ -7,6 +7,16 @@ export {
   type DebrisTypeFormKind,
   type SetupWarning,
 } from './form-debris-types.ts';
+export {
+  MapShapes,
+  type BoundingBox,
+  type MapGeometry,
+  type MapShape,
+  type MultiPolygonShape,
+  type NamedShape,
+  type PolygonShape,
+  type ShapeReading,
+} from './map-shapes.ts';
 export { Policy, policyNames, type PolicyName } from './policy.ts';
 export {
   PaysWhen,

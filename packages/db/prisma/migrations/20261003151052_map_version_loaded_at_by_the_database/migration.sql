@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "map_version" ALTER COLUMN "loaded_at" SET DEFAULT CURRENT_TIMESTAMP;

@@ -33,7 +33,21 @@ importers:
         specifier: 5.0.1
         version: 5.0.1(@types/node@24.13.6)(vite@8.3.0(@types/node@24.13.6)(jiti@2.7.0))
 
-  apps/api: {}
+  apps/api:
+    dependencies:
+      '@open-adms/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@open-adms/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@open-adms/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.6
+        version: 24.13.6
 
   apps/back-office: {}
 
@@ -85,6 +99,9 @@ importers:
 
   packages/scenarios:
     dependencies:
+      '@open-adms/api':
+        specifier: workspace:*
+        version: link:../../apps/api
       '@open-adms/db':
         specifier: workspace:*
         version: link:../db

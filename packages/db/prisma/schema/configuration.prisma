@@ -506,7 +506,9 @@ model MapVersion {
   northLatitude   Decimal   @map("north_latitude") @db.Decimal(38, 8)
   uploadedFileKey String?   @map("uploaded_file_key")
   loadedById      String    @map("loaded_by_id") @db.Uuid
-  loadedAt        DateTime  @default(now()) @map("loaded_at") @db.Timestamptz(3)
+  // The database's own time for the piece of work that loaded it, never the client's: a zone is
+  // written only in that same piece of work, which the guard tells by this time (ADR-311, 316).
+  loadedAt        DateTime  @default(dbgenerated("CURRENT_TIMESTAMP")) @map("loaded_at") @db.Timestamptz(3)
 
   project  Project @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   loadedBy User    @relation("MapVersionLoadedBy", fields: [loadedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
