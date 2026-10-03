@@ -67,8 +67,9 @@ record (why Phase 0 existed, its exit criteria and how each was met, the spec tr
 question rounds) moved word for word to `DECISIONS.md`'s scratchpad, "Moved from NEXT.md,
 2026-10-02"; `ROADMAP.md` §3a keeps the table.
 
-**Still live from the spec track:** `spec/acceptance/` is 1 of 9 files (`01-setup.md`: 82
-scenarios, 62 passing and AC-01-27, 48 and 55 in part, after 1.1.8); each other file is the first task of the milestone that builds its part
+**Still live from the spec track:** `spec/acceptance/` is 2 of 9 files (`01-setup.md`: 82
+scenarios, 62 passing and AC-01-27, 48 and 55 in part, after 1.1.8; `02-people-and-devices.md`: 74
+scenarios, 28 passing as Phase 0 built them, ADR-314); each other file is the first task of the milestone that builds its part
 (ADR-300).
 
 ---
@@ -80,7 +81,7 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-03: Phase 1 is open, nine tasks done)
+### Where things stand (2026-10-03: Phase 1 is open, ten tasks done)
 - **Phase 1 (data core and engine) is the active phase**, opened by the user on 2026-10-01
   (ADR-299). Its plan is `BACKLOG.md`'s ten milestones and 47 tasks (ADR-300): setup records →
   certifications and capacity → tickets and numbers → sync intake → reconciliation → the rule engine
@@ -117,7 +118,10 @@ of `DECISIONS.md`.
   `RuleCriterionPick`, `RuleAction`, `RuleActionItem`; a rule held to a ticket form and a contract
   of its own project, a picked value to the rule's own project and form, an operator to its
   criterion's kind; in `packages/domain`, which criteria a form takes, "Is valid", the refusal of
-  an exact copy, the overlap warning and the rules a pay item's "Pays when" writes.
+  an exact copy, the overlap warning and the rules a pay item's "Pays when" writes; and **1.1.9,
+  the acceptance scenarios for people and devices (2026-10-03, ADR-314)**: 74 scenarios, each
+  saying whether it is built (28, by Phase 0), task 1.1.10's (seven, and two in part) or a later
+  phase's.
   **Corrected by the user on
   2026-10-02 (ADR-301):** a pay item's code is unique on its project (ADR-147 had read their answer
   backwards), a pay item is its code and its description (no separate name, no "line number"), and
@@ -286,23 +290,26 @@ rounds of questions.
 firm's lists, ADR-302), 1.1.3 (the client, the declaration event and the project in full,
 ADR-303), 1.1.4 (contractors on a project, and contracts, ADR-305, 306), 1.1.5 (forms, debris
 types, field tags, the firm's own fields, ADR-308), 1.1.6 (pay items in full, ADR-309), 1.1.7
-(disposal sites in full and the project map, ADR-311; `btree_gist`, ADR-310), **1.1.8 (rules,
-ADR-313)**; and the user's correction of 2026-10-02 (ADR-301: a pay item's code is unique, it has a
+(disposal sites in full and the project map, ADR-311; `btree_gist`, ADR-310), 1.1.8 (rules,
+ADR-313), **1.1.9 (the acceptance scenarios for people and devices, ADR-314)**; and the user's correction of 2026-10-02 (ADR-301: a pay item's code is unique, it has a
 description and no name, a duplicate rule is refused).
 
-👉 **Task 1.1.9, the acceptance scenarios for people and devices** (`BACKLOG.md`, Milestone 1.1).
-Write `spec/acceptance/02-people-and-devices.md` from Part 2 (`spec/parts/02-people-and-devices.md`),
-as `01-setup.md` is written (`spec/acceptance/README.md` says how): each scenario restates a
-recorded rule and names it, in the example world's values; **what Phase 0 built is marked as built**
-(enrolment's models, the Monitor ID, devices, the master passcode's place, assignments and their
-pay items and forms: ADR-281, 286, 308, 309, with the tests that prove each), and **what waits for
-Phases 2–4 names its phase** (sign-in, the login list, the sync contract, the dispatch board's
-screen, the time clock's tables). The scenarios 1.1.10 must make pass (permissions, viewers,
-row-level security for the setup tables, C18, C54) are marked for the database. **Read first:**
-Part 2, `adms-field-app`, ARCHITECTURE §7–§8, ADR-095, 105, 106, 120, 145, 169, 170, 240, 241, 281.
-A docs task: nothing is built; **Done when** the file exists, every scenario names its source and
-where it is proven, and anything nothing settles is listed for the task that decides it. Then
-1.1.10: people's permissions and viewers.
+👉 **Task 1.1.10, people's permissions and viewers** (`BACKLOG.md`, Milestone 1.1). `UserPermission`,
+`ViewerProject` (its table can't be `viewer_project`, which is the project's viewer view: C54),
+`User.viewerKind` and the contact fields, `Device.keyRevokedAt` (its refusal is Phase 2's, C47);
+**row-level security for every setup table a viewer sees** (C18's first part, C54). **Read first:**
+`spec/acceptance/02-people-and-devices.md` (ADR-314), `spec/DATA-MODEL.md` §2.2, ARCHITECTURE §5.5,
+ADR-169, 270, 281, and the register's C18, C22, C54, C56. **Done when:** AC-02-05, 06, 09, 10, 11,
+69 and 70 pass at the database, with the database's part of AC-02-61 and 71; **and the 28
+scenarios Phase 0 built carry their IDs in their tests' names** (the file names each test: a rename,
+never a loosening). **It decides, each as an agent default in its ADR, the file's points 1…6:** how
+a permission is taken away when nothing is deleted; what a contractor user sees of a project's setup
+(ADR-169 gives it only its own tickets and transactions); whether a viewer sees a client's or a
+contractor's contact details; whether the database refuses a contractor user with no contractor;
+the audit domain of a grant; `ViewerProject`'s table name. A schema task: the brief's steps (Prisma
+writes the migration, the guard in its own stub, tried on a throw-away copy with its tests, the
+exact lists in `grants.test.ts` and `catalog.test.ts`, each new guard's removal shown caught, two
+copies at a time). Then 1.1.11: the example world's setup as a story.
 
 **Rules** (ADR-313): the example world's P1 has the golden mission's first rule in full
 (`world.rule`: its id, its two criteria, its action); a test writes more with `ruleLike`,

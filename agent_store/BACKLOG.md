@@ -163,12 +163,16 @@ by ADR-303 (named here by ADR-307). Closes the behaviour of KD-14, 16, 17, 18, 2
   `packages/domain`: which criteria and operators a form takes (`spec/RULES.md` §4, §4a), "Is valid"
   (§7), the overlap warning, **the refusal of an exact duplicate of a rule before it is saved**
   (ADR-301), and the rules a pay item's "Pays when" writes. **Done when:** AC-01-60…67 and 81 pass. *REQ-125a; REQ-131c's storage (its rates: 1.6.3).*
-- [ ] **1.1.9** `spec/acceptance/02-people-and-devices.md`, from Part 2: what Phase 0 built is
+- [x] **1.1.9** ✅ **done 2026-10-03 (ADR-314):** 74 scenarios; 28 are what Phase 0 built (and ADR-286, 308, 309), each naming the test that proves it, seen passing that day (six test files, 136 tests; the story `dispatch-monday`, 18 checks), and AC-02-38 and 49 in part; seven (and two in part) are 1.1.10's; 28 are for Phases 2–4 only; ten points nothing settles are listed for the task that decides each. `spec/acceptance/02-people-and-devices.md`, from Part 2: what Phase 0 built is
   marked as built; what waits for Phases 2–4 names its phase.
 - [ ] **1.1.10** **People's permissions and viewers.** `UserPermission`, `ViewerProject`,
   `User.viewerKind` and contact fields, `Device.keyRevokedAt` (its refusal is Phase 2's, C47);
   row-level security for every setup table a viewer sees (C18). **Done when:** the Part 2 scenarios
-  marked for the database pass.
+  marked for the database pass (AC-02-05, 06, 09, 10, 11, 69, 70, and the database's part of 61 and
+  71), **and the 28 scenarios Phase 0 built carry their IDs in their tests' names** (ADR-314: the
+  file names each test; a rename, never a loosening). It decides the file's points 1…6 (how a
+  permission is taken away, what a contractor user sees of setup, contact details, a contractor
+  user with no contractor, the audit domain, `ViewerProject`'s table name).
 - [ ] **1.1.11** **The example world's setup as a story.** The golden mission's §1, P1 and P2,
   written in the spine's order through the API's setup services as the people who make it; every
   record asserted, one audit record per write. **Done when:** `pnpm scenarios` runs it (AC-01-01,

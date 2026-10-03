@@ -1,13 +1,13 @@
 # Open ADMS — Current decisions and gaps, at a glance
 
 **The present tense of the project on one page.** `DECISIONS.md` and `DEVIATIONS.md` are the full
-history, with 313 ADRs and 67 KDs, many superseded. This page says what is true **now** and which
+history, with 314 ADRs and 67 KDs, many superseded. This page says what is true **now** and which
 entries to cite. The reasons live in the ADRs and the skills.
 
 - **Keep it current:** when you add, amend or supersede an ADR, or open or close a KD, update this
   page **in the same response** (`adms-decisions`).
 - **If this page and a log entry disagree,** the newest ADR wins: fix this page and say so.
-- Updated 2026-10-03, through ADR-313 / KD-67. Rounds 13–26 are answered (ADR-145…228).
+- Updated 2026-10-03, through ADR-314 / KD-67. Rounds 13–26 are answered (ADR-145…228).
   **Phase 1 (data core and engine, rebuilt) is open, at the user's word (ADR-299).** Its plan is
   `BACKLOG.md`'s ten milestones and 47 tasks, one task per response, each milestone opening with
   its part's acceptance scenarios in `spec/acceptance/` (ADR-300). Done: the plan,
@@ -33,7 +33,11 @@ entries to cite. The reasons live in the ADRs and the skills.
   value to the rule's own project and an operator to its criterion's kind; `packages/domain` says
   which criteria a form takes, works out "Is valid", refuses an exact copy, warns of an overlap and
   writes a pay item's "Pays when" rules). 62 of the 82 scenarios pass, and AC-01-27, 48 and 55 in
-  part. **Next: task 1.1.9, the acceptance scenarios for people and devices.**
+  part. **1.1.9, the acceptance scenarios for people and devices** (ADR-314:
+  `spec/acceptance/02-people-and-devices.md`, 74 scenarios; 28 are what Phase 0 built, each naming
+  the test that proves it, and take their IDs in 1.1.10; seven and two in part are 1.1.10's; 28 wait
+  for Phases 2–4; ten points nothing settles are listed for the task that decides each).
+  **Next: task 1.1.10, people's permissions and viewers.**
   **Corrected by the user 2026-10-02 (ADR-301):** a pay item's **code is unique on its project**
   (ADR-147 had it backwards); a pay item is its code and its **description**, with no separate name
   and no "line number"; **an exact duplicate of a rule is refused before it is saved**.
@@ -1188,7 +1192,7 @@ Phase 1 milestones name the KDs each closes (ADR-300).
 
 ## 4. Waiting on the user
 
-**Nothing blocks the next task (1.1.8, rules).**
+**Nothing blocks the next task (1.1.10, people's permissions and viewers).**
 What was answered or done moved word for word to `DECISIONS.md`'s scratchpad, "Moved from
 SUMMARY.md, 2026-10-02" (ADR-307). Yours whenever you like; none of it blocks building (ADR-230):
 
@@ -1196,7 +1200,10 @@ SUMMARY.md, 2026-10-02" (ADR-307). Yours whenever you like; none of it blocks bu
   part, each before its milestone's code**, not all nine before any code (say so and all nine are
   written first); one task per response; the setup points nothing settles, listed at the end of
   `spec/acceptance/01-setup.md`, are decided as agent defaults by the tasks named there.
-  `spec/acceptance/` is a draft for you to approve (`01-setup.md` you marked partially approved).
+  `spec/acceptance/` is a draft for you to approve (`01-setup.md` you marked partially approved;
+  `02-people-and-devices.md`, 74 scenarios, is new, ADR-314: its last table lists ten points
+  nothing settles, six of them decided as agent defaults by task 1.1.10, among them **what a
+  contractor user sees of a project's setup** and **how a permission is taken away**).
 - **Approval:** the ADR-240 notes in ARCHITECTURE §7–§10 (the approved sections now say "enrol once,
   assignment daily").
 - **The REQ moves (ADR-287):** REQ-003, 015, 017 now sit in Phase 1 and REQ-004, 006, 016 in Phase
