@@ -459,69 +459,91 @@ No row = no rate for that prime (a $0 line, flagged, ADR-212). A rate's history 
 
 #### `Rule`
 
-*Configuration.* `spec/RULES.md` §2. "Is valid" is computed, never stored.
+*Configuration, built (ADR-313).* `spec/RULES.md` §2. "Is valid" is computed, never stored
+(`packages/domain`'s `RuleValidity`): a rule that isn't valid is saved all the same and never runs.
+An exact copy of another rule is refused by setup before it is saved, and two rules that add the
+same # on a ticket both could meet are warned of (`ProjectRules`; ADR-125, 301).
 
 | Field | Type | Notes |
 |---|---|---|
 | **id** | uuid | |
 | **projectId** | → `Project` | |
-| **formId** | → `Form` | |
-| **name** | text | |
-| contractId | → `Contract` | Empty only on a rule with no *Add transaction* (ADR-239) |
-| **active** | bool | |
-| fromPayItemId | → `PayItem` | Written by that pay item's "Pays when" and edited only there (ADR-229) |
+| **formId** | → `Form` | One of its own project's load, haul-out or unit rate forms: one three-column foreign key (project, form, document type) |
+| **documentType** | enum `FormDocumentType` | Its form's, again: `LOAD` · `HAUL_OUT` · `UNIT_RATE` (a check; ADR-308's idiom, ADR-313) |
+| **name** | text | The firm's free text; a blank one is saved and not valid |
+| contractId | → `Contract` | One of its own project's contracts (a two-column foreign key). Empty only on a rule with no *Add transaction* (ADR-239); an *Add* with none is saved and not valid |
+| **active** | bool | No database default |
+| fromPayItemId | → `PayItem` | Written by that pay item's "Pays when" and edited only there (ADR-229): its own project's; setup refuses a change made in the rule builder |
+| **createdAt** | instant | |
 | archivedAt | instant | |
 
 #### `RuleCriterion`
 
-*Configuration.* One line of a rule's "ifs". Real columns, never JSON: the engine reads them.
+*Configuration, built (ADR-313).* One line of a rule's "ifs". Real columns, never JSON: the engine
+reads them. Which criteria a form takes is `packages/domain`'s `RuleCriteria` (a line that doesn't
+apply to its form is saved, and makes the rule not valid).
 
 | Field | Type | Notes |
 |---|---|---|
-| **ruleId** | → `Rule` | |
-| **position** | int | |
+| **id** | uuid | |
+| **ruleId** | → `Rule` | With `projectId` and `formId`, the rule's again (a three-column foreign key), so a pick is held to the rule's own project and form |
+| **position** | int | From 1, once per rule |
 | **criterion** | enum `RuleCriterionKey` | §9 |
-| **operator** | enum `RuleOperator` | §9 |
-| numberFrom, numberTo | decimal(14,4) | The typed value, where it is a number |
-| dateFrom, dateTo | date | The typed value, where it is a date |
-| text | text | The typed value, where it is text |
+| **operator** | enum `RuleOperator` | §9. Only one its criterion's kind of value takes (a check; `spec/RULES.md` §4a): an *Item* line compares the count of the one item picked, so it takes the number operators |
+| numberFrom, numberTo | decimal(14,4) | The typed value, where it is a number; the "to" only on BETWEEN, never below the "from" (a check) |
+| dateFrom, dateTo | date | The typed value, where it is a date; likewise |
+| text | text | The typed value, where it is text; never blank |
+| **createdAt** | instant | |
+| archivedAt | instant | Takes the line off its rule (ADR-313) |
+
+A value sits only in the columns of its criterion's kind; IS EMPTY and IS NOT EMPTY take none (a
+check).
 
 #### `RuleCriterionPick`
 
-*Configuration.* One row per picked value of a criterion.
+*Configuration, built (ADR-313).* One row per picked value of a criterion.
 
 | Field | Type | Notes |
 |---|---|---|
-| **criterionId** | → `RuleCriterion` | |
-| contractorId | → `Contractor` | **Exactly one** of these eight is filled |
-| formDebrisTypeId | → `FormDebrisType` | |
-| fieldTagId | → `FieldTag` | |
-| disposalSiteId | → `DisposalSite` | |
+| **id** | uuid | |
+| **criterionId** | → `RuleCriterion` | With `projectId`, `formId` and `criterion`, the line's again (a four-column foreign key): a line's criterion can't change under its picks |
+| contractorId | → `Contractor` | **Exactly one** of these eight is filled, the one its criterion picks from (a check). A contractor on the rule's project (`ProjectContractor`) |
+| formDebrisTypeId | → `FormDebrisType` | An entry of the rule's own form |
+| fieldTagId | → `FieldTag` | The rule's project's |
+| disposalSiteId | → `DisposalSite` | The rule's project's; a *Disposal site* or a *From site* line's |
 | siteTypeId | → `SiteType` | |
-| payItemId | → `PayItem` | |
+| payItemId | → `PayItem` | The rule's project's |
 | itemNameId | → `ItemName` | |
-| zoneName | text | A zone is matched by name, since map versions change |
+| zoneName | text | A zone is matched by name, since map versions change; never blank. That the name is on the project's current map is setup's to say (ADR-141 (6)) |
+| **createdAt** | instant | |
+| archivedAt | instant | |
 
 #### `RuleAction`
 
-*Configuration.* What happens to a ticket that meets every criterion.
+*Configuration, built (ADR-313).* What happens to a ticket that meets every criterion.
 
 | Field | Type | Notes |
 |---|---|---|
-| **ruleId** | → `Rule` | |
+| **id** | uuid | |
+| **ruleId** | → `Rule` | With `projectId`, the rule's again (a two-column foreign key) |
 | **kind** | enum `RuleActionKind` | `ADD_TRANSACTION` · `REMOVE_TRANSACTION` · `VOID_TICKET` |
-| slot | int | On add and remove |
-| payItemId | → `PayItem` | On add |
-| quantityFrom | enum `QuantityFrom` | `ALL_ITEMS` · `CHOSEN_ITEMS` (ADR-128) |
+| slot | int | On add and remove, 1 or more; never on void (a check). A missing one is saved and makes the rule not valid |
+| payItemId | → `PayItem` | On add only (a check); the rule's project's |
+| quantityFrom | enum `QuantityFrom` | `ALL_ITEMS` · `CHOSEN_ITEMS` (ADR-128). Stated on every add, and on nothing else (a check) |
+| **createdAt** | instant | |
+| archivedAt | instant | |
 
 #### `RuleActionItem`
 
-*Configuration.* The chosen items of an action whose quantity is from chosen items.
+*Configuration, built (ADR-313).* The chosen items of an action whose quantity is from chosen items.
 
 | Field | Type | Notes |
 |---|---|---|
+| **id** | uuid | |
 | **actionId** | → `RuleAction` | |
-| **itemNameId** | → `ItemName` | |
+| **itemNameId** | → `ItemName` | Once per action |
+| **createdAt** | instant | |
+| archivedAt | instant | |
 
 ### Sites and the map
 
@@ -1360,7 +1382,8 @@ Never relaxed to pass a test (ARCHITECTURE §5.4). ✅ = built today.
 | An assignment names only unit rate pay items (C42) | ✅ a three-column foreign key to the pay item's project, id and kind of work (ADR-309) |
 | A list value with a key (a built-in value) is never archived; a key appears once in its list (ADR-194, 302) | ✅ a check and a unique key on every list |
 | Only a release writes a list value's key: no other login adds a row with one, or gives, changes or removes one (ADR-302) | ✅ a trigger on every list |
-| A rule that is an exact copy of another (same form, contract, criteria and actions, whatever its name) | the API at setup, before it is saved (ADR-301) |
+| A rule that is an exact copy of another (same form, contract, criteria and actions, whatever its name) | the API at setup, before it is saved (ADR-301): ✅ the check is `packages/domain`'s `ProjectRules` (ADR-313) |
+| A rule sits on a load, haul-out or unit rate form of its own project and names one of that project's contracts; a picked value is the rule's own project's (a debris type its own form's); a pick fills the one column its criterion picks from; a criterion takes only its kind's operators, and a value only its operator's; an action holds only what its kind takes (ADR-313) | ✅ composite foreign keys and checks |
 | A transaction # once per ticket (and property or pile) | unique key |
 | A crew certification has no capacity and no boxes; a container has both | check |
 | A project's time zone is an IANA name; no time without its zone | ✅ checks, a test |
@@ -1642,6 +1665,8 @@ user approved the page on 2026-10-01 without changing one, so all sixteen stand.
 | 26 | **A site repeats its type's built-in key** (`siteTypeKey`), so the database refuses *Haul-outs leave here* off a TDSR/DMS site (ADR-311) | C52 asked whether the database refuses it too; a foreign key and a check, no trigger (as ADR-305, 308, 309) |
 | 27 | **A site's tipping fee pay items are a link table**, several per site (ADR-311; KD-67; **confirmed by the user, ADR-312**, so no longer a default to overturn) | ADR-222's "Service(s)", ADR-202's per CY and per ton; one link would miss a per-ton fee |
 | 28 | **A bounding box is four `decimal(38,8)` columns**; a shape's version has its own number; a zone's name is once per version (ADR-311) | The box is read like coordinates (§1); the number tells versions apart in the review; a zone criterion picks by name |
+| 29 | **A rule repeats its form's document type; a criterion line its rule's project and form; a pick its line's project, form and criterion; an action its rule's project** (ADR-313) | So the database itself holds a rule to a ticket form and a contract of its own project, and a picked value to the rule's own project and form, by foreign keys alone (the idiom of #22, #25, #26) |
+| 30 | **Each line of a rule (criterion, pick, action, chosen item) has its own id, created and archived times**; a line is taken off by archiving. **`quantityFrom` is stated on every *Add transaction*.** **An *Item* line takes the number operators** on the count of the one item it picks, not the list operators (ADR-313) | Nothing is deleted; one way to say "every item" lets two rules be compared; one operator can't mean both "is this item" and "its count equals" |
 
 **Carried items this page answers:**
 

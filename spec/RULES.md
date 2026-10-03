@@ -116,12 +116,22 @@ The legacy editor showed **EQUALS, NOT EQUALS, BETWEEN**. The approved set, by k
 | **Text** | collection address | EQUALS · NOT EQUALS · **CONTAINS** · **STARTS WITH** |
 | **Any** | all | **IS EMPTY** · **IS NOT EMPTY** |
 
+*Item* is in two rows because its value is both: **one picked item, and a number compared with its
+count** (*Item "Fridge, freon recovered" AT LEAST 1*). As built it takes the number operators, and
+IS EMPTY / IS NOT EMPTY for "the ticket lists none / some of this item"; the list operators aren't
+taken on *Item*, since one operator can't mean both "is this item" and "its count equals" *(agent
+default, ADR-313; the user may overturn it)*.
+
 "IS ONE OF" saves writing the same rule several times (e.g. *Disposal site IS ONE OF Marsh Road
 TDSR, Bayline Transfer Station*).
 
 - **BETWEEN includes both ends** (`Mileage BETWEEN 0 and 15` matches 15.0). When two rules' ranges
   overlap on the same transaction # (0–15 and 15–30 both creating #1), the builder **warns**; it
   never refuses the save. At run time a ticket caught by both is flagged (§6.4).
+  *As built (agent default, ADR-313):* the warning is given when two rules of one form, naming the
+  same contract, add the same # and nothing in their criteria keeps them apart; it names where a
+  shared range overlaps ("their Mileage ranges overlap at 15.0"), or says "a ticket could meet
+  both" where no range is involved.
 - **An exact duplicate of a rule is refused before it is saved** ✅ *(user, 2026-10-02; ADR-301)*,
   with an error naming the rule it copies ("Not saved: this rule is the same as "VEG-HAUL-CY-15 -
   ROW VEG haul 0–15 mi"."), so nobody goes on building from it. Two rules are the same when they are
