@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 
 import { systemActorId } from '../src/system-actor.ts';
 import { refusedBy } from './support/database.ts';
-import { insertOf, payItemLike } from './support/example-world.ts';
+import { insertOf, payItemLike, siteLike } from './support/example-world.ts';
 import { eachTestRolledBack } from './support/lifecycle.ts';
 
 const tested = eachTestRolledBack();
@@ -94,8 +94,14 @@ describe('an assignment', () => {
     await asTheApi();
     // P2 enters the same landfill as its own site (ADR-145); P1's assignments can't use it.
     const { id: p2Site } = await db.one<{ id: string }>(
-      `INSERT INTO "disposal_site" ("project_id", "name") VALUES ($1, 'Marsh Road TDSR') RETURNING "id"::text`,
-      [world.p2],
+      ...insertOf(
+        'disposal_site',
+        siteLike({ p1: world.p2 }, world.siteTypes.tdsr, {
+          name: 'Marsh Road TDSR',
+          site_type_key: 'TDSR',
+          haul_outs_leave_here: true,
+        }),
+      ),
     );
     expect(await refusedAssignment({ site: p2Site })).toBe(refusedBy.foreignKey);
     const onP2 = await assign({ project: world.p2, site: p2Site });

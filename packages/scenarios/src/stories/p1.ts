@@ -77,3 +77,53 @@ export async function setUpP1(tx: Prisma.TransactionClient, policy: Policy): Pro
     contract: contract.id,
   };
 }
+
+export interface P1Sites {
+  // Marsh Road TDSR (TDSR/DMS: takes loads, haul-outs leave here) and Bayline County Landfill
+  // (Final Disposal, BCL: takes loads, charges a tipping fee), as the golden mission §1 has them.
+  readonly tdsr: string;
+  readonly landfill: string;
+}
+
+// P1's two sites of setup step 7, each with its type, the four site facts, its GPS and a permit,
+// active from the project's first day (spec/parts/01-setup.md step 7; ADR-215, 311). A TDSR/DMS
+// site states its type's key too, as the database holds Haul-outs leave here to it. Its tipping
+// fee pay item, Cypress Creek Landfill and P1's map are the whole setup's story (BACKLOG 1.1.11).
+export async function setUpP1Sites(
+  tx: Prisma.TransactionClient,
+  project: string,
+): Promise<P1Sites> {
+  const tdsrType = await tx.siteType.findUniqueOrThrow({ where: { key: 'TDSR' } });
+  const landfillType = await tx.siteType.findUniqueOrThrow({ where: { key: 'FINAL_DISPOSAL' } });
+  const opened = { projectId: project, activationDate: new Date('2026-10-12'), takesLoads: true };
+  const tdsr = await tx.disposalSite.create({
+    data: {
+      ...opened,
+      name: 'Marsh Road TDSR',
+      siteTypeId: tdsrType.id,
+      siteTypeKey: tdsrType.key,
+      haulOutsLeaveHere: true,
+      chargesTippingFee: false,
+      ineligibleSite: false,
+      permitNumber: 'FDEP-DMS-2026-0117',
+      latitude: '27.98150000',
+      longitude: '-82.39720000',
+    },
+  });
+  const landfill = await tx.disposalSite.create({
+    data: {
+      ...opened,
+      name: 'Bayline County Landfill',
+      shortCode: 'BCL',
+      siteTypeId: landfillType.id,
+      siteTypeKey: landfillType.key,
+      haulOutsLeaveHere: false,
+      chargesTippingFee: true,
+      ineligibleSite: false,
+      permitNumber: 'FDEP-SW-0098',
+      latitude: '27.89340000',
+      longitude: '-82.32160000',
+    },
+  });
+  return { tdsr: tdsr.id, landfill: landfill.id };
+}

@@ -26,6 +26,13 @@ const domains: Record<string, string> = {
   user: 'SECURITY',
   device: 'SECURITY',
   disposal_site: 'OPERATIONS',
+  // A site's labels and own shape, and the project map; a site's tipping fee pay item tells a fee
+  // line, so its link is the billing reviewer's to read (ADR-311).
+  disposal_site_label: 'OPERATIONS',
+  disposal_site_tipping_fee: 'BILLING',
+  site_area_version: 'OPERATIONS',
+  map_version: 'OPERATIONS',
+  zone: 'OPERATIONS',
   number_block: 'OPERATIONS',
   assignment: 'OPERATIONS',
   // Where a rate will live: its changes are the billing reviewer's to read (ADR-286).
@@ -63,6 +70,13 @@ const triggers = [
   `CREATE TRIGGER audit_record_refuse_truncate BEFORE TRUNCATE ON public.audit_record FOR EACH STATEMENT EXECUTE FUNCTION refuse_audit_change()`,
   // A definition's version is never edited (ADR-308).
   `CREATE TRIGGER form_definition_refuse_edit BEFORE UPDATE ON public.form_definition FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
+  // Nor is a site's own shape, a map version or a zone; and a zone is written with its version
+  // (ADR-311).
+  ...['site_area_version', 'map_version', 'zone'].map(
+    (table) =>
+      `CREATE TRIGGER ${table}_refuse_edit BEFORE UPDATE ON public.${table} FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
+  ),
+  `CREATE TRIGGER zone_with_its_map_version BEFORE INSERT ON public.zone FOR EACH ROW EXECUTE FUNCTION zone_with_its_map_version()`,
   // The system actor's row (ADR-276).
   `CREATE TRIGGER user_system_actor BEFORE INSERT OR UPDATE ON public."user" FOR EACH ROW EXECUTE FUNCTION user_system_actor_guard()`,
   // Only a release writes a list value's key (ADR-302).
@@ -88,6 +102,12 @@ const policies = [
   'project_viewer PERMISSIVE {adms_readonly} SELECT USING viewer_sees_project(id)',
   'transaction_viewer PERMISSIVE {adms_readonly} SELECT USING (viewer_sees_load_project(completed_load_id) AND (viewer_sees_every_ticket() OR viewer_is_contractor(prime_id)))',
 ].sort();
+
+// A shape on a map, and its bounding box, are checked alike wherever one is kept (ADR-311).
+const shapeCheck = (column: string): string =>
+  `CHECK ((((jsonb_typeof(${column}) = 'object'::text) AND ((${column} ->> 'type'::text) = ANY (ARRAY['Polygon'::text, 'MultiPolygon'::text])) AND (jsonb_typeof((${column} -> 'coordinates'::text)) = 'array'::text)) IS TRUE))`;
+const boundingBoxCheck =
+  "CHECK ((((west_longitude >= ('-180'::integer)::numeric) AND (west_longitude <= (180)::numeric)) AND ((east_longitude >= ('-180'::integer)::numeric) AND (east_longitude <= (180)::numeric)) AND ((south_latitude >= ('-90'::integer)::numeric) AND (south_latitude <= (90)::numeric)) AND ((north_latitude >= ('-90'::integer)::numeric) AND (north_latitude <= (90)::numeric)) AND (south_latitude <= north_latitude)))";
 
 describe('the guards in the catalog', () => {
   it('every guard trigger, enabled and unconditional, and no other', async () => {
@@ -167,6 +187,28 @@ describe('the guards in the catalog', () => {
         definition:
           "CHECK (((document_type = 'ROE'::form_document_type) = (gps_required IS NOT NULL)))",
       },
+      {
+        name: 'disposal_site_coordinates_check',
+        definition:
+          "CHECK ((((latitude >= ('-90'::integer)::numeric) AND (latitude <= (90)::numeric)) AND ((longitude >= ('-180'::integer)::numeric) AND (longitude <= (180)::numeric))))",
+      },
+      {
+        name: 'disposal_site_dates_check',
+        definition: 'CHECK (((close_date IS NULL) OR (close_date >= activation_date)))',
+      },
+      {
+        name: 'disposal_site_haul_outs_check',
+        definition:
+          "CHECK (((NOT haul_outs_leave_here) OR (NOT (site_type_key IS DISTINCT FROM 'TDSR'::text))))",
+      },
+      { name: 'map_version_boundary_check', definition: shapeCheck('boundary') },
+      { name: 'map_version_bounding_box_check', definition: boundingBoxCheck },
+      { name: 'map_version_version_check', definition: 'CHECK ((version >= 1))' },
+      { name: 'site_area_version_bounding_box_check', definition: boundingBoxCheck },
+      { name: 'site_area_version_geometry_check', definition: shapeCheck('geometry') },
+      { name: 'site_area_version_version_check', definition: 'CHECK ((version >= 1))' },
+      { name: 'zone_bounding_box_check', definition: boundingBoxCheck },
+      { name: 'zone_geometry_check', definition: shapeCheck('geometry') },
       { name: 'master_passcode_hash_check', definition: "CHECK ((hash ~~ '$argon2id$%'::text))" },
       { name: 'master_passcode_version_check', definition: 'CHECK ((version >= 1))' },
       {
@@ -266,6 +308,20 @@ describe('the guards in the catalog', () => {
       ...listChecks,
     ];
     expect(rows).toEqual(checks.sort((a, b) => (a.name < b.name ? -1 : 1)));
+  });
+
+  it('every exclusion constraint, as written: the size bands of one payable type never overlap', async () => {
+    const rows = await tested.db.rows<{ name: string; definition: string }>(
+      `SELECT conname AS name, pg_get_constraintdef(oid) AS definition FROM pg_constraint
+       WHERE contype = 'x' AND connamespace = 'public'::regnamespace ORDER BY conname`,
+    );
+    expect(rows).toEqual([
+      {
+        name: 'pay_item_bands_never_overlap',
+        definition:
+          "EXCLUDE USING gist (project_id WITH =, payable_type_id WITH =, numrange(band_from, band_to, '[]'::text) WITH &&) WHERE (((archived_at IS NULL) AND ((band_from IS NOT NULL) OR (band_to IS NOT NULL))))",
+      },
+    ]);
   });
 
   it('row-level security on the four project-scoped tables only, with exactly their policies', async () => {

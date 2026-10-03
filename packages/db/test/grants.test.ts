@@ -32,6 +32,13 @@ const tableGrants: Record<string, Record<string, string>> = {
   user: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   device: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   disposal_site: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
+  // A site's labels and tipping fee pay items; a site's own shape, and the project map, added in
+  // versions, never edited (ADR-311).
+  disposal_site_label: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
+  disposal_site_tipping_fee: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
+  site_area_version: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },
+  map_version: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },
+  zone: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },
   number_block: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   assignment: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   pay_item: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
@@ -178,6 +185,34 @@ describe('the grants, exactly as the catalog holds them', () => {
       'adms_readonly USAGE',
       'adms_worker USAGE',
     ]);
+  });
+
+  it('the extensions schema holds btree_gist alone, is the owner’s, and no runtime login may use it', async () => {
+    // Its functions are callable by anyone and pin no search path, so they stay out of public; an
+    // exclusion constraint's index calls them without the right (ADR-310).
+    const extensions = await tested.db.rows<{ name: string; version: string; schema: string }>(
+      `SELECT extname AS name, extversion AS version, extnamespace::regnamespace::text AS schema
+       FROM pg_extension ORDER BY extname`,
+    );
+    expect(extensions).toEqual([
+      { name: 'btree_gist', version: '1.8', schema: 'extensions' },
+      { name: 'plpgsql', version: '1.0', schema: 'pg_catalog' },
+    ]);
+    const rows = await tested.db.rows<{ owner: string; grant: string | null }>(
+      `SELECT pg_get_userbyid(n.nspowner) AS owner,
+         ${grantee} || ' ' || a.privilege_type AS grant
+       FROM pg_namespace n LEFT JOIN LATERAL aclexplode(n.nspacl) a ON a.grantee <> n.nspowner
+       WHERE n.nspname = 'extensions'`,
+    );
+    expect(rows).toEqual([{ owner: 'adms_owner', grant: null }]);
+    for (const login of ['adms_api', 'adms_worker', 'adms_readonly']) {
+      expect(
+        await tested.db.one(`SELECT has_schema_privilege($1, 'extensions', 'USAGE') AS usage`, [
+          login,
+        ]),
+        login,
+      ).toEqual({ usage: false });
+    }
   });
 
   it('no login is a superuser, makes databases or roles, replicates, skips row-level security, or belongs to another role', async () => {
@@ -378,7 +413,7 @@ describe('the worker (adms_worker)', () => {
 
 describe('the read-only login (adms_readonly)', () => {
   // The new tables too: no viewer view shows them, so none is granted (ADR-281, 286, 302, 303, 305,
-  // 308).
+  // 308, 309, 311).
   it.each([
     'user',
     'client',
@@ -396,6 +431,11 @@ describe('the read-only login (adms_readonly)', () => {
     'master_passcode',
     'number_block',
     'disposal_site',
+    'disposal_site_label',
+    'disposal_site_tipping_fee',
+    'site_area_version',
+    'map_version',
+    'zone',
     'assignment',
     'pay_item',
     'pay_item_rate',

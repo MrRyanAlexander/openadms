@@ -672,7 +672,7 @@ describe('a project', () => {
       field_events: 4,
       completed_loads: 2,
       assignments: 1,
-      sites: 1,
+      sites: 2,
       kinds: 5,
     });
     await db.as('adms_api');

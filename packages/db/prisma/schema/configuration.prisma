@@ -101,6 +101,7 @@ model Project {
   contracts        Contract[]
   forms            Form[]
   disposalSites    DisposalSite[]
+  mapVersions      MapVersion[]
   payItems         PayItem[]
   assignments      Assignment[]
   numberBlocks     NumberBlock[]
@@ -345,23 +346,179 @@ model FormDefinition {
   @@map("form_definition")
 }
 
-// Where debris legally goes, entered on each project that uses it, never shared (ADR-145).
-// PROVISIONAL: only what an assignment's site needs. Its site type, facts, permit, GPS, area and
-// dates are spec/DATA-MODEL.md's (adms-ticket-workflows §4.0).
+// Where debris legally goes, entered on each project that uses it, never shared: the same landfill
+// on two projects is two records (ADR-145). A site type and the four site facts, which hold for
+// every ticket type (ADR-215); its GPS, where mileage ends (ADR-208); its area is the project's
+// circle round that GPS unless it has a shape of its own (SiteAreaVersion; ADR-142, 144). A ticket
+// at a site without the matching fact is flagged, never refused. No setting has a default here.
 model DisposalSite {
-  id        String @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  projectId String @map("project_id") @db.Uuid
-  name      String
+  id                String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  projectId         String    @map("project_id") @db.Uuid
+  name              String
+  // What setup offers in a suggested pay item code (BCL in TIP-FEE-CY-BCL).
+  shortCode         String?   @map("short_code")
+  // From the firm's list; what the Disposal site type criterion tests (ADR-190, 215).
+  siteTypeId        String    @map("site_type_id") @db.Uuid
+  // The site type's built-in key, again, where it has one (TDSR): held to the type's own by the
+  // second relation below, so Haul-outs leave here can be ticked only on a TDSR/DMS site, and a
+  // ticked site's type can't change away from TDSR/DMS (ADR-298; a check in the guard migration).
+  siteTypeKey       String?   @map("site_type_key")
+  // The four site facts (ADR-215).
+  takesLoads        Boolean   @map("takes_loads")
+  haulOutsLeaveHere Boolean   @map("haul_outs_leave_here")
+  chargesTippingFee Boolean   @map("charges_tipping_fee")
+  ineligibleSite    Boolean   @map("ineligible_site")
+  // Empty is "permit outstanding": flagged, never blocking (ADR-111).
+  permitNumber      String?   @map("permit_number")
+  // Entered with the site, WGS84, exact decimals (ADR-005, 208).
+  latitude          Decimal   @db.Decimal(38, 8)
+  longitude         Decimal   @db.Decimal(38, 8)
+  // Calendar days in the project's time zone; a disposal after a set close date is flagged "site
+  // closed" (ADR-173).
+  activationDate    DateTime  @map("activation_date") @db.Date
+  closeDate         DateTime? @map("close_date") @db.Date
 
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
 
-  project     Project      @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  assignments Assignment[]
+  project      Project                  @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  siteType     SiteType                 @relation("DisposalSiteType", fields: [siteTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  siteTypeKeys SiteType?                @relation("DisposalSiteTypeKey", fields: [siteTypeId, siteTypeKey], references: [id, key], onDelete: Restrict, onUpdate: Restrict)
+  labels       DisposalSiteLabel[]
+  tippingFees  DisposalSiteTippingFee[]
+  areaVersions SiteAreaVersion[]
+  assignments  Assignment[]
 
-  // So an assignment's site can only be one of its own project's (its relation's target).
+  // So an assignment's site, and a tipping fee's, can only be one of its own project's.
   @@unique([projectId, id])
   @@map("disposal_site")
+}
+
+// One of the firm's own labels on a site (a burn site): kept, and changes nothing the system does
+// (ADR-194, 215). Taken off by archiving; put back by clearing it.
+model DisposalSiteLabel {
+  id          String @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  siteId      String @map("site_id") @db.Uuid
+  siteLabelId String @map("site_label_id") @db.Uuid
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  site      DisposalSite @relation(fields: [siteId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  siteLabel SiteLabel    @relation(fields: [siteLabelId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([siteId, siteLabelId])
+  @@map("disposal_site_label")
+}
+
+// A tipping fee pay item written from a site that charges a tipping fee: the link that tells a fee
+// line from a hauling line (ADR-220, 222). A site may keep several, one per Unit of Measure the
+// contract prices its fee in (TIP-FEE-CY-BCL, TIP-FEE-TN-BCL; ADR-202). Both are the same project's.
+model DisposalSiteTippingFee {
+  id        String @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  projectId String @map("project_id") @db.Uuid
+  siteId    String @map("site_id") @db.Uuid
+  payItemId String @map("pay_item_id") @db.Uuid
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  site    DisposalSite @relation(fields: [projectId, siteId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  payItem PayItem      @relation(fields: [projectId, payItemId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([siteId, payItemId])
+  @@map("disposal_site_tipping_fee")
+}
+
+// Where a shape on a map came from.
+enum SiteAreaSource {
+  DRAWN
+  UPLOAD
+
+  @@map("site_area_source")
+}
+
+enum MapSource {
+  UPLOAD
+  ESRI_LAYER
+  DRAWN
+
+  @@map("map_source")
+}
+
+// A site's own shape, the advanced area: it replaces the project's circle for that site (ADR-142,
+// 144). Each shape is a new version, numbered from 1 and dated; a version is never edited or
+// deleted (the guard migration), so the shape a ticket was checked against is always there.
+// The shape is a GeoJSON Polygon or MultiPolygon in longitude and latitude, WGS84, with its
+// bounding box (ARCHITECTURE §3; ADR-311).
+model SiteAreaVersion {
+  id            String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  siteId        String         @map("site_id") @db.Uuid
+  version       Int
+  geometry      Json
+  westLongitude Decimal        @map("west_longitude") @db.Decimal(38, 8)
+  southLatitude Decimal        @map("south_latitude") @db.Decimal(38, 8)
+  eastLongitude Decimal        @map("east_longitude") @db.Decimal(38, 8)
+  northLatitude Decimal        @map("north_latitude") @db.Decimal(38, 8)
+  source        SiteAreaSource
+  createdById   String         @map("created_by_id") @db.Uuid
+  // The site's area from then until its next version.
+  effectiveFrom DateTime       @default(now()) @map("effective_from") @db.Timestamptz(3)
+
+  site      DisposalSite @relation(fields: [siteId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  createdBy User         @relation("SiteAreaVersionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([siteId, version])
+  @@map("site_area_version")
+}
+
+// A project's boundary and its zones as loaded: each load is a new version, numbered from 1, with
+// where it came from and who loaded it; a version and its zones are never edited or deleted, and a
+// zone is written only with its version (the guard migration; ADR-135, 141). The file as uploaded
+// is kept in object storage (uploadedFileKey). Shapes are GeoJSON Polygon or MultiPolygon in
+// longitude and latitude, WGS84, each with its bounding box (ARCHITECTURE §3; ADR-311).
+model MapVersion {
+  id              String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  projectId       String    @map("project_id") @db.Uuid
+  version         Int
+  source          MapSource
+  // The file's name, or the Esri layer's address.
+  sourceName      String?   @map("source_name")
+  // The field the admin picked as the zone's name (ZONE_NAME).
+  zoneNameField   String?   @map("zone_name_field")
+  boundary        Json
+  westLongitude   Decimal   @map("west_longitude") @db.Decimal(38, 8)
+  southLatitude   Decimal   @map("south_latitude") @db.Decimal(38, 8)
+  eastLongitude   Decimal   @map("east_longitude") @db.Decimal(38, 8)
+  northLatitude   Decimal   @map("north_latitude") @db.Decimal(38, 8)
+  uploadedFileKey String?   @map("uploaded_file_key")
+  loadedById      String    @map("loaded_by_id") @db.Uuid
+  loadedAt        DateTime  @default(now()) @map("loaded_at") @db.Timestamptz(3)
+
+  project  Project @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  loadedBy User    @relation("MapVersionLoadedBy", fields: [loadedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  zones    Zone[]
+
+  @@unique([projectId, version])
+  @@map("map_version")
+}
+
+// One named zone of a map version (ADR-135, 141). Its name is once per version: features the file
+// gives one name are one zone, a MultiPolygon.
+model Zone {
+  id            String  @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  mapVersionId  String  @map("map_version_id") @db.Uuid
+  name          String
+  geometry      Json
+  westLongitude Decimal @map("west_longitude") @db.Decimal(38, 8)
+  southLatitude Decimal @map("south_latitude") @db.Decimal(38, 8)
+  eastLongitude Decimal @map("east_longitude") @db.Decimal(38, 8)
+  northLatitude Decimal @map("north_latitude") @db.Decimal(38, 8)
+
+  mapVersion MapVersion @relation(fields: [mapVersionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([mapVersionId, name])
+  @@map("zone")
 }
 
 // A pay item's Unit of Measure (spec/CONVENTIONS.md §4; ADR-221, 223): TN or LB means the load is
@@ -430,12 +587,13 @@ model PayItem {
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
 
-  project      Project              @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  payableType  PayableType          @relation(fields: [payableTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  kindOfWork   KindOfWork?          @relation(fields: [kindOfWorkId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  project      Project                  @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  payableType  PayableType              @relation(fields: [payableTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  kindOfWork   KindOfWork?              @relation(fields: [kindOfWorkId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   rates        PayItemRate[]
   crewDaySteps PayItemCrewDayStep[]
   assignments  AssignmentPayItem[]
+  tippingFeeAt DisposalSiteTippingFee[]
 
   // So a rate can only be its own project's pay item's (its relation's target).
   @@unique([projectId, id])
@@ -518,11 +676,13 @@ model User {
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
 
-  contractor      Contractor?      @relation("ViewerContractor", fields: [contractorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  employer        Contractor?      @relation("Employer", fields: [employerId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  assignments     Assignment[]     @relation("AssignmentPerson")
-  assignmentsMade Assignment[]     @relation("AssignmentMadeBy")
-  formDefinitions FormDefinition[] @relation("FormDefinitionCreatedBy")
+  contractor      Contractor?       @relation("ViewerContractor", fields: [contractorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  employer        Contractor?       @relation("Employer", fields: [employerId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  assignments     Assignment[]      @relation("AssignmentPerson")
+  assignmentsMade Assignment[]      @relation("AssignmentMadeBy")
+  formDefinitions FormDefinition[]  @relation("FormDefinitionCreatedBy")
+  siteAreas       SiteAreaVersion[] @relation("SiteAreaVersionCreatedBy")
+  mapsLoaded      MapVersion[]      @relation("MapVersionLoadedBy")
   fieldEvents     FieldEvent[]
   invoiceLocks    InvoiceLock[]
   auditRecords    AuditRecord[]
@@ -921,6 +1081,11 @@ model SiteType {
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
 
+  sites     DisposalSite[] @relation("DisposalSiteType")
+  sitesKeys DisposalSite[] @relation("DisposalSiteTypeKey")
+
+  // What a site's type and its key, together, point at (ADR-298, 311).
+  @@unique([id, key])
   @@map("site_type")
 }
 
@@ -934,6 +1099,8 @@ model SiteLabel {
 
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  sites DisposalSiteLabel[]
 
   @@map("site_label")
 }

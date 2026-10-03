@@ -14,7 +14,7 @@
 import { projectTime } from '../clock.ts';
 import { uuidv7 } from '../ids.ts';
 import type { Story } from '../runner.ts';
-import { p1TimeZone as timeZone, setUpP1 } from './p1.ts';
+import { p1TimeZone as timeZone, setUpP1, setUpP1Sites } from './p1.ts';
 
 const at = (time: string): string => `2026-10-12T${time}:00-04:00`;
 const monday = new Date('2026-10-12');
@@ -41,20 +41,15 @@ export const dispatchMonday: Story = {
       });
       const luis = await tx.user.create({ data: { name: 'Luis Ortega', role: 'MANAGER_ANALYST' } });
       const p1 = await setUpP1(tx, story.policy);
-      const tdsr = await tx.disposalSite.create({
-        data: { projectId: p1.project, name: 'Marsh Road TDSR' },
-      });
-      const landfill = await tx.disposalSite.create({
-        data: { projectId: p1.project, name: 'Bayline County Landfill' },
-      });
+      const { tdsr, landfill } = await setUpP1Sites(tx, p1.project);
       return {
         danaRow,
         luis,
         p1: p1.project,
         prime: p1.prime,
         contract: p1.contract,
-        tdsr: tdsr.id,
-        landfill: landfill.id,
+        tdsr,
+        landfill,
       };
     });
     const project = await api.project.findUniqueOrThrow({

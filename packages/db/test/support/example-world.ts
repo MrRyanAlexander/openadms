@@ -21,9 +21,14 @@
 // (ADR-206, 309). The rest of the table a test adds as Dana would; P2 has none.
 // Each load is a collection and a disposal event (load call at the tower), its completed load and
 // one transaction for its prime. Nothing is locked as invoiced; a test locks what it needs.
+// P1's sites are two of the golden mission's §1, entered in full (ADR-215, 311): Marsh Road TDSR
+// (TDSR/DMS: takes loads, haul-outs leave here) and Bayline County Landfill (Final Disposal, `BCL`:
+// takes loads, charges a tipping fee), each with its GPS (spec/CONVENTIONS.md §6) and a permit,
+// active from 12 October 2026. Its tipping fee pay item, P1's map and the other sites a test adds as
+// Dana would; P2 has no site.
 // Ana Brooks records every event here, on the one phone, under her assignment on each project
-// (Monday 12 October 2026, written on the board by Dana); P1's site is the Marsh Road TDSR. The
-// phone holds version 1 of the master passcode, which the installer's seed keeps (ADR-281).
+// (Monday 12 October 2026, written on the board by Dana). The phone holds version 1 of the master
+// passcode, which the installer's seed keeps (ADR-281).
 import { systemActorId } from '../../src/system-actor.ts';
 import type { GuardedDatabase } from './database.ts';
 
@@ -49,9 +54,13 @@ export interface World {
   // Ana Brooks, a monitor, and the phone she records on, P1-COL-1.
   monitor: string;
   device: string;
-  // Her assignments for the day, one on each project, and P1's site.
+  // Her assignments for the day, one on each project.
   assignments: { p1: string; p2: string };
+  // P1's Marsh Road TDSR, and its Bayline County Landfill.
   site: string;
+  landfill: string;
+  // The two built-in site types, from the firm's list.
+  siteTypes: { tdsr: string; finalDisposal: string };
   // The worker's system actor, made by the installer's seed (ADR-273).
   worker: string;
   coastline: string;
@@ -141,6 +150,31 @@ export function payItemLike(
     photos_required: false,
     monitor_may_mark_ineligible: false,
     quantity_from_carried_tickets: false,
+    ...more,
+  };
+}
+
+// A disposal site as Dana enters one on P1: Bayline Transfer Station (Transfer Station, a type of
+// the firm's list with no built-in key), takes loads, its GPS, a permit, active from 12 October 2026;
+// every fact stated, none has a database default (ADR-215, 311). For a test that writes another
+// site, or changes one column of this one (`more`). A TDSR/DMS site states its type's key too.
+export function siteLike(
+  world: Pick<World, 'p1'>,
+  siteTypeId: string,
+  more: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    project_id: world.p1,
+    name: 'Bayline Transfer Station',
+    site_type_id: siteTypeId,
+    takes_loads: true,
+    haul_outs_leave_here: false,
+    charges_tipping_fee: false,
+    ineligible_site: false,
+    permit_number: 'FDEP-TS-2026-0412',
+    latitude: '27.95010000',
+    longitude: '-82.44730000',
+    activation_date: '2026-10-12',
     ...more,
   };
 }
@@ -372,7 +406,34 @@ export class ExampleWorld {
       crewTime: await rateOf(payItems.crewTime, '150.0000'),
     };
 
-    const site = await this.insert('disposal_site', { project_id: p1, name: 'Marsh Road TDSR' });
+    // P1's sites, as the golden mission §1 has them (ADR-215).
+    const siteTypes = {
+      tdsr: await this.picked('site_type', 'TDSR/DMS'),
+      finalDisposal: await this.picked('site_type', 'Final Disposal'),
+    };
+    const site = await this.insert(
+      'disposal_site',
+      siteLike({ p1 }, siteTypes.tdsr, {
+        name: 'Marsh Road TDSR',
+        site_type_key: 'TDSR',
+        haul_outs_leave_here: true,
+        permit_number: 'FDEP-DMS-2026-0117',
+        latitude: '27.98150000',
+        longitude: '-82.39720000',
+      }),
+    );
+    const landfill = await this.insert(
+      'disposal_site',
+      siteLike({ p1 }, siteTypes.finalDisposal, {
+        name: 'Bayline County Landfill',
+        short_code: 'BCL',
+        site_type_key: 'FINAL_DISPOSAL',
+        charges_tipping_fee: true,
+        permit_number: 'FDEP-SW-0098',
+        latitude: '27.89340000',
+        longitude: '-82.32160000',
+      }),
+    );
     const assignment = (projectId: string): Promise<string> =>
       this.insert('assignment', {
         person_id: monitor,
@@ -392,6 +453,8 @@ export class ExampleWorld {
       device,
       assignments,
       site,
+      landfill,
+      siteTypes,
       worker: systemActorId,
       coastline,
       summit,

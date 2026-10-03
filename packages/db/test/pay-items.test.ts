@@ -1,10 +1,11 @@
 // REQ-102, 112d: pay items in full, a rate for each prime, a crew day's steps (spec/DATA-MODEL.md
 // §3 "Pay items and rates"; ADR-087, 128, 206, 207, 210, 221, 223, 235, 292, 301, 305, 309).
 // Section E of spec/acceptance/01-setup.md, proven at the database: AC-01-39…44 and 47…51, and
-// AC-01-78 for these tables. Overlapping size bands (AC-01-45) and a gap between them (AC-01-46)
-// are packages/domain's (SizeBands); that every ticked capture setting is checked is the worker's
-// (BACKLOG 1.5.7). The pay items are P1's as the example world enters them from the golden
-// mission §1, with Coastline's rate on each.
+// AC-01-78 for these tables, and the database's half of AC-01-45: overlapping size bands are
+// refused by an exclusion constraint (ADR-310). Setup's words for an overlap (AC-01-45) and a gap
+// between bands (AC-01-46) are packages/domain's (SizeBands); that every ticked capture setting is
+// checked is the worker's (BACKLOG 1.5.7). The pay items are P1's as the example world enters them
+// from the golden mission §1, with Coastline's rate on each.
 import { describe, expect, it } from 'vitest';
 
 import { refusedBy } from './support/database.ts';
@@ -313,7 +314,7 @@ describe('a pay item', () => {
     ).toEqual({ band_from: '24.1', band_to: '99.0' });
     const stumps = { payable_type_id: world.payableTypes.stumps, unit: 'EA' };
     await add('pay_item', payItemLike(world, { ...stumps, code: 'STP-UP', band_from: '48.1' }));
-    await add('pay_item', payItemLike(world, { ...stumps, code: 'STP-TO', band_to: '24.0' }));
+    await add('pay_item', payItemLike(world, { ...stumps, code: 'STP-TO', band_to: '23.9' }));
     for (const [from, to] of [
       ['36.0', '24.0'],
       ['-1.0', '24.0'],
@@ -325,6 +326,100 @@ describe('a pay item', () => {
       expect(refusal.code, `${String(from)}–${String(to)}`).toBe(refusedBy.check);
       expect(refusal.message).toContain('"pay_item_band_check"');
     }
+  });
+});
+
+describe('the size bands of one payable type (the database’s half of AC-01-45)', () => {
+  it('AC-01-45 Leaners 20–30 in, beside 6–24 and 24.1–99, is refused by the database itself', async () => {
+    const { world } = tested;
+    await asTheApi();
+    const leaners = {
+      payable_type_id: world.payableTypes.leaners,
+      kind_of_work_id: world.kindsOfWork.leaners,
+      unit: 'EA',
+    };
+    const refusal = await tested.db.refused(
+      ...insertOf(
+        'pay_item',
+        payItemLike(world, {
+          ...leaners,
+          code: 'LNR-RMV-EA-30',
+          band_from: '20.0',
+          band_to: '30.0',
+        }),
+      ),
+    );
+    expect(refusal.code).toBe(refusedBy.exclusion);
+    expect(refusal.message).toContain('"pay_item_bands_never_overlap"');
+    // Sharing one end is an overlap: both ends are included.
+    expect(
+      await refusedRow(
+        'pay_item',
+        payItemLike(world, { ...leaners, code: 'LNR-RMV-EA-6', band_from: '0.0', band_to: '6.0' }),
+      ),
+    ).toBe(refusedBy.exclusion);
+    // An open end runs on: "99.1 in and up" meets nothing, "from 98 up" overlaps 24.1–99.
+    await add(
+      'pay_item',
+      payItemLike(world, { ...leaners, code: 'LNR-RMV-EA-UP', band_from: '99.1' }),
+    );
+    expect(
+      await refusedRow(
+        'pay_item',
+        payItemLike(world, { ...leaners, code: 'LNR-RMV-EA-98', band_from: '98.0' }),
+      ),
+    ).toBe(refusedBy.exclusion);
+  });
+
+  it('AC-01-45 a band is kept apart only from the same payable type’s, on the same project, not archived', async () => {
+    const { db, world } = tested;
+    await asTheApi();
+    const band = { band_from: '20.0', band_to: '30.0', unit: 'EA' };
+    // Hangers 20–30 in beside Leaners' bands: another payable type.
+    await add(
+      'pay_item',
+      payItemLike(world, {
+        ...band,
+        code: 'HNG-RMV-EA-30',
+        payable_type_id: world.payableTypes.hangers,
+      }),
+    );
+    // P2's own Leaners 20–30 in: another project.
+    await add(
+      'pay_item',
+      payItemLike(world, {
+        ...band,
+        project_id: world.p2,
+        code: 'LNR-RMV-EA-30',
+        payable_type_id: world.payableTypes.leaners,
+      }),
+    );
+    // A Leaners pay item with no band takes no part.
+    await add(
+      'pay_item',
+      payItemLike(world, { code: 'LNR-ANY', payable_type_id: world.payableTypes.leaners }),
+    );
+    // Archived, LNR-RMV-EA-24's band no longer counts; it can't be put back over the new one.
+    await db.run(`UPDATE "pay_item" SET "archived_at" = now() WHERE "id" = $1`, [
+      world.payItems.leaners24,
+    ]);
+    await add(
+      'pay_item',
+      payItemLike(world, {
+        code: 'LNR-RMV-EA-20',
+        payable_type_id: world.payableTypes.leaners,
+        unit: 'EA',
+        band_from: '6.0',
+        band_to: '20.0',
+      }),
+    );
+    expect(
+      (
+        await db.refused(`UPDATE "pay_item" SET "archived_at" = NULL WHERE "id" = $1`, [
+          world.payItems.leaners24,
+        ])
+      ).code,
+    ).toBe(refusedBy.exclusion);
   });
 });
 

@@ -25,6 +25,8 @@ export const refusedBy = {
   unique: '23505',
   foreignKey: '23503',
   notNull: '23502',
+  // exclusion_violation: two rows an exclusion constraint keeps apart (overlapping size bands)
+  exclusion: '23P01',
   badValue: '22P02',
   // invalid_parameter_value: a time zone the server's time zone data doesn't know
   unknownTimeZone: '22023',

@@ -9,7 +9,7 @@
 import { projectTime } from '../clock.ts';
 import { uuidv7, uuidv7Time } from '../ids.ts';
 import type { Story } from '../runner.ts';
-import { p1TimeZone as timeZone, setUpP1 } from './p1.ts';
+import { p1TimeZone as timeZone, setUpP1, setUpP1Sites } from './p1.ts';
 
 const at = (time: string): string => `2026-10-12T${time}:00-04:00`;
 
@@ -43,9 +43,7 @@ export const ticket101001: Story = {
       const towerPhone = await tx.device.create({
         data: { name: 'P1-TWR-TDSR', publicKey: 'story-P1-TWR-TDSR', masterPasscodeVersion: 1 },
       });
-      const tdsr = await tx.disposalSite.create({
-        data: { projectId: p1.project, name: 'Marsh Road TDSR' },
-      });
+      const { tdsr } = await setUpP1Sites(tx, p1.project);
       const monday = { workDate: new Date('2026-10-12'), projectId: p1.project, madeById: dana };
       const collections = await tx.assignment.create({
         data: {
@@ -61,7 +59,7 @@ export const ticket101001: Story = {
           ...monday,
           personId: kim.id,
           fieldEventKinds: ['DISPOSAL'],
-          siteId: tdsr.id,
+          siteId: tdsr,
           deviceId: towerPhone.id,
           origin: 'PLANNED',
         },
@@ -242,6 +240,7 @@ export const ticket101001: Story = {
         ['user', 'BACK_OFFICE'],
         ['device', 'BACK_OFFICE'],
         ['device', 'BACK_OFFICE'],
+        ['disposal_site', 'BACK_OFFICE'],
         ['disposal_site', 'BACK_OFFICE'],
         ['assignment', 'BACK_OFFICE'],
         ['assignment', 'BACK_OFFICE'],
