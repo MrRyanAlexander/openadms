@@ -17,17 +17,21 @@ export const policyNames = {
   siteCircleMeters: 'DISPOSAL_SITE_PROXIMITY_M',
   // The root-ball height the stump fill is worked out with, in inches (ADR-203).
   stumpFillDepthInches: 'STUMP_FILL_DEPTH_INCHES',
+  // A crew day's length, in hours, on a pay item paid by the crew day by exact division (ADR-087,
+  // 309).
+  crewDayHours: 'CREW_DAY_HOURS',
 } as const;
 
 export type PolicyName = (typeof policyNames)[keyof typeof policyNames];
 
 // What each value may be: a whole number in the range the database's own checks hold a project's
-// setting to. A load call is 0 to 100; a size is at least one.
+// setting to. A load call is 0 to 100; a size is at least one; a crew day is 1 to 24 hours.
 const ranges: Record<PolicyName, { least: number; most: number }> = {
   [policyNames.loadCallLowLimit]: { least: 0, most: 100 },
   [policyNames.loadCallHighLimit]: { least: 0, most: 100 },
   [policyNames.siteCircleMeters]: { least: 1, most: Number.MAX_SAFE_INTEGER },
   [policyNames.stumpFillDepthInches]: { least: 1, most: Number.MAX_SAFE_INTEGER },
+  [policyNames.crewDayHours]: { least: 1, most: 24 },
 };
 
 export class Policy {
@@ -35,12 +39,14 @@ export class Policy {
   readonly loadCallHighLimit: number;
   readonly siteCircleMeters: number;
   readonly stumpFillDepthInches: number;
+  readonly crewDayHours: number;
 
   private constructor(values: Readonly<Record<string, string | undefined>>) {
     this.loadCallLowLimit = Policy.read(values, policyNames.loadCallLowLimit);
     this.loadCallHighLimit = Policy.read(values, policyNames.loadCallHighLimit);
     this.siteCircleMeters = Policy.read(values, policyNames.siteCircleMeters);
     this.stumpFillDepthInches = Policy.read(values, policyNames.stumpFillDepthInches);
+    this.crewDayHours = Policy.read(values, policyNames.crewDayHours);
   }
 
   // From an environment: an env file's values, or a process's. A value that is missing or isn't a

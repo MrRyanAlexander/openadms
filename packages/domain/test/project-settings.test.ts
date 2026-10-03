@@ -13,6 +13,7 @@ const shipped = {
   LOAD_CALL_HIGH_LIMIT: '95',
   DISPOSAL_SITE_PROXIMITY_M: '200',
   STUMP_FILL_DEPTH_INCHES: '31',
+  CREW_DAY_HOURS: '12',
 };
 
 // The program types of the example world: PPDR requires an ROE, ROW doesn't.
@@ -39,6 +40,7 @@ describe('a new project’s settings', () => {
       LOAD_CALL_HIGH_LIMIT: '90',
       DISPOSAL_SITE_PROXIMITY_M: '300',
       STUMP_FILL_DEPTH_INCHES: '36',
+      CREW_DAY_HOURS: '10',
     });
     expect(new NewProjectSettings(policy).for(row)).toMatchObject({
       loadCallLowLimit: 10,
@@ -70,12 +72,13 @@ describe('a new project’s settings', () => {
 });
 
 describe('the policy values', () => {
-  it('are four, each under its own name in the environment', () => {
+  it('are five, each under its own name in the environment', () => {
     expect(policyNames).toEqual({
       loadCallLowLimit: 'LOAD_CALL_LOW_LIMIT',
       loadCallHighLimit: 'LOAD_CALL_HIGH_LIMIT',
       siteCircleMeters: 'DISPOSAL_SITE_PROXIMITY_M',
       stumpFillDepthInches: 'STUMP_FILL_DEPTH_INCHES',
+      crewDayHours: 'CREW_DAY_HOURS',
     });
     expect(Object.keys(shipped).sort()).toEqual(Object.values(policyNames).sort());
   });
@@ -117,6 +120,19 @@ describe('the policy values', () => {
         `The policy value ${name} must be a whole number, 1 or more: "0".`,
       );
       expect(() => Policy.from({ ...shipped, [name]: '1' })).not.toThrow();
+    }
+  });
+
+  it('AC-01-50 a crew day is 12 h unless changed: a day of 1 to 24 hours', () => {
+    expect(Policy.from(shipped).crewDayHours).toBe(12);
+    expect(Policy.from({ ...shipped, CREW_DAY_HOURS: '10' }).crewDayHours).toBe(10);
+    for (const written of ['0', '25']) {
+      expect(() => Policy.from({ ...shipped, CREW_DAY_HOURS: written })).toThrow(
+        `The policy value CREW_DAY_HOURS must be a whole number, from 1 to 24: "${written}".`,
+      );
+    }
+    for (const written of ['1', '24']) {
+      expect(() => Policy.from({ ...shipped, CREW_DAY_HOURS: written })).not.toThrow();
     }
   });
 
