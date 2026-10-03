@@ -8,6 +8,33 @@ export {
   type SetupWarning,
 } from './form-debris-types.ts';
 export { Policy, policyNames, type PolicyName } from './policy.ts';
+export {
+  PaysWhen,
+  type PaysWhenContract,
+  type PaysWhenOnForm,
+  type PaysWhenPayItem,
+} from './pays-when.ts';
+export {
+  RuleCriteria,
+  ruleCriterionKeys,
+  ruleOperators,
+  type RuleCriterionKey,
+  type RuleCriterionLine,
+  type RuleForm,
+  type RuleOperator,
+  type RulePick,
+  type RuleValueKind,
+} from './rule-criteria.ts';
+export {
+  ProjectRules,
+  RuleValidity,
+  type QuantityFrom,
+  type RuleActionKind,
+  type RuleActionLine,
+  type RuleCheck,
+  type RuleEntry,
+  type RuleRefusal,
+} from './rules.ts';
 export { SiteFacts, type SiteRefusal, type SiteSetting } from './site-facts.ts';
 export { SizeBands, type BandCheck, type BandedPayItem, type SetupRefusal } from './size-bands.ts';
 export {
