@@ -69,7 +69,7 @@ question rounds) moved word for word to `DECISIONS.md`'s scratchpad, "Moved from
 
 **Still live from the spec track:** `spec/acceptance/` is 2 of 9 files (`01-setup.md`: 82
 scenarios, 62 passing and AC-01-27, 48 and 55 in part, after 1.1.8; `02-people-and-devices.md`: 74
-scenarios, 28 passing as Phase 0 built them, ADR-314); each other file is the first task of the milestone that builds its part
+scenarios, 35 passing at the database and four in part after 1.1.10, ADR-315); each other file is the first task of the milestone that builds its part
 (ADR-300).
 
 ---
@@ -81,7 +81,7 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-03: Phase 1 is open, ten tasks done)
+### Where things stand (2026-10-03: Phase 1 is open, eleven tasks done)
 - **Phase 1 (data core and engine) is the active phase**, opened by the user on 2026-10-01
   (ADR-299). Its plan is `BACKLOG.md`'s ten milestones and 47 tasks (ADR-300): setup records →
   certifications and capacity → tickets and numbers → sync intake → reconciliation → the rule engine
@@ -121,20 +121,26 @@ of `DECISIONS.md`.
   an exact copy, the overlap warning and the rules a pay item's "Pays when" writes; and **1.1.9,
   the acceptance scenarios for people and devices (2026-10-03, ADR-314)**: 74 scenarios, each
   saying whether it is built (28, by Phase 0), task 1.1.10's (seven, and two in part) or a later
-  phase's.
+  phase's; and **1.1.10, people's permissions and viewers (2026-10-03, ADR-315)**: `UserPermission`
+  and `ViewerProject` (table `user_viewer_project`), each taken away by archiving; a viewer's kind
+  and contractor held by checks; **the database reads what a viewer may see from their own record**
+  (the API states only `adms.viewer_id`); `guard_viewer`, one line per table, gives 41 setup tables
+  and lists their row-level security: a client user and an auditor see their projects' whole
+  setup, a contractor user none, no viewer a contact or a person; `Device.keyRevokedAt`.
   **Corrected by the user on
   2026-10-02 (ADR-301):** a pay item's code is unique on its project (ADR-147 had read their answer
   backwards), a pay item is its code and its description (no separate name, no "line number"), and
   an exact duplicate of a rule is refused before it is saved; the provisional `pay_item` table and
   its test follow (the twentieth migration). **The first product tables
   exist** (the lists, the client, the declaration event, the project, contractors on a project,
-  contracts, forms, pay items, sites, the project map and rules; 53 models, 37 migrations);
+  contracts, forms, pay items, sites, the project map, rules, permissions and viewers; 55 models,
+  39 migrations);
   the other models are still Phase 0's provisional ones, and `packages/domain` holds the built-in
   keys, the policy values and a new project's settings.
 - **Phase 0 (Foundation) is done** (2026-10-01, ADR-281…288): the monorepo, the local HTTPS stack
   with the map servers, the installer, the hardened database, the scenario harness and the security
   checks. How it got there moved to `DECISIONS.md`'s scratchpad (ADR-307). **Every known later
-  concern** is in `BACKLOG.md`'s **carry-forward register** (C1…C58) under the task that picks it
+  concern** is in `BACKLOG.md`'s **carry-forward register** (C1…C59) under the task that picks it
   up (ADR-274): read a task's items before starting it.
 - **Product rules:** 26 rounds of questions, **ADR-001…231**. **Discovery is closed (ADR-230, the
   question shot-clock):** no questions are open; ask the user only when the answer changes money,
@@ -291,25 +297,32 @@ firm's lists, ADR-302), 1.1.3 (the client, the declaration event and the project
 ADR-303), 1.1.4 (contractors on a project, and contracts, ADR-305, 306), 1.1.5 (forms, debris
 types, field tags, the firm's own fields, ADR-308), 1.1.6 (pay items in full, ADR-309), 1.1.7
 (disposal sites in full and the project map, ADR-311; `btree_gist`, ADR-310), 1.1.8 (rules,
-ADR-313), **1.1.9 (the acceptance scenarios for people and devices, ADR-314)**; and the user's correction of 2026-10-02 (ADR-301: a pay item's code is unique, it has a
+ADR-313), 1.1.9 (the acceptance scenarios for people and devices, ADR-314), **1.1.10 (people's
+permissions and viewers, ADR-315)**; and the user's correction of 2026-10-02 (ADR-301: a pay item's code is unique, it has a
 description and no name, a duplicate rule is refused).
 
-👉 **Task 1.1.10, people's permissions and viewers** (`BACKLOG.md`, Milestone 1.1). `UserPermission`,
-`ViewerProject` (its table can't be `viewer_project`, which is the project's viewer view: C54),
-`User.viewerKind` and the contact fields, `Device.keyRevokedAt` (its refusal is Phase 2's, C47);
-**row-level security for every setup table a viewer sees** (C18's first part, C54). **Read first:**
-`spec/acceptance/02-people-and-devices.md` (ADR-314), `spec/DATA-MODEL.md` §2.2, ARCHITECTURE §5.5,
-ADR-169, 270, 281, and the register's C18, C22, C54, C56. **Done when:** AC-02-05, 06, 09, 10, 11,
-69 and 70 pass at the database, with the database's part of AC-02-61 and 71; **and the 28
-scenarios Phase 0 built carry their IDs in their tests' names** (the file names each test: a rename,
-never a loosening). **It decides, each as an agent default in its ADR, the file's points 1…6:** how
-a permission is taken away when nothing is deleted; what a contractor user sees of a project's setup
-(ADR-169 gives it only its own tickets and transactions); whether a viewer sees a client's or a
-contractor's contact details; whether the database refuses a contractor user with no contractor;
-the audit domain of a grant; `ViewerProject`'s table name. A schema task: the brief's steps (Prisma
-writes the migration, the guard in its own stub, tried on a throw-away copy with its tests, the
-exact lists in `grants.test.ts` and `catalog.test.ts`, each new guard's removal shown caught, two
-copies at a time). Then 1.1.11: the example world's setup as a story.
+👉 **Task 1.1.11, the example world's setup as a story** (`BACKLOG.md`, Milestone 1.1). The golden
+mission's §1, P1 and P2, written in the spine's order **through the API's setup services** (plain
+service classes in `apps/api`, as `adms_api`, through `db.$write(actor, …)`; no HTTP) as the people
+who make it; every record asserted, one audit record per write. **Read first:**
+`spec/golden/MISSION.md` §1, `spec/acceptance/01-setup.md` (AC-01-01, 78…80), the brief's "Where
+the code lives", and the register's C30 (first part), C53 (first part), C56, C57, C58 and C59:
+the setup service is the one place that adds a prime (and writes `asPrimeId`), starts a project
+from `NewProjectSettings`, calls `SizeBands`, `SiteFacts`, `DebrisTypeEntries` and
+`ProjectRules.check` before it saves, and matches `PaysWhen.rules(…)` to the rules a pay item
+keeps. **Done when:** `pnpm scenarios` runs it. *REQ-105e, 108; REQ-142's setup part.* It is the
+first task that writes code in `apps/api`: its ADR settles where each kind of service lives. Then
+Milestone 1.2 opens with 1.2.1, `spec/acceptance/03-certification.md`.
+
+**People and viewers** (ADR-315): the example world has three read-only viewers
+(`world.clientViewer`, given P1; `world.auditor`, given P1 and P2; `world.coastlineViewer`, a
+contractor user, given P1); a test issues another with `viewerLike(name, kind, contractor?)` and
+`given(viewer, project)`, and states who is looking with `db.viewer(id)`
+(`packages/db/test/support/`). **A new table a client user or an auditor should see** gets
+`SELECT guard_viewer('<table>', '<PROJECT|PART_OF|NAMED_BY|FIRM>'[, relation, column][, hidden]);`
+in its guard migration and a row in `test/support/viewers.ts`; one nobody should see goes in that
+file's `unseenTables`; a viewed table that gains a column reruns `guard_viewer` (C59). A
+permission or a viewer's project is taken away by archiving, never deleted.
 
 **Rules** (ADR-313): the example world's P1 has the golden mission's first rule in full
 (`world.rule`: its id, its two criteria, its action); a test writes more with `ruleLike`,
@@ -358,7 +371,7 @@ then `SELECT guard_list('<table>', '<domain>');` in its guard migration; a new b
 `packages/domain`'s `builtInKeys` first, with an ADR (ADR-302).
 
 Start every command with `eval "$(fnm env --shell zsh)"`; the checks are **`adms-verify`** (the chain
-is 41 files, 834 tests; thirty-seven migrations; `pnpm scenarios` runs two stories, 16 and 18 checks),
+is 43 files, 859 tests; thirty-nine migrations; `pnpm scenarios` runs two stories, 16 and 18 checks),
 with **`pnpm security`** (7 passed, 0 failed, ADR-291). The database tests, the map servers' tests and
 the stories need `pnpm local:up` first; stop it at close-out (ADR-277). A schema change goes through
 Prisma (`prisma migrate dev --create-only`), a guard into its own empty stub (ADR-113); **try a guard

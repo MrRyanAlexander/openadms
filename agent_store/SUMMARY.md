@@ -1,13 +1,13 @@
 # Open ADMS — Current decisions and gaps, at a glance
 
 **The present tense of the project on one page.** `DECISIONS.md` and `DEVIATIONS.md` are the full
-history, with 314 ADRs and 67 KDs, many superseded. This page says what is true **now** and which
+history, with 315 ADRs and 67 KDs, many superseded. This page says what is true **now** and which
 entries to cite. The reasons live in the ADRs and the skills.
 
 - **Keep it current:** when you add, amend or supersede an ADR, or open or close a KD, update this
   page **in the same response** (`adms-decisions`).
 - **If this page and a log entry disagree,** the newest ADR wins: fix this page and say so.
-- Updated 2026-10-03, through ADR-314 / KD-67. Rounds 13–26 are answered (ADR-145…228).
+- Updated 2026-10-03, through ADR-315 / KD-67. Rounds 13–26 are answered (ADR-145…228).
   **Phase 1 (data core and engine, rebuilt) is open, at the user's word (ADR-299).** Its plan is
   `BACKLOG.md`'s ten milestones and 47 tasks, one task per response, each milestone opening with
   its part's acceptance scenarios in `spec/acceptance/` (ADR-300). Done: the plan,
@@ -37,7 +37,13 @@ entries to cite. The reasons live in the ADRs and the skills.
   `spec/acceptance/02-people-and-devices.md`, 74 scenarios; 28 are what Phase 0 built, each naming
   the test that proves it, and take their IDs in 1.1.10; seven and two in part are 1.1.10's; 28 wait
   for Phases 2–4; ten points nothing settles are listed for the task that decides each).
-  **Next: task 1.1.10, people's permissions and viewers.**
+  **1.1.10, people's permissions and viewers** (ADR-315: a manager/analyst's permissions, each
+  its own grant, taken away by archiving; a read-only viewer's kind, contractor and projects; the
+  database reads what a viewer may see from their own record, the API stating only who is looking;
+  a client user and an auditor see their projects' whole setup, a contractor user none of it; no
+  viewer a contact or a person; a phone's revoked key's time). 35 of Part 2's 74 scenarios pass at
+  the database, four more in part, each under a test named by its ID.
+  **Next: task 1.1.11, the example world's setup as a story.**
   **Corrected by the user 2026-10-02 (ADR-301):** a pay item's **code is unique on its project**
   (ADR-147 had it backwards); a pay item is its code and its **description**, with no separate name
   and no "line number"; **an exact duplicate of a rule is refused before it is saved**.
@@ -98,8 +104,8 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   refused for everyone; audit by trigger with **`adms.actor_id` and `adms.source` required**
   (transaction-local settings; device, reason, request optional; domains per table); audit
   append-only; a transaction delete copied to audit first and refused on an invoice-locked load;
-  row-level security with `viewer_*` views, the viewer stated as `adms.viewer_project_ids` and
-  `adms.viewer_contractor_id` (`none` for clients and auditors), fail closed. The worker's system
+  row-level security with `viewer_*` views, the viewer stated per request (since ADR-315 as
+  `adms.viewer_id` alone; the two settings ADR-270 named are gone), fail closed. The worker's system
   actor is a `User` row (ADR-273 below). [270] **A new table is guarded in one
   line** (the user wants hand-written SQL near zero): its model in the right `.prisma` file, then a
   guard migration `SELECT guard_table('<table>', '<CONFIGURATION|MARK|EVIDENCE|DERIVED>',
@@ -187,7 +193,7 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   built-in value's never changes; and a value with a key is never archived, by anyone. **A new list
   is guarded in one line:** `SELECT guard_list('<table>', '<domain>');` (`guard_table` plus those
   two). Audited in the operations domain; no read-only viewer sees a list yet, so no row-level
-  security (task 1.1.10). **The seed writes a list's starting values once, into an empty list**, as
+  security (since ADR-315 a client user and an auditor read the lists; a contractor user none). **The seed writes a list's starting values once, into an empty list**, as
   the system actor (94 values in 15 lists; site labels, incident sub-types and field tags start
   empty); a list that holds anything is the firm's and gets only a built-in value it lacks, which is
   how a release adds one. Thirty-three models, twenty-two migrations. The starting values where
@@ -211,7 +217,8 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   database itself refuses a project with no ticket-type list, a window that ends before it starts,
   a load-call limit outside 0–100, and a fill depth or site circle under 1. The three new tables
   are guarded in one line each, in the operations domain; no read-only viewer sees them, and the
-  project's viewer view shows none of the new columns (task 1.1.10). Thirty-six models,
+  project's viewer view shows none of the new columns (since ADR-315 a client user and an auditor see
+  them all; a contractor user still the five). Thirty-six models,
   twenty-four migrations. *Agent defaults.* [303]
 - **Contractors on a project, and contracts, are built (Phase 1, task 1.1.4):** `Contractor` has
   a **kind** (`ContractorKind`: `HAULER` · `MONITORING` · `CREW` · `OTHER`; no default, whoever adds
@@ -229,7 +236,7 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   names can't be made a sub; no trigger does it. **Whoever adds a prime writes `asPrimeId`**; a
   rate's prime and a certification's prime will point at the same key (C56). `project_contractor`
   is audited in the operations domain, `contract` in billing; no read-only viewer sees either
-  (task 1.1.10, which also decides whether a viewer sees a contractor's contact details). What a
+  (since ADR-315 a client user and an auditor see both, never a contact detail). What a
   merge moves is the certification task's (C56). Thirty-eight models, twenty-seven migrations.
   *Agent defaults, seen by the user ("the rest of this is good to go", ADR-306).* [305, 306]
 - **Forms, debris types on them, field tags, the firm's own fields (built 2026-10-02, task 1.1.5):**
@@ -285,9 +292,32 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   naming where a shared range overlaps) and `PaysWhen` (one rule per form the pay item pays on and
   per contract whose prime has a rate, named "`<code> - <description>`"). **An *Item* line is one
   picked item and a number operator on its count**; the list operators aren't taken on *Item*.
-  Audited in billing; no read-only viewer sees a rule (task 1.1.10). Not decided: what an archived
+  Audited in billing; since ADR-315 a client user and an auditor see their projects' rules. Not decided: what an archived
   pay item, contract or form does to a rule naming it (the setup check, 1.6.4). Fifty-three models,
   thirty-seven migrations. *Agent defaults.* [313]
+- **People's permissions and read-only viewers (built 2026-10-03, task 1.1.10):** `UserPermission`
+  (a person and one of the ten permissions, once; **taken away by archiving, given back by clearing
+  it**, never a second row; never the system actor's; the database doesn't tie it to the role
+  manager/analyst, which is the API's to read); `ViewerProject`, **table `user_viewer_project`** (a
+  project once per viewer, taken away by archiving); `User.viewerKind` (`CLIENT · CONTRACTOR ·
+  AUDITOR`: every read-only viewer states it and nobody else does; **a contractor user names its
+  contractor and nobody else does**), `email`, `phone`; `Device.keyRevokedAt` (only on a phone out
+  of service, never before its removal time; the refusal is Phase 2's). Both tables audited in the
+  **security** domain. **The viewer of a request is read from their own record:** the API states
+  only `adms.viewer_id`; `viewer_sees_project`, `viewer_sees_every_ticket` and
+  `viewer_is_contractor` read the person (a read-only viewer, not archived), the projects given and
+  not taken away, the kind and the contractor, with the owner's rights; anyone else, or nobody,
+  sees nothing. **A table gets its viewer sight in one line:** `SELECT guard_viewer('<table>',
+  '<PROJECT|PART_OF|NAMED_BY|FIRM>'[, relation, column][, hidden]);` (row-level security, the
+  services' policy, the viewer's policy, the view `viewer_<table>`, exactly its columns granted).
+  **A client user and an auditor see** their projects' whole setup (21 project tables), the
+  project's settings (`viewer_project_setup`, the one view run with the owner's rights, since
+  row-level security can't tell columns apart), the client, declaration event and contractors
+  their projects name, and the firm's lists. **A contractor user sees** the project's name, time
+  zone and dates, and no setup at all. **No viewer reads** a contact name, email or phone, a
+  client's notes, a map's uploaded file key, or any person, permission, phone, assignment, number
+  block or the master passcode. Fifty-five models, thirty-nine migrations. Left for later: C59.
+  *Agent defaults.* [315]
 - **The map servers are in the local stack (REQ-022):** `routing` (**Valhalla 3.9.0**) and
   `addresses` (**Nominatim 5.3.2**, mediagis's image), pinned by tag and digest, reached **only
   through Caddy over HTTPS** (`https://routing.adms.localhost`, `https://addresses.adms.localhost`),
@@ -464,6 +494,11 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
 - **What read-only viewers see:** clients and auditors the whole project except personal phone and
   licence numbers; a contractor only its own tickets and transactions (a prime with its subs'),
   never another prime's; monitors' phone numbers only admins. Enforced by row-level security. [169]
+  **Built for setup (ADR-315):** a client user and an auditor see their projects' whole setup; a
+  contractor user none of it (the project's name and dates only); no viewer a client's or a
+  contractor's contact, or any person's record. An admin issues a viewer its kind, its projects
+  and, for a contractor user, its contractor; a project or a permission is taken away by
+  archiving. *Agent defaults.* [315]
 - **Creating users:** field monitors are created **on a phone, online**, by the master user (then
   optionally set up); back-office and outside users by an admin in the back office. [105]
 - **One master passcode per firm**, set at install, changed by the firm when it chooses; no
@@ -1061,6 +1096,7 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
 
 | Old | Replaced by | What changed |
 |---|---|---|
+| 270 (7), the API stating a viewer's projects and contractor (`adms.viewer_project_ids`, `adms.viewer_contractor_id`) | 315 | The API states only who is looking (`adms.viewer_id`); the database reads their projects, kind and contractor from their record |
 | 305 (5), "no contact details on a contractor" | 306 | A contractor holds a contact name, email and phone |
 | 001 | 074 | Debris types are extendable, not a closed 12-value enum |
 | 007 (Transaction part) | 085 | Transactions regenerate; only `AuditRecord` is append-only |
@@ -1192,7 +1228,7 @@ Phase 1 milestones name the KDs each closes (ADR-300).
 
 ## 4. Waiting on the user
 
-**Nothing blocks the next task (1.1.10, people's permissions and viewers).**
+**Nothing blocks the next task (1.1.11, the example world's setup as a story).**
 What was answered or done moved word for word to `DECISIONS.md`'s scratchpad, "Moved from
 SUMMARY.md, 2026-10-02" (ADR-307). Yours whenever you like; none of it blocks building (ADR-230):
 
@@ -1202,8 +1238,12 @@ SUMMARY.md, 2026-10-02" (ADR-307). Yours whenever you like; none of it blocks bu
   `spec/acceptance/01-setup.md`, are decided as agent defaults by the tasks named there.
   `spec/acceptance/` is a draft for you to approve (`01-setup.md` you marked partially approved;
   `02-people-and-devices.md`, 74 scenarios, is new, ADR-314: its last table lists ten points
-  nothing settles, six of them decided as agent defaults by task 1.1.10, among them **what a
-  contractor user sees of a project's setup** and **how a permission is taken away**).
+  nothing settles; **six were decided as agent defaults by task 1.1.10 (ADR-315), yours to
+  overturn: a contractor user sees none of a project's setup** (only its name and dates; say so
+  and it sees its pay items, rates or sites), **no viewer sees a client's or a contractor's contact
+  details or a client's notes, a permission or a viewer's project is taken away by archiving, the
+  database refuses a contractor user with no contractor, grants are audited in the security
+  domain, and the table is `user_viewer_project`**).
 - **Approval:** the ADR-240 notes in ARCHITECTURE §7–§10 (the approved sections now say "enrol once,
   assignment daily").
 - **The REQ moves (ADR-287):** REQ-003, 015, 017 now sit in Phase 1 and REQ-004, 006, 016 in Phase

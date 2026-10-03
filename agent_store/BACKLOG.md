@@ -34,7 +34,8 @@ review, QC, invoice lock and batches → the golden mission. Each milestone buil
   stub: `SELECT guard_table('<table>', '<CONFIGURATION|MARK|EVIDENCE|DERIVED>', '<domain>'[, …]);`
   and any check the model needs (ADR-113, 271) → applied by `pnpm installer` → the exact lists in
   `grants.test.ts` and `catalog.test.ts` extended → **a row-level-security decision** for each table
-  a viewer sees (C18, C22) → the example world (`packages/db/test/support/example-world.ts`)
+  a viewer sees (C18, C22; since ADR-315 one line, `SELECT guard_viewer(…)`, and a row in
+  `test/support/viewers.ts`, C59) → the example world (`packages/db/test/support/example-world.ts`)
   extended → tests named by scenario ID → each new guard's removal shown caught on a throw-away
   copy (as ADR-272). `prisma migrate dev` wants a terminal when a migration carries a warning
   (`adms-verify`, "The schema").
@@ -165,7 +166,7 @@ by ADR-303 (named here by ADR-307). Closes the behaviour of KD-14, 16, 17, 18, 2
   (ADR-301), and the rules a pay item's "Pays when" writes. **Done when:** AC-01-60…67 and 81 pass. *REQ-125a; REQ-131c's storage (its rates: 1.6.3).*
 - [x] **1.1.9** ✅ **done 2026-10-03 (ADR-314):** 74 scenarios; 28 are what Phase 0 built (and ADR-286, 308, 309), each naming the test that proves it, seen passing that day (six test files, 136 tests; the story `dispatch-monday`, 18 checks), and AC-02-38 and 49 in part; seven (and two in part) are 1.1.10's; 28 are for Phases 2–4 only; ten points nothing settles are listed for the task that decides each. `spec/acceptance/02-people-and-devices.md`, from Part 2: what Phase 0 built is
   marked as built; what waits for Phases 2–4 names its phase.
-- [ ] **1.1.10** **People's permissions and viewers.** `UserPermission`, `ViewerProject`,
+- [x] **1.1.10** ✅ **done 2026-10-03 (ADR-315):** `UserPermission`, `ViewerProject` (table `user_viewer_project`), `User.viewerKind`, `email`, `phone`, `Device.keyRevokedAt` (two migrations, `permissions_and_viewers` and `guard_permissions_and_viewers`: 39 in all; 55 models); the viewer of a request read from their own record (`adms.viewer_id`); `guard_viewer`, one line per table, on 41 setup tables and lists, with `viewer_project_setup` for the project's settings; a contractor user sees no setup, no viewer a contact or a person. AC-02-05, 06, 09, 10, 11, 69 and 70 pass at the database, with the database's part of 61 and 71; the 28 Phase 0 scenarios carry their IDs; `guard_gaps()` empty; 35 loosenings each caught (one only after a test gained its case: a project written against a person who is no viewer); chain 43 files, 859 tests. *C54 done; C18's first part done; C47's column built.* **People's permissions and viewers.** `UserPermission`, `ViewerProject`,
   `User.viewerKind` and contact fields, `Device.keyRevokedAt` (its refusal is Phase 2's, C47);
   row-level security for every setup table a viewer sees (C18). **Done when:** the Part 2 scenarios
   marked for the database pass (AC-02-05, 06, 09, 10, 11, 69, 70, and the database's part of 61 and
@@ -677,7 +678,7 @@ delete one.
 
 **For `spec/DATA-MODEL.md` (0.2b.2) and Phase 1** — *2026-10-01: the draft (ADR-284) answers C16–C19, C29, C36 and C42–C44 on paper (its §12); each stays here until Phase 1 builds it.*
 *2026-10-01 (ADR-300), Phase 1 open: the task that picks each up: C36 → 1.1.5 (the definition), 1.3.6 (the answers); C42 → 1.1.5, 1.1.6, 1.1.7; C52 → 1.1.7 (setup) ✅, 1.5.6 (the flags); C18 → 1.1.10, 1.7.1; C43 → 1.3.2; C44 → 1.3.3; C16 → 1.5.2, 1.7.1; C50 → 1.5.8; C20 → 1.5.9; C17 → 1.7.1, 1.8.2; C19 → 1.8.2; C29, C30 → 1.9.1; C51's two scenarios → 1.9.2; C28 → 1.9.3; C31's stand-in → 1.4.2. Filed since (ADR-303, 305; added here by ADR-307): C53 →
-1.1.11, 1.5.5 (and Phase 2); C54 → 1.1.10; C55 → 1.5.5, 1.5.7; C56 → 1.2.3. Filed by ADR-311: C57 → 1.1.11, 1.5.6. Filed by ADR-313: C58 → 1.1.11, 1.6.1, 1.6.4.*
+1.1.11, 1.5.5 (and Phase 2); C54 → 1.1.10; C55 → 1.5.5, 1.5.7; C56 → 1.2.3. Filed by ADR-311: C57 → 1.1.11, 1.5.6. Filed by ADR-313: C58 → 1.1.11, 1.6.1, 1.6.4. Filed by ADR-315: C59 → every schema task, 1.2.3, 1.3.3, 1.7.1, Phase 2.*
 - **C36. The storage shape of the firm's added fields** (ADR-278, at the user's word): a versioned
   form definition per record kind, one JSONB answers column per record keyed by field ID plus the
   definition version, a schema generated from the definition in `packages/contracts`, Prisma's `Json`
@@ -756,7 +757,7 @@ delete one.
   **Phase 2, with the API's configuration:** decide whether a value of the same name in a service's
   own env overrides the built-in default for the installation, and have `installer:check` report
   the values in force.
-- **C54. A viewer and the project's setup** (ADR-303 (5)). Task 1.1.10: what a client user, a
+- **C54. ✅ done (ADR-315): a client user and an auditor see the whole setup, a contractor user none; the table is `user_viewer_project`.** ~~A viewer and the project's setup~~ (ADR-303 (5)). Task 1.1.10: what a client user, a
   contractor user and an auditor see of `client`, `declaration_event`, `project_kind_of_work` and
   the project's new columns (the viewer view shows five columns today), each with its
   row-level-security decision. **The model `ViewerProject` can't take the table name
@@ -798,6 +799,19 @@ delete one.
   added twice by one rule is flagged like two rules adding it. **Task 1.6.4** (the setup check):
   decide what an archived pay item, contract or form does to a rule that names it (`spec/RULES.md`
   §7 speaks only of a criterion's value), and list it.
+- **C59. What the viewers' build left for later** (ADR-315 (1), (2), (3), (8)). **Every later
+  schema task:** a new table a client user or an auditor should see gets `SELECT guard_viewer(…)`
+  in its guard migration and a row in `packages/db/test/support/viewers.ts`; one nobody should see
+  goes in that file's `unseenTables`; a viewed table that gains a column reruns `guard_viewer`.
+  **Task 1.2.3** (certifications): a certification's viewer sight, without the driver's licence
+  number (AC-02-71's other half). **Task 1.3.3** (field events in full): who recorded a ticket, by
+  name and Monitor ID, for a client user and an auditor (no viewer reads `user` today), and the
+  ticket's viewer view in its real shape. **Tasks 1.2.3 and 1.7.1** (C18): what a contractor user
+  needs of setup to read its own tickets and transactions (a debris type's, a site's, a pay item's
+  name), and a prime's sight of its subs' through `project_contractor`; it sees no setup today.
+  **Phase 2:** the API states `adms.viewer_id` on every `adms_readonly` request (C22); it reads a
+  manager/analyst's permissions that aren't archived, and only on a manager/analyst (the database
+  doesn't tie a grant to a role); it never gives a viewer a project or a kind the admin didn't.
 - **C20.** The worker's one transaction per group, one run per project, and flagged-and-skipped groups
   (REQ-015, KD-55) use one `$write` per group (ADR-273 (3)).
 
@@ -806,7 +820,8 @@ delete one.
   password hash or an authenticator secret on `user` is named on its audit trigger, so it's kept out
   of the audit log as the master passcode's hash is (ADR-281 (7)).
 - **C22. Nothing states the viewer yet.** `$write` states the actor; the read-only portal must state
-  `adms.viewer_project_ids` and `adms.viewer_contractor_id` on every `adms_readonly` request, from one
+  **`adms.viewer_id`, the viewer's own id** (since ADR-315; no longer their projects and contractor,
+  which the database now reads from their record) on every `adms_readonly` request, from one
   shared place like `$write` (ADR-270 (7)). Unstated, a viewer sees nothing.
 - **C31. The sync stand-in goes** (ADR-275 (3)): `packages/scenarios/src/intake.ts` writes straight through `$write`; once the API's sync endpoint exists, stories sync through it (duplicates, quarantine, the idempotency ledger). The UUIDv7 maker (`packages/scenarios/src/ids.ts`) moves to `packages/domain` when the field app needs it, so phone and harness share one.
 - **C45. Who the API states for an act under the master passcode** (ADR-281 (11)): enrolment, creating
@@ -820,7 +835,7 @@ delete one.
   `FieldEvent.setupVersion` is the sync's too.
 - **C47. A device key's revocation** (ARCHITECTURE §7.4; ADR-281 (11)): once a lost or retired phone
   has synced, been confirmed and wiped, its key is revoked and the server refuses it; `Device` has no
-  column for that yet. The same goes for changing the master passcode from the back office (a new
+  column for that yet (**built, ADR-315: `keyRevokedAt`, only on a phone out of service; the refusal is still Phase 2's**). The same goes for changing the master passcode from the back office (a new
   `master_passcode` version) and each phone's `masterPasscodeVersion` moving at its next sync.
 - **C23.** `ADMS_TOKEN_SIGNING_SECRET`'s use is Phase 2's (ADR-266); OpenAPI from the Zod schemas comes
   with the API (ADR-261); the server apps add `@types/node` when they get real code (ADR-256).
