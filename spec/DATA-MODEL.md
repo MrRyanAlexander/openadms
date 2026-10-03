@@ -15,8 +15,8 @@
 > **What exists today.** Thirteen provisional models are built (ADR-268, 281), plus, in full, the
 > firm's eighteen lists of §2.3 (ADR-302), the client, the declaration event and the project of
 > §2.1 and §3 (ADR-303), the contractor, its place on a project and the contract (ADR-305), the
-> forms and what sits on them (ADR-308), and pay items with their rates and steps (ADR-309). §10
-> says, model by model, what Phase 1 changes.
+> forms and what sits on them (ADR-308), pay items with their rates and steps (ADR-309), and sites
+> and the project map (ADR-311). §10 says, model by model, what Phase 1 changes.
 
 **How to read a record.** Every record on this page is laid out the same way (ADR-289): its name,
 one line saying what kind of record it is (§1) and what it is for, then one table of its fields.
@@ -70,7 +70,7 @@ one line saying what kind of record it is (§1) and what it is for, then one tab
 | **Leaving** | Configuration is archived (`archivedAt`), a project closed (`closedAt`), a ticket voided. No row is ever deleted, except a `Transaction` by regeneration (copied to the audit log first) | ADR-085 |
 | **Free text** | Every record a person makes takes `notes` | ADR-160 |
 | **The firm's own fields** | One `answers` JSONB column plus the `formDefinitionId` it answered (§4.3). **Nothing the engine, a rule or a flag reads is ever in JSONB** | ADR-278 |
-| **Shapes on a map** | GeoJSON geometry in longitude and latitude, with its bounding box: fixed-shape data the engine reads, as ARCHITECTURE §3 approved | ADR-141 |
+| **Shapes on a map** | GeoJSON geometry in longitude and latitude, with its bounding box: fixed-shape data the engine reads, as ARCHITECTURE §3 approved. Built (ADR-311): a `Polygon` or `MultiPolygon` geometry kept as JSONB, checked to hold its type and coordinates; its bounding box four `decimal(38,8)` columns (`westLongitude`, `southLatitude`, `eastLongitude`, `northLatitude`). Phase 1 takes shapes in as GeoJSON; a shapefile, KML or Esri layer is REQ-124b's import (Phase 4) | ADR-141, 311 |
 
 **Four kinds of record** (`adms-data-model` §3.1b), each guarded in the database by its kind
 (`guard_table`, ADR-271), plus the marks people set:
@@ -419,7 +419,7 @@ be added by a Load rule and by a Haul-out rule. A unit rate pay item is known by
 | **payableTypeId** | → `PayableType` | The work it prices; every pay item has one (ADR-221) |
 | **unit** | enum `BillingUnit` | `CY` · `TN` · `EA` · `LB` · `HR` · `CREW_DAY` · `TBN`; `TN` or `LB` means the load is weighed (ADR-223) |
 | kindOfWorkId | → `KindOfWork` | Required on a unit rate pay item (ADR-127) |
-| bandFrom, bandTo | decimal(8,1) | The size band, in inches, both ends included; either may be open ("24 in and up"). Never below nought, the from no more than the to (a check). Bands of one payable type never overlap: setup refuses, by the domain's `SizeBands`, and warns of a gap (ADR-217, 309) |
+| bandFrom, bandTo | decimal(8,1) | The size band, in inches, both ends included; either may be open ("24 in and up"). Never below nought, the from no more than the to (a check). Bands of one payable type never overlap: setup refuses, by the domain's `SizeBands`, and warns of a gap (ADR-217, 309); the database refuses an overlap too, by an exclusion constraint (ADR-310) |
 | **countIsAlwaysOne**, **gpsRequired**, **measurementRequired**, **decimalsAllowed**, **photosRequired**, **monitorMayMarkIneligible**, **quantityFromCarriedTickets** | bool | The capture settings (ADR-157, 192, 207, 210); no default, so every writer states each (ADR-303, 309) |
 | crewTimeConversion | enum `CrewTimeConversion` | `PER_HOUR` · `PER_DAY_EXACT` · `PER_DAY_STEPS` (ADR-087). Set on an `HR` pay item (`PER_HOUR`) or a `CREW_DAY` one (either day conversion), and on no other (a check, ADR-309) |
 | crewDayHours | decimal(4,2) | The day length on a `PER_DAY_EXACT` pay item, and only there (a check): more than 0, at most 24. A new one starts at the policy value `CREW_DAY_HOURS`, 12 (ADR-087, 309) |
@@ -527,7 +527,7 @@ No row = no rate for that prime (a $0 line, flagged, ADR-212). A rate's history 
 
 #### `DisposalSite`
 
-*Configuration, provisional shape built.* Entered on each project that uses it (ADR-145).
+*Configuration, built (ADR-311).* Entered on each project that uses it (ADR-145).
 
 | Field | Type | Notes |
 |---|---|---|
@@ -536,65 +536,93 @@ No row = no rate for that prime (a $0 line, flagged, ADR-212). A rate's history 
 | **name** | text | "Bayline County Landfill" |
 | shortCode | text | `BCL`: what setup offers in a suggested pay item code (*agent default*) |
 | **siteTypeId** | → `SiteType` | What *Disposal site type* tests |
-| **takesLoads**, **haulOutsLeaveHere**, **chargesTippingFee**, **ineligibleSite** | bool | The four site facts (ADR-215). `haulOutsLeaveHere` only on a site whose type is the built-in TDSR/DMS: setup refuses it elsewhere (ADR-298, *agent default*; whether the database refuses it too is settled with the site's real model, C52) |
+| siteTypeKey | text | The type's built-in key, again, where it has one (`TDSR`), held to the type's own by a two-column foreign key to `site_type (id, key)` (ADR-311, *agent default*) |
+| **takesLoads**, **haulOutsLeaveHere**, **chargesTippingFee**, **ineligibleSite** | bool | The four site facts (ADR-215); no default. `haulOutsLeaveHere` only on a site whose type is the built-in TDSR/DMS: setup refuses it elsewhere, and so does the database, by a check on `siteTypeKey` (ADR-298; C52 settled by ADR-311) |
 | permitNumber | text | Empty = "permit outstanding", flagged, never blocking (ADR-111) |
-| **latitude**, **longitude** | decimal(38,8) | Entered with the site; where mileage ends (ADR-208) |
+| **latitude**, **longitude** | decimal(38,8) | Entered with the site; where mileage ends (ADR-208); on the earth (a check) |
 | **activationDate** | date | ADR-173 |
-| closeDate | date | |
-| tippingFeePayItemId | → `PayItem` | The link that tells a fee line (ADR-222) |
+| closeDate | date | Never before the activation date (a check) |
 | **createdAt** | instant | |
 | archivedAt | instant | |
 
+*Changed 2026-10-02 (ADR-311; KD-67), **confirmed by the user (ADR-312)**:* the single `tippingFeePayItemId` this page had is
+`DisposalSiteTippingFee` below, so a site keeps every fee pay item written from it (ADR-222's
+"Service(s)": per CY and per ton, ADR-202).
+
 #### `DisposalSiteLabel`
 
-*Configuration.* A site's own labels.
+*Configuration, built (ADR-311).* A site's own labels; once each, archived and put back.
 
 | Field | Type | Notes |
 |---|---|---|
+| **id** | uuid | |
 | **siteId** | → `DisposalSite` | |
 | **siteLabelId** | → `SiteLabel` | |
+| **createdAt** | instant | |
+| archivedAt | instant | |
+
+#### `DisposalSiteTippingFee`
+
+*Configuration, built (ADR-311).* A tipping fee pay item written from a site that charges one: the
+link that tells a fee line (ADR-222). Several per site; once per site and pay item; audited in
+billing.
+
+| Field | Type | Notes |
+|---|---|---|
+| **id** | uuid | |
+| **projectId** | → `Project` | Holds the site and the pay item to one project (two-column foreign keys) |
+| **siteId** | → `DisposalSite` (same project) | |
+| **payItemId** | → `PayItem` (same project) | |
+| **createdAt** | instant | |
+| archivedAt | instant | |
 
 #### `SiteAreaVersion`
 
-*Configuration.* A site's own shape (the advanced area); dated and kept. A site with none uses the
-project's circle (ADR-142, 144).
+*Configuration, built (ADR-311).* A site's own shape (the advanced area); dated and kept, **never
+edited or deleted**. A site with none uses the project's circle (ADR-142, 144).
 
 | Field | Type | Notes |
 |---|---|---|
+| **id** | uuid | |
 | **siteId** | → `DisposalSite` | |
-| **geometry** | geometry | |
-| **boundingBox** | *open* | The shape's bounding box (§1) |
+| **version** | int | From 1; once per site |
+| **geometry** | geometry | A Polygon or MultiPolygon (§1) |
+| **westLongitude**, **southLatitude**, **eastLongitude**, **northLatitude** | decimal(38,8) | The shape's bounding box (§1) |
 | **source** | enum `SiteAreaSource` | `DRAWN` · `UPLOAD` |
 | **createdById** | → `User` | |
-| **effectiveFrom** | *open* | |
+| **effectiveFrom** | instant | When it was saved: the site's area until its next version |
 
 #### `MapVersion`
 
-*Configuration.* A project's boundary and zones as loaded. Never edited or deleted (ADR-135, 141).
+*Configuration, built (ADR-311).* A project's boundary and zones as loaded. **Never edited or
+deleted** (ADR-135, 141).
 
 | Field | Type | Notes |
 |---|---|---|
+| **id** | uuid | |
 | **projectId** | → `Project` | |
-| **version** | int | |
+| **version** | int | From 1; once per project |
 | **source** | enum `MapSource` | `UPLOAD` · `ESRI_LAYER` · `DRAWN` |
-| sourceName | text | |
+| sourceName | text | The file's name, or the Esri layer's address |
 | zoneNameField | text | |
-| **boundary** | geometry | |
-| **boundingBox** | *open* | The shape's bounding box (§1) |
+| **boundary** | geometry | A Polygon or MultiPolygon (§1) |
+| **westLongitude**, **southLatitude**, **eastLongitude**, **northLatitude** | decimal(38,8) | The shape's bounding box (§1) |
 | uploadedFileKey | text | |
 | **loadedById** | → `User` | |
-| **loadedAt** | instant | |
+| **loadedAt** | instant | When it was saved |
 
 #### `Zone`
 
-*Configuration.* One zone of a map version (ADR-135, 141).
+*Configuration, built (ADR-311).* One zone of a map version (ADR-135, 141). **Never edited or
+deleted, and written only with its version**, in the same piece of work.
 
 | Field | Type | Notes |
 |---|---|---|
+| **id** | uuid | |
 | **mapVersionId** | → `MapVersion` | |
-| **name** | text | |
-| **geometry** | geometry | |
-| **boundingBox** | *open* | The shape's bounding box (§1) |
+| **name** | text | Once per version: features of one name are one zone, a MultiPolygon |
+| **geometry** | geometry | A Polygon or MultiPolygon (§1) |
+| **westLongitude**, **southLatitude**, **eastLongitude**, **northLatitude** | decimal(38,8) | The shape's bounding box (§1) |
 
 ### Numbering
 
@@ -1343,8 +1371,11 @@ Never relaxed to pass a test (ARCHITECTURE §5.4). ✅ = built today.
 | A sub names its prime and a prime names none; a prime's row, and only a prime's, carries its own contractor as `asPrimeId`; a merged contractor is merged into another record and is archived (ADR-305) | ✅ checks |
 | The Monitor ID is issued, well-formed, unique; the system actor is one fixed row and never a person | ✅ |
 | An assignment's site, a field event's site and an assignment's pay items are their own project's | two-column foreign keys (✅ for the first and third) |
-| Number blocks of one series never overlap | an exclusion constraint (needs `btree_gist`: its own ADR, C43) |
-| Size bands of one payable type never overlap | setup, before it saves, by `packages/domain`'s `SizeBands`, which also warns of a gap (ADR-217, 309); the worker flags what slips through |
+| Number blocks of one series never overlap | an exclusion constraint (`btree_gist` is in since ADR-310; C43, task 1.3.2) |
+| Size bands of one payable type never overlap | ✅ an exclusion constraint on the project, the payable type and the band, archived pay items left out (ADR-310); setup says so first, by `packages/domain`'s `SizeBands`, which also warns of a gap (ADR-217, 309) |
+| A site's GPS is on the earth; it closes no earlier than it opens; *Haul-outs leave here* only on a TDSR/DMS site, whose type can't change while it's marked (ADR-298, 311) | ✅ checks, and a two-column foreign key to the type's key |
+| A site's tipping fee pay item is its own project's; a label and a fee once per site (ADR-311) | ✅ two-column foreign keys, unique keys |
+| A site's shape, a map version and its zones are never edited; a zone is written only with its version; versions count from 1, once each; every shape a Polygon or MultiPolygon with its bounding box on the earth (ADR-141, 144, 311) | ✅ no update grant and `refuse_edit()`, a trigger, unique keys, checks |
 | Nothing is deleted; audit is append-only; every write states its actor; a transaction's delete is copied first and refused when locked; viewers see only their own projects | ✅ the guard migrations (ADR-270…276) |
 
 ---
@@ -1406,7 +1437,7 @@ A new value in any of them is a code change with an ADR (`spec/LISTS.md` Group 2
 | `Contractor` | ✅ built 2026-10-02 (ADR-305, 306): its kind, contact and merge link, with `ProjectContractor` and `Contract` |
 | `User` | Gains viewer kind, contact, permissions and viewer projects; sign-in's columns in Phase 2 |
 | `Device`, `MasterPasscode`, `NumberBlock` | As built; a key's revocation; the overlap refusal |
-| `DisposalSite` | Gains its type, facts, permit, GPS, dates, labels, area versions, tipping fee link |
+| `DisposalSite` | ✅ built 2026-10-02 (ADR-311): its type (and the type's key), facts, permit, GPS, dates, with `DisposalSiteLabel`, `DisposalSiteTippingFee`, `SiteAreaVersion`, and the project map, `MapVersion` and `Zone` |
 | `Assignment` | ✅ `formDocumentTypes` built (ADR-308); its pay items (ADR-286), held to unit rate ones (ADR-309) |
 | `PayItem` | ✅ built 2026-10-02 (ADR-309): every field of §3, with `PayItemRate` and `PayItemCrewDayStep`; `AssignmentPayItem` gains the pay item's kind of work |
 | `FieldEvent` | Gains the shared and kind-specific columns of §4.1; `deviceId`, `assignmentId`, `setupVersion` become optional for a back-office-created record |
@@ -1608,6 +1639,9 @@ user approved the page on 2026-10-01 without changing one, so all sixteen stand.
 | 23 | **A pay item's rate has its own id, project, created and archived times**; a prime's rate is taken off by archiving and put back by clearing it, never a second row (ADR-309) | §1's *Keys* and *Leaving* for every configuration record; the project lets the prime be held by ADR-305's key |
 | 24 | **A crew day's step is hours to the quarter (`decimal(4,2)`) within one day, its quantity `decimal(14,4)`, its from hours once per pay item** (ADR-309) | The hours are captured to the quarter (ADR-084); a quantity is §1's quantity |
 | 25 | **An assignment's pay item repeats the pay item's kind of work** (ADR-309) | So the database itself refuses a pay item that isn't a unit rate one (C42), by a foreign key, no trigger (as ADR-305 and 308) |
+| 26 | **A site repeats its type's built-in key** (`siteTypeKey`), so the database refuses *Haul-outs leave here* off a TDSR/DMS site (ADR-311) | C52 asked whether the database refuses it too; a foreign key and a check, no trigger (as ADR-305, 308, 309) |
+| 27 | **A site's tipping fee pay items are a link table**, several per site (ADR-311; KD-67; **confirmed by the user, ADR-312**, so no longer a default to overturn) | ADR-222's "Service(s)", ADR-202's per CY and per ton; one link would miss a per-ton fee |
+| 28 | **A bounding box is four `decimal(38,8)` columns**; a shape's version has its own number; a zone's name is once per version (ADR-311) | The box is read like coordinates (§1); the number tells versions apart in the review; a zone criterion picks by name |
 
 **Carried items this page answers:**
 
@@ -1619,8 +1653,8 @@ user approved the page on 2026-10-01 without changing one, so all sixteen stand.
 | C19 | A person's void |
 | C29 | Times the database stamps stay its own; a story asserts order, not those times |
 | C36 | The firm's added fields |
-| C42 | The assignment's pay items and forms; the real `DisposalSite`; a contractor's kind |
-| C43 | The series, control ranges, the ROE series; the overlap refusal still needs its ADR |
+| C42 | The assignment's pay items and forms; the real `DisposalSite` (built, ADR-311); a contractor's kind |
+| C43 | The series, control ranges, the ROE series; the overlap refusal (its extension is in, ADR-310) |
 | C44 | Back-office-created events |
 
 **Not on this page:** a rate history table (the audit log is the only history, ADR-090); an invoice
