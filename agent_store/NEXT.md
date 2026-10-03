@@ -68,7 +68,7 @@ question rounds) moved word for word to `DECISIONS.md`'s scratchpad, "Moved from
 2026-10-02"; `ROADMAP.md` §3a keeps the table.
 
 **Still live from the spec track:** `spec/acceptance/` is 1 of 9 files (`01-setup.md`: 82
-scenarios, 26 passing); each other file is the first task of the milestone that builds its part
+scenarios, 45 passing and AC-01-27 and 48 in part, after 1.1.6); each other file is the first task of the milestone that builds its part
 (ADR-300).
 
 ---
@@ -80,7 +80,7 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-02: Phase 1 is open, five tasks done)
+### Where things stand (2026-10-02: Phase 1 is open, seven tasks done)
 - **Phase 1 (data core and engine) is the active phase**, opened by the user on 2026-10-01
   (ADR-299). Its plan is `BACKLOG.md`'s ten milestones and 47 tasks (ADR-300): setup records →
   certifications and capacity → tickets and numbers → sync intake → reconciliation → the rule engine
@@ -98,14 +98,24 @@ of `DECISIONS.md`.
   the user's word the same day, ADR-306)**: a contractor's kind, contact details and merge link, `ProjectContractor` (one place per project: prime, tier 1 or tier 2 under one of
   the project's primes) and `Contract` (name, prime, optional link); **the database holds "the
   prime" to one of the project's primes** through `asPrimeId` on the prime's row and two-column
-  foreign keys, with no trigger.
+  foreign keys, with no trigger; and **1.1.5, forms, the debris types on them, field tags and the
+  firm's own fields (2026-10-02, ADR-308)**: `Form` (one per document type on a project),
+  `FormDebrisType` (only on a load or haul-out form), `FormDefinition` (per project form, only on an
+  ROE, survey, incident or drop-off log form, never edited by anyone: `refuse_edit`),
+  `Assignment.formDocumentTypes`; `DebrisTypeEntries` in `packages/domain`, `formDefinitionFields` in
+  `packages/contracts`; KD-66 closed; and **1.1.6, pay items in full (2026-10-02, ADR-309)**:
+  `PayItem`'s every field (payable type, Unit of Measure, kind of work, size band, capture settings,
+  crew time's conversion and day length), `PayItemRate` (one per prime, held to the project's
+  primes) and `PayItemCrewDayStep`; an assignment names only unit rate pay items (C42);
+  `SizeBands` in `packages/domain` (an overlap refused, a gap warned) and the policy value
+  `CREW_DAY_HOURS=12`.
   **Corrected by the user on
   2026-10-02 (ADR-301):** a pay item's code is unique on its project (ADR-147 had read their answer
   backwards), a pay item is its code and its description (no separate name, no "line number"), and
   an exact duplicate of a rule is refused before it is saved; the provisional `pay_item` table and
   its test follow (the twentieth migration). **The first product tables
-  exist** (the lists, the client, the declaration event, the project, contractors on a project and
-  contracts; 38 models, 27 migrations);
+  exist** (the lists, the client, the declaration event, the project, contractors on a project,
+  contracts, forms and pay items; 43 models, 31 migrations);
   the other models are still Phase 0's provisional ones, and `packages/domain` holds the built-in
   keys, the policy values and a new project's settings.
 - **Phase 0 (Foundation) is done** (2026-10-01, ADR-281…288): the monorepo, the local HTTPS stack
@@ -259,23 +269,39 @@ rounds of questions.
 **Phase 1 is open (ADR-299).** Its plan is `BACKLOG.md`, "Active — Phase 1" (ADR-300): read its
 "Brief for every Phase 1 task" first. **One task per response.** Done: 1.0.1, 1.1.1, 1.1.2 (the
 firm's lists, ADR-302), 1.1.3 (the client, the declaration event and the project in full,
-ADR-303), **1.1.4 (contractors on a project, and contracts, ADR-305, 306)**; and the user's correction
+ADR-303), 1.1.4 (contractors on a project, and contracts, ADR-305, 306), 1.1.5 (forms, debris
+types, field tags, the firm's own fields, ADR-308), **1.1.6 (pay items in full, ADR-309)**; and the
+user's correction
 of 2026-10-02 (ADR-301: a pay item's code is unique, it has a description and no name, a duplicate
 rule is refused).
 
-👉 **Task 1.1.5, forms, debris types, field tags, the firm's own fields** (`BACKLOG.md`, Milestone
-1.1). `Form` (`FormDocumentType`: `LOAD` · `HAUL_OUT` · `UNIT_RATE` · `CERTIFICATION` · `ROE` ·
-`SURVEY` · `INCIDENT` · `DROP_OFF_LOG`; at most one form of each on a project), `FormDebrisType` (a
-debris type's entry on a form, named as the contract names the work, with *Reduced*, a reduction
-method and *Hidden on phones*; taken off by archiving), `FormDefinition` (a version of the firm's
-added fields: never edited or deleted, guarded like `MasterPasscode`), the project's `FieldTag` list
-in use, and `Assignment.formDocumentTypes` (C42). **Read first:** `spec/DATA-MODEL.md` §3
-"Contracts and forms" (`Form`, `FormDebrisType`, `FormDefinition`) and §4.3, `spec/parts/01-setup.md`
-step 5, `spec/acceptance/01-setup.md` section C, `adms-data-model` §3.1c and §3.2, ADR-160, 211,
-214, 216, 218, 278, the register's C36 and C42, and **KD-66** (six points these leave open, each with a recommended reading for 1.1.5's ADR). **Done when:** AC-01-22…30 pass, named by
-their IDs (25 and 26 at the domain: the unreduced-debris warning, and what a phone's lists leave
-out); `guard_gaps()` is empty; each new guard's removal is shown caught; the chain is green with
-real counts. *REQ-101, 105a; C36's definition.* Then 1.1.6: pay items in full.
+👉 **Task 1.1.7, disposal sites in full, and the project map** (`BACKLOG.md`, Milestone 1.1).
+`DisposalSite`'s type, four facts, permit, GPS, activation and close dates, short code and tipping
+fee link (`tippingFeePayItemId`, one of the site's own project's pay items: `pay_item (project_id,
+id)` is the key to point at); `DisposalSiteLabel`, `SiteAreaVersion`; `MapVersion` and `Zone`
+(never edited or deleted: `refuse_edit()`, ADR-308, may be reused); *Haul-outs leave here* only on a
+TDSR/DMS site (C52: the ADR says whether the database refuses it too). The provisional
+`DisposalSite` (project and name) changes shape: the example world, both stories and every test that
+writes a site follow. The ADR settles the formats a shape is taken in (`01-setup.md`, point 5).
+**Read first:** `spec/DATA-MODEL.md` §3 "Sites and the map", `spec/parts/01-setup.md` step 7,
+`spec/acceptance/01-setup.md` section F (AC-01-52…59), ARCHITECTURE §3 (shapes, GeoJSON), the
+golden mission's P1 sites, ADR-111, 136, 141, 142, 145, 173, 190, 208, 215, 222, 226, 227, and the
+register's C42 (the real site) and C52. **Done when:** AC-01-52…59 pass, named by their IDs (54 at
+the domain); `guard_gaps()` is empty; each new guard's removal is shown caught; the chain is green
+with real counts. *REQ-104, 105q; REQ-105n's site (its flag: 1.5.6); C42's site.* Then 1.1.8:
+rules.
+
+**Pay items** (ADR-309): the example world's P1 has six of the golden mission's pay items with
+Coastline's rates (`world.payItems`, `world.rates`, `world.payableTypes`, `world.kindsOfWork`); a
+test enters another with `payItemLike(world, …)` and `insertOf`, since no capture setting has a
+database default. An assignment's pay item repeats its `kindOfWorkId`.
+
+**Forms** (ADR-308): a row that belongs only on some kinds of form (`FormDebrisType` on a load or
+haul-out form, `FormDefinition` on an ROE, survey, incident or drop-off log form) repeats its form's
+`documentType`, held by a check and a two-column foreign key to `form (id, document_type)`. A
+version that is never edited uses `refuse_edit()` (map versions and zones, 1.1.7, may reuse it). The
+example world's P1 has a load form (Vegetative, C&D), a haul-out form and an incident form
+(`world.forms`, `world.formDebrisTypes`).
 
 **"The prime" is one key** (ADR-305): a table that names a prime (`Contract` today; a pay item's
 rate in 1.1.6, a certification in 1.2.3) holds it with a two-column foreign key (project, prime) to
@@ -296,7 +322,7 @@ then `SELECT guard_list('<table>', '<domain>');` in its guard migration; a new b
 `packages/domain`'s `builtInKeys` first, with an ADR (ADR-302).
 
 Start every command with `eval "$(fnm env --shell zsh)"`; the checks are **`adms-verify`** (the chain
-is 32 files, 604 tests; twenty-seven migrations; `pnpm scenarios` runs two stories, 16 and 17 checks),
+is 37 files, 687 tests; thirty-one migrations; `pnpm scenarios` runs two stories, 16 and 18 checks),
 with **`pnpm security`** (7 passed, 0 failed, ADR-291). The database tests, the map servers' tests and
 the stories need `pnpm local:up` first; stop it at close-out (ADR-277). A schema change goes through
 Prisma (`prisma migrate dev --create-only`), a guard into its own empty stub (ADR-113); **try a guard

@@ -1,13 +1,13 @@
 # Open ADMS — Current decisions and gaps, at a glance
 
 **The present tense of the project on one page.** `DECISIONS.md` and `DEVIATIONS.md` are the full
-history, with 306 ADRs and 65 KDs, many superseded. This page says what is true **now** and which
+history, with 308 ADRs and 66 KDs, many superseded. This page says what is true **now** and which
 entries to cite. The reasons live in the ADRs and the skills.
 
 - **Keep it current:** when you add, amend or supersede an ADR, or open or close a KD, update this
   page **in the same response** (`adms-decisions`).
 - **If this page and a log entry disagree,** the newest ADR wins: fix this page and say so.
-- Updated 2026-10-02, through ADR-306 / KD-65. Rounds 13–26 are answered (ADR-145…228).
+- Updated 2026-10-02, through ADR-309 / KD-66. Rounds 13–26 are answered (ADR-145…228).
   **Phase 1 (data core and engine, rebuilt) is open, at the user's word (ADR-299).** Its plan is
   `BACKLOG.md`'s ten milestones and 47 tasks, one task per response, each milestone opening with
   its part's acceptance scenarios in `spec/acceptance/` (ADR-300). Done: the plan,
@@ -17,9 +17,15 @@ entries to cite. The reasons live in the ADRs and the skills.
   settings start in `packages/domain` from policy values, whose built-in defaults are
   `packages/domain/policy.env`) and **1.1.4, contractors on a project, and contracts** (ADR-305,
   306: a contractor's kind, contact details and merge link, its one place on a project, the
-  contract; the database holds "the prime" to one of the project's primes). 26 of the 82 scenarios
-  pass. **Next: task 1.1.5,
-  forms, debris types, field tags, the firm's own fields.**
+  contract; the database holds "the prime" to one of the project's primes) and **1.1.5, forms, the
+  debris types on them, field tags and the firm's own fields** (ADR-308: at most one form of each
+  document type on a project; debris types only on a load or haul-out form; the firm's own fields
+  only on an ROE, survey, incident or drop-off log form, versioned per form, never edited; KD-66
+  closed) and **1.1.6, pay items in full** (ADR-309: payable type, Unit of Measure, kind of work,
+  size band, capture settings, crew time's conversion; a rate for each of the project's primes; a
+  crew day's steps; an assignment names only unit rate pay items; size bands checked in
+  `packages/domain`). 45 of the 82 scenarios pass, and AC-01-27 and 48 in part. **Next: task
+  1.1.7, disposal sites in full, and the project map.**
   **Corrected by the user 2026-10-02 (ADR-301):** a pay item's **code is unique on its project**
   (ADR-147 had it backwards); a pay item is its code and its **description**, with no separate name
   and no "line number"; **an exact duplicate of a rule is refused before it is saved**.
@@ -213,6 +219,24 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   (task 1.1.10, which also decides whether a viewer sees a contractor's contact details). What a
   merge moves is the certification task's (C56). Thirty-eight models, twenty-seven migrations.
   *Agent defaults, seen by the user ("the rest of this is good to go", ADR-306).* [305, 306]
+- **Forms, debris types on them, field tags, the firm's own fields (built 2026-10-02, task 1.1.5):**
+  `Form`, `FormDebrisType`, `FormDefinition` and `Assignment.formDocumentTypes`, as the "Forms:"
+  bullet below states them; a row that belongs only on some kinds of form repeats its form's document type,
+  held by a check and a two-column foreign key to `form (id, document_type)`; a definition version
+  is never edited by anyone (`refuse_edit()`). Forty-one models, twenty-nine migrations. *Agent
+  defaults.* [308]
+- **Pay items in full (built 2026-10-02, task 1.1.6):** `PayItem`'s every field of DATA-MODEL §3
+  (payable type required; `BillingUnit`; kind of work on a unit rate one; band from and to, inches
+  to a tenth, both ends included, either open; the seven capture settings, each stated, no default;
+  `CrewTimeConversion` only on an `HR` or `CREW_DAY` pay item, the day length only on an exact one,
+  starting at the policy value **`CREW_DAY_HOURS=12`**); `PayItemRate` (one per prime, the prime held
+  by ADR-305's key, so never a sub or a contractor off the project; archived, never deleted; a
+  change's prior value is the audit log's); `PayItemCrewDayStep` (hours to the quarter within a
+  day, a quantity); `AssignmentPayItem` repeats the pay item's kind of work, so **only a unit rate
+  pay item can be named** (C42, a three-column foreign key). **`SizeBands` (`packages/domain`)**
+  refuses a band that overlaps another of its payable type, naming each, and warns of a gap; the
+  database doesn't refuse an overlap (it would need `btree_gist`). Forty-three models, thirty-one
+  migrations. *Agent defaults.* [309]
 - **The map servers are in the local stack (REQ-022):** `routing` (**Valhalla 3.9.0**) and
   `addresses` (**Nominatim 5.3.2**, mediagis's image), pinned by tag and digest, reached **only
   through Caddy over HTTPS** (`https://routing.adms.localhost`, `https://addresses.adms.localhost`),
@@ -519,7 +543,15 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   Complete, right after the debris type, and a unit rate ticket can take one too (the tower
   doesn't); read only by the *Field tag* criterion and exports; the firm decides what each
   means. *Agent readings, to confirm:* picked at a haul-out's loading end; on unit rate, on the
-  review before the number. [211, 216, 218]
+  review before the number. [211, 216, 218] **Built (ADR-308):** `Form` (one per document type
+  on a project, archived ones included; `enabled` read only on forms that aren't a workflow's, whose
+  use is `Project.workflows`'; "GPS required" stated on the ROE form alone), `FormDebrisType` (only on
+  a load or haul-out form; archived, never deleted), `FormDefinition` (**per project form**, only on
+  an ROE, survey, incident or drop-off log form; versions from 1, unique per form; never edited or
+  deleted by anyone, a trigger refuses an edit; its fields' shape in `packages/contracts`),
+  `Assignment.formDocumentTypes` (those four only). Setup's warning for an unreduced debris type on
+  the haul-out form, and what a phone's list offers (not archived, not hidden), are `packages/domain`'s
+  `DebrisTypeEntries`. [308]
 - **Disposal site dates:** a disposal **before** the activation date ("site not yet active") or
   after a set close date ("site closed") is flagged. [173, 181]
 - **Cert-number blocks:** 100 per certifying phone, topped up at sync. **A 0% load call is always
@@ -1088,7 +1120,7 @@ Full text: `DEVIATIONS.md`.
 | **Unit rate** | 27, 28, 44, 30 | No itemised counts or sub-types; unit-count flag ignored; no decimals; HHW disposition trail (low priority, design not yet discussed) |
 | **Splits and scale receipts** | 22, 23, 24, 29 | No estimate or ROE on collections; no scale receipts; no `LB` unit |
 | **Permissions and records** | 25, 37, 40 | No edit permissions; no creating-device field; no invoice lock |
-| **Docs and tooling** | 34, 63, 65, **66** | README test count (34); **66** (found 2026-10-02, ADR-307): task 1.1.5's inputs leave six things to its agent defaults (whose form definition, which forms carry one, its version numbering, `Form.enabled` against `Project.workflows`, what `Assignment.formDocumentTypes` may hold, two already built), each with a recommended reading; read it before 1.1.5; 65 closed 2026-10-01: `spec/DATA-MODEL.md`'s thirteen points settled at the user's word (ADR-292…295). 59 closed 2026-10-01: the user retired the root `docker-compose.yml` and its volume, `pnpm security` 7 passed, 0 failed (ADR-291); **63**: the `development/` conventions draft is read-only background, its errors listed in CONVENTIONS §8. 33, 58, 61 and 62 closed by the rewrites and the truth-up (ADR-247…253); 57 closed by the `adms-verify` rewrite (ADR-259) |
+| **Docs and tooling** | 34, 63, 65, 66 | README test count (34); 66 closed 2026-10-02 (ADR-308): task 1.1.5's six open points settled as agent defaults, as recommended; 65 closed 2026-10-01: `spec/DATA-MODEL.md`'s thirteen points settled at the user's word (ADR-292…295). 59 closed 2026-10-01: the user retired the root `docker-compose.yml` and its volume, `pnpm security` 7 passed, 0 failed (ADR-291); **63**: the `development/` conventions draft is read-only background, its errors listed in CONVENTIONS §8. 33, 58, 61 and 62 closed by the rewrites and the truth-up (ADR-247…253); 57 closed by the `adms-verify` rewrite (ADR-259) |
 
 **Known later concerns from the Phase 0 build** (not KDs: nothing disagrees with a rule yet) are the
 **carry-forward register** in `BACKLOG.md` (C1…C56, by the task that picks each up; ADR-274; C1–C3
@@ -1099,13 +1131,13 @@ per-login timeout with Phase 2, TLS with the demo deploy); nothing states the vi
 minimum, the behaviour of **01, 04, 05, 10, 12, 13, 15, 55, 56** right and verified. `BACKLOG.md`'s
 Phase 1 milestones name the KDs each closes (ADR-300).
 
-**Closed:** 03, 07, 08, 09, 20, 21, 31, 32, 33, 51, 57, 58, 60, 61, 62, 64.
+**Closed:** 03, 07, 08, 09, 20, 21, 31, 32, 33, 51, 57, 58, 60, 61, 62, 64, 65, 66.
 
 ---
 
 ## 4. Waiting on the user
 
-**Nothing blocks the next task (1.1.5, forms, debris types, field tags, the firm's own fields).**
+**Nothing blocks the next task (1.1.7, disposal sites in full, and the project map).**
 What was answered or done moved word for word to `DECISIONS.md`'s scratchpad, "Moved from
 SUMMARY.md, 2026-10-02" (ADR-307). Yours whenever you like; none of it blocks building (ADR-230):
 
@@ -1137,4 +1169,4 @@ SUMMARY.md, 2026-10-02" (ADR-307). Yours whenever you like; none of it blocks bu
   field event it reads; **ADR-240, a finished field event is reopenable until the monitor ends the
   shift** (the one that touches the monitor's work and the evidence); ADR-241, no hourly rates or pay
   in Open ADMS, and viewers don't see hours; ADR-243, the site's lookup also answers "count the carried
-  tickets", and the worker (not the tower phone) compares the count with the collection's list; ADR-244, a rule's *Debris type* reads the collection's, and a `PENDING` ticket shows its one event's flags; ADR-245, people's marks on derived records (QC status, the invoice lock, a flag's acceptance) are their own records keyed to the record they mark; ADR-278, the details of how firm-added fields are stored (one JSONB answers column per record, a versioned form definition); ADR-280, the roadmap page's place and name, its finish line drawn after the deploy and before the later features, and no dates; ADR-255, the licence field `AGPL-3.0-only` rather than `-or-later`; ADR-262, `pnpm licences` still checks every installed package, not only shipped ones; ADR-263, the local stack's hostnames, Postgres on port 55432, `local:down` keeping the data and the helper's command names; ADR-268, the provisional schema's shapes (database-made UUIDv7 ids, RESTRICT foreign keys, text ticket numbers, an empty split suffix, `User.monitorNumber` for the Monitor ID, the `UserRole` keys); ADR-273, the system actor (role `SYSTEM`, its fixed id and the name "Open ADMS (system)", seeded by the installer) and the tests reaching a login through the service's own env file; ADR-275, a new database per story (not a copy of `adms`), dropped afterwards, the `pnpm scenarios` command and the story's names; ADR-282, the map servers (the images, Delaware as the built-in extract, address lookup only, the hostnames, the two settings); ADR-283, the hook's new rules (env files unreadable to agents, generated paths, failing closed without `jq`); ADR-284, `spec/DATA-MODEL.md`'s sixteen defaults; ADR-285, `spec/FLAGS.md`'s codes and wording; ADR-286, the provisional pay item and an assignment that names pay items staying on its project; ADR-287, the six moved REQs; ADR-298, *Haul-outs leave here* tickable only on a TDSR/DMS site, refused in setup elsewhere; ADR-296, 297, the golden mission's split haul-out with no flagged pile and numbered 201004, and what P1's setup gained for it (Cypress Creek Landfill, `MULCH-HO-TN` at $20.00, the haul-out rules picking by disposal site, a sixth monitor); ADR-281, the Phase 0 models' shapes (a Monitor ID issued to every person written without one, from `M000001`; the device's name and no details column; an unplanned assignment with no author; no uniqueness on person or phone and day; the provisional `DisposalSite`; the number block's series and statuses; the time zone checks; the master passcode asked again when the database is lost); ADR-276, the worker still free to state a person, every audit advisory failing the run unless accepted by id, secretlint as the scanner (with our own two checks), the three accepted Prisma-CLI advisories and seven dev-tool licences allowed by version; ADR-266, the installer's command names (`pnpm installer`…), its three questions, **a master passcode of 8 to 128 characters** (NIST's floor, no breached-list screening yet), the env file locations, the database name `adms`, and stopping rather than remaking a lost secret; ADR-247, `spec/RULES.md` §7 "Is valid" (with the setup check listing every invalid active rule) and the white goods example code `WG-HAUL-EA-60`; ADR-301, the details on your correction (an archived pay item keeps its code; codes compared exactly as typed; a description is required; what makes two rules "the same" and the error's wording; a "Pays when" rule named from its pay item); ADR-300, Phase 1's plan (its milestones and their order, the acceptance scenarios written part by part, where the code lives, the scenario format, the example world's second client); ADR-302, the firm's lists as built (one table per list; only PPDR starting with *Requires ROE*; the item names and the default reasons each list starts with; "Other (typed)" not a list value; the seed never touching a list the firm has changed except to add a missing built-in value; names not unique in a list; `packages/db` depending on `packages/domain` for its types); ADR-303, the project as built (the policy values' names and their built-in defaults in the committed `packages/domain/policy.env`, with an installation-wide override left open; no database default for any setting; a kind of unit rate work taken off a project by archiving; the window never ending before it starts, the limits 0–100 and the sizes at least 1 as database checks; REQ-105d and 105j left unticked until the worker's ROE checks and the "project not active" flag exist); ADR-305, contractors and contracts as built (the database, not only setup, refusing a contract or a sub whose prime isn't one of the project's primes, through `asPrimeId` on the prime's row; a contractor's kind with no default; a sub naming its prime at either tier; a merged contractor always archived; `contract` audited in the billing domain; no unique names or link format; REQ-106e left unticked until subs are created at certification; all seen by the user, "good to go", ADR-306); ADR-306, a contractor's contact as exactly the client's three fields, each optional, with no check of an email's or a phone number's form. Design tasks (ours): Q-166, Q-167.
+  tickets", and the worker (not the tower phone) compares the count with the collection's list; ADR-244, a rule's *Debris type* reads the collection's, and a `PENDING` ticket shows its one event's flags; ADR-309, a crew day's length starts at 12 h as a policy value, a band holds both its ends in tenths of an inch, and the database leaves an overlap of bands to setup; ADR-245, people's marks on derived records (QC status, the invoice lock, a flag's acceptance) are their own records keyed to the record they mark; ADR-278, the details of how firm-added fields are stored (one JSONB answers column per record, a versioned form definition); **ADR-308, task 1.1.5's agent defaults** (a form definition per project form; the database refuses a definition on a load, haul-out, unit rate or certification form, and a debris type on any form but a load or haul-out one; `Form.enabled` read only on the forms that aren't a workflow's; an assignment names only ROE, survey, incident and drop-off log forms; the unreduced warning's wording); ADR-280, the roadmap page's place and name, its finish line drawn after the deploy and before the later features, and no dates; ADR-255, the licence field `AGPL-3.0-only` rather than `-or-later`; ADR-262, `pnpm licences` still checks every installed package, not only shipped ones; ADR-263, the local stack's hostnames, Postgres on port 55432, `local:down` keeping the data and the helper's command names; ADR-268, the provisional schema's shapes (database-made UUIDv7 ids, RESTRICT foreign keys, text ticket numbers, an empty split suffix, `User.monitorNumber` for the Monitor ID, the `UserRole` keys); ADR-273, the system actor (role `SYSTEM`, its fixed id and the name "Open ADMS (system)", seeded by the installer) and the tests reaching a login through the service's own env file; ADR-275, a new database per story (not a copy of `adms`), dropped afterwards, the `pnpm scenarios` command and the story's names; ADR-282, the map servers (the images, Delaware as the built-in extract, address lookup only, the hostnames, the two settings); ADR-283, the hook's new rules (env files unreadable to agents, generated paths, failing closed without `jq`); ADR-284, `spec/DATA-MODEL.md`'s sixteen defaults; ADR-285, `spec/FLAGS.md`'s codes and wording; ADR-286, the provisional pay item and an assignment that names pay items staying on its project; ADR-287, the six moved REQs; ADR-298, *Haul-outs leave here* tickable only on a TDSR/DMS site, refused in setup elsewhere; ADR-296, 297, the golden mission's split haul-out with no flagged pile and numbered 201004, and what P1's setup gained for it (Cypress Creek Landfill, `MULCH-HO-TN` at $20.00, the haul-out rules picking by disposal site, a sixth monitor); ADR-281, the Phase 0 models' shapes (a Monitor ID issued to every person written without one, from `M000001`; the device's name and no details column; an unplanned assignment with no author; no uniqueness on person or phone and day; the provisional `DisposalSite`; the number block's series and statuses; the time zone checks; the master passcode asked again when the database is lost); ADR-276, the worker still free to state a person, every audit advisory failing the run unless accepted by id, secretlint as the scanner (with our own two checks), the three accepted Prisma-CLI advisories and seven dev-tool licences allowed by version; ADR-266, the installer's command names (`pnpm installer`…), its three questions, **a master passcode of 8 to 128 characters** (NIST's floor, no breached-list screening yet), the env file locations, the database name `adms`, and stopping rather than remaking a lost secret; ADR-247, `spec/RULES.md` §7 "Is valid" (with the setup check listing every invalid active rule) and the white goods example code `WG-HAUL-EA-60`; ADR-301, the details on your correction (an archived pay item keeps its code; codes compared exactly as typed; a description is required; what makes two rules "the same" and the error's wording; a "Pays when" rule named from its pay item); ADR-300, Phase 1's plan (its milestones and their order, the acceptance scenarios written part by part, where the code lives, the scenario format, the example world's second client); ADR-302, the firm's lists as built (one table per list; only PPDR starting with *Requires ROE*; the item names and the default reasons each list starts with; "Other (typed)" not a list value; the seed never touching a list the firm has changed except to add a missing built-in value; names not unique in a list; `packages/db` depending on `packages/domain` for its types); ADR-303, the project as built (the policy values' names and their built-in defaults in the committed `packages/domain/policy.env`, with an installation-wide override left open; no database default for any setting; a kind of unit rate work taken off a project by archiving; the window never ending before it starts, the limits 0–100 and the sizes at least 1 as database checks; REQ-105d and 105j left unticked until the worker's ROE checks and the "project not active" flag exist); ADR-305, contractors and contracts as built (the database, not only setup, refusing a contract or a sub whose prime isn't one of the project's primes, through `asPrimeId` on the prime's row; a contractor's kind with no default; a sub naming its prime at either tier; a merged contractor always archived; `contract` audited in the billing domain; no unique names or link format; REQ-106e left unticked until subs are created at certification; all seen by the user, "good to go", ADR-306); ADR-306, a contractor's contact as exactly the client's three fields, each optional, with no check of an email's or a phone number's form. Design tasks (ours): Q-166, Q-167.

@@ -115,11 +115,34 @@ by ADR-303 (named here by ADR-307). Closes the behaviour of KD-14, 16, 17, 18, 2
   **Contractors on a project, and contracts.** `Contractor.kind` and its merge link,
   `ProjectContractor` (prime, tier 1, tier 2; one place per project), `Contract`. **Done when:**
   AC-01-15…18, 20, 21 pass. *REQ-106e's tiers (its subs at certification: 1.2.3).*
-- [ ] **1.1.5** **Forms, debris types, field tags, the firm's own fields.** `Form`,
+- [x] **1.1.5** ✅ **done 2026-10-02 (ADR-308):** `FormDocumentType`, `Form`, `FormDebrisType`,
+  `FormDefinition` and `Assignment.formDocumentTypes`; two migrations
+  (`forms_debris_types_definitions`, `guard_forms_debris_types_definitions`: 29 in all); KD-66's six
+  points settled as agent defaults (a definition per project form; the database refuses a definition
+  on any form but an ROE, survey, incident or drop-off log form, and a debris type on any form but a
+  load or haul-out one, by a two-column foreign key to the form and its document type; versions from
+  1, unique per form, never edited by anyone: `refuse_edit`; `Form.enabled` read only on the forms
+  that aren't a workflow's; an assignment names only those four forms); `DebrisTypeEntries` in
+  `packages/domain` (what a phone's list offers; the unreduced warning) and `formDefinitionFields`
+  in `packages/contracts`. AC-01-22…26 and 28…30 pass (25 and 26 at the domain, the rest at the
+  database), AC-01-27 in part (the field events still pointing at an archived entry: 1.3.4); AC-01-80
+  gains the two new refusals; `guard_gaps()` empty; 28 loosenings each caught. REQ-105a ticked; REQ-101
+  and REQ-107 not (a field event's pick, 1.3.4; the records, 1.3.6).
+  **Forms, debris types, field tags, the firm's own fields.** `Form`,
   `FormDebrisType`, `FormDefinition` (a version never edited or deleted, guarded like
   `MasterPasscode`), `FieldTag`'s project list in use, `Assignment.formDocumentTypes` (C42). **Done
   when:** AC-01-22…30 pass. *REQ-101, 105a; C36's definition.*
-- [ ] **1.1.6** **Pay items in full.** `PayItem`'s every other field (its code, unique on its
+- [x] **1.1.6** ✅ **done 2026-10-02 (ADR-309):** `BillingUnit` and `CrewTimeConversion`;
+  `PayItem`'s every field, `PayItemRate` (one per prime, the prime held by ADR-305's key; `id`,
+  `projectId`, `createdAt`, `archivedAt` besides §3's three) and `PayItemCrewDayStep`;
+  `AssignmentPayItem.kindOfWorkId`, so an assignment names only unit rate pay items (C42's pay item
+  done); two migrations (`pay_items_in_full`, `guard_pay_items_in_full`: 31 in all); `SizeBands`
+  in `packages/domain` (an overlap refused, naming each band; a gap warned) and the policy value
+  `CREW_DAY_HOURS=12`. AC-01-39…47 and 49…51 pass (45 and 46 at the domain, the rest at the
+  database), AC-01-48 in part (the worker's checks: 1.5.7); `guard_gaps()` empty; 26 loosenings
+  each caught; chain 37 files, 687 tests; stories 16 and 18 checks. REQ-102 and REQ-112d ticked;
+  REQ-112e in part (billing the highest item's hours: 1.7.1).
+  **Pay items in full.** `PayItem`'s every other field (its code, unique on its
   project, and its description are built, ADR-301; AC-01-41 passes), `PayItemRate` (one per prime),
   `PayItemCrewDayStep`; the size-band rule in `packages/domain` (bands of one payable type can't
   overlap; a gap warns). `AssignmentPayItem` and `dispatch-monday` follow. **Done when:**
@@ -182,7 +205,8 @@ Carried: C43, C44, C36's answers. Closes the behaviour of KD-13, 22, 23, 24, 27,
   setup version (C44, with its check), the typed number and its reason, the certification as scanned
   and as found, the site, both GPS ends, the address. `guard_table` rerun; both stories follow.
   *REQ-105i, 115.*
-- [ ] **1.3.4** **`FieldEvent`, what each kind records.** The kind-specific columns of §4.1 (2),
+- [ ] **1.3.4** **`FieldEvent`, what each kind records.** (AC-01-27's other half: a field event
+  that points at a debris type's entry still does once the entry is archived, ADR-308.) The kind-specific columns of §4.1 (2),
   each empty on every other kind by a check; a split load's suffix and estimate both or neither; a
   haul-out collection's suffix with its running call; `FieldEventItem`, `CarriedTicket`; the same
   both-or-neither rule in `packages/contracts`. *REQ-103, 105o, 110, 111, 111a, 112, 112a, 112b;
@@ -665,9 +689,11 @@ delete one.
 - **C30. The golden mission as a story** (REQ-017 stays open until it runs; REQ-142, REQ-143): its setup, days, reviews, ledger and audit rows asserted exactly; the worker's writes through the `worker` client as `systemActor`; add stories to `packages/scenarios/src/stories/index.ts`.
 - **C42. The assignment's forms; the real pay item and site** (ADR-281 (8)). ~~REQ-020's "work: … unit rate
   pay items"~~ **done (ADR-286): a provisional `PayItem` (project, code, name; since ADR-301 its code is unique on its project and it has a description, not a name) and `AssignmentPayItem`;
-  REQ-020 ticked.** Still to come: the forms an assignment names (incidents, drop-off logs, surveys,
-  ROEs: `formDocumentTypes`, DATA-MODEL §2.2); `PayItem`'s real fields and its rate per prime
-  (REQ-102, DATA-MODEL §3); the check that a named pay item is a unit rate one. `DisposalSite` is
+  REQ-020 ticked.** ~~The forms an assignment names~~ **done (ADR-308): `formDocumentTypes`, held to
+  ROEs, surveys, incidents and drop-off logs.** ~~`PayItem`'s real fields and its rate per prime
+  (REQ-102, DATA-MODEL §3); the check that a named pay item is a unit rate one~~ **done (ADR-309):
+  every field, a rate per prime, and a three-column foreign key that names only a unit rate pay
+  item.** Still to come: `DisposalSite` is
   provisional (project and name): its site type, facts, permit, GPS, area and dates are DATA-MODEL's,
   and so is a field event's own site (each record keeps the site it was made at, ADR-195). A
   contractor's kind (hauler, monitoring, crew, other; Q-97) comes with `Contractor`'s real shape.
@@ -733,7 +759,7 @@ delete one.
   does to the duplicate's place on each project and to the certifications that name it (today only
   the link exists: `mergedIntoId`, never itself, the merged row archived), and whether a merge into
   an already-merged contractor is refused; **REQ-106e is ticked there**, not before. **Tasks 1.1.6
-  and 1.2.3:** `PayItemRate.primeId` and `Certification.primeId` point at the same key as a
+  and 1.2.3:** `PayItemRate.primeId` (✅ built, ADR-309) and `Certification.primeId` point at the same key as a
   contract's prime, a two-column foreign key to `project_contractor (project_id, as_prime_id)`, so
   a rate or a certification can't name a contractor that isn't one of the project's primes.
   **Task 1.1.11:** the API's setup service is the one place that adds a prime to a project and

@@ -2,9 +2,9 @@
 name: adms-data-model
 description: Open ADMS data model, in today's rules. Covers the records and how they link (Client → DeclarationEvent → Project, contractors and contracts, forms and debris types, pay items with a rate per prime, rules naming one contract, sites, certifications, users, devices and assignments, time-clock entries, FieldEvent and the CompletedLoad / CompletedHaulOut drawn from it, transactions, flags, AuditRecord), why reference data is editable, evidence correctable only by permission and the derived records and audit never by a person, which lists are fixed in code and which the firm extends (built-in keys plus the firm's own values), identifiers, uniqueness, coordinates and time, and which package and database role may write what. Use when touching the Prisma schema, adding or changing a model, a list, a relation or a constraint, or deciding where a write belongs. Field names are spec/DATA-MODEL.md's; what each setup record and field event holds is adms-ticket-workflows.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-245; ADR-246; the Phase 0 models built, ADR-281; the pay item's first shape and `spec/DATA-MODEL.md` drafted, ADR-284, 286; the page approved, ADR-289; a pay item's unique code and description, ADR-301; the firm's lists built, ADR-302; the client, the declaration event and the project built, ADR-303; contractors on a project and contracts built, ADR-305; a contractor's contact details, ADR-306) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-245; ADR-246; the Phase 0 models built, ADR-281; the pay item's first shape and `spec/DATA-MODEL.md` drafted, ADR-284, 286; the page approved, ADR-289; a pay item's unique code and description, ADR-301; the firm's lists built, ADR-302; the client, the declaration event and the project built, ADR-303; contractors on a project and contracts built, ADR-305; a contractor's contact details, ADR-306; forms, the debris types on them and the firm's own fields built, ADR-308; pay items in full, ADR-309) -->
 
-> **This page states today's rules** (last changed by ADR-306, as its status line lists). Each rule cites its ADR; what changed is in
+> **This page states today's rules** (last changed by ADR-309, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
 > `agent_store/SUMMARY.md` disagree, SUMMARY wins: log a KD (`adms-decisions`). The worked example
 > is `spec/golden/MISSION.md`; names and examples follow `spec/CONVENTIONS.md` (§3 for code names).
@@ -15,8 +15,9 @@ description: Open ADMS data model, in today's rules. Covers the records and how 
 **The schema is being built in Phase 1's order** (`BACKLOG.md`): Phase 0's fifteen provisional
 models in `packages/db/prisma/schema/` (ADR-268, 281, 286: only what the hardening tests and
 REQ-019…021 need) and, built in full, the firm's eighteen lists (ADR-302; §3.2), `Client`,
-`DeclarationEvent`, `Project` and `ProjectKindOfWork` (ADR-303; §3.1a), and `Contractor`,
-`ProjectContractor` and `Contract` (ADR-305; §3.1a). The schema is a Prisma multi-file schema in `packages/db`
+`DeclarationEvent`, `Project` and `ProjectKindOfWork` (ADR-303; §3.1a), `Contractor`,
+`ProjectContractor` and `Contract` (ADR-305; §3.1a), `Form`, `FormDebrisType` and `FormDefinition`
+(ADR-308), and `PayItem`, `PayItemRate` and `PayItemCrewDayStep` (ADR-309). The schema is a Prisma multi-file schema in `packages/db`
 (ARCHITECTURE §18), written in Phase 0 and Phase 1; this page is the model it must follow. **Model names** below
 are the agent defaults of `spec/CONVENTIONS.md` §3; **field names** are settled in
 `spec/DATA-MODEL.md` (drafted 2026-10-01, ADR-284; **approved by the user 2026-10-01**, ADR-289; changed at their word by ADR-292…295; KD-65 is closed), which may
@@ -195,7 +196,11 @@ changed" (ADR-166).
   The answers are **one JSONB column per record, keyed by field ID, with the definition version
   answered**; the definition is versioned, never edited. Nothing the engine, a rule or a flag reads
   lives in JSONB: such a value is promoted to a real column (ADR-278; the details are
-  `spec/DATA-MODEL.md`'s `FormDefinition` and §4.3, approved, ADR-289; see KD-66 before 1.1.5).
+  `spec/DATA-MODEL.md`'s `FormDefinition` and §4.3, approved, ADR-289). **Built (ADR-308):** a
+  definition belongs to one project's form (an ROE, survey, incident or drop-off log form, and no
+  other: the database refuses the rest), numbered from 1, never edited or deleted; its fields' shape
+  is `packages/contracts`' `formDefinitionFields`. A debris type sits only on a load or haul-out
+  form; what a phone offers and the unreduced warning are `packages/domain`'s `DebrisTypeEntries`.
 
 **`CompletedLoad` and `CompletedHaulOut`** are what the worker concludes from a ticket's events: the
 load's own number, its events (**unique links**, so one load can't bill twice, invariant 17), the
@@ -231,8 +236,9 @@ regenerated when its ticket changes; details in `adms-ledger-audit`.
   column. `NumberBlock`: device, project, series, first, last, last used, how it ended. `Assignment`:
   person, `workDate`, project, `fieldEventKinds`, `certifying`, an optional site (one of its own
   project's) and phone, `origin` (`PLANNED · UNPLANNED`), `madeById`; its unit rate pay items are
-  `AssignmentPayItem` rows, each a provisional `PayItem` (project, code, description; the code unique
-  on its project, ADR-301) of its own project (ADR-286); its forms join with the form model. `MasterPasscode`: a version and its slow hash, never edited, read only by
+  `AssignmentPayItem` rows, each a `PayItem` of its own project (ADR-286) and a unit rate one: the
+  row repeats the pay item's kind of work, held by a three-column foreign key (C42, ADR-309); the forms it names are
+  `formDocumentTypes`, held to ROE, survey, incident and drop-off log (ADR-308). `MasterPasscode`: a version and its slow hash, never edited, read only by
   the API. A field event's `assignmentId` and `setupVersion` are required captured columns.
 
 ## 3.2 Fixed in code, or the firm's to extend
@@ -413,6 +419,9 @@ What this page used to say, and why it changed. Never build from the left-hand s
 - The provisional `Project` as a name and a time zone → the project in full, under its client and
   declaration event, its settings' starting values in `packages/domain` from the policy values
   (ADR-303).
+- The provisional `PayItem` (project, code, description) → every field of `spec/DATA-MODEL.md` §3, a
+  rate per prime held to the project's primes, a crew day's steps; an assignment names only unit
+  rate pay items; size bands checked in `packages/domain` (ADR-309).
 - The provisional `Contractor` as a name → its kind and merge link, its place on each project
   (`ProjectContractor`) and the `Contract`, with "the prime" held to one of the project's primes by
   the database (ADR-305).
