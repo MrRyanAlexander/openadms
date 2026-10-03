@@ -113,6 +113,9 @@ describe('capture', () => {
     );
     expect(Object.fromEntries(domains.map((row) => [row.table_name, row.domains]))).toEqual({
       assignment: ['OPERATIONS'],
+      certification: ['BILLING'],
+      certification_box: ['BILLING'],
+      certification_helper: ['OPERATIONS'],
       client: ['OPERATIONS'],
       completed_load: ['BILLING'],
       contract: ['BILLING'],

@@ -1,8 +1,10 @@
 // REQ-106e's tiers: contractors on a project, and contracts (spec/DATA-MODEL.md §2.1, §3 "Contracts
 // and forms"; ADR-102 (Q-97), 108, 146, 239, 305, 306). Section B of spec/acceptance/01-setup.md,
 // proven at the database: AC-01-15…18, 20, 21, 82, and AC-01-78 for these tables. That no step of setup asks
-// for subs (AC-01-19) is a story's, with the certification that types one in (BACKLOG 1.2.3); here a
-// test places Rivera Trucking as that certification will.
+// for subs (AC-01-19) is a story's, with the certification that types one in (the story
+// `certification`, ADR-321). The example world has Rivera Trucking under Coastline on P1 and on P2,
+// as the certifications of its self-loader left it; a test that needs another sub places one as a
+// certification would.
 import { describe, expect, it } from 'vitest';
 
 import { refusedBy } from './support/database.ts';
@@ -310,6 +312,7 @@ describe('a contractor’s place on a project', () => {
     expect(await placesOn(world.p1)).toEqual([
       { contractor: coastline, position: 'PRIME', under: null },
       { contractor: summit, position: 'PRIME', under: null },
+      { contractor: 'Rivera Trucking', position: 'SUB_TIER_1', under: coastline },
     ]);
     expect(await contractsOn(world.p1)).toEqual([
       { name: 'Coastline, Bayline ROW 2026', prime: coastline, link: null },
@@ -323,7 +326,7 @@ describe('a contractor’s place on a project', () => {
       name: 'Summit, Bayline PPDR 2026',
       prime_id: world.summit,
     });
-    expect(await placesOn(world.p2)).toEqual([
+    expect(await placesOn(world.p2, `p."position" = 'PRIME'`)).toEqual([
       { contractor: coastline, position: 'PRIME', under: null },
       { contractor: summit, position: 'PRIME', under: null },
     ]);
@@ -339,8 +342,7 @@ describe('a contractor’s place on a project', () => {
   it('AC-01-17 Rivera Trucking, a sub under Coastline on P1, can’t be placed under Summit on P1 as well: a contractor has one place on a project', async () => {
     const { db, world } = tested;
     await asTheApi();
-    const rivera = await hauler('Rivera Trucking');
-    await add('project_contractor', subOn(world.p1, rivera, world.coastline));
+    const { rivera } = world;
     for (const again of [
       subOn(world.p1, rivera, world.summit),
       subOn(world.p1, rivera, world.summit, 2),
@@ -366,10 +368,14 @@ describe('a contractor’s place on a project', () => {
       { contractor: summit, position: 'PRIME', under: null },
       { contractor: 'Rivera Trucking', position: 'SUB_TIER_1', under: coastline },
     ]);
-    // One place per project: on P2 it has its own.
-    await add('project_contractor', subOn(world.p2, rivera, world.coastline, 2));
+    // One place per project: on P2 it has its own, and a tier 2 sub may sit beside it there.
     expect(await placesOn(world.p2, `c."name" = 'Rivera Trucking'`)).toEqual([
-      { contractor: 'Rivera Trucking', position: 'SUB_TIER_2', under: coastline },
+      { contractor: 'Rivera Trucking', position: 'SUB_TIER_1', under: coastline },
+    ]);
+    const pinewood = await hauler('Pinewood Hauling');
+    await add('project_contractor', subOn(world.p2, pinewood, world.coastline, 2));
+    expect(await placesOn(world.p2, `c."name" = 'Pinewood Hauling'`)).toEqual([
+      { contractor: 'Pinewood Hauling', position: 'SUB_TIER_2', under: coastline },
     ]);
   });
 
@@ -377,9 +383,8 @@ describe('a contractor’s place on a project', () => {
     const { db, world } = tested;
     expect(await valuesOf('contractor_position')).toEqual(['PRIME', 'SUB_TIER_1', 'SUB_TIER_2']);
     await asTheApi();
-    const rivera = await hauler('Rivera Trucking');
+    const { rivera } = world;
     const pinewood = await hauler('Pinewood Hauling');
-    await add('project_contractor', subOn(world.p1, rivera, world.coastline, 1));
     await add('project_contractor', subOn(world.p1, pinewood, world.coastline, 2));
     expect(await placesOn(world.p1, `p."position" <> 'PRIME'`)).toEqual([
       { contractor: 'Rivera Trucking', position: 'SUB_TIER_1', under: coastline },
@@ -468,6 +473,7 @@ describe('a contractor’s place on a project', () => {
     ).toEqual([
       { position: 'PRIME', own: true },
       { position: 'PRIME', own: true },
+      { position: 'SUB_TIER_1', own: null },
     ]);
   });
 
@@ -501,8 +507,6 @@ describe('a contractor’s place on a project', () => {
   it('is taken off the project by archiving, audited; its subs and its contracts still point at it', async () => {
     const { db, world } = tested;
     await asTheApi();
-    const rivera = await hauler('Rivera Trucking');
-    await add('project_contractor', subOn(world.p1, rivera, world.coastline));
     const { id } = await db.one<{ id: string }>(
       `UPDATE "project_contractor" SET "archived_at" = now()
        WHERE "project_id" = $1 AND "contractor_id" = $2 RETURNING "id"::text`,
@@ -805,7 +809,7 @@ describe('changing them', () => {
       prime: summit,
       prime_archived: true,
     });
-    expect(await placesOn(world.p1)).toHaveLength(2);
+    expect(await placesOn(world.p1)).toHaveLength(3);
     expect((await auditOf(world.contracts.summitP1)).at(-1)).toMatchObject({
       operation: 'UPDATE',
       changed: ['archived_at'],
@@ -813,19 +817,18 @@ describe('changing them', () => {
     });
   });
 
-  it.each(['project_contractor', 'contract'])(
-    'the worker reads %s and may not write it',
-    async (table) => {
-      const { db, world } = tested;
-      await db.as('adms_worker');
-      await db.actor(world.worker, 'SYSTEM');
-      expect(await db.rows(`SELECT 1 FROM "${table}"`)).toHaveLength(3);
-      expect((await db.refused(`UPDATE "${table}" SET "created_at" = now()`)).code).toBe(
-        refusedBy.grant,
-      );
-      expect((await db.refused(`INSERT INTO "${table}" DEFAULT VALUES`)).code).toBe(
-        refusedBy.grant,
-      );
-    },
-  );
+  // Three primes' places and Rivera's two; three contracts.
+  it.each([
+    ['project_contractor', 5],
+    ['contract', 3],
+  ] as const)('the worker reads %s and may not write it', async (table, held) => {
+    const { db, world } = tested;
+    await db.as('adms_worker');
+    await db.actor(world.worker, 'SYSTEM');
+    expect(await db.rows(`SELECT 1 FROM "${table}"`)).toHaveLength(held);
+    expect((await db.refused(`UPDATE "${table}" SET "created_at" = now()`)).code).toBe(
+      refusedBy.grant,
+    );
+    expect((await db.refused(`INSERT INTO "${table}" DEFAULT VALUES`)).code).toBe(refusedBy.grant);
+  });
 });

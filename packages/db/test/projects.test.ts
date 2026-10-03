@@ -671,7 +671,8 @@ describe('a project', () => {
     expect(before).toEqual({
       field_events: 4,
       completed_loads: 2,
-      assignments: 1,
+      // Ana's for the Monday, and Sam's and Lee's for the Saturday the trucks were certified.
+      assignments: 3,
       sites: 2,
       kinds: 5,
     });

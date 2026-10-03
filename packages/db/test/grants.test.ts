@@ -56,6 +56,10 @@ const tableGrants: Record<string, Record<string, string>> = {
   rule_criterion_pick: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   rule_action: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   rule_action_item: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
+  // A certification, its measured boxes and its helpers (ADR-321).
+  certification: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
+  certification_box: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
+  certification_helper: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   // The firm's lists: configuration, each one (ADR-302).
   ...Object.fromEntries(
     listTables.map((table) => [table, { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' }]),

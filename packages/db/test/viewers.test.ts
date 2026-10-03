@@ -148,14 +148,14 @@ describe("a read-only viewer's record", () => {
 
 describe("a project's setup, for a read-only viewer", () => {
   // What the example world's P1 holds, table by table; P2 holds its project, its prime and its
-  // contract, and nothing else.
+  // contract, Rivera under that prime, and its own certification 730416 (ADR-321).
   const p1Setup = {
     viewer_project_setup: 1,
     viewer_client: 1,
     viewer_declaration_event: 1,
     viewer_project_kind_of_work: 5,
-    viewer_contractor: 2,
-    viewer_project_contractor: 2,
+    viewer_contractor: 3,
+    viewer_project_contractor: 3,
     viewer_contract: 2,
     viewer_form: 3,
     viewer_form_debris_type: 2,
@@ -166,6 +166,9 @@ describe("a project's setup, for a read-only viewer", () => {
     viewer_rule_criterion: 2,
     viewer_rule_criterion_pick: 1,
     viewer_rule_action: 1,
+    viewer_certification: 5,
+    viewer_certification_box: 6,
+    viewer_certification_helper: 1,
   };
   const views = Object.keys(p1Setup);
 
@@ -186,6 +189,7 @@ describe("a project's setup, for a read-only viewer", () => {
     // Harbor Staffing is on no project of theirs.
     expect(await reads(world.clientViewer, 'viewer_contractor', 'name')).toEqual([
       'Coastline Haulers LLC',
+      'Rivera Trucking',
       'Summit Debris Services',
     ]);
     expect(await reads(world.clientViewer, 'viewer_pay_item_rate', 'rate')).toEqual(
@@ -222,9 +226,11 @@ describe("a project's setup, for a read-only viewer", () => {
       viewer_project_setup: 1,
       viewer_client: 1,
       viewer_declaration_event: 1,
-      viewer_contractor: 1,
-      viewer_project_contractor: 1,
+      viewer_contractor: 2,
+      viewer_project_contractor: 2,
       viewer_contract: 1,
+      viewer_certification: 1,
+      viewer_certification_box: 2,
     });
     expect(await reads(viewer, 'viewer_contract', 'name')).toEqual([
       'Coastline, Bayline PPDR 2026',
@@ -236,8 +242,10 @@ describe("a project's setup, for a read-only viewer", () => {
     expect(await counts(world.auditor, views)).toEqual({
       ...p1Setup,
       viewer_project_setup: 2,
-      viewer_project_contractor: 3,
+      viewer_project_contractor: 5,
       viewer_contract: 3,
+      viewer_certification: 6,
+      viewer_certification_box: 8,
     });
   });
 

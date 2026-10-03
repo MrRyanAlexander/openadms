@@ -58,6 +58,10 @@ export const viewerSights: Record<string, Sight> = {
   rule_criterion_pick: project(),
   rule_action: project(),
   rule_action_item: partOf('rule_action_item', 'rule_action', 'action_id'),
+  // A certification, without its driver's phone or licence number (ADR-169, 321).
+  certification: project(['driver_phone', 'driver_licence_number']),
+  certification_box: partOf('certification_box', 'certification', 'certification_id'),
+  certification_helper: partOf('certification_helper', 'certification', 'certification_id'),
   client: namedBy('client', 'viewer_project_setup', 'client_id', [...contact, 'notes']),
   declaration_event: namedBy('declaration_event', 'viewer_project_setup', 'declaration_event_id'),
   contractor: namedBy('contractor', 'project_contractor', 'contractor_id', contact),

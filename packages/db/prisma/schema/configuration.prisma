@@ -105,6 +105,7 @@ model Project {
   payItems         PayItem[]
   assignments      Assignment[]
   numberBlocks     NumberBlock[]
+  certifications   Certification[]
   fieldTags        FieldTag[]
   fieldEvents      FieldEvent[]
   completedLoads   CompletedLoad[]
@@ -165,19 +166,23 @@ model Contractor {
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
 
-  mergedInto   Contractor?         @relation("Merged", fields: [mergedIntoId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  merged       Contractor[]        @relation("Merged")
+  mergedInto                    Contractor?         @relation("Merged", fields: [mergedIntoId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  merged                        Contractor[]        @relation("Merged")
   // Its place on each project it works on.
-  projects     ProjectContractor[]
+  projects                      ProjectContractor[]
   // The contracts it holds, each as one of its project's primes.
-  contracts    Contract[]
+  contracts                     Contract[]
   // Its rate on each pay item, as one of the project's primes (ADR-206).
-  payItemRates PayItemRate[]
+  payItemRates                  PayItemRate[]
   // A contractor user sees only its own transactions (ADR-169).
-  users        User[]              @relation("ViewerContractor")
+  users                         User[]              @relation("ViewerContractor")
   // The people it employs (Q-97).
-  employees    User[]              @relation("Employer")
-  transactions Transaction[]
+  employees                     User[]              @relation("Employer")
+  // The certifications that name it: as their prime, or as a sub typed in under one (ADR-108).
+  certificationsAsPrime         Certification[]     @relation("CertificationPrime")
+  certificationsAsFirstTierSub  Certification[]     @relation("CertificationFirstTierSub")
+  certificationsAsSecondTierSub Certification[]     @relation("CertificationSecondTierSub")
+  transactions                  Transaction[]
 
   @@map("contractor")
 }
@@ -213,16 +218,23 @@ model ProjectContractor {
   // Taken off the project; never deleted.
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
 
-  project    Project             @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  contractor Contractor          @relation(fields: [contractorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  prime      ProjectContractor?  @relation("PrimeSubs", fields: [projectId, primeId], references: [projectId, asPrimeId], onDelete: Restrict, onUpdate: Restrict)
-  subs       ProjectContractor[] @relation("PrimeSubs")
-  contracts  Contract[]
-  rates      PayItemRate[]
-  rulePicks  RuleCriterionPick[]
+  project                       Project             @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  contractor                    Contractor          @relation(fields: [contractorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  prime                         ProjectContractor?  @relation("PrimeSubs", fields: [projectId, primeId], references: [projectId, asPrimeId], onDelete: Restrict, onUpdate: Restrict)
+  subs                          ProjectContractor[] @relation("PrimeSubs")
+  contracts                     Contract[]
+  rates                         PayItemRate[]
+  rulePicks                     RuleCriterionPick[]
+  // The certifications held to this place: a prime's, and a sub's under its prime (ADR-321).
+  certificationsAsPrime         Certification[]     @relation("CertificationPrimePlace")
+  certificationsAsFirstTierSub  Certification[]     @relation("CertificationFirstTierPlace")
+  certificationsAsSecondTierSub Certification[]     @relation("CertificationSecondTierPlace")
 
   // One place on a project: a sub is never shared by two primes.
   @@unique([projectId, contractorId])
+  // What a certification's sub points at: a contractor placed on the project under that prime, so
+  // a prime, another prime's sub and a contractor off the project can't be named as one (ADR-321).
+  @@unique([projectId, contractorId, primeId])
   // What a sub's prime and a contract's prime point at.
   @@unique([projectId, asPrimeId])
   @@map("project_contractor")
@@ -508,7 +520,9 @@ model MapVersion {
   loadedById      String    @map("loaded_by_id") @db.Uuid
   // The database's own time for the piece of work that loaded it, never the client's: a zone is
   // written only in that same piece of work, which the guard tells by this time (ADR-311, 316).
-  loadedAt        DateTime  @default(dbgenerated("CURRENT_TIMESTAMP")) @map("loaded_at") @db.Timestamptz(3)
+  // Written as transaction_timestamp(), which is now(): Prisma reads CURRENT_TIMESTAMP back as its
+  // own now() and wrote the default again into every later migration (KD-70).
+  loadedAt        DateTime  @default(dbgenerated("transaction_timestamp()")) @map("loaded_at") @db.Timestamptz(3)
 
   project  Project @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   loadedBy User    @relation("MapVersionLoadedBy", fields: [loadedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
@@ -928,18 +942,22 @@ model User {
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
 
-  contractor      Contractor?       @relation("ViewerContractor", fields: [contractorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  employer        Contractor?       @relation("Employer", fields: [employerId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  permissions     UserPermission[]
-  viewerProjects  ViewerProject[]
-  assignments     Assignment[]      @relation("AssignmentPerson")
-  assignmentsMade Assignment[]      @relation("AssignmentMadeBy")
-  formDefinitions FormDefinition[]  @relation("FormDefinitionCreatedBy")
-  siteAreas       SiteAreaVersion[] @relation("SiteAreaVersionCreatedBy")
-  mapsLoaded      MapVersion[]      @relation("MapVersionLoadedBy")
-  fieldEvents     FieldEvent[]
-  invoiceLocks    InvoiceLock[]
-  auditRecords    AuditRecord[]
+  contractor            Contractor?           @relation("ViewerContractor", fields: [contractorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  employer              Contractor?           @relation("Employer", fields: [employerId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  permissions           UserPermission[]
+  viewerProjects        ViewerProject[]
+  assignments           Assignment[]          @relation("AssignmentPerson")
+  assignmentsMade       Assignment[]          @relation("AssignmentMadeBy")
+  formDefinitions       FormDefinition[]      @relation("FormDefinitionCreatedBy")
+  siteAreas             SiteAreaVersion[]     @relation("SiteAreaVersionCreatedBy")
+  mapsLoaded            MapVersion[]          @relation("MapVersionLoadedBy")
+  // The certifications they made and measured, helped on, or revoked (ADR-079, 294).
+  certificationsMade    Certification[]       @relation("CertificationCertifiedBy")
+  certificationsRevoked Certification[]       @relation("CertificationRevokedBy")
+  certificationsHelped  CertificationHelper[]
+  fieldEvents           FieldEvent[]
+  invoiceLocks          InvoiceLock[]
+  auditRecords          AuditRecord[]
 
   @@map("user")
 }
@@ -1043,9 +1061,10 @@ model Device {
   // migration); refusing the key is the API's (Phase 2).
   keyRevokedAt          DateTime?    @map("key_revoked_at") @db.Timestamptz(3)
 
-  masterPasscode MasterPasscode @relation(fields: [masterPasscodeVersion], references: [version], onDelete: Restrict, onUpdate: Restrict)
+  masterPasscode MasterPasscode  @relation(fields: [masterPasscodeVersion], references: [version], onDelete: Restrict, onUpdate: Restrict)
   numberBlocks   NumberBlock[]
   assignments    Assignment[]
+  certifications Certification[]
   fieldEvents    FieldEvent[]
   auditRecords   AuditRecord[]
 
@@ -1138,13 +1157,14 @@ model Assignment {
   // Withdrawn from the board; never deleted.
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
 
-  person      User                @relation("AssignmentPerson", fields: [personId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  project     Project             @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  site        DisposalSite?       @relation(fields: [projectId, siteId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
-  device      Device?             @relation(fields: [deviceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  madeBy      User?               @relation("AssignmentMadeBy", fields: [madeById], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  payItems    AssignmentPayItem[]
-  fieldEvents FieldEvent[]
+  person         User                @relation("AssignmentPerson", fields: [personId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  project        Project             @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  site           DisposalSite?       @relation(fields: [projectId, siteId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  device         Device?             @relation(fields: [deviceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  madeBy         User?               @relation("AssignmentMadeBy", fields: [madeById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  payItems       AssignmentPayItem[]
+  certifications Certification[]
+  fieldEvents    FieldEvent[]
 
   // So its pay items can only be its own project's (their relation's target).
   @@unique([projectId, id])
@@ -1175,6 +1195,187 @@ model AssignmentPayItem {
 
   @@unique([assignmentId, payItemId])
   @@map("assignment_pay_item")
+}
+
+// The shape a measured box is worked out as (adms-certifications §3A.3): each reads only its own
+// measurements. The same closed set as packages/domain's boxShapes.
+enum BoxShape {
+  RECTANGLE
+  TRIANGLE
+  TWO_LENGTH_HOIST
+  ROUND_BOTTOM
+  RADIUS_CORNER
+
+  @@map("box_shape")
+}
+
+// Whether a measured box adds to the container or takes from it. The primary adds; a radius corner
+// always subtracts (ADR-087).
+enum BoxSign {
+  ADD
+  SUBTRACT
+
+  @@map("box_sign")
+}
+
+// A one-time inspection of a container (measured: its boxes, its capacity) or of a crew (never
+// measured); never of a vehicle (adms-certifications §3A.1, §3A.2; invariants 8, 10). A record, not
+// a ticket's field event (ADR-236): made once, on a phone whose assignment includes certifying, and
+// every field event that scans its badge refers to it. Edited as configuration is (corrected in
+// place, audited); never deleted and never archived: it is the evidence a measurement was taken.
+// It never ends on its own (ADR-079): a revocation and a replacement are recorded here, and flag
+// later tickets. Its QC status is its own mark (QcMark, BACKLOG 1.8.2).
+model Certification {
+  // Made on the phone, so a retried sync is the same record (KD-56); by the database for a copy
+  // the back office makes.
+  id         String            @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  projectId  String            @map("project_id") @db.Uuid
+  // The cert number is the placard number is the badge number: one identifier, never a second
+  // field (ADR-045; invariant 9). System-issued or typed off pre-printed paper, kept as written;
+  // unique on its project and nowhere else (ADR-318).
+  certNumber String            @map("cert_number")
+  kind       CertificationKind
+
+  // Whose work it is, on every ticket that scans its badge (ADR-186): one of its project's primes,
+  // and the subs typed in under that prime, at most two tiers (ADR-108). The operating sub is the
+  // lowest tier filled.
+  primeId         String  @map("prime_id") @db.Uuid
+  firstTierSubId  String? @map("first_tier_sub_id") @db.Uuid
+  secondTierSubId String? @map("second_tier_sub_id") @db.Uuid
+
+  // What was certified, from the firm's lists; a typed description where none of the list fits
+  // (ADR-070). A crew type on a crew only.
+  vehicleTypeId    String? @map("vehicle_type_id") @db.Uuid
+  vehicleTypeOther String? @map("vehicle_type_other")
+  crewTypeId       String? @map("crew_type_id") @db.Uuid
+
+  // A container only: whole cubic yards, worked out from its boxes exactly as adms-certifications
+  // §3A.3 says (packages/domain's Capacity). Never typed; a crew has none (invariant 10).
+  capacityCy Int? @map("capacity_cy")
+
+  // The driver: recorded here only, never checked, never copied to a field event (ADR-153, 289).
+  driverName          String?   @map("driver_name")
+  driverPhone         String?   @map("driver_phone")
+  driverLicenceNumber String?   @map("driver_licence_number")
+  driverLicenceState  String?   @map("driver_licence_state")
+  driverLicenceExpiry DateTime? @map("driver_licence_expiry") @db.Date
+  // The tag (plate); an expired tag flags later tickets (ADR-079, 153).
+  tagNumber           String?   @map("tag_number")
+  tagState            String?   @map("tag_state")
+  tagExpiry           DateTime? @map("tag_expiry") @db.Date
+
+  // The phone's clock, as a UTC instant plus its offset; and when the server received it (ADR-100).
+  certifiedAt            DateTime @map("certified_at") @db.Timestamptz(3)
+  deviceUtcOffsetMinutes Int      @map("device_utc_offset_minutes")
+  receivedAt             DateTime @map("received_at") @db.Timestamptz(3)
+  // The monitor who made it and measured it (ADR-294); the phone and the assignment it was made
+  // under, where a phone made it.
+  certifiedById          String   @map("certified_by_id") @db.Uuid
+  deviceId               String?  @map("device_id") @db.Uuid
+  assignmentId           String?  @map("assignment_id") @db.Uuid
+
+  // The representatives: names only, no ID, no signature (ADR-080). Whether signatures are on
+  // file (kept elsewhere) is marked at QC.
+  clientRepresentativeName     String? @map("client_representative_name")
+  contractorRepresentativeName String? @map("contractor_representative_name")
+  signaturesOnFile             Boolean @map("signatures_on_file")
+
+  // A modified truck's new certification names the one it replaces, on its own project, and why
+  // (ADR-082); a certification is replaced once.
+  replacesId     String?   @map("replaces_id") @db.Uuid
+  replacedReason String?   @map("replaced_reason")
+  // The same truck on another project: the certification this one was copied from (ADR-152).
+  copiedFromId   String?   @map("copied_from_id") @db.Uuid
+  // Revoked from a day, by an admin, with a reason: all three or none (ADR-079).
+  revokedFrom    DateTime? @map("revoked_from") @db.Date
+  revokedReason  String?   @map("revoked_reason")
+  revokedById    String?   @map("revoked_by_id") @db.Uuid
+  notes          String?
+
+  project         Project               @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  prime           Contractor            @relation("CertificationPrime", fields: [primeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  // One of its own project's primes (ADR-305; C56).
+  primePlace      ProjectContractor     @relation("CertificationPrimePlace", fields: [projectId, primeId], references: [projectId, asPrimeId], onDelete: Restrict, onUpdate: Restrict)
+  firstTierSub    Contractor?           @relation("CertificationFirstTierSub", fields: [firstTierSubId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  secondTierSub   Contractor?           @relation("CertificationSecondTierSub", fields: [secondTierSubId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  // Each sub is placed on its project under its own prime (ADR-321).
+  firstTierPlace  ProjectContractor?    @relation("CertificationFirstTierPlace", fields: [projectId, firstTierSubId, primeId], references: [projectId, contractorId, primeId], onDelete: Restrict, onUpdate: Restrict)
+  secondTierPlace ProjectContractor?    @relation("CertificationSecondTierPlace", fields: [projectId, secondTierSubId, primeId], references: [projectId, contractorId, primeId], onDelete: Restrict, onUpdate: Restrict)
+  vehicleType     VehicleType?          @relation(fields: [vehicleTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  crewType        CrewType?             @relation(fields: [crewTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  certifiedBy     User                  @relation("CertificationCertifiedBy", fields: [certifiedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  device          Device?               @relation(fields: [deviceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  assignment      Assignment?           @relation(fields: [assignmentId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  replaces        Certification?        @relation("CertificationReplaced", fields: [projectId, replacesId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  replacedBy      Certification?        @relation("CertificationReplaced")
+  copiedFrom      Certification?        @relation("CertificationCopied", fields: [copiedFromId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  copies          Certification[]       @relation("CertificationCopied")
+  revokedBy       User?                 @relation("CertificationRevokedBy", fields: [revokedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  boxes           CertificationBox[]
+  helpers         CertificationHelper[]
+
+  // A cert number once per project (ADR-045).
+  @@unique([projectId, certNumber])
+  // So "replaces" names only a certification of its own project, and only once.
+  @@unique([projectId, id])
+  @@unique([projectId, replacesId])
+  // So a measured box can only be a container's (its relation's target).
+  @@unique([id, kind])
+  @@map("certification")
+}
+
+// A helper on the measurement: picked, never typed, from the people assigned to the project with
+// the certifying monitor; none is allowed, and each once (ADR-294). Taken off by archiving.
+model CertificationHelper {
+  id              String @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  certificationId String @map("certification_id") @db.Uuid
+  userId          String @map("user_id") @db.Uuid
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  certification Certification @relation(fields: [certificationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  user          User          @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([certificationId, userId])
+  @@map("certification_helper")
+}
+
+// One measured box of a container, kept so its capacity can always be worked out again
+// (adms-certifications §3A.3, "store the boxes"). Position 0 is the primary; boxes 1…N follow, with
+// no limit. A measuring mistake is corrected in place, audited; a box entered by mistake is taken
+// off by archiving, never the primary.
+model CertificationBox {
+  id              String            @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  certificationId String            @map("certification_id") @db.Uuid
+  // Its certification's kind, again: always CONTAINER (a check in the guard migration), so a crew
+  // can hold no box.
+  kind            CertificationKind
+  position        Int
+  // What a box after the primary is: picked from the firm's list, or typed (ADR-070, 076).
+  featureId       String?           @map("feature_id") @db.Uuid
+  featureOther    String?           @map("feature_other")
+  shape           BoxShape
+  sign            BoxSign
+  // Whole inches; each shape holds its own measurements and no other (a check in the guard
+  // migration). `corners` is how many radius corners.
+  length          Int?
+  secondLength    Int?              @map("second_length")
+  width           Int?
+  height          Int?
+  diameter        Int?
+  radius          Int?
+  run             Int?
+  corners         Int?
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  certification Certification   @relation(fields: [certificationId, kind], references: [id, kind], onDelete: Restrict, onUpdate: Restrict)
+  feature       VehicleFeature? @relation(fields: [featureId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([certificationId, position])
+  @@map("certification_box")
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1351,6 +1552,8 @@ model VehicleType {
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
 
+  certifications Certification[]
+
   @@map("vehicle_type")
 }
 
@@ -1365,6 +1568,8 @@ model VehicleFeature {
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
 
+  boxes CertificationBox[]
+
   @@map("vehicle_feature")
 }
 
@@ -1378,6 +1583,8 @@ model CrewType {
 
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  certifications Certification[]
 
   @@map("crew_type")
 }

@@ -11,7 +11,16 @@
 // Coastline Haulers LLC and Summit Debris Services are P1's two primes, each with its contract;
 // Coastline is P2's prime, with its own contract there. Harbor Staffing, a temp agency, is a
 // contractor of the monitoring kind, on no project (spec/CONVENTIONS.md §6; ADR-305). Subs aren't
-// set up: a test places Rivera Trucking as certification would.
+// set up: Rivera Trucking is on P1 and on P2 as a tier 1 sub under Coastline because its
+// self-loader was certified there (ADR-108, 321).
+// P1's five certifications, as the golden mission §1 has them (ADR-321): `730415` Coastline's dump
+// trailer (65 CY), `730416` Rivera's self-loader (48 CY), `730417` and `730418` Coastline's bucket
+// truck crew and skid steer crew, `730419` Coastline's walking floor (110 CY); each container with
+// its measured boxes (spec/CONVENTIONS.md §6). Sam Grant certified them on Saturday 10 October 2026
+// on the phone P1-HO-TDSR, under his certifying assignment, with Lee Morgan, assigned to P1 with him
+// that day, as his helper on `730415`. P2 has its own `730416`, the same self-loader certified
+// there in its own right on the Sunday (ADR-318). The tandem, a replacement and a copy a test
+// writes, with `certificationLike` and `boxLike`.
 // P1 has a load form with Vegetative and C&D on it (the golden mission §1), a haul-out form and an
 // incident form, switched on (ADR-308). Mulch isn't in the firm's library as the seed writes it, and
 // P1's field tags start empty, so a test adds those as Dana would.
@@ -55,9 +64,32 @@ export interface PayItems {
   crewTime: string;
 }
 
+export interface Certifications {
+  c730415: string;
+  c730416: string;
+  c730417: string;
+  c730418: string;
+  c730419: string;
+  // P2's own 730416.
+  p2c730416: string;
+}
+
 export interface World {
   // Dana Reyes, admin: the actor the world is written by.
   admin: string;
+  // Sam Grant, the monitor who certifies, on the phone P1-HO-TDSR, under his certifying assignment
+  // on each project; Lee Morgan, assigned to P1 with him, the helper he picks.
+  certifier: string;
+  helper: string;
+  certifyingDevice: string;
+  certifyingAssignments: { p1: string; p2: string };
+  // Rivera Trucking, a tier 1 sub under Coastline on P1 and on P2.
+  rivera: string;
+  certifications: Certifications;
+  // What the certifications pick from the firm's lists.
+  vehicleTypes: { dumpTrailer: string; selfLoader: string };
+  vehicleFeatures: { sideboards: string; dogBox: string; curvedSides: string };
+  crewTypes: { bucketTruck: string; skidSteer: string };
   // Ana Brooks, a monitor, and the phone she records on, P1-COL-1.
   monitor: string;
   device: string;
@@ -313,6 +345,65 @@ export function subOn(
     contractor_id: contractorId,
     position: `SUB_TIER_${String(tier)}`,
     prime_id: primeId,
+  };
+}
+
+// A certification as Sam Grant makes one on P1, on his phone, under his certifying assignment:
+// Coastline's tandem truck body `730421` (30 CY), no sub, certified on Saturday 10 October 2026 at
+// 11:30 and received a minute later. For a test that writes another certification, or changes one
+// column of this one (`more`). A container is written with its primary box (`boxLike`).
+export function certificationLike(
+  world: Pick<
+    World,
+    'p1' | 'coastline' | 'certifier' | 'certifyingDevice' | 'certifyingAssignments'
+  >,
+  more: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    project_id: world.p1,
+    cert_number: '730421',
+    kind: 'CONTAINER',
+    prime_id: world.coastline,
+    capacity_cy: 30,
+    certified_at: '2026-10-10T15:30:00Z',
+    device_utc_offset_minutes: -240,
+    received_at: '2026-10-10T15:31:00Z',
+    certified_by_id: world.certifier,
+    device_id: world.certifyingDevice,
+    assignment_id: world.certifyingAssignments.p1,
+    signatures_on_file: false,
+    ...more,
+  };
+}
+
+// A crew certification as Sam makes one: no capacity, nothing measured.
+export function crewLike(
+  world: Parameters<typeof certificationLike>[0],
+  more: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return without(
+    certificationLike(world, { kind: 'CREW', cert_number: '730423', ...more }),
+    'capacity_cy',
+  );
+}
+
+// A measured box of a container. Position 0 is its primary, a rectangle that adds: 240 × 90 × 60
+// unless `more` says otherwise. A box after the primary states its feature, shape and sign.
+export function boxLike(
+  certificationId: string,
+  position: number,
+  more: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    certification_id: certificationId,
+    kind: 'CONTAINER',
+    position,
+    shape: 'RECTANGLE',
+    sign: 'ADD',
+    length: 240,
+    width: 90,
+    height: 60,
+    ...more,
   };
 }
 
@@ -584,6 +675,171 @@ export class ExampleWorld {
         made_by_id: admin,
       });
     const assignments = { p1: await assignment(p1), p2: await assignment(p2) };
+    // Who certifies, where and when (spec/CONVENTIONS.md §6; ADR-151, 240, 294).
+    const certifier = await this.insert('user', { name: 'Sam Grant', role: 'MONITOR' });
+    const helper = await this.insert('user', { name: 'Lee Morgan', role: 'MONITOR' });
+    const certifyingDevice = await this.insert('device', {
+      name: 'P1-HO-TDSR',
+      public_key: 'test-public-key-sam-grant',
+      master_passcode_version: 1,
+    });
+    const certifying = (projectId: string, workDate: string): Promise<string> =>
+      this.insert('assignment', {
+        person_id: certifier,
+        work_date: workDate,
+        project_id: projectId,
+        certifying: true,
+        device_id: certifyingDevice,
+        origin: 'PLANNED',
+        made_by_id: admin,
+      });
+    const certifyingAssignments = {
+      p1: await certifying(p1, '2026-10-10'),
+      p2: await certifying(p2, '2026-10-11'),
+    };
+    await this.insert('assignment', {
+      person_id: helper,
+      work_date: '2026-10-10',
+      project_id: p1,
+      origin: 'PLANNED',
+      made_by_id: admin,
+    });
+    // Rivera Trucking, typed in when its self-loader was certified: placed under Coastline on each
+    // project it was certified on (ADR-108).
+    const rivera = await this.insert('contractor', { name: 'Rivera Trucking', kind: 'HAULER' });
+    await this.insert('project_contractor', subOn(p1, rivera, coastline));
+    await this.insert('project_contractor', subOn(p2, rivera, coastline));
+    const vehicleTypes = {
+      dumpTrailer: await this.picked('vehicle_type', 'Hydraulic Dump Trailer'),
+      selfLoader: await this.picked('vehicle_type', 'Self-Loading Truck'),
+    };
+    const vehicleFeatures = {
+      sideboards: await this.picked('vehicle_feature', 'Sideboards'),
+      dogBox: await this.picked('vehicle_feature', 'Dog Box'),
+      curvedSides: await this.picked('vehicle_feature', 'Curved/Angled Sides/Floor'),
+    };
+    const crewTypes = {
+      bucketTruck: await this.picked('crew_type', 'Bucket Truck'),
+      skidSteer: await this.picked('crew_type', 'Skid Steer'),
+    };
+    const certifies = { p1, coastline, certifier, certifyingDevice, certifyingAssignments };
+    // A container: the certification, its primary box, then its one box after it.
+    const container = async (
+      more: Record<string, unknown>,
+      primary: [number, number, number],
+      box: Record<string, unknown>,
+    ): Promise<string> => {
+      const id = await this.insert('certification', certificationLike(certifies, more));
+      const [length, width, height] = primary;
+      await this.insert('certification_box', boxLike(id, 0, { length, width, height }));
+      await this.insert('certification_box', boxLike(id, 1, box));
+      return id;
+    };
+    const selfLoader = {
+      cert_number: '730416',
+      capacity_cy: 48,
+      first_tier_sub_id: rivera,
+      vehicle_type_id: vehicleTypes.selfLoader,
+      driver_name: 'Marco Rivera',
+      driver_phone: '555-0142',
+      driver_licence_number: 'R160-542-80-112-0',
+      driver_licence_state: 'FL',
+      driver_licence_expiry: '2028-03-31',
+      tag_number: 'RVT 4821',
+      tag_state: 'FL',
+      tag_expiry: '2027-03-31',
+    };
+    const dogBox = {
+      feature_id: vehicleFeatures.dogBox,
+      shape: 'TRIANGLE',
+      sign: 'SUBTRACT',
+      length: 36,
+      width: 92,
+      height: 48,
+    };
+    const certifications: Certifications = {
+      c730415: await container(
+        {
+          cert_number: '730415',
+          capacity_cy: 65,
+          vehicle_type_id: vehicleTypes.dumpTrailer,
+          certified_at: '2026-10-10T13:10:00Z',
+          received_at: '2026-10-10T13:11:00Z',
+          client_representative_name: 'Bayline County debris manager',
+          contractor_representative_name: 'Coastline Haulers dispatch',
+        },
+        [360, 96, 72],
+        { feature_id: vehicleFeatures.sideboards, length: 360, width: 96, height: 16 },
+      ),
+      c730416: await container(
+        {
+          ...selfLoader,
+          certified_at: '2026-10-10T13:40:00Z',
+          received_at: '2026-10-10T13:41:00Z',
+        },
+        [264, 92, 96],
+        dogBox,
+      ),
+      c730417: await this.insert(
+        'certification',
+        crewLike(certifies, {
+          cert_number: '730417',
+          crew_type_id: crewTypes.bucketTruck,
+          certified_at: '2026-10-10T14:05:00Z',
+          received_at: '2026-10-10T14:06:00Z',
+        }),
+      ),
+      c730418: await this.insert(
+        'certification',
+        crewLike(certifies, {
+          cert_number: '730418',
+          crew_type_id: crewTypes.skidSteer,
+          certified_at: '2026-10-10T14:20:00Z',
+          received_at: '2026-10-10T14:21:00Z',
+        }),
+      ),
+      c730419: await container(
+        {
+          cert_number: '730419',
+          capacity_cy: 110,
+          vehicle_type_other: 'Walking floor trailer',
+          certified_at: '2026-10-10T14:50:00Z',
+          received_at: '2026-10-10T14:51:00Z',
+        },
+        [576, 96, 93],
+        {
+          feature_id: vehicleFeatures.curvedSides,
+          shape: 'RADIUS_CORNER',
+          sign: 'SUBTRACT',
+          length: null,
+          width: null,
+          height: null,
+          radius: 6,
+          run: 576,
+          corners: 2,
+        },
+      ),
+      p2c730416: await container(
+        {
+          ...selfLoader,
+          project_id: p2,
+          assignment_id: certifyingAssignments.p2,
+          certified_at: '2026-10-11T13:15:00Z',
+          received_at: '2026-10-11T13:16:00Z',
+        },
+        [264, 92, 96],
+        dogBox,
+      ),
+    };
+    await this.insert('certification_helper', {
+      certification_id: certifications.c730415,
+      user_id: helper,
+    });
+    // A container's primary box is asked for when the piece of work that wrote it ends (a deferred
+    // constraint trigger). The world is never committed, so it is asked here, as a commit would:
+    // every container above has its primary box.
+    await this.db.run('SET CONSTRAINTS ALL IMMEDIATE');
+    await this.db.run('SET CONSTRAINTS ALL DEFERRED');
     await this.insert('user_viewer_project', given(coastlineViewer, p1));
     await this.insert('user_viewer_project', given(clientViewer, p1));
     await this.insert('user_viewer_project', given(auditor, p1));
@@ -592,6 +848,15 @@ export class ExampleWorld {
     const place = { monitor, device };
     return {
       admin,
+      certifier,
+      helper,
+      certifyingDevice,
+      certifyingAssignments,
+      rivera,
+      certifications,
+      vehicleTypes,
+      vehicleFeatures,
+      crewTypes,
       monitor,
       device,
       assignments,

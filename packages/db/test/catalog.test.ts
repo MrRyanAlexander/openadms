@@ -53,6 +53,11 @@ const domains: Record<string, string> = {
   rule_criterion_pick: 'BILLING',
   rule_action: 'BILLING',
   rule_action_item: 'BILLING',
+  // A container's capacity is what every load on it bills by: a certification and its measured
+  // boxes are the billing reviewer's to read; who helped measure is operations (ADR-321).
+  certification: 'BILLING',
+  certification_box: 'BILLING',
+  certification_helper: 'OPERATIONS',
   master_passcode: 'SECURITY',
   field_event: 'RECORDS',
   completed_load: 'BILLING',
@@ -88,6 +93,9 @@ const triggers = [
       `CREATE TRIGGER ${table}_refuse_edit BEFORE UPDATE ON public.${table} FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
   ),
   `CREATE TRIGGER zone_with_its_map_version BEFORE INSERT ON public.zone FOR EACH ROW EXECUTE FUNCTION zone_with_its_map_version()`,
+  // A container has its primary box, asked when the piece of work that wrote it ends (ADR-321).
+  `CREATE CONSTRAINT TRIGGER certification_has_primary_box AFTER INSERT OR UPDATE OF kind ON public.certification DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION certification_has_primary_box()`,
+  `CREATE CONSTRAINT TRIGGER certification_box_keeps_primary AFTER UPDATE OF certification_id, "position" ON public.certification_box DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION certification_has_primary_box()`,
   // The system actor's row (ADR-276).
   `CREATE TRIGGER user_system_actor BEFORE INSERT OR UPDATE ON public."user" FOR EACH ROW EXECUTE FUNCTION user_system_actor_guard()`,
   // Only a release writes a list value's key (ADR-302).
@@ -157,6 +165,96 @@ describe('the guards in the catalog', () => {
         name: 'assignment_system_actor_check',
         definition:
           "CHECK (((person_id <> '00000000-0000-7000-8000-000000000001'::uuid) AND (made_by_id IS DISTINCT FROM '00000000-0000-7000-8000-000000000001'::uuid)))",
+      },
+      // A certification, its measured boxes and its helpers (ADR-321).
+      {
+        name: 'certification_box_feature_check',
+        definition: [
+          'CHECK ((((num_nonnulls(feature_id, feature_other) =',
+          'CASE',
+          '    WHEN ("position" = 0) THEN 0',
+          '    ELSE 1',
+          "END) AND ((feature_other IS NULL) OR (btrim(feature_other) <> ''::text))) IS TRUE))",
+        ].join('\n'),
+      },
+      {
+        name: 'certification_box_kind_check',
+        definition: "CHECK ((kind = 'CONTAINER'::certification_kind))",
+      },
+      {
+        name: 'certification_box_measurements_check',
+        definition: [
+          'CHECK ((',
+          'CASE',
+          "    WHEN (shape = ANY (ARRAY['RECTANGLE'::box_shape, 'TRIANGLE'::box_shape])) THEN ((length >= 1) AND (width >= 1) AND (height >= 1) AND (num_nonnulls(second_length, diameter, radius, run, corners) = 0))",
+          "    WHEN (shape = 'TWO_LENGTH_HOIST'::box_shape) THEN ((length >= 1) AND (second_length >= 1) AND (width >= 1) AND (height >= 1) AND (num_nonnulls(diameter, radius, run, corners) = 0))",
+          "    WHEN (shape = 'ROUND_BOTTOM'::box_shape) THEN ((diameter >= 1) AND (length >= 1) AND (num_nonnulls(second_length, width, height, radius, run, corners) = 0))",
+          "    WHEN (shape = 'RADIUS_CORNER'::box_shape) THEN ((radius >= 1) AND (run >= 1) AND (corners >= 1) AND (num_nonnulls(length, second_length, width, height, diameter) = 0))",
+          '    ELSE false',
+          'END IS TRUE))',
+        ].join('\n'),
+      },
+      {
+        name: 'certification_box_position_check',
+        definition: 'CHECK (("position" >= 0))',
+      },
+      {
+        name: 'certification_box_primary_check',
+        definition:
+          "CHECK ((((\"position\" <> 0) OR ((shape = 'RECTANGLE'::box_shape) AND (sign = 'ADD'::box_sign) AND (archived_at IS NULL))) IS TRUE))",
+      },
+      {
+        name: 'certification_box_radius_corner_check',
+        definition:
+          "CHECK (((shape <> 'RADIUS_CORNER'::box_shape) OR (sign = 'SUBTRACT'::box_sign)))",
+      },
+      {
+        name: 'certification_cert_number_check',
+        definition: "CHECK ((btrim(cert_number) <> ''::text))",
+      },
+      {
+        name: 'certification_copied_from_check',
+        definition: 'CHECK (((copied_from_id IS NULL) OR (copied_from_id <> id)))',
+      },
+      {
+        name: 'certification_helper_system_actor_check',
+        definition: "CHECK ((user_id <> '00000000-0000-7000-8000-000000000001'::uuid))",
+      },
+      {
+        name: 'certification_kind_check',
+        definition: [
+          'CHECK ((',
+          'CASE kind',
+          "    WHEN 'CONTAINER'::certification_kind THEN ((capacity_cy IS NOT NULL) AND (capacity_cy >= 0) AND (crew_type_id IS NULL))",
+          "    WHEN 'CREW'::certification_kind THEN (capacity_cy IS NULL)",
+          '    ELSE false',
+          'END IS TRUE))',
+        ].join('\n'),
+      },
+      {
+        name: 'certification_replaces_check',
+        definition:
+          "CHECK (((((replaces_id IS NULL) = (replaced_reason IS NULL)) AND ((replaced_reason IS NULL) OR (btrim(replaced_reason) <> ''::text)) AND ((replaces_id IS NULL) OR (replaces_id <> id))) IS TRUE))",
+      },
+      {
+        name: 'certification_revoked_check',
+        definition:
+          "CHECK ((((num_nonnulls(revoked_from, revoked_reason, revoked_by_id) = ANY (ARRAY[0, 3])) AND ((revoked_reason IS NULL) OR (btrim(revoked_reason) <> ''::text))) IS TRUE))",
+      },
+      {
+        name: 'certification_subs_check',
+        definition:
+          'CHECK (((((second_tier_sub_id IS NULL) OR (first_tier_sub_id IS NOT NULL)) AND ((second_tier_sub_id IS NULL) OR (second_tier_sub_id <> first_tier_sub_id))) IS TRUE))',
+      },
+      {
+        name: 'certification_system_actor_check',
+        definition:
+          "CHECK (((certified_by_id <> '00000000-0000-7000-8000-000000000001'::uuid) AND (revoked_by_id IS DISTINCT FROM '00000000-0000-7000-8000-000000000001'::uuid)))",
+      },
+      {
+        name: 'certification_vehicle_type_check',
+        definition:
+          "CHECK ((((num_nonnulls(vehicle_type_id, vehicle_type_other) <= 1) AND ((vehicle_type_other IS NULL) OR (btrim(vehicle_type_other) <> ''::text))) IS TRUE))",
       },
       {
         name: 'contractor_merged_into_another_check',
