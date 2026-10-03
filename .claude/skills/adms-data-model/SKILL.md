@@ -2,7 +2,7 @@
 name: adms-data-model
 description: Open ADMS data model, in today's rules. Covers the records and how they link (Client → DeclarationEvent → Project, contractors and contracts, forms and debris types, pay items with a rate per prime, rules naming one contract, sites, certifications, users, devices and assignments, time-clock entries, FieldEvent and the CompletedLoad / CompletedHaulOut drawn from it, transactions, flags, AuditRecord), why reference data is editable, evidence correctable only by permission and the derived records and audit never by a person, which lists are fixed in code and which the firm extends (built-in keys plus the firm's own values), identifiers, uniqueness, coordinates and time, and which package and database role may write what. Use when touching the Prisma schema, adding or changing a model, a list, a relation or a constraint, or deciding where a write belongs. Field names are spec/DATA-MODEL.md's; what each setup record and field event holds is adms-ticket-workflows.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-245; ADR-246; the Phase 0 models built, ADR-281; the pay item's first shape and `spec/DATA-MODEL.md` drafted, ADR-284, 286; the page approved, ADR-289; a pay item's unique code and description, ADR-301; the firm's lists built, ADR-302; the client, the declaration event and the project built, ADR-303; contractors on a project and contracts built, ADR-305; a contractor's contact details, ADR-306; forms, the debris types on them and the firm's own fields built, ADR-308; pay items in full, ADR-309; sites and the project map built, a site keeping several tipping fee pay items, ADR-311; rules built, ADR-313; people's permissions and viewers, ADR-315) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-245; ADR-246; the Phase 0 models built, ADR-281; the pay item's first shape and `spec/DATA-MODEL.md` drafted, ADR-284, 286; the page approved, ADR-289; a pay item's unique code and description, ADR-301; the firm's lists built, ADR-302; the client, the declaration event and the project built, ADR-303; contractors on a project and contracts built, ADR-305; a contractor's contact details, ADR-306; forms, the debris types on them and the firm's own fields built, ADR-308; pay items in full, ADR-309; sites and the project map built, a site keeping several tipping fee pay items, ADR-311; rules built, ADR-313; people's permissions and viewers, ADR-315; certifications, ADR-321) -->
 
 > **This page states today's rules** (last changed by ADR-315, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
@@ -314,6 +314,12 @@ an ADR):
 
 - **Field events: one model with a kind**, shared columns plus kind-checked ones (§3.1c). Reads of a
   ticket never join across stage tables, because there are none.
+- **Built (ADR-321):** `Certification`, `CertificationBox`, `CertificationHelper`: one table with
+  a `kind`; a box repeats that kind (always `CONTAINER`), so a crew holds none, and two deferred
+  constraint triggers hold a container to its primary box; `firstTierSubId` and `secondTierSubId`
+  point at `project_contractor (project_id, contractor_id, prime_id)`, so a sub is one placed
+  under that prime on that project; audited in billing. A test writes one with
+  `certificationLike`, `crewLike` and `boxLike`.
 - **Certifications** share one base (number, project, prime and sub, photos, attestation, QC) with a
   container part (measured boxes, capacity) or a crew part (not measured, invariant 10); the shape is
   `adms-certifications` §3A.2. A crew **is** its certification: there is no crew list (ADR-228).

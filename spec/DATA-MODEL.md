@@ -722,6 +722,12 @@ The server is the only allocator (ADR-065).
 #### `Certification`
 
 *Configuration.* `adms-certifications` §3A.2: a container or a crew, never a vehicle.
+**✅ Built 2026-10-03 (ADR-321)** as below. It has no `archivedAt`: replaced, revoked or QC Void, it
+stays as it was made. Each sub is held to a contractor placed on the project under `primeId`
+(a foreign key to `project_contractor`); "replaced on" is the new certification's `certifiedAt`,
+as a day in the project's time zone; `replacesId` names a certification of the same project, once.
+A helper and a box also carry `id`, `createdAt` and `archivedAt` (taken off by archiving, never the
+primary box); a box repeats its certification's `kind`, so only a container holds one.
 
 | Field | Type | Notes |
 |---|---|---|
@@ -1403,7 +1409,7 @@ Never relaxed to pass a test (ARCHITECTURE §5.4). ✅ = built today.
 | Every kind-specific column is empty on the other kinds; a split load's collection has its suffix and estimate both, or neither; a haul-out collection may carry a suffix, with its load call (ADR-295) | checks |
 | A phone's record carries its device, assignment and setup version; a back-office one its person and reason | check |
 | One disposal per completed load or haul-out; one live completed record per collection event | unique keys (the second partial: `WHERE dissolved_at IS NULL`, in a guard migration) |
-| A cert number once per project; a receipt number once per project; an ROE number once per project | unique keys |
+| A cert number once per project (✅ ADR-321); a receipt number once per project; an ROE number once per project | unique keys |
 | A pay item's code once per project (ADR-301) | ✅ unique key |
 | One rate per prime on a pay item, and only for one of the pay item's own project's primes (ADR-206, 305, 309) | ✅ a unique key and two-column foreign keys |
 | A size band is never below nought or backwards; crew time's conversion only on an `HR` or `CREW_DAY` pay item, its day length only on an exact one, at most 24 h; a crew day's step within a day; a rate and a step's quantity nought or more (ADR-087, 309) | ✅ checks |
@@ -1413,7 +1419,8 @@ Never relaxed to pass a test (ARCHITECTURE §5.4). ✅ = built today.
 | A rule that is an exact copy of another (same form, contract, criteria and actions, whatever its name) | the API at setup, before it is saved (ADR-301): ✅ the check is `packages/domain`'s `ProjectRules` (ADR-313) |
 | A rule sits on a load, haul-out or unit rate form of its own project and names one of that project's contracts; a picked value is the rule's own project's (a debris type its own form's); a pick fills the one column its criterion picks from; a criterion takes only its kind's operators, and a value only its operator's; an action holds only what its kind takes (ADR-313) | ✅ composite foreign keys and checks |
 | A transaction # once per ticket (and property or pile) | unique key |
-| A crew certification has no capacity and no boxes; a container has both | check |
+| A crew certification has no capacity and no boxes; a container has both (ADR-321) | ✅ a check; a box repeats its certification's kind, held by a foreign key; two deferred constraint triggers hold a container to its primary box |
+| A certification's prime is one of its project's primes, and each sub is placed on that project under that prime; a second tier only with a first; "replaces" names a certification of its own project, once, with a reason; a revocation has its date, reason and person; a box's shape holds its own whole-inch measurements, each 1 or more, a radius corner subtracts, a box after the primary has one label (ADR-321) | ✅ foreign keys, unique keys and checks |
 | A project's time zone is an IANA name; no time without its zone | ✅ checks, a test |
 | A project's active window never ends before it starts; its load-call limits are empty or 0–100; its stump fill depth and site circle are at least 1; its ticket types are never missing (ADR-303) | ✅ checks |
 | A kind of unit rate work is on a project once | ✅ unique key |
@@ -1460,8 +1467,8 @@ A new value in any of them is a code change with an ADR (`spec/LISTS.md` Group 2
 | `CrewTimeConversion` ✅ | `PER_HOUR` · `PER_DAY_EXACT` · `PER_DAY_STEPS` | `PayItem` |
 | `CountShape` ✅ | `NUMBER` · `ITEM_COUNTS` · `ITEM_HOURS` | `KindOfWork` |
 | `CertificationKind` ✅ | `CONTAINER` · `CREW` | `Certification`, `VehicleType.certifies` (ADR-302) |
-| `BoxShape` | `RECTANGLE` · `TRIANGLE` · `TWO_LENGTH_HOIST` · `ROUND_BOTTOM` · `RADIUS_CORNER` | `CertificationBox` |
-| `BoxSign` | `ADD` · `SUBTRACT` | `CertificationBox` |
+| `BoxShape` ✅ | `RECTANGLE` · `TRIANGLE` · `TWO_LENGTH_HOIST` · `ROUND_BOTTOM` · `RADIUS_CORNER` | `CertificationBox` |
+| `BoxSign` ✅ | `ADD` · `SUBTRACT` | `CertificationBox` (ADR-321) |
 | `RecordSource` | `DEVICE` · `BACK_OFFICE` | `FieldEvent`, `Roe`, the forms |
 | `MeasuredAs` | `CIRCUMFERENCE` · `DIAMETER` | `FieldEvent` |
 | `AddressSource` | `LOOKED_UP` · `TYPED` | `FieldEvent` |
@@ -1501,6 +1508,8 @@ A new value in any of them is a code change with an ADR (`spec/LISTS.md` Group 2
 | `InvoiceLock` | Gains the unlock columns, the batch and the two other targets |
 | `AuditRecord` | As built |
 | The firm's eighteen lists (§2.3) | ✅ built 2026-10-02 as this page has them (ADR-302) |
+| `ProjectContractor` | ✅ gains a unique key on (project, contractor, prime), which a certification's subs point at (ADR-321) |
+| `Certification`, `CertificationBox`, `CertificationHelper` | ✅ built 2026-10-03 (ADR-321) |
 | *New* | Everything else on this page, in `BACKLOG.md`'s Phase 1 order; each table guarded in one line (ADR-271) |
 
 ---
