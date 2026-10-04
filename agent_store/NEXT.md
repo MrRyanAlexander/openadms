@@ -154,7 +154,7 @@ of `DECISIONS.md`.
   (`number_blocks_never_overlap`: a reclaimed block holds only what its phone used, so its rest
   is cut again for the next phone, once); the number rules in `packages/domain` (`numbers.ts`),
   block sizes as policy values; the allocator `NumberAllocator` in `apps/api`
-  (`src/numbering/`), which also numbers a copied certification; the story `numbering` (15
+  (`src/numbering/`); the story `numbering` (15
   checks); and **1.3.3, what every field event records (2026-10-03, ADR-324)**: `FieldEvent`'s
   shared columns of `spec/DATA-MODEL.md` §4.1 (1), none with a database default; one check
   tells a phone's record (phone, assignment, setup version) from one created in the back office
@@ -176,8 +176,7 @@ of `DECISIONS.md`.
   fingerprints and two unique places in storage, written once; a view only on a
   certification's); `FieldEvent.scaleReceiptId`, only on a disposal and a haul-out disposal,
   its own project's; both tables seen by a client user and an auditor with their project, a
-  photograph without where its file is kept. A copied certification holds no photograph of its
-  own; and **1.3.6, ROEs and forms (2026-10-04, ADR-327)**: `Roe` and `RoeScopeItem`
+  photograph without where its file is kept. A certification is never copied (ADR-328, 330); and **1.3.6, ROEs and forms (2026-10-04, ADR-327)**: `Roe` and `RoeScopeItem`
   (configuration: a number once per project, a phone's or the back office's, its scope picked
   from its own project's load form or the payable types) and `Survey`, `Incident`, `DropOffLog`
   (evidence, each saying where it came from as a field event does); each record's answers with
@@ -370,6 +369,13 @@ tickets and numbers, ADR-322: 98)**, **1.3.2 (numbering, ADR-323)**, **1.3.3 (wh
 2026-10-02 (ADR-301: a pay item's code is unique, it has a description and no name, a duplicate
 rule is refused).
 
+**First, C67 (b), then 1.3.7** (the user, 2026-10-04, ADR-328…330): C67 (a), certification
+copying taken out, is done (ADR-330); **C67 (b), a scale receipt's number is no longer unique**
+(drop `@@unique([projectId, receiptNumber])` by a new migration; its test, AC-04's scenario,
+DATA-MODEL §8, `adms-scale-receipts`), comes before 1.3.7's story; C67 (c)…(e) before 1.4.2.
+**A column taken off a table viewers see** goes in three migrations (ADR-330): a guard stub that
+drops the `viewer_<table>` view, made while the schema is unchanged; the generated drop; a guard
+stub that runs `guard_viewer` again.
 👉 **Task 1.3.7, the harness's phones capture every kind** (`BACKLOG.md`, Milestone 1.3): badge
 first, the number last and re-entered; a unit rate pay item worked out from the bands by the one
 rule the phone and the server share; the story of a day of P1's field events, every kind, each
@@ -543,7 +549,7 @@ then `SELECT guard_list('<table>', '<domain>');` in its guard migration; a new b
 `packages/domain`'s `builtInKeys` first, with an ADR (ADR-302).
 
 Start every command with `eval "$(fnm env --shell zsh)"`; the checks are **`adms-verify`** (the chain
-is 56 files, 1,139 tests; fifty-three migrations; `pnpm scenarios` runs five stories, 16, 18, 52, 28 and 15 checks),
+is 56 files, 1,137 tests; fifty-six migrations; `pnpm scenarios` runs five stories, 16, 18, 52, 25 and 15 checks),
 with **`pnpm security`** (7 passed, 0 failed, ADR-291). The database tests, the map servers' tests and
 the stories need `pnpm local:up` first; stop it at close-out (ADR-277). A schema change goes through
 Prisma (`prisma migrate dev --create-only`), a guard into its own empty stub (ADR-113); **try a guard

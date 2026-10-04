@@ -1,13 +1,13 @@
 # Open ADMS — Current decisions and gaps, at a glance
 
 **The present tense of the project on one page.** `DECISIONS.md` and `DEVIATIONS.md` are the full
-history, with 329 ADRs and 70 KDs, many superseded. This page says what is true **now** and which
+history, with 330 ADRs and 70 KDs, many superseded. This page says what is true **now** and which
 entries to cite. The reasons live in the ADRs and the skills.
 
 - **Keep it current:** when you add, amend or supersede an ADR, or open or close a KD, update this
   page **in the same response** (`adms-decisions`).
 - **If this page and a log entry disagree,** the newest ADR wins: fix this page and say so.
-- Updated 2026-10-04, through ADR-329 / KD-70. **The user answered the agent defaults of 1.3.2…1.3.6 (ADR-328; §4): certifications are never copied, a scale receipt's number is never unique, an incident may name a contractor, cert number and ROE number, a viewer's sight of private citizens' names is the firm's choice. Not built yet (BACKLOG C67).** **Task 1.3.6, ROEs and forms, is done (ADR-327; see "Field events").** Task 1.3.5, scale receipts and photographs, is done (ADR-326). Task 1.3.4, what each kind of field event records, is done (ADR-325). Task 1.3.3, what every field event records, is done (ADR-324). Task 1.3.2, numbering, is done (ADR-323; see "Tickets and numbers"). Rounds 13–26 are answered (ADR-145…228).
+- Updated 2026-10-04, through ADR-330 / KD-70. **C67 (a) is built (ADR-330): certification copying is out of the schema, the service, the domain and the story; C67 (b)…(g) are not.** **The user answered the agent defaults of 1.3.2…1.3.6 (ADR-328; §4): certifications are never copied, a scale receipt's number is never unique, an incident may name a contractor, cert number and ROE number, a viewer's sight of private citizens' names is the firm's choice. Not built yet (BACKLOG C67).** **Task 1.3.6, ROEs and forms, is done (ADR-327; see "Field events").** Task 1.3.5, scale receipts and photographs, is done (ADR-326). Task 1.3.4, what each kind of field event records, is done (ADR-325). Task 1.3.3, what every field event records, is done (ADR-324). Task 1.3.2, numbering, is done (ADR-323; see "Tickets and numbers"). Rounds 13–26 are answered (ADR-145…228).
   **Phase 1 (data core and engine, rebuilt) is open, at the user's word (ADR-299).** Its plan is
   `BACKLOG.md`'s ten milestones and 47 tasks, one task per response, each milestone opening with
   its part's acceptance scenarios in `spec/acceptance/` (ADR-300). Done: the plan,
@@ -385,19 +385,17 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   elsewhere in the firm it is placed, unknown it is a new contractor, a hauler on a container and
   a crew on a crew; **a name that already has another place on the project is never moved: the
   certification is saved under a separate contractor of that name, with the warning
-  `SUB_PLACED_ELSEWHERE`**), `CertificationChanges` (a replacement and a revocation say why; a copy
-  goes to another project where its prime is a prime) and `ContractorMerge` (the kept record takes
+  `SUB_PLACED_ELSEWHERE`**), `CertificationChanges` (a replacement and a revocation say why) and `ContractorMerge` (the kept record takes
   the duplicate's place on each project; refused into itself, of a merged record, into an archived
   one, of a prime, or where the two are placed differently on one project). **In `apps/api`:**
   `Certifications` (`src/certification/`): `certify`, written as the certifying monitor from their
   phone (source `DEVICE`), the capacity worked out by `Capacity` and never typed, **measurements
   that give no capacity refused with nothing saved**; `measure` (a box corrected in place, the
-  capacity worked out again); `signaturesOnFile`; `revoke`; `copy` (to another project, the
-  original's measurements and subs, a number the caller states); `SubPlaces` and
+  capacity worked out again); `signaturesOnFile`; `revoke`; **no copy** (a certification is never copied, ADR-328, 330); `SubPlaces` and
   `ContractorSetup.merge` (the certifications that named the duplicate name the kept one). **"Replaced on" is the new certification's certified time**, as a day in the project's time
   zone. A certification's number is the phone's (the next of its block, or the pre-printed
-  sheet's); a copy's is the other project's next, taken by the allocator (ADR-323). The story
-  `certification` runs it: `pnpm scenarios` runs five stories (16, 18, 52, 28, 15 checks). Sixty
+  sheet's). The story
+  `certification` runs it: `pnpm scenarios` runs five stories (16, 18, 52, 25, 15 checks since ADR-330). Sixty
   models, forty-five migrations. **`MapVersion.loadedAt`'s default is `transaction_timestamp()`** (KD-70:
   Prisma read `CURRENT_TIMESTAMP` back as its own `now()` and wrote it into every later
   migration). Left for later: C62. *Agent defaults.* [321]
@@ -737,8 +735,7 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
 - It certifies a **container or a crew, never a vehicle**. **One number:** cert = placard =
   badge, pre-printed or system-issued, unique per project. Tickets copy it. [015, 016, 017, 045,
   056] **Unique per project only** (the user, ADR-318): the same number on two projects is
-  ordinary, never flagged or refused; the golden mission's P2 has its own `730416`. A **copy** to another project still takes a new
-  number, never the placard's (confirmed by the user). [318, 319]
+  ordinary, never flagged or refused; the golden mission's P2 has its own `730416`. A certification is never copied (ADR-328, below). [318]
 - **System-issued cert numbers** come from a per-project series set at project creation, seeded
   with a number that doesn't look made up (e.g. `730415`), counting up by one; a tandem gets
   consecutive numbers. (Q-96, Build 1 answer) [102]
@@ -756,9 +753,13 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   tickets, with a message to review the certification. **A driver's licence flags nothing**; the
   driver is recorded on the cert only and carried onto its tickets (no driver list). A measuring
   mistake is corrected in place and its tickets reprocess. [079, 082, 153]
-- **Copying to another project:** a cert may be copied (unmodified truck) with a **new number** from
-  that project's series and a reference to the original; a mistake found in the copy **flags the
-  original** for review. [152]
+- **A certification is never copied** (the user, 2026-10-04): a truck that moves to a second
+  project is **certified there from scratch**, measured and photographed again, with that
+  project's own number, as tickets, incidents and surveys are never copied (configuration is:
+  pay items, rules). Supersedes ADR-152 (Q-143) and `REVIEW_ORIGINAL_CERTIFICATION`. **Built
+  (ADR-330):** `Certifications.copy`, the domain's copy rule, `NumberAllocator.next` and
+  `Certification.copiedFromId` are gone (three migrations: the viewers' view dropped, the
+  column dropped, the view written again; 56 in all). [328, 329, 330]
 - **A truck keyed in by hand** bills the **certification's** capacity; the typed capacity is only
   the monitor's claim, flagged if it differs; no such cert → unbilled and flagged until one exists.
   [154]
@@ -854,8 +855,7 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   hex digits) and two places in storage, each place unique, all four written once** (a trigger
   refuses any change to them, by anyone); its owner, time, place and `uploadedAt` are corrected
   as evidence is. **The database counts no photographs** ("at most 8" stays the phone's rule;
-  each belongs to the field event that took it). **A copied certification holds no photograph
-  of its own**: its photographs are the original's, through `copiedFromId`. Both tables are
+  each belongs to the field event that took it). A certification is never copied (ADR-328), so each holds its own photographs. Both tables are
   evidence, audited in the records domain; a client user and an auditor see their projects'
   receipts and photographs' records, **never where a file is kept**; a contractor user none
   until 1.7.1. **Not checked, on purpose** (flags, 1.5.x): net against gross less tare; the
@@ -1443,9 +1443,9 @@ its scenario.
 ## 4. Waiting on the user
 
 **Nothing blocks the next task (1.3.7, the harness's phones capture every kind).**
-- **Decided by the user 2026-10-04 (ADR-328), not built yet (BACKLOG C67); the lines above and
-  below that say otherwise are superseded:** **a certification is never copied** (configuration
-  is: pay items, rules); **a scale receipt's number is never unique** (a receipt book restarts
+- **Decided by the user 2026-10-04 (ADR-328), not built yet (BACKLOG C67) but for the first; the
+  lines above and below that say otherwise are superseded:** **a certification is never copied**
+  (configuration is: pay items, rules; **built, ADR-330**); **a scale receipt's number is never unique** (a receipt book restarts
   at 001; only a duplicate *record* matters); **an incident may name a contractor, a cert number
   and an ROE number**, each optional, offered as the project's setup says; **a viewer sees
   private citizens by name unless the firm said otherwise for that viewer**, set when it adds

@@ -940,8 +940,8 @@ delete one.
   **Phase 4:** the exports' columns for the firm's fields; whether an incident should name the
   certification it concerns as a real column (today its parties and description).
 - **C67. What the user's replies of 2026-10-04 changed** (ADR-328). Each is built as its own
-  task, before the task that would otherwise build on the old shape: **(a) certifications are
-  never copied**: take out `Certifications.copy`, `CertificationChanges`' copy rule, the
+  task, before the task that would otherwise build on the old shape: ✅ **(a) done 2026-10-04
+  (ADR-330)**, certifications are never copied: take out `Certifications.copy`, `CertificationChanges`' copy rule, the
   allocator's use in it, `copiedFromId` (a new migration, never an edit), the story
   `certification`'s copy, AC-03's copy scenarios, `adms-certifications`' copy lines,
   DATA-MODEL and C65's copied-photographs point; **(b) a scale receipt's number isn't unique**:
