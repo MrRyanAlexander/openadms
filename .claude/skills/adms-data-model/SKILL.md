@@ -2,9 +2,9 @@
 name: adms-data-model
 description: Open ADMS data model, in today's rules. Covers the records and how they link (Client → DeclarationEvent → Project, contractors and contracts, forms and debris types, pay items with a rate per prime, rules naming one contract, sites, certifications, users, devices and assignments, time-clock entries, FieldEvent and the CompletedLoad / CompletedHaulOut drawn from it, transactions, flags, AuditRecord), why reference data is editable, evidence correctable only by permission and the derived records and audit never by a person, which lists are fixed in code and which the firm extends (built-in keys plus the firm's own values), identifiers, uniqueness, coordinates and time, and which package and database role may write what. Use when touching the Prisma schema, adding or changing a model, a list, a relation or a constraint, or deciding where a write belongs. Field names are spec/DATA-MODEL.md's; what each setup record and field event holds is adms-ticket-workflows.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-245; ADR-246; the Phase 0 models built, ADR-281; the pay item's first shape and `spec/DATA-MODEL.md` drafted, ADR-284, 286; the page approved, ADR-289; a pay item's unique code and description, ADR-301; the firm's lists built, ADR-302; the client, the declaration event and the project built, ADR-303; contractors on a project and contracts built, ADR-305; a contractor's contact details, ADR-306; forms, the debris types on them and the firm's own fields built, ADR-308; pay items in full, ADR-309; sites and the project map built, a site keeping several tipping fee pay items, ADR-311; rules built, ADR-313; people's permissions and viewers, ADR-315; certifications, ADR-321) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-245; ADR-246; the Phase 0 models built, ADR-281; the pay item's first shape and `spec/DATA-MODEL.md` drafted, ADR-284, 286; the page approved, ADR-289; a pay item's unique code and description, ADR-301; the firm's lists built, ADR-302; the client, the declaration event and the project built, ADR-303; contractors on a project and contracts built, ADR-305; a contractor's contact details, ADR-306; forms, the debris types on them and the firm's own fields built, ADR-308; pay items in full, ADR-309; sites and the project map built, a site keeping several tipping fee pay items, ADR-311; rules built, ADR-313; people's permissions and viewers, ADR-315; certifications, ADR-321; what every field event records, ADR-324; what each kind records, ADR-325) -->
 
-> **This page states today's rules** (last changed by ADR-315, as its status line lists). Each rule cites its ADR; what changed is in
+> **This page states today's rules** (last changed by ADR-325, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
 > `agent_store/SUMMARY.md` disagree, SUMMARY wins: log a KD (`adms-decisions`). The worked example
 > is `spec/golden/MISSION.md`; names and examples follow `spec/CONVENTIONS.md` (§3 for code names).
@@ -184,6 +184,33 @@ changed" (ADR-166).
   and its measurement, items, stump readings…) are **checked by the kind** with a database
   constraint, so a disposal can't hold a unit rate measurement. What each kind records:
   `adms-ticket-workflows` §4.2–§4.5.
+- **Built (ADR-324): the shared columns in full** (`spec/DATA-MODEL.md` §4.1 (1)). `source`
+  (`DEVICE` · `BACK_OFFICE`) and one check tell a phone's record (its phone, assignment and setup
+  version) from one created in the back office (the person and the reason, no phone); the number
+  typed and its reason (a reason only on a typed number); the cert number as scanned and the
+  certification found, one of its own project's, empty until one has that number; keyed in by
+  hand, with the typed capacity only then; the site, one of its own project's; GPS at both ends
+  (a whole fix on the earth, or none); the address and whether it was looked up or typed; notes;
+  the temporary session. **None of these has a database default**: a test writes a field event
+  with `fieldEventLike` or `backOfficeEventLike` and `eventInsertOf`. A client user and an
+  auditor see every column, and the monitor's name and Monitor ID through
+  `viewer_field_event_monitor`.
+- **Built (ADR-325): the kind-specific columns** (`spec/DATA-MODEL.md` §4.1 (2)), but for the
+  scale receipt and the ROE found, which join with their own tables (1.3.5, 1.3.6). **None is
+  required**: a pick that didn't reach the server is a flag's. The database refuses a detail on
+  a kind that doesn't record it; the same table is `packages/domain`'s `fieldEventDetails`
+  (`FieldEventDetails` says what a kind records and why a record isn't one; `packages/contracts`'
+  `fieldEventDetailsSchema` asks it), and a database test holds the two together. **A debris
+  type** is the entry on the field event's own project's form for its workflow: the field event
+  repeats the entry's `formId` and `formDocumentType` (all three or none), so a test writes one
+  with `debrisTypePicked(world, entryId[, form])`. A field tag and a pay item are its own
+  project's. **A split suffix** is capital letters, only on a collection or a haul-out
+  collection; a collection has its suffix and its estimate both or neither; a pile gives a load
+  call, never an estimate. A measurement comes with how it was read (`MeasuredAs`).
+  **`FieldEventItem`** (an itemised unit rate event's lines, an item once) and
+  **`CarriedTicket`** (the numbers a load's collection lists, as written, each once) repeat
+  their field event's kind, so each sits only where it belongs; evidence, audited in the records
+  domain, seen by a viewer with its field event.
 - **A ticket is its number and its events**: grouped on **project + workflow + bare number**, the
   split suffix stripped; never on a label, a type or any other field (ADR-019, 033, 062). **One
   event of each kind per ticket** (one collection per split suffix); a second is a duplicate, held in
@@ -237,13 +264,13 @@ regenerated when its ticket changes; details in `adms-ledger-audit`.
   the Monitor ID (the default of `User.monitorNumber`; every monitor has one), and a worker's employer
   is `User.employerId` (a contractor) with `employerNumber`. `Device`: `name`, a unique `publicKey`,
   `status` (`ACTIVE · LOST · RETIRED`, with `outOfServiceAt`), `masterPasscodeVersion`; no details
-  column. `NumberBlock`: device, project, series, first, last, last used, how it ended. `Assignment`:
+  column. `NumberBlock`: device, project, series, first, last, last used, how it ended; cut only from a `ProjectNumberSeries` of its project, and two blocks of one series never hold the same number (a reclaimed block holds only what its phone used); `ControlRange` holds a control-ticket project's pre-printed ranges, loads and haul-outs only (built, ADR-323). `Assignment`:
   person, `workDate`, project, `fieldEventKinds`, `certifying`, an optional site (one of its own
   project's) and phone, `origin` (`PLANNED · UNPLANNED`), `madeById`; its unit rate pay items are
   `AssignmentPayItem` rows, each a `PayItem` of its own project (ADR-286) and a unit rate one: the
   row repeats the pay item's kind of work, held by a three-column foreign key (C42, ADR-309); the forms it names are
   `formDocumentTypes`, held to ROE, survey, incident and drop-off log (ADR-308). `MasterPasscode`: a version and its slow hash, never edited, read only by
-  the API. A field event's `assignmentId` and `setupVersion` are required captured columns.
+  the API. A field event's `assignmentId` and `setupVersion` are captured columns, required on a phone's record and empty on one created in the back office (ADR-324).
 
 ## 3.2 Fixed in code, or the firm's to extend
 

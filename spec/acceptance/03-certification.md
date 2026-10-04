@@ -39,7 +39,7 @@ problem with a certification is a flag on the ticket or on the certification (AD
 | AC-03-03 | **Given** `730415` on P1, **when** a second certification numbered `730415` is written on P1, **then** the database refuses it. The same number on P2 is not refused or flagged: a cert number is unique within its project and nowhere else, and the golden mission's P2 has its own `730416` | ADR-045, 318; golden mission §3 · REQ-106a | database (1.2.3) | database (2026-10-03, ADR-321); story `certification` (2026-10-03, ADR-321) |
 | AC-03-04 | **Given** any certification, **then** it holds one number: the cert number is the placard number is the badge number. No record holds a placard number or a badge number beside it | ADR-016, 045; invariant 9 · REQ-106a | database (1.2.3) | database (2026-10-03, ADR-321) |
 | AC-03-05 | **Given** a pre-printed certification sheet numbered `88120`, **when** the monitor types that number in, **then** it is the certification's number, kept as written; no length is enforced. The sheet's own barcode isn't used | ADR-045, 080 · REQ-106a | database (1.2.3) | database (2026-10-03, ADR-321); story `certification` (2026-10-03, ADR-321) |
-| AC-03-06 | **Given** P1's cert-number series starts at `730415`, **then** the system issues `730415`, `730416`, `730417`… counting up by one; a certifying phone holds a block of 100 of them, topped up at sync and reclaimed when the phone is reset | ADR-045, 151, 181; Q-96 (ADR-102) · REQ-106a, 114 | database and domain (1.3.2; C43) | |
+| AC-03-06 | **Given** P1's cert-number series starts at `730415`, **then** the system issues `730415`, `730416`, `730417`… counting up by one; a certifying phone holds a block of 100 of them, topped up at sync and reclaimed when the phone is reset | ADR-045, 151, 181; Q-96 (ADR-102) · REQ-106a, 114 | database and domain (1.3.2; C43) | database and domain (2026-10-03, ADR-323) |
 | AC-03-07 | **Given** Coastline's tandem, **then** its truck body `730421` (30 CY) and its trailer `730422` (40 CY) are two certifications, each with its own number. The numbers are consecutive here but needn't be, and a trailer swap is never flagged | ADR-015, 114; Q-96 | two records: database (1.2.3); never flagged: domain (1.5.5) | database (2026-10-03, ADR-321) (two records; never flagged waits for 1.5.5) |
 | AC-03-08 | **When** Sam Grant, whose assignment on P1 for Saturday 10 October 2026 includes certifying, certifies `730415` on `P1-HO-TDSR`, **then** the record says who made and measured it (Sam), the phone, his assignment, the phone's time with its offset, and when the server received it; its id is the one the phone made | ADR-151, 240, 294; `spec/DATA-MODEL.md` §1, §3 · REQ-106b | database (1.2.3) | database (2026-10-03, ADR-321) |
 | AC-03-09 | **Given** certifying is done where there is signal, **then** the project knows a new certification exists before its truck works, and any phone with a connection can refresh its lists to pick it up, at any time | ADR-151 (Q-142) | API (Phase 2); field app (Phase 3) | |
@@ -59,7 +59,7 @@ problem with a certification is a flag on the ticket or on the certification (AD
 
 | ID | Scenario | From | Proven at | Passing |
 |---|---|---|---|---|
-| AC-03-16 | **Given** `730415` was certified with its driver's name, phone, licence number, state and expiry, **then** they are kept on the certification only: there is no driver list, a ticket shows and exports its certification's driver, and no field event stores a copy | ADR-153, 289; `spec/DATA-MODEL.md` §12 (12) · REQ-106 | database (1.2.3); no copy on a field event: database (1.3.3) | database (2026-10-03, ADR-321) (no field event column today; again with 1.3.3) |
+| AC-03-16 | **Given** `730415` was certified with its driver's name, phone, licence number, state and expiry, **then** they are kept on the certification only: there is no driver list, a ticket shows and exports its certification's driver, and no field event stores a copy | ADR-153, 289; `spec/DATA-MODEL.md` §12 (12) · REQ-106 | database (1.2.3); no copy on a field event: database (1.3.3) | database (2026-10-03, ADR-321) (and no driver column on a field event in its full shape: AC-04-25, ADR-324) |
 | AC-03-17 | **Given** the driver's licence on `730416` expired on 30 September 2026, **when** its tickets of 12 October are reconciled, **then** nothing is flagged for the licence, and nothing is flagged because somebody else was driving | ADR-153; `spec/FLAGS.md` §2 · REQ-106 | domain (1.5.5) | |
 | AC-03-18 | **When** a truck is certified, **then** its tag (plate) number, state and expiry are kept | ADR-079, 153 · REQ-106b | database (1.2.3) | database (2026-10-03, ADR-321) |
 | AC-03-19 | **When** `730416` is certified, **then** its vehicle type is picked from the firm's list (Self-Loading Truck), with a typed description beside it only where "Other" applies; each measured box after the primary is labelled with a feature picked from the firm's list (Sideboards, Dog Box…), or a typed one; a crew type (Bucket Truck, Skid Steer) is picked on a crew only | ADR-070, 076, 228; `spec/LISTS.md` · REQ-106b | database (1.2.3) | database (2026-10-03, ADR-321) |
@@ -102,7 +102,7 @@ total is divided by 46,656 (36³); the capacity is that to the nearest whole cub
 
 | ID | Scenario | From | Proven at | Passing |
 |---|---|---|---|---|
-| AC-03-40 | **Given** a monitor scans badge `730415` at New, **then** the field event records the certification it found and its own copy of the number as scanned. **When** the certification is later corrected, **then** the number on the field event doesn't change | ADR-017; `spec/DATA-MODEL.md` §4.1 | database (1.3.3) | |
+| AC-03-40 | **Given** a monitor scans badge `730415` at New, **then** the field event records the certification it found and its own copy of the number as scanned. **When** the certification is later corrected, **then** the number on the field event doesn't change | ADR-017; `spec/DATA-MODEL.md` §4.1 | database (1.3.3) | database (2026-10-03, ADR-324): `field-events.test.ts`, with AC-04-27 |
 | AC-03-41 | **Given** a field event on P1 with cert number `730499`, which no certification on P1 has, **then** it is received, and its ticket is flagged "Ticket 101015: no certification 730499 on this project. Flagged for review; not billed." | ADR-052, 154; `spec/FLAGS.md` `NO_CERTIFICATION` | domain (1.5.5) | |
 | AC-03-42 | **Given** that ticket, **when** a certification numbered `730499` is made on P1 and the ticket is reprocessed, **then** the flag clears and the ticket bills at that certification's capacity: unbilled only until one exists | ADR-154 (Q-145) | story (Milestone 1.5) | |
 | AC-03-43 | **Given** a field event on P2 with cert number `730415`, and `730415` is certified only on P1, **then** it is flagged as AC-03-41 is, never refused: a certification belongs to one project | ADR-052, 154; `adms-certifications` §3A.6 (6) | domain (1.5.5) | |
@@ -138,7 +138,7 @@ total is divided by 46,656 (36³); the capacity is that to the nearest whole cub
 
 ## The count
 
-**60 scenarios**, **36 passing and 1 more in part** (2026-10-03). Task 1.2.2 (ADR-320, the capacity
+**60 scenarios**, **38 passing and 1 more in part** (2026-10-03). Task 1.3.3 (ADR-324, what every field event records): AC-03-40, the cert number as scanned and the certification found, at the database. Task 1.3.2 (ADR-323, numbering): AC-03-06, the cert-number series and its blocks of 100, at the database and the domain. Task 1.2.2 (ADR-320, the capacity
 math, `packages/domain`'s `Capacity`): AC-03-21…29, 31 and 32 at the domain. Task 1.2.3 (ADR-321,
 the certification's records): AC-03-01…05, 07, 08, 10…13, 16, 18…20, 30, 36, 37, 51, 53, 55, 56
 and 58…60 at the database (`packages/db/test/certifications.test.ts`, each under a test named by
@@ -149,7 +149,7 @@ AC-03-38's "signatures on file" passes and its QC mark waits for 1.8.2.
 |---|---|---|
 | Task 1.2.2, the capacity math (domain) | AC-03-21…29, 31, 32 | 11 |
 | Task 1.2.3, the certification's records (database or story) ✅ | AC-03-01…05, 07, 08, 10…13, 16, 18…20, 30, 36, 37, 51, 53, 55, 56, 58…60 | 25 |
-| Later Phase 1 tasks | AC-03-06 (1.3.2); 40 (1.3.3); 34 (Milestone 1.3); 33 (1.5.4); 17, 35, 39, 41…50 (Milestone 1.5); 15 (1.7.1); 52, 57 (1.8.3) | 20 |
+| Later Phase 1 tasks | AC-03-06 (1.3.2 ✅); 40 (1.3.3 ✅); 34 (Milestone 1.3); 33 (1.5.4); 17, 35, 39, 41…50 (Milestone 1.5); 15 (1.7.1); 52, 57 (1.8.3) | 20 |
 | Phases 2–4 only | AC-03-09, 14, 54 | 3 |
 | In two places | AC-03-38: signatures on file with 1.2.3, the QC mark with 1.8.2 | 1 |
 

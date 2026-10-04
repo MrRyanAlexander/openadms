@@ -396,7 +396,7 @@ dates or amount (ADR-146). A prime may hold one contract on a project or several
 #### `FormDebrisType`
 
 *Configuration, built (ADR-308).* A debris type added to a load or haul-out form (ADR-211, 214).
-**A field event points at this entry** (from BACKLOG 1.3.4), so a rule's *Debris type* matches the
+**A field event points at this entry** (built, ADR-325), so a rule's *Debris type* matches the
 exact entry (ADR-226). What a phone's list offers (not archived, not hidden) and setup's warning for
 an entry not marked *Reduced* on the haul-out form are `packages/domain`'s `DebrisTypeEntries`.
 
@@ -676,42 +676,57 @@ deleted, and written only with its version**, in the same piece of work.
 
 ### Numbering
 
-The server is the only allocator (ADR-065).
+The server is the only allocator (ADR-065). **✅ Built 2026-10-03 (ADR-323)** as below.
 
 #### `ProjectNumberSeries`
 
 *Configuration.* A project's series of numbers; unique on project + series. The model is not named
-`NumberSeries`: that is the built enum its `series` field uses (ADR-292).
+`NumberSeries`: that is the built enum its `series` field uses (ADR-292). A project that generates
+its ticket numbers has one per workflow; one numbered from control tickets has only `UNIT_RATE`
+(ADR-056). A ticket series runs from 100,001 to 9,999,999 (a check); a cert-number or ROE series
+starts where the firm says. Never archived: a series doesn't leave.
 
 | Field | Type | Notes |
 |---|---|---|
+| **id** | uuid | |
 | **projectId** | → `Project` | |
 | **series** | enum `NumberSeries` | `LOAD` · `HAUL_OUT` · `UNIT_RATE` · `CERTIFICATION` · `ROE` |
 | **firstNumber** | int | |
-| **nextNumber** | int | |
+| **nextNumber** | int | The next number never handed out; one past the end when a ticket series is used up |
+| **createdAt** | instant | |
 
 #### `ControlRange`
 
-*Configuration.* Pre-printed stock (ADR-056).
+*Configuration.* Pre-printed stock (ADR-056), for loads and haul-outs only (a check). The stock's
+numbers are the printer's own: not held to 100,001–9,999,999. Two ranges of one series on a
+project, neither archived, never share a number (an exclusion constraint, ADR-323).
 
 | Field | Type | Notes |
 |---|---|---|
+| **id** | uuid | |
 | **projectId** | → `Project` | |
-| **series** | enum `NumberSeries` | |
+| **series** | enum `NumberSeries` | `LOAD` or `HAUL_OUT` |
 | **firstNumber** | int | |
 | **lastNumber** | int | |
+| **createdAt** | instant | |
+| archivedAt | instant | |
 
 #### `NumberBlock`
 
-*Configuration, as built (ADR-281)*, plus a database refusal of overlapping blocks (C43).
+*Configuration, as built (ADR-281)*, cut only from a series its project has (a foreign key to
+`ProjectNumberSeries` on project + series), and **two blocks of one series never hold the same
+number** (an exclusion constraint, C43, ADR-323). An issued block holds its whole run, and so does
+a retired one, for good; a reclaimed block holds only what its phone used (first to last used), so
+its unused rest is cut again for the next phone, once (ADR-065). Its start is therefore no longer
+unique: a block handed back unused is cut again from the same number.
 
 | Field | Type | Notes |
 |---|---|---|
 | **id** | uuid | |
 | **deviceId** | → `Device` | |
-| **projectId** | → `Project` | Unique with `series` and `firstNumber` |
+| **projectId** | → `Project` | With `series`, → `ProjectNumberSeries` |
 | **series** | enum `NumberSeries` | |
-| **firstNumber**, **lastNumber** | int | |
+| **firstNumber**, **lastNumber** | int | A ticket series' block lies inside 100,001–9,999,999 (a check) |
 | lastUsedNumber | int | |
 | **status** | enum `NumberBlockStatus` | `ISSUED` · `RECLAIMED` · `RETIRED`: how it ended |
 | **issuedAt** | instant | |
@@ -883,7 +898,10 @@ is typed and nothing is pre-programmed. Real columns, never JSON: the engine rea
 #### `FieldEvent`
 
 *Evidence, built in part.* **There is no ticket table**: a ticket is its number and its events
-(*agent default*). Its columns come in three groups.
+(*agent default*). Its columns come in three groups. **Built: group 1 in full (ADR-324) and
+group 2 (ADR-325)**, with their checks (below, and §8), but for `scaleReceiptId` and `roeId`,
+which join with their own tables (tasks 1.3.5 and 1.3.6); of group 3 `status` and
+`reconciledAt` (the rest: task 1.5.2).
 
 **1. Every kind records:**
 
@@ -918,11 +936,26 @@ is typed and nothing is pre-programmed. Real columns, never JSON: the engine rea
 | addressSource | enum `AddressSource` | `LOOKED_UP` · `TYPED` (ADR-111) |
 | notes | text | |
 
+**As built (ADR-324).** No new required column has a database default: whoever writes a field
+event says its `source`, `temporarySession`, `numberTyped`, `certNumber` and `certKeyedByHand`.
+The database refuses: a phone's record without its phone, assignment or setup version, or with a
+back-office person or reason; a back-office record without its person or reason, or with a phone,
+an assignment, a setup version or a temporary session; the system actor as creator; a reason on a
+number that was scanned (a typed number with no reason is taken); a typed capacity on a truck not
+keyed in by hand, or below nought (keyed in by hand with none is taken: a crew has none); a
+certification or a site of another project; half a GPS fix, or one off the earth (no fix is
+taken); an address with no source, or a source with no address. It does not check that a number
+is digits, that times are in order, that the certification found has the number scanned, or that
+a load is on a container's certification: those are flags, or nothing. **Viewers:** a client user
+and an auditor see every column (`viewer_field_event`), and who recorded each through
+`viewer_field_event_monitor` (id, name, Monitor ID; nothing else of a person).
+
 **2. Kind-specific columns**, each empty on every other kind (a database check per column):
 
 | Field | Type | `COL` | `DIS` | `HOC` | `HOD` | `URT` | Notes |
 |---|---|---|---|---|---|---|---|
 | formDebrisTypeId | → `FormDebrisType` | ✓ | ✓ | ✓ | ✓ | | Picked at each end, on its own (ADR-207) |
+| formId, formDocumentType | → `Form`; enum `FormDocumentType` | ✓ | ✓ | ✓ | ✓ | | The entry's form and that form's document type, again: there exactly when the entry is. They hold the entry to the field event's own project and to its workflow's form by foreign keys (ADR-325) |
 | fieldTagId | → `FieldTag` | ✓ | | ✓ | | ✓ | Optional (ADR-218) |
 | roeNumber | text | ✓ | | | | ✓ | On an ROE project (ADR-149): the number as picked or typed, a snapshot like `certNumber` (Q-33; ADR-292) |
 | roeId | → `Roe` | ✓ | | | | ✓ | Empty while no ROE on the project has that number (ADR-292) |
@@ -941,6 +974,24 @@ is typed and nothing is pre-programmed. Real columns, never JSON: the engine rea
 | surveyNumber | text | | | | | ✓ | Stumps: picked or typed; none is flagged (ADR-198). Matched to a survey by the number as written (ADR-294) |
 | markedIneligible | bool | | | | | ✓ | Where the pay item allows it (ADR-210) |
 
+**As built (ADR-325).** No kind-specific column is required: a pick that didn't reach the server
+is a flag's, never a refusal (as a typed number with no reason, ADR-324). The database refuses a
+detail on a kind that doesn't record it (the table above, one check per group of kinds; the same
+table is `packages/domain`'s `fieldEventDetails`, and a test holds the two together); a debris
+type's entry that isn't on the field event's own project's form for its workflow (a load's from
+the load form, a haul-out's from the haul-out form); a field tag or a pay item of another
+project; **a split suffix on anything but a collection or a haul-out collection**, or one that
+isn't capital letters (`A`, `B`… `AA`; kept without its hyphen); a collection with a suffix and
+no estimate, or an estimate and no suffix; an estimate on any other kind, a haul-out's pile
+included; a measurement without how it was read, or the reverse; a negative estimate, count,
+measurement or root ball. It does not check: that a suffixed collection's project allows split
+loads; that a pile's collection has its load call; that a disposal holds only one quantity (a
+load call and a count together are taken); that a pay item is of the kind of work or the payable
+type beside it, or that the kind of work is one the project allows; that an itemised event has no
+count of its own; that a stump was measured as a diameter; that an ROE number or a survey number
+is on the project. Those are flags, or nothing. **Viewers:** a client user and an auditor see the
+new columns with the rest (`viewer_field_event`).
+
 **3. The reconciliation columns**, the only ones the worker may write (column grants, ADR-270).
 Every event of a ticket carries the ticket's status.
 
@@ -954,22 +1005,28 @@ Every event of a ticket carries the ticket's status.
 
 #### `FieldEventItem`
 
-*Evidence.* An itemised unit rate event's lines (ADR-040, 084).
+*Evidence, built (ADR-325).* An itemised unit rate event's lines (ADR-040, 084). Its id and
+created time are the database's. Corrected in place by the API, audited in the records domain;
+seen by a client user and an auditor with its field event. How a correction takes a line off
+(nothing is deleted) is task 1.8.3's.
 
 | Field | Type | Notes |
 |---|---|---|
 | **fieldEventId** | → `FieldEvent` | Unique with `itemNameId` |
-| **itemNameId** | → `ItemName` | |
-| **quantity** | decimal(10,2) | A count, or hours to the quarter hour |
+| **fieldEventKind** | enum `FieldEventKind` | Its field event's kind, again: always `UNIT_RATE` (a check), held to the field event's own by the foreign key, so a line sits only on unit rate work (ADR-325) |
+| **itemNameId** | → `ItemName` | Not held to the event's kind of work (a flag's) |
+| **quantity** | decimal(10,2) | A count, or hours to the quarter hour; nought or more (a check). Quarter hours aren't held by the database |
 
 #### `CarriedTicket`
 
-*Evidence.* The tickets a load carries (ADR-192).
+*Evidence, built (ADR-325).* The tickets a load carries (ADR-192). As `FieldEventItem`: its own id
+and created time, corrected in place, audited in the records domain, seen with its field event.
 
 | Field | Type | Notes |
 |---|---|---|
 | **fieldEventId** | → `FieldEvent` | The collection; unique with `carriedTicketNumber` |
-| **carriedTicketNumber** | text | |
+| **fieldEventKind** | enum `FieldEventKind` | Always `COLLECTION` (a check), held to the field event's own by the foreign key (ADR-325) |
+| **carriedTicketNumber** | text | The number as written, never a link: one that matches no ticket is taken and flagged later |
 
 ### 4.2 Scale receipts (ADR-034, 038)
 
@@ -1406,8 +1463,9 @@ Never relaxed to pass a test (ARCHITECTURE §5.4). ✅ = built today.
 |---|---|
 | One field event per project + workflow + bare number + split suffix + kind | ✅ unique key |
 | A kind fits its workflow; a load call is 0–100 and only on `DIS` and `HOC` | ✅ checks |
-| Every kind-specific column is empty on the other kinds; a split load's collection has its suffix and estimate both, or neither; a haul-out collection may carry a suffix, with its load call (ADR-295) | checks |
-| A phone's record carries its device, assignment and setup version; a back-office one its person and reason | check |
+| Every kind-specific column is empty on the other kinds; a split load's collection has its suffix and estimate both, or neither; a haul-out collection may carry a suffix, with its load call (ADR-295); no other kind has a suffix, and a suffix is capital letters; a measurement with how it was read, both or neither; an estimate, a count, a measurement and a root ball nought or more (ADR-325) | ✅ checks |
+| A field event's debris type is an entry of its own project's form for its workflow; its field tag and its pay item are its own project's; an item line sits only on a unit rate event, once per item, and a carried ticket only on a collection, once per number (ADR-325) | ✅ foreign keys (the field event repeats the entry's form and document type; a line repeats its field event's kind), checks and unique keys |
+| A phone's record carries its device, assignment and setup version; a back-office one its person and reason, and neither the other's (ADR-324) | ✅ check |
 | One disposal per completed load or haul-out; one live completed record per collection event | unique keys (the second partial: `WHERE dissolved_at IS NULL`, in a guard migration) |
 | A cert number once per project (✅ ADR-321); a receipt number once per project; an ROE number once per project | unique keys |
 | A pay item's code once per project (ADR-301) | ✅ unique key |
@@ -1428,8 +1486,9 @@ Never relaxed to pass a test (ARCHITECTURE §5.4). ✅ = built today.
 | The prime a sub names, and a contract's prime, is one of that project's primes; a prime that a sub or a contract names can't be made a sub (ADR-108, 146, 305) | ✅ two-column foreign keys to the prime's row |
 | A sub names its prime and a prime names none; a prime's row, and only a prime's, carries its own contractor as `asPrimeId`; a merged contractor is merged into another record and is archived (ADR-305) | ✅ checks |
 | The Monitor ID is issued, well-formed, unique; the system actor is one fixed row and never a person | ✅ |
-| An assignment's site, a field event's site and an assignment's pay items are their own project's | two-column foreign keys (✅ for the first and third) |
-| Number blocks of one series never overlap | an exclusion constraint (`btree_gist` is in since ADR-310; C43, task 1.3.2) |
+| An assignment's site, a field event's site and an assignment's pay items are their own project's; a field event's certification too (ADR-324) | ✅ two-column foreign keys |
+| A reason for a typed number only on a typed number; a typed capacity only on a truck keyed in by hand, nought or more; each GPS end a latitude and a longitude together, on the earth, or neither; an address with its source, and only an address (ADR-324) | ✅ checks |
+| Number blocks of one series never hold the same number (✅ ADR-323: a reclaimed block holds only what its phone used); control ranges of one series never overlap (✅ ADR-323) | exclusion constraints (`btree_gist` is in since ADR-310; C43) |
 | Size bands of one payable type never overlap | ✅ an exclusion constraint on the project, the payable type and the band, archived pay items left out (ADR-310); setup says so first, by `packages/domain`'s `SizeBands`, which also warns of a gap (ADR-217, 309) |
 | A site's GPS is on the earth; it closes no earlier than it opens; *Haul-outs leave here* only on a TDSR/DMS site, whose type can't change while it's marked (ADR-298, 311) | ✅ checks, and a two-column foreign key to the type's key |
 | A site's tipping fee pay item is its own project's; a label and a fee once per site (ADR-311) | ✅ two-column foreign keys, unique keys |
@@ -1453,7 +1512,7 @@ A new value in any of them is a code change with an ADR (`spec/LISTS.md` Group 2
 | `TicketStatus` ✅ | `PENDING` · `COMPLETED` · `MANUAL_REVIEW` · `VOID` | `FieldEvent`, `ReconciliationDecision` |
 | `UserRole` ✅ | `ADMIN` · `MANAGER_ANALYST` · `MONITOR` · `READ_ONLY_VIEWER` · `SYSTEM` | `User` |
 | `DeviceStatus` ✅ | `ACTIVE` · `LOST` · `RETIRED` | `Device` |
-| `NumberSeries` ✅ | `LOAD` · `HAUL_OUT` · `UNIT_RATE` · `CERTIFICATION`, and `ROE` (new in Phase 1) | `ProjectNumberSeries`, `ControlRange`, `NumberBlock` |
+| `NumberSeries` ✅ | `LOAD` · `HAUL_OUT` · `UNIT_RATE` · `CERTIFICATION` · `ROE` (✅ ADR-323) | `ProjectNumberSeries`, `ControlRange`, `NumberBlock` |
 | `NumberBlockStatus` ✅ | `ISSUED` · `RECLAIMED` · `RETIRED` | `NumberBlock` |
 | `AssignmentOrigin` ✅ | `PLANNED` · `UNPLANNED` | `Assignment` |
 | The audit's three ✅ | operation `INSERT` · `UPDATE` · `DELETE`; source `DEVICE` · `BACK_OFFICE` · `SYSTEM`; domain `SECURITY` · `BILLING` · `OPERATIONS` · `RECORDS` | `AuditRecord` |
@@ -1469,9 +1528,9 @@ A new value in any of them is a code change with an ADR (`spec/LISTS.md` Group 2
 | `CertificationKind` ✅ | `CONTAINER` · `CREW` | `Certification`, `VehicleType.certifies` (ADR-302) |
 | `BoxShape` ✅ | `RECTANGLE` · `TRIANGLE` · `TWO_LENGTH_HOIST` · `ROUND_BOTTOM` · `RADIUS_CORNER` | `CertificationBox` |
 | `BoxSign` ✅ | `ADD` · `SUBTRACT` | `CertificationBox` (ADR-321) |
-| `RecordSource` | `DEVICE` · `BACK_OFFICE` | `FieldEvent`, `Roe`, the forms |
-| `MeasuredAs` | `CIRCUMFERENCE` · `DIAMETER` | `FieldEvent` |
-| `AddressSource` | `LOOKED_UP` · `TYPED` | `FieldEvent` |
+| `RecordSource` ✅ | `DEVICE` · `BACK_OFFICE` | `FieldEvent`, `Roe`, the forms |
+| `MeasuredAs` ✅ | `CIRCUMFERENCE` · `DIAMETER` | `FieldEvent` (ADR-325) |
+| `AddressSource` ✅ | `LOOKED_UP` · `TYPED` | `FieldEvent` |
 | `TicketNumberSource` ✅ | `CONTROL` · `GENERATED` | `Project` |
 | `QuantitySource` | `LOAD_CALL` · `SCALE_WEIGHT` · `CARRIED_TICKETS` | `CompletedLoad`, `CompletedHaulOut` |
 | `MileageSource` | `ROAD_ROUTE` · `STRAIGHT_LINE` | `CompletedLoadCollection`, `CompletedHaulOutCollection` |
@@ -1708,6 +1767,9 @@ user approved the page on 2026-10-01 without changing one, so all sixteen stand.
 | 28 | **A bounding box is four `decimal(38,8)` columns**; a shape's version has its own number; a zone's name is once per version (ADR-311) | The box is read like coordinates (§1); the number tells versions apart in the review; a zone criterion picks by name |
 | 29 | **A rule repeats its form's document type; a criterion line its rule's project and form; a pick its line's project, form and criterion; an action its rule's project** (ADR-313) | So the database itself holds a rule to a ticket form and a contract of its own project, and a picked value to the rule's own project and form, by foreign keys alone (the idiom of #22, #25, #26) |
 | 30 | **Each line of a rule (criterion, pick, action, chosen item) has its own id, created and archived times**; a line is taken off by archiving. **`quantityFrom` is stated on every *Add transaction*.** **An *Item* line takes the number operators** on the count of the one item it picks, not the list operators (ADR-313) | Nothing is deleted; one way to say "every item" lets two rules be compared; one operator can't mean both "is this item" and "its count equals" |
+
+| 31 | **A field event repeats its debris type's form and that form's document type; an item line and a carried ticket repeat their field event's kind** (ADR-325) | So the database itself holds a picked debris type to the field event's own project and workflow, and a line to the kind it belongs on, by foreign keys alone (the idiom of #22, #25, #26, #29) |
+| 32 | **An item line and a carried ticket have their own id and created time**, made by the database (ADR-325) | Every audited row has them; a line travels inside its field event, whose phone-made id is what a retried sync repeats |
 
 **Carried items this page answers:**
 

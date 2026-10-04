@@ -103,7 +103,13 @@ pay items and their settings for unit rate work (ADR-176, 213); **no pay items f
   phones. **Generated**: each numbering phone takes a **1,000-number block** of the series, issues it
   in order offline, is topped up at sync; a reset reclaims the unused rest; a lost phone's block is
   retired. Disposal phones issue nothing. Gaps are normal (ADR-056, 065). Unit rate tickets are
-  always generated (ADR-056).
+  always generated (ADR-056). **Built (ADR-323):** a project has a series per workflow, one for its
+  cert numbers once seeded and one for its ROEs (`ProjectNumberSeries`); the rest a reset phone
+  hands back is cut again for the next phone, once, and the database refuses any block that would
+  put one number on two phones; a control-ticket project has ranges for its loads and haul-outs
+  (two of one series never share a number) and only a unit rate series; block sizes are policy
+  values (1,000 ticket numbers, 100 cert numbers, 100 ROE numbers); a phone-made ROE's number is
+  written `R-0007` (agent default).
 - **The truck carries the number** from the field event that makes it to the one that closes it; the
   driver carries one barcode, the base number, even on a split (ADR-032).
 - A number **typed instead of scanned** is flagged and needs a reason from the firm's list (ADR-111,
