@@ -46,6 +46,8 @@
 // Three read-only viewers, issued by Dana (ADR-169, 315): Bayline County's client user, given P1;
 // an auditor, given P1 and P2; and Coastline Haulers' contractor user, given P1. A test issues
 // another with `viewerLike` and `given`.
+import { createHash } from 'node:crypto';
+
 import { systemActorId } from '../../src/system-actor.ts';
 import type { GuardedDatabase } from './database.ts';
 
@@ -483,6 +485,144 @@ export function eventInsertOf(row: Record<string, unknown>): [string, unknown[]]
   const columns = Object.keys(row);
   return [
     `INSERT INTO "field_event" ("id", ${columns.map((column) => `"${column}"`).join(', ')})
+     VALUES (uuidv7(), ${columns.map((_, index) => `$${String(index + 1)}`).join(', ')})
+     RETURNING id::text`,
+    Object.values(row),
+  ];
+}
+
+// A scale receipt as Ana copies one by hand at Bayline County Landfill's tower on P1: the
+// tandem's `BCL-88241`, a real weighing (gross 62,400 lb, tare 28,200 lb, net 34,200 lb, 17.10
+// tons; adms-scale-receipts), Tuesday 13 October 2026 at 09:30 (UTC−4). For a test that writes
+// another receipt, or changes one column of this one (`more`).
+export function scaleReceiptLike(
+  world: Pick<World, 'p1' | 'landfill' | 'monitor' | 'device'>,
+  more: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    project_id: world.p1,
+    receipt_number: 'BCL-88241',
+    site_id: world.landfill,
+    gross_weight_lb: '62400.00',
+    tare_weight_lb: '28200.00',
+    net_weight_lb: '34200.00',
+    net_weight_tons: '17.1000',
+    entered_by_id: world.monitor,
+    device_id: world.device,
+    entered_at: '2026-10-13T13:30:00Z',
+    device_utc_offset_minutes: -240,
+    ...more,
+  };
+}
+
+// A SHA-256 as a phone keeps one: 64 lower-case hexadecimal digits.
+export const fingerprintOf = (file: string): string =>
+  createHash('sha256').update(file).digest('hex');
+
+let photographs = 0;
+
+// A photograph's record as Ana's phone sends one from P1, belonging to `owner` (one of
+// `field_event_id`, `certification_id`, `scale_receipt_id`, `roe_id`, `survey_id`, `incident_id`,
+// `drop_off_log_id`): taken Tuesday 13 October 2026 at
+// 09:20 (UTC−4) with a fix, its two fingerprints, and its own place in storage (each call a new
+// file, since no two records name the same one). For a test that changes a column (`more`).
+export function photoLike(
+  world: Pick<World, 'p1' | 'device'>,
+  owner: Record<string, unknown>,
+  more: Record<string, unknown> = {},
+): Record<string, unknown> {
+  photographs += 1;
+  const file = `photographs/example-${String(photographs)}`;
+  return {
+    project_id: world.p1,
+    ...owner,
+    captured_at: '2026-10-13T13:20:00Z',
+    device_utc_offset_minutes: -240,
+    latitude: '27.95010000',
+    longitude: '-82.44730000',
+    original_sha256: fingerprintOf(`${file} as taken`),
+    uploaded_sha256: fingerprintOf(`${file} as uploaded`),
+    object_key: file,
+    device_id: world.device,
+    ...more,
+  };
+}
+
+// ROE `R-0007` as Ana makes it on her phone on P2: 412 Cedar Ct, its parcel and owner, signed on
+// 9 October 2026 (the golden mission §3), that day at 10:15 (UTC−4), with no fields of the firm's
+// own. For a test that writes another ROE, or changes a column of this one (`more`).
+export function roeLike(
+  world: Pick<World, 'p2' | 'monitor' | 'device' | 'assignments'>,
+  more: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    project_id: world.p2,
+    roe_number: 'R-0007',
+    parcel_id: 'APN 14-0321-007',
+    address: '412 Cedar Ct',
+    owner_name: 'Rosa Delgado',
+    signed: true,
+    signed_date: '2026-10-09',
+    latitude: '27.96120000',
+    longitude: '-82.43310000',
+    answers: '{}',
+    source: 'DEVICE',
+    made_by_id: world.monitor,
+    device_id: world.device,
+    assignment_id: world.assignments.p2,
+    made_at: '2026-10-09T14:15:00Z',
+    device_utc_offset_minutes: -240,
+    ...more,
+  };
+}
+
+// What every form records, as Ana's phone sends it from P1 on Tuesday 13 October 2026 at 11:50
+// (UTC−4), with no fields of the firm's own: where it came from has no database default, as on a
+// field event. A survey, an incident and a drop-off log each add their own.
+export function formLike(
+  world: Pick<World, 'p1' | 'monitor' | 'device' | 'assignments'>,
+  more: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    project_id: world.p1,
+    source: 'DEVICE',
+    monitor_id: world.monitor,
+    device_id: world.device,
+    assignment_id: world.assignments.p1,
+    setup_version: 1,
+    made_at: '2026-10-13T15:50:00Z',
+    device_utc_offset_minutes: -240,
+    latitude: '27.95010000',
+    longitude: '-82.44730000',
+    answers: '{}',
+    ...more,
+  };
+}
+
+// The same form created in the back office by Dana because the phone failed (ADR-156): no phone,
+// no assignment and no setup version; the person and the reason instead.
+export function backOfficeFormLike(
+  world: Parameters<typeof formLike>[0] & Pick<World, 'admin' | 'reasons'>,
+  more: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    ...formLike(world),
+    source: 'BACK_OFFICE',
+    device_id: null,
+    assignment_id: null,
+    setup_version: null,
+    created_by_id: world.admin,
+    created_reason_id: world.reasons.deviceFailed,
+    ...more,
+  };
+}
+
+// The insert of one record a phone makes the id of (a scale receipt, a photograph, an ROE, a
+// form), returning its id. Here the database is asked for a UUIDv7 in the phone's place, as `eventInsertOf` does.
+export function phoneInsertOf(table: string, row: Record<string, unknown>): [string, unknown[]] {
+  const columns = Object.keys(row);
+  return [
+    `INSERT INTO "${table}" ("id", ${columns.map((column) => `"${column}"`).join(', ')})
      VALUES (uuidv7(), ${columns.map((_, index) => `$${String(index + 1)}`).join(', ')})
      RETURNING id::text`,
     Object.values(row),

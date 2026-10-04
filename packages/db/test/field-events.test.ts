@@ -435,8 +435,9 @@ describe('a field event', () => {
     // site. `typed_capacity_cy` is a monitor's claim on a truck keyed in by hand (AC-04-26), never
     // a capacity of the field event's. A unit rate event's pay item is what its phone worked out
     // and printed, never a rate (ADR-213, 325); a split property's estimate is the monitor's, and
-    // no share is kept (AC-04-48). The scale receipt and the ROE found join with their own
-    // records (1.3.5, 1.3.6), the worker's zone and map version in 1.5.2.
+    // no share is kept (AC-04-48). A weight is the scale receipt's, which a disposal only points
+    // at (AC-04-73, ADR-326), and an ROE's owner and scope are the ROE's, which a collection only
+    // points at (AC-04-82, ADR-327). The worker's zone and map version join in 1.5.2.
     expect(columns.map((column) => column.name)).toEqual([
       'address',
       'address_source',
@@ -473,9 +474,11 @@ describe('a field event', () => {
       'project_id',
       'received_at',
       'reconciled_at',
+      'roe_id',
       'roe_number',
       'root_ball_half_exposed',
       'root_ball_inches',
+      'scale_receipt_id',
       'setup_version',
       'site_id',
       'source',

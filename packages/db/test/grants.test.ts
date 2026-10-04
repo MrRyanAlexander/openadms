@@ -68,6 +68,9 @@ const tableGrants: Record<string, Record<string, string>> = {
   certification: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   certification_box: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   certification_helper: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
+  // An ROE and what it allows: edited as setup is (ADR-294, 327).
+  roe: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
+  roe_scope_item: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   // The firm's lists: configuration, each one (ADR-302).
   ...Object.fromEntries(
     listTables.map((table) => [table, { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' }]),
@@ -80,6 +83,13 @@ const tableGrants: Record<string, Record<string, string>> = {
   // An itemised unit rate event's lines and the tickets a load carries: evidence (ADR-325).
   field_event_item: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },
   carried_ticket: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },
+  // A scale receipt and a photograph's record: evidence (ADR-326).
+  scale_receipt: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },
+  photo: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },
+  // A survey, an incident and a drop-off log: evidence (ADR-327).
+  survey: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },
+  incident: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },
+  drop_off_log: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },
   completed_load: { adms_api: 'SELECT', adms_worker: 'INSERT SELECT UPDATE' },
   transaction: { adms_api: 'SELECT', adms_worker: 'DELETE INSERT SELECT' },
   invoice_lock: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },
@@ -149,11 +159,83 @@ const captured = [
   'root_ball_inches',
   'survey_number',
   'unit_count',
+  // The scale receipt a disposal points at (ADR-326).
+  'scale_receipt_id',
+  // The ROE its number found (ADR-327).
+  'roe_id',
 ];
-// What the API corrects on an item line and on a carried ticket: all but the id and created time.
+// What every form records, beside its own (ADR-327).
+const formShared = [
+  'project_id',
+  'source',
+  'monitor_id',
+  'device_id',
+  'assignment_id',
+  'setup_version',
+  'created_by_id',
+  'created_reason_id',
+  'made_at',
+  'device_utc_offset_minutes',
+  'latitude',
+  'longitude',
+  'answers',
+  'form_definition_id',
+  'form_id',
+  'form_document_type',
+  'notes',
+];
+// What the API corrects on an item line and on a carried ticket: all but the id and created time;
+// on a scale receipt, a photograph's record, a survey, an incident and a drop-off log: all but the
+// id and the server's received time (a photograph's fingerprints and places in storage hold the
+// grant and are refused by a trigger).
 const correctable: Record<string, string[]> = {
+  survey: [...formShared, 'work_type_id', 'survey_number', 'roe_number', 'roe_id'],
+  incident: [
+    ...formShared,
+    'incident_type_id',
+    'incident_sub_type_id',
+    'description',
+    'parties',
+    'address',
+  ],
+  drop_off_log: [...formShared, 'site_id', 'resident_name', 'origin_address'],
   field_event_item: ['field_event_id', 'field_event_kind', 'item_name_id', 'quantity'],
   carried_ticket: ['field_event_id', 'field_event_kind', 'carried_ticket_number'],
+  scale_receipt: [
+    'project_id',
+    'receipt_number',
+    'site_id',
+    'gross_weight_lb',
+    'tare_weight_lb',
+    'net_weight_lb',
+    'net_weight_tons',
+    'entered_by_id',
+    'device_id',
+    'entered_at',
+    'device_utc_offset_minutes',
+    'notes',
+  ],
+  photo: [
+    'project_id',
+    'field_event_id',
+    'certification_id',
+    'scale_receipt_id',
+    'roe_id',
+    'survey_id',
+    'incident_id',
+    'drop_off_log_id',
+    'view',
+    'captured_at',
+    'device_utc_offset_minutes',
+    'latitude',
+    'longitude',
+    'original_sha256',
+    'uploaded_sha256',
+    'object_key',
+    'depth_object_key',
+    'device_id',
+    'uploaded_at',
+  ],
 };
 // What the viewer views show, read through their base tables (row-level security applies there).
 const viewerColumns: Record<string, string[]> = {

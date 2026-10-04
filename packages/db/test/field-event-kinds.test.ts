@@ -21,6 +21,9 @@ import {
   fieldEventLike,
   insertOf,
   payItemLike,
+  phoneInsertOf,
+  roeLike,
+  scaleReceiptLike,
 } from './support/example-world.ts';
 import { eachTestRolledBack } from './support/lifecycle.ts';
 
@@ -1057,6 +1060,18 @@ describe('unit rate work', () => {
     const onHaulOutForm = await mulch();
     const mixed = await fieldTag('Mixed');
     await asThePhone();
+    const receipt = await tested.db.one<{ id: string }>(
+      ...phoneInsertOf('scale_receipt', scaleReceiptLike(world)),
+    );
+    // An ROE on P1, so the ROE a number found has one to point at.
+    const r0007 = (
+      await tested.db.one<{ id: string }>(
+        ...phoneInsertOf(
+          'roe',
+          roeLike(world, { project_id: world.p1, assignment_id: world.assignments.p1 }),
+        ),
+      )
+    ).id;
     const column = (detail: string): string =>
       detail.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
     const isHaulOut = (kind: FieldEventKindName): boolean => kind.startsWith('HAUL_OUT');
@@ -1069,10 +1084,14 @@ describe('unit rate work', () => {
           return { field_tag_id: mixed };
         case 'roeNumber':
           return { roe_number: 'R-0007' };
+        case 'roeId':
+          return { roe_id: r0007 };
         case 'estimateCy':
           return { estimate_cy: 12, ...(kind === 'COLLECTION' ? { split_suffix: 'A' } : {}) };
         case 'loadCall':
           return { load_call: 80 };
+        case 'scaleReceiptId':
+          return { scale_receipt_id: receipt.id };
         case 'carriedCount':
           return { carried_count: 3 };
         case 'kindOfWorkId':
@@ -1122,7 +1141,7 @@ describe('unit rate work', () => {
       }
     }
     expect(outcomes).toEqual(expected);
-    expect(outcomes).toHaveLength(5 * 16);
+    expect(outcomes).toHaveLength(5 * 18);
   });
 
   it('AC-04-68 the monitor marked ineligible says so, and is taken', async () => {

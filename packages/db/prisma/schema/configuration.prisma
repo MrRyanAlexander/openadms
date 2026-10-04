@@ -110,6 +110,13 @@ model Project {
   certifications   Certification[]
   fieldTags        FieldTag[]
   fieldEvents      FieldEvent[]
+  scaleReceipts    ScaleReceipt[]
+  photos           Photo[]
+  roes             Roe[]
+  roeScopeItems    RoeScopeItem[]
+  surveys          Survey[]
+  incidents        Incident[]
+  dropOffLogs      DropOffLog[]
   completedLoads   CompletedLoad[]
   // The read-only viewers who may see it.
   viewers          ViewerProject[]
@@ -303,11 +310,16 @@ model Form {
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
 
-  project     Project          @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  debrisTypes FormDebrisType[]
-  definitions FormDefinition[]
-  rules       Rule[]
-  fieldEvents FieldEvent[]
+  project       Project          @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  debrisTypes   FormDebrisType[]
+  definitions   FormDefinition[]
+  rules         Rule[]
+  fieldEvents   FieldEvent[]
+  roes          Roe[]
+  roeScopeItems RoeScopeItem[]
+  surveys       Survey[]
+  incidents     Incident[]
+  dropOffLogs   DropOffLog[]
 
   @@unique([projectId, documentType])
   // What a rule points at: its own project's form, with its document type (ADR-313).
@@ -343,6 +355,7 @@ model FormDebrisType {
   reductionMethod ReductionMethod?    @relation(fields: [reductionMethodId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   rulePicks       RuleCriterionPick[]
   fieldEvents     FieldEvent[]
+  roeScopeItems   RoeScopeItem[]
 
   @@unique([formId, debrisTypeId])
   // So a rule's Debris type picks only an entry of the rule's own form (its relation's target).
@@ -367,10 +380,16 @@ model FormDefinition {
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  form      Form @relation(fields: [formId, documentType], references: [id, documentType], onDelete: Restrict, onUpdate: Restrict)
-  createdBy User @relation("FormDefinitionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  form        Form         @relation(fields: [formId, documentType], references: [id, documentType], onDelete: Restrict, onUpdate: Restrict)
+  createdBy   User         @relation("FormDefinitionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  roes        Roe[]
+  surveys     Survey[]
+  incidents   Incident[]
+  dropOffLogs DropOffLog[]
 
   @@unique([formId, version])
+  // What an ROE and a form point at, so the definition answered is one of its own form's.
+  @@unique([formId, id])
   @@map("form_definition")
 }
 
@@ -409,15 +428,17 @@ model DisposalSite {
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
 
-  project      Project                  @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  siteType     SiteType                 @relation("DisposalSiteType", fields: [siteTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  siteTypeKeys SiteType?                @relation("DisposalSiteTypeKey", fields: [siteTypeId, siteTypeKey], references: [id, key], onDelete: Restrict, onUpdate: Restrict)
-  labels       DisposalSiteLabel[]
-  tippingFees  DisposalSiteTippingFee[]
-  areaVersions SiteAreaVersion[]
-  assignments  Assignment[]
-  fieldEvents  FieldEvent[]
-  rulePicks    RuleCriterionPick[]
+  project       Project                  @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  siteType      SiteType                 @relation("DisposalSiteType", fields: [siteTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  siteTypeKeys  SiteType?                @relation("DisposalSiteTypeKey", fields: [siteTypeId, siteTypeKey], references: [id, key], onDelete: Restrict, onUpdate: Restrict)
+  labels        DisposalSiteLabel[]
+  tippingFees   DisposalSiteTippingFee[]
+  areaVersions  SiteAreaVersion[]
+  assignments   Assignment[]
+  fieldEvents   FieldEvent[]
+  scaleReceipts ScaleReceipt[]
+  dropOffLogs   DropOffLog[]
+  rulePicks     RuleCriterionPick[]
 
   // So an assignment's site, a tipping fee's and a rule's pick can only be one of its own project's.
   @@unique([projectId, id])
@@ -964,6 +985,14 @@ model User {
   certificationsHelped  CertificationHelper[]
   fieldEvents           FieldEvent[]          @relation("FieldEventMonitor")
   fieldEventsCreated    FieldEvent[]          @relation("FieldEventCreatedBy")
+  scaleReceiptsEntered  ScaleReceipt[]
+  roesMade              Roe[]
+  surveys               Survey[]              @relation("SurveyMonitor")
+  surveysCreated        Survey[]              @relation("SurveyCreatedBy")
+  incidents             Incident[]            @relation("IncidentMonitor")
+  incidentsCreated      Incident[]            @relation("IncidentCreatedBy")
+  dropOffLogs           DropOffLog[]          @relation("DropOffLogMonitor")
+  dropOffLogsCreated    DropOffLog[]          @relation("DropOffLogCreatedBy")
   invoiceLocks          InvoiceLock[]
   auditRecords          AuditRecord[]
 
@@ -1074,6 +1103,12 @@ model Device {
   assignments    Assignment[]
   certifications Certification[]
   fieldEvents    FieldEvent[]
+  scaleReceipts  ScaleReceipt[]
+  photos         Photo[]
+  roes           Roe[]
+  surveys        Survey[]
+  incidents      Incident[]
+  dropOffLogs    DropOffLog[]
   auditRecords   AuditRecord[]
 
   @@map("device")
@@ -1218,6 +1253,10 @@ model Assignment {
   payItems       AssignmentPayItem[]
   certifications Certification[]
   fieldEvents    FieldEvent[]
+  roes           Roe[]
+  surveys        Survey[]
+  incidents      Incident[]
+  dropOffLogs    DropOffLog[]
 
   // So its pay items can only be its own project's (their relation's target).
   @@unique([projectId, id])
@@ -1367,6 +1406,7 @@ model Certification {
   boxes           CertificationBox[]
   helpers         CertificationHelper[]
   fieldEvents     FieldEvent[]
+  photos          Photo[]
 
   // A cert number once per project (ADR-045).
   @@unique([projectId, certNumber])
@@ -1430,6 +1470,105 @@ model CertificationBox {
 
   @@unique([certificationId, position])
   @@map("certification_box")
+}
+
+// A Right of Entry: a record like a ticket (ADR-149), and both setup and field work. Where the
+// project requires ROEs it is set up for the project, then a monitor on a phone or a back-office
+// worker fills in its details, so it is edited as configuration is (freely, audited, never
+// deleted), not held to a field event's correction rules (ADR-294). Nothing here is required but
+// its number and whether it is signed: an ROE that is missing, unsigned or out of scope is a
+// flag's, never a refusal (ADR-052).
+model Roe {
+  // Made on the phone, so a retried sync is the same record (KD-56); by the database for one the
+  // back office makes.
+  id        String @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  projectId String @map("project_id") @db.Uuid
+  // The next of its phone's ROE block as the series writes it (R-0007), or the paper's number
+  // kept as typed (ADR-181, 323). Text, never parsed; unique on its project.
+  roeNumber String @map("roe_number")
+
+  parcelId   String?   @map("parcel_id")
+  address    String?
+  ownerName  String?   @map("owner_name")
+  signed     Boolean
+  signedDate DateTime? @map("signed_date") @db.Date
+  // WGS84, exact decimals (invariant 15); whether a fix is required is the ROE form's setting
+  // (ADR-181).
+  latitude   Decimal?  @db.Decimal(38, 8)
+  longitude  Decimal?  @db.Decimal(38, 8)
+
+  // The firm's own ROE form fields, keyed by field id, and the version of the definition they
+  // answered: one of its own project's ROE form's (the form and its document type again hold it
+  // there, all three or none). Its scope is never here: RoeScopeItem (ADR-278, 293).
+  answers          Json
+  formDefinitionId String?           @map("form_definition_id") @db.Uuid
+  formId           String?           @map("form_id") @db.Uuid
+  formDocumentType FormDocumentType? @map("form_document_type")
+
+  // Where it came from: a phone, with who made it, the phone and the assignment it held; or the
+  // back office (ADR-149, 156). No default: whoever writes one says.
+  source                 RecordSource
+  madeById               String?      @map("made_by_id") @db.Uuid
+  deviceId               String?      @map("device_id") @db.Uuid
+  assignmentId           String?      @map("assignment_id") @db.Uuid
+  // The device's clock, as a UTC instant plus its offset; and when the server received it (ADR-100).
+  madeAt                 DateTime?    @map("made_at") @db.Timestamptz(3)
+  deviceUtcOffsetMinutes Int?         @map("device_utc_offset_minutes")
+  receivedAt             DateTime     @default(now()) @map("received_at") @db.Timestamptz(3)
+
+  notes String?
+
+  project        Project         @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  form           Form?           @relation(fields: [projectId, formId, formDocumentType], references: [projectId, id, documentType], onDelete: Restrict, onUpdate: Restrict)
+  formDefinition FormDefinition? @relation(fields: [formId, formDefinitionId], references: [formId, id], onDelete: Restrict, onUpdate: Restrict)
+  madeBy         User?           @relation(fields: [madeById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  device         Device?         @relation(fields: [deviceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  assignment     Assignment?     @relation(fields: [assignmentId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  scopeItems     RoeScopeItem[]
+  fieldEvents    FieldEvent[]
+  surveys        Survey[]
+  photos         Photo[]
+
+  // An ROE number once per project (ADR-149).
+  @@unique([projectId, roeNumber])
+  // What a scope line, a field event, a survey and a photograph point at, so each is its own
+  // project's.
+  @@unique([projectId, id])
+  @@map("roe")
+}
+
+// What an ROE allows, picked from what its project already has: a debris type on the project's
+// load form, or a payable type (ADR-293). Nothing is typed. Real columns, never JSON: the engine
+// reads them (ROE_OUT_OF_SCOPE). An ROE with no line has no scope to check. A line is taken off by
+// archiving.
+model RoeScopeItem {
+  id               String            @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  // Its ROE's, again: it holds the ROE and a picked debris type to one project.
+  projectId        String            @map("project_id") @db.Uuid
+  roeId            String            @map("roe_id") @db.Uuid
+  // Exactly one of a debris type and a payable type (a check). The debris type is an entry of its
+  // own project's load form: the form and its document type are that entry's, again, there
+  // exactly when the entry is.
+  formDebrisTypeId String?           @map("form_debris_type_id") @db.Uuid
+  formId           String?           @map("form_id") @db.Uuid
+  formDocumentType FormDocumentType? @map("form_document_type")
+  payableTypeId    String?           @map("payable_type_id") @db.Uuid
+  // How many, where the ROE says (three trees): recorded and exported, never checked.
+  count            Int?
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  roe            Roe             @relation(fields: [projectId, roeId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  form           Form?           @relation(fields: [projectId, formId, formDocumentType], references: [projectId, id, documentType], onDelete: Restrict, onUpdate: Restrict)
+  formDebrisType FormDebrisType? @relation(fields: [formId, formDebrisTypeId], references: [formId, id], onDelete: Restrict, onUpdate: Restrict)
+  payableType    PayableType?    @relation(fields: [payableTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  project        Project         @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  // Each once per ROE.
+  @@unique([roeId, formDebrisTypeId])
+  @@unique([roeId, payableTypeId])
+  @@map("roe_scope_item")
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1547,8 +1686,9 @@ model PayableType {
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
 
-  payItems    PayItem[]
-  fieldEvents FieldEvent[]
+  payItems      PayItem[]
+  fieldEvents   FieldEvent[]
+  roeScopeItems RoeScopeItem[]
 
   @@map("payable_type")
 }
@@ -1692,7 +1832,8 @@ model IncidentType {
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
 
-  subTypes IncidentSubType[]
+  subTypes  IncidentSubType[]
+  incidents Incident[]
 
   @@map("incident_type")
 }
@@ -1709,6 +1850,7 @@ model IncidentSubType {
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
 
   incidentType IncidentType @relation(fields: [incidentTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  incidents    Incident[]
 
   @@map("incident_sub_type")
 }
@@ -1727,6 +1869,9 @@ model Reason {
 
   fieldEventsCreated     FieldEvent[] @relation("FieldEventCreatedReason")
   fieldEventsNumberTyped FieldEvent[] @relation("FieldEventNumberTypedReason")
+  surveysCreated         Survey[]
+  incidentsCreated       Incident[]
+  dropOffLogsCreated     DropOffLog[]
 
   @@map("reason")
 }
@@ -1741,6 +1886,7 @@ model SurveyWorkType {
 
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+  surveys    Survey[]
 
   @@map("survey_work_type")
 }

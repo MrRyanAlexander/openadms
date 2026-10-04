@@ -148,14 +148,12 @@ model FieldEvent {
   // a unit rate event's (ADR-218, 295).
   fieldTagId       String?           @map("field_tag_id") @db.Uuid
   // On an ROE project, a collection's and a unit rate event's: the number as picked or typed, a
-  // snapshot like the cert number (ADR-149, 292). The ROE it finds joins with the ROE's own record
-  // (BACKLOG 1.3.6).
+  // snapshot like the cert number (ADR-149, 292). The ROE it found is roeId, below.
   roeNumber        String?           @map("roe_number")
   // A split load's property estimate, in CY: there exactly when a collection's split suffix is
   // (ADR-055). A haul-out's piles give a load call instead.
   estimateCy       Decimal?          @map("estimate_cy") @db.Decimal(8, 1)
-  // The tower's count on a load that carries tickets (ADR-243). The scale receipt a disposal
-  // points at joins with the scale receipt's own record (BACKLOG 1.3.5).
+  // The tower's count on a load that carries tickets (ADR-243).
   carriedCount     Int?              @map("carried_count")
 
   // A unit rate event's. The kind of work captured (its screen), kept so it is known when no band
@@ -179,6 +177,15 @@ model FieldEvent {
   // Where the pay item lets the monitor mark the work ineligible (ADR-210).
   markedIneligible    Boolean?    @map("marked_ineligible")
 
+  // A disposal's and a haul-out disposal's: the scale receipt it points at, one of its own
+  // project's. A tandem's two disposals point at the one receipt; no field event holds a weight of
+  // its own (ADR-034, 175).
+  scaleReceiptId String? @map("scale_receipt_id") @db.Uuid
+
+  // A collection's and a unit rate event's: the ROE its number found, one of its own project's;
+  // empty while no ROE on the project has that number (ADR-292).
+  roeId String? @map("roe_id") @db.Uuid
+
   project           Project          @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   monitor           User             @relation("FieldEventMonitor", fields: [monitorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   device            Device?          @relation(fields: [deviceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
@@ -196,8 +203,11 @@ model FieldEvent {
   kindOfWork        KindOfWork?      @relation(fields: [kindOfWorkId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   payableType       PayableType?     @relation(fields: [payableTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   payItem           PayItem?         @relation(fields: [projectId, payItemId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  scaleReceipt      ScaleReceipt?    @relation(fields: [projectId, scaleReceiptId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  roe               Roe?             @relation(fields: [projectId, roeId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
   items             FieldEventItem[]
   carriedTickets    CarriedTicket[]
+  photos            Photo[]
 
   completedLoadAsCollection CompletedLoad? @relation("CollectionEvent")
   completedLoadAsDisposal   CompletedLoad? @relation("DisposalEvent")
@@ -206,6 +216,8 @@ model FieldEvent {
   @@unique([projectId, workflow, ticketNumber, splitSuffix, kind])
   // What an item line and a carried ticket point at, so each is held to the kind it belongs on.
   @@unique([id, kind])
+  // What a photograph points at, so it is one of its own project's field events.
+  @@unique([projectId, id])
   // So a viewer's "who recorded it" is found by the monitor.
   @@index([monitorId])
   @@map("field_event")
@@ -247,4 +259,293 @@ model CarriedTicket {
 
   @@unique([fieldEventId, carriedTicketNumber])
   @@map("carried_ticket")
+}
+
+// The paper a final disposal site hands the tower: its own record, apart from any ticket, pointed
+// at by one or several disposals (a tandem weighed once) and consumed once (ADR-034, 038). Every
+// figure is what the paper says, copied by hand: none is worked out from another, and a
+// receipt-book slip has none. A tandem's shares are derived, on the completed loads, never here
+// (ADR-175).
+model ScaleReceipt {
+  // UUIDv7 made on the phone, so a retried sync is the same record (KD-56): no default here.
+  id            String @id @db.Uuid
+  projectId     String @map("project_id") @db.Uuid
+  // The site's own number, exactly as written: never one of ours, never a ticket number, never
+  // put into our format (ADR-034).
+  receiptNumber String @map("receipt_number")
+  // The site that issued it, one of its own project's.
+  siteId        String @map("site_id") @db.Uuid
+
+  grossWeightLb Decimal? @map("gross_weight_lb") @db.Decimal(12, 2)
+  tareWeightLb  Decimal? @map("tare_weight_lb") @db.Decimal(12, 2)
+  netWeightLb   Decimal? @map("net_weight_lb") @db.Decimal(12, 2)
+  netWeightTons Decimal? @map("net_weight_tons") @db.Decimal(12, 4)
+
+  // The monitor making the ticket at the disposal (ADR-294); never the system actor. The phone,
+  // where one was used.
+  enteredById            String   @map("entered_by_id") @db.Uuid
+  deviceId               String?  @map("device_id") @db.Uuid
+  // The device's clock, as a UTC instant plus its offset; and when the server received it (ADR-100).
+  enteredAt              DateTime @map("entered_at") @db.Timestamptz(3)
+  deviceUtcOffsetMinutes Int      @map("device_utc_offset_minutes")
+  receivedAt             DateTime @default(now()) @map("received_at") @db.Timestamptz(3)
+
+  notes String?
+
+  project     Project      @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  site        DisposalSite @relation(fields: [projectId, siteId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  enteredBy   User         @relation(fields: [enteredById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  device      Device?      @relation(fields: [deviceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  fieldEvents FieldEvent[]
+  photos      Photo[]
+
+  // A receipt number once per project: a second is a transcription error or a double billing.
+  @@unique([projectId, receiptNumber])
+  // What a disposal and a photograph point at, so each is its own project's.
+  @@unique([projectId, id])
+  @@map("scale_receipt")
+}
+
+// A certification's five views (ADR-179).
+enum PhotoView {
+  OPERATOR_WITH_PLACARD
+  INTERIOR_OR_BACK
+  RIGHT
+  LEFT
+  FRONT
+
+  @@map("photo_view")
+}
+
+// A photograph's record: the file itself is one object in storage, never overwritten, kept
+// indefinitely (ADR-101; ARCHITECTURE §11). It belongs to exactly one thing, one of its own
+// project's (a check in the guard migration): a field event, a certification, a scale receipt, an
+// ROE, a survey, an incident or a drop-off log. A record waiting in quarantine joins with its own
+// table (BACKLOG 1.4.2). How many a ticket may hold is the phone's rule, never the database's.
+model Photo {
+  // UUIDv7 made on the phone, so a retried sync is the same record (KD-56): no default here.
+  id              String  @id @db.Uuid
+  projectId       String  @map("project_id") @db.Uuid
+  fieldEventId    String? @map("field_event_id") @db.Uuid
+  certificationId String? @map("certification_id") @db.Uuid
+  scaleReceiptId  String? @map("scale_receipt_id") @db.Uuid
+  roeId           String? @map("roe_id") @db.Uuid
+  surveyId        String? @map("survey_id") @db.Uuid
+  incidentId      String? @map("incident_id") @db.Uuid
+  dropOffLogId    String? @map("drop_off_log_id") @db.Uuid
+
+  // Which of the five views a certification's photograph is; no other photograph has one.
+  view PhotoView?
+
+  // The device's clock, as a UTC instant plus its offset; and when the server received the record
+  // (ADR-100).
+  capturedAt             DateTime @map("captured_at") @db.Timestamptz(3)
+  deviceUtcOffsetMinutes Int      @map("device_utc_offset_minutes")
+  receivedAt             DateTime @default(now()) @map("received_at") @db.Timestamptz(3)
+
+  // WGS84 where it was taken: whatever fix the phone had (invariant 15).
+  latitude  Decimal? @db.Decimal(38, 8)
+  longitude Decimal? @db.Decimal(38, 8)
+
+  // The fingerprint taken at capture and the fingerprint of the file uploaded, so anyone can show
+  // the one came from the other; where the file is, and the depth data beside it where it couldn't
+  // travel inside. None of the four is ever changed (a trigger in the guard migration).
+  originalSha256 String  @map("original_sha256")
+  uploadedSha256 String  @map("uploaded_sha256")
+  objectKey      String  @unique @map("object_key")
+  depthObjectKey String? @unique @map("depth_object_key")
+
+  deviceId   String?   @map("device_id") @db.Uuid
+  // When the file reached storage; empty until it has.
+  uploadedAt DateTime? @map("uploaded_at") @db.Timestamptz(3)
+
+  project       Project        @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  fieldEvent    FieldEvent?    @relation(fields: [projectId, fieldEventId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  certification Certification? @relation(fields: [projectId, certificationId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  scaleReceipt  ScaleReceipt?  @relation(fields: [projectId, scaleReceiptId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  roe           Roe?           @relation(fields: [projectId, roeId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  survey        Survey?        @relation(fields: [projectId, surveyId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  incident      Incident?      @relation(fields: [projectId, incidentId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  dropOffLog    DropOffLog?    @relation(fields: [projectId, dropOffLogId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  device        Device?        @relation(fields: [deviceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@map("photo")
+}
+
+// Forms: records, never a ticket's field events (ADR-236). A survey, an incident and a drop-off
+// log never pair, never bill and have no status; each is QC'd on its own (ADR-107). Each says
+// where it came from as a field event does: a phone's carries its phone, assignment and setup
+// version; one created in the back office the person and the reason (ADR-047, 156; a check in the
+// guard migration). Each keeps the firm's own fields as answers keyed by field id, with the
+// version of the definition they answered, one of its own project's form of its kind (ADR-278).
+
+// A property's condition before work, or after it: its work type from the firm's list, the survey
+// number as written and its ROE (ADR-149, 150).
+model Survey {
+  // Made on the phone, so a retried sync is the same record (KD-56); by the database for one
+  // created in the back office.
+  id              String       @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  projectId       String       @map("project_id") @db.Uuid
+  source          RecordSource
+  // Who made it; never the system actor.
+  monitorId       String       @map("monitor_id") @db.Uuid
+  deviceId        String?      @map("device_id") @db.Uuid
+  assignmentId    String?      @map("assignment_id") @db.Uuid
+  setupVersion    Int?         @map("setup_version")
+  createdById     String?      @map("created_by_id") @db.Uuid
+  createdReasonId String?      @map("created_reason_id") @db.Uuid
+
+  // The device's clock, as a UTC instant plus its offset; and when the server received it (ADR-100).
+  madeAt                 DateTime @map("made_at") @db.Timestamptz(3)
+  deviceUtcOffsetMinutes Int      @map("device_utc_offset_minutes")
+  receivedAt             DateTime @default(now()) @map("received_at") @db.Timestamptz(3)
+
+  // WGS84, exact decimals: whatever fix the phone had (invariant 15).
+  latitude  Decimal? @db.Decimal(38, 8)
+  longitude Decimal? @db.Decimal(38, 8)
+
+  answers          Json
+  formDefinitionId String?           @map("form_definition_id") @db.Uuid
+  formId           String?           @map("form_id") @db.Uuid
+  formDocumentType FormDocumentType? @map("form_document_type")
+  notes            String?
+
+  workTypeId   String  @map("work_type_id") @db.Uuid
+  // What a stump ticket cites (ADR-198). Typed as written, never issued by the system: usually
+  // what names the property legally. No series, and not unique: a property's pre-work and
+  // post-work surveys carry the same one (ADR-294).
+  surveyNumber String? @map("survey_number")
+  // The ROE's number as picked or typed, a snapshot (ADR-292); and the ROE it found, one of its
+  // own project's, empty while no ROE on the project has that number. A post-work survey finds
+  // its pre-work survey by the ROE number (ADR-150).
+  roeNumber    String? @map("roe_number")
+  roeId        String? @map("roe_id") @db.Uuid
+
+  project        Project         @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  monitor        User            @relation("SurveyMonitor", fields: [monitorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  device         Device?         @relation(fields: [deviceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  assignment     Assignment?     @relation(fields: [assignmentId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  createdBy      User?           @relation("SurveyCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  createdReason  Reason?         @relation(fields: [createdReasonId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  form           Form?           @relation(fields: [projectId, formId, formDocumentType], references: [projectId, id, documentType], onDelete: Restrict, onUpdate: Restrict)
+  formDefinition FormDefinition? @relation(fields: [formId, formDefinitionId], references: [formId, id], onDelete: Restrict, onUpdate: Restrict)
+  workType       SurveyWorkType  @relation(fields: [workTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  roe            Roe?            @relation(fields: [projectId, roeId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  photos         Photo[]
+
+  // What a photograph points at, so it is one of its own project's surveys.
+  @@unique([projectId, id])
+  // So a post-work survey's pre-work survey is found by the ROE number.
+  @@index([projectId, roeNumber])
+  @@map("survey")
+}
+
+// Something that happened in the field. Records only: it never stops work, whatever the incident
+// (ADR-052). It has no ticket number and names no certification: a truck it concerns is in its
+// parties and description, as written.
+model Incident {
+  // Made on the phone, so a retried sync is the same record (KD-56); by the database for one
+  // created in the back office.
+  id              String       @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  projectId       String       @map("project_id") @db.Uuid
+  source          RecordSource
+  // Who made it; never the system actor.
+  monitorId       String       @map("monitor_id") @db.Uuid
+  deviceId        String?      @map("device_id") @db.Uuid
+  assignmentId    String?      @map("assignment_id") @db.Uuid
+  setupVersion    Int?         @map("setup_version")
+  createdById     String?      @map("created_by_id") @db.Uuid
+  createdReasonId String?      @map("created_reason_id") @db.Uuid
+
+  // The device's clock, as a UTC instant plus its offset; and when the server received it (ADR-100).
+  madeAt                 DateTime @map("made_at") @db.Timestamptz(3)
+  deviceUtcOffsetMinutes Int      @map("device_utc_offset_minutes")
+  receivedAt             DateTime @default(now()) @map("received_at") @db.Timestamptz(3)
+
+  // WGS84, exact decimals: whatever fix the phone had (invariant 15).
+  latitude  Decimal? @db.Decimal(38, 8)
+  longitude Decimal? @db.Decimal(38, 8)
+
+  answers          Json
+  formDefinitionId String?           @map("form_definition_id") @db.Uuid
+  formId           String?           @map("form_id") @db.Uuid
+  formDocumentType FormDocumentType? @map("form_document_type")
+  notes            String?
+
+  // Picked from the firm's lists: a type, then a sub-type (ADR-137).
+  incidentTypeId    String  @map("incident_type_id") @db.Uuid
+  incidentSubTypeId String? @map("incident_sub_type_id") @db.Uuid
+  description       String?
+  parties           String?
+  address           String?
+
+  project         Project          @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  monitor         User             @relation("IncidentMonitor", fields: [monitorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  device          Device?          @relation(fields: [deviceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  assignment      Assignment?      @relation(fields: [assignmentId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  createdBy       User?            @relation("IncidentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  createdReason   Reason?          @relation(fields: [createdReasonId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  form            Form?            @relation(fields: [projectId, formId, formDocumentType], references: [projectId, id, documentType], onDelete: Restrict, onUpdate: Restrict)
+  formDefinition  FormDefinition?  @relation(fields: [formId, formDefinitionId], references: [formId, id], onDelete: Restrict, onUpdate: Restrict)
+  incidentType    IncidentType     @relation(fields: [incidentTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  incidentSubType IncidentSubType? @relation(fields: [incidentSubTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  photos          Photo[]
+
+  // What a photograph points at, so it is one of its own project's incidents.
+  @@unique([projectId, id])
+  @@map("incident")
+}
+
+// A citizen's drop-off at a site: a reference log, like an incident, never a ticket. No quantity,
+// number, pay item or cost; the pile bills when it leaves on a haul-out (ADR-184, 188). Not
+// checked against the site's facts (ADR-215).
+model DropOffLog {
+  // Made on the phone, so a retried sync is the same record (KD-56); by the database for one
+  // created in the back office.
+  id              String       @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  projectId       String       @map("project_id") @db.Uuid
+  source          RecordSource
+  // Who made it; never the system actor.
+  monitorId       String       @map("monitor_id") @db.Uuid
+  deviceId        String?      @map("device_id") @db.Uuid
+  assignmentId    String?      @map("assignment_id") @db.Uuid
+  setupVersion    Int?         @map("setup_version")
+  createdById     String?      @map("created_by_id") @db.Uuid
+  createdReasonId String?      @map("created_reason_id") @db.Uuid
+
+  // The device's clock, as a UTC instant plus its offset; and when the server received it (ADR-100).
+  madeAt                 DateTime @map("made_at") @db.Timestamptz(3)
+  deviceUtcOffsetMinutes Int      @map("device_utc_offset_minutes")
+  receivedAt             DateTime @default(now()) @map("received_at") @db.Timestamptz(3)
+
+  // WGS84, exact decimals: whatever fix the phone had (invariant 15).
+  latitude  Decimal? @db.Decimal(38, 8)
+  longitude Decimal? @db.Decimal(38, 8)
+
+  answers          Json
+  formDefinitionId String?           @map("form_definition_id") @db.Uuid
+  formId           String?           @map("form_id") @db.Uuid
+  formDocumentType FormDocumentType? @map("form_document_type")
+  notes            String?
+
+  // The site, one of its own project's; the resident's name and where the debris came from, only
+  // if given.
+  siteId        String  @map("site_id") @db.Uuid
+  residentName  String? @map("resident_name")
+  originAddress String? @map("origin_address")
+
+  project        Project         @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  monitor        User            @relation("DropOffLogMonitor", fields: [monitorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  device         Device?         @relation(fields: [deviceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  assignment     Assignment?     @relation(fields: [assignmentId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  createdBy      User?           @relation("DropOffLogCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  createdReason  Reason?         @relation(fields: [createdReasonId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  form           Form?           @relation(fields: [projectId, formId, formDocumentType], references: [projectId, id, documentType], onDelete: Restrict, onUpdate: Restrict)
+  formDefinition FormDefinition? @relation(fields: [formId, formDefinitionId], references: [formId, id], onDelete: Restrict, onUpdate: Restrict)
+  site           DisposalSite    @relation(fields: [projectId, siteId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  photos         Photo[]
+
+  // What a photograph points at, so it is one of its own project's drop-off logs.
+  @@unique([projectId, id])
+  @@map("drop_off_log")
 }

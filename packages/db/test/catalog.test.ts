@@ -61,12 +61,22 @@ const domains: Record<string, string> = {
   certification: 'BILLING',
   certification_box: 'BILLING',
   certification_helper: 'OPERATIONS',
+  // An ROE and what it allows, a survey, an incident and a drop-off log: records beside the
+  // field event (ADR-327).
+  roe: 'RECORDS',
+  roe_scope_item: 'RECORDS',
+  survey: 'RECORDS',
+  incident: 'RECORDS',
+  drop_off_log: 'RECORDS',
   master_passcode: 'SECURITY',
   field_event: 'RECORDS',
   // An itemised unit rate event's lines and the tickets a load carries: the field event's own
   // domain (ADR-325).
   field_event_item: 'RECORDS',
   carried_ticket: 'RECORDS',
+  // A scale receipt and a photograph's record: evidence beside the field event (ADR-326).
+  scale_receipt: 'RECORDS',
+  photo: 'RECORDS',
   completed_load: 'BILLING',
   transaction: 'BILLING',
   invoice_lock: 'BILLING',
@@ -99,6 +109,8 @@ const triggers = [
     (table) =>
       `CREATE TRIGGER ${table}_refuse_edit BEFORE UPDATE ON public.${table} FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
   ),
+  // A photograph's fingerprints and places in storage are written once (ADR-326).
+  `CREATE TRIGGER photo_refuse_file_edit BEFORE UPDATE OF original_sha256, uploaded_sha256, object_key, depth_object_key ON public.photo FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
   `CREATE TRIGGER zone_with_its_map_version BEFORE INSERT ON public.zone FOR EACH ROW EXECUTE FUNCTION zone_with_its_map_version()`,
   // A container has its primary box, asked when the piece of work that wrote it ends (ADR-321).
   `CREATE CONSTRAINT TRIGGER certification_has_primary_box AFTER INSERT OR UPDATE OF kind ON public.certification DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION certification_has_primary_box()`,
@@ -423,6 +435,154 @@ describe('the guards in the catalog', () => {
       { name: 'site_area_version_version_check', definition: 'CHECK ((version >= 1))' },
       { name: 'zone_bounding_box_check', definition: boundingBoxCheck },
       { name: 'zone_geometry_check', definition: shapeCheck('geometry') },
+      {
+        name: 'field_event_scale_receipt_check',
+        definition:
+          "CHECK (((scale_receipt_id IS NULL) OR (kind = ANY (ARRAY['DISPOSAL'::field_event_kind, 'HAUL_OUT_DISPOSAL'::field_event_kind]))))",
+      },
+      {
+        name: 'scale_receipt_entered_by_check',
+        definition: "CHECK ((entered_by_id <> '00000000-0000-7000-8000-000000000001'::uuid))",
+      },
+      {
+        name: 'scale_receipt_number_check',
+        definition: "CHECK ((btrim(receipt_number) <> ''::text))",
+      },
+      {
+        name: 'scale_receipt_weights_check',
+        definition:
+          'CHECK ((((gross_weight_lb IS NULL) OR (gross_weight_lb >= (0)::numeric)) AND ((tare_weight_lb IS NULL) OR (tare_weight_lb >= (0)::numeric))))',
+      },
+      {
+        name: 'photo_file_check',
+        definition:
+          "CHECK ((((original_sha256 ~ '^[0-9a-f]{64}$'::text) AND (uploaded_sha256 ~ '^[0-9a-f]{64}$'::text) AND (btrim(object_key) <> ''::text) AND ((depth_object_key IS NULL) OR (btrim(depth_object_key) <> ''::text))) IS TRUE))",
+      },
+      {
+        name: 'photo_gps_check',
+        definition:
+          "CHECK ((((num_nonnulls(latitude, longitude) = ANY (ARRAY[0, 2])) AND ((latitude IS NULL) OR ((latitude >= ('-90'::integer)::numeric) AND (latitude <= (90)::numeric))) AND ((longitude IS NULL) OR ((longitude >= ('-180'::integer)::numeric) AND (longitude <= (180)::numeric)))) IS TRUE))",
+      },
+      {
+        name: 'photo_owner_check',
+        definition:
+          'CHECK ((num_nonnulls(field_event_id, certification_id, scale_receipt_id, roe_id, survey_id, incident_id, drop_off_log_id) = 1))',
+      },
+      {
+        name: 'photo_view_check',
+        definition: 'CHECK (((view IS NULL) OR (certification_id IS NOT NULL)))',
+      },
+      // ROEs and forms (ADR-327).
+      {
+        name: 'drop_off_log_answers_check',
+        definition:
+          "CHECK ((((jsonb_typeof(answers) = 'object'::text) AND (num_nonnulls(form_definition_id, form_id, form_document_type) = ANY (ARRAY[0, 3])) AND ((form_document_type IS NULL) OR (form_document_type = 'DROP_OFF_LOG'::form_document_type)) AND ((form_definition_id IS NOT NULL) OR (answers = '{}'::jsonb))) IS TRUE))",
+      },
+      {
+        name: 'drop_off_log_created_by_check',
+        definition:
+          "CHECK ((created_by_id IS DISTINCT FROM '00000000-0000-7000-8000-000000000001'::uuid))",
+      },
+      {
+        name: 'drop_off_log_gps_check',
+        definition:
+          "CHECK ((((num_nonnulls(latitude, longitude) = ANY (ARRAY[0, 2])) AND ((latitude IS NULL) OR ((latitude >= ('-90'::integer)::numeric) AND (latitude <= (90)::numeric))) AND ((longitude IS NULL) OR ((longitude >= ('-180'::integer)::numeric) AND (longitude <= (180)::numeric)))) IS TRUE))",
+      },
+      {
+        name: 'drop_off_log_monitor_check',
+        definition: "CHECK ((monitor_id <> '00000000-0000-7000-8000-000000000001'::uuid))",
+      },
+      {
+        name: 'drop_off_log_source_check',
+        definition:
+          "CHECK ((\nCASE source\n    WHEN 'DEVICE'::record_source THEN ((num_nonnulls(device_id, assignment_id, setup_version) = 3) AND (num_nonnulls(created_by_id, created_reason_id) = 0))\n    WHEN 'BACK_OFFICE'::record_source THEN ((num_nonnulls(device_id, assignment_id, setup_version) = 0) AND (num_nonnulls(created_by_id, created_reason_id) = 2))\n    ELSE false\nEND IS TRUE))",
+      },
+      {
+        name: 'field_event_roe_check',
+        definition:
+          "CHECK (((roe_id IS NULL) OR (kind = ANY (ARRAY['COLLECTION'::field_event_kind, 'UNIT_RATE'::field_event_kind]))))",
+      },
+      {
+        name: 'incident_answers_check',
+        definition:
+          "CHECK ((((jsonb_typeof(answers) = 'object'::text) AND (num_nonnulls(form_definition_id, form_id, form_document_type) = ANY (ARRAY[0, 3])) AND ((form_document_type IS NULL) OR (form_document_type = 'INCIDENT'::form_document_type)) AND ((form_definition_id IS NOT NULL) OR (answers = '{}'::jsonb))) IS TRUE))",
+      },
+      {
+        name: 'incident_created_by_check',
+        definition:
+          "CHECK ((created_by_id IS DISTINCT FROM '00000000-0000-7000-8000-000000000001'::uuid))",
+      },
+      {
+        name: 'incident_gps_check',
+        definition:
+          "CHECK ((((num_nonnulls(latitude, longitude) = ANY (ARRAY[0, 2])) AND ((latitude IS NULL) OR ((latitude >= ('-90'::integer)::numeric) AND (latitude <= (90)::numeric))) AND ((longitude IS NULL) OR ((longitude >= ('-180'::integer)::numeric) AND (longitude <= (180)::numeric)))) IS TRUE))",
+      },
+      {
+        name: 'incident_monitor_check',
+        definition: "CHECK ((monitor_id <> '00000000-0000-7000-8000-000000000001'::uuid))",
+      },
+      {
+        name: 'incident_source_check',
+        definition:
+          "CHECK ((\nCASE source\n    WHEN 'DEVICE'::record_source THEN ((num_nonnulls(device_id, assignment_id, setup_version) = 3) AND (num_nonnulls(created_by_id, created_reason_id) = 0))\n    WHEN 'BACK_OFFICE'::record_source THEN ((num_nonnulls(device_id, assignment_id, setup_version) = 0) AND (num_nonnulls(created_by_id, created_reason_id) = 2))\n    ELSE false\nEND IS TRUE))",
+      },
+      {
+        name: 'roe_answers_check',
+        definition:
+          "CHECK ((((jsonb_typeof(answers) = 'object'::text) AND (num_nonnulls(form_definition_id, form_id, form_document_type) = ANY (ARRAY[0, 3])) AND ((form_document_type IS NULL) OR (form_document_type = 'ROE'::form_document_type)) AND ((form_definition_id IS NOT NULL) OR (answers = '{}'::jsonb))) IS TRUE))",
+      },
+      {
+        name: 'roe_gps_check',
+        definition:
+          "CHECK ((((num_nonnulls(latitude, longitude) = ANY (ARRAY[0, 2])) AND ((latitude IS NULL) OR ((latitude >= ('-90'::integer)::numeric) AND (latitude <= (90)::numeric))) AND ((longitude IS NULL) OR ((longitude >= ('-180'::integer)::numeric) AND (longitude <= (180)::numeric)))) IS TRUE))",
+      },
+      {
+        name: 'roe_made_by_check',
+        definition:
+          "CHECK ((made_by_id IS DISTINCT FROM '00000000-0000-7000-8000-000000000001'::uuid))",
+      },
+      {
+        name: 'roe_number_check',
+        definition: "CHECK ((btrim(roe_number) <> ''::text))",
+      },
+      {
+        name: 'roe_scope_item_count_check',
+        definition: 'CHECK (((count IS NULL) OR (count >= 1)))',
+      },
+      {
+        name: 'roe_scope_item_pick_check',
+        definition:
+          "CHECK ((((num_nonnulls(form_debris_type_id, payable_type_id) = 1) AND (num_nonnulls(form_debris_type_id, form_id, form_document_type) = ANY (ARRAY[0, 3])) AND ((form_document_type IS NULL) OR (form_document_type = 'LOAD'::form_document_type))) IS TRUE))",
+      },
+      {
+        name: 'roe_source_check',
+        definition:
+          "CHECK ((\nCASE source\n    WHEN 'DEVICE'::record_source THEN (num_nonnulls(made_by_id, device_id, assignment_id, made_at, device_utc_offset_minutes) = 5)\n    WHEN 'BACK_OFFICE'::record_source THEN (num_nonnulls(device_id, assignment_id, device_utc_offset_minutes) = 0)\n    ELSE false\nEND IS TRUE))",
+      },
+      {
+        name: 'survey_answers_check',
+        definition:
+          "CHECK ((((jsonb_typeof(answers) = 'object'::text) AND (num_nonnulls(form_definition_id, form_id, form_document_type) = ANY (ARRAY[0, 3])) AND ((form_document_type IS NULL) OR (form_document_type = 'SURVEY'::form_document_type)) AND ((form_definition_id IS NOT NULL) OR (answers = '{}'::jsonb))) IS TRUE))",
+      },
+      {
+        name: 'survey_created_by_check',
+        definition:
+          "CHECK ((created_by_id IS DISTINCT FROM '00000000-0000-7000-8000-000000000001'::uuid))",
+      },
+      {
+        name: 'survey_gps_check',
+        definition:
+          "CHECK ((((num_nonnulls(latitude, longitude) = ANY (ARRAY[0, 2])) AND ((latitude IS NULL) OR ((latitude >= ('-90'::integer)::numeric) AND (latitude <= (90)::numeric))) AND ((longitude IS NULL) OR ((longitude >= ('-180'::integer)::numeric) AND (longitude <= (180)::numeric)))) IS TRUE))",
+      },
+      {
+        name: 'survey_monitor_check',
+        definition: "CHECK ((monitor_id <> '00000000-0000-7000-8000-000000000001'::uuid))",
+      },
+      {
+        name: 'survey_source_check',
+        definition:
+          "CHECK ((\nCASE source\n    WHEN 'DEVICE'::record_source THEN ((num_nonnulls(device_id, assignment_id, setup_version) = 3) AND (num_nonnulls(created_by_id, created_reason_id) = 0))\n    WHEN 'BACK_OFFICE'::record_source THEN ((num_nonnulls(device_id, assignment_id, setup_version) = 0) AND (num_nonnulls(created_by_id, created_reason_id) = 2))\n    ELSE false\nEND IS TRUE))",
+      },
       { name: 'master_passcode_hash_check', definition: "CHECK ((hash ~~ '$argon2id$%'::text))" },
       { name: 'master_passcode_version_check', definition: 'CHECK ((version >= 1))' },
       {

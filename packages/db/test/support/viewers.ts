@@ -1,7 +1,9 @@
 // The setup tables a client user or an auditor sees, and how each is told to be theirs
 // (ADR-315; the viewers' guard migration, `guard_viewer`), for the tests that hold every one of
 // them to the same policies, views and grants. A field event's item lines and carried tickets are
-// here too, seen with the field event they belong to (ADR-325); the field event itself is one of
+// here too, seen with the field event they belong to (ADR-325), and scale receipts and
+// photographs, seen with their project (ADR-326), and ROEs, their scope lines, surveys, incidents
+// and drop-off logs, seen with theirs (ADR-327); the field event itself is one of
 // the row-level security guard's four tables, held by name in the tests.
 import { listTables } from './lists.ts';
 
@@ -69,6 +71,17 @@ export const viewerSights: Record<string, Sight> = {
   certification_helper: partOf('certification_helper', 'certification', 'certification_id'),
   field_event_item: partOf('field_event_item', 'field_event', 'field_event_id'),
   carried_ticket: partOf('carried_ticket', 'field_event', 'field_event_id'),
+  // A project's scale receipts; and its photographs' records, without where the files are kept
+  // (ADR-326).
+  scale_receipt: project(),
+  photo: project(['object_key', 'depth_object_key']),
+  // A project's ROEs with what each allows, and its forms: surveys, incidents, drop-off logs
+  // (ADR-327).
+  roe: project(),
+  roe_scope_item: project(),
+  survey: project(),
+  incident: project(),
+  drop_off_log: project(),
   client: namedBy('client', 'viewer_project_setup', 'client_id', [...contact, 'notes']),
   declaration_event: namedBy('declaration_event', 'viewer_project_setup', 'declaration_event_id'),
   contractor: namedBy('contractor', 'project_contractor', 'contractor_id', contact),
