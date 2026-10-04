@@ -8,10 +8,37 @@
 // when its truck is certified (ADR-108). The whole setup, P2 included, told in the spine's order
 // through the API's setup services, is its own story (BACKLOG 1.1.11).
 import type { Prisma } from '@open-adms/db';
-import { NewProjectSettings, type Policy } from '@open-adms/domain';
+import { NewProjectNumbers, NewProjectSettings, type Policy } from '@open-adms/domain';
 
 export const p1TimeZone = 'America/New_York';
 export const p1KindsOfWork = ['Hangers', 'Leaners', 'Stumps', 'White Goods', 'Crew time'];
+
+// Where P1's number series start (spec/CONVENTIONS.md §6): loads, haul-outs, unit rate tickets,
+// and the cert numbers' seed (Q-96).
+export const p1NumbersFrom = {
+  LOAD: 101001,
+  HAUL_OUT: 201001,
+  UNIT_RATE: 301001,
+  CERTIFICATION: 730415,
+} as const;
+
+// A generated project's number series, as the setup service starts them with the project
+// (ADR-323): each from the number given, or its usual start.
+export async function startSeries(
+  tx: Prisma.TransactionClient,
+  projectId: string,
+  numbersFrom: Readonly<
+    Partial<Record<'LOAD' | 'HAUL_OUT' | 'UNIT_RATE' | 'CERTIFICATION', number>>
+  >,
+): Promise<void> {
+  const numbers = new NewProjectNumbers('GENERATED').series(numbersFrom);
+  if (numbers.refusal !== null) throw new Error(numbers.refusal.message);
+  for (const { series, firstNumber } of numbers.series) {
+    await tx.projectNumberSeries.create({
+      data: { projectId, series, firstNumber, nextNumber: firstNumber },
+    });
+  }
+}
 
 export interface P1 {
   readonly client: string;
@@ -47,6 +74,7 @@ export async function setUpP1(tx: Prisma.TransactionClient, policy: Policy): Pro
       allowSplitLoads: true,
     },
   });
+  await startSeries(tx, project.id, p1NumbersFrom);
   const kinds = await tx.kindOfWork.findMany({
     where: { name: { in: p1KindsOfWork } },
     orderBy: { position: 'asc' },

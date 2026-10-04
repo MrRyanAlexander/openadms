@@ -2,22 +2,29 @@
 // 127, 135, 141, 216, 303, 311): the client and the declaration event, searched for and picked or
 // created; the project under them; the kinds of unit rate work it allows; its field tags; its map.
 // A new project's settings start as packages/domain's NewProjectSettings says, from the policy
-// values: the database gives none a default (ADR-303).
+// values: the database gives none a default (ADR-303). Its number series start with it, and a
+// control-ticket project's ranges are entered after (ADR-056, 062, 323).
 import type {
   Client,
+  ControlRange,
   Database,
   DeclarationEvent,
   FieldTag,
   MapSource,
   MapVersion,
+  NumberSeries,
   Prisma,
   Project,
+  ProjectNumberSeries,
   TicketNumberSource,
   Workflow,
 } from '@open-adms/db';
 import {
+  ControlRanges,
   MapShapes,
+  NewProjectNumbers,
   NewProjectSettings,
+  NumberSeriesRules,
   type Policy,
   type ProjectSettings,
 } from '@open-adms/domain';
@@ -53,6 +60,16 @@ export interface NewProject {
   readonly workflows: readonly Workflow[];
   // The kinds of unit rate work it allows.
   readonly kindOfWorkIds: readonly string[];
+  // Where a series starts, where the firm says: a ticket series otherwise starts at 100,001
+  // (ADR-062), and there is a cert-number series only once it is seeded here or later (Q-96).
+  readonly numbersFrom?: Readonly<Partial<Record<NumberSeries, number>>>;
+}
+
+export interface NewControlRange {
+  readonly projectId: string;
+  readonly series: NumberSeries;
+  readonly firstNumber: number;
+  readonly lastNumber: number;
 }
 
 export interface NewMap {
@@ -124,9 +141,14 @@ export class ProjectSetup extends SetupService {
     );
   }
 
-  // Step 3: the project, with a new project's settings, and the kinds of unit rate work it allows.
+  // Step 3: the project, with a new project's settings, the kinds of unit rate work it allows and
+  // its number series.
   project(person: string, input: NewProject): Promise<Outcome<Project>> {
     return this.write(person, async (tx) => {
+      const numbers = new NewProjectNumbers(input.ticketNumberSource).series(
+        input.numbersFrom ?? {},
+      );
+      if (numbers.refusal !== null) throw new Refused(numbers.refusal);
       const programType = await tx.programType.findUniqueOrThrow({
         where: { id: input.programTypeId },
       });
@@ -147,8 +169,59 @@ export class ProjectSetup extends SetupService {
       for (const kindOfWorkId of input.kindOfWorkIds) {
         await tx.projectKindOfWork.create({ data: { projectId: project.id, kindOfWorkId } });
       }
+      for (const { series, firstNumber } of numbers.series) {
+        await tx.projectNumberSeries.create({
+          data: { projectId: project.id, series, firstNumber, nextNumber: firstNumber },
+        });
+      }
       return project;
     });
+  }
+
+  // A series the project doesn't have yet, from the number the firm says: its cert numbers, seeded
+  // after the project was made. A series that exists is never started again.
+  numberSeries(
+    person: string,
+    projectId: string,
+    series: NumberSeries,
+    firstNumber: number,
+  ): Promise<Outcome<ProjectNumberSeries>> {
+    return this.write(person, async (tx) => {
+      const project = await tx.project.findUniqueOrThrow({ where: { id: projectId } });
+      const refusal =
+        new NewProjectNumbers(project.ticketNumberSource).refusal(series) ??
+        new NumberSeriesRules(series).start(firstNumber);
+      if (refusal !== null) throw new Refused(refusal);
+      return tx.projectNumberSeries.create({
+        data: { projectId, series, firstNumber, nextNumber: firstNumber },
+      });
+    });
+  }
+
+  // A run of pre-printed control tickets, on a project that numbers its tickets from them
+  // (ADR-056): sent with the phones' lists. Refused when it shares a number with a range of the
+  // same series already entered.
+  controlRange(person: string, input: NewControlRange): Promise<Outcome<ControlRange>> {
+    return this.write(person, async (tx) => {
+      const project = await tx.project.findUniqueOrThrow({ where: { id: input.projectId } });
+      const entered = await tx.controlRange.findMany({ where: { projectId: input.projectId } });
+      const refusal = new ControlRanges(
+        project.ticketNumberSource,
+        entered.map((range) => ({ ...range, archived: range.archivedAt !== null })),
+      ).check({ ...input, archived: false });
+      if (refusal !== null) throw new Refused(refusal);
+      return tx.controlRange.create({ data: { ...input } });
+    });
+  }
+
+  // A range entered by mistake is taken off, never deleted.
+  archiveControlRange(person: string, controlRangeId: string): Promise<Outcome<ControlRange>> {
+    return this.write(person, (tx) =>
+      tx.controlRange.update({
+        where: { id: controlRangeId },
+        data: { archivedAt: this.clock.now() },
+      }),
+    );
   }
 
   // The firm changes a project's own settings afterwards, audited with the value before.

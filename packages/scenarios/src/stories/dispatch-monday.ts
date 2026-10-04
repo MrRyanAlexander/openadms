@@ -6,11 +6,14 @@
 // master passcode sets his phone up on the spot: an unplanned assignment, marked. Ana and Kim record ticket 101001 under their assignments; that evening
 // Tariq's phone can't be found and is marked lost. What it proves is the models: the time zone, the
 // Monitor ID, the device with its number block and passcode version, the assignment, and each
-// field event carrying its assignment and setup version. The screens, the sign-in, the sync and
-// the allocator behind these rows are Phases 2 to 4. It opens with setup's first three steps
+// field event carrying its assignment and setup version. The screens, the sign-in and the sync
+// behind these rows are Phases 2 to 4; the number block is cut by the API's allocator (ADR-323).
+// It opens with setup's first three steps
 // (ADR-303): the client, the declaration event and the project, whose settings start as the
 // release's policy values; then the fourth (ADR-305): the prime added to the project, and its
 // contract.
+import { NumberAllocator } from '@open-adms/api';
+
 import { projectTime } from '../clock.ts';
 import { uuidv7 } from '../ids.ts';
 import type { Story } from '../runner.ts';
@@ -404,19 +407,14 @@ export const dispatchMonday: Story = {
       at('06:30'),
       'At the yard, online, Ana’s phone takes her assignment and a block of load numbers',
     );
-    await api.$write(
-      { actorId: people.ana, source: 'DEVICE', deviceId: phones.collection.id },
-      (tx) =>
-        tx.numberBlock.create({
-          data: {
-            deviceId: phones.collection.id,
-            projectId: office.p1,
-            series: 'LOAD',
-            firstNumber: 101001,
-            lastNumber: 102000,
-          },
-        }),
-    );
+    const allocator = new NumberAllocator(api, clock, story.policy);
+    const anaAtSync = { person: people.ana, deviceId: phones.collection.id };
+    const firstBlock = await allocator.topUp(anaAtSync, {
+      projectId: office.p1,
+      series: 'LOAD',
+      lastUsedNumber: null,
+    });
+    if (!firstBlock.saved) throw new Error(firstBlock.refusal.message);
     const anaPhone = story.phone({
       name: 'P1-COL-1',
       deviceId: phones.collection.id,
@@ -432,6 +430,7 @@ export const dispatchMonday: Story = {
       monitorId: people.kim,
       assignmentId: board.tower,
       projectId: office.p1,
+      siteId: office.tdsr,
       setupVersion: 1,
       timeZone,
     });
@@ -513,7 +512,7 @@ export const dispatchMonday: Story = {
     );
 
     story.at(at('08:15'), 'Ana scans the truck’s badge at 14 Heron St, offline');
-    const collection = anaPhone.begin('LOAD', 'COLLECTION');
+    const collection = anaPhone.begin('LOAD', 'COLLECTION', '730415');
     story.at(
       at('08:40'),
       'Ana completes the collection; her phone shows 101001, the first of its block',
@@ -524,7 +523,7 @@ export const dispatchMonday: Story = {
       endLongitude: '-82.45870000',
     });
     story.at(at('09:05'), 'Kim scans the badge at the Marsh Road TDSR tower, offline');
-    const disposal = kimPhone.begin('LOAD', 'DISPOSAL');
+    const disposal = kimPhone.begin('LOAD', 'DISPOSAL', '730415');
     story.at(at('09:25'), 'Kim calls the load 80% and scans 101001 last');
     kimPhone.complete(disposal, {
       ticketNumber: '101001',
@@ -539,14 +538,12 @@ export const dispatchMonday: Story = {
       [await kimPhone.sync(story.intake), await anaPhone.sync(story.intake)],
       [1, 1],
     );
-    await api.$write(
-      { actorId: people.ana, source: 'DEVICE', deviceId: phones.collection.id },
-      (tx) =>
-        tx.numberBlock.updateMany({
-          where: { deviceId: phones.collection.id, series: 'LOAD' },
-          data: { lastUsedNumber: 101001 },
-        }),
-    );
+    const toppedUp = await allocator.topUp(anaAtSync, {
+      projectId: office.p1,
+      series: 'LOAD',
+      lastUsedNumber: 101001,
+    });
+    if (!toppedUp.saved) throw new Error(toppedUp.refusal.message);
     const events = await api.fieldEvent.findMany({
       include: { assignment: { include: { person: true, site: true } }, project: true },
       orderBy: { endedAt: 'asc' },
@@ -556,9 +553,9 @@ export const dispatchMonday: Story = {
       events.map((event) => [
         event.kind,
         event.ticketNumber,
-        event.assignment.person.name,
-        event.assignment.site?.name ?? 'no site',
-        event.assignment.origin,
+        event.assignment?.person.name,
+        event.assignment?.site?.name ?? 'no site',
+        event.assignment?.origin,
         event.setupVersion,
       ]),
       [
@@ -571,18 +568,25 @@ export const dispatchMonday: Story = {
       events.map((event) => [
         projectTime(event.project.timeZone, event.endedAt),
         event.deviceUtcOffsetMinutes,
-        day(event.assignment.workDate),
+        event.assignment === null ? 'no assignment' : day(event.assignment.workDate),
       ]),
       [
         ['Mon 12 Oct 08:40', -240, '2026-10-12'],
         ['Mon 12 Oct 09:25', -240, '2026-10-12'],
       ],
     );
-    const [block] = await api.numberBlock.findMany();
     story.check(
-      'the block knows its last used number; the rest stay the phone’s',
-      [block?.lastUsedNumber, block?.status],
-      [101001, 'ISSUED'],
+      'the block knows its last used number; the rest stay the phone’s, topped up by the one it used',
+      toppedUp.record.map((block) => [
+        block.firstNumber,
+        block.lastNumber,
+        block.lastUsedNumber,
+        block.status,
+      ]),
+      [
+        [101001, 102000, 101001, 'ISSUED'],
+        [102001, 102001, null, 'ISSUED'],
+      ],
     );
 
     story.at(at('18:10'), 'P1-TWR-LF isn’t handed in and can’t be found: Luis marks it lost');
@@ -657,6 +661,7 @@ export const dispatchMonday: Story = {
         ['number_block', 'INSERT', 'Ana Brooks', 'DEVICE', 'P1-COL-1', null],
         ['assignment', 'INSERT', 'Tariq Patel', 'DEVICE', 'P1-TWR-LF', null],
         ['number_block', 'UPDATE', 'Ana Brooks', 'DEVICE', 'P1-COL-1', null],
+        ['number_block', 'INSERT', 'Ana Brooks', 'DEVICE', 'P1-COL-1', null],
         [
           'device',
           'UPDATE',

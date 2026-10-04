@@ -2,13 +2,15 @@
 // classes, with no HTTP and no sign-in: each takes the service's own database client (the login
 // adms_api) and writes through db.$write as the person it is told. Phase 2 wraps them in endpoints
 // (ADR-316). The setup services are spec/parts/01-setup.md's steps, one class per group of records;
-// certifying is spec/parts/03-certification.md's (ADR-321).
+// certifying is spec/parts/03-certification.md's (ADR-321); the allocator of numbers is the
+// server's alone (ADR-065, 323).
 export {
   Certifications,
   type BoxInput,
   type BoxMeasurements,
   type NewCertification,
 } from './certification/certifications.ts';
+export { NumberAllocator, type LastUsed, type PhoneAtSync } from './numbering/number-allocator.ts';
 export { builtInPolicy } from './policy.ts';
 export {
   ContractorSetup,
@@ -27,6 +29,7 @@ export {
 export {
   ProjectSetup,
   type NewClient,
+  type NewControlRange,
   type NewDeclarationEvent,
   type NewMap,
   type NewProject,

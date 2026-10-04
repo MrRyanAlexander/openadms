@@ -10,8 +10,10 @@
 // The later changes are the back office's: a measuring mistake corrected in place (the capacity
 // worked out again), signatures on file, a revocation from a date, a copy to another project. A
 // modified truck is certified again, naming the certification it replaces. Nothing is deleted.
-// Who may do each (an admin revokes; a certifying assignment) is read at sign-in, Phase 2; the
-// certification's number comes from the caller until the allocator exists (BACKLOG 1.3.2).
+// Who may do each (an admin revokes; a certifying assignment) is read at sign-in, Phase 2. A
+// certification's number is the phone's: the next of its block of the project's cert-number
+// series, or the pre-printed sheet's, as written. A copy's number is the other project's next,
+// taken by the server itself (NumberAllocator; ADR-323).
 import type { Actor, Certification, CertificationBox, Prisma } from '@open-adms/db';
 import {
   type BoxShape,
@@ -22,6 +24,7 @@ import {
   type MeasuredBox,
 } from '@open-adms/domain';
 
+import { NumberAllocator } from '../numbering/number-allocator.ts';
 import { SubPlaces } from '../setup/contractor-setup.ts';
 import { day, type Outcome, Refused, SetupService, type Warn } from '../setup/setup-service.ts';
 
@@ -226,12 +229,14 @@ export class Certifications extends SetupService {
 
   // The same truck on another project: a new certification there, with a number of that project's
   // own and a reference to the original; each is its own record (ADR-152). What was measured, who
-  // measured it and when are the original's; its subs get their place on the other project.
+  // measured it and when are the original's; its subs get their place on the other project. The
+  // number is the next of the other project's cert-number series; a number typed from pre-printed
+  // paper is kept as written instead, and is needed where that project has no series (ADR-045).
   copy(
     person: string,
     certificationId: string,
     toProjectId: string,
-    certNumber: string,
+    typedCertNumber?: string,
   ): Promise<Outcome<Certification>> {
     return this.write(person, async (tx, warn) => {
       const original = await tx.certification.findUniqueOrThrow({
@@ -262,6 +267,14 @@ export class Certifications extends SetupService {
       const helpers = await tx.certificationHelper.findMany({
         where: { certificationId, archivedAt: null },
       });
+      const certNumber =
+        typedCertNumber ?? (await NumberAllocator.next(tx, toProjectId, 'CERTIFICATION'));
+      if (certNumber === null) {
+        throw new Refused({
+          code: 'COPY_NEEDS_CERT_NUMBER',
+          message: `Not saved: ${project.name} has no cert-number series. Type the number from its pre-printed certification paper to copy certification ${original.certNumber}.`,
+        });
+      }
       const copy = await tx.certification.create({
         data: {
           projectId: toProjectId,

@@ -311,6 +311,8 @@ export const setup: Story = {
       ticketNumberSource: 'GENERATED',
       workflows: ['LOAD', 'HAUL_OUT', 'UNIT_RATE'],
       kindOfWorkIds: await Promise.all(p1Kinds.map((kind) => picked.kindOfWork(kind))),
+      // Where its numbers start, and the seed of its cert numbers (Q-96).
+      numbersFrom: { LOAD: 101001, HAUL_OUT: 201001, UNIT_RATE: 301001, CERTIFICATION: 730415 },
     } as const;
     story.check(
       'AC-01-80 a time zone that isn’t an IANA name is refused by the database: EST',
@@ -322,6 +324,21 @@ export const setup: Story = {
       'project_time_zone_named_check',
     );
     const p1 = (await saved(projects.project(dana, newP1))).id;
+    const p1Series = await api.projectNumberSeries.findMany({
+      where: { projectId: p1 },
+      orderBy: { firstNumber: 'asc' },
+    });
+    story.check(
+      'AC-01-09, AC-04-01 P1 generates its numbers: a series for each workflow, its cert numbers from 730415, its ROEs from 1',
+      p1Series.map((series) => `${series.series} from ${String(series.firstNumber)}`),
+      [
+        'ROE from 1',
+        'LOAD from 101001',
+        'HAUL_OUT from 201001',
+        'UNIT_RATE from 301001',
+        'CERTIFICATION from 730415',
+      ],
+    );
     const p1Read = async () =>
       api.project.findUniqueOrThrow({
         where: { id: p1 },
@@ -467,6 +484,7 @@ export const setup: Story = {
         'Dana: declaration_event INSERT (BACK_OFFICE)': 1,
         'Dana: project INSERT (BACK_OFFICE)': 1,
         'Dana: project_kind_of_work INSERT (BACK_OFFICE)': 5,
+        'Dana: project_number_series INSERT (BACK_OFFICE)': 5,
         'Dana: project UPDATE (BACK_OFFICE)': 1,
         'Dana: map_version INSERT (BACK_OFFICE)': 1,
         'Dana: zone INSERT (BACK_OFFICE)': 3,
@@ -1588,6 +1606,7 @@ export const setup: Story = {
           ticketNumberSource: 'GENERATED',
           workflows: ['LOAD'],
           kindOfWorkIds: [],
+          numbersFrom: { LOAD: 102001, CERTIFICATION: 730416 },
         }),
       )
     ).id;
@@ -1789,6 +1808,7 @@ export const setup: Story = {
       await audited(),
       {
         'Luis: project INSERT (BACK_OFFICE)': 1,
+        'Luis: project_number_series INSERT (BACK_OFFICE)': 5,
         'Luis: project_contractor INSERT (BACK_OFFICE)': 1,
         'Luis: contract INSERT (BACK_OFFICE)': 1,
         'Luis: form INSERT (BACK_OFFICE)': 3,

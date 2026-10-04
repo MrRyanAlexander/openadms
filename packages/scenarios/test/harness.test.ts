@@ -75,10 +75,10 @@ describe('a simulated phone', () => {
   it('keeps what its monitor records until it syncs, then sends it in the order recorded', async () => {
     const clock = new StoryClock('2026-10-12T08:15:00-04:00');
     const phone = new SimulatedDevice(setup, clock);
-    const first = phone.begin('LOAD', 'COLLECTION');
+    const first = phone.begin('LOAD', 'COLLECTION', '730415');
     clock.advance(25);
     phone.complete(first, { ticketNumber: '101001' });
-    const second = phone.begin('LOAD', 'COLLECTION');
+    const second = phone.begin('LOAD', 'COLLECTION', '730415');
     clock.advance(20);
     phone.complete(second, { ticketNumber: '101002' });
     expect(phone.waiting.map((event) => event.ticketNumber)).toEqual(['101001', '101002']);
@@ -93,7 +93,7 @@ describe('a simulated phone', () => {
   it('stamps its own clock, its offset, and an id made when the badge was scanned', () => {
     const clock = new StoryClock('2026-10-12T08:15:00-04:00');
     const phone = new SimulatedDevice({ ...setup, clockErrorMinutes: -7 }, clock);
-    const id = phone.begin('LOAD', 'DISPOSAL');
+    const id = phone.begin('LOAD', 'DISPOSAL', '730415');
     clock.advance(20);
     const event = phone.complete(id, { ticketNumber: '101001', loadCall: 80 });
     expect(projectTime('America/New_York', event.startedAt)).toBe('Mon 12 Oct 08:08');
@@ -118,7 +118,7 @@ describe('a simulated phone', () => {
     const clock = new StoryClock('2026-10-12T08:15:00-04:00');
     const phone = new SimulatedDevice(setup, clock);
     for (const number of ['101001', '101002', '101003']) {
-      phone.complete(phone.begin('LOAD', 'COLLECTION'), { ticketNumber: number });
+      phone.complete(phone.begin('LOAD', 'COLLECTION', '730415'), { ticketNumber: number });
     }
     const intake = new Received();
     intake.refuseAfter = 1;

@@ -17,10 +17,20 @@ export interface RecordedEvent {
   readonly ticketNumber: string;
   readonly splitSuffix: string;
   readonly monitorId: string;
+  // Made on a phone: with the phone, the assignment it held and the version of its lists it
+  // captured with (ADR-240, 324).
+  readonly source: 'DEVICE';
   readonly deviceId: string;
-  // The assignment the phone held, and the version of its lists it captured with (ADR-240).
   readonly assignmentId: string;
   readonly setupVersion: number;
+  readonly temporarySession: boolean;
+  readonly numberTyped: boolean;
+  // The cert number as scanned off the badge (ADR-017). Which certification it finds on the
+  // project is the server's to look up at intake (BACKLOG 1.4.2).
+  readonly certNumber: string;
+  readonly certKeyedByHand: boolean;
+  // The assignment's site, where the work is at one (ADR-195).
+  readonly siteId: string | null;
   readonly startedAt: Date;
   readonly endedAt: Date;
   readonly deviceUtcOffsetMinutes: number;
@@ -43,6 +53,8 @@ export interface PhoneSetup {
   readonly monitorId: string;
   readonly assignmentId: string;
   readonly projectId: string;
+  // The assignment's one site (a tower, a haul-out end); a curb collection's phone has none.
+  readonly siteId?: string;
   // The numbered version of the lists the phone holds for that assignment.
   readonly setupVersion: number;
   // The phone's own time zone: the project's, unless the story says otherwise.
@@ -64,6 +76,7 @@ interface Started {
   readonly id: string;
   readonly workflow: Workflow;
   readonly kind: FieldEventKind;
+  readonly certNumber: string;
   readonly startedAt: Date;
 }
 
@@ -87,11 +100,12 @@ export class SimulatedDevice {
     return new Date(this.clock.now().getTime() + (this.setup.clockErrorMinutes ?? 0) * 60_000);
   }
 
-  // New: the monitor starts a field event (the badge scanned); its id is made now, on the phone.
-  begin(workflow: Workflow, kind: FieldEventKind): string {
+  // New: the monitor starts a field event by scanning the badge (badge first, ADR-209); its id is
+  // made now, on the phone.
+  begin(workflow: Workflow, kind: FieldEventKind, certNumber: string): string {
     const startedAt = this.now();
     const id = uuidv7(startedAt);
-    this.started.set(id, { id, workflow, kind, startedAt });
+    this.started.set(id, { id, workflow, kind, certNumber, startedAt });
     return id;
   }
 
@@ -109,9 +123,15 @@ export class SimulatedDevice {
       ticketNumber: completion.ticketNumber,
       splitSuffix: completion.splitSuffix ?? '',
       monitorId: this.setup.monitorId,
+      source: 'DEVICE',
       deviceId: this.setup.deviceId,
       assignmentId: this.setup.assignmentId,
       setupVersion: this.setup.setupVersion,
+      temporarySession: false,
+      numberTyped: false,
+      certNumber: started.certNumber,
+      certKeyedByHand: false,
+      siteId: this.setup.siteId ?? null,
       startedAt: started.startedAt,
       endedAt,
       deviceUtcOffsetMinutes: utcOffsetMinutes(this.setup.timeZone, endedAt),

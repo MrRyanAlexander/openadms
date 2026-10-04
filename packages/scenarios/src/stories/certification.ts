@@ -12,8 +12,8 @@
 // refuses only what can't be a certification (measurements that give no capacity, a crew with
 // boxes, a tier 2 sub with no tier 1, a revocation with no reason), saving nothing.
 //
-// Not here: the phone's screens, its cert-number block and its sub suggestions (Phase 3; the
-// numbers are stated by the story until the allocator exists, BACKLOG 1.3.2), photographs
+// Not here: the phone's screens and its sub suggestions (Phase 3); the phone's cert-number block
+// (the story `numbering`: the numbers Sam's phone gives out are stated here), photographs
 // (Milestone 1.3), the flags a certification raises on tickets (1.5.5) and QC (1.8.2).
 import {
   type BoxInput,
@@ -27,7 +27,7 @@ import { NewProjectSettings } from '@open-adms/domain';
 import { utcOffsetMinutes } from '../clock.ts';
 import { uuidv7 } from '../ids.ts';
 import type { Story } from '../runner.ts';
-import { p1TimeZone as timeZone, setUpP1 } from './p1.ts';
+import { p1TimeZone as timeZone, setUpP1, startSeries } from './p1.ts';
 
 const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-04:00`;
 const saturday = (time: string): string => on('10', time);
@@ -95,6 +95,8 @@ export const certification: Story = {
           ...new NewProjectSettings(story.policy).for(ppdr),
         },
       });
+      // P2's own series; its cert numbers are seeded at 880112.
+      await startSeries(tx, p2.id, { LOAD: 102001, CERTIFICATION: 880112 });
       const phone = await tx.device.create({
         data: { name: 'P1-HO-TDSR', publicKey: 'story-key-p1-ho-tdsr', masterPasscodeVersion: 1 },
       });
@@ -566,14 +568,14 @@ export const certification: Story = {
     // ------------------------------------------------------------------------------------------
     story.at(
       on('14', '09:30'),
-      'Rivera’s self-loader starts work on P2 as well: Luis copies 730420 there as 880112',
+      'Rivera’s self-loader starts work on P2 as well: Luis copies 730420 there, and it takes P2’s next cert number, 880112',
     );
     story.check(
       'a copy needs the prime on the other project: Summit isn’t on P2',
-      await refused(certifications.copy(luis, summitTruck.id, p2, '880113')),
+      await refused(certifications.copy(luis, summitTruck.id, p2)),
       'COPY_PRIME_NOT_ON_PROJECT: Not saved: Summit Debris Services isn’t a prime on Bayline County PPDR, Hurricane Delphine. Add it to the project first, then copy certification 88120.',
     );
-    const copy = await saved(certifications.copy(luis, replacement.id, p2, '880112'));
+    const copy = await saved(certifications.copy(luis, replacement.id, p2));
     story.check(
       'AC-03-56 P2 has its own certification, with the original’s boxes and capacity and a reference to it; Rivera is placed on P2',
       [
@@ -588,6 +590,14 @@ export const certification: Story = {
         3,
         ['Coastline Haulers LLC: prime', 'Rivera Trucking: tier 1 under Coastline Haulers LLC'],
       ],
+    );
+    const p2Certs = await api.projectNumberSeries.findUniqueOrThrow({
+      where: { projectId_series: { projectId: p2, series: 'CERTIFICATION' } },
+    });
+    story.check(
+      'AC-03-06 its number is the next of P2’s cert-number series, taken by the server: the refused copy took none, and the series moved on by one',
+      [copy.certNumber, p2Certs.nextNumber],
+      ['880112', 880113],
     );
 
     // ------------------------------------------------------------------------------------------

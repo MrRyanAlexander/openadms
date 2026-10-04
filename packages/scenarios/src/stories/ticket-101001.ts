@@ -72,6 +72,7 @@ export const ticket101001: Story = {
         towerPhone,
         collections: collections.id,
         tower: tower.id,
+        tdsr,
       };
     });
     const anaPhone = story.phone({
@@ -89,12 +90,13 @@ export const ticket101001: Story = {
       monitorId: setup.kim,
       assignmentId: setup.tower,
       projectId: setup.p1,
+      siteId: setup.tdsr,
       setupVersion: 1,
       timeZone,
     });
 
     story.at(at('08:15'), 'Ana scans the truck’s badge at 14 Heron St, offline');
-    const collection = anaPhone.begin('LOAD', 'COLLECTION');
+    const collection = anaPhone.begin('LOAD', 'COLLECTION', '730415');
     story.at(at('08:40'), 'Ana completes the collection, number 101001 last');
     anaPhone.complete(collection, {
       ticketNumber: '101001',
@@ -103,7 +105,7 @@ export const ticket101001: Story = {
     });
 
     story.at(at('09:05'), 'Kim scans the badge at the Marsh Road TDSR tower, offline');
-    const disposal = kimPhone.begin('LOAD', 'DISPOSAL');
+    const disposal = kimPhone.begin('LOAD', 'DISPOSAL', '730415');
     story.at(at('09:25'), 'Kim calls the load 80% and scans 101001 last');
     kimPhone.complete(disposal, {
       ticketNumber: '101001',
@@ -170,14 +172,17 @@ export const ticket101001: Story = {
       ],
     );
     story.check(
-      'each carries its monitor’s assignment and the setup version its phone held',
+      'each says it came from a phone, with its monitor’s assignment, the setup version its phone held, the badge as scanned, and the tower’s its site',
       inFieldOrder.map((event) => [
+        event.source,
         event.assignmentId === setup.collections ? 'Ana’s' : 'Kim’s',
         event.setupVersion,
+        event.certNumber,
+        event.siteId === setup.tdsr ? 'Marsh Road TDSR' : (event.siteId ?? 'no site'),
       ]),
       [
-        ['Ana’s', 1],
-        ['Kim’s', 1],
+        ['DEVICE', 'Ana’s', 1, '730415', 'no site'],
+        ['DEVICE', 'Kim’s', 1, '730415', 'Marsh Road TDSR'],
       ],
     );
     story.check(
@@ -221,13 +226,18 @@ export const ticket101001: Story = {
       [['user', 'master_passcode'], 94, 15],
     );
     story.check(
-      'and then holds exactly Dana’s nineteen setup rows (the client, the declaration event, P1 and its five kinds of unit rate work, Coastline, its place as P1’s prime and its contract among them) and the two syncs',
+      'and then holds exactly Dana’s twenty-four setup rows (the client, the declaration event, P1, its five number series and its five kinds of unit rate work, Coastline, its place as P1’s prime and its contract among them) and the two syncs',
       audit.slice(afterSeed).map((record) => [record.tableName, record.source]),
       [
         ['user', 'BACK_OFFICE'],
         ['client', 'BACK_OFFICE'],
         ['declaration_event', 'BACK_OFFICE'],
         ['project', 'BACK_OFFICE'],
+        ['project_number_series', 'BACK_OFFICE'],
+        ['project_number_series', 'BACK_OFFICE'],
+        ['project_number_series', 'BACK_OFFICE'],
+        ['project_number_series', 'BACK_OFFICE'],
+        ['project_number_series', 'BACK_OFFICE'],
         ['project_kind_of_work', 'BACK_OFFICE'],
         ['project_kind_of_work', 'BACK_OFFICE'],
         ['project_kind_of_work', 'BACK_OFFICE'],
