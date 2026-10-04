@@ -27,6 +27,18 @@ export {
   type SubTier,
 } from './certifications.ts';
 export {
+  FieldEventDetails,
+  fieldEventDetailNames,
+  fieldEventDetails,
+  fieldEventKinds,
+  measuredAs,
+  type DetailRefusal,
+  type FieldEventDetail,
+  type FieldEventKindName,
+  type MeasuredAs,
+  type RecordedDetails,
+} from './field-event-details.ts';
+export {
   DebrisTypeEntries,
   type DebrisTypeEntry,
   type DebrisTypeFormKind,
@@ -42,6 +54,24 @@ export {
   type PolygonShape,
   type ShapeReading,
 } from './map-shapes.ts';
+export {
+  ControlRanges,
+  NewProjectNumbers,
+  NumberSeriesBook,
+  NumberSeriesRules,
+  PhoneNumbers,
+  numberSeries,
+  ticketNumberSeries,
+  ticketNumbers,
+  type ControlRangeEntry,
+  type HeldBlock,
+  type NewSeries,
+  type NumberRefusal,
+  type NumberRun,
+  type NumberSeriesName,
+  type NumbersTaken,
+  type SeriesPosition,
+} from './numbers.ts';
 export { Policy, policyNames, type PolicyName } from './policy.ts';
 export {
   PaysWhen,

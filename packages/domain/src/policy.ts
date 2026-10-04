@@ -20,18 +20,27 @@ export const policyNames = {
   // A crew day's length, in hours, on a pay item paid by the crew day by exact division (ADR-087,
   // 309).
   crewDayHours: 'CREW_DAY_HOURS',
+  // How many unused ticket numbers a numbering phone holds after a top-up (ADR-065).
+  ticketNumberBlockSize: 'TICKET_NUMBER_BLOCK_SIZE',
+  // The same for a certifying phone's cert numbers (ADR-181), and for ROE numbers (ADR-323).
+  certNumberBlockSize: 'CERT_NUMBER_BLOCK_SIZE',
+  roeNumberBlockSize: 'ROE_NUMBER_BLOCK_SIZE',
 } as const;
 
 export type PolicyName = (typeof policyNames)[keyof typeof policyNames];
 
 // What each value may be: a whole number in the range the database's own checks hold a project's
-// setting to. A load call is 0 to 100; a size is at least one; a crew day is 1 to 24 hours.
+// setting to. A load call is 0 to 100; a size is at least one; a crew day is 1 to 24 hours; a block
+// is at least one number.
 const ranges: Record<PolicyName, { least: number; most: number }> = {
   [policyNames.loadCallLowLimit]: { least: 0, most: 100 },
   [policyNames.loadCallHighLimit]: { least: 0, most: 100 },
   [policyNames.siteCircleMeters]: { least: 1, most: Number.MAX_SAFE_INTEGER },
   [policyNames.stumpFillDepthInches]: { least: 1, most: Number.MAX_SAFE_INTEGER },
   [policyNames.crewDayHours]: { least: 1, most: 24 },
+  [policyNames.ticketNumberBlockSize]: { least: 1, most: Number.MAX_SAFE_INTEGER },
+  [policyNames.certNumberBlockSize]: { least: 1, most: Number.MAX_SAFE_INTEGER },
+  [policyNames.roeNumberBlockSize]: { least: 1, most: Number.MAX_SAFE_INTEGER },
 };
 
 export class Policy {
@@ -40,6 +49,9 @@ export class Policy {
   readonly siteCircleMeters: number;
   readonly stumpFillDepthInches: number;
   readonly crewDayHours: number;
+  readonly ticketNumberBlockSize: number;
+  readonly certNumberBlockSize: number;
+  readonly roeNumberBlockSize: number;
 
   private constructor(values: Readonly<Record<string, string | undefined>>) {
     this.loadCallLowLimit = Policy.read(values, policyNames.loadCallLowLimit);
@@ -47,6 +59,9 @@ export class Policy {
     this.siteCircleMeters = Policy.read(values, policyNames.siteCircleMeters);
     this.stumpFillDepthInches = Policy.read(values, policyNames.stumpFillDepthInches);
     this.crewDayHours = Policy.read(values, policyNames.crewDayHours);
+    this.ticketNumberBlockSize = Policy.read(values, policyNames.ticketNumberBlockSize);
+    this.certNumberBlockSize = Policy.read(values, policyNames.certNumberBlockSize);
+    this.roeNumberBlockSize = Policy.read(values, policyNames.roeNumberBlockSize);
   }
 
   // From an environment: an env file's values, or a process's. A value that is missing or isn't a

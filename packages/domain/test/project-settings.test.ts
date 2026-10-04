@@ -14,6 +14,9 @@ const shipped = {
   DISPOSAL_SITE_PROXIMITY_M: '200',
   STUMP_FILL_DEPTH_INCHES: '31',
   CREW_DAY_HOURS: '12',
+  TICKET_NUMBER_BLOCK_SIZE: '1000',
+  CERT_NUMBER_BLOCK_SIZE: '100',
+  ROE_NUMBER_BLOCK_SIZE: '100',
 };
 
 // The program types of the example world: PPDR requires an ROE, ROW doesn't.
@@ -36,6 +39,7 @@ describe('a new project’s settings', () => {
 
   it('AC-01-11 follow the policy values, never a number in code: other values, other settings', () => {
     const policy = Policy.from({
+      ...shipped,
       LOAD_CALL_LOW_LIMIT: '10',
       LOAD_CALL_HIGH_LIMIT: '90',
       DISPOSAL_SITE_PROXIMITY_M: '300',
@@ -72,13 +76,16 @@ describe('a new project’s settings', () => {
 });
 
 describe('the policy values', () => {
-  it('are five, each under its own name in the environment', () => {
+  it('are eight, each under its own name in the environment', () => {
     expect(policyNames).toEqual({
       loadCallLowLimit: 'LOAD_CALL_LOW_LIMIT',
       loadCallHighLimit: 'LOAD_CALL_HIGH_LIMIT',
       siteCircleMeters: 'DISPOSAL_SITE_PROXIMITY_M',
       stumpFillDepthInches: 'STUMP_FILL_DEPTH_INCHES',
       crewDayHours: 'CREW_DAY_HOURS',
+      ticketNumberBlockSize: 'TICKET_NUMBER_BLOCK_SIZE',
+      certNumberBlockSize: 'CERT_NUMBER_BLOCK_SIZE',
+      roeNumberBlockSize: 'ROE_NUMBER_BLOCK_SIZE',
     });
     expect(Object.keys(shipped).sort()).toEqual(Object.values(policyNames).sort());
   });
@@ -114,8 +121,14 @@ describe('the policy values', () => {
     }
   });
 
-  it('the site circle and the stump fill depth are sizes: at least one', () => {
-    for (const name of [policyNames.siteCircleMeters, policyNames.stumpFillDepthInches]) {
+  it('the site circle, the stump fill depth and a number block are sizes: at least one', () => {
+    for (const name of [
+      policyNames.siteCircleMeters,
+      policyNames.stumpFillDepthInches,
+      policyNames.ticketNumberBlockSize,
+      policyNames.certNumberBlockSize,
+      policyNames.roeNumberBlockSize,
+    ]) {
       expect(() => Policy.from({ ...shipped, [name]: '0' })).toThrow(
         `The policy value ${name} must be a whole number, 1 or more: "0".`,
       );
