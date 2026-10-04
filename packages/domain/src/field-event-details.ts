@@ -1,5 +1,6 @@
 // What each kind of field event records beside what every kind does (spec/DATA-MODEL.md §4.1 (2),
-// §8; spec/acceptance/04-field-capture.md sections C–F; ADR-006, 055, 207, 218, 236, 295, 325).
+// §8; spec/acceptance/04-field-capture.md sections C–G; ADR-006, 034, 055, 207, 218, 236, 295,
+// 325, 326, 327).
 // One rule for the phone, the contracts package and the server: a detail belongs to its kinds and
 // to no other, a split load's property has its suffix and its estimate both or neither, and a
 // measurement says how it was read. The database holds the same with its own checks.
@@ -21,14 +22,17 @@ const load = ['COLLECTION', 'DISPOSAL'] as const;
 const haulOut = ['HAUL_OUT_COLLECTION', 'HAUL_OUT_DISPOSAL'] as const;
 const unitRate = ['UNIT_RATE'] as const;
 
-// Each kind-specific detail and the kinds that record it. The scale receipt and the ROE found
-// join with their own records (BACKLOG 1.3.5, 1.3.6).
+// Each kind-specific detail and the kinds that record it.
 export const fieldEventDetails = {
   formDebrisTypeId: [...load, ...haulOut],
   fieldTagId: ['COLLECTION', 'HAUL_OUT_COLLECTION', 'UNIT_RATE'],
   roeNumber: ['COLLECTION', 'UNIT_RATE'],
+  // The ROE that number found, where the project has one (ADR-292).
+  roeId: ['COLLECTION', 'UNIT_RATE'],
   estimateCy: ['COLLECTION'],
   loadCall: ['DISPOSAL', 'HAUL_OUT_COLLECTION'],
+  // The tower's, where the paper is handed over (ADR-034, 227).
+  scaleReceiptId: ['DISPOSAL', 'HAUL_OUT_DISPOSAL'],
   carriedCount: ['DISPOSAL'],
   kindOfWorkId: unitRate,
   payableTypeId: unitRate,
@@ -76,8 +80,10 @@ const detailWords: Record<FieldEventDetail, string> = {
   formDebrisTypeId: 'a debris type',
   fieldTagId: 'a field tag',
   roeNumber: 'an ROE',
+  roeId: 'the ROE its number found',
   estimateCy: 'an estimate',
   loadCall: 'a load call',
+  scaleReceiptId: 'a scale receipt',
   carriedCount: 'a count of what the load carries',
   kindOfWorkId: 'a kind of work',
   payableTypeId: 'a payable type',

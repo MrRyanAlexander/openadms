@@ -1,8 +1,8 @@
 // What each kind of field event records beside what every kind does, as a payload carries it
-// (spec/DATA-MODEL.md §4.1 (2), §8; ADR-006, 055, 325; REQ-103). The shape of each detail is
+// (spec/DATA-MODEL.md §4.1 (2), §8; ADR-006, 055, 325, 326, 327; REQ-103). The shape of each detail is
 // here; which kind records which, a split's suffix and estimate both or neither, and a measurement
 // with how it was read are packages/domain's FieldEventDetails, asked once. The whole sync payload
-// (what every kind records, the scale receipt, photographs) is Phase 2's.
+// (what every kind records, the scale receipt's own record, photographs) is Phase 2's.
 import { FieldEventDetails, fieldEventKinds, measuredAs } from '@open-adms/domain';
 import { z } from 'zod';
 
@@ -23,9 +23,13 @@ export const fieldEventDetailsSchema = z
     fieldTagId: id.nullish(),
     // The number as picked or typed: a snapshot, never parsed.
     roeNumber: z.string().nullish(),
+    // The ROE that number found, where the phone picked it from its list.
+    roeId: id.nullish(),
     estimateCy: places(1).nullish(),
     // A whole number 0–100; 0 is taken (ADR-116).
     loadCall: z.int().min(0).max(100).nullish(),
+    // The scale receipt it points at, by the id its phone made.
+    scaleReceiptId: id.nullish(),
     carriedCount: z.int().nonnegative().nullish(),
     kindOfWorkId: id.nullish(),
     payableTypeId: id.nullish(),

@@ -1,5 +1,5 @@
 // What each kind of field event records, at the domain (spec/acceptance/04-field-capture.md
-// AC-04-34, 46, 54, 58, 67; spec/DATA-MODEL.md §4.1 (2); ADR-325). The database holds the same
+// AC-04-34, 46, 54, 58, 67, 75; spec/DATA-MODEL.md §4.1 (2); ADR-325, 326). The database holds the same
 // with its own checks (packages/db/test/field-event-kinds.test.ts compares the two).
 import { describe, expect, it } from 'vitest';
 
@@ -25,13 +25,14 @@ describe('what each kind records', () => {
         fieldEventKinds.map((kind) => [kind, new FieldEventDetails(kind).recorded()]),
       ),
     ).toEqual({
-      COLLECTION: ['formDebrisTypeId', 'fieldTagId', 'roeNumber', 'estimateCy'],
-      DISPOSAL: ['formDebrisTypeId', 'loadCall', 'carriedCount'],
+      COLLECTION: ['formDebrisTypeId', 'fieldTagId', 'roeNumber', 'roeId', 'estimateCy'],
+      DISPOSAL: ['formDebrisTypeId', 'loadCall', 'scaleReceiptId', 'carriedCount'],
       HAUL_OUT_COLLECTION: ['formDebrisTypeId', 'fieldTagId', 'loadCall'],
-      HAUL_OUT_DISPOSAL: ['formDebrisTypeId'],
+      HAUL_OUT_DISPOSAL: ['formDebrisTypeId', 'scaleReceiptId'],
       UNIT_RATE: [
         'fieldTagId',
         'roeNumber',
+        'roeId',
         'kindOfWorkId',
         'payableTypeId',
         'payItemId',
@@ -98,6 +99,37 @@ describe('what each kind records', () => {
     ]);
   });
 
+  it('AC-04-75 only a disposal and a haul-out disposal point at a scale receipt', () => {
+    for (const kind of ['DISPOSAL', 'HAUL_OUT_DISPOSAL'] as const) {
+      expect(codes({ kind, splitSuffix: '', scaleReceiptId: 'CCL-51207' }), kind).toEqual([]);
+    }
+    for (const kind of ['COLLECTION', 'HAUL_OUT_COLLECTION', 'UNIT_RATE'] as const) {
+      expect(codes({ kind, splitSuffix: '', scaleReceiptId: 'CCL-51207' }), kind).toEqual([
+        'NOT_THIS_KINDS scaleReceiptId',
+      ]);
+    }
+    expect(
+      refusals({ kind: 'HAUL_OUT_COLLECTION', splitSuffix: '', scaleReceiptId: 'CCL-51207' }),
+    ).toEqual([
+      {
+        code: 'NOT_THIS_KINDS',
+        detail: 'scaleReceiptId',
+        message: "A haul-out collection doesn't record a scale receipt.",
+      },
+    ]);
+    // One quantity is the phone's question; a record that holds a load call and a receipt, or a
+    // count and a receipt, is still a record (AC-04-39).
+    expect(
+      codes({
+        kind: 'DISPOSAL',
+        splitSuffix: '',
+        loadCall: 60,
+        carriedCount: 3,
+        scaleReceiptId: 'BCL-88241',
+      }),
+    ).toEqual([]);
+  });
+
   it('a detail that is null was not recorded', () => {
     expect(
       codes({ kind: 'DISPOSAL', splitSuffix: '', estimateCy: null, fieldTagId: null }),
@@ -160,5 +192,20 @@ describe('a measurement', () => {
     expect(codes({ ...leaner, measuredAs: 'DIAMETER' })).toEqual([
       'MEASUREMENT_INCOMPLETE measurementInches',
     ]);
+  });
+
+  it('AC-04-82 the ROE a number found belongs where the number does: on a collection and on unit rate work', () => {
+    for (const kind of ['COLLECTION', 'UNIT_RATE'] as const) {
+      expect(codes({ kind, splitSuffix: '', roeNumber: 'R-0007', roeId: 'r-0007' }), kind).toEqual(
+        [],
+      );
+    }
+    // A number that found no ROE is taken as it is (R-0099, which P2 doesn't have).
+    expect(codes({ kind: 'COLLECTION', splitSuffix: '', roeNumber: 'R-0099' })).toEqual([]);
+    for (const kind of ['DISPOSAL', 'HAUL_OUT_COLLECTION', 'HAUL_OUT_DISPOSAL'] as const) {
+      expect(codes({ kind, splitSuffix: '', roeId: 'r-0007' }), kind).toEqual([
+        'NOT_THIS_KINDS roeId',
+      ]);
+    }
   });
 });

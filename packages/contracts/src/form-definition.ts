@@ -1,6 +1,6 @@
 // The firm's own fields on an ROE, survey, incident or drop-off log form: one version of a form's
 // definition, as its `fields` hold it (spec/DATA-MODEL.md §3 "FormDefinition"; ADR-160, 278, 308;
-// C36). The answers' schema, made from a definition, is BACKLOG 1.3.6's.
+// C36). The answers' schema, made from a definition, is form-answers.ts.
 import { z } from 'zod';
 
 // What a field takes: text, a number, yes or no, one of its choices, a photo (ADR-160).
