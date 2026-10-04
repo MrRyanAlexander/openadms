@@ -334,7 +334,6 @@ describe('what is certified, and its one number', () => {
       'signatures_on_file',
       'replaces_id',
       'replaced_reason',
-      'copied_from_id',
       'revoked_from',
       'revoked_reason',
       'revoked_by_id',
@@ -1129,63 +1128,31 @@ describe('later changes', () => {
     });
   });
 
-  it('AC-03-56 the back office copies 730416 to P2: a new certification with its own number there and a reference to the original; each is its own record on its own project', async () => {
-    const { db, world } = tested;
-    await asTheBackOffice();
-    const copy = await add(
-      'certification',
-      without(
-        without(
-          certificationLike(world, {
-            project_id: world.p2,
-            cert_number: '880112',
-            capacity_cy: 48,
-            first_tier_sub_id: world.rivera,
-            copied_from_id: world.certifications.c730416,
-          }),
-          'device_id',
-        ),
-        'assignment_id',
-      ),
-    );
-    await add('certification_box', boxLike(copy, 0, { length: 264, width: 92, height: 96 }));
+  it('AC-03-56 a certification is never copied: Rivera’s self-loader is certified on P2 from scratch, and nothing on a certification names another project’s', async () => {
+    const { db } = tested;
     expect(
       await db.rows(
-        `SELECT c."cert_number" AS number, p."name" AS project, o."cert_number" AS copied_from,
-           op."name" AS original_on
+        `SELECT c."cert_number" AS number, p."name" AS project, c."replaces_id" AS replaces
          FROM "certification" c JOIN "project" p ON p."id" = c."project_id"
-           LEFT JOIN "certification" o ON o."id" = c."copied_from_id"
-           LEFT JOIN "project" op ON op."id" = o."project_id"
-         WHERE c."id" IN ($1, $2) ORDER BY 1`,
-        [copy, world.certifications.c730416],
+         WHERE c."cert_number" = '730416' ORDER BY 2`,
+      ),
+    ).toEqual([
+      { number: '730416', project: 'Bayline County PPDR, Hurricane Delphine', replaces: null },
+      { number: '730416', project: 'Bayline County ROW, Hurricane Delphine', replaces: null },
+    ]);
+    // The one link from a certification to another is "replaces", held to its own project.
+    expect(
+      await db.rows(
+        `SELECT conname AS name, pg_get_constraintdef(oid) AS definition FROM pg_constraint
+         WHERE conrelid = 'certification'::regclass AND confrelid = 'certification'::regclass`,
       ),
     ).toEqual([
       {
-        number: '730416',
-        project: 'Bayline County ROW, Hurricane Delphine',
-        copied_from: null,
-        original_on: null,
-      },
-      {
-        number: '880112',
-        project: 'Bayline County PPDR, Hurricane Delphine',
-        copied_from: '730416',
-        original_on: 'Bayline County ROW, Hurricane Delphine',
+        name: 'certification_project_id_replaces_id_fkey',
+        definition:
+          'FOREIGN KEY (project_id, replaces_id) REFERENCES certification(project_id, id) ON UPDATE RESTRICT ON DELETE RESTRICT',
       },
     ]);
-    expect(
-      (
-        await db.refused(`UPDATE "certification" SET "copied_from_id" = "id" WHERE "id" = $1`, [
-          copy,
-        ])
-      ).message,
-    ).toContain('"certification_copied_from_check"');
-    expect(
-      await refusedRow(
-        'certification',
-        certificationLike(world, { cert_number: '730430', copied_from_id: world.p1 }),
-      ),
-    ).toBe(refusedBy.foreignKey);
   });
 
   it.each(tables)('AC-03-58 a %s row is never deleted, by any login', async (table) => {

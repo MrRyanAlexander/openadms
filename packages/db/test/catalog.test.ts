@@ -237,10 +237,6 @@ describe('the guards in the catalog', () => {
         definition: "CHECK ((btrim(cert_number) <> ''::text))",
       },
       {
-        name: 'certification_copied_from_check',
-        definition: 'CHECK (((copied_from_id IS NULL) OR (copied_from_id <> id)))',
-      },
-      {
         name: 'certification_helper_system_actor_check',
         definition: "CHECK ((user_id <> '00000000-0000-7000-8000-000000000001'::uuid))",
       },

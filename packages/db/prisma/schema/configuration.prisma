@@ -1376,8 +1376,6 @@ model Certification {
   // (ADR-082); a certification is replaced once.
   replacesId     String?   @map("replaces_id") @db.Uuid
   replacedReason String?   @map("replaced_reason")
-  // The same truck on another project: the certification this one was copied from (ADR-152).
-  copiedFromId   String?   @map("copied_from_id") @db.Uuid
   // Revoked from a day, by an admin, with a reason: all three or none (ADR-079).
   revokedFrom    DateTime? @map("revoked_from") @db.Date
   revokedReason  String?   @map("revoked_reason")
@@ -1400,8 +1398,6 @@ model Certification {
   assignment      Assignment?           @relation(fields: [assignmentId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   replaces        Certification?        @relation("CertificationReplaced", fields: [projectId, replacesId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
   replacedBy      Certification?        @relation("CertificationReplaced")
-  copiedFrom      Certification?        @relation("CertificationCopied", fields: [copiedFromId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  copies          Certification[]       @relation("CertificationCopied")
   revokedBy       User?                 @relation("CertificationRevokedBy", fields: [revokedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
   boxes           CertificationBox[]
   helpers         CertificationHelper[]
