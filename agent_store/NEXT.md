@@ -67,9 +67,9 @@ record (why Phase 0 existed, its exit criteria and how each was met, the spec tr
 question rounds) moved word for word to `DECISIONS.md`'s scratchpad, "Moved from NEXT.md,
 2026-10-02"; `ROADMAP.md` §3a keeps the table.
 
-**Still live from the spec track:** `spec/acceptance/` is 3 of 9 files (`01-setup.md`: 82
-scenarios, 65 passing (AC-01-19 since 1.2.3) and AC-01-27, 48, 55 and 80 in part; `02-people-and-devices.md`: 74
-scenarios, 35 passing at the database and four in part after 1.1.10, ADR-315; `03-certification.md`: 60 scenarios, 36 passing and 1 in part after 1.2.3, ADR-321); each other file is the first task of the milestone that builds its part
+**Still live from the spec track:** `spec/acceptance/` is 4 of 9 files (`04-field-capture.md`: 98 scenarios, 62 passing and 3 in part after 1.3.4, ADR-325; `01-setup.md`: 82
+scenarios, 67 passing (AC-01-19 since 1.2.3, AC-01-09 since 1.3.2, AC-01-27 whole since 1.3.4) and AC-01-48, 55 and 80 in part; `02-people-and-devices.md`: 74
+scenarios, 35 passing at the database and four in part after 1.1.10, ADR-315; `03-certification.md`: 60 scenarios, 38 passing and 1 in part after 1.3.3, ADR-324); each other file is the first task of the milestone that builds its part
 (ADR-300).
 
 ---
@@ -81,7 +81,7 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-03: Phase 1 is open, fifteen tasks done; Milestones 1.1 and 1.2 are done)
+### Where things stand (2026-10-03: Phase 1 is open, nineteen tasks done; Milestones 1.1 and 1.2 are done, 1.3 has four of seven)
 - **Phase 1 (data core and engine) is the active phase**, opened by the user on 2026-10-01
   (ADR-299). Its plan is `BACKLOG.md`'s ten milestones and 47 tasks (ADR-300): setup records →
   certifications and capacity → tickets and numbers → sync intake → reconciliation → the rule engine
@@ -144,7 +144,33 @@ of `DECISIONS.md`.
   on the project; the service `Certifications` (`apps/api/src/certification/`) certifies as the
   monitor from their phone, works the capacity out and never takes one typed, places a typed sub,
   and corrects, revokes and copies; `ContractorSetup.merge` merges two spellings of a sub; the
-  story `certification` (27 checks). Found and closed on the way: KD-70 (below, under Tools).
+  story `certification` (27 checks). Found and closed on the way: KD-70 (below, under Tools);
+  and **1.3.1, the acceptance scenarios for tickets and numbers (2026-10-03, ADR-322)**: 98
+  scenarios of what is recorded (numbers, what every field event and each kind records, scale
+  receipts, photographs, forms), each naming the task that proves it; eighteen points nothing
+  settles listed (C63); and **1.3.2, numbering (2026-10-03, ADR-323)**: `ProjectNumberSeries`
+  and `ControlRange`, `ROE` as a fifth series, a block cut only from a series its project has;
+  **the database refuses any block that would put one number on two phones**
+  (`number_blocks_never_overlap`: a reclaimed block holds only what its phone used, so its rest
+  is cut again for the next phone, once); the number rules in `packages/domain` (`numbers.ts`),
+  block sizes as policy values; the allocator `NumberAllocator` in `apps/api`
+  (`src/numbering/`), which also numbers a copied certification; the story `numbering` (15
+  checks); and **1.3.3, what every field event records (2026-10-03, ADR-324)**: `FieldEvent`'s
+  shared columns of `spec/DATA-MODEL.md` §4.1 (1), none with a database default; one check
+  tells a phone's record (phone, assignment, setup version) from one created in the back office
+  (person, reason); a reason only on a typed number, a typed capacity only on a truck keyed in
+  by hand, each GPS end whole and on the earth or missing, an address with its source; the
+  certification found and the site held to the field event's own project; a client user and an
+  auditor see every column, and who recorded it through `viewer_field_event_monitor`; and
+  **1.3.4, what each kind records (2026-10-03, ADR-325)**: the kind-specific columns of
+  `spec/DATA-MODEL.md` §4.1 (2), none required, each refused on a kind that doesn't record it;
+  a debris type held to its own project's form for its workflow (the field event repeats the
+  entry's form and document type), a field tag and a pay item to its project; a split suffix
+  only on a collection or a haul-out collection, capital letters; a split's suffix and
+  estimate both or neither; `FieldEventItem` and `CarriedTicket`, each only on its kind; the
+  one rule in `packages/domain` (`FieldEventDetails`), asked by `packages/contracts`
+  (`fieldEventDetailsSchema`). The scale receipt and the ROE found join with their tables
+  (1.3.5, 1.3.6).
   **Corrected by the user on
   2026-10-02 (ADR-301):** a pay item's code is unique on its project (ADR-147 had read their answer
   backwards), a pay item is its code and its description (no separate name, no "line number"), and
@@ -152,7 +178,8 @@ of `DECISIONS.md`.
   its test follow (the twentieth migration). **The first product tables
   exist** (the lists, the client, the declaration event, the project, contractors on a project,
   contracts, forms, pay items, sites, the project map, rules, permissions and viewers,
-  certifications; 58 models, 43 migrations);
+  certifications, numbering, the field event in full but for two links, its item lines and
+  carried tickets; 62 models, 49 migrations);
   the other models are still Phase 0's provisional ones, and `packages/domain` holds the built-in
   keys, the policy values and a new project's settings.
 - **Phase 0 (Foundation) is done** (2026-10-01, ADR-281…288): the monorepo, the local HTTPS stack
@@ -325,19 +352,67 @@ ADR-313), 1.1.9 (the acceptance scenarios for people and devices, ADR-314), 1.1.
 permissions and viewers, ADR-315), **1.1.11 (the example world's setup as a story, ADR-316:
 Milestone 1.1 is done)**, **1.2.1 (the acceptance scenarios for certifications, ADR-317: 60)**,
 **1.2.2 (the capacity math, ADR-320: `Capacity` in `packages/domain`)**, **1.2.3 (the
-certification's records, ADR-321: Milestone 1.2 is done)**; and the user's correction of
+certification's records, ADR-321: Milestone 1.2 is done)**, **1.3.1 (the acceptance scenarios for
+tickets and numbers, ADR-322: 98)**, **1.3.2 (numbering, ADR-323)**, **1.3.3 (what every field event records, ADR-324)**, **1.3.4 (what each kind records, ADR-325)**; and the user's correction of
 2026-10-02 (ADR-301: a pay item's code is unique, it has a description and no name, a duplicate
 rule is refused).
 
-👉 **Task 1.3.1, the acceptance scenarios for tickets and numbers** (`BACKLOG.md`, Milestone 1.3):
-`spec/acceptance/04-field-capture.md`, from Part 4 (`spec/parts/`), `adms-ticket-workflows`
-§4.0a–§4.6 and `adms-field-app`: what each field event records; the phone's screens name Phase 3.
-A docs task, as 1.1.1, 1.1.9 and 1.2.1 were: each scenario restates a recorded rule and names the
-task that proves it (1.3.2…1.3.7, later milestones, Phases 2–4); values from the example world and
-the golden mission; what nothing settles is listed for the task that decides it, never asserted.
-**Carried:** C43, C44, C36's answers, and C62's parts for 1.3.2 and 1.3.3 (cert-number blocks; a
-field event's certification and its copy of the number). No code, so no chain run and no stack.
-Then 1.3.2 (numbering).
+👉 **Task 1.3.5, scale receipts and photographs** (`BACKLOG.md`, Milestone 1.3): `ScaleReceipt`
+(`spec/DATA-MODEL.md` §4.2: its own record, unique per project by receipt number, never
+confusable with a ticket number) and `Photo` (§4.4: exactly one owner); **`FieldEvent`
+gains `scaleReceiptId`**, only on a disposal and a haul-out disposal (ADR-325 left the link for
+its table). Its scenarios: `spec/acceptance/04-field-capture.md` AC-04-71…78, and the rest of
+AC-04-38, 39 and 52; REQ-126a. **Carried:** C63's points for 1.3.5 (points 14 and 15 of the
+file's "Left to the task that builds it": a ticket's photographs and where eight is counted, a
+copied certification's photographs (C61 point 14), a disposal whose receipt number is already on
+the project, a tandem's one receipt; and from ADR-325, whether a count and a scale receipt
+together are taken); C59 (a viewer's sight of each new table; `guard_table` and `guard_viewer`
+rerun on `field_event` for the new column); C62 (a certification's five views). `Photo`'s owners
+`roeId`, `surveyId`, `incidentId`, `dropOffLogId` and `quarantinedRecordId` point at tables built
+in 1.3.6 and 1.4.2: decide whether each column waits for its table, as ADR-325 did. A schema
+task: the stack is needed (`pnpm local:up`), stopped at close-out. Then 1.3.6.
+
+**What each kind records** (ADR-325): a test writes a load's or a haul-out's debris type with
+`debrisTypePicked(world, entryId[, form])`, which gives the entry with its form and that form's
+document type (all three or none; P1's load form unless told); the example world's 101001
+picked Vegetative and 101002 C&D at both ends, P2 has no form. **A split collection is written
+with its estimate** (`split_suffix: 'A', estimate_cy: 12`), and a suffix only on a collection or
+a haul-out collection. A measurement comes with `measured_as`. An item line and a carried
+ticket repeat their field event's kind (`field_event_kind: 'UNIT_RATE'` / `'COLLECTION'`).
+Mulch isn't in the seeded library and P1's field tags start empty: a test adds them as Dana
+would (`packages/db/test/field-event-kinds.test.ts` has `mulch()` and `fieldTag()`). **Which
+kind records which detail is `packages/domain`'s `fieldEventDetails`**: a new kind-specific
+column joins it, `packages/contracts`' `fieldEventDetailsSchema`, the test "every detail on
+every kind" and the two exact lists below. The scenario tests are
+`packages/db/test/field-event-kinds.test.ts`, one per ID.
+
+**Field events** (ADR-324): a test writes one with `fieldEventLike(world, …)` (Ana's collection
+from her phone on P1, badge `730415` found) or `backOfficeEventLike(world, …)` (created by Dana,
+"Device failed"), through `eventInsertOf(row)`, which asks the database for the id a phone would
+make (`packages/db/test/support/example-world.ts`); **no column of where it came from has a
+default**, so every insert states `source`, `temporary_session`, `number_typed`, `cert_number` and
+`cert_keyed_by_hand`. `world.reasons` has "Barcode damaged" and "Device failed". The harness's
+phone scans the badge at `begin(workflow, kind, certNumber)` and names its assignment's site
+(`PhoneSetup.siteId`); it sends the cert number only: looking the certification up is intake's
+(1.4.2). **A field event that gains a column** reruns both `guard_table('field_event', 'EVIDENCE',
+'RECORDS', ARRAY['status', 'reconciled_at'])` and `guard_viewer('field_event', 'PROJECT')` in its
+guard migration (`guard_viewer` replaces the view in place when columns are only added at the
+end), and the exact lists follow: `captured` in `grants.test.ts`, the checks in `catalog.test.ts`,
+the column list of AC-04-25 in `field-events.test.ts`. The scenario tests are
+`packages/db/test/field-events.test.ts`, one per ID.
+
+**Numbering** (ADR-323): every project of the example world and of every story has its series
+(`project_number_series`: P1's loads from 101001, haul-outs 201001, unit rate 301001, cert numbers
+730415, ROEs 1; `packages/scenarios/src/stories/p1.ts` has `p1NumbersFrom` and `startSeries`). **A
+number block needs its project's series** (a foreign key), and two blocks of one series can't hold
+the same number (`number_blocks_never_overlap`): a test or story that writes a block picks a free
+run, or asks `apps/api`'s `NumberAllocator.topUp` (the story `numbering` is the model). A new
+project made through `ProjectSetup.project` gets its series; pass `numbersFrom` to say where they
+start and to seed the cert numbers. The domain's `PhoneNumbers(blocks).next()` is the next number
+a phone gives out (1.3.7); `NumberSeriesRules('ROE').written(7)` is `R-0007` (1.3.6). A new policy
+value is added in four places: `policy.ts`, `policy.env`, and the `shipped` lists of
+`packages/domain/test/project-settings.test.ts` and `numbers.test.ts`
+(`packages/scenarios/test/policy.test.ts` holds the file to the names).
 
 **Certifications** (ADR-321): the example world has Sam Grant (`world.certifier`), Lee Morgan
 (`world.helper`), the phone `P1-HO-TDSR` (`world.certifyingDevice`), their assignments
@@ -351,7 +426,8 @@ events). A box repeats its certification's `kind` (`CONTAINER`). **A later table
 points at `project_contractor (project_id, contractor_id, prime_id)`. The service is
 `Certifications` (`apps/api/src/certification/certifications.ts`): `certify` is written as the
 certifying monitor, source `DEVICE`, through `SetupService.writeAs`; the story `certification`
-is the model for a story that needs certified trucks. The cert number is the caller's until 1.3.2.
+is the model for a story that needs certified trucks. `certify`'s cert number is the phone's (its
+block's next, or the sheet's); `copy` takes the other project's next from the allocator (ADR-323).
 
 **Services** (ADR-316): what a person or a phone writes is a plain class in
 `apps/api/src/<part>/` (today `setup/`), given the API's database client, a clock and, where
@@ -420,7 +496,7 @@ then `SELECT guard_list('<table>', '<domain>');` in its guard migration; a new b
 `packages/domain`'s `builtInKeys` first, with an ADR (ADR-302).
 
 Start every command with `eval "$(fnm env --shell zsh)"`; the checks are **`adms-verify`** (the chain
-is 47 files, 956 tests; forty-three migrations; `pnpm scenarios` runs four stories, 16, 18, 51 and 27 checks),
+is 53 files, 1,089 tests; forty-nine migrations; `pnpm scenarios` runs five stories, 16, 18, 52, 28 and 15 checks),
 with **`pnpm security`** (7 passed, 0 failed, ADR-291). The database tests, the map servers' tests and
 the stories need `pnpm local:up` first; stop it at close-out (ADR-277). A schema change goes through
 Prisma (`prisma migrate dev --create-only`), a guard into its own empty stub (ADR-113); **try a guard

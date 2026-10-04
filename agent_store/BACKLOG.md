@@ -218,20 +218,23 @@ Carried: C56 (1.2.3), filed by ADR-305 (named here by ADR-307). Closes the behav
 
 Carried: C43, C44, C36's answers. Closes the behaviour of KD-13, 22, 23, 24, 27, 37, 41, 43, 44.
 
-- [ ] **1.3.1** `spec/acceptance/04-field-capture.md`, from Part 4, `adms-ticket-workflows`
+- [x] **1.3.1** ✅ **done 2026-10-03 (ADR-322):** 98 scenarios of what is recorded; none marked
+  passing (nothing was run; seven restate a guard Phase 0 built and are marked when 1.3.3 names the
+  test by its ID); eighteen points nothing settles listed for the task that decides each (C63).
+  `spec/acceptance/04-field-capture.md`, from Part 4, `adms-ticket-workflows`
   §4.0a–§4.6 and `adms-field-app`: what each field event records; the phone's screens name Phase 3.
-- [ ] **1.3.2** **Numbering.** `ProjectNumberSeries`, `ControlRange`, `NumberSeries` gains `ROE`;
+- [x] **1.3.2** ✅ **done 2026-10-03 (ADR-323):** the two records, `ROE`, a block cut only from a series its project has; `number_blocks_never_overlap` (a reclaimed block holds only what its phone used) and `control_ranges_never_overlap`; `packages/domain`'s `numbers.ts`; `apps/api`'s `NumberAllocator`, and `Certifications.copy` numbered by it; the story `numbering` (15 checks). 20 loosenings each caught; chain 49 files, 1,018 tests; AC-04-01, 04…09, 13, 14, AC-03-06, AC-01-09 pass; REQ-105k, 106a, 114 ticked. **Numbering.** `ProjectNumberSeries`, `ControlRange`, `NumberSeries` gains `ROE`;
   blocks of one series never overlap (an exclusion constraint needs the `btree_gist` extension: its
   ADR first, C43); the number rules in `packages/domain` (100,001 to 9,999,999, 1,000-number ticket
   blocks, 100-number cert blocks, issued in order, reclaimed, retired); the server's allocator.
   **Done when:** two phones can never hold the same number, proven as a database test. *REQ-105k,
   106a, 114.*
-- [ ] **1.3.3** **`FieldEvent`, what every kind records.** The shared columns of DATA-MODEL §4.1
+- [x] **1.3.3** ✅ **done 2026-10-03 (ADR-324):** the shared columns of §4.1 (1), none with a database default; one check tells a phone's record from a back-office one (C44); a reason only on a typed number, a typed capacity only on a truck keyed in by hand, a GPS end whole and on the earth, an address with its source; the certification found and the site held to the field event's own project; `guard_table` rerun; `guard_viewer('field_event', 'PROJECT')` and `viewer_field_event_monitor` (who recorded it: name and Monitor ID); `packages/db/test/field-events.test.ts`, 21 tests by scenario ID; 16 loosenings each caught; the example world, the harness's phone and both early stories follow. AC-04-02, 03, 12, 15, 16, 18…31, 44, 94 and AC-03-40 pass. REQ-105i and REQ-115 stay open for 1.3.6 and 1.3.4. **`FieldEvent`, what every kind records.** The shared columns of DATA-MODEL §4.1
   (1): the source, a back-office-created record's person and reason with no phone, assignment or
   setup version (C44, with its check), the typed number and its reason, the certification as scanned
   and as found, the site, both GPS ends, the address. `guard_table` rerun; both stories follow.
   *REQ-105i, 115.*
-- [ ] **1.3.4** **`FieldEvent`, what each kind records.** (AC-01-27's other half: a field event
+- [x] **1.3.4** ✅ **done 2026-10-03 (ADR-325):** the columns of §4.1 (2) but the scale receipt and the ROE found (1.3.5, 1.3.6), none required; each held to its kinds by a check; a debris type held to its own project's form for its workflow, a field tag and a pay item to its project; a suffix only on a collection or a haul-out collection, capital letters; a split's suffix and estimate both or neither; `FieldEventItem` and `CarriedTicket`, each on its kind only; `guard_table` and `guard_viewer` rerun, the two tables seen with their field event; `packages/domain`'s `FieldEventDetails`, `packages/contracts`' `fieldEventDetailsSchema`; `packages/db/test/field-event-kinds.test.ts`, 38 tests by scenario ID, one trying every detail on every kind against the domain's table; 31 loosenings each caught; chain 53 files, 1,089 tests. AC-04-32…37, 40, 41, 43, 45…51, 53…58, 60…69 and AC-01-27 pass; AC-04-38, 52, 82 in part. REQ-103 and 112a ticked; REQ-105o, 110, 111, 111a, 112, 112b, 112e and 115 stay open for the worker, the phone and the two links. **`FieldEvent`, what each kind records.** (AC-01-27's other half: a field event
   that points at a debris type's entry still does once the entry is archived, ADR-308.) The kind-specific columns of §4.1 (2),
   each empty on every other kind by a check; a split load's suffix and estimate both or neither; a
   haul-out collection's suffix with its running call; `FieldEventItem`, `CarriedTicket`; the same
@@ -694,7 +697,7 @@ delete one.
 
 **For `spec/DATA-MODEL.md` (0.2b.2) and Phase 1** — *2026-10-01: the draft (ADR-284) answers C16–C19, C29, C36 and C42–C44 on paper (its §12); each stays here until Phase 1 builds it.*
 *2026-10-01 (ADR-300), Phase 1 open: the task that picks each up: C36 → 1.1.5 (the definition), 1.3.6 (the answers); C42 → 1.1.5, 1.1.6, 1.1.7; C52 → 1.1.7 (setup) ✅, 1.5.6 (the flags); C18 → 1.1.10, 1.7.1; C43 → 1.3.2; C44 → 1.3.3; C16 → 1.5.2, 1.7.1; C50 → 1.5.8; C20 → 1.5.9; C17 → 1.7.1, 1.8.2; C19 → 1.8.2; C29, C30 → 1.9.1; C51's two scenarios → 1.9.2; C28 → 1.9.3; C31's stand-in → 1.4.2. Filed since (ADR-303, 305; added here by ADR-307): C53 →
-1.1.11, 1.5.5 (and Phase 2); C54 → 1.1.10; C55 → 1.5.5, 1.5.7; C56 → 1.2.3. Filed by ADR-311: C57 → 1.1.11, 1.5.6. Filed by ADR-313: C58 → 1.1.11, 1.6.1, 1.6.4. Filed by ADR-315: C59 → every schema task, 1.2.3, 1.3.3, 1.7.1, Phase 2. Filed by ADR-317: C61 → 1.2.2, 1.2.3, 1.5.5, 1.8.2, 1.9.1. Filed by ADR-321: C62 → 1.3.2, 1.3.3, Milestone 1.3, 1.5.5, 1.7.1, 1.8.2, 1.8.3, Phase 2.*
+1.1.11, 1.5.5 (and Phase 2); C54 → 1.1.10; C55 → 1.5.5, 1.5.7; C56 → 1.2.3. Filed by ADR-311: C57 → 1.1.11, 1.5.6. Filed by ADR-313: C58 → 1.1.11, 1.6.1, 1.6.4. Filed by ADR-315: C59 → every schema task, 1.2.3, 1.3.3, 1.7.1, Phase 2. Filed by ADR-317: C61 → 1.2.2, 1.2.3, 1.5.5, 1.8.2, 1.9.1. Filed by ADR-321: C62 → 1.3.2, 1.3.3, Milestone 1.3, 1.5.5, 1.7.1, 1.8.2, 1.8.3, Phase 2. Filed by ADR-322: C63 → 1.3.2…1.3.7, 1.4.2, 1.5.5, 1.5.7. Filed by ADR-323: C64 → 1.3.6, 1.3.7, 1.4.2, 1.5.5, Phases 2 and 4. Filed by ADR-325 (under C63): → 1.3.5, 1.3.6, 1.3.7, 1.5.4, 1.5.5, 1.5.7, 1.8.3.*
 - **C36. The storage shape of the firm's added fields** (ADR-278, at the user's word): a versioned
   form definition per record kind, one JSONB answers column per record keyed by field ID plus the
   definition version, a schema generated from the definition in `packages/contracts`, Prisma's `Json`
@@ -724,13 +727,13 @@ delete one.
   provisional (project and name): its site type, facts, permit, GPS, area and dates are DATA-MODEL's~~
   **done (ADR-311).** Still to come: a field event's own site (each record keeps the site it was made at, ADR-195). A
   contractor's kind (hauler, monitoring, crew, other; Q-97) comes with `Contractor`'s real shape.
-- **C43. Numbering** (ADR-281 (5)): `NumberBlock` holds only a block's range, last used number and
+- **C43. Numbering** (ADR-281 (5)) — **done by task 1.3.2 (ADR-323)** but for where a firm's Monitor ID series starts if it isn't `M000001` (no task needs it yet; Phase 4's setup screens): `NumberBlock` holds only a block's range, last used number and
   how it ended. Still to come with tickets and numbers: the project's series and control ranges, the
   allocator (the server is the only one, ADR-065), **a database refusal of overlapping blocks** (an
   exclusion constraint; **`btree_gist` is in since ADR-310**, in the schema `extensions`, so no ADR
   of its own is needed: `pay_item_bands_never_overlap` is the idiom), which block an ROE's number comes
   from (ADR-181), and where a firm's Monitor ID series starts if it isn't `M000001`.
-- **C44. Back-office-created field events** (ADR-156; ADR-281 (9)): they have no phone and no
+- **C44. Back-office-created field events** — **built by task 1.3.3 (ADR-324)**: `field_event_source_check`. Still to come: the engine's flag for a field event whose project differs from its assignment's (1.5.5). Was: (ADR-156; ADR-281 (9)): they have no phone and no
   assignment, so `FieldEvent.deviceId`, `assignmentId` and `setupVersion` become optional for them (with
   a check that a phone's record still carries all three). The engine flags an event whose project
   differs from its assignment's (the database doesn't refuse it).
@@ -821,9 +824,9 @@ delete one.
   goes in that file's `unseenTables`; a viewed table that gains a column reruns `guard_viewer`.
   ~~**Task 1.2.3** (certifications): a certification's viewer sight, without the driver's licence
   number (AC-02-71's other half).~~ ✅ done, ADR-321 (a contractor user's sight of its own
-  certifications: 1.7.1). **Task 1.3.3** (field events in full): who recorded a ticket, by
+  certifications: 1.7.1). ~~**Task 1.3.3** (field events in full): who recorded a ticket, by
   name and Monitor ID, for a client user and an auditor (no viewer reads `user` today), and the
-  ticket's viewer view in its real shape. **Tasks 1.2.3 and 1.7.1** (C18): what a contractor user
+  ticket's viewer view in its real shape.~~ ✅ done, ADR-324 (`viewer_field_event_monitor`; a back-office creator's name for a viewer is left to the task that gives viewers the back office's records). **Tasks 1.2.3 and 1.7.1** (C18): what a contractor user
   needs of setup to read its own tickets and transactions (a debris type's, a site's, a pay item's
   name), and a prime's sight of its subs' through `project_contractor`; it sees no setup today.
   **Phase 2:** the API states `adms.viewer_id` on every `adms_readonly` request (C22); it reads a
@@ -858,12 +861,12 @@ delete one.
   does to its tickets. ~~**Task 1.9.1 (KD-69):** ticket 102001's cert number on P2 needs the user's
   word~~ **answered (ADR-318):** P2 has its own certification `730416` (Rivera's self-loader, 48
   CY), which task 1.2.3 writes into the example world.
-- **C62. What the certification's records left for later** (ADR-321). **Task 1.3.2** (numbering):
+- **C62. What the certification's records left for later** (ADR-321). ~~**Task 1.3.2** (numbering)~~ **done (ADR-323): `copy` takes the other project's next number from the allocator; `certify`'s is the phone's, from its block.** Was:
   the cert number is the caller's today; the allocator issues it from the project's series, in
   100-number blocks per certifying phone (REQ-106a), and `Certifications.copy` takes the other
-  project's next number from it. **Task 1.3.3** (field events in full): a field event's
+  project's next number from it. ~~**Task 1.3.3** (field events in full): a field event's
   `certificationId` and its own copy of the number (AC-03-40); no driver column on it (AC-03-16's
-  other half). **Milestone 1.3, with `Photo`:** a certification's five views, and whether a copy
+  other half).~~ ✅ done, ADR-324. **Tasks 1.4.2 and 1.5.2:** who fills `certificationId` (intake looks the scanned number up on the project; the worker again when the certification arrives later); the harness's phones send the number only. **Milestone 1.3, with `Photo`:** a certification's five views, and whether a copy
   points at the original's photographs or holds its own (C61 point 14). **Task 1.5.5** (the
   flags): tag expired, revoked, replaced ("replaced on" is the new certification's certified time
   as a day in the project's time zone; whether work on that same day is flagged is decided there),
@@ -877,8 +880,29 @@ delete one.
   finds rule picks, employers or viewers naming the duplicate says so (today they are left as they
   are). **Any later migration:** `prisma migrate dev --create-only` must give an empty stub; if it
   carries a line nobody asked for, a `dbgenerated` default is being read back differently (KD-70).
+- **C63. What the capture scenarios left for the tasks that build them** (ADR-322;
+  `spec/acceptance/04-field-capture.md`, "Left to the task that builds it", eighteen points).
+  ~~**Task 1.3.2:** what a reclaimed block's unused numbers become; the ROE series' block size and
+  the look of an issued ROE number; whether control ranges may overlap.~~ **Decided (ADR-323).** ~~**Task 1.3.3:** whether
+  the database requires a typed number's reason; "keyed in by hand" and the typed capacity both or
+  neither; a load on a crew's certification (or a unit rate event on a container's).~~ **Decided (ADR-324):** a reason only on a typed number, and a typed number without one taken; a typed capacity only when keyed in by hand; either kind of certification taken. **Task 1.5.5:** how `TYPED_TICKET_NUMBER` reads with no reason; whether a load on a crew's certification is flagged. **Each of
+  1.3.3…1.3.6:** a client user's and an auditor's sight of each new evidence table, and its audit
+  domain (C59). ~~**Task 1.3.4:** whether a picked debris type, field tag, ROE, payable type and pay
+  item are held to the event's own project (a debris type to its workflow's form); a suffix off a
+  collection, and what a suffix may be; a suffixed collection on a project that doesn't allow
+  split loads; a disposal with two quantities; an itemised event's own count, quarter hours, a
+  stump "as a circumference".~~ **Decided (ADR-325):** a debris type held to its own project's form for its workflow, a field tag and a pay item to its project; a suffix only on a collection or a haul-out collection, capital letters; the rest taken, for a flag. **Task 1.3.5:** `FieldEvent.scaleReceiptId` joins with `ScaleReceipt` (only on a disposal and a haul-out disposal; `guard_table` and `guard_viewer` rerun; AC-04-38, 39, 52, 75), and whether a count and a scale receipt together are taken. **Task 1.3.6:** `FieldEvent.roeId` joins with `Roe` (AC-04-82's other half). **Task 1.3.7:** the harness's phone sends the kind-specific details (`RecordedEvent` has none yet), and its intake reads the debris type's form from the project and workflow. **Tasks 1.5.5 and 1.5.7:** no flag exists for a unit rate ticket with no kind of work, payable type or count, a pile with no load call, an item that isn't its kind of work's, a pay item that isn't its payable type's, hours that aren't quarter hours, or a stump read as a circumference; each is decided there. **Task 1.5.4:** which quantity bills on a disposal that holds both a load call and a count. **Task 1.8.3:** how a correction takes an item line or a carried ticket off (nothing is deleted), and that a field event with lines can't change kind. **Task 1.3.5:** a ticket's photographs (each event's own; where
+  eight is counted), a copied certification's (C61 point 14), and, with **1.4.2**, a disposal
+  whose scale receipt's number is already on the project, and how a tandem's two disposals send
+  one receipt. **Task 1.3.6:** where an incident keeps the truck it concerns; an ROE's setup
+  version and what a monitor may change on one after their shift. **Task 1.3.7:** the harness's
+  cancelled field event and a re-entered number that doesn't match. **Tasks 1.5.5 and 1.5.7:**
+  the catalogue has no flag for a control ticket scanned outside its ranges, a certification of
+  the wrong kind, a split on a project that doesn't allow one, or a count of 2 where *Count is
+  always 1*: each is decided there, a new flag needing its ADR.
 - **C20.** The worker's one transaction per group, one run per project, and flagged-and-skipped groups
   (REQ-015, KD-55) use one `$write` per group (ADR-273 (3)).
+- **C64. What numbering left for later** (ADR-323). **Task 1.3.6** (ROEs): a phone-made ROE's number is the next of its phone's ROE block, written by `NumberSeriesRules('ROE').written` (`R-0007`); a typed paper number kept as typed. **Task 1.3.7** (the harness's phones): a phone gives its field event the next number of its block (`PhoneNumbers.next`), and a certifying phone its cert number. **Task 1.4.2 / Phase 2** (sync): the sync carries each series' last used number and calls `NumberAllocator.topUp`; a top-up thrown because the series moved on is asked again; a lost phone's blocks are retired after its last sync and wipe (ADR-134), a reset phone's reclaimed. **Task 1.5.5:** whether a control ticket scanned outside the entered ranges is flagged after sync (no such flag in the catalogue). **Phase 4:** setup's screen suggests a cert-number seed "that doesn't look made up" (Q-96); today the firm states it, and a project without one types its cert numbers. **Not guarded, on purpose:** a series' next number going back (the exclusion constraint then refuses the block).
 
 **For Phase 2 (API, worker, apps) and the demo deploy**
 - **C21.** Sign-in refuses role `SYSTEM`; the system actor never gets a password (ADR-273 (4)). A

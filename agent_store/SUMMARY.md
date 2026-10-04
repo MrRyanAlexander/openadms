@@ -1,13 +1,13 @@
 # Open ADMS — Current decisions and gaps, at a glance
 
 **The present tense of the project on one page.** `DECISIONS.md` and `DEVIATIONS.md` are the full
-history, with 321 ADRs and 70 KDs, many superseded. This page says what is true **now** and which
+history, with 325 ADRs and 70 KDs, many superseded. This page says what is true **now** and which
 entries to cite. The reasons live in the ADRs and the skills.
 
 - **Keep it current:** when you add, amend or supersede an ADR, or open or close a KD, update this
   page **in the same response** (`adms-decisions`).
 - **If this page and a log entry disagree,** the newest ADR wins: fix this page and say so.
-- Updated 2026-10-03, through ADR-321 / KD-70. Rounds 13–26 are answered (ADR-145…228).
+- Updated 2026-10-03, through ADR-325 / KD-70. **Task 1.3.4, what each kind of field event records, is done (ADR-325; see "Field events").** Task 1.3.3, what every field event records, is done (ADR-324). Task 1.3.2, numbering, is done (ADR-323; see "Tickets and numbers"). Rounds 13–26 are answered (ADR-145…228).
   **Phase 1 (data core and engine, rebuilt) is open, at the user's word (ADR-299).** Its plan is
   `BACKLOG.md`'s ten milestones and 47 tasks, one task per response, each milestone opening with
   its part's acceptance scenarios in `spec/acceptance/` (ADR-300). Done: the plan,
@@ -61,7 +61,14 @@ entries to cite. The reasons live in the ADRs and the skills.
   unique on its project; a sub typed at certification placed under its prime; replaced, copied,
   revoked, never deleted; the service `Certifications` and the story `certification`; 36 of Part
   3's 60 scenarios pass; KD-70 found and closed). **Milestone 1.2 is done.**
-  **Next: task 1.3.1, the acceptance scenarios for tickets and numbers.**
+  **1.3.1, the acceptance scenarios for tickets and numbers** (ADR-322:
+  `spec/acceptance/04-field-capture.md`, 98 scenarios, none marked passing yet; it covers what is
+  recorded, never what the worker concludes; 9 are numbering's (1.3.2), 21 and 36 the field
+  event's (1.3.3, 1.3.4), 8 scale receipts' and photographs' (1.3.5), 10 the forms' (1.3.6), 9 the
+  day's story (1.3.7); eighteen unsettled points listed for the task that decides each, C63).
+  **1.3.2, numbering** (ADR-323), **1.3.3, what every field event records** (ADR-324) and
+  **1.3.4, what each kind records** (ADR-325: 62 of Part 4's 98 scenarios pass, three more in
+  part; 67 of Part 1's 82). **Next: task 1.3.5, scale receipts and photographs.**
   **Corrected by the user 2026-10-02 (ADR-301):** a pay item's **code is unique on its project**
   (ADR-147 had it backwards); a pay item is its code and its **description**, with no separate name
   and no "line number"; **an exact duplicate of a rule is refused before it is saved**.
@@ -182,7 +189,7 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   leaves named columns out** (`audit_capture('SECURITY', 'hash')`: the record says the column changed,
   never its value), the path for password hashes in Phase 2. **`NumberBlock`**: device, project,
   series (`LOAD · HAUL_OUT · UNIT_RATE · CERTIFICATION`), first, last, last used, `ISSUED · RECLAIMED ·
-  RETIRED`; the series, the allocator and a refusal of overlapping blocks are Phase 1's (C43).
+  RETIRED`; the series, the allocator and the refusal of overlapping blocks are built (ADR-323).
   **`DisposalSite`** (project and name only, built in full since ADR-311) so an assignment's site
   can only be its own project's.
   **`Assignment`**: person, work date, project, the kinds of field event they may record, certifying,
@@ -386,9 +393,10 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   capacity worked out again); `signaturesOnFile`; `revoke`; `copy` (to another project, the
   original's measurements and subs, a number the caller states); `SubPlaces` and
   `ContractorSetup.merge` (the certifications that named the duplicate name the kept one). **"Replaced on" is the new certification's certified time**, as a day in the project's time
-  zone. The cert number is the caller's until the allocator (1.3.2). The story `certification`
-  runs it: `pnpm scenarios` runs four stories (16, 18, 51, 27 checks). Fifty-eight models,
-  forty-three migrations. **`MapVersion.loadedAt`'s default is `transaction_timestamp()`** (KD-70:
+  zone. A certification's number is the phone's (the next of its block, or the pre-printed
+  sheet's); a copy's is the other project's next, taken by the allocator (ADR-323). The story
+  `certification` runs it: `pnpm scenarios` runs five stories (16, 18, 52, 28, 15 checks). Sixty
+  models, forty-five migrations. **`MapVersion.loadedAt`'s default is `transaction_timestamp()`** (KD-70:
   Prisma read `CURRENT_TIMESTAMP` back as its own `now()` and wrote it into every later
   migration). Left for later: C62. *Agent defaults.* [321]
 - **The map servers are in the local stack (REQ-022):** `routing` (**Valhalla 3.9.0**) and
@@ -777,6 +785,55 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   meant. **Code** (agent default): `FieldEvent` with `kind` `COLLECTION` · `DISPOSAL` ·
   `HAUL_OUT_COLLECTION` · `HAUL_OUT_DISPOSAL` · `UNIT_RATE`; derived `CompletedLoad`,
   `CompletedHaulOut`.
+- **What every kind records, as built (task 1.3.3)** [324]: `FieldEvent` holds
+  `spec/DATA-MODEL.md` §4.1 (1)'s columns. **Where it came from** (`source`: `DEVICE` ·
+  `BACK_OFFICE`): a phone's record carries its phone, assignment and setup version and no
+  back-office person or reason; one created in the back office carries the person and the reason
+  (from the firm's list) and no phone, assignment or setup version, and was made in no temporary
+  session; the system actor creates none (one check, C44). **The number:** whether it was typed,
+  and the reason picked; a reason on a scanned number is refused, **a typed number with no reason
+  is taken**. **The certification:** the number as scanned, always there, a snapshot; the
+  certification found, one of the field event's own project, empty until one has that number;
+  keyed in by hand, with the capacity typed (**only on a truck keyed in by hand**, nought or
+  more; a crew keyed in has none). **The site** is one of its own project's; a curb collection
+  has none. **GPS at both ends**: a latitude and a longitude together, on the earth, or neither;
+  no accuracy. **The address** with whether it was looked up or typed. Notes; made in a temporary
+  session. **No new required column has a database default.** **Not checked, on purpose:** that
+  a number is digits, that times are in order, that the certification found bears the number
+  scanned, that a load is on a container's certification, that the site is the assignment's
+  (flags, or nothing). No driver, contractor, zone, destination or rate on a field event.
+  **Viewers:** a client user and an auditor see every column of their projects' field events
+  (`guard_viewer`), and **who recorded each through `viewer_field_event_monitor`** (id, name,
+  Monitor ID, nothing else of a person; owner's rights behind a security barrier, as
+  `viewer_project_setup`); a contractor user none until 1.7.1. Who looks the certification up
+  by its number is intake's and the worker's (1.4.2, 1.5.2). Sixty models, forty-seven
+  migrations. *Agent defaults, but for the C44 check, which DATA-MODEL §8 approved.*
+- **What each kind records, as built (task 1.3.4)** [325]: `spec/DATA-MODEL.md` §4.1 (2)'s
+  columns, but for the scale receipt and the ROE found, which join with their own tables (1.3.5,
+  1.3.6). **None is required, on any kind**: a pick that didn't reach the server is a flag's.
+  **The database refuses a detail on a kind that doesn't record it**: a debris type on unit rate
+  work; a field tag at a tower or a haul-out's final site; an ROE number off a collection or unit
+  rate work; an estimate off a collection; a carried count off a disposal; a kind of work,
+  payable type, pay item, count, measurement, root ball, survey number or "marked ineligible"
+  off unit rate work. **A debris type is the entry on the field event's own project's form for
+  its workflow** (the field event repeats the entry's form and document type; foreign keys, no
+  trigger); **a field tag and a pay item are its own project's**. **A split suffix is capital
+  letters (`A`… `AA`), only on a collection or a haul-out collection**; a collection has its
+  suffix and its estimate both or neither; a pile gives a load call, never an estimate. A
+  measurement says whether it was read as a circumference or a diameter (`MeasuredAs`), both or
+  neither; numbers are nought or more. **`FieldEventItem`** (an itemised unit rate event's
+  lines: an item once, a count or hours) and **`CarriedTicket`** (the numbers a load's
+  collection lists, as written, each once, never a link) sit only on the kind they belong to,
+  are evidence audited in the records domain, and are seen by a client user and an auditor with
+  their field event. **Not checked, on purpose:** a suffixed collection on a project that
+  doesn't allow split loads; a pile with no load call; a disposal with both a load call and a
+  count; a pay item against the kind of work or payable type beside it; an itemised event with a
+  count of its own; quarter hours; a stump "as a circumference"; an ROE or survey number against
+  the project (flags, or nothing). **The rule lives once:** `packages/domain`'s
+  `fieldEventDetails` and `FieldEventDetails`; `packages/contracts`' `fieldEventDetailsSchema`
+  asks it; a database test holds the database to the same table. How a correction takes an item
+  line or a carried ticket off is task 1.8.3's. Sixty-two models, forty-nine migrations. *Agent
+  defaults.*
 - **An outside design review** (contract-first templates, a state machine replacing rules, a billing
   matrix, hard field checks) was weighed: only the event idea is taken; each other point is already
   ours or declined, with the reason, in ADR-238. [238]
@@ -788,6 +845,23 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   from 100,001 to 9,999,999, unique per project. `COL`/`DIS`/`CLT`/`HOC`/`HOD`/`CHO`/`URT` labels
   are **display only**. Generated numbers come from **1,000-number device blocks**, reclaimed on
   reset. Control tickets use pre-entered ranges. [046, 056, 062, 065]
+- **Numbering as built** [323]: `ProjectNumberSeries` (one per project and series: `LOAD ·
+  HAUL_OUT · UNIT_RATE · CERTIFICATION · ROE`; first number, next number never handed out) and
+  `ControlRange` (loads and haul-outs only; two of one series, neither taken off, never share a
+  number). A generated project has a series per workflow; a control-ticket project only the unit
+  rate series; either an ROE series from 1, and a cert-number series once the firm seeds it
+  (without one, cert numbers are typed). **Two phones never hold the same number:** the database's
+  `number_blocks_never_overlap` keeps apart what blocks *hold* (an issued or retired block its
+  whole run; **a reclaimed block only what its phone used, so its unused rest is cut again for the
+  next phone, once**: ADR-065's own words). A block is cut only from a series its project has;
+  ticket series and their blocks lie inside 100,001–9,999,999 by checks. The rules are
+  `packages/domain`'s `numbers.ts` (`NumberSeriesRules`, `NumberSeriesBook`, `PhoneNumbers`,
+  `ControlRanges`, `NewProjectNumbers`); the allocator is `apps/api`'s `NumberAllocator`
+  (`topUp`, `reclaim`, `retire`, `next`). **Block sizes are policy values:** 1,000 ticket
+  numbers, 100 cert numbers, 100 ROE numbers. *Agent defaults:* **a phone-made ROE's number is
+  written `R-0007`** (`R-` and at least four digits; written, never parsed); ROE blocks of 100;
+  control ranges of one series never overlap; a top-up brings a phone to a full block of unused
+  numbers at every sync, however few it used.
 - **Splits:** N collections → 1 disposal, grouped on the base number; the first is **`-A`**, never
   bare. Each property's share = its estimate ÷ Σ estimates, applied to CY or tonnage. There is no
   divergence check. **Rules run once per property**, on its share (its own zone, address, mileage;
@@ -1312,7 +1386,25 @@ its scenario.
 
 ## 4. Waiting on the user
 
-**Nothing blocks the next task (1.3.1, the acceptance scenarios for tickets and numbers).**
+**Nothing blocks the next task (1.3.5, scale receipts and photographs).**
+- **From task 1.3.4 (ADR-325), yours to overturn:** **no detail of a field event is required**
+  (a unit rate ticket with no kind of work or count, a load with no debris type, a pile with no
+  load call are all received and left for a flag); **a disposal that arrives with both a load
+  call and a count is received**, and which one bills is read from the pay item; **a split
+  suffix is capital letters only (`A`… `Z`, then `AA`)** and only on a collection or a haul-out
+  collection; a split collection without its estimate, or an estimate without a suffix, is
+  refused; a measurement must say whether it is a circumference or a diameter; a debris type,
+  a field tag and a pay item of another project are refused; a carried ticket is kept as the
+  number written, with no link to the ticket; an item appears once on a ticket.
+- **From task 1.3.3 (ADR-324), yours to overturn:** **a typed ticket number with no reason picked
+  is still received** (a reason on a scanned number is refused); **a typed capacity is taken only
+  on a truck keyed in by hand, and a truck or crew keyed in by hand may have none**; **half a GPS
+  fix, or one off the earth, is refused, and no fix at all is taken**; an address always says
+  whether it was looked up or typed; the database takes a load on a crew's certification and
+  unit rate work on a container's; it doesn't check that a ticket number is digits or that times
+  are in order; a client user and an auditor see every column of a field event and its monitor's
+  name and Monitor ID; AC-04-19's reason is "Device failed", as the list ships.
+- **From task 1.3.2 (ADR-323), yours to overturn:** **a phone-made ROE's number is written `R-0007`** (ticket and cert numbers stay bare); **a phone holds 100 ROE numbers**; **two control ranges of one series on a project can't share a number**; a project has a cert-number series only once the firm seeds it.
 - **From task 1.2.3 (ADR-321), yours to overturn:** **a sub typed at certification whose name
   already has another place on the project** (another prime's sub, or the other tier) is saved as
   a separate contractor of that name under the prime picked, with a warning, never refused and
