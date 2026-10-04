@@ -1,5 +1,5 @@
 // Part 3, certifying containers and crews (spec/parts/03-certification.md; adms-certifications;
-// spec/DATA-MODEL.md §3 "Certifications"; ADR-015, 045, 076, 079, 082, 108, 152, 294, 321).
+// spec/DATA-MODEL.md §3 "Certifications"; ADR-015, 045, 076, 079, 082, 108, 294, 321, 328).
 //
 // `certify` is what a monitor's phone sends when a truck or a crew is certified: one piece of work,
 // written as that monitor, from that phone. Nobody types a capacity: it is what the measured boxes
@@ -8,12 +8,12 @@
 // place on the project in the same piece of work (SubPlaces, beside ContractorSetup.addPrime).
 //
 // The later changes are the back office's: a measuring mistake corrected in place (the capacity
-// worked out again), signatures on file, a revocation from a date, a copy to another project. A
-// modified truck is certified again, naming the certification it replaces. Nothing is deleted.
+// worked out again), signatures on file, a revocation from a date. A modified truck is
+// certified again, naming the certification it replaces. A certification is never copied: a truck
+// that works another project is certified there from scratch (ADR-328, 329). Nothing is deleted.
 // Who may do each (an admin revokes; a certifying assignment) is read at sign-in, Phase 2. A
 // certification's number is the phone's: the next of its block of the project's cert-number
-// series, or the pre-printed sheet's, as written. A copy's number is the other project's next,
-// taken by the server itself (NumberAllocator; ADR-323).
+// series, or the pre-printed sheet's, as written (ADR-323).
 import type { Actor, Certification, CertificationBox, Prisma } from '@open-adms/db';
 import {
   type BoxShape,
@@ -24,7 +24,6 @@ import {
   type MeasuredBox,
 } from '@open-adms/domain';
 
-import { NumberAllocator } from '../numbering/number-allocator.ts';
 import { SubPlaces } from '../setup/contractor-setup.ts';
 import { day, type Outcome, Refused, SetupService, type Warn } from '../setup/setup-service.ts';
 
@@ -224,103 +223,6 @@ export class Certifications extends SetupService {
         where: { id: certificationId },
         data: { revokedFrom: day(from), revokedReason: reason.trim(), revokedById: person },
       });
-    });
-  }
-
-  // The same truck on another project: a new certification there, with a number of that project's
-  // own and a reference to the original; each is its own record (ADR-152). What was measured, who
-  // measured it and when are the original's; its subs get their place on the other project. The
-  // number is the next of the other project's cert-number series; a number typed from pre-printed
-  // paper is kept as written instead, and is needed where that project has no series (ADR-045).
-  copy(
-    person: string,
-    certificationId: string,
-    toProjectId: string,
-    typedCertNumber?: string,
-  ): Promise<Outcome<Certification>> {
-    return this.write(person, async (tx, warn) => {
-      const original = await tx.certification.findUniqueOrThrow({
-        where: { id: certificationId },
-      });
-      const project = await tx.project.findUniqueOrThrow({ where: { id: toProjectId } });
-      const prime = await tx.contractor.findUniqueOrThrow({ where: { id: original.primeId } });
-      const primeThere = await tx.projectContractor.findUnique({
-        where: { projectId_asPrimeId: { projectId: toProjectId, asPrimeId: prime.id } },
-      });
-      const refusal = new CertificationChanges(original.certNumber).copy(
-        { projectId: original.projectId },
-        { projectId: toProjectId, projectName: project.name },
-        { name: prime.name, isPrimeThere: primeThere !== null && primeThere.archivedAt === null },
-      );
-      if (refusal !== null) throw new Refused(refusal);
-      const subIds = [original.firstTierSubId, original.secondTierSubId];
-      const typed = await tx.contractor.findMany({
-        where: { id: { in: subIds.flatMap((id) => (id === null ? [] : [id])) } },
-      });
-      const nameOf = (id: string | null): string | undefined =>
-        typed.find((contractor) => contractor.id === id)?.name;
-      const subs = await Certifications.subs(tx, warn, toProjectId, original.kind, prime.id, [
-        nameOf(original.firstTierSubId),
-        nameOf(original.secondTierSubId),
-      ]);
-      const boxes = await Certifications.boxesOf(tx, certificationId);
-      const helpers = await tx.certificationHelper.findMany({
-        where: { certificationId, archivedAt: null },
-      });
-      const certNumber =
-        typedCertNumber ?? (await NumberAllocator.next(tx, toProjectId, 'CERTIFICATION'));
-      if (certNumber === null) {
-        throw new Refused({
-          code: 'COPY_NEEDS_CERT_NUMBER',
-          message: `Not saved: ${project.name} has no cert-number series. Type the number from its pre-printed certification paper to copy certification ${original.certNumber}.`,
-        });
-      }
-      const copy = await tx.certification.create({
-        data: {
-          projectId: toProjectId,
-          certNumber,
-          kind: original.kind,
-          primeId: prime.id,
-          ...subs,
-          vehicleTypeId: original.vehicleTypeId,
-          vehicleTypeOther: original.vehicleTypeOther,
-          crewTypeId: original.crewTypeId,
-          capacityCy: Certifications.capacity(original.kind, boxes),
-          driverName: original.driverName,
-          driverPhone: original.driverPhone,
-          driverLicenceNumber: original.driverLicenceNumber,
-          driverLicenceState: original.driverLicenceState,
-          driverLicenceExpiry: original.driverLicenceExpiry,
-          tagNumber: original.tagNumber,
-          tagState: original.tagState,
-          tagExpiry: original.tagExpiry,
-          certifiedAt: original.certifiedAt,
-          deviceUtcOffsetMinutes: original.deviceUtcOffsetMinutes,
-          receivedAt: this.clock.now(),
-          certifiedById: original.certifiedById,
-          clientRepresentativeName: original.clientRepresentativeName,
-          contractorRepresentativeName: original.contractorRepresentativeName,
-          signaturesOnFile: false,
-          copiedFromId: original.id,
-        },
-      });
-      for (const box of boxes) {
-        await tx.certificationBox.create({
-          data: {
-            ...Certifications.measured(box, box.position),
-            featureId: box.featureId,
-            featureOther: box.featureOther,
-            certificationId: copy.id,
-            kind: 'CONTAINER',
-          },
-        });
-      }
-      for (const helper of helpers) {
-        await tx.certificationHelper.create({
-          data: { certificationId: copy.id, userId: helper.userId },
-        });
-      }
-      return copy;
     });
   }
 

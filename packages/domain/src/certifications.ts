@@ -49,9 +49,7 @@ export interface CertificationRefusal {
     | 'SECOND_TIER_WITHOUT_FIRST'
     | 'SUB_TYPED_TWICE'
     | 'REPLACEMENT_NEEDS_REASON'
-    | 'REVOCATION_NEEDS_REASON'
-    | 'COPY_ON_ITS_OWN_PROJECT'
-    | 'COPY_PRIME_NOT_ON_PROJECT';
+    | 'REVOCATION_NEEDS_REASON';
   readonly message: string;
 }
 
@@ -161,28 +159,6 @@ export class CertificationChanges {
       code: 'REVOCATION_NEEDS_REASON',
       message: `Not saved: certification ${this.certNumber} is revoked from a date with a reason.`,
     };
-  }
-
-  // The same truck on another project: a copy there, under one of that project's own primes.
-  copy(
-    from: { readonly projectId: string },
-    to: { readonly projectId: string; readonly projectName: string },
-    prime: { readonly name: string; readonly isPrimeThere: boolean },
-  ): CertificationRefusal | null {
-    const { certNumber } = this;
-    if (from.projectId === to.projectId) {
-      return {
-        code: 'COPY_ON_ITS_OWN_PROJECT',
-        message: `Not saved: certification ${certNumber} is already on ${to.projectName}. A copy is for the same truck on another project; a modified truck is certified again.`,
-      };
-    }
-    if (!prime.isPrimeThere) {
-      return {
-        code: 'COPY_PRIME_NOT_ON_PROJECT',
-        message: `Not saved: ${prime.name} isn’t a prime on ${to.projectName}. Add it to the project first, then copy certification ${certNumber}.`,
-      };
-    }
-    return null;
   }
 }
 

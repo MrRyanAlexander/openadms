@@ -159,27 +159,6 @@ describe('a later change to a certification', () => {
       message: 'Not saved: certification 730416 is revoked from a date with a reason.',
     });
   });
-
-  it('AC-03-56 a copy is made on another project, under one of that project’s own primes', () => {
-    const p1 = { projectId: 'p1' };
-    const p2 = { projectId: 'p2', projectName: 'Bayline County PPDR, Hurricane Delphine' };
-    const prime = { name: coastline.name, isPrimeThere: true };
-    expect(new CertificationChanges('730416').copy(p1, p2, prime)).toBeNull();
-    expect(
-      new CertificationChanges('730416').copy(
-        p1,
-        { projectId: 'p1', projectName: 'Bayline County ROW, Hurricane Delphine' },
-        prime,
-      ),
-    ).toMatchObject({ code: 'COPY_ON_ITS_OWN_PROJECT' });
-    expect(
-      new CertificationChanges('88120').copy(p1, p2, { name: summit.name, isPrimeThere: false }),
-    ).toEqual({
-      code: 'COPY_PRIME_NOT_ON_PROJECT',
-      message:
-        'Not saved: Summit Debris Services isn’t a prime on Bayline County PPDR, Hurricane Delphine. Add it to the project first, then copy certification 88120.',
-    });
-  });
 });
 
 describe('merging two spellings of a sub', () => {

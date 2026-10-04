@@ -7,8 +7,8 @@
 // (AC-01-19, AC-03-11), and Tidewater Hauling under it (AC-03-12).
 //
 // Then what happens later: a measuring mistake corrected in place, the capacity worked out again
-// (AC-03-51); a modified truck certified again, replacing its old certification; a revocation; a
-// copy to P2; and two spellings of one sub merged by the back office. Along the way the service
+// (AC-03-51); a modified truck certified again, replacing its old certification; a revocation;
+// and two spellings of one sub merged by the back office. Along the way the service
 // refuses only what can't be a certification (measurements that give no capacity, a crew with
 // boxes, a tier 2 sub with no tier 1, a revocation with no reason), saving nothing.
 //
@@ -44,7 +44,7 @@ const primary = (length: number, width: number, height: number): BoxInput => ({
 export const certification: Story = {
   name: 'certification',
   title:
-    'Sam Grant certifies P1’s trucks and crews; a sub is typed in; a measurement is corrected; a truck is replaced, revoked and copied to P2',
+    'Sam Grant certifies P1’s trucks and crews; a sub is typed in; a measurement is corrected; a truck is replaced and revoked',
   timeZone,
   start: saturday('08:00'),
 
@@ -567,41 +567,6 @@ export const certification: Story = {
 
     // ------------------------------------------------------------------------------------------
     story.at(
-      on('14', '09:30'),
-      'Rivera’s self-loader starts work on P2 as well: Luis copies 730420 there, and it takes P2’s next cert number, 880112',
-    );
-    story.check(
-      'a copy needs the prime on the other project: Summit isn’t on P2',
-      await refused(certifications.copy(luis, summitTruck.id, p2)),
-      'COPY_PRIME_NOT_ON_PROJECT: Not saved: Summit Debris Services isn’t a prime on Bayline County PPDR, Hurricane Delphine. Add it to the project first, then copy certification 88120.',
-    );
-    const copy = await saved(certifications.copy(luis, replacement.id, p2));
-    story.check(
-      'AC-03-56 P2 has its own certification, with the original’s boxes and capacity and a reference to it; Rivera is placed on P2',
-      [
-        await certified(p2),
-        copy.copiedFromId === replacement.id,
-        await api.certificationBox.count({ where: { certificationId: copy.id } }),
-        await placesOn(p2),
-      ],
-      [
-        ['880112 · 55 CY · Coastline Haulers LLC > Rivera Trucking'],
-        true,
-        3,
-        ['Coastline Haulers LLC: prime', 'Rivera Trucking: tier 1 under Coastline Haulers LLC'],
-      ],
-    );
-    const p2Certs = await api.projectNumberSeries.findUniqueOrThrow({
-      where: { projectId_series: { projectId: p2, series: 'CERTIFICATION' } },
-    });
-    story.check(
-      'AC-03-06 its number is the next of P2’s cert-number series, taken by the server: the refused copy took none, and the series moved on by one',
-      [copy.certNumber, p2Certs.nextNumber],
-      ['880112', 880113],
-    );
-
-    // ------------------------------------------------------------------------------------------
-    story.at(
       on('14', '10:15'),
       'Another Rivera truck, 730425, is certified with its sub typed "Rivera Trucking Inc"; Luis merges the two spellings',
     );
@@ -680,8 +645,6 @@ export const certification: Story = {
         'Luis: certification_box UPDATE (BACK_OFFICE)': 1,
         'Luis: certification UPDATE (BACK_OFFICE)': 2,
         'Dana: certification UPDATE (BACK_OFFICE)': 1,
-        'Luis: certification INSERT (BACK_OFFICE)': 1,
-        'Luis: certification_box INSERT (BACK_OFFICE)': 3,
       },
     );
   },

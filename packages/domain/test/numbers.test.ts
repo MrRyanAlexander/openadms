@@ -276,18 +276,6 @@ describe('a phone’s numbers', () => {
     expect(phone.reported(999999)).toEqual([101990, null]);
   });
 
-  it('AC-03-06 a copied certification’s number is one never handed out, never one a phone handed back', () => {
-    const certs = new NumberSeriesBook(
-      { series: 'CERTIFICATION', firstNumber: 730415, nextNumber: 730515 },
-      [block(730415, 730514, 730419, 'RECLAIMED')],
-    );
-    expect(certs.takeNew(1)).toEqual({
-      refusal: null,
-      runs: [{ firstNumber: 730515, lastNumber: 730515 }],
-      nextNumber: 730516,
-    });
-  });
-
   it('AC-04-06 are given out in order, offline: 101001, then 101002…', () => {
     expect(new PhoneNumbers([block(101001, 102000)]).next()).toBe(101001);
     expect(new PhoneNumbers([block(101001, 102000, 101001)]).next()).toBe(101002);

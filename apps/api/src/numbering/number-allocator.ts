@@ -101,23 +101,6 @@ export class NumberAllocator extends SetupService {
     );
   }
 
-  // One number for a record the server numbers itself, inside the caller's piece of work: the
-  // series' next, never one a phone handed back. None when the project has no such series.
-  static async next(
-    tx: Prisma.TransactionClient,
-    projectId: string,
-    series: NumberSeries,
-  ): Promise<string | null> {
-    const position = await tx.projectNumberSeries.findUnique({
-      where: { projectId_series: { projectId, series } },
-    });
-    if (position === null) return null;
-    const taken = new NumberSeriesBook(position, []).takeNew(1);
-    await NumberAllocator.advance(tx, position, taken);
-    if (taken.refusal !== null) throw new Refused(taken.refusal);
-    return new NumberSeriesRules(series).written(position.nextNumber);
-  }
-
   // Moves the series on to the next number never handed out, only if nobody moved it meanwhile.
   private static async advance(
     tx: Prisma.TransactionClient,

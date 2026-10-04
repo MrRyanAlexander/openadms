@@ -203,8 +203,7 @@ export class NumberSeriesBook {
     return { refusal: null, runs: [...runs, ...fresh.runs], nextNumber: fresh.nextNumber };
   }
 
-  // Numbers never handed out, only: what the server takes for a record it numbers itself, with no
-  // phone and no block (a certification copied to another project).
+  // Numbers never handed out, only: what a block takes once the handed-back numbers are used up.
   takeNew(count: number): NumbersTaken {
     const firstNumber = this.position.nextNumber;
     const lastNumber = firstNumber + count - 1;
