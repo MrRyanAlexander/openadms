@@ -67,9 +67,9 @@ record (why Phase 0 existed, its exit criteria and how each was met, the spec tr
 question rounds) moved word for word to `DECISIONS.md`'s scratchpad, "Moved from NEXT.md,
 2026-10-02"; `ROADMAP.md` §3a keeps the table.
 
-**Still live from the spec track:** `spec/acceptance/` is 4 of 9 files (`04-field-capture.md`: 98 scenarios, 62 passing and 3 in part after 1.3.4, ADR-325; `01-setup.md`: 82
+**Still live from the spec track:** `spec/acceptance/` is 4 of 9 files (`04-field-capture.md`: 98 scenarios, 84 passing after 1.3.6, ADR-327; `01-setup.md`: 82
 scenarios, 67 passing (AC-01-19 since 1.2.3, AC-01-09 since 1.3.2, AC-01-27 whole since 1.3.4) and AC-01-48, 55 and 80 in part; `02-people-and-devices.md`: 74
-scenarios, 35 passing at the database and four in part after 1.1.10, ADR-315; `03-certification.md`: 60 scenarios, 38 passing and 1 in part after 1.3.3, ADR-324); each other file is the first task of the milestone that builds its part
+scenarios, 35 passing at the database and four in part after 1.1.10, ADR-315; `03-certification.md`: 60 scenarios, 39 passing and 1 in part after 1.3.5, ADR-326); each other file is the first task of the milestone that builds its part
 (ADR-300).
 
 ---
@@ -81,7 +81,7 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-03: Phase 1 is open, nineteen tasks done; Milestones 1.1 and 1.2 are done, 1.3 has four of seven)
+### Where things stand (2026-10-04: Phase 1 is open, twenty-one tasks done; Milestones 1.1 and 1.2 are done, 1.3 has six of seven)
 - **Phase 1 (data core and engine) is the active phase**, opened by the user on 2026-10-01
   (ADR-299). Its plan is `BACKLOG.md`'s ten milestones and 47 tasks (ADR-300): setup records →
   certifications and capacity → tickets and numbers → sync intake → reconciliation → the rule engine
@@ -169,8 +169,20 @@ of `DECISIONS.md`.
   only on a collection or a haul-out collection, capital letters; a split's suffix and
   estimate both or neither; `FieldEventItem` and `CarriedTicket`, each only on its kind; the
   one rule in `packages/domain` (`FieldEventDetails`), asked by `packages/contracts`
-  (`fieldEventDetailsSchema`). The scale receipt and the ROE found join with their tables
-  (1.3.5, 1.3.6).
+  (`fieldEventDetailsSchema`). The ROE found joins with its table (1.3.6); and **1.3.5, scale
+  receipts and photographs (2026-10-04, ADR-326)**: `ScaleReceipt` (the site's number as
+  written, once per project; every weight optional, none worked out) and `Photo` (exactly one
+  owner of its own project: a field event, a certification or a scale receipt today; two
+  fingerprints and two unique places in storage, written once; a view only on a
+  certification's); `FieldEvent.scaleReceiptId`, only on a disposal and a haul-out disposal,
+  its own project's; both tables seen by a client user and an auditor with their project, a
+  photograph without where its file is kept. A copied certification holds no photograph of its
+  own; and **1.3.6, ROEs and forms (2026-10-04, ADR-327)**: `Roe` and `RoeScopeItem`
+  (configuration: a number once per project, a phone's or the back office's, its scope picked
+  from its own project's load form or the payable types) and `Survey`, `Incident`, `DropOffLog`
+  (evidence, each saying where it came from as a field event does); each record's answers with
+  the definition answered, of its own project's form of its kind, or `{}` with none;
+  `formAnswersSchema` in `packages/contracts`; `FieldEvent.roeId`; `Photo`'s four new owners.
   **Corrected by the user on
   2026-10-02 (ADR-301):** a pay item's code is unique on its project (ADR-147 had read their answer
   backwards), a pay item is its code and its description (no separate name, no "line number"), and
@@ -178,8 +190,9 @@ of `DECISIONS.md`.
   its test follow (the twentieth migration). **The first product tables
   exist** (the lists, the client, the declaration event, the project, contractors on a project,
   contracts, forms, pay items, sites, the project map, rules, permissions and viewers,
-  certifications, numbering, the field event in full but for two links, its item lines and
-  carried tickets; 62 models, 49 migrations);
+  certifications, numbering, the field event in full, its item lines and carried tickets, scale
+  receipts and photographs, ROEs and their scope, surveys, incidents and drop-off logs; 69
+  models, 53 migrations);
   the other models are still Phase 0's provisional ones, and `packages/domain` holds the built-in
   keys, the policy values and a new project's settings.
 - **Phase 0 (Foundation) is done** (2026-10-01, ADR-281…288): the monorepo, the local HTTPS stack
@@ -353,24 +366,58 @@ permissions and viewers, ADR-315), **1.1.11 (the example world's setup as a stor
 Milestone 1.1 is done)**, **1.2.1 (the acceptance scenarios for certifications, ADR-317: 60)**,
 **1.2.2 (the capacity math, ADR-320: `Capacity` in `packages/domain`)**, **1.2.3 (the
 certification's records, ADR-321: Milestone 1.2 is done)**, **1.3.1 (the acceptance scenarios for
-tickets and numbers, ADR-322: 98)**, **1.3.2 (numbering, ADR-323)**, **1.3.3 (what every field event records, ADR-324)**, **1.3.4 (what each kind records, ADR-325)**; and the user's correction of
+tickets and numbers, ADR-322: 98)**, **1.3.2 (numbering, ADR-323)**, **1.3.3 (what every field event records, ADR-324)**, **1.3.4 (what each kind records, ADR-325)**, **1.3.5 (scale receipts and photographs, ADR-326)**, **1.3.6 (ROEs and forms, ADR-327)**; and the user's correction of
 2026-10-02 (ADR-301: a pay item's code is unique, it has a description and no name, a duplicate
 rule is refused).
 
-👉 **Task 1.3.5, scale receipts and photographs** (`BACKLOG.md`, Milestone 1.3): `ScaleReceipt`
-(`spec/DATA-MODEL.md` §4.2: its own record, unique per project by receipt number, never
-confusable with a ticket number) and `Photo` (§4.4: exactly one owner); **`FieldEvent`
-gains `scaleReceiptId`**, only on a disposal and a haul-out disposal (ADR-325 left the link for
-its table). Its scenarios: `spec/acceptance/04-field-capture.md` AC-04-71…78, and the rest of
-AC-04-38, 39 and 52; REQ-126a. **Carried:** C63's points for 1.3.5 (points 14 and 15 of the
-file's "Left to the task that builds it": a ticket's photographs and where eight is counted, a
-copied certification's photographs (C61 point 14), a disposal whose receipt number is already on
-the project, a tandem's one receipt; and from ADR-325, whether a count and a scale receipt
-together are taken); C59 (a viewer's sight of each new table; `guard_table` and `guard_viewer`
-rerun on `field_event` for the new column); C62 (a certification's five views). `Photo`'s owners
-`roeId`, `surveyId`, `incidentId`, `dropOffLogId` and `quarantinedRecordId` point at tables built
-in 1.3.6 and 1.4.2: decide whether each column waits for its table, as ADR-325 did. A schema
-task: the stack is needed (`pnpm local:up`), stopped at close-out. Then 1.3.6.
+👉 **Task 1.3.7, the harness's phones capture every kind** (`BACKLOG.md`, Milestone 1.3): badge
+first, the number last and re-entered; a unit rate pay item worked out from the bands by the one
+rule the phone and the server share; the story of a day of P1's field events, every kind, each
+landing `PENDING`. Its scenarios: `spec/acceptance/04-field-capture.md` AC-04-10, 11, 17, 42, 59,
+70, 91, 92, 93; REQ-112g, 120a, REQ-112f's phone part. **Carried:** C63's points for 1.3.7 (the
+harness's phone sends the kind-specific details, `RecordedEvent` has none yet, and its intake
+reads the debris type's form from the project and workflow; point 18: a cancelled field event and
+a re-entered number that doesn't match); C64 (a phone gives its field event the next number of
+its block, `PhoneNumbers.next`, and a certifying phone its cert number); C66 (a phone makes an
+ROE with the next number of its ROE block). A story task: the stack is needed (`pnpm local:up`),
+stopped at close-out. It closes Milestone 1.3; then 1.4.1.
+
+**ROEs and forms** (ADR-327): a test writes an ROE with `roeLike(world, …)` (Ana's `R-0007` on
+P2: 412 Cedar Ct, signed 9 October; state `project_id` and `assignment_id` for one on P1) and a
+survey, an incident or a drop-off log from `formLike(world, …)` (what every form records, from
+Ana's phone on P1) or `backOfficeFormLike(world, …)` (created by Dana, "Device failed"), adding
+its own columns (`work_type_id`; `incident_type_id`; `site_id`), all through `phoneInsertOf`
+(`packages/db/test/support/example-world.ts`). **No column of where a form came from has a
+default**, and `answers` is always stated (`'{}'` with no definition). **Answers come with their
+definition**: `form_definition_id`, `form_id` and `form_document_type` together, the document
+type the record's own (`ROE`, `SURVEY`, `INCIDENT`, `DROP_OFF_LOG`). The example world holds no
+ROE and no form record, P2 has no form, and P1's incident form has no definition: a test writes
+its own (`roes-and-forms.test.ts` has `formOn`, `definition`, `answered` and `p2LoadForm`). A
+scope line repeats its ROE's `project_id`, and a debris type on it comes with `form_id` and
+`form_document_type: 'LOAD'`. **A new form table** takes the same shared columns and the same
+five checks (`<table>_source_check`, `_monitor_check`, `_created_by_check`, `_gps_check`,
+`_answers_check`), `guard_table('<table>', 'EVIDENCE', 'RECORDS')` and `guard_viewer('<table>',
+'PROJECT')`, and joins `formShared`'s users in `grants.test.ts`. **The answers' schema** is
+`formAnswersSchema(fields)` in `packages/contracts`, made from the version answered; the
+database doesn't run it: intake does (1.4.2). The scenario tests are
+`packages/db/test/roes-and-forms.test.ts`.
+
+**Scale receipts and photographs** (ADR-326): a test writes a receipt with `scaleReceiptLike(world,
+…)` (the tandem's `BCL-88241` at Bayline County Landfill, entered by Ana) and a photograph's record
+with `photoLike(world, owner, …)` (its owner one of `field_event_id`, `certification_id`,
+`scale_receipt_id`; each call names a new file, since `object_key` is unique), both through
+`phoneInsertOf(table, row)`, which asks the database for the id a phone would make;
+`fingerprintOf(text)` gives a SHA-256 as the check wants it (`packages/db/test/support/example-world.ts`).
+The example world holds no receipt and no photograph: a test writes its own. **A new owner of a
+photograph** adds its column with a two-column foreign key to `(project_id, id)` of its table,
+then in its guard migration drops `photo_owner_check` and writes it again with the new column
+(seven owners since ADR-327; `quarantinedRecordId` is 1.4.2's),
+and reruns `guard_table('photo', 'EVIDENCE', 'RECORDS')` and `guard_viewer('photo', 'PROJECT',
+hidden => ARRAY['object_key', 'depth_object_key'])`; `correctable.photo` in `grants.test.ts`, the
+check in `catalog.test.ts` and AC-04-76's column list follow. **A photograph's fingerprints and
+keys can't be updated** (`photo_refuse_file_edit`): a test that needs other values writes
+another photograph. A new latitude or longitude column joins the exact list in `sites.test.ts`.
+The scenario tests are `packages/db/test/scale-receipts-and-photos.test.ts`.
 
 **What each kind records** (ADR-325): a test writes a load's or a haul-out's debris type with
 `debrisTypePicked(world, entryId[, form])`, which gives the entry with its form and that form's
@@ -496,7 +543,7 @@ then `SELECT guard_list('<table>', '<domain>');` in its guard migration; a new b
 `packages/domain`'s `builtInKeys` first, with an ADR (ADR-302).
 
 Start every command with `eval "$(fnm env --shell zsh)"`; the checks are **`adms-verify`** (the chain
-is 53 files, 1,089 tests; forty-nine migrations; `pnpm scenarios` runs five stories, 16, 18, 52, 28 and 15 checks),
+is 56 files, 1,139 tests; fifty-three migrations; `pnpm scenarios` runs five stories, 16, 18, 52, 28 and 15 checks),
 with **`pnpm security`** (7 passed, 0 failed, ADR-291). The database tests, the map servers' tests and
 the stories need `pnpm local:up` first; stop it at close-out (ADR-277). A schema change goes through
 Prisma (`prisma migrate dev --create-only`), a guard into its own empty stub (ADR-113); **try a guard

@@ -240,9 +240,9 @@ Carried: C43, C44, C36's answers. Closes the behaviour of KD-13, 22, 23, 24, 27,
   haul-out collection's suffix with its running call; `FieldEventItem`, `CarriedTicket`; the same
   both-or-neither rule in `packages/contracts`. *REQ-103, 105o, 110, 111, 111a, 112, 112a, 112b;
   REQ-112e's capture.*
-- [ ] **1.3.5** **Scale receipts and photos.** `ScaleReceipt` (unique per project by receipt
+- [x] **1.3.5** ✅ **done 2026-10-04 (ADR-326):** `ScaleReceipt` (the site's number as written, once per project; its site its own project's; every weight optional and none worked out; a gross or tare below nought refused) and `Photo` (exactly one owner of its own project: a field event, a certification or a scale receipt today, the other five joining with their tables in 1.3.6 and 1.4.2; a view only on a certification's; two fingerprints and two unique places in storage, written once); `FieldEvent.scaleReceiptId`, only on a disposal and a haul-out disposal, its own project's; `guard_table` and `guard_viewer` rerun on `field_event`, both new tables guarded and seen with their project (a photograph without where its file is kept); `packages/domain`'s `fieldEventDetails` and `packages/contracts`' schema gain the link; `packages/db/test/scale-receipts-and-photos.test.ts`, 16 tests by scenario ID; 31 loosenings tried. AC-04-71…78, 38, 39, 52 and AC-03-34 pass. REQ-126a ticked. **Scale receipts and photos.** `ScaleReceipt` (unique per project by receipt
   number; never confusable with a ticket number), `Photo` (exactly one owner). *REQ-126a.*
-- [ ] **1.3.6** **ROEs and forms.** `Roe`, `RoeScopeItem`, `Survey`, `Incident`, `DropOffLog`, each
+- [x] **1.3.6** ✅ **done 2026-10-04 (ADR-327):** `Roe` and `RoeScopeItem` (configuration, records domain: a number once per project; a phone's or the back office's; scope picked from its own project's load form or the payable types, each once) and `Survey`, `Incident`, `DropOffLog` (evidence: where each came from held by one check, as a field event's; a survey's ROE and a drop-off log's site its own project's); each record's answers with the definition answered, of its own project's form of its kind, or `{}` with none; `packages/contracts`' `formAnswersSchema` made from a definition's version (C36); `FieldEvent.roeId`, only on a collection and a unit rate event, its own project's; `Photo`'s four new owners; `guard_table` and `guard_viewer` rerun on `field_event` and `photo`, the five new tables guarded and seen with their project; `packages/db/test/roes-and-forms.test.ts`, 19 tests by scenario ID; 59 loosenings each caught; chain 56 files, 1,139 tests. AC-04-80…90 pass (82 now whole). REQ-105i ticked; REQ-107 stays open for the QC mark (1.8.2). **ROEs and forms.** `Roe`, `RoeScopeItem`, `Survey`, `Incident`, `DropOffLog`, each
   with its answers and the definition version answered; the answers' schema made from the definition
   in `packages/contracts` (C36). *REQ-107.*
 - [ ] **1.3.7** **The harness's phones capture every kind.** Badge first, the number last and
@@ -697,7 +697,7 @@ delete one.
 
 **For `spec/DATA-MODEL.md` (0.2b.2) and Phase 1** — *2026-10-01: the draft (ADR-284) answers C16–C19, C29, C36 and C42–C44 on paper (its §12); each stays here until Phase 1 builds it.*
 *2026-10-01 (ADR-300), Phase 1 open: the task that picks each up: C36 → 1.1.5 (the definition), 1.3.6 (the answers); C42 → 1.1.5, 1.1.6, 1.1.7; C52 → 1.1.7 (setup) ✅, 1.5.6 (the flags); C18 → 1.1.10, 1.7.1; C43 → 1.3.2; C44 → 1.3.3; C16 → 1.5.2, 1.7.1; C50 → 1.5.8; C20 → 1.5.9; C17 → 1.7.1, 1.8.2; C19 → 1.8.2; C29, C30 → 1.9.1; C51's two scenarios → 1.9.2; C28 → 1.9.3; C31's stand-in → 1.4.2. Filed since (ADR-303, 305; added here by ADR-307): C53 →
-1.1.11, 1.5.5 (and Phase 2); C54 → 1.1.10; C55 → 1.5.5, 1.5.7; C56 → 1.2.3. Filed by ADR-311: C57 → 1.1.11, 1.5.6. Filed by ADR-313: C58 → 1.1.11, 1.6.1, 1.6.4. Filed by ADR-315: C59 → every schema task, 1.2.3, 1.3.3, 1.7.1, Phase 2. Filed by ADR-317: C61 → 1.2.2, 1.2.3, 1.5.5, 1.8.2, 1.9.1. Filed by ADR-321: C62 → 1.3.2, 1.3.3, Milestone 1.3, 1.5.5, 1.7.1, 1.8.2, 1.8.3, Phase 2. Filed by ADR-322: C63 → 1.3.2…1.3.7, 1.4.2, 1.5.5, 1.5.7. Filed by ADR-323: C64 → 1.3.6, 1.3.7, 1.4.2, 1.5.5, Phases 2 and 4. Filed by ADR-325 (under C63): → 1.3.5, 1.3.6, 1.3.7, 1.5.4, 1.5.5, 1.5.7, 1.8.3.*
+1.1.11, 1.5.5 (and Phase 2); C54 → 1.1.10; C55 → 1.5.5, 1.5.7; C56 → 1.2.3. Filed by ADR-311: C57 → 1.1.11, 1.5.6. Filed by ADR-313: C58 → 1.1.11, 1.6.1, 1.6.4. Filed by ADR-315: C59 → every schema task, 1.2.3, 1.3.3, 1.7.1, Phase 2. Filed by ADR-317: C61 → 1.2.2, 1.2.3, 1.5.5, 1.8.2, 1.9.1. Filed by ADR-321: C62 → 1.3.2, 1.3.3, Milestone 1.3, 1.5.5, 1.7.1, 1.8.2, 1.8.3, Phase 2. Filed by ADR-322: C63 → 1.3.2…1.3.7, 1.4.2, 1.5.5, 1.5.7. Filed by ADR-323: C64 → 1.3.6, 1.3.7, 1.4.2, 1.5.5, Phases 2 and 4. Filed by ADR-325 (under C63): → 1.3.5, 1.3.6, 1.3.7, 1.5.4, 1.5.5, 1.5.7, 1.8.3. Filed by ADR-326: C65 → 1.3.6, 1.4.2, 1.5.4, 1.5.5, 1.5.7, 1.7.1, 1.8.3, Phases 2 and 4. Filed by ADR-327: C66 → 1.3.7, 1.4.2, 1.5.7, 1.6.4, 1.7.1, 1.8.2, 1.8.3, Phases 2, 3 and 4.*
 - **C36. The storage shape of the firm's added fields** (ADR-278, at the user's word): a versioned
   form definition per record kind, one JSONB answers column per record keyed by field ID plus the
   definition version, a schema generated from the definition in `packages/contracts`, Prisma's `Json`
@@ -866,8 +866,8 @@ delete one.
   100-number blocks per certifying phone (REQ-106a), and `Certifications.copy` takes the other
   project's next number from it. ~~**Task 1.3.3** (field events in full): a field event's
   `certificationId` and its own copy of the number (AC-03-40); no driver column on it (AC-03-16's
-  other half).~~ ✅ done, ADR-324. **Tasks 1.4.2 and 1.5.2:** who fills `certificationId` (intake looks the scanned number up on the project; the worker again when the certification arrives later); the harness's phones send the number only. **Milestone 1.3, with `Photo`:** a certification's five views, and whether a copy
-  points at the original's photographs or holds its own (C61 point 14). **Task 1.5.5** (the
+  other half).~~ ✅ done, ADR-324. **Tasks 1.4.2 and 1.5.2:** who fills `certificationId` (intake looks the scanned number up on the project; the worker again when the certification arrives later); the harness's phones send the number only. ~~**Milestone 1.3, with `Photo`:** a certification's five views, and whether a copy
+  points at the original's photographs or holds its own (C61 point 14).~~ **Done (ADR-326):** `PhotoView` on a certification's photograph; a copy's photographs are the original's, through `copiedFromId`. **Task 1.5.5** (the
   flags): tag expired, revoked, replaced ("replaced on" is the new certification's certified time
   as a day in the project's time zone; whether work on that same day is flagged is decided there),
   no certification, typed capacity, a missing photograph; nothing flags a certification made
@@ -891,18 +891,73 @@ delete one.
   item are held to the event's own project (a debris type to its workflow's form); a suffix off a
   collection, and what a suffix may be; a suffixed collection on a project that doesn't allow
   split loads; a disposal with two quantities; an itemised event's own count, quarter hours, a
-  stump "as a circumference".~~ **Decided (ADR-325):** a debris type held to its own project's form for its workflow, a field tag and a pay item to its project; a suffix only on a collection or a haul-out collection, capital letters; the rest taken, for a flag. **Task 1.3.5:** `FieldEvent.scaleReceiptId` joins with `ScaleReceipt` (only on a disposal and a haul-out disposal; `guard_table` and `guard_viewer` rerun; AC-04-38, 39, 52, 75), and whether a count and a scale receipt together are taken. **Task 1.3.6:** `FieldEvent.roeId` joins with `Roe` (AC-04-82's other half). **Task 1.3.7:** the harness's phone sends the kind-specific details (`RecordedEvent` has none yet), and its intake reads the debris type's form from the project and workflow. **Tasks 1.5.5 and 1.5.7:** no flag exists for a unit rate ticket with no kind of work, payable type or count, a pile with no load call, an item that isn't its kind of work's, a pay item that isn't its payable type's, hours that aren't quarter hours, or a stump read as a circumference; each is decided there. **Task 1.5.4:** which quantity bills on a disposal that holds both a load call and a count. **Task 1.8.3:** how a correction takes an item line or a carried ticket off (nothing is deleted), and that a field event with lines can't change kind. **Task 1.3.5:** a ticket's photographs (each event's own; where
-  eight is counted), a copied certification's (C61 point 14), and, with **1.4.2**, a disposal
-  whose scale receipt's number is already on the project, and how a tandem's two disposals send
-  one receipt. **Task 1.3.6:** where an incident keeps the truck it concerns; an ROE's setup
-  version and what a monitor may change on one after their shift. **Task 1.3.7:** the harness's
+  stump "as a circumference".~~ **Decided (ADR-325):** a debris type held to its own project's form for its workflow, a field tag and a pay item to its project; a suffix only on a collection or a haul-out collection, capital letters; the rest taken, for a flag. ~~**Task 1.3.5:** `FieldEvent.scaleReceiptId` joins with `ScaleReceipt` (only on a disposal and a haul-out disposal; `guard_table` and `guard_viewer` rerun; AC-04-38, 39, 52, 75), and whether a count and a scale receipt together are taken.~~ **Done (ADR-326): joined; a count, or a load call, beside a scale receipt is taken.** ~~**Task 1.3.6:** `FieldEvent.roeId` joins with `Roe` (AC-04-82's other half).~~ **Done (ADR-327).** **Task 1.3.7:** the harness's phone sends the kind-specific details (`RecordedEvent` has none yet), and its intake reads the debris type's form from the project and workflow. **Tasks 1.5.5 and 1.5.7:** no flag exists for a unit rate ticket with no kind of work, payable type or count, a pile with no load call, an item that isn't its kind of work's, a pay item that isn't its payable type's, hours that aren't quarter hours, or a stump read as a circumference; each is decided there. **Task 1.5.4:** which quantity bills on a disposal that holds both a load call and a count. **Task 1.8.3:** how a correction takes an item line or a carried ticket off (nothing is deleted), and that a field event with lines can't change kind. ~~**Task 1.3.5:** a ticket's photographs (each event's own; where
+  eight is counted), a copied certification's (C61 point 14), and how a tandem's two disposals send
+  one receipt.~~ **Decided (ADR-326):** each field event's own, the database counts none; a copy holds none of its own; one receipt whose id both disposals carry. **Task 1.4.2:** a disposal
+  whose scale receipt's number is already on the project (the receipt is refused; the monitor's record must not be lost). ~~**Task 1.3.6:** where an incident keeps the truck it concerns; an ROE's setup
+  version and what a monitor may change on one after their shift.~~ **Decided (ADR-327):** in its parties and description, no certification named; no setup version, edited freely and audited (what a phone offers after the shift: Phase 3). **Task 1.3.7:** the harness's
   cancelled field event and a re-entered number that doesn't match. **Tasks 1.5.5 and 1.5.7:**
   the catalogue has no flag for a control ticket scanned outside its ranges, a certification of
   the wrong kind, a split on a project that doesn't allow one, or a count of 2 where *Count is
   always 1*: each is decided there, a new flag needing its ADR.
 - **C20.** The worker's one transaction per group, one run per project, and flagged-and-skipped groups
   (REQ-015, KD-55) use one `$write` per group (ADR-273 (3)).
-- **C64. What numbering left for later** (ADR-323). **Task 1.3.6** (ROEs): a phone-made ROE's number is the next of its phone's ROE block, written by `NumberSeriesRules('ROE').written` (`R-0007`); a typed paper number kept as typed. **Task 1.3.7** (the harness's phones): a phone gives its field event the next number of its block (`PhoneNumbers.next`), and a certifying phone its cert number. **Task 1.4.2 / Phase 2** (sync): the sync carries each series' last used number and calls `NumberAllocator.topUp`; a top-up thrown because the series moved on is asked again; a lost phone's blocks are retired after its last sync and wipe (ADR-134), a reset phone's reclaimed. **Task 1.5.5:** whether a control ticket scanned outside the entered ranges is flagged after sync (no such flag in the catalogue). **Phase 4:** setup's screen suggests a cert-number seed "that doesn't look made up" (Q-96); today the firm states it, and a project without one types its cert numbers. **Not guarded, on purpose:** a series' next number going back (the exclusion constraint then refuses the block).
+- **C65. What scale receipts and photographs left for later** (ADR-326). ✅ **Task 1.3.6's part done (ADR-327).** ~~**Task 1.3.6** (ROEs and
+  forms):~~ `Photo` gains `roeId`, `surveyId`, `incidentId` and `dropOffLogId`, each held to the
+  photograph's own project; `photo_owner_check` is dropped and written again with them, and
+  `guard_table('photo', 'EVIDENCE', 'RECORDS')` and `guard_viewer('photo', 'PROJECT', hidden =>
+  ARRAY['object_key', 'depth_object_key'])` are rerun; the exact lists follow (`correctable` in
+  `grants.test.ts`, the check in `catalog.test.ts`, AC-04-76's column list). **Task 1.4.2**
+  (intake): `quarantinedRecordId` the same way; intake writes a scale receipt before the
+  disposals that point at it, takes a tandem's second disposal with the receipt already there (the
+  same id), and decides what it does with a disposal whose receipt's number is already on the
+  project under another id (C63 point 14); it writes a photograph's record with its fingerprints
+  and key. **Tasks 1.5.4, 1.5.5 and 1.5.7** (quantities and flags): a tandem's shares; a weight
+  needed but missing; a net that isn't its gross less its tare, a net of nought or below; a
+  receipt whose site isn't the disposal's, or isn't a Final Disposal site; a receipt on two
+  trips; a certification's missing view (`CERTIFICATION_PHOTO_MISSING`); fewer photographs than
+  a pay item requires. **Task 1.7.1:** a contractor user's sight of its own tickets' scale
+  receipts and photographs (C18). **Task 1.8.3:** a correction that moves a photograph to another
+  owner; nothing corrects a fingerprint or a key. **Phase 2:** who makes `objectKey`, the upload
+  that sets `uploadedAt`, and the check of the uploaded file against `uploadedSha256`. **Phase
+  4:** a copied certification shows its original's photographs (through `copiedFromId`) to a
+  viewer given only the copy's project; the review of photographs inside a ticket.
+- **C66. What ROEs and forms left for later** (ADR-327). **Task 1.3.7** (the harness's phones): a
+  phone makes an ROE with the next number of its ROE block and sends a collection's `roeNumber`.
+  **Task 1.4.2** (intake): it looks the ROE up by number on the field event's and the survey's
+  project and writes `roeId` (and again when a later ROE arrives with that number); it runs
+  `formAnswersSchema` on a form's answers against the version answered, and decides what it does
+  with answers that don't fit (the monitor's record must not be lost); an ROE whose number is
+  already on the project. **Task 1.5.7** (flags): `ROE_MISSING`, `ROE_NOT_ON_PROJECT`, an unsigned
+  ROE, `ROE_OUT_OF_SCOPE` from the scope lines, `NO_PRE_WORK_SURVEY`; whether an ROE with a signed
+  date but not marked signed, or a scope line's payable type that no unit rate pay item of the
+  project has, is flagged. **Task 1.6.4** (the setup check) or the ROE's setup service: offering
+  only the project's unit rate payable types as scope. **Task 1.7.1:** a contractor user's sight
+  (none today). **Task 1.8.2:** the QC mark on an ROE and on each form (REQ-107's last part).
+  **Task 1.8.3:** a correction to a form; taking a scope line off. **Phase 2:** the endpoints
+  that make and edit an ROE and take a form in. **Phase 3:** what a phone lets a monitor change
+  on an ROE after their shift; "GPS required" asked by the phone; a photo field's capture.
+  **Phase 4:** the exports' columns for the firm's fields; whether an incident should name the
+  certification it concerns as a real column (today its parties and description).
+- **C67. What the user's replies of 2026-10-04 changed** (ADR-328). Each is built as its own
+  task, before the task that would otherwise build on the old shape: **(a) certifications are
+  never copied**: take out `Certifications.copy`, `CertificationChanges`' copy rule, the
+  allocator's use in it, `copiedFromId` (a new migration, never an edit), the story
+  `certification`'s copy, AC-03's copy scenarios, `adms-certifications`' copy lines,
+  DATA-MODEL and C65's copied-photographs point; **(b) a scale receipt's number isn't unique**:
+  drop `@@unique([projectId, receiptNumber])` by a new migration, its test, AC-04's scenario,
+  DATA-MODEL §8, `adms-scale-receipts` ("unique per project", "the same receipt number on a
+  later trip"); C63 point 14 falls away; **(c) an incident's optional contractor, cert number
+  and ROE number**, and the project's setting of which are offered; **(d) a viewer's sight of
+  private citizens' names**, set per viewer (hide an ROE's owner and contact details and a
+  drop-off log's resident and address from a viewer the firm marked). (a) and (b) come before
+  1.3.7's story and 1.4.2's intake; (c) and (d) before 1.4.2 takes forms in.
+  **From ADR-329:** **(e) a photograph's archive mark and label** (two columns, a new
+  migration; the back office's remove and label, audited); **(f) task 1.4.2's intake** keeps a
+  field event whose GPS fix is impossible, without the fix, and flags it; **(g) new flags to
+  word with the user** (1.5.5, 1.5.7): two quantities on one disposal, GPS unreadable, not a
+  valid ticket number, the wrong kind of badge, a detail the phone should have required.
+- **C64. What numbering left for later** (ADR-323). **Task 1.3.6** (ROEs): a phone-made ROE's number is the next of its phone's ROE block, written by `NumberSeriesRules('ROE').written` (`R-0007`); a typed paper number kept as typed. *(ADR-327: `roe.roe_number` keeps either as written; the phone that takes the next of its block is the harness's, 1.3.7, and intake's, 1.4.2.)* **Task 1.3.7** (the harness's phones): a phone gives its field event the next number of its block (`PhoneNumbers.next`), and a certifying phone its cert number. **Task 1.4.2 / Phase 2** (sync): the sync carries each series' last used number and calls `NumberAllocator.topUp`; a top-up thrown because the series moved on is asked again; a lost phone's blocks are retired after its last sync and wipe (ADR-134), a reset phone's reclaimed. **Task 1.5.5:** whether a control ticket scanned outside the entered ranges is flagged after sync (no such flag in the catalogue). **Phase 4:** setup's screen suggests a cert-number seed "that doesn't look made up" (Q-96); today the firm states it, and a project without one types its cert numbers. **Not guarded, on purpose:** a series' next number going back (the exclusion constraint then refuses the block).
 
 **For Phase 2 (API, worker, apps) and the demo deploy**
 - **C21.** Sign-in refuses role `SYSTEM`; the system actor never gets a password (ADR-273 (4)). A

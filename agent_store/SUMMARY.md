@@ -1,13 +1,13 @@
 # Open ADMS — Current decisions and gaps, at a glance
 
 **The present tense of the project on one page.** `DECISIONS.md` and `DEVIATIONS.md` are the full
-history, with 325 ADRs and 70 KDs, many superseded. This page says what is true **now** and which
+history, with 329 ADRs and 70 KDs, many superseded. This page says what is true **now** and which
 entries to cite. The reasons live in the ADRs and the skills.
 
 - **Keep it current:** when you add, amend or supersede an ADR, or open or close a KD, update this
   page **in the same response** (`adms-decisions`).
 - **If this page and a log entry disagree,** the newest ADR wins: fix this page and say so.
-- Updated 2026-10-03, through ADR-325 / KD-70. **Task 1.3.4, what each kind of field event records, is done (ADR-325; see "Field events").** Task 1.3.3, what every field event records, is done (ADR-324). Task 1.3.2, numbering, is done (ADR-323; see "Tickets and numbers"). Rounds 13–26 are answered (ADR-145…228).
+- Updated 2026-10-04, through ADR-329 / KD-70. **The user answered the agent defaults of 1.3.2…1.3.6 (ADR-328; §4): certifications are never copied, a scale receipt's number is never unique, an incident may name a contractor, cert number and ROE number, a viewer's sight of private citizens' names is the firm's choice. Not built yet (BACKLOG C67).** **Task 1.3.6, ROEs and forms, is done (ADR-327; see "Field events").** Task 1.3.5, scale receipts and photographs, is done (ADR-326). Task 1.3.4, what each kind of field event records, is done (ADR-325). Task 1.3.3, what every field event records, is done (ADR-324). Task 1.3.2, numbering, is done (ADR-323; see "Tickets and numbers"). Rounds 13–26 are answered (ADR-145…228).
   **Phase 1 (data core and engine, rebuilt) is open, at the user's word (ADR-299).** Its plan is
   `BACKLOG.md`'s ten milestones and 47 tasks, one task per response, each milestone opening with
   its part's acceptance scenarios in `spec/acceptance/` (ADR-300). Done: the plan,
@@ -68,7 +68,9 @@ entries to cite. The reasons live in the ADRs and the skills.
   day's story (1.3.7); eighteen unsettled points listed for the task that decides each, C63).
   **1.3.2, numbering** (ADR-323), **1.3.3, what every field event records** (ADR-324) and
   **1.3.4, what each kind records** (ADR-325: 62 of Part 4's 98 scenarios pass, three more in
-  part; 67 of Part 1's 82). **Next: task 1.3.5, scale receipts and photographs.**
+  part; 67 of Part 1's 82) and **1.3.5, scale receipts and photographs** (ADR-326: 73 of Part 4's
+  98 pass, one more in part; 39 of Part 3's 60) and **1.3.6, ROEs and forms** (ADR-327: 84 of Part
+  4's 98 pass, none in part). **Next: task 1.3.7, the harness's phones capture every kind.**
   **Corrected by the user 2026-10-02 (ADR-301):** a pay item's **code is unique on its project**
   (ADR-147 had it backwards); a pay item is its code and its **description**, with no separate name
   and no "line number"; **an exact duplicate of a rule is refused before it is saved**.
@@ -625,7 +627,8 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   whether photos are **required** is a **pay item** setting; too few is flagged, never blocked
   (a hazardous tree: 1 pre, 1 measure, 1 post); no minimum unless required, then 1. **A
   certification takes five photos**: operator with placard, interior/back, right, left, front. [157,
-  179, 181]
+  179, 181] **The record is built (ADR-326; see "Field events"):** one owner, two fingerprints,
+  the file's place written once; the 8 is the phone's rule, never the database's.
 - **A load's time is its collection's end** (haul-outs too); a disposal's time is its disposal's
   end. The active window, the *Ticket date* criterion and daily counts use the load's time: a Monday
   preload dumped Tuesday is Monday's, at Monday's rate. [161, 181]
@@ -809,8 +812,8 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   by its number is intake's and the worker's (1.4.2, 1.5.2). Sixty models, forty-seven
   migrations. *Agent defaults, but for the C44 check, which DATA-MODEL §8 approved.*
 - **What each kind records, as built (task 1.3.4)** [325]: `spec/DATA-MODEL.md` §4.1 (2)'s
-  columns, but for the scale receipt and the ROE found, which join with their own tables (1.3.5,
-  1.3.6). **None is required, on any kind**: a pick that didn't reach the server is a flag's.
+  columns, but for the ROE found, which joins with its own table (1.3.6; the scale receipt
+  joined in 1.3.5, ADR-326). **None is required, on any kind**: a pick that didn't reach the server is a flag's.
   **The database refuses a detail on a kind that doesn't record it**: a debris type on unit rate
   work; a field tag at a tower or a haul-out's final site; an ROE number off a collection or unit
   rate work; an estimate off a collection; a carried count off a disposal; a kind of work,
@@ -834,6 +837,58 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   asks it; a database test holds the database to the same table. How a correction takes an item
   line or a carried ticket off is task 1.8.3's. Sixty-two models, forty-nine migrations. *Agent
   defaults.*
+- **Scale receipts and photographs, as built (task 1.3.5)** [326]: **`ScaleReceipt`**
+  (`spec/DATA-MODEL.md` §4.2): its own record, apart from any ticket; the site's number **exactly
+  as written**, once per project; its site one of its own project's; who entered it (never the
+  system actor), when, on which phone if any. **Every weight is what the paper says**: all four
+  may be missing (a receipt-book slip), none is worked out from another, a net of nought or
+  below nought is kept for a flag; only a gross or a tare below nought is refused.
+  **`FieldEvent.scaleReceiptId`**: only on a disposal and a haul-out disposal, only a receipt of
+  its own project; **a load call or a count beside it is taken** (which bills: 1.5.4). **A
+  tandem weighed once is one receipt both disposals point at**; no field event holds a weight
+  and no share sits on the receipt. **`Photo`** (§4.4): the record only, the file is storage's;
+  **exactly one owner, of its own project**: a field event, a certification or a scale receipt
+  today (an ROE, a survey, an incident and a drop-off log join in 1.3.6, a quarantined record in
+  1.4.2, C65); a **view** (`PhotoView`, the five) only on a certification's photograph, never
+  required; when and where it was taken, the phone; **two fingerprints (SHA-256, 64 lower-case
+  hex digits) and two places in storage, each place unique, all four written once** (a trigger
+  refuses any change to them, by anyone); its owner, time, place and `uploadedAt` are corrected
+  as evidence is. **The database counts no photographs** ("at most 8" stays the phone's rule;
+  each belongs to the field event that took it). **A copied certification holds no photograph
+  of its own**: its photographs are the original's, through `copiedFromId`. Both tables are
+  evidence, audited in the records domain; a client user and an auditor see their projects'
+  receipts and photographs' records, **never where a file is kept**; a contractor user none
+  until 1.7.1. **Not checked, on purpose** (flags, 1.5.x): net against gross less tare; the
+  receipt's site against the disposal's, or its type; one trip per receipt; a missing view.
+  `fieldEventDetails` and `fieldEventDetailsSchema` hold the new link. No service, intake or
+  story yet (1.4.2, 1.3.7). Sixty-four models, fifty-one migrations. *Agent defaults.*
+- **ROEs and forms, as built (task 1.3.6)** [327]: **`Roe`** is configuration (ADR-294), in the
+  records domain: edited freely by the API, audited, never deleted, no archive. Its number
+  (issued, `R-0007`, or typed off the paper) is not blank and once per project; only the number,
+  `signed`, `answers` and `source` are required, so one can be set up with its number alone. A
+  phone's says who made it, the phone, the assignment and the phone's time; a back-office one
+  has no phone, assignment or offset. **No setup version.** **`RoeScopeItem`**: exactly one of
+  a debris type (an entry of its own project's **load** form, held by foreign keys) and a
+  payable type, each once per ROE; a count of 1 or more, never checked; taken off by archiving.
+  That a payable type is among the project's unit rate pay items isn't held by the database.
+  **`Survey`, `Incident`, `DropOffLog`** are evidence in the records domain, with no status and
+  no worker column: "its time" is `madeAt`; one check tells a phone's (phone, assignment, setup
+  version) from one created in the back office (person, reason); a whole fix on the earth, or
+  none. A survey's ROE and a drop-off log's site are its own project's; a survey has no unique
+  key; **an incident names no certification** (the truck is in its parties and description)
+  and its sub-type isn't held to its type. **The firm's own fields:** `answers` is an object;
+  the definition answered comes with its form and document type, all three or none, of its own
+  project's form of the record's kind; **no definition means `{}`** (`formDefinitionId` is
+  optional: a form with no added field has no definition). **The answers' schema is
+  `packages/contracts`' `formAnswersSchema(fields)`**, made from the version answered (text
+  not blank, a number, yes or no, one of a pick's choices, a photograph's id; required fields
+  answered; no unknown field); the database doesn't run it. **`FieldEvent.roeId`** only on a
+  collection and a unit rate event, its own project's, not held to match `roeNumber`.
+  **`Photo`** has seven owners (the four new ones of its own project). A client user and an
+  auditor see all five tables with their project, every column; a contractor user none.
+  **Not checked, on purpose** (flags, 1.5.7): an unsigned or missing ROE, work out of scope, a
+  post-work survey with no pre-work survey. No service, intake or story yet (1.4.2, 1.3.7).
+  Sixty-nine models, fifty-three migrations. *Agent defaults.*
 - **An outside design review** (contract-first templates, a state machine replacing rules, a billing
   matrix, hard field checks) was weighed: only the event idea is taken; each other point is already
   ours or declined, with the reason, in ADR-238. [238]
@@ -1143,7 +1198,8 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   quantity is asked, never both** (ADR-175, ADR-221, ADR-223; how a site's phones learn which: ADR-227);
   there is **no weight-vs-load-call check**. **One weight shared by a tandem** is split **by certified capacity**
   (derived, stored apart, summing exactly) and **both tickets are flagged**; weighing each container
-  separately avoids it. [165, 175]
+  separately avoids it. [165, 175] **The record is built (ADR-326; see "Field events"):** its
+  own table, the number once per project, weights as written, pointed at by disposals.
 
 ### Agent tooling and terms
 - Front door `spec/INDEX.md`; rules in skills; product questions in `spec/QUESTIONS.md`; the
@@ -1386,7 +1442,39 @@ its scenario.
 
 ## 4. Waiting on the user
 
-**Nothing blocks the next task (1.3.5, scale receipts and photographs).**
+**Nothing blocks the next task (1.3.7, the harness's phones capture every kind).**
+- **Decided by the user 2026-10-04 (ADR-328), not built yet (BACKLOG C67); the lines above and
+  below that say otherwise are superseded:** **a certification is never copied** (configuration
+  is: pay items, rules); **a scale receipt's number is never unique** (a receipt book restarts
+  at 001; only a duplicate *record* matters); **an incident may name a contractor, a cert number
+  and an ROE number**, each optional, offered as the project's setup says; **a viewer sees
+  private citizens by name unless the firm said otherwise for that viewer**, set when it adds
+  them. Confirmed as built: loose ROE scope and incident sub-type; no database limit of 8
+  photographs; `MeasuredAs`; 0 CY; `formDefinitionId` optional.
+- **The user's second round, 2026-10-04 (ADR-329), not built yet (C67):** **the phone prevents a
+  broken record; one that reaches the server anyway is kept and flagged** (a missing kind of
+  work, debris type or load call; a typed number with no reason; a load on a crew's badge; a
+  net that isn't gross less tare; a ticket number that isn't digits; an end before a start).
+  **An impossible GPS fix is dropped at intake with a flag and the record kept** (1.4.2). **A
+  disposal with two quantities is flagged.** **A truck on a second project is certified there
+  from scratch.** **The back office can archive and label a photograph.** A load of white goods
+  never has a load call (`adms-ticket-workflows` §4.2b, unchanged). Nothing waits on the user.
+- **From task 1.3.6 (ADR-327), yours to overturn:** **an incident names no certification** (the
+  truck it concerns is written in its parties and description); **an ROE carries no setup
+  version**, and the database lets the back office and a phone edit one freely, audited;
+  **a record on a form with no fields of the firm's own has no definition** and empty answers;
+  **a photograph field's answer is that photograph's id**; an incident's sub-type isn't held to
+  its type, nor an ROE's payable type to the project's unit rate pay items, by the database;
+  a client user and an auditor see an ROE's owner and a drop-off log's resident by name.
+- **From task 1.3.5 (ADR-326), yours to overturn:** **a scale receipt's weights are kept as
+  written and none is required or worked out** (a net that isn't its gross less its tare, or is
+  nought or below, is received and left for a flag; only a gross or tare below nought is
+  refused); **a load call or a count beside a scale receipt is received**; **the database holds
+  no limit of 8 photographs a ticket** (the phone's rule); **a certification copied to another
+  project holds no photographs of its own and shows its original's**; a photograph's
+  fingerprints and its file's place can never be changed, by anyone; a certification's
+  photograph may have no view (a crew's); **a client user and an auditor see a photograph's
+  record but not where its file is kept**.
 - **From task 1.3.4 (ADR-325), yours to overturn:** **no detail of a field event is required**
   (a unit rate ticket with no kind of work or count, a load with no debris type, a pile with no
   load call are all received and left for a flag); **a disposal that arrives with both a load

@@ -2,9 +2,9 @@
 name: adms-scale-receipts
 description: Open ADMS scale receipts, in today's rules. Covers when a scale receipt exists at all (destination decides, the contract decides whether it matters), what one actually is (a hand-transcribed third-party paper, a real weighing or only a lineage token), why it is its own record referenced by several field events and consumed once, one quantity never both (the tower takes the weight instead of a load call where the site's lookup says the paying pay items are by weight), one weight shared by a tandem split by certified capacity and flagged, why there is no weight-vs-load-call check, and the cases to handle rather than assume. Use when touching weights, tonnage, TN billing, scale receipt numbers, final disposal sites or tandems.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-252; haul-outs, ADR-295) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-252; haul-outs, ADR-295; the record built, ADR-326) -->
 
-> **This page states today's rules** (last changed by ADR-295, as its status line lists). Each rule cites its ADR; what changed is in
+> **This page states today's rules** (last changed by ADR-326, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
 > `agent_store/SUMMARY.md` disagree, SUMMARY wins: log a KD (`adms-decisions`). Names and examples
 > follow `spec/CONVENTIONS.md`. The industry says "scale ticket"; **it is not a ticket** and never
@@ -85,6 +85,9 @@ never. **A site won't produce a weight the contract doesn't ask for**, and that'
    Weight columns on each disposal event would duplicate one weighing across two rows and invite
    summing them: **billing 34.20 tons for a 17.10-ton load**. So a scale receipt is **its own record**
    that the disposal events point at (REQ-126a).
+   **Built (ADR-326):** `ScaleReceipt`, with the number kept exactly as written and every weight
+   optional and never worked out; a disposal or a haul-out disposal points at it
+   (`scaleReceiptId`), and a tandem's two disposals at the one row.
 3. **It is consumed once.** A receipt attached to a second, unrelated load is a direct double-billing
    vector: its number is **unique per project**, and every field event on it must belong to the same
    physical trip. Duplicates arrive by **transcription error**, not re-scanning: look there first.
@@ -173,7 +176,8 @@ What this page used to say, and why it changed. Never build from the left-hand s
 - "A receipt with two debris types is voided by default", "the engine never writes VOID" → both
   flagged, weight unused; a person voids, or a firm's rule (ADR-069, 118).
 - "None of this is built" (KD-24) → nothing is built yet; the requirements are REQ-126a, 126b, 126d,
-  126e (ADR-093).
+  126e (ADR-093) → the record is built (REQ-126a, ADR-326); the shares, the flags and the
+  lookup are tasks 1.5.4, 1.5.x and 1.6.4.
 - The worked example (tickets `10101`/`10102`, certs 4471/4472, "Rivera Landfill", receipt `SH-88241`)
   → the example world (ADR-235).
 - The ⚠️ notes of ADR-165, 175 and 223 stacked on the historical body → absorbed; rewritten in the

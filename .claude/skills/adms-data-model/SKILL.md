@@ -2,9 +2,9 @@
 name: adms-data-model
 description: Open ADMS data model, in today's rules. Covers the records and how they link (Client → DeclarationEvent → Project, contractors and contracts, forms and debris types, pay items with a rate per prime, rules naming one contract, sites, certifications, users, devices and assignments, time-clock entries, FieldEvent and the CompletedLoad / CompletedHaulOut drawn from it, transactions, flags, AuditRecord), why reference data is editable, evidence correctable only by permission and the derived records and audit never by a person, which lists are fixed in code and which the firm extends (built-in keys plus the firm's own values), identifiers, uniqueness, coordinates and time, and which package and database role may write what. Use when touching the Prisma schema, adding or changing a model, a list, a relation or a constraint, or deciding where a write belongs. Field names are spec/DATA-MODEL.md's; what each setup record and field event holds is adms-ticket-workflows.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-245; ADR-246; the Phase 0 models built, ADR-281; the pay item's first shape and `spec/DATA-MODEL.md` drafted, ADR-284, 286; the page approved, ADR-289; a pay item's unique code and description, ADR-301; the firm's lists built, ADR-302; the client, the declaration event and the project built, ADR-303; contractors on a project and contracts built, ADR-305; a contractor's contact details, ADR-306; forms, the debris types on them and the firm's own fields built, ADR-308; pay items in full, ADR-309; sites and the project map built, a site keeping several tipping fee pay items, ADR-311; rules built, ADR-313; people's permissions and viewers, ADR-315; certifications, ADR-321; what every field event records, ADR-324; what each kind records, ADR-325) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-245; ADR-246; the Phase 0 models built, ADR-281; the pay item's first shape and `spec/DATA-MODEL.md` drafted, ADR-284, 286; the page approved, ADR-289; a pay item's unique code and description, ADR-301; the firm's lists built, ADR-302; the client, the declaration event and the project built, ADR-303; contractors on a project and contracts built, ADR-305; a contractor's contact details, ADR-306; forms, the debris types on them and the firm's own fields built, ADR-308; pay items in full, ADR-309; sites and the project map built, a site keeping several tipping fee pay items, ADR-311; rules built, ADR-313; people's permissions and viewers, ADR-315; certifications, ADR-321; what every field event records, ADR-324; what each kind records, ADR-325; scale receipts and photographs, ADR-326; ROEs and forms, ADR-327) -->
 
-> **This page states today's rules** (last changed by ADR-325, as its status line lists). Each rule cites its ADR; what changed is in
+> **This page states today's rules** (last changed by ADR-327, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
 > `agent_store/SUMMARY.md` disagree, SUMMARY wins: log a KD (`adms-decisions`). The worked example
 > is `spec/golden/MISSION.md`; names and examples follow `spec/CONVENTIONS.md` (§3 for code names).
@@ -195,8 +195,8 @@ changed" (ADR-166).
   with `fieldEventLike` or `backOfficeEventLike` and `eventInsertOf`. A client user and an
   auditor see every column, and the monitor's name and Monitor ID through
   `viewer_field_event_monitor`.
-- **Built (ADR-325): the kind-specific columns** (`spec/DATA-MODEL.md` §4.1 (2)), but for the
-  scale receipt and the ROE found, which join with their own tables (1.3.5, 1.3.6). **None is
+- **Built (ADR-325): the kind-specific columns** (`spec/DATA-MODEL.md` §4.1 (2); the ROE found
+  joined with its own table, ADR-327). **None is
   required**: a pick that didn't reach the server is a flag's. The database refuses a detail on
   a kind that doesn't record it; the same table is `packages/domain`'s `fieldEventDetails`
   (`FieldEventDetails` says what a kind records and why a record isn't one; `packages/contracts`'
@@ -211,6 +211,39 @@ changed" (ADR-166).
   **`CarriedTicket`** (the numbers a load's collection lists, as written, each once) repeat
   their field event's kind, so each sits only where it belongs; evidence, audited in the records
   domain, seen by a viewer with its field event.
+- **Built (ADR-326): scale receipts and photographs** (`spec/DATA-MODEL.md` §4.2, §4.4).
+  **`ScaleReceipt`** is its own evidence record: the site's number exactly as written, once per
+  project; its site its own project's; every weight what the paper says, each optional, none
+  worked out (a net of nought or below is kept for a flag; a gross or tare below nought is
+  refused). A field event's `scaleReceiptId` is taken only on a disposal and a haul-out
+  disposal, for a receipt of its own project, a load call or a count beside it included; a
+  tandem's one receipt is one row both disposals point at. **`Photo`** is the record only (the
+  file is storage's): exactly one owner of its own project (a field event, a certification or a
+  scale receipt; an ROE, a survey, an incident or a drop-off log since ADR-327; quarantine's
+  joins with its table, 1.4.2); a
+  `view` only on a certification's; two fingerprints and two unique places in storage, **written
+  once** (a trigger refuses a change, by anyone); the database counts none ("at most 8" is the
+  phone's); a copied certification holds none of its own (the original's, through
+  `copiedFromId`). Both are audited in the records domain; a client user and an auditor see
+  them with their project, a photograph without `objectKey` and `depthObjectKey`. A test writes
+  them with `scaleReceiptLike`, `photoLike` and `phoneInsertOf`.
+- **Built (ADR-327): ROEs and forms** (`spec/DATA-MODEL.md` "ROEs", §4.3). **`Roe`** is
+  configuration in the records domain: its number once per project, not blank; only the number,
+  `signed`, `answers` and `source` required; a phone's with who made it, the phone, the
+  assignment and its time, a back-office one with no phone; no setup version, no archive.
+  **`RoeScopeItem`** repeats its ROE's project: exactly one of an entry of its own project's
+  load form (with `formId` and `formDocumentType` `LOAD`) and a payable type, each once per ROE,
+  a count of 1 or more. **`Survey`, `Incident`, `DropOffLog`** are evidence in the records
+  domain, with no status and no worker column; "its time" is `madeAt`; one check tells a
+  phone's (phone, assignment, setup version) from one created in the back office (person,
+  reason), as on a field event. A survey's `roeId` and a drop-off log's `siteId` are its own
+  project's; an incident names no certification. **Each record's `answers`** is an object, and
+  `formDefinitionId` comes with `formId` and `formDocumentType` (the record's own kind), all
+  three or none, of its own project's form; with no definition the answers are `{}`. The
+  answers' schema is `packages/contracts`' `formAnswersSchema(fields)`, made from the version
+  answered. **`FieldEvent.roeId`**: only on a collection and a unit rate event, its own
+  project's. **`Photo`** has seven owners. A client user and an auditor see all five tables
+  with their project. A test writes them with `roeLike`, `formLike` and `backOfficeFormLike`.
 - **A ticket is its number and its events**: grouped on **project + workflow + bare number**, the
   split suffix stripped; never on a label, a type or any other field (ADR-019, 033, 062). **One
   event of each kind per ticket** (one collection per split suffix); a second is a duplicate, held in
