@@ -7,7 +7,13 @@ import { describe, expect, it } from 'vitest';
 
 import { systemActorId } from '../src/system-actor.ts';
 import { refusedBy } from './support/database.ts';
-import { insertOf, payItemLike, siteLike } from './support/example-world.ts';
+import {
+  eventInsertOf,
+  fieldEventLike,
+  insertOf,
+  payItemLike,
+  siteLike,
+} from './support/example-world.ts';
 import { eachTestRolledBack } from './support/lifecycle.ts';
 
 const tested = eachTestRolledBack();
@@ -358,38 +364,33 @@ describe("an assignment's unit rate pay items", () => {
 });
 
 describe('a field event', () => {
-  const sync = (columns: string, values: string): string =>
-    `INSERT INTO "field_event" ("id", "project_id", "workflow", "kind", "ticket_number", "monitor_id",
-       "device_id", "started_at", "ended_at", "device_utc_offset_minutes"${columns})
-     VALUES (uuidv7(), $1, 'LOAD', 'COLLECTION', '101050', $2, $3, '2026-10-13T13:00:00Z',
-       '2026-10-13T13:25:00Z', -240${values})`;
+  // Ana's collection on load 101050, as her phone sends it; the test changes what it needs.
+  const sync = (more: Record<string, unknown>): [string, unknown[]] =>
+    eventInsertOf(fieldEventLike(tested.world, { ticket_number: '101050', ...more }));
 
   it('AC-02-43 carries its assignment and the setup version of the phone’s lists', async () => {
     const { db, world } = tested;
     await db.as('adms_api');
     await db.actor(world.monitor, 'DEVICE', { deviceId: world.device });
-    const place = [world.p1, world.monitor, world.device];
-    expect((await db.refused(sync('', ''), place)).code).toBe(refusedBy.notNull);
-    expect(
-      (await db.refused(sync(', "assignment_id"', ', $4'), [...place, world.assignments.p1])).code,
-    ).toBe(refusedBy.notNull);
-    expect((await db.refused(sync(', "setup_version"', ', 3'), place)).code).toBe(
-      refusedBy.notNull,
-    );
+    // A phone's record without either is refused by the check that tells it from one created in
+    // the back office (C44, ADR-324).
+    for (const missing of [
+      { assignment_id: null, setup_version: null },
+      { setup_version: null },
+      { assignment_id: null },
+    ]) {
+      expect((await db.refused(...sync(missing))).code, Object.keys(missing).join(' ')).toBe(
+        refusedBy.check,
+      );
+    }
     expect(
       (
-        await db.refused(sync(', "assignment_id", "setup_version"', ', $4, 3'), [
-          ...place,
-          '019a0000-0000-7000-8000-00000000dead',
-        ])
+        await db.refused(
+          ...sync({ assignment_id: '019a0000-0000-7000-8000-00000000dead', setup_version: 3 }),
+        )
       ).code,
     ).toBe(refusedBy.foreignKey);
-    expect(
-      await db.run(sync(', "assignment_id", "setup_version"', ', $4, 3'), [
-        ...place,
-        world.assignments.p1,
-      ]),
-    ).toBe(1);
+    expect(await db.run(...sync({ setup_version: 3 }))).toBe(1);
     expect(
       await db.one(
         `SELECT "assignment_id"::text AS assignment, "setup_version" FROM "field_event"

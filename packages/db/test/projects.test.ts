@@ -7,7 +7,13 @@
 import { describe, expect, it } from 'vitest';
 
 import { refusedBy } from './support/database.ts';
-import { insertOf, projectLike, without } from './support/example-world.ts';
+import {
+  eventInsertOf,
+  fieldEventLike,
+  insertOf,
+  projectLike,
+  without,
+} from './support/example-world.ts';
 import { eachTestRolledBack } from './support/lifecycle.ts';
 
 const tested = eachTestRolledBack();
@@ -402,12 +408,14 @@ describe('a project', () => {
     await db.actor(world.monitor, 'DEVICE', { deviceId: world.device });
     expect(
       await db.run(
-        `INSERT INTO "field_event" ("id", "project_id", "workflow", "kind", "ticket_number",
-           "monitor_id", "device_id", "assignment_id", "setup_version", "started_at", "ended_at",
-           "device_utc_offset_minutes")
-         VALUES (uuidv7(), $1, 'LOAD', 'COLLECTION', '101090', $2, $3, $4, 1,
-           '2027-03-02T09:00:00-05:00', '2027-03-02T09:25:00-05:00', -300)`,
-        [world.p1, world.monitor, world.device, world.assignments.p1],
+        ...eventInsertOf(
+          fieldEventLike(world, {
+            ticket_number: '101090',
+            started_at: '2027-03-02T09:00:00-05:00',
+            ended_at: '2027-03-02T09:25:00-05:00',
+            device_utc_offset_minutes: -300,
+          }),
+        ),
       ),
     ).toBe(1);
   });

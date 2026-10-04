@@ -4,7 +4,13 @@
 import { describe, expect, it } from 'vitest';
 
 import { refusedBy } from './support/database.ts';
-import { insertOf, primeOn, projectLike } from './support/example-world.ts';
+import {
+  eventInsertOf,
+  fieldEventLike,
+  insertOf,
+  primeOn,
+  projectLike,
+} from './support/example-world.ts';
 import { eachTestRolledBack } from './support/lifecycle.ts';
 import { listTables } from './support/lists.ts';
 import { unseenTables, viewedTables, viewerSights } from './support/viewers.ts';
@@ -44,6 +50,8 @@ const tableGrants: Record<string, Record<string, string>> = {
   map_version: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },
   zone: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },
   number_block: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
+  project_number_series: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
+  control_range: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   assignment: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   pay_item: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   // A pay item's rate for each prime, and a crew day's steps (ADR-309).
@@ -69,6 +77,9 @@ const tableGrants: Record<string, Record<string, string>> = {
   // The API writes people, so the Monitor ID's default runs as it (ADR-281).
   monitor_number_seq: { adms_api: 'USAGE' },
   field_event: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },
+  // An itemised unit rate event's lines and the tickets a load carries: evidence (ADR-325).
+  field_event_item: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },
+  carried_ticket: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },
   completed_load: { adms_api: 'SELECT', adms_worker: 'INSERT SELECT UPDATE' },
   transaction: { adms_api: 'SELECT', adms_worker: 'DELETE INSERT SELECT' },
   invoice_lock: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },
@@ -79,6 +90,8 @@ const tableGrants: Record<string, Record<string, string>> = {
   viewer_transaction: { adms_readonly: 'SELECT' },
   // A project's setup, for a client user and an auditor (ADR-315).
   viewer_project_setup: { adms_readonly: 'SELECT' },
+  // Who recorded a field event: a monitor's name and Monitor ID (ADR-324).
+  viewer_field_event_monitor: { adms_readonly: 'SELECT' },
   ...Object.fromEntries(
     viewedTables.map((table) => [`viewer_${table}`, { adms_readonly: 'SELECT' }]),
   ),
@@ -102,20 +115,51 @@ const captured = [
   'load_call',
   'assignment_id',
   'setup_version',
+  'address',
+  'address_source',
+  'cert_keyed_by_hand',
+  'cert_number',
+  'certification_id',
+  'created_by_id',
+  'created_reason_id',
+  'notes',
+  'number_typed',
+  'number_typed_reason_id',
+  'site_id',
+  'source',
+  'start_latitude',
+  'start_longitude',
+  'temporary_session',
+  'typed_capacity_cy',
+  // What each kind records (ADR-325).
+  'carried_count',
+  'estimate_cy',
+  'field_tag_id',
+  'form_debris_type_id',
+  'form_document_type',
+  'form_id',
+  'kind_of_work_id',
+  'marked_ineligible',
+  'measured_as',
+  'measurement_inches',
+  'pay_item_id',
+  'payable_type_id',
+  'roe_number',
+  'root_ball_half_exposed',
+  'root_ball_inches',
+  'survey_number',
+  'unit_count',
 ];
+// What the API corrects on an item line and on a carried ticket: all but the id and created time.
+const correctable: Record<string, string[]> = {
+  field_event_item: ['field_event_id', 'field_event_kind', 'item_name_id', 'quantity'],
+  carried_ticket: ['field_event_id', 'field_event_kind', 'carried_ticket_number'],
+};
 // What the viewer views show, read through their base tables (row-level security applies there).
 const viewerColumns: Record<string, string[]> = {
   project: ['id', 'name', 'time_zone', 'created_at', 'closed_at'],
-  field_event: [
-    'id',
-    ...captured.slice(0, 10),
-    'received_at',
-    'end_latitude',
-    'end_longitude',
-    'load_call',
-    'status',
-    'reconciled_at',
-  ],
+  // Every column of a field event, since guard_viewer wrote its view (ADR-324).
+  field_event: ['id', 'received_at', 'status', 'reconciled_at', ...captured],
   completed_load: [
     'id',
     'project_id',
@@ -140,6 +184,9 @@ const columnGrants = [
   ...captured.map((column) => `field_event.${column} adms_api UPDATE`),
   'field_event.status adms_worker UPDATE',
   'field_event.reconciled_at adms_worker UPDATE',
+  ...Object.entries(correctable).flatMap(([table, columns]) =>
+    columns.map((column) => `${table}.${column} adms_api UPDATE`),
+  ),
   ...Object.entries(viewerColumns).flatMap(([table, columns]) =>
     columns.map((column) => `${table}.${column} adms_readonly SELECT`),
   ),
@@ -284,16 +331,9 @@ describe('the API (adms_api)', () => {
         world.p2,
       ]),
     ).toBe(1);
-    expect(
-      await db.run(
-        `INSERT INTO "field_event" ("id", "project_id", "workflow", "kind", "ticket_number",
-           "monitor_id", "device_id", "assignment_id", "setup_version", "started_at", "ended_at",
-           "device_utc_offset_minutes")
-         VALUES (uuidv7(), $1, 'LOAD', 'COLLECTION', '101003', $2, $3, $4, 1,
-           '2026-10-12T15:00:00Z', '2026-10-12T15:20:00Z', -240)`,
-        [world.p1, world.monitor, world.device, world.assignments.p1],
-      ),
-    ).toBe(1);
+    expect(await db.run(...eventInsertOf(fieldEventLike(world, { ticket_number: '101003' })))).toBe(
+      1,
+    );
     expect(
       await db.run(`UPDATE "field_event" SET "load_call" = 70 WHERE "id" = $1`, [
         world.loads.l101001.disposal,
@@ -400,13 +440,7 @@ describe('the worker (adms_worker)', () => {
     const attempts: [string, unknown[]][] = [
       [`UPDATE "field_event" SET "load_call" = 100 WHERE "id" = $1`, [load.disposal]],
       [`UPDATE "field_event" SET "ticket_number" = '101099' WHERE "id" = $1`, [load.collection]],
-      [
-        `INSERT INTO "field_event" ("id", "project_id", "workflow", "kind", "ticket_number",
-           "monitor_id", "device_id", "assignment_id", "setup_version", "started_at", "ended_at",
-           "device_utc_offset_minutes")
-         VALUES (uuidv7(), $1, 'LOAD', 'COLLECTION', '101003', $2, $3, $4, 1, now(), now(), -240)`,
-        [world.p1, world.monitor, world.device, world.assignments.p1],
-      ],
+      eventInsertOf(fieldEventLike(world, { ticket_number: '101003' })),
       insertOf('project', projectLike(world)),
       insertOf('client', { name: 'Town of Egret Point' }),
       [`UPDATE "project" SET "closed_at" = now() WHERE "id" = $1`, [world.p1]],

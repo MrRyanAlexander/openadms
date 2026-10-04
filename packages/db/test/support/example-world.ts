@@ -33,7 +33,8 @@
 // Vegetative, Mileage AT MOST 15.0 → Add transaction 1, VEG-HAUL-CY-15. The rest a test writes as
 // Dana would, with `ruleLike`, `criterionLike`, `pickLike` and `actionLike`.
 // Each load is a collection and a disposal event (load call at the tower), its completed load and
-// one transaction for its prime. Nothing is locked as invoiced; a test locks what it needs.
+// one transaction for its prime. P1's loads picked their debris type at each end, off its load
+// form: 101001 Vegetative, 101002 C&D (ADR-325); P2 has no form, so 102001 picked none. Nothing is locked as invoiced; a test locks what it needs.
 // P1's sites are two of the golden mission's §1, entered in full (ADR-215, 311): Marsh Road TDSR
 // (TDSR/DMS: takes loads, haul-outs leave here) and Bayline County Landfill (Final Disposal, `BCL`:
 // takes loads, charges a tipping fee), each with its GPS (spec/CONVENTIONS.md §6) and a permit,
@@ -100,6 +101,9 @@ export interface World {
   landfill: string;
   // The two built-in site types, from the firm's list.
   siteTypes: { tdsr: string; finalDisposal: string };
+  // Two of the firm's reasons, as the seed ships them: for a typed ticket number, and for a
+  // record created in the back office.
+  reasons: { barcodeDamaged: string; deviceFailed: string };
   // The worker's system actor, made by the installer's seed (ADR-273).
   worker: string;
   coastline: string;
@@ -407,6 +411,84 @@ export function boxLike(
   };
 }
 
+// A field event as Ana's phone sends one from P1: a collection on load `101020`, the truck's
+// badge `730415` scanned and found, the number scanned, Tuesday 13 October 2026 from 09:00 to
+// 09:25 (UTC−4), no site (a curb collection). No column of where it came from has a database
+// default, so a test that writes a field event starts here and changes what it needs (`more`).
+export function fieldEventLike(
+  world: Pick<World, 'p1' | 'monitor' | 'device' | 'assignments' | 'certifications'>,
+  more: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    project_id: world.p1,
+    workflow: 'LOAD',
+    kind: 'COLLECTION',
+    ticket_number: '101020',
+    monitor_id: world.monitor,
+    source: 'DEVICE',
+    device_id: world.device,
+    assignment_id: world.assignments.p1,
+    setup_version: 1,
+    temporary_session: false,
+    number_typed: false,
+    cert_number: '730415',
+    certification_id: world.certifications.c730415,
+    cert_keyed_by_hand: false,
+    started_at: '2026-10-13T13:00:00Z',
+    ended_at: '2026-10-13T13:25:00Z',
+    device_utc_offset_minutes: -240,
+    ...more,
+  };
+}
+
+// The debris type a load's or a haul-out's monitor picked: the entry, with its form and that
+// form's document type again, which hold it to the field event's own project and workflow
+// (ADR-325). P1's load form unless the test names another.
+export function debrisTypePicked(
+  world: Pick<World, 'forms'>,
+  entryId: string,
+  form: { id: string; documentType: 'LOAD' | 'HAUL_OUT' } = {
+    id: world.forms.load,
+    documentType: 'LOAD',
+  },
+): Record<string, unknown> {
+  return {
+    form_id: form.id,
+    form_document_type: form.documentType,
+    form_debris_type_id: entryId,
+  };
+}
+
+// The same field event created in the back office by Dana because the phone failed (ADR-156): no
+// phone, no assignment and no setup version; the person and the reason instead.
+export function backOfficeEventLike(
+  world: Parameters<typeof fieldEventLike>[0] & Pick<World, 'admin' | 'reasons'>,
+  more: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    ...fieldEventLike(world),
+    source: 'BACK_OFFICE',
+    device_id: null,
+    assignment_id: null,
+    setup_version: null,
+    created_by_id: world.admin,
+    created_reason_id: world.reasons.deviceFailed,
+    ...more,
+  };
+}
+
+// The insert of one field event, returning its id. A phone makes the id; here the database is
+// asked for a UUIDv7 in its place.
+export function eventInsertOf(row: Record<string, unknown>): [string, unknown[]] {
+  const columns = Object.keys(row);
+  return [
+    `INSERT INTO "field_event" ("id", ${columns.map((column) => `"${column}"`).join(', ')})
+     VALUES (uuidv7(), ${columns.map((_, index) => `$${String(index + 1)}`).join(', ')})
+     RETURNING id::text`,
+    Object.values(row),
+  ];
+}
+
 // A row without one of its columns, for a test of what the database does when it's left out.
 export function without(row: Record<string, unknown>, column: string): Record<string, unknown> {
   return Object.fromEntries(Object.entries(row).filter(([name]) => name !== column));
@@ -499,6 +581,22 @@ export class ExampleWorld {
         workflows: '{LOAD}',
       }),
     );
+    // Each project's number series (spec/CONVENTIONS.md §6): P1's loads from 101001, its
+    // haul-outs from 201001, its unit rate tickets from 301001, its cert numbers from 730415; P2's
+    // loads from 102001, its own cert numbers from 730416 (ADR-318); ROEs from 1 on both.
+    for (const [project, starts] of [
+      [p1, { LOAD: 101001, HAUL_OUT: 201001, UNIT_RATE: 301001, CERTIFICATION: 730415, ROE: 1 }],
+      [p2, { LOAD: 102001, HAUL_OUT: 202001, UNIT_RATE: 302001, CERTIFICATION: 730416, ROE: 1 }],
+    ] as const) {
+      for (const [series, firstNumber] of Object.entries(starts)) {
+        await this.insert('project_number_series', {
+          project_id: project,
+          series,
+          first_number: firstNumber,
+          next_number: firstNumber,
+        });
+      }
+    }
     for (const kind of ['Hangers', 'Leaners', 'Stumps', 'White Goods', 'Crew time']) {
       await this.insert('project_kind_of_work', {
         project_id: p1,
@@ -846,6 +944,28 @@ export class ExampleWorld {
     await this.insert('user_viewer_project', given(auditor, p2));
 
     const place = { monitor, device };
+    // P1's loads are on Coastline's dump trailer `730415` and dump at Marsh Road TDSR; P2's is on
+    // its own `730416` (ADR-318) and P2 has no site.
+    const onP1 = {
+      ...place,
+      assignment: assignments.p1,
+      certNumber: '730415',
+      certification: certifications.c730415,
+      site,
+    };
+    const picked = (entryId: string): Record<string, unknown> =>
+      debrisTypePicked({ forms }, entryId);
+    const onP2 = {
+      ...place,
+      assignment: assignments.p2,
+      certNumber: '730416',
+      certification: certifications.p2c730416,
+      site: null,
+    };
+    const reasons = {
+      barcodeDamaged: await this.picked('reason', 'Barcode damaged'),
+      deviceFailed: await this.picked('reason', 'Device failed'),
+    };
     return {
       admin,
       certifier,
@@ -863,6 +983,7 @@ export class ExampleWorld {
       site,
       landfill,
       siteTypes,
+      reasons,
       worker: systemActorId,
       coastline,
       summit,
@@ -883,29 +1004,28 @@ export class ExampleWorld {
       p2,
       loads: {
         l101001: await this.load(
-          { ...place, assignment: assignments.p1 },
+          onP1,
           p1,
           '101001',
           80,
           coastline,
           ['52.0000', '4.9000', '254.80'],
+          picked(formDebrisTypes.vegetative),
         ),
         l101002: await this.load(
-          { ...place, assignment: assignments.p1 },
+          onP1,
           p1,
           '101002',
           75,
           summit,
           ['36.0000', '5.2500', '189.00'],
+          picked(formDebrisTypes.cd),
         ),
-        l102001: await this.load(
-          { ...place, assignment: assignments.p2 },
-          p2,
-          '102001',
-          90,
-          coastline,
-          ['43.2000', '4.9000', '211.68'],
-        ),
+        l102001: await this.load(onP2, p2, '102001', 90, coastline, [
+          '43.2000',
+          '4.9000',
+          '211.68',
+        ]),
       },
       written: this.written,
     };
@@ -913,12 +1033,21 @@ export class ExampleWorld {
 
   // A load: its collection and disposal events, the completed load and one transaction.
   private async load(
-    place: { monitor: string; device: string; assignment: string },
+    place: {
+      monitor: string;
+      device: string;
+      assignment: string;
+      certNumber: string;
+      certification: string;
+      site: string | null;
+    },
     projectId: string,
     ticketNumber: string,
     loadCall: number,
     primeId: string,
     [quantity, rate, amount]: [string, string, string],
+    // The debris type each monitor picked, on their own (ADR-207).
+    debrisType: Record<string, unknown> = {},
   ): Promise<Load> {
     const event = (kind: string, ended: string, call: number | null): Promise<string> =>
       this.insert('field_event', {
@@ -928,15 +1057,24 @@ export class ExampleWorld {
         kind,
         ticket_number: ticketNumber,
         monitor_id: place.monitor,
+        source: 'DEVICE',
         device_id: place.device,
         assignment_id: place.assignment,
         setup_version: 1,
+        temporary_session: false,
+        number_typed: false,
+        cert_number: place.certNumber,
+        certification_id: place.certification,
+        cert_keyed_by_hand: false,
+        // The tower's phone names its site; the curb collection none (ADR-195).
+        site_id: kind === 'DISPOSAL' ? place.site : null,
         started_at: '2026-10-12T13:40:00Z',
         ended_at: ended,
         device_utc_offset_minutes: -240,
         end_latitude: '27.94620000',
         end_longitude: '-82.45870000',
         load_call: call,
+        ...debrisType,
       });
     const collection = await event('COLLECTION', '2026-10-12T14:05:00Z', null);
     const disposal = await event('DISPOSAL', '2026-10-12T14:35:00Z', loadCall);

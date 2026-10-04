@@ -1,6 +1,8 @@
 // The setup tables a client user or an auditor sees, and how each is told to be theirs
 // (ADR-315; the viewers' guard migration, `guard_viewer`), for the tests that hold every one of
-// them to the same policies, views and grants.
+// them to the same policies, views and grants. A field event's item lines and carried tickets are
+// here too, seen with the field event they belong to (ADR-325); the field event itself is one of
+// the row-level security guard's four tables, held by name in the tests.
 import { listTables } from './lists.ts';
 
 export interface Sight {
@@ -38,6 +40,9 @@ const contact = ['contact_name', 'contact_email', 'contact_phone'];
 
 export const viewerSights: Record<string, Sight> = {
   project_kind_of_work: project(),
+  // A project's number series and its control ranges are its setup (ADR-323).
+  project_number_series: project(),
+  control_range: project(),
   project_contractor: project(),
   contract: project(),
   form: project(),
@@ -62,6 +67,8 @@ export const viewerSights: Record<string, Sight> = {
   certification: project(['driver_phone', 'driver_licence_number']),
   certification_box: partOf('certification_box', 'certification', 'certification_id'),
   certification_helper: partOf('certification_helper', 'certification', 'certification_id'),
+  field_event_item: partOf('field_event_item', 'field_event', 'field_event_id'),
+  carried_ticket: partOf('carried_ticket', 'field_event', 'field_event_id'),
   client: namedBy('client', 'viewer_project_setup', 'client_id', [...contact, 'notes']),
   declaration_event: namedBy('declaration_event', 'viewer_project_setup', 'declaration_event_id'),
   contractor: namedBy('contractor', 'project_contractor', 'contractor_id', contact),

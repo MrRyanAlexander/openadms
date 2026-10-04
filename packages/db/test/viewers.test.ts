@@ -148,12 +148,14 @@ describe("a read-only viewer's record", () => {
 
 describe("a project's setup, for a read-only viewer", () => {
   // What the example world's P1 holds, table by table; P2 holds its project, its prime and its
-  // contract, Rivera under that prime, and its own certification 730416 (ADR-321).
+  // contract, its five number series, Rivera under that prime, and its own certification 730416
+  // (ADR-321, 323).
   const p1Setup = {
     viewer_project_setup: 1,
     viewer_client: 1,
     viewer_declaration_event: 1,
     viewer_project_kind_of_work: 5,
+    viewer_project_number_series: 5,
     viewer_contractor: 3,
     viewer_project_contractor: 3,
     viewer_contract: 2,
@@ -229,6 +231,7 @@ describe("a project's setup, for a read-only viewer", () => {
       viewer_contractor: 2,
       viewer_project_contractor: 2,
       viewer_contract: 1,
+      viewer_project_number_series: 5,
       viewer_certification: 1,
       viewer_certification_box: 2,
     });
@@ -242,6 +245,7 @@ describe("a project's setup, for a read-only viewer", () => {
     expect(await counts(world.auditor, views)).toEqual({
       ...p1Setup,
       viewer_project_setup: 2,
+      viewer_project_number_series: 10,
       viewer_project_contractor: 5,
       viewer_contract: 3,
       viewer_certification: 6,

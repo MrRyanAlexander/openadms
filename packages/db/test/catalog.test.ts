@@ -38,6 +38,9 @@ const domains: Record<string, string> = {
   map_version: 'OPERATIONS',
   zone: 'OPERATIONS',
   number_block: 'OPERATIONS',
+  // A project's number series and its control ranges (ADR-323).
+  project_number_series: 'OPERATIONS',
+  control_range: 'OPERATIONS',
   assignment: 'OPERATIONS',
   // Where a rate will live: its changes are the billing reviewer's to read (ADR-286).
   pay_item: 'BILLING',
@@ -60,6 +63,10 @@ const domains: Record<string, string> = {
   certification_helper: 'OPERATIONS',
   master_passcode: 'SECURITY',
   field_event: 'RECORDS',
+  // An itemised unit rate event's lines and the tickets a load carries: the field event's own
+  // domain (ADR-325).
+  field_event_item: 'RECORDS',
+  carried_ticket: 'RECORDS',
   completed_load: 'BILLING',
   transaction: 'BILLING',
   invoice_lock: 'BILLING',
@@ -165,6 +172,11 @@ describe('the guards in the catalog', () => {
         name: 'assignment_system_actor_check',
         definition:
           "CHECK (((person_id <> '00000000-0000-7000-8000-000000000001'::uuid) AND (made_by_id IS DISTINCT FROM '00000000-0000-7000-8000-000000000001'::uuid)))",
+      },
+      // A carried ticket is a collection's (ADR-325).
+      {
+        name: 'carried_ticket_kind_check',
+        definition: "CHECK ((field_event_kind = 'COLLECTION'::field_event_kind))",
       },
       // A certification, its measured boxes and its helpers (ADR-321).
       {
@@ -274,6 +286,49 @@ describe('the guards in the catalog', () => {
         definition: "CHECK (((status = 'ACTIVE'::device_status) = (out_of_service_at IS NULL)))",
       },
       {
+        name: 'field_event_address_check',
+        definition: 'CHECK (((address IS NULL) = (address_source IS NULL)))',
+      },
+      // What each kind of field event records (ADR-325).
+      {
+        name: 'field_event_carried_count_check',
+        definition:
+          "CHECK (((carried_count IS NULL) OR ((kind = 'DISPOSAL'::field_event_kind) AND (carried_count >= 0))))",
+      },
+      {
+        name: 'field_event_created_by_check',
+        definition:
+          "CHECK ((created_by_id IS DISTINCT FROM '00000000-0000-7000-8000-000000000001'::uuid))",
+      },
+      {
+        name: 'field_event_debris_type_check',
+        definition:
+          "CHECK ((((num_nonnulls(form_debris_type_id, form_id, form_document_type) = ANY (ARRAY[0, 3])) AND ((form_debris_type_id IS NULL) OR ((workflow = 'LOAD'::workflow) AND (form_document_type = 'LOAD'::form_document_type)) OR ((workflow = 'HAUL_OUT'::workflow) AND (form_document_type = 'HAUL_OUT'::form_document_type)))) IS TRUE))",
+      },
+      {
+        name: 'field_event_end_gps_check',
+        definition:
+          "CHECK ((((num_nonnulls(end_latitude, end_longitude) = ANY (ARRAY[0, 2])) AND ((end_latitude IS NULL) OR ((end_latitude >= ('-90'::integer)::numeric) AND (end_latitude <= (90)::numeric))) AND ((end_longitude IS NULL) OR ((end_longitude >= ('-180'::integer)::numeric) AND (end_longitude <= (180)::numeric)))) IS TRUE))",
+      },
+      {
+        name: 'field_event_estimate_check',
+        definition:
+          "CHECK ((\nCASE\n    WHEN (kind = 'COLLECTION'::field_event_kind) THEN (((split_suffix <> ''::text) = (estimate_cy IS NOT NULL)) AND ((estimate_cy IS NULL) OR (estimate_cy >= (0)::numeric)))\n    ELSE (estimate_cy IS NULL)\nEND IS TRUE))",
+      },
+      {
+        name: 'field_event_field_tag_check',
+        definition:
+          "CHECK (((field_tag_id IS NULL) OR (kind = ANY (ARRAY['COLLECTION'::field_event_kind, 'HAUL_OUT_COLLECTION'::field_event_kind, 'UNIT_RATE'::field_event_kind]))))",
+      },
+      {
+        name: 'field_event_item_kind_check',
+        definition: "CHECK ((field_event_kind = 'UNIT_RATE'::field_event_kind))",
+      },
+      {
+        name: 'field_event_item_quantity_check',
+        definition: 'CHECK ((quantity >= (0)::numeric))',
+      },
+      {
         name: 'field_event_kind_in_workflow_check',
         definition:
           "CHECK ((((workflow = 'LOAD'::workflow) AND (kind = ANY (ARRAY['COLLECTION'::field_event_kind, 'DISPOSAL'::field_event_kind]))) OR ((workflow = 'HAUL_OUT'::workflow) AND (kind = ANY (ARRAY['HAUL_OUT_COLLECTION'::field_event_kind, 'HAUL_OUT_DISPOSAL'::field_event_kind]))) OR ((workflow = 'UNIT_RATE'::workflow) AND (kind = 'UNIT_RATE'::field_event_kind))))",
@@ -284,8 +339,47 @@ describe('the guards in the catalog', () => {
           "CHECK (((load_call IS NULL) OR ((kind = ANY (ARRAY['DISPOSAL'::field_event_kind, 'HAUL_OUT_COLLECTION'::field_event_kind])) AND ((load_call >= 0) AND (load_call <= 100)))))",
       },
       {
+        name: 'field_event_measurement_check',
+        definition:
+          'CHECK (((((measurement_inches IS NULL) = (measured_as IS NULL)) AND ((measurement_inches IS NULL) OR (measurement_inches >= (0)::numeric)) AND ((root_ball_inches IS NULL) OR (root_ball_inches >= (0)::numeric)) AND ((unit_count IS NULL) OR (unit_count >= (0)::numeric))) IS TRUE))',
+      },
+      {
         name: 'field_event_monitor_check',
         definition: "CHECK ((monitor_id <> '00000000-0000-7000-8000-000000000001'::uuid))",
+      },
+      {
+        name: 'field_event_number_typed_check',
+        definition: 'CHECK ((number_typed OR (number_typed_reason_id IS NULL)))',
+      },
+      {
+        name: 'field_event_roe_number_check',
+        definition:
+          "CHECK (((roe_number IS NULL) OR (kind = ANY (ARRAY['COLLECTION'::field_event_kind, 'UNIT_RATE'::field_event_kind]))))",
+      },
+      {
+        name: 'field_event_source_check',
+        definition:
+          "CHECK ((\nCASE source\n    WHEN 'DEVICE'::record_source THEN ((num_nonnulls(device_id, assignment_id, setup_version) = 3) AND (num_nonnulls(created_by_id, created_reason_id) = 0))\n    WHEN 'BACK_OFFICE'::record_source THEN ((num_nonnulls(device_id, assignment_id, setup_version) = 0) AND (num_nonnulls(created_by_id, created_reason_id) = 2) AND (NOT temporary_session))\n    ELSE false\nEND IS TRUE))",
+      },
+      {
+        name: 'field_event_split_suffix_check',
+        definition:
+          "CHECK (((split_suffix = ''::text) OR ((kind = ANY (ARRAY['COLLECTION'::field_event_kind, 'HAUL_OUT_COLLECTION'::field_event_kind])) AND (split_suffix ~ '^[A-Z]+$'::text))))",
+      },
+      {
+        name: 'field_event_start_gps_check',
+        definition:
+          "CHECK ((((num_nonnulls(start_latitude, start_longitude) = ANY (ARRAY[0, 2])) AND ((start_latitude IS NULL) OR ((start_latitude >= ('-90'::integer)::numeric) AND (start_latitude <= (90)::numeric))) AND ((start_longitude IS NULL) OR ((start_longitude >= ('-180'::integer)::numeric) AND (start_longitude <= (180)::numeric)))) IS TRUE))",
+      },
+      {
+        name: 'field_event_typed_capacity_check',
+        definition:
+          'CHECK (((typed_capacity_cy IS NULL) OR (cert_keyed_by_hand AND (typed_capacity_cy >= 0))))',
+      },
+      {
+        name: 'field_event_unit_rate_check',
+        definition:
+          "CHECK (((kind = 'UNIT_RATE'::field_event_kind) OR (num_nonnulls(kind_of_work_id, payable_type_id, pay_item_id, unit_count, measurement_inches, measured_as, root_ball_inches, root_ball_half_exposed, survey_number, marked_ineligible) = 0)))",
       },
       {
         name: 'form_debris_type_document_type_check',
@@ -343,6 +437,29 @@ describe('the guards in the catalog', () => {
       {
         name: 'number_block_range_check',
         definition: 'CHECK (((first_number >= 1) AND (first_number <= last_number)))',
+      },
+      {
+        name: 'number_block_ticket_range_check',
+        definition:
+          "CHECK ((((series <> ALL (ARRAY['LOAD'::number_series, 'HAUL_OUT'::number_series, 'UNIT_RATE'::number_series])) OR ((first_number >= 100001) AND (last_number <= 9999999))) IS TRUE))",
+      },
+      {
+        name: 'project_number_series_range_check',
+        definition: 'CHECK (((first_number >= 1) AND (next_number >= first_number)))',
+      },
+      {
+        name: 'project_number_series_ticket_range_check',
+        definition:
+          "CHECK ((((series <> ALL (ARRAY['LOAD'::number_series, 'HAUL_OUT'::number_series, 'UNIT_RATE'::number_series])) OR ((first_number >= 100001) AND (next_number <= 10000000))) IS TRUE))",
+      },
+      {
+        name: 'control_range_range_check',
+        definition: 'CHECK (((first_number >= 1) AND (first_number <= last_number)))',
+      },
+      {
+        name: 'control_range_series_check',
+        definition:
+          "CHECK ((series = ANY (ARRAY['LOAD'::number_series, 'HAUL_OUT'::number_series])))",
       },
       {
         name: 'pay_item_band_check',
@@ -489,12 +606,23 @@ describe('the guards in the catalog', () => {
     expect(rows).toEqual(checks.sort((a, b) => (a.name < b.name ? -1 : 1)));
   });
 
-  it('every exclusion constraint, as written: the size bands of one payable type never overlap', async () => {
+  it('every exclusion constraint, as written: size bands, number blocks and control ranges never overlap', async () => {
     const rows = await tested.db.rows<{ name: string; definition: string }>(
       `SELECT conname AS name, pg_get_constraintdef(oid) AS definition FROM pg_constraint
        WHERE contype = 'x' AND connamespace = 'public'::regnamespace ORDER BY conname`,
     );
     expect(rows).toEqual([
+      {
+        name: 'control_ranges_never_overlap',
+        definition:
+          "EXCLUDE USING gist (project_id WITH =, series WITH =, int4range(first_number, last_number, '[]'::text) WITH &&) WHERE ((archived_at IS NULL))",
+      },
+      // What a block holds: its whole run, or, once reclaimed, only what its phone used (ADR-323).
+      {
+        name: 'number_blocks_never_overlap',
+        definition:
+          "EXCLUDE USING gist (project_id WITH =, series WITH =, int4range(first_number, (\nCASE\n    WHEN (status = 'RECLAIMED'::number_block_status) THEN COALESCE(last_used_number, (first_number - 1))\n    ELSE last_number\nEND + 1), '[)'::text) WITH &&)",
+      },
       {
         name: 'pay_item_bands_never_overlap',
         definition:
@@ -531,9 +659,12 @@ describe('the guards in the catalog', () => {
       ...viewedTables.map((table) => `viewer_${table}`),
     ].map((name) => ({ name, options: ['security_invoker=true', 'security_barrier=true'] }));
     expect(rows).toEqual(
-      [...asTheViewer, { name: 'viewer_project_setup', options: ['security_barrier=true'] }].sort(
-        (a, b) => (a.name < b.name ? -1 : 1),
-      ),
+      [
+        ...asTheViewer,
+        // Who recorded a field event asks the viewer's question itself too (ADR-324).
+        { name: 'viewer_field_event_monitor', options: ['security_barrier=true'] },
+        { name: 'viewer_project_setup', options: ['security_barrier=true'] },
+      ].sort((a, b) => (a.name < b.name ? -1 : 1)),
     );
     // Row-level security can't tell columns apart, so the one view that shows a project's settings
     // runs with the owner's rights and holds the question in its own WHERE (ADR-315).

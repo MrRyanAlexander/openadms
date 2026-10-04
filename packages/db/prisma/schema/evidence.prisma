@@ -30,7 +30,34 @@ enum TicketStatus {
   @@map("ticket_status")
 }
 
-// What one monitor recorded under a ticket number: one model, five kinds (ADR-236).
+// Where a record came from: a phone, or a person in the back office (ADR-047, 156).
+enum RecordSource {
+  DEVICE
+  BACK_OFFICE
+
+  @@map("record_source")
+}
+
+// How a field event's address was got: looked up from its GPS, or typed (ADR-111).
+enum AddressSource {
+  LOOKED_UP
+  TYPED
+
+  @@map("address_source")
+}
+
+// How a tree was measured: what the monitor read, never a conversion (ADR-177).
+enum MeasuredAs {
+  CIRCUMFERENCE
+  DIAMETER
+
+  @@map("measured_as")
+}
+
+// What one monitor recorded under a ticket number: one model, five kinds (ADR-236). There is no
+// ticket table: a ticket is its number and the field events under it. First the columns every
+// kind records (spec/DATA-MODEL.md §4.1 (1)), then the kind-specific ones (§4.1 (2)), each empty
+// on every other kind by a check in the guard migration (ADR-325).
 model FieldEvent {
   // UUIDv7 made on the phone, so a retried sync is the same record (KD-56): no default here.
   id           String         @id @db.Uuid
@@ -39,15 +66,19 @@ model FieldEvent {
   kind         FieldEventKind
   // The bare number, as scanned or shown; text, never parsed for meaning (ADR-062).
   ticketNumber String         @map("ticket_number")
-  // A, B… on a split load's collections; empty when not split, so the unique key below holds
-  // without NULLs (Postgres treats NULLs as distinct).
+  // A, B… on a split load's collections (one per property) and a split haul-out's (one per pile,
+  // ADR-295); empty when not split, so the unique key below holds without NULLs (Postgres treats
+  // NULLs as distinct). Capital letters, and only on a collection or a haul-out collection (a
+  // check, ADR-325).
   splitSuffix  String         @default("") @map("split_suffix")
+  // Who witnessed it; never the system actor.
   monitorId    String         @map("monitor_id") @db.Uuid
-  deviceId     String         @map("device_id") @db.Uuid
-  // The assignment the phone held, and the numbered version of its lists the event was captured
-  // with, so a reviewer sees what the phone showed (ADR-240).
-  assignmentId String         @map("assignment_id") @db.Uuid
-  setupVersion Int            @map("setup_version")
+  // The phone, the assignment it held and the numbered version of its lists the event was
+  // captured with, so a reviewer sees what the phone showed (ADR-240). All three on a phone's
+  // record, none on one created in the back office (C44; a check in the guard migration).
+  deviceId     String?        @map("device_id") @db.Uuid
+  assignmentId String?        @map("assignment_id") @db.Uuid
+  setupVersion Int?           @map("setup_version")
 
   // The device's clock, as a UTC instant plus its offset; and when the server received it (ADR-100).
   startedAt              DateTime @map("started_at") @db.Timestamptz(3)
@@ -59,24 +90,161 @@ model FieldEvent {
   endLatitude  Decimal? @map("end_latitude") @db.Decimal(38, 8)
   endLongitude Decimal? @map("end_longitude") @db.Decimal(38, 8)
 
-  // Kind-specific: a whole-number load call 0-100 (ADR-116). Its range and the kinds that may
-  // carry it are checks in the guard migrations (BACKLOG 0.3.2).
+  // A disposal's and a haul-out collection's: a whole-number load call 0-100 (ADR-116). On a split
+  // haul-out each pile's is the running call, how full the container is after that pile (ADR-295).
+  // Its range and the kinds that may carry it are checks in the guard migrations (BACKLOG 0.3.2).
   loadCall Int? @map("load_call")
 
   // Reconciliation columns: the only ones the worker may write (ARCHITECTURE §5.1).
   status       TicketStatus @default(PENDING)
   reconciledAt DateTime?    @map("reconciled_at") @db.Timestamptz(3)
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  monitor User    @relation(fields: [monitorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  device  Device  @relation(fields: [deviceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  // Where it came from. One created in the back office (a phone failed) says who created it and
+  // why, picked from the firm's reasons (ADR-156, 173). None of these has a default: whoever
+  // writes a field event says.
+  source           RecordSource
+  createdById      String?      @map("created_by_id") @db.Uuid
+  createdReasonId  String?      @map("created_reason_id") @db.Uuid
+  // Made under the master passcode's temporary session for this monitor (ADR-120).
+  temporarySession Boolean      @map("temporary_session")
 
-  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  // The number typed instead of scanned, and the reason picked (ADR-111, 173).
+  numberTyped         Boolean @map("number_typed")
+  numberTypedReasonId String? @map("number_typed_reason_id") @db.Uuid
+
+  // The cert number as scanned off the badge: a snapshot (ADR-017). The certification it found,
+  // one of its own project's; empty while no certification on the project has that number
+  // (ADR-154). No driver, contractor or capacity is copied here: they are the certification's.
+  certNumber      String  @map("cert_number")
+  certificationId String? @map("certification_id") @db.Uuid
+  // A truck keyed in by hand, with the capacity the monitor read off it: only their claim; the
+  // certification's capacity bills (ADR-154).
+  certKeyedByHand Boolean @map("cert_keyed_by_hand")
+  typedCapacityCy Int?    @map("typed_capacity_cy")
+
+  // The site, from the assignment, never picked; empty on a curb collection and on unit rate
+  // work away from a site (ADR-195).
+  siteId String? @map("site_id") @db.Uuid
+
+  // WGS84 where the event started: whatever fix the phone had (ADR-083).
+  startLatitude  Decimal? @map("start_latitude") @db.Decimal(38, 8)
+  startLongitude Decimal? @map("start_longitude") @db.Decimal(38, 8)
+
+  address       String?
+  addressSource AddressSource? @map("address_source")
+  notes         String?
+
+  // What each kind records (spec/DATA-MODEL.md §4.1 (2)). None is required: a pick that didn't
+  // reach the server is a flag's, never a refusal (ADR-325).
+
+  // A load's or a haul-out's debris type, picked at each end on its own (ADR-207): the entry on
+  // its own project's form for its workflow, so a rule matches the exact entry (ADR-226). The form
+  // and its document type are that entry's, again, and are there exactly when the entry is: they
+  // hold it to the field event's project and workflow by foreign keys (ADR-325).
+  formDebrisTypeId String?           @map("form_debris_type_id") @db.Uuid
+  formId           String?           @map("form_id") @db.Uuid
+  formDocumentType FormDocumentType? @map("form_document_type")
+  // Optional, one of its own project's: a collection's, a haul-out collection's (it tells a pile),
+  // a unit rate event's (ADR-218, 295).
+  fieldTagId       String?           @map("field_tag_id") @db.Uuid
+  // On an ROE project, a collection's and a unit rate event's: the number as picked or typed, a
+  // snapshot like the cert number (ADR-149, 292). The ROE it finds joins with the ROE's own record
+  // (BACKLOG 1.3.6).
+  roeNumber        String?           @map("roe_number")
+  // A split load's property estimate, in CY: there exactly when a collection's split suffix is
+  // (ADR-055). A haul-out's piles give a load call instead.
+  estimateCy       Decimal?          @map("estimate_cy") @db.Decimal(8, 1)
+  // The tower's count on a load that carries tickets (ADR-243). The scale receipt a disposal
+  // points at joins with the scale receipt's own record (BACKLOG 1.3.5).
+  carriedCount     Int?              @map("carried_count")
+
+  // A unit rate event's. The kind of work captured (its screen), kept so it is known when no band
+  // fits and there is no pay item (ADR-292); the payable type the monitor picked by name
+  // (ADR-207); the pay item the phone worked out and printed, one of its own project's, empty when
+  // no band fits (ADR-213). The worker's own answer joins in BACKLOG 1.5.2.
+  kindOfWorkId        String?     @map("kind_of_work_id") @db.Uuid
+  payableTypeId       String?     @map("payable_type_id") @db.Uuid
+  payItemId           String?     @map("pay_item_id") @db.Uuid
+  // The count or the pounds; nothing where the items hold it (FieldEventItem).
+  unitCount           Decimal?    @map("unit_count") @db.Decimal(10, 2)
+  // What the monitor read, and whether as a circumference or a diameter: both or neither. A
+  // stump's is its diameter two feet up (ADR-177, 189).
+  measurementInches   Decimal?    @map("measurement_inches") @db.Decimal(8, 1)
+  measuredAs          MeasuredAs? @map("measured_as")
+  // Stumps: the root ball's diameter, whether half or more of it is exposed, and the survey number
+  // as picked or typed (ADR-198).
+  rootBallInches      Decimal?    @map("root_ball_inches") @db.Decimal(8, 1)
+  rootBallHalfExposed Boolean?    @map("root_ball_half_exposed")
+  surveyNumber        String?     @map("survey_number")
+  // Where the pay item lets the monitor mark the work ineligible (ADR-210).
+  markedIneligible    Boolean?    @map("marked_ineligible")
+
+  project           Project          @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  monitor           User             @relation("FieldEventMonitor", fields: [monitorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  device            Device?          @relation(fields: [deviceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  assignment        Assignment?      @relation(fields: [assignmentId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  createdBy         User?            @relation("FieldEventCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  createdReason     Reason?          @relation("FieldEventCreatedReason", fields: [createdReasonId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  numberTypedReason Reason?          @relation("FieldEventNumberTypedReason", fields: [numberTypedReasonId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  // One of its own project's certifications, and one of its own project's sites.
+  certification     Certification?   @relation(fields: [projectId, certificationId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  site              DisposalSite?    @relation(fields: [projectId, siteId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  // Its debris type is an entry of that form, and that form is its own project's.
+  form              Form?            @relation(fields: [projectId, formId, formDocumentType], references: [projectId, id, documentType], onDelete: Restrict, onUpdate: Restrict)
+  formDebrisType    FormDebrisType?  @relation(fields: [formId, formDebrisTypeId], references: [formId, id], onDelete: Restrict, onUpdate: Restrict)
+  fieldTag          FieldTag?        @relation(fields: [projectId, fieldTagId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  kindOfWork        KindOfWork?      @relation(fields: [kindOfWorkId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  payableType       PayableType?     @relation(fields: [payableTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  payItem           PayItem?         @relation(fields: [projectId, payItemId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  items             FieldEventItem[]
+  carriedTickets    CarriedTicket[]
 
   completedLoadAsCollection CompletedLoad? @relation("CollectionEvent")
   completedLoadAsDisposal   CompletedLoad? @relation("DisposalEvent")
 
   // One field event per project + workflow + bare number + split suffix + kind (ARCHITECTURE §5.4).
   @@unique([projectId, workflow, ticketNumber, splitSuffix, kind])
+  // What an item line and a carried ticket point at, so each is held to the kind it belongs on.
+  @@unique([id, kind])
+  // So a viewer's "who recorded it" is found by the monitor.
+  @@index([monitorId])
   @@map("field_event")
+}
+
+// One line of an itemised unit rate event: an item from the firm's list with its count, or its
+// hours to the quarter hour (ADR-040, 084). An item appears once on a ticket; a line is never a
+// pay item and holds no price.
+model FieldEventItem {
+  id             String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  fieldEventId   String         @map("field_event_id") @db.Uuid
+  // Its field event's, again: UNIT_RATE, held by a check and by the relation (ADR-325).
+  fieldEventKind FieldEventKind @map("field_event_kind")
+  itemNameId     String         @map("item_name_id") @db.Uuid
+  quantity       Decimal        @db.Decimal(10, 2)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  fieldEvent FieldEvent @relation(fields: [fieldEventId, fieldEventKind], references: [id, kind], onDelete: Restrict, onUpdate: Restrict)
+  itemName   ItemName   @relation(fields: [itemNameId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([fieldEventId, itemNameId])
+  @@map("field_event_item")
+}
+
+// A ticket a load carries: a stump's or a white goods ticket's number, as the loading monitor
+// added it (ADR-192). The number as written, never a link: one that matches no ticket is taken
+// and flagged later.
+model CarriedTicket {
+  id                  String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  fieldEventId        String         @map("field_event_id") @db.Uuid
+  // Its field event's, again: COLLECTION, held by a check and by the relation (ADR-325).
+  fieldEventKind      FieldEventKind @map("field_event_kind")
+  carriedTicketNumber String         @map("carried_ticket_number")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  fieldEvent FieldEvent @relation(fields: [fieldEventId, fieldEventKind], references: [id, kind], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([fieldEventId, carriedTicketNumber])
+  @@map("carried_ticket")
 }

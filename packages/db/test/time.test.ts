@@ -5,7 +5,13 @@
 import { describe, expect, it } from 'vitest';
 
 import { refusedBy } from './support/database.ts';
-import { insertOf, projectLike, without } from './support/example-world.ts';
+import {
+  eventInsertOf,
+  fieldEventLike,
+  insertOf,
+  projectLike,
+  without,
+} from './support/example-world.ts';
 import { eachTestRolledBack } from './support/lifecycle.ts';
 
 const tested = eachTestRolledBack();
@@ -102,12 +108,14 @@ describe('every captured time', () => {
     await db.as('adms_api');
     await db.actor(world.monitor, 'DEVICE', { deviceId: world.device });
     await db.run(
-      `INSERT INTO "field_event" ("id", "project_id", "workflow", "kind", "ticket_number",
-         "monitor_id", "device_id", "assignment_id", "setup_version", "started_at", "ended_at",
-         "device_utc_offset_minutes")
-       VALUES (uuidv7(), $1, 'LOAD', 'COLLECTION', '101030', $2, $3, $4, 1,
-         '2026-10-12T21:05:00-05:00', '2026-10-12T21:30:00-05:00', -300)`,
-      [world.p1, world.monitor, world.device, world.assignments.p1],
+      ...eventInsertOf(
+        fieldEventLike(world, {
+          ticket_number: '101030',
+          started_at: '2026-10-12T21:05:00-05:00',
+          ended_at: '2026-10-12T21:30:00-05:00',
+          device_utc_offset_minutes: -300,
+        }),
+      ),
     );
     const days = await db.one(
       `SELECT to_char(e."ended_at" AT TIME ZONE 'UTC', 'Dy DD Mon HH24:MI') AS utc,

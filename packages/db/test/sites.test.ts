@@ -269,6 +269,8 @@ describe('coordinates (REQ-104)', () => {
       'disposal_site.longitude',
       'field_event.end_latitude',
       'field_event.end_longitude',
+      'field_event.start_latitude',
+      'field_event.start_longitude',
       'map_version.east_longitude',
       'map_version.north_latitude',
       'map_version.south_latitude',

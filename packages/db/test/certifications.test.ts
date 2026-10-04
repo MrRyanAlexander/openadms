@@ -651,8 +651,9 @@ describe('driver, tag, vehicle type and features', () => {
          WHERE table_schema = 'public' AND table_name LIKE '%driver%'`,
       ),
     ).toEqual([]);
+    // The truck's tag, that is: a field event's field tag is the firm's own label (ADR-218, 325).
     expect(
-      (await columnsOf('field_event')).filter((column) => /driver|licence|tag/.test(column)),
+      (await columnsOf('field_event')).filter((column) => /driver|licence|^tag_/.test(column)),
     ).toEqual([]);
     // Recorded, never checked: a licence that has already expired is saved (ADR-153).
     await asThePhone();

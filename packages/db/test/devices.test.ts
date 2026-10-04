@@ -300,13 +300,14 @@ describe('a number block', () => {
     const { db, world } = tested;
     await asTheApi();
     await db.one(issue, [world.device, world.p1, 'LOAD', 101001, 102000]);
+    // Refused because the two would hold the same numbers (numbering.test.ts, AC-04-05).
     expect((await db.refused(issue, [world.device, world.p1, 'LOAD', 101001, 101500])).code).toBe(
-      refusedBy.unique,
+      refusedBy.exclusion,
     );
     // Another series, and another project's own series, start where they like.
     await db.one(issue, [world.device, world.p1, 'UNIT_RATE', 101001, 102000]);
     await db.one(issue, [world.device, world.p2, 'LOAD', 101001, 102000]);
-    expect((await db.refused(issue, [world.device, world.p1, 'ROE', 1, 100])).code).toBe(
+    expect((await db.refused(issue, [world.device, world.p1, 'TICKET', 1, 100])).code).toBe(
       refusedBy.badValue,
     );
   });

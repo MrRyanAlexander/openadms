@@ -93,9 +93,9 @@ model Project {
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   closedAt  DateTime? @map("closed_at") @db.Timestamptz(3)
 
-  client           Client              @relation(fields: [clientId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  declarationEvent DeclarationEvent    @relation(fields: [declarationEventId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  programType      ProgramType         @relation(fields: [programTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  client           Client                @relation(fields: [clientId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  declarationEvent DeclarationEvent      @relation(fields: [declarationEventId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  programType      ProgramType           @relation(fields: [programTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   kindsOfWork      ProjectKindOfWork[]
   contractors      ProjectContractor[]
   contracts        Contract[]
@@ -104,6 +104,8 @@ model Project {
   mapVersions      MapVersion[]
   payItems         PayItem[]
   assignments      Assignment[]
+  numberSeries     ProjectNumberSeries[]
+  controlRanges    ControlRange[]
   numberBlocks     NumberBlock[]
   certifications   Certification[]
   fieldTags        FieldTag[]
@@ -305,6 +307,7 @@ model Form {
   debrisTypes FormDebrisType[]
   definitions FormDefinition[]
   rules       Rule[]
+  fieldEvents FieldEvent[]
 
   @@unique([projectId, documentType])
   // What a rule points at: its own project's form, with its document type (ADR-313).
@@ -339,6 +342,7 @@ model FormDebrisType {
   debrisType      DebrisType          @relation(fields: [debrisTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   reductionMethod ReductionMethod?    @relation(fields: [reductionMethodId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   rulePicks       RuleCriterionPick[]
+  fieldEvents     FieldEvent[]
 
   @@unique([formId, debrisTypeId])
   // So a rule's Debris type picks only an entry of the rule's own form (its relation's target).
@@ -412,6 +416,7 @@ model DisposalSite {
   tippingFees  DisposalSiteTippingFee[]
   areaVersions SiteAreaVersion[]
   assignments  Assignment[]
+  fieldEvents  FieldEvent[]
   rulePicks    RuleCriterionPick[]
 
   // So an assignment's site, a tipping fee's and a rule's pick can only be one of its own project's.
@@ -627,6 +632,8 @@ model PayItem {
   rulesWritten Rule[]
   ruleActions  RuleAction[]
   rulePicks    RuleCriterionPick[]
+  // The unit rate events whose phone worked it out.
+  fieldEvents  FieldEvent[]
 
   // So a rate, and a rule's pay item, can only be its own project's pay item (its relation's target).
   @@unique([projectId, id])
@@ -955,7 +962,8 @@ model User {
   certificationsMade    Certification[]       @relation("CertificationCertifiedBy")
   certificationsRevoked Certification[]       @relation("CertificationRevokedBy")
   certificationsHelped  CertificationHelper[]
-  fieldEvents           FieldEvent[]
+  fieldEvents           FieldEvent[]          @relation("FieldEventMonitor")
+  fieldEventsCreated    FieldEvent[]          @relation("FieldEventCreatedBy")
   invoiceLocks          InvoiceLock[]
   auditRecords          AuditRecord[]
 
@@ -1071,13 +1079,15 @@ model Device {
   @@map("device")
 }
 
-// Which of a project's number series a block comes from: one per workflow (ADR-062), and the
-// project's cert numbers for a phone that certifies (ADR-151).
+// Which of a project's number series a block comes from: one per workflow (ADR-062), the
+// project's cert numbers for a phone that certifies (ADR-151), and its ROE numbers, kept apart
+// from the ticket series (ADR-181, 292).
 enum NumberSeries {
   LOAD
   HAUL_OUT
   UNIT_RATE
   CERTIFICATION
+  ROE
 
   @@map("number_series")
 }
@@ -1092,9 +1102,49 @@ enum NumberBlockStatus {
   @@map("number_block_status")
 }
 
+// One of a project's series of numbers (spec/DATA-MODEL.md §3, Numbering): where it starts, and
+// the next number the server has never handed out. A generated project has one per workflow; unit
+// rate tickets are generated on every project (ADR-056, 062). The server is the only allocator
+// (ADR-065): a block is cut from here, or from what a reset phone handed back.
+model ProjectNumberSeries {
+  id          String       @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  projectId   String       @map("project_id") @db.Uuid
+  series      NumberSeries
+  firstNumber Int          @map("first_number")
+  nextNumber  Int          @map("next_number")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  project Project       @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  blocks  NumberBlock[]
+
+  @@unique([projectId, series])
+  @@map("project_number_series")
+}
+
+// A run of pre-printed control tickets, entered at setup and sent with the phones' lists
+// (ADR-056). A scan outside the project's ranges is questioned on the phone, never refused. Taken
+// off by archiving.
+model ControlRange {
+  id          String       @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  projectId   String       @map("project_id") @db.Uuid
+  series      NumberSeries
+  firstNumber Int          @map("first_number")
+  lastNumber  Int          @map("last_number")
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([projectId, series])
+  @@map("control_range")
+}
+
 // A run of a project's numbers issued to one phone, which gives them out in order, offline
-// (ADR-065, 151). The server is the only allocator. PROVISIONAL: the series themselves, the
-// control ranges and the allocator are Phase 1's (adms-ticket-workflows).
+// (ADR-065, 151). The server is the only allocator, and a block is cut only from a series its
+// project has. Two blocks of one series never hold the same number: the guard migration's
+// exclusion constraint (ADR-323).
 model NumberBlock {
   id             String            @id @default(dbgenerated("uuidv7()")) @db.Uuid
   deviceId       String            @map("device_id") @db.Uuid
@@ -1110,10 +1160,13 @@ model NumberBlock {
   // When it was reclaimed or retired.
   endedAt  DateTime? @map("ended_at") @db.Timestamptz(3)
 
-  device  Device  @relation(fields: [deviceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  project Project @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  device       Device              @relation(fields: [deviceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  project      Project             @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  numberSeries ProjectNumberSeries @relation(fields: [projectId, series], references: [projectId, series], onDelete: Restrict, onUpdate: Restrict)
 
-  @@unique([projectId, series, firstNumber])
+  // Not unique on its start: a block handed back unused is cut again from the same number. What
+  // two blocks may never do is hold the same number (the exclusion constraint).
+  @@index([projectId, series, firstNumber])
   @@index([deviceId])
   @@map("number_block")
 }
@@ -1313,6 +1366,7 @@ model Certification {
   revokedBy       User?                 @relation("CertificationRevokedBy", fields: [revokedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
   boxes           CertificationBox[]
   helpers         CertificationHelper[]
+  fieldEvents     FieldEvent[]
 
   // A cert number once per project (ADR-045).
   @@unique([projectId, certNumber])
@@ -1493,7 +1547,8 @@ model PayableType {
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
 
-  payItems PayItem[]
+  payItems    PayItem[]
+  fieldEvents FieldEvent[]
 
   @@map("payable_type")
 }
@@ -1512,9 +1567,10 @@ model KindOfWork {
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
 
-  itemNames ItemName[]
-  projects  ProjectKindOfWork[]
-  payItems  PayItem[]
+  itemNames   ItemName[]
+  projects    ProjectKindOfWork[]
+  payItems    PayItem[]
+  fieldEvents FieldEvent[]
 
   @@map("kind_of_work")
 }
@@ -1534,6 +1590,7 @@ model ItemName {
   kindOfWork      KindOfWork          @relation(fields: [kindOfWorkId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   rulePicks       RuleCriterionPick[]
   ruleActionItems RuleActionItem[]
+  fieldEventItems FieldEventItem[]
 
   @@map("item_name")
 }
@@ -1668,6 +1725,9 @@ model Reason {
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
 
+  fieldEventsCreated     FieldEvent[] @relation("FieldEventCreatedReason")
+  fieldEventsNumberTyped FieldEvent[] @relation("FieldEventNumberTypedReason")
+
   @@map("reason")
 }
 
@@ -1711,8 +1771,9 @@ model FieldTag {
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
 
-  project   Project             @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  rulePicks RuleCriterionPick[]
+  project     Project             @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  rulePicks   RuleCriterionPick[]
+  fieldEvents FieldEvent[]
 
   // So a rule's Field tag picks only one of its own project's (its relation's target).
   @@unique([projectId, id])

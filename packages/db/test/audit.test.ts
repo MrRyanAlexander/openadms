@@ -132,6 +132,7 @@ describe('capture', () => {
       project: ['OPERATIONS'],
       project_contractor: ['OPERATIONS'],
       project_kind_of_work: ['OPERATIONS'],
+      project_number_series: ['OPERATIONS'],
       rule: ['BILLING'],
       rule_action: ['BILLING'],
       rule_criterion: ['BILLING'],
