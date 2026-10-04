@@ -71,9 +71,9 @@ works on the project.
     - **Truck modified** (sideboards added) → a **new certification and number**, with a
       **replaces** link to the old one, shown on both (ADR-082).
     - **Pulled from work** → an admin **revokes** it from a date, with a reason (ADR-079).
-    - **The same truck on another project** → **copy** it with a new number from that project's
-      series and a reference to the original; a mistake found in the copy flags the original
-      (ADR-152).
+    - **The same truck on another project** → it is **certified there from scratch**: measured
+      and photographed again, with that project's own number. A certification is never copied
+      (the user, ADR-328, 329).
 15. **A truck keyed in by hand** at a tower (no badge to scan) bills the **certification's**
     capacity; a typed capacity that differs is flagged; no such certification → unbilled and
     flagged until one exists (ADR-154).

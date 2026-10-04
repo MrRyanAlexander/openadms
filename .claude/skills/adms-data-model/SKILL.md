@@ -223,8 +223,7 @@ changed" (ADR-166).
   joins with its table, 1.4.2); a
   `view` only on a certification's; two fingerprints and two unique places in storage, **written
   once** (a trigger refuses a change, by anyone); the database counts none ("at most 8" is the
-  phone's); a copied certification holds none of its own (the original's, through
-  `copiedFromId`). Both are audited in the records domain; a client user and an auditor see
+  phone's); a certification is never copied (ADR-328), so each holds its own. Both are audited in the records domain; a client user and an auditor see
   them with their project, a photograph without `objectKey` and `depthObjectKey`. A test writes
   them with `scaleReceiptLike`, `photoLike` and `phoneInsertOf`.
 - **Built (ADR-327): ROEs and forms** (`spec/DATA-MODEL.md` "ROEs", §4.3). **`Roe`** is

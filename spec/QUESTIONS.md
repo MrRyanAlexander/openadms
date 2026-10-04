@@ -2237,7 +2237,9 @@ time, not only at the nightly sync.
 ### ✅ Q-143 — The same truck on two projects
 *(ADR-152)* **Decided:** copy the certification to the other project with a **new number** and a
 reference to the old one; if a mistake is later found in the copy, the original is flagged for
-review.
+review. **Superseded by the user, 2026-10-04 (ADR-328, 329): a certification is never copied; a
+truck that moves to a second project is certified there from scratch, with that project's own
+number.**
 
 A certification belongs to one project, so a truck working two projects needs one on each.
 

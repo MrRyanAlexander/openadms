@@ -173,7 +173,7 @@ A flag here sits on the record it's about; it never touches a ticket's status.
 | `ROE_OUT_OF_SCOPE` | Its ROE has a scope and the work isn't in it: a collection's debris type, or a unit rate ticket's payable type, isn't among the ROE's scope picks. An ROE with no scope picked is never flagged for scope | "Ticket 102005: outside the scope of ROE R-0008." | the ROE's scope, the work | 055, 149, 293 |
 | `NO_PRE_WORK_SURVEY` | A post-work survey with no pre-work survey on its ROE | "Survey on ROE R-0008: no pre-work survey." | the ROE | 150 |
 | `CERTIFICATION_PHOTO_MISSING` | A certification without one of its five views | "Certification 730416: no left side photo." | the views present | 179 |
-| `REVIEW_ORIGINAL_CERTIFICATION` | A mistake was corrected in a certification copied to another project: the original is flagged | "Certification 730416: its copy 880112 on Bayline County PPDR was corrected." | both numbers | 152 |
+| ~~`REVIEW_ORIGINAL_CERTIFICATION`~~ | Withdrawn (ADR-328): a certification is never copied, so there is no copy whose correction could flag an original | | | 152 → 328 |
 | `PERMIT_OUTSTANDING` | A disposal site with no permit | "Marsh Road TDSR: permit outstanding." | | 111 |
 
 A ticket's ROE flags still bill.

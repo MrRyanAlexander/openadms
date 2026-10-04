@@ -123,8 +123,8 @@ total is divided by 46,656 (36³); the capacity is that to the nearest whole cub
 | AC-03-53 | **Given** sideboards were added to Rivera's self-loader on 14 October, **when** it is certified again, **then** that is a new certification with a new number, `730420`, holding a "replaces" link to `730416` and the reason; `730416` is kept unchanged, and each shows the other ("replaces 730416 (sideboards added, 14 Oct)", "replaced by 730420 on 14 Oct") | ADR-079, 082 (Q-77) · REQ-106f | database (1.2.3); the wording shown: back office (Phase 4) | database (2026-10-03, ADR-321); story `certification` (2026-10-03, ADR-321) |
 | AC-03-54 | **Given** `730420`, **then** its number is `730420` and nothing else: a MOD label may be shown beside it, display only, never a prefix | ADR-082 (Q-77) | back office (Phase 4) | |
 | AC-03-55 | **When** Dana, an admin, revokes `730416` from 14 October 2026 with a reason, **then** the certification keeps the date, the reason and who revoked it; a date without a reason is refused. Nothing else on the certification changes and nothing is blocked | ADR-079 (Q-74) · REQ-106f | database (1.2.3); only an admin: API (Phase 2) | database (2026-10-03, ADR-321); story `certification` (2026-10-03, ADR-321) |
-| AC-03-56 | **Given** Rivera's self-loader `730416`, unmodified, starts work on P2 as well, **when** the back office copies its certification to P2, **then** P2 has a new certification with a new number from P2's own series and a reference to `730416`; each is its own record on its own project | ADR-152 (Q-143) · REQ-106f | database (1.2.3) | database (2026-10-03, ADR-321); story `certification` (2026-10-03, ADR-321) |
-| AC-03-57 | **Given** that copy, `880112` on P2, **when** a measuring mistake is corrected in it, **then** the original is flagged for review on the certification itself: "Certification 730416: its copy 880112 on Bayline County PPDR was corrected." The fix is not applied to the original by the system | ADR-152 (Q-143); `spec/FLAGS.md` `REVIEW_ORIGINAL_CERTIFICATION` · REQ-106f | story (1.8.3) | |
+| AC-03-56 | **Given** Rivera's self-loader `730416` on P1, unmodified, starts work on P2 as well, **then** it is certified on P2 from scratch: measured and photographed again, with a number of P2's own. A certification is never copied, and nothing on one names a certification of another project (rewritten 2026-10-04: the user, ADR-328, 329, superseding ADR-152's copy) | ADR-328, 329 · REQ-106f | database (1.2.3) | database (2026-10-04, ADR-330): `certifications.test.ts` |
+| AC-03-57 | ~~**Given** that copy, `880112` on P2, **when** a measuring mistake is corrected in it, **then** the original is flagged for review~~ **Withdrawn 2026-10-04 (the user, ADR-328): a certification is never copied, so there is no copy to correct and no `REVIEW_ORIGINAL_CERTIFICATION`** | ADR-328 | withdrawn | |
 | AC-03-58 | **Given** any certification, replaced, revoked or QC Void, **then** it is never deleted: it is the evidence that a measurement was taken, and the database refuses a delete for every login | invariant 1; ADR-007 · REQ-010 | database (1.2.3) | database (2026-10-03, ADR-321) |
 
 ## H. Who writes it, and who sees it
@@ -138,7 +138,7 @@ total is divided by 46,656 (36³); the capacity is that to the nearest whole cub
 
 ## The count
 
-**60 scenarios**, **39 passing and 1 more in part** (2026-10-04). Task 1.3.5 (ADR-326, photographs): AC-03-34, a certification's five views, at the database. Task 1.3.3 (ADR-324, what every field event records): AC-03-40, the cert number as scanned and the certification found, at the database. Task 1.3.2 (ADR-323, numbering): AC-03-06, the cert-number series and its blocks of 100, at the database and the domain. Task 1.2.2 (ADR-320, the capacity
+**59 scenarios** (60 written; AC-03-57 withdrawn, ADR-328), **39 passing and 1 more in part** (2026-10-04). Task C67 (a) (ADR-330): AC-03-56 rewritten, a truck on a second project is certified there from scratch, at the database. Task 1.3.5 (ADR-326, photographs): AC-03-34, a certification's five views, at the database. Task 1.3.3 (ADR-324, what every field event records): AC-03-40, the cert number as scanned and the certification found, at the database. Task 1.3.2 (ADR-323, numbering): AC-03-06, the cert-number series and its blocks of 100, at the database and the domain. Task 1.2.2 (ADR-320, the capacity
 math, `packages/domain`'s `Capacity`): AC-03-21…29, 31 and 32 at the domain. Task 1.2.3 (ADR-321,
 the certification's records): AC-03-01…05, 07, 08, 10…13, 16, 18…20, 30, 36, 37, 51, 53, 55, 56
 and 58…60 at the database (`packages/db/test/certifications.test.ts`, each under a test named by
@@ -149,7 +149,7 @@ AC-03-38's "signatures on file" passes and its QC mark waits for 1.8.2.
 |---|---|---|
 | Task 1.2.2, the capacity math (domain) | AC-03-21…29, 31, 32 | 11 |
 | Task 1.2.3, the certification's records (database or story) ✅ | AC-03-01…05, 07, 08, 10…13, 16, 18…20, 30, 36, 37, 51, 53, 55, 56, 58…60 | 25 |
-| Later Phase 1 tasks | AC-03-06 (1.3.2 ✅); 40 (1.3.3 ✅); 34 (Milestone 1.3); 33 (1.5.4); 17, 35, 39, 41…50 (Milestone 1.5); 15 (1.7.1); 52, 57 (1.8.3) | 20 |
+| Later Phase 1 tasks | AC-03-06 (1.3.2 ✅); 40 (1.3.3 ✅); 34 (Milestone 1.3); 33 (1.5.4); 17, 35, 39, 41…50 (Milestone 1.5); 15 (1.7.1); 52 (1.8.3) | 19 |
 | Phases 2–4 only | AC-03-09, 14, 54 | 3 |
 | In two places | AC-03-38: signatures on file with 1.2.3, the QC mark with 1.8.2 | 1 |
 
@@ -176,14 +176,14 @@ or a monitor's work (ADR-230).
 | 11 | ~~What a contractor user sees of certifications~~ **Decided (ADR-321):** none yet; its own come with a transaction's prime and operating sub | 1.2.3 ✅; 1.7.1 (C18) |
 | 12 | ~~Which audit domain a certification belongs to~~ **Decided (ADR-321):** billing, with its boxes; its helpers operations | 1.2.3 ✅ |
 | 13 | What QC Void on a certification does to tickets on it (nothing recorded says it flags them) | 1.8.2 |
-| 14 | A copy's photographs: whether the copy points at the original's or holds its own | Milestone 1.3, with `Photo` |
+| 14 | ~~A copy's photographs: whether the copy points at the original's or holds its own~~ **Falls away (ADR-328): a certification is never copied** | ✅ |
 
 **Settled by the user, 2026-10-03 (KD-69 closed, ADR-318):** the golden mission's P2 ticket 102001
 scans cert `730416`, the number Rivera's self-loader also has on P1, and that stands. **User:**
 > KD-69 (b) because a placeard number (the number on the side of the truck and what is scanned by the bardcord or manually entered) is unique per project only. Multiple projects could in theory contain the same placeard numbers. The only thing the system cares about it that no single placeard number appears on a project more than once.
 
-So P2 has its own certification `730416` (AC-03-03). The back office's *copy* of AC-03-56 and 57 is
-unchanged: it still takes a new number (Q-143, ADR-152; confirmed by the user, ADR-319).
+So P2 has its own certification `730416` (AC-03-03). **Since 2026-10-04 (the user, ADR-328, 329)
+a certification is never copied:** the truck is certified on P2 from scratch (AC-03-56).
 
 **Not in Phase 1** (their rules are recorded): certifying on the phone, its sub suggestions and its
 itemised receipt (Phase 3, `adms-field-app`); the certification screens, the "replaces" wording and

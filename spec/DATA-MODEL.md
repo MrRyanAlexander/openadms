@@ -770,7 +770,7 @@ primary box); a box repeats its certification's `kind`, so only a container hold
 | **signaturesOnFile** | bool | Set at QC |
 | replacesId | → `Certification` | A modified truck's new certification (ADR-082) |
 | replacedReason | text | |
-| copiedFromId | → `Certification` | The same truck on another project (ADR-152) |
+| ~~copiedFromId~~ | | Removed (ADR-328, 330): a certification is never copied; a truck on another project is certified there from scratch |
 | revokedFrom | date | By an admin, with a reason (ADR-079) |
 | revokedReason | text | |
 | revokedById | → `User` | |
@@ -1181,8 +1181,8 @@ A `view` only on a certification's photograph, and not required. A fingerprint i
 hexadecimal digits; `objectKey` and `depthObjectKey` are each unique. **The two fingerprints and
 the two keys are written once**: a trigger refuses any change to them, by anyone; the owner, the
 time, the place and `uploadedAt` are corrected as evidence is. The database counts no
-photographs: "at most 8" stays the phone's. A copied certification holds none of its own: its
-photographs are the original's, through `copiedFromId`. **Viewers:** a client user and an
+photographs: "at most 8" stays the phone's. A certification is never copied (ADR-328), so each holds its own
+photographs. **Viewers:** a client user and an
 auditor see their projects' photographs' records without `objectKey` and `depthObjectKey`
 (`viewer_photo`).
 
