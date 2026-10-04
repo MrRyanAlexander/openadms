@@ -849,6 +849,22 @@ is typed and nothing is pre-programmed. Real columns, never JSON: the engine rea
 | count | int | How many, where the ROE says (three trees); recorded and exported, never checked (*agent default*) |
 | archivedAt | instant | Takes one off |
 
+**As built (ADR-327).** Both are configuration, audited in the records domain; the API edits an
+ROE freely and nothing is deleted. An ROE's id is the phone's, or the database's for one the back
+office makes; its number is kept as issued or as typed, not blank, once per project; only the
+number, `signed`, `answers` and `source` are required, so an ROE can be set up with its number
+alone and filled in later. **A phone's ROE** says who made it, on which phone, under which
+assignment and when (with the phone's offset); **a back-office one** has no phone, assignment or
+offset. It carries **no setup version** (it is setup, like a certification). A latitude and a
+longitude together, on the earth, or neither. `formDefinitionId` comes with `formId` and
+`formDocumentType` (`ROE`), all three or none, held by foreign keys to its own project's ROE form
+and to that form's definition; **with no definition the answers are `{}`** (a form with no fields
+of the firm's own has no definition to answer). A scope line repeats its ROE's `projectId`; its
+debris type comes with `formId` and `formDocumentType` (`LOAD`), which hold it to its own
+project's load form; a count is 1 or more; a debris type and a payable type are each once per
+ROE. That a payable type is among the project's unit rate pay items is not held by the database.
+**Viewers:** a client user and an auditor see their projects' ROEs and scope lines, every column.
+
 ### The time clock (Phases 3–4; ADR-241)
 
 **No field links any of it to crew time**, and no rate or pay is held.
@@ -899,8 +915,8 @@ is typed and nothing is pre-programmed. Real columns, never JSON: the engine rea
 
 *Evidence, built in part.* **There is no ticket table**: a ticket is its number and its events
 (*agent default*). Its columns come in three groups. **Built: group 1 in full (ADR-324) and
-group 2 (ADR-325)**, with their checks (below, and §8), but for `scaleReceiptId` and `roeId`,
-which join with their own tables (tasks 1.3.5 and 1.3.6); of group 3 `status` and
+group 2 (ADR-325)**, with their checks (below, and §8), `scaleReceiptId` and `roeId` with
+their own tables (ADR-326, 327); of group 3 `status` and
 `reconciledAt` (the rest: task 1.5.2).
 
 **1. Every kind records:**
@@ -958,7 +974,7 @@ and an auditor see every column (`viewer_field_event`), and who recorded each th
 | formId, formDocumentType | → `Form`; enum `FormDocumentType` | ✓ | ✓ | ✓ | ✓ | | The entry's form and that form's document type, again: there exactly when the entry is. They hold the entry to the field event's own project and to its workflow's form by foreign keys (ADR-325) |
 | fieldTagId | → `FieldTag` | ✓ | | ✓ | | ✓ | Optional (ADR-218) |
 | roeNumber | text | ✓ | | | | ✓ | On an ROE project (ADR-149): the number as picked or typed, a snapshot like `certNumber` (Q-33; ADR-292) |
-| roeId | → `Roe` | ✓ | | | | ✓ | Empty while no ROE on the project has that number (ADR-292) |
+| roeId | → `Roe` | ✓ | | | | ✓ | Empty while no ROE on the project has that number (ADR-292). Built (ADR-327): one of its own project's ROEs, only on a collection and a unit rate event |
 | estimateCy | decimal(8,1) | ✓ | | | | | A split load's property estimate; present exactly when a collection's `splitSuffix` is (check; ADR-055). A haul-out's piles give a load call instead (ADR-295) |
 | loadCall | int 0–100 | | ✓ | ✓ | | | A whole number; 0 accepted and flagged (ADR-116). On a split haul-out each pile's is the **running** call: how full the container is after that pile; the last is the haul-out's (ADR-295) |
 | scaleReceiptId | → `ScaleReceipt` | | ✓ | | ✓ | | The weight instead of a load call, or an optional receipt at a Final Disposal tower (ADR-223, 227) |
@@ -1049,6 +1065,17 @@ loads (§5).
 | **enteredAt** | instant | With its offset and `receivedAt` |
 | notes | text | |
 
+**As built (ADR-326).** Evidence, audited in the records domain; its id is the phone's. The
+database refuses a blank number, a second receipt with a number already on its project, a site of
+another project, the system actor as the person who entered it, and a gross or a tare below
+nought. **Every weight may be missing and none is worked out**: a net that isn't the gross less
+the tare, a net of nought and a net below nought are kept as written, for a flag. A field event's
+`scaleReceiptId` is taken only on a disposal and a haul-out disposal, for a receipt of its own
+project; a load call or a count beside it is taken. A tandem's one receipt is one row both
+disposals point at. Not checked (flags, or nothing): the receipt's site against the disposal's,
+the site's type, one trip per receipt. **Viewers:** a client user and an auditor see their
+projects' receipts (`viewer_scale_receipt`).
+
 ### 4.3 Forms: records, never a ticket's events (ADR-236)
 
 **Each form has these fields**, as a field event has them:
@@ -1103,6 +1130,25 @@ No quantity, number, pay item or cost (ADR-184, 188).
 | residentName | text | |
 | originAddress | text | |
 
+**As built (ADR-327).** `Survey`, `Incident` and `DropOffLog` are evidence, audited in the records
+domain: the API inserts and corrects them, the worker reads them and writes none of their columns
+(a form has no status). "Its time" is `madeAt`, with `deviceUtcOffsetMinutes` and `receivedAt`.
+**One check tells a phone's form** (its phone, assignment and setup version; no back-office person
+or reason) **from one created in the back office** (the person and the reason; no phone,
+assignment or setup version), as on a field event; the system actor makes and creates none. A
+latitude and a longitude together, on the earth, or neither. `formDefinitionId` comes with
+`formId` and `formDocumentType`, all three or none, the document type the record's own (`SURVEY`,
+`INCIDENT`, `DROP_OFF_LOG`), held by foreign keys to its own project's form and to that form's
+definition; **with no definition the answers are `{}`**. Whether each answer fits its field is the
+schema `packages/contracts` makes from the definition's version (`formAnswersSchema`: text that
+isn't blank, a number, yes or no, one of a pick's choices, a photograph's id; a required field
+answered; no field the version doesn't have). A survey's `roeId` and a drop-off log's `siteId` are
+its own project's. An incident's sub-type is not held to its type by the database, and **an
+incident names no certification**: a truck it concerns is in its parties and description
+(`spec/acceptance/04-field-capture.md` point 16). A survey has no unique key: `surveyNumber` and
+`roeNumber` may repeat. **Viewers:** a client user and an auditor see their projects' surveys,
+incidents and drop-off logs, every column.
+
 ### 4.4 Photos (ARCHITECTURE §11)
 
 #### `Photo`
@@ -1125,6 +1171,20 @@ item requires is a flag.
 | depthObjectKey | text | |
 | deviceId | → `Device` | |
 | uploadedAt | instant | |
+
+**As built (ADR-326).** Evidence, audited in the records domain; its id is the phone's; it also
+keeps `deviceUtcOffsetMinutes` and `receivedAt`. **Seven owners today**, each of the
+photograph's own project (two-column foreign keys): `fieldEventId`, `certificationId`,
+`scaleReceiptId`, and since ADR-327 `roeId`, `surveyId`, `incidentId` and `dropOffLogId`.
+`quarantinedRecordId` joins with its own table (1.4.2), widening the one-owner check.
+A `view` only on a certification's photograph, and not required. A fingerprint is 64 lower-case
+hexadecimal digits; `objectKey` and `depthObjectKey` are each unique. **The two fingerprints and
+the two keys are written once**: a trigger refuses any change to them, by anyone; the owner, the
+time, the place and `uploadedAt` are corrected as evidence is. The database counts no
+photographs: "at most 8" stays the phone's. A copied certification holds none of its own: its
+photographs are the original's, through `copiedFromId`. **Viewers:** a client user and an
+auditor see their projects' photographs' records without `objectKey` and `depthObjectKey`
+(`viewer_photo`).
 
 ### 4.5 Sync (Phase 2 settles the detail; ARCHITECTURE §9)
 

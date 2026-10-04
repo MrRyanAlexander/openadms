@@ -91,7 +91,7 @@ total is divided by 46,656 (36³); the capacity is that to the nearest whole cub
 
 | ID | Scenario | From | Proven at | Passing |
 |---|---|---|---|---|
-| AC-03-34 | **When** a truck is certified, **then** it takes five photographs, each marked with its view: operator with the placard; interior or back; right side; left side; front | ADR-179 (Q-173) · REQ-106f | database (Milestone 1.3, with `Photo`) | |
+| AC-03-34 | **When** a truck is certified, **then** it takes five photographs, each marked with its view: operator with the placard; interior or back; right side; left side; front | ADR-179 (Q-173) · REQ-106f | database (Milestone 1.3, with `Photo`) | database (2026-10-04, ADR-326: each photograph's record says its view; AC-04-78) |
 | AC-03-35 | **Given** `730416` synced without its left side view, **then** the certification is saved and usable, and it is flagged on the certification itself, "Certification 730416: no left side photo.", which touches no ticket's status | ADR-179; `spec/FLAGS.md` `CERTIFICATION_PHOTO_MISSING` · REQ-106f | domain (1.5.5) | |
 | AC-03-36 | **Given** Sam Grant certifies `730415` with Lee Morgan, who is assigned to P1 with him that day, **then** Sam is recorded automatically as the monitor who made and measured it, and Lee as the helper he picked. A helper is picked, never typed; none at all is allowed; the same helper twice on one certification is refused | ADR-080, 294; `spec/DATA-MODEL.md` §3, §12 (18) · REQ-106b | database (1.2.3); the pick list: field app (Phase 3) | database (2026-10-03, ADR-321) |
 | AC-03-37 | **When** the client's and the contractor's representatives are named on a certification, **then** each is a typed name and nothing more: no ID, no signature | ADR-080 · REQ-106b | database (1.2.3) | database (2026-10-03, ADR-321) |
@@ -138,7 +138,7 @@ total is divided by 46,656 (36³); the capacity is that to the nearest whole cub
 
 ## The count
 
-**60 scenarios**, **38 passing and 1 more in part** (2026-10-03). Task 1.3.3 (ADR-324, what every field event records): AC-03-40, the cert number as scanned and the certification found, at the database. Task 1.3.2 (ADR-323, numbering): AC-03-06, the cert-number series and its blocks of 100, at the database and the domain. Task 1.2.2 (ADR-320, the capacity
+**60 scenarios**, **39 passing and 1 more in part** (2026-10-04). Task 1.3.5 (ADR-326, photographs): AC-03-34, a certification's five views, at the database. Task 1.3.3 (ADR-324, what every field event records): AC-03-40, the cert number as scanned and the certification found, at the database. Task 1.3.2 (ADR-323, numbering): AC-03-06, the cert-number series and its blocks of 100, at the database and the domain. Task 1.2.2 (ADR-320, the capacity
 math, `packages/domain`'s `Capacity`): AC-03-21…29, 31 and 32 at the domain. Task 1.2.3 (ADR-321,
 the certification's records): AC-03-01…05, 07, 08, 10…13, 16, 18…20, 30, 36, 37, 51, 53, 55, 56
 and 58…60 at the database (`packages/db/test/certifications.test.ts`, each under a test named by
