@@ -67,7 +67,7 @@ record (why Phase 0 existed, its exit criteria and how each was met, the spec tr
 question rounds) moved word for word to `DECISIONS.md`'s scratchpad, "Moved from NEXT.md,
 2026-10-02"; `ROADMAP.md` §3a keeps the table.
 
-**Still live from the spec track:** `spec/acceptance/` is 5 of 9 files (`05-sync.md`: 56 scenarios, written 2026-10-04, ADR-333; 39 are task 1.4.2's; `04-field-capture.md`: 98 scenarios, 93 passing after 1.3.7, ADR-332; `01-setup.md`: 82
+**Still live from the spec track:** `spec/acceptance/` is 5 of 9 files (`05-sync.md`: 56 scenarios, written 2026-10-04, ADR-333; 39 are task 1.4.2's; `04-field-capture.md`: 103 scenarios, 98 passing after C67 (e), ADR-337; `01-setup.md`: 82
 scenarios, 67 passing (AC-01-19 since 1.2.3, AC-01-09 since 1.3.2, AC-01-27 whole since 1.3.4) and AC-01-48, 55 and 80 in part; `02-people-and-devices.md`: 74
 scenarios, 35 passing at the database and four in part after 1.1.10, ADR-315; `03-certification.md`: 60 scenarios, 39 passing and 1 in part after 1.3.5, ADR-326); each other file is the first task of the milestone that builds its part
 (ADR-300).
@@ -81,7 +81,7 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-04: Phase 1 is open, twenty-three tasks done; Milestones 1.1, 1.2 and 1.3 are done; 1.4.1 written; C67 (a)…(d) built)
+### Where things stand (2026-10-04: Phase 1 is open, twenty-three tasks done; Milestones 1.1, 1.2 and 1.3 are done; 1.4.1 written; C67 (a)…(e) built)
 - **Phase 1 (data core and engine) is the active phase**, opened by the user on 2026-10-01
   (ADR-299). Its plan is `BACKLOG.md`'s ten milestones and 47 tasks (ADR-300): setup records →
   certifications and capacity → tickets and numbers → sync intake → reconciliation → the rule engine
@@ -402,15 +402,17 @@ the column before, `DROP VIEW` it first in the same stub. **A test's viewer stat
 its actor and writes in one `DO` block: Prisma runs a migration's statements one by one, so a
 `set_config(…, true)` in its own statement is gone by the next. **A stub written once can't be
 written again** (the hook): if it was never applied to `adms`, remove it and make a fresh one.
-👉 **C67 (e), a photograph's archive mark and label** (`BACKLOG.md`, the register, C67; ADR-329
-(9)): two columns on `Photo`, a new migration; the back office's remove (an archive mark; the
-file and its fingerprints stay) and label (free text), each by permission and audited; `photo`
-is evidence and viewed, so its guard reruns `guard_table` and `guard_viewer` (hidden
-`object_key`, `depth_object_key`). It needs the stack (`pnpm local:up`; Docker Desktop may need
-`open -a Docker`). Then
-**1.4.2, intake** (read `05-sync.md` first: its scenarios, its sixteen open points, and the
+**C67 (e) is done (ADR-337):** a photograph's record holds the back office's two marks,
+`archivedAt` (removed from the record: a mark with its time, cleared to put it back; the row, the
+file and its fingerprints stay) and `label` (free text, never blank: `photo_label_check`); both
+are empty as a phone sends a photograph, corrected by the API and audited, and shown by
+`viewer_photo`. Intake writes neither from a phone; the service call is 1.8.3's; whether a
+removed photograph counts as a required one is 1.5.5's and 1.5.7's. **C67 (a)…(e) are all
+built; (f) is part of 1.4.2 and (g) of 1.5.5 and 1.5.7.**
+👉 **1.4.2, intake** (read `05-sync.md` first: its scenarios, its sixteen open points, and the
 carried items under them; it also looks up the certification and the ROE an incident's numbers
-find).
+find, and keeps a field event whose GPS fix is impossible, without the fix: C67 (f)). It needs
+the stack (`pnpm local:up`; Docker Desktop may need `open -a Docker`).
 
 **The harness's phones** (ADR-332): a story signs a phone in with `story.phone({ …, lists: await
 phoneLists(api, { assignmentId, deviceId }) })` after its blocks are cut (`NumberAllocator.topUp`),
@@ -587,7 +589,7 @@ then `SELECT guard_list('<table>', '<domain>');` in its guard migration; a new b
 `packages/domain`'s `builtInKeys` first, with an ADR (ADR-302).
 
 Start every command with `eval "$(fnm env --shell zsh)"`; the checks are **`adms-verify`** (the chain
-is 58 files, 1,173 tests; sixty-one migrations; `pnpm scenarios` runs six stories, 16, 18, 52, 25, 15 and 35 checks),
+is 58 files, 1,175 tests; sixty-three migrations; `pnpm scenarios` runs six stories, 16, 18, 52, 25, 15 and 35 checks),
 with **`pnpm security`** (7 passed, 0 failed, ADR-291). The database tests, the map servers' tests and
 the stories need `pnpm local:up` first; stop it at close-out (ADR-277). A schema change goes through
 Prisma (`prisma migrate dev --create-only`), a guard into its own empty stub (ADR-113); **try a guard

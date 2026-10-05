@@ -150,6 +150,8 @@ of 140, an estimate on a tower's record), never work that looks wrong.
 | AC-04-77 | **Given** a photograph, **then** its record keeps when it was taken by the phone's clock, where, the phone, the fingerprint taken at capture and the fingerprint of what was uploaded, and where the file is; it may name a file of depth data beside it. A photograph is never deleted or overwritten | ADR-101; ARCHITECTURE §11 | database (1.3.5); the file itself: API (Phase 2) | database (2026-10-04, ADR-326); the file itself: Phase 2 |
 | AC-04-78 | **Given** `730415`'s certification, **then** each of its five photographs says which view it is: operator with the placard, interior or back, right, left, front (AC-03-34) | ADR-179; `spec/DATA-MODEL.md` §4.4 · REQ-106f | database (1.3.5) | database (2026-10-04, ADR-326) |
 | AC-04-79 | **Given** a ticket, **then** the phone takes at most 8 photographs for it, from the camera only, never the gallery; whether any is required is the pay item's setting, and too few is flagged, never refused | ADR-101, 157, 181 | field app (Phase 3); the flag: domain (1.5.7) | |
+| AC-04-102 | **Given** a photograph on `101020` that doesn't belong on the record, **when** Dana removes it in the back office on Wednesday at 10:05, **then** its record is marked as removed, with that time, and nothing is deleted: the record, the file, both fingerprints and where the file is kept all stay, and the ticket's other photographs are untouched. The audit log says Dana did it and when. Clearing the mark puts the photograph back, audited the same way. A phone sends no such mark, and the worker never sets one. *(Added 2026-10-04 at the user's word, ADR-329 (9), 337; after the user's approval of this file, ADR-335.)* | ADR-101, 329 (9), 337; `spec/DATA-MODEL.md` §4.4 | database (C67 (e)); who may: API (Phase 2); the screen, and what an export does with a removed photograph: back office (Phase 4) | database (2026-10-04, ADR-337); the rest: Phases 2 and 4 |
+| AC-04-103 | **Given** a photograph, **when** Dana labels it "Pile at the curb before loading", **then** the label is kept on its record in her own words; she may change it ("Pile at the curb, 22 Elm St") or take it off, and each change is in the audit log with what the label said before. A blank isn't a label. No check, flag or rule reads a label, and a removed photograph keeps its own. *(Added 2026-10-04 at the user's word, ADR-329 (9), 337; after the user's approval of this file, ADR-335.)* | ADR-329 (9), 337; `spec/DATA-MODEL.md` §4.4 | database (C67 (e)); who may: API (Phase 2); the screen: back office (Phase 4) | database (2026-10-04, ADR-337); the rest: Phases 2 and 4 |
 
 ## H. Forms: records that never bill (Workflow D)
 
@@ -187,7 +189,7 @@ of 140, an estimate on a tower's record), never work that looks wrong.
 
 ## The count
 
-**98 scenarios**, **93 passing** (2026-10-04): task 1.3.2's nine (ADR-323: AC-04-01,
+**103 scenarios**, **98 passing** (2026-10-04): the 98 written by task 1.3.1, 93 of them passing as listed below; AC-04-99…101 (ADR-334), passing in `packages/db/test/roes-and-forms.test.ts`; and AC-04-102 and 103 (ADR-337, a photograph removed from the record and labelled), passing in `packages/db/test/scale-receipts-and-photos.test.ts`. Of the first 98: task 1.3.2's nine (ADR-323: AC-04-01,
 04…09, 13, 14), task 1.3.3's twenty-one (ADR-324: AC-04-02, 03, 12, 15, 16, 18…31, 44, 94), each
 under a test named by its ID in `packages/db/test/field-events.test.ts`, the seven that restate a
 Phase 0 guard included, and task 1.3.4's thirty-two (ADR-325: AC-04-32…37, 40, 41, 43, 45…51,
@@ -212,6 +214,8 @@ The five left are Phases 2–4's.
 | Task 1.3.5, scale receipts and photographs | AC-04-71…78 | 8 |
 | Task 1.3.6, ROEs and forms | AC-04-80, 81, 83…90 | 10 |
 | Task 1.3.7, the harness's phones and the day's story | AC-04-10, 11, 17, 42, 59, 70, 91, 92, 93 | 9 |
+| C67 (c), what an incident names (ADR-334) | AC-04-99…101 | 3 |
+| C67 (e), a photograph removed and labelled (ADR-337) | AC-04-102, 103 | 2 |
 | Phases 2–4 only | AC-04-79, 95…98 | 5 |
 
 Many have a second part proven later (a flag in Milestone 1.5, a screen in Phase 3); each row says

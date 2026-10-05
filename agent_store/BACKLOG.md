@@ -963,8 +963,13 @@ delete one.
   text, the firm's own form fields, a signed ROE form's photograph and an ROE's address count as
   naming a private citizen: none is hidden today). (a) and (b) came before
   1.3.7's story and 1.4.2's intake; (c) and (d) before 1.4.2 takes forms in.
-  **From ADR-329:** **(e) a photograph's archive mark and label** (two columns, a new
-  migration; the back office's remove and label, audited); **(f) task 1.4.2's intake** keeps a
+  **From ADR-329:** ✅ **(e) done 2026-10-04 (ADR-337)**, a photograph's archive mark and label
+  (`Photo.archivedAt`, `Photo.label`; two migrations; corrected by the API, audited; AC-04-102,
+  103; **left for 1.4.2:** intake writes neither from a phone; **1.5.5, 1.5.7:** whether a
+  removed photograph counts towards the photographs a pay item requires or a certification's
+  five views; **1.8.3:** the corrections' service removes, puts back and labels; **Phase 2:**
+  which permission may; **Phase 4:** the screen, and what a viewer's screen and the exports do
+  with a removed photograph); **(f) task 1.4.2's intake** keeps a
   field event whose GPS fix is impossible, without the fix, and flags it; **(g) new flags to
   word with the user** (1.5.5, 1.5.7): two quantities on one disposal, GPS unreadable, not a
   valid ticket number, the wrong kind of badge, a detail the phone should have required.

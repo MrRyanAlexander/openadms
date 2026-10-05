@@ -1197,6 +1197,8 @@ item requires is a flag.
 | depthObjectKey | text | |
 | deviceId | → `Device` | |
 | uploadedAt | instant | |
+| archivedAt | instant | The back office removed it from the record (ADR-329 (9), 337): a mark only, cleared to put it back. Nothing is deleted; who and when is the audit record |
+| label | text | The back office's own words for what it shows; never blank; read by no check (ADR-337) |
 
 **As built (ADR-326).** Evidence, audited in the records domain; its id is the phone's; it also
 keeps `deviceUtcOffsetMinutes` and `receivedAt`. **Seven owners today**, each of the
@@ -1210,7 +1212,13 @@ time, the place and `uploadedAt` are corrected as evidence is. The database coun
 photographs: "at most 8" stays the phone's. A certification is never copied (ADR-328), so each holds its own
 photographs. **Viewers:** a client user and an
 auditor see their projects' photographs' records without `objectKey` and `depthObjectKey`
-(`viewer_photo`).
+(`viewer_photo`). **Removed and labelled (ADR-337, built for C67 (e)):** `archivedAt` and
+`label`, both empty on a photograph as a phone sends it, both set, changed and cleared by the API
+like any correction (audited in the records domain, the worker only reads them); a removed
+photograph keeps its record, its file, its fingerprints and its label, and a viewer's view shows
+both columns. A label that is blank is refused (`photo_label_check`). Who may remove or label is
+a permission the API reads (Phase 2); whether a removed photograph counts towards the photographs
+a pay item requires or a certification's five views is the flags' task (1.5.5, 1.5.7).
 
 ### 4.5 Sync (Phase 2 settles the detail; ARCHITECTURE §9)
 
