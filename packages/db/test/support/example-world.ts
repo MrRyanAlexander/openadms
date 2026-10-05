@@ -770,12 +770,26 @@ export class ExampleWorld {
 
     // P1's forms: one per document type it uses (ADR-211). The load form's debris types, from the
     // firm's library, none reduced or hidden (the golden mission §1).
-    const form = (documentType: string, name: string): Promise<string> =>
-      this.insert('form', { project_id: p1, name, document_type: documentType, enabled: true });
+    // The incident form alone says what an incident offers P1's monitors: the contractor involved
+    // and a cert number; no ROE number, since P1 is right-of-way work (ADR-334).
+    const form = (
+      documentType: string,
+      name: string,
+      more: Record<string, unknown> = {},
+    ): Promise<string> =>
+      this.insert('form', {
+        project_id: p1,
+        name,
+        document_type: documentType,
+        enabled: true,
+        ...more,
+      });
     const forms = {
       load: await form('LOAD', 'Load'),
       haulOut: await form('HAUL_OUT', 'Haul-out'),
-      incident: await form('INCIDENT', 'Incident'),
+      incident: await form('INCIDENT', 'Incident', {
+        incident_offers: '{CONTRACTOR,CERT_NUMBER}',
+      }),
     };
     const onLoadForm = async (debrisType: string): Promise<string> =>
       this.insert('form_debris_type', {

@@ -238,6 +238,8 @@ model ProjectContractor {
   certificationsAsPrime         Certification[]     @relation("CertificationPrimePlace")
   certificationsAsFirstTierSub  Certification[]     @relation("CertificationFirstTierPlace")
   certificationsAsSecondTierSub Certification[]     @relation("CertificationSecondTierPlace")
+  // The incidents that name this contractor as the one involved (ADR-328).
+  incidents                     Incident[]
 
   // One place on a project: a sub is never shared by two primes.
   @@unique([projectId, contractorId])
@@ -291,21 +293,36 @@ enum FormDocumentType {
   @@map("form_document_type")
 }
 
+// What an incident may name, each optional: the contractor involved, a certification by its cert
+// number, an ROE by its number. The project's incident form says which its monitors are offered
+// (ADR-328).
+enum IncidentOffer {
+  CONTRACTOR
+  CERT_NUMBER
+  ROE_NUMBER
+
+  @@map("incident_offer")
+}
+
 // A project's form for one document type, the legacy "Document Format" (ADR-211): at most one of
 // each on a project, archived ones included. Debris types are added to a load or haul-out form;
 // the firm's own fields to an ROE, survey, incident or drop-off log form (ADR-160, 188, 308).
 model Form {
-  id           String           @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  projectId    String           @map("project_id") @db.Uuid
-  name         String
-  documentType FormDocumentType @map("document_type")
+  id             String           @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  projectId      String           @map("project_id") @db.Uuid
+  name           String
+  documentType   FormDocumentType @map("document_type")
   // Read on the forms that aren't a workflow's: incidents and drop-off logs are switched on per
   // project (ADR-188). Whether a load, haul-out or unit rate form is used is the project's
   // workflows' to say (ADR-041, 308).
-  enabled      Boolean
+  enabled        Boolean
   // "GPS required": a setting of the ROE form alone, which states it (ADR-181; a check in the
   // guard migration).
-  gpsRequired  Boolean?         @map("gps_required")
+  gpsRequired    Boolean?         @map("gps_required")
+  // What an incident may name besides its type, as this project offers its monitors: a setting of
+  // the incident form alone, which states it, an empty list for none (ADR-328, 334; a check in
+  // the guard migration).
+  incidentOffers IncidentOffer[]  @map("incident_offers")
 
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
@@ -1402,6 +1419,7 @@ model Certification {
   boxes           CertificationBox[]
   helpers         CertificationHelper[]
   fieldEvents     FieldEvent[]
+  incidents       Incident[]
   photos          Photo[]
 
   // A cert number once per project (ADR-045).
@@ -1523,6 +1541,7 @@ model Roe {
   scopeItems     RoeScopeItem[]
   fieldEvents    FieldEvent[]
   surveys        Survey[]
+  incidents      Incident[]
   photos         Photo[]
 
   // An ROE number once per project (ADR-149).

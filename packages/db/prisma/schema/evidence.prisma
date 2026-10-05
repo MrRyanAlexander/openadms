@@ -441,8 +441,9 @@ model Survey {
 }
 
 // Something that happened in the field. Records only: it never stops work, whatever the incident
-// (ADR-052). It has no ticket number and names no certification: a truck it concerns is in its
-// parties and description, as written.
+// (ADR-052). It has no ticket number. It may name the contractor involved, a certification by its
+// cert number and an ROE by its number, each optional (ADR-328); which of them a monitor is
+// offered is the project's incident form's to say, never a refusal here.
 model Incident {
   // Made on the phone, so a retried sync is the same record (KD-56); by the database for one
   // created in the back office.
@@ -479,16 +480,30 @@ model Incident {
   parties           String?
   address           String?
 
-  project         Project          @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  monitor         User             @relation("IncidentMonitor", fields: [monitorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  device          Device?          @relation(fields: [deviceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  assignment      Assignment?      @relation(fields: [assignmentId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  createdBy       User?            @relation("IncidentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  createdReason   Reason?          @relation(fields: [createdReasonId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  form            Form?            @relation(fields: [projectId, formId, formDocumentType], references: [projectId, id, documentType], onDelete: Restrict, onUpdate: Restrict)
-  formDefinition  FormDefinition?  @relation(fields: [formId, formDefinitionId], references: [formId, id], onDelete: Restrict, onUpdate: Restrict)
-  incidentType    IncidentType     @relation(fields: [incidentTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  incidentSubType IncidentSubType? @relation(fields: [incidentSubTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  // The contractor involved, picked from those on its own project, a prime or a sub (ADR-328).
+  contractorId    String? @map("contractor_id") @db.Uuid
+  // The cert number as scanned or typed, a snapshot as on a field event, and the certification it
+  // found, one of its own project's; empty while no certification on the project has that number.
+  certNumber      String? @map("cert_number")
+  certificationId String? @map("certification_id") @db.Uuid
+  // The ROE's number as picked or typed, a snapshot, and the ROE it found, one of its own
+  // project's; empty while no ROE on the project has that number (ADR-292).
+  roeNumber       String? @map("roe_number")
+  roeId           String? @map("roe_id") @db.Uuid
+
+  project         Project            @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  monitor         User               @relation("IncidentMonitor", fields: [monitorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  device          Device?            @relation(fields: [deviceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  assignment      Assignment?        @relation(fields: [assignmentId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  createdBy       User?              @relation("IncidentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  createdReason   Reason?            @relation(fields: [createdReasonId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  form            Form?              @relation(fields: [projectId, formId, formDocumentType], references: [projectId, id, documentType], onDelete: Restrict, onUpdate: Restrict)
+  formDefinition  FormDefinition?    @relation(fields: [formId, formDefinitionId], references: [formId, id], onDelete: Restrict, onUpdate: Restrict)
+  incidentType    IncidentType       @relation(fields: [incidentTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  incidentSubType IncidentSubType?   @relation(fields: [incidentSubTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  contractor      ProjectContractor? @relation(fields: [projectId, contractorId], references: [projectId, contractorId], onDelete: Restrict, onUpdate: Restrict)
+  certification   Certification?     @relation(fields: [projectId, certificationId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  roe             Roe?               @relation(fields: [projectId, roeId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
   photos          Photo[]
 
   // What a photograph points at, so it is one of its own project's incidents.

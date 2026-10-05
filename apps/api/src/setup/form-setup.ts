@@ -5,7 +5,7 @@
 // added to the haul-out form (packages/domain's DebrisTypeEntries).
 import { formDefinitionFields } from '@open-adms/contracts';
 import type { Form, FormDebrisType, FormDefinition, FormDocumentType, Prisma } from '@open-adms/db';
-import { DebrisTypeEntries } from '@open-adms/domain';
+import { DebrisTypeEntries, type IncidentOffer, IncidentOffers } from '@open-adms/domain';
 
 import { type Outcome, SetupService } from './setup-service.ts';
 
@@ -17,6 +17,9 @@ export interface NewForm {
   readonly enabled: boolean;
   // "GPS required": stated on the ROE form, and only there.
   readonly gpsRequired?: boolean;
+  // What an incident offers the project's monitors: stated on the incident form, and only there
+  // (an empty list for none). A new one starts from the domain's IncidentOffers.startingFor.
+  readonly incidentOffers?: readonly IncidentOffer[];
 }
 
 export interface NewFormDebrisType {
@@ -38,6 +41,10 @@ export class FormSetup extends SetupService {
           name: input.name,
           enabled: input.enabled,
           gpsRequired: input.gpsRequired ?? null,
+          // Left unsaid on an incident form, the database refuses it; on any other there is none.
+          ...(input.incidentOffers === undefined
+            ? {}
+            : { incidentOffers: new IncidentOffers(input.incidentOffers).list() }),
         },
       }),
     );

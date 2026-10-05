@@ -44,6 +44,7 @@ export {
   type DebrisTypeFormKind,
   type SetupWarning,
 } from './form-debris-types.ts';
+export { IncidentOffers, incidentOffers, type IncidentOffer } from './incident-offers.ts';
 export {
   MapShapes,
   type BoundingBox,

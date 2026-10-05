@@ -122,13 +122,15 @@ const documentTypes = [
   'DROP_OFF_LOG',
 ];
 
-// A form of each document type, as written on a project: the ROE form alone states "GPS required".
+// A form of each document type, as written on a project: the ROE form alone states "GPS
+// required", the incident form alone what an incident offers (here nothing).
 const formOf = (projectId: string, documentType: string): Record<string, unknown> => ({
   project_id: projectId,
   name: `A ${documentType} form`,
   document_type: documentType,
   enabled: true,
   ...(documentType === 'ROE' ? { gps_required: true } : {}),
+  ...(documentType === 'INCIDENT' ? { incident_offers: '{}' } : {}),
 });
 
 describe('a project’s forms', () => {
@@ -174,8 +176,10 @@ describe('a project’s forms', () => {
     expect(underEntries.code).toBe(refusedBy.restrict);
     expect(underEntries.message).toContain('"form_debris_type_form_id_document_type_fkey"');
     await add('form_definition', definition(world.forms.incident, 'INCIDENT', 1, [policeReport]));
+    // An incident form made a survey form gives up what an incident offers with it (the incident
+    // form's own setting), so it is the definition's foreign key that answers.
     const underDefinition = await db.refused(
-      `UPDATE "form" SET "document_type" = 'SURVEY' WHERE "id" = $1`,
+      `UPDATE "form" SET "document_type" = 'SURVEY', "incident_offers" = NULL WHERE "id" = $1`,
       [world.forms.incident],
     );
     expect(underDefinition.code).toBe(refusedBy.restrict);
@@ -248,6 +252,64 @@ describe('a project’s forms', () => {
       );
       expect(elsewhere.code, documentType).toBe(refusedBy.check);
     }
+  });
+
+  it('AC-01-83 what an incident offers is a setting on the project’s incident form, stated there and on no other form: P1 offers the contractor and a cert number, P2 all three, and either may offer none', async () => {
+    const { db, world } = tested;
+    await asTheApi();
+    const offers = async (form: string): Promise<unknown> =>
+      (
+        await db.one<{ offers: string[] }>(
+          `SELECT "incident_offers"::text[] AS offers FROM "form" WHERE "id" = $1`,
+          [form],
+        )
+      ).offers;
+    expect(await offers(world.forms.incident)).toEqual(['CONTRACTOR', 'CERT_NUMBER']);
+    const p2 = await add('form', {
+      ...formOf(world.p2, 'INCIDENT'),
+      incident_offers: '{CONTRACTOR,CERT_NUMBER,ROE_NUMBER}',
+    });
+    expect(await offers(p2)).toEqual(['CONTRACTOR', 'CERT_NUMBER', 'ROE_NUMBER']);
+    // Dana takes the cert number off P1's: one change, audited.
+    await db.run(`UPDATE "form" SET "incident_offers" = '{CONTRACTOR}' WHERE "id" = $1`, [
+      world.forms.incident,
+    ]);
+    expect(await offers(world.forms.incident)).toEqual(['CONTRACTOR']);
+    expect((await auditOf(world.forms.incident)).at(-1)).toMatchObject({
+      operation: 'UPDATE',
+      changed: ['incident_offers'],
+      actor: world.admin,
+      domain: 'OPERATIONS',
+    });
+    await db.run(`UPDATE "form" SET "incident_offers" = '{}' WHERE "id" = $1`, [p2]);
+    expect(await offers(p2)).toEqual([]);
+    // Unstated on an incident form, stated on any other, a gap in the list, or a value that
+    // isn't one of the three: each refused.
+    const unstated = await db.refused(
+      `UPDATE "form" SET "incident_offers" = NULL WHERE "id" = $1`,
+      [p2],
+    );
+    expect(unstated.code).toBe(refusedBy.check);
+    expect(unstated.message).toContain('"form_incident_offers_check"');
+    for (const documentType of documentTypes.filter(
+      (type) => !['INCIDENT', 'LOAD', 'HAUL_OUT'].includes(type),
+    )) {
+      const elsewhere = await db.refused(
+        ...insertOf('form', { ...formOf(world.p1, documentType), incident_offers: '{}' }),
+      );
+      expect(elsewhere.code, documentType).toBe(refusedBy.check);
+      expect(elsewhere.message, documentType).toContain('"form_incident_offers_check"');
+    }
+    const gap = await db.refused(
+      `UPDATE "form" SET "incident_offers" = ARRAY['CONTRACTOR', NULL]::incident_offer[] WHERE "id" = $1`,
+      [p2],
+    );
+    expect(gap.code).toBe(refusedBy.check);
+    const other = await db.refused(
+      `UPDATE "form" SET "incident_offers" = '{DRIVER}' WHERE "id" = $1`,
+      [p2],
+    );
+    expect(other.code).toBe(refusedBy.badValue);
   });
 
   it.each(['project_id', 'name', 'document_type', 'enabled'])('needs its %s', async (column) => {

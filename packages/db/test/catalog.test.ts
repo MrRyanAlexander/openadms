@@ -410,6 +410,11 @@ describe('the guards in the catalog', () => {
           "CHECK (((document_type = 'ROE'::form_document_type) = (gps_required IS NOT NULL)))",
       },
       {
+        name: 'form_incident_offers_check',
+        definition:
+          "CHECK (((((document_type = 'INCIDENT'::form_document_type) = (incident_offers IS NOT NULL)) AND ((incident_offers IS NULL) OR (array_position(incident_offers, NULL::incident_offer) IS NULL))) IS TRUE))",
+      },
+      {
         name: 'disposal_site_coordinates_check',
         definition:
           "CHECK ((((latitude >= ('-90'::integer)::numeric) AND (latitude <= (90)::numeric)) AND ((longitude >= ('-180'::integer)::numeric) AND (longitude <= (180)::numeric))))",
@@ -504,6 +509,11 @@ describe('the guards in the catalog', () => {
           "CHECK ((((jsonb_typeof(answers) = 'object'::text) AND (num_nonnulls(form_definition_id, form_id, form_document_type) = ANY (ARRAY[0, 3])) AND ((form_document_type IS NULL) OR (form_document_type = 'INCIDENT'::form_document_type)) AND ((form_definition_id IS NOT NULL) OR (answers = '{}'::jsonb))) IS TRUE))",
       },
       {
+        name: 'incident_cert_number_check',
+        definition:
+          "CHECK (((((cert_number IS NULL) OR (btrim(cert_number) <> ''::text)) AND ((certification_id IS NULL) OR (cert_number IS NOT NULL))) IS TRUE))",
+      },
+      {
         name: 'incident_created_by_check',
         definition:
           "CHECK ((created_by_id IS DISTINCT FROM '00000000-0000-7000-8000-000000000001'::uuid))",
@@ -516,6 +526,11 @@ describe('the guards in the catalog', () => {
       {
         name: 'incident_monitor_check',
         definition: "CHECK ((monitor_id <> '00000000-0000-7000-8000-000000000001'::uuid))",
+      },
+      {
+        name: 'incident_roe_number_check',
+        definition:
+          "CHECK (((((roe_number IS NULL) OR (btrim(roe_number) <> ''::text)) AND ((roe_id IS NULL) OR (roe_number IS NOT NULL))) IS TRUE))",
       },
       {
         name: 'incident_source_check',

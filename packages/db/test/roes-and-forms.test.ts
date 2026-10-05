@@ -80,7 +80,8 @@ async function listed(table: string, by: 'name' | 'key', value: string): Promise
   ).id;
 }
 
-// A form on a project, as Dana writes it: the ROE form alone states "GPS required".
+// A form on a project, as Dana writes it: the ROE form alone states "GPS required", the incident
+// form alone what an incident offers (all three, as on an ROE project).
 async function formOn(projectId: string, documentType: string): Promise<string> {
   return entered('form', {
     project_id: projectId,
@@ -88,6 +89,9 @@ async function formOn(projectId: string, documentType: string): Promise<string> 
     document_type: documentType,
     enabled: true,
     ...(documentType === 'ROE' ? { gps_required: true } : {}),
+    ...(documentType === 'INCIDENT'
+      ? { incident_offers: '{CONTRACTOR,CERT_NUMBER,ROE_NUMBER}' }
+      : {}),
   });
 }
 
@@ -545,7 +549,7 @@ describe('a survey', () => {
 });
 
 describe('an incident', () => {
-  it('AC-04-86 is kept as a record with its monitor: type, sub-type, address, parties, description, photographs; no ticket number, no certification, nothing priced', async () => {
+  it('AC-04-86 is kept as a record with its monitor: type, sub-type, address, parties, description, photographs; no ticket number, nothing priced', async () => {
     const { db, world } = tested;
     await asTheBackOffice();
     const propertyDamage = await listed('incident_type', 'name', 'Property damage');
@@ -576,12 +580,15 @@ describe('an incident', () => {
       made_at: new Date('2026-10-13T15:50:00Z'),
       photographs: 2,
     });
-    // The truck it concerns is in its parties and description, as written (ADR-327): the record
-    // names no certification, and holds no ticket number, status or price.
+    // The record holds no ticket number, status or price. What it may name (the contractor
+    // involved, a cert number, an ROE number: ADR-328) is AC-04-99's.
     expect(await columnsOf('incident')).toEqual([
       'address',
       'answers',
       'assignment_id',
+      'cert_number',
+      'certification_id',
+      'contractor_id',
       'created_by_id',
       'created_reason_id',
       'description',
@@ -601,6 +608,8 @@ describe('an incident', () => {
       'parties',
       'project_id',
       'received_at',
+      'roe_id',
+      'roe_number',
       'setup_version',
       'source',
     ]);
@@ -689,6 +698,112 @@ describe('an incident', () => {
     expect(await refusal('drop_off_log', dropOff({ answers: JSON.stringify(answers) }))).toBe(
       check('drop_off_log_answers_check'),
     );
+  });
+
+  it('AC-04-99 may name the contractor involved, a certification by its cert number and an ROE by its number, each on its own or none: Jo’s names Coastline and truck 730416; one on P2 names all three', async () => {
+    const { db, world } = tested;
+    await asThePhone();
+    const named = (id: string): Promise<unknown> =>
+      db.one(
+        `SELECT "contractor_id"::text AS contractor, "cert_number",
+           "certification_id"::text AS certification, "roe_number", "roe_id"::text AS roe
+         FROM "incident" WHERE "id" = $1`,
+        [id],
+      );
+    const none = {
+      contractor: null,
+      cert_number: null,
+      certification: null,
+      roe_number: null,
+      roe: null,
+    };
+    // None of the three: the incident as it was before (AC-04-86).
+    expect(await named(await received('incident', await incident()))).toEqual(none);
+    // The mailbox: Coastline's truck 730416, the cert number as scanned and the certification found.
+    const mailbox = await received(
+      'incident',
+      await incident({
+        contractor_id: world.coastline,
+        cert_number: '730416',
+        certification_id: world.certifications.c730416,
+      }),
+    );
+    expect(await named(mailbox)).toEqual({
+      ...none,
+      contractor: world.coastline,
+      cert_number: '730416',
+      certification: world.certifications.c730416,
+    });
+    // Each on its own: a sub is a contractor on the project too.
+    expect(
+      await named(await received('incident', await incident({ contractor_id: world.rivera }))),
+    ).toEqual({ ...none, contractor: world.rivera });
+    expect(
+      await named(await received('incident', await incident({ cert_number: '730417' }))),
+    ).toEqual({ ...none, cert_number: '730417' });
+    // On P2, an ROE project: a fence damaged at 412 Cedar Ct, on ROE R-0007, by P2's own 730416.
+    const r0007 = await roe();
+    const fence = await received(
+      'incident',
+      await incident(
+        onP2({
+          address: '412 Cedar Ct',
+          contractor_id: world.coastline,
+          cert_number: '730416',
+          certification_id: world.certifications.p2c730416,
+          roe_number: 'R-0007',
+          roe_id: r0007,
+        }),
+      ),
+    );
+    expect(await named(fence)).toEqual({
+      contractor: world.coastline,
+      cert_number: '730416',
+      certification: world.certifications.p2c730416,
+      roe_number: 'R-0007',
+      roe: r0007,
+    });
+    // P1's incident form offers no ROE number, and an incident of P1 that names one is still
+    // taken: what is offered is what a phone shows, never a refusal (ADR-052).
+    expect(
+      await db.one(`SELECT "incident_offers"::text[] AS offers FROM "form" WHERE "id" = $1`, [
+        world.forms.incident,
+      ]),
+    ).toEqual({ offers: ['CONTRACTOR', 'CERT_NUMBER'] });
+    expect(
+      await named(await received('incident', await incident({ roe_number: 'R-0031' }))),
+    ).toEqual({ ...none, roe_number: 'R-0031' });
+    // The back office adds what the monitor left out: a correction.
+    await asTheBackOffice();
+    await db.run(`UPDATE "incident" SET "contractor_id" = $2 WHERE "id" = $1`, [
+      mailbox,
+      world.rivera,
+    ]);
+    expect(await named(mailbox)).toMatchObject({ contractor: world.rivera });
+  });
+
+  it('AC-04-100 a number that finds nothing is taken as written; a contractor off the project, or a certification or an ROE of another project, is refused, and so is a found record without its number', async () => {
+    const { world } = tested;
+    await asThePhone();
+    const r0007 = await roe();
+    const tried = async (more: Row): Promise<string> => refusal('incident', await incident(more));
+    // No certification on P1 has 999999 and no ROE has R-0099: kept, to be looked at later.
+    await received('incident', await incident({ cert_number: '999999', roe_number: 'R-0099' }));
+    // Harbor Staffing is on no project; Summit is on P1 and not on P2.
+    expect(await tried({ contractor_id: world.harbor })).toBe(refusedBy.foreignKey);
+    expect(await tried(onP2({ contractor_id: world.summit }))).toBe(refusedBy.foreignKey);
+    // P2's own 730416 and P2's R-0007, on an incident of P1.
+    expect(
+      await tried({ cert_number: '730416', certification_id: world.certifications.p2c730416 }),
+    ).toBe(refusedBy.foreignKey);
+    expect(await tried({ roe_number: 'R-0007', roe_id: r0007 })).toBe(refusedBy.foreignKey);
+    // A found record without the number that found it, and a blank number.
+    expect(await tried({ certification_id: world.certifications.c730416 })).toBe(
+      check('incident_cert_number_check'),
+    );
+    expect(await tried(onP2({ roe_id: r0007 }))).toBe(check('incident_roe_number_check'));
+    expect(await tried({ cert_number: ' ' })).toBe(check('incident_cert_number_check'));
+    expect(await tried({ roe_number: '' })).toBe(check('incident_roe_number_check'));
   });
 });
 

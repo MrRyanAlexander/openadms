@@ -61,6 +61,19 @@ export async function phoneLists(
         orderBy: { position: 'asc' },
       })
     : [];
+  // What the project's incident form offers, and the contractors on the project to pick "the
+  // contractor involved" from: read only for a phone whose assignment makes incidents.
+  const incidentForm = assignment.formDocumentTypes.includes('INCIDENT')
+    ? await api.form.findFirst({ where: { projectId, documentType: 'INCIDENT' } })
+    : null;
+  const incidentOffers = incidentForm?.incidentOffers ?? [];
+  const placed = incidentOffers.includes('CONTRACTOR')
+    ? await api.projectContractor.findMany({
+        where: { projectId, archivedAt: null },
+        include: { contractor: true },
+        orderBy: { createdAt: 'asc' },
+      })
+    : [];
   const name = ({ id, name }: { id: string; name: string }) => ({ id, name });
   return {
     blocks: blocks.map(({ series, firstNumber, lastNumber, lastUsedNumber, status }) => ({
@@ -93,5 +106,7 @@ export async function phoneLists(
       ...name(type),
       subTypes: type.subTypes.map(name),
     })),
+    incidentOffers,
+    contractors: placed.map((place) => name(place.contractor)),
   };
 }

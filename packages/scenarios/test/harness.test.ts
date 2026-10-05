@@ -207,6 +207,9 @@ const lists: PhoneLists = {
     { ...named('Dryer'), kindOfWorkId: 'id:White Goods' },
   ],
   incidentTypes: [{ ...named('Property damage'), subTypes: [named('Mailbox struck')] }],
+  // P1's incident form: the contractor involved and a cert number, no ROE number.
+  incidentOffers: ['CONTRACTOR', 'CERT_NUMBER'],
+  contractors: [named('Coastline Haulers LLC'), named('Rivera Trucking')],
 };
 const tdsr = '00000000-0000-7000-8000-00000000000e';
 const phoneAt = (time: string, more: Partial<typeof setup> & { siteId?: string } = {}) => {
@@ -501,6 +504,8 @@ describe('a simulated phone captures badge first, number last', () => {
       type: 'Property damage',
       subType: 'Mailbox struck',
       address: '22 Elm St',
+      contractor: 'Coastline Haulers LLC',
+      certNumber: '730416',
     });
     const log = phone.dropOffLog({ residentName: 'Carl Jensen', originAddress: '14 Heron St' });
     const intake = new Received();
@@ -521,6 +526,31 @@ describe('a simulated phone captures badge first, number last', () => {
       tdsr,
     ]);
     expect(uuidv7Time(incident.id)).toEqual(incident.madeAt);
+    // AC-04-99: what the incident names, the contractor picked by name, the cert number as given.
+    expect([incident.contractorId, incident.certNumber, incident.roeNumber]).toEqual([
+      'id:Coastline Haulers LLC',
+      '730416',
+      null,
+    ]);
+    // AC-04-101: P1's incident form offers no ROE number, so the phone has nowhere to take one;
+    // with none of the three, an incident is an incident still.
+    const type = { type: 'Property damage' };
+    expect(() => phone.incident({ ...type, roeNumber: 'R-0007' })).toThrow(
+      "isn't offered an ROE number",
+    );
+    expect(() => phone.incident({ ...type, contractor: 'Summit Debris Co' })).toThrow(
+      'has no contractor "Summit Debris Co"',
+    );
+    const bare = new SimulatedDevice(
+      { ...setup, lists: { ...lists, incidentOffers: [], contractors: [] } },
+      new StoryClock('2026-10-12T08:20:00-04:00'),
+    );
+    expect(() => bare.incident({ ...type, certNumber: '730416' })).toThrow('a cert number');
+    expect(bare.incident(type)).toMatchObject({
+      contractorId: null,
+      certNumber: null,
+      roeNumber: null,
+    });
     const curb = phoneAt('08:15').phone;
     expect(() => curb.dropOffLog({})).toThrow('this assignment has no site');
   });

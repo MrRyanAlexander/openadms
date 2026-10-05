@@ -193,7 +193,16 @@ export const p1FieldDays: Story = {
     const loadForm = await form('LOAD', 'Load');
     const haulOutForm = await form('HAUL_OUT', 'Haul-out');
     await form('UNIT_RATE', 'Unit rate');
-    await form('INCIDENT', 'Incident');
+    // What an incident offers Jo: the contractor involved and a cert number (ADR-334).
+    await saved(
+      forms.form(dana, {
+        projectId: p1,
+        documentType: 'INCIDENT',
+        name: 'Incident',
+        enabled: true,
+        incidentOffers: ['CONTRACTOR', 'CERT_NUMBER'],
+      }),
+    );
     await form('DROP_OFF_LOG', 'Drop-off log');
     const library = async (name: string): Promise<string> =>
       (await api.debrisType.findFirstOrThrow({ where: { name } })).id;
@@ -818,7 +827,7 @@ export const p1FieldDays: Story = {
       type: 'Property damage',
       subType: 'Mailbox struck',
       address: '22 Elm St',
-      parties: 'Truck 730416',
+      certNumber: '730416',
     });
     story.at(tuesday('11:55'), 'Kim scans 730416 at the tower');
     started['dis101006'] = begin(kim, 'LOAD', 'DISPOSAL', '730416');
@@ -1191,6 +1200,8 @@ export const p1FieldDays: Story = {
           row.incidentSubType?.name,
           row.address,
           row.parties,
+          row.certNumber,
+          row.contractorId,
           row.answers,
         ]),
         dropOffs.map((row) => [
@@ -1212,7 +1223,9 @@ export const p1FieldDays: Story = {
             'Property damage',
             'Mailbox struck',
             '22 Elm St',
-            'Truck 730416',
+            null,
+            '730416',
+            null,
             {},
           ],
         ],

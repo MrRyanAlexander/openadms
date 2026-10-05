@@ -25,7 +25,7 @@ import {
   RuleSetup,
   SiteSetup,
 } from '@open-adms/api';
-import { RuleCriteria } from '@open-adms/domain';
+import { IncidentOffers, RuleCriteria } from '@open-adms/domain';
 
 import { uuidv7 } from '../ids.ts';
 import type { Story } from '../runner.ts';
@@ -582,6 +582,8 @@ export const setup: Story = {
             documentType: 'INCIDENT',
             name: 'Incident',
             enabled: true,
+            // P1 is right-of-way work: the contractor involved and a cert number, no ROE number.
+            incidentOffers: IncidentOffers.startingFor({ requiresRoe: false }).list(),
           }),
         )
       ).id,

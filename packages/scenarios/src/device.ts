@@ -15,6 +15,8 @@ import {
   type BandedPayItem,
   FieldEventDetails,
   type HeldBlock,
+  type IncidentOffer,
+  IncidentOffers,
   type MeasuredAs,
   NumberSeriesRules,
   PhoneNumbers,
@@ -131,6 +133,12 @@ export interface RecordedIncident extends RecordedForm {
   readonly description: string | null;
   readonly parties: string | null;
   readonly address: string | null;
+  // What it names, where the project offers it (ADR-328): the contractor picked by name, the cert
+  // number and the ROE number as scanned, picked or typed. The certification and the ROE a
+  // number finds are intake's to look up (BACKLOG 1.4.2).
+  readonly contractorId: string | null;
+  readonly certNumber: string | null;
+  readonly roeNumber: string | null;
 }
 
 export interface RecordedDropOffLog extends RecordedForm {
@@ -205,6 +213,10 @@ export interface PhoneLists {
   // The item names of the kinds of work its pay items do.
   readonly itemNames: readonly (Named & { readonly kindOfWorkId: string })[];
   readonly incidentTypes: readonly (Named & { readonly subTypes: readonly Named[] })[];
+  // What the project's incident form offers, and the project's contractors, primes and subs, by
+  // name, for "the contractor involved" (ADR-328).
+  readonly incidentOffers: readonly IncidentOffer[];
+  readonly contractors: readonly Named[];
 }
 
 const noLists: PhoneLists = {
@@ -215,6 +227,8 @@ const noLists: PhoneLists = {
   payItems: [],
   itemNames: [],
   incidentTypes: [],
+  incidentOffers: [],
+  contractors: [],
 };
 
 export interface PhoneSetup {
@@ -323,6 +337,10 @@ export interface NewIncident {
   readonly description?: string;
   readonly parties?: string;
   readonly address?: string;
+  // Each only where the project's incident form offers it.
+  readonly contractor?: string;
+  readonly certNumber?: string;
+  readonly roeNumber?: string;
   readonly latitude?: string;
   readonly longitude?: string;
   readonly notes?: string;
@@ -553,10 +571,20 @@ export class SimulatedDevice {
     return { saved: true, event };
   }
 
-  // An incident: its type, then the firm's sub-type if any. It records and never stops work
-  // (ADR-052, 137).
+  // An incident: its type, then the firm's sub-type if any, then whichever of the contractor
+  // involved, a cert number and an ROE number the project's incident form offers, each optional.
+  // It records and never stops work (ADR-052, 137, 328).
   incident(incident: NewIncident): RecordedIncident {
     const type = this.pick('incident type', this.lists.incidentTypes, incident.type);
+    const offers = new IncidentOffers(this.lists.incidentOffers);
+    const offered = <T>(offer: IncidentOffer, what: string, given: T | undefined): T | null => {
+      if (given === undefined) return null;
+      if (!offers.offers(offer)) {
+        throw new Error(`${this.name} isn't offered ${what} on an incident: not on this project.`);
+      }
+      return given;
+    };
+    const contractor = offered('CONTRACTOR', 'a contractor', incident.contractor);
     const made: RecordedIncident = {
       ...this.form(incident),
       incidentTypeId: type.id,
@@ -567,6 +595,10 @@ export class SimulatedDevice {
       description: incident.description ?? null,
       parties: incident.parties ?? null,
       address: incident.address ?? null,
+      contractorId:
+        contractor === null ? null : this.pick('contractor', this.lists.contractors, contractor).id,
+      certNumber: offered('CERT_NUMBER', 'a cert number', incident.certNumber),
+      roeNumber: offered('ROE_NUMBER', 'an ROE number', incident.roeNumber),
     };
     this.outbox.push({ record: 'INCIDENT', incident: made });
     return made;
