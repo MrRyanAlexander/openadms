@@ -270,7 +270,8 @@ ADR-303 (named here by ADR-307). Closes the behaviour of KD-02, 04, 05, 06, 12, 
 
 - [x] **1.5.1** ✅ **done 2026-10-05 (ADR-339):** 162 scenarios, AC-06-01…162: what starts a run, grouping, shape and status, every flag of the catalogue (66 today: 67 less the one ADR-328 withdrew) word for word, each thing never flagged, the quantities to the digit, how a flag behaves, what the worker writes and the run's guarantees, and the eight things ADR-329 keeps and flags that have no words yet; 152 are Milestone 1.5's, nine wait for the rules, one for a correction; eighteen points left to the tasks that build them (C70); KD-71 opened. `spec/acceptance/06-reconciliation.md`, from Part 6, `adms-validation` and
   `spec/FLAGS.md`: one scenario at least for each of the 67 flags and each thing never flagged.
-- [ ] **1.5.2** **The derived records.** `CompletedLoad` and `CompletedLoadCollection`,
+- [x] **1.5.2** ✅ **done 2026-10-05 (ADR-340):** the seven tables and five closed sets below, built as `spec/DATA-MODEL.md` §5 has them, in three migrations (the sixty-sixth to sixty-eighth); only the worker's login writes them; a disposal has one completed record, a collection is a live row of one, a number is one live record's (six exclusions `WHERE dissolved_at IS NULL`, which Prisma doesn't try to drop, where a partial unique index would be); each thing a derived record names is its own project's; `FlagCode` is the catalogue's 66 codes, held to `spec/FLAGS.md` by a test; a client user and an auditor see the completed records, their rows and the flags, nobody a run; `packages/db/test/derived-records.test.ts`, 17 tests by scenario ID (AC-06-06, 144, 145, 146 whole; 19, 21, 137, 138, 148, 152 the database's half); fifty loosened guards each caught. `Transaction`, `InvoiceLock` and `guard_transaction_delete` are unchanged (1.7.1, 1.8.2). REQ-113 ticked; REQ-116 waits for the worker. Was:
+  **The derived records.** `CompletedLoad` and `CompletedLoadCollection`,
   `CompletedHaulOut` and `CompletedHaulOutCollection` (one disposal each; one live row per
   collection event, the partial unique key in a guard migration; `dissolvedAt`), `Flag` with
   `FlagCode` and `FlagBilling`, `ReconciliationRun`, `ReconciliationDecision`; the worker's columns
@@ -704,9 +705,9 @@ delete one.
   type, audited like any field; nothing the engine, a rule or a flag reads lives in JSONB. The draft
   settles the model and field names, the guard for the definition's versions (never edited or
   deleted) and how exports name the columns; it may overturn the details, with an ADR.
-- **C16.** Every model and field is provisional (ADR-268). `CompletedLoad` links one collection (a split's
-  several are DATA-MODEL's); `CompletedHaulOut` is still to come; `Transaction` lacks pay item, rule,
-  contract and operating sub.
+- **C16.** Every model and field is provisional (ADR-268). ~~`CompletedLoad` links one collection (a split's
+  several are DATA-MODEL's); `CompletedHaulOut` is still to come;~~ ✅ built, ADR-340 (1.5.2). **Task 1.7.1:** `Transaction` lacks pay item, rule,
+  contract and operating sub, and its links to a property (`completedLoadCollectionId`), a haul-out and its pile, and a unit rate ticket; its viewer policy still finds its project through `viewer_sees_load_project`.
 - **C17.** A transaction **insert** on an invoice-locked load isn't refused by the database (it's the
   worker's "regenerate only un-invoiced tickets", ADR-090); unlocking needs an unlock column, since an
   `InvoiceLock` can't be deleted (ADR-270 (6)).
@@ -1064,8 +1065,8 @@ delete one.
 
 - **C70. What the reconciliation scenarios left for the tasks that build them** (ADR-339;
   `spec/acceptance/06-reconciliation.md`, "Left to the task that builds it", eighteen points).
-  **Task 1.5.2:** how reconciliation is queued (with 1.5.9); who points a field event at a
-  certification made later. **Task 1.5.4:** who takes the remainder of rounded shares; which
+  ~~**Task 1.5.2:** how reconciliation is queued (with 1.5.9); who points a field event at a
+  certification made later.~~ **1.5.2's half is decided (ADR-340): it added no queue record, and the worker has no right to write `certification_id`. Task 1.5.9:** how the worker finds the tickets to work (a record of its own, or what was received or changed since its last run). **Task 1.5.5:** who points a field event at a certification made later (the API, which writes that column), and what queues its tickets. **Left by 1.5.2 (ADR-340): task 1.5.3**, the kind of field event a completed record names is the grouping's to keep (the database holds the project and the uniqueness); **tasks 1.5.4, 1.5.5**, which figures a completed record carries when a check fails (nothing ties them to `quantitySource`; `pileLoadCall` has no range); **task 1.7.1**, a contractor user's sight of completed records and flags (C18); **task 1.8.x**, a flag's acceptance as a mark, and whether a viewer is ever shown a run. **Task 1.5.4:** who takes the remainder of rounded shares; which
   quantity bills beside a count. **Task 1.5.5:** the work time; a tag's last day; work on the day
   a certification was replaced; the checks on a lone field event; `OVERLAPPING_LOADS` while a
   disposal hasn't synced and after the phantom is voided (KD-71); a bare collection's words; the

@@ -929,8 +929,8 @@ ROE. That a payable type is among the project's unit rate pay items is not held 
 *Evidence, built in part.* **There is no ticket table**: a ticket is its number and its events
 (*agent default*). Its columns come in three groups. **Built: group 1 in full (ADR-324) and
 group 2 (ADR-325)**, with their checks (below, and §8), `scaleReceiptId` and `roeId` with
-their own tables (ADR-326, 327); of group 3 `status` and
-`reconciledAt` (the rest: task 1.5.2).
+their own tables (ADR-326, 327); and group 3 in full (ADR-340: the zone held to the map
+version used, both and the worked-out pay item to the field event's own project).
 
 **1. Every kind records:**
 
@@ -1311,9 +1311,27 @@ The numbered lists a phone was sent, kept so a reviewer sees what the phone show
 
 ## 5. Derived: the worker's conclusions
 
+**Built 2026-10-05 (ADR-340), all but `Transaction`** (task 1.7.1's): the completed load and
+haul-out, their collection rows, `Flag`, `ReconciliationRun`, `ReconciliationDecision`, and the
+worker's three columns on a field event (§4.1 (3)). What the build added to this page, as agent
+defaults: **a collection row has its own `id` and repeats its completed record's `projectId`**, so
+the database holds the completed record and the collection event to one project (a transaction
+points at the row by its id, 1.7.1); **a completed record's disposal, a flag's record and run, and a
+field event's map version, zone and worked-out pay item are each held to its own project** by
+two-column foreign keys; **`mileageSource` is there exactly when `mileage` is** (a collection with
+no GPS has neither), and the road point and the map data's date and hash are each whole or
+missing; **"unique among live rows" is an exclusion on equality** `WHERE dissolved_at IS NULL`,
+which holds what a partial unique key would and which Prisma's next migration doesn't try to drop;
+a suffix is once among a completed record's live rows; a `ReconciliationRun` and a
+`ReconciliationDecision` have an `id`, and a run has one decision for a ticket. A client user and
+an auditor see the completed records, their rows and the flags of their projects; no viewer reads
+a run or its decisions. That a completed load's disposal is a `DISPOSAL` and its rows'
+collections `COLLECTION`s is the worker's grouping (1.5.3): the database holds the project and the
+uniqueness, not the kind.
+
 #### `CompletedLoad` (`CLT`)
 
-*Derived, built in part.* One per disposal event, for the life of that event (*agent default*: it is
+*Derived, built (ADR-340).* One per disposal event, for the life of that event (*agent default*: it is
 "updated in place, never duplicated", ADR-086).
 
 | Field | Type | Notes |
@@ -1583,10 +1601,13 @@ Never relaxed to pass a test (ARCHITECTURE §5.4). ✅ = built today.
 |---|---|
 | One field event per project + workflow + bare number + split suffix + kind | ✅ unique key |
 | A kind fits its workflow; a load call is 0–100 and only on `DIS` and `HOC` | ✅ checks |
+| A completed record's disposal, a collection row's completed record and collection event, a flag's field event, certification, site, survey, pay item and run, and a field event's map version and worked-out pay item are each of its own project; a zone is one of the map version used, and comes with it; only a unit rate event has a worked-out pay item (ADR-340) | ✅ two-column foreign keys and checks |
+| A completed record's load call is 0–100 and nothing on it or its rows is below nought; a weight is a share only where there is a weight; a haul-out never takes its quantity from carried tickets; a share is nought to one; a mileage with its source, a road point whole and on the earth, the map data's date with its hash; a flag is on a ticket or a record, says something, keeps its facts as an object with a SHA-256, and is never cleared before it was raised; a run never finishes before it starts; one decision for a ticket in a run (ADR-340) | ✅ checks and a unique key |
+| Only the worker writes a derived record and the reconciliation columns on a field event; the API reads them; nobody deletes one (ADR-270, 340) | ✅ grants (`guard_table`, `DERIVED`; the field event's five worker columns) |
 | Every kind-specific column is empty on the other kinds; a split load's collection has its suffix and estimate both, or neither; a haul-out collection may carry a suffix, with its load call (ADR-295); no other kind has a suffix, and a suffix is capital letters; a measurement with how it was read, both or neither; an estimate, a count, a measurement and a root ball nought or more (ADR-325) | ✅ checks |
 | A field event's debris type is an entry of its own project's form for its workflow; its field tag and its pay item are its own project's; an item line sits only on a unit rate event, once per item, and a carried ticket only on a collection, once per number (ADR-325) | ✅ foreign keys (the field event repeats the entry's form and document type; a line repeats its field event's kind), checks and unique keys |
 | A phone's record carries its device, assignment and setup version; a back-office one its person and reason, and neither the other's (ADR-324) | ✅ check |
-| One disposal per completed load or haul-out; one live completed record per collection event | unique keys (the second partial: `WHERE dissolved_at IS NULL`, in a guard migration) |
+| One disposal per completed load or haul-out; one live completed record per collection event; a ticket number once among a project's live completed loads, and among its live completed haul-outs; a suffix once among a completed record's live rows (ADR-340) | ✅ a unique key, and exclusions on equality `WHERE dissolved_at IS NULL` in the guard migration (what a partial unique key holds) |
 | A cert number once per project (✅ ADR-321); an ROE number once per project. **A scale receipt's number is never unique** (ADR-328, 331: the key is gone) | unique keys |
 | A pay item's code once per project (ADR-301) | ✅ unique key |
 | One rate per prime on a pay item, and only for one of the pay item's own project's primes (ADR-206, 305, 309) | ✅ a unique key and two-column foreign keys |
@@ -1654,17 +1675,17 @@ A new value in any of them is a code change with an ADR (`spec/LISTS.md` Group 2
 | `MeasuredAs` ✅ | `CIRCUMFERENCE` · `DIAMETER` | `FieldEvent` (ADR-325) |
 | `AddressSource` ✅ | `LOOKED_UP` · `TYPED` | `FieldEvent` |
 | `TicketNumberSource` ✅ | `CONTROL` · `GENERATED` | `Project` |
-| `QuantitySource` | `LOAD_CALL` · `SCALE_WEIGHT` · `CARRIED_TICKETS` | `CompletedLoad`, `CompletedHaulOut` |
-| `MileageSource` | `ROAD_ROUTE` · `STRAIGHT_LINE` | `CompletedLoadCollection`, `CompletedHaulOutCollection` |
+| `QuantitySource` ✅ | `LOAD_CALL` · `SCALE_WEIGHT` · `CARRIED_TICKETS` | `CompletedLoad`, `CompletedHaulOut` |
+| `MileageSource` ✅ | `ROAD_ROUTE` · `STRAIGHT_LINE` | `CompletedLoadCollection`, `CompletedHaulOutCollection` |
 | `MapSource` | `UPLOAD` · `ESRI_LAYER` · `DRAWN` | `MapVersion` |
 | `QcStatus` | `QC_REVIEW` · `QC_APPROVED` · `QC_ISSUES` · `QC_VOID` | `QcMark` |
 | `SiteAreaSource` | `DRAWN` · `UPLOAD` | `SiteAreaVersion` |
 | `ClockEntryKind` | `IN` · `BREAK_START` · `BREAK_END` · `OUT` | `ClockEntry` |
 | `PhotoView` | `OPERATOR_WITH_PLACARD` · `INTERIOR_OR_BACK` · `RIGHT` · `LEFT` · `FRONT` | `Photo` |
 | `SyncAnswer` | `SAVED` · `QUARANTINED` | `SyncedRecord` |
-| `ReconciliationTrigger` | `SYNC` · `CORRECTION` · `SETUP_CHANGE` · `REPROCESS` | `ReconciliationRun` |
-| `FlagBilling` | `BILLS` · `LINE_NOT_BILLED` · `NOT_BILLED` | `Flag` |
-| `FlagCode` | The codes of `spec/FLAGS.md` §3 | `Flag` |
+| `ReconciliationTrigger` ✅ | `SYNC` · `CORRECTION` · `SETUP_CHANGE` · `REPROCESS` | `ReconciliationRun` |
+| `FlagBilling` ✅ | `BILLS` · `LINE_NOT_BILLED` · `NOT_BILLED` | `Flag` |
+| `FlagCode` ✅ | The codes of `spec/FLAGS.md` §3: 66 today, in the page's order; a database test holds the enum to the page (ADR-340) | `Flag` |
 | `RuleActionKind` | `ADD_TRANSACTION` · `REMOVE_TRANSACTION` · `VOID_TICKET` | `RuleAction` |
 | `QuantityFrom` | `ALL_ITEMS` · `CHOSEN_ITEMS` | `RuleAction` |
 | `RuleOperator` | `spec/RULES.md` §4a: `EQUALS` · `NOT_EQUALS` · `IS_ONE_OF` · `IS_NOT_ONE_OF` · `BETWEEN` · `AT_LEAST` · `AT_MOST` · `MORE_THAN` · `LESS_THAN` · `ON` · `NOT_ON` · `ON_OR_BEFORE` · `ON_OR_AFTER` · `CONTAINS` · `STARTS_WITH` · `IS_EMPTY` · `IS_NOT_EMPTY` | `RuleCriterion` |
@@ -1684,7 +1705,7 @@ A new value in any of them is a code change with an ADR (`spec/LISTS.md` Group 2
 | `Assignment` | ✅ `formDocumentTypes` built (ADR-308); its pay items (ADR-286), held to unit rate ones (ADR-309) |
 | `PayItem` | ✅ built 2026-10-02 (ADR-309): every field of §3, with `PayItemRate` and `PayItemCrewDayStep`; `AssignmentPayItem` gains the pay item's kind of work |
 | `FieldEvent` | Gains the shared and kind-specific columns of §4.1; `deviceId`, `assignmentId`, `setupVersion` become optional for a back-office-created record |
-| `CompletedLoad` | Its one collection link moves to `CompletedLoadCollection`; gains its quantity and `dissolvedAt` |
+| `CompletedLoad` | ✅ built 2026-10-05 (ADR-340): its one collection link moved to `CompletedLoadCollection`; its quantity and `dissolvedAt`; with `CompletedHaulOut`, `CompletedHaulOutCollection`, `Flag`, `ReconciliationRun`, `ReconciliationDecision` and the worker's zone, map version and worked-out pay item on `FieldEvent` |
 | `Transaction` | Gains its rule, pay item, contract, operating sub, unit, property and the two other ticket links; the delete guard follows the lock through them |
 | `InvoiceLock` | Gains the unlock columns, the batch and the two other targets |
 | `AuditRecord` | As built |
