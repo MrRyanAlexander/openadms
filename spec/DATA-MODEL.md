@@ -1217,8 +1217,8 @@ auditor see their projects' photographs' records without `objectKey` and `depthO
 like any correction (audited in the records domain, the worker only reads them); a removed
 photograph keeps its record, its file, its fingerprints and its label, and a viewer's view shows
 both columns. A label that is blank is refused (`photo_label_check`). Who may remove or label is
-a permission the API reads (Phase 2); whether a removed photograph counts towards the photographs
-a pay item requires or a certification's five views is the flags' task (1.5.5, 1.5.7).
+a permission the API reads (Phase 2); a removed photograph counts towards nothing a record must
+have: not a certification's five views, not the photographs a pay item requires (the user, ADR-345).
 
 ### 4.5 Sync (Phase 2 settles the detail; ARCHITECTURE §9)
 
@@ -1685,7 +1685,7 @@ A new value in any of them is a code change with an ADR (`spec/LISTS.md` Group 2
 | `SyncAnswer` | `SAVED` · `QUARANTINED` | `SyncedRecord` |
 | `ReconciliationTrigger` ✅ | `SYNC` · `CORRECTION` · `SETUP_CHANGE` · `REPROCESS` | `ReconciliationRun` |
 | `FlagBilling` ✅ | `BILLS` · `LINE_NOT_BILLED` · `NOT_BILLED` | `Flag` |
-| `FlagCode` ✅ | The codes of `spec/FLAGS.md` §3: 66 today, in the page's order; a database test holds the enum to the page (ADR-340) | `Flag` |
+| `FlagCode` ✅ | The codes of `spec/FLAGS.md` §3: 75 today (nine added as §3.10, ADR-345), in the page's order; a database test holds the enum to the page (ADR-340) | `Flag` |
 | `RuleActionKind` | `ADD_TRANSACTION` · `REMOVE_TRANSACTION` · `VOID_TICKET` | `RuleAction` |
 | `QuantityFrom` | `ALL_ITEMS` · `CHOSEN_ITEMS` | `RuleAction` |
 | `RuleOperator` | `spec/RULES.md` §4a: `EQUALS` · `NOT_EQUALS` · `IS_ONE_OF` · `IS_NOT_ONE_OF` · `BETWEEN` · `AT_LEAST` · `AT_MOST` · `MORE_THAN` · `LESS_THAN` · `ON` · `NOT_ON` · `ON_OR_BEFORE` · `ON_OR_AFTER` · `CONTAINS` · `STARTS_WITH` · `IS_EMPTY` · `IS_NOT_EMPTY` | `RuleCriterion` |

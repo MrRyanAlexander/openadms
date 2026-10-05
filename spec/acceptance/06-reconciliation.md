@@ -34,8 +34,8 @@ open flag makes the ticket `MANUAL_REVIEW`, and a ticket in review **still bills
 amount can be computed (ADR-060). Everything the worker writes is written as the system actor and
 audited by the database (ADR-273); it changes nothing a monitor captured (invariant 21).
 
-**The catalogue is 66 flags today** (67 when it was approved; `REVIEW_ORIGINAL_CERTIFICATION` was
-withdrawn by ADR-328). Each has at least one scenario below; the table at the end lists which.
+**The catalogue is 75 flags today** (67 when it was approved; `REVIEW_ORIGINAL_CERTIFICATION` was
+withdrawn by ADR-328; nine added as §3.10 by ADR-345). Each has at least one scenario below; the table at the end lists which.
 
 ---
 
@@ -276,23 +276,26 @@ As important as the flags: the worker must not add these.
 | AC-06-153 | **Given** any outcome of a run, on a load, a haul-out or a unit rate ticket, clean or flagged, **then** it is audited by the database under the system actor and shows the status the ticket really ended with | ADR-273, 276; KD-04, 05 · REQ-132 | story (1.5.9) | |
 | AC-06-154 | **Given** P1's Monday and Tuesday reconciled before any review, **then**: `101001`, `101002`, `101004` and `201001` are whole and unflagged; `101003` is `MANUAL_REVIEW` for its 96% call; `101005` is `PENDING` until Wednesday; `101006` and `101060` are each `PENDING`, `101060` showing its typed-number flag; `201004` is one haul-out of three piles, unflagged; `301005` is `MANUAL_REVIEW` | golden mission §2 | story (1.5.9, unpriced); story (1.9.1, in full) | |
 
-## O. Kept and flagged, with no flag in the catalogue yet (ADR-329)
+## O. A record that should not have been possible: kept and flagged (ADR-329, 345; `spec/FLAGS.md` §3.10)
 
 The user's rule of 2026-10-04: the phone prevents a broken record, and one that reaches the server
-anyway is **kept and flagged**. Intake keeps each (AC-05-38, 39). The flags have no code and no
-words in `spec/FLAGS.md` yet: each is worded with the user by the task named (BACKLOG C67 (g)), as
-a new code with its ADR, so these scenarios say only that the ticket is flagged.
+anyway is **kept and flagged**. Intake keeps each (AC-05-38, 39). Six of the flags were worded with the user on 2026-10-05 ("Yes to all", ADR-345), and three backup
+catches were added the same day at their word (AC-06-163…165). AC-06-158 and 162 are task 1.5.7's
+and still say only "flagged": their words are settled with the user there.
 
 | ID | Scenario | From | Proven at | Passing |
 |---|---|---|---|---|
-| AC-06-155 | **Given** a field event received without its debris type, its load call or its kind of work, **then** its ticket is flagged | ADR-329 (1); AC-05-38 | domain (1.5.5, 1.5.7) | |
-| AC-06-156 | **Given** a field event whose number was typed with no reason picked, **then** its ticket is flagged | ADR-329 (2); AC-05-38; BACKLOG C63 | domain (1.5.5) | |
-| AC-06-157 | **Given** a load recorded on a crew's badge (`730417`), or unit rate work on a container's, **then** its ticket is flagged | ADR-329 (3); BACKLOG C63 | domain (1.5.5) | |
+| AC-06-155 | **Given** a field event received without its debris type, **then** its ticket is flagged "Ticket 101036: collection has no debris type. Flagged for review."; a haul-out collection with no load call, a unit rate event with no kind of work, and a load's disposal that took no load call, no scale weight and no count are flagged the same way. A tower that took a weight or a count in place of a load call is missing nothing | ADR-329 (1), 345; `spec/FLAGS.md` `DETAIL_MISSING`; AC-05-38 | domain (1.5.5) | domain (2026-10-05, ADR-345): `packages/domain/test/checks.test.ts` |
+| AC-06-156 | **Given** a field event whose number was typed with no reason picked, **then** its ticket is flagged "Ticket 101037: typed ticket number (no reason picked). Flagged for review." | ADR-329 (2), 345; `spec/FLAGS.md` `TYPED_NUMBER_NO_REASON`; AC-05-38; BACKLOG C63 | domain (1.5.5) | domain (2026-10-05, ADR-345): `packages/domain/test/checks.test.ts` |
+| AC-06-157 | **Given** a load recorded on a crew's badge (`730417`), **then** its ticket is flagged "Ticket 101038: a load recorded on crew certification 730417. Flagged for review."; unit rate work on a container's badge is flagged the same way | ADR-329 (3), 345; `spec/FLAGS.md` `WRONG_KIND_OF_BADGE`; BACKLOG C63 | domain (1.5.5) | domain (2026-10-05, ADR-345): `packages/domain/test/checks.test.ts` |
 | AC-06-158 | **Given** a scale receipt whose net isn't its gross less its tare, **then** its ticket is flagged; the weights stay as typed, never corrected | ADR-329 (4); BACKLOG C65 | domain (1.5.7) | |
-| AC-06-159 | **Given** a field event whose impossible GPS fix intake kept apart as sent, **then** its ticket is flagged "GPS unreadable" (the words to settle) | ADR-329 (5), 338 (10); AC-05-39; BACKLOG C69 | domain (1.5.5) | |
-| AC-06-160 | **Given** a field event whose ticket number isn't digits, **then** it is flagged as not a valid ticket number and pairs with nothing until a person renumbers it | ADR-329 (6), 338; BACKLOG C69 | domain (1.5.3, 1.5.5) | in part: domain (2026-10-05, ADR-341), `packages/domain/test/tickets.test.ts`; the flag: 1.5.5 |
-| AC-06-161 | **Given** a field event that ends before it starts, **then** its ticket is flagged | ADR-329 (6); AC-05-38 | domain (1.5.5) | |
+| AC-06-159 | **Given** a field event whose impossible GPS fix intake kept apart as sent, **then** its ticket is flagged "Ticket 101039: GPS unreadable. Flagged for review." | ADR-329 (5), 338 (10), 345; `spec/FLAGS.md` `GPS_UNREADABLE`; AC-05-39; BACKLOG C69 | domain (1.5.5) | domain (2026-10-05, ADR-345): `packages/domain/test/checks.test.ts` |
+| AC-06-160 | **Given** a field event whose ticket number isn't digits, **then** it is flagged "Ticket 10A040: not a valid ticket number. Flagged for review; not billed." and pairs with nothing until a person renumbers it | ADR-329 (6), 338, 345; `spec/FLAGS.md` `NOT_A_TICKET_NUMBER`; BACKLOG C69 | domain (1.5.3, 1.5.5) | domain (2026-10-05, ADR-341): `packages/domain/test/tickets.test.ts`; the flag, domain (2026-10-05, ADR-345): `packages/domain/test/checks.test.ts` |
+| AC-06-161 | **Given** a field event that ends before it starts, **then** its ticket is flagged "Ticket 101041: collection ended 09:10, before it started 09:40. Flagged for review." | ADR-329 (6), 345; `spec/FLAGS.md` `ENDED_BEFORE_STARTED`; AC-05-38 | domain (1.5.5) | domain (2026-10-05, ADR-345): `packages/domain/test/checks.test.ts` |
 | AC-06-162 | **Given** a disposal that holds two quantities (a load call beside a scale weight), **then** its ticket is flagged for holding both; which one bills is still read from the paying pay item, and the two are never compared | ADR-329 (7); `adms-validation` §5.2a | domain (1.5.4, 1.5.7) | in part: domain (2026-10-05, ADR-343), `packages/domain/test/quantities.test.ts`; the flag: 1.5.7 |
+| AC-06-163 | **Given** P1, where *Allow split loads* is off, and a collection `101042-A`, **then** its ticket is flagged "Ticket 101042: a split load on a project that doesn't allow split loads. Flagged for review." and still bills; a lettered haul-out collection is flagged the same way. The phone offers no split there: this is the backup catch | ADR-137, 345 (the user, 2026-10-05); `spec/FLAGS.md` `SPLIT_NOT_ALLOWED` | domain (1.5.5) | domain (2026-10-05, ADR-345): `packages/domain/test/checks.test.ts` |
+| AC-06-164 | **Given** a project numbered from control tickets with load ranges `101001`–`102000` and `105001`–`106000` entered, and a load numbered `109999`, **then** its ticket is flagged "Ticket 109999: number is in none of the project's control ticket ranges. Flagged for review." and still bills; a number at either end of a range is not flagged, nor is a series with no range entered, nor any ticket of a project that generates its numbers | ADR-056, 345 (the user, 2026-10-05); `spec/FLAGS.md` `OUTSIDE_CONTROL_RANGES`; BACKLOG C64 | domain (1.5.5) | domain (2026-10-05, ADR-345): `packages/domain/test/checks.test.ts` |
+| AC-06-165 | **Given** a field event on P1 whose assignment is P2's, **then** its ticket is flagged "Ticket 101043: recorded under an assignment on another project. Flagged for review." and still bills; a record created in the back office has no assignment and isn't flagged for it | ADR-156, 345 (the user, 2026-10-05); `spec/FLAGS.md` `ASSIGNMENT_ON_ANOTHER_PROJECT`; BACKLOG C44 | domain (1.5.5) | domain (2026-10-05, ADR-345): `packages/domain/test/checks.test.ts` |
 
 ---
 
@@ -300,12 +303,12 @@ a new code with its ADR, so these scenarios say only that the ticket is flagged.
 
 | Where it is first proven | Scenarios | How many |
 |---|---|---|
-| Milestone 1.5 (tasks 1.5.2…1.5.9) | every scenario not named below | 152 |
+| Milestone 1.5 (tasks 1.5.2…1.5.9) | every scenario not named below | 155 |
 | Milestone 1.6 only (the rules) | AC-06-57, 70, 71, 91, 105, 120…123 | 9 |
 | Task 1.8.x or 1.9.1 only (a reviewer's action as the story) | AC-06-69 | 1 |
 | Phases 2–4 only | none (AC-06-58's difference at the sync is Phase 2's; its flag is 1.5.5's) | 0 |
 
-162 scenarios. **Fifty-six pass and sixteen more in part** (after task 1.5.5, 2026-10-05, ADR-344, at the domain, `packages/domain/test/checks.test.ts` and `flags.test.ts`: AC-06-25…35, 37…40, 49, 50, 59…64, 117, 130, 131, 133, 136 whole; AC-06-17, 137 and 138 whole with their earlier halves; AC-06-41, 58 and 125 in part. Task 1.5.4, ADR-343: AC-06-73…77, 79, 81, 82, 84, 128 whole.) Task 1.5.2 (2026-10-05, ADR-340, at
+165 scenarios (AC-06-163…165 added 2026-10-05, ADR-345). **Sixty-five pass and fifteen more in part** (after ADR-345: AC-06-155, 156, 157, 159, 161, 163, 164, 165 whole and 160 whole with its earlier half; after task 1.5.5, 2026-10-05, ADR-344, at the domain, `packages/domain/test/checks.test.ts` and `flags.test.ts`: AC-06-25…35, 37…40, 49, 50, 59…64, 117, 130, 131, 133, 136 whole; AC-06-17, 137 and 138 whole with their earlier halves; AC-06-41, 58 and 125 in part. Task 1.5.4, ADR-343: AC-06-73…77, 79, 81, 82, 84, 128 whole.) Task 1.5.2 (2026-10-05, ADR-340, at
 the database): AC-06-06, 144, 145, 146 whole; AC-06-137, 138, 148, 152 the database's half. Task
 1.5.3 (2026-10-05, ADR-341, at the domain, `packages/domain/test/tickets.test.ts`): AC-06-07, 08,
 09, 11, 12, 15, 20, 22, 142 whole, and AC-06-19 and 21 whole with their database half; AC-06-10,
@@ -327,6 +330,7 @@ part proven later (a reviewer's action in Milestone 1.8, the lines in 1.6, the w
 | §3.7 Forms, certifications and sites (7) | `ROE_MISSING` · `ROE_NOT_ON_PROJECT` · `ROE_UNSIGNED` · `ROE_OUT_OF_SCOPE` · `NO_PRE_WORK_SURVEY` · `CERTIFICATION_PHOTO_MISSING` · `PERMIT_OUTSTANDING` | AC-06-112 · 113 · 114 · 115 · 116 · 117 · 118 |
 | §3.8 Pricing (4) | `NO_PRICING_RULE` · `DUPLICATE_TRANSACTION_NUMBER` · `NO_RATE_FOR_PRIME` · `RATE_TO_BE_NEGOTIATED` | AC-06-120 · 121 · 122 · 123 |
 | §3.9 The engine (1) | `NOT_PROCESSED` | AC-06-124 |
+| §3.10 A record that should not have been possible (9) | `DETAIL_MISSING` · `TYPED_NUMBER_NO_REASON` · `WRONG_KIND_OF_BADGE` · `GPS_UNREADABLE` · `NOT_A_TICKET_NUMBER` · `ENDED_BEFORE_STARTED` · `SPLIT_NOT_ALLOWED` · `OUTSIDE_CONTROL_RANGES` · `ASSIGNMENT_ON_ANOTHER_PROJECT` | AC-06-155 · 156 · 157 · 159 · 160 · 161 · 163 · 164 · 165 |
 
 **Never flagged** (`spec/FLAGS.md` §2): waiting, AC-06-13…15; a preload and a haul-out from a prior
 date, 125; the distance a collection covers, 126; GPS accuracy, 127; split estimates against the
@@ -352,7 +356,7 @@ or a monitor's work (ADR-230).
 | 8 | What else has no flag: a control ticket scanned outside its ranges; a count of 2 where *Count is always 1*; an item that isn't its kind of work's; a pay item that isn't its payable type's; hours that aren't quarter hours; a stump read as a circumference; a payable type with several pay items, some with no band; a scale receipt whose site isn't the disposal's or isn't a Final Disposal site; one receipt on two trips (BACKLOG C63, C65, C68) | 1.5.5, 1.5.7 |
 | 9 | Whether `DEVICE_CLOCK_OFF` can be raised in Phase 1 at all (the difference is kept on `Sync`, Phase 2's), and the worker's own thresholds joining the policy values (BACKLOG C53) | 1.5.5 |
 | 10 | Whether a ticket's ROE flag puts the ticket in `MANUAL_REVIEW` (`spec/FLAGS.md` §3.7 says a flag there "never touches a ticket's status" and that a ticket's ROE flags still bill; §1 says any open flag does); an ROE with a signed date that isn't marked signed; a scope line's payable type no unit rate pay item has (BACKLOG C66) | 1.5.7 |
-| 11 | Whether a photograph removed from the record counts towards the photographs a pay item requires, or a certification's five views (ADR-337 (5)) | 1.5.5, 1.5.7 |
+| 11 | Whether a photograph removed from the record counts towards the photographs a pay item requires, or a certification's five views (ADR-337 (5)) | **decided by the user (2026-10-05, ADR-345): it counts for nothing a record must have.** The certification's views: built (1.5.5); the pay item's photographs: 1.5.7 |
 | 12 | Whether `301005` carries `NO_SIZE_BAND` beside `STUMP_UNDER_24` (the mission says "under 24 in, and no band fits") | 1.5.7; 1.9.1 |
 | 13 | Whether the crew-hours limit of 12 is the policy value `CREW_DAY_HOURS` or one of its own, and whether the flag is raised on every ticket of the day or the one that takes it over | 1.5.7 |
 | 14 | Which pile, property or container takes the remainder when rounded shares don't add up; which quantity bills on a disposal that holds a load call and a count (BACKLOG C63) | 1.5.4: **decided (ADR-343, agent defaults):** the largest share takes it, the last of them where several are as large; the paying pay item says which quantity bills, and one marked *quantity from the tickets it carries* bills the carried tickets whatever call stands beside them |

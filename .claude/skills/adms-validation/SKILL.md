@@ -2,7 +2,7 @@
 name: adms-validation
 description: Open ADMS checks, flags, statuses, how rules run, and the quantity math, in today's rules. Covers the checks between a ticket's field events and on each event against the setup (certification, place and time, where debris went, quantity, pay item settings, forms, pricing), what is never flagged, how the worker runs a form's rules (one contract per rule, criteria read only the ticket, Add in # order then Remove then Void ticket, a rule's void wins), why no rule or setting may be silently inert, the four statuses and what sets them, timing contradictions, how a flag reads and how a reviewer accepts one, and every quantity formula (capacity × load call, scale weight and a tandem's split, split shares, circumference to diameter, stump CY, fill CY, carried tickets, white goods, crew hours, mileage rounding). Use when writing a check or a flag, the rule engine, a threshold or project setting, status changes, or any quantity math. Setup and workflows live in adms-ticket-workflows, pricing and the ledger in adms-ledger-audit, duplicates and corrections in adms-exceptions.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-244; the flag catalogue approved, ADR-290; split haul-outs, ADR-295; a split haul-out's pile weights, ADR-297; *Haul-outs leave here* only on a TDSR, ADR-298; a duplicate rule refused, ADR-301) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-244; the flag catalogue approved, ADR-290; split haul-outs, ADR-295; a split haul-out's pile weights, ADR-297; *Haul-outs leave here* only on a TDSR, ADR-298; a duplicate rule refused, ADR-301; the flags for a record that should not have been possible and what a removed photograph counts for, ADR-345) -->
 
 > **This page states today's rules** (last changed by ADR-301, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
@@ -129,6 +129,27 @@ every ticket they apply to):
 | Two rules create the **same #** | neither line bills: "two rules create transaction 1 (LNR-RMV-EA-24, LNR-RMV-EA-99)" | 118 |
 | The pay item has no rate for the prime | a **$0 line**, flagged: "Pay item VEG-HAUL-CY-15 has no rate for Summit." | 212 |
 | A pay item still to be negotiated (TBN) | "rate to be negotiated. Not billed yet." | 068 |
+
+**A record that should not have been possible** (`spec/FLAGS.md` §3.10; ADR-329, 345). The phone
+and setup stop each of these; one that reaches the server anyway is kept and flagged. **User,
+2026-10-05:** "If there is even a chance those could be created make them flag, but it really
+should be impossible if we build things the right way."
+| Check | The flag | ADRs |
+|---|---|---|
+| A field event with no debris type; a haul-out collection with no load call; a unit rate event with no kind of work; a load's disposal that took no load call, no scale weight and no count | "Ticket 101036: collection has no debris type." | 329, 345 |
+| A ticket number typed with no reason picked | "typed ticket number (no reason picked)" | 329, 345 |
+| A load or a haul-out on a crew's badge, or unit rate work on a container's | "a load recorded on crew certification 730417" | 329, 345 |
+| A GPS fix that can't be one, kept apart at intake | "GPS unreadable" | 329, 338, 345 |
+| A ticket number that isn't digits: in no ticket, pairs with nothing until renumbered | "not a valid ticket number. Flagged for review; not billed." | 329, 345 |
+| A field event that ends before it starts | "collection ended 09:10, before it started 09:40" | 329, 345 |
+| A lettered collection where *Allow split loads* is off; a control ticket number in none of the ranges entered for its series; a field event under another project's assignment | the three backup catches, each still bills | 345 |
+
+**What a record must have is counted from what is on it now** (the user, ADR-345). **User,
+2026-10-05:** "if say a ticket requires 4 photos and it has 4 but the back office were to delete 1
+leaving only 3 remaining... That ticket would then flag for not having enough photos". A
+photograph the back office removed from the record counts for nothing: not one of a
+certification's five views, not a photograph a pay item requires. (*Photos required* is yes or no
+today, meaning at least one.)
 
 ### 5.2a Never flagged
 
