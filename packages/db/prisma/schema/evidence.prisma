@@ -299,8 +299,8 @@ model ScaleReceipt {
   fieldEvents FieldEvent[]
   photos      Photo[]
 
-  // A receipt number once per project: a second is a transcription error or a double billing.
-  @@unique([projectId, receiptNumber])
+  // The number is never unique (ADR-328): a site's receipt book starts again at 001. A duplicate
+  // record (the same truck, day and time) is the worker's to flag.
   // What a disposal and a photograph point at, so each is its own project's.
   @@unique([projectId, id])
   @@map("scale_receipt")

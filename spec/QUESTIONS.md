@@ -215,7 +215,7 @@ person must resolve it — ADR-060). Expired at the time of the work → flagged
 - Reconciled records have unique FKs to both source tickets.
 - The run reads only `PENDING` rows (idempotent by status).
 - Phantoms are voided, never renumbered; a void clears anything already billed (ADR-085).
-- A scale receipt can be used only once per project.
+- A scale receipt can be used only once per project. *(Its **number** is never unique: a receipt book starts again at 001; the user, 2026-10-04, ADR-328, 331.)*
 
 *(ADR-021/022/028/034/056, `adms-ticket-workflows` §4.7, invariant 17)* ⚠️ `Transaction` has
 **no** uniqueness on its source record, so the ledger write path KD-01 adds must itself be

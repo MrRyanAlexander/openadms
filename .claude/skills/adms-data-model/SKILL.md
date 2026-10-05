@@ -212,8 +212,8 @@ changed" (ADR-166).
   their field event's kind, so each sits only where it belongs; evidence, audited in the records
   domain, seen by a viewer with its field event.
 - **Built (ADR-326): scale receipts and photographs** (`spec/DATA-MODEL.md` §4.2, §4.4).
-  **`ScaleReceipt`** is its own evidence record: the site's number exactly as written, once per
-  project; its site its own project's; every weight what the paper says, each optional, none
+  **`ScaleReceipt`** is its own evidence record: the site's number exactly as written, **never unique**
+  (ADR-328, 331); its site its own project's; every weight what the paper says, each optional, none
   worked out (a net of nought or below is kept for a flag; a gross or tare below nought is
   refused). A field event's `scaleReceiptId` is taken only on a disposal and a haul-out
   disposal, for a receipt of its own project, a load call or a count beside it included; a

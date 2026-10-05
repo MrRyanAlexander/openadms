@@ -199,26 +199,37 @@ describe('a scale receipt', () => {
     await receipt({ receipt_number: 'BCL-88250', entered_by_id: world.admin, device_id: null });
   });
 
-  it('AC-04-72 a receipt number is once per project', async () => {
+  it('AC-04-72 a receipt number is never unique: a site’s receipt book starts again', async () => {
     const { db, world } = tested;
     const site = await cypressCreek();
-    const onP2 = await cypressCreek(world.p2);
     await asThePhone();
-    await receipt(ccl51207(site));
-    const second = await db.refused(
-      ...phoneInsertOf('scale_receipt', scaleReceiptLike(world, ccl51207(site))),
-    );
-    expect(second.code).toBe(refusedBy.unique);
-    expect(second.message).toContain('"scale_receipt_project_id_receipt_number_key"');
-    // Whatever else it says: another site's, another weight.
+    // The same number twice on P1, at the same site: both are kept, each its own record.
+    const first = await receipt(ccl51207(site));
+    const second = await receipt({ ...ccl51207(site), entered_at: '2026-10-14T15:40:00Z' });
+    expect(second).not.toBe(first);
+    // A store-bought book of 500 slips, back at 017, at another site too.
+    await receipt({ receipt_number: '017', site_id: site });
+    await receipt({ receipt_number: '017', site_id: site });
+    await receipt({ receipt_number: '017' });
     expect(
-      await refusedRecord(
-        'scale_receipt',
-        scaleReceiptLike(world, { receipt_number: 'CCL-51207' }),
+      await db.rows(
+        `SELECT "receipt_number", count(*)::int AS receipts FROM "scale_receipt"
+         WHERE "project_id" = $1 GROUP BY "receipt_number" ORDER BY "receipt_number"`,
+        [world.p1],
       ),
-    ).toBe(refusedBy.unique);
-    // The same number on another project is that project's own.
-    await receipt({ ...ccl51207(onP2), project_id: world.p2 });
+    ).toEqual([
+      { receipt_number: '017', receipts: 3 },
+      { receipt_number: 'CCL-51207', receipts: 2 },
+    ]);
+    // No unique key holds the number: the table's only ones are its id and what others point at.
+    expect(
+      (
+        await db.rows<{ name: string }>(
+          `SELECT indexname AS name FROM pg_indexes
+           WHERE schemaname = 'public' AND tablename = 'scale_receipt' ORDER BY indexname`,
+        )
+      ).map((index) => index.name),
+    ).toEqual(['scale_receipt_pkey', 'scale_receipt_project_id_id_key']);
     // A ticket's number is no receipt's: load 101020 and a receipt the site numbered 101020.
     await event({ ticket_number: '101020' });
     await receipt({ receipt_number: '101020', site_id: site });

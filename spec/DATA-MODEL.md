@@ -1055,8 +1055,8 @@ loads (§5).
 | Field | Type | Notes |
 |---|---|---|
 | **id** | uuid | From the phone |
-| **projectId** | → `Project` | **Unique with `receiptNumber`** |
-| **receiptNumber** | text | The site's own, transcribed verbatim |
+| **projectId** | → `Project` | |
+| **receiptNumber** | text | The site's own, transcribed verbatim. **Never unique** (the user, ADR-328: a receipt book starts again at 001) |
 | **siteId** | → `DisposalSite` | |
 | grossWeightLb, tareWeightLb, netWeightLb | decimal(12,2) | |
 | netWeightTons | decimal(12,4) | |
@@ -1066,7 +1066,7 @@ loads (§5).
 | notes | text | |
 
 **As built (ADR-326).** Evidence, audited in the records domain; its id is the phone's. The
-database refuses a blank number, a second receipt with a number already on its project, a site of
+database refuses a blank number, a site of
 another project, the system actor as the person who entered it, and a gross or a tare below
 nought. **Every weight may be missing and none is worked out**: a net that isn't the gross less
 the tare, a net of nought and a net below nought are kept as written, for a flag. A field event's
@@ -1527,7 +1527,7 @@ Never relaxed to pass a test (ARCHITECTURE §5.4). ✅ = built today.
 | A field event's debris type is an entry of its own project's form for its workflow; its field tag and its pay item are its own project's; an item line sits only on a unit rate event, once per item, and a carried ticket only on a collection, once per number (ADR-325) | ✅ foreign keys (the field event repeats the entry's form and document type; a line repeats its field event's kind), checks and unique keys |
 | A phone's record carries its device, assignment and setup version; a back-office one its person and reason, and neither the other's (ADR-324) | ✅ check |
 | One disposal per completed load or haul-out; one live completed record per collection event | unique keys (the second partial: `WHERE dissolved_at IS NULL`, in a guard migration) |
-| A cert number once per project (✅ ADR-321); a receipt number once per project; an ROE number once per project | unique keys |
+| A cert number once per project (✅ ADR-321); an ROE number once per project. **A scale receipt's number is never unique** (ADR-328, 331: the key is gone) | unique keys |
 | A pay item's code once per project (ADR-301) | ✅ unique key |
 | One rate per prime on a pay item, and only for one of the pay item's own project's primes (ADR-206, 305, 309) | ✅ a unique key and two-column foreign keys |
 | A size band is never below nought or backwards; crew time's conversion only on an `HR` or `CREW_DAY` pay item, its day length only on an exact one, at most 24 h; a crew day's step within a day; a rate and a step's quantity nought or more (ADR-087, 309) | ✅ checks |
