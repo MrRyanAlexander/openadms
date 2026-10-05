@@ -113,9 +113,16 @@ the same pile.
           └─ SAME pile, SAME truck, OVERLAPPING loading times
  10:05  DIS at Marsh Road TDSR: the driver hands over 101030  ✓
 
-   101030 → COL + DIS  → COMPLETED ✓
+   101030 → COL + DIS  → MANUAL_REVIEW, flagged: overlapping loads on cert 730415; still bills
    101031 → COL only   → PENDING for ever, flagged: overlapping loads on cert 730415
 ```
+
+**Both tickets are flagged** (ADR-342; `spec/FLAGS.md` `OVERLAPPING_LOADS`). **User, 2026-10-05:**
+"The agent was correct to flag both but let the first flow to billing as it is likely making sense. However like all flags it'll be prevented from being invoiced until resolved."
+So 101030, the ticket the truck dumped under, bills while in review and can't be locked as
+invoiced until its flag is fixed or accepted. The same flag is raised when two loads that both
+happened sit on one cert number (the monitor scanned the wrong badge for the next truck): the
+worker can't tell which it is, and a person decides.
 
 **How to recognise it:** two collections on one certification with **overlapping loading times and
 no disposal between** can't be two loads (Scenario A's rule). The same address and debris type make
@@ -309,6 +316,10 @@ own. **Only Scenario A, real work wearing the wrong number, is a renumber.**
 ## History
 
 What this page used to say, and why it changed. Never build from the left-hand side.
+
+- Scenario B's diagram showed 101030, the ticket the truck dumped under, as `COMPLETED ✓` with no
+  flag → both tickets of an overlap are flagged; it is `MANUAL_REVIEW` and still bills (the user,
+  ADR-342; KD-71 (1)).
 
 - Ticket "halves", stage tickets (`CollectionTicket`, `DisposalTicket`) and a reconciled
   `LoadTicket` that a reviewer must never author → **field events** under a ticket number and the

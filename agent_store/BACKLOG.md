@@ -277,7 +277,7 @@ ADR-303 (named here by ADR-307). Closes the behaviour of KD-02, 04, 05, 06, 12, 
   `FlagCode` and `FlagBilling`, `ReconciliationRun`, `ReconciliationDecision`; the worker's columns
   on a field event (zone, map version, worked-out pay item). Today's `CompletedLoad`, its tests and
   `guard_transaction_delete` follow. *REQ-113, 116.*
-- [ ] **1.5.3** **Grouping and status, in `packages/domain`.** A ticket's events grouped on project
+- [x] **1.5.3** ✅ **done 2026-10-05 (ADR-341):** `packages/domain/src/tickets.ts` (`Tickets`, `Ticket`, `workerStatuses`), 24 tests; AC-06-07, 08, 09, 11, 12, 15, 19, 20, 21, 22, 142 pass and nine more in part; REQ-120, 120e, 120f ticked (120b1, 127, 129 wait for the flag, 1.5.5, and the run, 1.5.9); chain 62 files, 1,246 tests. **Grouping and status, in `packages/domain`.** A ticket's events grouped on project
   + workflow + bare number, ordered by field time, the kind never used to find a partner; the
   group's shape (a split's suffixes); an event missing → `PENDING`, listed, never flagged, never
   expiring. *REQ-120, 120b1, 120e, 120f, 127, 129.*
@@ -1066,10 +1066,10 @@ delete one.
 - **C70. What the reconciliation scenarios left for the tasks that build them** (ADR-339;
   `spec/acceptance/06-reconciliation.md`, "Left to the task that builds it", eighteen points).
   ~~**Task 1.5.2:** how reconciliation is queued (with 1.5.9); who points a field event at a
-  certification made later.~~ **1.5.2's half is decided (ADR-340): it added no queue record, and the worker has no right to write `certification_id`. Task 1.5.9:** how the worker finds the tickets to work (a record of its own, or what was received or changed since its last run). **Task 1.5.5:** who points a field event at a certification made later (the API, which writes that column), and what queues its tickets. **Left by 1.5.2 (ADR-340): task 1.5.3**, the kind of field event a completed record names is the grouping's to keep (the database holds the project and the uniqueness); **tasks 1.5.4, 1.5.5**, which figures a completed record carries when a check fails (nothing ties them to `quantitySource`; `pileLoadCall` has no range); **task 1.7.1**, a contractor user's sight of completed records and flags (C18); **task 1.8.x**, a flag's acceptance as a mark, and whether a viewer is ever shown a run. **Task 1.5.4:** who takes the remainder of rounded shares; which
+  certification made later.~~ **1.5.2's half is decided (ADR-340): it added no queue record, and the worker has no right to write `certification_id`. Task 1.5.9:** how the worker finds the tickets to work (a record of its own, or what was received or changed since its last run). **Task 1.5.5:** who points a field event at a certification made later (the API, which writes that column), and what queues its tickets. **Left by 1.5.2 (ADR-340): task 1.5.3**, the kind of field event a completed record names is the grouping's to keep (the database holds the project and the uniqueness); **tasks 1.5.4, 1.5.5**, which figures a completed record carries when a check fails (nothing ties them to `quantitySource`; `pileLoadCall` has no range); **task 1.7.1**, a contractor user's sight of completed records and flags (C18); **task 1.8.x**, a flag's acceptance as a mark, and whether a viewer is ever shown a run. **Left by 1.5.3 (ADR-341): task 1.5.5**, `SPLIT_SUFFIX_GAP` from `Ticket.splitShape` (its words for a bare collection, point 6); the flag, the status and the billing of a field event whose number isn't digits (`Tickets.notTicketNumbers`: in no ticket today, a unit rate event included; with the user, C67 (g)); a unit rate ticket's time and the day in the project's time zone; **task 1.5.9**, reading a ticket's field events and its raised flags from the database, the run's list from `Tickets.pending`, a `Ticket` that throws on a second field event of one kind (`NOT_PROCESSED`); **tasks 1.6.3, 1.8.x**, how a voided ticket is kept from the worker's three statuses. **Task 1.5.4:** who takes the remainder of rounded shares; which
   quantity bills beside a count. **Task 1.5.5:** the work time; a tag's last day; work on the day
   a certification was replaced; the checks on a lone field event; `OVERLAPPING_LOADS` while a
-  disposal hasn't synced and after the phantom is voided (KD-71); a bare collection's words; the
+  disposal hasn't synced and after the phantom is voided (both tickets flagged is settled, ADR-342; the agent recommends the flag clears once the phantom is voided); a bare collection's words; the
   flags of ADR-329 (section O) and the gaps with no flag, worded with the user (C67 (g));
   `DEVICE_CLOCK_OFF` in Phase 1; the worker's thresholds as policy values (C53); when a flag on
   a certification is raised. **Task 1.5.6:** a project with no map; a haul-out collection's zone;
@@ -1077,7 +1077,7 @@ delete one.
   whether a ticket's ROE flag puts it in review; a removed photograph against the required ones;
   `301005`'s second flag; the crew-hours limit as a policy value and the tickets it is raised on.
   **Task 1.5.9:** an errored ticket's status; the person stated for a reprocess (C20); how a
-  pending ticket is listed. **For the user:** KD-71, and the file's approval.
+  pending ticket is listed. **For the user:** the file's approval (KD-71 (1) answered, ADR-342).
 
 ## Historical — Phase 1 closeout on `database/` *(superseded by ADR-093/103; kept as rebuild requirements)*
 
