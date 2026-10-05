@@ -88,8 +88,8 @@ const inFieldOrder = (left: GroupedFieldEvent, right: GroupedFieldEvent): number
   byText(left.splitSuffix, right.splitSuffix) ||
   byText(left.id, right.id);
 
-// Where a suffix stands in A, B … Z, AA, AB …
-const placeOf = (suffix: string): number => {
+// Where a suffix stands in A, B … Z, AA, AB …; nought for none.
+export const placeOf = (suffix: string): number => {
   let place = 0;
   for (let at = 0; at < suffix.length; at += 1) place = place * 26 + (suffix.charCodeAt(at) - 64);
   return place;
