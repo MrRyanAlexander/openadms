@@ -198,6 +198,30 @@ to the project, never typed, so an ID that matches no user can't happen.
 |---|---|---|---|---|---|
 | `NOT_PROCESSED` | The worker hit an error on this ticket: it is flagged and skipped, and the run goes on | "Ticket 101035: could not be processed. Flagged for review; not billed." | no | the run | ARCHITECTURE §13 |
 
+### 3.10 A record that should not have been possible
+
+The phone stops each of these before a monitor can finish the record, and setup stops the last
+three. One that reaches the server anyway is **kept and flagged, never thrown away** (the user,
+2026-10-04, ADR-329). The first six were worded by the agent and approved by the user on
+2026-10-05 ("Yes to all", ADR-345). The last three are backup catches the user asked for the same
+day: "If there is even a chance those could be created make them flag, but it really should be
+impossible if we build things the right way"; their wording is the agent's.
+
+| Code | Raised when | Message | Bills | Facts kept | ADR |
+|---|---|---|---|---|---|
+| `DETAIL_MISSING` | A field event arrived without a detail its kind always records: a load's or a haul-out's debris type at either end; a disposal with no load call, no scale receipt and no count; a haul-out collection's load call; a unit rate event's kind of work | "Ticket 101036: collection has no debris type." | yes, where an amount can be computed | the detail | 329, 345 |
+| `TYPED_NUMBER_NO_REASON` | The ticket number was typed instead of scanned and no reason was picked | "Ticket 101037: typed ticket number (no reason picked)." | yes | | 329, 345 |
+| `WRONG_KIND_OF_BADGE` | A load or a haul-out recorded on a crew's certification, or unit rate work on a container's | "Ticket 101038: a load recorded on crew certification 730417." | yes, where an amount can be computed | the cert number, its kind | 329, 345 |
+| `GPS_UNREADABLE` | The phone sent a GPS fix that can't be one (half a fix, a latitude past 90); the field event was saved without it | "Ticket 101039: GPS unreadable." | yes | the fix as sent | 329, 338, 345 |
+| `NOT_A_TICKET_NUMBER` | The ticket number isn't digits: the field event pairs with nothing until a person renumbers it | "Ticket 10A040: not a valid ticket number. Flagged for review; not billed." | no | the number as sent | 329, 345 |
+| `ENDED_BEFORE_STARTED` | A field event's end is before its start | "Ticket 101041: collection ended 09:10, before it started 09:40." | yes | both times | 329, 345 |
+| `SPLIT_NOT_ALLOWED` | A collection with a split suffix on a project whose *Allow split loads* is off | "Ticket 101042: a split load on a project that doesn't allow split loads." | yes | the suffixes | 137, 345 |
+| `OUTSIDE_CONTROL_RANGES` | On a project numbered from control tickets, a load's or a haul-out's number is in none of the ranges entered for its series | "Ticket 109999: number is in none of the project's control ticket ranges." | yes | the number, the ranges | 056, 345 |
+| `ASSIGNMENT_ON_ANOTHER_PROJECT` | A field event's assignment belongs to a different project from the field event | "Ticket 101043: recorded under an assignment on another project." | yes | both projects | 156, 345 |
+
+**Added:** the nine flags of §3.10 (ADR-345). The catalogue is 75 flags: 66 after ADR-328 withdrew
+one, and these nine.
+
 ---
 
 ## 4. What a reviewer does with one

@@ -22,6 +22,7 @@ export {
   type CheckedAround,
   type CheckedCertification,
   type CheckedFieldEvent,
+  type ControlRangeRead,
   type Named,
 } from './checks.ts';
 export {

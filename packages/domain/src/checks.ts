@@ -11,11 +11,13 @@
 // Never flagged, so never checked here: how long a field event has waited, a preload, a driver's
 // licence, a trailer swap, a certification still at QC Review, work under an unplanned
 // assignment (spec/FLAGS.md §2). The checks on place, quantity, the pay item's settings, unit
-// rate work and forms are tasks 1.5.6 and 1.5.7.
+// rate work and forms are tasks 1.5.6 and 1.5.7. §3.10's flags, for a record that should not
+// have been possible, are here too (ADR-329, 345).
 import {
   Flags,
   certificationViews,
   type CertificationView,
+  type Fact,
   type FlagRaised,
   type FlagSubject,
 } from './flags.ts';
@@ -51,11 +53,23 @@ export interface CheckedFieldEvent extends GroupedFieldEvent {
   readonly clockOffAtSyncMinutes: number | null;
   // The tower's count on a load that carries tickets.
   readonly carriedCount: number | null;
+  // A disposal's and a haul-out collection's load call, and the scale receipt a disposal points
+  // at: with the count above, the quantities a tower may have taken.
+  readonly loadCall: number | null;
+  readonly scaleReceiptId: string | null;
+  // A unit rate event's kind of work.
+  readonly kindOfWorkId: string | null;
+  // A GPS fix intake couldn't read, kept as the phone sent it (ADR-338); none when every fix
+  // was readable.
+  readonly unreadableGps: Fact | null;
+  // The project of the assignment it was recorded under; none on a back-office record.
+  readonly assignmentProjectId: string | null;
 }
 
 // What the checks read of a certification of the project.
 export interface CheckedCertification {
   readonly certNumber: string;
+  readonly kind: 'CONTAINER' | 'CREW';
   // A container's, in whole CY; a crew has none.
   readonly capacityCy: number | null;
   // Calendar days, 2026-09-30.
@@ -75,6 +89,17 @@ export interface CheckSetup {
   // A phone's clock further than this from the server's at a sync flags that sync's records;
   // none switches the check off. A threshold is policy, never a number here (invariant 16).
   readonly deviceClockOffLimitMinutes: number | null;
+  // The project's Allow split loads.
+  readonly allowSplitLoads: boolean;
+  // The control ticket ranges entered and not taken off, on a project numbered from control
+  // tickets; none on a project that generates its numbers.
+  readonly controlRanges: readonly ControlRangeRead[] | null;
+}
+
+export interface ControlRangeRead {
+  readonly series: 'LOAD' | 'HAUL_OUT';
+  readonly firstNumber: number;
+  readonly lastNumber: number;
 }
 
 // What a ticket's checks read beyond the ticket itself.
@@ -114,8 +139,157 @@ export class TicketChecks<E extends CheckedFieldEvent = CheckedFieldEvent> {
       ...ticket.events.flatMap((event) => [
         ...this.certification(ticket, event),
         ...this.time(ticket, event),
+        ...this.shouldNotBePossible(ticket, event),
       ]),
+      ...this.backupCatches(ticket),
     ];
+  }
+
+  // A field event whose ticket number isn't digits is in no ticket and pairs with nothing until
+  // a person renumbers it (ADR-329 (6); `Tickets.notTicketNumbers`). It bills nothing.
+  notATicketNumber(event: E): FlagRaised {
+    return this.flags.raise(
+      'NOT_A_TICKET_NUMBER',
+      { ticketNumber: event.ticketNumber },
+      {},
+      { ticketNumber: event.ticketNumber },
+      event.id,
+    );
+  }
+
+  // §3.10's first rows: what the phone stops, kept and flagged when it reaches the server
+  // anyway (ADR-329, 345).
+  private shouldNotBePossible(ticket: Ticket<E>, event: E): FlagRaised[] {
+    const subject: FlagSubject = { ticketNumber: ticket.ticketNumber };
+    const raised: FlagRaised[] = [];
+    const missing = (detail: string, words: string): void => {
+      raised.push(
+        this.flags.raise(
+          'DETAIL_MISSING',
+          subject,
+          { event: event.kind, missing: words },
+          { missing: detail },
+          event.id,
+        ),
+      );
+    };
+    if (event.kind !== 'UNIT_RATE' && event.debrisType === null) {
+      missing('DEBRIS_TYPE', 'debris type');
+    }
+    // A tower takes one quantity: a load call, a scale weight or a count (ADR-223). None at all
+    // is the gap; which one the load should have had is the pay item's to say (1.6.3).
+    if (
+      event.kind === 'DISPOSAL' &&
+      event.loadCall === null &&
+      event.scaleReceiptId === null &&
+      event.carriedCount === null
+    ) {
+      missing('QUANTITY', 'load call, scale receipt or count');
+    }
+    if (event.kind === 'HAUL_OUT_COLLECTION' && event.loadCall === null) {
+      missing('LOAD_CALL', 'load call');
+    }
+    if (event.kind === 'UNIT_RATE' && event.kindOfWorkId === null) {
+      missing('KIND_OF_WORK', 'kind of work');
+    }
+
+    if (event.numberTyped && event.numberTypedReason === null) {
+      raised.push(this.flags.raise('TYPED_NUMBER_NO_REASON', subject, {}, {}, event.id));
+    }
+
+    const certification = this.certifications.get(event.certNumber);
+    if (certification !== undefined) {
+      const unitRate = event.kind === 'UNIT_RATE';
+      if (unitRate ? certification.kind === 'CONTAINER' : certification.kind === 'CREW') {
+        raised.push(
+          this.flags.raise(
+            'WRONG_KIND_OF_BADGE',
+            subject,
+            {
+              work: unitRate
+                ? 'unit rate work'
+                : ticket.workflow === 'HAUL_OUT'
+                  ? 'a haul-out'
+                  : 'a load',
+              certifies: unitRate ? 'container' : 'crew',
+              certNumber: certification.certNumber,
+            },
+            { certNumber: certification.certNumber, kind: certification.kind },
+            event.id,
+          ),
+        );
+      }
+    }
+
+    if (event.unreadableGps !== null) {
+      raised.push(
+        this.flags.raise('GPS_UNREADABLE', subject, {}, { sent: event.unreadableGps }, event.id),
+      );
+    }
+    if (event.endedAt.getTime() < event.startedAt.getTime()) {
+      raised.push(
+        this.flags.raise(
+          'ENDED_BEFORE_STARTED',
+          subject,
+          { event: event.kind, endedAt: event.endedAt, startedAt: event.startedAt },
+          { endedAt: iso(event.endedAt), startedAt: iso(event.startedAt) },
+          event.id,
+        ),
+      );
+    }
+    if (event.assignmentProjectId !== null && event.assignmentProjectId !== event.projectId) {
+      raised.push(
+        this.flags.raise(
+          'ASSIGNMENT_ON_ANOTHER_PROJECT',
+          subject,
+          {},
+          { projectId: event.projectId, assignmentProjectId: event.assignmentProjectId },
+          event.id,
+        ),
+      );
+    }
+    return raised;
+  }
+
+  // §3.10's backup catches on the ticket itself: what setup and the phone should make
+  // impossible, flagged if it happens all the same (the user, ADR-345).
+  private backupCatches(ticket: Ticket<E>): FlagRaised[] {
+    const subject: FlagSubject = { ticketNumber: ticket.ticketNumber };
+    const raised: FlagRaised[] = [];
+    const shape = ticket.splitShape;
+    if (shape !== null && !this.setup.allowSplitLoads) {
+      raised.push(
+        this.flags.raise(
+          'SPLIT_NOT_ALLOWED',
+          subject,
+          { split: ticket.workflow === 'HAUL_OUT' ? 'haul-out' : 'load' },
+          { suffixes: shape.suffixes },
+        ),
+      );
+    }
+    // Only where ranges were entered for the ticket's series: with none there is nothing to be
+    // outside of, and a unit rate number is generated on every project (ADR-056).
+    const ranges = (this.setup.controlRanges ?? []).filter(
+      (range) => range.series === ticket.workflow,
+    );
+    const number = Number(ticket.ticketNumber);
+    if (
+      ranges.length > 0 &&
+      !ranges.some((range) => number >= range.firstNumber && number <= range.lastNumber)
+    ) {
+      raised.push(
+        this.flags.raise(
+          'OUTSIDE_CONTROL_RANGES',
+          subject,
+          {},
+          {
+            ticketNumber: ticket.ticketNumber,
+            ranges: ranges.map((range) => [range.firstNumber, range.lastNumber]),
+          },
+        ),
+      );
+    }
+    return raised;
   }
 
   // §3.1: what two monitors who couldn't see each other disagree on.
@@ -420,8 +594,7 @@ export class TicketChecks<E extends CheckedFieldEvent = CheckedFieldEvent> {
         );
       }
     }
-    // A number typed with no reason picked is kept and flagged too (ADR-329 (2)): its words
-    // are still to be settled with the user, so nothing says it yet.
+    // A number typed with no reason picked is TYPED_NUMBER_NO_REASON's.
     if (event.numberTyped && event.numberTypedReason !== null) {
       raised.push(
         this.flags.raise(

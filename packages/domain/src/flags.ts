@@ -11,6 +11,7 @@
 // facts changed?" can be answered on a reprocess (ADR-166): the same facts keep the same flag,
 // with its acceptance; changed facts clear it and, if the problem is still there, raise a new one.
 // The check that raises a flag says both. Nothing here decides when a flag is raised.
+import type { FieldEventKindName } from './field-event-details.ts';
 import { ProjectClock, enDash } from './project-clock.ts';
 import { sha256 } from './sha256.ts';
 
@@ -18,7 +19,7 @@ import { sha256 } from './sha256.ts';
 export const flagBillings = ['BILLS', 'LINE_NOT_BILLED', 'NOT_BILLED'] as const;
 export type FlagBilling = (typeof flagBillings)[number];
 
-// spec/FLAGS.md §3, in the page's order: 66 codes (`FlagCode`, held to the page by a test).
+// spec/FLAGS.md §3, in the page's order: 75 codes (`FlagCode`, held to the page by a test).
 export const flagCodes = [
   // §3.1 Between a ticket's field events
   'DEBRIS_TYPE_MISMATCH',
@@ -95,6 +96,16 @@ export const flagCodes = [
   'RATE_TO_BE_NEGOTIATED',
   // §3.9 The engine
   'NOT_PROCESSED',
+  // §3.10 A record that should not have been possible
+  'DETAIL_MISSING',
+  'TYPED_NUMBER_NO_REASON',
+  'WRONG_KIND_OF_BADGE',
+  'GPS_UNREADABLE',
+  'NOT_A_TICKET_NUMBER',
+  'ENDED_BEFORE_STARTED',
+  'SPLIT_NOT_ALLOWED',
+  'OUTSIDE_CONTROL_RANGES',
+  'ASSIGNMENT_ON_ANOTHER_PROJECT',
 ] as const;
 export type FlagCode = (typeof flagCodes)[number];
 
@@ -220,7 +231,30 @@ export interface FlagTold {
   NO_RATE_FOR_PRIME: { payItem: string; prime: string };
   RATE_TO_BE_NEGOTIATED: Nothing;
   NOT_PROCESSED: Nothing;
+  // What the field event has none of: "debris type".
+  DETAIL_MISSING: { event: FieldEventKindName; missing: string };
+  TYPED_NUMBER_NO_REASON: Nothing;
+  WRONG_KIND_OF_BADGE: {
+    work: 'a load' | 'a haul-out' | 'unit rate work';
+    certifies: 'crew' | 'container';
+    certNumber: string;
+  };
+  GPS_UNREADABLE: Nothing;
+  NOT_A_TICKET_NUMBER: Nothing;
+  ENDED_BEFORE_STARTED: { event: FieldEventKindName; endedAt: Date; startedAt: Date };
+  SPLIT_NOT_ALLOWED: { split: 'load' | 'haul-out' };
+  OUTSIDE_CONTROL_RANGES: Nothing;
+  ASSIGNMENT_ON_ANOTHER_PROJECT: Nothing;
 }
+
+// A field event's kind as a message says it.
+const eventWords: Record<FieldEventKindName, string> = {
+  COLLECTION: 'collection',
+  DISPOSAL: 'disposal',
+  HAUL_OUT_COLLECTION: 'haul-out collection',
+  HAUL_OUT_DISPOSAL: 'haul-out disposal',
+  UNIT_RATE: 'unit rate event',
+};
 
 // What a flag is on: a ticket, or the record it sits on where it isn't a ticket's (spec/FLAGS.md
 // §1, §3.7).
@@ -600,6 +634,48 @@ const catalogue: { readonly [Code in FlagCode]: Entry<Code> } = {
     billing: 'NOT_BILLED',
     ending: 'NOT_BILLED',
     words: () => 'could not be processed',
+  },
+  DETAIL_MISSING: {
+    billing: 'BILLS',
+    ending: 'REVIEW',
+    words: (told) => `${eventWords[told.event]} has no ${told.missing}`,
+  },
+  TYPED_NUMBER_NO_REASON: {
+    billing: 'BILLS',
+    ending: 'REVIEW',
+    words: () => 'typed ticket number (no reason picked)',
+  },
+  WRONG_KIND_OF_BADGE: {
+    billing: 'BILLS',
+    ending: 'REVIEW',
+    words: (told) => `${told.work} recorded on ${told.certifies} certification ${told.certNumber}`,
+  },
+  GPS_UNREADABLE: { billing: 'BILLS', ending: 'REVIEW', words: () => 'GPS unreadable' },
+  NOT_A_TICKET_NUMBER: {
+    billing: 'NOT_BILLED',
+    ending: 'NOT_BILLED',
+    words: () => 'not a valid ticket number',
+  },
+  ENDED_BEFORE_STARTED: {
+    billing: 'BILLS',
+    ending: 'REVIEW',
+    words: (told, clock) =>
+      `${eventWords[told.event]} ended ${clock.time(told.endedAt)}, before it started ${clock.time(told.startedAt)}`,
+  },
+  SPLIT_NOT_ALLOWED: {
+    billing: 'BILLS',
+    ending: 'REVIEW',
+    words: (told) => `a split ${told.split} on a project that doesn't allow split loads`,
+  },
+  OUTSIDE_CONTROL_RANGES: {
+    billing: 'BILLS',
+    ending: 'REVIEW',
+    words: () => "number is in none of the project's control ticket ranges",
+  },
+  ASSIGNMENT_ON_ANOTHER_PROJECT: {
+    billing: 'BILLS',
+    ending: 'REVIEW',
+    words: () => 'recorded under an assignment on another project',
   },
 };
 

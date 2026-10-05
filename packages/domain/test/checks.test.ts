@@ -1,6 +1,6 @@
 // The checks between a ticket's field events, on the certification and on its times
-// (spec/acceptance/06-reconciliation.md sections D, E, the time rows of F, AC-06-17, 117, 125,
-// 130, 131, 133; spec/FLAGS.md §3.1, §3.2, §3.3; ADR-344). Each message is the catalogue's, word
+// (spec/acceptance/06-reconciliation.md sections D, E, the time rows of F, section O, AC-06-17,
+// 117, 125, 130, 131, 133; spec/FLAGS.md §3.1, §3.2, §3.3, §3.10; ADR-344, 345). Each message is the catalogue's, word
 // for word. The values are the example world's (spec/CONVENTIONS.md §6) and the catalogue's own
 // example tickets: P1 in Bayline County, on America/New_York, active 12 October 2026 to
 // 31 January 2027.
@@ -84,6 +84,11 @@ function recorded(
     device: { enrolledAt: enrolled, outOfServiceAt: null },
     clockOffAtSyncMinutes: null,
     carriedCount: null,
+    loadCall: kind === 'DISPOSAL' || kind === 'HAUL_OUT_COLLECTION' ? 80 : null,
+    scaleReceiptId: null,
+    kindOfWorkId: kind === 'UNIT_RATE' ? 'kind-hangers' : null,
+    unreadableGps: null,
+    assignmentProjectId: more.projectId ?? p1,
     ...more,
   };
 }
@@ -108,6 +113,7 @@ const certified = (
   more: Partial<CheckedCertification> = {},
 ): CheckedCertification => ({
   certNumber,
+  kind: capacityCy === null ? 'CREW' : 'CONTAINER',
   capacityCy,
   tagExpiry: null,
   revokedFrom: null,
@@ -121,6 +127,9 @@ const p1Setup = (more: Partial<CheckSetup> = {}): CheckSetup => ({
   activeTo: '2027-01-31',
   certifications: [certified('730415', 65), certified('730416', 48), certified('730417', null)],
   deviceClockOffLimitMinutes: null,
+  // P1 as these tests set it up: a split's own checks need splits allowed.
+  allowSplitLoads: true,
+  controlRanges: null,
   ...more,
 });
 
@@ -723,5 +732,211 @@ describe('a ticket’s times, and where its records came from', () => {
       );
       expect(checks.of(ticket, { otherLoads, carried: null })).toEqual([]);
     }
+  });
+});
+
+describe('a record that should not have been possible is kept and flagged', () => {
+  it('AC-06-155 a field event that arrived without its debris type, its quantity or its kind of work is flagged', () => {
+    const col = collection('101036', at(mon, '09:40'), { debrisType: null });
+    const flags = flagsOf([col]);
+    expect(messagesOf(flags)).toEqual([
+      'Ticket 101036: collection has no debris type. Flagged for review.',
+    ]);
+    expect(flags[0]).toMatchObject({
+      code: 'DETAIL_MISSING',
+      billing: 'BILLS',
+      fieldEventId: col.id,
+      facts: { missing: 'DEBRIS_TYPE' },
+    });
+
+    expect(
+      messagesOf(
+        flagsOf([
+          collection('101036', at(mon, '09:40')),
+          disposal('101036', at(mon, '10:20'), { loadCall: null }),
+        ]),
+      ),
+    ).toEqual([
+      'Ticket 101036: disposal has no load call, scale receipt or count. Flagged for review.',
+    ]);
+    expect(
+      messagesOf(
+        flagsOf([
+          recorded('HAUL_OUT_COLLECTION', '201005', at(tue, '08:00'), at(tue, '08:20'), {
+            loadCall: null,
+          }),
+        ]),
+      ),
+    ).toEqual(['Ticket 201005: haul-out collection has no load call. Flagged for review.']);
+    expect(
+      messagesOf(
+        flagsOf([
+          recorded('UNIT_RATE', '301022', at(tue, '08:00'), at(tue, '08:20'), {
+            certNumber: '730417',
+            kindOfWorkId: null,
+          }),
+        ]),
+      ),
+    ).toEqual(['Ticket 301022: unit rate event has no kind of work. Flagged for review.']);
+  });
+
+  it('AC-06-155 a tower that took a weight or a count in place of a load call is missing nothing: one quantity, never both', () => {
+    const col = collection('101036', at(mon, '09:40'));
+    for (const taken of [{ scaleReceiptId: 'receipt-bcl-88241' }, { carriedCount: 4 }]) {
+      expect(
+        flagsOf([col, disposal('101036', at(mon, '10:20'), { loadCall: null, ...taken })]),
+      ).toEqual([]);
+    }
+  });
+
+  it('AC-06-156 a ticket number typed with no reason picked is flagged', () => {
+    const flags = flagsOf([disposal('101037', at(mon, '10:20'), { numberTyped: true })]);
+
+    expect(messagesOf(flags)).toEqual([
+      'Ticket 101037: typed ticket number (no reason picked). Flagged for review.',
+    ]);
+    expect(flags[0]).toMatchObject({ code: 'TYPED_NUMBER_NO_REASON', billing: 'BILLS' });
+  });
+
+  it('AC-06-157 a load on a crew’s badge, or unit rate work on a container’s, is flagged; the right kind of badge is not', () => {
+    const onACrew = flagsOf([collection('101038', at(mon, '09:40'), { certNumber: '730417' })]);
+    expect(messagesOf(onACrew)).toEqual([
+      'Ticket 101038: a load recorded on crew certification 730417. Flagged for review.',
+    ]);
+    expect(onACrew[0]?.facts).toEqual({ certNumber: '730417', kind: 'CREW' });
+
+    const unitRate = (certNumber: string) =>
+      flagsOf([
+        recorded('UNIT_RATE', '301023', at(tue, '08:00'), at(tue, '08:20'), { certNumber }),
+      ]);
+    expect(messagesOf(unitRate('730415'))).toEqual([
+      'Ticket 301023: unit rate work recorded on container certification 730415. Flagged for review.',
+    ]);
+    expect(unitRate('730417')).toEqual([]);
+    expect(
+      messagesOf(
+        flagsOf([
+          recorded('HAUL_OUT_COLLECTION', '201005', at(tue, '08:00'), at(tue, '08:20'), {
+            certNumber: '730417',
+          }),
+        ]),
+      ),
+    ).toEqual([
+      'Ticket 201005: a haul-out recorded on crew certification 730417. Flagged for review.',
+    ]);
+  });
+
+  it('AC-06-159 a field event whose impossible GPS fix intake kept apart as sent is flagged, with the fix as its fact', () => {
+    const sent = { end: { latitude: '97.50000000', longitude: null } };
+    const flags = flagsOf([collection('101039', at(mon, '09:40'), { unreadableGps: sent })]);
+
+    expect(messagesOf(flags)).toEqual(['Ticket 101039: GPS unreadable. Flagged for review.']);
+    expect(flags[0]).toMatchObject({ billing: 'BILLS', facts: { sent } });
+  });
+
+  it('AC-06-160 a field event whose ticket number isn’t digits is in no ticket, pairs with nothing, and is flagged, not billed', () => {
+    const odd = collection('10A040', at(mon, '09:40'));
+    const dis = disposal('101040', at(mon, '10:20'));
+    const all = new Tickets([odd, dis]);
+
+    expect(all.notTicketNumbers).toEqual([odd]);
+    expect(all.tickets.map((ticket) => ticket.ticketNumber)).toEqual(['101040']);
+    const flag = new TicketChecks(p1Setup()).notATicketNumber(odd);
+    expect(flag).toMatchObject({
+      code: 'NOT_A_TICKET_NUMBER',
+      message: 'Ticket 10A040: not a valid ticket number. Flagged for review; not billed.',
+      billing: 'NOT_BILLED',
+      fieldEventId: odd.id,
+      facts: { ticketNumber: '10A040' },
+    });
+  });
+
+  it('AC-06-161 a field event that ends before it starts is flagged', () => {
+    const flags = flagsOf([recorded('COLLECTION', '101041', at(mon, '09:40'), at(mon, '09:10'))]);
+
+    expect(messagesOf(flags)).toEqual([
+      'Ticket 101041: collection ended 09:10, before it started 09:40. Flagged for review.',
+    ]);
+    expect(flags[0]?.billing).toBe('BILLS');
+  });
+
+  it('AC-06-163 a split on a project that doesn’t allow split loads is flagged, a load’s or a haul-out’s', () => {
+    const split = [
+      collection('101042-A', at(mon, '08:40')),
+      collection('101042-B', at(mon, '09:05')),
+    ];
+    const flags = flagsOf(split, { allowSplitLoads: false });
+
+    expect(messagesOf(flags)).toEqual([
+      "Ticket 101042: a split load on a project that doesn't allow split loads. Flagged for review.",
+    ]);
+    expect(flags[0]).toMatchObject({
+      code: 'SPLIT_NOT_ALLOWED',
+      billing: 'BILLS',
+      fieldEventId: null,
+      facts: { suffixes: ['A', 'B'] },
+    });
+    expect(flagsOf(split)).toEqual([]);
+    expect(flagsOf([collection('101042', at(mon, '08:40'))], { allowSplitLoads: false })).toEqual(
+      [],
+    );
+    expect(
+      messagesOf(
+        flagsOf([recorded('HAUL_OUT_COLLECTION', '201005-A', at(tue, '08:00'), at(tue, '08:20'))], {
+          allowSplitLoads: false,
+        }),
+      ),
+    ).toEqual([
+      "Ticket 201005: a split haul-out on a project that doesn't allow split loads. Flagged for review.",
+    ]);
+  });
+
+  it('AC-06-164 on a project numbered from control tickets, a number in none of its series’ ranges is flagged', () => {
+    const controlRanges = [
+      { series: 'LOAD' as const, firstNumber: 101001, lastNumber: 102000 },
+      { series: 'LOAD' as const, firstNumber: 105001, lastNumber: 106000 },
+    ];
+    const flags = flagsOf([collection('109999', at(mon, '09:40'))], { controlRanges });
+
+    expect(messagesOf(flags)).toEqual([
+      "Ticket 109999: number is in none of the project's control ticket ranges. Flagged for review.",
+    ]);
+    expect(flags[0]).toMatchObject({
+      code: 'OUTSIDE_CONTROL_RANGES',
+      billing: 'BILLS',
+      facts: {
+        ticketNumber: '109999',
+        ranges: [
+          [101001, 102000],
+          [105001, 106000],
+        ],
+      },
+    });
+    // Inside a range, at either end; a series with no range entered; a project that generates.
+    for (const inside of ['101001', '102000', '105500']) {
+      expect(flagsOf([collection(inside, at(mon, '09:40'))], { controlRanges })).toEqual([]);
+    }
+    expect(
+      flagsOf([recorded('HAUL_OUT_COLLECTION', '209999', at(tue, '08:00'), at(tue, '08:20'))], {
+        controlRanges,
+      }),
+    ).toEqual([]);
+    expect(flagsOf([collection('109999', at(mon, '09:40'))], { controlRanges: null })).toEqual([]);
+  });
+
+  it('AC-06-165 a field event recorded under an assignment on another project is flagged; a back-office record has no assignment', () => {
+    const flags = flagsOf([collection('101043', at(mon, '09:40'), { assignmentProjectId: p2 })]);
+
+    expect(messagesOf(flags)).toEqual([
+      'Ticket 101043: recorded under an assignment on another project. Flagged for review.',
+    ]);
+    expect(flags[0]).toMatchObject({
+      code: 'ASSIGNMENT_ON_ANOTHER_PROJECT',
+      billing: 'BILLS',
+      facts: { projectId: p1, assignmentProjectId: p2 },
+    });
+    expect(
+      flagsOf([collection('101043', at(mon, '09:40'), { assignmentProjectId: null })]),
+    ).toEqual([]);
   });
 });

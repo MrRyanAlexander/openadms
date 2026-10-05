@@ -1,4 +1,4 @@
-// The domain's flag catalogue against the approved page itself (spec/FLAGS.md §3; ADR-290, 344;
+// The domain's flag catalogue against the approved page itself (spec/FLAGS.md §3; ADR-290, 344, 345;
 // spec/acceptance/06-reconciliation.md AC-06-136, 137): the same codes in the same order, and
 // every message word for word. Each flag is raised here with what the page's own example says,
 // and what comes out is compared with the page. Needs no database.
@@ -151,6 +151,21 @@ const examples: Example = {
   NO_RATE_FOR_PRIME: [ticket('101034'), { payItem: 'VEG-HAUL-CY-15', prime: 'Summit' }],
   RATE_TO_BE_NEGOTIATED: [ticket('301021'), {}],
   NOT_PROCESSED: [ticket('101035'), {}],
+  DETAIL_MISSING: [ticket('101036'), { event: 'COLLECTION', missing: 'debris type' }],
+  TYPED_NUMBER_NO_REASON: [ticket('101037'), {}],
+  WRONG_KIND_OF_BADGE: [
+    ticket('101038'),
+    { work: 'a load', certifies: 'crew', certNumber: '730417' },
+  ],
+  GPS_UNREADABLE: [ticket('101039'), {}],
+  NOT_A_TICKET_NUMBER: [ticket('10A040'), {}],
+  ENDED_BEFORE_STARTED: [
+    ticket('101041'),
+    { event: 'COLLECTION', endedAt: at('09:10'), startedAt: at('09:40') },
+  ],
+  SPLIT_NOT_ALLOWED: [ticket('101042'), { split: 'load' }],
+  OUTSIDE_CONTROL_RANGES: [ticket('109999'), {}],
+  ASSIGNMENT_ON_ANOTHER_PROJECT: [ticket('101043'), {}],
 };
 
 const flags = new Flags('America/New_York');
@@ -160,9 +175,9 @@ const raised = (code: FlagCode): string => {
 };
 
 describe('the flag catalogue, against spec/FLAGS.md', () => {
-  it('AC-06-137 the domain’s codes are the page’s, in its order: 66, and a flag that isn’t on the page can’t be raised', () => {
+  it('AC-06-137 the domain’s codes are the page’s, in its order: 75, and a flag that isn’t on the page can’t be raised', () => {
     expect(rows.map(([code]) => code)).toEqual([...flagCodes]);
-    expect(rows).toHaveLength(66);
+    expect(rows).toHaveLength(75);
   });
 
   it.each(rows)('AC-06-136 %s reads as the page words it', (code, shown) => {
