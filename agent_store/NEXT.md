@@ -67,7 +67,7 @@ record (why Phase 0 existed, its exit criteria and how each was met, the spec tr
 question rounds) moved word for word to `DECISIONS.md`'s scratchpad, "Moved from NEXT.md,
 2026-10-02"; `ROADMAP.md` §3a keeps the table.
 
-**Still live from the spec track:** `spec/acceptance/` is 5 of 9 files (`05-sync.md`: 56 scenarios, written 2026-10-04, ADR-333; 39 are task 1.4.2's; `04-field-capture.md`: 103 scenarios, 98 passing after C67 (e), ADR-337; `01-setup.md`: 82
+**Still live from the spec track:** `spec/acceptance/` is 5 of 9 files (`05-sync.md`: 56 scenarios, written 2026-10-04, ADR-333; **43 passing and two in part after task 1.4.2, ADR-338**; `04-field-capture.md`: 103 scenarios, 98 passing after C67 (e), ADR-337; `01-setup.md`: 82
 scenarios, 67 passing (AC-01-19 since 1.2.3, AC-01-09 since 1.3.2, AC-01-27 whole since 1.3.4) and AC-01-48, 55 and 80 in part; `02-people-and-devices.md`: 74
 scenarios, 35 passing at the database and four in part after 1.1.10, ADR-315; `03-certification.md`: 60 scenarios, 39 passing and 1 in part after 1.3.5, ADR-326); each other file is the first task of the milestone that builds its part
 (ADR-300).
@@ -81,7 +81,7 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-04: Phase 1 is open, twenty-three tasks done; Milestones 1.1, 1.2 and 1.3 are done; 1.4.1 written; C67 (a)…(e) built)
+### Where things stand (2026-10-04: Phase 1 is open, twenty-four tasks done; Milestones 1.1, 1.2, 1.3 and 1.4 are done; C67 (a)…(f) built)
 - **Phase 1 (data core and engine) is the active phase**, opened by the user on 2026-10-01
   (ADR-299). Its plan is `BACKLOG.md`'s ten milestones and 47 tasks (ADR-300): setup records →
   certifications and capacity → tickets and numbers → sync intake → reconciliation → the rule engine
@@ -181,7 +181,7 @@ of `DECISIONS.md`.
   from its own project's load form or the payable types) and `Survey`, `Incident`, `DropOffLog`
   (evidence, each saying where it came from as a field event does); each record's answers with
   the definition answered, of its own project's form of its kind, or `{}` with none;
-  `formAnswersSchema` in `packages/contracts`; `FieldEvent.roeId`; `Photo`'s four new owners; and **1.3.7, the harness's phones capture every kind (2026-10-04, ADR-332: Milestone 1.3 is done)**: the one rule that works a unit rate pay item out from the size bands (`SizeBands.payItemFor`, `packages/domain`); the harness's phone holds its assignment's lists, scans the badge at New, picks by name and takes the number last (its own block's next, or scanned; entered again); the story `p1-field-days`: P1's Monday and Tuesday, 25 field events, a scale receipt, an incident and a drop-off log, every field event `PENDING`.
+  `formAnswersSchema` in `packages/contracts`; `FieldEvent.roeId`; `Photo`'s four new owners; and **1.3.7, the harness's phones capture every kind (2026-10-04, ADR-332: Milestone 1.3 is done)**: the one rule that works a unit rate pay item out from the size bands (`SizeBands.payItemFor`, `packages/domain`); the harness's phone holds its assignment's lists, scans the badge at New, picks by name and takes the number last (its own block's next, or scanned; entered again); the story `p1-field-days`: P1's Monday and Tuesday, 25 field events, a scale receipt, an incident and a drop-off log, every field event `PENDING`; and **1.4.2, intake (2026-10-04, ADR-338: Milestone 1.4 is done)**: `apps/api`'s `Intake` (`src/sync/`) answers each record a phone sends saved, already saved or not saved; `QuarantinedRecord` keeps a duplicate field event, and an ROE whose number is taken, whole, never changed or deleted; `Photo.quarantinedRecordId`; an impossible GPS fix kept as sent in `FieldEvent.unreadableGps`; `GpsFix` and `Quarantine` in `packages/domain`; the stand-in intake gone; the stories `sync` and `p1-any-order`.
   **Corrected by the user on
   2026-10-02 (ADR-301):** a pay item's code is unique on its project (ADR-147 had read their answer
   backwards), a pay item is its code and its description (no separate name, no "line number"), and
@@ -190,8 +190,8 @@ of `DECISIONS.md`.
   exist** (the lists, the client, the declaration event, the project, contractors on a project,
   contracts, forms, pay items, sites, the project map, rules, permissions and viewers,
   certifications, numbering, the field event in full, its item lines and carried tickets, scale
-  receipts and photographs, ROEs and their scope, surveys, incidents and drop-off logs; 69
-  models, 53 migrations);
+  receipts and photographs, ROEs and their scope, surveys, incidents and drop-off logs, quarantined records; 70
+  models, 65 migrations);
   the other models are still Phase 0's provisional ones, and `packages/domain` holds the built-in
   keys, the policy values and a new project's settings.
 - **Phase 0 (Foundation) is done** (2026-10-01, ADR-281…288): the monorepo, the local HTTPS stack
@@ -365,7 +365,7 @@ permissions and viewers, ADR-315), **1.1.11 (the example world's setup as a stor
 Milestone 1.1 is done)**, **1.2.1 (the acceptance scenarios for certifications, ADR-317: 60)**,
 **1.2.2 (the capacity math, ADR-320: `Capacity` in `packages/domain`)**, **1.2.3 (the
 certification's records, ADR-321: Milestone 1.2 is done)**, **1.3.1 (the acceptance scenarios for
-tickets and numbers, ADR-322: 98)**, **1.3.2 (numbering, ADR-323)**, **1.3.3 (what every field event records, ADR-324)**, **1.3.4 (what each kind records, ADR-325)**, **1.3.5 (scale receipts and photographs, ADR-326)**, **1.3.6 (ROEs and forms, ADR-327)**, **1.3.7 (the harness's phones capture every kind, ADR-332: Milestone 1.3 is done)**, **1.4.1 (the acceptance scenarios for sync, ADR-333: 56)**; and the user's correction of
+tickets and numbers, ADR-322: 98)**, **1.3.2 (numbering, ADR-323)**, **1.3.3 (what every field event records, ADR-324)**, **1.3.4 (what each kind records, ADR-325)**, **1.3.5 (scale receipts and photographs, ADR-326)**, **1.3.6 (ROEs and forms, ADR-327)**, **1.3.7 (the harness's phones capture every kind, ADR-332: Milestone 1.3 is done)**, **1.4.1 (the acceptance scenarios for sync, ADR-333: 56)**, **1.4.2 (intake, ADR-338: Milestone 1.4 is done)**; and the user's correction of
 2026-10-02 (ADR-301: a pay item's code is unique, it has a description and no name, a duplicate
 rule is refused).
 
@@ -408,11 +408,25 @@ file and its fingerprints stay) and `label` (free text, never blank: `photo_labe
 are empty as a phone sends a photograph, corrected by the API and audited, and shown by
 `viewer_photo`. Intake writes neither from a phone; the service call is 1.8.3's; whether a
 removed photograph counts as a required one is 1.5.5's and 1.5.7's. **C67 (a)…(e) are all
-built; (f) is part of 1.4.2 and (g) of 1.5.5 and 1.5.7.**
-👉 **1.4.2, intake** (read `05-sync.md` first: its scenarios, its sixteen open points, and the
-carried items under them; it also looks up the certification and the ROE an incident's numbers
-find, and keeps a field event whose GPS fix is impossible, without the fix: C67 (f)). It needs
-the stack (`pnpm local:up`; Docker Desktop may need `open -a Docker`).
+built; (f) came with 1.4.2 (ADR-338); (g) is 1.5.5's and 1.5.7's.**
+**Task 1.4.2, intake, is done (ADR-338): Milestone 1.4 is done.** `Intake` (`apps/api/src/sync/`)
+is what a story's phones sync to (`story.intake`): `receive(record)` answers `SAVED` (with
+notes), `ALREADY_SAVED` or `QUARANTINED`; `topUp(phone, reports)` fills a phone's number blocks.
+A phone keeps what it was told (`phone.answers`, `phone.notSaved`), sends its records first and
+its photographs after, and has `photograph`, `survey` and a tandem's `sameScaleReceiptAs`. **A
+record a phone never makes** (a gap, a broken fix, answers to the firm's own fields) is told by
+copying a phone's record under a new id and handing it to `story.intake.receive` (the story
+`sync` is the model). **A record the database's own constraints refuse makes intake throw**: the
+record stays on the phone (Phase 2's contract answers it). **A quarantined record** is written
+with what holds its number (`holding_event_id`, or `holding_roe_id` with reason
+`DUPLICATE_ROE_NUMBER`), and what the phone sent can't be updated: a test that needs other
+values writes another (`packages/db/test/quarantined-records.test.ts`). **A field event's new
+column** `unreadable_gps` joined `captured`, the catalog's checks and AC-04-25's list; a
+photograph's `quarantined_record_id` joined `correctable.photo`, `photo_owner_check` and
+AC-04-76's list. What is left: BACKLOG C69.
+👉 **1.5.1, the acceptance scenarios for reconciliation** (`spec/acceptance/06-reconciliation.md`,
+from Part 6, `adms-validation` and `adms-exceptions`; read BACKLOG Milestone 1.5's carried items
+and C69 first). A docs task: it needs no stack.
 
 **The harness's phones** (ADR-332): a story signs a phone in with `story.phone({ …, lists: await
 phoneLists(api, { assignmentId, deviceId }) })` after its blocks are cut (`NumberAllocator.topUp`),
@@ -420,10 +434,9 @@ and the next day with `phone.signIn(…)` (the phone keeps its own count of numb
 kind, badge?)` is New (a unit rate event with no badge is the working crew's); `complete(id, { number:
 made | scanned('101001') | typed('101060', 'Barcode damaged') | chained(idBefore), … })` takes
 every pick **by name** and answers `{ saved, event }` or a `NUMBER_MISMATCH` (`reentered`).
-`incident`, `dropOffLog`, `roe`, `takeCertNumber`, `cancel`, `lastUsedNumber(series)`. The
-stand-in intake (`intake.ts`) writes field events with their details, items and carried tickets,
-scale receipts, incidents and drop-off logs; **it throws on an ROE**: 1.4.2's intake replaces it
-(C68). `passOver(series, upTo)` is the harness's own, for numbers a story doesn't tell (201002,
+`incident`, `dropOffLog`, `roe`, `survey`, `photograph`, `takeCertNumber`, `cancel`,
+`lastUsedNumber(series)`. It syncs to the API's intake (ADR-338; the stand-in is gone).
+`passOver(series, upTo)` is the harness's own, for numbers a story doesn't tell (201002,
 201003). The worker works the pay item out again with `SizeBands.payItemFor` (1.5.7). The story
 `p1-field-days` (`packages/scenarios/src/stories/`) is the model for a day of field events; it
 writes no certification, rule or load pay item.
@@ -457,7 +470,7 @@ with `photoLike(world, owner, …)` (its owner one of `field_event_id`, `certifi
 The example world holds no receipt and no photograph: a test writes its own. **A new owner of a
 photograph** adds its column with a two-column foreign key to `(project_id, id)` of its table,
 then in its guard migration drops `photo_owner_check` and writes it again with the new column
-(seven owners since ADR-327; `quarantinedRecordId` is 1.4.2's),
+(eight owners since ADR-338: `quarantinedRecordId`),
 and reruns `guard_table('photo', 'EVIDENCE', 'RECORDS')` and `guard_viewer('photo', 'PROJECT',
 hidden => ARRAY['object_key', 'depth_object_key'])`; `correctable.photo` in `grants.test.ts`, the
 check in `catalog.test.ts` and AC-04-76's column list follow. **A photograph's fingerprints and
@@ -589,7 +602,7 @@ then `SELECT guard_list('<table>', '<domain>');` in its guard migration; a new b
 `packages/domain`'s `builtInKeys` first, with an ADR (ADR-302).
 
 Start every command with `eval "$(fnm env --shell zsh)"`; the checks are **`adms-verify`** (the chain
-is 58 files, 1,175 tests; sixty-three migrations; `pnpm scenarios` runs six stories, 16, 18, 52, 25, 15 and 35 checks),
+is 60 files, 1,199 tests; sixty-five migrations; `pnpm scenarios` runs eight stories, 16, 18, 52, 25, 15, 35, 47 and 4 checks),
 with **`pnpm security`** (7 passed, 0 failed, ADR-291). The database tests, the map servers' tests and
 the stories need `pnpm local:up` first; stop it at close-out (ADR-277). A schema change goes through
 Prisma (`prisma migrate dev --create-only`), a guard into its own empty stub (ADR-113); **try a guard

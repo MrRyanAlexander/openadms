@@ -1204,7 +1204,7 @@ item requires is a flag.
 keeps `deviceUtcOffsetMinutes` and `receivedAt`. **Seven owners today**, each of the
 photograph's own project (two-column foreign keys): `fieldEventId`, `certificationId`,
 `scaleReceiptId`, and since ADR-327 `roeId`, `surveyId`, `incidentId` and `dropOffLogId`.
-`quarantinedRecordId` joins with its own table (1.4.2), widening the one-owner check.
+`quarantinedRecordId` joined with its table (ADR-338): **eight owners**, exactly one.
 A `view` only on a certification's photograph, and not required. A fingerprint is 64 lower-case
 hexadecimal digits; `objectKey` and `depthObjectKey` are each unique. **The two fingerprints and
 the two keys are written once**: a trigger refuses any change to them, by anyone; the owner, the
@@ -1221,6 +1221,14 @@ a permission the API reads (Phase 2); whether a removed photograph counts toward
 a pay item requires or a certification's five views is the flags' task (1.5.5, 1.5.7).
 
 ### 4.5 Sync (Phase 2 settles the detail; ARCHITECTURE §9)
+
+**`FieldEvent.unreadableGps` (ADR-329 (5), 338; listed here because intake writes it).** JSON,
+empty on almost every field event: a GPS fix that reached the server and couldn't be one (half a
+fix, a latitude past 90, a longitude past 180, not a decimal), kept exactly as sent under `start`
+or `end`, while the field event is saved without that fix. The worker reads it to raise "GPS
+unreadable" (task 1.5.5); a reviewer who corrects the fix writes the real columns. A form's, an
+ROE's and a photograph's impossible fix is dropped the same way and kept in that insert's audit
+reason. *Agent default.*
 
 #### `Sync`
 
@@ -1264,6 +1272,24 @@ resolved; it is never dropped (ADR-292).
 | resolvedById | → `User` | |
 | resolvedAt | instant | |
 | resolution | *open* | |
+
+**As built (ADR-338, task 1.4.2).** Evidence, audited in the records domain; written by intake
+(`apps/api`, `Intake`), never by the worker, which doesn't read it. `payload` is the record with
+its kind, as the phone sent it (an object). `reason` is the closed set `QuarantineReason`:
+`DUPLICATE_FIELD_EVENT` (a second field event of one kind on one project, workflow, bare number
+and split suffix) or `DUPLICATE_ROE_NUMBER` (an ROE made on a phone whose number another ROE of
+the project has: the monitor's record isn't lost and no ROE number is held twice). **There are
+two holders, exactly the one the reason names:** `holdingEventId` → `FieldEvent`, or
+`holdingRoeId` → `Roe`, each of the record's own project (two-column foreign keys). The first
+record to reach the server holds the number, a voided ticket's included. **What the phone sent
+is never changed, by anyone** (a trigger on the id, project, phone, monitor, payload, reason,
+holders and received time) and never deleted; the resolution is `resolvedById`, `resolvedAt`
+and `resolution` (free text until task 1.8.x words it), all three or none, never the system
+actor's. **Viewers:** a client user and an auditor see every column but `payload`
+(`viewer_quarantined_record`); the record as sent may name a private citizen, so it is shown by
+`viewer_quarantined_record_citizen` only to a viewer the firm lets see them (ADR-336); a
+contractor user sees none. A quarantined record's item lines and carried tickets are inside its
+payload; a scale receipt sent with it is saved as its own record. *Agent defaults.*
 
 #### `FieldEventEdit`
 

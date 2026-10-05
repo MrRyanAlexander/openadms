@@ -2,7 +2,7 @@
 name: adms-exceptions
 description: Open ADMS failure cases and how people resolve them, in today's rules. Covers the special cases around a ticket's field events, why nothing can be validated in the field, duplicate field events quarantined at sync and resolved by a person, four worked scenarios (a barcode scanned twice at the tower, a phantom collection, sync in any order, a legitimate split load), renumber versus void versus accept, corrections in place by permission (a monitor's own reopen until the shift ends, the back office after), reprocessing completed tickets, back-office-created records, an out-of-service phone, and the other duplicate and orphan shapes. Use when handling duplicates, quarantine, unpartnered field events, preloads, corrections, voids, renumbering or split chains. Flags and their wording live in adms-validation; pricing in adms-ledger-audit.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-248) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-248; an ROE's duplicate number quarantined, ADR-338) -->
 
 > **This page states today's rules** (last changed by ADR-248, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
@@ -297,6 +297,7 @@ ticket simply waits with it.
 | `-A`…`-N` collections and one disposal on the base number | **Scenario D**: a split | Group on the base number; one load. Never renumber, never treat as duplicates |
 | A bare collection beside suffixed ones, or a gap in the suffixes | A mis-keyed number | Flagged (ADR-033, 173); the reviewer corrects the number |
 | A second disposal on a split's base number | A duplicate like any other: a load dumps once (ADR-155) | Quarantined at sync (ADR-022) |
+| An ROE made on a phone whose number another ROE of the project already has | Not a ticket's field event, but the same problem: one number, two records | Quarantined at sync in full, beside the ROE that holds the number; never saved under a taken number, never lost (ADR-338, agent default) |
 
 **Before renumbering anything, establish which scenario you're in** (ADR-028). Renumbering a
 Scenario B phantom double-bills; renumbering a Scenario D collection breaks it off its base number;
