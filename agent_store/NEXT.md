@@ -67,7 +67,7 @@ record (why Phase 0 existed, its exit criteria and how each was met, the spec tr
 question rounds) moved word for word to `DECISIONS.md`'s scratchpad, "Moved from NEXT.md,
 2026-10-02"; `ROADMAP.md` §3a keeps the table.
 
-**Still live from the spec track:** `spec/acceptance/` is 5 of 9 files (`05-sync.md`: 56 scenarios, written 2026-10-04, ADR-333; **43 passing and two in part after task 1.4.2, ADR-338**; `04-field-capture.md`: 103 scenarios, 98 passing after C67 (e), ADR-337; `01-setup.md`: 82
+**Still live from the spec track:** `spec/acceptance/` is 6 of 9 files (`06-reconciliation.md`: 162 scenarios, written 2026-10-05, ADR-339, none passing yet; `05-sync.md`: 56 scenarios, written 2026-10-04, ADR-333; **43 passing and two in part after task 1.4.2, ADR-338**; `04-field-capture.md`: 103 scenarios, 98 passing after C67 (e), ADR-337; `01-setup.md`: 82
 scenarios, 67 passing (AC-01-19 since 1.2.3, AC-01-09 since 1.3.2, AC-01-27 whole since 1.3.4) and AC-01-48, 55 and 80 in part; `02-people-and-devices.md`: 74
 scenarios, 35 passing at the database and four in part after 1.1.10, ADR-315; `03-certification.md`: 60 scenarios, 39 passing and 1 in part after 1.3.5, ADR-326); each other file is the first task of the milestone that builds its part
 (ADR-300).
@@ -81,7 +81,7 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-04: Phase 1 is open, twenty-four tasks done; Milestones 1.1, 1.2, 1.3 and 1.4 are done; C67 (a)…(f) built)
+### Where things stand (2026-10-05: Phase 1 is open, twenty-five tasks done (the newest: 1.5.1, reconciliation's 162 acceptance scenarios, ADR-339); Milestones 1.1, 1.2, 1.3 and 1.4 are done; C67 (a)…(f) built)
 - **Phase 1 (data core and engine) is the active phase**, opened by the user on 2026-10-01
   (ADR-299). Its plan is `BACKLOG.md`'s ten milestones and 47 tasks (ADR-300): setup records →
   certifications and capacity → tickets and numbers → sync intake → reconciliation → the rule engine
@@ -365,7 +365,7 @@ permissions and viewers, ADR-315), **1.1.11 (the example world's setup as a stor
 Milestone 1.1 is done)**, **1.2.1 (the acceptance scenarios for certifications, ADR-317: 60)**,
 **1.2.2 (the capacity math, ADR-320: `Capacity` in `packages/domain`)**, **1.2.3 (the
 certification's records, ADR-321: Milestone 1.2 is done)**, **1.3.1 (the acceptance scenarios for
-tickets and numbers, ADR-322: 98)**, **1.3.2 (numbering, ADR-323)**, **1.3.3 (what every field event records, ADR-324)**, **1.3.4 (what each kind records, ADR-325)**, **1.3.5 (scale receipts and photographs, ADR-326)**, **1.3.6 (ROEs and forms, ADR-327)**, **1.3.7 (the harness's phones capture every kind, ADR-332: Milestone 1.3 is done)**, **1.4.1 (the acceptance scenarios for sync, ADR-333: 56)**, **1.4.2 (intake, ADR-338: Milestone 1.4 is done)**; and the user's correction of
+tickets and numbers, ADR-322: 98)**, **1.3.2 (numbering, ADR-323)**, **1.3.3 (what every field event records, ADR-324)**, **1.3.4 (what each kind records, ADR-325)**, **1.3.5 (scale receipts and photographs, ADR-326)**, **1.3.6 (ROEs and forms, ADR-327)**, **1.3.7 (the harness's phones capture every kind, ADR-332: Milestone 1.3 is done)**, **1.4.1 (the acceptance scenarios for sync, ADR-333: 56)**, **1.4.2 (intake, ADR-338: Milestone 1.4 is done)**, **1.5.1 (the acceptance scenarios for reconciliation, ADR-339: 162)**; and the user's correction of
 2026-10-02 (ADR-301: a pay item's code is unique, it has a description and no name, a duplicate
 rule is refused).
 
@@ -424,9 +424,20 @@ values writes another (`packages/db/test/quarantined-records.test.ts`). **A fiel
 column** `unreadable_gps` joined `captured`, the catalog's checks and AC-04-25's list; a
 photograph's `quarantined_record_id` joined `correctable.photo`, `photo_owner_check` and
 AC-04-76's list. What is left: BACKLOG C69.
-👉 **1.5.1, the acceptance scenarios for reconciliation** (`spec/acceptance/06-reconciliation.md`,
-from Part 6, `adms-validation` and `adms-exceptions`; read BACKLOG Milestone 1.5's carried items
-and C69 first). A docs task: it needs no stack.
+**Task 1.5.1 is done (ADR-339):** `spec/acceptance/06-reconciliation.md`, 162 scenarios
+(AC-06-01…162), none passing yet; 152 are Milestone 1.5's, each row naming its task. **The flag
+catalogue is 66 flags** (not the 67 its last line says). Section O's eight scenarios (what ADR-329
+keeps and flags) say only "flagged": **their codes and words are put to the user by 1.5.5 and
+1.5.7** (C67 (g)), each a new `FlagCode` with its ADR. Its "Left to the task that builds it" table
+has eighteen points (BACKLOG C70). **KD-71 is open for the user:** the catalogue raises
+`OVERLAPPING_LOADS` on both tickets, `adms-exceptions` Scenario B pictures the real one clean; the
+scenarios follow the catalogue (AC-06-30).
+👉 **1.5.2, the derived records** (BACKLOG Milestone 1.5: `CompletedLoad` and
+`CompletedLoadCollection`, `CompletedHaulOut` and `CompletedHaulOutCollection`, `Flag` with
+`FlagCode` and `FlagBilling`, `ReconciliationRun`, `ReconciliationDecision`, the worker's columns
+on a field event; from `spec/DATA-MODEL.md` §5 and §9; scenarios AC-06-06, 19, 21, 137, 138,
+144…146, 148, 152; read C16, C62, C69 and C70's 1.5.2 points first: how reconciliation is queued,
+and who points a field event at a certification made later). A schema task: it needs the stack.
 
 **The harness's phones** (ADR-332): a story signs a phone in with `story.phone({ …, lists: await
 phoneLists(api, { assignmentId, deviceId }) })` after its blocks are cut (`NumberAllocator.topUp`),

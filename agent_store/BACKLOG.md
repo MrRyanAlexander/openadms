@@ -268,7 +268,7 @@ Carried: C16, C20, C50, C52's scenarios; C53's second part (1.5.5) and C55 (1.5.
 ADR-303 (named here by ADR-307). Closes the behaviour of KD-02, 04, 05, 06, 12, 19, 28, 35, 42, 50,
 55.
 
-- [ ] **1.5.1** `spec/acceptance/06-reconciliation.md`, from Part 6, `adms-validation` and
+- [x] **1.5.1** ✅ **done 2026-10-05 (ADR-339):** 162 scenarios, AC-06-01…162: what starts a run, grouping, shape and status, every flag of the catalogue (66 today: 67 less the one ADR-328 withdrew) word for word, each thing never flagged, the quantities to the digit, how a flag behaves, what the worker writes and the run's guarantees, and the eight things ADR-329 keeps and flags that have no words yet; 152 are Milestone 1.5's, nine wait for the rules, one for a correction; eighteen points left to the tasks that build them (C70); KD-71 opened. `spec/acceptance/06-reconciliation.md`, from Part 6, `adms-validation` and
   `spec/FLAGS.md`: one scenario at least for each of the 67 flags and each thing never flagged.
 - [ ] **1.5.2** **The derived records.** `CompletedLoad` and `CompletedLoadCollection`,
   `CompletedHaulOut` and `CompletedHaulOutCollection` (one disposal each; one live row per
@@ -1061,6 +1061,22 @@ delete one.
   should drop `adms_story_…` databases first (or stop and name `pnpm scenarios clean`).
 
 ---
+
+- **C70. What the reconciliation scenarios left for the tasks that build them** (ADR-339;
+  `spec/acceptance/06-reconciliation.md`, "Left to the task that builds it", eighteen points).
+  **Task 1.5.2:** how reconciliation is queued (with 1.5.9); who points a field event at a
+  certification made later. **Task 1.5.4:** who takes the remainder of rounded shares; which
+  quantity bills beside a count. **Task 1.5.5:** the work time; a tag's last day; work on the day
+  a certification was replaced; the checks on a lone field event; `OVERLAPPING_LOADS` while a
+  disposal hasn't synced and after the phantom is voided (KD-71); a bare collection's words; the
+  flags of ADR-329 (section O) and the gaps with no flag, worded with the user (C67 (g));
+  `DEVICE_CLOCK_OFF` in Phase 1; the worker's thresholds as policy values (C53); when a flag on
+  a certification is raised. **Task 1.5.6:** a project with no map; a haul-out collection's zone;
+  a site with no GPS; a disposal on the close date; when a site's flag is raised. **Task 1.5.7:**
+  whether a ticket's ROE flag puts it in review; a removed photograph against the required ones;
+  `301005`'s second flag; the crew-hours limit as a policy value and the tickets it is raised on.
+  **Task 1.5.9:** an errored ticket's status; the person stated for a reprocess (C20); how a
+  pending ticket is listed. **For the user:** KD-71, and the file's approval.
 
 ## Historical — Phase 1 closeout on `database/` *(superseded by ADR-093/103; kept as rebuild requirements)*
 
