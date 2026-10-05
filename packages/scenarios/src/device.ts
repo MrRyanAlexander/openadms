@@ -10,6 +10,22 @@
 // hand. A unit rate pay item is worked out from the size bands by packages/domain's rule, the one
 // the server uses. Its screens, its printing and its own duplicate check are the field app's
 // (Phase 3).
+import { createHash } from 'node:crypto';
+
+import type {
+  PhotoOwnerKind,
+  SentDropOffLog,
+  SentFieldEvent,
+  SentForm,
+  SentIncident,
+  SentItem,
+  SentPhoto,
+  SentRecord,
+  SentRoe,
+  SentScaleReceipt,
+  SentSurvey,
+  SyncAnswer,
+} from '@open-adms/api';
 import type { AddressSource, FieldEventKind, NumberSeries, Workflow } from '@open-adms/db';
 import {
   type BandedPayItem,
@@ -17,7 +33,6 @@ import {
   type HeldBlock,
   type IncidentOffer,
   IncidentOffers,
-  type MeasuredAs,
   NumberSeriesRules,
   PhoneNumbers,
   SizeBands,
@@ -27,159 +42,29 @@ import {
 import { utcOffsetMinutes, type StoryClock } from './clock.ts';
 import { uuidv7 } from './ids.ts';
 
-// A line of an itemised unit rate event: the item picked, and its count or its hours.
-export interface RecordedItem {
-  readonly itemNameId: string;
-  readonly quantity: number;
-}
+// What a phone sends at a sync is the API's to say (apps/api, src/sync/sent.ts): the harness's
+// phone sends exactly those records, under the names its stories know them by.
+export type RecordedItem = SentItem;
+export type RecordedEvent = SentFieldEvent;
+export type RecordedScaleReceipt = SentScaleReceipt;
+export type RecordedIncident = SentIncident;
+export type RecordedDropOffLog = SentDropOffLog;
+export type RecordedSurvey = SentSurvey;
+export type RecordedRoe = SentRoe;
+export type RecordedPhoto = SentPhoto;
+export type PhoneRecord = SentRecord;
 
-// A field event as the phone sends it at sync.
-export interface RecordedEvent {
-  readonly id: string;
-  readonly projectId: string;
-  readonly workflow: Workflow;
-  readonly kind: FieldEventKind;
-  readonly ticketNumber: string;
-  readonly splitSuffix: string;
-  readonly monitorId: string;
-  // Made on a phone: with the phone, the assignment it held and the version of its lists it
-  // captured with (ADR-240, 324).
-  readonly source: 'DEVICE';
-  readonly deviceId: string;
-  readonly assignmentId: string;
-  readonly setupVersion: number;
-  readonly temporarySession: boolean;
-  // Typed because the barcode wouldn't read, with the reason picked (ADR-111, 173).
-  readonly numberTyped: boolean;
-  readonly numberTypedReasonId: string | null;
-  // The cert number as scanned off the badge (ADR-017). Which certification it finds on the
-  // project is the server's to look up at intake (BACKLOG 1.4.2).
-  readonly certNumber: string;
-  readonly certKeyedByHand: boolean;
-  // The assignment's site, where the work is at one (ADR-195).
-  readonly siteId: string | null;
-  readonly startedAt: Date;
-  readonly endedAt: Date;
-  readonly deviceUtcOffsetMinutes: number;
-  readonly endLatitude: string | null;
-  readonly endLongitude: string | null;
-  readonly address: string | null;
-  readonly addressSource: AddressSource | null;
-  readonly notes: string | null;
-  // What its kind records (packages/domain's fieldEventDetails). The debris type is the entry on
-  // the project's form; which form that is, the server reads from the project and the workflow.
-  readonly formDebrisTypeId: string | null;
-  readonly fieldTagId: string | null;
-  // As picked or typed; the ROE it finds is the server's to look up (BACKLOG 1.4.2).
-  readonly roeNumber: string | null;
-  readonly estimateCy: number | null;
-  readonly loadCall: number | null;
-  // The scale receipt recorded with it, by the id the phone made.
-  readonly scaleReceiptId: string | null;
-  readonly carriedCount: number | null;
-  readonly kindOfWorkId: string | null;
-  readonly payableTypeId: string | null;
-  // The phone's answer, what printed; none where no band fits (ADR-213).
-  readonly payItemId: string | null;
-  readonly unitCount: number | null;
-  readonly measurementInches: number | null;
-  readonly measuredAs: MeasuredAs | null;
-  readonly rootBallInches: number | null;
-  readonly rootBallHalfExposed: boolean | null;
-  readonly surveyNumber: string | null;
-  readonly markedIneligible: boolean | null;
-  readonly items: readonly RecordedItem[];
-  // The numbers of the tickets a load carries, as the loading monitor added them (ADR-192).
-  readonly carriedTickets: readonly string[];
-}
-
-// The paper a final disposal site hands the tower, copied by hand (ADR-034): its own record,
-// sent before the disposal that points at it.
-export interface RecordedScaleReceipt {
-  readonly id: string;
-  readonly projectId: string;
-  readonly receiptNumber: string;
-  readonly siteId: string;
-  readonly grossWeightLb: number | null;
-  readonly tareWeightLb: number | null;
-  readonly netWeightLb: number | null;
-  readonly netWeightTons: number | null;
-  readonly enteredById: string;
-  readonly deviceId: string;
-  readonly enteredAt: Date;
-  readonly deviceUtcOffsetMinutes: number;
-}
-
-// What every form made on a phone records (ADR-327). The firm's own fields aren't among the
-// harness's lists, so its answers are always empty.
-interface RecordedForm {
-  readonly id: string;
-  readonly projectId: string;
-  readonly source: 'DEVICE';
-  readonly monitorId: string;
-  readonly deviceId: string;
-  readonly assignmentId: string;
-  readonly setupVersion: number;
-  readonly madeAt: Date;
-  readonly deviceUtcOffsetMinutes: number;
-  readonly latitude: string | null;
-  readonly longitude: string | null;
-  readonly notes: string | null;
-}
-
-export interface RecordedIncident extends RecordedForm {
-  readonly incidentTypeId: string;
-  readonly incidentSubTypeId: string | null;
-  readonly description: string | null;
-  readonly parties: string | null;
-  readonly address: string | null;
-  // What it names, where the project offers it (ADR-328): the contractor picked by name, the cert
-  // number and the ROE number as scanned, picked or typed. The certification and the ROE a
-  // number finds are intake's to look up (BACKLOG 1.4.2).
-  readonly contractorId: string | null;
-  readonly certNumber: string | null;
-  readonly roeNumber: string | null;
-}
-
-export interface RecordedDropOffLog extends RecordedForm {
-  // The assignment's site (ADR-215).
-  readonly siteId: string;
-  readonly residentName: string | null;
-  readonly originAddress: string | null;
-}
-
-// An ROE made on a phone: the next number of its ROE block, written R-0007, unless the paper ROE
-// has one, typed (ADR-149, 323).
-export interface RecordedRoe {
-  readonly id: string;
-  readonly projectId: string;
-  readonly roeNumber: string;
-  readonly parcelId: string | null;
-  readonly address: string | null;
-  readonly ownerName: string | null;
-  readonly signed: boolean;
-  // A calendar day, 2026-10-09.
-  readonly signedDate: string | null;
-  readonly source: 'DEVICE';
-  readonly madeById: string;
-  readonly deviceId: string;
-  readonly assignmentId: string;
-  readonly madeAt: Date;
-  readonly deviceUtcOffsetMinutes: number;
-}
-
-// One record a phone sends at sync.
-export type PhoneRecord =
-  | { readonly record: 'FIELD_EVENT'; readonly fieldEvent: RecordedEvent }
-  | { readonly record: 'SCALE_RECEIPT'; readonly scaleReceipt: RecordedScaleReceipt }
-  | { readonly record: 'INCIDENT'; readonly incident: RecordedIncident }
-  | { readonly record: 'DROP_OFF_LOG'; readonly dropOffLog: RecordedDropOffLog }
-  | { readonly record: 'ROE'; readonly roe: RecordedRoe };
-
-// What receives a phone's records at sync: in the harness, a stand-in for the API's sync
-// endpoint (Phase 2), which writes them as the API's login (intake.ts).
+// What receives a phone's records at sync, and answers each: the API's intake (apps/api,
+// src/sync/intake.ts), with no endpoint in front of it until Phase 2.
 export interface SyncIntake {
-  receive(record: PhoneRecord): Promise<void>;
+  receive(record: PhoneRecord): Promise<SyncAnswer>;
+}
+
+// A record the phone sent and what it was told: saved, already saved, or not saved (ARCHITECTURE
+// §9 (4)).
+export interface Answered {
+  readonly sent: PhoneRecord;
+  readonly answer: SyncAnswer;
 }
 
 export interface Named {
@@ -217,6 +102,8 @@ export interface PhoneLists {
   // name, for "the contractor involved" (ADR-328).
   readonly incidentOffers: readonly IncidentOffer[];
   readonly contractors: readonly Named[];
+  // The firm's survey work types, for a phone whose assignment makes surveys (ADR-150).
+  readonly surveyWorkTypes: readonly Named[];
 }
 
 const noLists: PhoneLists = {
@@ -229,6 +116,7 @@ const noLists: PhoneLists = {
   incidentTypes: [],
   incidentOffers: [],
   contractors: [],
+  surveyWorkTypes: [],
 };
 
 export interface PhoneSetup {
@@ -299,6 +187,9 @@ export interface Completion {
     readonly netWeightLb?: number;
     readonly netWeightTons?: number;
   };
+  // A tandem weighed once: this disposal points at the receipt recorded with an earlier one, by
+  // that field event's id (ADR-034, 175).
+  readonly sameScaleReceiptAs?: string;
   // Unit rate work: the payable type picked, then what its kind of work's screen takes.
   readonly payableType?: string;
   readonly count?: number;
@@ -354,6 +245,16 @@ export interface NewDropOffLog {
   readonly notes?: string;
 }
 
+export interface NewSurvey {
+  // Pre-work or Post-work, or one of the firm's own, by name.
+  readonly workType: string;
+  readonly surveyNumber?: string;
+  readonly roeNumber?: string;
+  readonly latitude?: string;
+  readonly longitude?: string;
+  readonly notes?: string;
+}
+
 export interface NewRoe {
   // The paper ROE's own number, typed; without one the phone gives the next of its block.
   readonly paperNumber?: string;
@@ -362,6 +263,13 @@ export interface NewRoe {
   readonly ownerName?: string;
   readonly signed: boolean;
   readonly signedDate?: string;
+}
+
+// A photograph taken with a record the phone made: of what, and where if the phone had a fix.
+export interface NewPhoto {
+  readonly of: { readonly kind: PhotoOwnerKind; readonly id: string };
+  readonly latitude?: string;
+  readonly longitude?: string;
 }
 
 const seriesOf: Record<Workflow, NumberSeries> = {
@@ -382,6 +290,11 @@ export class SimulatedDevice {
   private readonly numbers = new Map<string, string>();
   // The crew whose badge was last scanned for unit rate work (ADR-111).
   private crew: string | undefined;
+  // The scale receipt recorded with each finished disposal, for a tandem's second.
+  private readonly receipts = new Map<string, string>();
+  // Every record it has sent and what it was told, in the order sent.
+  private readonly told: Answered[] = [];
+  private photographs = 0;
 
   constructor(setup: PhoneSetup, clock: StoryClock) {
     this.current = setup;
@@ -512,7 +425,12 @@ export class SimulatedDevice {
     const endedAt = this.now();
     const offset = utcOffsetMinutes(this.current.timeZone, endedAt);
     let scaleReceiptId: string | null = null;
-    if (completion.scaleReceipt !== undefined) {
+    if (completion.sameScaleReceiptAs !== undefined) {
+      scaleReceiptId = this.receipts.get(completion.sameScaleReceiptAs) ?? null;
+      if (scaleReceiptId === null) {
+        throw new Error(`${this.name} recorded no scale receipt with that disposal.`);
+      }
+    } else if (completion.scaleReceipt !== undefined) {
       const siteId = this.site('A scale receipt');
       scaleReceiptId = uuidv7(endedAt);
       this.outbox.push({
@@ -567,6 +485,7 @@ export class SimulatedDevice {
     if (entry.from === 'BLOCK') this.lastUsed.set(series, Number(number));
     this.started.delete(id);
     this.numbers.set(id, number);
+    if (scaleReceiptId !== null) this.receipts.set(id, scaleReceiptId);
     this.outbox.push({ record: 'FIELD_EVENT', fieldEvent: event });
     return { saved: true, event };
   }
@@ -616,6 +535,45 @@ export class SimulatedDevice {
     return made;
   }
 
+  // A survey of a property before work or after it, with the ROE's number as picked or typed
+  // (ADR-149, 150).
+  survey(survey: NewSurvey): RecordedSurvey {
+    const made: RecordedSurvey = {
+      ...this.form(survey),
+      workTypeId: this.pick('survey work type', this.lists.surveyWorkTypes, survey.workType).id,
+      surveyNumber: survey.surveyNumber ?? null,
+      roeNumber: survey.roeNumber ?? null,
+    };
+    this.outbox.push({ record: 'SURVEY', survey: made });
+    return made;
+  }
+
+  // A photograph taken with a record: its fingerprint is taken now, at capture (ADR-101). The
+  // file's upload is Phase 2's, so the harness's phone states where the file would be kept and
+  // the same fingerprint for what was uploaded.
+  photograph(photo: NewPhoto): RecordedPhoto {
+    const capturedAt = this.now();
+    this.photographs += 1;
+    const file = `${this.name}/${capturedAt.toISOString()}/${String(this.photographs)}`;
+    const fingerprint = createHash('sha256').update(file).digest('hex');
+    const made: RecordedPhoto = {
+      id: uuidv7(capturedAt),
+      projectId: this.current.projectId,
+      owner: photo.of,
+      takenById: this.current.monitorId,
+      deviceId: this.current.deviceId,
+      capturedAt,
+      deviceUtcOffsetMinutes: utcOffsetMinutes(this.current.timeZone, capturedAt),
+      latitude: photo.latitude ?? null,
+      longitude: photo.longitude ?? null,
+      originalSha256: fingerprint,
+      uploadedSha256: fingerprint,
+      objectKey: `photographs/${file}`,
+    };
+    this.outbox.push({ record: 'PHOTO', photo: made });
+    return made;
+  }
+
   // An ROE: the next number of the phone's ROE block, unless the paper has its own (ADR-149).
   roe(roe: NewRoe): RecordedRoe {
     const madeAt = this.now();
@@ -656,18 +614,35 @@ export class SimulatedDevice {
     return [...this.outbox];
   }
 
-  // The phone finds signal: each waiting record is sent in the order recorded and leaves the
-  // phone once received. One that isn't received stays, with the rest after it. How many were sent.
+  // The phone finds signal: its records go first and its photographs after (ARCHITECTURE §9
+  // (2)), each in the order recorded. Each leaves the queue once it is answered, whatever the
+  // answer, and the phone keeps what it was told. One that gets no answer stays, with the rest
+  // after it. How many were sent.
   async sync(intake: SyncIntake): Promise<number> {
+    const photographs = this.outbox.filter((entry) => entry.record === 'PHOTO');
+    const records = this.outbox.filter((entry) => entry.record !== 'PHOTO');
+    this.outbox.splice(0, this.outbox.length, ...records, ...photographs);
     let sent = 0;
     while (this.outbox.length > 0) {
       const [next] = this.outbox;
       if (next === undefined) break;
-      await intake.receive(next);
+      const answer = await intake.receive(next);
+      this.told.push({ sent: next, answer });
       this.outbox.shift();
       sent += 1;
     }
     return sent;
+  }
+
+  // Every record it has sent and what it was told, in the order sent.
+  get answers(): readonly Answered[] {
+    return [...this.told];
+  }
+
+  // What it shows its monitor as not saved: each record the server kept in quarantine, with the
+  // reason. Never swallowed (ADR-022; REQ-308c).
+  get notSaved(): readonly Answered[] {
+    return this.told.filter((one) => one.answer.answer === 'QUARANTINED');
   }
 
   private startedEvent(id: string): StartedEvent {
@@ -700,7 +675,7 @@ export class SimulatedDevice {
     readonly latitude?: string;
     readonly longitude?: string;
     readonly notes?: string;
-  }): RecordedForm {
+  }): SentForm {
     const madeAt = this.now();
     return {
       id: uuidv7(madeAt),

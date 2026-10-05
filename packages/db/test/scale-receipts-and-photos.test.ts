@@ -591,6 +591,8 @@ describe('a photograph', () => {
       'object_key',
       'original_sha256',
       'project_id',
+      // While its record waits in quarantine (ADR-338; AC-05-22).
+      'quarantined_record_id',
       'received_at',
       'roe_id',
       'scale_receipt_id',

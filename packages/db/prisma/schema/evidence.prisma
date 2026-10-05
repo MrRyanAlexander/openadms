@@ -186,28 +186,36 @@ model FieldEvent {
   // empty while no ROE on the project has that number (ADR-292).
   roeId String? @map("roe_id") @db.Uuid
 
-  project           Project          @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  monitor           User             @relation("FieldEventMonitor", fields: [monitorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  device            Device?          @relation(fields: [deviceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  assignment        Assignment?      @relation(fields: [assignmentId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  createdBy         User?            @relation("FieldEventCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  createdReason     Reason?          @relation("FieldEventCreatedReason", fields: [createdReasonId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  numberTypedReason Reason?          @relation("FieldEventNumberTypedReason", fields: [numberTypedReasonId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  // A GPS fix that reached the server and couldn't be one (half a fix, a latitude past 90): kept
+  // here exactly as the phone sent it, by which end it was, while the field event is saved
+  // without that fix (ADR-329 (5), 338). Empty when every fix sent was readable. The flag is the
+  // worker's.
+  unreadableGps Json? @map("unreadable_gps")
+
+  project            Project             @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  monitor            User                @relation("FieldEventMonitor", fields: [monitorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  device             Device?             @relation(fields: [deviceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  assignment         Assignment?         @relation(fields: [assignmentId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  createdBy          User?               @relation("FieldEventCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  createdReason      Reason?             @relation("FieldEventCreatedReason", fields: [createdReasonId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  numberTypedReason  Reason?             @relation("FieldEventNumberTypedReason", fields: [numberTypedReasonId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   // One of its own project's certifications, and one of its own project's sites.
-  certification     Certification?   @relation(fields: [projectId, certificationId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
-  site              DisposalSite?    @relation(fields: [projectId, siteId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  certification      Certification?      @relation(fields: [projectId, certificationId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  site               DisposalSite?       @relation(fields: [projectId, siteId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
   // Its debris type is an entry of that form, and that form is its own project's.
-  form              Form?            @relation(fields: [projectId, formId, formDocumentType], references: [projectId, id, documentType], onDelete: Restrict, onUpdate: Restrict)
-  formDebrisType    FormDebrisType?  @relation(fields: [formId, formDebrisTypeId], references: [formId, id], onDelete: Restrict, onUpdate: Restrict)
-  fieldTag          FieldTag?        @relation(fields: [projectId, fieldTagId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
-  kindOfWork        KindOfWork?      @relation(fields: [kindOfWorkId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  payableType       PayableType?     @relation(fields: [payableTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  payItem           PayItem?         @relation(fields: [projectId, payItemId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
-  scaleReceipt      ScaleReceipt?    @relation(fields: [projectId, scaleReceiptId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
-  roe               Roe?             @relation(fields: [projectId, roeId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
-  items             FieldEventItem[]
-  carriedTickets    CarriedTicket[]
-  photos            Photo[]
+  form               Form?               @relation(fields: [projectId, formId, formDocumentType], references: [projectId, id, documentType], onDelete: Restrict, onUpdate: Restrict)
+  formDebrisType     FormDebrisType?     @relation(fields: [formId, formDebrisTypeId], references: [formId, id], onDelete: Restrict, onUpdate: Restrict)
+  fieldTag           FieldTag?           @relation(fields: [projectId, fieldTagId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  kindOfWork         KindOfWork?         @relation(fields: [kindOfWorkId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  payableType        PayableType?        @relation(fields: [payableTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  payItem            PayItem?            @relation(fields: [projectId, payItemId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  scaleReceipt       ScaleReceipt?       @relation(fields: [projectId, scaleReceiptId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  roe                Roe?                @relation(fields: [projectId, roeId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  items              FieldEventItem[]
+  carriedTickets     CarriedTicket[]
+  photos             Photo[]
+  // The records in quarantine because this field event holds their number (ADR-022).
+  quarantinedRecords QuarantinedRecord[]
 
   completedLoadAsCollection CompletedLoad? @relation("CollectionEvent")
   completedLoadAsDisposal   CompletedLoad? @relation("DisposalEvent")
@@ -320,19 +328,22 @@ enum PhotoView {
 // A photograph's record: the file itself is one object in storage, never overwritten, kept
 // indefinitely (ADR-101; ARCHITECTURE §11). It belongs to exactly one thing, one of its own
 // project's (a check in the guard migration): a field event, a certification, a scale receipt, an
-// ROE, a survey, an incident or a drop-off log. A record waiting in quarantine joins with its own
-// table (BACKLOG 1.4.2). How many a ticket may hold is the phone's rule, never the database's.
+// ROE, a survey, an incident, a drop-off log, or a record while it waits in quarantine (ADR-292,
+// 338). How many a ticket may hold is the phone's rule, never the database's.
 model Photo {
   // UUIDv7 made on the phone, so a retried sync is the same record (KD-56): no default here.
-  id              String  @id @db.Uuid
-  projectId       String  @map("project_id") @db.Uuid
-  fieldEventId    String? @map("field_event_id") @db.Uuid
-  certificationId String? @map("certification_id") @db.Uuid
-  scaleReceiptId  String? @map("scale_receipt_id") @db.Uuid
-  roeId           String? @map("roe_id") @db.Uuid
-  surveyId        String? @map("survey_id") @db.Uuid
-  incidentId      String? @map("incident_id") @db.Uuid
-  dropOffLogId    String? @map("drop_off_log_id") @db.Uuid
+  id                  String  @id @db.Uuid
+  projectId           String  @map("project_id") @db.Uuid
+  fieldEventId        String? @map("field_event_id") @db.Uuid
+  certificationId     String? @map("certification_id") @db.Uuid
+  scaleReceiptId      String? @map("scale_receipt_id") @db.Uuid
+  roeId               String? @map("roe_id") @db.Uuid
+  surveyId            String? @map("survey_id") @db.Uuid
+  incidentId          String? @map("incident_id") @db.Uuid
+  dropOffLogId        String? @map("drop_off_log_id") @db.Uuid
+  // While its record waits in quarantine; a reviewer's resolution moves the photograph to the
+  // field event the record becomes (ADR-292 (5); BACKLOG 1.8.x).
+  quarantinedRecordId String? @map("quarantined_record_id") @db.Uuid
 
   // Which of the five views a certification's photograph is; no other photograph has one.
   view PhotoView?
@@ -366,15 +377,16 @@ model Photo {
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
   label      String?
 
-  project       Project        @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  fieldEvent    FieldEvent?    @relation(fields: [projectId, fieldEventId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
-  certification Certification? @relation(fields: [projectId, certificationId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
-  scaleReceipt  ScaleReceipt?  @relation(fields: [projectId, scaleReceiptId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
-  roe           Roe?           @relation(fields: [projectId, roeId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
-  survey        Survey?        @relation(fields: [projectId, surveyId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
-  incident      Incident?      @relation(fields: [projectId, incidentId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
-  dropOffLog    DropOffLog?    @relation(fields: [projectId, dropOffLogId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
-  device        Device?        @relation(fields: [deviceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  project           Project            @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  fieldEvent        FieldEvent?        @relation(fields: [projectId, fieldEventId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  certification     Certification?     @relation(fields: [projectId, certificationId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  scaleReceipt      ScaleReceipt?      @relation(fields: [projectId, scaleReceiptId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  roe               Roe?               @relation(fields: [projectId, roeId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  survey            Survey?            @relation(fields: [projectId, surveyId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  incident          Incident?          @relation(fields: [projectId, incidentId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  dropOffLog        DropOffLog?        @relation(fields: [projectId, dropOffLogId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  quarantinedRecord QuarantinedRecord? @relation(fields: [projectId, quarantinedRecordId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  device            Device?            @relation(fields: [deviceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
 
   @@map("photo")
 }
@@ -570,4 +582,55 @@ model DropOffLog {
   // What a photograph points at, so it is one of its own project's drop-off logs.
   @@unique([projectId, id])
   @@map("drop_off_log")
+}
+
+// Why a record a phone sent is in quarantine and not saved: the number it carries is held by
+// another record (ADR-022, 338).
+enum QuarantineReason {
+  // A second field event of one kind on one ticket (project, workflow, bare number, split suffix).
+  DUPLICATE_FIELD_EVENT
+  // An ROE made on a phone whose number another ROE of the project already has.
+  DUPLICATE_ROE_NUMBER
+
+  @@map("quarantine_reason")
+}
+
+// A record a phone sent that couldn't be saved because another record holds its number, kept in
+// full for a person (ADR-022, 292; adms-exceptions §4.3a). It is no ticket's field event: the
+// worker never reads it, it has no status and it bills nothing. What the phone sent is never
+// changed; a reviewer's resolution is written beside it, and the row is kept (BACKLOG 1.8.x).
+model QuarantinedRecord {
+  // The id the phone made for the record, so a retried sync is the same quarantined record
+  // (KD-56), and the record keeps it when a reviewer resolves it: no default here.
+  id        String @id @db.Uuid
+  projectId String @map("project_id") @db.Uuid
+  deviceId  String @map("device_id") @db.Uuid
+  // Who made the record; never the system actor.
+  monitorId String @map("monitor_id") @db.Uuid
+
+  // The record exactly as the phone sent it, for a person to read.
+  payload        Json
+  reason         QuarantineReason
+  // The record that holds the number, one of its own project's: a field event, or an ROE.
+  holdingEventId String?          @map("holding_event_id") @db.Uuid
+  holdingRoeId   String?          @map("holding_roe_id") @db.Uuid
+  // When the server received it (ADR-100).
+  receivedAt     DateTime         @default(now()) @map("received_at") @db.Timestamptz(3)
+
+  // Who resolved it, when, and what they did: all three or none.
+  resolvedById String?   @map("resolved_by_id") @db.Uuid
+  resolvedAt   DateTime? @map("resolved_at") @db.Timestamptz(3)
+  resolution   String?
+
+  project      Project     @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  device       Device      @relation(fields: [deviceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  monitor      User        @relation("QuarantinedRecordMonitor", fields: [monitorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  resolvedBy   User?       @relation("QuarantinedRecordResolvedBy", fields: [resolvedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  holdingEvent FieldEvent? @relation(fields: [projectId, holdingEventId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  holdingRoe   Roe?        @relation(fields: [projectId, holdingRoeId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  photos       Photo[]
+
+  // What a photograph points at, so it is one of its own project's quarantined records.
+  @@unique([projectId, id])
+  @@map("quarantined_record")
 }

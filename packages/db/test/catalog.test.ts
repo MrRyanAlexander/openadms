@@ -77,6 +77,8 @@ const domains: Record<string, string> = {
   // A scale receipt and a photograph's record: evidence beside the field event (ADR-326).
   scale_receipt: 'RECORDS',
   photo: 'RECORDS',
+  // A record waiting in quarantine: evidence beside the field event it couldn't become (ADR-338).
+  quarantined_record: 'RECORDS',
   completed_load: 'BILLING',
   transaction: 'BILLING',
   invoice_lock: 'BILLING',
@@ -111,6 +113,8 @@ const triggers = [
   ),
   // A photograph's fingerprints and places in storage are written once (ADR-326).
   `CREATE TRIGGER photo_refuse_file_edit BEFORE UPDATE OF original_sha256, uploaded_sha256, object_key, depth_object_key ON public.photo FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
+  // What a phone sent, kept in quarantine, is written once (ADR-338).
+  `CREATE TRIGGER quarantined_record_refuse_sent_edit BEFORE UPDATE OF id, project_id, device_id, monitor_id, payload, reason, holding_event_id, holding_roe_id, received_at ON public.quarantined_record FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
   `CREATE TRIGGER zone_with_its_map_version BEFORE INSERT ON public.zone FOR EACH ROW EXECUTE FUNCTION zone_with_its_map_version()`,
   // A container has its primary box, asked when the piece of work that wrote it ends (ADR-321).
   `CREATE CONSTRAINT TRIGGER certification_has_primary_box AFTER INSERT OR UPDATE OF kind ON public.certification DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION certification_has_primary_box()`,
@@ -472,7 +476,36 @@ describe('the guards in the catalog', () => {
       {
         name: 'photo_owner_check',
         definition:
-          'CHECK ((num_nonnulls(field_event_id, certification_id, scale_receipt_id, roe_id, survey_id, incident_id, drop_off_log_id) = 1))',
+          'CHECK ((num_nonnulls(field_event_id, certification_id, scale_receipt_id, roe_id, survey_id, incident_id, drop_off_log_id, quarantined_record_id) = 1))',
+      },
+      // A record waiting in quarantine, and a fix kept as sent (ADR-338).
+      {
+        name: 'field_event_unreadable_gps_check',
+        definition:
+          "CHECK ((((unreadable_gps IS NULL) OR ((jsonb_typeof(unreadable_gps) = 'object'::text) AND (unreadable_gps <> '{}'::jsonb))) IS TRUE))",
+      },
+      {
+        name: 'quarantined_record_holder_check',
+        definition:
+          "CHECK ((\nCASE reason\n    WHEN 'DUPLICATE_FIELD_EVENT'::quarantine_reason THEN ((holding_event_id IS NOT NULL) AND (holding_roe_id IS NULL))\n    WHEN 'DUPLICATE_ROE_NUMBER'::quarantine_reason THEN ((holding_roe_id IS NOT NULL) AND (holding_event_id IS NULL))\n    ELSE false\nEND IS TRUE))",
+      },
+      {
+        name: 'quarantined_record_monitor_check',
+        definition: "CHECK ((monitor_id <> '00000000-0000-7000-8000-000000000001'::uuid))",
+      },
+      {
+        name: 'quarantined_record_payload_check',
+        definition: "CHECK ((jsonb_typeof(payload) = 'object'::text))",
+      },
+      {
+        name: 'quarantined_record_resolution_check',
+        definition:
+          "CHECK ((((num_nonnulls(resolved_by_id, resolved_at, resolution) = ANY (ARRAY[0, 3])) AND ((resolution IS NULL) OR (btrim(resolution) <> ''::text))) IS TRUE))",
+      },
+      {
+        name: 'quarantined_record_resolved_by_check',
+        definition:
+          "CHECK ((resolved_by_id IS DISTINCT FROM '00000000-0000-7000-8000-000000000001'::uuid))",
       },
       {
         name: 'photo_view_check',
@@ -910,6 +943,12 @@ describe('the guards in the catalog', () => {
           'FROM drop_off_log',
           question,
         ],
+      },
+      // The record as a phone sent it may name one: an ROE's owner (ADR-338).
+      {
+        name: 'viewer_quarantined_record_citizen',
+        owner: 'adms_owner',
+        definition: ['SELECT id,', 'project_id,', 'payload', 'FROM quarantined_record', question],
       },
       {
         name: 'viewer_roe_citizen',

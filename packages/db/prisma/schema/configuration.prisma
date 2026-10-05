@@ -93,33 +93,34 @@ model Project {
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   closedAt  DateTime? @map("closed_at") @db.Timestamptz(3)
 
-  client           Client                @relation(fields: [clientId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  declarationEvent DeclarationEvent      @relation(fields: [declarationEventId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  programType      ProgramType           @relation(fields: [programTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  kindsOfWork      ProjectKindOfWork[]
-  contractors      ProjectContractor[]
-  contracts        Contract[]
-  forms            Form[]
-  disposalSites    DisposalSite[]
-  mapVersions      MapVersion[]
-  payItems         PayItem[]
-  assignments      Assignment[]
-  numberSeries     ProjectNumberSeries[]
-  controlRanges    ControlRange[]
-  numberBlocks     NumberBlock[]
-  certifications   Certification[]
-  fieldTags        FieldTag[]
-  fieldEvents      FieldEvent[]
-  scaleReceipts    ScaleReceipt[]
-  photos           Photo[]
-  roes             Roe[]
-  roeScopeItems    RoeScopeItem[]
-  surveys          Survey[]
-  incidents        Incident[]
-  dropOffLogs      DropOffLog[]
-  completedLoads   CompletedLoad[]
+  client             Client                @relation(fields: [clientId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  declarationEvent   DeclarationEvent      @relation(fields: [declarationEventId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  programType        ProgramType           @relation(fields: [programTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  kindsOfWork        ProjectKindOfWork[]
+  contractors        ProjectContractor[]
+  contracts          Contract[]
+  forms              Form[]
+  disposalSites      DisposalSite[]
+  mapVersions        MapVersion[]
+  payItems           PayItem[]
+  assignments        Assignment[]
+  numberSeries       ProjectNumberSeries[]
+  controlRanges      ControlRange[]
+  numberBlocks       NumberBlock[]
+  certifications     Certification[]
+  fieldTags          FieldTag[]
+  fieldEvents        FieldEvent[]
+  scaleReceipts      ScaleReceipt[]
+  photos             Photo[]
+  roes               Roe[]
+  roeScopeItems      RoeScopeItem[]
+  surveys            Survey[]
+  incidents          Incident[]
+  dropOffLogs        DropOffLog[]
+  quarantinedRecords QuarantinedRecord[]
+  completedLoads     CompletedLoad[]
   // The read-only viewers who may see it.
-  viewers          ViewerProject[]
+  viewers            ViewerProject[]
 
   // "Every project under this declaration", and a client's projects, are one query each (ADR-026).
   @@index([declarationEventId])
@@ -963,60 +964,62 @@ enum ViewerKind {
 // A person with a login; firm-wide, not project-scoped (ADR-050, 105, 169): someone who works on
 // two projects is one record.
 model User {
-  id             String      @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  name           String
-  role           UserRole
+  id                  String      @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  name                String
+  role                UserRole
   // Stated on a read-only viewer, and only there (a check in the guard migration, ADR-315).
-  viewerKind     ViewerKind? @map("viewer_kind")
+  viewerKind          ViewerKind? @map("viewer_kind")
   // Whether this viewer sees private citizens by name: an ROE's owner, a drop-off log's resident
   // and where their debris came from. The firm's choice for each viewer, made when it adds them;
   // stated on a read-only viewer, and only there (a check in the guard migration). No default
   // here: a new viewer starts seeing them, which is packages/domain's to say (ADR-328, 336).
-  seesPrivateCitizens Boolean? @map("sees_private_citizens")
+  seesPrivateCitizens Boolean?    @map("sees_private_citizens")
   // Their contact, each optional. No read-only viewer ever reads either; a monitor's phone is
   // shown to admins only, which is the API's to keep (ADR-169).
-  email          String?
-  phone          String?
+  email               String?
+  phone               String?
   // The Monitor ID (M004127), a business number, never a key (spec/CONVENTIONS.md §3). The system
   // issues it (REQ-021): a person written without one gets the next from the database. Every
   // monitor has one; the system actor never does (checks in the guard migrations, ADR-276, 281).
-  monitorNumber  String?     @unique @default(dbgenerated("next_monitor_number()")) @map("monitor_number")
+  monitorNumber       String?     @unique @default(dbgenerated("next_monitor_number()")) @map("monitor_number")
   // A contractor user's contractor: set on one, and only there (ADR-169; a check in the guard
   // migration, ADR-315).
-  contractorId   String?     @map("contractor_id") @db.Uuid
+  contractorId        String?     @map("contractor_id") @db.Uuid
   // Who employs them, when it isn't the firm itself: a monitoring firm or temp agency, always a
   // contractor record, never typed text; and the ID that employer gives them, if any (Q-97).
-  employerId     String?     @map("employer_id") @db.Uuid
-  employerNumber String?     @map("employer_number")
+  employerId          String?     @map("employer_id") @db.Uuid
+  employerNumber      String?     @map("employer_number")
 
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
 
-  contractor            Contractor?           @relation("ViewerContractor", fields: [contractorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  employer              Contractor?           @relation("Employer", fields: [employerId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  permissions           UserPermission[]
-  viewerProjects        ViewerProject[]
-  assignments           Assignment[]          @relation("AssignmentPerson")
-  assignmentsMade       Assignment[]          @relation("AssignmentMadeBy")
-  formDefinitions       FormDefinition[]      @relation("FormDefinitionCreatedBy")
-  siteAreas             SiteAreaVersion[]     @relation("SiteAreaVersionCreatedBy")
-  mapsLoaded            MapVersion[]          @relation("MapVersionLoadedBy")
+  contractor                 Contractor?           @relation("ViewerContractor", fields: [contractorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  employer                   Contractor?           @relation("Employer", fields: [employerId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  permissions                UserPermission[]
+  viewerProjects             ViewerProject[]
+  assignments                Assignment[]          @relation("AssignmentPerson")
+  assignmentsMade            Assignment[]          @relation("AssignmentMadeBy")
+  formDefinitions            FormDefinition[]      @relation("FormDefinitionCreatedBy")
+  siteAreas                  SiteAreaVersion[]     @relation("SiteAreaVersionCreatedBy")
+  mapsLoaded                 MapVersion[]          @relation("MapVersionLoadedBy")
   // The certifications they made and measured, helped on, or revoked (ADR-079, 294).
-  certificationsMade    Certification[]       @relation("CertificationCertifiedBy")
-  certificationsRevoked Certification[]       @relation("CertificationRevokedBy")
-  certificationsHelped  CertificationHelper[]
-  fieldEvents           FieldEvent[]          @relation("FieldEventMonitor")
-  fieldEventsCreated    FieldEvent[]          @relation("FieldEventCreatedBy")
-  scaleReceiptsEntered  ScaleReceipt[]
-  roesMade              Roe[]
-  surveys               Survey[]              @relation("SurveyMonitor")
-  surveysCreated        Survey[]              @relation("SurveyCreatedBy")
-  incidents             Incident[]            @relation("IncidentMonitor")
-  incidentsCreated      Incident[]            @relation("IncidentCreatedBy")
-  dropOffLogs           DropOffLog[]          @relation("DropOffLogMonitor")
-  dropOffLogsCreated    DropOffLog[]          @relation("DropOffLogCreatedBy")
-  invoiceLocks          InvoiceLock[]
-  auditRecords          AuditRecord[]
+  certificationsMade         Certification[]       @relation("CertificationCertifiedBy")
+  certificationsRevoked      Certification[]       @relation("CertificationRevokedBy")
+  certificationsHelped       CertificationHelper[]
+  fieldEvents                FieldEvent[]          @relation("FieldEventMonitor")
+  fieldEventsCreated         FieldEvent[]          @relation("FieldEventCreatedBy")
+  scaleReceiptsEntered       ScaleReceipt[]
+  roesMade                   Roe[]
+  surveys                    Survey[]              @relation("SurveyMonitor")
+  surveysCreated             Survey[]              @relation("SurveyCreatedBy")
+  incidents                  Incident[]            @relation("IncidentMonitor")
+  incidentsCreated           Incident[]            @relation("IncidentCreatedBy")
+  dropOffLogs                DropOffLog[]          @relation("DropOffLogMonitor")
+  dropOffLogsCreated         DropOffLog[]          @relation("DropOffLogCreatedBy")
+  quarantinedRecords         QuarantinedRecord[]   @relation("QuarantinedRecordMonitor")
+  quarantinedRecordsResolved QuarantinedRecord[]   @relation("QuarantinedRecordResolvedBy")
+  invoiceLocks               InvoiceLock[]
+  auditRecords               AuditRecord[]
 
   @@map("user")
 }
@@ -1120,18 +1123,19 @@ model Device {
   // migration); refusing the key is the API's (Phase 2).
   keyRevokedAt          DateTime?    @map("key_revoked_at") @db.Timestamptz(3)
 
-  masterPasscode MasterPasscode  @relation(fields: [masterPasscodeVersion], references: [version], onDelete: Restrict, onUpdate: Restrict)
-  numberBlocks   NumberBlock[]
-  assignments    Assignment[]
-  certifications Certification[]
-  fieldEvents    FieldEvent[]
-  scaleReceipts  ScaleReceipt[]
-  photos         Photo[]
-  roes           Roe[]
-  surveys        Survey[]
-  incidents      Incident[]
-  dropOffLogs    DropOffLog[]
-  auditRecords   AuditRecord[]
+  masterPasscode     MasterPasscode      @relation(fields: [masterPasscodeVersion], references: [version], onDelete: Restrict, onUpdate: Restrict)
+  numberBlocks       NumberBlock[]
+  assignments        Assignment[]
+  certifications     Certification[]
+  fieldEvents        FieldEvent[]
+  scaleReceipts      ScaleReceipt[]
+  photos             Photo[]
+  roes               Roe[]
+  surveys            Survey[]
+  incidents          Incident[]
+  dropOffLogs        DropOffLog[]
+  quarantinedRecords QuarantinedRecord[]
+  auditRecords       AuditRecord[]
 
   @@map("device")
 }
@@ -1537,17 +1541,19 @@ model Roe {
 
   notes String?
 
-  project        Project         @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  form           Form?           @relation(fields: [projectId, formId, formDocumentType], references: [projectId, id, documentType], onDelete: Restrict, onUpdate: Restrict)
-  formDefinition FormDefinition? @relation(fields: [formId, formDefinitionId], references: [formId, id], onDelete: Restrict, onUpdate: Restrict)
-  madeBy         User?           @relation(fields: [madeById], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  device         Device?         @relation(fields: [deviceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  assignment     Assignment?     @relation(fields: [assignmentId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  scopeItems     RoeScopeItem[]
-  fieldEvents    FieldEvent[]
-  surveys        Survey[]
-  incidents      Incident[]
-  photos         Photo[]
+  project            Project             @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  form               Form?               @relation(fields: [projectId, formId, formDocumentType], references: [projectId, id, documentType], onDelete: Restrict, onUpdate: Restrict)
+  formDefinition     FormDefinition?     @relation(fields: [formId, formDefinitionId], references: [formId, id], onDelete: Restrict, onUpdate: Restrict)
+  madeBy             User?               @relation(fields: [madeById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  device             Device?             @relation(fields: [deviceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  assignment         Assignment?         @relation(fields: [assignmentId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  scopeItems         RoeScopeItem[]
+  fieldEvents        FieldEvent[]
+  surveys            Survey[]
+  incidents          Incident[]
+  photos             Photo[]
+  // The records in quarantine because this ROE holds their number (BACKLOG 1.4.2).
+  quarantinedRecords QuarantinedRecord[]
 
   // An ROE number once per project (ADR-149).
   @@unique([projectId, roeNumber])

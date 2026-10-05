@@ -2,6 +2,7 @@
 // ids a phone makes, and a phone that keeps what it records until it syncs. And how that phone
 // captures (BACKLOG 1.3.7; spec/acceptance/04-field-capture.md AC-04-10, 11, 17, 59, 70, 91, 92):
 // badge first, the details picked by name, the number last and entered again.
+import type { SyncAnswer } from '@open-adms/api';
 import { describe, expect, it } from 'vitest';
 
 import { projectTime, StoryClock, utcOffsetMinutes } from '../src/clock.ts';
@@ -28,18 +29,51 @@ const setup = {
   timeZone: 'America/New_York',
 };
 
+// The id its phone made for a record, whatever its kind.
+function idOf(sent: PhoneRecord): string {
+  switch (sent.record) {
+    case 'FIELD_EVENT':
+      return sent.fieldEvent.id;
+    case 'SCALE_RECEIPT':
+      return sent.scaleReceipt.id;
+    case 'INCIDENT':
+      return sent.incident.id;
+    case 'DROP_OFF_LOG':
+      return sent.dropOffLog.id;
+    case 'SURVEY':
+      return sent.survey.id;
+    case 'ROE':
+      return sent.roe.id;
+    case 'PHOTO':
+      return sent.photo.id;
+  }
+}
+
 class Received implements SyncIntake {
   readonly records: PhoneRecord[] = [];
   refuseAfter = Infinity;
+  // The ids the server keeps in quarantine instead of saving.
+  readonly quarantines = new Set<string>();
 
   get events(): RecordedEvent[] {
     return this.records.flatMap((sent) => (sent.record === 'FIELD_EVENT' ? [sent.fieldEvent] : []));
   }
 
-  receive(sent: PhoneRecord): Promise<void> {
+  receive(sent: PhoneRecord): Promise<SyncAnswer> {
     if (this.records.length >= this.refuseAfter) return Promise.reject(new Error('no signal'));
     this.records.push(sent);
-    return Promise.resolve();
+    const id = idOf(sent);
+    return Promise.resolve(
+      this.quarantines.has(id)
+        ? {
+            answer: 'QUARANTINED',
+            id,
+            reason: 'DUPLICATE_FIELD_EVENT',
+            message: 'Not saved.',
+            heldBy: setup.deviceId,
+          }
+        : { answer: 'SAVED', id, notes: [] },
+    );
   }
 }
 
@@ -210,6 +244,7 @@ const lists: PhoneLists = {
   // P1's incident form: the contractor involved and a cert number, no ROE number.
   incidentOffers: ['CONTRACTOR', 'CERT_NUMBER'],
   contractors: [named('Coastline Haulers LLC'), named('Rivera Trucking')],
+  surveyWorkTypes: [named('Pre-work'), named('Post-work')],
 };
 const tdsr = '00000000-0000-7000-8000-00000000000e';
 const phoneAt = (time: string, more: Partial<typeof setup> & { siteId?: string } = {}) => {
@@ -567,5 +602,94 @@ describe('a simulated phone captures badge first, number last', () => {
     ]);
     expect([phone.takeCertNumber(), phone.takeCertNumber()]).toEqual(['730415', '730416']);
     expect(phone.waitingRecords.map((sent) => sent.record)).toEqual(['ROE', 'ROE', 'ROE']);
+  });
+
+  it('AC-05-05, AC-05-45 sends its records first and its photographs after, keeps each record’s own answer, and shows one that was not saved', async () => {
+    const { phone, clock } = phoneAt('10:22', { name: 'P1-TWR-TDSR', siteId: tdsr });
+    const first = saved(
+      phone.complete(phone.begin('LOAD', 'DISPOSAL', '730416'), {
+        number: scanned('101020'),
+        loadCall: 70,
+      }),
+    );
+    const photo = phone.photograph({ of: { kind: 'FIELD_EVENT', id: first.id } });
+    clock.advance(78);
+    const second = saved(
+      phone.complete(phone.begin('LOAD', 'DISPOSAL', '730416'), {
+        number: scanned('101020'),
+        loadCall: 65,
+      }),
+    );
+    expect(phone.waitingRecords.map((sent) => sent.record)).toEqual([
+      'FIELD_EVENT',
+      'PHOTO',
+      'FIELD_EVENT',
+    ]);
+    // The fingerprint is taken at capture, 64 hexadecimal digits; the photograph is its record's.
+    expect(photo.originalSha256).toMatch(/^[0-9a-f]{64}$/);
+    expect([photo.owner, uuidv7Time(photo.id)]).toEqual([
+      { kind: 'FIELD_EVENT', id: first.id },
+      photo.capturedAt,
+    ]);
+    const intake = new Received();
+    intake.quarantines.add(second.id);
+    expect(await phone.sync(intake)).toBe(3);
+    expect(intake.records.map((sent) => sent.record)).toEqual([
+      'FIELD_EVENT',
+      'FIELD_EVENT',
+      'PHOTO',
+    ]);
+    expect(phone.answers.map((told) => told.answer.answer)).toEqual([
+      'SAVED',
+      'QUARANTINED',
+      'SAVED',
+    ]);
+    // The quarantined record left the queue (it was answered), and is shown as not saved.
+    expect(phone.waitingRecords).toEqual([]);
+    expect(phone.notSaved.map((told) => idOf(told.sent))).toEqual([second.id]);
+  });
+
+  it('AC-05-10 a tandem’s second disposal points at the receipt recorded with the first: one receipt, sent once', () => {
+    const { phone, clock } = phoneAt('09:30', { name: 'P1-TWR-LF', siteId: tdsr });
+    const front = phone.begin('LOAD', 'DISPOSAL', '730415');
+    const rear = phone.begin('LOAD', 'DISPOSAL', '730416');
+    clock.advance(10);
+    const first = saved(
+      phone.complete(front, {
+        number: scanned('101040'),
+        scaleReceipt: { receiptNumber: 'BCL-88241', netWeightTons: 17.1 },
+      }),
+    );
+    const second = saved(
+      phone.complete(rear, { number: scanned('101041'), sameScaleReceiptAs: first.id }),
+    );
+    expect(second.scaleReceiptId).toBe(first.scaleReceiptId);
+    expect(phone.waitingRecords.map((sent) => sent.record)).toEqual([
+      'SCALE_RECEIPT',
+      'FIELD_EVENT',
+      'FIELD_EVENT',
+    ]);
+    expect(() =>
+      phone.complete(phone.begin('LOAD', 'DISPOSAL', '730415'), {
+        number: scanned('101042'),
+        sameScaleReceiptAs: second.id.replace(/.$/, '0'),
+      }),
+    ).toThrow('recorded no scale receipt');
+  });
+
+  it('a survey picks its work type by name and carries the ROE number as picked or typed', () => {
+    const { phone } = phoneAt('08:15');
+    const survey = phone.survey({
+      workType: 'Pre-work',
+      surveyNumber: 'APN 14-0321-007',
+      roeNumber: 'R-0007',
+    });
+    expect([survey.workTypeId, survey.surveyNumber, survey.roeNumber]).toEqual([
+      'id:Pre-work',
+      'APN 14-0321-007',
+      'R-0007',
+    ]);
+    expect(phone.waitingRecords.map((sent) => sent.record)).toEqual(['SURVEY']);
+    expect(() => phone.survey({ workType: 'Mid-work' })).toThrow('has no survey work type');
   });
 });

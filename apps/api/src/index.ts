@@ -3,7 +3,8 @@
 // adms_api) and writes through db.$write as the person it is told. Phase 2 wraps them in endpoints
 // (ADR-316). The setup services are spec/parts/01-setup.md's steps, one class per group of records;
 // certifying is spec/parts/03-certification.md's (ADR-321); the allocator of numbers is the
-// server's alone (ADR-065, 323).
+// server's alone (ADR-065, 323); intake is spec/parts/05-sync.md's, what the server does with
+// each record a phone sends (ADR-338).
 export {
   Certifications,
   type BoxInput,
@@ -43,5 +44,23 @@ export {
   type SiteChanges,
   type SiteFactSettings,
 } from './setup/site-setup.ts';
+
+export { Intake } from './sync/intake.ts';
+export type {
+  IntakeNote,
+  PhotoOwnerKind,
+  SentAnswers,
+  SentDropOffLog,
+  SentFieldEvent,
+  SentForm,
+  SentIncident,
+  SentItem,
+  SentPhoto,
+  SentRecord,
+  SentRoe,
+  SentScaleReceipt,
+  SentSurvey,
+  SyncAnswer,
+} from './sync/sent.ts';
 
 export const workspace = 'api';

@@ -4,12 +4,12 @@
 // error does. The database is dropped afterwards unless the run keeps it for a person to look at.
 import { isDeepStrictEqual } from 'node:util';
 
+import { Intake } from '@open-adms/api';
 import type { Database } from '@open-adms/db';
 import type { Policy } from '@open-adms/domain';
 
 import { projectTime, StoryClock } from './clock.ts';
-import { SimulatedDevice, type PhoneSetup, type SyncIntake } from './device.ts';
-import { ApiSyncIntake } from './intake.ts';
+import { SimulatedDevice, type PhoneSetup } from './device.ts';
 import { builtInPolicy } from './policy.ts';
 import { StoryDatabase } from './story-database.ts';
 
@@ -31,8 +31,10 @@ export interface StoryContext {
   readonly worker: Database;
   // The release's policy values, which a new project's settings start from (ADR-303).
   readonly policy: Policy;
-  // Where phones sync to: the stand-in for the API's sync endpoint.
-  readonly intake: SyncIntake;
+  // Where phones sync to: the API's intake, with no endpoint in front of it until Phase 2
+  // (ADR-338). It takes each record a phone sends and answers it; `topUp` is the sync's last
+  // step, the phone's number blocks made full again.
+  readonly intake: Intake;
   // Moves the clock to a time (with its offset) and says what happens then.
   at(time: string, what: string): void;
   phone(setup: PhoneSetup): SimulatedDevice;
@@ -83,12 +85,13 @@ export class Runner {
       const worker = database.open('worker');
       open.push(api, worker);
       const clock = new StoryClock(story.start);
+      const policy = builtInPolicy();
       const context: StoryContext = {
         clock,
         api,
         worker,
-        policy: builtInPolicy(),
-        intake: new ApiSyncIntake(api, clock),
+        policy,
+        intake: new Intake(api, clock, policy),
         at(time, what) {
           clock.set(time);
           out(`  ${projectTime(story.timeZone, clock.now())}  ${what}`);

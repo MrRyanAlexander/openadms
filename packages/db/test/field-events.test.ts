@@ -492,6 +492,8 @@ describe('a field event', () => {
       'ticket_number',
       'typed_capacity_cy',
       'unit_count',
+      // A fix the phone sent that couldn't be one, as sent (ADR-338): never a second fix.
+      'unreadable_gps',
       'workflow',
     ]);
   });

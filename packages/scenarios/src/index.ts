@@ -7,6 +7,7 @@ export {
   scanned,
   SimulatedDevice,
   typed,
+  type Answered,
   type Completed,
   type Completion,
   type NumberEntry,
@@ -17,7 +18,6 @@ export {
   type SyncIntake,
 } from './device.ts';
 export { uuidv7, uuidv7Time } from './ids.ts';
-export { ApiSyncIntake } from './intake.ts';
 export { phoneLists } from './phone-lists.ts';
 export { builtInPolicy } from './policy.ts';
 export {

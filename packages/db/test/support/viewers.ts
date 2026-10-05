@@ -93,6 +93,9 @@ export const viewerSights: Record<string, Sight> = {
   survey: project(),
   incident: project(),
   drop_off_log: project([], ['resident_name', 'origin_address']),
+  // That a record of their project waits in quarantine, why and what holds its number; the
+  // record as sent may name a private citizen, an ROE's owner (ADR-338).
+  quarantined_record: project([], ['payload']),
   client: namedBy('client', 'viewer_project_setup', 'client_id', [...contact, 'notes']),
   declaration_event: namedBy('declaration_event', 'viewer_project_setup', 'declaration_event_id'),
   contractor: namedBy('contractor', 'project_contractor', 'contractor_id', contact),

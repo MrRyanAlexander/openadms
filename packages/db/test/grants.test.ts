@@ -90,6 +90,8 @@ const tableGrants: Record<string, Record<string, string>> = {
   survey: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },
   incident: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },
   drop_off_log: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },
+  // A record waiting in quarantine: evidence, kept as the phone sent it (ADR-338).
+  quarantined_record: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },
   completed_load: { adms_api: 'SELECT', adms_worker: 'INSERT SELECT UPDATE' },
   transaction: { adms_api: 'SELECT', adms_worker: 'DELETE INSERT SELECT' },
   invoice_lock: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },
@@ -165,6 +167,8 @@ const captured = [
   'scale_receipt_id',
   // The ROE its number found (ADR-327).
   'roe_id',
+  // A fix the phone sent that couldn't be one, kept as sent (ADR-338).
+  'unreadable_gps',
 ];
 // What every form records, beside its own (ADR-327).
 const formShared = [
@@ -231,6 +235,8 @@ const correctable: Record<string, string[]> = {
     'survey_id',
     'incident_id',
     'drop_off_log_id',
+    // While its record waits in quarantine (ADR-338).
+    'quarantined_record_id',
     'view',
     'captured_at',
     'device_utc_offset_minutes',
@@ -245,6 +251,21 @@ const correctable: Record<string, string[]> = {
     // The back office's two marks (ADR-337).
     'archived_at',
     'label',
+  ],
+  // The grant is the evidence guard's, every column but the id and the received time; what the
+  // phone sent is refused any change by the table's own trigger, so only the resolution is ever
+  // written (ADR-338).
+  quarantined_record: [
+    'project_id',
+    'device_id',
+    'monitor_id',
+    'payload',
+    'reason',
+    'holding_event_id',
+    'holding_roe_id',
+    'resolved_by_id',
+    'resolved_at',
+    'resolution',
   ],
 };
 // What the viewer views show, read through their base tables (row-level security applies there).

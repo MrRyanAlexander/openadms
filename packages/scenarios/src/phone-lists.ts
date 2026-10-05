@@ -74,6 +74,12 @@ export async function phoneLists(
         orderBy: { createdAt: 'asc' },
       })
     : [];
+  const surveyWorkTypes = assignment.formDocumentTypes.includes('SURVEY')
+    ? await api.surveyWorkType.findMany({
+        where: { archivedAt: null },
+        orderBy: { position: 'asc' },
+      })
+    : [];
   const name = ({ id, name }: { id: string; name: string }) => ({ id, name });
   return {
     blocks: blocks.map(({ series, firstNumber, lastNumber, lastUsedNumber, status }) => ({
@@ -108,5 +114,6 @@ export async function phoneLists(
     })),
     incidentOffers,
     contractors: placed.map((place) => name(place.contractor)),
+    surveyWorkTypes: surveyWorkTypes.map(name),
   };
 }

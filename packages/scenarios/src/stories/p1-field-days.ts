@@ -10,12 +10,13 @@
 //
 // It ends where this build does: every record on the server as recorded, every field event
 // PENDING, nothing refused. Pairing, flags, zones, mileage and money are the engine's (Milestones
-// 1.5…1.7); the certification a badge finds, duplicates and quarantine are intake's (1.4.2).
+// 1.5…1.7); the certification a badge finds, duplicates and quarantine are the story `sync`'s.
 //
 // Not here: P1's load pay items, rules and map (the story `setup`) and its certifications (the
 // story `certification`): a phone sends only the cert number it scanned. Photographs (the file's
 // place in storage is Phase 2's). GPS fixes, apart from ticket 101001's. The top-up of a block at
-// a sync (1.4.2). The golden mission's own story, with what happens at review, is 1.9.1.
+// a sync (the story `sync`). The golden mission's own story, with what happens at review, is
+// 1.9.1.
 import {
   FormSetup,
   ListSetup,
@@ -1243,7 +1244,7 @@ export const p1FieldDays: Story = {
       ],
     );
     story.check(
-      'AC-04-93 every field event is PENDING and nothing is concluded: no completed load, no certification looked up, no pay item on a load; pairing, flags and money are the engine’s',
+      'AC-04-93 every field event is PENDING and nothing is concluded: no completed load, no certification found (this story certifies no truck), no pay item on a load; pairing, flags and money are the engine’s',
       [
         [...new Set(events.map((event) => event.status))],
         await api.completedLoad.count(),
