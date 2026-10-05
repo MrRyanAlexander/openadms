@@ -134,8 +134,8 @@ export async function setUpP1Sites(
       chargesTippingFee: false,
       ineligibleSite: false,
       permitNumber: 'FDEP-DMS-2026-0117',
-      latitude: '27.98150000',
-      longitude: '-82.39720000',
+      latitude: '39.09000000',
+      longitude: '-75.62000000',
     },
   });
   const landfill = await tx.disposalSite.create({
@@ -149,8 +149,8 @@ export async function setUpP1Sites(
       chargesTippingFee: true,
       ineligibleSite: false,
       permitNumber: 'FDEP-SW-0098',
-      latitude: '27.89340000',
-      longitude: '-82.32160000',
+      latitude: '39.00000000',
+      longitude: '-75.58000000',
     },
   });
   return { tdsr: tdsr.id, landfill: landfill.id };

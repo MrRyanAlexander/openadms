@@ -343,10 +343,10 @@ describe('a field event', () => {
     const { db } = tested;
     await asThePhone();
     const collection = await received({
-      start_latitude: '27.94618234',
-      start_longitude: '-82.45871209',
-      end_latitude: '27.9462',
-      end_longitude: '-82.4587',
+      start_latitude: '39.13848234',
+      start_longitude: '-75.55371209',
+      end_latitude: '39.1385',
+      end_longitude: '-75.5537',
     });
     expect(
       await kept(
@@ -354,10 +354,10 @@ describe('a field event', () => {
         `"start_latitude"::text, "start_longitude"::text, "end_latitude"::text, "end_longitude"::text`,
       ),
     ).toEqual({
-      start_latitude: '27.94618234',
-      start_longitude: '-82.45871209',
-      end_latitude: '27.94620000',
-      end_longitude: '-82.45870000',
+      start_latitude: '39.13848234',
+      start_longitude: '-75.55371209',
+      end_latitude: '39.13850000',
+      end_longitude: '-75.55370000',
     });
     const noFix = await received({ ticket_number: '101021' });
     expect(
@@ -376,10 +376,10 @@ describe('a field event', () => {
     ).toEqual([]);
     // Half a fix, or one off the earth, is no fix: refused as a record that isn't one.
     for (const [what, more] of [
-      ['a start latitude alone', { start_latitude: '27.9462' }],
-      ['an end longitude alone', { end_longitude: '-82.4587' }],
-      ['a start latitude of 91', { start_latitude: '91', start_longitude: '-82.4587' }],
-      ['an end longitude of -181', { end_latitude: '27.9462', end_longitude: '-181' }],
+      ['a start latitude alone', { start_latitude: '39.1385' }],
+      ['an end longitude alone', { end_longitude: '-75.5537' }],
+      ['a start latitude of 91', { start_latitude: '91', start_longitude: '-75.5537' }],
+      ['an end longitude of -181', { end_latitude: '39.1385', end_longitude: '-181' }],
     ] as const) {
       expect(await refusedEvent({ ticket_number: '101022', ...more }), what).toBe(refusedBy.check);
     }
@@ -612,7 +612,7 @@ describe('a field event', () => {
       `"typed_capacity_cy" = 60`,
       `"source" = 'BACK_OFFICE'`,
       `"temporary_session" = true`,
-      `"start_latitude" = 27.9`,
+      `"start_latitude" = 39.0`,
       `"address" = '14 Heron St'`,
       `"notes" = 'changed'`,
       `"load_call" = 100`,
@@ -631,7 +631,7 @@ describe('a field event', () => {
     expect(
       await db.run(
         `UPDATE "field_event" SET "ticket_number" = '101007', "ended_at" = '2026-10-12T14:45:00Z',
-           "end_latitude" = 27.9501, "end_longitude" = -82.4473, "load_call" = 70,
+           "end_latitude" = 39.16, "end_longitude" = -75.57, "load_call" = 70,
            "cert_number" = '730416', "certification_id" = $2, "address" = '2 Marsh Rd',
            "address_source" = 'TYPED'
          WHERE "id" = $1`,

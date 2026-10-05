@@ -177,8 +177,8 @@ export const p1FieldDays: Story = {
           chargesTippingFee: false,
           ineligibleSite: false,
           permitNumber: 'FDEP-SW-0131',
-          latitude: '28.04170000',
-          longitude: '-82.28050000',
+          latitude: '39.24000000',
+          longitude: '-75.60000000',
           activationDate: '2026-10-12',
         }),
       )
@@ -523,8 +523,8 @@ export const p1FieldDays: Story = {
         ...vegetative,
         address: '14 Heron St',
         addressSource: 'TYPED',
-        endLatitude: '27.94620000',
-        endLongitude: '-82.45870000',
+        endLatitude: '39.13850000',
+        endLongitude: '-75.55370000',
       }),
     );
     story.check(
@@ -544,8 +544,8 @@ export const p1FieldDays: Story = {
         number: scanned('101001'),
         ...vegetative,
         loadCall: 80,
-        endLatitude: '27.99810000',
-        endLongitude: '-82.39120000',
+        endLatitude: '39.09030000',
+        endLongitude: '-75.62020000',
       }),
     );
 

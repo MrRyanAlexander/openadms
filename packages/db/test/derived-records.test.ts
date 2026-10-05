@@ -159,18 +159,18 @@ async function mapOf(projectId: string): Promise<{ version: string; zone: string
       type: 'Polygon',
       coordinates: [
         [
-          [-82.6, 27.8],
-          [-82.2, 27.8],
-          [-82.2, 28.2],
-          [-82.6, 28.2],
-          [-82.6, 27.8],
+          [-75.8, 38.9],
+          [-75.4, 38.9],
+          [-75.4, 39.3],
+          [-75.8, 39.3],
+          [-75.8, 38.9],
         ],
       ],
     }),
-    west_longitude: '-82.60000000',
-    south_latitude: '27.80000000',
-    east_longitude: '-82.20000000',
-    north_latitude: '28.20000000',
+    west_longitude: '-75.80000000',
+    south_latitude: '38.90000000',
+    east_longitude: '-75.40000000',
+    north_latitude: '39.30000000',
   };
   const { geometry, ...box } = shape;
   const version = await add('map_version', {
@@ -239,7 +239,7 @@ describe("the worker's columns on a field event", () => {
     for (const sql of [
       `UPDATE "field_event" SET "ticket_number" = '101099' WHERE "id" = $1`,
       `UPDATE "field_event" SET "ended_at" = now() WHERE "id" = $1`,
-      `UPDATE "field_event" SET "end_latitude" = 27.9, "end_longitude" = -82.4 WHERE "id" = $1`,
+      `UPDATE "field_event" SET "end_latitude" = 39.0, "end_longitude" = -75.6 WHERE "id" = $1`,
       `UPDATE "field_event" SET "pay_item_id" = NULL WHERE "id" = $1`,
       `UPDATE "field_event" SET "certification_id" = NULL WHERE "id" = $1`,
     ]) {
@@ -411,11 +411,11 @@ describe('a completed load', () => {
       ).toBe(refusedBy.foreignKey);
     }
     const routed = {
-      mileage: '6.8412',
+      mileage: '6.2050',
       mileage_source: 'ROAD_ROUTE',
-      snapped_latitude: '27.94620000',
-      snapped_longitude: '-82.45870000',
-      snapped_address: '118 Heron Way',
+      snapped_latitude: '39.13844300',
+      snapped_longitude: '-75.55388800',
+      snapped_address: 'Wyoming Mill Road',
       map_data_date: '2026-01-01',
       map_data_sha256: sha256('b'),
     };

@@ -98,8 +98,8 @@ async function cypressCreek(projectId = tested.world.p1): Promise<string> {
           name: 'Cypress Creek Landfill',
           short_code: 'CCL',
           permit_number: 'FDEP-SW-0131',
-          latitude: '28.04170000',
-          longitude: '-82.28050000',
+          latitude: '39.24000000',
+          longitude: '-75.60000000',
         }),
       ),
     )
@@ -642,8 +642,8 @@ describe('a photograph', () => {
     ).toEqual({
       captured_at: new Date('2026-10-13T13:20:00Z'),
       device_utc_offset_minutes: -240,
-      latitude: '27.95010000',
-      longitude: '-82.44730000',
+      latitude: '39.16000000',
+      longitude: '-75.57000000',
       device: world.device,
       original_sha256: original,
       uploaded_sha256: uploaded,

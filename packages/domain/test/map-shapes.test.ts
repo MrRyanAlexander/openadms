@@ -1,6 +1,6 @@
 // Reading a shape off a map, at the domain (spec/acceptance/01-setup.md AC-01-56, 59; ADR-311;
 // BACKLOG C57). The shapes are the example world's (spec/CONVENTIONS.md §6): P1's boundary from
-// 82.60° W to 82.20° W and 27.80° N to 28.20° N, in three zones west to east, as the file
+// 75.80° W to 75.40° W and 38.90° N to 39.30° N, in three zones west to east, as the file
 // bayline-row-zones-v1.geojson names them in its field ZONE_NAME.
 import { describe, expect, it } from 'vitest';
 
@@ -21,15 +21,15 @@ const rectangle = (west: number, south: number, east: number, north: number): nu
 const zone = (name: string, west: number, east: number) => ({
   type: 'Feature',
   properties: { ZONE_NAME: name },
-  geometry: { type: 'Polygon', coordinates: rectangle(west, 27.8, east, 28.2) },
+  geometry: { type: 'Polygon', coordinates: rectangle(west, 38.9, east, 39.3) },
 });
-const boundary = { type: 'Polygon', coordinates: rectangle(-82.6, 27.8, -82.2, 28.2) };
+const boundary = { type: 'Polygon', coordinates: rectangle(-75.8, 38.9, -75.4, 39.3) };
 const zones = {
   type: 'FeatureCollection',
   features: [
-    zone('Zone 1', -82.6, -82.47),
-    zone('Zone 2', -82.47, -82.33),
-    zone('Zone 3', -82.33, -82.2),
+    zone('Zone 1', -75.8, -75.67),
+    zone('Zone 2', -75.67, -75.53),
+    zone('Zone 3', -75.53, -75.4),
   ],
 };
 
@@ -39,10 +39,10 @@ describe('a shape', () => {
       read: {
         geometry: boundary,
         box: {
-          westLongitude: '-82.60000000',
-          southLatitude: '27.80000000',
-          eastLongitude: '-82.20000000',
-          northLatitude: '28.20000000',
+          westLongitude: '-75.80000000',
+          southLatitude: '38.90000000',
+          eastLongitude: '-75.40000000',
+          northLatitude: '39.30000000',
         },
       },
       problem: null,
@@ -69,21 +69,21 @@ describe('a shape', () => {
 
   it('anything but closed polygon rings on the earth is refused, in plain words', () => {
     const problems = [
-      shapeOf({ type: 'Point', coordinates: [-82.4, 28] }),
+      shapeOf({ type: 'Point', coordinates: [-75.6, 39.1] }),
       shapeOf({ type: 'Polygon', coordinates: [] }),
       shapeOf({
         type: 'Polygon',
         coordinates: [
           [
-            [-82.6, 27.8],
-            [-82.2, 27.8],
-            [-82.2, 28.2],
-            [-82.6, 28.2],
+            [-75.8, 38.9],
+            [-75.4, 38.9],
+            [-75.4, 39.3],
+            [-75.8, 39.3],
           ],
         ],
       }),
       // Latitude first: a file not in longitude and latitude.
-      shapeOf({ type: 'Polygon', coordinates: rectangle(27.8, -182.6, 28.2, -182.2) }),
+      shapeOf({ type: 'Polygon', coordinates: rectangle(38.9, -175.8, 39.3, -175.4) }),
       shapeOf({ type: 'Polygon', coordinates: [[['a', 'b']]] }),
       shapeOf('bayline-row-zones-v1.geojson'),
       shapeOf({ type: 'FeatureCollection', features: [] }),
@@ -94,7 +94,7 @@ describe('a shape', () => {
       [null, "A ring isn't closed: its last position must be its first."],
       [
         null,
-        'A position is off the earth: longitude 27.8, latitude -182.6. Shapes are in longitude and latitude, WGS84.',
+        'A position is off the earth: longitude 38.9, latitude -175.8. Shapes are in longitude and latitude, WGS84.',
       ],
       [null, 'A ring has at least four positions.'],
       [null, 'The file is not GeoJSON.'],
@@ -111,30 +111,30 @@ describe('the zones of a map', () => {
         'Zone 1',
         'Polygon',
         {
-          westLongitude: '-82.60000000',
-          southLatitude: '27.80000000',
-          eastLongitude: '-82.47000000',
-          northLatitude: '28.20000000',
+          westLongitude: '-75.80000000',
+          southLatitude: '38.90000000',
+          eastLongitude: '-75.67000000',
+          northLatitude: '39.30000000',
         },
       ],
       [
         'Zone 2',
         'Polygon',
         {
-          westLongitude: '-82.47000000',
-          southLatitude: '27.80000000',
-          eastLongitude: '-82.33000000',
-          northLatitude: '28.20000000',
+          westLongitude: '-75.67000000',
+          southLatitude: '38.90000000',
+          eastLongitude: '-75.53000000',
+          northLatitude: '39.30000000',
         },
       ],
       [
         'Zone 3',
         'Polygon',
         {
-          westLongitude: '-82.33000000',
-          southLatitude: '27.80000000',
-          eastLongitude: '-82.20000000',
-          northLatitude: '28.20000000',
+          westLongitude: '-75.53000000',
+          southLatitude: '38.90000000',
+          eastLongitude: '-75.40000000',
+          northLatitude: '39.30000000',
         },
       ],
     ]);
@@ -144,9 +144,9 @@ describe('the zones of a map', () => {
     const split = {
       type: 'FeatureCollection',
       features: [
-        zone('Zone 1', -82.6, -82.5),
-        zone('Zone 2', -82.5, -82.3),
-        zone('Zone 1', -82.3, -82.2),
+        zone('Zone 1', -75.8, -75.7),
+        zone('Zone 2', -75.7, -75.5),
+        zone('Zone 1', -75.5, -75.4),
       ],
     };
     const { read } = zonesOf(split, 'ZONE_NAME');
@@ -158,8 +158,8 @@ describe('the zones of a map', () => {
         each.box.eastLongitude,
       ]),
     ).toEqual([
-      ['Zone 1', 'MultiPolygon', '-82.60000000', '-82.20000000'],
-      ['Zone 2', 'Polygon', '-82.50000000', '-82.30000000'],
+      ['Zone 1', 'MultiPolygon', '-75.80000000', '-75.40000000'],
+      ['Zone 2', 'Polygon', '-75.70000000', '-75.50000000'],
     ]);
   });
 

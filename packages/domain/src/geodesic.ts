@@ -11,7 +11,7 @@
 // ground.
 import geographiclib from 'geographiclib-geodesic';
 
-// A GPS point, WGS84, each half an exact decimal as text: "27.98150000".
+// A GPS point, WGS84, each half an exact decimal as text: "39.09000000".
 export interface GpsPoint {
   readonly latitude: string;
   readonly longitude: string;

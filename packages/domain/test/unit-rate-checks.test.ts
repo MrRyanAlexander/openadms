@@ -100,7 +100,7 @@ function recorded(
     rootBallInches: null,
     surveyNumber: null,
     markedIneligible: false,
-    endGps: { latitude: '27.94620000', longitude: '-82.45870000' },
+    endGps: { latitude: '39.13850000', longitude: '-75.55370000' },
     photographs: [{ archivedAt: null }],
     items: [],
     ...more,

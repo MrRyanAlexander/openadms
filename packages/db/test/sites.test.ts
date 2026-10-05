@@ -37,8 +37,8 @@ async function picked(list: string, name: string): Promise<string> {
 }
 
 // A rectangle as a GeoJSON Polygon, longitude first, its ring closed; and its bounding box's
-// columns. P1's boundary runs from 82.60° W to 82.20° W and 27.80° N to 28.20° N (made up, round
-// Bayline County; spec/CONVENTIONS.md §6).
+// columns. P1's boundary runs from 75.80° W to 75.40° W and 38.90° N to 39.30° N (stand-ins on the pinned
+// map extract; spec/CONVENTIONS.md §6).
 function rectangle(west: number, south: number, east: number, north: number) {
   const ring = [
     [west, south],
@@ -59,12 +59,12 @@ function rectangle(west: number, south: number, east: number, north: number) {
   };
 }
 
-const p1Boundary = rectangle(-82.6, 27.8, -82.2, 28.2);
+const p1Boundary = rectangle(-75.8, 38.9, -75.4, 39.3);
 // Its three zones, west to east.
 const p1Zones = {
-  'Zone 1': rectangle(-82.6, 27.8, -82.47, 28.2),
-  'Zone 2': rectangle(-82.47, 27.8, -82.33, 28.2),
-  'Zone 3': rectangle(-82.33, 27.8, -82.2, 28.2),
+  'Zone 1': rectangle(-75.8, 38.9, -75.67, 39.3),
+  'Zone 2': rectangle(-75.67, 38.9, -75.53, 39.3),
+  'Zone 3': rectangle(-75.53, 38.9, -75.4, 39.3),
 };
 
 // A map version of P1 as Dana loads it, with the zones it was loaded with.
@@ -94,7 +94,7 @@ async function mapLoaded(
 
 // A shape of Marsh Road TDSR's own, as Dana draws it.
 function areaOf(siteId: string, version: number): Record<string, unknown> {
-  const shape = rectangle(-82.3992, 27.9798, -82.3951, 27.9831);
+  const shape = rectangle(-75.622, 39.0883, -75.6179, 39.0916);
   return {
     site_id: siteId,
     version,
@@ -158,8 +158,8 @@ describe('a disposal site', () => {
       haul_outs_leave_here: false,
       charges_tipping_fee: true,
       ineligible_site: false,
-      latitude: '27.89340000',
-      longitude: '-82.32160000',
+      latitude: '39.00000000',
+      longitude: '-75.58000000',
       activation_date: '2026-10-12',
       close_date: null,
       permit_number: 'FDEP-SW-0098',
@@ -209,10 +209,10 @@ describe('a disposal site', () => {
     await asTheApi();
     const transfer = await picked('site_type', 'Transfer Station');
     for (const [latitude, longitude] of [
-      ['90.00000001', '-82.44730000'],
-      ['-90.00000001', '-82.44730000'],
-      ['27.95010000', '180.00000001'],
-      ['27.95010000', '-180.00000001'],
+      ['90.00000001', '-75.57000000'],
+      ['-90.00000001', '-75.57000000'],
+      ['39.16000000', '180.00000001'],
+      ['39.16000000', '-180.00000001'],
     ] as const) {
       const refusal = await db.refused(
         ...insertOf('disposal_site', siteLike(world, transfer, { latitude, longitude })),
@@ -222,14 +222,14 @@ describe('a disposal site', () => {
     }
     const exact = await add(
       'disposal_site',
-      siteLike(world, transfer, { latitude: '27.95010012', longitude: '-82.44730098' }),
+      siteLike(world, transfer, { latitude: '39.16000012', longitude: '-75.57000098' }),
     );
     expect(
       await db.one(
         `SELECT "latitude"::text, "longitude"::text FROM "disposal_site" WHERE "id" = $1`,
         [exact],
       ),
-    ).toEqual({ latitude: '27.95010012', longitude: '-82.44730098' });
+    ).toEqual({ latitude: '39.16000012', longitude: '-75.57000098' });
   });
 
   it('AC-01-55 saved with no permit number; work there is never refused', async () => {
@@ -453,13 +453,13 @@ describe('a site’s area', () => {
     await asTheApi();
     const multi = JSON.stringify({
       type: 'MultiPolygon',
-      coordinates: [[rectangle(-82.4, 27.98, -82.39, 27.99).ring]],
+      coordinates: [[rectangle(-75.63, 39.08, -75.61, 39.1).ring]],
     });
     await add('site_area_version', { ...areaOf(world.site, 1), geometry: multi });
     for (const geometry of [
-      JSON.stringify({ type: 'Point', coordinates: [-82.3972, 27.9815] }),
+      JSON.stringify({ type: 'Point', coordinates: [-75.62, 39.09] }),
       JSON.stringify({ type: 'Polygon' }),
-      JSON.stringify([[-82.4, 27.98]]),
+      JSON.stringify([[-75.63, 39.08]]),
       JSON.stringify({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [] } }),
     ]) {
       const refusal = await db.refused(
@@ -469,7 +469,7 @@ describe('a site’s area', () => {
       expect(refusal.message).toContain('"site_area_version_geometry_check"');
     }
     for (const box of [
-      { south_latitude: '27.99000000', north_latitude: '27.98000000' },
+      { south_latitude: '39.09000000', north_latitude: '39.08000000' },
       { west_longitude: '-180.00000001' },
       { north_latitude: '90.00000001' },
     ]) {
@@ -601,7 +601,7 @@ describe('the project map', () => {
     const first = await mapLoaded(1, p1Zones);
     const second = await mapLoaded(2, {
       ...p1Zones,
-      'Zone 3': rectangle(-82.33, 27.8, -82.21, 28.2),
+      'Zone 3': rectangle(-75.53, 38.9, -75.41, 39.3),
     });
     expect(
       await db.rows(
@@ -696,7 +696,7 @@ describe('the project map', () => {
         ...p1Zones['Zone 1'].box,
       }),
     ).toBe(refusedBy.unique);
-    const point = JSON.stringify({ type: 'Point', coordinates: [-82.4, 28] });
+    const point = JSON.stringify({ type: 'Point', coordinates: [-75.6, 39.1] });
     const boundaryRefusal = await db.refused(
       ...insertOf('map_version', {
         project_id: world.p1,
@@ -723,7 +723,7 @@ describe('the project map', () => {
         name: 'Zone 5',
         geometry: p1Zones['Zone 1'].geometry,
         ...p1Zones['Zone 1'].box,
-        south_latitude: '28.30000000',
+        south_latitude: '39.40000000',
       }),
     );
     expect(boxRefusal.message).toContain('"zone_bounding_box_check"');

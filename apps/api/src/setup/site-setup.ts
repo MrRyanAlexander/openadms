@@ -24,7 +24,7 @@ export interface NewSite extends SiteFactSettings {
   readonly siteTypeId: string;
   // Empty is "permit outstanding": saved, flagged later, never blocking (ADR-111).
   readonly permitNumber: string | null;
-  // WGS84, exact decimals: "27.98150000".
+  // WGS84, exact decimals: "39.09000000".
   readonly latitude: string;
   readonly longitude: string;
   // Calendar days in the project's time zone.

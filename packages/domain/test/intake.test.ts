@@ -6,8 +6,8 @@ import { GpsFix, Quarantine, quarantineReasons } from '../src/index.ts';
 
 describe('a GPS fix as a phone sends it', () => {
   it('AC-05-39 a fix on the earth is kept as sent, exact decimals as text', () => {
-    expect(new GpsFix({ latitude: '27.98150000', longitude: '-82.39720000' }).read()).toEqual({
-      fix: { latitude: '27.98150000', longitude: '-82.39720000' },
+    expect(new GpsFix({ latitude: '39.09000000', longitude: '-75.62000000' }).read()).toEqual({
+      fix: { latitude: '39.09000000', longitude: '-75.62000000' },
       unreadable: null,
     });
     // The poles and the date line are on the earth.
@@ -33,11 +33,11 @@ describe('a GPS fix as a phone sends it', () => {
 
   it('AC-05-39 half a fix, a latitude past 90 and a longitude past 180 can’t be one: no fix, and what was sent is kept as sent', () => {
     for (const sent of [
-      { latitude: '27.98150000', longitude: null },
-      { latitude: null, longitude: '-82.39720000' },
-      { latitude: '91.20000000', longitude: '-82.39720000' },
-      { latitude: '-90.00000001', longitude: '-82.39720000' },
-      { latitude: '27.98150000', longitude: '180.5' },
+      { latitude: '39.09000000', longitude: null },
+      { latitude: null, longitude: '-75.62000000' },
+      { latitude: '91.20000000', longitude: '-75.62000000' },
+      { latitude: '-90.00000001', longitude: '-75.62000000' },
+      { latitude: '39.09000000', longitude: '180.5' },
     ]) {
       expect(new GpsFix(sent).read(), JSON.stringify(sent)).toEqual({
         fix: null,
@@ -48,11 +48,11 @@ describe('a GPS fix as a phone sends it', () => {
 
   it('anything that isn’t a decimal can’t be one either, whatever it is', () => {
     for (const sent of [
-      { latitude: 'north', longitude: '-82.39720000' },
-      { latitude: '27,9815', longitude: '-82.39720000' },
+      { latitude: 'north', longitude: '-75.62000000' },
+      { latitude: '39,0900', longitude: '-75.62000000' },
       { latitude: '', longitude: '' },
-      { latitude: 27.9815, longitude: -82.3972 },
-      { latitude: '2.79815e1', longitude: '-82.39720000' },
+      { latitude: 39.09, longitude: -75.62 },
+      { latitude: '3.909e1', longitude: '-75.62000000' },
     ]) {
       expect(new GpsFix(sent).read(), JSON.stringify(sent)).toEqual({
         fix: null,

@@ -69,8 +69,8 @@ const sent = {
   loadCall: 65,
   startedAt: '2026-10-13T15:28:00.000Z',
   endedAt: '2026-10-13T15:40:00.000Z',
-  endLatitude: '27.98150000',
-  endLongitude: '-82.39720000',
+  endLatitude: '39.09000000',
+  endLongitude: '-75.62000000',
 };
 
 function quarantined(holdingEventId: string, more: Row = {}): Row {
@@ -459,7 +459,7 @@ describe('a GPS fix that couldn’t be one', () => {
   it('AC-05-39 is kept as the phone sent it, beside a field event saved without that fix; the field event’s own fix still takes no impossible value', async () => {
     const { db } = tested;
     await asThePhone();
-    const unreadable = { end: { latitude: '91.20000000', longitude: '-82.39720000' } };
+    const unreadable = { end: { latitude: '91.20000000', longitude: '-75.62000000' } };
     const id = (
       await db.one<{ id: string }>(
         ...eventInsertOf(disposal({ unreadable_gps: JSON.stringify(unreadable) })),
@@ -480,8 +480,8 @@ describe('a GPS fix that couldn’t be one', () => {
     }
     // The database's own check on a fix stays (ADR-329 (5)): intake never writes the bad one.
     for (const fix of [
-      { end_latitude: '91.20000000', end_longitude: '-82.39720000' },
-      { end_latitude: '27.98150000', end_longitude: null },
+      { end_latitude: '91.20000000', end_longitude: '-75.62000000' },
+      { end_latitude: '39.09000000', end_longitude: null },
     ]) {
       expect(await refusal('field_event', disposal({ ticket_number: '101022', ...fix }))).toBe(
         check('field_event_end_gps_check'),

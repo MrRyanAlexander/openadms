@@ -36,8 +36,8 @@ const friday = (time: string): string => `2026-10-09T${time}:00-04:00`;
 const date = (value: Date | null): string | null =>
   value === null ? null : value.toISOString().slice(0, 10);
 
-// P1's map as its file gives it (spec/CONVENTIONS.md §6): a boundary from 82.60° W to 82.20° W and
-// 27.80° N to 28.20° N, in three zones west to east, each named in the field ZONE_NAME.
+// P1's map as its file gives it (spec/CONVENTIONS.md §6): a boundary from 75.80° W to 75.40° W and
+// 38.90° N to 39.30° N, in three zones west to east, each named in the field ZONE_NAME.
 const rectangle = (west: number, south: number, east: number, north: number) => ({
   type: 'Polygon',
   coordinates: [
@@ -50,17 +50,17 @@ const rectangle = (west: number, south: number, east: number, north: number) => 
     ],
   ],
 });
-const p1Boundary = rectangle(-82.6, 27.8, -82.2, 28.2);
+const p1Boundary = rectangle(-75.8, 38.9, -75.4, 39.3);
 const p1Zones = {
   type: 'FeatureCollection',
   features: [
-    ['Zone 1', -82.6, -82.47] as const,
-    ['Zone 2', -82.47, -82.33] as const,
-    ['Zone 3', -82.33, -82.2] as const,
+    ['Zone 1', -75.8, -75.67] as const,
+    ['Zone 2', -75.67, -75.53] as const,
+    ['Zone 3', -75.53, -75.4] as const,
   ].map(([name, west, east]) => ({
     type: 'Feature',
     properties: { ZONE_NAME: name },
-    geometry: rectangle(west, 27.8, east, 28.2),
+    geometry: rectangle(west, 38.9, east, 39.3),
   })),
 };
 
@@ -471,8 +471,8 @@ export const setup: Story = {
           'ZONE_NAME',
           'Dana Reyes',
           'Polygon',
-          '-82.6 27.8 -82.2 28.2',
-          ['Zone 1: -82.60 to -82.47', 'Zone 2: -82.47 to -82.33', 'Zone 3: -82.33 to -82.20'],
+          '-75.8 38.9 -75.4 39.3',
+          ['Zone 1: -75.80 to -75.67', 'Zone 2: -75.67 to -75.53', 'Zone 3: -75.53 to -75.40'],
         ],
       ],
     );
@@ -889,8 +889,8 @@ export const setup: Story = {
           siteTypeId: await picked.siteType('TDSR/DMS'),
           haulOutsLeaveHere: true,
           permitNumber: 'FDEP-DMS-2026-0117',
-          latitude: '27.98150000',
-          longitude: '-82.39720000',
+          latitude: '39.09000000',
+          longitude: '-75.62000000',
         }),
       )
     ).id;
@@ -903,8 +903,8 @@ export const setup: Story = {
           shortCode: 'BCL',
           siteTypeId: finalDisposal,
           permitNumber: 'FDEP-SW-0098',
-          latitude: '27.89340000',
-          longitude: '-82.32160000',
+          latitude: '39.00000000',
+          longitude: '-75.58000000',
         }),
       )
     ).id;
@@ -917,8 +917,8 @@ export const setup: Story = {
           shortCode: 'CCL',
           siteTypeId: finalDisposal,
           permitNumber: 'FDEP-SW-0131',
-          latitude: '28.04170000',
-          longitude: '-82.28050000',
+          latitude: '39.24000000',
+          longitude: '-75.60000000',
         }),
       )
     ).id;
@@ -979,7 +979,7 @@ export const setup: Story = {
           ['Takes loads', 'Haul-outs leave here'],
           null,
           'FDEP-DMS-2026-0117',
-          '27.98150000, -82.39720000',
+          '39.09000000, -75.62000000',
           '2026-10-12',
           null,
           [],
@@ -991,7 +991,7 @@ export const setup: Story = {
           ['Takes loads', 'Charges a tipping fee'],
           'BCL',
           'FDEP-SW-0098',
-          '27.89340000, -82.32160000',
+          '39.00000000, -75.58000000',
           '2026-10-12',
           null,
           ['TIP-FEE-CY-BCL'],
@@ -1003,7 +1003,7 @@ export const setup: Story = {
           ['Takes loads'],
           'CCL',
           'FDEP-SW-0131',
-          '28.04170000, -82.28050000',
+          '39.24000000, -75.60000000',
           '2026-10-12',
           null,
           [],
@@ -1726,8 +1726,8 @@ export const setup: Story = {
         siteTypeId: await picked.siteType('TDSR/DMS'),
         haulOutsLeaveHere: true,
         permitNumber: 'FDEP-DMS-2026-0117',
-        latitude: '27.98150000',
-        longitude: '-82.39720000',
+        latitude: '39.09000000',
+        longitude: '-75.62000000',
       }),
     );
     await saved(

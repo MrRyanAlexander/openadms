@@ -1,8 +1,8 @@
 // The checks on place (spec/acceptance/06-reconciliation.md AC-06-42…47, 51, 52, 65…68, 72,
 // 118, 126, 127, 134; spec/FLAGS.md §3.3, §3.4, §3.7; ADR-346). Each message is the catalogue's,
 // word for word. The values are the example world's (spec/CONVENTIONS.md §6) and the catalogue's
-// own example tickets: P1 in Bayline County, on America/New_York, its boundary from 82.60° W to
-// 82.20° W and 27.80° N to 28.20° N in three zones west to east, its site circle 200 m.
+// own example tickets: P1 in Bayline County, on America/New_York, its boundary from 75.80° W to
+// 75.40° W and 38.90° N to 39.30° N in three zones west to east, its site circle 200 m.
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -50,15 +50,15 @@ function shapeOf(west: number, south: number, east: number, north: number): MapS
 const zone = (name: string, west: number, east: number) => ({
   id: `zone-${name.slice(-1)}`,
   name,
-  shape: shapeOf(west, 27.8, east, 28.2),
+  shape: shapeOf(west, 38.9, east, 39.3),
 });
 const p1Map: ProjectMap = {
   versionId: 'map-version-1',
-  boundary: shapeOf(-82.6, 27.8, -82.2, 28.2),
+  boundary: shapeOf(-75.8, 38.9, -75.4, 39.3),
   zones: [
-    zone('Zone 1', -82.6, -82.47),
-    zone('Zone 2', -82.47, -82.33),
-    zone('Zone 3', -82.33, -82.2),
+    zone('Zone 1', -75.8, -75.67),
+    zone('Zone 2', -75.67, -75.53),
+    zone('Zone 3', -75.53, -75.4),
   ],
 };
 
@@ -76,24 +76,24 @@ const site = (name: string, gps: GpsPoint, more: Partial<CheckedSite> = {}): Che
   area: null,
   ...more,
 });
-const marshRoad = site('Marsh Road TDSR', point('27.98150000', '-82.39720000'), {
+const marshRoad = site('Marsh Road TDSR', point('39.09000000', '-75.62000000'), {
   siteTypeKey: 'TDSR',
   haulOutsLeaveHere: true,
   permitNumber: 'FDEP-DMS-2026-0117',
 });
-const landfill = site('Bayline County Landfill', point('27.89340000', '-82.32160000'), {
+const landfill = site('Bayline County Landfill', point('39.00000000', '-75.58000000'), {
   siteTypeKey: 'FINAL_DISPOSAL',
   permitNumber: 'FDEP-SW-0098',
 });
-const transferStation = site('Bayline Transfer Station', point('27.95010000', '-82.44730000'), {
+const transferStation = site('Bayline Transfer Station', point('39.16000000', '-75.57000000'), {
   permitNumber: 'FDEP-TS-2026-0412',
 });
-const oldQuarryPit = site('Old Quarry Pit', point('28.10000000', '-82.50000000'));
+const oldQuarryPit = site('Old Quarry Pit', point('39.20000000', '-75.65000000'));
 
 // 14 Heron St, in Zone 2; and 250 m and 150 m north of Marsh Road TDSR's GPS.
-const heronSt = point('27.94620000', '-82.45870000');
-const north250 = point('27.98375593', '-82.39720000');
-const north150 = point('27.98285356', '-82.39720000');
+const heronSt = point('39.13850000', '-75.55370000');
+const north250 = point('39.09225190', '-75.62000000');
+const north150 = point('39.09135114', '-75.62000000');
 
 const workflowOf: Record<FieldEventKindName, WorkflowName> = {
   COLLECTION: 'LOAD',
@@ -154,7 +154,7 @@ describe('the project’s boundary and zones', () => {
   it('AC-06-42 a collection that ended at 14 Heron St is given the zone its end GPS lies in, with the map version used; a unit rate event’s zone comes from its own GPS', () => {
     const col = collection('101001', heronSt);
     const hanger = recorded('UNIT_RATE', '301001', at(mon, '11:00'), {
-      endGps: point('28.01000000', '-82.25000000'),
+      endGps: point('39.11000000', '-75.45000000'),
     });
 
     expect(placeOf([col])).toEqual({
@@ -168,7 +168,7 @@ describe('the project’s boundary and zones', () => {
   });
 
   it('AC-06-43 a load’s zone is its collection’s: its disposal is given none, and each property of a split keeps its own', () => {
-    const a = collection('102001-A', point('27.90000000', '-82.55000000'));
+    const a = collection('102001-A', point('39.00000000', '-75.75000000'));
     const b = collection('102001-B', heronSt, at(mon, '10:00'));
     const dis = disposal('102001', marshRoad);
 
@@ -182,7 +182,7 @@ describe('the project’s boundary and zones', () => {
   });
 
   it('AC-06-44 a collection that ended south of the boundary is flagged and still bills; a unit rate event outside it the same', () => {
-    const south = point('27.75000000', '-82.40000000');
+    const south = point('38.85000000', '-75.60000000');
     const col = collection('101020', south);
     const found = placeOf([col]);
 
@@ -194,7 +194,7 @@ describe('the project’s boundary and zones', () => {
       billing: 'BILLS',
       fieldEventId: col.id,
       facts: {
-        gps: { latitude: '27.75000000', longitude: '-82.40000000' },
+        gps: { latitude: '38.85000000', longitude: '-75.60000000' },
         mapVersionId: 'map-version-1',
       },
     });
@@ -235,7 +235,7 @@ describe('the project’s boundary and zones', () => {
   });
 
   it('a project with no map (P2) has no boundary to be outside of and no zone to give', () => {
-    const col = collection('102002', point('27.75000000', '-82.40000000'));
+    const col = collection('102002', point('38.85000000', '-75.60000000'));
 
     expect(placeOf([col], { map: null })).toEqual({
       flags: [],
@@ -253,13 +253,13 @@ describe('the project’s boundary and zones', () => {
   });
 
   it('a point on the line between two zones is in the first the map names', () => {
-    const col = collection('101001', point('28.00000000', '-82.47000000'));
+    const col = collection('101001', point('39.10000000', '-75.67000000'));
 
     expect(placeOf([col]).zones[0]?.zoneId).toBe('zone-1');
   });
 
   it('a haul-out’s collection, at a TDSR, is given no zone and isn’t judged against the boundary', () => {
-    const outside = site('Marsh Road TDSR', point('27.75000000', '-82.40000000'), {
+    const outside = site('Marsh Road TDSR', point('38.85000000', '-75.60000000'), {
       siteTypeKey: 'TDSR',
       haulOutsLeaveHere: true,
     });
@@ -275,7 +275,7 @@ describe('the project’s boundary and zones', () => {
   it('AC-06-126 a collection whose start and end GPS are 9 km apart: nothing is flagged for the distance it covers', () => {
     const far = {
       ...collection('101001', heronSt),
-      startGps: point('28.02700000', '-82.45870000'),
+      startGps: point('39.21950000', '-75.55370000'),
     };
 
     expect(flagsOf([far])).toEqual([]);
@@ -301,9 +301,9 @@ describe('a site’s area', () => {
       billing: 'BILLS',
       fieldEventId: far.id,
       facts: {
-        gps: { latitude: '27.98375593', longitude: '-82.39720000' },
+        gps: { latitude: '39.09225190', longitude: '-75.62000000' },
         siteId: marshRoad.id,
-        siteGps: { latitude: '27.98150000', longitude: '-82.39720000' },
+        siteGps: { latitude: '39.09000000', longitude: '-75.62000000' },
         circleMeters: 200,
       },
     });
@@ -323,7 +323,7 @@ describe('a site’s area', () => {
     });
     const hod = recorded('HAUL_OUT_DISPOSAL', '201001', at(mon, '14:10'), {
       site: landfill,
-      endGps: point('27.89700000', '-82.32160000'),
+      endGps: point('39.00360000', '-75.58000000'),
     });
     const flags = flagsOf([hoc, hod]);
 
@@ -339,12 +339,12 @@ describe('a site’s area', () => {
   it('AC-06-47 a site with a shape of its own is checked against the shape in place of the circle: inside it, not flagged, however far from the site’s GPS', () => {
     const shaped: CheckedSite = {
       ...marshRoad,
-      area: { versionId: 'area-version-1', shape: shapeOf(-82.41, 27.975, -82.39, 27.995) },
+      area: { versionId: 'area-version-1', shape: shapeOf(-75.63, 39.085, -75.61, 39.105) },
     };
-    // About 1.4 km north of the site's GPS, inside the shape; and 150 m west of it, inside the
-    // circle but outside the shape.
-    const inside = disposal('101022', shaped, { endGps: point('27.99400000', '-82.39720000') });
-    const outside = disposal('101022', shaped, { endGps: point('27.98150000', '-82.38900000') });
+    // About 1.4 km north of the site's GPS, inside the shape; and about 950 m east of it, outside
+    // the shape.
+    const inside = disposal('101022', shaped, { endGps: point('39.10250000', '-75.62000000') });
+    const outside = disposal('101022', shaped, { endGps: point('39.09000000', '-75.60900000') });
 
     expect(flagsOf([inside])).toEqual([]);
     const flags = flagsOf([outside]);
@@ -352,7 +352,7 @@ describe('a site’s area', () => {
       "Ticket 101022: dumped outside Marsh Road TDSR's area. Flagged for review.",
     ]);
     expect(flags[0]?.facts).toEqual({
-      gps: { latitude: '27.98150000', longitude: '-82.38900000' },
+      gps: { latitude: '39.09000000', longitude: '-75.60900000' },
       siteId: marshRoad.id,
       areaVersionId: 'area-version-1',
     });
@@ -525,7 +525,7 @@ describe('where the debris went', () => {
     });
 
     // A site whose name says TDSR but whose type has no built-in key isn't one.
-    const namedOnly = site('North Staging TDSR', point('28.05000000', '-82.30000000'));
+    const namedOnly = site('North Staging TDSR', point('39.15000000', '-75.50000000'));
     expect(
       flagsOf([recorded('HAUL_OUT_DISPOSAL', '201002', at(mon, '14:10'), { site: namedOnly })]),
     ).toEqual([]);

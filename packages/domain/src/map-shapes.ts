@@ -27,7 +27,7 @@ export type MultiPolygonShape = {
 
 export type MapGeometry = PolygonShape | MultiPolygonShape;
 
-// Exact decimals to eight places: "-82.60000000".
+// Exact decimals to eight places: "-75.80000000".
 export interface BoundingBox {
   readonly westLongitude: string;
   readonly southLatitude: string;

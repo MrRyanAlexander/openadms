@@ -148,8 +148,8 @@ export const sync: Story = {
           chargesTippingFee: false,
           ineligibleSite: false,
           permitNumber: 'FDEP-DMS-2026-0117',
-          latitude: '27.98150000',
-          longitude: '-82.39720000',
+          latitude: '39.09000000',
+          longitude: '-75.62000000',
           activationDate: new Date('2026-10-12'),
         },
       });
@@ -527,8 +527,8 @@ export const sync: Story = {
         number: scanned('101020'),
         ...vegetative,
         loadCall: 70,
-        endLatitude: '27.98150000',
-        endLongitude: '-82.39720000',
+        endLatitude: '39.09000000',
+        endLongitude: '-75.62000000',
       }),
     );
     story.at(monday('10:51'), 'Ana scans 730416 again, at 40 Birch Ln');
@@ -553,8 +553,8 @@ export const sync: Story = {
         number: scanned('101020'),
         ...vegetative,
         loadCall: 65,
-        endLatitude: '27.98150000',
-        endLongitude: '-82.39720000',
+        endLatitude: '39.09000000',
+        endLongitude: '-75.62000000',
       }),
     );
     const emptyBed = kim.photograph({ of: { kind: 'FIELD_EVENT', id: dis1140 } });
@@ -632,7 +632,7 @@ export const sync: Story = {
       [
         new Date(monday('11:28')).toISOString(),
         new Date(monday('11:40')).toISOString(),
-        '27.98150000',
+        '39.09000000',
         '730416',
         65,
         '101020',
@@ -1008,13 +1008,13 @@ export const sync: Story = {
     const halfFix = quick(ana, 'LOAD', 'COLLECTION', '730415', {
       number: made,
       ...vegetative,
-      endLatitude: '27.94620000',
+      endLatitude: '39.13850000',
     });
     const pastNinety = quick(ana, 'LOAD', 'COLLECTION', '730415', {
       number: made,
       ...vegetative,
       endLatitude: '91.20000000',
-      endLongitude: '-82.45870000',
+      endLongitude: '-75.55370000',
     });
     // A phone never lets these through; they reach the server broken anyway (ADR-329). Each is
     // its own record, told as Ana's phone would send it.
@@ -1349,26 +1349,26 @@ export const sync: Story = {
         {
           status: 'PENDING',
           fix: [null, null],
-          unreadableGps: { end: { latitude: '27.94620000', longitude: null } },
+          unreadableGps: { end: { latitude: '39.13850000', longitude: null } },
         },
         {
           status: 'PENDING',
           fix: [null, null],
-          unreadableGps: { end: { latitude: '91.20000000', longitude: '-82.45870000' } },
+          unreadableGps: { end: { latitude: '91.20000000', longitude: '-75.55370000' } },
         },
         [
           [
             {
               code: 'GPS_UNREADABLE',
               message:
-                'GPS unreadable at the end: latitude "27.94620000", longitude none as sent. Kept without that fix.',
+                'GPS unreadable at the end: latitude "39.13850000", longitude none as sent. Kept without that fix.',
             },
           ],
           [
             {
               code: 'GPS_UNREADABLE',
               message:
-                'GPS unreadable at the end: latitude "91.20000000", longitude "-82.45870000" as sent. Kept without that fix.',
+                'GPS unreadable at the end: latitude "91.20000000", longitude "-75.55370000" as sent. Kept without that fix.',
             },
           ],
         ],
@@ -1400,7 +1400,7 @@ export const sync: Story = {
       };
     };
     const answered = another('40 Birch Ln', { answers: { 'police-report': 'BC-2026-1187' } });
-    const blank = another('14 Heron St', { answers: {}, latitude: '27.94620000' });
+    const blank = another('14 Heron St', { answers: {}, latitude: '39.13850000' });
     const fits = await intake.receive({ record: 'INCIDENT', incident: answered });
     const doesNot = await intake.receive({ record: 'INCIDENT', incident: blank });
     const incidents = await api.incident.findMany({
@@ -1429,7 +1429,7 @@ export const sync: Story = {
           [{ 'police-report': 'BC-2026-1187' }, true, null],
           [{}, true, null],
         ],
-        'GPS unreadable: latitude "27.94620000", longitude none as sent. Kept without that fix.',
+        'GPS unreadable: latitude "39.13850000", longitude none as sent. Kept without that fix.',
       ],
     );
     story.check(

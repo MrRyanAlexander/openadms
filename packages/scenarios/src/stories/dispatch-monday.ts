@@ -525,16 +525,16 @@ export const dispatchMonday: Story = {
     );
     anaPhone.complete(collection, {
       number: made,
-      endLatitude: '27.94620000',
-      endLongitude: '-82.45870000',
+      endLatitude: '39.13850000',
+      endLongitude: '-75.55370000',
     });
     story.at(at('09:05'), 'Kim scans the badge at the Marsh Road TDSR tower, offline');
     const disposal = kimPhone.begin('LOAD', 'DISPOSAL', '730415');
     story.at(at('09:25'), 'Kim calls the load 80% and scans 101001 last');
     kimPhone.complete(disposal, {
       number: scanned('101001'),
-      endLatitude: '27.99810000',
-      endLongitude: '-82.39120000',
+      endLatitude: '39.09030000',
+      endLongitude: '-75.62020000',
       loadCall: 80,
     });
 

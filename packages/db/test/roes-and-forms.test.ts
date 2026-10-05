@@ -473,8 +473,8 @@ describe('a survey', () => {
       monitor: world.monitor,
       made_at: new Date('2026-10-09T14:40:00Z'),
       device_utc_offset_minutes: -240,
-      latitude: '27.95010000',
-      longitude: '-82.44730000',
+      latitude: '39.16000000',
+      longitude: '-75.57000000',
     });
     expect(after).not.toBe(before);
     expect(
@@ -850,8 +850,8 @@ describe('a citizen drop-off log', () => {
       site: world.site,
       monitor: world.monitor,
       made_at: new Date('2026-10-13T19:20:00Z'),
-      latitude: '27.95010000',
-      longitude: '-82.44730000',
+      latitude: '39.16000000',
+      longitude: '-75.57000000',
       resident_name: 'Carl Jensen',
       origin_address: '14 Heron St',
       notes: 'Two pickup loads of limbs.',
