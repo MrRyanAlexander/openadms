@@ -67,7 +67,7 @@ record (why Phase 0 existed, its exit criteria and how each was met, the spec tr
 question rounds) moved word for word to `DECISIONS.md`'s scratchpad, "Moved from NEXT.md,
 2026-10-02"; `ROADMAP.md` §3a keeps the table.
 
-**Still live from the spec track:** `spec/acceptance/` is 4 of 9 files (`04-field-capture.md`: 98 scenarios, 84 passing after 1.3.6, ADR-327; `01-setup.md`: 82
+**Still live from the spec track:** `spec/acceptance/` is 4 of 9 files (`04-field-capture.md`: 98 scenarios, 93 passing after 1.3.7, ADR-332; `01-setup.md`: 82
 scenarios, 67 passing (AC-01-19 since 1.2.3, AC-01-09 since 1.3.2, AC-01-27 whole since 1.3.4) and AC-01-48, 55 and 80 in part; `02-people-and-devices.md`: 74
 scenarios, 35 passing at the database and four in part after 1.1.10, ADR-315; `03-certification.md`: 60 scenarios, 39 passing and 1 in part after 1.3.5, ADR-326); each other file is the first task of the milestone that builds its part
 (ADR-300).
@@ -81,7 +81,7 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-04: Phase 1 is open, twenty-one tasks done; Milestones 1.1 and 1.2 are done, 1.3 has six of seven)
+### Where things stand (2026-10-04: Phase 1 is open, twenty-two tasks done; Milestones 1.1, 1.2 and 1.3 are done)
 - **Phase 1 (data core and engine) is the active phase**, opened by the user on 2026-10-01
   (ADR-299). Its plan is `BACKLOG.md`'s ten milestones and 47 tasks (ADR-300): setup records →
   certifications and capacity → tickets and numbers → sync intake → reconciliation → the rule engine
@@ -171,17 +171,17 @@ of `DECISIONS.md`.
   one rule in `packages/domain` (`FieldEventDetails`), asked by `packages/contracts`
   (`fieldEventDetailsSchema`). The ROE found joins with its table (1.3.6); and **1.3.5, scale
   receipts and photographs (2026-10-04, ADR-326)**: `ScaleReceipt` (the site's number as
-  written, once per project; every weight optional, none worked out) and `Photo` (exactly one
+  written, never unique since ADR-331; every weight optional, none worked out) and `Photo` (exactly one
   owner of its own project: a field event, a certification or a scale receipt today; two
   fingerprints and two unique places in storage, written once; a view only on a
   certification's); `FieldEvent.scaleReceiptId`, only on a disposal and a haul-out disposal,
   its own project's; both tables seen by a client user and an auditor with their project, a
-  photograph without where its file is kept. A certification is never copied (ADR-328, 330); and **1.3.6, ROEs and forms (2026-10-04, ADR-327)**: `Roe` and `RoeScopeItem`
+  photograph without where its file is kept. A certification is never copied (ADR-328, 330), and a scale receipt's number is never unique (ADR-328, 331); and **1.3.6, ROEs and forms (2026-10-04, ADR-327)**: `Roe` and `RoeScopeItem`
   (configuration: a number once per project, a phone's or the back office's, its scope picked
   from its own project's load form or the payable types) and `Survey`, `Incident`, `DropOffLog`
   (evidence, each saying where it came from as a field event does); each record's answers with
   the definition answered, of its own project's form of its kind, or `{}` with none;
-  `formAnswersSchema` in `packages/contracts`; `FieldEvent.roeId`; `Photo`'s four new owners.
+  `formAnswersSchema` in `packages/contracts`; `FieldEvent.roeId`; `Photo`'s four new owners; and **1.3.7, the harness's phones capture every kind (2026-10-04, ADR-332: Milestone 1.3 is done)**: the one rule that works a unit rate pay item out from the size bands (`SizeBands.payItemFor`, `packages/domain`); the harness's phone holds its assignment's lists, scans the badge at New, picks by name and takes the number last (its own block's next, or scanned; entered again); the story `p1-field-days`: P1's Monday and Tuesday, 25 field events, a scale receipt, an incident and a drop-off log, every field event `PENDING`.
   **Corrected by the user on
   2026-10-02 (ADR-301):** a pay item's code is unique on its project (ADR-147 had read their answer
   backwards), a pay item is its code and its description (no separate name, no "line number"), and
@@ -365,28 +365,39 @@ permissions and viewers, ADR-315), **1.1.11 (the example world's setup as a stor
 Milestone 1.1 is done)**, **1.2.1 (the acceptance scenarios for certifications, ADR-317: 60)**,
 **1.2.2 (the capacity math, ADR-320: `Capacity` in `packages/domain`)**, **1.2.3 (the
 certification's records, ADR-321: Milestone 1.2 is done)**, **1.3.1 (the acceptance scenarios for
-tickets and numbers, ADR-322: 98)**, **1.3.2 (numbering, ADR-323)**, **1.3.3 (what every field event records, ADR-324)**, **1.3.4 (what each kind records, ADR-325)**, **1.3.5 (scale receipts and photographs, ADR-326)**, **1.3.6 (ROEs and forms, ADR-327)**; and the user's correction of
+tickets and numbers, ADR-322: 98)**, **1.3.2 (numbering, ADR-323)**, **1.3.3 (what every field event records, ADR-324)**, **1.3.4 (what each kind records, ADR-325)**, **1.3.5 (scale receipts and photographs, ADR-326)**, **1.3.6 (ROEs and forms, ADR-327)**, **1.3.7 (the harness's phones capture every kind, ADR-332: Milestone 1.3 is done)**; and the user's correction of
 2026-10-02 (ADR-301: a pay item's code is unique, it has a description and no name, a duplicate
 rule is refused).
 
-**First, C67 (b), then 1.3.7** (the user, 2026-10-04, ADR-328…330): C67 (a), certification
-copying taken out, is done (ADR-330); **C67 (b), a scale receipt's number is no longer unique**
-(drop `@@unique([projectId, receiptNumber])` by a new migration; its test, AC-04's scenario,
-DATA-MODEL §8, `adms-scale-receipts`), comes before 1.3.7's story; C67 (c)…(e) before 1.4.2.
+**C67 (a) and (b) are done** (the user, 2026-10-04, ADR-328…331): certification copying is
+taken out (ADR-330) and **a scale receipt's number is no longer unique** (ADR-331: the key
+dropped by the fifty-seventh migration; two receipts of one number on a project are both kept;
+AC-04-72 rewritten). **C67 (c)…(e) come before 1.4.2.**
 **A column taken off a table viewers see** goes in three migrations (ADR-330): a guard stub that
 drops the `viewer_<table>` view, made while the schema is unchanged; the generated drop; a guard
 stub that runs `guard_viewer` again.
-👉 **Task 1.3.7, the harness's phones capture every kind** (`BACKLOG.md`, Milestone 1.3): badge
-first, the number last and re-entered; a unit rate pay item worked out from the bands by the one
-rule the phone and the server share; the story of a day of P1's field events, every kind, each
-landing `PENDING`. Its scenarios: `spec/acceptance/04-field-capture.md` AC-04-10, 11, 17, 42, 59,
-70, 91, 92, 93; REQ-112g, 120a, REQ-112f's phone part. **Carried:** C63's points for 1.3.7 (the
-harness's phone sends the kind-specific details, `RecordedEvent` has none yet, and its intake
-reads the debris type's form from the project and workflow; point 18: a cancelled field event and
-a re-entered number that doesn't match); C64 (a phone gives its field event the next number of
-its block, `PhoneNumbers.next`, and a certifying phone its cert number); C66 (a phone makes an
-ROE with the next number of its ROE block). A story task: the stack is needed (`pnpm local:up`),
-stopped at close-out. It closes Milestone 1.3; then 1.4.1.
+👉 **Task 1.4.1, the acceptance scenarios for sync** (`BACKLOG.md`, Milestone 1.4):
+`spec/acceptance/05-sync.md`, from `spec/parts/05-sync.md` and `adms-exceptions` §4.3a: what
+Phase 1's intake does (every record received, in any order, in bursts; a second field event of
+one kind on one ticket quarantined in full; a retry of a phone-made id is the same record; an
+out-of-service phone's work), each scenario naming the task that proves it; the endpoint, the
+idempotency ledger and the manifest name Phase 2. A docs task: no stack needed. **Carried:** C31's
+first part; C63, C64, C65, C66 and C68's points for 1.4.2 (list them in the file's "left to the
+task" table); C67 (c)…(g). Then C67 (c), (d), (e), each its own task, then 1.4.2.
+
+**The harness's phones** (ADR-332): a story signs a phone in with `story.phone({ …, lists: await
+phoneLists(api, { assignmentId, deviceId }) })` after its blocks are cut (`NumberAllocator.topUp`),
+and the next day with `phone.signIn(…)` (the phone keeps its own count of numbers). `begin(workflow,
+kind, badge?)` is New (a unit rate event with no badge is the working crew's); `complete(id, { number:
+made | scanned('101001') | typed('101060', 'Barcode damaged') | chained(idBefore), … })` takes
+every pick **by name** and answers `{ saved, event }` or a `NUMBER_MISMATCH` (`reentered`).
+`incident`, `dropOffLog`, `roe`, `takeCertNumber`, `cancel`, `lastUsedNumber(series)`. The
+stand-in intake (`intake.ts`) writes field events with their details, items and carried tickets,
+scale receipts, incidents and drop-off logs; **it throws on an ROE**: 1.4.2's intake replaces it
+(C68). `passOver(series, upTo)` is the harness's own, for numbers a story doesn't tell (201002,
+201003). The worker works the pay item out again with `SizeBands.payItemFor` (1.5.7). The story
+`p1-field-days` (`packages/scenarios/src/stories/`) is the model for a day of field events; it
+writes no certification, rule or load pay item.
 
 **ROEs and forms** (ADR-327): a test writes an ROE with `roeLike(world, …)` (Ana's `R-0007` on
 P2: 412 Cedar Ct, signed 9 October; state `project_id` and `assignment_id` for one on P1) and a
@@ -549,7 +560,7 @@ then `SELECT guard_list('<table>', '<domain>');` in its guard migration; a new b
 `packages/domain`'s `builtInKeys` first, with an ADR (ADR-302).
 
 Start every command with `eval "$(fnm env --shell zsh)"`; the checks are **`adms-verify`** (the chain
-is 56 files, 1,137 tests; fifty-six migrations; `pnpm scenarios` runs five stories, 16, 18, 52, 25 and 15 checks),
+is 56 files, 1,160 tests; fifty-seven migrations; `pnpm scenarios` runs six stories, 16, 18, 52, 25, 15 and 35 checks),
 with **`pnpm security`** (7 passed, 0 failed, ADR-291). The database tests, the map servers' tests and
 the stories need `pnpm local:up` first; stop it at close-out (ADR-277). A schema change goes through
 Prisma (`prisma migrate dev --create-only`), a guard into its own empty stub (ADR-113); **try a guard

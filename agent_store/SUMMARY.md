@@ -1,13 +1,13 @@
 # Open ADMS — Current decisions and gaps, at a glance
 
 **The present tense of the project on one page.** `DECISIONS.md` and `DEVIATIONS.md` are the full
-history, with 330 ADRs and 70 KDs, many superseded. This page says what is true **now** and which
+history, with 331 ADRs and 70 KDs, many superseded. This page says what is true **now** and which
 entries to cite. The reasons live in the ADRs and the skills.
 
 - **Keep it current:** when you add, amend or supersede an ADR, or open or close a KD, update this
   page **in the same response** (`adms-decisions`).
 - **If this page and a log entry disagree,** the newest ADR wins: fix this page and say so.
-- Updated 2026-10-04, through ADR-330 / KD-70. **C67 (a) is built (ADR-330): certification copying is out of the schema, the service, the domain and the story; C67 (b)…(g) are not.** **The user answered the agent defaults of 1.3.2…1.3.6 (ADR-328; §4): certifications are never copied, a scale receipt's number is never unique, an incident may name a contractor, cert number and ROE number, a viewer's sight of private citizens' names is the firm's choice. Not built yet (BACKLOG C67).** **Task 1.3.6, ROEs and forms, is done (ADR-327; see "Field events").** Task 1.3.5, scale receipts and photographs, is done (ADR-326). Task 1.3.4, what each kind of field event records, is done (ADR-325). Task 1.3.3, what every field event records, is done (ADR-324). Task 1.3.2, numbering, is done (ADR-323; see "Tickets and numbers"). Rounds 13–26 are answered (ADR-145…228).
+- Updated 2026-10-04, through ADR-332 / KD-70. **Task 1.3.7 is done (ADR-332): Milestone 1.3 is done; next 1.4.1.** **C67 (a) and (b) are built: certification copying is out of the schema, the service, the domain and the story (ADR-330), and a scale receipt's number is no longer unique (ADR-331: the key dropped by the fifty-seventh migration); C67 (c)…(g) are not.** **The user answered the agent defaults of 1.3.2…1.3.6 (ADR-328; §4): certifications are never copied, a scale receipt's number is never unique, an incident may name a contractor, cert number and ROE number, a viewer's sight of private citizens' names is the firm's choice. The first two are built (ADR-330, 331); the others not yet (BACKLOG C67).** **Task 1.3.6, ROEs and forms, is done (ADR-327; see "Field events").** Task 1.3.5, scale receipts and photographs, is done (ADR-326). Task 1.3.4, what each kind of field event records, is done (ADR-325). Task 1.3.3, what every field event records, is done (ADR-324). Task 1.3.2, numbering, is done (ADR-323; see "Tickets and numbers"). Rounds 13–26 are answered (ADR-145…228).
   **Phase 1 (data core and engine, rebuilt) is open, at the user's word (ADR-299).** Its plan is
   `BACKLOG.md`'s ten milestones and 47 tasks, one task per response, each milestone opening with
   its part's acceptance scenarios in `spec/acceptance/` (ADR-300). Done: the plan,
@@ -395,7 +395,7 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   `ContractorSetup.merge` (the certifications that named the duplicate name the kept one). **"Replaced on" is the new certification's certified time**, as a day in the project's time
   zone. A certification's number is the phone's (the next of its block, or the pre-printed
   sheet's). The story
-  `certification` runs it: `pnpm scenarios` runs five stories (16, 18, 52, 25, 15 checks since ADR-330). Sixty
+  `certification` runs it: `pnpm scenarios` runs six stories (16, 18, 52, 25, 15, 35 checks since ADR-332). Sixty
   models, forty-five migrations. **`MapVersion.loadedAt`'s default is `transaction_timestamp()`** (KD-70:
   Prisma read `CURRENT_TIMESTAMP` back as its own `now()` and wrote it into every later
   migration). Left for later: C62. *Agent defaults.* [321]
@@ -840,7 +840,9 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   defaults.*
 - **Scale receipts and photographs, as built (task 1.3.5)** [326]: **`ScaleReceipt`**
   (`spec/DATA-MODEL.md` §4.2): its own record, apart from any ticket; the site's number **exactly
-  as written**, once per project; its site one of its own project's; who entered it (never the
+  as written**, **never unique** (the user, ADR-328; the key taken off, ADR-331: a receipt book
+  starts again at 001, so two receipts of one number are both kept; a duplicate *record* is the
+  worker's to flag, 1.5.x); its site one of its own project's; who entered it (never the
   system actor), when, on which phone if any. **Every weight is what the paper says**: all four
   may be missing (a receipt-book slip), none is worked out from another, a net of nought or
   below nought is kept for a flag; only a gross or a tare below nought is refused.
@@ -892,6 +894,21 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
 - **An outside design review** (contract-first templates, a state machine replacing rules, a billing
   matrix, hard field checks) was weighed: only the event idea is taken; each other point is already
   ours or declined, with the reason, in ADR-238. [238]
+- **The harness's phones capture every kind (built, ADR-332).** **The pay item a unit rate
+  measurement falls to is one rule**, `SizeBands.payItemFor` in `packages/domain`, for the phone
+  and the worker: a payable type with one pay item is that pay item, measured or not (ADR-210);
+  with several, the one whose band holds the diameter (a circumference ÷ 3.14, half up to a
+  tenth), else **no pay item** (*agent default:* several pay items and nothing measured is no pay
+  item too). The harness's phone (`packages/scenarios`) holds its assignment's lists, read from
+  the server (never a rate, a rule or a load's pay item), scans the badge at New, picks by name,
+  and takes the number last: the first field event's from its own block, the second's scanned,
+  either entered again. *Agent defaults (the phone's own, Phase 3 may overturn):* **a number
+  entered again that doesn't match saves nothing, the field event stays open and no number is
+  used up; a cancelled field event stays on the phone, unsent, with no number; a typed number
+  isn't entered twice; the next of a split chain carries its chain's number.** The story
+  `p1-field-days` records P1's Monday and Tuesday: 25 field events, a scale receipt, an incident
+  and a drop-off log, every field event `PENDING`. The stand-in intake writes them; the real one
+  is 1.4.2 (C68). [332]
 
 ### Tickets and numbers — `adms-ticket-workflows`, `adms-exceptions`
 - Two field events per load, two witnesses. The load call is on the **disposal** for a standard load
@@ -1199,7 +1216,7 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   there is **no weight-vs-load-call check**. **One weight shared by a tandem** is split **by certified capacity**
   (derived, stored apart, summing exactly) and **both tickets are flagged**; weighing each container
   separately avoids it. [165, 175] **The record is built (ADR-326; see "Field events"):** its
-  own table, the number once per project, weights as written, pointed at by disposals.
+  own table, the number never unique (ADR-328, 331), weights as written, pointed at by disposals.
 
 ### Agent tooling and terms
 - Front door `spec/INDEX.md`; rules in skills; product questions in `spec/QUESTIONS.md`; the
@@ -1442,11 +1459,11 @@ its scenario.
 
 ## 4. Waiting on the user
 
-**Nothing blocks the next task (1.3.7, the harness's phones capture every kind).**
+**Nothing blocks the next task (1.4.1, the acceptance scenarios for sync).**
 - **Decided by the user 2026-10-04 (ADR-328), not built yet (BACKLOG C67) but for the first; the
   lines above and below that say otherwise are superseded:** **a certification is never copied**
   (configuration is: pay items, rules; **built, ADR-330**); **a scale receipt's number is never unique** (a receipt book restarts
-  at 001; only a duplicate *record* matters); **an incident may name a contractor, a cert number
+  at 001; only a duplicate *record* matters; **built, ADR-331**); **an incident may name a contractor, a cert number
   and an ROE number**, each optional, offered as the project's setup says; **a viewer sees
   private citizens by name unless the firm said otherwise for that viewer**, set when it adds
   them. Confirmed as built: loose ROE scope and incident sub-type; no database limit of 8
