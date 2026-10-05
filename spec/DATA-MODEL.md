@@ -1783,8 +1783,13 @@ monitor_id, started_at, ended_at, address, latitude, longitude, zone, open_flags
 ```text
 project, workflow, ticket_number, split_suffix, transaction_number,
 pay_item_code, pay_item_description, payable_type, unit, quantity, rate, amount,
-contract, prime, operating_sub, rule, ticket_date, status, qc_status, invoice_batch, locked_at
+contract, prime, operating_sub, rule, ticket_date, status, qc_status, invoice_batch, locked_at,
+mileage, mileage_source, map_data_date
 ```
+
+A load's or a haul-out's line shows the mileage of the property or pile it prices, read from its
+collection row (the user, 2026-10-05, ADR-350 (4): "we want to make sure we are putting it on the
+final transactions"); a unit rate line has none.
 
 **Field events** (the evidence, as captured)
 
