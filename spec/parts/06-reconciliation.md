@@ -83,7 +83,7 @@ tickets included: the worker draws its conclusions again from the corrected even
 
 The checks and formulas in `packages/domain` (plain classes, unit-tested alone); the run in
 `apps/worker` on the Postgres job queue; routing and address lookup on our own Valhalla and
-Nominatim servers (ARCHITECTURE §3, §13, §18). Not built yet: Phase 0 has only a provisional database schema (ADR-268).
+Nominatim servers (ARCHITECTURE §3, §13, §18). Built without prices (Milestone 1.5): the run is `apps/worker/src/reconciliation/` (ADR-352), driven by the scenario harness until Phase 2's job queue starts it; steps 6 and the transactions of step 7 are Milestones 1.6 and 1.7.
 
 ## Open questions
 
