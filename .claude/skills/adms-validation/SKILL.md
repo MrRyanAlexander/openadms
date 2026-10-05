@@ -279,7 +279,7 @@ weight) is stored apart from what was observed, and the parts **sum exactly** to
 - **Split haul-out shares** (ADR-295): each pile records a **running** load call, how full the
   container is after it; the last is the haul-out's call. A pile's part = its call − the call before
   it; its CY = capacity × that part ÷ 100; its share of a scale weight = that part ÷ the last call,
-  to two decimals, the remainder given to one pile so the shares sum exactly. Golden mission 201004: `730419`, 110 CY,
+  to two decimals, the remainder given to one pile (the largest, the last of equals: agent default, ADR-343) so the shares sum exactly. Golden mission 201004: `730419`, 110 CY,
   calls 10%, 35%, 85% → parts 10, 25, 50 → **11.0, 27.5 and 55.0 CY** (93.5 CY); the mission pays it
   by weight (ADR-297), and its 24.00-ton scale weight → **2.82, 7.06 and 14.12 t**, the billed quantities. A call not higher than the one before it is flagged and the piles
   aren't shared out until it's corrected. The load-call limits judge only the last call.
