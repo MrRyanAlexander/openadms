@@ -7,7 +7,7 @@ entries to cite. The reasons live in the ADRs and the skills.
 - **Keep it current:** when you add, amend or supersede an ADR, or open or close a KD, update this
   page **in the same response** (`adms-decisions`).
 - **If this page and a log entry disagree,** the newest ADR wins: fix this page and say so.
-- Updated 2026-10-04, through ADR-333 / KD-70. **Task 1.4.1 is done (ADR-333): `spec/acceptance/05-sync.md`, 56 scenarios, decides nothing; sixteen points are left to the tasks that build them (1.4.2 mostly); next C67 (c), (d), (e), then 1.4.2.** Task 1.3.7 is done (ADR-332): Milestone 1.3 is done. **C67 (a) and (b) are built: certification copying is out of the schema, the service, the domain and the story (ADR-330), and a scale receipt's number is no longer unique (ADR-331: the key dropped by the fifty-seventh migration); C67 (c)…(g) are not.** **The user answered the agent defaults of 1.3.2…1.3.6 (ADR-328; §4): certifications are never copied, a scale receipt's number is never unique, an incident may name a contractor, cert number and ROE number, a viewer's sight of private citizens' names is the firm's choice. The first two are built (ADR-330, 331); the others not yet (BACKLOG C67).** **Task 1.3.6, ROEs and forms, is done (ADR-327; see "Field events").** Task 1.3.5, scale receipts and photographs, is done (ADR-326). Task 1.3.4, what each kind of field event records, is done (ADR-325). Task 1.3.3, what every field event records, is done (ADR-324). Task 1.3.2, numbering, is done (ADR-323; see "Tickets and numbers"). Rounds 13–26 are answered (ADR-145…228).
+- Updated 2026-10-04, through ADR-335 / KD-70. **C67 (c) is built (ADR-334): an incident may name the contractor involved, a cert number and an ROE number, each optional, and the project's incident form's `incidentOffers` says which a phone shows; next C67 (d), (e), then 1.4.2. The user approved acceptance files 01…05 (ADR-335).** **Task 1.4.1 is done (ADR-333): `spec/acceptance/05-sync.md`, 56 scenarios, decides nothing; sixteen points are left to the tasks that build them (1.4.2 mostly); next C67 (c), (d), (e), then 1.4.2.** Task 1.3.7 is done (ADR-332): Milestone 1.3 is done. **C67 (a) and (b) are built: certification copying is out of the schema, the service, the domain and the story (ADR-330), and a scale receipt's number is no longer unique (ADR-331: the key dropped by the fifty-seventh migration); C67 (c)…(g) are not.** **The user answered the agent defaults of 1.3.2…1.3.6 (ADR-328; §4): certifications are never copied, a scale receipt's number is never unique, an incident may name a contractor, cert number and ROE number, a viewer's sight of private citizens' names is the firm's choice. The first two are built (ADR-330, 331); the others not yet (BACKLOG C67).** **Task 1.3.6, ROEs and forms, is done (ADR-327; see "Field events").** Task 1.3.5, scale receipts and photographs, is done (ADR-326). Task 1.3.4, what each kind of field event records, is done (ADR-325). Task 1.3.3, what every field event records, is done (ADR-324). Task 1.3.2, numbering, is done (ADR-323; see "Tickets and numbers"). Rounds 13–26 are answered (ADR-145…228).
   **Phase 1 (data core and engine, rebuilt) is open, at the user's word (ADR-299).** Its plan is
   `BACKLOG.md`'s ten milestones and 47 tasks, one task per response, each milestone opening with
   its part's acceptance scenarios in `spec/acceptance/` (ADR-300). Done: the plan,
@@ -877,8 +877,11 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   no worker column: "its time" is `madeAt`; one check tells a phone's (phone, assignment, setup
   version) from one created in the back office (person, reason); a whole fix on the earth, or
   none. A survey's ROE and a drop-off log's site are its own project's; a survey has no unique
-  key; **an incident names no certification** (the truck is in its parties and description)
-  and its sub-type isn't held to its type. **The firm's own fields:** `answers` is an object;
+  key; **an incident may name the contractor involved, a cert number and an ROE number**, each
+  optional (ADR-328 (3), built ADR-334: the contractor one on its own project, the
+  certification and the ROE found its own project's, each only with its number; the project's
+  incident form's `incidentOffers` says which a monitor is offered, never a refusal on the
+  record); its sub-type isn't held to its type. **The firm's own fields:** `answers` is an object;
   the definition answered comes with its form and document type, all three or none, of its own
   project's form of the record's kind; **no definition means `{}`** (`formDefinitionId` is
   optional: a form with no added field has no definition). **The answers' schema is
@@ -1459,7 +1462,7 @@ its scenario.
 
 ## 4. Waiting on the user
 
-**Nothing blocks the next task (C67 (c), an incident's optional contractor, cert number and ROE number; then (d), (e), then 1.4.2, intake).**
+**Nothing blocks the next task (C67 (d), a viewer's sight of private citizens' names; then (e), then 1.4.2, intake).** **Yours to approve or overturn from C67 (c) (ADR-334):** the setting lives on the project's incident form; a new incident form starts offering the contractor and a cert number, and an ROE number where the program type requires ROEs; scenarios AC-01-83 and AC-04-99…101, added after your approval of the files (ADR-335).
 - **Decided by the user 2026-10-04 (ADR-328), not built yet (BACKLOG C67) but for the first; the
   lines above and below that say otherwise are superseded:** **a certification is never copied**
   (configuration is: pay items, rules; **built, ADR-330**); **a scale receipt's number is never unique** (a receipt book restarts
@@ -1476,8 +1479,8 @@ its scenario.
   disposal with two quantities is flagged.** **A truck on a second project is certified there
   from scratch.** **The back office can archive and label a photograph.** A load of white goods
   never has a load call (`adms-ticket-workflows` §4.2b, unchanged). Nothing waits on the user.
-- **From task 1.3.6 (ADR-327), yours to overturn:** **an incident names no certification** (the
-  truck it concerns is written in its parties and description); **an ROE carries no setup
+- **From task 1.3.6 (ADR-327), yours to overturn:** ~~an incident names no certification~~
+  (overturned, ADR-328 (3); built, ADR-334); **an ROE carries no setup
   version**, and the database lets the back office and a phone edit one freely, audited;
   **a record on a form with no fields of the firm's own has no definition** and empty answers;
   **a photograph field's answer is that photograph's id**; an incident's sub-type isn't held to

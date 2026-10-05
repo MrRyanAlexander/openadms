@@ -1,6 +1,6 @@
 # Acceptance scenarios — Part 2, People and devices
 
-**Draft**: agent-written (ADR-314); the user approves.
+✅ ** Approved**: agent-written (ADR-314); the user approves.
 
 ← [Acceptance scenarios](README.md) · The part page: [Part 2 — People & devices](../parts/02-people-and-devices.md)
 

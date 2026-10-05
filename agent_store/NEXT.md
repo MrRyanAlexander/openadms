@@ -372,22 +372,32 @@ rule is refused).
 **C67 (a) and (b) are done** (the user, 2026-10-04, ADR-328…331): certification copying is
 taken out (ADR-330) and **a scale receipt's number is no longer unique** (ADR-331: the key
 dropped by the fifty-seventh migration; two receipts of one number on a project are both kept;
-AC-04-72 rewritten). **C67 (c)…(e) come before 1.4.2.**
+AC-04-72 rewritten). **C67 (d) and (e) come before 1.4.2.**
 **A column taken off a table viewers see** goes in three migrations (ADR-330): a guard stub that
 drops the `viewer_<table>` view, made while the schema is unchanged; the generated drop; a guard
 stub that runs `guard_viewer` again.
 **Task 1.4.1 is done (ADR-333):** `spec/acceptance/05-sync.md`, 56 scenarios (AC-05-01…56), 39 of
 them task 1.4.2's; its "Left to the task that builds it" table has sixteen points, and the
 paragraph under it lists what C31, C63…C68 carry into 1.4.2.
-👉 **C67 (c), an incident's optional contractor, cert number and ROE number** (`BACKLOG.md`, the
-register, C67; ADR-328 (3)): an incident may name the contractor involved, a certification by its
-cert number and an ROE by its number, each optional, and the project sets which of them its
-monitors are offered. A schema task (the brief's order: the model through Prisma, a guard stub,
-the exact lists, the example world, tests by scenario ID; AC-04's incident scenarios follow);
-it needs the stack (`pnpm local:up`; Docker Desktop may need `open -a Docker`). Then **C67 (d)**
-(a viewer's sight of private citizens' names, set per viewer) and **C67 (e)** (a photograph's
-archive mark and label), each its own task, then **1.4.2, intake** (read `05-sync.md` first: its
-scenarios, its sixteen open points, and the carried items under them).
+**C67 (c) is done (ADR-334):** an incident may name the contractor involved (`contractorId`, one
+on its own project), a cert number (`certNumber`, `certificationId`) and an ROE number
+(`roeNumber`, `roeId`), each optional; the project's incident form's `incidentOffers` says which a
+phone shows, and nothing is refused on a record for naming what isn't offered. **An incident form
+is written with its `incidentOffers`** (an empty list for none; no other form has one): the
+example world's P1 offers `CONTRACTOR` and `CERT_NUMBER`, and `FormSetup.form` takes
+`incidentOffers` (a new one starts from the domain's `IncidentOffers.startingFor(programType)`).
+**A configuration table that gains a column needs no `guard_table` rerun** (tried: nothing
+changes); an evidence table does, and a viewed table reruns `guard_viewer`. **The user approved
+acceptance files 01…05 (ADR-335);** AC-01-83 and AC-04-99…101 were added after and wait for them.
+👉 **C67 (d), a viewer's sight of private citizens' names, set per viewer** (`BACKLOG.md`, the
+register, C67; ADR-328 (4)): by default a read-only viewer sees an ROE's owner and contact details
+and a drop-off log's resident and address; the firm can mark a viewer so they don't. A schema
+task (the setting on the viewer, the views that hide the columns, `test/support/viewers.ts`,
+tests by scenario ID); it needs the stack (`pnpm local:up`; Docker Desktop may need
+`open -a Docker`). Then **C67 (e)** (a photograph's archive mark and label), its own task, then
+**1.4.2, intake** (read `05-sync.md` first: its scenarios, its sixteen open points, and the
+carried items under them; it also looks up the certification and the ROE an incident's numbers
+find).
 
 **The harness's phones** (ADR-332): a story signs a phone in with `story.phone({ …, lists: await
 phoneLists(api, { assignmentId, deviceId }) })` after its blocks are cut (`NumberAllocator.topUp`),
@@ -564,7 +574,7 @@ then `SELECT guard_list('<table>', '<domain>');` in its guard migration; a new b
 `packages/domain`'s `builtInKeys` first, with an ADR (ADR-302).
 
 Start every command with `eval "$(fnm env --shell zsh)"`; the checks are **`adms-verify`** (the chain
-is 56 files, 1,160 tests; fifty-seven migrations; `pnpm scenarios` runs six stories, 16, 18, 52, 25, 15 and 35 checks),
+is 57 files, 1,167 tests; fifty-nine migrations; `pnpm scenarios` runs six stories, 16, 18, 52, 25, 15 and 35 checks),
 with **`pnpm security`** (7 passed, 0 failed, ADR-291). The database tests, the map servers' tests and
 the stories need `pnpm local:up` first; stop it at close-out (ADR-277). A schema change goes through
 Prisma (`prisma migrate dev --create-only`), a guard into its own empty stub (ADR-113); **try a guard

@@ -390,6 +390,7 @@ dates or amount (ADR-146). A prime may hold one contract on a project or several
 | **documentType** | enum `FormDocumentType` | `LOAD` · `HAUL_OUT` · `UNIT_RATE` · `CERTIFICATION` · `ROE` · `SURVEY` · `INCIDENT` · `DROP_OFF_LOG`. Also unique with `id`: the key a debris type's entry and a definition point at, so neither sits on the wrong kind of form and the type can't change under them |
 | **enabled** | bool | Incidents and drop-off logs are switched on per project (ADR-188). No default. **Read only on the forms that aren't a workflow's**: whether a load, haul-out or unit rate form is used is `Project.workflows`' to say (ADR-041, 308) |
 | gpsRequired | bool | The ROE form's setting (ADR-181): stated on it, and on no other form (a check, ADR-308) |
+| incidentOffers | enum `IncidentOffer`[] | The incident form's setting (ADR-328, 334): which of the contractor involved, a cert number and an ROE number an incident offers the project's monitors. Stated on the incident form, an empty list for none, and on no other form (a check). A new one starts with `CONTRACTOR` and `CERT_NUMBER`, and `ROE_NUMBER` where the program type requires ROEs (`packages/domain`'s `IncidentOffers`, *agent default*) |
 | **createdAt** | instant | As every configuration record (§1, *Leaving*) |
 | archivedAt | instant | |
 
@@ -1119,6 +1120,14 @@ Records only: never stops work (ADR-052).
 | description | text | |
 | parties | text | |
 | address | text | |
+| contractorId | → `ProjectContractor` (its project's) | The contractor involved, a prime or a sub on the incident's own project (ADR-328) |
+| certNumber | text | As scanned or typed, a snapshot as on a field event (ADR-328) |
+| certificationId | → `Certification` | The one the number found, its own project's; empty while none has that number |
+| roeNumber | text | As picked or typed (ADR-292, 328) |
+| roeId | → `Roe` | The one the number found, its own project's; empty while none has that number |
+
+All five are optional. Which of them a monitor is offered is the project's incident form's
+`incidentOffers`; nothing here is refused for naming what the project doesn't offer (ADR-052).
 
 #### `DropOffLog`
 
@@ -1143,9 +1152,12 @@ definition; **with no definition the answers are `{}`**. Whether each answer fit
 schema `packages/contracts` makes from the definition's version (`formAnswersSchema`: text that
 isn't blank, a number, yes or no, one of a pick's choices, a photograph's id; a required field
 answered; no field the version doesn't have). A survey's `roeId` and a drop-off log's `siteId` are
-its own project's. An incident's sub-type is not held to its type by the database, and **an
-incident names no certification**: a truck it concerns is in its parties and description
-(`spec/acceptance/04-field-capture.md` point 16). A survey has no unique key: `surveyNumber` and
+its own project's. An incident's sub-type is not held to its type by the database. **An incident
+may name the contractor involved, a cert number and an ROE number** (ADR-328 (3), built ADR-334;
+it named no certification before): the contractor is one placed on its own project (a foreign
+key to `project_contractor (project_id, contractor_id)`), the certification and the ROE found are
+its own project's, each there only with its number, and a number is never blank. A number that
+finds nothing is taken; looking one up is intake's (1.4.2). A survey has no unique key: `surveyNumber` and
 `roeNumber` may repeat. **Viewers:** a client user and an auditor see their projects' surveys,
 incidents and drop-off logs, every column.
 
@@ -1582,6 +1594,7 @@ A new value in any of them is a code change with an ADR (`spec/LISTS.md` Group 2
 | `Permission` | `CORRECT` · `RENUMBER` · `VOID` · `ACCEPT_FLAG` · `QC` · `LOCK_INVOICED` · `UNLOCK_INVOICED` · `APPROVE_HOURS` · `SETUP` · `DISPATCH` | `UserPermission` |
 | `ReasonUse` ✅ | `VOID` · `TYPED_NUMBER` · `ACCEPT_FLAG` · `BACK_OFFICE_RECORD` | `Reason` |
 | `FormDocumentType` | `LOAD` · `HAUL_OUT` · `UNIT_RATE` · `CERTIFICATION` · `ROE` · `SURVEY` · `INCIDENT` · `DROP_OFF_LOG` | `Form`, `Assignment` |
+| `IncidentOffer` ✅ | `CONTRACTOR` · `CERT_NUMBER` · `ROE_NUMBER` | `Form.incidentOffers` (ADR-334) |
 | `BillingUnit` ✅ | `CY` · `TN` · `EA` · `LB` · `HR` · `CREW_DAY` · `TBN` | `PayItem`, `Transaction` |
 | `CrewTimeConversion` ✅ | `PER_HOUR` · `PER_DAY_EXACT` · `PER_DAY_STEPS` | `PayItem` |
 | `CountShape` ✅ | `NUMBER` · `ITEM_COUNTS` · `ITEM_HOURS` | `KindOfWork` |

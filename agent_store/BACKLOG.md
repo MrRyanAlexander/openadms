@@ -948,8 +948,12 @@ delete one.
   DATA-MODEL and C65's copied-photographs point; ✅ **(b) done 2026-10-04 (ADR-331)**, a scale receipt's number isn't unique:
   drop `@@unique([projectId, receiptNumber])` by a new migration, its test, AC-04's scenario,
   DATA-MODEL §8, `adms-scale-receipts` ("unique per project", "the same receipt number on a
-  later trip"); C63 point 14 falls away; **(c) an incident's optional contractor, cert number
-  and ROE number**, and the project's setting of which are offered; **(d) a viewer's sight of
+  later trip"); C63 point 14 falls away; ✅ **(c) done 2026-10-04 (ADR-334)**, an incident's optional contractor, cert number
+  and ROE number, and the project's setting of which are offered (on its incident form:
+  `Form.incidentOffers`; **left for 1.4.2:** intake looks up the certification and the ROE an
+  incident's numbers find; **Phase 3:** the phone's incident screen shows only what is offered;
+  **Phase 4:** the setting on the form's setup screen, and the back office adding any of the
+  three to an incident); **(d) a viewer's sight of
   private citizens' names**, set per viewer (hide an ROE's owner and contact details and a
   drop-off log's resident and address from a viewer the firm marked). (a) and (b) came before
   1.3.7's story and 1.4.2's intake; (c) and (d) before 1.4.2 takes forms in.

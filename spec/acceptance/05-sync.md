@@ -1,6 +1,6 @@
 # Acceptance scenarios — Part 5, Sync
 
-**Draft**: agent-written (ADR-333); the user approves.
+✅ ** Approved**: agent-written (ADR-333); the user approves.
 
 ← [Acceptance scenarios](README.md) · The part page: [Part 5 — Sync](../parts/05-sync.md)
 

@@ -1,6 +1,6 @@
 # Acceptance scenarios — Part 3, Certify containers and crews
 
-**Draft**: agent-written (ADR-317; KD-69 settled by the user, ADR-318); the user approves.
+✅ ** Approved**: agent-written (ADR-317; KD-69 settled by the user, ADR-318); the user approves.
 
 ← [Acceptance scenarios](README.md) · The part page: [Part 3 — Certify containers and crews](../parts/03-certification.md)
 

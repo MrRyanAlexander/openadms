@@ -236,7 +236,10 @@ changed" (ADR-166).
   domain, with no status and no worker column; "its time" is `madeAt`; one check tells a
   phone's (phone, assignment, setup version) from one created in the back office (person,
   reason), as on a field event. A survey's `roeId` and a drop-off log's `siteId` are its own
-  project's; an incident names no certification. **Each record's `answers`** is an object, and
+  project's; an incident may name the contractor involved (one on its own project), a cert
+  number and an ROE number with the certification and ROE each found, all optional, and the
+  project's incident form's `incidentOffers` says which a monitor is offered (the user,
+  ADR-328 (3); built ADR-334). **Each record's `answers`** is an object, and
   `formDefinitionId` comes with `formId` and `formDocumentType` (the record's own kind), all
   three or none, of its own project's form; with no definition the answers are `{}`. The
   answers' schema is `packages/contracts`' `formAnswersSchema(fields)`, made from the version

@@ -202,8 +202,9 @@ assignment:
   items with hours) (ADR-207, 213).
 - **Surveys and ROEs**: the work type (Pre-work survey · Post-work survey · ROE); a phone-made ROE
   takes a number from the block unless the paper ROE has one (typed) (ADR-149, 181).
-- **Incident**: its type, then the firm's sub-types if any; it records and never stops work (ADR-052,
-  137).
+- **Incident**: its type, then the firm's sub-types if any; then whichever of the contractor
+  involved (picked by name), a cert number and an ROE number the project's incident form offers,
+  each optional; it records and never stops work (ADR-052, 137, 328, 334).
 - **Citizen drop-off log** (a phone at a site): the site from the assignment, the resident's name and
   origin address (optional), photos (optional), notes, the firm's fields; no quantity, number or cost
   (ADR-184, 188, 215).
