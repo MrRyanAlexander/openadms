@@ -14,9 +14,10 @@
 //
 // Not here: P1's load pay items, rules and map (the story `setup`) and its certifications (the
 // story `certification`): a phone sends only the cert number it scanned. Photographs (the file's
-// place in storage is Phase 2's). GPS fixes, apart from ticket 101001's. The top-up of a block at
-// a sync (the story `sync`). The golden mission's own story, with what happens at review, is
-// 1.9.1.
+// place in storage is Phase 2's). GPS fixes, apart from the tickets whose zone and mileage the
+// story `p1-reconciled` tells (101001, 101002, 201001 and 201004: spec/CONVENTIONS.md §6's
+// stand-in points). The top-up of a block at a sync (the story `sync`). The golden mission's own
+// story, with what happens at review, is 1.9.1.
 import {
   FormSetup,
   ListSetup,
@@ -124,7 +125,13 @@ export const p1FieldDays: Story = {
         'P1-UR-1',
       ]) {
         const phone = await tx.device.create({
-          data: { name, publicKey: `story-key-${name.toLowerCase()}`, masterPasscodeVersion: 1 },
+          // Enrolled by now, on the story's clock: before any work it records.
+          data: {
+            name,
+            publicKey: `story-key-${name.toLowerCase()}`,
+            masterPasscodeVersion: 1,
+            enrolledAt: clock.now(),
+          },
         });
         phones[name] = phone.id;
       }
@@ -562,7 +569,14 @@ export const p1FieldDays: Story = {
     } as const;
     done(jo.complete(started['301001'], hanger));
     story.at(monday('10:10'), 'Ana picks C&D; her phone shows 101002');
-    done(ana.complete(started['101002'], { number: made, debrisType: 'C&D' }));
+    done(
+      ana.complete(started['101002'], {
+        number: made,
+        debrisType: 'C&D',
+        endLatitude: '39.15000000',
+        endLongitude: '-75.52000000',
+      }),
+    );
     story.at(monday('10:35'), 'Tariq scans 730416 at the Bayline County Landfill tower');
     started['dis101002'] = begin(tariq, 'LOAD', 'DISPOSAL', '730416');
     story.at(monday('10:50'), 'Tariq picks C&D, calls 75%, scans 101002');
@@ -859,7 +873,16 @@ export const p1FieldDays: Story = {
       tuesday('13:00'),
       'Loaded with mulch: Sam picks Mulch and calls 90% at the loading end; his phone shows 201001',
     );
-    done(sam.complete(started['201001'], { number: made, debrisType: 'Mulch', loadCall: 90 }));
+    // Where a haul-out is loaded at Marsh Road TDSR: by its tower.
+    const atTheTdsr = { endLatitude: '39.09030000', endLongitude: '-75.62020000' } as const;
+    done(
+      sam.complete(started['201001'], {
+        number: made,
+        debrisType: 'Mulch',
+        loadCall: 90,
+        ...atTheTdsr,
+      }),
+    );
     story.at(tuesday('13:55'), 'Tariq scans 730419 at the Landfill');
     started['hod201001'] = begin(tariq, 'HAUL_OUT', 'HAUL_OUT_DISPOSAL', '730419');
     story.at(
@@ -886,6 +909,7 @@ export const p1FieldDays: Story = {
           debrisType: 'Mulch',
           fieldTag: tag,
           loadCall,
+          ...atTheTdsr,
         }),
       );
     story.at(tuesday('15:30'), 'Zone 1 pile is on: Mulch, 10% so far; his phone shows 201004');

@@ -55,6 +55,9 @@ importers:
 
   apps/worker:
     dependencies:
+      '@open-adms/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@open-adms/domain':
         specifier: workspace:*
         version: link:../../packages/domain
@@ -120,6 +123,9 @@ importers:
       '@open-adms/domain':
         specifier: workspace:*
         version: link:../domain
+      '@open-adms/worker':
+        specifier: workspace:*
+        version: link:../../apps/worker
       pg:
         specifier: 8.23.0
         version: 8.23.0

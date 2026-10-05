@@ -50,8 +50,8 @@ const rectangle = (west: number, south: number, east: number, north: number) => 
     ],
   ],
 });
-const p1Boundary = rectangle(-75.8, 38.9, -75.4, 39.3);
-const p1Zones = {
+export const p1Boundary = rectangle(-75.8, 38.9, -75.4, 39.3);
+export const p1Zones = {
   type: 'FeatureCollection',
   features: [
     ['Zone 1', -75.8, -75.67] as const,

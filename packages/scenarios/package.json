@@ -10,6 +10,7 @@
     "@open-adms/api": "workspace:*",
     "@open-adms/db": "workspace:*",
     "@open-adms/domain": "workspace:*",
+    "@open-adms/worker": "workspace:*",
     "pg": "8.23.0"
   },
   "devDependencies": {

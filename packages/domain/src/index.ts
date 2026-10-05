@@ -223,6 +223,7 @@ export { SiteFacts, type SiteRefusal, type SiteSetting } from './site-facts.ts';
 export {
   Ticket,
   Tickets,
+  placeOf,
   workerStatuses,
   workflows,
   type GroupedFieldEvent,
