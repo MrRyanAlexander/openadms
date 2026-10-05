@@ -10,9 +10,10 @@
 //
 // Never flagged, so never checked here: how long a field event has waited, a preload, a driver's
 // licence, a trailer swap, a certification still at QC Review, work under an unplanned
-// assignment (spec/FLAGS.md §2). The checks on place, quantity, the pay item's settings, unit
-// rate work and forms are tasks 1.5.6 and 1.5.7. §3.10's flags, for a record that should not
-// have been possible, are here too (ADR-329, 345).
+// assignment (spec/FLAGS.md §2). The checks on place are place.ts; on quantity,
+// quantity-checks.ts; on the pay item's settings and unit rate work, unit-rate-checks.ts; on
+// ROEs and surveys, roe-checks.ts. §3.10's flags, for a record that should not have been
+// possible, are here too (ADR-329, 345).
 import {
   Flags,
   certificationViews,

@@ -19,7 +19,7 @@ import { sha256 } from './sha256.ts';
 export const flagBillings = ['BILLS', 'LINE_NOT_BILLED', 'NOT_BILLED'] as const;
 export type FlagBilling = (typeof flagBillings)[number];
 
-// spec/FLAGS.md §3, in the page's order: 75 codes (`FlagCode`, held to the page by a test).
+// spec/FLAGS.md §3, in the page's order: 77 codes (`FlagCode`, held to the page by a test).
 export const flagCodes = [
   // §3.1 Between a ticket's field events
   'DEBRIS_TYPE_MISMATCH',
@@ -106,6 +106,8 @@ export const flagCodes = [
   'SPLIT_NOT_ALLOWED',
   'OUTSIDE_CONTROL_RANGES',
   'ASSIGNMENT_ON_ANOTHER_PROJECT',
+  'SCALE_NET_DISAGREES',
+  'TWO_QUANTITIES',
 ] as const;
 export type FlagCode = (typeof flagCodes)[number];
 
@@ -245,6 +247,9 @@ export interface FlagTold {
   SPLIT_NOT_ALLOWED: { split: 'load' | 'haul-out' };
   OUTSIDE_CONTROL_RANGES: Nothing;
   ASSIGNMENT_ON_ANOTHER_PROJECT: Nothing;
+  // Tons as the message says them: "17.60", "17.10".
+  SCALE_NET_DISAGREES: { receipt: string; netTons: string; grossLessTareTons: string };
+  TWO_QUANTITIES: Nothing;
 }
 
 // A field event's kind as a message says it.
@@ -262,13 +267,15 @@ export type FlagSubject =
   | { readonly ticketNumber: string }
   | { readonly certNumber: string }
   | { readonly site: string }
-  | { readonly surveyOnRoe: string };
+  // A survey, by the ROE number it names; one that names none is "Survey" (agent default,
+  // ADR-347).
+  | { readonly surveyOnRoe: string | null };
 
 const subjectWords = (subject: FlagSubject): string => {
   if ('ticketNumber' in subject) return `Ticket ${subject.ticketNumber}`;
   if ('certNumber' in subject) return `Certification ${subject.certNumber}`;
   if ('site' in subject) return subject.site;
-  return `Survey on ROE ${subject.surveyOnRoe}`;
+  return subject.surveyOnRoe === null ? 'Survey' : `Survey on ROE ${subject.surveyOnRoe}`;
 };
 
 // How a message ends (spec/FLAGS.md §1, and the messages the page words otherwise).
@@ -676,6 +683,17 @@ const catalogue: { readonly [Code in FlagCode]: Entry<Code> } = {
     billing: 'BILLS',
     ending: 'REVIEW',
     words: () => 'recorded under an assignment on another project',
+  },
+  SCALE_NET_DISAGREES: {
+    billing: 'BILLS',
+    ending: 'REVIEW',
+    words: (told) =>
+      `scale receipt ${told.receipt}'s net (${told.netTons} tons) is not its gross less its tare (${told.grossLessTareTons} tons)`,
+  },
+  TWO_QUANTITIES: {
+    billing: 'BILLS',
+    ending: 'REVIEW',
+    words: () => 'disposal has both a load call and a scale weight',
   },
 };
 

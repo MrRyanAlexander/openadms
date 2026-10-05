@@ -42,6 +42,35 @@ export {
   type FlagsCompared,
 } from './flags.ts';
 export { ProjectClock } from './project-clock.ts';
+export {
+  QuantityChecks,
+  type CarriedTicketRead,
+  type CheckedReceipt,
+  type QuantifiedAround,
+  type QuantifiedFieldEvent,
+  type QuantitySetup,
+  type ReceiptDisposal,
+} from './quantity-checks.ts';
+export {
+  RoeChecks,
+  type CheckedRoe,
+  type CheckedSurvey,
+  type RoeFieldEvent,
+  type RoeNamed,
+  type RoeSetup,
+} from './roe-checks.ts';
+export {
+  UnitRateChecks,
+  countShapes,
+  type CheckedKindOfWork,
+  type CountShapeName,
+  type PayItemWorkedOut,
+  type UnitRateAround,
+  type UnitRateFieldEvent,
+  type UnitRateFound,
+  type UnitRatePayItem,
+  type UnitRateSetup,
+} from './unit-rate-checks.ts';
 export { Distance, type GpsPoint } from './geodesic.ts';
 export {
   PlaceChecks,

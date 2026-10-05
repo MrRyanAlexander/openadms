@@ -69,6 +69,10 @@ class Exact {
     return this.over * other.under > other.over * this.under;
   }
 
+  is(other: Exact): boolean {
+    return this.over * other.under === other.over * this.under;
+  }
+
   // To so many decimals, a half up (away from nought below it).
   rounded(decimals: number): Exact {
     const scale = 10n ** BigInt(decimals);
@@ -179,6 +183,31 @@ export class ScaleWeight {
       readFrom,
       usableTons: Exact.of(netTons).isAboveNought() ? netTons : null,
     };
+  }
+
+  // Where the receipt holds a gross, a tare and a net, and the net isn't the gross less the
+  // tare: both, in tons, as they stand. Nothing is corrected, and the net as written is still
+  // the one read (ADR-329 (4)). The net that is read is the one compared: pounds exactly; tons
+  // to two decimals, as far as a weight is worked to here (ADR-035), so a net the scale house
+  // rounded to a hundredth of a ton agrees (ADR-348).
+  netAgainstGrossLessTare(): { netTons: string; grossLessTareTons: string } | null {
+    const { receipt } = this;
+    if (receipt.grossWeightLb === null || receipt.tareWeightLb === null) return null;
+    const worked = Exact.of(receipt.grossWeightLb).minus(Exact.of(receipt.tareWeightLb));
+    const workedTons = worked.dividedBy(poundsPerTon);
+    let written: Exact;
+    let agrees: boolean;
+    if (receipt.netWeightTons !== null) {
+      written = Exact.of(receipt.netWeightTons);
+      agrees = written.rounded(weightShareDecimals).is(workedTons.rounded(weightShareDecimals));
+    } else if (receipt.netWeightLb !== null) {
+      agrees = Exact.of(receipt.netWeightLb).is(worked);
+      written = Exact.of(receipt.netWeightLb).dividedBy(poundsPerTon);
+    } else {
+      return null;
+    }
+    if (agrees) return null;
+    return { netTons: written.text(tonDecimals), grossLessTareTons: workedTons.text(tonDecimals) };
   }
 
   // The receipt's weight on the disposals of several containers (a truck and its trailer

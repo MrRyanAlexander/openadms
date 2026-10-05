@@ -1,4 +1,4 @@
-// The domain's flag catalogue against the approved page itself (spec/FLAGS.md §3; ADR-290, 344, 345;
+// The domain's flag catalogue against the approved page itself (spec/FLAGS.md §3; ADR-290, 344, 345, 348;
 // spec/acceptance/06-reconciliation.md AC-06-136, 137): the same codes in the same order, and
 // every message word for word. Each flag is raised here with what the page's own example says,
 // and what comes out is compared with the page. Needs no database.
@@ -166,6 +166,11 @@ const examples: Example = {
   SPLIT_NOT_ALLOWED: [ticket('101042'), { split: 'load' }],
   OUTSIDE_CONTROL_RANGES: [ticket('109999'), {}],
   ASSIGNMENT_ON_ANOTHER_PROJECT: [ticket('101043'), {}],
+  SCALE_NET_DISAGREES: [
+    ticket('101054'),
+    { receipt: 'BCL-88251', netTons: '17.60', grossLessTareTons: '17.10' },
+  ],
+  TWO_QUANTITIES: [ticket('101055'), {}],
 };
 
 const flags = new Flags('America/New_York');
@@ -175,9 +180,9 @@ const raised = (code: FlagCode): string => {
 };
 
 describe('the flag catalogue, against spec/FLAGS.md', () => {
-  it('AC-06-137 the domain’s codes are the page’s, in its order: 75, and a flag that isn’t on the page can’t be raised', () => {
+  it('AC-06-137 the domain’s codes are the page’s, in its order: 77, and a flag that isn’t on the page can’t be raised', () => {
     expect(rows.map(([code]) => code)).toEqual([...flagCodes]);
-    expect(rows).toHaveLength(75);
+    expect(rows).toHaveLength(77);
   });
 
   it.each(rows)('AC-06-136 %s reads as the page words it', (code, shown) => {
