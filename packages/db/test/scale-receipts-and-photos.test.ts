@@ -575,6 +575,7 @@ describe('a photograph', () => {
     // An ROE, a survey, an incident and a drop-off log own photographs too (ADR-327;
     // roes-and-forms.test.ts). A record waiting in quarantine (task 1.4.2) has no column yet.
     expect(await columnsOf('photo')).toEqual([
+      'archived_at',
       'captured_at',
       'certification_id',
       'depth_object_key',
@@ -584,6 +585,7 @@ describe('a photograph', () => {
       'field_event_id',
       'id',
       'incident_id',
+      'label',
       'latitude',
       'longitude',
       'object_key',
@@ -783,6 +785,142 @@ describe('a photograph', () => {
       expect(refusal.message, what).toContain('"photo_view_check"');
     }
   });
+
+  // What the audit log kept of each change to one column of a photograph, oldest first.
+  async function auditedChangesOf(id: string, column: string): Promise<Row[]> {
+    return tested.db.rows(
+      `SELECT "actor_id"::text AS actor, "source"::text AS source, "changed_fields",
+         "prior_value" -> '${column}' IS NOT NULL
+           AND "prior_value" -> '${column}' <> 'null'::jsonb AS had,
+         "new_value" -> '${column}' <> 'null'::jsonb AS has
+       FROM "audit_record"
+       WHERE "table_name" = 'photo' AND "record_id" = $1 AND "operation" = 'UPDATE'
+         AND "domain" = 'RECORDS'
+       ORDER BY "id"`,
+      [id],
+    );
+  }
+
+  it('AC-04-102 the back office removes a photograph from the record: a mark on its record, with the file, its fingerprints and the record kept, and who and when in the audit log', async () => {
+    const { db, world } = tested;
+    await asThePhone();
+    const collection = await event({ ticket_number: '101020' });
+    const id = await photograph({ field_event_id: collection });
+    const kept = await photograph({ field_event_id: collection });
+    const asTaken = await db.one<Row>(
+      `SELECT "original_sha256", "uploaded_sha256", "object_key", "archived_at", "label"
+       FROM "photo" WHERE "id" = $1`,
+      [id],
+    );
+    // A phone sends neither mark.
+    expect(asTaken).toMatchObject({ archived_at: null, label: null });
+    // Dana removes it on Wednesday at 10:05 (UTC−4).
+    await asTheBackOffice();
+    await db.run(`UPDATE "photo" SET "archived_at" = '2026-10-14T14:05:00Z' WHERE "id" = $1`, [id]);
+    expect(
+      await db.rows(
+        `SELECT "id"::text AS id, "archived_at", "original_sha256", "uploaded_sha256", "object_key"
+         FROM "photo" WHERE "field_event_id" = $1 ORDER BY "archived_at" NULLS LAST`,
+        [collection],
+      ),
+    ).toEqual([
+      {
+        id,
+        archived_at: new Date('2026-10-14T14:05:00Z'),
+        original_sha256: asTaken['original_sha256'],
+        uploaded_sha256: asTaken['uploaded_sha256'],
+        object_key: asTaken['object_key'],
+      },
+      expect.objectContaining({ id: kept, archived_at: null }),
+    ]);
+    // Removed is not deleted, and what says which file it is still can't be changed.
+    expect((await db.refused(`DELETE FROM "photo" WHERE "id" = $1`, [id])).code).toBe(
+      refusedBy.grant,
+    );
+    expect(
+      (
+        await db.refused(`UPDATE "photo" SET "object_key" = 'photographs/gone' WHERE "id" = $1`, [
+          id,
+        ])
+      ).code,
+    ).toBe(refusedBy.trigger);
+    // It is put back by clearing the mark.
+    await db.run(`UPDATE "photo" SET "archived_at" = NULL WHERE "id" = $1`, [id]);
+    // The worker reads the mark and never sets it.
+    await db.as('adms_worker');
+    await db.actor(world.worker, 'SYSTEM');
+    expect(await db.one(`SELECT "archived_at" FROM "photo" WHERE "id" = $1`, [id])).toEqual({
+      archived_at: null,
+    });
+    expect(
+      (await db.refused(`UPDATE "photo" SET "archived_at" = now() WHERE "id" = $1`, [id])).code,
+    ).toBe(refusedBy.grant);
+    await db.administer();
+    await db.actor(world.admin, 'BACK_OFFICE');
+    expect((await db.refused(`DELETE FROM "photo" WHERE "id" = $1`, [id])).code).toBe(
+      refusedBy.trigger,
+    );
+    const dana = { actor: world.admin, source: 'BACK_OFFICE', changed_fields: ['archived_at'] };
+    expect(await auditedChangesOf(id, 'archived_at')).toEqual([
+      { ...dana, had: false, has: true },
+      { ...dana, had: true, has: false },
+    ]);
+    expect(await auditedChangesOf(kept, 'archived_at')).toEqual([]);
+  });
+
+  it('AC-04-103 the back office labels a photograph in its own words, changes the label and takes it off, each change audited with what it said before', async () => {
+    const { db, world } = tested;
+    await asThePhone();
+    const collection = await event({ ticket_number: '101020' });
+    const id = await photograph({ field_event_id: collection });
+    await asTheBackOffice();
+    await db.run(`UPDATE "photo" SET "label" = 'Pile at the curb before loading' WHERE "id" = $1`, [
+      id,
+    ]);
+    await db.run(`UPDATE "photo" SET "label" = 'Pile at the curb, 22 Elm St' WHERE "id" = $1`, [
+      id,
+    ]);
+    expect(
+      await db.one(`SELECT "label", "archived_at" FROM "photo" WHERE "id" = $1`, [id]),
+    ).toEqual({ label: 'Pile at the curb, 22 Elm St', archived_at: null });
+    // A blank isn't a label; no label is no value.
+    for (const blank of ['', '   ']) {
+      const refusal = await db.refused(`UPDATE "photo" SET "label" = $2 WHERE "id" = $1`, [
+        id,
+        blank,
+      ]);
+      expect(refusal.code, `"${blank}"`).toBe(refusedBy.check);
+      expect(refusal.message).toContain('"photo_label_check"');
+    }
+    // A removed photograph keeps its label, and may be given one.
+    await db.run(`UPDATE "photo" SET "archived_at" = '2026-10-14T14:05:00Z' WHERE "id" = $1`, [id]);
+    await db.run(`UPDATE "photo" SET "label" = NULL WHERE "id" = $1`, [id]);
+    await db.as('adms_worker');
+    await db.actor(world.worker, 'SYSTEM');
+    expect(
+      (await db.refused(`UPDATE "photo" SET "label" = 'Front' WHERE "id" = $1`, [id])).code,
+    ).toBe(refusedBy.grant);
+    await db.administer();
+    expect(
+      await db.rows(
+        `SELECT "actor_id"::text AS actor, "prior_value" ->> 'label' AS said,
+           "new_value" ->> 'label' AS says
+         FROM "audit_record"
+         WHERE "table_name" = 'photo' AND "record_id" = $1 AND "operation" = 'UPDATE'
+           AND "changed_fields" = ARRAY['label']
+         ORDER BY "id"`,
+        [id],
+      ),
+    ).toEqual([
+      { actor: world.admin, said: null, says: 'Pile at the curb before loading' },
+      {
+        actor: world.admin,
+        said: 'Pile at the curb before loading',
+        says: 'Pile at the curb, 22 Elm St',
+      },
+      { actor: world.admin, said: 'Pile at the curb, 22 Elm St', says: null },
+    ]);
+  });
 });
 
 describe('what a read-only viewer sees of them', () => {
@@ -840,6 +978,10 @@ describe('what a read-only viewer sees of them', () => {
     expect(shown).toContain('uploaded_sha256');
     expect(shown).not.toContain('object_key');
     expect(shown).not.toContain('depth_object_key');
+    // The back office's two marks are shown: a removed photograph's record is seen with its mark
+    // (AC-04-102, 103; ADR-337).
+    expect(shown).toContain('archived_at');
+    expect(shown).toContain('label');
     for (const sql of [
       `SELECT "object_key" FROM "photo"`,
       `SELECT "depth_object_key" FROM "photo"`,

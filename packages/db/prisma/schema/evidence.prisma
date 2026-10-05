@@ -359,6 +359,13 @@ model Photo {
   // When the file reached storage; empty until it has.
   uploadedAt DateTime? @map("uploaded_at") @db.Timestamptz(3)
 
+  // The back office's two marks (ADR-329 (9), 337). Removed from the record: an archive mark, set
+  // when it was removed and cleared to put it back; the record, the file and its fingerprints
+  // stay, and who removed it is the audit record's actor. And a label: the firm's own words for
+  // what the photograph shows, read by no check.
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+  label      String?
+
   project       Project        @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   fieldEvent    FieldEvent?    @relation(fields: [projectId, fieldEventId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
   certification Certification? @relation(fields: [projectId, certificationId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)

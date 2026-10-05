@@ -464,6 +464,11 @@ describe('the guards in the catalog', () => {
         definition:
           "CHECK ((((num_nonnulls(latitude, longitude) = ANY (ARRAY[0, 2])) AND ((latitude IS NULL) OR ((latitude >= ('-90'::integer)::numeric) AND (latitude <= (90)::numeric))) AND ((longitude IS NULL) OR ((longitude >= ('-180'::integer)::numeric) AND (longitude <= (180)::numeric)))) IS TRUE))",
       },
+      // A photograph's label, when it has one, isn't blank (ADR-337).
+      {
+        name: 'photo_label_check',
+        definition: "CHECK (((label IS NULL) OR (btrim(label) <> ''::text)))",
+      },
       {
         name: 'photo_owner_check',
         definition:

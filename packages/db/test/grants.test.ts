@@ -242,6 +242,9 @@ const correctable: Record<string, string[]> = {
     'depth_object_key',
     'device_id',
     'uploaded_at',
+    // The back office's two marks (ADR-337).
+    'archived_at',
+    'label',
   ],
 };
 // What the viewer views show, read through their base tables (row-level security applies there).
