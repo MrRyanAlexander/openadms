@@ -953,9 +953,15 @@ delete one.
   `Form.incidentOffers`; **left for 1.4.2:** intake looks up the certification and the ROE an
   incident's numbers find; **Phase 3:** the phone's incident screen shows only what is offered;
   **Phase 4:** the setting on the form's setup screen, and the back office adding any of the
-  three to an incident); **(d) a viewer's sight of
-  private citizens' names**, set per viewer (hide an ROE's owner and contact details and a
-  drop-off log's resident and address from a viewer the firm marked). (a) and (b) came before
+  three to an incident); ✅ **(d) done 2026-10-04 (ADR-336)**, a viewer's sight of
+  private citizens' names, set per viewer (`User.seesPrivateCitizens`; an ROE's owner and a
+  drop-off log's resident and address are shown only by `viewer_roe_citizen` and
+  `viewer_drop_off_log_citizen`; **left for Phase 2:** the API states the setting from
+  `ViewerSettings.starting()` when a viewer is added, and the portal reads the citizen views;
+  **Phase 4:** the box on the viewer's screen, and the exports' columns for a marked viewer;
+  **1.7.1:** a contractor user's sight of either table; **for the user to say:** whether free
+  text, the firm's own form fields, a signed ROE form's photograph and an ROE's address count as
+  naming a private citizen: none is hidden today). (a) and (b) came before
   1.3.7's story and 1.4.2's intake; (c) and (d) before 1.4.2 takes forms in.
   **From ADR-329:** **(e) a photograph's archive mark and label** (two columns, a new
   migration; the back office's remove and label, audited); **(f) task 1.4.2's intake** keeps a

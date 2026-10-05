@@ -81,7 +81,7 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-04: Phase 1 is open, twenty-three tasks done; Milestones 1.1, 1.2 and 1.3 are done; 1.4.1 written)
+### Where things stand (2026-10-04: Phase 1 is open, twenty-three tasks done; Milestones 1.1, 1.2 and 1.3 are done; 1.4.1 written; C67 (a)…(d) built)
 - **Phase 1 (data core and engine) is the active phase**, opened by the user on 2026-10-01
   (ADR-299). Its plan is `BACKLOG.md`'s ten milestones and 47 tasks (ADR-300): setup records →
   certifications and capacity → tickets and numbers → sync intake → reconciliation → the rule engine
@@ -389,12 +389,25 @@ example world's P1 offers `CONTRACTOR` and `CERT_NUMBER`, and `FormSetup.form` t
 **A configuration table that gains a column needs no `guard_table` rerun** (tried: nothing
 changes); an evidence table does, and a viewed table reruns `guard_viewer`. **The user approved
 acceptance files 01…05 (ADR-335);** AC-01-83 and AC-04-99…101 were added after and wait for them.
-👉 **C67 (d), a viewer's sight of private citizens' names, set per viewer** (`BACKLOG.md`, the
-register, C67; ADR-328 (4)): by default a read-only viewer sees an ROE's owner and contact details
-and a drop-off log's resident and address; the firm can mark a viewer so they don't. A schema
-task (the setting on the viewer, the views that hide the columns, `test/support/viewers.ts`,
-tests by scenario ID); it needs the stack (`pnpm local:up`; Docker Desktop may need
-`open -a Docker`). Then **C67 (e)** (a photograph's archive mark and label), its own task, then
+**C67 (d) is done (ADR-336):** every read-only viewer's record says whether they see private
+citizens by name (`User.seesPrivateCitizens`; no database default, a new viewer starts at yes:
+`packages/domain`'s `ViewerSettings.starting()`). An ROE's `owner_name` and a drop-off log's
+`resident_name` and `origin_address` are in no `viewer_<table>` view and granted to no viewer;
+`viewer_roe_citizen` and `viewer_drop_off_log_citizen` (id, project, those columns; the owner's
+rights) show them to a client user or an auditor the firm lets see them. **A column that names a
+private citizen** is told to `guard_viewer` as `citizen => ARRAY[…]` (every rerun of that table's
+line repeats it) and to `test/support/viewers.ts` as the sight's `citizen`; if the view showed
+the column before, `DROP VIEW` it first in the same stub. **A test's viewer states
+`sees_private_citizens`** (`viewerLike` says `true`). **A migration that writes a row** states
+its actor and writes in one `DO` block: Prisma runs a migration's statements one by one, so a
+`set_config(…, true)` in its own statement is gone by the next. **A stub written once can't be
+written again** (the hook): if it was never applied to `adms`, remove it and make a fresh one.
+👉 **C67 (e), a photograph's archive mark and label** (`BACKLOG.md`, the register, C67; ADR-329
+(9)): two columns on `Photo`, a new migration; the back office's remove (an archive mark; the
+file and its fingerprints stay) and label (free text), each by permission and audited; `photo`
+is evidence and viewed, so its guard reruns `guard_table` and `guard_viewer` (hidden
+`object_key`, `depth_object_key`). It needs the stack (`pnpm local:up`; Docker Desktop may need
+`open -a Docker`). Then
 **1.4.2, intake** (read `05-sync.md` first: its scenarios, its sixteen open points, and the
 carried items under them; it also looks up the certification and the ROE an incident's numbers
 find).
@@ -574,7 +587,7 @@ then `SELECT guard_list('<table>', '<domain>');` in its guard migration; a new b
 `packages/domain`'s `builtInKeys` first, with an ADR (ADR-302).
 
 Start every command with `eval "$(fnm env --shell zsh)"`; the checks are **`adms-verify`** (the chain
-is 57 files, 1,167 tests; fifty-nine migrations; `pnpm scenarios` runs six stories, 16, 18, 52, 25, 15 and 35 checks),
+is 58 files, 1,173 tests; sixty-one migrations; `pnpm scenarios` runs six stories, 16, 18, 52, 25, 15 and 35 checks),
 with **`pnpm security`** (7 passed, 0 failed, ADR-291). The database tests, the map servers' tests and
 the stories need `pnpm local:up` first; stop it at close-out (ADR-277). A schema change goes through
 Prisma (`prisma migrate dev --create-only`), a guard into its own empty stub (ADR-113); **try a guard

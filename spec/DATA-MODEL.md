@@ -163,6 +163,7 @@ primes; a sub belongs to one prime, at most two tiers, never shared (ADR-108).
 | employerNumber | text | That employer's own ID for them (`HS-0417`) |
 | contractorId | → `Contractor` | A contractor user's contractor: what they may see (ADR-169). **Built (ADR-315):** set on a contractor user and on nobody else (check) |
 | viewerKind | enum `ViewerKind` | `CLIENT` · `CONTRACTOR` · `AUDITOR`, on a read-only viewer only. **Built (ADR-315):** every read-only viewer states it, nobody else does (check) |
+| seesPrivateCitizens | boolean | Whether this viewer sees private citizens by name (an ROE's owner; a drop-off log's resident and origin address). On a read-only viewer only: every one states it, nobody else does (check). No database default: a new viewer starts at yes (`packages/domain`, `ViewerSettings.starting()`), and the firm changes it for that viewer at any time, audited (ADR-328 (4); **built, ADR-336**) |
 | email, phone | text | Each optional. A monitor's phone is shown to admins only (ADR-169). **Built (ADR-315):** no read-only viewer reads either: the read-only login has no grant on `user` at all |
 | **createdAt** | instant | |
 | archivedAt | instant | |
@@ -215,6 +216,17 @@ time zone and dates (`viewer_project`), and nothing else of its setup (*agent de
 setup table is given its viewer sight in one line, `SELECT guard_viewer('<table>', '<PROJECT|
 PART_OF|NAMED_BY|FIRM>'[, …]);`. No viewer reads a person, a permission, a phone, an assignment,
 a number block or the master passcode.
+
+**Private citizens by name (ADR-328 (4); built, ADR-336).** Whether a viewer reads the columns that
+name a private citizen is the firm's choice for each viewer (`User.seesPrivateCitizens`). Today
+those columns are an ROE's `ownerName` and a drop-off log's `residentName` and `originAddress`
+(*agent default*). They are in no `viewer_<table>` view and the read-only login holds no grant on
+them; each such table has a second view, `viewer_<table>_citizen` (the row's id, its project,
+those columns), which runs with the owner's rights and shows a row only to a client user or an
+auditor of its project whose record says they see private citizens
+(`viewer_sees_private_citizens()`). A table says which columns they are in its one line:
+`SELECT guard_viewer('roe', 'PROJECT', citizen => ARRAY['owner_name']);`. A contractor user sees
+neither table (1.7.1).
 
 #### `Device`
 
@@ -864,7 +876,7 @@ of the firm's own has no definition to answer). A scope line repeats its ROE's `
 debris type comes with `formId` and `formDocumentType` (`LOAD`), which hold it to its own
 project's load form; a count is 1 or more; a debris type and a payable type are each once per
 ROE. That a payable type is among the project's unit rate pay items is not held by the database.
-**Viewers:** a client user and an auditor see their projects' ROEs and scope lines, every column.
+**Viewers:** a client user and an auditor see their projects' ROEs and scope lines, every column but the owner's name (`viewer_roe`); the owner's name through `viewer_roe_citizen`, only where the firm lets that viewer see private citizens by name (§2.2; ADR-336).
 
 ### The time clock (Phases 3–4; ADR-241)
 
@@ -1159,7 +1171,9 @@ key to `project_contractor (project_id, contractor_id)`), the certification and 
 its own project's, each there only with its number, and a number is never blank. A number that
 finds nothing is taken; looking one up is intake's (1.4.2). A survey has no unique key: `surveyNumber` and
 `roeNumber` may repeat. **Viewers:** a client user and an auditor see their projects' surveys,
-incidents and drop-off logs, every column.
+incidents and drop-off logs, every column but a drop-off log's resident and origin address; those
+through `viewer_drop_off_log_citizen`, only where the firm lets that viewer see private citizens
+by name (§2.2; ADR-336).
 
 ### 4.4 Photos (ARCHITECTURE §11)
 
@@ -1568,6 +1582,7 @@ Never relaxed to pass a test (ARCHITECTURE §5.4). ✅ = built today.
 | Nothing is deleted; audit is append-only; every write states its actor; a transaction's delete is copied first and refused when locked; viewers see only their own projects | ✅ the guard migrations (ADR-270…276) |
 | A permission once per person; a project once per viewer; neither for the system actor (ADR-315) | ✅ unique keys and checks |
 | A read-only viewer states its kind and nobody else does; a contractor user names its contractor and nobody else does (ADR-315) | ✅ checks |
+| Every read-only viewer says whether they see private citizens by name, and nobody else does; a viewer the firm marked reads no ROE owner and no drop-off log's resident or origin address (ADR-336) | ✅ a check; no column grant, and the `viewer_<table>_citizen` views (`guard_viewer`'s `citizen`) |
 | A phone's key is revoked only once it is out of service, never before its removal time (ADR-315) | ✅ check |
 | A client user and an auditor read only their own projects' setup; a contractor user none of it; no viewer a contact, a phone number or a person (ADR-315) | ✅ row-level security and column grants (`guard_viewer`) |
 
@@ -1629,7 +1644,7 @@ A new value in any of them is a code change with an ADR (`spec/LISTS.md` Group 2
 |---|---|
 | `Project` | ✅ built 2026-10-02 (ADR-303): its client, declaration event, program type, window, number source and settings (§3), with `Client`, `DeclarationEvent` and `ProjectKindOfWork` |
 | `Contractor` | ✅ built 2026-10-02 (ADR-305, 306): its kind, contact and merge link, with `ProjectContractor` and `Contract` |
-| `User` | ✅ viewer kind, contact, permissions and viewer projects (ADR-315); sign-in's columns in Phase 2 |
+| `User` | ✅ viewer kind, contact, permissions and viewer projects (ADR-315); whether a viewer sees private citizens by name (ADR-336); sign-in's columns in Phase 2 |
 | `Device`, `MasterPasscode`, `NumberBlock` | As built; a key's revocation; the overlap refusal |
 | `DisposalSite` | ✅ built 2026-10-02 (ADR-311): its type (and the type's key), facts, permit, GPS, dates, with `DisposalSiteLabel`, `DisposalSiteTippingFee`, `SiteAreaVersion`, and the project map, `MapVersion` and `Zone` |
 | `Assignment` | ✅ `formDocumentTypes` built (ADR-308); its pay items (ADR-286), held to unit rate ones (ADR-309) |

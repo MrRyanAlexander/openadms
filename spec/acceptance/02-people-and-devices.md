@@ -146,22 +146,26 @@ screens are Phases 3–4 (REQ-310). Nothing here is Phase 1's but the project's 
 | AC-02-72 | **Given** Luis, a manager/analyst, **when** he looks at Ana Brooks, **then** he doesn't see her phone number; Dana, an admin, does | ADR-169 | API (Phase 2) | |
 | AC-02-73 | **Given** P1's time clock is on, **then** no read-only viewer sees anybody's hours | ADR-241 (agent default) | Phases 3–4, with the clock's tables | |
 | AC-02-74 | **When** a client user, a contractor user or an auditor signs in, **then** it is to a read-only web view of their own projects' tickets and reports, with an authenticator code only if they chose one | ADR-050, 170 · REQ-408 | API (Phase 2); back office (Phase 4) | |
+| AC-02-75 | **When** Dana issues a read-only viewer their login, **then** the record says whether that viewer sees private citizens by name; every read-only viewer's record says so and nobody else's does. A new viewer starts seeing them; Dana may say otherwise for that one viewer, then or later, and each change is audited with her as the actor. No viewer reads or changes the setting *(added 2026-10-04, ADR-336, after the user's approval of this file: agent-written, for the user's approval)* | ADR-328 (4), 336 | database and domain (C67 (d)): `viewers.test.ts`, `viewer-settings.test.ts` | database and domain (2026-10-04, ADR-336) |
+| AC-02-76 | **Given** ROE `R-0007` on P1 is Rosa Delgado's, and Kim logged Carl Jensen's drop-off from 14 Heron St, **then** Bayline County's client user and the auditor, neither marked, read the ROE's owner and the log's resident and address by name, for their own projects only; a contractor user reads neither record *(added 2026-10-04, ADR-336: agent-written, for the user's approval)* | ADR-169, 327, 328 (4), 336 | database (C67 (d)): `roes-and-forms.test.ts`, `catalog.test.ts` | database (2026-10-04, ADR-336) |
+| AC-02-77 | **Given** Dana marked the auditor not to see private citizens, **then** the auditor still sees `R-0007` (its number, parcel, address, signature) and the drop-off log (its site, time, notes), and reads no owner, no resident and no origin address, through the viewer views or past them; the client user, not marked, still reads them; when Dana gives the auditor that sight back, they read them again *(added 2026-10-04, ADR-336: agent-written, for the user's approval)* | ADR-328 (4), 336 | database (C67 (d)): `roes-and-forms.test.ts` | database (2026-10-04, ADR-336) |
 
 ---
 
 ## The count
 
-**74 scenarios.** By where each is proven:
+**77 scenarios** (74 approved by the user, ADR-335; AC-02-75…77 added after, ADR-336). By where each is proven:
 
 | | Scenarios | How many |
 |---|---|---|
 | Built in Phase 0 (and by ADR-286, 308, 309), passing at the database, each under a test whose name starts with its ID (since task 1.1.10, ADR-315) | AC-02-01…04, 15…17, 20…22, 24…32, 43, 57, 59, 62…65, 67, 68 | 28 |
 | Built, in part | AC-02-38 (the unplanned assignment's record), AC-02-49 (the project's switch, as AC-01-11) | 2 |
 | Built by task 1.1.10 (ADR-315), passing at the database | AC-02-05, 06, 09, 10, 11, 69, 70; and the database's part of AC-02-61 and 71 | 7, and 2 in part |
+| Built by C67 (d) (ADR-336), passing at the database and the domain | AC-02-75, 76, 77 | 3 |
 | Later Phase 1 tasks | AC-02-34 and the flags of 48 and 60 (Milestone 1.5); 42, 47, 48 (1.3.3); 56 (1.9.1); 66 (1.2.3, 1.7.1); 71's licence number (1.2.3) | |
 | Phases 2–4 only | AC-02-07, 08, 12…14, 18, 19, 23, 33, 35…37, 39…41, 44…46, 50…55, 58, 72…74 | 28 |
 
-**35 pass at the database, and four in part** (AC-02-38, 49, 61, 71). The run behind it
+**38 pass at the database, and four in part** (AC-02-38, 49, 61, 71): the 35 of 2026-10-03, and AC-02-75…77 (2026-10-04, ADR-336). The run behind it
 (2026-10-03, on the local stack, ADR-315): `pnpm test`, `Test Files 43 passed (43)`, `Tests 859 passed (859)`,
 the database's 654 among them (`people`, `viewers`, `devices`, `assignments`, `monitor-id`,
 `row-level-security`, `grants`, `catalog`, `forms`); `pnpm scenarios`, 16 and 18 checks passed.

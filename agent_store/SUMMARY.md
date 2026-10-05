@@ -1,13 +1,13 @@
 # Open ADMS — Current decisions and gaps, at a glance
 
 **The present tense of the project on one page.** `DECISIONS.md` and `DEVIATIONS.md` are the full
-history, with 331 ADRs and 70 KDs, many superseded. This page says what is true **now** and which
+history, with 336 ADRs and 70 KDs, many superseded. This page says what is true **now** and which
 entries to cite. The reasons live in the ADRs and the skills.
 
 - **Keep it current:** when you add, amend or supersede an ADR, or open or close a KD, update this
   page **in the same response** (`adms-decisions`).
 - **If this page and a log entry disagree,** the newest ADR wins: fix this page and say so.
-- Updated 2026-10-04, through ADR-335 / KD-70. **C67 (c) is built (ADR-334): an incident may name the contractor involved, a cert number and an ROE number, each optional, and the project's incident form's `incidentOffers` says which a phone shows; next C67 (d), (e), then 1.4.2. The user approved acceptance files 01…05 (ADR-335).** **Task 1.4.1 is done (ADR-333): `spec/acceptance/05-sync.md`, 56 scenarios, decides nothing; sixteen points are left to the tasks that build them (1.4.2 mostly); next C67 (c), (d), (e), then 1.4.2.** Task 1.3.7 is done (ADR-332): Milestone 1.3 is done. **C67 (a) and (b) are built: certification copying is out of the schema, the service, the domain and the story (ADR-330), and a scale receipt's number is no longer unique (ADR-331: the key dropped by the fifty-seventh migration); C67 (c)…(g) are not.** **The user answered the agent defaults of 1.3.2…1.3.6 (ADR-328; §4): certifications are never copied, a scale receipt's number is never unique, an incident may name a contractor, cert number and ROE number, a viewer's sight of private citizens' names is the firm's choice. The first two are built (ADR-330, 331); the others not yet (BACKLOG C67).** **Task 1.3.6, ROEs and forms, is done (ADR-327; see "Field events").** Task 1.3.5, scale receipts and photographs, is done (ADR-326). Task 1.3.4, what each kind of field event records, is done (ADR-325). Task 1.3.3, what every field event records, is done (ADR-324). Task 1.3.2, numbering, is done (ADR-323; see "Tickets and numbers"). Rounds 13–26 are answered (ADR-145…228).
+- Updated 2026-10-04, through ADR-336 / KD-70. **C67 (d) is built (ADR-336): every read-only viewer's record says whether they see private citizens by name (`User.seesPrivateCitizens`, default yes, the domain's); an ROE's owner and a drop-off log's resident and origin address are granted to no viewer and shown only by `viewer_roe_citizen` and `viewer_drop_off_log_citizen`; next C67 (e), then 1.4.2.** **C67 (c) is built (ADR-334): an incident may name the contractor involved, a cert number and an ROE number, each optional, and the project's incident form's `incidentOffers` says which a phone shows; next C67 (d), (e), then 1.4.2. The user approved acceptance files 01…05 (ADR-335).** **Task 1.4.1 is done (ADR-333): `spec/acceptance/05-sync.md`, 56 scenarios, decides nothing; sixteen points are left to the tasks that build them (1.4.2 mostly); next C67 (c), (d), (e), then 1.4.2.** Task 1.3.7 is done (ADR-332): Milestone 1.3 is done. **C67 (a) and (b) are built: certification copying is out of the schema, the service, the domain and the story (ADR-330), and a scale receipt's number is no longer unique (ADR-331: the key dropped by the fifty-seventh migration); C67 (c)…(g) are not.** **The user answered the agent defaults of 1.3.2…1.3.6 (ADR-328; §4): certifications are never copied, a scale receipt's number is never unique, an incident may name a contractor, cert number and ROE number, a viewer's sight of private citizens' names is the firm's choice. The first two are built (ADR-330, 331); the others not yet (BACKLOG C67).** **Task 1.3.6, ROEs and forms, is done (ADR-327; see "Field events").** Task 1.3.5, scale receipts and photographs, is done (ADR-326). Task 1.3.4, what each kind of field event records, is done (ADR-325). Task 1.3.3, what every field event records, is done (ADR-324). Task 1.3.2, numbering, is done (ADR-323; see "Tickets and numbers"). Rounds 13–26 are answered (ADR-145…228).
   **Phase 1 (data core and engine, rebuilt) is open, at the user's word (ADR-299).** Its plan is
   `BACKLOG.md`'s ten milestones and 47 tasks, one task per response, each milestone opening with
   its part's acceptance scenarios in `spec/acceptance/` (ADR-300). Done: the plan,
@@ -345,6 +345,20 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   client's notes, a map's uploaded file key, or any person, permission, phone, assignment, number
   block or the master passcode. Fifty-five models, thirty-nine migrations. Left for later: C59.
   *Agent defaults.* [315]
+- **Whether a viewer sees private citizens by name is the firm's choice for each viewer (the
+  user, ADR-328 (4); built 2026-10-04, C67 (d)):** `User.seesPrivateCitizens`, stated on every
+  read-only viewer and on nobody else (a check), no database default; **a new viewer starts at
+  yes** (`packages/domain`, `ViewerSettings.starting()`); changed at any time, audited (security).
+  **The columns that name a private citizen** *(agent default)*: an ROE's `owner_name`, a
+  drop-off log's `resident_name` and `origin_address`. They are in no `viewer_<table>` view and
+  the read-only login holds no grant on them; `viewer_roe_citizen` and
+  `viewer_drop_off_log_citizen` (id, project, those columns), run with the owner's rights behind
+  a security barrier, show a row only to a client user or an auditor of its project whose record
+  says yes (`viewer_sees_private_citizens()`, the viewer's fourth question). **One line says
+  it:** `SELECT guard_viewer('roe', 'PROJECT', citizen => ARRAY['owner_name']);`. Not hidden,
+  for the user to say: an ROE's address and parcel, free text, the firm's own form fields, a
+  photograph of a signed form. A migration that writes a row states its actor inside one `DO`
+  block. Sixty-one migrations; 58 test files, 1,173 tests. [328, 336]
 - **The API's setup services, and where services live (built 2026-10-03, task 1.1.11):**
   `apps/api/src/<part>/`, plain classes, no HTTP, no sign-in, each given the API's database client,
   a clock and, where needed, the policy values (read by `apps/api/src/policy.ts`). `setup/`:
@@ -1462,14 +1476,14 @@ its scenario.
 
 ## 4. Waiting on the user
 
-**Nothing blocks the next task (C67 (d), a viewer's sight of private citizens' names; then (e), then 1.4.2, intake).** **Yours to approve or overturn from C67 (c) (ADR-334):** the setting lives on the project's incident form; a new incident form starts offering the contractor and a cert number, and an ROE number where the program type requires ROEs; scenarios AC-01-83 and AC-04-99…101, added after your approval of the files (ADR-335).
+**Nothing blocks the next task (C67 (e), a photograph's archive mark and label; then 1.4.2, intake).** **Yours to approve or overturn from C67 (d) (ADR-336):** which columns name a private citizen (an ROE's owner; a drop-off log's resident and origin address; not an ROE's address, free text, the firm's own fields or a signed form's photograph); scenarios AC-02-75…77, added after your approval of the file. **Yours to approve or overturn from C67 (c) (ADR-334):** the setting lives on the project's incident form; a new incident form starts offering the contractor and a cert number, and an ROE number where the program type requires ROEs; scenarios AC-01-83 and AC-04-99…101, added after your approval of the files (ADR-335).
 - **Decided by the user 2026-10-04 (ADR-328), not built yet (BACKLOG C67) but for the first; the
   lines above and below that say otherwise are superseded:** **a certification is never copied**
   (configuration is: pay items, rules; **built, ADR-330**); **a scale receipt's number is never unique** (a receipt book restarts
   at 001; only a duplicate *record* matters; **built, ADR-331**); **an incident may name a contractor, a cert number
   and an ROE number**, each optional, offered as the project's setup says; **a viewer sees
   private citizens by name unless the firm said otherwise for that viewer**, set when it adds
-  them. Confirmed as built: loose ROE scope and incident sub-type; no database limit of 8
+  them (**built, ADR-336**). Confirmed as built: loose ROE scope and incident sub-type; no database limit of 8
   photographs; `MeasuredAs`; 0 CY; `formDefinitionId` optional.
 - **The user's second round, 2026-10-04 (ADR-329), not built yet (C67):** **the phone prevents a
   broken record; one that reaches the server anyway is kept and flagged** (a missing kind of
@@ -1485,7 +1499,7 @@ its scenario.
   **a record on a form with no fields of the firm's own has no definition** and empty answers;
   **a photograph field's answer is that photograph's id**; an incident's sub-type isn't held to
   its type, nor an ROE's payable type to the project's unit rate pay items, by the database;
-  a client user and an auditor see an ROE's owner and a drop-off log's resident by name.
+  ~~a client user and an auditor see an ROE's owner and a drop-off log's resident by name~~ (the firm's choice per viewer, ADR-328 (4); built, ADR-336).
 - **From task 1.3.5 (ADR-326), yours to overturn:** **a scale receipt's weights are kept as
   written and none is required or worked out** (a net that isn't its gross less its tare, or is
   nought or below, is received and left for a flag; only a gross or tare below nought is
