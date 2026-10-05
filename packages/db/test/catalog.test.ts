@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import { eachTestRolledBack } from './support/lifecycle.ts';
 import { listTables } from './support/lists.ts';
-import { viewedTables, viewerSights } from './support/viewers.ts';
+import { citizenViews, viewedTables, viewerSights } from './support/viewers.ts';
 
 const tested = eachTestRolledBack();
 
@@ -768,6 +768,12 @@ describe('the guards in the catalog', () => {
         name: 'user_viewer_kind_check',
         definition: "CHECK (((role = 'READ_ONLY_VIEWER'::user_role) = (viewer_kind IS NOT NULL)))",
       },
+      // Every read-only viewer says whether they see private citizens by name (ADR-336).
+      {
+        name: 'user_viewer_private_citizens_check',
+        definition:
+          "CHECK (((role = 'READ_ONLY_VIEWER'::user_role) = (sees_private_citizens IS NOT NULL)))",
+      },
       {
         name: 'user_viewer_project_system_actor_check',
         definition: "CHECK ((user_id <> '00000000-0000-7000-8000-000000000001'::uuid))",
@@ -817,7 +823,7 @@ describe('the guards in the catalog', () => {
     expect(rows.map((row) => row.policy).sort()).toEqual(policies);
   });
 
-  it("the viewer views run as the viewer, behind a security barrier; the project's setup alone asks the viewer's question itself", async () => {
+  it("the viewer views run as the viewer, behind a security barrier; a project's setup, who recorded a field event and a private citizen's columns ask the viewer's questions themselves", async () => {
     const rows = await tested.db.rows<{ name: string; options: string[] }>(
       `SELECT relname AS name, reloptions AS options FROM pg_class
        WHERE relnamespace = 'public'::regnamespace AND relkind IN ('v', 'm') ORDER BY relname`,
@@ -835,6 +841,8 @@ describe('the guards in the catalog', () => {
         // Who recorded a field event asks the viewer's question itself too (ADR-324).
         { name: 'viewer_field_event_monitor', options: ['security_barrier=true'] },
         { name: 'viewer_project_setup', options: ['security_barrier=true'] },
+        // A private citizen's columns too (ADR-336).
+        ...citizenViews.map((name) => ({ name, options: ['security_barrier=true'] })),
       ].sort((a, b) => (a.name < b.name ? -1 : 1)),
     );
     // Row-level security can't tell columns apart, so the one view that shows a project's settings
@@ -871,7 +879,52 @@ describe('the guards in the catalog', () => {
     ]);
   });
 
-  it("only six functions run with the owner's rights, and every function pins its search path", async () => {
+  it("AC-02-76 a private citizen's columns are shown by a view of their own, the owner's, that asks whether this viewer may see them", async () => {
+    const views = await tested.db.rows<{ name: string; owner: string; definition: string }>(
+      `SELECT relname AS name, pg_get_userbyid(relowner) AS owner,
+         pg_get_viewdef(oid) AS definition
+       FROM pg_class WHERE relname = ANY($1) ORDER BY relname`,
+      [citizenViews],
+    );
+    const question =
+      'WHERE (viewer_sees_project(project_id) AND viewer_sees_every_ticket() AND viewer_sees_private_citizens());';
+    expect(
+      views.map((view) => ({
+        ...view,
+        definition: view.definition.split('\n').map((line) => line.trim()),
+      })),
+    ).toEqual([
+      {
+        name: 'viewer_drop_off_log_citizen',
+        owner: 'adms_owner',
+        definition: [
+          'SELECT id,',
+          'project_id,',
+          'resident_name,',
+          'origin_address',
+          'FROM drop_off_log',
+          question,
+        ],
+      },
+      {
+        name: 'viewer_roe_citizen',
+        owner: 'adms_owner',
+        definition: ['SELECT id,', 'project_id,', 'owner_name', 'FROM roe', question],
+      },
+    ]);
+    // And the views every viewer of the project reads don't show them.
+    for (const [table, sight] of Object.entries(viewerSights)) {
+      if (sight.citizen.length === 0) continue;
+      const shown = await tested.db.rows<{ name: string }>(
+        `SELECT attname AS name FROM pg_attribute
+         WHERE attrelid = $1::regclass AND attnum > 0 AND attname = ANY($2)`,
+        [`viewer_${table}`, sight.citizen],
+      );
+      expect(shown, table).toEqual([]);
+    }
+  });
+
+  it("only seven functions run with the owner's rights, and every function pins its search path", async () => {
     const rows = await tested.db.rows<{ name: string; definer: boolean; config: string[] | null }>(
       `SELECT proname AS name, prosecdef AS definer, proconfig AS config FROM pg_proc
        WHERE pronamespace = 'public'::regnamespace ORDER BY proname`,
@@ -883,6 +936,8 @@ describe('the guards in the catalog', () => {
       'viewer_is_contractor',
       'viewer_sees_every_ticket',
       'viewer_sees_load_project',
+      // Whether they see private citizens by name, read there too (ADR-336).
+      'viewer_sees_private_citizens',
       'viewer_sees_project',
     ]);
     expect(

@@ -50,6 +50,7 @@ describe('a person', () => {
       'name',
       'phone',
       'role',
+      'sees_private_citizens',
       'viewer_kind',
     ]);
     const days = await db.rows<{ project_id: string; person_id: string }>(

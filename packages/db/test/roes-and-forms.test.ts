@@ -1222,6 +1222,121 @@ describe('what a viewer sees of ROEs and forms', () => {
     expect(await sees(world.auditor, 'viewer_roe')).toEqual([ids.viewer_roe, onP2Too].sort());
   });
 
+  // What the read-only login reads from a view, for the viewer stated.
+  async function reads(viewerId: string, sql: string): Promise<Row[]> {
+    const { db } = tested;
+    await db.viewer(viewerId);
+    await db.as('adms_readonly');
+    const rows = await db.rows<Row>(sql);
+    await db.administer();
+    return rows;
+  }
+
+  const owners = `SELECT "roe_number", "owner_name" FROM "viewer_roe"
+    JOIN "viewer_roe_citizen" USING ("id") ORDER BY 1`;
+  const residents = `SELECT "resident_name", "origin_address" FROM "viewer_drop_off_log"
+    JOIN "viewer_drop_off_log_citizen" USING ("id")`;
+
+  // ROE R-0007 on P1, owned by Rosa Delgado, and Carl Jensen's drop-off of 14 Heron St.
+  async function citizensOnP1(): Promise<void> {
+    const { world } = tested;
+    await asThePhone();
+    await roe({ project_id: world.p1, assignment_id: world.assignments.p1 });
+    await received(
+      'drop_off_log',
+      dropOff({ resident_name: 'Carl Jensen', origin_address: '14 Heron St' }),
+    );
+    await tested.db.administer();
+  }
+
+  it('AC-02-76 a client user and an auditor read an ROE’s owner and a drop-off log’s resident and address by name, of their own projects only', async () => {
+    const { db, world } = tested;
+    await citizensOnP1();
+    for (const viewer of [world.clientViewer, world.auditor]) {
+      expect(await reads(viewer, owners), viewer).toEqual([
+        { roe_number: 'R-0007', owner_name: 'Rosa Delgado' },
+      ]);
+      expect(await reads(viewer, residents), viewer).toEqual([
+        { resident_name: 'Carl Jensen', origin_address: '14 Heron St' },
+      ]);
+    }
+    // P2's ROE, Ben Whitaker's, is the auditor's to read and not the client user's.
+    await asThePhone();
+    await roe(r0008);
+    await db.administer();
+    expect(await reads(world.clientViewer, owners)).toHaveLength(1);
+    expect(await reads(world.auditor, owners)).toEqual([
+      { roe_number: 'R-0007', owner_name: 'Rosa Delgado' },
+      { roe_number: 'R-0008', owner_name: 'Ben Whitaker' },
+    ]);
+    // A contractor user sees neither record, so no name; nor does a request that states nobody.
+    for (const view of ['viewer_roe_citizen', 'viewer_drop_off_log_citizen']) {
+      expect(await reads(world.coastlineViewer, `SELECT 1 FROM "${view}"`), view).toEqual([]);
+      await db.noViewer();
+      await db.as('adms_readonly');
+      expect(await db.rows(`SELECT 1 FROM "${view}"`), view).toEqual([]);
+      await db.administer();
+    }
+  });
+
+  it('AC-02-77 a viewer the firm marked sees the ROE and the drop-off log without the owner, the resident or the address, through the view or past it', async () => {
+    const { db, world } = tested;
+    await citizensOnP1();
+    await asTheBackOffice();
+    await db.run(`UPDATE "user" SET "sees_private_citizens" = false WHERE "id" = $1`, [
+      world.auditor,
+    ]);
+    await db.administer();
+    // The records are still theirs to read: the ROE's number, parcel, address and signature,
+    // the log's site and time.
+    expect(
+      await reads(
+        world.auditor,
+        `SELECT "roe_number", "parcel_id", "address", "signed" FROM "viewer_roe"`,
+      ),
+    ).toEqual([
+      { roe_number: 'R-0007', parcel_id: 'APN 14-0321-007', address: '412 Cedar Ct', signed: true },
+    ]);
+    expect(await reads(world.auditor, `SELECT "site_id"::text FROM "viewer_drop_off_log"`)).toEqual(
+      [{ site_id: world.site }],
+    );
+    // Nobody's name.
+    expect(await reads(world.auditor, owners)).toEqual([]);
+    expect(await reads(world.auditor, residents)).toEqual([]);
+    // The client user wasn't marked, and still reads them.
+    expect(await reads(world.clientViewer, owners)).toHaveLength(1);
+    expect(await reads(world.clientViewer, residents)).toHaveLength(1);
+    // No viewer, marked or not, reads the columns from the table or from the view every viewer
+    // of the project reads: the read-only login holds no grant on them.
+    for (const viewer of [world.auditor, world.clientViewer]) {
+      await db.viewer(viewer);
+      await db.as('adms_readonly');
+      for (const sql of [
+        `SELECT "owner_name" FROM "roe"`,
+        `SELECT * FROM "roe"`,
+        `SELECT "resident_name" FROM "drop_off_log"`,
+        `SELECT "origin_address" FROM "drop_off_log"`,
+      ]) {
+        expect((await db.refused(sql)).code, sql).toBe(refusedBy.grant);
+      }
+      for (const [view, column] of [
+        ['viewer_roe', 'owner_name'],
+        ['viewer_drop_off_log', 'resident_name'],
+        ['viewer_drop_off_log', 'origin_address'],
+      ] as const) {
+        expect((await db.refused(`SELECT "${column}" FROM "${view}"`)).code, view).toBe('42703');
+      }
+      await db.administer();
+    }
+    // Given their sight back, the auditor reads them again.
+    await asTheBackOffice();
+    await db.run(`UPDATE "user" SET "sees_private_citizens" = true WHERE "id" = $1`, [
+      world.auditor,
+    ]);
+    await db.administer();
+    expect(await reads(world.auditor, owners)).toHaveLength(1);
+  });
+
   it('no viewer writes one, or reads a table past its view', async () => {
     const { db, world } = tested;
     await written();

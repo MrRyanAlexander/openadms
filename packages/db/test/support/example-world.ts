@@ -308,7 +308,9 @@ export function actionLike(
 }
 
 // A read-only viewer as Dana issues one: a client user or an auditor, or a contractor user with
-// its contractor (ADR-169, 315).
+// its contractor (ADR-169, 315). Each sees private citizens by name, as a new viewer does unless
+// the firm says otherwise (ADR-336): a test that needs one who doesn't states
+// `sees_private_citizens: false`.
 export function viewerLike(
   name: string,
   kind: 'CLIENT' | 'AUDITOR' | 'CONTRACTOR',
@@ -318,6 +320,7 @@ export function viewerLike(
     name,
     role: 'READ_ONLY_VIEWER',
     viewer_kind: kind,
+    sees_private_citizens: true,
     ...(contractorId === undefined ? {} : { contractor_id: contractorId }),
   };
 }

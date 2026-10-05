@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { refusedBy } from './support/database.ts';
 import { given, insertOf, viewerLike } from './support/example-world.ts';
 import { eachTestRolledBack } from './support/lifecycle.ts';
-import { viewedTables } from './support/viewers.ts';
+import { citizenViews, viewedTables } from './support/viewers.ts';
 
 const tested = eachTestRolledBack();
 
@@ -146,6 +146,75 @@ describe("a read-only viewer's record", () => {
   });
 });
 
+describe('whether a viewer sees private citizens by name', () => {
+  it('AC-02-75 every read-only viewer says whether they do, and nobody else says so', async () => {
+    const { db, world } = tested;
+    await asTheApi();
+    for (const sees of [true, false]) {
+      await add('user', {
+        ...viewerLike('Bayline County finance', 'CLIENT'),
+        sees_private_citizens: sees,
+      });
+    }
+    const unsaid = await db.refused(
+      ...insertOf('user', {
+        name: 'Bayline County finance',
+        role: 'READ_ONLY_VIEWER',
+        viewer_kind: 'CLIENT',
+      }),
+    );
+    expect(unsaid.code).toBe(refusedBy.check);
+    expect(unsaid.message).toContain('"user_viewer_private_citizens_check"');
+    for (const role of ['ADMIN', 'MANAGER_ANALYST', 'MONITOR']) {
+      const kept = await db.refused(
+        ...insertOf('user', { name: 'Luis Ortega', role, sees_private_citizens: true }),
+      );
+      expect(kept.code, role).toBe(refusedBy.check);
+      expect(kept.message, role).toContain('"user_viewer_private_citizens_check"');
+    }
+    // Nor does a viewer stop saying so later.
+    const lost = await db.refused(
+      `UPDATE "user" SET "sees_private_citizens" = NULL WHERE "id" = $1`,
+      [world.auditor],
+    );
+    expect(lost.message).toContain('"user_viewer_private_citizens_check"');
+  });
+
+  it('AC-02-75 the firm changes it at any time, audited with Dana as the actor; no viewer reads or writes it', async () => {
+    const { db, world } = tested;
+    await asTheApi();
+    expect(
+      await db.run(`UPDATE "user" SET "sees_private_citizens" = false WHERE "id" = $1`, [
+        world.auditor,
+      ]),
+    ).toBe(1);
+    expect(
+      await db.one(
+        `SELECT "actor_id"::text, "domain"::text, "operation"::text,
+           "prior_value"->>'sees_private_citizens' AS was,
+           "new_value"->>'sees_private_citizens' AS "is"
+         FROM "audit_record"
+         WHERE "table_name" = 'user' AND "record_id" = $1 AND "operation" = 'UPDATE'`,
+        [world.auditor],
+      ),
+    ).toEqual({
+      actor_id: world.admin,
+      domain: 'SECURITY',
+      operation: 'UPDATE',
+      was: 'true',
+      is: 'false',
+    });
+    await db.viewer(world.auditor);
+    await db.as('adms_readonly');
+    for (const sql of [
+      `SELECT "sees_private_citizens" FROM "user"`,
+      `UPDATE "user" SET "sees_private_citizens" = true`,
+    ]) {
+      expect((await db.refused(sql)).code, sql).toBe(refusedBy.grant);
+    }
+  });
+});
+
 describe("a project's setup, for a read-only viewer", () => {
   // What the example world's P1 holds, table by table; P2 holds its project, its prime and its
   // contract, its five number series, Rivera under that prime, and its own certification 730416
@@ -265,7 +334,11 @@ describe("a project's setup, for a read-only viewer", () => {
 
   it('a contractor user sees the project by name and nothing of its setup: no settings, pay items, rates, rules, sites or lists', async () => {
     const { db, world } = tested;
-    const every = ['viewer_project_setup', ...viewedTables.map((table) => `viewer_${table}`)];
+    const every = [
+      'viewer_project_setup',
+      ...viewedTables.map((table) => `viewer_${table}`),
+      ...citizenViews,
+    ];
     expect(await counts(world.coastlineViewer, every)).toEqual(
       Object.fromEntries(every.map((view) => [view, 0])),
     );
@@ -282,7 +355,11 @@ describe("a project's setup, for a read-only viewer", () => {
 
   it('with no viewer stated, or a person who is no viewer, shows nothing', async () => {
     const { db, world } = tested;
-    const every = ['viewer_project_setup', ...viewedTables.map((table) => `viewer_${table}`)];
+    const every = [
+      'viewer_project_setup',
+      ...viewedTables.map((table) => `viewer_${table}`),
+      ...citizenViews,
+    ];
     const nothing = Object.fromEntries(every.map((view) => [view, 0]));
     await db.noViewer();
     await db.as('adms_readonly');
@@ -341,6 +418,11 @@ describe('guard_viewer', () => {
         'name a relation and a column',
       ],
       [`guard_viewer('client', 'FIRM', hidden => ARRAY['fax'])`, 'client has no column fax'],
+      [`guard_viewer('roe', 'PROJECT', citizen => ARRAY['fax'])`, 'roe has no column fax'],
+      [
+        `guard_viewer('contractor', 'NAMED_BY', 'project_contractor', 'contractor_id', citizen => ARRAY['contact_name'])`,
+        'only a table seen by its PROJECT names citizen columns',
+      ],
     ] as const) {
       expect((await db.refused(`SELECT ${call}`)).message, call).toContain(message);
     }

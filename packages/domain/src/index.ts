@@ -102,6 +102,7 @@ export {
   type RuleRefusal,
 } from './rules.ts';
 export { SiteFacts, type SiteRefusal, type SiteSetting } from './site-facts.ts';
+export { ViewerSettings } from './viewer-settings.ts';
 export {
   SizeBands,
   type BandCheck,

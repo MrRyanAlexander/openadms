@@ -13,7 +13,7 @@ import {
 } from './support/example-world.ts';
 import { eachTestRolledBack } from './support/lifecycle.ts';
 import { listTables } from './support/lists.ts';
-import { unseenTables, viewedTables, viewerSights } from './support/viewers.ts';
+import { citizenViews, unseenTables, viewedTables, viewerSights } from './support/viewers.ts';
 
 const tested = eachTestRolledBack();
 
@@ -105,6 +105,8 @@ const tableGrants: Record<string, Record<string, string>> = {
   ...Object.fromEntries(
     viewedTables.map((table) => [`viewer_${table}`, { adms_readonly: 'SELECT' }]),
   ),
+  // A private citizen's columns, for a viewer the firm lets see them (ADR-336).
+  ...Object.fromEntries(citizenViews.map((view) => [view, { adms_readonly: 'SELECT' }])),
 };
 
 // A field event's captured columns: what the API corrects. Never its id, the server's received
@@ -286,6 +288,7 @@ const functionGrants = [
   'viewer_is_contractor adms_readonly EXECUTE',
   'viewer_sees_every_ticket adms_readonly EXECUTE',
   'viewer_sees_load_project adms_readonly EXECUTE',
+  'viewer_sees_private_citizens adms_readonly EXECUTE',
   'viewer_sees_project adms_readonly EXECUTE',
 ];
 
@@ -318,7 +321,9 @@ describe('the grants, exactly as the catalog holds them', () => {
     );
     const hidden = new Set(
       Object.entries(viewerSights).flatMap(([table, sight]) =>
-        sight.hidden.map((column) => `${table}.${column} adms_readonly SELECT`),
+        [...sight.hidden, ...sight.citizen].map(
+          (column) => `${table}.${column} adms_readonly SELECT`,
+        ),
       ),
     );
     const shown = setupColumns.map((row) => row.grant).filter((grant) => !hidden.has(grant));
