@@ -53,7 +53,15 @@ importers:
 
   apps/field: {}
 
-  apps/worker: {}
+  apps/worker:
+    dependencies:
+      '@open-adms/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.6
+        version: 24.13.6
 
   infra/local:
     devDependencies:

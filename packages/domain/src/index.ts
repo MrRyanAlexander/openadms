@@ -126,6 +126,15 @@ export {
   type SentFix,
 } from './intake.ts';
 export {
+  Mileage,
+  mileageSources,
+  type MapData,
+  type MileageEnds,
+  type MileageMeasured,
+  type MileageSource,
+  type RoadPoint,
+} from './mileage.ts';
+export {
   MapShapes,
   ShapeArea,
   type BoundingBox,

@@ -2,8 +2,14 @@
   "name": "@open-adms/worker",
   "version": "0.0.0",
   "private": true,
-  "description": "Open ADMS worker: reconciliation, pricing, repricing and media jobs (ARCHITECTURE §13).",
+  "description": "Open ADMS worker: reconciliation, pricing, repricing and media jobs (ARCHITECTURE \u00a713).",
   "license": "AGPL-3.0-only",
   "type": "module",
-  "exports": "./dist/index.js"
+  "exports": "./dist/index.js",
+  "dependencies": {
+    "@open-adms/domain": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.6"
+  }
 }
