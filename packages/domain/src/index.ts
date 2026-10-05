@@ -42,6 +42,18 @@ export {
   type FlagsCompared,
 } from './flags.ts';
 export { ProjectClock } from './project-clock.ts';
+export { Distance, type GpsPoint } from './geodesic.ts';
+export {
+  PlaceChecks,
+  SiteChecks,
+  type CheckedSite,
+  type PlaceFound,
+  type PlaceSetup,
+  type PlacedFieldEvent,
+  type ProjectMap,
+  type ZoneAttached,
+  type ZoneOnMap,
+} from './place.ts';
 export {
   CertificationChanges,
   CertificationSubs,
@@ -86,6 +98,7 @@ export {
 } from './intake.ts';
 export {
   MapShapes,
+  ShapeArea,
   type BoundingBox,
   type MapGeometry,
   type MapShape,

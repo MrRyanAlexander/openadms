@@ -8,7 +8,8 @@
 // The box is the least and greatest longitude and latitude of the shape's positions, written as
 // exact decimals to eight places, as the database keeps them (invariant 15). A shape that crosses
 // the 180° meridian gets a box the whole way round, which is still a box it lies in. Whether a
-// point is in a shape is the engine's, in this same module (BACKLOG 1.5).
+// point is in a shape is the engine's, in this same module: `ShapeArea` (ADR-346).
+import type { GpsPoint } from './geodesic.ts';
 
 // Type aliases, not interfaces, so a shape is plain JSON to whoever stores it.
 // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
@@ -193,5 +194,70 @@ export class MapShapes {
 
   private static isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
+  }
+}
+
+type RingSide = 'IN' | 'EDGE' | 'OUT';
+
+// Whether a GPS point is in a shape: the project's boundary, a zone, a site's own area
+// (ARCHITECTURE §3 "The check"; ADR-141, 144, 346; BACKLOG C57). Point-in-polygon on longitude
+// and latitude; **a point on an edge is inside**. A polygon's later rings are holes: a point in
+// one is outside, a point on a hole's edge inside. The bounding box is the quick first test.
+//
+// The shapes of a project are a county across at most, so an edge is taken as the straight line
+// between its two positions in longitude and latitude, as every GIS tool that drew it shows it.
+// A shape that crosses the 180° meridian isn't handled apart: its box goes the whole way round,
+// and no project lies there.
+export class ShapeArea {
+  private readonly shape: MapShape;
+
+  constructor(shape: MapShape) {
+    this.shape = shape;
+  }
+
+  holds(point: GpsPoint): boolean {
+    const x = Number(point.longitude);
+    const y = Number(point.latitude);
+    const { box, geometry } = this.shape;
+    if (
+      x < Number(box.westLongitude) ||
+      x > Number(box.eastLongitude) ||
+      y < Number(box.southLatitude) ||
+      y > Number(box.northLatitude)
+    ) {
+      return false;
+    }
+    const polygons = geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates;
+    return polygons.some((polygon) => ShapeArea.polygonHolds(polygon, x, y));
+  }
+
+  private static polygonHolds(polygon: Polygon, x: number, y: number): boolean {
+    const [outline, ...holes] = polygon;
+    if (outline === undefined) return false;
+    const side = ShapeArea.sideOf(outline, x, y);
+    if (side !== 'IN') return side === 'EDGE';
+    return holes.every((hole) => ShapeArea.sideOf(hole, x, y) !== 'IN');
+  }
+
+  // Where the point lies against one closed ring: a ray cast east crosses the ring an odd number
+  // of times from inside it.
+  private static sideOf(ring: number[][], x: number, y: number): RingSide {
+    let inside = false;
+    for (let index = 1; index < ring.length; index += 1) {
+      const [x1 = 0, y1 = 0] = ring[index - 1] ?? [];
+      const [x2 = 0, y2 = 0] = ring[index] ?? [];
+      const onTheLine = (x2 - x1) * (y - y1) - (y2 - y1) * (x - x1) === 0;
+      if (
+        onTheLine &&
+        x >= Math.min(x1, x2) &&
+        x <= Math.max(x1, x2) &&
+        y >= Math.min(y1, y2) &&
+        y <= Math.max(y1, y2)
+      ) {
+        return 'EDGE';
+      }
+      if (y1 > y !== y2 > y && x < ((x2 - x1) * (y - y1)) / (y2 - y1) + x1) inside = !inside;
+    }
+    return inside ? 'IN' : 'OUT';
   }
 }
