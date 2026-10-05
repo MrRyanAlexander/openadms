@@ -15,7 +15,9 @@
 import { NumberAllocator } from '@open-adms/api';
 
 import { projectTime } from '../clock.ts';
+import { made, scanned } from '../device.ts';
 import { uuidv7 } from '../ids.ts';
+import { phoneLists } from '../phone-lists.ts';
 import type { Story } from '../runner.ts';
 import { p1TimeZone as timeZone, setUpP1, setUpP1Sites } from './p1.ts';
 
@@ -422,6 +424,10 @@ export const dispatchMonday: Story = {
       assignmentId: board.collections,
       projectId: office.p1,
       setupVersion: 1,
+      lists: await phoneLists(api, {
+        assignmentId: board.collections,
+        deviceId: phones.collection.id,
+      }),
       timeZone,
     });
     const kimPhone = story.phone({
@@ -518,7 +524,7 @@ export const dispatchMonday: Story = {
       'Ana completes the collection; her phone shows 101001, the first of its block',
     );
     anaPhone.complete(collection, {
-      ticketNumber: '101001',
+      number: made,
       endLatitude: '27.94620000',
       endLongitude: '-82.45870000',
     });
@@ -526,7 +532,7 @@ export const dispatchMonday: Story = {
     const disposal = kimPhone.begin('LOAD', 'DISPOSAL', '730415');
     story.at(at('09:25'), 'Kim calls the load 80% and scans 101001 last');
     kimPhone.complete(disposal, {
-      ticketNumber: '101001',
+      number: scanned('101001'),
       endLatitude: '27.99810000',
       endLongitude: '-82.39120000',
       loadCall: 80,
@@ -541,7 +547,7 @@ export const dispatchMonday: Story = {
     const toppedUp = await allocator.topUp(anaAtSync, {
       projectId: office.p1,
       series: 'LOAD',
-      lastUsedNumber: 101001,
+      lastUsedNumber: anaPhone.lastUsedNumber('LOAD'),
     });
     if (!toppedUp.saved) throw new Error(toppedUp.refusal.message);
     const events = await api.fieldEvent.findMany({

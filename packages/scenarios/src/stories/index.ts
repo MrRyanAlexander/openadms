@@ -3,6 +3,7 @@ import type { Story } from '../runner.ts';
 import { certification } from './certification.ts';
 import { dispatchMonday } from './dispatch-monday.ts';
 import { numbering } from './numbering.ts';
+import { p1FieldDays } from './p1-field-days.ts';
 import { setup } from './setup.ts';
 import { ticket101001 } from './ticket-101001.ts';
 
@@ -12,4 +13,5 @@ export const stories: readonly Story[] = [
   setup,
   certification,
   numbering,
+  p1FieldDays,
 ];

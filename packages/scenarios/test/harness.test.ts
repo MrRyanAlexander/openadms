@@ -1,9 +1,21 @@
 // The harness's own pieces, without a database (BACKLOG 0.4.1; ADR-275): the story's clock, the
-// ids a phone makes, and a phone that keeps what it records until it syncs.
+// ids a phone makes, and a phone that keeps what it records until it syncs. And how that phone
+// captures (BACKLOG 1.3.7; spec/acceptance/04-field-capture.md AC-04-10, 11, 17, 59, 70, 91, 92):
+// badge first, the details picked by name, the number last and entered again.
 import { describe, expect, it } from 'vitest';
 
 import { projectTime, StoryClock, utcOffsetMinutes } from '../src/clock.ts';
-import { SimulatedDevice, type RecordedEvent, type SyncIntake } from '../src/device.ts';
+import {
+  chained,
+  made,
+  scanned,
+  SimulatedDevice,
+  typed,
+  type PhoneLists,
+  type PhoneRecord,
+  type RecordedEvent,
+  type SyncIntake,
+} from '../src/device.ts';
 import { uuidv7, uuidv7Time } from '../src/ids.ts';
 
 const setup = {
@@ -17,12 +29,16 @@ const setup = {
 };
 
 class Received implements SyncIntake {
-  readonly events: RecordedEvent[] = [];
+  readonly records: PhoneRecord[] = [];
   refuseAfter = Infinity;
 
-  receive(event: RecordedEvent): Promise<void> {
-    if (this.events.length >= this.refuseAfter) return Promise.reject(new Error('no signal'));
-    this.events.push(event);
+  get events(): RecordedEvent[] {
+    return this.records.flatMap((sent) => (sent.record === 'FIELD_EVENT' ? [sent.fieldEvent] : []));
+  }
+
+  receive(sent: PhoneRecord): Promise<void> {
+    if (this.records.length >= this.refuseAfter) return Promise.reject(new Error('no signal'));
+    this.records.push(sent);
     return Promise.resolve();
   }
 }
@@ -77,10 +93,10 @@ describe('a simulated phone', () => {
     const phone = new SimulatedDevice(setup, clock);
     const first = phone.begin('LOAD', 'COLLECTION', '730415');
     clock.advance(25);
-    phone.complete(first, { ticketNumber: '101001' });
+    phone.complete(first, { number: scanned('101001') });
     const second = phone.begin('LOAD', 'COLLECTION', '730415');
     clock.advance(20);
-    phone.complete(second, { ticketNumber: '101002' });
+    phone.complete(second, { number: scanned('101002') });
     expect(phone.waiting.map((event) => event.ticketNumber)).toEqual(['101001', '101002']);
 
     const intake = new Received();
@@ -95,7 +111,9 @@ describe('a simulated phone', () => {
     const phone = new SimulatedDevice({ ...setup, clockErrorMinutes: -7 }, clock);
     const id = phone.begin('LOAD', 'DISPOSAL', '730415');
     clock.advance(20);
-    const event = phone.complete(id, { ticketNumber: '101001', loadCall: 80 });
+    const completed = phone.complete(id, { number: scanned('101001'), loadCall: 80 });
+    if (!completed.saved) throw new Error('not saved');
+    const { event } = completed;
     expect(projectTime('America/New_York', event.startedAt)).toBe('Mon 12 Oct 08:08');
     expect(projectTime('America/New_York', event.endedAt)).toBe('Mon 12 Oct 08:28');
     expect(uuidv7Time(event.id)).toEqual(event.startedAt);
@@ -118,7 +136,7 @@ describe('a simulated phone', () => {
     const clock = new StoryClock('2026-10-12T08:15:00-04:00');
     const phone = new SimulatedDevice(setup, clock);
     for (const number of ['101001', '101002', '101003']) {
-      phone.complete(phone.begin('LOAD', 'COLLECTION', '730415'), { ticketNumber: number });
+      phone.complete(phone.begin('LOAD', 'COLLECTION', '730415'), { number: scanned(number) });
     }
     const intake = new Received();
     intake.refuseAfter = 1;
@@ -135,8 +153,389 @@ describe('a simulated phone', () => {
 
   it('completes only a field event it started', () => {
     const phone = new SimulatedDevice(setup, new StoryClock('2026-10-12T08:15:00-04:00'));
-    expect(() => phone.complete('not-started', { ticketNumber: '101001' })).toThrow(
+    expect(() => phone.complete('not-started', { number: scanned('101001') })).toThrow(
       'has no field event',
     );
+  });
+});
+
+// The lists a phone holds, by made-up ids: P1's debris types, field tags and unit rate pay items
+// (spec/golden/MISSION.md §1), a block of each series, and no rate anywhere.
+const named = (name: string) => ({ id: `id:${name}`, name });
+const block = (series: PhoneLists['blocks'][number]['series'], first: number, last: number) =>
+  ({
+    series,
+    firstNumber: first,
+    lastNumber: last,
+    lastUsedNumber: null,
+    status: 'ISSUED',
+  }) as const;
+const payItem = (code: string, work: string, bandFrom: number | null, bandTo: number | null) => ({
+  id: `id:${code}`,
+  code,
+  bandFrom,
+  bandTo,
+  archived: false,
+  payableType: named(work),
+  kindOfWork: named(work),
+});
+const lists: PhoneLists = {
+  blocks: [
+    block('LOAD', 101001, 101003),
+    block('LOAD', 105001, 106000),
+    block('HAUL_OUT', 201001, 202000),
+    block('UNIT_RATE', 301001, 302000),
+    block('CERTIFICATION', 730415, 730514),
+    block('ROE', 7, 106),
+  ],
+  debrisTypes: {
+    LOAD: [named('Vegetative'), named('C&D')],
+    HAUL_OUT: [named('Mulch')],
+  },
+  fieldTags: [named('Zone 1 pile'), named('Zone 2 pile')],
+  typedNumberReasons: [named('Barcode damaged')],
+  payItems: [
+    payItem('HNG-RMV-EA', 'Hangers', null, null),
+    payItem('LNR-RMV-EA-24', 'Leaners', 6, 24),
+    payItem('LNR-RMV-EA-99', 'Leaners', 24.1, 99),
+    payItem('STP-RMV-EA-36', 'Stumps', 24, 36),
+    payItem('STP-RMV-EA-48', 'Stumps', 36.1, 48),
+    payItem('WG-RMV-EA', 'White Goods', null, null),
+  ],
+  itemNames: [
+    { ...named('Washer'), kindOfWorkId: 'id:White Goods' },
+    { ...named('Dryer'), kindOfWorkId: 'id:White Goods' },
+  ],
+  incidentTypes: [{ ...named('Property damage'), subTypes: [named('Mailbox struck')] }],
+};
+const tdsr = '00000000-0000-7000-8000-00000000000e';
+const phoneAt = (time: string, more: Partial<typeof setup> & { siteId?: string } = {}) => {
+  const clock = new StoryClock(`2026-10-12T${time}:00-04:00`);
+  return { clock, phone: new SimulatedDevice({ ...setup, lists, ...more }, clock) };
+};
+const saved = (completed: ReturnType<SimulatedDevice['complete']>): RecordedEvent => {
+  if (!completed.saved) throw new Error(`Not saved: ${completed.reason}`);
+  return completed.event;
+};
+
+describe('a simulated phone captures badge first, number last', () => {
+  it('AC-04-91, AC-04-17 New scans the badge: the field event waits with its id and no number', () => {
+    const { phone, clock } = phoneAt('08:15');
+    const id = phone.begin('LOAD', 'COLLECTION', '730415');
+    expect(phone.open).toEqual([
+      {
+        id,
+        workflow: 'LOAD',
+        kind: 'COLLECTION',
+        certNumber: '730415',
+        startedAt: new Date('2026-10-12T12:15:00Z'),
+      },
+    ]);
+    expect([phone.nextNumber('LOAD'), phone.lastUsedNumber('LOAD'), phone.waiting]).toEqual([
+      101001,
+      null,
+      [],
+    ]);
+    clock.advance(25);
+    const event = saved(phone.complete(id, { number: made, debrisType: 'Vegetative' }));
+    expect([event.id, event.ticketNumber, event.certNumber]).toEqual([id, '101001', '730415']);
+    expect([phone.open, phone.lastUsedNumber('LOAD')]).toEqual([[], 101001]);
+    expect(() => phone.begin('LOAD', 'COLLECTION')).toThrow('starts with a badge scanned');
+  });
+
+  it('AC-04-10 the first field event makes the number, the next of its block, block after block', () => {
+    const { phone } = phoneAt('08:15');
+    const numbers = [1, 2, 3, 4].map(
+      () =>
+        saved(phone.complete(phone.begin('LOAD', 'COLLECTION', '730415'), { number: made }))
+          .ticketNumber,
+    );
+    expect(numbers).toEqual(['101001', '101002', '101003', '105001']);
+    const haulOut = phone.begin('HAUL_OUT', 'HAUL_OUT_COLLECTION', '730419');
+    const unitRate = phone.begin('UNIT_RATE', 'UNIT_RATE', '730417');
+    expect([
+      saved(phone.complete(haulOut, { number: made, loadCall: 90 })).ticketNumber,
+      saved(phone.complete(unitRate, { number: made, payableType: 'Hangers' })).ticketNumber,
+    ]).toEqual(['201001', '301001']);
+  });
+
+  it('AC-04-10 a tower holds no block: it scans the number and never makes one', () => {
+    const { phone } = phoneAt('09:05', { name: 'P1-TWR-TDSR', siteId: tdsr });
+    const tower = new SimulatedDevice(
+      { ...phone.setup, lists: { ...lists, blocks: [] } },
+      phoneAt('09:05').clock,
+    );
+    const id = tower.begin('LOAD', 'DISPOSAL', '730415');
+    expect(tower.nextNumber('LOAD')).toBeNull();
+    expect(() => tower.complete(id, { number: made, loadCall: 80 })).toThrow(
+      'P1-TWR-TDSR holds no LOAD number to give out',
+    );
+    const event = saved(tower.complete(id, { number: scanned('101001'), loadCall: 80 }));
+    expect([event.ticketNumber, event.numberTyped, event.siteId]).toEqual(['101001', false, tdsr]);
+  });
+
+  it('AC-04-11 a number entered again that doesn’t match saves nothing: the same number shows until it does', () => {
+    const { phone } = phoneAt('08:15');
+    const id = phone.begin('LOAD', 'COLLECTION', '730415');
+    expect(phone.complete(id, { number: made, reentered: '101010' })).toEqual({
+      saved: false,
+      reason: 'NUMBER_MISMATCH',
+      shown: '101001',
+      reentered: '101010',
+    });
+    expect([phone.open.length, phone.waiting.length, phone.lastUsedNumber('LOAD')]).toEqual([
+      1,
+      0,
+      null,
+    ]);
+    expect(saved(phone.complete(id, { number: made, reentered: '101001' })).ticketNumber).toBe(
+      '101001',
+    );
+    const disposal = phone.begin('LOAD', 'DISPOSAL', '730415');
+    expect(phone.complete(disposal, { number: scanned('101001'), reentered: '101007' })).toEqual({
+      saved: false,
+      reason: 'NUMBER_MISMATCH',
+      shown: '101001',
+      reentered: '101007',
+    });
+    expect(phone.open.map((event) => event.id)).toEqual([disposal]);
+  });
+
+  it('a field event cancelled stays on the phone, is never sent, and took no number', async () => {
+    const { phone } = phoneAt('08:15');
+    const mistake = phone.begin('LOAD', 'COLLECTION', '730416');
+    phone.cancel(mistake);
+    expect([
+      phone.open,
+      phone.cancelled.map((event) => event.id),
+      phone.nextNumber('LOAD'),
+    ]).toEqual([[], [mistake], 101001]);
+    expect(() => phone.complete(mistake, { number: made })).toThrow('has no field event');
+    expect(await phone.sync(new Received())).toBe(0);
+  });
+
+  it('a typed number carries its reason and is not entered twice', () => {
+    const { phone } = phoneAt('12:10');
+    const event = saved(
+      phone.complete(phone.begin('LOAD', 'DISPOSAL', '730416'), {
+        number: typed('101060', 'Barcode damaged'),
+        loadCall: 60,
+      }),
+    );
+    expect([event.ticketNumber, event.numberTyped, event.numberTypedReasonId]).toEqual([
+      '101060',
+      true,
+      'id:Barcode damaged',
+    ]);
+    expect(() =>
+      phone.complete(phone.begin('LOAD', 'DISPOSAL', '730416'), {
+        number: typed('101061', 'Felt like it'),
+      }),
+    ).toThrow('no reason "Felt like it" in its lists');
+  });
+
+  it('AC-04-92 picks are names from its lists, each sent as the id the list holds', () => {
+    const { phone } = phoneAt('08:15');
+    const event = saved(
+      phone.complete(phone.begin('LOAD', 'COLLECTION', '730415'), {
+        number: made,
+        debrisType: 'C&D',
+        address: '14 Heron St',
+        addressSource: 'TYPED',
+        carriedTickets: ['301004'],
+      }),
+    );
+    expect([event.formDebrisTypeId, event.payItemId, event.address, event.carriedTickets]).toEqual([
+      'id:C&D',
+      null,
+      '14 Heron St',
+      ['301004'],
+    ]);
+    expect(phone.payableTypes).toEqual(['Hangers', 'Leaners', 'Stumps', 'White Goods']);
+    // A load's list is the load form's: Mulch is the haul-out form's.
+    expect(() =>
+      phone.complete(phone.begin('LOAD', 'COLLECTION', '730415'), {
+        number: made,
+        debrisType: 'Mulch',
+      }),
+    ).toThrow('no debris type "Mulch" in its lists');
+  });
+
+  it('refuses what its kind doesn’t record, as the domain’s rule says', () => {
+    const { phone } = phoneAt('08:15');
+    expect(() =>
+      phone.complete(phone.begin('LOAD', 'COLLECTION', '730415'), { number: made, loadCall: 80 }),
+    ).toThrow("A collection doesn't record a load call.");
+  });
+
+  it('AC-04-59 works a unit rate pay item out from the payable type’s bands', () => {
+    const { phone } = phoneAt('09:40');
+    const ticket = (completion: Parameters<SimulatedDevice['complete']>[1]) =>
+      saved(phone.complete(phone.begin('UNIT_RATE', 'UNIT_RATE', '730417'), completion));
+    const leaner = ticket({
+      number: made,
+      payableType: 'Leaners',
+      count: 1,
+      measurement: { inches: 56.5, measuredAs: 'CIRCUMFERENCE' },
+    });
+    expect([
+      leaner.payableTypeId,
+      leaner.kindOfWorkId,
+      leaner.payItemId,
+      leaner.measurementInches,
+      leaner.measuredAs,
+    ]).toEqual(['id:Leaners', 'id:Leaners', 'id:LNR-RMV-EA-24', 56.5, 'CIRCUMFERENCE']);
+    const stump = (inches: number) =>
+      ticket({
+        number: made,
+        payableType: 'Stumps',
+        count: 1,
+        measurement: { inches, measuredAs: 'DIAMETER' },
+      }).payItemId;
+    expect([stump(30), stump(40), stump(20)]).toEqual([
+      'id:STP-RMV-EA-36',
+      'id:STP-RMV-EA-48',
+      null,
+    ]);
+    const whiteGoods = ticket({
+      number: made,
+      payableType: 'White Goods',
+      items: [
+        { name: 'Washer', quantity: 2 },
+        { name: 'Dryer', quantity: 1 },
+      ],
+    });
+    expect([whiteGoods.payItemId, whiteGoods.unitCount, whiteGoods.items]).toEqual([
+      'id:WG-RMV-EA',
+      null,
+      [
+        { itemNameId: 'id:Washer', quantity: 2 },
+        { itemNameId: 'id:Dryer', quantity: 1 },
+      ],
+    ]);
+  });
+
+  it('AC-04-70 a crew badge scanned stays the working crew until another is scanned', () => {
+    const { phone } = phoneAt('09:40');
+    const tickets = ['730417', undefined, undefined, '730418', undefined].map((badge) =>
+      saved(
+        phone.complete(phone.begin('UNIT_RATE', 'UNIT_RATE', badge), {
+          number: made,
+          payableType: 'Hangers',
+        }),
+      ),
+    );
+    expect(tickets.map((event) => [event.ticketNumber, event.certNumber])).toEqual([
+      ['301001', '730417'],
+      ['301002', '730417'],
+      ['301003', '730417'],
+      ['301004', '730418'],
+      ['301005', '730418'],
+    ]);
+    expect(phone.workingCrew).toBe('730418');
+    // A truck's badge is scanned every time.
+    expect(() => phone.begin('LOAD', 'COLLECTION')).toThrow('starts with a badge scanned');
+  });
+
+  it('a split chain carries one number: each pile after the first takes its chain’s', () => {
+    const { phone } = phoneAt('15:10', { siteId: tdsr });
+    const pile = (suffix: string, tag: string, loadCall: number, after?: string) => {
+      const id = phone.begin('HAUL_OUT', 'HAUL_OUT_COLLECTION', '730419');
+      const event = saved(
+        phone.complete(id, {
+          number: after === undefined ? made : chained(after),
+          splitSuffix: suffix,
+          debrisType: 'Mulch',
+          fieldTag: tag,
+          loadCall,
+        }),
+      );
+      return event;
+    };
+    const first = pile('A', 'Zone 1 pile', 10);
+    const second = pile('B', 'Zone 2 pile', 35, first.id);
+    expect(
+      [first, second].map((event) => [event.ticketNumber, event.splitSuffix, event.fieldTagId]),
+    ).toEqual([
+      ['201001', 'A', 'id:Zone 1 pile'],
+      ['201001', 'B', 'id:Zone 2 pile'],
+    ]);
+    expect(phone.nextNumber('HAUL_OUT')).toBe(201002);
+  });
+
+  it('keeps its count of numbers when the next day’s monitor signs in; the story may pass numbers over', () => {
+    const { phone } = phoneAt('08:15');
+    saved(phone.complete(phone.begin('LOAD', 'COLLECTION', '730415'), { number: made }));
+    phone.signIn({ ...phone.setup, assignmentId: '00000000-0000-7000-8000-0000000000aa' });
+    const next = saved(
+      phone.complete(phone.begin('LOAD', 'COLLECTION', '730415'), { number: made }),
+    );
+    expect([next.ticketNumber, next.assignmentId]).toEqual([
+      '101002',
+      '00000000-0000-7000-8000-0000000000aa',
+    ]);
+    phone.passOver('HAUL_OUT', 201003);
+    expect(phone.nextNumber('HAUL_OUT')).toBe(201004);
+    expect(() => {
+      phone.signIn({ ...phone.setup, deviceId: tdsr });
+    }).toThrow('is one phone');
+  });
+
+  it('sends a scale receipt before the disposal that points at it, and forms in the order made', async () => {
+    const { phone, clock } = phoneAt('17:00', { siteId: tdsr });
+    const disposal = saved(
+      phone.complete(phone.begin('HAUL_OUT', 'HAUL_OUT_DISPOSAL', '730419'), {
+        number: scanned('201004'),
+        debrisType: 'Mulch',
+        scaleReceipt: {
+          receiptNumber: 'CCL-51207',
+          grossWeightLb: 79600,
+          tareWeightLb: 31600,
+          netWeightLb: 48000,
+          netWeightTons: 24,
+        },
+      }),
+    );
+    clock.advance(5);
+    const incident = phone.incident({
+      type: 'Property damage',
+      subType: 'Mailbox struck',
+      address: '22 Elm St',
+    });
+    const log = phone.dropOffLog({ residentName: 'Carl Jensen', originAddress: '14 Heron St' });
+    const intake = new Received();
+    expect(await phone.sync(intake)).toBe(4);
+    expect(intake.records.map((sent) => sent.record)).toEqual([
+      'SCALE_RECEIPT',
+      'FIELD_EVENT',
+      'INCIDENT',
+      'DROP_OFF_LOG',
+    ]);
+    const [receipt] = intake.records;
+    expect(receipt).toMatchObject({
+      scaleReceipt: { id: disposal.scaleReceiptId, receiptNumber: 'CCL-51207', siteId: tdsr },
+    });
+    expect([incident.incidentTypeId, incident.incidentSubTypeId, log.siteId]).toEqual([
+      'id:Property damage',
+      'id:Mailbox struck',
+      tdsr,
+    ]);
+    expect(uuidv7Time(incident.id)).toEqual(incident.madeAt);
+    const curb = phoneAt('08:15').phone;
+    expect(() => curb.dropOffLog({})).toThrow('this assignment has no site');
+  });
+
+  it('gives an ROE the next number of its ROE block, and a certifying phone its cert number', () => {
+    const { phone } = phoneAt('08:15');
+    const first = phone.roe({ address: '412 Cedar Ct', signed: true, signedDate: '2026-10-09' });
+    const paper = phone.roe({ paperNumber: 'ROE 2026-0412', signed: false });
+    const second = phone.roe({ address: '416 Cedar Ct', signed: true });
+    expect([first.roeNumber, paper.roeNumber, second.roeNumber]).toEqual([
+      'R-0007',
+      'ROE 2026-0412',
+      'R-0008',
+    ]);
+    expect([phone.takeCertNumber(), phone.takeCertNumber()]).toEqual(['730415', '730416']);
+    expect(phone.waitingRecords.map((sent) => sent.record)).toEqual(['ROE', 'ROE', 'ROE']);
   });
 });

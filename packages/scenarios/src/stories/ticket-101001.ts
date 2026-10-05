@@ -6,8 +6,12 @@
 // harness: its own database, the story's clock, offline phones, out-of-order sync, the audit trail.
 // Each phone holds its monitor's assignment for the day (ADR-240); the day's dispatch itself is the
 // next story's (dispatch-monday).
+import { NumberAllocator } from '@open-adms/api';
+
 import { projectTime } from '../clock.ts';
+import { made, scanned } from '../device.ts';
 import { uuidv7, uuidv7Time } from '../ids.ts';
+import { phoneLists } from '../phone-lists.ts';
 import type { Story } from '../runner.ts';
 import { p1TimeZone as timeZone, setUpP1, setUpP1Sites } from './p1.ts';
 
@@ -75,6 +79,13 @@ export const ticket101001: Story = {
         tdsr,
       };
     });
+    // At the yard, online, Ana's phone takes her assignment and its first block of load numbers:
+    // the collection makes the ticket's number (ADR-065, 209).
+    const block = await new NumberAllocator(api, clock, story.policy).topUp(
+      { person: setup.ana, deviceId: setup.collectionPhone.id },
+      { projectId: setup.p1, series: 'LOAD', lastUsedNumber: null },
+    );
+    if (!block.saved) throw new Error(block.refusal.message);
     const anaPhone = story.phone({
       name: 'P1-COL-1',
       deviceId: setup.collectionPhone.id,
@@ -82,6 +93,10 @@ export const ticket101001: Story = {
       assignmentId: setup.collections,
       projectId: setup.p1,
       setupVersion: 1,
+      lists: await phoneLists(api, {
+        assignmentId: setup.collections,
+        deviceId: setup.collectionPhone.id,
+      }),
       timeZone,
     });
     const kimPhone = story.phone({
@@ -97,9 +112,12 @@ export const ticket101001: Story = {
 
     story.at(at('08:15'), 'Ana scans the truck’s badge at 14 Heron St, offline');
     const collection = anaPhone.begin('LOAD', 'COLLECTION', '730415');
-    story.at(at('08:40'), 'Ana completes the collection, number 101001 last');
+    story.at(
+      at('08:40'),
+      'Ana completes the collection; her phone shows 101001, the first of its block, last',
+    );
     anaPhone.complete(collection, {
-      ticketNumber: '101001',
+      number: made,
       endLatitude: '27.94620000',
       endLongitude: '-82.45870000',
     });
@@ -108,7 +126,7 @@ export const ticket101001: Story = {
     const disposal = kimPhone.begin('LOAD', 'DISPOSAL', '730415');
     story.at(at('09:25'), 'Kim calls the load 80% and scans 101001 last');
     kimPhone.complete(disposal, {
-      ticketNumber: '101001',
+      number: scanned('101001'),
       endLatitude: '27.99810000',
       endLongitude: '-82.39120000',
       loadCall: 80,
@@ -226,7 +244,7 @@ export const ticket101001: Story = {
       [['user', 'master_passcode'], 94, 15],
     );
     story.check(
-      'and then holds exactly Dana’s twenty-four setup rows (the client, the declaration event, P1, its five number series and its five kinds of unit rate work, Coastline, its place as P1’s prime and its contract among them) and the two syncs',
+      'and then holds exactly Dana’s twenty-four setup rows (the client, the declaration event, P1, its five number series and its five kinds of unit rate work, Coastline, its place as P1’s prime and its contract among them), the block Ana’s phone took (the series moved on, the block cut) and the two syncs',
       audit.slice(afterSeed).map((record) => [record.tableName, record.source]),
       [
         ['user', 'BACK_OFFICE'],
@@ -254,6 +272,8 @@ export const ticket101001: Story = {
         ['disposal_site', 'BACK_OFFICE'],
         ['assignment', 'BACK_OFFICE'],
         ['assignment', 'BACK_OFFICE'],
+        ['project_number_series', 'DEVICE'],
+        ['number_block', 'DEVICE'],
         ['field_event', 'DEVICE'],
         ['field_event', 'DEVICE'],
       ],
