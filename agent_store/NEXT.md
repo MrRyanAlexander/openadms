@@ -67,7 +67,7 @@ record (why Phase 0 existed, its exit criteria and how each was met, the spec tr
 question rounds) moved word for word to `DECISIONS.md`'s scratchpad, "Moved from NEXT.md,
 2026-10-02"; `ROADMAP.md` §3a keeps the table.
 
-**Still live from the spec track:** `spec/acceptance/` is 6 of 9 files (`06-reconciliation.md`: 162 scenarios, written 2026-10-05, ADR-339; **25 passing and 17 more in part after task 1.5.4, ADR-343**; `05-sync.md`: 56 scenarios, written 2026-10-04, ADR-333; **43 passing and two in part after task 1.4.2, ADR-338**; `04-field-capture.md`: 103 scenarios, 98 passing after C67 (e), ADR-337; `01-setup.md`: 82
+**Still live from the spec track:** `spec/acceptance/` is 6 of 9 files (`06-reconciliation.md`: 162 scenarios, written 2026-10-05, ADR-339; **56 passing and 16 more in part after task 1.5.5, ADR-344**; `05-sync.md`: 56 scenarios, written 2026-10-04, ADR-333; **43 passing and two in part after task 1.4.2, ADR-338**; `04-field-capture.md`: 103 scenarios, 98 passing after C67 (e), ADR-337; `01-setup.md`: 82
 scenarios, 67 passing (AC-01-19 since 1.2.3, AC-01-09 since 1.3.2, AC-01-27 whole since 1.3.4) and AC-01-48, 55 and 80 in part; `02-people-and-devices.md`: 74
 scenarios, 35 passing at the database and four in part after 1.1.10, ADR-315; `03-certification.md`: 60 scenarios, 39 passing and 1 in part after 1.3.5, ADR-326); each other file is the first task of the milestone that builds its part
 (ADR-300).
@@ -81,7 +81,7 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-05: Phase 1 is open, twenty-eight tasks done (the newest: 1.5.4, quantities, ADR-343); Milestones 1.1, 1.2, 1.3 and 1.4 are done; C67 (a)…(f) built)
+### Where things stand (2026-10-05: Phase 1 is open, twenty-nine tasks done (the newest: 1.5.5, checks and flags between events and on the certification, ADR-344); Milestones 1.1, 1.2, 1.3 and 1.4 are done; C67 (a)…(f) built)
 - **Phase 1 (data core and engine) is the active phase**, opened by the user on 2026-10-01
   (ADR-299). Its plan is `BACKLOG.md`'s ten milestones and 47 tasks (ADR-300): setup records →
   certifications and capacity → tickets and numbers → sync intake → reconciliation → the rule engine
@@ -181,7 +181,7 @@ of `DECISIONS.md`.
   from its own project's load form or the payable types) and `Survey`, `Incident`, `DropOffLog`
   (evidence, each saying where it came from as a field event does); each record's answers with
   the definition answered, of its own project's form of its kind, or `{}` with none;
-  `formAnswersSchema` in `packages/contracts`; `FieldEvent.roeId`; `Photo`'s four new owners; and **1.3.7, the harness's phones capture every kind (2026-10-04, ADR-332: Milestone 1.3 is done)**: the one rule that works a unit rate pay item out from the size bands (`SizeBands.payItemFor`, `packages/domain`); the harness's phone holds its assignment's lists, scans the badge at New, picks by name and takes the number last (its own block's next, or scanned; entered again); the story `p1-field-days`: P1's Monday and Tuesday, 25 field events, a scale receipt, an incident and a drop-off log, every field event `PENDING`; and **1.4.2, intake (2026-10-04, ADR-338: Milestone 1.4 is done)**: `apps/api`'s `Intake` (`src/sync/`) answers each record a phone sends saved, already saved or not saved; `QuarantinedRecord` keeps a duplicate field event, and an ROE whose number is taken, whole, never changed or deleted; `Photo.quarantinedRecordId`; an impossible GPS fix kept as sent in `FieldEvent.unreadableGps`; `GpsFix` and `Quarantine` in `packages/domain`; the stand-in intake gone; the stories `sync` and `p1-any-order`; and **1.5.2, the derived records (2026-10-05, ADR-340)**: `CompletedLoad` reshaped (one per disposal event, its quantity, `dissolvedAt`), `CompletedLoadCollection`, `CompletedHaulOut` and `CompletedHaulOutCollection` (a row for each collection: each property, each pile), `Flag` with the catalogue's 66 codes as `FlagCode` and `FlagBilling`, `ReconciliationRun`, `ReconciliationDecision`, and the worker's `zoneId`, `mapVersionId` and `workedOutPayItemId` on a field event; only the worker's login writes them; a load can't be concluded twice (a unique key on the disposal, exclusions over the live rows); whatever a derived record names is its own project's; a client user and an auditor see the completed records, their rows and the flags; and **1.5.3, grouping and status (2026-10-05, ADR-341)**: `packages/domain`'s `Tickets` and `Ticket` (`tickets.ts`): field events gathered on project, workflow and number and nothing else, in field order; what a ticket has and waits for, a split's lettering, a load's time; the worker's three statuses from whether it is whole and the flags raised on it; and **1.5.4, quantities (2026-10-05, ADR-343)**: `packages/domain`'s `quantities.ts`: capacity × load call, a split's shares, a split haul-out's piles, one weight on a truck and trailer, the carried tickets, the stump's CY and fill, in exact decimals, each to the digit of the golden mission.
+  `formAnswersSchema` in `packages/contracts`; `FieldEvent.roeId`; `Photo`'s four new owners; and **1.3.7, the harness's phones capture every kind (2026-10-04, ADR-332: Milestone 1.3 is done)**: the one rule that works a unit rate pay item out from the size bands (`SizeBands.payItemFor`, `packages/domain`); the harness's phone holds its assignment's lists, scans the badge at New, picks by name and takes the number last (its own block's next, or scanned; entered again); the story `p1-field-days`: P1's Monday and Tuesday, 25 field events, a scale receipt, an incident and a drop-off log, every field event `PENDING`; and **1.4.2, intake (2026-10-04, ADR-338: Milestone 1.4 is done)**: `apps/api`'s `Intake` (`src/sync/`) answers each record a phone sends saved, already saved or not saved; `QuarantinedRecord` keeps a duplicate field event, and an ROE whose number is taken, whole, never changed or deleted; `Photo.quarantinedRecordId`; an impossible GPS fix kept as sent in `FieldEvent.unreadableGps`; `GpsFix` and `Quarantine` in `packages/domain`; the stand-in intake gone; the stories `sync` and `p1-any-order`; and **1.5.2, the derived records (2026-10-05, ADR-340)**: `CompletedLoad` reshaped (one per disposal event, its quantity, `dissolvedAt`), `CompletedLoadCollection`, `CompletedHaulOut` and `CompletedHaulOutCollection` (a row for each collection: each property, each pile), `Flag` with the catalogue's 66 codes as `FlagCode` and `FlagBilling`, `ReconciliationRun`, `ReconciliationDecision`, and the worker's `zoneId`, `mapVersionId` and `workedOutPayItemId` on a field event; only the worker's login writes them; a load can't be concluded twice (a unique key on the disposal, exclusions over the live rows); whatever a derived record names is its own project's; a client user and an auditor see the completed records, their rows and the flags; and **1.5.3, grouping and status (2026-10-05, ADR-341)**: `packages/domain`'s `Tickets` and `Ticket` (`tickets.ts`): field events gathered on project, workflow and number and nothing else, in field order; what a ticket has and waits for, a split's lettering, a load's time; the worker's three statuses from whether it is whole and the flags raised on it; and **1.5.4, quantities (2026-10-05, ADR-343)**: `packages/domain`'s `quantities.ts`: capacity × load call, a split's shares, a split haul-out's piles, one weight on a truck and trailer, the carried tickets, the stump's CY and fill, in exact decimals, each to the digit of the golden mission; and **1.5.5, checks and flags between events and on the certification (2026-10-05, ADR-344)**: `packages/domain`'s `flags.ts` (the catalogue's 66 flags as one closed set, each message held word for word to `spec/FLAGS.md` by a test, the facts a flag keeps and their SHA-256, the same flag kept or cleared on a reprocess) and `checks.ts` (debris type, cert number, order in time, overlapping loads, a split's lettering, the tower's count; no certification, a typed capacity, an expired tag, revoked, replaced; the active window, the times that can't be true, a phone out of service, a typed number, a back-office record; a certification's missing views). ADR-329's six flags that fall to it wait for the user's words.
   **Corrected by the user on
   2026-10-02 (ADR-301):** a pay item's code is unique on its project (ADR-147 had read their answer
   backwards), a pay item is its code and its description (no separate name, no "line number"), and
@@ -365,7 +365,7 @@ permissions and viewers, ADR-315), **1.1.11 (the example world's setup as a stor
 Milestone 1.1 is done)**, **1.2.1 (the acceptance scenarios for certifications, ADR-317: 60)**,
 **1.2.2 (the capacity math, ADR-320: `Capacity` in `packages/domain`)**, **1.2.3 (the
 certification's records, ADR-321: Milestone 1.2 is done)**, **1.3.1 (the acceptance scenarios for
-tickets and numbers, ADR-322: 98)**, **1.3.2 (numbering, ADR-323)**, **1.3.3 (what every field event records, ADR-324)**, **1.3.4 (what each kind records, ADR-325)**, **1.3.5 (scale receipts and photographs, ADR-326)**, **1.3.6 (ROEs and forms, ADR-327)**, **1.3.7 (the harness's phones capture every kind, ADR-332: Milestone 1.3 is done)**, **1.4.1 (the acceptance scenarios for sync, ADR-333: 56)**, **1.4.2 (intake, ADR-338: Milestone 1.4 is done)**, **1.5.1 (the acceptance scenarios for reconciliation, ADR-339: 162)**, **1.5.2 (the derived records, ADR-340)**, **1.5.3 (grouping and status, ADR-341)**, **1.5.4 (quantities, ADR-343)**; and the user's correction of
+tickets and numbers, ADR-322: 98)**, **1.3.2 (numbering, ADR-323)**, **1.3.3 (what every field event records, ADR-324)**, **1.3.4 (what each kind records, ADR-325)**, **1.3.5 (scale receipts and photographs, ADR-326)**, **1.3.6 (ROEs and forms, ADR-327)**, **1.3.7 (the harness's phones capture every kind, ADR-332: Milestone 1.3 is done)**, **1.4.1 (the acceptance scenarios for sync, ADR-333: 56)**, **1.4.2 (intake, ADR-338: Milestone 1.4 is done)**, **1.5.1 (the acceptance scenarios for reconciliation, ADR-339: 162)**, **1.5.2 (the derived records, ADR-340)**, **1.5.3 (grouping and status, ADR-341)**, **1.5.4 (quantities, ADR-343)**, **1.5.5 (checks and flags between events and on the certification, ADR-344)**; and the user's correction of
 2026-10-02 (ADR-301: a pay item's code is unique, it has a description and no name, a duplicate
 rule is refused).
 
@@ -488,13 +488,35 @@ figures)` is the one figure a pay item bills (1.6.3 calls it; none means the lin
 **It raises no flag**: the flags read its results (1.5.5, 1.5.7). The tests' helpers (`load`,
 `haulOut`, `piles201004`, the guide's 79 rows) are in `packages/domain/test/quantities.test.ts`.
 What it leaves: BACKLOG C70 ("Left by 1.5.4").
-👉 **1.5.5, checks and flags, between events and on the certification** (BACKLOG Milestone 1.5:
-the flag catalogue as one closed set with each message word for word from `spec/FLAGS.md`;
-`FLAGS.md` §3.1, §3.2 and the time flags of §3.3; the facts a flag keeps and their hash;
-scenarios of `spec/acceptance/06-reconciliation.md` marked 1.5.5; read `adms-validation`,
-`adms-certifications`, `adms-exceptions` and C70 first: its 1.5.5 list is long, and section O's
-flags and a field event whose number isn't digits are worded **with the user**, C67 (g)). A rule
-task: plain classes, no Postgres unless a decision needs a column.
+**Task 1.5.5, checks and flags between events and on the certification, is done (ADR-344).**
+`packages/domain/src/flags.ts`: **every flag is raised through `new Flags(timeZone).raise(code,
+subject, told, facts[, fieldEventId])`**, which gives a `FlagRaised` (code, subject, field event,
+the catalogue's message, billing, facts, `factsSha256`). *Told* is what the message says (names,
+`Date`s, days as `2026-10-12`); *facts* are what is kept and hashed (ids, numbers, days, ISO
+instants): keep them apart, so a renamed site changes no flag. `Flags.compared(standing, now)`
+says which standing flags are kept, which cleared and which are new (the same code, field event
+and hash is the same flag). `ProjectClock` (`project-clock.ts`) answers `day`, `date`, `time` and
+`offsetMinutes` in the project's time zone: never format a date another way. `checks.ts`: `new
+TicketChecks({ timeZone, activeFrom, activeTo, certifications, deviceClockOffLimitMinutes
+}).of(ticket, { otherLoads, carried })` for `FLAGS.md` §3.1, §3.2 and §3.3's time rows; `new
+CertificationChecks(timeZone).views(certNumber, photographs)`. **The work time is the field
+event's end** (`workTimeOf`). **`packages/scenarios/test/flag-catalogue.test.ts` holds every
+message to `spec/FLAGS.md`**: a new flag is a row on the page, a code in `flagCodes` and in
+`FlagCode` (a migration), an entry and its told type in `flags.ts`, and an example in that test.
+The tests' helpers (`recorded`, `collection`, `disposal`, `certified`, `p1Setup`, `flagsOf`) are
+in `packages/domain/test/checks.test.ts`. **Waiting on the user's words (C67 (g), asked
+2026-10-05):** the six flags of ADR-329 that fall to 1.5.5 (a missing detail, a typed number with
+no reason, the wrong kind of badge, an unreadable GPS fix, a number that isn't digits, an end
+before a start); none is built, and a number typed with no reason raises nothing until they
+are. **If the user has answered, build those first** (one task: the page's rows, the migration
+for `FlagCode`, the entries, the checks). What it leaves: BACKLOG C70 ("Left by 1.5.5").
+👉 **1.5.6, checks on place** (BACKLOG Milestone 1.5: the one geodesic module; a point in a
+circle, a shape, the boundary, a zone; `FLAGS.md` §3.3's place flags and §3.4, where the debris
+went; a site's dates and permit; scenarios of `spec/acceptance/06-reconciliation.md` marked
+1.5.6; read `adms-validation` §5.2, ARCHITECTURE §3 ("Project boundary and zones") and C70's
+1.5.6 list first: a project with no map, a haul-out collection's zone, a site with no GPS, a
+disposal on the close date, when a site's flag is raised; C52, C57). A rule task: plain classes
+in `packages/domain`, raising through `Flags.raise`; any library needs its ADR first.
 
 **The harness's phones** (ADR-332): a story signs a phone in with `story.phone({ …, lists: await
 phoneLists(api, { assignmentId, deviceId }) })` after its blocks are cut (`NumberAllocator.topUp`),
@@ -670,7 +692,7 @@ then `SELECT guard_list('<table>', '<domain>');` in its guard migration; a new b
 `packages/domain`'s `builtInKeys` first, with an ADR (ADR-302).
 
 Start every command with `eval "$(fnm env --shell zsh)"`; the checks are **`adms-verify`** (the chain
-is 63 files, 1,271 tests; sixty-eight migrations; `pnpm scenarios` runs eight stories, 16, 18, 52, 25, 15, 35, 47 and 4 checks),
+is 66 files, 1,382 tests; sixty-eight migrations; `pnpm scenarios` runs eight stories, 16, 18, 52, 25, 15, 35, 47 and 4 checks),
 with **`pnpm security`** (7 passed, 0 failed, ADR-291). The database tests, the map servers' tests and
 the stories need `pnpm local:up` first; stop it at close-out (ADR-277). A schema change goes through
 Prisma (`prisma migrate dev --create-only`), a guard into its own empty stub (ADR-113); **try a guard
