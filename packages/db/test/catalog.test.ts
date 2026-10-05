@@ -80,6 +80,14 @@ const domains: Record<string, string> = {
   // A record waiting in quarantine: evidence beside the field event it couldn't become (ADR-338).
   quarantined_record: 'RECORDS',
   completed_load: 'BILLING',
+  // The worker's other conclusions (ADR-340): a completed record and its collection rows are
+  // what bills; a flag, a run and a run's decisions are how the work went.
+  completed_load_collection: 'BILLING',
+  completed_haul_out: 'BILLING',
+  completed_haul_out_collection: 'BILLING',
+  flag: 'OPERATIONS',
+  reconciliation_run: 'OPERATIONS',
+  reconciliation_decision: 'OPERATIONS',
   transaction: 'BILLING',
   invoice_lock: 'BILLING',
   // The firm's lists: none holds a rate, a login or a ticket (ADR-302).
@@ -135,9 +143,9 @@ const listChecks = listTables.map((table) => ({
 }));
 
 const viewerQual = '(viewer_sees_project(project_id) AND viewer_sees_every_ticket())';
-// The four tables of the row-level security guard (ADR-270), and every setup table a client user
-// or an auditor sees (ADR-315).
-const secured = ['completed_load', 'field_event', 'project', 'transaction', ...viewedTables].sort();
+// Three tables of the row-level security guard (ADR-270), and every table a client user or an
+// auditor sees through `guard_viewer` (ADR-315), the completed load among them since ADR-340.
+const secured = ['field_event', 'project', 'transaction', ...viewedTables].sort();
 const policies = [
   ...secured.map(
     (table) => `${table}_services PERMISSIVE {adms_api,adms_worker} ALL USING true CHECK true`,
@@ -145,7 +153,6 @@ const policies = [
   ...Object.entries(viewerSights).map(
     ([table, { seen }]) => `${table}_viewer PERMISSIVE {adms_readonly} SELECT USING ${seen}`,
   ),
-  `completed_load_viewer PERMISSIVE {adms_readonly} SELECT USING ${viewerQual}`,
   `field_event_viewer PERMISSIVE {adms_readonly} SELECT USING ${viewerQual}`,
   'project_viewer PERMISSIVE {adms_readonly} SELECT USING viewer_sees_project(id)',
   'transaction_viewer PERMISSIVE {adms_readonly} SELECT USING (viewer_sees_load_project(completed_load_id) AND (viewer_sees_every_ticket() OR viewer_is_contractor(prime_id)))',
@@ -816,17 +823,121 @@ describe('the guards in the catalog', () => {
         name: 'user_viewer_project_system_actor_check',
         definition: "CHECK ((user_id <> '00000000-0000-7000-8000-000000000001'::uuid))",
       },
+      // The derived records (ADR-340): a completed record's quantity, a collection row's share
+      // and mileage, a flag's subject, message, facts and clearing, a run and its decisions; and
+      // on a field event, a zone with its map version and a worked-out pay item only on unit
+      // rate work.
+      {
+        name: 'completed_haul_out_collection_mileage_check',
+        definition:
+          "CHECK ((((num_nonnulls(mileage, mileage_source) = ANY (ARRAY[0, 2])) AND ((mileage IS NULL) OR (mileage >= (0)::numeric)) AND (num_nonnulls(snapped_latitude, snapped_longitude) = ANY (ARRAY[0, 2])) AND ((snapped_latitude IS NULL) OR ((snapped_latitude >= ('-90'::integer)::numeric) AND (snapped_latitude <= (90)::numeric))) AND ((snapped_longitude IS NULL) OR ((snapped_longitude >= ('-180'::integer)::numeric) AND (snapped_longitude <= (180)::numeric))) AND (num_nonnulls(map_data_date, map_data_sha256) = ANY (ARRAY[0, 2])) AND ((map_data_sha256 IS NULL) OR (map_data_sha256 ~ '^[0-9a-f]{64}$'::text)) AND ((snapped_address IS NULL) OR (btrim(snapped_address) <> ''::text))) IS TRUE))",
+      },
+      {
+        name: 'completed_haul_out_collection_share_check',
+        definition:
+          "CHECK (((((split_suffix = ''::text) OR (split_suffix ~ '^[A-Z]+$'::text)) AND ((share_fraction >= (0)::numeric) AND (share_fraction <= (1)::numeric)) AND ((volume_cy IS NULL) OR (volume_cy >= (0)::numeric)) AND ((weight_tons IS NULL) OR (weight_tons >= (0)::numeric))) IS TRUE))",
+      },
+      {
+        name: 'completed_haul_out_quantity_check',
+        definition:
+          "CHECK ((((btrim(ticket_number) <> ''::text) AND (quantity_source <> 'CARRIED_TICKETS'::quantity_source) AND ((load_call IS NULL) OR ((load_call >= 0) AND (load_call <= 100))) AND ((capacity_cy IS NULL) OR (capacity_cy >= 0)) AND ((volume_cy IS NULL) OR (volume_cy >= (0)::numeric)) AND ((weight_tons IS NULL) OR (weight_tons >= (0)::numeric)) AND ((NOT weight_is_share) OR (weight_tons IS NOT NULL))) IS TRUE))",
+      },
+      {
+        name: 'completed_load_collection_mileage_check',
+        definition:
+          "CHECK ((((num_nonnulls(mileage, mileage_source) = ANY (ARRAY[0, 2])) AND ((mileage IS NULL) OR (mileage >= (0)::numeric)) AND (num_nonnulls(snapped_latitude, snapped_longitude) = ANY (ARRAY[0, 2])) AND ((snapped_latitude IS NULL) OR ((snapped_latitude >= ('-90'::integer)::numeric) AND (snapped_latitude <= (90)::numeric))) AND ((snapped_longitude IS NULL) OR ((snapped_longitude >= ('-180'::integer)::numeric) AND (snapped_longitude <= (180)::numeric))) AND (num_nonnulls(map_data_date, map_data_sha256) = ANY (ARRAY[0, 2])) AND ((map_data_sha256 IS NULL) OR (map_data_sha256 ~ '^[0-9a-f]{64}$'::text)) AND ((snapped_address IS NULL) OR (btrim(snapped_address) <> ''::text))) IS TRUE))",
+      },
+      {
+        name: 'completed_load_collection_share_check',
+        definition:
+          "CHECK (((((split_suffix = ''::text) OR (split_suffix ~ '^[A-Z]+$'::text)) AND ((share_fraction >= (0)::numeric) AND (share_fraction <= (1)::numeric)) AND ((volume_cy IS NULL) OR (volume_cy >= (0)::numeric)) AND ((weight_tons IS NULL) OR (weight_tons >= (0)::numeric))) IS TRUE))",
+      },
+      {
+        name: 'completed_load_quantity_check',
+        definition:
+          "CHECK ((((btrim(ticket_number) <> ''::text) AND ((load_call IS NULL) OR ((load_call >= 0) AND (load_call <= 100))) AND ((capacity_cy IS NULL) OR (capacity_cy >= 0)) AND ((volume_cy IS NULL) OR (volume_cy >= (0)::numeric)) AND ((weight_tons IS NULL) OR (weight_tons >= (0)::numeric)) AND ((carried_count IS NULL) OR (carried_count >= 0)) AND ((NOT weight_is_share) OR (weight_tons IS NOT NULL))) IS TRUE))",
+      },
+      {
+        name: 'field_event_worked_out_pay_item_check',
+        definition:
+          "CHECK (((worked_out_pay_item_id IS NULL) OR (kind = 'UNIT_RATE'::field_event_kind)))",
+      },
+      {
+        name: 'field_event_zone_check',
+        definition: 'CHECK (((zone_id IS NULL) OR (map_version_id IS NOT NULL)))',
+      },
+      {
+        name: 'flag_cleared_check',
+        definition: 'CHECK (((cleared_at IS NULL) OR (cleared_at >= raised_at)))',
+      },
+      {
+        name: 'flag_facts_check',
+        definition:
+          "CHECK ((((jsonb_typeof(facts) = 'object'::text) AND (facts_sha256 ~ '^[0-9a-f]{64}$'::text)) IS TRUE))",
+      },
+      {
+        name: 'flag_message_check',
+        definition: "CHECK ((btrim(message) <> ''::text))",
+      },
+      {
+        name: 'flag_subject_check',
+        definition:
+          "CHECK ((((num_nonnulls(workflow, ticket_number) = ANY (ARRAY[0, 2])) AND ((ticket_number IS NULL) OR (btrim(ticket_number) <> ''::text)) AND (num_nonnulls(ticket_number, field_event_id, certification_id, disposal_site_id, survey_id) >= 1)) IS TRUE))",
+      },
+      {
+        name: 'reconciliation_decision_summary_check',
+        definition:
+          "CHECK ((((btrim(ticket_number) <> ''::text) AND (jsonb_typeof(summary) = 'object'::text) AND ((error IS NULL) OR (btrim(error) <> ''::text))) IS TRUE))",
+      },
+      {
+        name: 'reconciliation_run_finished_check',
+        definition:
+          'CHECK (((((finished_at IS NULL) OR (finished_at >= started_at)) AND ((tickets_done IS NULL) OR (tickets_done >= 0)) AND ((tickets_failed IS NULL) OR (tickets_failed >= 0))) IS TRUE))',
+      },
       ...listChecks,
     ];
     expect(rows).toEqual(checks.sort((a, b) => (a.name < b.name ? -1 : 1)));
   });
 
-  it('every exclusion constraint, as written: size bands, number blocks and control ranges never overlap', async () => {
+  it('every exclusion constraint, as written: size bands, number blocks and control ranges never overlap; a completed record is live once', async () => {
     const rows = await tested.db.rows<{ name: string; definition: string }>(
       `SELECT conname AS name, pg_get_constraintdef(oid) AS definition FROM pg_constraint
        WHERE contype = 'x' AND connamespace = 'public'::regnamespace ORDER BY conname`,
     );
     expect(rows).toEqual([
+      // Live once (AC-06-146, invariant 17; ADR-340): a ticket number among a project's live
+      // completed loads and haul-outs, a collection event among live rows, a suffix among a
+      // completed record's live rows. What a unique key over the live rows would hold.
+      {
+        name: 'completed_haul_out_collection_live_event_once',
+        definition:
+          'EXCLUDE USING btree (collection_event_id WITH =) WHERE ((dissolved_at IS NULL))',
+      },
+      {
+        name: 'completed_haul_out_collection_live_suffix_once',
+        definition:
+          'EXCLUDE USING btree (completed_haul_out_id WITH =, split_suffix WITH =) WHERE ((dissolved_at IS NULL))',
+      },
+      {
+        name: 'completed_haul_out_live_ticket_number_once',
+        definition:
+          'EXCLUDE USING btree (project_id WITH =, ticket_number WITH =) WHERE ((dissolved_at IS NULL))',
+      },
+      {
+        name: 'completed_load_collection_live_event_once',
+        definition:
+          'EXCLUDE USING btree (collection_event_id WITH =) WHERE ((dissolved_at IS NULL))',
+      },
+      {
+        name: 'completed_load_collection_live_suffix_once',
+        definition:
+          'EXCLUDE USING btree (completed_load_id WITH =, split_suffix WITH =) WHERE ((dissolved_at IS NULL))',
+      },
+      {
+        name: 'completed_load_live_ticket_number_once',
+        definition:
+          'EXCLUDE USING btree (project_id WITH =, ticket_number WITH =) WHERE ((dissolved_at IS NULL))',
+      },
       {
         name: 'control_ranges_never_overlap',
         definition:
@@ -867,7 +978,6 @@ describe('the guards in the catalog', () => {
        WHERE relnamespace = 'public'::regnamespace AND relkind IN ('v', 'm') ORDER BY relname`,
     );
     const asTheViewer = [
-      'viewer_completed_load',
       'viewer_field_event',
       'viewer_project',
       'viewer_transaction',

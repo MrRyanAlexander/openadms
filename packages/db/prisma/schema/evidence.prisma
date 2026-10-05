@@ -96,8 +96,15 @@ model FieldEvent {
   loadCall Int? @map("load_call")
 
   // Reconciliation columns: the only ones the worker may write (ARCHITECTURE §5.1).
-  status       TicketStatus @default(PENDING)
-  reconciledAt DateTime?    @map("reconciled_at") @db.Timestamptz(3)
+  status             TicketStatus @default(PENDING)
+  reconciledAt       DateTime?    @map("reconciled_at") @db.Timestamptz(3)
+  // The zone attached from the GPS and the map version used, one of its own project's; the zone
+  // is one of that version's (ADR-135, 141).
+  zoneId             String?      @map("zone_id") @db.Uuid
+  mapVersionId       String?      @map("map_version_id") @db.Uuid
+  // On a unit rate event: the engine's answer from the bands, one of its own project's pay items.
+  // "The phone's answer printed, the engine's bills" (ADR-217).
+  workedOutPayItemId String?      @map("worked_out_pay_item_id") @db.Uuid
 
   // Where it came from. One created in the back office (a phone failed) says who created it and
   // why, picked from the firm's reasons (ADR-156, 173). None of these has a default: whoever
@@ -159,7 +166,7 @@ model FieldEvent {
   // A unit rate event's. The kind of work captured (its screen), kept so it is known when no band
   // fits and there is no pay item (ADR-292); the payable type the monitor picked by name
   // (ADR-207); the pay item the phone worked out and printed, one of its own project's, empty when
-  // no band fits (ADR-213). The worker's own answer joins in BACKLOG 1.5.2.
+  // no band fits (ADR-213). The worker's own answer is workedOutPayItemId, above.
   kindOfWorkId        String?     @map("kind_of_work_id") @db.Uuid
   payableTypeId       String?     @map("payable_type_id") @db.Uuid
   payItemId           String?     @map("pay_item_id") @db.Uuid
@@ -208,7 +215,10 @@ model FieldEvent {
   fieldTag           FieldTag?           @relation(fields: [projectId, fieldTagId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
   kindOfWork         KindOfWork?         @relation(fields: [kindOfWorkId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   payableType        PayableType?        @relation(fields: [payableTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  payItem            PayItem?            @relation(fields: [projectId, payItemId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  payItem            PayItem?            @relation("FieldEventPayItem", fields: [projectId, payItemId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  mapVersion         MapVersion?         @relation(fields: [projectId, mapVersionId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  zone               Zone?               @relation(fields: [mapVersionId, zoneId], references: [mapVersionId, id], onDelete: Restrict, onUpdate: Restrict)
+  workedOutPayItem   PayItem?            @relation("FieldEventWorkedOutPayItem", fields: [projectId, workedOutPayItemId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
   scaleReceipt       ScaleReceipt?       @relation(fields: [projectId, scaleReceiptId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
   roe                Roe?                @relation(fields: [projectId, roeId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
   items              FieldEventItem[]
@@ -217,8 +227,13 @@ model FieldEvent {
   // The records in quarantine because this field event holds their number (ADR-022).
   quarantinedRecords QuarantinedRecord[]
 
-  completedLoadAsCollection CompletedLoad? @relation("CollectionEvent")
-  completedLoadAsDisposal   CompletedLoad? @relation("DisposalEvent")
+  // What the worker concluded from it: a disposal's completed record (one: its own unique key),
+  // a collection's rows (one live), and the flags about it.
+  completedLoads              CompletedLoad[]
+  completedLoadCollections    CompletedLoadCollection[]
+  completedHaulOuts           CompletedHaulOut[]
+  completedHaulOutCollections CompletedHaulOutCollection[]
+  flags                       Flag[]
 
   // One field event per project + workflow + bare number + split suffix + kind (ARCHITECTURE §5.4).
   @@unique([projectId, workflow, ticketNumber, splitSuffix, kind])
@@ -451,6 +466,8 @@ model Survey {
   workType       SurveyWorkType  @relation(fields: [workTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   roe            Roe?            @relation(fields: [projectId, roeId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
   photos         Photo[]
+  // The flags about it (a post-work survey with no pre-work one).
+  flags          Flag[]
 
   // What a photograph points at, so it is one of its own project's surveys.
   @@unique([projectId, id])

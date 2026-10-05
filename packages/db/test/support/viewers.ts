@@ -4,7 +4,8 @@
 // here too, seen with the field event they belong to (ADR-325), and scale receipts and
 // photographs, seen with their project (ADR-326), and ROEs, their scope lines, surveys, incidents
 // and drop-off logs, seen with theirs (ADR-327); the field event itself is one of
-// the row-level security guard's four tables, held by name in the tests.
+// the row-level security guard's four tables, held by name in the tests. The completed load was
+// one of those four until it took `guard_viewer`'s line with the other derived records (ADR-340).
 import { listTables } from './lists.ts';
 
 export interface Sight {
@@ -96,6 +97,13 @@ export const viewerSights: Record<string, Sight> = {
   // That a record of their project waits in quarantine, why and what holds its number; the
   // record as sent may name a private citizen, an ROE's owner (ADR-338).
   quarantined_record: project([], ['payload']),
+  // What the worker concluded for their project: its completed loads and haul-outs, each with
+  // its collection rows, and its flags (ADR-340).
+  completed_load: project(),
+  completed_load_collection: project(),
+  completed_haul_out: project(),
+  completed_haul_out_collection: project(),
+  flag: project(),
   client: namedBy('client', 'viewer_project_setup', 'client_id', [...contact, 'notes']),
   declaration_event: namedBy('declaration_event', 'viewer_project_setup', 'declaration_event_id'),
   contractor: namedBy('contractor', 'project_contractor', 'contractor_id', contact),
@@ -127,5 +135,8 @@ export const unseenTables = [
   'assignment',
   'assignment_pay_item',
   'invoice_lock',
+  // A run of the worker and what it decided for each ticket are the back office's (ADR-340).
+  'reconciliation_run',
+  'reconciliation_decision',
   'audit_record',
 ];

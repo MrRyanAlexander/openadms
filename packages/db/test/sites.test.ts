@@ -265,6 +265,11 @@ describe('coordinates (REQ-104)', () => {
     );
     // Each table's, and its viewer view's (ADR-315): a view shows the column as it is kept.
     const kept = [
+      // The road point a mileage was routed from (ADR-340).
+      'completed_haul_out_collection.snapped_latitude',
+      'completed_haul_out_collection.snapped_longitude',
+      'completed_load_collection.snapped_latitude',
+      'completed_load_collection.snapped_longitude',
       'disposal_site.latitude',
       'disposal_site.longitude',
       // Where a drop-off log, an incident, an ROE and a survey were made (ADR-327).

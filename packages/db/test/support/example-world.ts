@@ -55,6 +55,8 @@ export interface Load {
   collection: string;
   disposal: string;
   completedLoad: string;
+  // The completed load's row for its one collection (an ordinary load: no suffix, the whole share).
+  completedLoadCollection: string;
   transaction: string;
 }
 
@@ -1235,12 +1237,25 @@ export class ExampleWorld {
       });
     const collection = await event('COLLECTION', '2026-10-12T14:05:00Z', null);
     const disposal = await event('DISPOSAL', '2026-10-12T14:35:00Z', loadCall);
+    // What the worker concluded: the quantity from the load call, and the load's one collection
+    // as a row of its own (spec/DATA-MODEL.md §5).
     const completedLoad = await this.insert('completed_load', {
       project_id: projectId,
       ticket_number: ticketNumber,
-      collection_event_id: collection,
       disposal_event_id: disposal,
+      quantity_source: 'LOAD_CALL',
+      load_call: loadCall,
+      volume_cy: quantity,
+      weight_is_share: false,
       updated_at: '2026-10-12T20:00:00Z',
+    });
+    const completedLoadCollection = await this.insert('completed_load_collection', {
+      project_id: projectId,
+      completed_load_id: completedLoad,
+      collection_event_id: collection,
+      split_suffix: '',
+      share_fraction: '1',
+      volume_cy: quantity,
     });
     const transaction = await this.insert('transaction', {
       completed_load_id: completedLoad,
@@ -1250,7 +1265,7 @@ export class ExampleWorld {
       amount,
       prime_id: primeId,
     });
-    return { collection, disposal, completedLoad, transaction };
+    return { collection, disposal, completedLoad, completedLoadCollection, transaction };
   }
 
   // A value of one of the firm's lists, by the name it ships with: its id.

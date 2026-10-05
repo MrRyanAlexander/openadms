@@ -118,6 +118,7 @@ describe('capture', () => {
       certification_helper: ['OPERATIONS'],
       client: ['OPERATIONS'],
       completed_load: ['BILLING'],
+      completed_load_collection: ['BILLING'],
       contract: ['BILLING'],
       contractor: ['OPERATIONS'],
       declaration_event: ['OPERATIONS'],

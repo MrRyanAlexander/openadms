@@ -93,12 +93,18 @@ const tableGrants: Record<string, Record<string, string>> = {
   // A record waiting in quarantine: evidence, kept as the phone sent it (ADR-338).
   quarantined_record: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },
   completed_load: { adms_api: 'SELECT', adms_worker: 'INSERT SELECT UPDATE' },
+  // The worker's other conclusions: derived, each one (ADR-340).
+  completed_load_collection: { adms_api: 'SELECT', adms_worker: 'INSERT SELECT UPDATE' },
+  completed_haul_out: { adms_api: 'SELECT', adms_worker: 'INSERT SELECT UPDATE' },
+  completed_haul_out_collection: { adms_api: 'SELECT', adms_worker: 'INSERT SELECT UPDATE' },
+  flag: { adms_api: 'SELECT', adms_worker: 'INSERT SELECT UPDATE' },
+  reconciliation_run: { adms_api: 'SELECT', adms_worker: 'INSERT SELECT UPDATE' },
+  reconciliation_decision: { adms_api: 'SELECT', adms_worker: 'INSERT SELECT UPDATE' },
   transaction: { adms_api: 'SELECT', adms_worker: 'DELETE INSERT SELECT' },
   invoice_lock: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },
   audit_record: { adms_api: 'SELECT', adms_worker: 'SELECT' },
   viewer_project: { adms_readonly: 'SELECT' },
   viewer_field_event: { adms_readonly: 'SELECT' },
-  viewer_completed_load: { adms_readonly: 'SELECT' },
   viewer_transaction: { adms_readonly: 'SELECT' },
   // A project's setup, for a client user and an auditor (ADR-315).
   viewer_project_setup: { adms_readonly: 'SELECT' },
@@ -272,15 +278,15 @@ const correctable: Record<string, string[]> = {
 const viewerColumns: Record<string, string[]> = {
   project: ['id', 'name', 'time_zone', 'created_at', 'closed_at'],
   // Every column of a field event, since guard_viewer wrote its view (ADR-324).
-  field_event: ['id', 'received_at', 'status', 'reconciled_at', ...captured],
-  completed_load: [
+  field_event: [
     'id',
-    'project_id',
-    'ticket_number',
-    'collection_event_id',
-    'disposal_event_id',
-    'created_at',
-    'updated_at',
+    'received_at',
+    'status',
+    'reconciled_at',
+    'zone_id',
+    'map_version_id',
+    'worked_out_pay_item_id',
+    ...captured,
   ],
   transaction: [
     'id',
@@ -297,6 +303,10 @@ const columnGrants = [
   ...captured.map((column) => `field_event.${column} adms_api UPDATE`),
   'field_event.status adms_worker UPDATE',
   'field_event.reconciled_at adms_worker UPDATE',
+  // The zone, the map version used and a unit rate event's worked-out pay item (ADR-340).
+  'field_event.zone_id adms_worker UPDATE',
+  'field_event.map_version_id adms_worker UPDATE',
+  'field_event.worked_out_pay_item_id adms_worker UPDATE',
   ...Object.entries(correctable).flatMap(([table, columns]) =>
     columns.map((column) => `${table}.${column} adms_api UPDATE`),
   ),
@@ -485,9 +495,9 @@ describe('the API (adms_api)', () => {
     await db.actor(world.admin, 'BACK_OFFICE');
     const attempts: [string, unknown[]][] = [
       [
-        `INSERT INTO "completed_load" ("project_id", "ticket_number", "collection_event_id", "disposal_event_id", "updated_at")
-         VALUES ($1, '101009', $2, $3, now())`,
-        [world.p1, load.collection, load.disposal],
+        `INSERT INTO "completed_load" ("project_id", "ticket_number", "disposal_event_id", "quantity_source", "weight_is_share", "updated_at")
+         VALUES ($1, '101009', $2, 'LOAD_CALL', false, now())`,
+        [world.p1, load.disposal],
       ],
       [
         `UPDATE "completed_load" SET "ticket_number" = '101009' WHERE "id" = $1`,

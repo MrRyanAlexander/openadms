@@ -437,7 +437,8 @@ describe('a field event', () => {
     // and printed, never a rate (ADR-213, 325); a split property's estimate is the monitor's, and
     // no share is kept (AC-04-48). A weight is the scale receipt's, which a disposal only points
     // at (AC-04-73, ADR-326), and an ROE's owner and scope are the ROE's, which a collection only
-    // points at (AC-04-82, ADR-327). The worker's zone and map version join in 1.5.2.
+    // points at (AC-04-82, ADR-327). The zone, the map version used and a unit rate event's
+    // worked-out pay item are the worker's, attached after sync: no monitor records one (ADR-340).
     expect(columns.map((column) => column.name)).toEqual([
       'address',
       'address_source',
@@ -462,6 +463,7 @@ describe('a field event', () => {
       'kind',
       'kind_of_work_id',
       'load_call',
+      'map_version_id',
       'marked_ineligible',
       'measured_as',
       'measurement_inches',
@@ -494,7 +496,9 @@ describe('a field event', () => {
       'unit_count',
       // A fix the phone sent that couldn't be one, as sent (ADR-338): never a second fix.
       'unreadable_gps',
+      'worked_out_pay_item_id',
       'workflow',
+      'zone_id',
     ]);
   });
 

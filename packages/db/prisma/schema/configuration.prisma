@@ -93,34 +93,39 @@ model Project {
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   closedAt  DateTime? @map("closed_at") @db.Timestamptz(3)
 
-  client             Client                @relation(fields: [clientId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  declarationEvent   DeclarationEvent      @relation(fields: [declarationEventId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  programType        ProgramType           @relation(fields: [programTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  kindsOfWork        ProjectKindOfWork[]
-  contractors        ProjectContractor[]
-  contracts          Contract[]
-  forms              Form[]
-  disposalSites      DisposalSite[]
-  mapVersions        MapVersion[]
-  payItems           PayItem[]
-  assignments        Assignment[]
-  numberSeries       ProjectNumberSeries[]
-  controlRanges      ControlRange[]
-  numberBlocks       NumberBlock[]
-  certifications     Certification[]
-  fieldTags          FieldTag[]
-  fieldEvents        FieldEvent[]
-  scaleReceipts      ScaleReceipt[]
-  photos             Photo[]
-  roes               Roe[]
-  roeScopeItems      RoeScopeItem[]
-  surveys            Survey[]
-  incidents          Incident[]
-  dropOffLogs        DropOffLog[]
-  quarantinedRecords QuarantinedRecord[]
-  completedLoads     CompletedLoad[]
+  client                      Client                       @relation(fields: [clientId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  declarationEvent            DeclarationEvent             @relation(fields: [declarationEventId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  programType                 ProgramType                  @relation(fields: [programTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  kindsOfWork                 ProjectKindOfWork[]
+  contractors                 ProjectContractor[]
+  contracts                   Contract[]
+  forms                       Form[]
+  disposalSites               DisposalSite[]
+  mapVersions                 MapVersion[]
+  payItems                    PayItem[]
+  assignments                 Assignment[]
+  numberSeries                ProjectNumberSeries[]
+  controlRanges               ControlRange[]
+  numberBlocks                NumberBlock[]
+  certifications              Certification[]
+  fieldTags                   FieldTag[]
+  fieldEvents                 FieldEvent[]
+  scaleReceipts               ScaleReceipt[]
+  photos                      Photo[]
+  roes                        Roe[]
+  roeScopeItems               RoeScopeItem[]
+  surveys                     Survey[]
+  incidents                   Incident[]
+  dropOffLogs                 DropOffLog[]
+  quarantinedRecords          QuarantinedRecord[]
+  completedLoads              CompletedLoad[]
+  completedLoadCollections    CompletedLoadCollection[]
+  completedHaulOuts           CompletedHaulOut[]
+  completedHaulOutCollections CompletedHaulOutCollection[]
+  flags                       Flag[]
+  reconciliationRuns          ReconciliationRun[]
   // The read-only viewers who may see it.
-  viewers            ViewerProject[]
+  viewers                     ViewerProject[]
 
   // "Every project under this declaration", and a client's projects, are one query each (ADR-026).
   @@index([declarationEventId])
@@ -454,6 +459,7 @@ model DisposalSite {
   areaVersions  SiteAreaVersion[]
   assignments   Assignment[]
   fieldEvents   FieldEvent[]
+  flags         Flag[]
   scaleReceipts ScaleReceipt[]
   dropOffLogs   DropOffLog[]
   rulePicks     RuleCriterionPick[]
@@ -568,11 +574,15 @@ model MapVersion {
   // own now() and wrote the default again into every later migration (KD-70).
   loadedAt        DateTime  @default(dbgenerated("transaction_timestamp()")) @map("loaded_at") @db.Timestamptz(3)
 
-  project  Project @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  loadedBy User    @relation("MapVersionLoadedBy", fields: [loadedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  zones    Zone[]
+  project     Project      @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  loadedBy    User         @relation("MapVersionLoadedBy", fields: [loadedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  zones       Zone[]
+  // The field events the worker judged with it.
+  fieldEvents FieldEvent[]
 
   @@unique([projectId, version])
+  // What a field event points at, so its map version is one of its own project's.
+  @@unique([projectId, id])
   @@map("map_version")
 }
 
@@ -588,9 +598,13 @@ model Zone {
   eastLongitude Decimal @map("east_longitude") @db.Decimal(38, 8)
   northLatitude Decimal @map("north_latitude") @db.Decimal(38, 8)
 
-  mapVersion MapVersion @relation(fields: [mapVersionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  mapVersion  MapVersion   @relation(fields: [mapVersionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  // The field events the worker attached it to.
+  fieldEvents FieldEvent[]
 
   @@unique([mapVersionId, name])
+  // What a field event points at, so its zone is one of its map version's.
+  @@unique([mapVersionId, id])
   @@map("zone")
 }
 
@@ -660,19 +674,22 @@ model PayItem {
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
 
-  project      Project                  @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  payableType  PayableType              @relation(fields: [payableTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  kindOfWork   KindOfWork?              @relation(fields: [kindOfWorkId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  rates        PayItemRate[]
-  crewDaySteps PayItemCrewDayStep[]
-  assignments  AssignmentPayItem[]
-  tippingFeeAt DisposalSiteTippingFee[]
+  project              Project                  @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  payableType          PayableType              @relation(fields: [payableTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  kindOfWork           KindOfWork?              @relation(fields: [kindOfWorkId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  rates                PayItemRate[]
+  crewDaySteps         PayItemCrewDayStep[]
+  assignments          AssignmentPayItem[]
+  tippingFeeAt         DisposalSiteTippingFee[]
   // The rules its "Pays when" wrote; the actions that add it; the criteria that pick it.
-  rulesWritten Rule[]
-  ruleActions  RuleAction[]
-  rulePicks    RuleCriterionPick[]
+  rulesWritten         Rule[]
+  ruleActions          RuleAction[]
+  rulePicks            RuleCriterionPick[]
   // The unit rate events whose phone worked it out.
-  fieldEvents  FieldEvent[]
+  fieldEvents          FieldEvent[]             @relation("FieldEventPayItem")
+  // The unit rate events the worker worked it out for, and the flags about a line of it.
+  fieldEventsWorkedOut FieldEvent[]             @relation("FieldEventWorkedOutPayItem")
+  flags                Flag[]
 
   // So a rate, and a rule's pay item, can only be its own project's pay item (its relation's target).
   @@unique([projectId, id])
@@ -993,33 +1010,34 @@ model User {
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
 
-  contractor                 Contractor?           @relation("ViewerContractor", fields: [contractorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  employer                   Contractor?           @relation("Employer", fields: [employerId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  permissions                UserPermission[]
-  viewerProjects             ViewerProject[]
-  assignments                Assignment[]          @relation("AssignmentPerson")
-  assignmentsMade            Assignment[]          @relation("AssignmentMadeBy")
-  formDefinitions            FormDefinition[]      @relation("FormDefinitionCreatedBy")
-  siteAreas                  SiteAreaVersion[]     @relation("SiteAreaVersionCreatedBy")
-  mapsLoaded                 MapVersion[]          @relation("MapVersionLoadedBy")
+  contractor                  Contractor?           @relation("ViewerContractor", fields: [contractorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  employer                    Contractor?           @relation("Employer", fields: [employerId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  permissions                 UserPermission[]
+  viewerProjects              ViewerProject[]
+  assignments                 Assignment[]          @relation("AssignmentPerson")
+  assignmentsMade             Assignment[]          @relation("AssignmentMadeBy")
+  formDefinitions             FormDefinition[]      @relation("FormDefinitionCreatedBy")
+  siteAreas                   SiteAreaVersion[]     @relation("SiteAreaVersionCreatedBy")
+  mapsLoaded                  MapVersion[]          @relation("MapVersionLoadedBy")
   // The certifications they made and measured, helped on, or revoked (ADR-079, 294).
-  certificationsMade         Certification[]       @relation("CertificationCertifiedBy")
-  certificationsRevoked      Certification[]       @relation("CertificationRevokedBy")
-  certificationsHelped       CertificationHelper[]
-  fieldEvents                FieldEvent[]          @relation("FieldEventMonitor")
-  fieldEventsCreated         FieldEvent[]          @relation("FieldEventCreatedBy")
-  scaleReceiptsEntered       ScaleReceipt[]
-  roesMade                   Roe[]
-  surveys                    Survey[]              @relation("SurveyMonitor")
-  surveysCreated             Survey[]              @relation("SurveyCreatedBy")
-  incidents                  Incident[]            @relation("IncidentMonitor")
-  incidentsCreated           Incident[]            @relation("IncidentCreatedBy")
-  dropOffLogs                DropOffLog[]          @relation("DropOffLogMonitor")
-  dropOffLogsCreated         DropOffLog[]          @relation("DropOffLogCreatedBy")
-  quarantinedRecords         QuarantinedRecord[]   @relation("QuarantinedRecordMonitor")
-  quarantinedRecordsResolved QuarantinedRecord[]   @relation("QuarantinedRecordResolvedBy")
-  invoiceLocks               InvoiceLock[]
-  auditRecords               AuditRecord[]
+  certificationsMade          Certification[]       @relation("CertificationCertifiedBy")
+  certificationsRevoked       Certification[]       @relation("CertificationRevokedBy")
+  certificationsHelped        CertificationHelper[]
+  fieldEvents                 FieldEvent[]          @relation("FieldEventMonitor")
+  fieldEventsCreated          FieldEvent[]          @relation("FieldEventCreatedBy")
+  scaleReceiptsEntered        ScaleReceipt[]
+  roesMade                    Roe[]
+  surveys                     Survey[]              @relation("SurveyMonitor")
+  surveysCreated              Survey[]              @relation("SurveyCreatedBy")
+  incidents                   Incident[]            @relation("IncidentMonitor")
+  incidentsCreated            Incident[]            @relation("IncidentCreatedBy")
+  dropOffLogs                 DropOffLog[]          @relation("DropOffLogMonitor")
+  dropOffLogsCreated          DropOffLog[]          @relation("DropOffLogCreatedBy")
+  quarantinedRecords          QuarantinedRecord[]   @relation("QuarantinedRecordMonitor")
+  quarantinedRecordsResolved  QuarantinedRecord[]   @relation("QuarantinedRecordResolvedBy")
+  invoiceLocks                InvoiceLock[]
+  reconciliationRunsRequested ReconciliationRun[]   @relation("ReconciliationRunRequestedBy")
+  auditRecords                AuditRecord[]
 
   @@map("user")
 }
@@ -1428,6 +1446,7 @@ model Certification {
   boxes           CertificationBox[]
   helpers         CertificationHelper[]
   fieldEvents     FieldEvent[]
+  flags           Flag[]
   incidents       Incident[]
   photos          Photo[]
 
