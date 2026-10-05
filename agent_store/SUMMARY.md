@@ -7,7 +7,7 @@ entries to cite. The reasons live in the ADRs and the skills.
 - **Keep it current:** when you add, amend or supersede an ADR, or open or close a KD, update this
   page **in the same response** (`adms-decisions`).
 - **If this page and a log entry disagree,** the newest ADR wins: fix this page and say so.
-- Updated 2026-10-04, through ADR-332 / KD-70. **Task 1.3.7 is done (ADR-332): Milestone 1.3 is done; next 1.4.1.** **C67 (a) and (b) are built: certification copying is out of the schema, the service, the domain and the story (ADR-330), and a scale receipt's number is no longer unique (ADR-331: the key dropped by the fifty-seventh migration); C67 (c)…(g) are not.** **The user answered the agent defaults of 1.3.2…1.3.6 (ADR-328; §4): certifications are never copied, a scale receipt's number is never unique, an incident may name a contractor, cert number and ROE number, a viewer's sight of private citizens' names is the firm's choice. The first two are built (ADR-330, 331); the others not yet (BACKLOG C67).** **Task 1.3.6, ROEs and forms, is done (ADR-327; see "Field events").** Task 1.3.5, scale receipts and photographs, is done (ADR-326). Task 1.3.4, what each kind of field event records, is done (ADR-325). Task 1.3.3, what every field event records, is done (ADR-324). Task 1.3.2, numbering, is done (ADR-323; see "Tickets and numbers"). Rounds 13–26 are answered (ADR-145…228).
+- Updated 2026-10-04, through ADR-333 / KD-70. **Task 1.4.1 is done (ADR-333): `spec/acceptance/05-sync.md`, 56 scenarios, decides nothing; sixteen points are left to the tasks that build them (1.4.2 mostly); next C67 (c), (d), (e), then 1.4.2.** Task 1.3.7 is done (ADR-332): Milestone 1.3 is done. **C67 (a) and (b) are built: certification copying is out of the schema, the service, the domain and the story (ADR-330), and a scale receipt's number is no longer unique (ADR-331: the key dropped by the fifty-seventh migration); C67 (c)…(g) are not.** **The user answered the agent defaults of 1.3.2…1.3.6 (ADR-328; §4): certifications are never copied, a scale receipt's number is never unique, an incident may name a contractor, cert number and ROE number, a viewer's sight of private citizens' names is the firm's choice. The first two are built (ADR-330, 331); the others not yet (BACKLOG C67).** **Task 1.3.6, ROEs and forms, is done (ADR-327; see "Field events").** Task 1.3.5, scale receipts and photographs, is done (ADR-326). Task 1.3.4, what each kind of field event records, is done (ADR-325). Task 1.3.3, what every field event records, is done (ADR-324). Task 1.3.2, numbering, is done (ADR-323; see "Tickets and numbers"). Rounds 13–26 are answered (ADR-145…228).
   **Phase 1 (data core and engine, rebuilt) is open, at the user's word (ADR-299).** Its plan is
   `BACKLOG.md`'s ten milestones and 47 tasks, one task per response, each milestone opening with
   its part's acceptance scenarios in `spec/acceptance/` (ADR-300). Done: the plan,
@@ -1459,7 +1459,7 @@ its scenario.
 
 ## 4. Waiting on the user
 
-**Nothing blocks the next task (1.4.1, the acceptance scenarios for sync).**
+**Nothing blocks the next task (C67 (c), an incident's optional contractor, cert number and ROE number; then (d), (e), then 1.4.2, intake).**
 - **Decided by the user 2026-10-04 (ADR-328), not built yet (BACKLOG C67) but for the first; the
   lines above and below that say otherwise are superseded:** **a certification is never copied**
   (configuration is: pay items, rules; **built, ADR-330**); **a scale receipt's number is never unique** (a receipt book restarts

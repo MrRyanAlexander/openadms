@@ -67,7 +67,7 @@ record (why Phase 0 existed, its exit criteria and how each was met, the spec tr
 question rounds) moved word for word to `DECISIONS.md`'s scratchpad, "Moved from NEXT.md,
 2026-10-02"; `ROADMAP.md` §3a keeps the table.
 
-**Still live from the spec track:** `spec/acceptance/` is 4 of 9 files (`04-field-capture.md`: 98 scenarios, 93 passing after 1.3.7, ADR-332; `01-setup.md`: 82
+**Still live from the spec track:** `spec/acceptance/` is 5 of 9 files (`05-sync.md`: 56 scenarios, written 2026-10-04, ADR-333; 39 are task 1.4.2's; `04-field-capture.md`: 98 scenarios, 93 passing after 1.3.7, ADR-332; `01-setup.md`: 82
 scenarios, 67 passing (AC-01-19 since 1.2.3, AC-01-09 since 1.3.2, AC-01-27 whole since 1.3.4) and AC-01-48, 55 and 80 in part; `02-people-and-devices.md`: 74
 scenarios, 35 passing at the database and four in part after 1.1.10, ADR-315; `03-certification.md`: 60 scenarios, 39 passing and 1 in part after 1.3.5, ADR-326); each other file is the first task of the milestone that builds its part
 (ADR-300).
@@ -81,7 +81,7 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-04: Phase 1 is open, twenty-two tasks done; Milestones 1.1, 1.2 and 1.3 are done)
+### Where things stand (2026-10-04: Phase 1 is open, twenty-three tasks done; Milestones 1.1, 1.2 and 1.3 are done; 1.4.1 written)
 - **Phase 1 (data core and engine) is the active phase**, opened by the user on 2026-10-01
   (ADR-299). Its plan is `BACKLOG.md`'s ten milestones and 47 tasks (ADR-300): setup records →
   certifications and capacity → tickets and numbers → sync intake → reconciliation → the rule engine
@@ -365,7 +365,7 @@ permissions and viewers, ADR-315), **1.1.11 (the example world's setup as a stor
 Milestone 1.1 is done)**, **1.2.1 (the acceptance scenarios for certifications, ADR-317: 60)**,
 **1.2.2 (the capacity math, ADR-320: `Capacity` in `packages/domain`)**, **1.2.3 (the
 certification's records, ADR-321: Milestone 1.2 is done)**, **1.3.1 (the acceptance scenarios for
-tickets and numbers, ADR-322: 98)**, **1.3.2 (numbering, ADR-323)**, **1.3.3 (what every field event records, ADR-324)**, **1.3.4 (what each kind records, ADR-325)**, **1.3.5 (scale receipts and photographs, ADR-326)**, **1.3.6 (ROEs and forms, ADR-327)**, **1.3.7 (the harness's phones capture every kind, ADR-332: Milestone 1.3 is done)**; and the user's correction of
+tickets and numbers, ADR-322: 98)**, **1.3.2 (numbering, ADR-323)**, **1.3.3 (what every field event records, ADR-324)**, **1.3.4 (what each kind records, ADR-325)**, **1.3.5 (scale receipts and photographs, ADR-326)**, **1.3.6 (ROEs and forms, ADR-327)**, **1.3.7 (the harness's phones capture every kind, ADR-332: Milestone 1.3 is done)**, **1.4.1 (the acceptance scenarios for sync, ADR-333: 56)**; and the user's correction of
 2026-10-02 (ADR-301: a pay item's code is unique, it has a description and no name, a duplicate
 rule is refused).
 
@@ -376,14 +376,18 @@ AC-04-72 rewritten). **C67 (c)…(e) come before 1.4.2.**
 **A column taken off a table viewers see** goes in three migrations (ADR-330): a guard stub that
 drops the `viewer_<table>` view, made while the schema is unchanged; the generated drop; a guard
 stub that runs `guard_viewer` again.
-👉 **Task 1.4.1, the acceptance scenarios for sync** (`BACKLOG.md`, Milestone 1.4):
-`spec/acceptance/05-sync.md`, from `spec/parts/05-sync.md` and `adms-exceptions` §4.3a: what
-Phase 1's intake does (every record received, in any order, in bursts; a second field event of
-one kind on one ticket quarantined in full; a retry of a phone-made id is the same record; an
-out-of-service phone's work), each scenario naming the task that proves it; the endpoint, the
-idempotency ledger and the manifest name Phase 2. A docs task: no stack needed. **Carried:** C31's
-first part; C63, C64, C65, C66 and C68's points for 1.4.2 (list them in the file's "left to the
-task" table); C67 (c)…(g). Then C67 (c), (d), (e), each its own task, then 1.4.2.
+**Task 1.4.1 is done (ADR-333):** `spec/acceptance/05-sync.md`, 56 scenarios (AC-05-01…56), 39 of
+them task 1.4.2's; its "Left to the task that builds it" table has sixteen points, and the
+paragraph under it lists what C31, C63…C68 carry into 1.4.2.
+👉 **C67 (c), an incident's optional contractor, cert number and ROE number** (`BACKLOG.md`, the
+register, C67; ADR-328 (3)): an incident may name the contractor involved, a certification by its
+cert number and an ROE by its number, each optional, and the project sets which of them its
+monitors are offered. A schema task (the brief's order: the model through Prisma, a guard stub,
+the exact lists, the example world, tests by scenario ID; AC-04's incident scenarios follow);
+it needs the stack (`pnpm local:up`; Docker Desktop may need `open -a Docker`). Then **C67 (d)**
+(a viewer's sight of private citizens' names, set per viewer) and **C67 (e)** (a photograph's
+archive mark and label), each its own task, then **1.4.2, intake** (read `05-sync.md` first: its
+scenarios, its sixteen open points, and the carried items under them).
 
 **The harness's phones** (ADR-332): a story signs a phone in with `story.phone({ …, lists: await
 phoneLists(api, { assignmentId, deviceId }) })` after its blocks are cut (`NumberAllocator.topUp`),

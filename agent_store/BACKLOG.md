@@ -254,7 +254,7 @@ Carried: C43, C44, C36's answers. Closes the behaviour of KD-13, 22, 23, 24, 27,
 
 Carried: C31's first part. Closes the behaviour of KD-56.
 
-- [ ] **1.4.1** `spec/acceptance/05-sync.md`, from Part 5 and `adms-exceptions` §4.3a: what Phase
+- [x] **1.4.1** ✅ **done 2026-10-04 (ADR-333):** 56 scenarios, AC-05-01…56: what a phone sends, a retry stored once, a duplicate quarantined in full, what is not a duplicate, nothing else refused, what intake fills in, what the phone is told and receives, any order and bursts, a phone taken out of service; 39 are 1.4.2's, 6 built already, 3 later Phase 1 tasks', 8 for Phases 2–4; sixteen points left to the task that builds them, with C31, C63…C68's parts for 1.4.2 listed in the file. `spec/acceptance/05-sync.md`, from Part 5 and `adms-exceptions` §4.3a: what Phase
   1's intake does; the endpoint, the idempotency ledger and the manifest name Phase 2.
 - [ ] **1.4.2** **Intake.** `QuarantinedRecord`; every field event received, in any order, in
   bursts; a second event of one kind on one ticket quarantined in full, never dropped, merged or
