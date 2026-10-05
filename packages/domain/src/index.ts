@@ -112,6 +112,17 @@ export {
   type RuleRefusal,
 } from './rules.ts';
 export { SiteFacts, type SiteRefusal, type SiteSetting } from './site-facts.ts';
+export {
+  Ticket,
+  Tickets,
+  workerStatuses,
+  workflows,
+  type GroupedFieldEvent,
+  type RaisedFlag,
+  type SplitShape,
+  type WorkerStatus,
+  type WorkflowName,
+} from './tickets.ts';
 export { ViewerSettings } from './viewer-settings.ts';
 export {
   SizeBands,
