@@ -295,7 +295,7 @@ ADR-303 (named here by ADR-307). Closes the behaviour of KD-02, 04, 05, 06, 12, 
   boundary, a zone; `FLAGS.md` §3.3's place flags and §3.4 (where the debris went; a haul-out that
   left a landfill, or was dumped at a TDSR: C52); a site's dates and permit. Any library needs its
   ADR. *REQ-123, 124b, 124e, 128; REQ-105n's flag.*
-- [ ] **1.5.7** **Checks on quantity, the pay item's settings, unit rate work and forms.**
+- [x] **1.5.7** ✅ **done 2026-10-05 (ADR-347):** `packages/domain/src/quantity-checks.ts` (`QuantityChecks`), `unit-rate-checks.ts` (`UnitRateChecks`, with the worker's own pay item), `roe-checks.ts` (`RoeChecks`); 65 tests; AC-06-80, 83, 85…90, 92…104, 107…116, 129, 132, 135 pass, 106 in part; AC-01-33, 48 and AC-04-59 whole; REQ-105d and 126b ticked (112c, 112f, 120j in part); chain 71 files, 1,504 tests. **AC-06-158 and 162's two flags were approved by the user and built the same day (ADR-348): `SCALE_NET_DISAGREES`, `TWO_QUANTITIES`, the seventieth migration, 77 flags; chain 71 files, 1,511 tests.** **Checks on quantity, the pay item's settings, unit rate work and forms.**
   `FLAGS.md` §3.5…§3.7: the load-call limits, the pay item worked out again from the bands, the
   stump checks, crew hours across a day, the ROE flags. A renamed built-in value changes nothing
   (AC-01-33). *REQ-112c; REQ-112f's engine part.*
@@ -1071,9 +1071,9 @@ delete one.
   flags of ADR-329 (section O) and the gaps with no flag, worded with the user (C67 (g));
   `DEVICE_CLOCK_OFF` in Phase 1; the worker's thresholds as policy values (C53); when a flag on
   a certification is raised. ~~**Task 1.5.6:** a project with no map; a haul-out collection's zone; a site with no GPS; a disposal on the close date; when a site's flag is raised.~~ **Decided (ADR-346, agent defaults). Left by 1.5.6: task 1.5.8**, the flagged straight-line mileage from `Distance`; **task 1.5.9**, handing `PlaceChecks` the newest map version (zones in the version's order), each site with its current shape version and the project's circle, writing each `ZoneAttached`, checking the sites' permits in a run, and a new map version, circle or site shape reprocessing un-invoiced tickets; **task 1.6.3**, `TIPPING_FEE_RULE_MISSING` and no lines after `HAUL_OUT_DUMPED_AT_TDSR`; **for the user**, the four points in ADR-346 (5), (7), (10) and (1). **What 1.5.6 was left:** a project with no map; a haul-out collection's zone;
-  a site with no GPS; a disposal on the close date; when a site's flag is raised. **Task 1.5.7:**
+  a site with no GPS; a disposal on the close date; when a site's flag is raised. ~~**Task 1.5.7:**
   whether a ticket's ROE flag puts it in review; a removed photograph against the required ones;
-  `301005`'s second flag; the crew-hours limit as a policy value and the tickets it is raised on.
+  `301005`'s second flag; the crew-hours limit as a policy value and the tickets it is raised on.~~ **Decided (ADR-347, agent defaults). Left by 1.5.7:** ~~with the user, the code and words of two flags (AC-06-158, 162)~~ **approved and built (ADR-348); task 1.5.9**, the worker hands `QuantityChecks` the project's limits, each receipt with every disposal that points at it (their capacities and debris types) and the carried tickets as found, `UnitRateChecks` the unit rate pay items, the stump switch, the policy value `CREW_DAY_HOURS` and the project's other crew-time field events, `RoeChecks` the program type's *requires ROE*, each ROE found with its live scope, and the project's surveys; writes `workedOutPayItemId`; counts a ticket's ROE flags in its status; **task 1.6.3**, `QUANTITY_MISSING_FOR_PAY_ITEM`, `FILL_WITHOUT_EXPOSED_ROOT_BALL` (the second stump switch), *Count is always 1* making the count 1; **for the user**, the points in ADR-347 marked raised (24 in as FEMA's fixed test; the crew's day; which ticket carries the crew-hours flag; both loads flagged for one carried ticket; a blank receipt not "unusable").
   **Task 1.5.9:** an errored ticket's status; the person stated for a reprocess (C20); how a
   pending ticket is listed. **For the user:** the file's approval (KD-71 (1) answered, ADR-342).
 

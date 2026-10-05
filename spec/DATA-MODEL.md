@@ -1685,7 +1685,7 @@ A new value in any of them is a code change with an ADR (`spec/LISTS.md` Group 2
 | `SyncAnswer` | `SAVED` · `QUARANTINED` | `SyncedRecord` |
 | `ReconciliationTrigger` ✅ | `SYNC` · `CORRECTION` · `SETUP_CHANGE` · `REPROCESS` | `ReconciliationRun` |
 | `FlagBilling` ✅ | `BILLS` · `LINE_NOT_BILLED` · `NOT_BILLED` | `Flag` |
-| `FlagCode` ✅ | The codes of `spec/FLAGS.md` §3: 75 today (nine added as §3.10, ADR-345), in the page's order; a database test holds the enum to the page (ADR-340) | `Flag` |
+| `FlagCode` ✅ | The codes of `spec/FLAGS.md` §3: 77 today (nine added as §3.10, ADR-345; two more, ADR-348), in the page's order; a database test holds the enum to the page (ADR-340) | `Flag` |
 | `RuleActionKind` | `ADD_TRANSACTION` · `REMOVE_TRANSACTION` · `VOID_TICKET` | `RuleAction` |
 | `QuantityFrom` | `ALL_ITEMS` · `CHOSEN_ITEMS` | `RuleAction` |
 | `RuleOperator` | `spec/RULES.md` §4a: `EQUALS` · `NOT_EQUALS` · `IS_ONE_OF` · `IS_NOT_ONE_OF` · `BETWEEN` · `AT_LEAST` · `AT_MOST` · `MORE_THAN` · `LESS_THAN` · `ON` · `NOT_ON` · `ON_OR_BEFORE` · `ON_OR_AFTER` · `CONTAINS` · `STARTS_WITH` · `IS_EMPTY` · `IS_NOT_EMPTY` | `RuleCriterion` |

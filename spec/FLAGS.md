@@ -205,7 +205,8 @@ three. One that reaches the server anyway is **kept and flagged, never thrown aw
 2026-10-04, ADR-329). The first six were worded by the agent and approved by the user on
 2026-10-05 ("Yes to all", ADR-345). The last three are backup catches the user asked for the same
 day: "If there is even a chance those could be created make them flag, but it really should be
-impossible if we build things the right way"; their wording is the agent's.
+impossible if we build things the right way"; their wording is the agent's. The last two, for a
+scale receipt and a disposal's quantities, were approved the same day (ADR-348).
 
 | Code | Raised when | Message | Bills | Facts kept | ADR |
 |---|---|---|---|---|---|
@@ -218,9 +219,13 @@ impossible if we build things the right way"; their wording is the agent's.
 | `SPLIT_NOT_ALLOWED` | A collection with a split suffix on a project whose *Allow split loads* is off | "Ticket 101042: a split load on a project that doesn't allow split loads." | yes | the suffixes | 137, 345 |
 | `OUTSIDE_CONTROL_RANGES` | On a project numbered from control tickets, a load's or a haul-out's number is in none of the ranges entered for its series | "Ticket 109999: number is in none of the project's control ticket ranges." | yes | the number, the ranges | 056, 345 |
 | `ASSIGNMENT_ON_ANOTHER_PROJECT` | A field event's assignment belongs to a different project from the field event | "Ticket 101043: recorded under an assignment on another project." | yes | both projects | 156, 345 |
+| `SCALE_NET_DISAGREES` | A scale receipt holds a gross, a tare and a net, and the net isn't the gross less the tare. The weights stay as typed, never corrected | "Ticket 101054: scale receipt BCL-88251's net (17.60 tons) is not its gross less its tare (17.10 tons)." | yes, from the net as written | the receipt's figures | 329, 348 |
+| `TWO_QUANTITIES` | A load's disposal holds a load call and a scale weight. Which one bills is read from the paying pay item; the two are never compared | "Ticket 101055: disposal has both a load call and a scale weight." | yes | the call, the receipt, its net | 329, 348 |
 
-**Added:** the nine flags of §3.10 (ADR-345). The catalogue is 75 flags: 66 after ADR-328 withdrew
-one, and these nine.
+**Added:** the nine flags of §3.10 (ADR-345). The catalogue was 75 flags: 66 after ADR-328 withdrew
+one, and these nine. **Added:** `SCALE_NET_DISAGREES` and `TWO_QUANTITIES`, worded by the agent and
+approved by the user on 2026-10-05 ("Agree on both proposed in the two questions", ADR-348). The
+catalogue is 77 flags.
 
 ---
 
