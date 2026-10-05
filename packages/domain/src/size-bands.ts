@@ -8,6 +8,7 @@
 // A band holds both its ends, in tenths of an inch, as the database keeps them (decimal(8,1)): 6–24
 // and 24.1–99 meet, with no gap between them. Either end may be open: "24 in and up".
 
+import type { MeasuredAs } from './field-event-details.ts';
 import type { SetupWarning } from './form-debris-types.ts';
 
 // One pay item of the payable type, as setup holds its band.
@@ -33,6 +34,20 @@ export interface SetupRefusal {
 export interface BandCheck {
   readonly refusal: SetupRefusal | null;
   readonly warnings: readonly SetupWarning[];
+}
+
+// What the monitor read off a tree: inches to a tenth, and whether around it or across (ADR-177).
+export interface TreeMeasurement {
+  readonly inches: number;
+  readonly measuredAs: MeasuredAs;
+}
+
+// The pay item a piece of unit rate work falls to (ADR-213, 217).
+export interface WorkedOutPayItem {
+  // None where no band fits: the ticket is saved with no pay item and flagged, never refused.
+  readonly payItem: BandedPayItem | null;
+  // The diameter the bands read, in inches to a tenth; none where nothing was measured.
+  readonly diameterInches: number | null;
 }
 
 // A band in whole tenths of an inch; an open end is the furthest there is.
@@ -100,6 +115,36 @@ export class SizeBands {
       });
     }
     return { refusal: null, warnings };
+  }
+
+  // The diameter bands and rules read (ADR-177): a diameter as it was read; a circumference ÷ 3.14,
+  // rounded half up to a tenth. In whole tenths, so no fraction is lost on the way.
+  static diameter(measurement: TreeMeasurement): number {
+    const tenths = Math.round(measurement.inches * 10);
+    if (measurement.measuredAs === 'DIAMETER') return tenths / 10;
+    return Math.floor((tenths * 200 + 314) / 628) / 10;
+  }
+
+  // The one rule the phone and the server share (ADR-213, 217; invariant 11): which of the
+  // payable type's pay items this work falls to. A payable type with one pay item is that pay
+  // item, measured or not: its band only flags work under or over it (ADR-210). With several, the
+  // one whose band holds the diameter; where none does, or nothing was measured, no pay item.
+  payItemFor(measurement: TreeMeasurement | null): WorkedOutPayItem {
+    const live = this.payItems.filter((payItem) => !payItem.archived);
+    const diameterInches = measurement === null ? null : SizeBands.diameter(measurement);
+    const [only] = live;
+    if (live.length === 1 && only !== undefined) return { payItem: only, diameterInches };
+    if (diameterInches === null) return { payItem: null, diameterInches };
+    const at = Math.round(diameterInches * 10);
+    const holding = live
+      .filter((payItem) => payItem.bandFrom !== null || payItem.bandTo !== null)
+      .map((payItem) => SizeBands.tenths(payItem))
+      .filter((band) => band.from <= at && at <= band.to);
+    const [found] = holding;
+    return {
+      payItem: holding.length === 1 && found !== undefined ? found.payItem : null,
+      diameterInches,
+    };
   }
 
   // Why a band can't be a band, or null: its ends are inches in tenths, nought or more, the from no

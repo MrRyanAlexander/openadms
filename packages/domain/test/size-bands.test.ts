@@ -1,7 +1,8 @@
 // The size bands of one payable type's pay items, at the domain (spec/acceptance/01-setup.md
 // AC-01-45, AC-01-46; ADR-210, 213, 217, 309). The bands are P1's as the golden mission §1 sets
 // them up: Leaners 6–24 and 24.1–99 in, Stumps 24–36 and 36.1–48 in. Which pay item a measurement
-// falls in is the phone's (Phase 3) and the worker's (1.5.7) to work out from them.
+// falls in is one rule, here, for the phone and the worker (spec/acceptance/04-field-capture.md
+// AC-04-59; BACKLOG 1.3.7).
 import { describe, expect, it } from 'vitest';
 
 import { type BandedPayItem, SizeBands } from '../src/index.ts';
@@ -126,5 +127,81 @@ describe('a band that is no band', () => {
     expect(stumps.check(payItem('new', 'STP-RMV-EA-36', 36, 24)).refusal?.message).toBe(
       'STP-RMV-EA-36: a band runs from its lower end to its higher: 36–24 in.',
     );
+  });
+});
+
+describe('the pay item a piece of unit rate work falls to', () => {
+  const leaners = new SizeBands('Leaners', [leaners24, leaners99]);
+  const stumps48 = payItem('s48', 'STP-RMV-EA-48', 36.1, 48);
+  const stumps = new SizeBands('Stumps', [stumps36, stumps48]);
+  const hangers = payItem('hng', 'HNG-RMV-EA', null, null);
+
+  it('AC-04-59 ticket 301002: a circumference of 56.5 in is 18.0 in across, in band 6–24: LNR-RMV-EA-24', () => {
+    expect(leaners.payItemFor({ inches: 56.5, measuredAs: 'CIRCUMFERENCE' })).toEqual({
+      payItem: leaners24,
+      diameterInches: 18,
+    });
+  });
+
+  it('AC-04-59 ticket 301004: a stump 30 in across is in band 24–36: STP-RMV-EA-36', () => {
+    expect(stumps.payItemFor({ inches: 30, measuredAs: 'DIAMETER' })).toEqual({
+      payItem: stumps36,
+      diameterInches: 30,
+    });
+  });
+
+  it('AC-04-59 ticket 301005: a stump 20 in across is in no band: no pay item', () => {
+    expect(stumps.payItemFor({ inches: 20, measuredAs: 'DIAMETER' })).toEqual({
+      payItem: null,
+      diameterInches: 20,
+    });
+  });
+
+  it('AC-04-59 a band holds both its ends: 24 in is the lower band, 24.1 in the upper', () => {
+    const at = (inches: number) =>
+      leaners.payItemFor({ inches, measuredAs: 'DIAMETER' }).payItem?.code;
+    expect([6, 24, 24.1, 99].map(at)).toEqual([
+      'LNR-RMV-EA-24',
+      'LNR-RMV-EA-24',
+      'LNR-RMV-EA-99',
+      'LNR-RMV-EA-99',
+    ]);
+    expect([5.9, 99.1].map(at)).toEqual([undefined, undefined]);
+  });
+
+  it('AC-04-59 a circumference is ÷ 3.14, rounded half up to a tenth, before the bands read it', () => {
+    const across = (inches: number) => SizeBands.diameter({ inches, measuredAs: 'CIRCUMFERENCE' });
+    // 75.3 ÷ 3.14 = 23.98; 75.6 ÷ 3.14 = 24.08; 7.7 ÷ 3.14 = 2.452.
+    expect([56.5, 75.3, 75.6, 7.7].map(across)).toEqual([18, 24, 24.1, 2.5]);
+    expect(leaners.payItemFor({ inches: 75.6, measuredAs: 'CIRCUMFERENCE' }).payItem).toBe(
+      leaners99,
+    );
+  });
+
+  it('AC-04-59 the same measurement and bands always give the same pay item, in any order', () => {
+    const turned = new SizeBands('Leaners', [leaners99, leaners24]);
+    for (const inches of [6, 18, 24, 24.1, 60, 120]) {
+      const measurement = { inches, measuredAs: 'DIAMETER' } as const;
+      expect(turned.payItemFor(measurement)).toEqual(leaners.payItemFor(measurement));
+    }
+  });
+
+  it('AC-04-59 ticket 301001: a payable type with one pay item is that pay item, measured or not', () => {
+    const one = new SizeBands('Hangers', [hangers]);
+    expect(one.payItemFor(null)).toEqual({ payItem: hangers, diameterInches: null });
+    expect(one.payItemFor({ inches: 3, measuredAs: 'DIAMETER' }).payItem).toBe(hangers);
+    // A lone pay item's band only flags work outside it (ADR-210).
+    expect(
+      new SizeBands('Leaners', [leaners24]).payItemFor({ inches: 40, measuredAs: 'DIAMETER' })
+        .payItem,
+    ).toBe(leaners24);
+  });
+
+  it('AC-04-59 several pay items and nothing measured: no pay item; one taken off no longer counts', () => {
+    expect(leaners.payItemFor(null)).toEqual({ payItem: null, diameterInches: null });
+    const archived = payItem('l99', 'LNR-RMV-EA-99', 24.1, 99, true);
+    const left = new SizeBands('Leaners', [leaners24, archived]);
+    expect(left.payItemFor({ inches: 40, measuredAs: 'DIAMETER' }).payItem).toBe(leaners24);
+    expect(new SizeBands('Leaners', []).payItemFor(null).payItem).toBeNull();
   });
 });

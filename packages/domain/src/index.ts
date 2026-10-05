@@ -101,7 +101,14 @@ export {
   type RuleRefusal,
 } from './rules.ts';
 export { SiteFacts, type SiteRefusal, type SiteSetting } from './site-facts.ts';
-export { SizeBands, type BandCheck, type BandedPayItem, type SetupRefusal } from './size-bands.ts';
+export {
+  SizeBands,
+  type BandCheck,
+  type BandedPayItem,
+  type SetupRefusal,
+  type TreeMeasurement,
+  type WorkedOutPayItem,
+} from './size-bands.ts';
 export {
   NewProjectSettings,
   type ProgramTypeSetting,
