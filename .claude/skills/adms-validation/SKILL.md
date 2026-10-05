@@ -2,7 +2,7 @@
 name: adms-validation
 description: Open ADMS checks, flags, statuses, how rules run, and the quantity math, in today's rules. Covers the checks between a ticket's field events and on each event against the setup (certification, place and time, where debris went, quantity, pay item settings, forms, pricing), what is never flagged, how the worker runs a form's rules (one contract per rule, criteria read only the ticket, Add in # order then Remove then Void ticket, a rule's void wins), why no rule or setting may be silently inert, the four statuses and what sets them, timing contradictions, how a flag reads and how a reviewer accepts one, and every quantity formula (capacity × load call, scale weight and a tandem's split, split shares, circumference to diameter, stump CY, fill CY, carried tickets, white goods, crew hours, mileage rounding). Use when writing a check or a flag, the rule engine, a threshold or project setting, status changes, or any quantity math. Setup and workflows live in adms-ticket-workflows, pricing and the ledger in adms-ledger-audit, duplicates and corrections in adms-exceptions.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-244; the flag catalogue approved, ADR-290; split haul-outs, ADR-295; a split haul-out's pile weights, ADR-297; *Haul-outs leave here* only on a TDSR, ADR-298; a duplicate rule refused, ADR-301; the flags for a record that should not have been possible and what a removed photograph counts for, ADR-345) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-244; the flag catalogue approved, ADR-290; split haul-outs, ADR-295; a split haul-out's pile weights, ADR-297; *Haul-outs leave here* only on a TDSR, ADR-298; a duplicate rule refused, ADR-301; the flags for a record that should not have been possible and what a removed photograph counts for, ADR-345; how the place checks are built, ADR-346) -->
 
 > **This page states today's rules** (last changed by ADR-301, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
@@ -78,6 +78,8 @@ amount can be computed (§5.4), except where the table says it doesn't.
 | Made on a phone after it was taken out of service | "made on a phone taken out of service" | 134 |
 | A ticket number **typed** instead of scanned (a reason picked) | "typed ticket number" | 111, 173 |
 | A record the back office created (person and reason kept) | flagged, then pairs like any other | 156 |
+
+**How the place checks are built** (agent defaults, ADR-346; `packages/domain`'s `place.ts`): a project with no map raises nothing and gives no zone; a map with no zones never says "not inside any zone"; outside the boundary is one flag and no zone is looked for; a haul-out's collection takes no zone; a field event with no GPS fix, or a disposal naming no site, isn't placed and nothing is raised for it here; a site is open on its activation date and its close date themselves, the day being the disposal's in the project's time zone; a point on a circle or on a shape's edge is inside.
 
 **Where the debris went** (the site's facts; the system checks where debris went, never where it
 was headed). **User, 2026-09-28 (Q-197):** "The system simply verifies that the debris was allowed

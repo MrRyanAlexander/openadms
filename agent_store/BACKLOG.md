@@ -291,7 +291,7 @@ ADR-303 (named here by ADR-307). Closes the behaviour of KD-02, 04, 05, 06, 12, 
   one closed set with each message word for word from `spec/FLAGS.md`; `FLAGS.md` §3.1, §3.2 and the
   time flags of §3.3; the facts a flag keeps and their hash. *REQ-105j, 120d, 122, 122a, 129a;
   REQ-106f's flags; REQ-124c's flag.*
-- [ ] **1.5.6** **Checks on place.** The one geodesic module; a point in a circle, a shape, the
+- [x] **1.5.6** ✅ **done 2026-10-05 (ADR-346):** `packages/domain/src/geodesic.ts` (`Distance`; `geographiclib-geodesic` 2.2.0, the package's first dependency), `ShapeArea` in `map-shapes.ts`, `place.ts` (`PlaceChecks`, `SiteChecks`); 38 tests; AC-06-43…47, 51, 52, 65…67, 72, 118, 126, 127, 134 pass, 42 and 68 in part; REQ-123, 105n ticked (124b, 124e, 128 in part); chain 68 files, 1,439 tests. **Checks on place.** The one geodesic module; a point in a circle, a shape, the
   boundary, a zone; `FLAGS.md` §3.3's place flags and §3.4 (where the debris went; a haul-out that
   left a landfill, or was dumped at a TDSR: C52); a site's dates and permit. Any library needs its
   ADR. *REQ-123, 124b, 124e, 128; REQ-105n's flag.*
@@ -762,7 +762,7 @@ delete one.
   monitor (`spec/CONVENTIONS.md` §6).
 - **C52. *Haul-outs leave here* only on a TDSR/DMS site** (ADR-298). **Setup half done (ADR-311):**
   the database refuses it too, and refuses changing a marked site's type (`siteTypeKey`, a check);
-  `SiteFacts` says so in setup. The two flags are 1.5.6's. With `DisposalSite`'s real
+  `SiteFacts` says so in setup. ~~The two flags are 1.5.6's.~~ **The two flags are built (ADR-346: AC-06-67, 68); C52 is done but for 1.6.3's "no lines".** With `DisposalSite`'s real
   model (C42): setup refuses the mark on any other site type and refuses changing a marked site's
   type; decide whether the database refuses it too (the type is a list row acted on by its fixed
   key, so a plain check constraint can't see it; a guard needs its own migration and test). An
@@ -800,7 +800,7 @@ delete one.
   writes `asPrimeId` with it. **Task 1.1.10 (C18):** a prime's sight of its subs' tickets reads
   `project_contractor`; and whether any read-only viewer sees a contractor's contact details
   (ADR-306; ADR-169 keeps personal phone numbers from them).
-- **C57 (the reader ✅ done, ADR-316: `MapShapes`; point-in-polygon is still 1.5.x's). Reading a shape, its bounding box, and point-in-polygon** (ADR-311 (6)). The database
+- **C57 (✅ done: the reader, ADR-316, `MapShapes`; point-in-polygon, ADR-346, `ShapeArea`). Reading a shape, its bounding box, and point-in-polygon** (ADR-311 (6)). The database
   keeps a GeoJSON `Polygon` or `MultiPolygon` and four bounding-box columns, and checks only that the
   shape holds its type and coordinates and that the box is on the earth; **whoever writes a shape
   works out its box**. **Task 1.1.11** (the setup story through the API's services, which load P1's
@@ -1070,7 +1070,7 @@ delete one.
   disposal hasn't synced and after the phantom is voided (both tickets flagged is settled, ADR-342; the agent recommends the flag clears once the phantom is voided); a bare collection's words; the
   flags of ADR-329 (section O) and the gaps with no flag, worded with the user (C67 (g));
   `DEVICE_CLOCK_OFF` in Phase 1; the worker's thresholds as policy values (C53); when a flag on
-  a certification is raised. **Task 1.5.6:** a project with no map; a haul-out collection's zone;
+  a certification is raised. ~~**Task 1.5.6:** a project with no map; a haul-out collection's zone; a site with no GPS; a disposal on the close date; when a site's flag is raised.~~ **Decided (ADR-346, agent defaults). Left by 1.5.6: task 1.5.8**, the flagged straight-line mileage from `Distance`; **task 1.5.9**, handing `PlaceChecks` the newest map version (zones in the version's order), each site with its current shape version and the project's circle, writing each `ZoneAttached`, checking the sites' permits in a run, and a new map version, circle or site shape reprocessing un-invoiced tickets; **task 1.6.3**, `TIPPING_FEE_RULE_MISSING` and no lines after `HAUL_OUT_DUMPED_AT_TDSR`; **for the user**, the four points in ADR-346 (5), (7), (10) and (1). **What 1.5.6 was left:** a project with no map; a haul-out collection's zone;
   a site with no GPS; a disposal on the close date; when a site's flag is raised. **Task 1.5.7:**
   whether a ticket's ROE flag puts it in review; a removed photograph against the required ones;
   `301005`'s second flag; the crew-hours limit as a policy value and the tickets it is raised on.
