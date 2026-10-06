@@ -142,6 +142,14 @@ pile's running call is never judged by the limits (ADR-295).
 | `CARRIED_TICKET_NOT_FOUND` | A carried ticket number (a stump or white goods ticket) matches no ticket | "Ticket 101014: carried ticket 301099 not found." | yes, from the tickets found | the number | 192 |
 | `CARRIED_TICKET_ON_ANOTHER_LOAD` | A carried ticket is already on another load | "Ticket 101014: carried ticket 301004 is already on load 101007." | yes | both loads | 192 |
 
+**`QUANTITY_MISSING_FOR_PAY_ITEM` says how the pay item is priced and what is lacking** (task 1.6.3,
+ADR-355; the wording beyond the row's own message is the agent's, the user may overturn it): "…is
+priced per ton, but the haul-out has no scale weight."; "…is priced per cubic yard, but the load
+carries no stump tickets."; and, **at the user's word (2026-10-05)**, hours that fall in no step of
+a crew day paid in steps: "Ticket 301029: CREW-TIME-DAY-STP is priced per crew day in steps, but
+13.25 h falls in no step. Flagged for review." That line bills nothing until the steps or the hours
+are fixed.
+
 ### 3.6 The pay item's settings, and unit rate work
 
 | Code | Raised when | Message | Bills | Facts kept | ADR |

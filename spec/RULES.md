@@ -139,6 +139,17 @@ TDSR, Bayline Transfer Station*).
   actions, in any order; **the rule's name and its Active tick are ignored**, and it is compared with
   every rule of the project that isn't archived, inactive ones included. An edit that would turn a
   rule into a copy of another is refused the same way. *(The details are an agent default.)*
+- **A line that compares with something the ticket doesn't have never passes, however it is
+  worded** ✅ *(user, 2026-10-05; ADR-354)*. On a collection with no GPS fix there is no mileage and
+  no zone: neither *Mileage AT MOST 15.0* nor *Zone NOT EQUALS Zone 1* passes on it; only *IS EMPTY*
+  does (and *IS NOT EMPTY* doesn't). Nothing is priced on a guess: with no rule adding a line the
+  ticket is flagged "no pricing rule…" until it is corrected.
+- *As built (agent defaults, ADR-354):* text is compared without regard to capitals or to spaces at
+  either end; a number is compared by its exact value (*Volume EQUALS 14.4* meets 14.40), mileage
+  alone rounded first; *Contractor* reads the prime, so a line that picks a sub finds no ticket;
+  *Zone* reads the name the zone had on the map version the ticket was placed with; *Unit count* on
+  any itemised ticket other than crew time is the total of its items; *Item* on a ticket that isn't
+  itemised is empty.
 - **Mileage is rounded half up to tenths of a mile** before any rule compares it (15.04 → 15.0,
   15.05 → 15.1). The unrounded distance is stored too. The rounding lives in one place (the shared
   domain package), so Show matches and the engine always agree.
@@ -214,6 +225,25 @@ When a ticket is reconciled or reprocessed (ADR-086, 090):
 9. A split runs steps 2–7 **once per property**, on its share (ADR-162); a split haul-out **once per
    pile** (ADR-295). **A haul-out dumped at a
    TDSR** skips the rules until corrected (ADR-226).
+
+**As built (task 1.6.3, ADR-355).** ✅ *The user, 2026-10-05:* **an amount is rounded to the cent a
+half up** (9.75 h × $151.25 = $1,474.6875 → $1,474.69), and it is the quantity as the line keeps it
+(four decimals) × the rate, so anyone can check a line by hand; **a crew day by exact division keeps
+four decimals** (10.25 h ÷ 12 = 0.8542; × $1,800.00 = $1,537.56); **hours that fall in no step** of
+a crew day paid in steps **bill nothing on that line, and the ticket is flagged** until the firm
+fixes the steps or the hours. *Agent defaults the user may overturn:*
+- A ticket under a flag that says "not billed" (a 0% call, no certification, no size band, piles
+  that can't be shared out) gets no lines until it is corrected (`spec/FLAGS.md` §1), and no pricing
+  flag joins the one it has; a rule's *Void ticket* still runs on it. A haul-out dumped at a TDSR
+  skips every rule.
+- Two creates of one # stop that # only: the ticket's other lines bill. Three are one flag.
+- A *Remove transaction* of a # nothing added does nothing. A tipping fee a rule added and another
+  removed is not "a missing rule"; a ticket whose only line was removed has no lines and no flag.
+- A pay item with no rate for any prime is a $0 pay item and raises nothing; "no rate for Summit" is
+  raised only where the pay item holds another prime's rate.
+- A TBN pay item writes no line; its flag keeps the # and the pay item.
+- *Quantity from* chosen items: their counts added up; on crew time, the highest of their hours.
+- A rule's void voids the whole ticket, a split included, and names every rule whose void ran.
 
 ## 7. "Is valid" *(agent default, ADR-247)*
 

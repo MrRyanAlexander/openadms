@@ -2,7 +2,7 @@
 name: adms-ledger-audit
 description: Open ADMS money and the permanent record, in today's rules. Covers pay items (the only place a rate lives, one rate per prime), how a ticket is priced (the rules of its form that name its prime's contract, Add transaction in # order, Remove, Void ticket), quantity and rate, the Transaction ledger (the current truth, regenerated per ticket, each removed row copied to the audit log first), rate and rule changes, the append-only AuditRecord written by the database, QC status, the invoice lock and invoice batches, and the client package. Use when touching pay items, rates, transactions, pricing, the audit trail, QC, invoicing or anything that must leave an immutable trail. The rule builder's screens and every criterion are spec/RULES.md; how the worker runs rules and the pricing flags are adms-validation §5.3.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-249; a pay item names no form, ADR-292; a unique code and a description, a duplicate rule refused, ADR-301) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-249; a pay item names no form, ADR-292; a unique code and a description, a duplicate rule refused, ADR-301; cent rounding, a crew day's decimals and hours in no step, ADR-355) -->
 
 > **This page states today's rules** (last changed by ADR-301, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
@@ -96,7 +96,8 @@ load lacks (that line bills nothing); a site that charges a tipping fee with no 
 ### 6.1b Quantity and rate
 
 **Cost = quantity × rate.** The **rate** is the pay item's rate **for the rule's contract's prime**
-(ADR-212). The **quantity** comes from the pay item's Unit of Measure; the formulas are
+(ADR-212). **The amount is rounded to the cent a half up**, and it is the quantity as the line keeps
+it (four decimals) × the rate (**User, 2026-10-05**, picking "Half up"; ADR-355). The **quantity** comes from the pay item's Unit of Measure; the formulas are
 `adms-validation` §5.5:
 
 | Unit | Quantity | ADRs |
@@ -105,7 +106,7 @@ load lacks (that line bills nothing); a site that charges a tipping fee with no 
 | `TN` | the scale weight (a tandem's split by certified capacity, both flagged) | 175, `adms-scale-receipts` |
 | `EA` | the count: white goods, **every item removed** (or the items a rule's *Quantity from* chooses) | 126, 128, 131 |
 | `LB` | the pounds the monitor entered as the count (HHW) | 054 |
-| `HR`, `CREW_DAY` | **the highest item's hours, once**, through the pay item's conversion (per hour, ÷ the day length, or steps) | 084, 087, 126 |
+| `HR`, `CREW_DAY` | **the highest item's hours, once**, through the pay item's conversion (per hour, ÷ the day length, or steps). By exact division the quantity keeps **four decimals** (10.25 h ÷ 12 = 0.8542); hours that fall **in no step bill nothing on that line, flagged** (the user, 2026-10-05, ADR-355) | 084, 087, 126, 355 |
 | `TBN` | nothing: the ticket completes and writes no money until the rate is agreed; then its tickets reprocess | 068 |
 
 **Who bills** (ADR-060): `COMPLETED` **and `MANUAL_REVIEW`** tickets bill wherever an amount can be

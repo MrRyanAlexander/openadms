@@ -343,7 +343,9 @@ weight) is stored apart from what was observed, and the parts **sum exactly** to
 - **Crew time:** the **highest item's hours, once** (Skid Steer 9.75 h, Truck 8.50 h → **9.75 h**,
   golden mission 301007), then the pay item's conversion: **per hour**; **per day, exact** (hours ÷
   the day length, default 12); or **per day in steps** the admin sets. These three are the only ones;
-  a contract that fits none is a new ADR (ADR-084, 087, 126).
+  a contract that fits none is a new ADR (ADR-084, 087, 126). By exact division the quantity keeps
+  **four decimals, a half up** (10.25 h ÷ 12 = 0.8542); hours that fall in no step **bill nothing on
+  that line and the ticket is flagged** (the user, 2026-10-05, ADR-355).
 - **TBN** bills nothing until the rate is agreed; entering it reprocesses the un-invoiced tickets
   (ADR-068, 090).
 
