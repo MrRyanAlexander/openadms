@@ -1541,6 +1541,15 @@ lines without them (the user, 2026-10-06, ADR-361; §2.2).
 
 ## 6. Marks: what people set, without changing the record (ADR-245)
 
+**Built (task 1.8.2, ADR-363):** all five, in `packages/db/prisma/schema/marks.prisma`. Beside the
+fields below, **every mark repeats its `projectId`**, which holds it and what it marks to one
+project; and a mark on a field event repeats that event's kind as `fieldEventKind`, held to
+`UNIT_RATE`. What a mark is on, who made it and when never change; a lock once unlocked, and a
+void once lifted, is history, and locking or voiding again is a new row. Audited: a QC mark in
+records; a lock, a batch and a void in billing; an acceptance in operations. A client user and an
+auditor see every mark of their projects (never an unlock's note); a contractor user sees that
+its own tickets are locked and in which batch, and no other mark.
+
 #### `QcMark`
 
 Set only by people; never on a load's or haul-out's single event (ADR-107, 168). No row = QC Review.
@@ -1556,10 +1565,11 @@ A certification's "checked by" is its mark's `setById` (ADR-080).
 
 #### `InvoiceLock`
 
-*Built in part.* Only on a QC Approved record (ADR-121). An unlock keeps the row and is audited;
-locking again is a new row (C17). **Its three targets are built (ADR-358):** a completed load, a
-completed haul-out or a unit rate ticket's field event, exactly one, each locked once; the unlock
-columns and the batch are task 1.8.2's.
+*Built (ADR-358, 363).* Only on a QC Approved record (ADR-121; held by the service, task 1.8.5,
+not by the database). An unlock keeps the row and is audited; locking again is a new row (C17).
+Its three targets: a completed load, a completed haul-out or a unit rate ticket's field event,
+exactly one. **A ticket has one lock in force at most** (not unlocked); a transaction's two
+guards and the worker ask only about a lock in force.
 
 | Field | Type | Notes |
 |---|---|---|
@@ -1573,7 +1583,9 @@ columns and the batch are task 1.8.2's.
 
 #### `InvoiceBatch`
 
-A name and its tickets; no amounts (ADR-228).
+A name and its tickets; no amounts (ADR-228). **A name is used once on a project** and is never
+blank; a lock names a batch of its own project; a batch is renamed freely, audited, and is never
+archived (agent defaults, ADR-363).
 
 | Field | Type | Notes |
 |---|---|---|
@@ -1584,7 +1596,8 @@ A name and its tickets; no amounts (ADR-228).
 
 #### `FlagAcceptance`
 
-The flag stays in the history and isn't raised again unless its facts change (ADR-166).
+The flag stays in the history and isn't raised again unless its facts change (ADR-166). The flag
+itself is never changed by an acceptance; the acceptance stays on its flag (ADR-363).
 
 | Field | Type | Notes |
 |---|---|---|
@@ -1596,9 +1609,10 @@ The flag stays in the history and isn't raised again unless its facts change (AD
 
 #### `TicketVoid`
 
-A person's void (C19): the worker reads it and sets `VOID`. An unvoid lifts it, audited. A rule's
-void is the worker's own: its reason is the rule, on the run's decision; it wins on every reprocess
-(ADR-167).
+A person's void (C19): the worker reads it and sets `VOID` (task 1.8.4). An unvoid lifts it,
+audited, on its own row; **a ticket has one void in force at most**, and voiding it again is a new
+row (ADR-363). A rule's void is the worker's own: its reason is the rule, on the run's decision; it
+stays until a person unvoids the ticket (ADR-360).
 
 | Field | Type | Notes |
 |---|---|---|
@@ -1672,7 +1686,11 @@ Never relaxed to pass a test (ARCHITECTURE §5.4). ✅ = built today.
 | A rule sits on a load, haul-out or unit rate form of its own project and names one of that project's contracts; a picked value is the rule's own project's (a debris type its own form's); a pick fills the one column its criterion picks from; a criterion takes only its kind's operators, and a value only its operator's; an action holds only what its kind takes (ADR-313) | ✅ composite foreign keys and checks |
 | A transaction # once per ticket (and property or pile) | ✅ three unique keys: on the property's row, the pile's row and the unit rate ticket's field event (ADR-358) |
 | A transaction is on exactly one kind of ticket, a load or a haul-out with the property or pile it prices; everything it names is its own project's, the property a row of its own load, the pile of its own haul-out; its prime one of the project's primes and its operating sub placed under that prime; its # 1 or more and its figures nought or more (ADR-358) | ✅ a check, two- and three-column foreign keys, a check |
-| An invoice lock is on exactly one ticket, locked once; a ticket locked as invoiced gives up no transaction and takes none, whichever of the three kinds it is (ADR-090, 358; C17) | ✅ a check, unique keys, the delete's trigger and an insert trigger |
+| An invoice lock is on exactly one ticket of its own project, a field event only as a unit rate ticket; a ticket has one lock in force; a ticket locked as invoiced gives up no transaction and takes none, whichever of the three kinds it is, until it is unlocked (ADR-090, 358, 363; C17) | ✅ a check, two-column foreign keys, three exclusions `WHERE unlocked_at IS NULL`, the delete's trigger and an insert trigger |
+| A QC mark is on exactly one record of its own project, a field event only as a unit rate ticket, and a record has one mark; a flag is accepted once; a batch's name is used once on its project, and a lock's batch is its own project's; a ticket has one person's void in force (ADR-363) | ✅ checks, two-column foreign keys, unique keys, an exclusion `WHERE lifted_at IS NULL` |
+| What a mark is on, who made it and when never change; a lock once unlocked and a void once lifted are never changed again; an unlock and an unvoid are who and when together; no mark is the system actor's (ADR-363) | ✅ `refuse_edit()` on those columns and on the finished row, checks |
+| Only the API writes a mark, for a person; the worker reads them; nobody deletes one (ADR-245, 363) | ✅ grants (`guard_table`, `MARK`) |
+| A contractor user reads only the locks on its own tickets and the batches that hold one; no viewer an unlock's note (ADR-228, 363) | ✅ row-level security (`guard_viewer`'s `own`), no column grant |
 | A contractor user reads only its own contractor's transactions in the projects it is given, as the prime or as the operating sub (ADR-169, 358) | ✅ row-level security |
 | A contractor user reads only its own tickets: the certifications that name its contractor, and the field events, completed records, scale receipts and photographs that hang on them; a field event with no certification found is nobody's (ADR-361) | ✅ row-level security (`guard_viewer`'s `own`) |
 | A sub's contractor user reads no rate and no amount (the user, 2026-10-06, ADR-361) | ✅ no column grant, and `viewer_transaction_money` |
@@ -1736,7 +1754,7 @@ A new value in any of them is a code change with an ADR (`spec/LISTS.md` Group 2
 | `QuantitySource` ✅ | `LOAD_CALL` · `SCALE_WEIGHT` · `CARRIED_TICKETS` | `CompletedLoad`, `CompletedHaulOut` |
 | `MileageSource` ✅ | `ROAD_ROUTE` · `STRAIGHT_LINE` | `CompletedLoadCollection`, `CompletedHaulOutCollection` |
 | `MapSource` | `UPLOAD` · `ESRI_LAYER` · `DRAWN` | `MapVersion` |
-| `QcStatus` | `QC_REVIEW` · `QC_APPROVED` · `QC_ISSUES` · `QC_VOID` | `QcMark` |
+| `QcStatus` ✅ | `QC_REVIEW` · `QC_APPROVED` · `QC_ISSUES` · `QC_VOID` | `QcMark` (ADR-363) |
 | `SiteAreaSource` | `DRAWN` · `UPLOAD` | `SiteAreaVersion` |
 | `ClockEntryKind` | `IN` · `BREAK_START` · `BREAK_END` · `OUT` | `ClockEntry` |
 | `PhotoView` | `OPERATOR_WITH_PLACARD` · `INTERIOR_OR_BACK` · `RIGHT` · `LEFT` · `FRONT` | `Photo` |

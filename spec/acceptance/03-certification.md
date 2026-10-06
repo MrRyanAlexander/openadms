@@ -95,7 +95,7 @@ total is divided by 46,656 (36³); the capacity is that to the nearest whole cub
 | AC-03-35 | **Given** `730416` synced without its left side view, **then** the certification is saved and usable, and it is flagged on the certification itself, "Certification 730416: no left side photo.", which touches no ticket's status | ADR-179; `spec/FLAGS.md` `CERTIFICATION_PHOTO_MISSING` · REQ-106f | domain (1.5.5) | |
 | AC-03-36 | **Given** Sam Grant certifies `730415` with Lee Morgan, who is assigned to P1 with him that day, **then** Sam is recorded automatically as the monitor who made and measured it, and Lee as the helper he picked. A helper is picked, never typed; none at all is allowed; the same helper twice on one certification is refused | ADR-080, 294; `spec/DATA-MODEL.md` §3, §12 (18) · REQ-106b | database (1.2.3); the pick list: field app (Phase 3) | database (2026-10-03, ADR-321) |
 | AC-03-37 | **When** the client's and the contractor's representatives are named on a certification, **then** each is a typed name and nothing more: no ID, no signature | ADR-080 · REQ-106b | database (1.2.3) | database (2026-10-03, ADR-321) |
-| AC-03-38 | **Given** `730415` was just certified, **then** its QC status is QC Review. **When** Luis sets it QC Approved (or QC Issues, or QC Void), **then** he is recorded as "checked by", and he marks whether signatures are on file. It is QC'd on its own, never with a ticket | ADR-080, 107, 168; `spec/DATA-MODEL.md` §6 · REQ-106f | signatures on file: database (1.2.3); the mark: database (1.8.2); the screen: back office (Phase 4) | signatures on file: database (2026-10-03, ADR-321); the mark waits for 1.8.2 |
+| AC-03-38 | **Given** `730415` was just certified, **then** its QC status is QC Review. **When** Luis sets it QC Approved (or QC Issues, or QC Void), **then** he is recorded as "checked by", and he marks whether signatures are on file. It is QC'd on its own, never with a ticket | ADR-080, 107, 168; `spec/DATA-MODEL.md` §6 · REQ-106f | signatures on file: database (1.2.3); the mark: database (1.8.2); the screen: back office (Phase 4) | signatures on file: database (2026-10-03, ADR-321); the mark: database (2026-10-06, ADR-363), `packages/db/test/marks.test.ts` (AC-08-58) |
 | AC-03-39 | **Given** `730415` is still at QC Review on Monday, **when** ticket 101001 scans its badge, **then** nothing is flagged for it: a certification is usable before QC | ADR-052, 080 | domain (1.5.5) | |
 
 ## F. At reconciliation: judged at work time, flagged, never blocked (steps 13, 15)
@@ -138,12 +138,12 @@ total is divided by 46,656 (36³); the capacity is that to the nearest whole cub
 
 ## The count
 
-**59 scenarios** (60 written; AC-03-57 withdrawn, ADR-328), **40 passing and 1 more in part** (2026-10-06). Task 1.7.1 (ADR-358, `Transaction` in full): AC-03-15, 101002's lines recorded as prime Coastline and operating sub Rivera, from the certification its tower scanned, at the database. Task C67 (a) (ADR-330): AC-03-56 rewritten, a truck on a second project is certified there from scratch, at the database. Task 1.3.5 (ADR-326, photographs): AC-03-34, a certification's five views, at the database. Task 1.3.3 (ADR-324, what every field event records): AC-03-40, the cert number as scanned and the certification found, at the database. Task 1.3.2 (ADR-323, numbering): AC-03-06, the cert-number series and its blocks of 100, at the database and the domain. Task 1.2.2 (ADR-320, the capacity
+**59 scenarios** (60 written; AC-03-57 withdrawn, ADR-328), **41 passing** (2026-10-06). Task 1.8.2 (ADR-363, people's marks): AC-03-38's QC mark, so it passes whole, at the database. Task 1.7.1 (ADR-358, `Transaction` in full): AC-03-15, 101002's lines recorded as prime Coastline and operating sub Rivera, from the certification its tower scanned, at the database. Task C67 (a) (ADR-330): AC-03-56 rewritten, a truck on a second project is certified there from scratch, at the database. Task 1.3.5 (ADR-326, photographs): AC-03-34, a certification's five views, at the database. Task 1.3.3 (ADR-324, what every field event records): AC-03-40, the cert number as scanned and the certification found, at the database. Task 1.3.2 (ADR-323, numbering): AC-03-06, the cert-number series and its blocks of 100, at the database and the domain. Task 1.2.2 (ADR-320, the capacity
 math, `packages/domain`'s `Capacity`): AC-03-21…29, 31 and 32 at the domain. Task 1.2.3 (ADR-321,
 the certification's records): AC-03-01…05, 07, 08, 10…13, 16, 18…20, 30, 36, 37, 51, 53, 55, 56
 and 58…60 at the database (`packages/db/test/certifications.test.ts`, each under a test named by
 its ID) or in the story `certification`, and the database's part of AC-03-22, 26 and 29;
-AC-03-38's "signatures on file" passes and its QC mark waits for 1.8.2.
+AC-03-38's "signatures on file" passes, and its QC mark since task 1.8.2 (ADR-363): it passes whole at the database.
 
 | Where it is first proven | Scenarios | How many |
 |---|---|---|
@@ -175,7 +175,7 @@ or a monitor's work (ADR-230).
 | 10 | Whether a tag is expired on its expiry date or from the day after, and which of a field event's times is "the work time" for a certification | 1.5.5 |
 | 11 | ~~What a contractor user sees of certifications~~ **Decided (ADR-321):** none yet; its own come with a transaction's prime and operating sub. **Built (ADR-361):** the certifications that name its contractor, as the prime or as either tier of sub, with their boxes and helpers, without the driver's phone or licence number (AC-02-78, 79; `certifications.test.ts`) | 1.2.3 ✅; 1.7.3 ✅ (ADR-361) |
 | 12 | ~~Which audit domain a certification belongs to~~ **Decided (ADR-321):** billing, with its boxes; its helpers operations | 1.2.3 ✅ |
-| 13 | What QC Void on a certification does to tickets on it (nothing recorded says it flags them) | 1.8.2 |
+| 13 | What QC Void on a certification does to tickets on it (nothing recorded says it flags them) | 1.8.2 ✅ (ADR-363: nothing at the database; no flag exists for it; the user's to say if one should) |
 | 14 | ~~A copy's photographs: whether the copy points at the original's or holds its own~~ **Falls away (ADR-328): a certification is never copied** | ✅ |
 
 **Settled by the user, 2026-10-03 (KD-69 closed, ADR-318):** the golden mission's P2 ticket 102001

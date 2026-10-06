@@ -2,9 +2,9 @@
 name: adms-data-model
 description: Open ADMS data model, in today's rules. Covers the records and how they link (Client → DeclarationEvent → Project, contractors and contracts, forms and debris types, pay items with a rate per prime, rules naming one contract, sites, certifications, users, devices and assignments, time-clock entries, FieldEvent and the CompletedLoad / CompletedHaulOut drawn from it, transactions, flags, AuditRecord), why reference data is editable, evidence correctable only by permission and the derived records and audit never by a person, which lists are fixed in code and which the firm extends (built-in keys plus the firm's own values), identifiers, uniqueness, coordinates and time, and which package and database role may write what. Use when touching the Prisma schema, adding or changing a model, a list, a relation or a constraint, or deciding where a write belongs. Field names are spec/DATA-MODEL.md's; what each setup record and field event holds is adms-ticket-workflows.
 ---
-<!-- skill-status: current (what a contractor user sees of its own tickets, ADR-361; `Transaction` in full, ADR-358; the derived records, ADR-340; a photograph's archive mark and label, ADR-337; ADR-138, rewritten 2026-09-29, ADR-245; ADR-246; the Phase 0 models built, ADR-281; the pay item's first shape and `spec/DATA-MODEL.md` drafted, ADR-284, 286; the page approved, ADR-289; a pay item's unique code and description, ADR-301; the firm's lists built, ADR-302; the client, the declaration event and the project built, ADR-303; contractors on a project and contracts built, ADR-305; a contractor's contact details, ADR-306; forms, the debris types on them and the firm's own fields built, ADR-308; pay items in full, ADR-309; sites and the project map built, a site keeping several tipping fee pay items, ADR-311; rules built, ADR-313; people's permissions and viewers, ADR-315; certifications, ADR-321; what every field event records, ADR-324; what each kind records, ADR-325; scale receipts and photographs, ADR-326; ROEs and forms, ADR-327; whether a viewer sees private citizens by name, ADR-336) -->
+<!-- skill-status: current (people's marks, ADR-363; what a contractor user sees of its own tickets, ADR-361; `Transaction` in full, ADR-358; the derived records, ADR-340; a photograph's archive mark and label, ADR-337; ADR-138, rewritten 2026-09-29, ADR-245; ADR-246; the Phase 0 models built, ADR-281; the pay item's first shape and `spec/DATA-MODEL.md` drafted, ADR-284, 286; the page approved, ADR-289; a pay item's unique code and description, ADR-301; the firm's lists built, ADR-302; the client, the declaration event and the project built, ADR-303; contractors on a project and contracts built, ADR-305; a contractor's contact details, ADR-306; forms, the debris types on them and the firm's own fields built, ADR-308; pay items in full, ADR-309; sites and the project map built, a site keeping several tipping fee pay items, ADR-311; rules built, ADR-313; people's permissions and viewers, ADR-315; certifications, ADR-321; what every field event records, ADR-324; what each kind records, ADR-325; scale receipts and photographs, ADR-326; ROEs and forms, ADR-327; whether a viewer sees private citizens by name, ADR-336) -->
 
-> **This page states today's rules** (last changed by ADR-361, as its status line lists). Each rule cites its ADR; what changed is in
+> **This page states today's rules** (last changed by ADR-363, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
 > `agent_store/SUMMARY.md` disagree, SUMMARY wins: log a KD (`adms-decisions`). The worked example
 > is `spec/golden/MISSION.md`; names and examples follow `spec/CONVENTIONS.md` (§3 for code names).
@@ -163,6 +163,22 @@ row (ARCHITECTURE §5.1 stands) and a reprocess that draws a completed load agai
 - A **flag** is the worker's; a reviewer's **acceptance** of it (reason from the firm's list, who,
 when) is audited and keeps the inputs the flag was raised on, so the worker can tell when "the facts
 changed" (ADR-166).
+- **Built (ADR-363; `spec/DATA-MODEL.md` §6; `packages/db/prisma/schema/marks.prisma`):** `QcMark`,
+  `InvoiceLock`, `InvoiceBatch`, `FlagAcceptance` and `TicketVoid` (a person's void, keyed as a
+  ticket is: project, workflow, bare number). **Every mark repeats its project**, which holds what
+  it marks to that project; a mark on a field event repeats its kind, held to `UNIT_RATE`, so a
+  load's or a haul-out's single field event takes neither a QC mark nor a lock. A QC mark is one
+  row for a thing, changed in place; no row is QC Review. **A ticket has one lock in force and one
+  void in force** (exclusions over the rows not unlocked, not lifted); an unlock and an unvoid are
+  written on the mark's own row, who and when together, and locking or voiding again is a new
+  row. What a mark is on, who made it and when never change, and a lock once unlocked or a void
+  once lifted is history (`refuse_edit()`). A batch's name is used once on its project. Guarded
+  as `MARK` (the API writes, the worker reads); audited: a QC mark in records, a lock, a batch
+  and a void in billing, an acceptance in operations. A client user and an auditor see every
+  mark; a contractor user its own tickets' locks and the batches that hold one, and no other
+  mark; no viewer an unlock's note. **Not the database's:** that only a QC Approved record
+  locks, that a reason is offered for its use, and any permission (the services', tasks
+  1.8.3…1.8.5). A test writes them with the helpers in `packages/db/test/marks.test.ts`.
 
 ## 3.1c Field events and the records drawn from them
 
@@ -312,8 +328,8 @@ prime is one of the project's primes and its operating sub a contractor placed u
 `packages/domain`'s `TicketRead.operatingSubId`). A # is once per property, pile or unit rate
 ticket. It keeps the pay item's unit as it was, and no mileage (read from the collection row,
 ADR-350). **A ticket locked as invoiced gives up no line and takes none**: `InvoiceLock` names a
-completed load, a completed haul-out or a unit rate ticket's field event, exactly one (its unlock
-and batch: 1.8.2). A client user and an auditor see every line of their projects; a contractor
+completed load, a completed haul-out or a unit rate ticket's field event, exactly one; only a
+lock in force (not unlocked) holds its ticket's lines still (ADR-363, below). A client user and an auditor see every line of their projects; a contractor
 user its own contractor's, as the prime or as the sub that did the work. **A line's rate and
 amount are read from `viewer_transaction_money`**, by a client user, an auditor and the line's
 own prime's contractor user: **a sub's contractor user reads no money** (**User, 2026-10-06:**
@@ -563,3 +579,6 @@ What this page used to say, and why it changed. Never build from the left-hand s
   a line's rate and amount in `viewer_transaction` for every viewer of the line → its own tickets,
   told by the certification; the money in `viewer_transaction_money`, never for a sub's
   contractor user (the user, 2026-10-06; ADR-361).
+- "The unlock columns and the batch are task 1.8.2's"; `InvoiceLock` with no project, each target
+  locked once for ever → the five mark records built, each with its project; one lock in force,
+  the unlock on its row (ADR-363).
