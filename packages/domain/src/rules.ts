@@ -8,6 +8,8 @@
 //     pay item (ADR-229);
 //   - the warning, never a refusal, when two rules add the same transaction # and a ticket could
 //     meet both (ADR-125): at run time such a ticket is flagged and neither bills (§6.4).
+// A rule that names an archived form, contract or pay item is not valid either, as one whose
+// criterion picks an archived value isn't (ADR-357).
 // Nothing here reads a ticket: how the worker runs the rules is the engine's (BACKLOG 1.6).
 
 import type { SetupWarning } from './form-debris-types.ts';
@@ -27,7 +29,12 @@ export type QuantityFrom = 'ALL_ITEMS' | 'CHOSEN_ITEMS';
 export interface RuleActionLine {
   readonly kind: RuleActionKind;
   readonly slot: number | null;
-  readonly payItem: { readonly id: string; readonly code: string } | null;
+  // `archived` where the pay item has been taken off the project: the rule then never runs (§7).
+  readonly payItem: {
+    readonly id: string;
+    readonly code: string;
+    readonly archived?: boolean;
+  } | null;
   // On an Add transaction: every item of an itemised ticket, or the chosen ones (ADR-128).
   readonly quantityFrom: QuantityFrom | null;
   readonly items: readonly { readonly id: string; readonly name: string }[];
@@ -40,7 +47,13 @@ export interface RuleEntry {
   readonly name: string;
   readonly formId: string;
   readonly form: RuleForm;
-  readonly contract: { readonly id: string; readonly name: string } | null;
+  // Its form taken off the project (§7).
+  readonly formArchived?: boolean;
+  readonly contract: {
+    readonly id: string;
+    readonly name: string;
+    readonly archived?: boolean;
+  } | null;
   readonly active: boolean;
   readonly archived: boolean;
   // The pay item whose "Pays when" wrote it (ADR-229).
@@ -87,6 +100,10 @@ export class RuleValidity {
     const { rule } = this;
     const reasons: string[] = [];
     if (rule.name.trim() === '') reasons.push('It has no name.');
+    if (rule.formArchived === true) reasons.push('Its form is archived.');
+    if (rule.contract?.archived === true) {
+      reasons.push(`Its contract "${rule.contract.name}" is archived.`);
+    }
     if (rule.criteria.length === 0) reasons.push('It has no criterion: a rule needs at least one.');
     if (rule.actions.length === 0) reasons.push('It has no action: a rule needs at least one.');
     const formCriteria = new RuleCriteria(rule.form);
@@ -117,6 +134,8 @@ export class RuleValidity {
               ? 'An Add transaction has no pay item.'
               : `Add transaction ${String(action.slot)} has no pay item.`,
           );
+        } else if (action.payItem.archived === true) {
+          reasons.push(`Pay item ${action.payItem.code} is archived.`);
         }
       }
       if (action.kind === 'REMOVE_TRANSACTION' && action.slot === null) {
@@ -124,6 +143,47 @@ export class RuleValidity {
       }
     }
     return reasons;
+  }
+}
+
+// How far a rule reaches, worked out ahead of any ticket: whether it could meet a ticket of which
+// some picked values are already known (its debris type, the site it is dumped at, its prime), and
+// what it would add. A criterion that isn't known ahead (a mileage, a date, a zone) is left open:
+// the rule could meet it. The setup check and the sites' quantity lookup both ask this (ADR-227,
+// 229).
+export class RuleReach {
+  private readonly rule: RuleEntry;
+
+  constructor(rule: RuleEntry) {
+    this.rule = rule;
+  }
+
+  // `known` holds, by criterion, the id of the value the ticket would have.
+  couldMeet(known: Partial<Record<RuleCriterionKey, string>>): boolean {
+    return this.rule.criteria.every((line) => {
+      const value = known[line.criterion];
+      if (value === undefined || RuleCriteria.kindOf(line.criterion) !== 'PICK') return true;
+      const picked = line.picks.some((pick) => pick.value === value);
+      switch (line.operator) {
+        case 'EQUALS':
+        case 'IS_ONE_OF':
+          return picked;
+        case 'NOT_EQUALS':
+        case 'IS_NOT_ONE_OF':
+          return !picked;
+        case 'IS_EMPTY':
+          return false;
+        default:
+          return true;
+      }
+    });
+  }
+
+  // The pay items its Add transactions name.
+  adds(): { readonly id: string; readonly code: string }[] {
+    return this.rule.actions.flatMap((action) =>
+      action.kind === 'ADD_TRANSACTION' && action.payItem !== null ? [action.payItem] : [],
+    );
   }
 }
 

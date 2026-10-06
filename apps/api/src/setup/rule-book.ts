@@ -105,18 +105,26 @@ export class RuleBook {
       where: { action: own, archivedAt: null },
       orderBy: { id: 'asc' },
     });
-    const payItemOf = (id: string | null): { id: string; code: string } | null => {
+    const forms = await tx.form.findMany({ where: own });
+    const payItemOf = (id: string | null): RuleActionLine['payItem'] => {
       const payItem = payItems.find((each) => each.id === id);
-      return payItem === undefined ? null : { id: payItem.id, code: payItem.code };
+      return payItem === undefined
+        ? null
+        : { id: payItem.id, code: payItem.code, archived: isArchived(payItem) };
     };
     return rules.map((rule) => {
       const contract = contracts.find((each) => each.id === rule.contractId);
+      const form = forms.find((each) => each.id === rule.formId);
       return {
         id: rule.id,
         name: rule.name,
         formId: rule.formId,
         form: rule.documentType as RuleForm,
-        contract: contract === undefined ? null : { id: contract.id, name: contract.name },
+        formArchived: form !== undefined && isArchived(form),
+        contract:
+          contract === undefined
+            ? null
+            : { id: contract.id, name: contract.name, archived: isArchived(contract) },
         active: rule.active,
         archived: isArchived(rule),
         fromPayItem: payItemOf(rule.fromPayItemId),

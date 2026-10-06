@@ -113,6 +113,33 @@ describe('a gap between the bands', () => {
   });
 });
 
+describe('the bands as they stand, for the setup check', () => {
+  it('AC-01-69 the golden mission’s Leaners and Stumps bands neither overlap nor leave a gap', () => {
+    expect(new SizeBands('Leaners', [leaners24, leaners99]).standing()).toEqual({
+      overlaps: [],
+      gaps: [],
+    });
+    const stumps = [stumps36, payItem('s48', 'STP-RMV-EA-48', 36.1, 48)];
+    expect(new SizeBands('Stumps', stumps).standing()).toEqual({ overlaps: [], gaps: [] });
+  });
+
+  it('every pair that overlaps and every stretch in no band is said once, archived pay items left out', () => {
+    const stumps = new SizeBands('Stumps', [
+      payItem('s48', 'STP-RMV-EA-48', 40, 48),
+      stumps36,
+      payItem('s30', 'STP-RMV-EA-30', 30, 34),
+      payItem('old', 'STP-RMV-EA-OLD', 36.1, 39.9, true),
+      payItem('none', 'STP-FILL-CY', null, null),
+    ]);
+    expect(stumps.standing()).toEqual({
+      overlaps: ['Stumps: STP-RMV-EA-36 (24–36 in) overlaps STP-RMV-EA-30 (30–34 in).'],
+      gaps: [
+        'Stumps: 36.1–39.9 in falls in no band; a measurement there gets no pay item and is flagged.',
+      ],
+    });
+  });
+});
+
 describe('a band that is no band', () => {
   it('is refused when its ends aren’t inches to a tenth, nought or more, or run backwards', () => {
     const stumps = new SizeBands('Stumps', []);

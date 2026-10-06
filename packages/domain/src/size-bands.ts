@@ -117,6 +117,36 @@ export class SizeBands {
     return { refusal: null, warnings };
   }
 
+  // The payable type's bands as they stand, for the setup check (ADR-229, 357): each pair of live
+  // bands that overlap (the database refuses one, so this is a backup), and each stretch between
+  // them that falls in none.
+  standing(): { readonly overlaps: readonly string[]; readonly gaps: readonly string[] } {
+    const bands = this.payItems
+      .filter((payItem) => !payItem.archived)
+      .filter((payItem) => payItem.bandFrom !== null || payItem.bandTo !== null)
+      .filter((payItem) => SizeBands.invalid(payItem) === null)
+      .map((payItem) => SizeBands.tenths(payItem))
+      .sort((a, b) => a.from - b.from);
+    const said = (band: Tenths): string =>
+      `${band.payItem.code} (${SizeBands.range(band.from, band.to)})`;
+    const overlaps: string[] = [];
+    const gaps: string[] = [];
+    let reached = Number.NEGATIVE_INFINITY;
+    for (const [index, band] of bands.entries()) {
+      for (const above of bands.slice(index + 1)) {
+        if (above.from > band.to) break;
+        overlaps.push(`${this.payableType}: ${said(band)} overlaps ${said(above)}.`);
+      }
+      if (index > 0 && band.from - reached > 1) {
+        gaps.push(
+          `${this.payableType}: ${SizeBands.range(reached + 1, band.from - 1)} falls in no band; a measurement there gets no pay item and is flagged.`,
+        );
+      }
+      reached = Math.max(reached, band.to);
+    }
+    return { overlaps, gaps };
+  }
+
   // The diameter bands and rules read (ADR-177): a diameter as it was read; a circumference ÷ 3.14,
   // rounded half up to a tenth. In whole tenths, so no fraction is lost on the way.
   static diameter(measurement: TreeMeasurement): number {

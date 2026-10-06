@@ -183,6 +183,7 @@ export {
 } from './rule-criteria.ts';
 export {
   ProjectRules,
+  RuleReach,
   RuleValidity,
   ruleActionKinds,
   type QuantityFrom,
@@ -259,6 +260,28 @@ export {
   type WorkflowName,
 } from './tickets.ts';
 export { ViewerSettings } from './viewer-settings.ts';
+export {
+  QuantityLookup,
+  quantityAsks,
+  type DumpedForm,
+  type LookupForm,
+  type LookupPayItem,
+  type LookupSetup,
+  type LookupSite,
+  type QuantityAsk,
+  type QuantityAskName,
+  type QuantityAskedAt,
+} from './quantity-lookup.ts';
+export {
+  SetupCheck,
+  setupGapCodes,
+  type CheckedFeeSite,
+  type CheckedForm,
+  type CheckedPayItem,
+  type SetupChecked,
+  type SetupGap,
+  type SetupGapCode,
+} from './setup-check.ts';
 export {
   SizeBands,
   type BandCheck,

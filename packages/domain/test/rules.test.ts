@@ -403,6 +403,31 @@ describe('Is valid', () => {
       'Zone: "Zone 4" is no longer on the project.',
     ]);
   });
+
+  it('AC-01-73 a rule that names an archived contract, pay item or form is not valid, and never runs (ADR-357)', () => {
+    const retired = rule(null, {
+      formArchived: true,
+      contract: { ...coastline, archived: true },
+      actions: [
+        { ...add(1, 'VEG-HAUL-CY-15'), payItem: { ...payItem('VEG-HAUL-CY-15'), archived: true } },
+      ],
+    });
+    expect(new RuleValidity(retired).reasons()).toEqual([
+      'Its form is archived.',
+      'Its contract "Coastline, Bayline ROW 2026" is archived.',
+      'Pay item VEG-HAUL-CY-15 is archived.',
+    ]);
+    expect(new RuleValidity(retired).runs).toBe(false);
+    // Put back, each is as it was.
+    const back = rule(null, {
+      formArchived: false,
+      contract: { ...coastline, archived: false },
+      actions: [
+        { ...add(1, 'VEG-HAUL-CY-15'), payItem: { ...payItem('VEG-HAUL-CY-15'), archived: false } },
+      ],
+    });
+    expect(new RuleValidity(back).runs).toBe(true);
+  });
 });
 
 describe('two rules that add the same transaction #', () => {
