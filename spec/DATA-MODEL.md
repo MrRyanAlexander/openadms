@@ -1067,8 +1067,10 @@ Every event of a ticket carries the ticket's status.
 
 *Evidence, built (ADR-325).* An itemised unit rate event's lines (ADR-040, 084). Its id and
 created time are the database's. Corrected in place by the API, audited in the records domain;
-seen by a client user and an auditor with its field event. How a correction takes a line off
-(nothing is deleted) is task 1.8.3's.
+seen by a client user and an auditor with its field event. **A correction takes a line off by
+marking it** (`archivedAt`, a time; cleared to put the line back): the row stays, and a line
+taken off counts for nothing the worker reads. A carried ticket (`CarriedTicket`) has the same
+mark (ADR-364, the seventy-seventh and seventy-eighth migrations; AC-08-66).
 
 | Field | Type | Notes |
 |---|---|---|
@@ -1076,6 +1078,7 @@ seen by a client user and an auditor with its field event. How a correction take
 | **fieldEventKind** | enum `FieldEventKind` | Its field event's kind, again: always `UNIT_RATE` (a check), held to the field event's own by the foreign key, so a line sits only on unit rate work (ADR-325) |
 | **itemNameId** | → `ItemName` | Not held to the event's kind of work (a flag's) |
 | **quantity** | decimal(10,2) | A count, or hours to the quarter hour; nought or more (a check). Quarter hours aren't held by the database |
+| archivedAt | instant | Taken off by a correction; empty on a live line (ADR-364) |
 
 #### `CarriedTicket`
 
@@ -1087,6 +1090,7 @@ and created time, corrected in place, audited in the records domain, seen with i
 | **fieldEventId** | → `FieldEvent` | The collection; unique with `carriedTicketNumber` |
 | **fieldEventKind** | enum `FieldEventKind` | Always `COLLECTION` (a check), held to the field event's own by the foreign key (ADR-325) |
 | **carriedTicketNumber** | text | The number as written, never a link: one that matches no ticket is taken and flagged later |
+| archivedAt | instant | Taken off by a correction; empty while the ticket is listed (ADR-364) |
 
 ### 4.2 Scale receipts (ADR-034, 038)
 
@@ -1315,8 +1319,10 @@ two holders, exactly the one the reason names:** `holdingEventId` → `FieldEven
 record to reach the server holds the number, a voided ticket's included. **What the phone sent
 is never changed, by anyone** (a trigger on the id, project, phone, monitor, payload, reason,
 holders and received time) and never deleted; the resolution is `resolvedById`, `resolvedAt`
-and `resolution` (free text until task 1.8.x words it), all three or none, never the system
-actor's. **Viewers:** a client user and an auditor see every column but `payload`
+and `resolution`, all three or none, never the system actor's. **Its words are the domain's
+`QuarantineResolution`** (ADR-364): "Renumbered to 101021: saved as a record of its own, with
+its photographs." or "A second copy of the record that holds its number: nothing was made from
+it."; a record is resolved once (`apps/api`'s `QuarantineReview`). **Viewers:** a client user and an auditor see every column but `payload`
 (`viewer_quarantined_record`); the record as sent may name a private citizen, so it is shown by
 `viewer_quarantined_record_citizen` only to a viewer the firm lets see them (ADR-336); a
 contractor user sees none. A quarantined record's item lines and carried tickets are inside its

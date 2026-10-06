@@ -62,7 +62,7 @@ of 12 Oct"**.
 | AC-09-13 | **Given** `101001` locked at $390.00 and `101003` not locked, **when** Dana changes Coastline's rate on `VEG-HAUL-CY-15` from $7.50 to $7.75, **then** `101003` is regenerated, 62.4 × $7.75 = **$483.60**, and `101001` is left exactly as it is, its line still 52.0 × $7.50 = **$390.00**; the run's decision on it says it was left because it is locked | ADR-090, 359; `adms-ledger-audit` §6.1c; golden mission §4; AC-07-98 · REQ-131b | built: AC-07-98 (story `p1-priced`, the lock written directly); with the lock made by the service: story (1.8.5) | |
 | AC-09-14 | **Given** a rule is added, changed or switched off, or Dana changes P1's site circle, loads a new map version or corrects a site's GPS, **then** every un-invoiced ticket the change touches is worked again and every locked ticket is passed by | ADR-090; Part 9 (step 2); AC-06-03; AC-07-99 | built: AC-07-99; a setup change beside a lock: story (1.8.5) | |
 | AC-09-15 | **Given** `101001` locked, **when** Luis tries to correct its load call, renumber its disposal or void it, **then** nothing is changed and he is told the ticket is locked as invoiced: a locked ticket is unlocked first | ADR-057 ("can't be edited until it's unlocked"); Part 8 (step 8); `adms-exceptions` ("A ticket locked as invoiced is unlocked first") · REQ-105h | story (1.8.5; where it is refused: point 1 below) | |
-| AC-09-16 | **Given** certification `730415`'s capacity is corrected, **then** every un-invoiced ticket on it reprocesses at the new capacity, and one locked as invoiced is unlocked first, the unlock audited | ADR-057, 079; AC-03-52 · REQ-106f | story (1.8.3; AC-03-52) | |
+| AC-09-16 | **Given** certification `730415`'s capacity is corrected, **then** every un-invoiced ticket on it reprocesses at the new capacity, and one locked as invoiced is unlocked first, the unlock audited | ADR-057, 079; AC-03-52 · REQ-106f | story (1.8.3; AC-03-52) | story (2026-10-06, ADR-364): `packages/scenarios/src/stories/p1-reviewed.ts` (the unlock written as the API's login may; its service is 1.8.5's) |
 
 ## D. Unlock, fix, lock again (Part 9, invoicing, steps 3 and 4)
 
@@ -107,7 +107,7 @@ of 12 Oct"**.
 | Tasks 1.9.1 and 1.9.2 (the golden mission and what it leaves out) | AC-09-11, 30, 31 | 3 |
 | Phases 2–4 only | AC-09-08, 18, 27, 28 | 4 |
 
-31 scenarios (AC-09-01…31). **Five pass at the database after task 1.8.2 (2026-10-06,
+31 scenarios (AC-09-01…31). **AC-09-16 passes in the story `p1-reviewed` after task 1.8.3 (2026-10-06, ADR-364).** **Five pass at the database after task 1.8.2 (2026-10-06,
 ADR-363):** AC-09-01, 07, 09, 10, 17, each under a test named by its ID in
 `packages/db/test/marks.test.ts`; three of them (01, 09, 17) wait for their story. The file was
 written before Milestone 1.8's code (ADR-300). The eight built already are marked when a test or a story names
