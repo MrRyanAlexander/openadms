@@ -18,7 +18,9 @@ import {
   RuleCriteria,
 } from './rule-criteria.ts';
 
-export type RuleActionKind = 'ADD_TRANSACTION' | 'REMOVE_TRANSACTION' | 'VOID_TICKET';
+// The actions a rule can carry, and no other: there is no Flag action (ADR-164).
+export const ruleActionKinds = ['ADD_TRANSACTION', 'REMOVE_TRANSACTION', 'VOID_TICKET'] as const;
+export type RuleActionKind = (typeof ruleActionKinds)[number];
 export type QuantityFrom = 'ALL_ITEMS' | 'CHOSEN_ITEMS';
 
 // One action of a rule (spec/RULES.md §5). The # is the transaction's slot on the ticket.

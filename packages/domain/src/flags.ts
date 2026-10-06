@@ -188,8 +188,8 @@ export interface FlagTold {
     pileBefore: string;
     loadCallBefore: number;
   };
-  // "priced per ton, but the load has no scale weight".
-  QUANTITY_MISSING_FOR_PAY_ITEM: { payItem: string; pricedPer: string; missing: string };
+  // "priced per ton, but the load has no scale weight": how it is priced, and what is lacking.
+  QUANTITY_MISSING_FOR_PAY_ITEM: { payItem: string; pricedPer: string; lacking: string };
   SHARED_SCALE_WEIGHT: { shareTons: string; netTons: string };
   RECEIPT_TWO_DEBRIS_TYPES: { receipt: string; debrisTypes: readonly string[] };
   SCALE_WEIGHT_UNUSABLE: { receipt: string };
@@ -504,8 +504,7 @@ const catalogue: { readonly [Code in FlagCode]: Entry<Code> } = {
   QUANTITY_MISSING_FOR_PAY_ITEM: {
     billing: 'LINE_NOT_BILLED',
     ending: 'REVIEW',
-    words: (told) =>
-      `${told.payItem} is priced ${told.pricedPer}, but the load has no ${told.missing}`,
+    words: (told) => `${told.payItem} is priced ${told.pricedPer}, but ${told.lacking}`,
   },
   SHARED_SCALE_WEIGHT: {
     billing: 'BILLS',

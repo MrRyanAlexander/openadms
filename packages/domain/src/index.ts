@@ -184,6 +184,7 @@ export {
 export {
   ProjectRules,
   RuleValidity,
+  ruleActionKinds,
   type QuantityFrom,
   type RuleActionKind,
   type RuleActionLine,
@@ -220,6 +221,31 @@ export {
   type SharesNotWorkedOut,
 } from './quantities.ts';
 export { SiteFacts, type SiteRefusal, type SiteSetting } from './site-facts.ts';
+export {
+  CriterionCheck,
+  TicketReadings,
+  TicketRules,
+  type ReadingAttached,
+  type ReadingSetup,
+  type RuleContract,
+  type RuleFieldEvent,
+  type RuleReading,
+  type TicketRead,
+} from './ticket-rules.ts';
+export {
+  TicketPricing,
+  crewTimeConversions,
+  type BillingUnit,
+  type CrewTimeConversionName,
+  type PricedDumpSite,
+  type PricedLine,
+  type PricedPayItem,
+  type PricedPiece,
+  type PricingFlagRaised,
+  type PricingSetup,
+  type TicketPriced,
+  type TicketToPrice,
+} from './ticket-pricing.ts';
 export {
   Ticket,
   Tickets,

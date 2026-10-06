@@ -95,7 +95,7 @@ const examples: Example = {
   ],
   QUANTITY_MISSING_FOR_PAY_ITEM: [
     ticket('101012'),
-    { payItem: 'TIP-FEE-TN-BCL', pricedPer: 'per ton', missing: 'scale weight' },
+    { payItem: 'TIP-FEE-TN-BCL', pricedPer: 'per ton', lacking: 'the load has no scale weight' },
   ],
   SHARED_SCALE_WEIGHT: [ticket('101050'), { shareTons: '7.33', netTons: '17.10' }],
   RECEIPT_TWO_DEBRIS_TYPES: [
