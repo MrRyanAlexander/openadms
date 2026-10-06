@@ -7,6 +7,7 @@ import { p1AnyOrder } from './p1-any-order.ts';
 import { p1FieldDays } from './p1-field-days.ts';
 import { p1Priced } from './p1-priced.ts';
 import { p1Reconciled } from './p1-reconciled.ts';
+import { p1Reviewed } from './p1-reviewed.ts';
 import { setup } from './setup.ts';
 import { sync } from './sync.ts';
 import { ticket101001 } from './ticket-101001.ts';
@@ -22,4 +23,5 @@ export const stories: readonly Story[] = [
   p1AnyOrder,
   p1Reconciled,
   p1Priced,
+  p1Reviewed,
 ];

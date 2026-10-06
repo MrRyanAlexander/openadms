@@ -535,15 +535,16 @@ export class ProjectRead {
     ];
 
     const items = grouped(
+      // A line or a carried ticket a correction took off counts for nothing (ADR-364).
       await db.fieldEventItem.findMany({
-        where: { fieldEventId: { in: ids } },
+        where: { fieldEventId: { in: ids }, archivedAt: null },
         orderBy: { id: 'asc' },
       }),
       (item) => item.fieldEventId,
     );
     const carried = grouped(
       await db.carriedTicket.findMany({
-        where: { fieldEventId: { in: ids } },
+        where: { fieldEventId: { in: ids }, archivedAt: null },
         orderBy: { carriedTicketNumber: 'asc' },
       }),
       (ticket) => ticket.fieldEventId,

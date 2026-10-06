@@ -296,5 +296,19 @@ export {
   type ProjectSettings,
 } from './project-settings.ts';
 
+export {
+  PickedReason,
+  QuarantineResolution,
+  Renumber,
+  Reviewer,
+  reviewPermissions,
+  type NumberWritten,
+  type ReasonUseName,
+  type ReviewPermission,
+  type ReviewRefusal,
+  type ReviewerRole,
+  type ReviewingPerson,
+} from './review.ts';
+
 // The wiring probe of BACKLOG 0.2.2: `contracts` proves it resolves this package by reading it.
 export const workspace = 'domain';

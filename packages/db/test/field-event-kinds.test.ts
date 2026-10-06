@@ -336,6 +336,7 @@ describe('a load', () => {
     expect(await refusedRow('carried_ticket', carried('301004'))).toBe(refusedBy.unique);
     // The number as written and the collection it is on, nothing else: no link to a ticket.
     expect(await columnsOf('carried_ticket')).toEqual([
+      'archived_at',
       'carried_ticket_number',
       'created_at',
       'field_event_id',
@@ -933,6 +934,7 @@ describe('unit rate work', () => {
     );
     // An item and how many: no pay item, no rate, no amount.
     expect(await columnsOf('field_event_item')).toEqual([
+      'archived_at',
       'created_at',
       'field_event_id',
       'field_event_kind',
@@ -1293,6 +1295,69 @@ describe('an item line and a carried ticket', () => {
       await db.refused(`DELETE FROM "field_event_item" WHERE "id" = $1`, [line]);
       await db.refused(`DELETE FROM "carried_ticket" WHERE "id" = $1`, [carried]);
     }
+  });
+
+  it('AC-08-66 are taken off by a mark, never a delete: the API’s login sets it and clears it, the audit log keeps who and when, the row stays as it was, and the worker can set neither', async () => {
+    const { db, world } = tested;
+    const { line, carried } = await written();
+    await asTheBackOffice();
+    for (const table of ['field_event_item', 'carried_ticket']) {
+      const id = table === 'field_event_item' ? line : carried;
+      expect(
+        await db.rows(`SELECT "archived_at" FROM "${table}" WHERE "id" = $1`, [id]),
+        table,
+      ).toEqual([{ archived_at: null }]);
+      expect(
+        await db.run(`UPDATE "${table}" SET "archived_at" = now() WHERE "id" = $1`, [id]),
+        table,
+      ).toBe(1);
+      expect(
+        await db.rows(
+          `SELECT "actor_id"::text AS actor, "source"::text, "changed_fields",
+             "prior_value" ->> 'archived_at' AS prior, "new_value" ->> 'archived_at' IS NOT NULL AS marked
+           FROM "audit_record" WHERE "record_id" = $1 AND "operation" = 'UPDATE'`,
+          [id],
+        ),
+        table,
+      ).toEqual([
+        {
+          actor: world.admin,
+          source: 'BACK_OFFICE',
+          changed_fields: ['archived_at'],
+          prior: null,
+          marked: true,
+        },
+      ]);
+      // Put back: the same row, its mark cleared.
+      expect(
+        await db.run(`UPDATE "${table}" SET "archived_at" = NULL WHERE "id" = $1`, [id]),
+        table,
+      ).toBe(1);
+    }
+    expect(
+      await db.rows(
+        `SELECT "quantity"::text, "archived_at" FROM "field_event_item" WHERE "id" = $1`,
+        [line],
+      ),
+    ).toEqual([{ quantity: '2.00', archived_at: null }]);
+    await db.as('adms_worker');
+    await db.actor(world.worker, 'SYSTEM');
+    for (const statement of [
+      `UPDATE "field_event_item" SET "archived_at" = now() WHERE "id" = '${line}'`,
+      `UPDATE "carried_ticket" SET "archived_at" = now() WHERE "id" = '${carried}'`,
+    ]) {
+      expect((await db.refused(statement)).code, statement).toBe(refusedBy.grant);
+    }
+    // A viewer of the project reads the mark with the line.
+    await db.administer();
+    await db.viewer(world.clientViewer);
+    await db.as('adms_readonly');
+    expect(
+      await db.rows(`SELECT "archived_at" FROM "viewer_field_event_item" WHERE "id" = $1`, [line]),
+    ).toEqual([{ archived_at: null }]);
+    expect(
+      await db.rows(`SELECT "archived_at" FROM "viewer_carried_ticket" WHERE "id" = $1`, [carried]),
+    ).toEqual([{ archived_at: null }]);
   });
 
   it('AC-04-31 are seen by a client user and an auditor with the field events of their projects, the new columns included; a contractor user sees those of its own tickets', async () => {

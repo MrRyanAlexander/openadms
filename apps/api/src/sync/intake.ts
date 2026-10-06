@@ -18,22 +18,14 @@
 // A record the database's own constraints refuse (a pick that isn't the project's, a detail on a
 // kind that doesn't record it) isn't caught here: the call throws, nothing is saved, and the
 // record stays on the phone. The sync contract answers those, in Phase 2.
-import { formAnswersSchema, formDefinitionFields } from '@open-adms/contracts';
-import type { Database, FormDocumentType, NumberBlock, Prisma } from '@open-adms/db';
-import {
-  fieldEventDetails,
-  GpsFix,
-  type Policy,
-  Quarantine,
-  type QuarantineNotice,
-  type SentFix,
-} from '@open-adms/domain';
+import type { Database, NumberBlock, Prisma } from '@open-adms/db';
+import { GpsFix, type Policy, Quarantine, type QuarantineNotice } from '@open-adms/domain';
 
 import { type LastUsed, NumberAllocator, type PhoneAtSync } from '../numbering/number-allocator.ts';
 import type { Clock } from '../setup/setup-service.ts';
+import { gpsNote, RecordWrite } from './record-write.ts';
 import type {
   IntakeNote,
-  SentAnswers,
   SentDropOffLog,
   SentFieldEvent,
   SentForm,
@@ -52,25 +44,12 @@ type Tx = Prisma.TransactionClient;
 // again, when it finds the first holding the number.
 const attempts = 3;
 
-const day = (date: string): Date => new Date(`${date}T00:00:00Z`);
-
 // The record exactly as sent, as JSON: times in ISO 8601, everything else as it came.
 const asSent = (sent: SentRecord): Prisma.InputJsonObject =>
   JSON.parse(JSON.stringify(sent)) as Prisma.InputJsonObject;
 
-const quoted = (half: unknown): string => (half === null ? 'none' : JSON.stringify(half));
-
 function isUniqueViolation(error: unknown): boolean {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002';
-}
-
-// The firm's own fields as a record keeps them: the answers, and the definition answered with its
-// form, all three or none.
-interface AnswersKept {
-  readonly answers: Prisma.InputJsonObject;
-  readonly formDefinitionId: string | null;
-  readonly formId: string | null;
-  readonly formDocumentType: FormDocumentType | null;
 }
 
 export class Intake {
@@ -183,107 +162,7 @@ export class Intake {
           return Intake.notSaved(event.id, notice, holder.id);
         }
 
-        const notes: IntakeNote[] = [];
-        const start = new GpsFix({
-          latitude: event.startLatitude,
-          longitude: event.startLongitude,
-        }).read();
-        const end = new GpsFix({
-          latitude: event.endLatitude,
-          longitude: event.endLongitude,
-        }).read();
-        const unreadable = {
-          ...(start.unreadable === null ? {} : { start: start.unreadable }),
-          ...(end.unreadable === null ? {} : { end: end.unreadable }),
-        };
-        if (start.unreadable !== null) notes.push(Intake.gpsNote('start', start.unreadable));
-        if (end.unreadable !== null) notes.push(Intake.gpsNote('end', end.unreadable));
-
-        const certification = await tx.certification.findUnique({
-          where: {
-            projectId_certNumber: { projectId: event.projectId, certNumber: event.certNumber },
-          },
-        });
-        const findsRoe = (fieldEventDetails.roeId as readonly string[]).includes(event.kind);
-        const roe = findsRoe ? await Intake.roeOf(tx, event.projectId, event.roeNumber) : null;
-        // The debris type's form is the entry's own: a load's the load form, a haul-out's the
-        // haul-out form (ADR-325).
-        const entry =
-          event.formDebrisTypeId === null
-            ? null
-            : await tx.formDebrisType.findUnique({ where: { id: event.formDebrisTypeId } });
-
-        await tx.fieldEvent.create({
-          data: {
-            id: event.id,
-            projectId: event.projectId,
-            workflow: event.workflow,
-            kind: event.kind,
-            ticketNumber: event.ticketNumber,
-            splitSuffix: event.splitSuffix,
-            monitorId: event.monitorId,
-            source: event.source,
-            deviceId: event.deviceId,
-            assignmentId: event.assignmentId,
-            setupVersion: event.setupVersion,
-            temporarySession: event.temporarySession,
-            numberTyped: event.numberTyped,
-            numberTypedReasonId: event.numberTypedReasonId,
-            certNumber: event.certNumber,
-            certificationId: certification?.id ?? null,
-            certKeyedByHand: event.certKeyedByHand,
-            siteId: event.siteId,
-            startedAt: event.startedAt,
-            endedAt: event.endedAt,
-            deviceUtcOffsetMinutes: event.deviceUtcOffsetMinutes,
-            receivedAt,
-            startLatitude: start.fix?.latitude ?? null,
-            startLongitude: start.fix?.longitude ?? null,
-            endLatitude: end.fix?.latitude ?? null,
-            endLongitude: end.fix?.longitude ?? null,
-            ...(Object.keys(unreadable).length === 0
-              ? {}
-              : { unreadableGps: unreadable as Prisma.InputJsonObject }),
-            address: event.address,
-            addressSource: event.addressSource,
-            notes: event.notes,
-            formDebrisTypeId: event.formDebrisTypeId,
-            formId: entry?.formId ?? null,
-            formDocumentType: entry?.documentType ?? null,
-            fieldTagId: event.fieldTagId,
-            roeNumber: event.roeNumber,
-            roeId: roe,
-            estimateCy: event.estimateCy,
-            loadCall: event.loadCall,
-            scaleReceiptId: event.scaleReceiptId,
-            carriedCount: event.carriedCount,
-            kindOfWorkId: event.kindOfWorkId,
-            payableTypeId: event.payableTypeId,
-            payItemId: event.payItemId,
-            unitCount: event.unitCount,
-            measurementInches: event.measurementInches,
-            measuredAs: event.measuredAs,
-            rootBallInches: event.rootBallInches,
-            rootBallHalfExposed: event.rootBallHalfExposed,
-            surveyNumber: event.surveyNumber,
-            markedIneligible: event.markedIneligible,
-          },
-        });
-        for (const item of event.items) {
-          await tx.fieldEventItem.create({
-            data: {
-              itemNameId: item.itemNameId,
-              quantity: item.quantity,
-              fieldEventId: event.id,
-              fieldEventKind: event.kind,
-            },
-          });
-        }
-        for (const carriedTicketNumber of event.carriedTickets) {
-          await tx.carriedTicket.create({
-            data: { carriedTicketNumber, fieldEventId: event.id, fieldEventKind: event.kind },
-          });
-        }
+        const notes = await new RecordWrite(tx, receivedAt).fieldEvent(event);
         return { answer: 'SAVED', id: event.id, notes };
       },
     );
@@ -338,7 +217,7 @@ export class Intake {
       await tx.incident.create({
         data: {
           ...shared,
-          ...(await Intake.answersOf(tx, incident, notes)),
+          ...(await new RecordWrite(tx, receivedAt).answersOf(incident, notes)),
           incidentTypeId: incident.incidentTypeId,
           incidentSubTypeId: incident.incidentSubTypeId,
           description: incident.description,
@@ -348,7 +227,10 @@ export class Intake {
           certNumber: incident.certNumber,
           certificationId: certification?.id ?? null,
           roeNumber: incident.roeNumber,
-          roeId: await Intake.roeOf(tx, incident.projectId, incident.roeNumber),
+          roeId: await new RecordWrite(tx, receivedAt).roeOf(
+            incident.projectId,
+            incident.roeNumber,
+          ),
           receivedAt,
         },
       });
@@ -363,7 +245,7 @@ export class Intake {
       await tx.dropOffLog.create({
         data: {
           ...shared,
-          ...(await Intake.answersOf(tx, log, notes)),
+          ...(await new RecordWrite(tx, receivedAt).answersOf(log, notes)),
           siteId: log.siteId,
           residentName: log.residentName,
           originAddress: log.originAddress,
@@ -381,11 +263,11 @@ export class Intake {
       await tx.survey.create({
         data: {
           ...shared,
-          ...(await Intake.answersOf(tx, survey, notes)),
+          ...(await new RecordWrite(tx, receivedAt).answersOf(survey, notes)),
           workTypeId: survey.workTypeId,
           surveyNumber: survey.surveyNumber,
           roeNumber: survey.roeNumber,
-          roeId: await Intake.roeOf(tx, survey.projectId, survey.roeNumber),
+          roeId: await new RecordWrite(tx, receivedAt).roeOf(survey.projectId, survey.roeNumber),
           receivedAt,
         },
       });
@@ -419,7 +301,7 @@ export class Intake {
   ): Promise<SyncAnswer> {
     const fix = new GpsFix(form).read();
     const notes: IntakeNote[] = [];
-    if (fix.unreadable !== null) notes.push(Intake.gpsNote('', fix.unreadable));
+    if (fix.unreadable !== null) notes.push(gpsNote('', fix.unreadable));
     const [note] = notes;
     return this.db.$write(
       {
@@ -461,7 +343,7 @@ export class Intake {
     const notice = Quarantine.duplicateRoeNumber(roe.roeNumber);
     const fix = new GpsFix({ latitude: roe.latitude, longitude: roe.longitude }).read();
     const notes: IntakeNote[] = [];
-    if (fix.unreadable !== null) notes.push(Intake.gpsNote('', fix.unreadable));
+    if (fix.unreadable !== null) notes.push(gpsNote('', fix.unreadable));
     const [note] = notes;
     return this.db.$write(
       {
@@ -493,35 +375,7 @@ export class Intake {
           });
           return Intake.notSaved(roe.id, notice, holder.id);
         }
-        await tx.roe.create({
-          data: {
-            id: roe.id,
-            projectId: roe.projectId,
-            roeNumber: roe.roeNumber,
-            parcelId: roe.parcelId,
-            address: roe.address,
-            ownerName: roe.ownerName,
-            signed: roe.signed,
-            signedDate: roe.signedDate === null ? null : day(roe.signedDate),
-            latitude: fix.fix?.latitude ?? null,
-            longitude: fix.fix?.longitude ?? null,
-            ...(await Intake.answersOf(tx, roe, notes)),
-            source: roe.source,
-            madeById: roe.madeById,
-            deviceId: roe.deviceId,
-            assignmentId: roe.assignmentId,
-            madeAt: roe.madeAt,
-            deviceUtcOffsetMinutes: roe.deviceUtcOffsetMinutes,
-            receivedAt,
-          },
-        });
-        const awaited = { projectId: roe.projectId, roeNumber: roe.roeNumber, roeId: null };
-        await tx.fieldEvent.updateMany({
-          where: { ...awaited, kind: { in: [...fieldEventDetails.roeId] } },
-          data: { roeId: roe.id },
-        });
-        await tx.survey.updateMany({ where: awaited, data: { roeId: roe.id } });
-        await tx.incident.updateMany({ where: awaited, data: { roeId: roe.id } });
+        await new RecordWrite(tx, receivedAt).roe(roe, fix.fix, notes);
         return { answer: 'SAVED', id: roe.id, notes };
       },
     );
@@ -533,7 +387,7 @@ export class Intake {
   private photo(photo: SentPhoto, receivedAt: Date): Promise<SyncAnswer> {
     const fix = new GpsFix(photo).read();
     const notes: IntakeNote[] = [];
-    if (fix.unreadable !== null) notes.push(Intake.gpsNote('', fix.unreadable));
+    if (fix.unreadable !== null) notes.push(gpsNote('', fix.unreadable));
     const [note] = notes;
     return this.db.$write(
       {
@@ -593,58 +447,5 @@ export class Intake {
 
   private static notSaved(id: string, notice: QuarantineNotice, heldBy: string): SyncAnswer {
     return { answer: 'QUARANTINED', id, reason: notice.reason, message: notice.message, heldBy };
-  }
-
-  // The ROE a number finds on the project, if it has reached the server (ADR-292).
-  private static async roeOf(
-    tx: Tx,
-    projectId: string,
-    roeNumber: string | null,
-  ): Promise<string | null> {
-    if (roeNumber === null) return null;
-    const roe = await tx.roe.findUnique({
-      where: { projectId_roeNumber: { projectId, roeNumber } },
-    });
-    return roe?.id ?? null;
-  }
-
-  // The firm's own fields: kept as sent, with the definition answered and its form. The answers
-  // are run against that version's fields; ones that don't fit are still the monitor's record,
-  // so they are kept and the sender told (ADR-052, 327).
-  private static async answersOf(
-    tx: Tx,
-    sent: SentAnswers,
-    notes: IntakeNote[],
-  ): Promise<AnswersKept> {
-    const answers = (sent.answers ?? {}) as Prisma.InputJsonObject;
-    if (sent.formDefinitionId === undefined) {
-      return { answers, formDefinitionId: null, formId: null, formDocumentType: null };
-    }
-    const definition = await tx.formDefinition.findUnique({
-      where: { id: sent.formDefinitionId },
-    });
-    if (definition === null) {
-      throw new Error(`No form definition ${sent.formDefinitionId}: the record was not saved.`);
-    }
-    const fields = formDefinitionFields.safeParse(definition.fields);
-    if (!fields.success || !formAnswersSchema(fields.data).safeParse(answers).success) {
-      notes.push({
-        code: 'ANSWERS_DO_NOT_FIT',
-        message: `Its answers don't fit the form's own fields as version ${String(definition.version)} has them: kept as sent.`,
-      });
-    }
-    return {
-      answers,
-      formDefinitionId: definition.id,
-      formId: definition.formId,
-      formDocumentType: definition.documentType,
-    };
-  }
-
-  private static gpsNote(end: 'start' | 'end' | '', sent: SentFix): IntakeNote {
-    return {
-      code: 'GPS_UNREADABLE',
-      message: `GPS unreadable${end === '' ? '' : ` at the ${end}`}: latitude ${quoted(sent.latitude)}, longitude ${quoted(sent.longitude)} as sent. Kept without that fix.`,
-    };
   }
 }

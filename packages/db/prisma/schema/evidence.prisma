@@ -264,7 +264,10 @@ model FieldEventItem {
   itemNameId     String         @map("item_name_id") @db.Uuid
   quantity       Decimal        @db.Decimal(10, 2)
 
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  // Taken off by a correction: a mark with its time, cleared to put the line back. The row
+  // stays; a line taken off counts for nothing (ADR-364).
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
 
   fieldEvent FieldEvent @relation(fields: [fieldEventId, fieldEventKind], references: [id, kind], onDelete: Restrict, onUpdate: Restrict)
   itemName   ItemName   @relation(fields: [itemNameId], references: [id], onDelete: Restrict, onUpdate: Restrict)
@@ -283,7 +286,10 @@ model CarriedTicket {
   fieldEventKind      FieldEventKind @map("field_event_kind")
   carriedTicketNumber String         @map("carried_ticket_number")
 
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  // Taken off by a correction: a mark with its time, cleared to put the ticket back. The row
+  // stays; a carried ticket taken off counts for nothing (ADR-364).
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
 
   fieldEvent FieldEvent @relation(fields: [fieldEventId, fieldEventKind], references: [id, kind], onDelete: Restrict, onUpdate: Restrict)
 

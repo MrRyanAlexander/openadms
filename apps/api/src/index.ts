@@ -4,7 +4,10 @@
 // (ADR-316). The setup services are spec/parts/01-setup.md's steps, one class per group of records;
 // certifying is spec/parts/03-certification.md's (ADR-321); the allocator of numbers is the
 // server's alone (ADR-065, 323); intake is spec/parts/05-sync.md's, what the server does with
-// each record a phone sends (ADR-338).
+// each record a phone sends (ADR-338); the review services are
+// spec/parts/08-review-and-corrections.md's: a reviewer's corrections and renumbers, a
+// quarantined record resolved, a record created in the back office, each answering the run to
+// ask the worker for (ADR-364).
 export {
   Certifications,
   type BoxInput,
@@ -44,6 +47,26 @@ export {
   type SiteChanges,
   type SiteFactSettings,
 } from './setup/site-setup.ts';
+
+export { BackOfficeRecords, type NewBackOfficeFieldEvent } from './review/back-office-records.ts';
+export {
+  Corrections,
+  type CorrectedFix,
+  type DropOffLogCorrection,
+  type FieldEventCorrection,
+  type IncidentCorrection,
+  type RoeCorrection,
+  type ScaleReceiptCorrection,
+  type ScopePick,
+  type SurveyCorrection,
+} from './review/corrections.ts';
+export { QuarantineReview, type NewNumber } from './review/quarantine-review.ts';
+export {
+  ReviewService,
+  type Reprocess,
+  type Reviewed,
+  type TicketNamed,
+} from './review/review-service.ts';
 
 export { Intake } from './sync/intake.ts';
 export type {

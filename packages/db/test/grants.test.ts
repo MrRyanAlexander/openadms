@@ -233,8 +233,15 @@ const correctable: Record<string, string[]> = {
     'roe_id',
   ],
   drop_off_log: [...formShared, 'site_id', 'resident_name', 'origin_address'],
-  field_event_item: ['field_event_id', 'field_event_kind', 'item_name_id', 'quantity'],
-  carried_ticket: ['field_event_id', 'field_event_kind', 'carried_ticket_number'],
+  // Each with the mark that takes it off (ADR-364).
+  field_event_item: [
+    'field_event_id',
+    'field_event_kind',
+    'item_name_id',
+    'quantity',
+    'archived_at',
+  ],
+  carried_ticket: ['field_event_id', 'field_event_kind', 'carried_ticket_number', 'archived_at'],
   scale_receipt: [
     'project_id',
     'receipt_number',
