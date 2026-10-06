@@ -1265,11 +1265,29 @@ describe('who writes it, and who sees it', () => {
     expect((await db.refused(`SELECT * FROM "certification"`)).code).toBe(refusedBy.grant);
   });
 
-  it('AC-03-60 a contractor user sees no certification yet, and a request that states no viewer sees none', async () => {
+  it('AC-03-60 a contractor user sees the certifications that name its contractor, with their boxes and helpers and without the driver’s licence number or phone; a request that states no viewer sees none', async () => {
     const { db, world } = tested;
-    for (const view of tables.map((table) => `viewer_${table}`)) {
-      expect(await reads(world.coastlineViewer, view, 'id'), view).toEqual([]);
+    // Coastline is the prime on all five of P1's, Rivera's `730416` under it included; P2's it
+    // isn't given (ADR-361; AC-02-78).
+    expect(await reads(world.coastlineViewer, 'viewer_certification', 'cert_number')).toEqual([
+      '730415',
+      '730416',
+      '730417',
+      '730418',
+      '730419',
+    ]);
+    expect(await reads(world.coastlineViewer, 'viewer_certification_box', 'id')).toHaveLength(6);
+    expect(await reads(world.coastlineViewer, 'viewer_certification_helper', 'user_id')).toEqual([
+      world.helper,
+    ]);
+    await db.viewer(world.coastlineViewer);
+    await db.as('adms_readonly');
+    for (const hidden of ['driver_phone', 'driver_licence_number']) {
+      expect((await db.refused(`SELECT "${hidden}" FROM "certification"`)).code, hidden).toBe(
+        refusedBy.grant,
+      );
     }
+    await db.administer();
     await db.noViewer();
     await db.as('adms_readonly');
     expect(await db.rows(`SELECT 1 FROM "viewer_certification"`)).toEqual([]);

@@ -6,6 +6,8 @@
 // and drop-off logs, seen with theirs (ADR-327); the field event itself is one of
 // the row-level security guard's four tables, held by name in the tests. The completed load was
 // one of those four until it took `guard_viewer`'s line with the other derived records (ADR-340).
+// A contractor user sees the rows of a table that are its own (`own`: whose work a ticket is, told
+// by the certification, ADR-361), and nothing of the others.
 import { listTables } from './lists.ts';
 
 export interface Sight {
@@ -19,6 +21,8 @@ export interface Sight {
   // Columns that name a private citizen: left out of the view and the grant too, and shown by
   // viewer_<table>_citizen to a viewer the firm lets see private citizens (ADR-328, 336).
   citizen: string[];
+  // Whether a contractor user sees the rows that are its own contractor's (ADR-361).
+  own: boolean;
 }
 
 const ownProject = '(viewer_sees_project(project_id) AND viewer_sees_every_ticket())';
@@ -30,12 +34,26 @@ const project = (hidden: string[] = [], citizen: string[] = []): Sight => ({
   seen: ownProject,
   hidden,
   citizen,
+  own: false,
 });
+// A table of which a contractor user sees its own rows: `own` is the question that says a row
+// is, as the catalog words it (ADR-361).
+const projectOrOwn = (own: string, hidden: string[] = []): Sight => ({
+  sight: 'PROJECT',
+  seen: `(viewer_sees_project(project_id) AND (viewer_sees_every_ticket() OR ${own}))`,
+  hidden,
+  citizen: [],
+  own: true,
+});
+// The row is the field event a contractor user sees (its certification names its contractor).
+const itsFieldEvent = (table: string, link: string): string =>
+  exists('field_event', `field_event.id = ${table}.${link}`);
 const partOf = (table: string, parent: string, link: string): Sight => ({
   sight: 'PART_OF',
   seen: exists(parent, `${parent}.id = ${table}.${link}`),
   hidden: [],
   citizen: [],
+  own: false,
 });
 const namedBy = (
   table: string,
@@ -47,6 +65,7 @@ const namedBy = (
   seen: exists(relation, `${relation}.${column} = ${table}.id`),
   hidden,
   citizen: [],
+  own: false,
 });
 
 const contact = ['contact_name', 'contact_email', 'contact_phone'];
@@ -56,7 +75,10 @@ export const viewerSights: Record<string, Sight> = {
   // A project's number series and its control ranges are its setup (ADR-323).
   project_number_series: project(),
   control_range: project(),
-  project_contractor: project(),
+  // A contractor user: its own place on the project and, a prime, its subs' (ADR-361).
+  project_contractor: projectOrOwn(
+    '(viewer_is_contractor(contractor_id) OR viewer_is_contractor(prime_id))',
+  ),
   contract: project(),
   form: project(),
   form_debris_type: partOf('form_debris_type', 'form', 'form_id'),
@@ -77,15 +99,31 @@ export const viewerSights: Record<string, Sight> = {
   rule_action: project(),
   rule_action_item: partOf('rule_action_item', 'rule_action', 'action_id'),
   // A certification, without its driver's phone or licence number (ADR-169, 321).
-  certification: project(['driver_phone', 'driver_licence_number']),
+  // A contractor user: the certifications that name its contractor, as the prime or as either
+  // tier of sub; whose work a ticket is hangs on this one question (ADR-361).
+  certification: projectOrOwn(
+    '(viewer_is_contractor(prime_id) OR viewer_is_contractor(first_tier_sub_id) OR viewer_is_contractor(second_tier_sub_id))',
+    ['driver_phone', 'driver_licence_number'],
+  ),
   certification_box: partOf('certification_box', 'certification', 'certification_id'),
   certification_helper: partOf('certification_helper', 'certification', 'certification_id'),
   field_event_item: partOf('field_event_item', 'field_event', 'field_event_id'),
   carried_ticket: partOf('carried_ticket', 'field_event', 'field_event_id'),
   // A project's scale receipts; and its photographs' records, without where the files are kept
   // (ADR-326).
-  scale_receipt: project(),
-  photo: project(['object_key', 'depth_object_key']),
+  // A contractor user: a receipt one of its field events points at, and the photographs of its
+  // field events, its certifications and those receipts (ADR-361).
+  scale_receipt: projectOrOwn(
+    exists('field_event', 'field_event.scale_receipt_id = scale_receipt.id'),
+  ),
+  photo: projectOrOwn(
+    `(${[
+      itsFieldEvent('photo', 'field_event_id'),
+      exists('certification', 'certification.id = photo.certification_id'),
+      exists('scale_receipt', 'scale_receipt.id = photo.scale_receipt_id'),
+    ].join(' OR ')})`,
+    ['object_key', 'depth_object_key'],
+  ),
   // A project's ROEs with what each allows, and its forms: surveys, incidents, drop-off logs
   // (ADR-327). An ROE's owner, and a drop-off log's resident and where their debris came from,
   // are a private citizen's (ADR-336).
@@ -99,10 +137,16 @@ export const viewerSights: Record<string, Sight> = {
   quarantined_record: project([], ['payload']),
   // What the worker concluded for their project: its completed loads and haul-outs, each with
   // its collection rows, and its flags (ADR-340).
-  completed_load: project(),
-  completed_load_collection: project(),
-  completed_haul_out: project(),
-  completed_haul_out_collection: project(),
+  // A contractor user: a completed record with its disposal event, a property's or a pile's row
+  // with its collection event; no flag (ADR-361).
+  completed_load: projectOrOwn(itsFieldEvent('completed_load', 'disposal_event_id')),
+  completed_load_collection: projectOrOwn(
+    itsFieldEvent('completed_load_collection', 'collection_event_id'),
+  ),
+  completed_haul_out: projectOrOwn(itsFieldEvent('completed_haul_out', 'disposal_event_id')),
+  completed_haul_out_collection: projectOrOwn(
+    itsFieldEvent('completed_haul_out_collection', 'collection_event_id'),
+  ),
   flag: project(),
   client: namedBy('client', 'viewer_project_setup', 'client_id', [...contact, 'notes']),
   declaration_event: namedBy('declaration_event', 'viewer_project_setup', 'declaration_event_id'),
@@ -112,12 +156,35 @@ export const viewerSights: Record<string, Sight> = {
       .filter((table) => table !== 'field_tag')
       .map((table): [string, Sight] => [
         table,
-        { sight: 'FIRM', seen: 'viewer_sees_every_ticket()', hidden: [], citizen: [] },
+        {
+          sight: 'FIRM',
+          seen: 'viewer_sees_every_ticket()',
+          hidden: [],
+          citizen: [],
+          own: false,
+        },
       ]),
   ),
 };
 
 export const viewedTables = Object.keys(viewerSights);
+
+// A field event's policy, held by name in the tests: a client user and an auditor see their
+// projects' field events, a contractor user the ones whose certification it sees (ADR-361).
+export const fieldEventSeen = projectOrOwn(
+  exists('certification', 'certification.id = field_event.certification_id'),
+).seen;
+
+// The views that run with the owner's rights and hold the viewer's questions themselves, beside
+// the citizen views: a line's rate and amount, for a client user, an auditor and the line's own
+// prime's contractor user; and the three names of setup every viewer of a project reads
+// (ADR-361).
+export const moneyView = 'viewer_transaction_money';
+export const nameViews = [
+  'viewer_debris_type_name',
+  'viewer_disposal_site_name',
+  'viewer_pay_item_name',
+];
 
 // The views that show a private citizen's columns, one for each table that has any.
 export const citizenViews = Object.entries(viewerSights)

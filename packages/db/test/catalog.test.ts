@@ -5,7 +5,14 @@ import { describe, expect, it } from 'vitest';
 
 import { eachTestRolledBack } from './support/lifecycle.ts';
 import { listTables } from './support/lists.ts';
-import { citizenViews, viewedTables, viewerSights } from './support/viewers.ts';
+import {
+  citizenViews,
+  fieldEventSeen,
+  moneyView,
+  nameViews,
+  viewedTables,
+  viewerSights,
+} from './support/viewers.ts';
 
 const tested = eachTestRolledBack();
 
@@ -144,7 +151,6 @@ const listChecks = listTables.map((table) => ({
   definition: 'CHECK (((key IS NULL) OR (archived_at IS NULL)))',
 }));
 
-const viewerQual = '(viewer_sees_project(project_id) AND viewer_sees_every_ticket())';
 // Three tables of the row-level security guard (ADR-270), and every table a client user or an
 // auditor sees through `guard_viewer` (ADR-315), the completed load among them since ADR-340.
 const secured = ['field_event', 'project', 'transaction', ...viewedTables].sort();
@@ -155,7 +161,8 @@ const policies = [
   ...Object.entries(viewerSights).map(
     ([table, { seen }]) => `${table}_viewer PERMISSIVE {adms_readonly} SELECT USING ${seen}`,
   ),
-  `field_event_viewer PERMISSIVE {adms_readonly} SELECT USING ${viewerQual}`,
+  // A contractor user sees the field events whose certification it sees (ADR-361).
+  `field_event_viewer PERMISSIVE {adms_readonly} SELECT USING ${fieldEventSeen}`,
   'project_viewer PERMISSIVE {adms_readonly} SELECT USING viewer_sees_project(id)',
   // A line carries its project; a contractor user sees its own contractor's lines, as the prime
   // or as the sub that did the work (ADR-358).
@@ -1018,6 +1025,8 @@ describe('the guards in the catalog', () => {
         { name: 'viewer_project_setup', options: ['security_barrier=true'] },
         // A private citizen's columns too (ADR-336).
         ...citizenViews.map((name) => ({ name, options: ['security_barrier=true'] })),
+        // A line's rate and amount, and the three names of setup a ticket is read with (ADR-361).
+        ...[moneyView, ...nameViews].map((name) => ({ name, options: ['security_barrier=true'] })),
       ].sort((a, b) => (a.name < b.name ? -1 : 1)),
     );
     // Row-level security can't tell columns apart, so the one view that shows a project's settings
@@ -1103,6 +1112,79 @@ describe('the guards in the catalog', () => {
       );
       expect(shown, table).toEqual([]);
     }
+  });
+
+  it("AC-02-80, AC-02-81 a line's rate and amount, and the names of setup a ticket is read with, are shown by views of their own, the owner's, that ask the viewer's questions themselves", async () => {
+    const views = await tested.db.rows<{ name: string; owner: string; definition: string }>(
+      `SELECT relname AS name, pg_get_userbyid(relowner) AS owner,
+         pg_get_viewdef(oid) AS definition
+       FROM pg_class WHERE relname = ANY($1) ORDER BY relname`,
+      [[moneyView, ...nameViews]],
+    );
+    expect(
+      views.map((view) => ({
+        ...view,
+        definition: view.definition.split('\n').map((line) => line.trim()),
+      })),
+    ).toEqual([
+      {
+        name: 'viewer_debris_type_name',
+        owner: 'adms_owner',
+        definition: [
+          'SELECT form_debris_type.id,',
+          'form.project_id,',
+          'debris_type.name',
+          'FROM ((form_debris_type',
+          'JOIN form ON ((form.id = form_debris_type.form_id)))',
+          'JOIN debris_type ON ((debris_type.id = form_debris_type.debris_type_id)))',
+          'WHERE viewer_sees_project(form.project_id);',
+        ],
+      },
+      {
+        name: 'viewer_disposal_site_name',
+        owner: 'adms_owner',
+        definition: [
+          'SELECT id,',
+          'project_id,',
+          'name',
+          'FROM disposal_site',
+          'WHERE viewer_sees_project(project_id);',
+        ],
+      },
+      {
+        name: 'viewer_pay_item_name',
+        owner: 'adms_owner',
+        definition: [
+          'SELECT id,',
+          'project_id,',
+          'code,',
+          'description',
+          'FROM pay_item',
+          'WHERE viewer_sees_project(project_id);',
+        ],
+      },
+      // The money on a line: a client user, an auditor, and the line's own prime's contractor
+      // user; never a sub's (the user, 2026-10-06).
+      {
+        name: 'viewer_transaction_money',
+        owner: 'adms_owner',
+        definition: [
+          'SELECT id,',
+          'project_id,',
+          'rate,',
+          'amount',
+          'FROM transaction',
+          'WHERE (viewer_sees_project(project_id) AND (viewer_sees_every_ticket() OR viewer_is_contractor(prime_id)));',
+        ],
+      },
+    ]);
+    // And the view every viewer of a line reads shows neither.
+    const shown = await tested.db.rows<{ name: string }>(
+      `SELECT attname AS name FROM pg_attribute
+       WHERE attrelid = 'viewer_transaction'::regclass AND attnum > 0
+         AND attname IN ('rate', 'amount')`,
+    );
+    expect(shown).toEqual([]);
   });
 
   it("only six functions run with the owner's rights, and every function pins its search path", async () => {

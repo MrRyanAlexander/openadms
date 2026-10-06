@@ -677,7 +677,7 @@ describe('a field event', () => {
     }
   });
 
-  it('AC-04-31 is seen by Bayline County’s client user and an auditor given its project, with who recorded it by name and Monitor ID and nothing else of a person; a contractor user sees none', async () => {
+  it('AC-04-31 is seen by Bayline County’s client user and an auditor given its project, with who recorded it by name and Monitor ID and nothing else of a person; a contractor user sees its own tickets’ and not who recorded them', async () => {
     const { db, world } = tested;
     // Kim Nguyen records only on P2, which the client user isn't given.
     await db.actor(world.admin, 'BACK_OFFICE');
@@ -731,8 +731,13 @@ describe('a field event', () => {
       projects: [world.p1, world.p2].sort(),
       monitors: names,
     });
-    // A contractor user, and nobody stated: nothing.
-    expect(await seenBy(world.coastlineViewer)).toEqual({ events: 0, projects: [], monitors: [] });
+    // Coastline's contractor user, given P1: the four field events on Coastline's
+    // certifications, and no monitor (ADR-361; AC-02-78). Nobody stated: nothing.
+    expect(await seenBy(world.coastlineViewer)).toEqual({
+      events: 4,
+      projects: [world.p1],
+      monitors: [],
+    });
     expect(await seenBy(null)).toEqual({ events: 0, projects: [], monitors: [] });
     // No viewer reads a person's record itself.
     await db.viewer(world.clientViewer);

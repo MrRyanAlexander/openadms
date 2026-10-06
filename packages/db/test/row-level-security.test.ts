@@ -2,8 +2,9 @@
 // (ARCHITECTURE §5.5; ADR-050, 169, 270 (7), (8), 315, 358). The API states the viewer of each
 // request, by their id; what they may see is read from their own record and the projects they are
 // given. Unstated, a viewer sees nothing. A priced line carries its project, its prime and its
-// operating sub, so a contractor user sees its own contractor's lines (AC-02-65, 66; AC-07-90);
-// of field events and completed loads it still sees none (fail closed; BACKLOG 1.7.1a).
+// operating sub, so a contractor user sees its own contractor's lines (AC-02-65, 66; AC-07-90),
+// and the field events and completed loads of its own tickets, told by the certification
+// (ADR-361; `contractor-users.test.ts` has that in full, AC-02-78…82).
 import { describe, expect, it } from 'vitest';
 
 import type { GuardedDatabase } from './support/database.ts';
@@ -43,7 +44,7 @@ async function seen(db: GuardedDatabase, world: typeof tested.world): Promise<Se
     loads: await count('viewer_completed_load'),
     transactions: (
       await db.rows<{ id: string }>(
-        `SELECT "id"::text FROM "viewer_transaction" WHERE "project_id" = ANY($1) ORDER BY "amount"`,
+        `SELECT "id"::text FROM "viewer_transaction" WHERE "project_id" = ANY($1) ORDER BY "quantity"`,
         [projects],
       )
     ).map((row) => row.id),
@@ -104,8 +105,9 @@ describe('a viewer', () => {
     });
   });
 
-  // Three primes' and subs' lines on P1: Coastline's own on 101001 ($390.00, the world's),
-  // Rivera's work under Coastline on 101002 ($297.00) and Summit's on 101044 ($109.20).
+  // Three primes' and subs' lines on P1: Coastline's own on 101001 (52 CY, $390.00, the world's),
+  // Rivera's work under Coastline on 101002 (36 CY, $297.00) and Summit's on 101044 (14 CY,
+  // $109.20). A viewer's lines are read in order of quantity: not every viewer reads the money.
   async function threeLines(): Promise<{ coastlines: string; riveras: string; summits: string }> {
     const { world } = tested;
     const { haul } = await tickets.cdToTheLandfill();
@@ -149,11 +151,13 @@ describe('a viewer', () => {
   it("AC-02-65, AC-07-90 a prime's contractor user sees its own lines in its projects, its sub's work among them, and never another prime's; a client user and an auditor see every line", async () => {
     const { db, world } = tested;
     const lines = await threeLines();
+    // Coastline's: its lines, and P1's two loads on its certifications with their four field
+    // events; nothing of Summit's 101044.
     await db.viewer(world.coastlineViewer);
     expect(await seen(db, world)).toEqual({
       projects: [world.p1],
-      events: 0,
-      loads: 0,
+      events: 4,
+      loads: 2,
       transactions: [lines.riveras, lines.coastlines],
     });
     await db.viewer(await contractorUser('Summit Debris Services viewer', world.summit));
@@ -172,12 +176,13 @@ describe('a viewer', () => {
       ...insertOf('user', viewerLike('Rivera Trucking viewer', 'CONTRACTOR', world.rivera)),
     );
     await db.viewer(riveraViewer);
-    expect((await seen(db, world)).transactions).toEqual([]);
+    expect(await seen(db, world)).toEqual(nothing);
     await db.run(...insertOf('user_viewer_project', given(riveraViewer, world.p1)));
+    // Rivera's: the one load its own truck hauled, 101002, and its line.
     expect(await seen(db, world)).toEqual({
       projects: [world.p1],
-      events: 0,
-      loads: 0,
+      events: 2,
+      loads: 1,
       transactions: [lines.riveras],
     });
     // A contractor user of a firm on no ticket sees no line.

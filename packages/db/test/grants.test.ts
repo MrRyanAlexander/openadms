@@ -14,7 +14,14 @@ import {
 } from './support/example-world.ts';
 import { eachTestRolledBack } from './support/lifecycle.ts';
 import { listTables } from './support/lists.ts';
-import { citizenViews, unseenTables, viewedTables, viewerSights } from './support/viewers.ts';
+import {
+  citizenViews,
+  moneyView,
+  nameViews,
+  unseenTables,
+  viewedTables,
+  viewerSights,
+} from './support/viewers.ts';
 
 const tested = eachTestRolledBack();
 
@@ -116,6 +123,10 @@ const tableGrants: Record<string, Record<string, string>> = {
   ),
   // A private citizen's columns, for a viewer the firm lets see them (ADR-336).
   ...Object.fromEntries(citizenViews.map((view) => [view, { adms_readonly: 'SELECT' }])),
+  // A line's rate and amount, and the names of setup a ticket is read with (ADR-361).
+  ...Object.fromEntries(
+    [moneyView, ...nameViews].map((view) => [view, { adms_readonly: 'SELECT' }]),
+  ),
 };
 
 // A field event's captured columns: what the API corrects. Never its id, the server's received
@@ -289,7 +300,8 @@ const viewerColumns: Record<string, string[]> = {
     'worked_out_pay_item_id',
     ...captured,
   ],
-  // Every column of a priced line (ADR-358).
+  // Every column of a priced line (ADR-358) but its rate and amount, which a sub's contractor
+  // user never reads: `viewer_transaction_money` shows them (ADR-361).
   transaction: [
     'id',
     'project_id',
@@ -306,8 +318,6 @@ const viewerColumns: Record<string, string[]> = {
     'operating_sub_id',
     'unit',
     'quantity',
-    'rate',
-    'amount',
     'reconciliation_run_id',
     'created_at',
   ],

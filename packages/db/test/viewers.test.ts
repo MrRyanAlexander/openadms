@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { refusedBy } from './support/database.ts';
-import { given, insertOf, viewerLike } from './support/example-world.ts';
+import { given, insertOf, phoneInsertOf, roeLike, viewerLike } from './support/example-world.ts';
 import { eachTestRolledBack } from './support/lifecycle.ts';
 import { citizenViews, viewedTables } from './support/viewers.ts';
 
@@ -332,16 +332,25 @@ describe("a project's setup, for a read-only viewer", () => {
     expect(await reads(world.auditor, 'viewer_program_type', 'name')).toContain('PPDR');
   });
 
-  it('a contractor user sees the project by name and nothing of its setup: no settings, pay items, rates, rules, sites or lists', async () => {
+  it('a contractor user sees the project by name and nothing of its setup: no settings, pay items, rates, rules, sites or lists; only its own certifications, its own and its subs’ places, and its own tickets', async () => {
     const { db, world } = tested;
     const every = [
       'viewer_project_setup',
       ...viewedTables.map((table) => `viewer_${table}`),
       ...citizenViews,
     ];
-    expect(await counts(world.coastlineViewer, every)).toEqual(
-      Object.fromEntries(every.map((view) => [view, 0])),
-    );
+    // Coastline's: the prime on all five of P1's certifications; its own place and Rivera's
+    // under it, so those two contractors by name; P1's two loads (ADR-361; AC-02-78).
+    expect(await counts(world.coastlineViewer, every)).toEqual({
+      ...Object.fromEntries(every.map((view) => [view, 0])),
+      viewer_certification: 5,
+      viewer_certification_box: 6,
+      viewer_certification_helper: 1,
+      viewer_project_contractor: 2,
+      viewer_contractor: 2,
+      viewer_completed_load: 2,
+      viewer_completed_load_collection: 2,
+    });
     expect(await reads(world.coastlineViewer, 'viewer_project', 'name')).toEqual([
       'Bayline County ROW, Hurricane Delphine',
     ]);
@@ -406,6 +415,34 @@ describe("a project's setup, for a read-only viewer", () => {
 });
 
 describe('guard_viewer', () => {
+  it('AC-02-78 told which rows are a contractor user’s own, shows them to that contractor’s user alone, and a private citizen’s columns still to no contractor user', async () => {
+    const { db, world } = tested;
+    await db.as('adms_owner');
+    // Tried on a table no contractor user sees: an ROE, as if it named the contractor.
+    await db.run(
+      `SELECT guard_viewer('roe', 'PROJECT', citizen => ARRAY['owner_name'],
+         own => 'viewer_is_contractor(''${world.coastline}''::uuid)')`,
+    );
+    await db.administer();
+    await db.actor(world.monitor, 'DEVICE', { deviceId: world.device });
+    await db.run(
+      ...phoneInsertOf(
+        'roe',
+        roeLike(world, { project_id: world.p1, assignment_id: world.assignments.p1 }),
+      ),
+    );
+    await db.actor(world.admin, 'BACK_OFFICE');
+    const { id: summitViewer } = await db.one<{ id: string }>(
+      ...insertOf('user', viewerLike('Summit Debris Services viewer', 'CONTRACTOR', world.summit)),
+    );
+    await db.run(...insertOf('user_viewer_project', given(summitViewer, world.p1)));
+    const seen = async (viewer: string): Promise<Record<string, number>> =>
+      counts(viewer, ['viewer_roe', 'viewer_roe_citizen']);
+    expect(await seen(world.clientViewer)).toEqual({ viewer_roe: 1, viewer_roe_citizen: 1 });
+    expect(await seen(world.coastlineViewer)).toEqual({ viewer_roe: 1, viewer_roe_citizen: 0 });
+    expect(await seen(summitViewer)).toEqual({ viewer_roe: 0, viewer_roe_citizen: 0 });
+  });
+
   it('refuses a table that isn’t there, a sight it doesn’t know, and a column the table lacks', async () => {
     const { db } = tested;
     await db.as('adms_owner');
@@ -422,6 +459,10 @@ describe('guard_viewer', () => {
       [
         `guard_viewer('contractor', 'NAMED_BY', 'project_contractor', 'contractor_id', citizen => ARRAY['contact_name'])`,
         'only a table seen by its PROJECT names citizen columns',
+      ],
+      [
+        `guard_viewer('zone', 'PART_OF', 'map_version', 'map_version_id', own => 'true')`,
+        'only a table seen by its PROJECT says which rows are a contractor user',
       ],
     ] as const) {
       expect((await db.refused(`SELECT ${call}`)).message, call).toContain(message);

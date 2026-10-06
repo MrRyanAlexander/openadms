@@ -1295,7 +1295,7 @@ describe('an item line and a carried ticket', () => {
     }
   });
 
-  it('AC-04-31 are seen by a client user and an auditor with the field events of their projects, the new columns included; a contractor user sees none', async () => {
+  it('AC-04-31 are seen by a client user and an auditor with the field events of their projects, the new columns included; a contractor user sees those of its own tickets', async () => {
     const { db, world } = tested;
     await written();
     // A line on P2's unit rate work, which the client user isn't given.
@@ -1326,7 +1326,9 @@ describe('an item line and a carried ticket', () => {
     // of loads 101001 and 101002 with the debris type each picked.
     expect(await seenBy(world.clientViewer)).toEqual({ lines: 1, carried: 1, picked: 4 });
     expect(await seenBy(world.auditor)).toEqual({ lines: 2, carried: 1, picked: 4 });
-    expect(await seenBy(world.coastlineViewer)).toEqual({ lines: 0, carried: 0, picked: 0 });
+    // Coastline's contractor user: every one of these is on a Coastline certification, Rivera's
+    // truck under it included (ADR-361).
+    expect(await seenBy(world.coastlineViewer)).toEqual({ lines: 1, carried: 1, picked: 4 });
     // The view shows every column of the field event, as it is kept.
     expect(await columnsOf('viewer_field_event')).toEqual(await columnsOf('field_event'));
   });

@@ -948,15 +948,18 @@ describe('what a read-only viewer sees of them', () => {
     return rows.map((row) => row.id);
   }
 
-  it('a client user and an auditor see their projects’ scale receipts and photographs; a contractor user, and a viewer of another project, none', async () => {
+  it('a client user and an auditor see their projects’ scale receipts and photographs; a contractor user those of its own tickets; a viewer of another project none', async () => {
     const { db, world } = tested;
     const { receipt: bcl88241, photos } = await written();
     for (const viewer of [world.clientViewer, world.auditor]) {
       expect(await sees(viewer, 'viewer_scale_receipt')).toEqual([bcl88241]);
       expect(await sees(viewer, 'viewer_photo')).toEqual([...photos].sort());
     }
+    // Coastline's contractor user: the photograph of the collection on its `730415`; no field
+    // event of its own points at the receipt yet, so neither the receipt nor the photograph of
+    // its paper (ADR-361; AC-02-78).
     expect(await sees(world.coastlineViewer, 'viewer_scale_receipt')).toEqual([]);
-    expect(await sees(world.coastlineViewer, 'viewer_photo')).toEqual([]);
+    expect(await sees(world.coastlineViewer, 'viewer_photo')).toEqual([photos[1]]);
     // The client user is given P1 only: P2's receipt isn't theirs.
     const onP2 = await cypressCreek(world.p2);
     await asThePhone();

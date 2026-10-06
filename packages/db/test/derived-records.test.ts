@@ -1172,7 +1172,7 @@ describe('who writes the derived records', () => {
     );
   });
 
-  it('a client user and an auditor see their project’s completed loads, haul-outs, collection rows and flags; a contractor user none of them; no viewer reads a run or its decisions', async () => {
+  it('a client user and an auditor see their project’s completed loads, haul-outs, collection rows and flags; a contractor user its own tickets’ and no flag; no viewer reads a run or its decisions', async () => {
     const { db, world } = tested;
     const { disposal } = await ticket101003();
     await asTheWorker();
@@ -1207,9 +1207,11 @@ describe('who writes the derived records', () => {
       piles: 0,
       flags: 1,
     });
+    // Coastline's contractor user: P1's two loads are on Coastline's certifications; a flag is
+    // never a contractor user's (ADR-361; AC-02-78).
     expect(await counts(world.coastlineViewer)).toEqual({
-      loads: 0,
-      rows: 0,
+      loads: 2,
+      rows: 2,
       haul_outs: 0,
       piles: 0,
       flags: 0,
