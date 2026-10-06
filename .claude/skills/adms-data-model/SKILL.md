@@ -2,9 +2,9 @@
 name: adms-data-model
 description: Open ADMS data model, in today's rules. Covers the records and how they link (Client → DeclarationEvent → Project, contractors and contracts, forms and debris types, pay items with a rate per prime, rules naming one contract, sites, certifications, users, devices and assignments, time-clock entries, FieldEvent and the CompletedLoad / CompletedHaulOut drawn from it, transactions, flags, AuditRecord), why reference data is editable, evidence correctable only by permission and the derived records and audit never by a person, which lists are fixed in code and which the firm extends (built-in keys plus the firm's own values), identifiers, uniqueness, coordinates and time, and which package and database role may write what. Use when touching the Prisma schema, adding or changing a model, a list, a relation or a constraint, or deciding where a write belongs. Field names are spec/DATA-MODEL.md's; what each setup record and field event holds is adms-ticket-workflows.
 ---
-<!-- skill-status: current (the derived records, ADR-340; a photograph's archive mark and label, ADR-337; ADR-138, rewritten 2026-09-29, ADR-245; ADR-246; the Phase 0 models built, ADR-281; the pay item's first shape and `spec/DATA-MODEL.md` drafted, ADR-284, 286; the page approved, ADR-289; a pay item's unique code and description, ADR-301; the firm's lists built, ADR-302; the client, the declaration event and the project built, ADR-303; contractors on a project and contracts built, ADR-305; a contractor's contact details, ADR-306; forms, the debris types on them and the firm's own fields built, ADR-308; pay items in full, ADR-309; sites and the project map built, a site keeping several tipping fee pay items, ADR-311; rules built, ADR-313; people's permissions and viewers, ADR-315; certifications, ADR-321; what every field event records, ADR-324; what each kind records, ADR-325; scale receipts and photographs, ADR-326; ROEs and forms, ADR-327; whether a viewer sees private citizens by name, ADR-336) -->
+<!-- skill-status: current (`Transaction` in full, ADR-358; the derived records, ADR-340; a photograph's archive mark and label, ADR-337; ADR-138, rewritten 2026-09-29, ADR-245; ADR-246; the Phase 0 models built, ADR-281; the pay item's first shape and `spec/DATA-MODEL.md` drafted, ADR-284, 286; the page approved, ADR-289; a pay item's unique code and description, ADR-301; the firm's lists built, ADR-302; the client, the declaration event and the project built, ADR-303; contractors on a project and contracts built, ADR-305; a contractor's contact details, ADR-306; forms, the debris types on them and the firm's own fields built, ADR-308; pay items in full, ADR-309; sites and the project map built, a site keeping several tipping fee pay items, ADR-311; rules built, ADR-313; people's permissions and viewers, ADR-315; certifications, ADR-321; what every field event records, ADR-324; what each kind records, ADR-325; scale receipts and photographs, ADR-326; ROEs and forms, ADR-327; whether a viewer sees private citizens by name, ADR-336) -->
 
-> **This page states today's rules** (last changed by ADR-340, as its status line lists). Each rule cites its ADR; what changed is in
+> **This page states today's rules** (last changed by ADR-358, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
 > `agent_store/SUMMARY.md` disagree, SUMMARY wins: log a KD (`adms-decisions`). The worked example
 > is `spec/golden/MISSION.md`; names and examples follow `spec/CONVENTIONS.md` (§3 for code names).
@@ -269,7 +269,7 @@ changed" (ADR-166).
   is `packages/contracts`' `formDefinitionFields`. A debris type sits only on a load or haul-out
   form; what a phone offers and the unreduced warning are `packages/domain`'s `DebrisTypeEntries`.
 
-**Built (ADR-340): the derived records, all but `Transaction`** (`spec/DATA-MODEL.md` §5).
+**Built (ADR-340): the derived records** (`spec/DATA-MODEL.md` §5; `Transaction` since ADR-358, below).
 `CompletedLoad` is one per disposal event, for that event's life (a unique key, dissolved or
 not), with its quantity (`quantitySource`, capacity, load call, volume, weight and whether it is
 a share, carried count) and `dissolvedAt`; its collections are `CompletedLoadCollection` rows
@@ -303,6 +303,20 @@ ticket has no completed record: its one event is the ticket.
 slot, the pay item, the quantity, the rate (the pay item's rate for the rule's contract's prime),
 the contract, the prime and the operating sub (ADR-081, 206, 212, 239). The current truth,
 regenerated when its ticket changes; details in `adms-ledger-audit`.
+**Built (ADR-358):** a line is on exactly one kind of ticket: a completed load with the property
+it prices (`completedLoadCollectionId`; an ordinary load's one row), a completed haul-out with the
+pile it prices, or a unit rate ticket's field event. It repeats its project, and **everything it
+names is its own project's** (the ticket, the rule, the pay item, the contract, the run); its
+prime is one of the project's primes and its operating sub a contractor placed under that prime
+(the sub of the lowest tier the certification names; empty on the prime's own truck or crew;
+`packages/domain`'s `TicketRead.operatingSubId`). A # is once per property, pile or unit rate
+ticket. It keeps the pay item's unit as it was, and no mileage (read from the collection row,
+ADR-350). **A ticket locked as invoiced gives up no line and takes none**: `InvoiceLock` names a
+completed load, a completed haul-out or a unit rate ticket's field event, exactly one (its unlock
+and batch: 1.8.2). A client user and an auditor see every line of their projects; a contractor
+user its own contractor's, as the prime or as the sub that did the work. A test writes one as the
+worker with `transactionLike` (`packages/db/test/support/example-world.ts`); the tickets the
+example world doesn't hold are `test/support/priced-tickets.ts`'s.
 
 **`Assignment`, `Device`, `ClockEntry`** (ADR-240, 241):
 - A **`Device`** is **enrolled once** (its device key; no project, no monitor), holds number and

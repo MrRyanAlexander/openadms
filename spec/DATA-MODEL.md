@@ -226,7 +226,7 @@ those columns), which runs with the owner's rights and shows a row only to a cli
 auditor of its project whose record says they see private citizens
 (`viewer_sees_private_citizens()`). A table says which columns they are in its one line:
 `SELECT guard_viewer('roe', 'PROJECT', citizen => ARRAY['owner_name']);`. A contractor user sees
-neither table (1.7.1).
+neither table (task 1.7.3).
 
 #### `Device`
 
@@ -1311,7 +1311,7 @@ The numbered lists a phone was sent, kept so a reviewer sees what the phone show
 
 ## 5. Derived: the worker's conclusions
 
-**Built 2026-10-05 (ADR-340), all but `Transaction`** (task 1.7.1's): the completed load and
+**Built 2026-10-05 (ADR-340), and `Transaction` on 2026-10-06 (ADR-358, below)**: the completed load and
 haul-out, their collection rows, `Flag`, `ReconciliationRun`, `ReconciliationDecision`, and the
 worker's three columns on a field event (§4.1 (3)). What the build added to this page, as agent
 defaults: **a collection row has its own `id` and repeats its completed record's `projectId`**, so
@@ -1413,9 +1413,9 @@ itself (each property's or pile's own on a split); it isn't copied onto the comp
 
 #### `Transaction`
 
-*Derived, built in part.* One priced line; the current truth, regenerated when its ticket changes,
-each removed row copied in full to `AuditRecord` first, the delete refused on an invoice-locked
-ticket (ADR-085, 090).
+*Derived, built (2026-10-06, ADR-358).* One priced line; the current truth, regenerated when its
+ticket changes, each removed row copied in full to `AuditRecord` first, the delete refused on an
+invoice-locked ticket (ADR-085, 090).
 
 | Field | Type | Notes |
 |---|---|---|
@@ -1437,6 +1437,24 @@ ticket (ADR-085, 090).
 | **amount** | decimal(14,2) | amount = quantity × rate; a $0 line where the prime has no rate, or the pay item none |
 | reconciliationRunId | → `ReconciliationRun` | |
 | **createdAt** | instant | |
+
+**As built (ADR-358; agent defaults).** A load's line always names the property it prices (an
+ordinary load's one row), a haul-out's the pile: the load or haul-out and its row come together,
+and the row is one of that load's or haul-out's own. **Everything a line names is its own
+project's**, held by the database: the load, haul-out or field event, the rule, the pay item, the
+contract and the run. **The prime is one of the project's primes, and the operating sub a
+contractor placed on the project under that prime** (tier 1 or tier 2: the sub of the lowest tier
+the certification names, AC-03-12; empty on the prime's own truck or crew). The database does not
+hold the rule to its contract or the contract to its prime: either may be changed in setup while
+lines stand, and the lines are then regenerated. **A # is once per property, per pile and per unit
+rate ticket**, and is 1 or more; no quantity, rate or amount is below nought; the amount is the
+worker's figure and the database doesn't work it out again. **A line keeps no mileage** (ADR-350):
+it is read from the property's or pile's collection row. **A ticket locked as invoiced takes no
+new line either** (C17): the database refuses the insert as it refuses the removal. Only the
+worker's login inserts and deletes one; nobody updates one. **What a viewer sees:** a client user
+and an auditor every line of their projects; a contractor user the lines of its own contractor in
+the projects it is given, as the prime (its subs' work among them) or as the sub that did the
+work; never another prime's.
 
 #### `Flag`
 
@@ -1506,7 +1524,9 @@ A certification's "checked by" is its mark's `setById` (ADR-080).
 #### `InvoiceLock`
 
 *Built in part.* Only on a QC Approved record (ADR-121). An unlock keeps the row and is audited;
-locking again is a new row (C17).
+locking again is a new row (C17). **Its three targets are built (ADR-358):** a completed load, a
+completed haul-out or a unit rate ticket's field event, exactly one, each locked once; the unlock
+columns and the batch are task 1.8.2's.
 
 | Field | Type | Notes |
 |---|---|---|
@@ -1617,7 +1637,10 @@ Never relaxed to pass a test (ARCHITECTURE §5.4). ✅ = built today.
 | Only a release writes a list value's key: no other login adds a row with one, or gives, changes or removes one (ADR-302) | ✅ a trigger on every list |
 | A rule that is an exact copy of another (same form, contract, criteria and actions, whatever its name) | the API at setup, before it is saved (ADR-301): ✅ the check is `packages/domain`'s `ProjectRules` (ADR-313) |
 | A rule sits on a load, haul-out or unit rate form of its own project and names one of that project's contracts; a picked value is the rule's own project's (a debris type its own form's); a pick fills the one column its criterion picks from; a criterion takes only its kind's operators, and a value only its operator's; an action holds only what its kind takes (ADR-313) | ✅ composite foreign keys and checks |
-| A transaction # once per ticket (and property or pile) | unique key |
+| A transaction # once per ticket (and property or pile) | ✅ three unique keys: on the property's row, the pile's row and the unit rate ticket's field event (ADR-358) |
+| A transaction is on exactly one kind of ticket, a load or a haul-out with the property or pile it prices; everything it names is its own project's, the property a row of its own load, the pile of its own haul-out; its prime one of the project's primes and its operating sub placed under that prime; its # 1 or more and its figures nought or more (ADR-358) | ✅ a check, two- and three-column foreign keys, a check |
+| An invoice lock is on exactly one ticket, locked once; a ticket locked as invoiced gives up no transaction and takes none, whichever of the three kinds it is (ADR-090, 358; C17) | ✅ a check, unique keys, the delete's trigger and an insert trigger |
+| A contractor user reads only its own contractor's transactions in the projects it is given, as the prime or as the operating sub (ADR-169, 358) | ✅ row-level security |
 | A crew certification has no capacity and no boxes; a container has both (ADR-321) | ✅ a check; a box repeats its certification's kind, held by a foreign key; two deferred constraint triggers hold a container to its primary box |
 | A certification's prime is one of its project's primes, and each sub is placed on that project under that prime; a second tier only with a first; "replaces" names a certification of its own project, once, with a reason; a revocation has its date, reason and person; a box's shape holds its own whole-inch measurements, each 1 or more, a radius corner subtracts, a box after the primary has one label (ADR-321) | ✅ foreign keys, unique keys and checks |
 | A project's time zone is an IANA name; no time without its zone | ✅ checks, a test |
@@ -1706,8 +1729,8 @@ A new value in any of them is a code change with an ADR (`spec/LISTS.md` Group 2
 | `PayItem` | ✅ built 2026-10-02 (ADR-309): every field of §3, with `PayItemRate` and `PayItemCrewDayStep`; `AssignmentPayItem` gains the pay item's kind of work |
 | `FieldEvent` | Gains the shared and kind-specific columns of §4.1; `deviceId`, `assignmentId`, `setupVersion` become optional for a back-office-created record |
 | `CompletedLoad` | ✅ built 2026-10-05 (ADR-340): its one collection link moved to `CompletedLoadCollection`; its quantity and `dissolvedAt`; with `CompletedHaulOut`, `CompletedHaulOutCollection`, `Flag`, `ReconciliationRun`, `ReconciliationDecision` and the worker's zone, map version and worked-out pay item on `FieldEvent` |
-| `Transaction` | Gains its rule, pay item, contract, operating sub, unit, property and the two other ticket links; the delete guard follows the lock through them |
-| `InvoiceLock` | Gains the unlock columns, the batch and the two other targets |
+| `Transaction` | ✅ built 2026-10-06 (ADR-358): its project, rule, pay item, contract, operating sub, unit, run, property and the two other ticket links; the delete guard follows the lock through them, and an insert guard beside it |
+| `InvoiceLock` | ✅ the two other targets (ADR-358); gains the unlock columns and the batch (1.8.2) |
 | `AuditRecord` | As built |
 | The firm's eighteen lists (§2.3) | ✅ built 2026-10-02 as this page has them (ADR-302) |
 | `ProjectContractor` | ✅ gains a unique key on (project, contractor, prime), which a certification's subs point at (ADR-321) |

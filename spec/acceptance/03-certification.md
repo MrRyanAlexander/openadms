@@ -53,7 +53,7 @@ problem with a certification is a flag on the ticket or on the certification (AD
 | AC-03-12 | **Given** Tidewater Hauling works under Rivera, **when** its truck is certified with Coastline picked, Rivera in tier 1 and "Tidewater Hauling" typed into tier 2, **then** Tidewater is placed on P1 as a tier 2 sub under prime Coastline, the certification names all three, and its operating sub is Tidewater, the lowest tier filled. There is no third tier | ADR-108; `spec/DATA-MODEL.md` §3 · REQ-106e | database (1.2.3) | database (2026-10-03, ADR-321); story `certification` (2026-10-03, ADR-321) |
 | AC-03-13 | **Given** `730415`, Coastline's own dump trailer, **then** it names its prime and no sub, and it has no operating sub | ADR-108; `spec/DATA-MODEL.md` §3 | database (1.2.3) | database (2026-10-03, ADR-321) |
 | AC-03-14 | **Given** Rivera is already known under Coastline on P1, **when** the next monitor certifying a Coastline truck starts typing a sub, **then** the phone suggests Rivera. A second spelling typed anyway is merged later by the back office (AC-01-21) | ADR-108 | field app (Phase 3) | |
-| AC-03-15 | **Given** ticket 101002 scanned badge `730416`, **then** the certification says whose work it is: its two transactions are recorded as prime Coastline and operating sub Rivera, at Coastline's rate. No monitor picked a contractor | ADR-186, 212; golden mission §2 · REQ-106g | database (1.7.1); story (1.9.1) | |
+| AC-03-15 | **Given** ticket 101002 scanned badge `730416`, **then** the certification says whose work it is: its two transactions are recorded as prime Coastline and operating sub Rivera, at Coastline's rate. No monitor picked a contractor | ADR-186, 212; golden mission §2 · REQ-106g | database (1.7.1); story (1.9.1) |database (2026-10-06, ADR-358): `packages/db/test/transactions.test.ts`, with AC-07-85; the story: 1.9.1 |
 
 ## C. Driver, tag, vehicle type and features (steps 2, 4, 5)
 
@@ -138,7 +138,7 @@ total is divided by 46,656 (36³); the capacity is that to the nearest whole cub
 
 ## The count
 
-**59 scenarios** (60 written; AC-03-57 withdrawn, ADR-328), **39 passing and 1 more in part** (2026-10-04). Task C67 (a) (ADR-330): AC-03-56 rewritten, a truck on a second project is certified there from scratch, at the database. Task 1.3.5 (ADR-326, photographs): AC-03-34, a certification's five views, at the database. Task 1.3.3 (ADR-324, what every field event records): AC-03-40, the cert number as scanned and the certification found, at the database. Task 1.3.2 (ADR-323, numbering): AC-03-06, the cert-number series and its blocks of 100, at the database and the domain. Task 1.2.2 (ADR-320, the capacity
+**59 scenarios** (60 written; AC-03-57 withdrawn, ADR-328), **40 passing and 1 more in part** (2026-10-06). Task 1.7.1 (ADR-358, `Transaction` in full): AC-03-15, 101002's lines recorded as prime Coastline and operating sub Rivera, from the certification its tower scanned, at the database. Task C67 (a) (ADR-330): AC-03-56 rewritten, a truck on a second project is certified there from scratch, at the database. Task 1.3.5 (ADR-326, photographs): AC-03-34, a certification's five views, at the database. Task 1.3.3 (ADR-324, what every field event records): AC-03-40, the cert number as scanned and the certification found, at the database. Task 1.3.2 (ADR-323, numbering): AC-03-06, the cert-number series and its blocks of 100, at the database and the domain. Task 1.2.2 (ADR-320, the capacity
 math, `packages/domain`'s `Capacity`): AC-03-21…29, 31 and 32 at the domain. Task 1.2.3 (ADR-321,
 the certification's records): AC-03-01…05, 07, 08, 10…13, 16, 18…20, 30, 36, 37, 51, 53, 55, 56
 and 58…60 at the database (`packages/db/test/certifications.test.ts`, each under a test named by
@@ -149,7 +149,7 @@ AC-03-38's "signatures on file" passes and its QC mark waits for 1.8.2.
 |---|---|---|
 | Task 1.2.2, the capacity math (domain) | AC-03-21…29, 31, 32 | 11 |
 | Task 1.2.3, the certification's records (database or story) ✅ | AC-03-01…05, 07, 08, 10…13, 16, 18…20, 30, 36, 37, 51, 53, 55, 56, 58…60 | 25 |
-| Later Phase 1 tasks | AC-03-06 (1.3.2 ✅); 40 (1.3.3 ✅); 34 (Milestone 1.3); 33 (1.5.4); 17, 35, 39, 41…50 (Milestone 1.5); 15 (1.7.1); 52 (1.8.3) | 19 |
+| Later Phase 1 tasks | AC-03-06 (1.3.2 ✅); 40 (1.3.3 ✅); 34 (Milestone 1.3); 33 (1.5.4); 17, 35, 39, 41…50 (Milestone 1.5); 15 (1.7.1 ✅); 52 (1.8.3) | 19 |
 | Phases 2–4 only | AC-03-09, 14, 54 | 3 |
 | In two places | AC-03-38: signatures on file with 1.2.3, the QC mark with 1.8.2 | 1 |
 
@@ -173,7 +173,7 @@ or a monitor's work (ADR-230).
 | 8 | ~~Whether the database refuses a certification made by someone whose assignment doesn't include certifying, or a helper who isn't assigned to the project that day~~ **Decided (ADR-321):** neither is refused, by the database or the service | 1.2.3 ✅ |
 | 9 | ~~Which date "replaced on" is, and whether "replaces" must point within the project and "copied from" outside it~~ **Decided (ADR-321):** the new certification's certified time, as a day in the project's time zone; "replaces" names a certification of its own project, once; a copy onto the original's own project is refused by the service. **Still open:** whether work on that same day is flagged | 1.2.3 ✅; the flag: 1.5.5 |
 | 10 | Whether a tag is expired on its expiry date or from the day after, and which of a field event's times is "the work time" for a certification | 1.5.5 |
-| 11 | ~~What a contractor user sees of certifications~~ **Decided (ADR-321):** none yet; its own come with a transaction's prime and operating sub | 1.2.3 ✅; 1.7.1 (C18) |
+| 11 | ~~What a contractor user sees of certifications~~ **Decided (ADR-321):** none yet; its own come with a transaction's prime and operating sub | 1.2.3 ✅; 1.7.3 (C18; ADR-358) |
 | 12 | ~~Which audit domain a certification belongs to~~ **Decided (ADR-321):** billing, with its boxes; its helpers operations | 1.2.3 ✅ |
 | 13 | What QC Void on a certification does to tickets on it (nothing recorded says it flags them) | 1.8.2 |
 | 14 | ~~A copy's photographs: whether the copy points at the original's or holds its own~~ **Falls away (ADR-328): a certification is never copied** | ✅ |
