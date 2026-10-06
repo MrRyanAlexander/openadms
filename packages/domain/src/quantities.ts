@@ -25,8 +25,9 @@ export type QuantitySourceName = (typeof quantitySources)[number];
 
 const decimalText = /^-?\d+(\.\d+)?$/;
 
-// A number held exactly, as one whole number over another.
-class Exact {
+// A number held exactly, as one whole number over another. The package's own: a rule's criterion
+// compares with it too (ticket-rules.ts).
+export class Exact {
   static readonly nought = new Exact(0n, 1n);
 
   private readonly over: bigint;

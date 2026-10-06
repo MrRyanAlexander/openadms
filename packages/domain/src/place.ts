@@ -32,6 +32,8 @@ export interface CheckedSite {
   readonly name: string;
   // The site type's built-in key, if it has one: a TDSR is told by it, whatever the firm calls
   // the type (ADR-194, 226).
+  // Its site type, the firm's own or a built-in one: what the criterion Disposal site type reads.
+  readonly siteTypeId: string;
   readonly siteTypeKey: BuiltInKey<'siteType'> | null;
   readonly takesLoads: boolean;
   readonly haulOutsLeaveHere: boolean;

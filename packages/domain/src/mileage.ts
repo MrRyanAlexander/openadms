@@ -16,9 +16,10 @@
 // the collection's end GPS or the site's GPS is corrected: the two ends are on the records
 // themselves and are kept nowhere else (the user, ADR-350), so the run says when one moved. The figure is kept as the routing server gave it,
 // to the column's four decimal places, never rounded to the tenths a rule compares in (ADR-125:
-// that rounding is the criterion's, task 1.6.2).
+// `Mileage.inTenths` is that rounding, and only a criterion uses it).
 import type { FlagRaised, Flags, FlagSubject } from './flags.ts';
 import { Distance, type GpsPoint } from './geodesic.ts';
+import { Exact } from './quantities.ts';
 
 export const mileageSources = ['ROAD_ROUTE', 'STRAIGHT_LINE'] as const;
 export type MileageSource = (typeof mileageSources)[number];
@@ -66,6 +67,13 @@ export class Mileage {
   constructor(ends: MileageEnds, mapData: MapData) {
     this.ends = ends;
     this.mapData = mapData;
+  }
+
+  // The miles a rule compares: what is kept, rounded half up to tenths of a mile (15.04 is 15.0,
+  // 15.05 is 15.1). The one place that rounding lives, so Show matches and the worker always
+  // agree; what is kept stays as it was measured (ADR-125).
+  static inTenths(miles: string): string {
+    return Exact.of(miles).text(1);
   }
 
   // The routing server found a route from the road point to the site: its length, in miles.

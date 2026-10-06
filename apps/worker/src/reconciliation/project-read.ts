@@ -344,6 +344,7 @@ export class ProjectRead {
     return rows.map((row) => ({
       id: row.id,
       name: row.name,
+      siteTypeId: row.siteTypeId,
       siteTypeKey: row.siteTypeKey as BuiltInKey<'siteType'> | null,
       takesLoads: row.takesLoads,
       haulOutsLeaveHere: row.haulOutsLeaveHere,

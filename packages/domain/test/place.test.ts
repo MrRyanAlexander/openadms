@@ -65,6 +65,7 @@ const p1Map: ProjectMap = {
 const site = (name: string, gps: GpsPoint, more: Partial<CheckedSite> = {}): CheckedSite => ({
   id: `site-${name.toLowerCase().replaceAll(' ', '-')}`,
   name,
+  siteTypeId: 'site-type-other',
   siteTypeKey: null,
   takesLoads: true,
   haulOutsLeaveHere: false,
