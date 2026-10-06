@@ -166,8 +166,8 @@ export interface ProjectSnapshot {
   readonly unitRatePayItems: readonly UnitRatePayItem[];
   readonly pricing: PricingRead;
   readonly surveys: readonly ReadSurvey[];
-  // Every field event of the project. One a rule's Void ticket voided is read like any other:
-  // the void is the worker's own conclusion, drawn again on every run (ADR-167, 359).
+  // Every field event of the project that isn't void. A voided ticket is out of the run until a
+  // person unvoids it, whoever voided it, a person or a rule (the user, ADR-360).
   readonly fieldEvents: readonly WorkerFieldEvent[];
   readonly completedLoads: readonly CompletedRead[];
   readonly completedHaulOuts: readonly CompletedRead[];
@@ -525,7 +525,10 @@ export class ProjectRead {
     roes: ReadonlyMap<string, CheckedRoe>,
   ): Promise<WorkerFieldEvent[]> {
     const { db } = this;
-    const rows = await db.fieldEvent.findMany({ where: { projectId }, orderBy: { id: 'asc' } });
+    const rows = await db.fieldEvent.findMany({
+      where: { projectId, status: { not: 'VOID' } },
+      orderBy: { id: 'asc' },
+    });
     const ids = rows.map((row) => row.id);
     const idsOf = (pick: (row: (typeof rows)[number]) => string | null): string[] => [
       ...new Set(rows.flatMap((row) => pick(row) ?? [])),

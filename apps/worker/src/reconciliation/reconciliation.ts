@@ -1,8 +1,8 @@
 // The worker's run (spec/parts/06-reconciliation.md; spec/acceptance/06-reconciliation.md
 // sections A, C, K and N; spec/parts/07-pricing-ledger-audit.md; ARCHITECTURE §13;
 // adms-ticket-workflows §4.7; BACKLOG 1.5.9, 1.7.2, C20, C70; ADR-086, 273, 276, 339, 352, 359):
-// for one project, every ticket is drawn again from its current field events and the firm's
-// current setup, and priced by the firm's rules.
+// for one project, every ticket that isn't void is drawn again from its current field events and
+// the firm's current setup, and priced by the firm's rules.
 //
 // Its guarantees:
 // - One run per project at a time, by a database lock held for the length of the run: a second
@@ -12,7 +12,9 @@
 //   completed record, its lines, its flags and the run's decision commit together or not at all
 //   (KD-01, 55): a reconciled ticket that bills is never left without its lines.
 // - A ticket that errors is flagged "could not be processed" and skipped: nothing else about it
-//   is written, the lines it had are still there, and the run goes on.
+//   is written, the lines it had are still there (and the flag says so), and the run goes on.
+// - A ticket a rule's Void ticket voids is VOID from then on and out of every later run, like a
+//   person's void, until a person unvoids it (the user, ADR-360).
 // - A ticket locked as invoiced is left exactly as it is, whatever changed (ADR-090): the run
 //   records that it left it.
 // - A rate or a rule that changes needs no list of the tickets it touches: a run works every
@@ -252,12 +254,29 @@ export class Reconciliation {
       await db.$write(systemActor, async (tx) => {
         const write = new TicketWrite(tx, ticket.projectId, runId, clock.now());
         const standing = await tx.flag.findFirst({
-          where: { projectId: ticket.projectId, ...on, clearedAt: null, code: 'NOT_PROCESSED' },
+          where: {
+            projectId: ticket.projectId,
+            ...on,
+            clearedAt: null,
+            code: { in: ['NOT_PROCESSED', 'NOT_PROCESSED_LINES_STAND'] },
+          },
           select: { id: true },
         });
         if (standing === null) {
+          // Nothing of the failed work is kept, so a ticket priced before still has its lines:
+          // the flag says which (the user, ADR-360).
+          const lines = await tx.transaction.count({
+            where: {
+              projectId: ticket.projectId,
+              ...(ticket.workflow === 'UNIT_RATE'
+                ? { fieldEventId: { in: ticket.events.map((event) => event.id) } }
+                : ticket.workflow === 'LOAD'
+                  ? { completedLoad: { ticketNumber: ticket.ticketNumber } }
+                  : { completedHaulOut: { ticketNumber: ticket.ticketNumber } }),
+            },
+          });
           const flag = new Flags('UTC').raise(
-            'NOT_PROCESSED',
+            lines > 0 ? 'NOT_PROCESSED_LINES_STAND' : 'NOT_PROCESSED',
             { ticketNumber: ticket.ticketNumber },
             {},
             {},

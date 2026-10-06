@@ -108,6 +108,8 @@ export const flagCodes = [
   'ASSIGNMENT_ON_ANOTHER_PROJECT',
   'SCALE_NET_DISAGREES',
   'TWO_QUANTITIES',
+  // §3.11 The engine, on a ticket that was priced before (ADR-360)
+  'NOT_PROCESSED_LINES_STAND',
 ] as const;
 export type FlagCode = (typeof flagCodes)[number];
 
@@ -233,6 +235,7 @@ export interface FlagTold {
   NO_RATE_FOR_PRIME: { payItem: string; prime: string };
   RATE_TO_BE_NEGOTIATED: Nothing;
   NOT_PROCESSED: Nothing;
+  NOT_PROCESSED_LINES_STAND: Nothing;
   // What the field event has none of: "debris type".
   DETAIL_MISSING: { event: FieldEventKindName; missing: string };
   TYPED_NUMBER_NO_REASON: Nothing;
@@ -285,6 +288,8 @@ const endings = {
   NOT_PRICED: '. Flagged for review; not priced.',
   WEIGHT_NOT_USED: '. Flagged for review; its weight is not used.',
   NOT_BILLED_YET: '. Not billed yet.',
+  // A ticket the worker failed on that had lines: they stand as they were (ADR-360).
+  LINES_STAND: '. Flagged for review; its lines are as of its last run.',
   // A flag on a record that isn't a ticket (§3.7).
   RECORD: '.',
 } as const;
@@ -639,6 +644,11 @@ const catalogue: { readonly [Code in FlagCode]: Entry<Code> } = {
   NOT_PROCESSED: {
     billing: 'NOT_BILLED',
     ending: 'NOT_BILLED',
+    words: () => 'could not be processed',
+  },
+  NOT_PROCESSED_LINES_STAND: {
+    billing: 'BILLS',
+    ending: 'LINES_STAND',
     words: () => 'could not be processed',
   },
   DETAIL_MISSING: {

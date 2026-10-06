@@ -10,11 +10,11 @@
 // and writes the new one, with no reversal; a failure part-way keeps the old lines; a rate or a
 // rule that changes regenerates the tickets it touches and no other, and never one locked as
 // invoiced; a pricing flag is cleared once the setup is fixed; a rule's Void ticket removes the
-// ticket's lines and is drawn again on every run.
+// ticket's lines, and the ticket stays void, out of every later run, until a person unvoids it.
 //
 // Not here: correcting, voiding and locking as a reviewer's actions, with their permissions and
 // reasons (Milestone 1.8): where this story needs one it writes it as the API's login may, to
-// show what the worker does when the ticket comes back. A person's void (`TicketVoid`, 1.8.4).
+// show what the worker does when the ticket comes back. A person's void and unvoid (1.8.4).
 // The golden mission in full, with P2, is 1.9.1.
 import { ContractorSetup, PayItemSetup, RuleSetup, SiteSetup } from '@open-adms/api';
 import { Prisma, systemActorId, type Database } from '@open-adms/db';
@@ -428,7 +428,7 @@ export const p1Priced: Story = {
       askedByLuis,
     );
     story.check(
-      'AC-07-102 none of 101001’s work is kept: its $390.00 line is still there, the same record, no removal is in the audit log, and its completed load still says 52.0 CY; the ticket is flagged "could not be processed"',
+      'AC-07-102 none of 101001’s work is kept: its $390.00 line is still there, the same record, no removal is in the audit log, and its completed load still says 52.0 CY; the ticket is flagged "could not be processed", and the flag says its lines are as of its last run (the user, ADR-360)',
       [
         told(failed).filter((line) => line.startsWith('101001')),
         await linesOf('101001'),
@@ -440,7 +440,7 @@ export const p1Priced: Story = {
       ],
       [
         [
-          '101001 · COMPLETED · error: The database refused the line. · Ticket 101001: could not be processed. Flagged for review; not billed.',
+          '101001 · COMPLETED · error: The database refused the line. · Ticket 101001: could not be processed. Flagged for review; its lines are as of its last run.',
         ],
         ['101001 #1 VEG-HAUL-CY-15 52 × $7.50 = $390.00'],
         true,
@@ -840,25 +840,20 @@ export const p1Priced: Story = {
         [20, '$5,509.45'],
       ],
     );
-    story.at(on('14', '13:10'), 'The worker runs again');
+    story.at(on('14', '13:10'), 'Dana switches the rule off; the worker runs');
     const auditedBefore = [await audited('transaction'), await audited('field_event')];
-    await reconciliation.run(sync);
+    await saved(rules.save(dana, { ...voidRule, id: quarryRule.id, active: false }));
+    const afterVoid = await reconciliation.run(setupChange);
     story.check(
-      'the rule’s void is the worker’s own conclusion, drawn again on every run: 101009 is still VOID, and nothing was written for it',
+      'a voided ticket stays void until a person unvoids it (the user, ADR-360): 101009 is out of the run, which doesn’t work it or write anything for it, though the rule that voided it is off',
       [
         await statusOf('101009'),
+        told(afterVoid).filter((line) => line.startsWith('101009')),
         [await audited('transaction'), await audited('field_event')],
+        await linesOf('101009'),
         await total(),
       ],
-      [['VOID'], auditedBefore, [20, '$5,509.45']],
-    );
-    story.at(on('14', '13:20'), 'Dana switches the rule off; the worker runs');
-    await saved(rules.save(dana, { ...voidRule, id: quarryRule.id, active: false }));
-    await reconciliation.run(setupChange);
-    story.check(
-      'with no rule voiding it, 101009 is a ticket in review again and bills: a rule’s void lasts only while the rule passes',
-      [await statusOf('101009'), await linesOf('101009'), await total()],
-      [['MANUAL_REVIEW'], ['101009 #1 VEG-HAUL-CY-15 39 × $7.50 = $292.50'], [21, '$5,801.95']],
+      [['VOID'], [], auditedBefore, [], [20, '$5,509.45']],
     );
 
     // ------------------------------------------------------------------------------------------
@@ -883,7 +878,7 @@ export const p1Priced: Story = {
       [[], 0, ['DELETE', 'INSERT'], ['true SYSTEM'], true],
     );
     story.check(
-      'the ledger at the end, 21 lines: P1’s Monday and Tuesday as on Wednesday morning ($5,400.25 on 19), Summit’s 101044 and the ineligible 101009',
+      'the ledger at the end, 20 lines: P1’s Monday and Tuesday as on Wednesday morning ($5,400.25 on 19) and Summit’s 101044; the voided 101009 has none',
       await ledger(),
       [
         '101001 #1 VEG-HAUL-CY-15 52 × $7.50 = $390.00',
@@ -892,7 +887,6 @@ export const p1Priced: Story = {
         '101003 #1 VEG-HAUL-CY-15 62.4 × $7.50 = $468.00',
         '101004 #1 VEG-HAUL-CY-15 24 × $7.50 = $180.00',
         '101005 #1 VEG-HAUL-CY-15 45.5 × $7.50 = $341.25',
-        '101009 #1 VEG-HAUL-CY-15 39 × $7.50 = $292.50',
         '101044 #1 VEG-HAUL-CY-15 14 × $7.80 = $109.20',
         '201001 #1 MULCH-HO-CY 99 × $5.10 = $504.90',
         '201001 #2 TIP-FEE-CY-BCL 99 × $4.00 = $396.00',

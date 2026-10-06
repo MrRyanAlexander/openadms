@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "flag_code" ADD VALUE 'NOT_PROCESSED_LINES_STAND';

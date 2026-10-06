@@ -250,7 +250,8 @@ export class TicketWork {
     const all: WorkedFlag[] = [...flags, ...priced.flags];
     return {
       ticket,
-      // A rule's void wins over everything else the ticket would be (ADR-167). A reviewer's
+      // A rule's void wins over everything else the ticket would be (ADR-167); once written, the
+      // ticket is out of the run until a person unvoids it (ADR-360). A reviewer's
       // acceptance is a mark of its own, task 1.8.x's: until it is built no flag is read as
       // accepted.
       status:

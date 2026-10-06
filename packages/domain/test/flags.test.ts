@@ -18,9 +18,9 @@ const flags = new Flags('America/New_York');
 const ticket = (ticketNumber: string) => ({ ticketNumber });
 
 describe('the flag catalogue', () => {
-  it('AC-06-137 is one closed set of 77 codes, none twice, and three things a flag can do to the money', () => {
-    expect(flagCodes).toHaveLength(77);
-    expect(new Set(flagCodes).size).toBe(77);
+  it('AC-06-137 is one closed set of 78 codes, none twice, and three things a flag can do to the money', () => {
+    expect(flagCodes).toHaveLength(78);
+    expect(new Set(flagCodes).size).toBe(78);
     expect(flagBillings).toEqual(['BILLS', 'LINE_NOT_BILLED', 'NOT_BILLED']);
   });
 

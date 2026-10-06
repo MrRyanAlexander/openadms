@@ -151,6 +151,7 @@ const examples: Example = {
   NO_RATE_FOR_PRIME: [ticket('101034'), { payItem: 'VEG-HAUL-CY-15', prime: 'Summit' }],
   RATE_TO_BE_NEGOTIATED: [ticket('301021'), {}],
   NOT_PROCESSED: [ticket('101035'), {}],
+  NOT_PROCESSED_LINES_STAND: [ticket('101035'), {}],
   DETAIL_MISSING: [ticket('101036'), { event: 'COLLECTION', missing: 'debris type' }],
   TYPED_NUMBER_NO_REASON: [ticket('101037'), {}],
   WRONG_KIND_OF_BADGE: [
@@ -180,9 +181,9 @@ const raised = (code: FlagCode): string => {
 };
 
 describe('the flag catalogue, against spec/FLAGS.md', () => {
-  it('AC-06-137 the domain’s codes are the page’s, in its order: 77, and a flag that isn’t on the page can’t be raised', () => {
+  it('AC-06-137 the domain’s codes are the page’s, in its order: 78, and a flag that isn’t on the page can’t be raised', () => {
     expect(rows.map(([code]) => code)).toEqual([...flagCodes]);
-    expect(rows).toHaveLength(77);
+    expect(rows).toHaveLength(78);
   });
 
   it.each(rows)('AC-06-136 %s reads as the page words it', (code, shown) => {
