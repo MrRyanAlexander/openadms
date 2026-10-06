@@ -34,7 +34,7 @@ open flag makes the ticket `MANUAL_REVIEW`, and a ticket in review **still bills
 amount can be computed (ADR-060). Everything the worker writes is written as the system actor and
 audited by the database (ADR-273); it changes nothing a monitor captured (invariant 21).
 
-**The catalogue is 77 flags today** (75 until ADR-348 added `SCALE_NET_DISAGREES` and `TWO_QUANTITIES`)**;** it was 75 flags (67 when it was approved; `REVIEW_ORIGINAL_CERTIFICATION` was
+**The catalogue is 78 flags today** (77 until ADR-360 added `NOT_PROCESSED_LINES_STAND`, an errored ticket that keeps its lines; 75 until ADR-348 added `SCALE_NET_DISAGREES` and `TWO_QUANTITIES`)**;** it was 75 flags (67 when it was approved; `REVIEW_ORIGINAL_CERTIFICATION` was
 withdrawn by ADR-328; nine added as §3.10 by ADR-345). Each has at least one scenario below; the table at the end lists which.
 
 ---

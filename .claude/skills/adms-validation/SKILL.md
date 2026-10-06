@@ -204,6 +204,18 @@ section is how the worker runs them, after the checks, the zone and mileage, and
 5. **A rule's void always wins** (ADR-167): it names the rule as its reason; a person's unvoid lasts
    only until the next reprocess, so the reviewer corrects the data or the rule to keep it. **User,
    2026-09-27 (Q-159):** "the rule **always win**".
+   **A void stays until a person unvoids it, whoever voided it, and a voided ticket is out of
+   the run** (ADR-360): switching the rule off or changing it doesn't bring a voided ticket back; a
+   person's unvoid does, and the rule then voids it again if it still passes. **User, 2026-10-06:**
+   "A void that was voided should be voided unless unvoided manually. why would the system
+   re-check things like this? The processing que should only consist of active work ticketed
+   stuff that is being processed or changes that were made and so on. What I mean is for example,
+   say we have a project with 300k tickets and 40 were voided along the way for various reasons.
+   Those 40 shouldn't be getting reprocessed unless they were changed. So once they are changed
+   and cleared they drop off the que and until they are edited they remain out of the que. This
+   is how all such things should happen". So **only what is active or was changed is worked**:
+   a settled ticket stays off the queue until it, or the setup it is priced by, is edited (the
+   queue itself is Phase 2's).
 6. **No *Flag* action and no *Load call* criterion**: project settings raise those flags, the same
    over the whole project (ADR-164).
 7. The flags rules raise are §5.2's "Pricing" table. **A haul-out dumped at a TDSR skips the rules**

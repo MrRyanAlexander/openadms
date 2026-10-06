@@ -204,7 +204,7 @@ to the project, never typed, so an ID that matches no user can't happen.
 
 | Code | Raised when | Message | Bills | Facts kept | ADR |
 |---|---|---|---|---|---|
-| `NOT_PROCESSED` | The worker hit an error on this ticket: it is flagged and skipped, and the run goes on | "Ticket 101035: could not be processed. Flagged for review; not billed." | no | the run | ARCHITECTURE §13 |
+| `NOT_PROCESSED` | The worker hit an error on this ticket, which has no lines: it is flagged and skipped, and the run goes on | "Ticket 101035: could not be processed. Flagged for review; not billed." | no | the run | ARCHITECTURE §13 |
 
 ### 3.10 A record that should not have been possible
 
@@ -230,10 +230,20 @@ scale receipt and a disposal's quantities, were approved the same day (ADR-348).
 | `SCALE_NET_DISAGREES` | A scale receipt holds a gross, a tare and a net, and the net isn't the gross less the tare. The weights stay as typed, never corrected | "Ticket 101054: scale receipt BCL-88251's net (17.60 tons) is not its gross less its tare (17.10 tons)." | yes, from the net as written | the receipt's figures | 329, 348 |
 | `TWO_QUANTITIES` | A load's disposal holds a load call and a scale weight. Which one bills is read from the paying pay item; the two are never compared | "Ticket 101055: disposal has both a load call and a scale weight." | yes | the call, the receipt, its net | 329, 348 |
 
+### 3.11 The engine, on a ticket that was priced before
+
+| Code | Raised when | Message | Bills | Facts kept | ADR |
+|---|---|---|---|---|---|
+| `NOT_PROCESSED_LINES_STAND` | The worker hit an error on a ticket that was priced before: nothing of the failed run is kept, so its lines stay as its last good run wrote them until it is fixed (the user, 2026-10-06) | "Ticket 101035: could not be processed. Flagged for review; its lines are as of its last run." | yes, as its last run priced it | the run | 360 |
+
+(Listed last because the database keeps the codes in the order they were added; it belongs with
+§3.9's `NOT_PROCESSED`.)
+
 **Added:** the nine flags of §3.10 (ADR-345). The catalogue was 75 flags: 66 after ADR-328 withdrew
 one, and these nine. **Added:** `SCALE_NET_DISAGREES` and `TWO_QUANTITIES`, worded by the agent and
 approved by the user on 2026-10-05 ("Agree on both proposed in the two questions", ADR-348). The
-catalogue is 77 flags.
+catalogue was 77 flags. **Added:** `NOT_PROCESSED_LINES_STAND` (the user, 2026-10-06: "KD-73
+recommended approved", ADR-360). The catalogue is 78 flags.
 
 ---
 
