@@ -2787,7 +2787,22 @@ another prime's; monitors' phone numbers are shown only to admins.
 
 > **User:** Agent proposal makes sense.. Approved!
 
-*Refs:* ADR-050, ADR-105, Q-02, Q-100; ARCHITECTURE §5.5.
+**Asked again for a sub, 2026-10-06 (task 1.7.3, ADR-361; the back office's hat).** Ticket 101002 on
+P1: Rivera Trucking's truck `730416`, working as a sub under Coastline Haulers, hauls C&D to the
+Landfill. The ledger holds two lines for it: #1 `CD-HAUL-CY-15`, 36.0 CY × $8.25 = $297.00, and #2
+`TIP-FEE-CY-BCL`, 36.0 CY × $4.00 = $144.00. The $8.25 and $4.00 are Coastline's rates with Bayline
+County; what Coastline pays Rivera is not in the system. When Rivera's own read-only login opens
+ticket 101002, what should it see of those two lines? Options: *No money (Recommended)* · *Rate and
+amount too* · *The firm picks per login*.
+
+> **User, 2026-10-06:** "No money (Recommended)": "Rivera sees its ticket, the pay item and the
+> quantity (36.0 CY), but not the rate ($8.25) or the amount ($297.00). The prime's price with the
+> client stays between the prime, the client and the firm."
+
+**Decided (ADR-361):** a sub's contractor user reads its lines' pay item and quantity and no rate or
+amount; its prime's contractor user, a client user and an auditor read the money.
+
+*Refs:* ADR-050, ADR-105, ADR-361, Q-02, Q-100; ARCHITECTURE §5.5.
 
 ### ✅ Q-162 — Two-step sign-in, and email
 *(ADR-170)* **Decided: approved as proposed**, with local development testing kept workable.

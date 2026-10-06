@@ -205,14 +205,45 @@ viewer view (ADR-270; C54).
 (`adms.viewer_id`, C22); the database reads the rest from that person's own record: they must be a
 read-only viewer who isn't archived; their projects are their `ViewerProject` rows that aren't
 archived; a client user or an auditor sees the whole of those projects; a contractor user only its
-`contractorId`'s transactions. Anyone else stated, or nobody, sees nothing.
+`contractorId`'s transactions and tickets (below). Anyone else stated, or nobody, sees nothing.
+
+**What a contractor user sees of tickets (ADR-169, 358; built, ADR-361, task 1.7.3).** Whose work
+a ticket is, is told in one place: **the certification its field events found**. A contractor user
+sees, in the projects it is given: the certifications that name its contractor, as the prime (so a
+prime sees its subs') or as either tier of sub, with their boxes and helpers, never the driver's
+phone or licence number; the field events that found one of those, with their item lines and
+carried tickets; a completed load or haul-out with its disposal event, and a property's or a
+pile's row with its collection event; a scale receipt one of its field events points at; the
+photographs' records of those field events, certifications and receipts; its own place on the
+project and, a prime, its subs', and those contractors by name; and its own contractor's
+transactions, as the prime or the operating sub. **A field event whose badge found no
+certification is no contractor's** (fail closed). It sees **no flag, no monitor, no ROE, form or
+quarantined record** (*agent defaults*). A table says which rows are a contractor user's own in
+its one line, and every rerun of that line repeats it: `SELECT guard_viewer('field_event',
+'PROJECT', own => 'EXISTS (SELECT 1 FROM public.certification WHERE certification."id" =
+field_event."certification_id")');`. The question is asked as the viewer, so one that looks in
+another viewed table is answered by that table's own policy.
+
+**A line's money (the user, 2026-10-06; ADR-361).** A transaction's `rate` and `amount` are the
+prime's price with the client. They are in no `viewer_transaction` view and the read-only login
+holds no grant on them; `viewer_transaction_money` (the line's id, its project, its rate and
+amount; the owner's rights, as a citizen view) shows them to a client user, an auditor and **the
+contractor user of the line's own prime**. A sub's contractor user reads its lines' pay item and
+quantity and no money.
+
+**The names a ticket is read with (ADR-361, *agent default*).** Three views, the owner's, show
+every viewer given a project, a contractor user included: `viewer_pay_item_name` (id, project,
+code, description), `viewer_disposal_site_name` (id, project, name) and `viewer_debris_type_name`
+(the form's entry's id, the project, the debris type's name). Nothing else of setup is a
+contractor user's.
 
 **What a viewer sees of setup (ADR-315; C54).** A client user and an auditor: their projects'
 whole setup, through one viewer view per table (`viewer_<table>`), each with row-level security,
 and the project with its settings through `viewer_project_setup`; the firm's lists; the client,
 the declaration event and the contractors their projects name, **without any contact name, email
 or phone**, a client's notes, or a map's uploaded file key. A contractor user: the project's name,
-time zone and dates (`viewer_project`), and nothing else of its setup (*agent defaults*). A new
+time zone and dates (`viewer_project`), and nothing else of its setup (*agent defaults*) but its
+own place on the project and the three names above (ADR-361). A new
 setup table is given its viewer sight in one line, `SELECT guard_viewer('<table>', '<PROJECT|
 PART_OF|NAMED_BY|FIRM>'[, …]);`. No viewer reads a person, a permission, a phone, an assignment,
 a number block or the master passcode.
@@ -226,7 +257,7 @@ those columns), which runs with the owner's rights and shows a row only to a cli
 auditor of its project whose record says they see private citizens
 (`viewer_sees_private_citizens()`). A table says which columns they are in its one line:
 `SELECT guard_viewer('roe', 'PROJECT', citizen => ARRAY['owner_name']);`. A contractor user sees
-neither table (task 1.7.3).
+neither table (ADR-361, *agent default*: ROEs and forms stay unseen unless the user says otherwise).
 
 #### `Device`
 
@@ -1454,7 +1485,9 @@ new line either** (C17): the database refuses the insert as it refuses the remov
 worker's login inserts and deletes one; nobody updates one. **What a viewer sees:** a client user
 and an auditor every line of their projects; a contractor user the lines of its own contractor in
 the projects it is given, as the prime (its subs' work among them) or as the sub that did the
-work; never another prime's.
+work; never another prime's. **The rate and the amount are read from `viewer_transaction_money`**,
+by a client user, an auditor and the line's own prime's contractor user; a sub's reads its
+lines without them (the user, 2026-10-06, ADR-361; §2.2).
 
 #### `Flag`
 
@@ -1641,6 +1674,8 @@ Never relaxed to pass a test (ARCHITECTURE §5.4). ✅ = built today.
 | A transaction is on exactly one kind of ticket, a load or a haul-out with the property or pile it prices; everything it names is its own project's, the property a row of its own load, the pile of its own haul-out; its prime one of the project's primes and its operating sub placed under that prime; its # 1 or more and its figures nought or more (ADR-358) | ✅ a check, two- and three-column foreign keys, a check |
 | An invoice lock is on exactly one ticket, locked once; a ticket locked as invoiced gives up no transaction and takes none, whichever of the three kinds it is (ADR-090, 358; C17) | ✅ a check, unique keys, the delete's trigger and an insert trigger |
 | A contractor user reads only its own contractor's transactions in the projects it is given, as the prime or as the operating sub (ADR-169, 358) | ✅ row-level security |
+| A contractor user reads only its own tickets: the certifications that name its contractor, and the field events, completed records, scale receipts and photographs that hang on them; a field event with no certification found is nobody's (ADR-361) | ✅ row-level security (`guard_viewer`'s `own`) |
+| A sub's contractor user reads no rate and no amount (the user, 2026-10-06, ADR-361) | ✅ no column grant, and `viewer_transaction_money` |
 | A crew certification has no capacity and no boxes; a container has both (ADR-321) | ✅ a check; a box repeats its certification's kind, held by a foreign key; two deferred constraint triggers hold a container to its primary box |
 | A certification's prime is one of its project's primes, and each sub is placed on that project under that prime; a second tier only with a first; "replaces" names a certification of its own project, once, with a reason; a revocation has its date, reason and person; a box's shape holds its own whole-inch measurements, each 1 or more, a radius corner subtracts, a box after the primary has one label (ADR-321) | ✅ foreign keys, unique keys and checks |
 | A project's time zone is an IANA name; no time without its zone | ✅ checks, a test |
@@ -1948,7 +1983,7 @@ user approved the page on 2026-10-01 without changing one, so all sixteen stand.
 |---|---|
 | C16 | A split's collections; `CompletedHaulOut`; the transaction's pay item, rule, contract and operating sub |
 | C17 | The unlock |
-| C18 | A contractor viewer follows `Transaction.primeId` and the certification's prime |
+| C18 | A contractor viewer follows `Transaction.primeId` and the certification's prime and subs (built, ADR-358, 361) |
 | C19 | A person's void |
 | C29 | Times the database stamps stay its own; a story asserts order, not those times |
 | C36 | The firm's added fields |
