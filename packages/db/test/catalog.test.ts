@@ -97,6 +97,12 @@ const domains: Record<string, string> = {
   reconciliation_decision: 'OPERATIONS',
   transaction: 'BILLING',
   invoice_lock: 'BILLING',
+  // People's marks (ADR-363): a lock, its batch and a person's void say what is billed; a QC mark
+  // is a mark on a record; a flag's acceptance sits with its flag.
+  qc_mark: 'RECORDS',
+  invoice_batch: 'BILLING',
+  flag_acceptance: 'OPERATIONS',
+  ticket_void: 'BILLING',
   // The firm's lists: none holds a rate, a login or a ticket (ADR-302).
   ...Object.fromEntries(listTables.map((table) => [table, 'OPERATIONS'])),
 };
@@ -133,6 +139,14 @@ const triggers = [
   `CREATE TRIGGER zone_with_its_map_version BEFORE INSERT ON public.zone FOR EACH ROW EXECUTE FUNCTION zone_with_its_map_version()`,
   // A ticket locked as invoiced takes no new line (ADR-358; C17).
   `CREATE TRIGGER transaction_refuse_on_locked_ticket BEFORE INSERT ON public.transaction FOR EACH ROW EXECUTE FUNCTION transaction_refuse_on_locked_ticket()`,
+  // What a mark is on, who made it and when never change, and a lock once unlocked, or a void
+  // once lifted, is history (ADR-363).
+  `CREATE TRIGGER qc_mark_refuse_target_edit BEFORE UPDATE OF id, project_id, completed_load_id, completed_haul_out_id, field_event_id, field_event_kind, certification_id, roe_id, survey_id, incident_id, drop_off_log_id ON public.qc_mark FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
+  `CREATE TRIGGER invoice_lock_refuse_lock_edit BEFORE UPDATE OF id, project_id, completed_load_id, completed_haul_out_id, field_event_id, field_event_kind, locked_by_id, locked_at ON public.invoice_lock FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
+  `CREATE TRIGGER invoice_lock_refuse_edit_once_unlocked BEFORE UPDATE ON public.invoice_lock FOR EACH ROW WHEN ((old.unlocked_at IS NOT NULL)) EXECUTE FUNCTION refuse_edit()`,
+  `CREATE TRIGGER flag_acceptance_refuse_flag_edit BEFORE UPDATE OF id, project_id, flag_id, accepted_by_id, accepted_at ON public.flag_acceptance FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
+  `CREATE TRIGGER ticket_void_refuse_void_edit BEFORE UPDATE OF id, project_id, workflow, ticket_number, voided_by_id, voided_at ON public.ticket_void FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
+  `CREATE TRIGGER ticket_void_refuse_edit_once_lifted BEFORE UPDATE ON public.ticket_void FOR EACH ROW WHEN ((old.lifted_at IS NOT NULL)) EXECUTE FUNCTION refuse_edit()`,
   // A container has its primary box, asked when the piece of work that wrote it ends (ADR-321).
   `CREATE CONSTRAINT TRIGGER certification_has_primary_box AFTER INSERT OR UPDATE OF kind ON public.certification DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION certification_has_primary_box()`,
   `CREATE CONSTRAINT TRIGGER certification_box_keeps_primary AFTER UPDATE OF certification_id, "position" ON public.certification_box DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION certification_has_primary_box()`,
@@ -923,17 +937,56 @@ describe('the guards in the catalog', () => {
         definition:
           'CHECK ((((slot >= 1) AND (quantity >= (0)::numeric) AND (rate >= (0)::numeric) AND (amount >= (0)::numeric)) IS TRUE))',
       },
+      // People's marks (ADR-363). A lock is on one ticket, a field event only as a unit rate
+      // ticket; an unlock is who and when together; only a person locks and unlocks.
       {
         name: 'invoice_lock_target_check',
         definition:
-          'CHECK ((num_nonnulls(completed_load_id, completed_haul_out_id, field_event_id) = 1))',
+          "CHECK ((((num_nonnulls(completed_load_id, completed_haul_out_id, field_event_id) = 1) AND (num_nonnulls(field_event_id, field_event_kind) = ANY (ARRAY[0, 2])) AND ((field_event_kind IS NULL) OR (field_event_kind = 'UNIT_RATE'::field_event_kind))) IS TRUE))",
+      },
+      {
+        name: 'invoice_lock_unlock_check',
+        definition:
+          "CHECK ((((num_nonnulls(unlocked_by_id, unlocked_at) = ANY (ARRAY[0, 2])) AND ((unlock_note IS NULL) OR ((unlocked_at IS NOT NULL) AND (btrim(unlock_note) <> ''::text))) AND (locked_by_id <> '00000000-0000-7000-8000-000000000001'::uuid) AND (unlocked_by_id IS DISTINCT FROM '00000000-0000-7000-8000-000000000001'::uuid)) IS TRUE))",
+      },
+      {
+        name: 'invoice_batch_name_check',
+        definition:
+          "CHECK ((((btrim(name) <> ''::text) AND (created_by_id IS DISTINCT FROM '00000000-0000-7000-8000-000000000001'::uuid)) IS TRUE))",
+      },
+      // A QC mark is on one record, a field event only as a unit rate ticket; a person sets it.
+      {
+        name: 'qc_mark_target_check',
+        definition:
+          "CHECK ((((num_nonnulls(completed_load_id, completed_haul_out_id, field_event_id, certification_id, roe_id, survey_id, incident_id, drop_off_log_id) = 1) AND (num_nonnulls(field_event_id, field_event_kind) = ANY (ARRAY[0, 2])) AND ((field_event_kind IS NULL) OR (field_event_kind = 'UNIT_RATE'::field_event_kind))) IS TRUE))",
+      },
+      {
+        name: 'qc_mark_set_by_check',
+        definition:
+          "CHECK ((((set_by_id <> '00000000-0000-7000-8000-000000000001'::uuid) AND ((note IS NULL) OR (btrim(note) <> ''::text))) IS TRUE))",
+      },
+      {
+        name: 'flag_acceptance_accepted_by_check',
+        definition:
+          "CHECK ((((accepted_by_id <> '00000000-0000-7000-8000-000000000001'::uuid) AND ((note IS NULL) OR (btrim(note) <> ''::text))) IS TRUE))",
+      },
+      // A person's void names its ticket; an unvoid is who and when together.
+      {
+        name: 'ticket_void_ticket_check',
+        definition:
+          "CHECK ((((btrim(ticket_number) <> ''::text) AND ((note IS NULL) OR (btrim(note) <> ''::text)) AND (voided_by_id <> '00000000-0000-7000-8000-000000000001'::uuid)) IS TRUE))",
+      },
+      {
+        name: 'ticket_void_lift_check',
+        definition:
+          "CHECK ((((num_nonnulls(lifted_by_id, lifted_at) = ANY (ARRAY[0, 2])) AND ((lift_note IS NULL) OR ((lifted_at IS NOT NULL) AND (btrim(lift_note) <> ''::text))) AND (lifted_by_id IS DISTINCT FROM '00000000-0000-7000-8000-000000000001'::uuid)) IS TRUE))",
       },
       ...listChecks,
     ];
     expect(rows).toEqual(checks.sort((a, b) => (a.name < b.name ? -1 : 1)));
   });
 
-  it('every exclusion constraint, as written: size bands, number blocks and control ranges never overlap; a completed record is live once', async () => {
+  it('every exclusion constraint, as written: size bands, number blocks and control ranges never overlap; a completed record is live once; a lock and a void are in force once', async () => {
     const rows = await tested.db.rows<{ name: string; definition: string }>(
       `SELECT conname AS name, pg_get_constraintdef(oid) AS definition FROM pg_constraint
        WHERE contype = 'x' AND connamespace = 'public'::regnamespace ORDER BY conname`,
@@ -978,6 +1031,21 @@ describe('the guards in the catalog', () => {
           "EXCLUDE USING gist (project_id WITH =, series WITH =, int4range(first_number, last_number, '[]'::text) WITH &&) WHERE ((archived_at IS NULL))",
       },
       // What a block holds: its whole run, or, once reclaimed, only what its phone used (ADR-323).
+      // In force once (ADR-363): a ticket has one lock not unlocked at most, and one void not
+      // lifted.
+      {
+        name: 'invoice_lock_haul_out_locked_once',
+        definition:
+          'EXCLUDE USING btree (completed_haul_out_id WITH =) WHERE ((unlocked_at IS NULL))',
+      },
+      {
+        name: 'invoice_lock_load_locked_once',
+        definition: 'EXCLUDE USING btree (completed_load_id WITH =) WHERE ((unlocked_at IS NULL))',
+      },
+      {
+        name: 'invoice_lock_unit_rate_ticket_locked_once',
+        definition: 'EXCLUDE USING btree (field_event_id WITH =) WHERE ((unlocked_at IS NULL))',
+      },
       {
         name: 'number_blocks_never_overlap',
         definition:
@@ -987,6 +1055,11 @@ describe('the guards in the catalog', () => {
         name: 'pay_item_bands_never_overlap',
         definition:
           "EXCLUDE USING gist (project_id WITH =, payable_type_id WITH =, numrange(band_from, band_to, '[]'::text) WITH &&) WHERE (((archived_at IS NULL) AND ((band_from IS NOT NULL) OR (band_to IS NOT NULL))))",
+      },
+      {
+        name: 'ticket_void_voided_once',
+        definition:
+          'EXCLUDE USING btree (project_id WITH =, workflow WITH =, ticket_number WITH =) WHERE ((lifted_at IS NULL))',
       },
     ]);
   });

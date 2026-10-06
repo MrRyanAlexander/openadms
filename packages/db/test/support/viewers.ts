@@ -148,6 +148,24 @@ export const viewerSights: Record<string, Sight> = {
     itsFieldEvent('completed_haul_out_collection', 'collection_event_id'),
   ),
   flag: project(),
+  // People's marks on their projects' records: the QC status, a flag's acceptance, a void, a lock
+  // as invoiced without its unlock's note, and its batch (ADR-363).
+  // A contractor user: a lock on a completed record or a unit rate ticket it sees, and a batch
+  // that holds one of those, by whose name it pulls its report (ADR-228); no other mark.
+  qc_mark: project(),
+  invoice_lock: projectOrOwn(
+    `(${[
+      exists('completed_load', 'completed_load.id = invoice_lock.completed_load_id'),
+      exists('completed_haul_out', 'completed_haul_out.id = invoice_lock.completed_haul_out_id'),
+      itsFieldEvent('invoice_lock', 'field_event_id'),
+    ].join(' OR ')})`,
+    ['unlock_note'],
+  ),
+  invoice_batch: projectOrOwn(
+    exists('invoice_lock', 'invoice_lock.invoice_batch_id = invoice_batch.id'),
+  ),
+  flag_acceptance: project(),
+  ticket_void: project(),
   client: namedBy('client', 'viewer_project_setup', 'client_id', [...contact, 'notes']),
   declaration_event: namedBy('declaration_event', 'viewer_project_setup', 'declaration_event_id'),
   contractor: namedBy('contractor', 'project_contractor', 'contractor_id', contact),
@@ -201,7 +219,6 @@ export const unseenTables = [
   'number_block',
   'assignment',
   'assignment_pay_item',
-  'invoice_lock',
   // A run of the worker and what it decided for each ticket are the back office's (ADR-340).
   'reconciliation_run',
   'reconciliation_decision',

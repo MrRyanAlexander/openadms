@@ -181,9 +181,15 @@ describe('a field event', () => {
         `SELECT table_name FROM information_schema.tables
          WHERE table_schema = 'public' AND table_name LIKE '%ticket%' ORDER BY table_name`,
       ),
-      // The one table with the word is the list of numbers a load's collection carries, and its
-      // viewer view: a number as written, never a ticket's record (ADR-325).
-    ).toEqual([{ table_name: 'carried_ticket' }, { table_name: 'viewer_carried_ticket' }]);
+      // The tables with the word are the list of numbers a load's collection carries, a number
+      // as written (ADR-325), and a person's void of a number (ADR-363), each with its viewer
+      // view: never a ticket's record.
+    ).toEqual([
+      { table_name: 'carried_ticket' },
+      { table_name: 'ticket_void' },
+      { table_name: 'viewer_carried_ticket' },
+      { table_name: 'viewer_ticket_void' },
+    ]);
     expect(await valuesOf('field_event_kind')).toEqual([
       'COLLECTION',
       'DISPOSAL',

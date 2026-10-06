@@ -529,7 +529,9 @@ export const p1Priced: Story = {
       where: { ticketNumber: '101004' },
     });
     await api.$write({ actorId: luis, source: 'BACK_OFFICE' }, (tx) =>
-      tx.invoiceLock.create({ data: { completedLoadId: loadOf101004.id, lockedById: luis } }),
+      tx.invoiceLock.create({
+        data: { projectId: p1, completedLoadId: loadOf101004.id, lockedById: luis },
+      }),
     );
     const rateTo = (rate: string) =>
       api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {

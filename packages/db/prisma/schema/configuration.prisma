@@ -125,6 +125,12 @@ model Project {
   flags                       Flag[]
   reconciliationRuns          ReconciliationRun[]
   transactions                Transaction[]
+  // People's marks on its records (marks.prisma).
+  qcMarks                     QcMark[]
+  invoiceBatches              InvoiceBatch[]
+  invoiceLocks                InvoiceLock[]
+  flagAcceptances             FlagAcceptance[]
+  ticketVoids                 TicketVoid[]
   // The read-only viewers who may see it.
   viewers                     ViewerProject[]
 
@@ -1047,7 +1053,14 @@ model User {
   dropOffLogsCreated          DropOffLog[]          @relation("DropOffLogCreatedBy")
   quarantinedRecords          QuarantinedRecord[]   @relation("QuarantinedRecordMonitor")
   quarantinedRecordsResolved  QuarantinedRecord[]   @relation("QuarantinedRecordResolvedBy")
-  invoiceLocks                InvoiceLock[]
+  // The marks a person set (marks.prisma).
+  qcMarksSet                  QcMark[]
+  invoiceBatchesCreated       InvoiceBatch[]
+  invoiceLocks                InvoiceLock[]         @relation("InvoiceLockLockedBy")
+  invoiceLocksUnlocked        InvoiceLock[]         @relation("InvoiceLockUnlockedBy")
+  flagAcceptances             FlagAcceptance[]
+  ticketVoids                 TicketVoid[]          @relation("TicketVoidVoidedBy")
+  ticketVoidsLifted           TicketVoid[]          @relation("TicketVoidLiftedBy")
   reconciliationRunsRequested ReconciliationRun[]   @relation("ReconciliationRunRequestedBy")
   auditRecords                AuditRecord[]
 
@@ -1461,6 +1474,8 @@ model Certification {
   flags           Flag[]
   incidents       Incident[]
   photos          Photo[]
+  // The back office's QC status of it, a mark of its own (marks.prisma).
+  qcMarks         QcMark[]
 
   // A cert number once per project (ADR-045).
   @@unique([projectId, certNumber])
@@ -1585,6 +1600,8 @@ model Roe {
   photos             Photo[]
   // The records in quarantine because this ROE holds their number (BACKLOG 1.4.2).
   quarantinedRecords QuarantinedRecord[]
+  // The back office's QC status of it, a mark of its own (marks.prisma).
+  qcMarks            QcMark[]
 
   // An ROE number once per project (ADR-149).
   @@unique([projectId, roeNumber])
@@ -1924,11 +1941,14 @@ model Reason {
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
 
-  fieldEventsCreated     FieldEvent[] @relation("FieldEventCreatedReason")
-  fieldEventsNumberTyped FieldEvent[] @relation("FieldEventNumberTypedReason")
+  fieldEventsCreated     FieldEvent[]     @relation("FieldEventCreatedReason")
+  fieldEventsNumberTyped FieldEvent[]     @relation("FieldEventNumberTypedReason")
   surveysCreated         Survey[]
   incidentsCreated       Incident[]
   dropOffLogsCreated     DropOffLog[]
+  // Picked for a flag's acceptance and for a person's void (marks.prisma).
+  flagAcceptances        FlagAcceptance[]
+  ticketVoids            TicketVoid[]
 
   @@map("reason")
 }

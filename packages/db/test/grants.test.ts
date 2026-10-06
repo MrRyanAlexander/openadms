@@ -109,7 +109,12 @@ const tableGrants: Record<string, Record<string, string>> = {
   reconciliation_run: { adms_api: 'SELECT', adms_worker: 'INSERT SELECT UPDATE' },
   reconciliation_decision: { adms_api: 'SELECT', adms_worker: 'INSERT SELECT UPDATE' },
   transaction: { adms_api: 'SELECT', adms_worker: 'DELETE INSERT SELECT' },
-  invoice_lock: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },
+  // People's marks: each its own record, written by the API, read by the worker (ADR-245, 363).
+  qc_mark: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
+  invoice_batch: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
+  invoice_lock: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
+  flag_acceptance: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
+  ticket_void: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   audit_record: { adms_api: 'SELECT', adms_worker: 'SELECT' },
   viewer_project: { adms_readonly: 'SELECT' },
   viewer_field_event: { adms_readonly: 'SELECT' },
@@ -489,8 +494,8 @@ describe('the API (adms_api)', () => {
     ).toBe(1);
     expect(
       await db.run(
-        `INSERT INTO "invoice_lock" ("completed_load_id", "locked_by_id") VALUES ($1, $2)`,
-        [world.loads.l101001.completedLoad, world.admin],
+        `INSERT INTO "invoice_lock" ("completed_load_id", "locked_by_id", "project_id") VALUES ($1, $2, $3)`,
+        [world.loads.l101001.completedLoad, world.admin, world.p1],
       ),
     ).toBe(1);
   });
@@ -538,14 +543,16 @@ describe('the API (adms_api)', () => {
       expect((await db.refused(sql, values)).code, sql).toBe(refusedBy.grant);
     }
     await db.run(
-      `INSERT INTO "invoice_lock" ("completed_load_id", "locked_by_id") VALUES ($1, $2)`,
-      [load.completedLoad, world.admin],
+      `INSERT INTO "invoice_lock" ("completed_load_id", "locked_by_id", "project_id") VALUES ($1, $2, $3)`,
+      [load.completedLoad, world.admin, world.p1],
     );
+    // It writes the unlock on a lock's row (ADR-363); what was locked, by whom and when it may
+    // not change.
     const change = await db.refused(
       `UPDATE "invoice_lock" SET "locked_at" = now() WHERE "completed_load_id" = $1`,
       [load.completedLoad],
     );
-    expect(change.code).toBe(refusedBy.grant);
+    expect(change.code).toBe(refusedBy.trigger);
   });
 });
 
@@ -602,8 +609,8 @@ describe('the worker (adms_worker)', () => {
       [`UPDATE "user" SET "name" = 'Someone else' WHERE "id" = $1`, [world.monitor]],
       [`UPDATE "transaction" SET "amount" = 0 WHERE "id" = $1`, [world.transaction]],
       [
-        `INSERT INTO "invoice_lock" ("completed_load_id", "locked_by_id") VALUES ($1, $2)`,
-        [load.completedLoad, world.admin],
+        `INSERT INTO "invoice_lock" ("completed_load_id", "locked_by_id", "project_id") VALUES ($1, $2, $3)`,
+        [load.completedLoad, world.admin, world.p1],
       ],
       [
         `INSERT INTO "audit_record" ("table_name", "record_id", "operation", "source", "domain")

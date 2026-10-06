@@ -229,14 +229,18 @@ model FieldEvent {
 
   // What the worker concluded from it: a disposal's completed record (one: its own unique key),
   // a collection's rows (one live), and the flags about it.
-  completedLoads              CompletedLoad[]
-  completedLoadCollections    CompletedLoadCollection[]
-  completedHaulOuts           CompletedHaulOut[]
-  completedHaulOutCollections CompletedHaulOutCollection[]
-  flags                       Flag[]
-  // A unit rate ticket's priced lines, and its lock as invoiced.
-  transactions                Transaction[]
-  invoiceLock                 InvoiceLock?
+  completedLoads               CompletedLoad[]
+  completedLoadCollections     CompletedLoadCollection[]
+  completedHaulOuts            CompletedHaulOut[]
+  completedHaulOutCollections  CompletedHaulOutCollection[]
+  flags                        Flag[]
+  // A unit rate ticket's priced lines, and people's marks on it: its QC status and every lock
+  // as invoiced it has had, each held to its project and to a unit rate event (marks.prisma).
+  transactions                 Transaction[]
+  qcMarks                      QcMark[]                     @relation("QcMarkFieldEvent")
+  qcMarksAsUnitRateTicket      QcMark[]                     @relation("QcMarkUnitRateTicket")
+  invoiceLocks                 InvoiceLock[]                @relation("InvoiceLockFieldEvent")
+  invoiceLocksAsUnitRateTicket InvoiceLock[]                @relation("InvoiceLockUnitRateTicket")
 
   // One field event per project + workflow + bare number + split suffix + kind (ARCHITECTURE §5.4).
   @@unique([projectId, workflow, ticketNumber, splitSuffix, kind])
@@ -471,6 +475,8 @@ model Survey {
   photos         Photo[]
   // The flags about it (a post-work survey with no pre-work one).
   flags          Flag[]
+  // The back office's QC status of it, a mark of its own (marks.prisma).
+  qcMarks        QcMark[]
 
   // What a photograph points at, so it is one of its own project's surveys.
   @@unique([projectId, id])
@@ -544,6 +550,8 @@ model Incident {
   certification   Certification?     @relation(fields: [projectId, certificationId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
   roe             Roe?               @relation(fields: [projectId, roeId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
   photos          Photo[]
+  // The back office's QC status of it, a mark of its own (marks.prisma).
+  qcMarks         QcMark[]
 
   // What a photograph points at, so it is one of its own project's incidents.
   @@unique([projectId, id])
@@ -598,6 +606,8 @@ model DropOffLog {
   formDefinition FormDefinition? @relation(fields: [formId, formDefinitionId], references: [formId, id], onDelete: Restrict, onUpdate: Restrict)
   site           DisposalSite    @relation(fields: [projectId, siteId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
   photos         Photo[]
+  // The back office's QC status of it, a mark of its own (marks.prisma).
+  qcMarks        QcMark[]
 
   // What a photograph points at, so it is one of its own project's drop-off logs.
   @@unique([projectId, id])

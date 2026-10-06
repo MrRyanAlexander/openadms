@@ -102,8 +102,8 @@ describe('capture', () => {
     const { db, world } = tested;
     await db.as('adms_api');
     const { id: lock } = await db.one<{ id: string }>(
-      `INSERT INTO "invoice_lock" ("completed_load_id", "locked_by_id") VALUES ($1, $2) RETURNING id::text`,
-      [world.loads.l101002.completedLoad, world.admin],
+      `INSERT INTO "invoice_lock" ("completed_load_id", "locked_by_id", "project_id") VALUES ($1, $2, $3) RETURNING id::text`,
+      [world.loads.l101002.completedLoad, world.admin, world.p1],
     );
     const written = [...Object.values(world.written).flat(), lock];
     const domains = await db.rows<{ table_name: string; domains: string[] }>(

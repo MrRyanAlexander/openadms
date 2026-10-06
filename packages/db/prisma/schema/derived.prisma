@@ -170,7 +170,9 @@ model CompletedLoad {
   disposalEvent FieldEvent                @relation(fields: [projectId, disposalEventId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
   collections   CompletedLoadCollection[]
   transactions  Transaction[]
-  invoiceLock   InvoiceLock?
+  // People's marks on it: its QC status, and every lock as invoiced it has had (marks.prisma).
+  qcMarks       QcMark[]
+  invoiceLocks  InvoiceLock[]
 
   // What a collection row points at, so it is one of its own project's completed loads.
   @@unique([projectId, id])
@@ -246,7 +248,9 @@ model CompletedHaulOut {
   disposalEvent FieldEvent                   @relation(fields: [projectId, disposalEventId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
   collections   CompletedHaulOutCollection[]
   transactions  Transaction[]
-  invoiceLock   InvoiceLock?
+  // People's marks on it: its QC status, and every lock as invoiced it has had (marks.prisma).
+  qcMarks       QcMark[]
+  invoiceLocks  InvoiceLock[]
 
   // What a collection row points at, so it is one of its own project's completed haul-outs.
   @@unique([projectId, id])
@@ -294,7 +298,7 @@ model CompletedHaulOutCollection {
 // Every problem, as a plain message (spec/FLAGS.md is the catalogue; ADR-052). The worker's:
 // raised with the facts it was raised on and their hash, so "have the facts changed?" can be
 // answered on a reprocess (ADR-166); cleared when the facts no longer raise it, never deleted. A
-// reviewer's acceptance is a mark of its own (BACKLOG 1.8.x).
+// reviewer's acceptance is a mark of its own (FlagAcceptance, marks.prisma).
 model Flag {
   id                  String      @id @default(dbgenerated("uuidv7()")) @db.Uuid
   projectId           String      @map("project_id") @db.Uuid
@@ -329,7 +333,11 @@ model Flag {
   survey            Survey?            @relation(fields: [projectId, surveyId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
   payItem           PayItem?           @relation(fields: [projectId, payItemId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
   reconciliationRun ReconciliationRun? @relation(fields: [projectId, reconciliationRunId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  // A reviewer's acceptance of it, a mark of its own (marks.prisma).
+  acceptances       FlagAcceptance[]
 
+  // What an acceptance points at, so it is one of its own project's flags.
+  @@unique([projectId, id])
   // A ticket's flags, as the review queue reads them.
   @@index([projectId, workflow, ticketNumber])
   @@map("flag")
@@ -435,24 +443,4 @@ model Transaction {
   @@index([completedLoadId])
   @@index([completedHaulOutId])
   @@map("transaction")
-}
-
-// A QC Approved ticket locked as invoiced: a completed load, a completed haul-out or a unit rate
-// ticket's field event, exactly one (a check in the guard migration). Its transactions can't be
-// regenerated until it's unlocked, audited (ADR-057, 090). PROVISIONAL: the unlock kept on its
-// row and the batch are spec/DATA-MODEL.md's (BACKLOG 1.8.2).
-model InvoiceLock {
-  id                 String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  completedLoadId    String?  @unique @map("completed_load_id") @db.Uuid
-  completedHaulOutId String?  @unique @map("completed_haul_out_id") @db.Uuid
-  fieldEventId       String?  @unique @map("field_event_id") @db.Uuid
-  lockedById         String   @map("locked_by_id") @db.Uuid
-  lockedAt           DateTime @default(now()) @map("locked_at") @db.Timestamptz(3)
-
-  completedLoad    CompletedLoad?    @relation(fields: [completedLoadId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  completedHaulOut CompletedHaulOut? @relation(fields: [completedHaulOutId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  fieldEvent       FieldEvent?       @relation(fields: [fieldEventId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  lockedBy         User              @relation(fields: [lockedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
-
-  @@map("invoice_lock")
 }

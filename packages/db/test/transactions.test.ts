@@ -477,20 +477,24 @@ describe('a ticket locked as invoiced', () => {
       {
         what: 'a load',
         line: world.transaction,
-        lock: { completed_load_id: world.loads.l101001.completedLoad },
+        lock: { project_id: world.p1, completed_load_id: world.loads.l101001.completedLoad },
         again: { slot: 2 },
       },
       {
         what: 'a haul-out',
         line: await tickets.line({ ...onThePile, slot: 1 }),
-        lock: { completed_haul_out_id: haulOut.completedHaulOut },
+        lock: { project_id: world.p1, completed_haul_out_id: haulOut.completedHaulOut },
         // Another pile of the same haul-out: the lock is the ticket's, not the pile's.
         again: { ...onThePile, completed_haul_out_collection_id: haulOut.piles.b, slot: 1 },
       },
       {
         what: 'a unit rate ticket',
         line: await tickets.line({ ...onTheHanger, slot: 1 }),
-        lock: { field_event_id: unitRate.fieldEvent },
+        lock: {
+          project_id: world.p1,
+          field_event_id: unitRate.fieldEvent,
+          field_event_kind: 'UNIT_RATE',
+        },
         again: { ...onTheHanger, slot: 2 },
       },
     ];
@@ -562,10 +566,10 @@ describe('a ticket locked as invoiced', () => {
     const haulOut = await tickets.haulOut201004();
     const unitRate = await tickets.unitRate301001();
     await tickets.asTheBackOffice();
-    const by = { locked_by_id: world.admin };
+    const by = { project_id: world.p1, locked_by_id: world.admin };
     const load = { completed_load_id: world.loads.l101001.completedLoad };
     const hauled = { completed_haul_out_id: haulOut.completedHaulOut };
-    const hanger = { field_event_id: unitRate.fieldEvent };
+    const hanger = { field_event_id: unitRate.fieldEvent, field_event_kind: 'UNIT_RATE' };
     for (const [what, lock] of [
       ['no ticket', {}],
       ['a load and a haul-out', { ...load, ...hauled }],
@@ -579,8 +583,9 @@ describe('a ticket locked as invoiced', () => {
       ['a unit rate ticket', hanger],
     ] as const) {
       await tickets.add('invoice_lock', { ...lock, ...by });
+      // In force once: an exclusion among the locks not unlocked (ADR-363; `marks.test.ts`).
       expect(await tickets.refused('invoice_lock', { ...lock, ...by }), what).toBe(
-        refusedBy.unique,
+        refusedBy.exclusion,
       );
     }
   });

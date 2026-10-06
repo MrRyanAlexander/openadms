@@ -31,8 +31,8 @@ async function lock(): Promise<string> {
   await db.administer();
   await db.actor(world.admin, 'BACK_OFFICE');
   const { id } = await db.one<{ id: string }>(
-    `INSERT INTO "invoice_lock" ("completed_load_id", "locked_by_id") VALUES ($1, $2) RETURNING id::text`,
-    [world.loads.l101002.completedLoad, world.admin],
+    `INSERT INTO "invoice_lock" ("completed_load_id", "locked_by_id", "project_id") VALUES ($1, $2, $3) RETURNING id::text`,
+    [world.loads.l101002.completedLoad, world.admin, world.p1],
   );
   return id;
 }

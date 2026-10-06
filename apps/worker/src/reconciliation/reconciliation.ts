@@ -308,8 +308,9 @@ export class Reconciliation {
   }
 
   // Whether the ticket is locked as invoiced: its completed load or haul-out, found by any of
-  // its field events, or its unit rate field event (ADR-057, 090). Asked as the ticket's turn
-  // comes, never from what the run read at its start.
+  // its field events, or its unit rate field event (ADR-057, 090). Only a lock in force counts:
+  // one a person unlocked is history, and the ticket is worked again (ADR-363). Asked as the
+  // ticket's turn comes, never from what the run read at its start.
   private async lockedAsInvoiced(ticket: Ticket<WorkerFieldEvent>): Promise<boolean> {
     const ids = ticket.events.map((event) => event.id);
     const ofIts = {
@@ -319,12 +320,14 @@ export class Reconciliation {
       ],
     };
     const locks = await this.db.invoiceLock.count({
-      where:
-        ticket.workflow === 'UNIT_RATE'
+      where: {
+        unlockedAt: null,
+        ...(ticket.workflow === 'UNIT_RATE'
           ? { fieldEventId: { in: ids } }
           : ticket.workflow === 'LOAD'
             ? { completedLoad: ofIts }
-            : { completedHaulOut: ofIts },
+            : { completedHaulOut: ofIts }),
+      },
     });
     return locks > 0;
   }

@@ -70,8 +70,8 @@ describe("regenerating a load's transactions", () => {
     const { completedLoad } = world.loads.l101001;
     await db.as('adms_api');
     await db.run(
-      `INSERT INTO "invoice_lock" ("completed_load_id", "locked_by_id") VALUES ($1, $2)`,
-      [completedLoad, world.admin],
+      `INSERT INTO "invoice_lock" ("completed_load_id", "locked_by_id", "project_id") VALUES ($1, $2, $3)`,
+      [completedLoad, world.admin, world.p1],
     );
     for (const who of ['adms_worker', 'adms_owner', 'superuser'] as const) {
       if (who === 'superuser') await db.administer();
@@ -116,8 +116,8 @@ describe("regenerating a load's transactions", () => {
     await db.as('adms_api');
     await db.actor(world.admin, 'BACK_OFFICE');
     await db.run(
-      `INSERT INTO "invoice_lock" ("completed_load_id", "locked_by_id") VALUES ($1, $2)`,
-      [world.loads.l101001.completedLoad, world.admin],
+      `INSERT INTO "invoice_lock" ("completed_load_id", "locked_by_id", "project_id") VALUES ($1, $2, $3)`,
+      [world.loads.l101001.completedLoad, world.admin, world.p1],
     );
     await db.as('adms_worker');
     await db.actor(world.worker, 'SYSTEM');
