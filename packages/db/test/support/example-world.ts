@@ -4,8 +4,8 @@
 //
 // The client Bayline County and the declaration event Hurricane Delphine, DR-9001-FL, with its two
 // projects as the golden mission §1 sets them up (ADR-303):
-//   P1 "Bayline County ROW, Hurricane Delphine": loads 101001 (Coastline) and 101002 (Summit)
-//   P2 "Bayline County PPDR, Hurricane Delphine": load 102001 (Coastline)
+//   P1 "Bayline County ROW, Hurricane Delphine": loads 101001 and 101002
+//   P2 "Bayline County PPDR, Hurricane Delphine": load 102001
 // Their program types, and P1's kinds of unit rate work, are picked from the firm's lists as the
 // installer's seed wrote them.
 // Coastline Haulers LLC and Summit Debris Services are P1's two primes, each with its contract;
@@ -32,8 +32,11 @@
 // naming "Coastline, Bayline ROW 2026", "VEG-HAUL-CY-15 - ROW VEG haul 0–15 mi": Debris type EQUALS
 // Vegetative, Mileage AT MOST 15.0 → Add transaction 1, VEG-HAUL-CY-15. The rest a test writes as
 // Dana would, with `ruleLike`, `criterionLike`, `pickLike` and `actionLike`.
-// Each load is a collection and a disposal event (load call at the tower), its completed load and
-// one transaction for its prime. P1's loads picked their debris type at each end, off its load
+// Each load is a collection and a disposal event (load call at the tower) and its completed load
+// with its one collection row. One of them is priced, by the one rule the world has (ADR-358):
+// 101001, Vegetative, 80% of 65 CY, #1 VEG-HAUL-CY-15 52.0 × $7.50 = $390.00 for Coastline, on its
+// own truck (the golden mission §2). Nothing here pays C&D, and P2 has no rule, so 101002 and
+// 102001 have no line: a test that needs another writes it with `transactionLike`. P1's loads picked their debris type at each end, off its load
 // form: 101001 Vegetative, 101002 C&D (ADR-325); P2 has no form, so 102001 picked none. Nothing is locked as invoiced; a test locks what it needs.
 // P1's sites are two of the golden mission's §1, entered in full (ADR-215, 311): Marsh Road TDSR
 // (TDSR/DMS: takes loads, haul-outs leave here) and Bayline County Landfill (Final Disposal, `BCL`:
@@ -57,7 +60,6 @@ export interface Load {
   completedLoad: string;
   // The completed load's row for its one collection (an ordinary load: no suffix, the whole share).
   completedLoadCollection: string;
-  transaction: string;
 }
 
 export interface PayItems {
@@ -147,6 +149,8 @@ export interface World {
   p1: string;
   p2: string;
   loads: { l101001: Load; l101002: Load; l102001: Load };
+  // 101001's one priced line: #1, VEG-HAUL-CY-15, $390.00 for Coastline.
+  transaction: string;
   // Every row the world wrote, by table, for tests that look at its audit records.
   written: Record<string, string[]>;
 }
@@ -634,6 +638,32 @@ export function phoneInsertOf(table: string, row: Record<string, unknown>): [str
   ];
 }
 
+// A priced line as the worker writes one on P1's load 101001, by the world's rule: its load and
+// the property it prices, the rule, its pay item VEG-HAUL-CY-15 and its contract "Coastline,
+// Bayline ROW 2026", Coastline as the prime and no sub, by the CY, 52.0 × $7.50 = $390.00. The
+// world holds this line as #1, so a second one states its own # (2 here), or its own ticket
+// (`more`). For a test that writes another line, or changes one column of this one.
+export function transactionLike(
+  world: Pick<World, 'p1' | 'loads' | 'rule' | 'payItems' | 'contracts' | 'coastline'>,
+  more: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    project_id: world.p1,
+    completed_load_id: world.loads.l101001.completedLoad,
+    completed_load_collection_id: world.loads.l101001.completedLoadCollection,
+    slot: 2,
+    rule_id: world.rule.id,
+    pay_item_id: world.payItems.vegHaul15,
+    contract_id: world.contracts.coastlineP1,
+    prime_id: world.coastline,
+    unit: 'CY',
+    quantity: '52.0000',
+    rate: '7.5000',
+    amount: '390.00',
+    ...more,
+  };
+}
+
 // A row without one of its columns, for a test of what the database does when it's left out.
 export function without(row: Record<string, unknown>, column: string): Record<string, unknown> {
   return Object.fromEntries(Object.entries(row).filter(([name]) => name !== column));
@@ -1103,8 +1133,9 @@ export class ExampleWorld {
     await this.insert('user_viewer_project', given(auditor, p2));
 
     const place = { monitor, device };
-    // P1's loads are on Coastline's dump trailer `730415` and dump at Marsh Road TDSR; P2's is on
-    // its own `730416` (ADR-318) and P2 has no site.
+    // P1's 101001 is on Coastline's dump trailer `730415` and dumps at Marsh Road TDSR; its 101002
+    // is on Rivera's self-loader `730416` and dumps at Bayline County Landfill; P2's is on its own
+    // `730416` (ADR-318) and P2 has no site.
     const onP1 = {
       ...place,
       assignment: assignments.p1,
@@ -1125,6 +1156,23 @@ export class ExampleWorld {
       barcodeDamaged: await this.picked('reason', 'Barcode damaged'),
       deviceFailed: await this.picked('reason', 'Device failed'),
     };
+    const loads = {
+      l101001: await this.load(onP1, p1, '101001', 80, '52.00', picked(formDebrisTypes.vegetative)),
+      l101002: await this.load(
+        // Rivera's self-loader, dumped at the Landfill (the golden mission §2).
+        { ...onP1, certNumber: '730416', certification: certifications.c730416, site: landfill },
+        p1,
+        '101002',
+        75,
+        '36.00',
+        picked(formDebrisTypes.cd),
+      ),
+      l102001: await this.load(onP2, p2, '102001', 90, '43.20'),
+    };
+    const transaction = await this.insert(
+      'transaction',
+      transactionLike({ p1, loads, rule, payItems, contracts, coastline }, { slot: 1 }),
+    );
     return {
       admin,
       certifier,
@@ -1161,36 +1209,14 @@ export class ExampleWorld {
       ...hub,
       p1,
       p2,
-      loads: {
-        l101001: await this.load(
-          onP1,
-          p1,
-          '101001',
-          80,
-          coastline,
-          ['52.0000', '4.9000', '254.80'],
-          picked(formDebrisTypes.vegetative),
-        ),
-        l101002: await this.load(
-          onP1,
-          p1,
-          '101002',
-          75,
-          summit,
-          ['36.0000', '5.2500', '189.00'],
-          picked(formDebrisTypes.cd),
-        ),
-        l102001: await this.load(onP2, p2, '102001', 90, coastline, [
-          '43.2000',
-          '4.9000',
-          '211.68',
-        ]),
-      },
+      loads,
+      transaction,
       written: this.written,
     };
   }
 
-  // A load: its collection and disposal events, the completed load and one transaction.
+  // A load: its collection and disposal events, and the completed load with its one collection
+  // row.
   private async load(
     place: {
       monitor: string;
@@ -1203,8 +1229,8 @@ export class ExampleWorld {
     projectId: string,
     ticketNumber: string,
     loadCall: number,
-    primeId: string,
-    [quantity, rate, amount]: [string, string, string],
+    // What the load call gave, in CY.
+    volumeCy: string,
     // The debris type each monitor picked, on their own (ADR-207).
     debrisType: Record<string, unknown> = {},
   ): Promise<Load> {
@@ -1245,7 +1271,7 @@ export class ExampleWorld {
       disposal_event_id: disposal,
       quantity_source: 'LOAD_CALL',
       load_call: loadCall,
-      volume_cy: quantity,
+      volume_cy: volumeCy,
       weight_is_share: false,
       updated_at: '2026-10-12T20:00:00Z',
     });
@@ -1255,17 +1281,9 @@ export class ExampleWorld {
       collection_event_id: collection,
       split_suffix: '',
       share_fraction: '1',
-      volume_cy: quantity,
+      volume_cy: volumeCy,
     });
-    const transaction = await this.insert('transaction', {
-      completed_load_id: completedLoad,
-      slot: 1,
-      quantity,
-      rate,
-      amount,
-      prime_id: primeId,
-    });
-    return { collection, disposal, completedLoad, completedLoadCollection, transaction };
+    return { collection, disposal, completedLoad, completedLoadCollection };
   }
 
   // A value of one of the firm's lists, by the name it ships with: its id.

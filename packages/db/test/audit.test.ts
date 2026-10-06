@@ -35,7 +35,7 @@ async function auditOf(recordId: string): Promise<Audited[]> {
 }
 
 describe('capture', () => {
-  it('an insert: the whole row, every field, the actor and the source', async () => {
+  it('AC-07-104 an insert: the whole row, every field, the actor and the source', async () => {
     const { db, world } = tested;
     const [inserted] = await auditOf(world.loads.l101001.disposal);
     const row = await db.one<{ row: Record<string, unknown> }>(
@@ -59,7 +59,7 @@ describe('capture', () => {
     });
   });
 
-  it('a correction: before and after, only the changed field, with device, reason and request', async () => {
+  it('AC-07-104 a correction: before and after, only the changed field, with device, reason and request', async () => {
     const { db, world } = tested;
     const disposal = world.loads.l101001.disposal;
     await db.as('adms_api');
@@ -98,7 +98,7 @@ describe('capture', () => {
     expect(refusal.code).toBe(refusedBy.grant);
   });
 
-  it('each table in its domain', async () => {
+  it('AC-07-108 each table in its domain', async () => {
     const { db, world } = tested;
     await db.as('adms_api');
     const { id: lock } = await db.one<{ id: string }>(
@@ -150,7 +150,7 @@ describe('capture', () => {
     expect(counts).toEqual({ records: written.length, rows: written.length });
   });
 
-  it("the worker's writes, as its system actor", async () => {
+  it("AC-07-107 the worker's writes, as its system actor", async () => {
     const { db, world } = tested;
     await db.as('adms_worker');
     await db.actor(world.worker, 'SYSTEM');
@@ -167,7 +167,7 @@ describe('capture', () => {
   });
 });
 
-describe('a write with no actor or source is refused', () => {
+describe('AC-07-105 a write with no actor or source is refused', () => {
   it('no actor stated', async () => {
     const { db, world } = tested;
     await db.as('adms_api');
@@ -229,7 +229,7 @@ describe('a write with no actor or source is refused', () => {
   });
 });
 
-describe('audit_record is append-only', () => {
+describe('AC-07-106 audit_record is append-only', () => {
   it('update, delete and truncate are refused for the owner and the superuser, by its trigger', async () => {
     const { db, world } = tested;
     for (const who of ['adms_owner', 'superuser'] as const) {

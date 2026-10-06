@@ -10,6 +10,7 @@ import {
   insertOf,
   primeOn,
   projectLike,
+  transactionLike,
 } from './support/example-world.ts';
 import { eachTestRolledBack } from './support/lifecycle.ts';
 import { listTables } from './support/lists.ts';
@@ -288,14 +289,26 @@ const viewerColumns: Record<string, string[]> = {
     'worked_out_pay_item_id',
     ...captured,
   ],
+  // Every column of a priced line (ADR-358).
   transaction: [
     'id',
+    'project_id',
     'completed_load_id',
+    'completed_load_collection_id',
+    'completed_haul_out_id',
+    'completed_haul_out_collection_id',
+    'field_event_id',
     'slot',
+    'rule_id',
+    'pay_item_id',
+    'contract_id',
+    'prime_id',
+    'operating_sub_id',
+    'unit',
     'quantity',
     'rate',
     'amount',
-    'prime_id',
+    'reconciliation_run_id',
     'created_at',
   ],
 };
@@ -321,7 +334,6 @@ const functionGrants = [
   'next_monitor_number adms_api EXECUTE',
   'viewer_is_contractor adms_readonly EXECUTE',
   'viewer_sees_every_ticket adms_readonly EXECUTE',
-  'viewer_sees_load_project adms_readonly EXECUTE',
   'viewer_sees_private_citizens adms_readonly EXECUTE',
   'viewer_sees_project adms_readonly EXECUTE',
 ];
@@ -503,13 +515,9 @@ describe('the API (adms_api)', () => {
         `UPDATE "completed_load" SET "ticket_number" = '101009' WHERE "id" = $1`,
         [load.completedLoad],
       ],
-      [
-        `INSERT INTO "transaction" ("completed_load_id", "slot", "quantity", "rate", "amount", "prime_id")
-         VALUES ($1, 2, 1, 1, 1, $2)`,
-        [load.completedLoad, world.coastline],
-      ],
-      [`UPDATE "transaction" SET "amount" = 0 WHERE "id" = $1`, [load.transaction]],
-      [`DELETE FROM "transaction" WHERE "id" = $1`, [load.transaction]],
+      insertOf('transaction', transactionLike(world)),
+      [`UPDATE "transaction" SET "amount" = 0 WHERE "id" = $1`, [world.transaction]],
+      [`DELETE FROM "transaction" WHERE "id" = $1`, [world.transaction]],
       [
         `INSERT INTO "audit_record" ("table_name", "record_id", "operation", "source", "domain")
          VALUES ('project', 'x', 'INSERT', 'SYSTEM', 'OPERATIONS')`,
@@ -548,13 +556,7 @@ describe('the worker (adms_worker)', () => {
         load.completedLoad,
       ]),
     ).toBe(1);
-    expect(
-      await db.run(
-        `INSERT INTO "transaction" ("completed_load_id", "slot", "quantity", "rate", "amount", "prime_id")
-         VALUES ($1, 2, 52, 1.5, 78, $2)`,
-        [load.completedLoad, world.coastline],
-      ),
-    ).toBe(1);
+    expect(await db.run(...insertOf('transaction', transactionLike(world)))).toBe(1);
     expect(await db.rows(`SELECT 1 FROM "audit_record" LIMIT 1`)).toHaveLength(1);
   });
 
@@ -588,7 +590,7 @@ describe('the worker (adms_worker)', () => {
         [world.contracts.coastlineP1],
       ],
       [`UPDATE "user" SET "name" = 'Someone else' WHERE "id" = $1`, [world.monitor]],
-      [`UPDATE "transaction" SET "amount" = 0 WHERE "id" = $1`, [load.transaction]],
+      [`UPDATE "transaction" SET "amount" = 0 WHERE "id" = $1`, [world.transaction]],
       [
         `INSERT INTO "invoice_lock" ("completed_load_id", "locked_by_id") VALUES ($1, $2)`,
         [load.completedLoad, world.admin],

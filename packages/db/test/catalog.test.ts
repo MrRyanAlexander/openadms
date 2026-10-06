@@ -124,6 +124,8 @@ const triggers = [
   // What a phone sent, kept in quarantine, is written once (ADR-338).
   `CREATE TRIGGER quarantined_record_refuse_sent_edit BEFORE UPDATE OF id, project_id, device_id, monitor_id, payload, reason, holding_event_id, holding_roe_id, received_at ON public.quarantined_record FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
   `CREATE TRIGGER zone_with_its_map_version BEFORE INSERT ON public.zone FOR EACH ROW EXECUTE FUNCTION zone_with_its_map_version()`,
+  // A ticket locked as invoiced takes no new line (ADR-358; C17).
+  `CREATE TRIGGER transaction_refuse_on_locked_ticket BEFORE INSERT ON public.transaction FOR EACH ROW EXECUTE FUNCTION transaction_refuse_on_locked_ticket()`,
   // A container has its primary box, asked when the piece of work that wrote it ends (ADR-321).
   `CREATE CONSTRAINT TRIGGER certification_has_primary_box AFTER INSERT OR UPDATE OF kind ON public.certification DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION certification_has_primary_box()`,
   `CREATE CONSTRAINT TRIGGER certification_box_keeps_primary AFTER UPDATE OF certification_id, "position" ON public.certification_box DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION certification_has_primary_box()`,
@@ -155,7 +157,9 @@ const policies = [
   ),
   `field_event_viewer PERMISSIVE {adms_readonly} SELECT USING ${viewerQual}`,
   'project_viewer PERMISSIVE {adms_readonly} SELECT USING viewer_sees_project(id)',
-  'transaction_viewer PERMISSIVE {adms_readonly} SELECT USING (viewer_sees_load_project(completed_load_id) AND (viewer_sees_every_ticket() OR viewer_is_contractor(prime_id)))',
+  // A line carries its project; a contractor user sees its own contractor's lines, as the prime
+  // or as the sub that did the work (ADR-358).
+  'transaction_viewer PERMISSIVE {adms_readonly} SELECT USING (viewer_sees_project(project_id) AND (viewer_sees_every_ticket() OR viewer_is_contractor(prime_id) OR viewer_is_contractor(operating_sub_id)))',
 ].sort();
 
 // A shape on a map, and its bounding box, are checked alike wherever one is kept (ADR-311).
@@ -894,6 +898,29 @@ describe('the guards in the catalog', () => {
         definition:
           'CHECK (((((finished_at IS NULL) OR (finished_at >= started_at)) AND ((tickets_done IS NULL) OR (tickets_done >= 0)) AND ((tickets_failed IS NULL) OR (tickets_failed >= 0))) IS TRUE))',
       },
+      // A priced line and the invoice lock (ADR-358): a line on exactly one kind of ticket,
+      // with its property or pile; its figures nought or more; a lock on exactly one ticket.
+      {
+        name: 'transaction_ticket_check',
+        definition: [
+          'CHECK ((',
+          'CASE',
+          '    WHEN (completed_load_id IS NOT NULL) THEN ((completed_load_collection_id IS NOT NULL) AND (num_nonnulls(completed_haul_out_id, completed_haul_out_collection_id, field_event_id) = 0))',
+          '    WHEN (completed_haul_out_id IS NOT NULL) THEN ((completed_haul_out_collection_id IS NOT NULL) AND (num_nonnulls(completed_load_collection_id, field_event_id) = 0))',
+          '    ELSE ((field_event_id IS NOT NULL) AND (num_nonnulls(completed_load_collection_id, completed_haul_out_collection_id) = 0))',
+          'END IS TRUE))',
+        ].join('\n'),
+      },
+      {
+        name: 'transaction_figures_check',
+        definition:
+          'CHECK ((((slot >= 1) AND (quantity >= (0)::numeric) AND (rate >= (0)::numeric) AND (amount >= (0)::numeric)) IS TRUE))',
+      },
+      {
+        name: 'invoice_lock_target_check',
+        definition:
+          'CHECK ((num_nonnulls(completed_load_id, completed_haul_out_id, field_event_id) = 1))',
+      },
       ...listChecks,
     ];
     expect(rows).toEqual(checks.sort((a, b) => (a.name < b.name ? -1 : 1)));
@@ -1078,7 +1105,7 @@ describe('the guards in the catalog', () => {
     }
   });
 
-  it("only seven functions run with the owner's rights, and every function pins its search path", async () => {
+  it("only six functions run with the owner's rights, and every function pins its search path", async () => {
     const rows = await tested.db.rows<{ name: string; definer: boolean; config: string[] | null }>(
       `SELECT proname AS name, prosecdef AS definer, proconfig AS config FROM pg_proc
        WHERE pronamespace = 'public'::regnamespace ORDER BY proname`,
@@ -1089,7 +1116,6 @@ describe('the guards in the catalog', () => {
       // Who the viewer of a request is, read from their own record (ADR-315).
       'viewer_is_contractor',
       'viewer_sees_every_ticket',
-      'viewer_sees_load_project',
       // Whether they see private citizens by name, read there too (ADR-336).
       'viewer_sees_private_citizens',
       'viewer_sees_project',

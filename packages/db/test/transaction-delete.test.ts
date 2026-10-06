@@ -1,16 +1,19 @@
 // REQ-013: a transaction is removed only by regeneration, copied in full to audit first, and never
-// while its load is locked as invoiced (ARCHITECTURE §5.3; ADR-085, 090, 270 (6)).
+// while its ticket is locked as invoiced (ARCHITECTURE §5.3; ADR-085, 090, 270 (6), 358;
+// spec/acceptance/07-pricing-ledger-audit.md AC-07-88, 96, 97). The lock on a haul-out and on a
+// unit rate ticket, and a line added to a locked ticket, are in transactions.test.ts.
 import { describe, expect, it } from 'vitest';
 
 import { refusedBy } from './support/database.ts';
+import { insertOf, transactionLike } from './support/example-world.ts';
 import { eachTestRolledBack } from './support/lifecycle.ts';
 
 const tested = eachTestRolledBack();
 
 describe("regenerating a load's transactions", () => {
-  it('copies the whole row to audit before it goes', async () => {
+  it('AC-07-96 copies the whole row to audit before it goes', async () => {
     const { db, world } = tested;
-    const { transaction } = world.loads.l101001;
+    const { transaction } = world;
     const before = await db.one<{ row: Record<string, unknown> }>(
       `SELECT to_jsonb(t) AS row FROM "transaction" t WHERE "id" = $1`,
       [transaction],
@@ -46,9 +49,9 @@ describe("regenerating a load's transactions", () => {
     });
   });
 
-  it('is refused without an actor, and the row stays', async () => {
+  it('AC-07-96 is refused without an actor, and the row stays', async () => {
     const { db, world } = tested;
-    const { transaction } = world.loads.l101001;
+    const { transaction } = world;
     await db.as('adms_worker');
     await db.noActor();
     const refusal = await db.refused(`DELETE FROM "transaction" WHERE "id" = $1`, [transaction]);
@@ -61,9 +64,10 @@ describe("regenerating a load's transactions", () => {
     ).toHaveLength(1);
   });
 
-  it('is refused while the load is locked as invoiced, for everyone, and nothing is audited', async () => {
+  it('AC-07-97 is refused while the load is locked as invoiced, for everyone, and nothing is audited', async () => {
     const { db, world } = tested;
-    const { transaction, completedLoad } = world.loads.l101002;
+    const { transaction } = world;
+    const { completedLoad } = world.loads.l101001;
     await db.as('adms_api');
     await db.run(
       `INSERT INTO "invoice_lock" ("completed_load_id", "locked_by_id") VALUES ($1, $2)`,
@@ -78,7 +82,7 @@ describe("regenerating a load's transactions", () => {
         who,
       ).toEqual({
         code: refusedBy.trigger,
-        message: `Transaction ${transaction} can't be removed: its load is locked as invoiced. Unlock it first`,
+        message: `Transaction ${transaction} can't be removed: its ticket is locked as invoiced. Unlock it first`,
       });
     }
     await db.administer();
@@ -93,23 +97,36 @@ describe("regenerating a load's transactions", () => {
     ).toEqual([]);
   });
 
-  it("a lock on one load leaves another load's regeneration alone", async () => {
+  it("AC-07-97 a lock on one load leaves another load's regeneration alone", async () => {
     const { db, world } = tested;
+    // A line on 101002, which nothing locks.
+    await db.as('adms_worker');
+    await db.actor(world.worker, 'SYSTEM');
+    const { id: other } = await db.one<{ id: string }>(
+      ...insertOf(
+        'transaction',
+        transactionLike(world, {
+          completed_load_id: world.loads.l101002.completedLoad,
+          completed_load_collection_id: world.loads.l101002.completedLoadCollection,
+          slot: 1,
+          operating_sub_id: world.rivera,
+        }),
+      ),
+    );
     await db.as('adms_api');
+    await db.actor(world.admin, 'BACK_OFFICE');
     await db.run(
       `INSERT INTO "invoice_lock" ("completed_load_id", "locked_by_id") VALUES ($1, $2)`,
-      [world.loads.l101002.completedLoad, world.admin],
+      [world.loads.l101001.completedLoad, world.admin],
     );
     await db.as('adms_worker');
     await db.actor(world.worker, 'SYSTEM');
-    expect(
-      await db.run(`DELETE FROM "transaction" WHERE "id" = $1`, [world.loads.l101001.transaction]),
-    ).toBe(1);
+    expect(await db.run(`DELETE FROM "transaction" WHERE "id" = $1`, [other])).toBe(1);
   });
 
-  it('only the worker deletes, and nobody updates a transaction', async () => {
+  it('AC-07-88 only the worker deletes, and nobody updates a transaction', async () => {
     const { db, world } = tested;
-    const { transaction } = world.loads.l101001;
+    const { transaction } = world;
     for (const login of ['adms_api', 'adms_readonly'] as const) {
       await db.as(login);
       expect(

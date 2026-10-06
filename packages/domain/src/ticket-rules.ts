@@ -53,7 +53,14 @@ export interface ReadingSetup {
   readonly timeZone: string;
   // The project's certifications, each with the prime its truck or crew works for: a sub's is
   // the prime it works under (ADR-081, 108).
-  readonly certifications: readonly { readonly certNumber: string; readonly primeId: string }[];
+  // Its subs, where the truck or crew is a sub's: the first tier under the prime and, under that
+  // one, the second (ADR-108).
+  readonly certifications: readonly {
+    readonly certNumber: string;
+    readonly primeId: string;
+    readonly firstTierSubId?: string | null;
+    readonly secondTierSubId?: string | null;
+  }[];
   // Every zone of every version of the project's map: a ticket's zone is read by the name it
   // had on the version the ticket was placed with (ADR-141).
   readonly zones: readonly Named[];
@@ -109,6 +116,10 @@ export interface TicketRead {
   // The ticket's prime, from its certification; none where no certification of the project has
   // the cert number scanned.
   readonly primeId: string | null;
+  // Who did the work, from the same certification: the sub of the lowest tier it names, the
+  // second where there is one, else the first; none on the prime's own truck or crew (ADR-081,
+  // 358). A transaction records it beside the prime.
+  readonly operatingSubId: string | null;
   // One for each piece the rules run on; none while the ticket waits for a field event.
   readonly readings: readonly RuleReading[];
 }
@@ -119,20 +130,28 @@ const bySuffix = <E extends GroupedFieldEvent>(events: readonly E[]): E[] =>
 export class TicketReadings<E extends RuleFieldEvent = RuleFieldEvent> {
   private readonly clock: ProjectClock;
   private readonly primes: ReadonlyMap<string, string>;
+  private readonly operatingSubs: ReadonlyMap<string, string | null>;
   private readonly zoneNames: ReadonlyMap<string, string>;
 
   constructor(setup: ReadingSetup) {
     this.clock = new ProjectClock(setup.timeZone);
     this.primes = new Map(setup.certifications.map((each) => [each.certNumber, each.primeId]));
+    this.operatingSubs = new Map(
+      setup.certifications.map((each) => [
+        each.certNumber,
+        each.secondTierSubId ?? each.firstTierSubId ?? null,
+      ]),
+    );
     this.zoneNames = new Map(setup.zones.map((zone) => [zone.id, zone.name]));
   }
 
   of(ticket: Ticket<E>, attached: ReadingAttached): TicketRead {
-    if (!ticket.isWhole) return { primeId: null, readings: [] };
+    if (!ticket.isWhole) return { primeId: null, operatingSubId: null, readings: [] };
     const event = ticket.unitRate;
     if (event !== null) {
       const primeId = this.primes.get(event.certNumber) ?? null;
-      return { primeId, readings: [this.unitRate(event, primeId, attached)] };
+      const operatingSubId = this.operatingSubs.get(event.certNumber) ?? null;
+      return { primeId, operatingSubId, readings: [this.unitRate(event, primeId, attached)] };
     }
     const { disposal } = ticket;
     const collections = bySuffix(ticket.collections);
@@ -142,6 +161,7 @@ export class TicketReadings<E extends RuleFieldEvent = RuleFieldEvent> {
     const primeId = this.primes.get(quantityTaker?.certNumber ?? '') ?? null;
     return {
       primeId,
+      operatingSubId: this.operatingSubs.get(quantityTaker?.certNumber ?? '') ?? null,
       readings: collections.map((collection) => {
         const share = attached.shares.find((each) => each.collectionEventId === collection.id);
         const haulOut = ticket.workflow === 'HAUL_OUT';

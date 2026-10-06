@@ -1,15 +1,18 @@
 // REQ-014: read-only viewers see only their own projects; a contractor only its own transactions
-// (ARCHITECTURE §5.5; ADR-050, 169, 270 (7), (8), 315). The API states the viewer of each request,
-// by their id; what they may see is read from their own record and the projects they are given.
-// Unstated, a viewer sees nothing. Field events and completed loads carry no contractor yet, so a
-// contractor user sees none of them (fail closed) until they do (C18).
+// (ARCHITECTURE §5.5; ADR-050, 169, 270 (7), (8), 315, 358). The API states the viewer of each
+// request, by their id; what they may see is read from their own record and the projects they are
+// given. Unstated, a viewer sees nothing. A priced line carries its project, its prime and its
+// operating sub, so a contractor user sees its own contractor's lines (AC-02-65, 66; AC-07-90);
+// of field events and completed loads it still sees none (fail closed; BACKLOG 1.7.1a).
 import { describe, expect, it } from 'vitest';
 
 import type { GuardedDatabase } from './support/database.ts';
 import { given, insertOf, viewerLike } from './support/example-world.ts';
 import { eachTestRolledBack } from './support/lifecycle.ts';
+import { PricedTickets } from './support/priced-tickets.ts';
 
 const tested = eachTestRolledBack();
+const tickets = new PricedTickets(tested);
 
 interface Seen {
   projects: string[];
@@ -40,8 +43,8 @@ async function seen(db: GuardedDatabase, world: typeof tested.world): Promise<Se
     loads: await count('viewer_completed_load'),
     transactions: (
       await db.rows<{ id: string }>(
-        `SELECT "id"::text FROM "viewer_transaction" WHERE "id" = ANY($1) ORDER BY "amount"`,
-        [Object.values(world.loads).map((load) => load.transaction)],
+        `SELECT "id"::text FROM "viewer_transaction" WHERE "project_id" = ANY($1) ORDER BY "amount"`,
+        [projects],
       )
     ).map((row) => row.id),
   };
@@ -86,7 +89,7 @@ describe('a viewer', () => {
       projects: [world.p1],
       events: 4,
       loads: 2,
-      transactions: [world.loads.l101002.transaction, world.loads.l101001.transaction],
+      transactions: [world.transaction],
     });
   });
 
@@ -97,30 +100,89 @@ describe('a viewer', () => {
       projects: [world.p2, world.p1],
       events: 6,
       loads: 3,
-      transactions: [
-        world.loads.l101002.transaction,
-        world.loads.l102001.transaction,
-        world.loads.l101001.transaction,
-      ],
+      transactions: [world.transaction],
     });
   });
 
-  it("AC-02-65 a contractor sees only its own transactions in its projects, never another prime's", async () => {
+  // Three primes' and subs' lines on P1: Coastline's own on 101001 ($390.00, the world's),
+  // Rivera's work under Coastline on 101002 ($297.00) and Summit's on 101044 ($109.20).
+  async function threeLines(): Promise<{ coastlines: string; riveras: string; summits: string }> {
+    const { world } = tested;
+    const { haul } = await tickets.cdToTheLandfill();
+    const summit = await tickets.summits101044();
+    const riveras = await tickets.line({
+      completed_load_id: world.loads.l101002.completedLoad,
+      completed_load_collection_id: world.loads.l101002.completedLoadCollection,
+      slot: 1,
+      rule_id: haul.rule,
+      pay_item_id: haul.payItem,
+      operating_sub_id: world.rivera,
+      quantity: '36.0000',
+      rate: '8.2500',
+      amount: '297.00',
+    });
+    const summits = await tickets.line({
+      completed_load_id: summit.completedLoad,
+      completed_load_collection_id: summit.property,
+      slot: 1,
+      rule_id: summit.rule,
+      contract_id: world.contracts.summitP1,
+      prime_id: world.summit,
+      quantity: '14.0000',
+      rate: '7.8000',
+      amount: '109.20',
+    });
+    await tested.db.administer();
+    await tested.db.actor(world.admin, 'BACK_OFFICE');
+    return { coastlines: world.transaction, riveras, summits };
+  }
+
+  async function contractorUser(name: string, contractor: string): Promise<string> {
     const { db, world } = tested;
+    const { id } = await db.one<{ id: string }>(
+      ...insertOf('user', viewerLike(name, 'CONTRACTOR', contractor)),
+    );
+    await db.run(...insertOf('user_viewer_project', given(id, world.p1)));
+    return id;
+  }
+
+  it("AC-02-65, AC-07-90 a prime's contractor user sees its own lines in its projects, its sub's work among them, and never another prime's; a client user and an auditor see every line", async () => {
+    const { db, world } = tested;
+    const lines = await threeLines();
     await db.viewer(world.coastlineViewer);
     expect(await seen(db, world)).toEqual({
       projects: [world.p1],
       events: 0,
       loads: 0,
-      transactions: [world.loads.l101001.transaction],
+      transactions: [lines.riveras, lines.coastlines],
     });
-    const { id: summitViewer } = await db.one<{ id: string }>(
-      ...insertOf('user', viewerLike('Summit Debris Services viewer', 'CONTRACTOR', world.summit)),
+    await db.viewer(await contractorUser('Summit Debris Services viewer', world.summit));
+    expect((await seen(db, world)).transactions).toEqual([lines.summits]);
+    const every = [lines.summits, lines.riveras, lines.coastlines];
+    for (const viewer of [world.clientViewer, world.auditor]) {
+      await db.viewer(viewer);
+      expect((await seen(db, world)).transactions, viewer).toEqual(every);
+    }
+  });
+
+  it("AC-02-66 a sub's contractor user sees only the lines of the work it did, and none before it is given the project", async () => {
+    const { db, world } = tested;
+    const lines = await threeLines();
+    const { id: riveraViewer } = await db.one<{ id: string }>(
+      ...insertOf('user', viewerLike('Rivera Trucking viewer', 'CONTRACTOR', world.rivera)),
     );
-    await db.run(...insertOf('user_viewer_project', given(summitViewer, world.p1)));
-    await db.run(...insertOf('user_viewer_project', given(summitViewer, world.p2)));
-    await db.viewer(summitViewer);
-    expect((await seen(db, world)).transactions).toEqual([world.loads.l101002.transaction]);
+    await db.viewer(riveraViewer);
+    expect((await seen(db, world)).transactions).toEqual([]);
+    await db.run(...insertOf('user_viewer_project', given(riveraViewer, world.p1)));
+    expect(await seen(db, world)).toEqual({
+      projects: [world.p1],
+      events: 0,
+      loads: 0,
+      transactions: [lines.riveras],
+    });
+    // A contractor user of a firm on no ticket sees no line.
+    await db.viewer(await contractorUser('Harbor Staffing viewer', world.harbor));
+    expect((await seen(db, world)).transactions).toEqual([]);
   });
 
   it('AC-02-69 sees a project from when it is given until it is taken away', async () => {
@@ -165,11 +227,10 @@ describe('the services', () => {
          (SELECT count(*)::int FROM "project" WHERE "id" = ANY($1)) AS projects,
          (SELECT count(*)::int FROM "field_event" WHERE "project_id" = ANY($1)) AS events,
          (SELECT count(*)::int FROM "completed_load" WHERE "project_id" = ANY($1)) AS loads,
-         (SELECT count(*)::int FROM "transaction" t JOIN "completed_load" l ON l."id" = t."completed_load_id"
-          WHERE l."project_id" = ANY($1)) AS transactions`,
+         (SELECT count(*)::int FROM "transaction" WHERE "project_id" = ANY($1)) AS transactions`,
         [[world.p1, world.p2]],
       );
-      expect(counts).toEqual({ projects: 2, events: 6, loads: 3, transactions: 3 });
+      expect(counts).toEqual({ projects: 2, events: 6, loads: 3, transactions: 1 });
     },
   );
 });

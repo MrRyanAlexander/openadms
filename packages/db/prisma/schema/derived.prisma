@@ -209,7 +209,10 @@ model CompletedLoadCollection {
   project         Project       @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   completedLoad   CompletedLoad @relation(fields: [projectId, completedLoadId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
   collectionEvent FieldEvent    @relation(fields: [projectId, collectionEventId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  transactions    Transaction[]
 
+  // What a transaction points at, so the property it prices is a row of its own load.
+  @@unique([projectId, completedLoadId, id])
   @@index([completedLoadId])
   @@map("completed_load_collection")
 }
@@ -241,6 +244,8 @@ model CompletedHaulOut {
   project       Project                      @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   disposalEvent FieldEvent                   @relation(fields: [projectId, disposalEventId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
   collections   CompletedHaulOutCollection[]
+  transactions  Transaction[]
+  invoiceLock   InvoiceLock?
 
   // What a collection row points at, so it is one of its own project's completed haul-outs.
   @@unique([projectId, id])
@@ -277,7 +282,10 @@ model CompletedHaulOutCollection {
   project          Project          @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   completedHaulOut CompletedHaulOut @relation(fields: [projectId, completedHaulOutId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
   collectionEvent  FieldEvent       @relation(fields: [projectId, collectionEventId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  transactions     Transaction[]
 
+  // What a transaction points at, so the pile it prices is a row of its own haul-out.
+  @@unique([projectId, completedHaulOutId, id])
   @@index([completedHaulOutId])
   @@map("completed_haul_out_collection")
 }
@@ -338,10 +346,11 @@ model ReconciliationRun {
   ticketsDone   Int?                  @map("tickets_done")
   ticketsFailed Int?                  @map("tickets_failed")
 
-  project     Project                  @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  requestedBy User?                    @relation("ReconciliationRunRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  decisions   ReconciliationDecision[]
-  flags       Flag[]
+  project      Project                  @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  requestedBy  User?                    @relation("ReconciliationRunRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  decisions    ReconciliationDecision[]
+  flags        Flag[]
+  transactions Transaction[]
 
   // What a flag points at, so it is one of its own project's runs.
   @@unique([projectId, id])
@@ -366,38 +375,83 @@ model ReconciliationDecision {
 }
 
 // One priced line, the current truth: regenerated when its ticket changes, each removed row copied
-// in full to AuditRecord first (ADR-085). PROVISIONAL: a load's lines only; the pay item, rule,
-// contract, operating sub and the links to a property, a haul-out and a unit rate ticket are
-// spec/DATA-MODEL.md's (BACKLOG 1.7.1).
+// in full to AuditRecord first, the delete refused on a ticket locked as invoiced (ADR-085, 090).
+// It is on exactly one kind of ticket (a check in the guard migration): a load, with the property
+// it prices; a haul-out, with the pile it prices (ADR-295); or a unit rate ticket, its one field
+// event. Everything it names is its own project's. It keeps no mileage: that is read from its
+// property's or pile's collection row (ADR-350).
 model Transaction {
-  id              String  @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  completedLoadId String  @map("completed_load_id") @db.Uuid
-  // The rule action's # slot (Add transaction #n).
-  slot            Int
-  quantity        Decimal @db.Decimal(14, 4)
-  rate            Decimal @db.Decimal(14, 4)
-  amount          Decimal @db.Decimal(14, 2)
-  primeId         String  @map("prime_id") @db.Uuid
+  id                           String      @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  projectId                    String      @map("project_id") @db.Uuid
+  // A load's line: the load, and the property it prices (its one row on an ordinary load).
+  completedLoadId              String?     @map("completed_load_id") @db.Uuid
+  completedLoadCollectionId    String?     @map("completed_load_collection_id") @db.Uuid
+  // A haul-out's line: the haul-out, and the pile it prices.
+  completedHaulOutId           String?     @map("completed_haul_out_id") @db.Uuid
+  completedHaulOutCollectionId String?     @map("completed_haul_out_collection_id") @db.Uuid
+  // A unit rate ticket's line.
+  fieldEventId                 String?     @map("field_event_id") @db.Uuid
+  // The rule action's # slot (Add transaction #n): once per ticket and property or pile.
+  slot                         Int
+  // The rule that made it, the pay item it pays, and the rule's contract (ADR-239, 292).
+  ruleId                       String      @map("rule_id") @db.Uuid
+  payItemId                    String      @map("pay_item_id") @db.Uuid
+  contractId                   String      @map("contract_id") @db.Uuid
+  // Whose rate (ADR-081, 212): one of its project's primes.
+  primeId                      String      @map("prime_id") @db.Uuid
+  // Who did the work: a sub placed on the project under that prime; empty on the prime's own.
+  operatingSubId               String?     @map("operating_sub_id") @db.Uuid
+  // The pay item's unit, as it was.
+  unit                         BillingUnit
+  quantity                     Decimal     @db.Decimal(14, 4)
+  rate                         Decimal     @db.Decimal(14, 4)
+  amount                       Decimal     @db.Decimal(14, 2)
+  // The run that wrote it, one of its own project's.
+  reconciliationRunId          String?     @map("reconciliation_run_id") @db.Uuid
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  completedLoad CompletedLoad @relation(fields: [completedLoadId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  prime         Contractor    @relation(fields: [primeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  project                    Project                     @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  completedLoad              CompletedLoad?              @relation(fields: [projectId, completedLoadId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  completedLoadCollection    CompletedLoadCollection?    @relation(fields: [projectId, completedLoadId, completedLoadCollectionId], references: [projectId, completedLoadId, id], onDelete: Restrict, onUpdate: Restrict)
+  completedHaulOut           CompletedHaulOut?           @relation(fields: [projectId, completedHaulOutId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  completedHaulOutCollection CompletedHaulOutCollection? @relation(fields: [projectId, completedHaulOutId, completedHaulOutCollectionId], references: [projectId, completedHaulOutId, id], onDelete: Restrict, onUpdate: Restrict)
+  fieldEvent                 FieldEvent?                 @relation(fields: [projectId, fieldEventId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  rule                       Rule                        @relation(fields: [ruleId, projectId], references: [id, projectId], onDelete: Restrict, onUpdate: Restrict)
+  payItem                    PayItem                     @relation(fields: [projectId, payItemId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  contract                   Contract                    @relation(fields: [projectId, contractId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  prime                      Contractor                  @relation("TransactionPrime", fields: [primeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  primePlace                 ProjectContractor           @relation("TransactionPrimePlace", fields: [projectId, primeId], references: [projectId, asPrimeId], onDelete: Restrict, onUpdate: Restrict)
+  operatingSub               Contractor?                 @relation("TransactionOperatingSub", fields: [operatingSubId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  operatingSubPlace          ProjectContractor?          @relation("TransactionOperatingSubPlace", fields: [projectId, operatingSubId, primeId], references: [projectId, contractorId, primeId], onDelete: Restrict, onUpdate: Restrict)
+  reconciliationRun          ReconciliationRun?          @relation(fields: [projectId, reconciliationRunId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
 
+  // A # once per ticket and property or pile (ADR-118): #1 on -A beside #1 on -B are two lines.
+  @@unique([completedLoadCollectionId, slot])
+  @@unique([completedHaulOutCollectionId, slot])
+  @@unique([fieldEventId, slot])
+  @@index([projectId])
   @@index([completedLoadId])
+  @@index([completedHaulOutId])
   @@map("transaction")
 }
 
-// A QC Approved load locked as invoiced; its transactions can't be regenerated until it's unlocked,
-// audited (ADR-057, 090).
+// A QC Approved ticket locked as invoiced: a completed load, a completed haul-out or a unit rate
+// ticket's field event, exactly one (a check in the guard migration). Its transactions can't be
+// regenerated until it's unlocked, audited (ADR-057, 090). PROVISIONAL: the unlock kept on its
+// row and the batch are spec/DATA-MODEL.md's (BACKLOG 1.8.2).
 model InvoiceLock {
-  id              String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  completedLoadId String   @unique @map("completed_load_id") @db.Uuid
-  lockedById      String   @map("locked_by_id") @db.Uuid
-  lockedAt        DateTime @default(now()) @map("locked_at") @db.Timestamptz(3)
+  id                 String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  completedLoadId    String?  @unique @map("completed_load_id") @db.Uuid
+  completedHaulOutId String?  @unique @map("completed_haul_out_id") @db.Uuid
+  fieldEventId       String?  @unique @map("field_event_id") @db.Uuid
+  lockedById         String   @map("locked_by_id") @db.Uuid
+  lockedAt           DateTime @default(now()) @map("locked_at") @db.Timestamptz(3)
 
-  completedLoad CompletedLoad @relation(fields: [completedLoadId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  lockedBy      User          @relation(fields: [lockedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  completedLoad    CompletedLoad?    @relation(fields: [completedLoadId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  completedHaulOut CompletedHaulOut? @relation(fields: [completedHaulOutId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  fieldEvent       FieldEvent?       @relation(fields: [fieldEventId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  lockedBy         User              @relation(fields: [lockedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
 
   @@map("invoice_lock")
 }

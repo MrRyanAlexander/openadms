@@ -124,6 +124,7 @@ model Project {
   completedHaulOutCollections CompletedHaulOutCollection[]
   flags                       Flag[]
   reconciliationRuns          ReconciliationRun[]
+  transactions                Transaction[]
   // The read-only viewers who may see it.
   viewers                     ViewerProject[]
 
@@ -197,7 +198,9 @@ model Contractor {
   certificationsAsPrime         Certification[]     @relation("CertificationPrime")
   certificationsAsFirstTierSub  Certification[]     @relation("CertificationFirstTierSub")
   certificationsAsSecondTierSub Certification[]     @relation("CertificationSecondTierSub")
-  transactions                  Transaction[]
+  // The priced lines at its rate, and the ones whose work it did as a sub (ADR-081, 212).
+  transactionsAsPrime           Transaction[]       @relation("TransactionPrime")
+  transactionsAsOperatingSub    Transaction[]       @relation("TransactionOperatingSub")
 
   @@map("contractor")
 }
@@ -246,6 +249,9 @@ model ProjectContractor {
   certificationsAsSecondTierSub Certification[]     @relation("CertificationSecondTierPlace")
   // The incidents that name this contractor as the one involved (ADR-328).
   incidents                     Incident[]
+  // The priced lines held to this place: a prime's, and an operating sub's under its prime.
+  transactionsAsPrime           Transaction[]       @relation("TransactionPrimePlace")
+  transactionsAsOperatingSub    Transaction[]       @relation("TransactionOperatingSubPlace")
 
   // One place on a project: a sub is never shared by two primes.
   @@unique([projectId, contractorId])
@@ -273,10 +279,12 @@ model Contract {
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
 
-  project    Project           @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  prime      Contractor        @relation(fields: [primeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  primePlace ProjectContractor @relation(fields: [projectId, primeId], references: [projectId, asPrimeId], onDelete: Restrict, onUpdate: Restrict)
-  rules      Rule[]
+  project      Project           @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  prime        Contractor        @relation(fields: [primeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  primePlace   ProjectContractor @relation(fields: [projectId, primeId], references: [projectId, asPrimeId], onDelete: Restrict, onUpdate: Restrict)
+  rules        Rule[]
+  // The priced lines made under it.
+  transactions Transaction[]
 
   // So a rule names only one of its own project's contracts (its relation's target).
   @@unique([projectId, id])
@@ -690,6 +698,8 @@ model PayItem {
   // The unit rate events the worker worked it out for, and the flags about a line of it.
   fieldEventsWorkedOut FieldEvent[]             @relation("FieldEventWorkedOutPayItem")
   flags                Flag[]
+  // The priced lines that pay it.
+  transactions         Transaction[]
 
   // So a rate, and a rule's pay item, can only be its own project's pay item (its relation's target).
   @@unique([projectId, id])
@@ -826,11 +836,13 @@ model Rule {
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
 
-  form        Form            @relation(fields: [projectId, formId, documentType], references: [projectId, id, documentType], onDelete: Restrict, onUpdate: Restrict)
-  contract    Contract?       @relation(fields: [projectId, contractId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
-  fromPayItem PayItem?        @relation(fields: [projectId, fromPayItemId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
-  criteria    RuleCriterion[]
-  actions     RuleAction[]
+  form         Form            @relation(fields: [projectId, formId, documentType], references: [projectId, id, documentType], onDelete: Restrict, onUpdate: Restrict)
+  contract     Contract?       @relation(fields: [projectId, contractId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  fromPayItem  PayItem?        @relation(fields: [projectId, fromPayItemId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  criteria     RuleCriterion[]
+  actions      RuleAction[]
+  // The priced lines it made.
+  transactions Transaction[]
 
   // What a criterion and an action point at, so each repeats its rule's own project and form.
   @@unique([id, projectId, formId])

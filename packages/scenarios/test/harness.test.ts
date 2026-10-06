@@ -672,7 +672,9 @@ describe('a simulated phone captures badge first, number last', () => {
     expect(() =>
       phone.complete(phone.begin('LOAD', 'DISPOSAL', '730415'), {
         number: scanned('101042'),
-        sameScaleReceiptAs: second.id.replace(/.$/, '0'),
+        // An id that is no record's: the second's with its last digit changed (to '0', or to
+        // '1' when it already ends in '0').
+        sameScaleReceiptAs: second.id.replace(/.$/, (last) => (last === '0' ? '1' : '0')),
       }),
     ).toThrow('recorded no scale receipt');
   });

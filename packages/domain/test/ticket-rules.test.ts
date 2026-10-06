@@ -81,11 +81,18 @@ const readings = new TicketReadings({
   certifications: [
     { certNumber: '730415', primeId: coastlinePrime },
     // Rivera Trucking's self-loader: a sub under Coastline.
-    { certNumber: '730416', primeId: coastlinePrime },
+    { certNumber: '730416', primeId: coastlinePrime, firstTierSubId: 'contractor-rivera' },
     { certNumber: '730417', primeId: coastlinePrime },
     { certNumber: '730418', primeId: coastlinePrime },
     { certNumber: '730419', primeId: coastlinePrime },
     { certNumber: '88120', primeId: summitPrime },
+    // Tidewater Hauling's truck: a tier 2 sub under Rivera, under Coastline (AC-03-12).
+    {
+      certNumber: '730423',
+      primeId: coastlinePrime,
+      firstTierSubId: 'contractor-rivera',
+      secondTierSubId: 'contractor-tidewater',
+    },
   ],
   zones: [named('zone-1', 'Zone 1'), named('zone-2', 'Zone 2'), named('zone-3', 'Zone 3')],
 });
@@ -492,6 +499,30 @@ describe('the rules that may run on a ticket', () => {
     expect(hauledOut.primeId).toBe(coastlinePrime);
   });
 
+  it('AC-07-73 who did the work is the lowest tier of sub the certification names: none on the prime’s own truck, Rivera on its own, Tidewater on a second-tier truck; with two cert numbers, the one that gave the prime', () => {
+    expect([l101001.primeId, l101001.operatingSubId]).toEqual([coastlinePrime, null]);
+    expect([l101002.primeId, l101002.operatingSubId]).toEqual([
+      coastlinePrime,
+      'contractor-rivera',
+    ]);
+    const secondTier = load('101047', { certNumber: '730423' });
+    expect([secondTier.primeId, secondTier.operatingSubId]).toEqual([
+      coastlinePrime,
+      'contractor-tidewater',
+    ]);
+    // Collected on Rivera's truck, dumped under Summit's badge: the disposal's, as the prime is.
+    const mismatched = load('101046', { certNumber: '730416', disposalCertNumber: '88120' });
+    expect([mismatched.primeId, mismatched.operatingSubId]).toEqual([summitPrime, null]);
+    // A haul-out's is its loading end's.
+    const hauledOut = haulOut('201005', { certNumber: '730416', disposalCertNumber: '88120' });
+    expect([hauledOut.primeId, hauledOut.operatingSubId]).toEqual([
+      coastlinePrime,
+      'contractor-rivera',
+    ]);
+    expect(u301001.operatingSubId).toBeNull();
+    expect(load('101050', { certNumber: '999999' }).operatingSubId).toBeNull();
+  });
+
   it('AC-07-09 a unit rate ticket’s prime is its crew’s certification’s', () => {
     expect(u301001.primeId).toBe(coastlinePrime);
     expect(idsOf(rules.passing('UNIT_RATE', u301001.primeId, only(u301001)))).toEqual([
@@ -505,7 +536,7 @@ describe('the rules that may run on a ticket', () => {
       { zones: [], workedOut: null, shares: [] },
     );
 
-    expect(waiting).toEqual({ primeId: null, readings: [] });
+    expect(waiting).toEqual({ primeId: null, operatingSubId: null, readings: [] });
   });
 });
 

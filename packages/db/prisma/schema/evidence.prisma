@@ -234,6 +234,9 @@ model FieldEvent {
   completedHaulOuts           CompletedHaulOut[]
   completedHaulOutCollections CompletedHaulOutCollection[]
   flags                       Flag[]
+  // A unit rate ticket's priced lines, and its lock as invoiced.
+  transactions                Transaction[]
+  invoiceLock                 InvoiceLock?
 
   // One field event per project + workflow + bare number + split suffix + kind (ARCHITECTURE §5.4).
   @@unique([projectId, workflow, ticketNumber, splitSuffix, kind])
