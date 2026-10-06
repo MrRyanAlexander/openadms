@@ -1,0 +1,205 @@
+# Acceptance scenarios — Part 8, Review and correct
+
+**Draft**: agent-written (ADR-362); the user approves.
+
+← [Acceptance scenarios](README.md) · The part page: [Part 8 — Review & correct](../parts/08-review-and-corrections.md)
+
+> Each scenario restates a recorded rule; **From** names it. Values are the example world's
+> (`spec/CONVENTIONS.md` §6), the golden mission's (`spec/golden/MISSION.md` §2…§4, its rates
+> included) and `adms-exceptions`' Scenarios A, B and D. A flag's message is `spec/FLAGS.md`'s, word
+> for word. How to read the columns: [README](README.md).
+>
+> **This file is about what people do to a ticket after the worker has looked at it**: correct a
+> captured field, renumber real work, resolve a quarantined record, void what never happened,
+> unvoid, accept a flag that is right as it is, and set a QC mark. What the worker then concludes
+> (the flags, the status, the completed record, the lines) is Parts 6 and 7's, and each scenario
+> here names the one it finishes (AC-06-…, AC-07-…). Locking as invoiced, batches, unlocking and
+> closeout are Part 9's file (`09-invoice-deliver-closeout.md`).
+
+**Where each scenario is proven.**
+
+| Mark in **Proven at** | Meaning |
+|---|---|
+| **database (1.8.2)** | `packages/db/test`: people's marks (`QcMark`, `FlagAcceptance`, `TicketVoid`), their constraints, grants and audit |
+| **story (1.8.3)** | The scenario harness: a correction, a renumber, a quarantined record resolved, each through `apps/api`'s service and then the worker's run |
+| **story (1.8.4)** | The same, for a void, an unvoid and an accepted flag |
+| **story (1.8.5)** | The same, for QC marks |
+| **built: AC-…** | An earlier task built the guard and that scenario's test proves it; restated here because Part 8 promises it |
+| **story (1.9.1)** | The golden mission, whole |
+| **API (Phase 2)** · **field app (Phase 3)** · **back office (Phase 4)** | The rule is recorded; nothing in Phase 1 builds that layer |
+
+**Throughout:** the reviewer is **Luis Ortega**, a manager/analyst whom Dana granted *correct*,
+*renumber*, *void*, *accept flags*, *QC* and *lock as invoiced* (AC-02-10); Dana Reyes is the
+admin. Every fix is one of three things: a field event corrected in place, a ticket voided, or a
+flag accepted; then the worker draws its conclusions again (`adms-exceptions`, head). **No person
+writes a completed load, a flag, a status or a transaction** (invariants 4, 21). A ticket in
+review keeps billing wherever an amount can be computed (ADR-060). Reasons are picked from the
+firm's list (ADR-173).
+
+---
+
+## A. The one review queue (Part 8, "One review queue")
+
+| ID | Scenario | From | Proven at | Passing |
+|---|---|---|---|---|
+| AC-08-01 | **Given** a project's tickets, **then** one review queue holds three kinds of thing and nothing else: **flagged tickets**, each with its plain message; **quarantined records**, each beside the record that holds its number; and **pending tickets**, listed as pending, never flagged for waiting and never expired, each with the flags of the field event it has | ADR-022, 053, 228, 244; Part 8 ("One review queue") · REQ-121 | what it holds, read from the records: story (1.9.1); the screen: back office (Phase 4) | |
+| AC-08-02 | **Given** P1 on Wednesday 14 October, after the Marsh Road tower's phone has synced and before anyone reviews, **then** the queue holds: `101003`, "Ticket 101003: load call 96%. Flagged for review."; `301005`, "Ticket 301005: not an eligible stump (20 in, under 24 in). Flagged for review."; the pending collection `101006`, with no flag; the pending disposal `101060`, with "Ticket 101060: typed ticket number (Barcode damaged). Flagged for review."; and no quarantined record. `301003`, the duplicate hanger, is `COMPLETED` and not in it: Luis finds it at QC | golden mission §2; AC-06-154; `spec/FLAGS.md` `LOAD_CALL_HIGH`, `STUMP_UNDER_24`, `TYPED_TICKET_NUMBER` · REQ-143 | story (1.9.1) | |
+| AC-08-03 | **Given** the queue, **then** its flags are grouped by cause, a reviewer can accept, fix or QC many at once, and photographs are reviewed inside the ticket, not on a screen of their own | ADR-224, 228; Part 8 ("One review queue") · REQ-405 | back office (Phase 4) | |
+| AC-08-04 | **Given** Luis opens ticket `101006`, **then** he reads every field event on it and beside it: the cert numbers, the collection's end and the disposal's start, the disposal's GPS and site, the address, the debris types, and the photographs of the pile and the empty bed. The back office sees everything about a ticket | ADR-224; Part 8 (step 1); `adms-exceptions` ("Resolving a quarantine": the evidence table) | back office (Phase 4) | |
+
+## B. Who may act, and what no person writes
+
+| ID | Scenario | From | Proven at | Passing |
+|---|---|---|---|---|
+| AC-08-05 | **Given** the reviewer's actions (correct, renumber, void, accept a flag, set a QC mark), **then** each is open to an admin, and to a manager/analyst only with that action's own grant: Luis, granted all five, may do each; a manager/analyst without *void* can't void | ADR-039, 050, 051; Part 8 ("Who"); AC-02-10, 11, 12; KD-25 · REQ-105g | the grants: built, AC-02-10, 11; the refusal: point 1 below (Milestone 1.8 or API, Phase 2) | |
+| AC-08-06 | **Given** Ana finished collection `101001` at 08:40 and has not ended her shift, **then** she may reopen it on her phone; the change travels as the phone's edit log, is audited under Ana, and reprocesses the ticket. **Given** she has ended her shift, **then** she never edits it again: only a permitted person in the back office does | ADR-051, 240 (the reopen an agent default); `adms-exceptions` ("Who may change a field event, and when") · REQ-105g | API (Phase 2); field app (Phase 3) | |
+| AC-08-07 | **Given** any action of this file, **then** the database audits it under **the person who did it**, with the source back office and the reason where one was given, never under the system actor; an action that states no actor is refused and nothing changes | ADR-051, 097; ARCHITECTURE §5.3; invariant 3 · REQ-011, 105g | the capture and the refusal: built, AC-07-104, 105; each action: stories (1.8.3…1.8.5) | |
+| AC-08-08 | **Given** the back office's login, **then** it can write no completed load or haul-out, no collection row, no flag, no run or decision and no transaction, and it can't set a field event's status: a reviewer changes field events and sets marks, and the worker concludes the rest | ADR-097, 270, 340; ARCHITECTURE §5.1; invariants 4, 21 · REQ-113 | built: AC-06-144, AC-07-88 | |
+| AC-08-09 | **Given** a QC mark, a flag's acceptance and a person's void, **then** each is its own record, written by the back office's login and keyed to what it marks (the completed load, the flag, the ticket's project, workflow and number), so no derived row is ever updated by a person and a reprocess that draws the completed load again loses none of them; the worker reads them and writes none | ADR-245 (agent default, approved with `spec/DATA-MODEL.md`, ADR-289); `spec/DATA-MODEL.md` §6; `adms-data-model` §3.1b; BACKLOG C19 · REQ-105m | database (1.8.2) | |
+
+## C. Correcting a captured field (Part 8, steps 3 and 4)
+
+| ID | Scenario | From | Proven at | Passing |
+|---|---|---|---|---|
+| AC-08-10 | **Given** `101001`, `COMPLETED` with its line of $390.00, **when** Luis corrects its disposal's load call from 80% to 70%, **then** the field event is changed in place (the same record), the audit log keeps 80% → 70% under Luis, and the ticket reprocesses: its completed load is updated in place to 45.5 CY, and its line is regenerated, 45.5 × $7.50 = **$341.25**, the $390.00 row copied in full to the audit log first | ADR-039, 051, 085, 086; Part 8 (steps 3, 4); AC-07-93, 94 · REQ-105g, 105l, 120c | story (1.8.3) | |
+| AC-08-11 | **Given** any captured field of a field event (a time, either GPS end, the address, the debris type, the cert number, the site, the load call, an estimate, a count or a measurement, the number itself), **then** a permitted person may correct it the same way: in place, audited with the value before, and the ticket reprocessed. Nothing captured is frozen | ADR-039, 051 (superseding ADR-020, 025); invariant 5; AC-04-30 · REQ-105g, 120c | the grant and the audit: built, AC-04-30; the service, a GPS end, a time and a site each corrected: story (1.8.3) | |
+| AC-08-12 | **Given** a correction, **then** it makes no replacement record and no "correction event": the project holds the same number of field events as before, the corrected one keeps its id, and its history is the record with its audit trail | ADR-051, 236; `adms-exceptions` ("Corrections: in place, by permission") · REQ-105g | story (1.8.3) | |
+| AC-08-13 | **Given** `101003`, `MANUAL_REVIEW` for "Ticket 101003: load call 96%. Flagged for review.", **when** Luis corrects the call to 90%, **then** on the next run the flag is cleared and, with no other flag open, the ticket is `COMPLETED`, billing 65 × 90% = 58.5 CY × $7.50 = **$438.75**. The cleared flag stays in the ticket's history | ADR-086, 166; `spec/FLAGS.md` §1, §4; AC-06-141 · REQ-120c | story (1.8.3) | |
+| AC-08-14 | **Given** `101008`, flagged "Ticket 101008: debris type mismatch (collection Vegetative, disposal C&D). Flagged for review.", **when** Luis corrects the disposal's debris type to Vegetative, **then** the flag is cleared and the ticket is `COMPLETED`. Nobody and nothing copied one field event's value onto the other: a person corrected the one that was wrong | ADR-019, 051; `spec/FLAGS.md` `DEBRIS_TYPE_MISMATCH`, §4; `adms-exceptions` §4.3 ("The two events disagree") | story (1.8.3) | |
+| AC-08-15 | **Given** `101008`, flagged "Ticket 101008: truck number doesn't match (collection 730415, disposal 730416). Flagged for review.", **when** Luis corrects the disposal's cert number to `730415`, **then** the flag is cleared and the ticket is priced from `730415`, the certification on the field event that took the quantity | ADR-019, 033; `spec/FLAGS.md` `CERT_NUMBER_MISMATCH`, §5 (1); AC-07-08 | story (1.8.3) | |
+| AC-08-16 | **Given** haul-out `201002`, flagged "Ticket 201002: a haul-out dumped at Marsh Road TDSR, a TDSR. Flagged for review; not priced.", **when** Luis corrects its disposal's site to Bayline County Landfill, **then** the flag is cleared and the rules run on it | ADR-226; `spec/FLAGS.md` `HAUL_OUT_DUMPED_AT_TDSR`, §4; AC-06-69; AC-07-11 | story (1.8.3) | |
+| AC-08-17 | **Given** the pending collection `101006`, whose disposal hasn't been found, **when** Luis corrects its address, **then** the change is saved and audited and the ticket simply goes on waiting: it is still `PENDING`, with no completed load and no lines | ADR-053, 086; `adms-exceptions` ("a correction to one field event of an unpartnered ticket simply waits with it") | story (1.8.3) | |
+| AC-08-18 | **Given** P2's split load `102001` (`-A` estimated 12 CY, `-B` 18 CY; 36.0 CY in all), **when** Luis corrects `-A`'s estimate to 18 CY, **then** the estimate is changed in place, audited, and the shares are worked out again: 18 ÷ 36 each, 18.0 CY and 18.0 CY; `-A` #1 `VEG-HAUL-CY` 18.0 × $9.00 = **$162.00**, `-B` #1 18.0 × $9.00 = **$162.00**, still $324.00 in all. The $129.60 and $194.40 rows are copied to the audit log first. The estimate is an observation a person may correct; the share is always computed | ADR-051, 055, 162; `adms-exceptions` Scenario D ("The estimate is an observation") | story (1.8.3) | |
+| AC-08-19 | **Given** P2's ROE `R-0008`, entered with a scope of C&D only, so that a Vegetative collection on it is flagged "Ticket 102005: outside the scope of ROE R-0008. Flagged for review.", **when** Luis adds Vegetative to the ROE's scope, **then** the change is audited under Luis and on the next run that flag is cleared. A survey, an incident and a drop-off log are corrected the same way: in place, by permission, the value before kept | ADR-039, 051, 149; `spec/FLAGS.md` `ROE_OUT_OF_SCOPE`, §4 ("The setup is wrong"); KD-25 · REQ-105g, 107 | story (1.8.3) | |
+| AC-08-20 | **Given** hanger ticket `301001`, whose pay item requires photographs, **when** Luis removes its only photograph from the record, **then** the ticket reprocesses and is flagged "Ticket 301001: no photos. Flagged for review."; **when** he puts it back, **then** the flag is cleared. The photograph's row, file and fingerprints were there all the while | ADR-337, 345 (the user: a removed photograph counts for nothing a record must have); `spec/FLAGS.md` `PHOTOS_MISSING`; AC-04-102 | story (1.8.3) | |
+| AC-08-21 | **Given** the Landfill tower's phone failed, **when** Luis creates Tariq's disposal on `101029` in the back office with a reason, **then** it is a field event like any other (marked with Luis and the reason, AC-04-19), it pairs with its collection on the next run, the ticket is flagged "Ticket 101029: record created in the back office by Luis Ortega (Phone failed). Flagged for review." and it bills. Paper is never accepted as the record | ADR-156, 173; Part 8 (step 9); `spec/FLAGS.md` `BACK_OFFICE_RECORD`; AC-04-19; AC-06-64 | the record: built, AC-04-19; the flag: built, AC-06-64; the service and the run: story (1.8.3; point 9 below) | |
+
+## D. Renumbering real work, and resolving a quarantined record (`adms-exceptions` §4.3a)
+
+| ID | Scenario | From | Proven at | Passing |
+|---|---|---|---|---|
+| AC-08-22 | **Given** the golden mission's Wednesday: Ana's collection `101006` (cert `730416`, Vegetative, Tuesday 11:30) and Kim's disposal typed `101060` (the same truck, called 60%), each `PENDING`, **when** Luis matches cert, times and photos and renumbers the disposal to `101006`, **then** the field event keeps its id, the audit log keeps `101060` → `101006` under Luis, and on the next run `101006` is whole: one completed load, 48 × 60% = 28.8 CY, #1 `VEG-HAUL-CY-15` 28.8 × $7.50 = **$216.00**, `MANUAL_REVIEW` for "Ticket 101006: typed ticket number (Barcode damaged). Flagged for review." | ADR-028, 051; golden mission §2 (101006), §4 (the audit excerpt); `adms-exceptions` ("Correct, void or accept"); AC-06-10 · REQ-120c | story (1.8.3); story (1.9.1) | |
+| AC-08-23 | **Given** that renumber, **then** nothing is left under `101060`: no ticket of that number is listed as pending, and the flag raised on it is cleared | ADR-352 ("a flag on a number no field event is under any longer is cleared"); golden mission §2 | story (1.8.3) | |
+| AC-08-24 | **Given** that renumber, **then** Luis changed one thing, the disposal's number. He named no partner and wrote no completed load: the worker paired the two field events by their number in its own run, under the system actor | ADR-019, 028; invariant 4; `adms-exceptions` ("Lets the worker decide again") · REQ-113, 120 | story (1.8.3) | |
+| AC-08-25 | **Given** `adms-exceptions`' Scenario A: Kim's 11:40 disposal, scanned `101020` a second time, waits in quarantine beside the 10:22 disposal that holds the number, and collection `101021` is `PENDING`, **when** Luis renumbers the quarantined record to `101021`, **then** it becomes a field event **that keeps its phone-made id**, its photographs now belong to that field event, and `101021` pairs on the next run. `101020`, already `COMPLETED` with its 10:22 disposal, is not touched | ADR-022, 051, 292 (5); `adms-exceptions` Scenario A, "Resolving a quarantine"; `spec/DATA-MODEL.md` §4.5 (`QuarantinedRecord`); AC-05-28 · REQ-120c | story (1.8.3) | |
+| AC-08-26 | **Given** that resolution, **then** the quarantined record is kept and marked resolved, by Luis, when, and how; what the phone sent is still there exactly as sent; and the audit log names Luis, never the system. A quarantined record is never dropped | ADR-022, 338; `adms-exceptions` ("it is not a wastebasket"); AC-05-23, 28 · REQ-120c | story (1.8.3) | |
+| AC-08-27 | **Given** disposal `101020` (10:22) holds its number, **when** someone renumbers another disposal onto `101020`, **then** the database's own key refuses it and nothing changes: one field event of each kind per project, workflow, bare number and split suffix, by any path, a reviewer's included | ADR-062, 236; ARCHITECTURE §5.4; invariant 17; AC-04-16; AC-05-26 | story (1.8.3) | |
+| AC-08-28 | **Given** `101005`, `COMPLETED` with its line of $341.25, **when** its disposal is renumbered by mistake to `101050`, **then** on the next run `101005` is `PENDING` again, its completed load is marked dissolved and never deleted, and its line is removed, copied in full to the audit log first. **When** the disposal is renumbered back, **then** the ticket is whole again: the same completed load with its mark cleared, and 45.5 × $7.50 = **$341.25** written again | ADR-085, 086; `spec/DATA-MODEL.md` §5 (`dissolvedAt`); AC-06-148; AC-07 (point 16, ADR-359) | the worker's half: built, AC-06-148; the renumber as a reviewer's action: story (1.8.3) | |
+| AC-08-29 | **Given** P2's split whose collections came in as `102001-A` and `102001-C`, flagged "Ticket 102001: collections -A and -C, no -B. Flagged for review.", **when** Luis corrects the second one's suffix to `-B`, **then** the flag is cleared. A split's collection is never renumbered off its base number | ADR-033, 173; `spec/FLAGS.md` `SPLIT_SUFFIX_GAP`; `adms-exceptions` ("Other duplicate and orphan shapes"); AC-06-32 | story (1.8.3) | |
+| AC-08-30 | **Given** `adms-exceptions`' Scenario B: `101031` is a phantom, a second number for the pile `101030` was dumped under, **when** someone renumbers it anyway, **then** nothing refuses it: the renumber is saved and audited under that person. Nothing technically stops a wrong choice; the audit trail is the backstop | ADR-028, 051; Part 8 (the last line of "Step by step"); `spec/FLAGS.md` §4 | story (1.8.3) | |
+
+## E. Voiding and unvoiding (Part 8, step 6)
+
+| ID | Scenario | From | Proven at | Passing |
+|---|---|---|---|---|
+| AC-08-31 | **Given** `301003`, `COMPLETED` and priced #1 `HNG-RMV-EA` 1 × $68.00, the same tree as `301001`, **when** Luis voids it ("Duplicate of 301001"), **then** the ticket is `VOID`; its $68.00 line is copied in full to the audit log and removed, by the system; the void is audited under Luis, `COMPLETED` → `VOID`; and the ticket bills nothing. Renumbering it would have billed the tree twice | ADR-028, 060, 085; golden mission §2 (301003), §4; AC-07-95 · REQ-105p, 120g, 121 | story (1.8.4); story (1.9.1) | |
+| AC-08-32 | **Given** `301005`, `MANUAL_REVIEW` for "Ticket 301005: not an eligible stump (20 in, under 24 in). Flagged for review.", with no pay item and no line, **when** Luis voids it ("Under 24 in; goes out as vegetative debris"), **then** it is `VOID` and bills nothing. The worker never voided it by itself | ADR-060, 187, 189; golden mission §2 (301005); AC-06-103 · REQ-105p | story (1.8.4); story (1.9.1) | |
+| AC-08-33 | **Given** a ticket Luis means to void, **when** he gives no reason, **then** nothing is voided: a person's void always carries a reason picked from the firm's list (shipped for voiding: Duplicate ticket · Work never happened · Not eligible work), who voided it and when | ADR-117, 173; `spec/LISTS.md` (Reasons); `spec/DATA-MODEL.md` §6 (`TicketVoid`) · REQ-105p | database (1.8.2); story (1.8.4) | |
+| AC-08-34 | **Given** Scenario B: `101030` (collection and disposal, `MANUAL_REVIEW`, billing) and the phantom `101031` (a collection only, `PENDING`), each flagged for overlapping the other, **when** Luis voids `101031` ("Work never happened"), **then** `101031` is `VOID`, kept with its audit trail, and never paired; on the next run the flag on `101030` is cleared, the overlap being gone, and `101030` is `COMPLETED` | ADR-027, 028, 342 (the user), 344 (agent default: the check reads only loads that aren't void); `adms-exceptions` Scenario B; AC-06-30 · REQ-120g | story (1.8.4) | |
+| AC-08-35 | **Given** a voided ticket, **then** it stays void until a person unvoids it: it is out of every later run, and a rate change, a rule change or a corrected site brings nothing of it back. A settled ticket stays off the worker's queue until it is changed | ADR-360 (the user, 2026-10-06) · REQ-105p | a rule's void: built, AC-07-44 (story `p1-priced`); a person's: story (1.8.4) | |
+| AC-08-36 | **Given** `301003` is void, **when** another unit rate field event arrives at sync under `301003`, **then** it is quarantined: a voided ticket's field event still holds its number | ADR-022, 338 (5) (agent default); AC-05 ("Left to the task that builds it", point 5) | story (1.8.4) | |
+| AC-08-37 | **Given** `301003` is void, **when** Luis unvoids it, **then** the unvoid is audited under Luis as an override, the void's own record is kept and marked lifted (by whom, when), and on the next run the ticket is worked again: `COMPLETED`, #1 `HNG-RMV-EA` 1 × $68.00 = **$68.00** | ADR-051, 060, 360; Part 8 (step 6); `spec/DATA-MODEL.md` §6 (`TicketVoid`: lifted) · REQ-120g | story (1.8.4) | |
+| AC-08-38 | **Given** load `101009`, dumped at Old Quarry Pit and voided by the firm's rule "Old Quarry Pit: void", **when** Luis unvoids it with the load and the rule unchanged, **then** the next run voids it again, naming the rule: **a rule's void always wins**, and an unvoid lasts only until the next reprocess | ADR-118, 167 (the user: "the rule **always win**"), 360; `adms-exceptions` ("Correct, void or accept"); AC-07-45 · REQ-105p | story (1.8.4) | |
+| AC-08-39 | **Given** that ticket, **when** Dana switches the rule off and Luis unvoids it, **then** it stays un-voided and is priced: 65 × 60% = 39.0 CY, #1 `VEG-HAUL-CY-15` 39.0 × $7.50 = **$292.50**, `MANUAL_REVIEW` for "Ticket 101009: dumped at Old Quarry Pit, an ineligible site. Flagged for review." **When** instead its disposal's site is corrected to the site it was really dumped at and Luis unvoids it, **then** the rule no longer passes and it stays un-voided. Switching the rule off without an unvoid brings nothing back | ADR-167, 215, 360; `spec/FLAGS.md` `INELIGIBLE_SITE`; `spec/CONVENTIONS.md` §6 (the priced story's `101009`); AC-07-45 | story (1.8.4) | |
+| AC-08-40 | **Given** a ticket a rule voids, **then** there is no "accepted void": nothing a person can mark makes an unvoid stick against the rule. To keep the ticket, the reviewer corrects the data or the rule | ADR-166, 167; `adms-validation` §5.4b | story (1.8.4) | |
+| AC-08-41 | **Given** any voided ticket, **then** its field events, their photographs and every audit record are still there, and no login can delete one: a void keeps the record and stops the billing | ADR-028, 051; invariant 1; Part 8 (step 6) · REQ-010, 120g | the delete refused: built, AC-04-30; a void's ticket read back: story (1.8.4) | |
+| AC-08-42 | **Given** any ticket, **then** it is `VOID` only because a person voided it with a reason or a rule's *Void ticket* ran; the worker voids nothing on its own (not a phantom, not an under-size stump, not a ticket that never found its partner) | ADR-060, 118; `adms-validation` §5.4; AC-06-24, 103 · REQ-121 | built: AC-06-24, 103; a person's void read by the run: story (1.8.4) | |
+
+## F. Accepting a flag (Part 8, step 5; `adms-validation` §5.4b)
+
+| ID | Scenario | From | Proven at | Passing |
+|---|---|---|---|---|
+| AC-08-43 | **Given** `101003`, `MANUAL_REVIEW` for its 96% call and billing #1 `VEG-HAUL-CY-15` 62.4 × $7.50 = $468.00, **when** Luis checks the tower's photographs and accepts the flag ("Heaped; photos confirm"), **then** the acceptance is recorded (the flag, the reason, Luis, when) and audited under him, the ticket is `COMPLETED` on the next run, and its line is the same $468.00 before and after | ADR-060, 166; golden mission §2 (101003), §4; AC-07-72 · REQ-129b | story (1.8.4); story (1.9.1) | |
+| AC-08-44 | **Given** that accepted flag, **when** the ticket is reprocessed with the same call and the same limit, **then** the flag isn't raised again and the ticket stays `COMPLETED` | ADR-166; `spec/FLAGS.md` §1 ("the same facts keep the same flag, with its acceptance"); AC-06-139 · REQ-129b | story (1.8.4) | |
+| AC-08-45 | **Given** that accepted flag, **when** the call is corrected to 97%, **then** the facts have changed: the old flag is cleared, a new one is raised, "Ticket 101003: load call 97%. Flagged for review.", the acceptance doesn't carry over, and the ticket is `MANUAL_REVIEW` again, billing 65 × 97% = 63.05 CY × $7.50 = $472.875, **$472.88** | ADR-166, 355 (the cent, a half up); `spec/FLAGS.md` §1; AC-06-140 · REQ-129b | story (1.8.4) | |
+| AC-08-46 | **Given** `101008` with two open flags (the debris type mismatch of AC-08-14 and the truck number of AC-08-15), **when** Luis accepts one, **then** the ticket is still `MANUAL_REVIEW`; when the other is fixed or accepted too, the worker marks it `COMPLETED` | ADR-166; `adms-validation` §5.4b; AC-06-142 · REQ-129b | story (1.8.4) | |
+| AC-08-47 | **Given** `101032`, flagged "Ticket 101032: load call 0%. Flagged for review; not billed.", **when** Luis accepts the flag, **then** the ticket is `COMPLETED` and still bills nothing: accepting never changes what bills | ADR-116, 166; `spec/FLAGS.md` §1, `LOAD_CALL_ZERO`; AC-06-143 | story (1.8.4) | |
+| AC-08-48 | **Given** a flag Luis means to accept, **when** he gives no reason, **then** nothing is accepted: an acceptance carries a reason picked from the firm's list (shipped for accepting a flag: Photos confirm · Confirmed with the monitor) | ADR-166, 173; `spec/LISTS.md` (Reasons); `spec/DATA-MODEL.md` §6 (`FlagAcceptance`) · REQ-129b | database (1.8.2); story (1.8.4) | |
+| AC-08-49 | **Given** a flag, **then** it is accepted at most once, and accepting it changes nothing on the flag itself, which only the worker writes: the acceptance is a record of its own beside it | ADR-245; `spec/DATA-MODEL.md` §6 (`FlagAcceptance`: `flagId` unique) · REQ-105m | database (1.8.2) | |
+| AC-08-50 | **Given** the mission's `101006` after its renumber (AC-08-22), **when** Luis accepts its typed-number flag, **then** the ticket is `COMPLETED`, its $216.00 unchanged | golden mission §2 (101006: "then accepts the typed-number flag") · REQ-129b | story (1.8.4); story (1.9.1) | |
+| AC-08-51 | **Given** a flag on a record that isn't a ticket, "Marsh Road TDSR: permit outstanding.", **when** a permitted person accepts it, **then** it is accepted like any other and isn't raised again while its facts stand: whoever may accept may accept any flag that is right as it is | ADR-111, 166; `spec/FLAGS.md` §1 ("any flag"), `PERMIT_OUTSTANDING` | story (1.8.4) | |
+| AC-08-52 | **Given** a ticket's flags over its life (one accepted, one cleared by a correction), **then** each is still in the ticket's history with what happened to it; no flag is ever deleted | ADR-166; `spec/FLAGS.md` §1, §4; invariant 1 | story (1.8.4) | |
+
+## G. QC (Part 8, step 7; `adms-ledger-audit` §6.1d)
+
+| ID | Scenario | From | Proven at | Passing |
+|---|---|---|---|---|
+| AC-08-53 | **Given** `101001`'s completed load, on which nobody has set a mark, **then** its QC status is QC Review: that is where every QC'd record starts | ADR-107; `spec/DATA-MODEL.md` §6 (`QcMark`: "No row = QC Review") · REQ-105m | database (1.8.2) | |
+| AC-08-54 | **Given** that completed load, **when** Luis sets it QC Approved, **then** the mark holds the status, Luis and the time (and his note, if he wrote one) and is audited under him; **nothing else changes**: the ticket's status, its completed load, its flags and its $390.00 line are as they were, and no run is started | ADR-107, 117; Part 8 (step 7); `adms-ledger-audit` §6.1d · REQ-105m | story (1.8.5) | |
+| AC-08-55 | **Given** a load or a haul-out, **then** only its completed load or completed haul-out carries a QC mark: a mark on `101001`'s collection event or on its disposal event is refused. A field event takes a mark only where it is a unit rate ticket | ADR-168 (the user, Q-160); `spec/DATA-MODEL.md` §6 (`QcMark`) · REQ-105m | database (1.8.2) | |
+| AC-08-56 | **Given** a QC mark, **then** it marks exactly one thing (a completed load, a completed haul-out, a unit rate ticket, a certification, an ROE, a survey, an incident or a drop-off log), and a thing has at most one mark: QC Approved changed to QC Issues is the same mark changed, the status before kept in the audit log | `spec/DATA-MODEL.md` §6 (`QcMark`: "exactly one target, unique"); ADR-097, 245 · REQ-105m | database (1.8.2) | |
+| AC-08-57 | **Given** P2's split load `102001` and P1's split haul-out `201004`, **then** each is QC'd once, as one completed record: never property `-A` on its own, never one pile | ADR-168, 295; golden mission §4 ("never a single event, and never one pile of a split haul-out") · REQ-105m | database (1.8.2); story (1.8.5) | |
+| AC-08-58 | **Given** unit rate ticket `301001`, Jo Kim's incident, Kim's drop-off log, ROE `R-0007`, its pre-work survey and certification `730415`, **then** each is QC'd on its own, never with a ticket; on the certification, whoever set the mark is its "checked by" | ADR-080, 107, 168; `spec/DATA-MODEL.md` §6; AC-03-38; AC-04-90 · REQ-105m, 106f, 107 | database (1.8.2); story (1.8.5) | |
+| AC-08-59 | **Given** any QC mark, **then** only a person sets or changes it: the worker's login can write none, and no run ever changes one | ADR-107 ("never changed by the engine"), 117; `adms-ledger-audit` §6.1d · REQ-105m | database (1.8.2) | |
+| AC-08-60 | **Given** Luis sets `101001`'s completed load QC Void, or QC Issues, **then** the ticket is not voided: its status stays `COMPLETED` and its $390.00 line stands. Voiding is a separate action with a reason (section E); QC is the back office's own review mark | ADR-107, 117 (Q-110) · REQ-105m | story (1.8.5) | |
+| AC-08-61 | **Given** `101001`'s completed load is QC Approved, **when** its load call is corrected and the ticket reprocesses (AC-08-10), **then** the mark is still there, still QC Approved and still Luis's: a reprocess draws the completed load again and never loses or changes a mark. Looking at it again is a person's step | ADR-107, 245; Part 9 (invoicing, step 3: "QC it again") · REQ-105m | story (1.8.5) | |
+| AC-08-62 | **Given** the pending collection `101006` before its renumber, **then** there is nothing to QC: an unpartnered field event of a load is never QC'd, and its ticket has no completed load until it is whole | ADR-168 ("An unpartnered half is never QC'd or locked") | story (1.8.5) | |
+| AC-08-63 | **Given** the mission's review is done, **when** Luis QCs it, **then** QC Approved stands on completed loads `101001`…`101006`, completed haul-outs `201001` and `201004`, P2's `102001`, the live unit rate tickets `301001`, `301002`, `301004`, `301006` and `301007`, the incident, the drop-off log, ROEs `R-0007` and `R-0008` with their surveys, and the certifications; the voided `301003` and `301005` are QC Void, each set by Luis by hand | golden mission §3, §4 ("QC") · REQ-143 | story (1.9.1) | |
+
+## H. The golden mission, reviewed
+
+| ID | Scenario | From | Proven at | Passing |
+|---|---|---|---|---|
+| AC-08-64 | **Given** the mission's review (AC-08-22, 31, 32, 43, 50), **then**: `101001`…`101006`, `201001`, `201004`, `301001`, `301002`, `301004`, `301006` and `301007` are `COMPLETED`; `301003` and `301005` are `VOID`; no flag is open, no ticket is pending and nothing is quarantined on P1; and P1's ledger is **$5,548.25 on 19 lines** (AC-07-113) | golden mission §2, §4 (ADR-297) · REQ-017, 142, 143 | story (1.9.1) | |
+| AC-08-65 | **Given** that review, **then** every one of Luis's actions is in the audit log under his name with the value before and after (the renumber `101060` → `101006`; the flag on `101003` accepted; `301003` voided, `COMPLETED` → `VOID`), and the removal of `301003`'s line is there under the system, the full row copied first | golden mission §4 (the audit excerpt); AC-07-111 · REQ-143 | story (1.9.1) | |
+
+---
+
+## Where each scenario is first proven
+
+| Where it is first proven | Scenarios | How many |
+|---|---|---|
+| Task 1.8.2 (people's marks, at the database) | AC-08-09, 33, 48, 49, 53, 55, 56, 57, 58, 59 | 10 |
+| Task 1.8.3 (corrections, renumbering, a quarantined record resolved) | AC-08-10…30, but for AC-08-11's and 21's built halves | 21 |
+| Task 1.8.4 (void, unvoid, accept) | AC-08-31, 32, 34…47, 50, 51, 52 | 19 |
+| Task 1.8.5 (QC) | AC-08-54, 60, 61, 62 | 4 |
+| Built already (an earlier task's test proves it; its story half with 1.8.3…1.8.5) | AC-08-07, 08 | 2 |
+| Task 1.9.1 (the golden mission) | AC-08-01, 02, 63, 64, 65 | 5 |
+| Milestone 1.8 or Phase 2 (point 1 below) | AC-08-05 | 1 |
+| Phases 2–4 only | AC-08-03, 04, 06 | 3 |
+
+65 scenarios (AC-08-01…65). **None passes yet:** the file is written before Milestone 1.8's code
+(ADR-300). Several restate, from the reviewer's side, a scenario whose worker's half already
+passes (AC-06-141, 148; AC-07-44, 93, 94); each row names it, and the earlier file's row is
+finished when this one passes.
+
+**The earlier files' scenarios that wait for this milestone**, and the row here that finishes
+each: AC-03-38's QC mark (AC-08-58) · AC-04-30's correction (AC-08-10, 11) · AC-04-90's QC mark
+(AC-08-58) · AC-05-28 (AC-08-25, 26) · AC-06-02 (AC-08-10, 22, 31, 37, 43) · AC-06-10 (AC-08-22) ·
+AC-06-24 (AC-08-42) · AC-06-69 (AC-08-16) · AC-06-139 (AC-08-44) · AC-06-140 (AC-08-45) ·
+AC-06-141 (AC-08-13) · AC-06-143 (AC-08-47) · AC-06-148 (AC-08-28) · AC-07-45 (AC-08-38, 39) ·
+AC-07-72 (AC-08-43) · AC-07-93 (AC-08-10) · AC-07-95 (AC-08-31). AC-03-52 (every ticket on a
+corrected certification reprocesses) stays in Part 3's file, task 1.8.3's.
+
+## Left to the task that builds it
+
+Nothing recorded settles these, so no scenario asserts them. Each is decided in the ADR of the
+task named, as an agent default the user may overturn, unless that task finds it changes money,
+evidence or what a monitor must do, in which case it is put to the user first (ADR-230).
+
+| # | What isn't settled | Decided with |
+|---|---|---|
+| 1 | **Where a permission is checked in Phase 1.** The grants exist (AC-02-10, 11) and "no service reads permissions yet" (ADR-316): whether Milestone 1.8's services refuse a person without the grant (which closes KD-25 at the engine), or only Phase 2's requests do (AC-02-12) | 1.8.3 |
+| 2 | **Whether *correct* carries *accept flags*.** ADR-166 and `spec/FLAGS.md` §1 say "whoever may correct may accept"; Part 2 and `spec/DATA-MODEL.md` §2.2 list *accept flags* as a grant of its own (KD-74) | 1.8.4; KD-74 |
+| 3 | **The mission's words and the firm's list.** "Heaped; photos confirm", "Duplicate of 301001" and "Under 24 in; goes out as vegetative debris" aren't values of the shipped list (Photos confirm; Duplicate ticket; Not eligible work): whether each is the reviewer's note beside a picked reason, or a reason the firm added | 1.8.4; 1.9.1 |
+| 4 | **Which of a correction's kinds ask for a reason.** Part 8 says "with a reason where one is asked"; a void, an acceptance and a back-office-created record name theirs, a correction and a renumber don't | 1.8.3 |
+| 5 | **What a person's void does to a load that was whole:** its completed load (marked dissolved, or kept), its open flags (cleared, or kept out of the queue; BACKLOG C75), and whether its lines go when the void is made or on the next run. Either way it bills nothing | 1.8.4 |
+| 6 | **Correcting a field event of a void ticket**, and whether that alone ever brings it back (ADR-360 says a person's unvoid does) | 1.8.4 |
+| 7 | **An acceptance and a renumber:** whether a flag accepted on a field event under one number is still accepted once that field event is renumbered (the mission renumbers first, then accepts); and accepting a flag on a ticket that is still `PENDING` | 1.8.4 |
+| 8 | **Taking an acceptance back.** Nothing says a reviewer can un-accept a flag | 1.8.4 |
+| 9 | **Which task builds the service that creates a record in the back office** (BACKLOG names none; AC-08-21 puts it with 1.8.3), and whether Luis picks the monitor who witnessed it | 1.8.3 |
+| 10 | **Resolving a quarantined record any way but a renumber:** a true second copy of work already recorded, a quarantined ROE (`DUPLICATE_ROE_NUMBER`: a new number, or nothing), and the words of `resolution` (free text since ADR-338) | 1.8.3 |
+| 11 | **A renumber of a split's collection** (base number and suffix are two fields), and of a whole ticket's field events at once | 1.8.3 |
+| 12 | **A QC mark when its record changes under it:** on a completed load that is dissolved and later whole again; on a ticket voided after it was QC Approved (the mission sets QC Void by hand); what QC Void on a certification does to its tickets (AC-03, point 13) | 1.8.2, 1.8.5 |
+| 13 | **Each mark's audit domain and who sees it:** whether a client user, an auditor and a contractor user see a QC status, an acceptance and a void's reason (BACKLOG C76) | 1.8.2 |
+| 14 | **What starts the reprocess after a reviewer's action** in Phase 1 (a run asked for by the service, naming who asked, ADR-352) until Phase 2's job queue names the tickets touched (ADR-360) | 1.8.3 |
+
+**Carried into Milestone 1.8** (`agent_store/BACKLOG.md`, the register): **C19** (where a person's
+void is recorded: AC-08-09, 33, 37), **C75** (the services take over what the story `p1-priced`
+writes directly; an unvoid lifts a rule's void too: AC-08-38, 39), **C76** (point 13), and the
+1.8.x halves the earlier files left (above).
+
+**Not in this file** (their rules are recorded): what each flag is and when it is raised (Part
+6's file); what the worker writes to the ledger when a ticket comes back (Part 7's file); the
+invoice lock, batches, unlocking, closeout and the client package (Part 9's file); the review
+queue's screens and bulk actions in full (Phase 4).
