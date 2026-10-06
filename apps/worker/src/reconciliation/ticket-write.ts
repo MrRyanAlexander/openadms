@@ -3,22 +3,29 @@
 // invariants 4, 17, 21; ADR-086, 166, 340, 352): the status, the zone and a unit rate ticket's
 // worked-out pay item on its field events; its completed load or haul-out and a row for each
 // collection, updated in place and never duplicated, marked dissolved when the ticket is no
-// longer whole; its flags, compared with the ones that stand; and the run's decision.
+// longer whole; its lines; its flags, compared with the ones that stand; and the run's decision.
 //
 // Only what differs is written: a ticket worked again on unchanged facts gets its decision and
 // nothing else, so no audit record says a conclusion changed when none did (AC-06-151). What
 // stands is read here, inside the piece of work, never from what the run read before it.
+//
+// The lines (spec/parts/07-pricing-ledger-audit.md step 8; adms-ledger-audit §6.1; ADR-085, 359)
+// are the ledger's current truth: a line that stands exactly as the rules give it now is left; one
+// that differs in anything is removed and written again, never updated, and one the rules no
+// longer give is removed. The database copies each removed row in full to the audit log before
+// it goes, and refuses the removal and the new line alike on a ticket locked as invoiced. There
+// is no reversal row.
 import type { Prisma } from '@open-adms/db';
 import {
   Flags,
-  type FlagRaised,
   type FlagStanding,
+  type PricedLine,
   type Ticket,
   type WorkflowName,
 } from '@open-adms/domain';
 
 import type { WorkerFieldEvent } from './project-read.ts';
-import type { CollectionWorked, CompletedWorked, TicketWorked } from './ticket-work.ts';
+import type { CollectionWorked, CompletedWorked, TicketWorked, WorkedFlag } from './ticket-work.ts';
 
 type Tx = Prisma.TransactionClient;
 
@@ -34,6 +41,31 @@ export interface WrittenFlags {
   readonly cleared: number;
   readonly raised: number;
 }
+
+export interface WrittenLines {
+  readonly kept: number;
+  readonly removed: number;
+  readonly written: number;
+}
+
+export interface Written {
+  readonly flags: WrittenFlags;
+  readonly lines: WrittenLines;
+}
+
+// A load's or a haul-out's completed records the ticket touches: the one its lines hang on now,
+// with the row of each collection, and every one whose lines are the ticket's to remove.
+interface CompletedWritten {
+  readonly recordId: string | null;
+  readonly rowOf: ReadonlyMap<string, string>;
+  readonly recordIds: readonly string[];
+}
+
+// What a line hangs on: a load's property, a haul-out's pile, or a unit rate ticket.
+type LineOn =
+  | { readonly completedLoadId: string; readonly completedLoadCollectionId: string }
+  | { readonly completedHaulOutId: string; readonly completedHaulOutCollectionId: string }
+  | { readonly fieldEventId: string };
 
 const decimal = (amount: { toFixed(places: number): string } | null, places: number) =>
   amount === null ? null : amount.toFixed(places);
@@ -54,7 +86,7 @@ export class TicketWrite {
   }
 
   // Everything the worker concluded for the ticket.
-  async conclusions(worked: TicketWorked): Promise<WrittenFlags> {
+  async conclusions(worked: TicketWorked): Promise<Written> {
     const { ticket } = worked;
     for (const event of ticket.events) {
       const zone = worked.zones.find((attached) => attached.fieldEventId === event.id);
@@ -68,12 +100,130 @@ export class TicketWrite {
             : event.workedOutPayItemId,
       });
     }
-    if (ticket.workflow === 'LOAD') await this.completedLoad(ticket, worked.completed);
-    if (ticket.workflow === 'HAUL_OUT') await this.completedHaulOut(ticket, worked.completed);
-    return this.flags(
+    const lines =
+      ticket.workflow === 'LOAD'
+        ? await this.loadLines(await this.completedLoad(ticket, worked.completed), worked.lines)
+        : ticket.workflow === 'HAUL_OUT'
+          ? await this.haulOutLines(
+              await this.completedHaulOut(ticket, worked.completed),
+              worked.lines,
+            )
+          : await this.unitRateLines(ticket, worked.lines);
+    const flags = await this.flags(
       { workflow: ticket.workflow, ticketNumber: ticket.ticketNumber },
       worked.flags,
     );
+    return { flags, lines };
+  }
+
+  private loadLines(completed: CompletedWritten, lines: readonly PricedLine[]) {
+    const { recordId } = completed;
+    return this.lines(
+      { completedLoadId: { in: [...completed.recordIds] } },
+      lines.map((line) => {
+        const rowId = completed.rowOf.get(line.fieldEventId);
+        if (recordId === null || rowId === undefined) {
+          throw new Error('A line on a property with no row of a completed load.');
+        }
+        return { line, on: { completedLoadId: recordId, completedLoadCollectionId: rowId } };
+      }),
+    );
+  }
+
+  private haulOutLines(completed: CompletedWritten, lines: readonly PricedLine[]) {
+    const { recordId } = completed;
+    return this.lines(
+      { completedHaulOutId: { in: [...completed.recordIds] } },
+      lines.map((line) => {
+        const rowId = completed.rowOf.get(line.fieldEventId);
+        if (recordId === null || rowId === undefined) {
+          throw new Error('A line on a pile with no row of a completed haul-out.');
+        }
+        return { line, on: { completedHaulOutId: recordId, completedHaulOutCollectionId: rowId } };
+      }),
+    );
+  }
+
+  private unitRateLines(ticket: Ticket<WorkerFieldEvent>, lines: readonly PricedLine[]) {
+    return this.lines(
+      { fieldEventId: { in: ticket.events.map((event) => event.id) } },
+      lines.map((line) => ({ line, on: { fieldEventId: line.fieldEventId } })),
+    );
+  }
+
+  // The ticket's lines that stand against the ones the rules give now.
+  private async lines(
+    standing: Prisma.TransactionWhereInput,
+    now: readonly { readonly line: PricedLine; readonly on: LineOn }[],
+  ): Promise<WrittenLines> {
+    const { tx, projectId } = this;
+    const stand = await tx.transaction.findMany({
+      where: { projectId, ...standing },
+      orderBy: { id: 'asc' },
+    });
+    const mark = (
+      on: {
+        readonly completedLoadCollectionId?: string | null;
+        readonly completedHaulOutCollectionId?: string | null;
+        readonly fieldEventId?: string | null;
+      },
+      line: Omit<PricedLine, 'splitSuffix' | 'fieldEventId'>,
+    ): string =>
+      JSON.stringify([
+        on.completedLoadCollectionId ?? on.completedHaulOutCollectionId ?? on.fieldEventId,
+        line.slot,
+        line.ruleId,
+        line.payItemId,
+        line.contractId,
+        line.primeId,
+        line.operatingSubId,
+        line.unit,
+        line.quantity,
+        line.rate,
+        line.amount,
+      ]);
+    const given = new Set(now.map(({ line, on }) => mark(on, line)));
+    const kept = new Set<string>();
+    let removed = 0;
+    for (const row of stand) {
+      const same = mark(row, {
+        ...row,
+        quantity: row.quantity.toFixed(4),
+        rate: row.rate.toFixed(4),
+        amount: row.amount.toFixed(2),
+      });
+      if (given.has(same)) {
+        kept.add(same);
+        continue;
+      }
+      // The database copies the whole row to the audit log before it goes (ADR-085).
+      await tx.transaction.delete({ where: { id: row.id }, select: { id: true } });
+      removed += 1;
+    }
+    let written = 0;
+    for (const { line, on } of now) {
+      if (kept.has(mark(on, line))) continue;
+      await tx.transaction.create({
+        data: {
+          projectId,
+          ...on,
+          slot: line.slot,
+          ruleId: line.ruleId,
+          payItemId: line.payItemId,
+          contractId: line.contractId,
+          primeId: line.primeId,
+          operatingSubId: line.operatingSubId,
+          unit: line.unit,
+          quantity: line.quantity,
+          rate: line.rate,
+          amount: line.amount,
+          reconciliationRunId: this.runId,
+        },
+        select: { id: true },
+      });
+      written += 1;
+    }
+    return { kept: kept.size, removed, written };
   }
 
   // The worker's columns on a field event: written when one differs, and the first time the
@@ -106,7 +256,7 @@ export class TicketWrite {
   // The flags that stand on something against the ones its facts raise now (ADR-166): the same
   // flag is kept as it is, one its facts no longer raise is cleared, never deleted, and a new
   // one is raised.
-  async flags(on: FlagOn, now: readonly FlagRaised[]): Promise<WrittenFlags> {
+  async flags(on: FlagOn, now: readonly WorkedFlag[]): Promise<WrittenFlags> {
     const standing: FlagStanding[] = await this.tx.flag.findMany({
       where: {
         projectId: this.projectId,
@@ -124,7 +274,9 @@ export class TicketWrite {
         select: { id: true },
       });
     }
-    for (const flag of compared.raised) {
+    for (const raised of compared.raised) {
+      // The same record that was handed in: a pricing flag's # and pay item are on it.
+      const flag: WorkedFlag = raised;
       await this.tx.flag.create({
         data: {
           projectId: this.projectId,
@@ -135,6 +287,8 @@ export class TicketWrite {
           facts: flag.facts,
           factsSha256: flag.factsSha256,
           billing: flag.billing,
+          slot: flag.slot ?? null,
+          payItemId: flag.payItemId ?? null,
           raisedAt: this.now,
           reconciliationRunId: this.runId,
         },
@@ -185,7 +339,7 @@ export class TicketWrite {
   private async completedLoad(
     ticket: Ticket<WorkerFieldEvent>,
     completed: CompletedWorked | null,
-  ): Promise<void> {
+  ): Promise<CompletedWritten> {
     const { tx, projectId, now } = this;
     const live = await tx.completedLoad.findMany({
       where: { projectId, ticketNumber: ticket.ticketNumber, dissolvedAt: null },
@@ -214,7 +368,11 @@ export class TicketWrite {
         select: { id: true },
       });
     }
-    if (completed === null) return;
+    // The records whose lines are the ticket's: its own, and each it no longer makes whole.
+    const recordIds = [
+      ...new Set([...dissolved, ...(own === null ? [] : [own])].map((record) => record.id)),
+    ];
+    if (completed === null) return { recordId: null, rowOf: new Map(), recordIds };
 
     const figures = {
       ticketNumber: ticket.ticketNumber,
@@ -270,11 +428,12 @@ export class TicketWrite {
         });
       }
     }
+    const rowOf = new Map<string, string>();
     for (const collection of completed.collections) {
       const row = rows.find((each) => each.collectionEventId === collection.collectionEventId);
       const data = TicketWrite.rowOf(collection);
       if (row === undefined) {
-        await tx.completedLoadCollection.create({
+        const created = await tx.completedLoadCollection.create({
           data: {
             projectId,
             completedLoadId: recordId,
@@ -283,7 +442,11 @@ export class TicketWrite {
           },
           select: { id: true },
         });
-      } else if (row.dissolvedAt !== null || TicketWrite.rowDiffers(row, collection)) {
+        rowOf.set(collection.collectionEventId, created.id);
+        continue;
+      }
+      rowOf.set(collection.collectionEventId, row.id);
+      if (row.dissolvedAt !== null || TicketWrite.rowDiffers(row, collection)) {
         await tx.completedLoadCollection.update({
           where: { id: row.id },
           data: { ...data, dissolvedAt: null },
@@ -291,13 +454,14 @@ export class TicketWrite {
         });
       }
     }
+    return { recordId, rowOf, recordIds: [...new Set([...recordIds, recordId])] };
   }
 
   // A haul-out's completed record: the same, with what each pile added to the call.
   private async completedHaulOut(
     ticket: Ticket<WorkerFieldEvent>,
     completed: CompletedWorked | null,
-  ): Promise<void> {
+  ): Promise<CompletedWritten> {
     const { tx, projectId, now } = this;
     const live = await tx.completedHaulOut.findMany({
       where: { projectId, ticketNumber: ticket.ticketNumber, dissolvedAt: null },
@@ -322,7 +486,11 @@ export class TicketWrite {
         select: { id: true },
       });
     }
-    if (completed === null) return;
+    // The records whose lines are the ticket's: its own, and each it no longer makes whole.
+    const recordIds = [
+      ...new Set([...dissolved, ...(own === null ? [] : [own])].map((record) => record.id)),
+    ];
+    if (completed === null) return { recordId: null, rowOf: new Map(), recordIds };
 
     const figures = {
       ticketNumber: ticket.ticketNumber,
@@ -376,11 +544,12 @@ export class TicketWrite {
         });
       }
     }
+    const rowOf = new Map<string, string>();
     for (const collection of completed.collections) {
       const row = rows.find((each) => each.collectionEventId === collection.collectionEventId);
       const data = { ...TicketWrite.rowOf(collection), pileLoadCall: collection.pileLoadCall ?? 0 };
       if (row === undefined) {
-        await tx.completedHaulOutCollection.create({
+        const created = await tx.completedHaulOutCollection.create({
           data: {
             projectId,
             completedHaulOutId: recordId,
@@ -389,7 +558,11 @@ export class TicketWrite {
           },
           select: { id: true },
         });
-      } else if (
+        rowOf.set(collection.collectionEventId, created.id);
+        continue;
+      }
+      rowOf.set(collection.collectionEventId, row.id);
+      if (
         row.dissolvedAt !== null ||
         row.pileLoadCall !== data.pileLoadCall ||
         TicketWrite.rowDiffers(row, collection)
@@ -401,6 +574,7 @@ export class TicketWrite {
         });
       }
     }
+    return { recordId, rowOf, recordIds: [...new Set([...recordIds, recordId])] };
   }
 
   // A collection row's share and its mileage, every mileage column empty where none could be

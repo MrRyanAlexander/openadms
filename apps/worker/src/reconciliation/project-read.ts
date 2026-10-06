@@ -5,10 +5,14 @@
 // the domain's checks with what they read of it (its certification by number, its site, its
 // receipt with every disposal that points at it, its ROE).
 //
+// Pricing's setup is read with it (ADR-359): the rules as packages/db's RuleRows reads them, the
+// one reading setup checks them from too, the contracts with their primes, and every pay item
+// with its live rates and crew-day steps, archived ones too (a rule that names one never runs).
+//
 // Never read: a record in quarantine (ADR-022: a second field event of one kind is no ticket's
 // until a person resolves it), an incident, a drop-off log (ADR-236: neither is a ticket's field
-// event), a rate, a rule (Milestone 1.6).
-import type { Database, Prisma, TicketStatus } from '@open-adms/db';
+// event).
+import { RuleRows, type Database, type Prisma, type TicketStatus } from '@open-adms/db';
 import {
   SizeBands,
   type BuiltInKey,
@@ -29,10 +33,14 @@ import {
   type MileageSource,
   type Named,
   type PlacedFieldEvent,
+  type PricedPayItem,
   type ProjectMap,
   type QuantifiedFieldEvent,
   type ReceiptDisposal,
   type RoeFieldEvent,
+  type RuleContract,
+  type RuleEntry,
+  type RuleFieldEvent,
   type UnitRateFieldEvent,
   type UnitRatePayItem,
 } from '@open-adms/domain';
@@ -45,7 +53,8 @@ export interface WorkerFieldEvent
     PlacedFieldEvent,
     QuantifiedFieldEvent,
     UnitRateFieldEvent,
-    RoeFieldEvent {
+    RoeFieldEvent,
+    RuleFieldEvent {
   readonly status: TicketStatus;
   readonly reconciledAt: Date | null;
   readonly zoneId: string | null;
@@ -55,12 +64,35 @@ export interface WorkerFieldEvent
   readonly estimateCy: string | null;
   // The numbers of the tickets a collection lists as carried.
   readonly carriedTicketNumbers: readonly string[];
+  // A stump's "half or more of the root ball exposed"; none where the monitor wasn't asked.
+  readonly rootBallHalfExposed: boolean | null;
 }
 
-// A certification of the project, with its record's id and its photographs.
+// A certification of the project, with its record's id, whose work it is and its photographs.
 export interface ReadCertification extends CheckedCertification {
   readonly id: string;
+  readonly primeId: string;
+  readonly firstTierSubId: string | null;
+  readonly secondTierSubId: string | null;
   readonly photographs: readonly CertificationPhotograph[];
+}
+
+// A site of the project, with what pricing reads of it (ADR-222, 311).
+export interface ReadSite extends CheckedSite {
+  readonly chargesTippingFee: boolean;
+  // The pay items linked to it as its tipping fee; a link taken off isn't one.
+  readonly tippingFeePayItemIds: readonly string[];
+}
+
+// What pricing reads of the firm's setup, as it stands now.
+export interface PricingRead {
+  readonly rules: readonly RuleEntry[];
+  readonly contracts: readonly RuleContract[];
+  // The project's primes, each by its contractor's name as recorded.
+  readonly primes: readonly Named[];
+  readonly payItems: readonly PricedPayItem[];
+  // Every zone of every version of the project's map (ADR-141).
+  readonly zones: readonly Named[];
 }
 
 export interface ReadSurvey extends CheckedSurvey {
@@ -121,17 +153,21 @@ export interface ProjectSnapshot {
     readonly loadCallLowLimit: number | null;
     readonly loadCallHighLimit: number | null;
     readonly stumpCheckRootBallWider: boolean;
+    readonly stumpCheckFillNeedsExposure: boolean;
+    readonly stumpFillDepthInches: number;
     readonly siteCircleMeters: number;
     readonly requiresRoe: boolean;
   };
   // None on a project that generates its numbers.
   readonly controlRanges: readonly ControlRangeRead[] | null;
   readonly certifications: readonly ReadCertification[];
-  readonly sites: readonly CheckedSite[];
+  readonly sites: readonly ReadSite[];
   readonly map: ProjectMap | null;
   readonly unitRatePayItems: readonly UnitRatePayItem[];
+  readonly pricing: PricingRead;
   readonly surveys: readonly ReadSurvey[];
-  // Every field event of the project that isn't void.
+  // Every field event of the project. One a rule's Void ticket voided is read like any other:
+  // the void is the worker's own conclusion, drawn again on every run (ADR-167, 359).
   readonly fieldEvents: readonly WorkerFieldEvent[];
   readonly completedLoads: readonly CompletedRead[];
   readonly completedHaulOuts: readonly CompletedRead[];
@@ -261,6 +297,8 @@ export class ProjectRead {
         loadCallLowLimit: project.loadCallLowLimit,
         loadCallHighLimit: project.loadCallHighLimit,
         stumpCheckRootBallWider: project.stumpCheckRootBallWider,
+        stumpCheckFillNeedsExposure: project.stumpCheckFillNeedsExposure,
+        stumpFillDepthInches: project.stumpFillDepthInches,
         siteCircleMeters: project.siteCircleMeters,
         requiresRoe: programType.requiresRoe,
       },
@@ -269,6 +307,7 @@ export class ProjectRead {
       sites,
       map,
       unitRatePayItems,
+      pricing: await this.pricing(projectId),
       surveys,
       fieldEvents,
       completedLoads: await this.completedLoads(projectId),
@@ -312,6 +351,9 @@ export class ProjectRead {
         certNumber: row.certNumber,
         kind: row.kind,
         capacityCy: row.capacityCy,
+        primeId: row.primeId,
+        firstTierSubId: row.firstTierSubId,
+        secondTierSubId: row.secondTierSubId,
         tagExpiry: dayOrNone(row.tagExpiry),
         revokedFrom: dayOrNone(row.revokedFrom),
         replacedBy:
@@ -327,7 +369,7 @@ export class ProjectRead {
   }
 
   // The project's sites, each with its own shape's current version where it has one.
-  private async sites(projectId: string): Promise<CheckedSite[]> {
+  private async sites(projectId: string): Promise<ReadSite[]> {
     const rows = await this.db.disposalSite.findMany({
       where: { projectId },
       orderBy: { name: 'asc' },
@@ -341,6 +383,13 @@ export class ProjectRead {
     for (const version of versions) {
       areas.set(version.siteId, { versionId: version.id, shape: shapeOf(version) });
     }
+    const fees = grouped(
+      await this.db.disposalSiteTippingFee.findMany({
+        where: { projectId, archivedAt: null },
+        orderBy: { id: 'asc' },
+      }),
+      (fee) => fee.siteId,
+    );
     return rows.map((row) => ({
       id: row.id,
       name: row.name,
@@ -354,7 +403,72 @@ export class ProjectRead {
       activationDate: day(row.activationDate),
       closeDate: dayOrNone(row.closeDate),
       area: areas.get(row.id) ?? null,
+      chargesTippingFee: row.chargesTippingFee,
+      tippingFeePayItemIds: (fees.get(row.id) ?? []).map((fee) => fee.payItemId),
     }));
+  }
+
+  // What the rules run on: the project's rules, its contracts, its primes, and every pay item
+  // with the rate each prime has on it now.
+  private async pricing(projectId: string): Promise<PricingRead> {
+    const { db } = this;
+    const rules = await db.$read((tx) => new RuleRows(tx, projectId).entries());
+    const contracts = await db.contract.findMany({ where: { projectId }, orderBy: { id: 'asc' } });
+    const places = await db.projectContractor.findMany({
+      where: { projectId, asPrimeId: { not: null } },
+      orderBy: { id: 'asc' },
+    });
+    const contractors = byId(
+      await db.contractor.findMany({
+        where: { id: { in: places.map((place) => place.contractorId) } },
+      }),
+    );
+    const rates = grouped(
+      await db.payItemRate.findMany({
+        where: { projectId, archivedAt: null },
+        orderBy: { id: 'asc' },
+      }),
+      (rate) => rate.payItemId,
+    );
+    const steps = grouped(
+      await db.payItemCrewDayStep.findMany({
+        where: { payItem: { projectId }, archivedAt: null },
+        orderBy: { fromHours: 'asc' },
+      }),
+      (step) => step.payItemId,
+    );
+    const payItems = await db.payItem.findMany({ where: { projectId }, orderBy: { code: 'asc' } });
+    const zones = await db.zone.findMany({
+      where: { mapVersion: { projectId } },
+      orderBy: { id: 'asc' },
+    });
+    return {
+      rules,
+      contracts: contracts.map((contract) => ({ id: contract.id, primeId: contract.primeId })),
+      primes: places.map((place) => ({
+        id: place.contractorId,
+        name: contractors.get(place.contractorId)?.name ?? '',
+      })),
+      payItems: payItems.map((payItem) => ({
+        id: payItem.id,
+        code: payItem.code,
+        unit: payItem.unit,
+        countIsAlwaysOne: payItem.countIsAlwaysOne,
+        quantityFromCarriedTickets: payItem.quantityFromCarriedTickets,
+        crewTimeConversion: payItem.crewTimeConversion,
+        crewDayHours: text(payItem.crewDayHours),
+        crewDaySteps: (steps.get(payItem.id) ?? []).map((step) => ({
+          fromHours: step.fromHours.toString(),
+          toHours: step.toHours.toString(),
+          quantity: step.quantity.toString(),
+        })),
+        rates: (rates.get(payItem.id) ?? []).map((rate) => ({
+          primeId: rate.primeId,
+          rate: rate.rate.toFixed(4),
+        })),
+      })),
+      zones: zones.map((zone) => ({ id: zone.id, name: zone.name })),
+    };
   }
 
   // The project's map as it stands: its newest version, its zones in the order they were
@@ -407,14 +521,11 @@ export class ProjectRead {
   private async fieldEvents(
     projectId: string,
     certifications: readonly ReadCertification[],
-    sites: readonly CheckedSite[],
+    sites: readonly ReadSite[],
     roes: ReadonlyMap<string, CheckedRoe>,
   ): Promise<WorkerFieldEvent[]> {
     const { db } = this;
-    const rows = await db.fieldEvent.findMany({
-      where: { projectId, status: { not: 'VOID' } },
-      orderBy: { id: 'asc' },
-    });
+    const rows = await db.fieldEvent.findMany({ where: { projectId }, orderBy: { id: 'asc' } });
     const ids = rows.map((row) => row.id);
     const idsOf = (pick: (row: (typeof rows)[number]) => string | null): string[] => [
       ...new Set(rows.flatMap((row) => pick(row) ?? [])),
@@ -443,6 +554,7 @@ export class ProjectRead {
     const payableTypes = byId(await db.payableType.findMany());
     const reasons = byId(await db.reason.findMany());
     const debrisTypes = byId(await db.debrisType.findMany());
+    const fieldTags = byId(await db.fieldTag.findMany({ where: { projectId } }));
     const formDebrisTypes = byId(
       await db.formDebrisType.findMany({
         where: { id: { in: idsOf((row) => row.formDebrisTypeId) } },
@@ -508,6 +620,9 @@ export class ProjectRead {
         certKeyedByHand: row.certKeyedByHand,
         typedCapacityCy: row.typedCapacityCy,
         debrisType: debrisTypeOf(row.formDebrisTypeId),
+        fieldTag: row.fieldTagId === null ? null : named(fieldTags.get(row.fieldTagId)),
+        address: row.address,
+        rootBallHalfExposed: row.rootBallHalfExposed,
         numberTyped: row.numberTyped,
         numberTypedReason:
           row.numberTypedReasonId === null ? null : named(reasons.get(row.numberTypedReasonId)),

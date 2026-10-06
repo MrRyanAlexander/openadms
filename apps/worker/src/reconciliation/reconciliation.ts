@@ -1,23 +1,29 @@
 // The worker's run (spec/parts/06-reconciliation.md; spec/acceptance/06-reconciliation.md
-// sections A, C, K and N; ARCHITECTURE §13; adms-ticket-workflows §4.7; BACKLOG 1.5.9, C20,
-// C70; ADR-086, 273, 276, 339, 352): for one project, every ticket that isn't void is drawn again
-// from its current field events and the firm's current setup.
+// sections A, C, K and N; spec/parts/07-pricing-ledger-audit.md; ARCHITECTURE §13;
+// adms-ticket-workflows §4.7; BACKLOG 1.5.9, 1.7.2, C20, C70; ADR-086, 273, 276, 339, 352, 359):
+// for one project, every ticket is drawn again from its current field events and the firm's
+// current setup, and priced by the firm's rules.
 //
 // Its guarantees:
 // - One run per project at a time, by a database lock held for the length of the run: a second
 //   run on the project while one is under way answers that, and works nothing. Another project's
 //   run isn't held up.
 // - One ticket, one piece of work in the database: its field events' worker columns, its
-//   completed record, its flags and the run's decision commit together or not at all (KD-55).
+//   completed record, its lines, its flags and the run's decision commit together or not at all
+//   (KD-01, 55): a reconciled ticket that bills is never left without its lines.
 // - A ticket that errors is flagged "could not be processed" and skipped: nothing else about it
-//   is written, and the run goes on.
+//   is written, the lines it had are still there, and the run goes on.
+// - A ticket locked as invoiced is left exactly as it is, whatever changed (ADR-090): the run
+//   records that it left it.
+// - A rate or a rule that changes needs no list of the tickets it touches: a run works every
+//   ticket of the project and writes only what differs, so only the tickets it touches change.
 // - Running again over unchanged input changes nothing but the record of the run itself.
 // - Each run is recorded, with one decision for each ticket: its status and why.
 // - Everything is written as the system actor, and the database audits it (ADR-273, 276). A
 //   reprocess a person asked for is still the worker's own writing: who asked is on the run.
 //
-// Nothing here is a rule: the checks, the quantities, the flags' words and the statuses are
-// `packages/domain`'s. Unpriced: the rules and their lines are Milestone 1.6's.
+// Nothing here is a rule: the checks, the quantities, the rules' running, the flags' words and
+// the statuses are `packages/domain`'s.
 import { systemActor, type Database, type Prisma, type ReconciliationTrigger } from '@open-adms/db';
 import {
   CertificationChecks,
@@ -204,14 +210,34 @@ export class Reconciliation {
       error: string | null,
     ): Promise<TicketOutcome> => this.outcome(ticket, status, error);
     try {
+      if (await this.lockedAsInvoiced(ticket)) {
+        const stoodAt = ticket.events[0]?.status ?? 'PENDING';
+        await db.$write(systemActor, (tx) =>
+          new TicketWrite(tx, ticket.projectId, runId, clock.now()).decision(ticket, stoodAt, {
+            why: 'Locked as invoiced: left as it is.',
+          }),
+        );
+        return await outcome(stoodAt, null);
+      }
       const worked = await work.of(ticket);
       await db.$write(systemActor, async (tx) => {
         const write = new TicketWrite(tx, ticket.projectId, runId, clock.now());
-        const flags = await write.conclusions(worked);
+        const { flags, lines } = await write.conclusions(worked);
         await write.decision(ticket, worked.status, {
           waitingFor: [...ticket.missing],
-          why: Reconciliation.why(ticket),
+          why:
+            worked.voidedBy.length === 0
+              ? Reconciliation.why(ticket)
+              : `${Reconciliation.why(ticket)} Voided by ${worked.voidedBy
+                  .map((rule) => `the rule "${rule.name}"`)
+                  .join(' and ')}.`,
+          // A rule's void has no record of its own: its reason is the rule, here (ADR-118).
+          voidedBy: worked.voidedBy.map((rule) => ({ id: rule.id, name: rule.name })),
           completed: worked.completed === null ? null : Reconciliation.figures(worked.completed),
+          lines: worked.lines.map((line) => ({ ...line })),
+          linesKept: lines.kept,
+          linesRemoved: lines.removed,
+          linesWritten: lines.written,
           flags: worked.flags.map((flag) => flag.code),
           flagsKept: flags.kept,
           flagsCleared: flags.cleared,
@@ -260,6 +286,28 @@ export class Reconciliation {
       });
       return outcome(stoodAt, error);
     }
+  }
+
+  // Whether the ticket is locked as invoiced: its completed load or haul-out, found by any of
+  // its field events, or its unit rate field event (ADR-057, 090). Asked as the ticket's turn
+  // comes, never from what the run read at its start.
+  private async lockedAsInvoiced(ticket: Ticket<WorkerFieldEvent>): Promise<boolean> {
+    const ids = ticket.events.map((event) => event.id);
+    const ofIts = {
+      OR: [
+        { disposalEventId: { in: ids } },
+        { collections: { some: { collectionEventId: { in: ids }, dissolvedAt: null } } },
+      ],
+    };
+    const locks = await this.db.invoiceLock.count({
+      where:
+        ticket.workflow === 'UNIT_RATE'
+          ? { fieldEventId: { in: ids } }
+          : ticket.workflow === 'LOAD'
+            ? { completedLoad: ofIts }
+            : { completedHaulOut: ofIts },
+    });
+    return locks > 0;
   }
 
   // The field events of one workflow that share a number that isn't one: flagged, in no

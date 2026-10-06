@@ -2,10 +2,10 @@
 // adms-ticket-workflows §4.7; BACKLOG C70; ADR-352): its flags, its status, the zone of each
 // collection and unit rate event, a unit rate ticket's pay item worked out again, and, once the
 // ticket is whole, its completed load or haul-out with a row for each collection, its share and
-// its mileage. No rule is here: every check and every formula is `packages/domain`'s, handed what
+// its mileage; then, with the quantity attached, what the firm's rules make of it: its lines, the
+// pricing flags and a rule's void (spec/parts/07-pricing-ledger-audit.md; adms-validation §5.3;
+// ADR-359). No rule is here: every check and every formula is `packages/domain`'s, handed what
 // it reads (invariant 11). Nothing is written here either: `TicketWrite` writes what this finds.
-//
-// Unpriced: the rules, the lines and the pricing flags are Milestone 1.6's.
 import {
   HaulOutQuantities,
   LoadQuantities,
@@ -14,7 +14,11 @@ import {
   QuantityChecks,
   RoeChecks,
   ScaleWeight,
+  SizeBands,
+  StumpQuantities,
   TicketChecks,
+  TicketPricing,
+  TicketReadings,
   UnitRateChecks,
   placeOf,
   type CarriedTicketRead,
@@ -22,8 +26,12 @@ import {
   type Flags,
   type MileageEnds,
   type MileageMeasured,
+  type Named,
   type PayItemWorkedOut,
+  type PricedLine,
+  type PricedPiece,
   type Ticket,
+  type TicketPriced,
   type WorkerStatus,
   type ZoneAttached,
 } from '@open-adms/domain';
@@ -80,18 +88,33 @@ export interface CompletedWorked {
   readonly weightIsShare: boolean;
   // A load's; none on a haul-out.
   readonly carriedCount: number | null;
+  // The carried stumps' CY: read by pricing, kept on no record.
+  readonly carriedStumpCy: string | null;
   readonly collections: readonly CollectionWorked[];
 }
 
+// A flag as the worker writes it: a pricing flag names the line it is about (its # and pay
+// item), since the line itself may not exist.
+export type WorkedFlag = FlagRaised & {
+  readonly slot?: number | null;
+  readonly payItemId?: string | null;
+};
+
 export interface TicketWorked {
   readonly ticket: Ticket<WorkerFieldEvent>;
-  readonly status: WorkerStatus;
-  // Every flag the ticket's facts raise now.
-  readonly flags: readonly FlagRaised[];
+  // VOID where a rule's Void ticket ran (ADR-118, 167).
+  readonly status: WorkerStatus | 'VOID';
+  // Every flag the ticket's facts raise now, the checks' and pricing's.
+  readonly flags: readonly WorkedFlag[];
   readonly zones: readonly ZoneAttached[];
   readonly workedOut: PayItemWorkedOut | null;
   // None while the ticket isn't whole, and on a unit rate ticket.
   readonly completed: CompletedWorked | null;
+  // The ticket's lines as the rules give them now, in the order of an invoice; none while it
+  // isn't whole, on a voided ticket and under a flag that says "not billed".
+  readonly lines: readonly PricedLine[];
+  // The rules whose Void ticket ran: the void's reason.
+  readonly voidedBy: readonly Named[];
 }
 
 const text = (left: string, right: string): number => (left < right ? -1 : left > right ? 1 : 0);
@@ -106,6 +129,8 @@ export class TicketWork {
   private readonly quantityChecks: QuantityChecks<WorkerFieldEvent>;
   private readonly unitRateChecks: UnitRateChecks<WorkerFieldEvent>;
   private readonly roeChecks: RoeChecks<WorkerFieldEvent>;
+  private readonly readings: TicketReadings<WorkerFieldEvent>;
+  private readonly pricing: TicketPricing;
   // What a ticket's checks read of the project's other tickets.
   private readonly loadCollections: readonly WorkerFieldEvent[];
   private readonly crewTime: readonly WorkerFieldEvent[];
@@ -154,6 +179,19 @@ export class TicketWork {
     this.roeChecks = new RoeChecks({
       timeZone: project.timeZone,
       requiresRoe: project.requiresRoe,
+    });
+    this.readings = new TicketReadings({
+      timeZone: project.timeZone,
+      certifications: snapshot.certifications,
+      zones: snapshot.pricing.zones,
+    });
+    this.pricing = new TicketPricing({
+      timeZone: project.timeZone,
+      rules: snapshot.pricing.rules,
+      contracts: snapshot.pricing.contracts,
+      primes: snapshot.pricing.primes,
+      payItems: snapshot.pricing.payItems,
+      stumpCheckFillNeedsExposure: project.stumpCheckFillNeedsExposure,
     });
 
     this.loadCollections = snapshot.fieldEvents.filter((event) => event.kind === 'COLLECTION');
@@ -208,16 +246,93 @@ export class TicketWork {
         return raised === null ? [] : [raised];
       }),
     ];
+    const priced = this.priced(ticket, place.zones, unitRate.workedOut, completed, flags);
+    const all: WorkedFlag[] = [...flags, ...priced.flags];
     return {
       ticket,
-      // A reviewer's acceptance is a mark of its own, task 1.8.x's: until it is built no flag
-      // is read as accepted.
-      status: ticket.status(flags.map(() => ({ accepted: false }))),
-      flags,
+      // A rule's void wins over everything else the ticket would be (ADR-167). A reviewer's
+      // acceptance is a mark of its own, task 1.8.x's: until it is built no flag is read as
+      // accepted.
+      status:
+        priced.voidedBy.length > 0 ? 'VOID' : ticket.status(all.map(() => ({ accepted: false }))),
+      flags: all,
       zones: place.zones,
       workedOut: unitRate.workedOut,
       completed,
+      lines: priced.lines,
+      voidedBy: priced.voidedBy,
     };
+  }
+
+  // What the firm's rules make of the ticket, after the checks, the zone, the mileage and the
+  // quantity (adms-validation §5.3): each piece the rules run on is read from the ticket and
+  // what was just attached to it, and pricing is handed the flags the checks raised.
+  private priced(
+    ticket: Ticket<WorkerFieldEvent>,
+    zones: readonly ZoneAttached[],
+    workedOut: PayItemWorkedOut | null,
+    completed: CompletedWorked | null,
+    raised: readonly FlagRaised[],
+  ): TicketPriced {
+    const read = this.readings.of(ticket, {
+      // The zone the run attaches now, or the one the field event already holds.
+      zones: ticket.events.map((event) => ({
+        fieldEventId: event.id,
+        zoneId:
+          zones.find((attached) => attached.fieldEventId === event.id)?.zoneId ?? event.zoneId,
+      })),
+      workedOut,
+      shares: completed?.collections ?? [],
+    });
+    const collections = [...ticket.collections].sort(
+      (left, right) => placeOf(left.splitSuffix) - placeOf(right.splitSuffix),
+    );
+    const split = collections.length > 1;
+    const pieces: PricedPiece[] = read.readings.map((reading, at) => {
+      const event = ticket.unitRate ?? collections[at];
+      if (event === undefined) throw new Error('A reading with no field event.');
+      const isStump = ticket.unitRate !== null && event.kindOfWork?.key === 'STUMPS';
+      return {
+        reading,
+        fieldEventId: event.id,
+        // What the tickets a load carries come to is the load's own: never handed to each
+        // property of a split, which would bill it once for each.
+        carriedCount: split ? null : (completed?.carriedCount ?? null),
+        carriedStumpCy: split ? null : (completed?.carriedStumpCy ?? null),
+        countShape: ticket.unitRate === null ? null : (event.kindOfWork?.countShape ?? null),
+        stump: isStump
+          ? {
+              fillCy:
+                event.measurement === null
+                  ? null
+                  : new StumpQuantities(
+                      SizeBands.diameter(event.measurement),
+                      event.rootBallInches,
+                    ).fillCy(this.snapshot.project.stumpFillDepthInches),
+              rootBallHalfExposed: event.rootBallHalfExposed,
+            }
+          : null,
+      };
+    });
+    const siteId = ticket.unitRate === null ? (ticket.disposal?.site?.id ?? null) : null;
+    const site = this.snapshot.sites.find((each) => each.id === siteId);
+    return this.pricing.of({
+      ticketNumber: ticket.ticketNumber,
+      form: ticket.workflow,
+      primeId: read.primeId,
+      operatingSubId: read.operatingSubId,
+      pieces,
+      dumpedAt:
+        site === undefined
+          ? null
+          : {
+              id: site.id,
+              name: site.name,
+              chargesTippingFee: site.chargesTippingFee,
+              tippingFeePayItemIds: site.tippingFeePayItemIds,
+            },
+      raised,
+    });
   }
 
   // The tickets a load's collections list as carried: whether a unit rate ticket of the project
@@ -323,6 +438,7 @@ export class TicketWork {
         weightTons: worked.weightTons,
         weightIsShare: worked.weightIsShare,
         carriedCount: worked.carriedCount,
+        carriedStumpCy: worked.carriedStumpCy,
         collections: await this.rows(
           ticket,
           collections.map((collection, at) => ({
@@ -355,6 +471,7 @@ export class TicketWork {
       weightTons: worked.weightTons,
       weightIsShare: worked.weightIsShare,
       carriedCount: null,
+      carriedStumpCy: null,
       collections: await this.rows(
         ticket,
         collections.map((collection, at) => ({

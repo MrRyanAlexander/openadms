@@ -1,9 +1,10 @@
 // The ninth story (BACKLOG 1.5.9; ADR-352; spec/acceptance/06-reconciliation.md AC-06-01, 03, 04,
 // 13, 14, 16, 18, 23, 42, 53, 56, 119, 124, 141, 147…154): the worker's run over P1's Monday and
-// Tuesday, unpriced. The field days are the story `p1-field-days`' own, record for record, held
-// on its six phones and sent here at the times that story's phones sync: Monday evening, Tuesday
-// evening, and the Marsh Road tower's on Wednesday. Before them P1 gets what that story leaves
-// out: its map (Thursday) and its five certifications (Saturday).
+// Tuesday, told without its money. The field days are the story `p1-field-days`' own, record for
+// record, held on its six phones and sent here at the times that story's phones sync: Monday
+// evening, Tuesday evening, and the Marsh Road tower's on Wednesday. Before them P1 gets what
+// that story leaves out: its map (Thursday), the rest of its pay items and its rules, and its
+// five certifications (Saturday).
 //
 // After each sync the worker runs, as a sync's job would start it, and the story checks what it
 // concluded: each ticket's status and flags, the completed loads and haul-outs with their
@@ -13,11 +14,12 @@
 // asked for again only when one of its ends moves; a completed load is updated in place, and
 // marked dissolved, never deleted, while its ticket isn't whole.
 //
-// Not here: the rules and the money (Milestone 1.6, 1.7). Accepting a flag, renumbering and
-// correcting as a reviewer's actions, with their permissions and reasons (1.8.x): where this
-// story needs a corrected record it writes the correction as the API's login may, to show what
-// the worker does when the ticket comes back. The golden mission in full is 1.9.1.
-import { Certifications, ProjectSetup, type BoxInput, type NewCertification } from '@open-adms/api';
+// Not here: the money. P1 has its pay items and rules, so the run prices as it goes; the lines
+// and the pricing flags are the story `p1-priced`'s (BACKLOG 1.7.2). Accepting a flag,
+// renumbering and correcting as a reviewer's actions, with their permissions and reasons
+// (1.8.x): where this story needs a corrected record it writes the correction as the API's login
+// may, to show what the worker does when the ticket comes back. The golden mission in full is 1.9.1.
+import { ProjectSetup } from '@open-adms/api';
 import type { Database, Prisma } from '@open-adms/db';
 import type { MileageEnds } from '@open-adms/domain';
 import {
@@ -28,26 +30,21 @@ import {
   type RunOutcome,
 } from '@open-adms/worker';
 
-import { createHash } from 'node:crypto';
-
-import { projectTime, StoryClock, utcOffsetMinutes } from '../clock.ts';
-import { SimulatedDevice, type PhoneRecord } from '../device.ts';
+import { projectTime } from '../clock.ts';
 import { uuidv7 } from '../ids.ts';
 import { localMapServers } from '../map-servers.ts';
 import type { Story } from '../runner.ts';
-import { p1FieldDays } from './p1-field-days.ts';
+import {
+  certifyP1,
+  loadP1Map,
+  p1FieldDaysHeld,
+  P1Syncs,
+  saved,
+  setUpP1Pricing,
+} from './p1-office.ts';
 import { p1TimeZone as timeZone } from './p1.ts';
-import { p1Boundary, p1Zones } from './setup.ts';
 
 const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-04:00`;
-
-const primary = (length: number, width: number, height: number): BoxInput => ({
-  shape: 'RECTANGLE',
-  sign: 'ADD',
-  length,
-  width,
-  height,
-});
 
 const short = {
   COLLECTION: 'COL',
@@ -80,7 +77,7 @@ const counts = (outcome: RunOutcome): unknown =>
 export const p1Reconciled: Story = {
   name: 'p1-reconciled',
   title:
-    'The worker’s run over P1’s Monday and Tuesday, unpriced: statuses, flags, quantities, zone and mileage; a failed ticket skipped; nothing changed twice; one run at a time',
+    'The worker’s run over P1’s Monday and Tuesday: statuses, flags, quantities, zone and mileage; a failed ticket skipped; nothing changed twice; one run at a time',
   timeZone,
   start: on('08', '08:00'),
 
@@ -88,163 +85,33 @@ export const p1Reconciled: Story = {
     const { api, worker, clock } = story;
 
     // ------------------------------------------------------------------------------------------
-    // The two field days, exactly as the story `p1-field-days` records them, on a clock of their
-    // own, with every phone's sync held back: each record is kept with the time its phone found
-    // signal, and that story's own checks aren't asked again. It sets P1 up as it goes (its
-    // sites, forms, pay items, people, phones and dispatch board); this story then tells what
-    // came before the field days and sends each record at its phone's own sync.
-    const held: { readonly sent: PhoneRecord; readonly syncedAt: Date }[] = [];
-    const fieldClock = new StoryClock(p1FieldDays.start);
-    await p1FieldDays.run({
-      ...story,
-      clock: fieldClock,
-      intake: {
-        receive: (sent: PhoneRecord) => {
-          held.push({ sent, syncedAt: fieldClock.now() });
-          return Promise.resolve({ answer: 'SAVED', id: '', notes: [] });
-        },
-        topUp: story.intake.topUp.bind(story.intake),
-      } as unknown as typeof story.intake,
-      at: (time) => {
-        fieldClock.set(time);
-      },
-      check: () => undefined,
-      phone: (setup) => new SimulatedDevice(setup, fieldClock),
-    });
-
-    const person = async (name: string): Promise<string> =>
-      (await api.user.findFirstOrThrow({ where: { name } })).id;
-    const dana = await person('Dana Reyes');
-    const luis = await person('Luis Ortega');
-    const sam = await person('Sam Grant');
-    const lee = await person('Lee Morgan');
-    const project = await api.project.findFirstOrThrow();
-    const p1 = project.id;
-    const coastline = (
-      await api.contractor.findFirstOrThrow({ where: { name: 'Coastline Haulers LLC' } })
-    ).id;
-    const tdsr = await api.disposalSite.findFirstOrThrow({ where: { name: 'Marsh Road TDSR' } });
-    const samPhone = (await api.device.findFirstOrThrow({ where: { name: 'P1-HO-TDSR' } })).id;
-    const saved = async <T>(
-      attempt: Promise<{ saved: true; record: T } | { saved: false; refusal: { message: string } }>,
-    ): Promise<T> => {
-      const outcome = await attempt;
-      if (!outcome.saved) throw new Error(`Refused: ${outcome.refusal.message}`);
-      return outcome.record;
-    };
+    // The two field days, exactly as the story `p1-field-days` records them, held on its phones
+    // (the stories' shared steps: p1-office.ts); this story then tells what came before the
+    // field days and sends each record at its phone's own sync.
+    const office = await p1FieldDaysHeld(story);
+    const { held, dana, luis, p1 } = office;
+    const tdsr = await api.disposalSite.findUniqueOrThrow({ where: { id: office.tdsr } });
+    const project = await api.project.findUniqueOrThrow({ where: { id: p1 } });
+    const projects = new ProjectSetup(api, clock, story.policy);
 
     // ------------------------------------------------------------------------------------------
     story.at(
       on('08', '08:40'),
       'Thursday, before the field days: Dana loads P1’s map, its boundary and three zones',
     );
-    const projects = new ProjectSetup(api, clock, story.policy);
-    await saved(
-      projects.loadMap(dana, {
-        projectId: p1,
-        source: 'UPLOAD',
-        sourceName: 'bayline-row-zones-v1.geojson',
-        boundary: p1Boundary,
-        zones: p1Zones,
-        zoneNameField: 'ZONE_NAME',
-      }),
+    await loadP1Map(story, office);
+
+    story.at(
+      on('08', '10:00'),
+      'Dana enters the pay items and rules the field days’ story leaves out (golden mission §1): what the worker prices with, told by the story p1-priced',
     );
+    await setUpP1Pricing(story, office);
 
     story.at(
       on('10', '09:10'),
       'Saturday: Sam Grant certifies P1’s three containers and two crews on P1-HO-TDSR, Lee Morgan helping',
     );
-    const certifying = await api.$write({ actorId: luis, source: 'BACK_OFFICE' }, (tx) =>
-      tx.assignment.create({
-        data: {
-          workDate: new Date('2026-10-10'),
-          projectId: p1,
-          madeById: luis,
-          personId: sam,
-          certifying: true,
-          deviceId: samPhone,
-          origin: 'PLANNED',
-        },
-      }),
-    );
-    const certifications = new Certifications(api, clock);
-    const feature = async (name: string): Promise<string> =>
-      (await api.vehicleFeature.findFirstOrThrow({ where: { name } })).id;
-    const certify = async (
-      time: string,
-      more: Partial<NewCertification> & Pick<NewCertification, 'certNumber' | 'boxes'>,
-    ): Promise<void> => {
-      clock.set(on('10', time));
-      await saved(
-        certifications.certify({
-          projectId: p1,
-          kind: 'CONTAINER',
-          primeId: coastline,
-          certifiedById: sam,
-          deviceId: samPhone,
-          assignmentId: certifying.id,
-          helperIds: [lee],
-          ...more,
-          id: uuidv7(clock.now()),
-          certifiedAt: clock.now(),
-          deviceUtcOffsetMinutes: utcOffsetMinutes(timeZone, clock.now()),
-        }),
-      );
-    };
-    await certify('09:10', {
-      certNumber: '730415',
-      vehicleTypeId: (
-        await api.vehicleType.findFirstOrThrow({ where: { name: 'Hydraulic Dump Trailer' } })
-      ).id,
-      boxes: [
-        primary(360, 96, 72),
-        { ...primary(360, 96, 16), featureId: await feature('Sideboards') },
-      ],
-    });
-    await certify('09:40', {
-      certNumber: '730416',
-      firstTierSub: 'Rivera Trucking',
-      vehicleTypeId: (
-        await api.vehicleType.findFirstOrThrow({ where: { name: 'Self-Loading Truck' } })
-      ).id,
-      boxes: [
-        primary(264, 92, 96),
-        {
-          shape: 'TRIANGLE',
-          sign: 'SUBTRACT',
-          length: 36,
-          width: 92,
-          height: 48,
-          featureId: await feature('Dog Box'),
-        },
-      ],
-    });
-    for (const [time, certNumber, crewType] of [
-      ['10:05', '730417', 'Bucket Truck'],
-      ['10:15', '730418', 'Skid Steer'],
-    ] as const) {
-      await certify(time, {
-        certNumber,
-        kind: 'CREW',
-        crewTypeId: (await api.crewType.findFirstOrThrow({ where: { name: crewType } })).id,
-        boxes: [],
-      });
-    }
-    await certify('10:50', {
-      certNumber: '730419',
-      vehicleTypeOther: 'Walking floor trailer',
-      boxes: [
-        primary(576, 96, 93),
-        {
-          shape: 'RADIUS_CORNER',
-          sign: 'SUBTRACT',
-          radius: 6,
-          run: 576,
-          corners: 2,
-          featureId: await feature('Curved/Angled Sides/Floor'),
-        },
-      ],
-    });
+    await certifyP1(story, office);
     story.check(
       'P1 has its five certifications, each capacity worked out from its measured boxes (golden mission §1)',
       (await api.certification.findMany({ orderBy: { certNumber: 'asc' } })).map(
@@ -392,18 +259,10 @@ export const p1Reconciled: Story = {
         typeof item === 'bigint' ? item.toString() : item,
       );
 
-    // A phone's records reach the server: the ones it sent at that sync in `p1-field-days`.
-    const arrive = async (syncedAt: Date): Promise<number> => {
-      const arriving = held.filter((each) => each.syncedAt.getTime() === syncedAt.getTime());
-      for (const { sent } of arriving) {
-        const answer = await story.intake.receive(sent);
-        if (answer.answer !== 'SAVED') throw new Error(`Not saved: ${answer.answer}`);
-      }
-      return arriving.length;
-    };
-    const syncs = [...new Set(held.map((each) => each.syncedAt.getTime()))]
-      .sort((left, right) => left - right)
-      .map((time) => new Date(time));
+    const phones = new P1Syncs(story, held);
+    const syncs = phones.times;
+    const arrive = (syncedAt: Date): Promise<number> => phones.arrive(syncedAt);
+    const crewPhotographs = (syncedAt: Date): Promise<number> => phones.crewPhotographs(syncedAt);
     const [mondayEvening, tuesdayEvening, wednesdayMorning] = syncs;
     if (
       mondayEvening === undefined ||
@@ -412,39 +271,6 @@ export const p1Reconciled: Story = {
     ) {
       throw new Error('The field days synced fewer than three times.');
     }
-    // Jo's crew photograph with each unit rate ticket (golden mission §2), taken as the ticket
-    // was completed and sent after that sync's records. The story `p1-field-days` takes none,
-    // so each photograph's record is made here as her phone would have sent it.
-    const crewPhotographs = async (syncedAt: Date): Promise<number> => {
-      let sent = 0;
-      for (const { sent: record, syncedAt: at } of held) {
-        if (at.getTime() !== syncedAt.getTime()) continue;
-        if (record.record !== 'FIELD_EVENT' || record.fieldEvent.kind !== 'UNIT_RATE') continue;
-        const event = record.fieldEvent;
-        const file = `P1-UR-1/${event.endedAt.toISOString()}/crew`;
-        const fingerprint = createHash('sha256').update(file).digest('hex');
-        const answer = await story.intake.receive({
-          record: 'PHOTO',
-          photo: {
-            id: uuidv7(event.endedAt),
-            projectId: event.projectId,
-            owner: { kind: 'FIELD_EVENT', id: event.id },
-            takenById: event.monitorId,
-            deviceId: event.deviceId,
-            capturedAt: event.endedAt,
-            deviceUtcOffsetMinutes: event.deviceUtcOffsetMinutes,
-            latitude: null,
-            longitude: null,
-            originalSha256: fingerprint,
-            uploadedSha256: fingerprint,
-            objectKey: `photographs/${file}`,
-          },
-        });
-        if (answer.answer !== 'SAVED') throw new Error(`Not saved: ${answer.answer}`);
-        sent += 1;
-      }
-      return sent;
-    };
 
     // ------------------------------------------------------------------------------------------
     story.at(
@@ -556,9 +382,9 @@ export const p1Reconciled: Story = {
       ],
     );
     story.check(
-      'the routing and address servers were asked for the two collections that have a fix, 14 Heron St and 101002’s; 101003’s has none',
+      'the routing and address servers were asked for the three collections: 14 Heron St, 101002’s, and 101003’s on Heron St again, worked out before its flag failed',
       asked.map((ends) => `${ends.from.latitude}, ${ends.from.longitude}`),
-      ['39.13850000, -75.55370000', '39.15000000, -75.52000000'],
+      ['39.13850000, -75.55370000', '39.15000000, -75.52000000', '39.13850000, -75.55370000'],
     );
 
     // ------------------------------------------------------------------------------------------
@@ -587,18 +413,18 @@ export const p1Reconciled: Story = {
       [['101004', []]],
     );
     story.check(
-      'AC-06-18, 23, 42, 53 the three completed loads: capacity × load call to the digit of the golden mission (52.0, 36.0 and 62.4 CY), the flagged one worked out all the same; 101001 in Zone 2, 6.2050 road miles from Marsh Road TDSR; 101002 in Zone 3, 11.4419 from Bayline County Landfill; 101003’s collection has no fix, so no zone and no mileage',
+      'AC-06-18, 23, 42, 53 the three completed loads: capacity × load call to the digit of the golden mission (52.0, 36.0 and 62.4 CY), the flagged one worked out all the same; 101001 in Zone 2, 6.2050 road miles from Marsh Road TDSR; 101002 in Zone 3, 11.4419 from Bayline County Landfill; 101003 from Heron St again',
       await completed(),
       [
         'CLT 101001 · LOAD_CALL · 65 CY × 80% = 52.00 CY | whole, share 1.0000, 52.00 CY, Zone 2, 6.2050 mi ROAD_ROUTE',
         'CLT 101002 · LOAD_CALL · 48 CY × 75% = 36.00 CY | whole, share 1.0000, 36.00 CY, Zone 3, 11.4419 mi ROAD_ROUTE',
-        'CLT 101003 · LOAD_CALL · 65 CY × 96% = 62.40 CY | whole, share 1.0000, 62.40 CY, no zone, no mileage',
+        'CLT 101003 · LOAD_CALL · 65 CY × 96% = 62.40 CY | whole, share 1.0000, 62.40 CY, Zone 2, 6.2050 mi ROAD_ROUTE',
       ],
     );
     story.check(
-      'no map server was asked again for the two mileages the first run kept',
-      asked.length,
-      0,
+      'no map server was asked again for the two mileages the first run kept; 101003’s, of which nothing was kept, is asked for again',
+      asked.map((ends) => `${ends.from.latitude}, ${ends.from.longitude}`),
+      ['39.13850000, -75.55370000'],
     );
     const flagsOnRecords = async (): Promise<Record<string, number>> => {
       const flags = await api.flag.findMany({ where: { ticketNumber: null, clearedAt: null } });
@@ -852,9 +678,9 @@ export const p1Reconciled: Story = {
       [
         'CLT 101001 · LOAD_CALL · 65 CY × 80% = 52.00 CY | whole, share 1.0000, 52.00 CY, Zone 2, 6.2050 mi ROAD_ROUTE',
         'CLT 101002 · LOAD_CALL · 48 CY × 75% = 36.00 CY | whole, share 1.0000, 36.00 CY, Zone 3, 11.4419 mi ROAD_ROUTE',
-        'CLT 101003 · LOAD_CALL · 65 CY × 96% = 62.40 CY | whole, share 1.0000, 62.40 CY, no zone, no mileage',
-        'CLT 101004 · LOAD_CALL · 48 CY × 50% = 24.00 CY | whole, share 1.0000, 24.00 CY, no zone, no mileage',
-        'CLT 101005 · LOAD_CALL · 65 CY × 70% = 45.50 CY | whole, share 1.0000, 45.50 CY, no zone, no mileage',
+        'CLT 101003 · LOAD_CALL · 65 CY × 96% = 62.40 CY | whole, share 1.0000, 62.40 CY, Zone 2, 6.2050 mi ROAD_ROUTE',
+        'CLT 101004 · LOAD_CALL · 48 CY × 50% = 24.00 CY | whole, share 1.0000, 24.00 CY, Zone 2, 7.8200 mi ROAD_ROUTE',
+        'CLT 101005 · LOAD_CALL · 65 CY × 70% = 45.50 CY | whole, share 1.0000, 45.50 CY, Zone 2, 6.2050 mi ROAD_ROUTE',
         'CHO 201001 · LOAD_CALL · 110 CY × 90% = 99.00 CY | whole, share 1.0000, 99.00 CY, no zone, 8.1397 mi ROAD_ROUTE, added 90',
         'CHO 201004 · SCALE_WEIGHT · 110 CY × 85% = 93.50 CY · 24.00 t | -A, share 0.1176, 11.00 CY, 2.82 t, no zone, 13.9516 mi ROAD_ROUTE, added 10 | -B, share 0.2941, 27.50 CY, 7.06 t, no zone, 13.9516 mi ROAD_ROUTE, added 25 | -C, share 0.5882, 55.00 CY, 14.12 t, no zone, 13.9516 mi ROAD_ROUTE, added 50',
       ],
@@ -1012,18 +838,18 @@ export const p1Reconciled: Story = {
     asked = [];
     await reconciliation.run(setupChange);
     story.check(
-      'AC-06-56, 03 one end of 101001’s mileage moved, so it is asked for again, to the site’s corrected GPS: once, for the one load with a fix that was dumped there',
+      'AC-06-56, 03 one end of 101001’s mileage moved, so it is asked for again, to the site’s corrected GPS: once for each of the four loads dumped there',
       [asked.map((ends) => ends.to.latitude), await mileageOf101001()],
-      [['39.09010000'], '6.2112'],
+      [['39.09010000', '39.09010000', '39.09010000', '39.09010000'], '6.2112'],
     );
     story.at(on('14', '09:30'), 'She puts it back; the worker runs');
     await moveTheTdsr('39.09000000');
     asked = [];
     await reconciliation.run(setupChange);
     story.check(
-      'asked once more, and 101001 is 6.2050 road miles from the TDSR again',
+      'asked once more for each of the four, and 101001 is 6.2050 road miles from the TDSR again',
       [asked.length, await mileageOf101001()],
-      [1, '6.2050'],
+      [4, '6.2050'],
     );
 
     story.at(
@@ -1056,7 +882,7 @@ export const p1Reconciled: Story = {
           'Ticket 101003: load call 96%. Flagged for review. (cleared)',
         ],
         [
-          'CLT 101003 · LOAD_CALL · 65 CY × 90% = 58.50 CY | whole, share 1.0000, 58.50 CY, no zone, no mileage',
+          'CLT 101003 · LOAD_CALL · 65 CY × 90% = 58.50 CY | whole, share 1.0000, 58.50 CY, Zone 2, 6.2050 mi ROAD_ROUTE',
         ],
       ],
     );
@@ -1118,7 +944,7 @@ export const p1Reconciled: Story = {
         ['PENDING'],
         ['PENDING'],
         [
-          'CLT 101005 · LOAD_CALL · 65 CY × 70% = 45.50 CY · dissolved | whole, share 1.0000, 45.50 CY, no zone, no mileage, dissolved',
+          'CLT 101005 · LOAD_CALL · 65 CY × 70% = 45.50 CY · dissolved | whole, share 1.0000, 45.50 CY, Zone 2, 6.2050 mi ROAD_ROUTE, dissolved',
         ],
       ],
     );
@@ -1157,7 +983,7 @@ export const p1Reconciled: Story = {
         ['Ticket 101006: typed ticket number (Barcode damaged). Flagged for review.'],
         ['Ticket 101060: typed ticket number (Barcode damaged). Flagged for review. (cleared)'],
         [
-          'CLT 101006 · LOAD_CALL · 48 CY × 60% = 28.80 CY | whole, share 1.0000, 28.80 CY, no zone, no mileage',
+          'CLT 101006 · LOAD_CALL · 48 CY × 60% = 28.80 CY | whole, share 1.0000, 28.80 CY, Zone 2, 7.8200 mi ROAD_ROUTE',
         ],
       ],
     );

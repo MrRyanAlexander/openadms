@@ -1,14 +1,15 @@
 // A project's rules, between the database's rows and the domain's reading of them (spec/RULES.md;
 // ADR-313; BACKLOG C58). packages/domain's ProjectRules checks a rule against every other rule of
-// its project, and reads each as a RuleEntry: this reads the rows into entries, with each picked
-// value's name and whether it is gone (archived, or a zone name the project's current map doesn't
-// have), and writes an entry back as rows. Both setup services that save rules use it, inside
+// its project, and reads each as a RuleEntry: the rows are read into entries by packages/db's
+// RuleRows, the one reading the worker runs the rules from too (ADR-359), with each picked value's
+// name and whether it is gone (archived, or a zone name the project's current map doesn't have);
+// this writes an entry back as rows. Both setup services that save rules use it, inside
 // their own piece of work: the rule builder (RuleSetup) and a pay item's "Pays when"
 // (PayItemSetup).
 //
 // A rule's lines are never deleted or edited in place: a change archives the lines it had and
 // writes the new ones after them, so the audit log holds what the rule said before.
-import type { Prisma } from '@open-adms/db';
+import { RuleRows, type Prisma, type RuleNamed } from '@open-adms/db';
 import {
   type QuantityFrom,
   type RuleActionKind,
@@ -18,7 +19,6 @@ import {
   type RuleEntry,
   type RuleForm,
   type RuleOperator,
-  type RulePick,
 } from '@open-adms/domain';
 
 import { type Clock, day } from './setup-service.ts';
@@ -59,24 +59,18 @@ const pickColumns = {
   ZONE: 'zoneName',
 } as const satisfies Partial<Record<RuleCriterionKey, string>>;
 
-// What a picked value is called, and whether it is still there to pick.
-interface Named {
-  readonly name: string;
-  readonly gone: boolean;
-}
-
-const isArchived = (record: { archivedAt: Date | null }): boolean => record.archivedAt !== null;
-
 export class RuleBook {
   private readonly tx: Prisma.TransactionClient;
   private readonly projectId: string;
   private readonly clock: Clock;
-  private names: Promise<ReadonlyMap<string, Named>> | undefined;
+  private readonly rows: RuleRows;
+  private names: Promise<ReadonlyMap<string, RuleNamed>> | undefined;
 
   constructor(tx: Prisma.TransactionClient, projectId: string, clock: Clock) {
     this.tx = tx;
     this.projectId = projectId;
     this.clock = clock;
+    this.rows = new RuleRows(tx, projectId);
   }
 
   // The form a rule is on: one of the project's own. Only a load, haul-out or unit rate form takes
@@ -88,89 +82,9 @@ export class RuleBook {
     return form.documentType as RuleForm;
   }
 
-  // Every rule of the project, archived and inactive ones included, in the order written. Read one
-  // query at a time: a piece of work has one connection.
+  // Every rule of the project, archived and inactive ones included, in the order written.
   async entries(): Promise<RuleEntry[]> {
-    const { tx } = this;
-    const own = { projectId: this.projectId };
-    const live = { ...own, archivedAt: null };
-    const named = await this.named();
-    const rules = await tx.rule.findMany({ where: own, orderBy: { id: 'asc' } });
-    const contracts = await tx.contract.findMany({ where: own });
-    const payItems = await tx.payItem.findMany({ where: own });
-    const lines = await tx.ruleCriterion.findMany({ where: live, orderBy: { position: 'asc' } });
-    const picks = await tx.ruleCriterionPick.findMany({ where: live, orderBy: { id: 'asc' } });
-    const actions = await tx.ruleAction.findMany({ where: live, orderBy: { id: 'asc' } });
-    const items = await tx.ruleActionItem.findMany({
-      where: { action: own, archivedAt: null },
-      orderBy: { id: 'asc' },
-    });
-    const forms = await tx.form.findMany({ where: own });
-    const payItemOf = (id: string | null): RuleActionLine['payItem'] => {
-      const payItem = payItems.find((each) => each.id === id);
-      return payItem === undefined
-        ? null
-        : { id: payItem.id, code: payItem.code, archived: isArchived(payItem) };
-    };
-    return rules.map((rule) => {
-      const contract = contracts.find((each) => each.id === rule.contractId);
-      const form = forms.find((each) => each.id === rule.formId);
-      return {
-        id: rule.id,
-        name: rule.name,
-        formId: rule.formId,
-        form: rule.documentType as RuleForm,
-        formArchived: form !== undefined && isArchived(form),
-        contract:
-          contract === undefined
-            ? null
-            : { id: contract.id, name: contract.name, archived: isArchived(contract) },
-        active: rule.active,
-        archived: isArchived(rule),
-        fromPayItem: payItemOf(rule.fromPayItemId),
-        criteria: lines
-          .filter((line) => line.ruleId === rule.id)
-          .map((line) => ({
-            criterion: line.criterion,
-            operator: line.operator,
-            picks: picks
-              .filter((pick) => pick.criterionId === line.id)
-              .map((pick) =>
-                RuleBook.pick(
-                  pick.contractorId ??
-                    pick.formDebrisTypeId ??
-                    pick.fieldTagId ??
-                    pick.disposalSiteId ??
-                    pick.siteTypeId ??
-                    pick.payItemId ??
-                    pick.itemNameId ??
-                    pick.zoneName ??
-                    '',
-                  named,
-                ),
-              ),
-            numberFrom: line.numberFrom?.toNumber() ?? null,
-            numberTo: line.numberTo?.toNumber() ?? null,
-            dateFrom: line.dateFrom?.toISOString().slice(0, 10) ?? null,
-            dateTo: line.dateTo?.toISOString().slice(0, 10) ?? null,
-            text: line.text,
-          })),
-        actions: actions
-          .filter((action) => action.ruleId === rule.id)
-          .map((action) => ({
-            kind: action.kind,
-            slot: action.slot,
-            payItem: payItemOf(action.payItemId),
-            quantityFrom: action.quantityFrom,
-            items: items
-              .filter((item) => item.actionId === action.id)
-              .map((item) => ({
-                id: item.itemNameId,
-                name: named.get(item.itemNameId)?.name ?? item.itemNameId,
-              })),
-          })),
-      };
-    });
+    return this.rows.entries(await this.named());
   }
 
   // The lines a screen hands over, as the domain reads them: each picked value with its name.
@@ -179,7 +93,7 @@ export class RuleBook {
     return criteria.map((line) => ({
       criterion: line.criterion,
       operator: line.operator,
-      picks: (line.picks ?? []).map((value) => RuleBook.pick(value, named)),
+      picks: (line.picks ?? []).map((value) => RuleRows.pick(value, named)),
       numberFrom: line.numberFrom ?? null,
       numberTo: line.numberTo ?? null,
       dateFrom: line.dateFrom ?? null,
@@ -323,61 +237,16 @@ export class RuleBook {
     }
   }
 
-  // Everything on the project a criterion may pick, by its id (a zone by its name, as the project's
-  // current map, its newest version, has it): what it is called, and whether it is gone. Read once
-  // for a piece of work, before it writes.
-  private named(): Promise<ReadonlyMap<string, Named>> {
-    this.names ??= this.readNames();
+  // Everything on the project a criterion may pick, by its id (a zone by its name): what it is
+  // called, and whether it is gone. Read once for a piece of work, before it writes.
+  private named(): Promise<ReadonlyMap<string, RuleNamed>> {
+    this.names ??= this.rows.names();
     return this.names;
-  }
-
-  private async readNames(): Promise<ReadonlyMap<string, Named>> {
-    const { tx } = this;
-    const own = { projectId: this.projectId };
-    const names = new Map<string, Named>();
-    const keep = (id: string, name: string, ...records: { archivedAt: Date | null }[]): void => {
-      names.set(id, { name, gone: records.some(isArchived) });
-    };
-    const places = await tx.projectContractor.findMany({
-      where: own,
-      include: { contractor: true },
-    });
-    for (const place of places) {
-      keep(place.contractorId, place.contractor.name, place, place.contractor);
-    }
-    const debrisTypes = await tx.formDebrisType.findMany({
-      where: { form: own },
-      include: { debrisType: true },
-    });
-    for (const entry of debrisTypes) keep(entry.id, entry.debrisType.name, entry);
-    for (const tag of await tx.fieldTag.findMany({ where: own })) keep(tag.id, tag.name, tag);
-    for (const site of await tx.disposalSite.findMany({ where: own })) {
-      keep(site.id, site.name, site);
-    }
-    for (const type of await tx.siteType.findMany()) keep(type.id, type.name, type);
-    for (const payItem of await tx.payItem.findMany({ where: own })) {
-      keep(payItem.id, payItem.code, payItem);
-    }
-    for (const item of await tx.itemName.findMany()) keep(item.id, item.name, item);
-    const map = await tx.mapVersion.findFirst({ where: own, orderBy: { version: 'desc' } });
-    if (map !== null) {
-      for (const zone of await tx.zone.findMany({ where: { mapVersionId: map.id } })) {
-        names.set(zone.name, { name: zone.name, gone: false });
-      }
-    }
-    return names;
-  }
-
-  // A picked value with its name. One that isn't on the project is gone; the database refuses to
-  // save a pick of it.
-  private static pick(value: string, named: ReadonlyMap<string, Named>): RulePick {
-    const found = named.get(value);
-    return { value, name: found?.name ?? value, gone: found?.gone ?? true };
   }
 
   private static items(
     itemNameIds: readonly string[],
-    named: ReadonlyMap<string, Named>,
+    named: ReadonlyMap<string, RuleNamed>,
   ): { id: string; name: string }[] {
     return itemNameIds.map((id) => ({ id, name: named.get(id)?.name ?? id }));
   }

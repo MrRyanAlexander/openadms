@@ -14,9 +14,9 @@
 //
 // Not here: P1's load pay items, rules and map (the story `setup`) and its certifications (the
 // story `certification`): a phone sends only the cert number it scanned. Photographs (the file's
-// place in storage is Phase 2's). GPS fixes, apart from the tickets whose zone and mileage the
-// story `p1-reconciled` tells (101001, 101002, 201001 and 201004: spec/CONVENTIONS.md §6's
-// stand-in points). The top-up of a block at a sync (the story `sync`). The golden mission's own
+// place in storage is Phase 2's). GPS fixes, apart from the collections' and the haul-outs',
+// whose zone and mileage the worker's stories tell and the rules price by (spec/CONVENTIONS.md
+// §6's stand-in points). The top-up of a block at a sync (the story `sync`). The golden mission's own
 // story, with what happens at review, is 1.9.1.
 import {
   FormSetup,
@@ -508,6 +508,13 @@ export const p1FieldDays: Story = {
       return id;
     };
 
+    // Where the later loads are collected (the mission names no address for them): the dump
+    // trailer goes back to Heron St, Rivera's self-loader works Elm St (spec/CONVENTIONS.md §6:
+    // 6.2050 and 7.8200 road miles from Marsh Road TDSR, both in Zone 2). The phone records its
+    // fix; no address is typed.
+    const heronSt = { endLatitude: '39.13850000', endLongitude: '-75.55370000' };
+    const elmSt = { endLatitude: '39.15000000', endLongitude: '-75.54000000' };
+
     story.at(monday('08:15'), 'Ana scans the dump trailer’s badge, 730415, at 14 Heron St');
     started['101001'] = begin(ana, 'LOAD', 'COLLECTION', '730415');
     story.check(
@@ -622,8 +629,14 @@ export const p1FieldDays: Story = {
     );
     story.check(
       'AC-04-11 she enters 101003: the two match, and it is saved',
-      done(ana.complete(started['101003'], { number: made, ...vegetative, reentered: '101003' }))
-        .ticketNumber,
+      done(
+        ana.complete(started['101003'], {
+          number: made,
+          ...vegetative,
+          ...heronSt,
+          reentered: '101003',
+        }),
+      ).ticketNumber,
       '101003',
     );
     story.at(monday('11:50'), 'Kim scans 730415 at the tower');
@@ -682,7 +695,7 @@ export const p1FieldDays: Story = {
     story.at(monday('17:30'), 'Ana scans 730416 for the day’s last load');
     started['101004'] = begin(ana, 'LOAD', 'COLLECTION', '730416');
     story.at(monday('17:50'), 'Ana completes 101004; the truck parks loaded for the night');
-    done(ana.complete(started['101004'], { number: made, ...vegetative }));
+    done(ana.complete(started['101004'], { number: made, ...vegetative, ...elmSt }));
     story.check(
       'every record is still on its phone, and the server has none',
       [
@@ -796,7 +809,8 @@ export const p1FieldDays: Story = {
     story.at(tuesday('10:05'), 'Ana completes it: her phone carries on from yesterday, 101005');
     story.check(
       'the phone kept its own count of numbers through the sign-in',
-      done(ana.complete(started['101005'], { number: made, ...vegetative })).ticketNumber,
+      done(ana.complete(started['101005'], { number: made, ...vegetative, ...heronSt }))
+        .ticketNumber,
       '101005',
     );
     story.at(tuesday('10:25'), 'Kim scans 730415 at the tower');
@@ -833,7 +847,7 @@ export const p1FieldDays: Story = {
       }),
     );
     story.at(tuesday('11:30'), 'Ana completes 101006');
-    done(ana.complete(started['101006'], { number: made, ...vegetative }));
+    done(ana.complete(started['101006'], { number: made, ...vegetative, ...elmSt }));
     story.at(
       tuesday('11:50'),
       'Jo records an incident at 22 Elm St: a mailbox struck by truck 730416',

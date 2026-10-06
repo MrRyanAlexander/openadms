@@ -350,3 +350,33 @@ describe('the worker writes as the system actor', () => {
     ).toContain('permission denied for table client');
   });
 });
+
+describe('$read runs reads in a transaction that can write nothing (ADR-359)', () => {
+  it('reads as the service’s own login, with no actor stated', async () => {
+    const seen = await worker.$read(async (tx) => ({
+      ...(await stated(tx)),
+      lists: await tx.siteType.count(),
+    }));
+    expect(seen.user).toBe('adms_worker');
+    expect(seen.actor).toBe('');
+    expect(seen.lists).toBeGreaterThan(0);
+  });
+
+  it('a write inside it is refused by the database, whoever states the actor', async () => {
+    expect(await refusal(api.$read((tx) => tx.client.create({ data: bayline })))).toContain(
+      'read-only transaction',
+    );
+    expect(
+      await refusal(
+        worker.$read(async (tx) => {
+          await tx.$queryRaw`SELECT set_config('adms.actor_id', ${systemActorId}, true),
+            set_config('adms.source', 'SYSTEM', true)`;
+          await tx.reconciliationRun.create({
+            data: { projectId: randomUUID(), trigger: 'SYNC', startedAt: new Date() },
+          });
+        }),
+      ),
+    ).toContain('read-only transaction');
+    expect(await api.client.count({ where: bayline })).toBe(0);
+  });
+});
