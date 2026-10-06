@@ -94,12 +94,16 @@ edited any time after (a change reprocesses the un-invoiced tickets it touches, 
 **Reuse:** a firm **library** (debris types, pay items, incident types, reasons) and **copy from a
 past project** (ADR-228). **The setup check** lists gaps before the field day (a tipping fee site
 with no fee pay item, a debris type no rule pays, a prime with no rate, overlapping bands), and every
-change shows what it would change first (ADR-229).
+change shows what it would change first (ADR-229). It also lists a stretch between two size bands or
+two crew-day steps that falls in neither, and every active rule that isn't valid, with why (a rule
+left naming an archived form, contract or pay item among them); it never refuses anything (built at
+the domain, ADR-357: `SetupCheck`).
 
 **What each site's phones will ask for** is worked out here, ahead: for each site, debris type and
 prime, from the rules that could match there and the Unit of Measure and capture settings of the pay
 items they pay: a load call, a scale weight, or a count of the tickets a load carries. It's shown on
-the site's page and sent with the phones' lists (ADR-227, 243).
+the site's page and sent with the phones' lists (ADR-227, 243). A haul-out's disposal is asked for
+the scale weight or nothing more (built at the domain, ADR-357: `QuantityLookup`).
 
 **Then dispatch** ([Part 2](02-people-and-devices.md)): phones are enrolled once, and each day's
 **assignments** say who works where on what (ADR-240). Only then does a monitor record a field event.

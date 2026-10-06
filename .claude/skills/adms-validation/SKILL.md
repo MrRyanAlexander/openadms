@@ -2,7 +2,7 @@
 name: adms-validation
 description: Open ADMS checks, flags, statuses, how rules run, and the quantity math, in today's rules. Covers the checks between a ticket's field events and on each event against the setup (certification, place and time, where debris went, quantity, pay item settings, forms, pricing), what is never flagged, how the worker runs a form's rules (one contract per rule, criteria read only the ticket, Add in # order then Remove then Void ticket, a rule's void wins), why no rule or setting may be silently inert, the four statuses and what sets them, timing contradictions, how a flag reads and how a reviewer accepts one, and every quantity formula (capacity × load call, scale weight and a tandem's split, split shares, circumference to diameter, stump CY, fill CY, carried tickets, white goods, crew hours, mileage rounding). Use when writing a check or a flag, the rule engine, a threshold or project setting, status changes, or any quantity math. Setup and workflows live in adms-ticket-workflows, pricing and the ledger in adms-ledger-audit, duplicates and corrections in adms-exceptions.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-244; the flag catalogue approved, ADR-290; split haul-outs, ADR-295; a split haul-out's pile weights, ADR-297; *Haul-outs leave here* only on a TDSR, ADR-298; a duplicate rule refused, ADR-301; the flags for a record that should not have been possible and what a removed photograph counts for, ADR-345; how the place checks are built, ADR-346; how the quantity, unit rate and ROE checks are built, ADR-347; two more flags, ADR-348) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-244; the flag catalogue approved, ADR-290; split haul-outs, ADR-295; a split haul-out's pile weights, ADR-297; *Haul-outs leave here* only on a TDSR, ADR-298; a duplicate rule refused, ADR-301; the flags for a record that should not have been possible and what a removed photograph counts for, ADR-345; how the place checks are built, ADR-346; how the quantity, unit rate and ROE checks are built, ADR-347; two more flags, ADR-348; the setup check built, ADR-357) -->
 
 > **This page states today's rules** (last changed by ADR-301, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
@@ -221,7 +221,10 @@ false confidence in a billing control. The rebuild closes the whole class (KD-15
   ignored.
 - **Show matches** says what a rule matches now, and the **setup check** lists gaps before the field
   day: a tipping fee site with no fee pay item, a debris type no rule pays, a prime with no rate,
-  overlapping bands (ADR-229). Whether the builder also marks a rule "valid" is a proposal
+  overlapping bands (ADR-229). Built at the domain (`SetupCheck`, ADR-357): it also lists a stretch
+  between two bands or two crew-day steps that falls in neither, and every active rule that isn't
+  valid, with why. **A rule that names an archived form, contract or pay item is not valid and
+  never runs** (agent default, ADR-357). Whether the builder also marks a rule "valid" is a proposal
   (`spec/RULES.md` §7).
 
 ## 5.4 Statuses, and what sets them

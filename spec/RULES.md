@@ -252,7 +252,10 @@ A rule is **valid** when:
 - every criterion applies to that form and its value still exists (not archived);
 - a rule with an *Add transaction* names a contract (ADR-239), and every *Add transaction* has a #
   and a pay item;
-- every *Remove transaction* names a #.
+- every *Remove transaction* names a #;
+- its form, its contract and every pay item it adds are still on the project (not archived): a rule
+  left naming an archived one stops running until it is put back or the rule is changed (*agent
+  default*, ADR-357).
 
 An invalid rule can be saved but never runs; the builder says why, and **the setup check lists every
 invalid active rule** before the field day, so none is silently inert (ADR-229; `adms-validation`
