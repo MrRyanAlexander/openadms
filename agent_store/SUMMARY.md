@@ -1,13 +1,13 @@
 # Open ADMS — Current decisions and gaps, at a glance
 
 **The present tense of the project on one page.** `DECISIONS.md` and `DEVIATIONS.md` are the full
-history, with 411 ADRs and 74 KDs, many superseded. This page says what is true **now** and which
+history, with 413 ADRs and 74 KDs, many superseded. This page says what is true **now** and which
 entries to cite. The reasons live in the ADRs and the skills.
 
 - **Keep it current:** when you add, amend or supersede an ADR, or open or close a KD, update this
   page **in the same response** (`adms-decisions`).
 - **If this page and a log entry disagree,** the newest ADR wins: fix this page and say so.
-- **Updated 2026-10-07, through ADR-411 / KD-74.** **Phase 2 (API and sync) is open (ADR-376);
+- **Updated 2026-10-07, through ADR-413 / KD-74.** **Phase 2 (API and sync) is open (ADR-376);
   its plan is `BACKLOG.md`'s eight milestones and 32 tasks (ADR-377). Tasks 2.1.1 (ADR-379) and
   2.1.2 (ADR-380…385) are done: the API runs as a process, reached only at
   `https://api.adms.localhost` through Caddy, with a health answer and nothing else yet. Task
@@ -16,7 +16,9 @@ entries to cite. The reasons live in the ADRs and the skills.
   policy values. Task 2.2.1 (ADR-397…399) is done: sign-in's records, in the database only. Task
   2.2.2 (ADR-402…406) is done: passwords (the rules, the breached list, the hash, an admin's set,
   reset by email). Task 2.2.3 (ADR-407…411) is done: sessions (sign-in and out, the two cookies,
-  CSRF, wrong tries and the lock, a password to change first, the keyed hash).**
+  CSRF, wrong tries and the lock, a password to change first, the keyed hash). Task 2.2.4
+  (ADR-412) is done: two-step sign-in (an authenticator's code, required for an admin and a
+  manager/analyst, set up by proving a code, cleared by an admin; the dev stack's accounts).**
   `spec/acceptance/10-api-and-sync.md` and `spec/THREAT-MODEL.md` are approved by the user
   (their marks, ADR-386, 393). **No KD is open.**
   The exception to the seven-day rule is gone from `pnpm-workspace.yaml` (ADR-372's owed step,
@@ -577,11 +579,53 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   `apps/api/test/session-tokens.test.ts` (no stack), `sessions.test.ts` (the installation's
   database, each test undone), `door.test.ts`, `packages/db/test/sign-in.test.ts`. AC-10-09,
   12…19 pass; AC-02-39 in part. **Not built, said:** the second step (2.2.4: **until then an
-  admin signs in with a password alone**); a way in for the last admin, locked, of a firm
+  admin signs in with a password alone**: built, ADR-412); a way in for the last admin, locked, of a firm
   with no mail (2.2.5); rate limits (2.2.6); a person's list of their own sessions and an
   admin ending somebody's (ASVS 7.5.2, 7.4.5). What it leaves: BACKLOG C90. *Agent defaults,
   but (a) the change of an admin-set password and (b) the keyed hash, built at the user's
   word (ADR-407).*
+- **Two-step sign-in (task 2.2.4).** [412; the rule is 170] **The standard, read first
+  (ADR-401):** NIST SP 800-63B-4 §3.1.4, §3.1.5, §3.2.2 and OWASP ASVS 5.0 V6.3…6.5; nothing
+  built departs from them (one reading is said, below). **The second step is an authenticator
+  app's code** (RFC 6238: HMAC-SHA-1, six digits, a thirty-second step, a secret of 20 random
+  bytes; `OneTimeCodes`, `node:crypto`, no dependency). **Who** (the domain's `TwoStepRules`):
+  required for an admin and a manager/analyst, optional for a read-only viewer, none for a
+  monitor. **Signing in:** `POST /sessions` takes an optional `code`; the password is checked
+  first; a person with an authenticator and no code is answered 401 `TWO_STEP_CODE_NEEDED`
+  (nothing opened, nothing written; never said while the login waits or is locked) and the page
+  sends the sign-in again with it; **a wrong or spent code is a wrong try at the login**
+  (`SIGN_IN_REFUSED`, counted, a `SIGN_IN_FAILED` event, the wait and the lock of ADR-409).
+  **A code is good once:** `user_credential.two_step_last_step` keeps the step of the last one
+  taken and none at or before it is taken again. **Which steps:** the server's own and
+  `TWO_STEP_CODE_STEPS_EITHER_SIDE` (1; 0 or 1) either side. *The reading:* ASVS 6.5.5's
+  "30 seconds at most" is read as the step's length, as the apps and comparable products work;
+  to the letter it is the value 0, which an installation may state. **A required person with
+  no authenticator** gets a session that opens nothing but setting one up: every `SIGNED_IN`
+  endpoint not marked `beforeTwoStepSetup` answers 403 `TWO_STEP_SETUP_REQUIRED`; a password
+  somebody else set is changed first. **Setting it up:** `POST /two-step/setups` answers a new
+  secret (base32, and the `otpauth://` address for a QR code) and a *setup* (the secret sealed
+  with whose it is, good for `TWO_STEP_SETUP_MINUTES`, 10); `POST
+  /two-step/setups/confirmations` `{ setup, code }` keeps it. **Nothing is in the database
+  until a code proves the app has the secret** (no "confirmed" column). A `TWO_STEP_SET_UP`
+  event; the person's other sessions end; told by email. A second one is refused
+  (`TWO_STEP_ALREADY_SET_UP`). **At rest** the secret is sealed (AES-256-GCM, a key of that
+  purpose drawn from `ADMS_TOKEN_SIGNING_SECRET`, bound to its person, written `v1.…`); **the
+  database refuses anything unsealed** and the audit log never holds it; **losing or changing
+  the signing secret means every authenticator is set up again**. **An admin clears another
+  person's** (`POST /people/:userId/two-step-clearings`; admin read from the database in the
+  same piece of work; never their own; `NOT_ALLOWED`, `NOT_FOUND`, `TWO_STEP_NOT_SET_UP`): the
+  secret goes, **the person's sessions end**, a `TWO_STEP_CLEARED` event about them with the
+  admin as actor, an email, and they set one up at their next sign-in. **The dev stack's
+  accounts** (`infra/local/src/dev-accounts.ts`; **`pnpm local:accounts`**, `--show` to only
+  show them): an admin, a manager/analyst and a viewer with known passwords and authenticator
+  secrets, written only to a database on this machine; no shipped folder holds one of those
+  values (a test). Eighty-six migrations. Tests: `packages/domain/test/two-step.test.ts`,
+  `apps/api/test/one-time-codes.test.ts` (no stack), `two-step.test.ts` (the installation's
+  database, undone), `infra/local/test/dev-accounts.test.ts`, `packages/db/test/sign-in.test.ts`.
+  AC-10-26 and AC-02-14 pass; AC-02-74's sign-in half. **Not built, said:** a person replacing
+  or removing their own authenticator; recovery codes; a way in for the only admin who lost
+  their phone (2.2.5, with the locked last admin); rate limits (2.2.6). What it leaves:
+  BACKLOG C91. *Agent defaults.*
 - **The threat model and the API's scenarios (task 2.1.1; both approved by the user, ADR-386,
   393).**
   `spec/THREAT-MODEL.md`: eleven kinds of attacker, 36 threats over the layers of ARCHITECTURE §2,
@@ -1702,28 +1746,28 @@ its scenario.
 ## 4. Waiting on the user
 
 **Live today (2026-10-07, ADR-376…411):**
-- **Nothing blocks the next task** (2.2.4, two-step sign-in).
-- **Settled at the user's word, 2026-10-07 (ADR-407: "I differ to your recommendations on the
-  points in the summary"), no longer waiting:** the agent defaults of tasks 2.1.2, 2.1.3,
-  2.1.4, 2.2.2 and of ADR-401 (3) as they were listed here; (a) a password an admin set is
-  changed by its owner at their next sign-in (built, ADR-410); (b) the keyed hash (built for
-  passwords, ADR-411; the master passcode's with 2.5.1); (c) AC-10-24's example for a person
-  is now `1q2w3e4r5t6y7u8i`, with `password1234` kept for the master passcode. **Said back so
-  a misreading shows:** (b) and (c) had no recommendation written here; the two above are the
-  ones made and acted on. Say if either was not what you meant.
-- **Agent defaults of 2.2.3 to confirm or overturn (ADR-408…410):** a person signs in with
-  their **email address**; a session ends after **30 quiet minutes** and **12 hours** at most
-  (the standard allows up to an hour and a day), its access token after 5 minutes; a login
-  **waits after 5 wrong tries in a row** (30 seconds, doubling) and is **locked at the 10th
-  until its password is set anew**, never by time (the standard's rule; its limit is 100);
-  every failed sign-in is told the same; a wrong try is recorded with the person whose login
-  was tried as its actor; a new password ends the person's sessions; two tabs refreshing with
-  one token sign the person out (the page will take a lock, Phase 4).
-- **Two things for you to know, neither blocking:** (1) **the last admin, locked, of a firm
-  with no mail server has no way in yet.** ARCHITECTURE §6 says the last admin can't be locked
-  out; the standard says a lock opens only by a new password. Task 2.2.5 owns it; recommended:
-  a command on the server, beside the installer, that sets an admin's password. (2) **Until
-  task 2.2.4 an admin signs in with a password alone**; nothing is shipped between the two.
+- **Nothing blocks the next task** (2.2.5, permissions on every request, and people).
+- **Settled at the user's word, 2026-10-07 (ADR-413: "as it relates to the previous task FLAGS,
+  Im going with your recommendations"), no longer waiting:** the agent defaults of task 2.2.3
+  (the email address; 30 quiet minutes, 12 hours, 5 minutes; a wait after 5 wrong tries and a
+  lock at the 10th until the password is set anew; one answer to every failed sign-in; the
+  actor of a wrong try; a new password ending sessions; two tabs), and **the server command
+  that sets an admin's password for a firm's locked last admin, which task 2.2.5 builds**.
+  Before it, ADR-407 settled tasks 2.1.2…2.2.2's.
+- **Agent defaults of 2.2.4 to confirm or overturn (ADR-412):** **(a) a code is taken in one
+  thirty-second step either side of the server's own** (what authenticator apps and RFC 6238
+  expect; ASVS's "30 seconds at most" read to the letter would be none either side, a policy
+  value an installation may state, at the cost of failed sign-ins near a step's end);
+  (b) a right password without a code is told "a code is needed", the one failed sign-in told
+  apart; (c) a wrong code counts as a wrong try and locks the login at the 10th like a wrong
+  password; (d) an admin never clears their own authenticator; (e) setting one up ends the
+  person's other sessions, and must be finished within ten minutes; (f) the dev accounts'
+  names and the command `pnpm local:accounts`.
+- **Two things for you to know, neither blocking:** (1) **the only admin of a firm who loses
+  their phone has no way in yet**, like the locked last admin of a firm with no mail: task
+  2.2.5's server command is recommended to do both (set the password, clear the
+  authenticator). (2) **Nobody can yet replace their own authenticator** (a new phone while the
+  old one still works): an admin clears it and they set it up again; a page for it is Phase 4's.
 - **Phase 2's exit criteria and its plan are agent defaults (ADR-376, 377)**, the user's to change:
   jobs built before the endpoints that queue them; a tenth acceptance file and a threat model
   written first, for the user's approval; reads that only a screen needs left to Phase 4.

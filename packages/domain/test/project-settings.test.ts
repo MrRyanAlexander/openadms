@@ -29,6 +29,8 @@ const shipped = {
   SIGN_IN_TRIES_BEFORE_LOCK: '10',
   SIGN_IN_FIRST_WAIT_SECONDS: '30',
   SIGN_IN_LONGEST_WAIT_MINUTES: '60',
+  TWO_STEP_CODE_STEPS_EITHER_SIDE: '1',
+  TWO_STEP_SETUP_MINUTES: '10',
 };
 
 // The program types of the example world: PPDR requires an ROE, ROW doesn't.
@@ -110,6 +112,8 @@ describe('the policy values', () => {
       signInTriesBeforeLock: 'SIGN_IN_TRIES_BEFORE_LOCK',
       signInFirstWaitSeconds: 'SIGN_IN_FIRST_WAIT_SECONDS',
       signInLongestWaitMinutes: 'SIGN_IN_LONGEST_WAIT_MINUTES',
+      twoStepCodeStepsEitherSide: 'TWO_STEP_CODE_STEPS_EITHER_SIDE',
+      twoStepSetupMinutes: 'TWO_STEP_SETUP_MINUTES',
     });
     expect(Object.keys(shipped).sort()).toEqual(Object.values(policyNames).sort());
   });

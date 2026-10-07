@@ -13,6 +13,8 @@ import {
   resetAskedAnswerSchema,
   sessionAnswerSchema,
   signedOutAnswerSchema,
+  twoStepClearedAnswerSchema,
+  twoStepSetupAnswerSchema,
 } from './api-answers.ts';
 
 // No endpoint deletes (invariant 1).
@@ -37,6 +39,9 @@ export interface Endpoint {
   // Served even to a person who must first set a password of their own (ADR-410): only what
   // they need to do that. Left out, such a person is refused.
   readonly beforePasswordChange?: true;
+  // Served even to a person who must first set an authenticator up (ADR-412): only what they
+  // need to do that. Left out, such a person is refused.
+  readonly beforeTwoStepSetup?: true;
   readonly method: EndpointMethod;
   // From the root, a parameter written `:name`: `/projects/:projectId`.
   readonly path: string;
@@ -157,16 +162,19 @@ export const csrfHeader = 'x-adms-csrf';
 
 // What a person signs in with is the email address the firm holds for them. The limits here only
 // bound what is read: a wrong name and a wrong password are refused alike, by one code.
+// A person with an authenticator sends its code too (ADR-412): without one, a right password is
+// answered `TWO_STEP_CODE_NEEDED` and opens nothing, and the page sends the sign-in again with it.
 export const signInEndpoint = endpoint({
   name: 'signIn',
   summary:
-    'Signs a back-office or outside user in with their email address and password. The tokens are set as cookies; the answer holds none.',
+    'Signs a back-office or outside user in with their email address and password, and their authenticator code where they have one. The tokens are set as cookies; the answer holds none.',
   access: 'ANYBODY',
   method: 'POST',
   path: '/sessions',
   body: z.strictObject({
     email: z.string().min(1).max(320),
     password: z.string().min(1).max(4096),
+    code: z.string().min(1).max(32).optional(),
   }),
   answer: sessionAnswerSchema,
 });
@@ -195,6 +203,7 @@ export const currentSessionEndpoint = endpoint({
   summary: 'Who is signed in.',
   access: 'SIGNED_IN',
   beforePasswordChange: true,
+  beforeTwoStepSetup: true,
   method: 'GET',
   path: '/sessions/current',
   answer: sessionAnswerSchema,
@@ -217,6 +226,7 @@ export const changePasswordEndpoint = endpoint({
     'The signed-in person sets a new password, giving their current one. Their other sessions end.',
   access: 'SIGNED_IN',
   beforePasswordChange: true,
+  beforeTwoStepSetup: true,
   method: 'POST',
   path: '/password-changes',
   body: z.strictObject({
@@ -224,6 +234,50 @@ export const changePasswordEndpoint = endpoint({
     password: z.string().min(1).max(4096),
   }),
   answer: passwordSetAnswerSchema,
+});
+
+// Two-step sign-in (ARCHITECTURE §6; AC-02-14, 74; AC-10-26; ADR-170, 412): an authenticator
+// app's six-digit code. A person sets it up in two calls: the first gives the secret for the app,
+// the second proves the app has it with a code, and only then does the server keep anything. An
+// admin and a manager/analyst are served nothing else until it is done; a read-only viewer may
+// choose it. A person who must first set their own password does that first.
+export const beginTwoStepSetupEndpoint = endpoint({
+  name: 'beginTwoStepSetup',
+  summary:
+    'Begins setting up the signed-in person’s authenticator: answers the secret for the app. Nothing is kept until a code proves it.',
+  access: 'SIGNED_IN',
+  beforeTwoStepSetup: true,
+  method: 'POST',
+  path: '/two-step/setups',
+  answer: twoStepSetupAnswerSchema,
+});
+
+export const confirmTwoStepSetupEndpoint = endpoint({
+  name: 'confirmTwoStepSetup',
+  summary:
+    'Finishes setting up the signed-in person’s authenticator with a code from it. Their other sessions end.',
+  access: 'SIGNED_IN',
+  beforeTwoStepSetup: true,
+  method: 'POST',
+  path: '/two-step/setups/confirmations',
+  body: z.strictObject({
+    setup: z.string().min(1).max(1024),
+    code: z.string().min(1).max(32),
+  }),
+  answer: sessionAnswerSchema,
+});
+
+// An admin clears the authenticator of somebody who lost the phone that held it (AC-10-26). The
+// person's sessions end, and they set one up again at their next sign-in.
+export const clearTwoStepEndpoint = endpoint({
+  name: 'clearTwoStep',
+  summary:
+    'An admin clears another person’s authenticator. Their sessions end; it is a security event.',
+  access: 'SIGNED_IN',
+  method: 'POST',
+  path: '/people/:userId/two-step-clearings',
+  params: z.strictObject({ userId: z.uuid() }),
+  answer: twoStepClearedAnswerSchema,
 });
 
 // Each task that adds an endpoint names it here; the API's tests hold its routes to this list.
@@ -237,4 +291,7 @@ export const endpoints: readonly Endpoint[] = [
   currentSessionEndpoint,
   sessionCsrfEndpoint,
   changePasswordEndpoint,
+  beginTwoStepSetupEndpoint,
+  confirmTwoStepSetupEndpoint,
+  clearTwoStepEndpoint,
 ];

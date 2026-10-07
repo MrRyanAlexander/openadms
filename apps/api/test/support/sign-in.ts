@@ -1,16 +1,19 @@
 // Sign-in's services as the process puts them together (api-process.ts), for a test that calls
 // one directly: on the test's own database, mail and clock, with a made-up signing secret.
 import type { Database } from '@open-adms/db';
-import { PasswordRules, SignInTries } from '@open-adms/domain';
+import { PasswordRules, SignInTries, TwoStepRules } from '@open-adms/domain';
 
 import type { Clock } from '../../src/setup/setup-service.ts';
 import { shippedBreachedPasswords } from '../../src/sign-in/breached-list.ts';
 import type { Mail, Message } from '../../src/sign-in/mail.ts';
+import { OneTimeCodes } from '../../src/sign-in/one-time-codes.ts';
 import { PasswordHasher } from '../../src/sign-in/password-hasher.ts';
 import { Passwords } from '../../src/sign-in/passwords.ts';
 import { ResetCodes } from '../../src/sign-in/reset-codes.ts';
 import { SessionTokens } from '../../src/sign-in/session-tokens.ts';
 import { Sessions } from '../../src/sign-in/sessions.ts';
+import { TwoStepSecrets } from '../../src/sign-in/two-step-secrets.ts';
+import { TwoStep, TwoStepCheck } from '../../src/sign-in/two-step.ts';
 import { WrongTries } from '../../src/sign-in/wrong-tries.ts';
 import { shippedPolicy } from './process.ts';
 
@@ -53,6 +56,8 @@ export interface SignIn {
   readonly tokens: SessionTokens;
   readonly sessions: Sessions;
   readonly passwords: Passwords;
+  readonly check: TwoStepCheck;
+  readonly twoStep: TwoStep;
 }
 
 export function signInOn(
@@ -65,7 +70,21 @@ export function signInOn(
   const tokens = new SessionTokens(signingSecret, policy.accessTokenMinutes);
   const requestNow = (): undefined => undefined;
   const tries = new WrongTries(within, { rules: new SignInTries(policy), clock, mail, requestNow });
-  const sessions = new Sessions(within, { tokens, hasher, tries, clock, policy, requestNow });
+  const check = new TwoStepCheck(
+    new TwoStepRules(policy),
+    new OneTimeCodes(),
+    new TwoStepSecrets(signingSecret),
+  );
+  const sessions = new Sessions(within, {
+    tokens,
+    hasher,
+    tries,
+    twoStep: check,
+    clock,
+    policy,
+    requestNow,
+  });
+  const twoStep = new TwoStep(within, { check, clock, mail, sessions, requestNow });
   const passwords = new Passwords(within, {
     rules: new PasswordRules(policy, shippedBreachedPasswords()),
     hasher,
@@ -76,5 +95,5 @@ export function signInOn(
     sessions,
     tries,
   });
-  return { hasher, tokens, sessions, passwords };
+  return { hasher, tokens, sessions, passwords, check, twoStep };
 }

@@ -1026,6 +1026,22 @@ describe('the guards in the catalog', () => {
         name: 'user_credential_failed_sign_ins_check',
         definition: 'CHECK ((failed_sign_ins >= 0))',
       },
+      // Two-step sign-in (ADR-412): a secret only as the API sealed it, and the step of the last
+      // code taken with it.
+      {
+        name: 'user_credential_two_step_sealed_check',
+        definition:
+          "CHECK ((two_step_secret ~ '^v1\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$'::text))",
+      },
+      {
+        name: 'user_credential_two_step_last_step_check',
+        definition: 'CHECK ((two_step_last_step >= 0))',
+      },
+      {
+        name: 'user_credential_two_step_together_check',
+        definition:
+          'CHECK ((((two_step_last_step IS NULL) OR (two_step_secret IS NOT NULL)) IS TRUE))',
+      },
       {
         name: 'session_refresh_token_hash_check',
         definition: "CHECK ((refresh_token_hash ~ '^[0-9a-f]{64}$'::text))",

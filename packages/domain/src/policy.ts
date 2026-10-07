@@ -49,6 +49,12 @@ export const policyNames = {
   signInTriesBeforeLock: 'SIGN_IN_TRIES_BEFORE_LOCK',
   signInFirstWaitSeconds: 'SIGN_IN_FIRST_WAIT_SECONDS',
   signInLongestWaitMinutes: 'SIGN_IN_LONGEST_WAIT_MINUTES',
+  // Two-step sign-in (ARCHITECTURE §6; NIST SP 800-63B-4 §3.1.4.2; ASVS 6.5.5; ADR-412): how many
+  // thirty-second steps before and after the server's own an authenticator's code is still taken
+  // in, for a phone's clock that runs a little off and the time it takes to type; and how long a
+  // person has to finish setting an authenticator up, in minutes.
+  twoStepCodeStepsEitherSide: 'TWO_STEP_CODE_STEPS_EITHER_SIDE',
+  twoStepSetupMinutes: 'TWO_STEP_SETUP_MINUTES',
 } as const;
 
 export type PolicyName = (typeof policyNames)[keyof typeof policyNames];
@@ -62,7 +68,9 @@ export type PolicyName = (typeof policyNames)[keyof typeof policyNames];
 // is good for a day at most, the standard's limit. A session lasts a day at most and an hour at
 // most with nothing asked of it (the standard's limits where a second step is required), and its
 // access token never as long as that hour. A login is locked after a hundred wrong tries in a row
-// at the very most, the standard's limit.
+// at the very most, the standard's limit. An authenticator's code is taken one step either side
+// of the server's own at the most (the standard has its clock value change at least every two
+// minutes), and nought takes the server's own step alone.
 const ranges: Record<PolicyName, { least: number; most: number }> = {
   [policyNames.loadCallLowLimit]: { least: 0, most: 100 },
   [policyNames.loadCallHighLimit]: { least: 0, most: 100 },
@@ -84,6 +92,8 @@ const ranges: Record<PolicyName, { least: number; most: number }> = {
   [policyNames.signInTriesBeforeLock]: { least: 2, most: 100 },
   [policyNames.signInFirstWaitSeconds]: { least: 1, most: 3600 },
   [policyNames.signInLongestWaitMinutes]: { least: 1, most: 1440 },
+  [policyNames.twoStepCodeStepsEitherSide]: { least: 0, most: 1 },
+  [policyNames.twoStepSetupMinutes]: { least: 1, most: 60 },
 };
 
 export class Policy {
@@ -107,6 +117,8 @@ export class Policy {
   readonly signInTriesBeforeLock: number;
   readonly signInFirstWaitSeconds: number;
   readonly signInLongestWaitMinutes: number;
+  readonly twoStepCodeStepsEitherSide: number;
+  readonly twoStepSetupMinutes: number;
 
   private constructor(values: Readonly<Record<string, string | undefined>>) {
     this.loadCallLowLimit = Policy.read(values, policyNames.loadCallLowLimit);
@@ -129,6 +141,8 @@ export class Policy {
     this.signInTriesBeforeLock = Policy.read(values, policyNames.signInTriesBeforeLock);
     this.signInFirstWaitSeconds = Policy.read(values, policyNames.signInFirstWaitSeconds);
     this.signInLongestWaitMinutes = Policy.read(values, policyNames.signInLongestWaitMinutes);
+    this.twoStepCodeStepsEitherSide = Policy.read(values, policyNames.twoStepCodeStepsEitherSide);
+    this.twoStepSetupMinutes = Policy.read(values, policyNames.twoStepSetupMinutes);
     // Two pairs hold only together: an access token that outlasted the session's quiet time would
     // keep a session nobody uses alive, and a lock that came no later than the first wait would
     // leave no wait at all.

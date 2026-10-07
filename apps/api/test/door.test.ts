@@ -297,7 +297,12 @@ describe('what an error and the log say, through the door', () => {
     const signIn = await ask('/sessions', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email: address, password: `${sent} marsh heron delphine` }),
+      // With a code for the second step (ADR-412), which is in no line either.
+      body: JSON.stringify({
+        email: address,
+        password: `${sent} marsh heron delphine`,
+        code: sent.slice(0, 32),
+      }),
     });
     expect(signIn.status).toBe(401);
     expect(errorAnswerSchema.parse(JSON.parse(signIn.body)).code).toBe('SIGN_IN_REFUSED');
@@ -308,6 +313,19 @@ describe('what an error and the log say, through the door', () => {
     });
     expect(refresh.status).toBe(401);
     expect(errorAnswerSchema.parse(JSON.parse(refresh.body)).code).toBe('NOT_SIGNED_IN');
+    // Setting an authenticator up, and clearing one, ask for a session before they read anything.
+    for (const path of [
+      '/two-step/setups/confirmations',
+      '/people/0199c1f4-7a10-7c3e-9b1d-5e2f8a4c6d99/two-step-clearings',
+    ]) {
+      const refused = await ask(path, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ setup: sent, code: sent.slice(0, 32) }),
+      });
+      expect([path, refused.status]).toEqual([path, 401]);
+      expect(errorAnswerSchema.parse(JSON.parse(refused.body)).code).toBe('NOT_SIGNED_IN');
+    }
 
     const log = compose(['logs', '--no-log-prefix', '--no-color', 'api']);
     const lines = log.trim().split('\n');
@@ -335,6 +353,8 @@ describe('what an error and the log say, through the door', () => {
       'token=',
       '"email"',
       '"code":',
+      '"setup"',
+      'otpauth',
       'gates.example',
       'marsh heron',
     ]) {

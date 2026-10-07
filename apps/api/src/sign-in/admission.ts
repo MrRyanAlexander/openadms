@@ -1,5 +1,5 @@
 // Who may call an endpoint, asked before anything the request sent is read (ARCHITECTURE §6,
-// Back-office sessions, Authorization; AC-10-12, 15, 16, 27; T-14, T-15; ADR-408, 410). An
+// Back-office sessions, Authorization; AC-10-12, 15, 16, 27; T-14, T-15; ADR-408, 410, 412). An
 // endpoint says who in the contracts (`access`). A caller who isn't signed in learns nothing of
 // what the endpoint takes: the session is checked first, the schemas after.
 //
@@ -64,6 +64,10 @@ export class Admission {
     this.proven(endpoint, request, caller.sessionId);
     if (caller.passwordChangeRequired && endpoint.beforePasswordChange !== true) {
       throw new Refusal('PASSWORD_CHANGE_REQUIRED', 403);
+    }
+    // An admin or a manager/analyst with no authenticator sets one up before anything else.
+    if (caller.twoStepSetupRequired && endpoint.beforeTwoStepSetup !== true) {
+      throw new Refusal('TWO_STEP_SETUP_REQUIRED', 403);
     }
     admitted.set(request, { caller });
   }

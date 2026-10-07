@@ -166,7 +166,7 @@
     "/sessions": {
       "post": {
         "operationId": "signIn",
-        "summary": "Signs a back-office or outside user in with their email address and password. The tokens are set as cookies; the answer holds none.",
+        "summary": "Signs a back-office or outside user in with their email address and password, and their authenticator code where they have one. The tokens are set as cookies; the answer holds none.",
         "x-open-adms-access": "ANYBODY",
         "requestBody": {
           "required": true,
@@ -184,6 +184,11 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 4096
+                  },
+                  "code": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 32
                   }
                 },
                 "required": ["email", "password"],
@@ -222,12 +227,24 @@
                     "passwordChangeRequired": {
                       "type": "boolean"
                     },
+                    "twoStepSetUp": {
+                      "type": "boolean"
+                    },
+                    "twoStepSetupRequired": {
+                      "type": "boolean"
+                    },
                     "csrf": {
                       "type": "string",
                       "minLength": 1
                     }
                   },
-                  "required": ["user", "passwordChangeRequired", "csrf"],
+                  "required": [
+                    "user",
+                    "passwordChangeRequired",
+                    "twoStepSetUp",
+                    "twoStepSetupRequired",
+                    "csrf"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -281,12 +298,24 @@
                     "passwordChangeRequired": {
                       "type": "boolean"
                     },
+                    "twoStepSetUp": {
+                      "type": "boolean"
+                    },
+                    "twoStepSetupRequired": {
+                      "type": "boolean"
+                    },
                     "csrf": {
                       "type": "string",
                       "minLength": 1
                     }
                   },
-                  "required": ["user", "passwordChangeRequired", "csrf"],
+                  "required": [
+                    "user",
+                    "passwordChangeRequired",
+                    "twoStepSetUp",
+                    "twoStepSetupRequired",
+                    "csrf"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -377,12 +406,24 @@
                     "passwordChangeRequired": {
                       "type": "boolean"
                     },
+                    "twoStepSetUp": {
+                      "type": "boolean"
+                    },
+                    "twoStepSetupRequired": {
+                      "type": "boolean"
+                    },
                     "csrf": {
                       "type": "string",
                       "minLength": 1
                     }
                   },
-                  "required": ["user", "passwordChangeRequired", "csrf"],
+                  "required": [
+                    "user",
+                    "passwordChangeRequired",
+                    "twoStepSetUp",
+                    "twoStepSetupRequired",
+                    "csrf"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -498,6 +539,200 @@
           }
         }
       }
+    },
+    "/two-step/setups": {
+      "post": {
+        "operationId": "beginTwoStepSetup",
+        "summary": "Begins setting up the signed-in person’s authenticator: answers the secret for the app. Nothing is kept until a code proves it.",
+        "x-open-adms-access": "SIGNED_IN",
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "secret": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "uri": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "setup": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "expiresAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                    }
+                  },
+                  "required": ["secret", "uri", "setup", "expiresAt"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/two-step/setups/confirmations": {
+      "post": {
+        "operationId": "confirmTwoStepSetup",
+        "summary": "Finishes setting up the signed-in person’s authenticator with a code from it. Their other sessions end.",
+        "x-open-adms-access": "SIGNED_IN",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "setup": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024
+                  },
+                  "code": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 32
+                  }
+                },
+                "required": ["setup", "code"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "role": {
+                          "type": "string",
+                          "enum": ["ADMIN", "MANAGER_ANALYST", "READ_ONLY_VIEWER"]
+                        }
+                      },
+                      "required": ["id", "name", "role"],
+                      "additionalProperties": false
+                    },
+                    "passwordChangeRequired": {
+                      "type": "boolean"
+                    },
+                    "twoStepSetUp": {
+                      "type": "boolean"
+                    },
+                    "twoStepSetupRequired": {
+                      "type": "boolean"
+                    },
+                    "csrf": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "user",
+                    "passwordChangeRequired",
+                    "twoStepSetUp",
+                    "twoStepSetupRequired",
+                    "csrf"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/people/{userId}/two-step-clearings": {
+      "post": {
+        "operationId": "clearTwoStep",
+        "summary": "An admin clears another person’s authenticator. Their sessions end; it is a security event.",
+        "x-open-adms-access": "SIGNED_IN",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "const": "cleared"
+                    }
+                  },
+                  "required": ["status"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -524,7 +759,13 @@
               "CSRF_REFUSED",
               "PASSWORD_CHANGE_REQUIRED",
               "PASSWORD_WRONG",
-              "PASSWORD_UNCHANGED"
+              "PASSWORD_UNCHANGED",
+              "TWO_STEP_CODE_NEEDED",
+              "TWO_STEP_SETUP_REQUIRED",
+              "TWO_STEP_REFUSED",
+              "TWO_STEP_ALREADY_SET_UP",
+              "TWO_STEP_NOT_SET_UP",
+              "NOT_ALLOWED"
             ]
           },
           "requestId": {

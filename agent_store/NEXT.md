@@ -89,7 +89,7 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-07, through ADR-411)
+### Where things stand (2026-10-07, through ADR-413)
 - **Phase 2 (API and sync) is open (ADR-376).** Its plan is `BACKLOG.md`'s eight milestones and 32
   tasks (ADR-377); tasks 2.0.1 (the opening and the plan), 2.1.1 (the threat model and the
   API's scenarios, ADR-379; docs), 2.1.2 (the API as a process, ADR-380…385), 2.1.3 (the
@@ -120,8 +120,22 @@ of `DECISIONS.md`.
   person whose login was tried as its actor; a name nobody has writes nothing. A password an
   admin set is changed by its owner first (`passwordChangeRequired`); a new password ends the
   person's sessions; the password hash is keyed from `ADMS_TOKEN_SIGNING_SECRET`. A monitor
-  and the system actor are refused. **Until 2.2.4 an admin signs in with a password alone.**
-  What it leaves: BACKLOG C90. **The user's word (ADR-401):
+  and the system actor are refused. What it leaves: BACKLOG C90. **Task 2.2.4 (two-step
+  sign-in, ADR-412) is done:** the second step is an authenticator app's code (RFC 6238, by
+  `node:crypto`); a person who has one gets a session only with it (`POST /sessions` takes
+  `code`; a right password without one answers `TWO_STEP_CODE_NEEDED`; a wrong or spent code
+  is a wrong try at the login); a code is good once (`user_credential.two_step_last_step`);
+  **an admin and a manager/analyst with none get a session that opens nothing but setting one
+  up** (`TWO_STEP_SETUP_REQUIRED`; an endpoint is open to them only where its definition says
+  `beforeTwoStepSetup`); a read-only viewer may choose one; a person sets it up by proving a
+  code (`POST /two-step/setups`, `/two-step/setups/confirmations`; nothing is kept before
+  that); the secret is kept sealed with a key drawn from the signing secret; an admin clears
+  another person's (`POST /people/:userId/two-step-clearings`: their sessions end, a
+  `TWO_STEP_CLEARED` security event). **The dev stack's accounts:** `pnpm local:accounts`
+  writes an admin, a manager/analyst and a viewer with known passwords and authenticator
+  secrets into this machine's installation (`--show` only shows them; it has not been run
+  for real here, so the installation holds no person but the system actor). What it leaves:
+  BACKLOG C91. **The user's word (ADR-401):
   sign-in follows NIST SP 800-63B and ASVS Level 2; when a direction in security is suggested,
   say what the standard asks before building it** (ADR-400 was built first and withdrawn). **Each service login (`adms_api`, `adms_worker`, `adms_readonly`) is
   under a statement timeout**, the policy value `STATEMENT_TIMEOUT_MS` (30,000 ms), set by
@@ -133,17 +147,20 @@ of `DECISIONS.md`.
   `@Serves`; `Boundary` reads its path, query and body by its schemas first** (BACKLOG C86 is the
   recipe for adding one); the CORS list is `ADMS_CORS_ORIGINS`; every answer carries the API's own
   headers; the API's database client states the request's id on every write; `pnpm openapi`
-  writes `apps/api/openapi.json`. `spec/acceptance/10-api-and-sync.md` (56 scenarios, 30 passing)
+  writes `apps/api/openapi.json`. `spec/acceptance/10-api-and-sync.md` (56 scenarios, 31 passing)
   and `spec/THREAT-MODEL.md` are both **approved by the user** (their marks, ADR-386, 393).
   Its 14 REQs are in `REQUIREMENTS.md`, one ticked (REQ-208).
 - **A test of the API that must write** runs in one piece of work on the installation's database,
   undone afterwards (`apps/api/test/support/database.ts`), and may hand the process its own
-  database, mail and clock (ADR-405).
+  database, mail and clock (ADR-405). **A test of a signed-in endpoint** uses
+  `apps/api/test/support/served.ts`: `worldOn` gives Dana and Luis a password and an
+  authenticator, and `served.signedIn(email, password)` sends the code their app shows (a code
+  is good once, so a second sign-in in one step moves the test's clock on thirty seconds).
 - **Phase 1 is done:** all seven exit criteria met (ADR-371, 372); 693 of the 708 scenarios with a
   Phase 1 part proven whole, 15 in part. 48 scenario rows name Phase 2 (37 as "API (Phase 2)").
-- **The chain, seen whole on 2026-10-07:** 95 test
-  files, 2,000 tests; lint clean; 421 licences allowed; fifteen stories; `pnpm security` 7 passed,
-  0 failed; eighty-four migrations. The expected output of each command is `adms-verify`'s.
+- **The chain, seen whole on 2026-10-07:** 99 test
+  files, 2,048 tests; lint clean; 421 licences allowed; fifteen stories; `pnpm security` 7 passed,
+  0 failed; eighty-six migrations. The expected output of each command is `adms-verify`'s.
 - **What exists:** `packages/db` (schema, guards, tests), `packages/domain` (every rule; one
   dependency, no database), `packages/contracts`, `packages/scenarios` (the harness and stories,
   the golden mission among them), `apps/worker/src/reconciliation/` (the run: group, check,
@@ -299,27 +316,24 @@ questions.
 **Phase 2 is open (ADR-376). Its plan is `BACKLOG.md`, "Active — Phase 2" (ADR-377): read its
 brief first. One task per response.**
 
-**Task 2.2.4, two-step sign-in** *(BACKLOG has the task in full)*. Read first:
-`spec/THREAT-MODEL.md` T-14, T-16 and its §4 rows on sign-in; `spec/acceptance/10-api-and-sync.md`'s
-**AC-10-26** (this task's), AC-10-32 (an authenticator code never in the log) and, in file 02,
-**AC-02-14 and 74** (required for an admin and a manager/analyst, optional for a read-only
-viewer, none for a monitor); **ADR-170** (the user's rule) and **ADR-401** (say what NIST SP
-800-63B-4 and ASVS 5.0 ask of a one-time code, before building: read the published texts);
-**ADR-408…410** (sessions as built: sign-in must give a session only once the second step is
-done, where one is required; `Sessions.signIn`, `Admission`, the `access` of an endpoint);
-BACKLOG **C88's and C90's 2.2.4 lines** (how `twoStepSecret` is kept at rest, since the server
-must read it to check a code and the audit log never holds it; whether "confirmed" needs a
-column; a wrong code as a wrong try; clearing it ends the person's sessions and is a security
-event, perhaps a kind of its own); ARCHITECTURE §6 (Two-step sign-in and email: seeded dev
-accounts with known secrets in the dev stack only, never in a shipped build); `spec/DATA-MODEL.md`
-§2.2, `UserCredential`. **A dependency needs its ADR first** (prefer what Node 24 gives: a
-time-based code is an HMAC, `node:crypto`). **Done when:** an admin and a manager/analyst can't
-get a session without a code once two-step is set up, and are made to set it up first; a
-read-only viewer may choose it; a person sets it up by proving a code; an admin clears it for
-someone who lost their phone and that is a security event; a code is good once, and wrong codes
-count as wrong tries; no secret or code is in a log or the audit log; AC-10-26, AC-02-14 and
-AC-02-74's sign-in half pass; and the chain is green with the new counts. **Next after it:
-2.2.5, permissions on every request, and people.**
+**Task 2.2.5, permissions on every request, and people** *(BACKLOG has the task in full)*. Read
+first: `spec/THREAT-MODEL.md` T-14, T-15 and its §4 rows on authorization;
+`spec/acceptance/02-people-and-devices.md`'s **AC-02-08, 12, 13, 72** and AC-09-18, and
+`spec/acceptance/10-api-and-sync.md`'s AC-10-25 (the admin's half), 27…31; ARCHITECTURE §6
+(Authorization) and §7.0 (creating people); **ADR-315, 364** (grants and how a service reads
+them), **ADR-406, 408 (3), 409 (5), (7), 410, 412 (9), 413 (2)**; BACKLOG **C89's, C90's and
+C91's 2.2.5 lines**: `Admission` is where a role and a grant per endpoint are asked, read from
+the database on each request; the endpoints of `Passwords.setByAdmin` and of creating a person;
+refusing a second back-office or outside user with an email address somebody has (the service,
+and a key of the database's); **the server command, beside the installer, that makes the first
+admin and gives a firm's only admin a way back in** (it sets a password and clears an
+authenticator; ADR-413 (2)); an admin ending anybody's sessions; the last admin never removed.
+**A dependency needs its ADR first.** **Done when:** a grant taken away refuses the person's
+very next request; an admin creates back-office and outside users and gives and takes grants and
+a viewer's projects; nobody grants what they don't hold; the last admin can't be removed or left
+with no way in; a manager/analyst never reads a monitor's phone number; AC-02-08, 12, 13, 72 and
+AC-10-25 pass at the API; REQ-202 is ticked if seen whole; and the chain is green with the new
+counts. **Next after it: 2.2.6, rate limits.**
 
 **Every command starts with** `eval "$(fnm env --shell zsh)"`. The checks are `adms-verify`'s; the
 database tests, the map servers' tests, the stories and `pnpm security` need `pnpm local:up` first,

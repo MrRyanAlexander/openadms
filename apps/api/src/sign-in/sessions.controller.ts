@@ -33,6 +33,17 @@ import { Sessions, type Caller, type Opened } from './sessions.ts';
 export const apiSessions = Symbol('the API’s sessions');
 export const apiSessionTokens = Symbol('the API’s session tokens');
 
+// Who is signed in, as an answer says it.
+export function sessionAnswer(caller: Caller, tokens: SessionTokens): SessionAnswer {
+  return sessionAnswerSchema.parse({
+    user: { id: caller.userId, name: caller.name, role: caller.role },
+    passwordChangeRequired: caller.passwordChangeRequired,
+    twoStepSetUp: caller.twoStepSetUp,
+    twoStepSetupRequired: caller.twoStepSetupRequired,
+    csrf: tokens.csrf(caller.sessionId),
+  });
+}
+
 @Controller()
 export class SessionsController {
   private readonly sessions: Sessions;
@@ -51,13 +62,16 @@ export class SessionsController {
 
   @Serves(signInEndpoint)
   async signIn(
-    @Body() body: { email: string; password: string },
+    @Body() body: { email: string; password: string; code?: string },
     @Req() request: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<SessionAnswer> {
-    const outcome = await this.sessions.signIn(body.email, body.password);
+    const outcome = await this.sessions.signIn(body.email, body.password, body.code);
     if (!outcome.signedIn) {
       request.log.info({ why: outcome.why }, 'A sign-in was refused.');
+      // The one refusal told apart: the password was right, and the authenticator's code is
+      // asked for. Nothing was opened and nothing written.
+      if (outcome.why === 'CODE_NEEDED') throw new Refusal('TWO_STEP_CODE_NEEDED', 401);
       throw new Refusal('SIGN_IN_REFUSED', 401);
     }
     request.log.info('A sign-in worked.');
@@ -135,10 +149,6 @@ export class SessionsController {
   }
 
   private answer(caller: Caller): SessionAnswer {
-    return sessionAnswerSchema.parse({
-      user: { id: caller.userId, name: caller.name, role: caller.role },
-      passwordChangeRequired: caller.passwordChangeRequired,
-      csrf: this.tokens.csrf(caller.sessionId),
-    });
+    return sessionAnswer(caller, this.tokens);
   }
 }

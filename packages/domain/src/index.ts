@@ -175,6 +175,7 @@ export {
   type PasswordProblemCode,
 } from './passwords.ts';
 export { SignInTries, type SignInTriesPolicy, type WrongTry } from './sign-in-tries.ts';
+export { TwoStepRules, twoStepCode, type TwoStepNeed, type TwoStepPolicy } from './two-step.ts';
 export {
   PaysWhen,
   type PaysWhenContract,

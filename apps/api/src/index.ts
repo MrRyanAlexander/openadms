@@ -8,7 +8,7 @@
 // spec/parts/08-review-and-corrections.md's: a reviewer's corrections and renumbers, a
 // quarantined record resolved, a record created in the back office (ADR-364), a ticket voided
 // and unvoided, a flag accepted (ADR-365), each answering the run to ask the worker for; and setting a password is
-// ARCHITECTURE §6's (ADR-402…405).
+// ARCHITECTURE §6's (ADR-402…405), as two-step sign-in is (ADR-412).
 export {
   Certifications,
   type BoxInput,
@@ -17,6 +17,7 @@ export {
 } from './certification/certifications.ts';
 export { NumberAllocator, type LastUsed, type PhoneAtSync } from './numbering/number-allocator.ts';
 export { builtInPolicy, installationPolicy } from './policy.ts';
+export { Settings, SettingsProblem } from './process/settings.ts';
 export {
   ContractorSetup,
   SubPlaces,
@@ -83,6 +84,7 @@ export {
   type MailSettings,
   type Message,
 } from './sign-in/mail.ts';
+export { OneTimeCodes } from './sign-in/one-time-codes.ts';
 export { PasswordHasher } from './sign-in/password-hasher.ts';
 export {
   Passwords,
@@ -105,6 +107,15 @@ export {
   type SignInRefused,
   type SignsInHere,
 } from './sign-in/sessions.ts';
+export { TwoStepSecrets } from './sign-in/two-step-secrets.ts';
+export {
+  TwoStep,
+  TwoStepCheck,
+  type SetupBegun,
+  type SetupConfirmed,
+  type TwoStepCleared,
+  type TwoStepParts,
+} from './sign-in/two-step.ts';
 export {
   WrongTries,
   type Tried,

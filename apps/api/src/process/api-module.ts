@@ -4,7 +4,10 @@ import { Module } from '@nestjs/common';
 
 import { PasswordResetsController } from '../sign-in/password-resets.controller.ts';
 import { SessionsController } from '../sign-in/sessions.controller.ts';
+import { TwoStepController } from '../sign-in/two-step.controller.ts';
 import { HealthController } from './health.controller.ts';
 
-@Module({ controllers: [HealthController, PasswordResetsController, SessionsController] })
+@Module({
+  controllers: [HealthController, PasswordResetsController, SessionsController, TwoStepController],
+})
 export class ApiModule {}

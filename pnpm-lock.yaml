@@ -92,6 +92,12 @@ importers:
 
   infra/local:
     devDependencies:
+      '@open-adms/api':
+        specifier: workspace:*
+        version: link:../../apps/api
+      '@open-adms/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@types/node':
         specifier: 24.13.6
         version: 24.13.6

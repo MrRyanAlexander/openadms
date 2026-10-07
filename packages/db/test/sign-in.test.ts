@@ -16,7 +16,8 @@ const tested = eachTestRolledBack();
 const aHash = '$argon2id$v=19$m=19456,t=2,p=1$c2FsdA$aGFzaA';
 const anotherHash = `${aHash}Zm9v`;
 // Made up, like the hash: no authenticator holds it.
-const aSecret = 'test-authenticator-secret-dana';
+// As the API seals one (ADR-412): a version and three parts. Made up; it opens to nothing.
+const aSecret = 'v1.dGVzdC1ub25jZS0x.dGVzdC1zZWFsZWQtc2VjcmV0LWRhbmE.dGVzdC10YWctZGFuYS0xMjM0';
 const keptOut = '[kept out of the audit]';
 
 // A refresh token as a browser would hold it, and what the server keeps of it.
@@ -65,6 +66,7 @@ describe('what sign-in keeps of a person', () => {
       'locked_until',
       'password_change_required',
       'password_hash',
+      'two_step_last_step',
       'two_step_secret',
       'user_id',
     ]);
@@ -131,6 +133,7 @@ describe('what sign-in keeps of a person', () => {
           'locked_until',
           'password_change_required',
           'password_hash',
+          'two_step_last_step',
           'two_step_secret',
           'user_id',
         ],
@@ -216,6 +219,40 @@ describe('what sign-in keeps of a person', () => {
     expect(refusal.message).toContain('"user_credential_password_hash_check"');
   });
 
+  it('a code is good once: the step of the last code taken is kept with the secret, never below nought, and goes when the secret goes (ADR-412)', async () => {
+    const { db, world } = tested;
+    await asTheApi();
+    const { id } = await db.one<{ id: string }>(keep, [world.admin, aHash]);
+    const step = `UPDATE "user_credential" SET "two_step_last_step" = $2 WHERE "id" = $1`;
+    // With no authenticator set up there is no last code.
+    const alone = await db.refused(step, [id, 58677600]);
+    expect(alone.code).toBe(refusedBy.check);
+    expect(alone.message).toContain('"user_credential_two_step_together_check"');
+    await db.run(`UPDATE "user_credential" SET "two_step_secret" = $2 WHERE "id" = $1`, [
+      id,
+      aSecret,
+    ]);
+    expect(await db.run(step, [id, 58677600])).toBe(1);
+    const below = await db.refused(step, [id, -1]);
+    expect(below.code).toBe(refusedBy.check);
+    expect(below.message).toContain('"user_credential_two_step_last_step_check"');
+    // Clearing the secret alone would leave a last code with nothing it belongs to.
+    expect(
+      (
+        await db.refused(`UPDATE "user_credential" SET "two_step_secret" = NULL WHERE "id" = $1`, [
+          id,
+        ])
+      ).code,
+    ).toBe(refusedBy.check);
+    expect(
+      await db.run(
+        `UPDATE "user_credential" SET "two_step_secret" = NULL, "two_step_last_step" = NULL
+         WHERE "id" = $1`,
+        [id],
+      ),
+    ).toBe(1);
+  });
+
   it('an authenticator secret is never blank; a person may have none, and no password yet', async () => {
     const { db, world } = tested;
     await asTheApi();
@@ -225,7 +262,17 @@ describe('what sign-in keeps of a person', () => {
       [id],
     );
     expect(refusal.code).toBe(refusedBy.check);
-    expect(refusal.message).toContain('"user_credential_two_step_secret_check"');
+    // Two checks refuse a blank; the database asks them by name, and "sealed" comes first.
+    expect(refusal.message).toContain('"user_credential_two_step_sealed_check"');
+    // Nor the secret an authenticator app is given: only what the API sealed (ADR-412).
+    for (const plain of ['JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP', 'v1.only-two.parts', 'v2.a.b.c']) {
+      const unsealed = await db.refused(
+        `UPDATE "user_credential" SET "two_step_secret" = $2 WHERE "id" = $1`,
+        [id, plain],
+      );
+      expect(unsealed.code, plain).toBe(refusedBy.check);
+      expect(unsealed.message).toContain('"user_credential_two_step_sealed_check"');
+    }
     expect(
       await db.run(`UPDATE "user_credential" SET "locked_until" = $2 WHERE "id" = $1`, [
         id,
@@ -478,6 +525,9 @@ describe('a security event', () => {
       'DEVICE_SETUP',
       'DEVICE_SWITCH',
       'MASTER_PASSCODE_USE',
+      // Added after (ADR-412): a new value of an enum goes last.
+      'TWO_STEP_SET_UP',
+      'TWO_STEP_CLEARED',
     ]);
     const at = '2026-10-12T12:05:00Z';
     expect((await db.refused(note, ['PASSWORD_GUESSED', world.admin, null, at])).code).toBe(

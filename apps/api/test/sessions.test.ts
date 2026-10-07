@@ -4,241 +4,49 @@
 // memory, on the installation's database as `adms_api`: it needs `pnpm local:up` after `pnpm
 // installer`, and fails saying so. Each test's work is undone (support/database.ts), so a test
 // stays short: a piece of work ends after five seconds.
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 
-import {
-  endpoint,
-  errorAnswerSchema,
-  healthAnswerSchema,
-  sessionAnswerSchema,
-} from '@open-adms/contracts';
+import { sessionAnswerSchema } from '@open-adms/contracts';
 import { systemActorId, type Database } from '@open-adms/db';
-import { Body, Controller, Module } from '@nestjs/common';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { ApiModule } from '../src/process/api-module.ts';
-import { ApiProcess } from '../src/process/api-process.ts';
-import { Serves } from '../src/process/serves.ts';
-import type { Mail } from '../src/sign-in/mail.ts';
 import { accessCookie, refreshCookie } from '../src/sign-in/session-cookies.ts';
-import { installationSettings, openInstallation, undone, type Tx } from './support/database.ts';
-import { madeUpSettings, ready, shippedPolicy } from './support/process.ts';
-import { NoServer, Outbox, signingSecret, signInOn, TestClock } from './support/sign-in.ts';
+import { installationSettings, openInstallation, type Tx } from './support/database.ts';
+import {
+  danasEmail,
+  long,
+  longer,
+  luissEmail,
+  ran,
+  worldOn,
+  wrong,
+  type Answer,
+} from './support/served.ts';
+import { NoServer, Outbox, signInOn } from './support/sign-in.ts';
 
-const long = 'marsh heron delphine ferry';
-const longer = 'ferry delphine heron marsh';
-const wrong = 'heron marsh ferry delphine';
 const keptOut = '[kept out of the audit]';
 const sha256 = (value: string): string => createHash('sha256').update(value).digest('hex');
 // What audit records hold of the rows they copy, as text.
 const heldBy = (audited: readonly { priorValue: unknown; newValue: unknown }[]): string =>
   JSON.stringify(audited.map(({ priorValue, newValue }) => [priorValue, newValue]));
 
-// This test's own endpoint, standing in for a reviewer's write (a void): only a signed-in person
-// may call it, and not one who must first set their own password.
-const ran: string[] = [];
-
-@Controller()
-class WritingController {
-  @Serves(
-    endpoint({
-      name: 'testVoid',
-      summary: 'A test’s own.',
-      access: 'SIGNED_IN',
-      method: 'POST',
-      path: '/test/voids',
-      body: healthAnswerSchema,
-      answer: healthAnswerSchema,
-    }),
-  )
-  void(@Body() body: { status: string }) {
-    ran.push(body.status);
-    return { status: 'ok' };
-  }
-}
-
-@Module({ imports: [ApiModule], controllers: [WritingController] })
-class WritingModule {}
-
-// The example world's people (CONVENTIONS §6).
-interface People {
-  readonly dana: string;
-  readonly luis: string;
-  readonly viewer: string;
-  readonly kim: string;
-  readonly kimsId: string;
-}
-
-async function people(tx: Tx, dana: string): Promise<People> {
-  await tx.user.create({
-    data: { id: dana, name: 'Dana Reyes', role: 'ADMIN', email: 'dana.reyes@gates.example' },
-  });
-  const luis = await tx.user.create({
-    data: { name: 'Luis Ortega', role: 'MANAGER_ANALYST', email: 'Luis.Ortega@gates.example' },
-  });
-  const viewer = await tx.user.create({
-    data: {
-      name: 'Bayline County debris manager',
-      role: 'READ_ONLY_VIEWER',
-      viewerKind: 'CLIENT',
-      seesPrivateCitizens: true,
-      email: 'debris@baylinecounty.example',
-    },
-  });
-  const kim = await tx.user.create({
-    data: { name: 'Kim Nguyen', role: 'MONITOR', email: 'kim.nguyen@harbor.example' },
-  });
-  return {
-    dana,
-    luis: luis.id,
-    viewer: viewer.id,
-    kim: kim.id,
-    kimsId: kim.monitorNumber ?? '',
-  };
-}
-
-type Cookies = Readonly<Record<string, string>>;
-
-interface Answer {
-  readonly status: number;
-  readonly body: unknown;
-  readonly text: string;
-  readonly code: string | undefined;
-  readonly requestId: string;
-  // The cookies the answer set, by name; a cleared one is the empty string.
-  readonly cookies: Cookies;
-  readonly setCookie: readonly string[];
-}
-
-interface Signed {
-  readonly cookies: Cookies;
-  readonly csrf: string;
-  readonly answer: Answer;
-}
-
-// The process on a test's own piece of work, and a browser's side of it.
-class Served {
-  readonly lines: string[] = [];
-  readonly clock = new TestClock();
-  private api: ApiProcess | undefined;
-
-  static async on(within: Database, mail: Mail = new NoServer()): Promise<Served> {
-    const served = new Served();
-    served.api = await ApiProcess.create(
-      WritingModule,
-      { ...madeUpSettings, tokenSigningSecret: signingSecret },
-      shippedPolicy,
-      {
-        stream: { write: (line) => served.lines.push(line) },
-        database: within,
-        mail,
-        clock: served.clock,
-      },
-    );
-    await ready(served.api);
-    return served;
-  }
-
-  async close(): Promise<void> {
-    await this.api?.close();
-  }
-
-  async ask(
-    method: 'GET' | 'POST',
-    url: string,
-    more: { cookies?: Cookies; csrf?: string; payload?: object } = {},
-  ): Promise<Answer> {
-    if (this.api === undefined) throw new Error('The process is not started.');
-    const cookie = Object.entries(more.cookies ?? {})
-      .map(([name, value]) => `${name}=${value}`)
-      .join('; ');
-    const answered = await this.api.app.inject({
-      method,
-      url,
-      headers: {
-        ...(cookie === '' ? {} : { cookie }),
-        ...(more.csrf === undefined ? {} : { 'x-adms-csrf': more.csrf }),
-      },
-      ...(more.payload === undefined ? {} : { payload: more.payload }),
-    });
-    const setCookie = [answered.headers['set-cookie'] ?? []].flat().map(String);
-    const body: unknown = answered.json();
-    const refused = errorAnswerSchema.safeParse(body);
-    return {
-      status: answered.statusCode,
-      body,
-      text: answered.body,
-      code: refused.success ? refused.data.code : undefined,
-      requestId: String(answered.headers['x-request-id']),
-      setCookie,
-      cookies: Object.fromEntries(
-        setCookie.map((set) => {
-          const [pair = ''] = set.split(';');
-          const at = pair.indexOf('=');
-          return [pair.slice(0, at), pair.slice(at + 1)];
-        }),
-      ),
-    };
-  }
-
-  signIn(email: string, password: string): Promise<Answer> {
-    return this.ask('POST', '/sessions', { payload: { email, password } });
-  }
-
-  // A sign-in that must work, with what the browser now holds.
-  async signedIn(email: string, password: string): Promise<Signed> {
-    const answer = await this.signIn(email, password);
-    expect([answer.status, answer.code]).toEqual([200, undefined]);
-    return { cookies: answer.cookies, csrf: sessionAnswerSchema.parse(answer.body).csrf, answer };
-  }
-
-  current(cookies: Cookies): Promise<Answer> {
-    return this.ask('GET', '/sessions/current', { cookies });
-  }
-
-  refresh(signed: Pick<Signed, 'cookies' | 'csrf'>): Promise<Answer> {
-    return this.ask('POST', '/sessions/refreshes', signed);
-  }
-}
-
 let db: Database;
 
-beforeAll(() => {
+// What the installation held of sign-in before these tests: a developer may have signed in on
+// this machine (the dev stack's accounts, ADR-412), and nothing of that is ever deleted.
+let before: readonly number[];
+const heldNow = (): Promise<number[]> =>
+  Promise.all([db.session.count(), db.securityEvent.count(), db.userCredential.count()]);
+
+beforeAll(async () => {
   db = openInstallation(installationSettings());
+  before = await heldNow();
 });
 afterAll(async () => {
   await db.$disconnect();
 });
 
-// Each test's own piece of work, started as Dana and undone: Dana and Luis each have a password
-// of their own (set as themselves, so neither is marked to be changed).
-const world = (
-  work: (served: Served, tx: Tx, who: People, within: Database) => Promise<void>,
-  mail: Mail = new NoServer(),
-): Promise<void> => {
-  const dana = randomUUID();
-  return undone(db, dana, async (within, tx) => {
-    const who = await people(tx, dana);
-    const { hasher } = signInOn(within, mail);
-    for (const [userId, password] of [
-      [who.dana, long],
-      [who.luis, longer],
-    ] as const) {
-      await tx.userCredential.create({
-        data: { userId, passwordHash: await hasher.hash(password) },
-      });
-    }
-    const served = await Served.on(within, mail);
-    try {
-      await work(served, tx, who, within);
-    } finally {
-      await served.close();
-    }
-  });
-};
-
-const danasEmail = 'dana.reyes@gates.example';
-const luissEmail = 'luis.ortega@gates.example';
+const world = worldOn(() => db);
 
 const events = (tx: Tx, userId: string) =>
   tx.securityEvent.findMany({ where: { userId }, orderBy: { id: 'asc' } });
@@ -256,6 +64,8 @@ describe('signing in', () => {
       expect(answer.body).toEqual({
         user: { id: dana, name: 'Dana Reyes', role: 'ADMIN' },
         passwordChangeRequired: false,
+        twoStepSetUp: true,
+        twoStepSetupRequired: false,
         csrf,
       });
       expect(answer.setCookie).toHaveLength(2);
@@ -299,9 +109,11 @@ describe('signing in', () => {
       const audited = await tx.auditRecord.findMany({
         where: { actorId: dana, requestId: answer.requestId },
       });
+      // The third is her sign-in record: the step of the code she signed in with (ADR-412).
       expect(audited.map(({ tableName, domain }) => [tableName, domain]).sort()).toEqual([
         ['security_event', 'SECURITY'],
         ['session', 'SECURITY'],
+        ['user_credential', 'SECURITY'],
       ]);
       expect(heldBy(audited)).not.toContain(secret);
       expect(heldBy(audited)).not.toContain(sha256(secret));
@@ -827,9 +639,8 @@ describe('the log', () => {
 });
 
 describe('afterwards', () => {
-  it('each test’s work was undone: the installation’s database holds no session and none of these people', async () => {
+  it('each test’s work was undone: the installation’s database holds none of these people, and no session, security event or sign-in record more than before', async () => {
     expect(await db.user.count({ where: { email: { endsWith: '@gates.example' } } })).toBe(0);
-    expect(await db.session.count()).toBe(0);
-    expect(await db.securityEvent.count()).toBe(0);
+    expect(await heldNow()).toEqual(before);
   });
 });

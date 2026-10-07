@@ -6,7 +6,7 @@
 import 'reflect-metadata';
 
 import type { Database } from '@open-adms/db';
-import { PasswordRules, SignInTries, type Policy } from '@open-adms/domain';
+import { PasswordRules, SignInTries, TwoStepRules, type Policy } from '@open-adms/domain';
 import {
   Inject,
   Module,
@@ -21,6 +21,7 @@ import type { Clock } from '../setup/setup-service.ts';
 import { Admission } from '../sign-in/admission.ts';
 import { shippedBreachedPasswords } from '../sign-in/breached-list.ts';
 import { mailFor, type Mail } from '../sign-in/mail.ts';
+import { OneTimeCodes } from '../sign-in/one-time-codes.ts';
 import { PasswordHasher } from '../sign-in/password-hasher.ts';
 import { apiPasswords } from '../sign-in/password-resets.controller.ts';
 import { Passwords } from '../sign-in/passwords.ts';
@@ -28,6 +29,9 @@ import { ResetCodes } from '../sign-in/reset-codes.ts';
 import { SessionTokens } from '../sign-in/session-tokens.ts';
 import { apiSessions, apiSessionTokens } from '../sign-in/sessions.controller.ts';
 import { Sessions } from '../sign-in/sessions.ts';
+import { TwoStepSecrets } from '../sign-in/two-step-secrets.ts';
+import { apiTwoStep } from '../sign-in/two-step.controller.ts';
+import { TwoStep, TwoStepCheck } from '../sign-in/two-step.ts';
 import { WrongTries } from '../sign-in/wrong-tries.ts';
 import { answersWith } from './answer-headers.ts';
 import { apiDatabase, openApiDatabase } from './api-database.ts';
@@ -61,6 +65,8 @@ export type ProcessPolicy = Pick<
   | 'signInTriesBeforeLock'
   | 'signInFirstWaitSeconds'
   | 'signInLongestWaitMinutes'
+  | 'twoStepCodeStepsEitherSide'
+  | 'twoStepSetupMinutes'
 >;
 
 // What a test puts in place of the process's own: where the log goes instead of standard output,
@@ -93,6 +99,7 @@ class ProcessModule implements OnApplicationShutdown {
     passwords: Passwords,
     sessions: Sessions,
     tokens: SessionTokens,
+    twoStep: TwoStep,
   ): DynamicModule {
     return {
       module: ProcessModule,
@@ -103,8 +110,9 @@ class ProcessModule implements OnApplicationShutdown {
         { provide: apiPasswords, useValue: passwords },
         { provide: apiSessions, useValue: sessions },
         { provide: apiSessionTokens, useValue: tokens },
+        { provide: apiTwoStep, useValue: twoStep },
       ],
-      exports: [apiDatabase, apiPasswords, apiSessions, apiSessionTokens],
+      exports: [apiDatabase, apiPasswords, apiSessions, apiSessionTokens, apiTwoStep],
     };
   }
 
@@ -154,7 +162,21 @@ export class ApiProcess {
       mail,
       requestNow,
     });
-    const sessions = new Sessions(database, { tokens, hasher, tries, clock, policy, requestNow });
+    const check = new TwoStepCheck(
+      new TwoStepRules(policy),
+      new OneTimeCodes(),
+      new TwoStepSecrets(settings.tokenSigningSecret),
+    );
+    const sessions = new Sessions(database, {
+      tokens,
+      hasher,
+      tries,
+      twoStep: check,
+      clock,
+      policy,
+      requestNow,
+    });
+    const twoStep = new TwoStep(database, { check, clock, mail, sessions, requestNow });
     const passwords = new Passwords(database, {
       rules: new PasswordRules(policy, shippedBreachedPasswords()),
       hasher,
@@ -166,7 +188,7 @@ export class ApiProcess {
       tries,
     });
     const app = await NestFactory.create<NestFastifyApplication>(
-      ProcessModule.around(module, database, passwords, sessions, tokens),
+      ProcessModule.around(module, database, passwords, sessions, tokens, twoStep),
       adapter,
       { logger: new ProcessLog(server.log) },
     );

@@ -6,6 +6,11 @@
 //   an admin, a manager/analyst or a read-only viewer signs in here: never a monitor (their ID
 //   and password open a phone's calls only, ADR-105) and never the system actor, which is no
 //   login. Whatever is wrong, the caller is told the same thing in about the same time.
+// - **The second step** (ADR-170, 412; NIST SP 800-63B-4 §3.1.4; ASVS 5.0 V6.5): a person who
+//   has an authenticator gets a session only with its code. A right password without one opens
+//   nothing and says a code is needed; a wrong code is a wrong try at the login like a wrong
+//   password, and a code is good once. An admin or a manager/analyst with no authenticator yet
+//   gets a session that opens nothing but setting one up.
 // - **A session** is one row; its refresh token rotates in place and is good once. One presented
 //   again ends the session: whoever copied it and the person are both signed out.
 // - **It ends** when the person signs out, when nothing was asked of it for the policy's minutes,
@@ -20,6 +25,7 @@ import type { Policy } from '@open-adms/domain';
 import type { Clock } from '../setup/setup-service.ts';
 import type { PasswordHasher } from './password-hasher.ts';
 import type { SessionTokens } from './session-tokens.ts';
+import type { TwoStepCheck } from './two-step.ts';
 import type { WrongTries } from './wrong-tries.ts';
 
 type Tx = Prisma.TransactionClient;
@@ -37,6 +43,10 @@ export interface Caller {
   readonly role: SignsInHere;
   // Somebody else set their password: they set their own before anything else (ADR-410).
   readonly passwordChangeRequired: boolean;
+  // Whether they have an authenticator, and whether they must set one up before anything else:
+  // an admin or a manager/analyst with none (ADR-412).
+  readonly twoStepSetUp: boolean;
+  readonly twoStepSetupRequired: boolean;
 }
 
 // A session's tokens, for its cookies, and how long the refresh token's cookie may live.
@@ -48,7 +58,10 @@ export interface Opened {
 }
 
 // Why a sign-in was refused: for the server's log only. A caller is never told which.
-export type SignInRefused = 'NOBODY' | 'WRONG' | 'WAITING' | 'LOCKED';
+// `CODE_NEEDED` is the one a caller is told apart: the password was right, the person has an
+// authenticator and no code was sent.
+export type SignInRefused =
+  'NOBODY' | 'WRONG' | 'WAITING' | 'LOCKED' | 'CODE_NEEDED' | 'WRONG_CODE';
 
 export type SignInOutcome =
   | ({ readonly signedIn: true } & Opened)
@@ -65,6 +78,7 @@ export interface SessionParts {
   readonly tokens: SessionTokens;
   readonly hasher: PasswordHasher;
   readonly tries: WrongTries;
+  readonly twoStep: TwoStepCheck;
   readonly clock: Clock;
   readonly policy: SessionPolicy;
   readonly requestNow: () => string | undefined;
@@ -82,7 +96,7 @@ const sessionRead = {
       name: true,
       role: true,
       archivedAt: true,
-      credential: { select: { passwordChangeRequired: true } },
+      credential: { select: { passwordChangeRequired: true, twoStepSecret: true } },
     },
   },
 } as const;
@@ -102,7 +116,7 @@ export class Sessions {
     this.parts = parts;
   }
 
-  async signIn(email: string, password: string): Promise<SignInOutcome> {
+  async signIn(email: string, password: string, code?: string): Promise<SignInOutcome> {
     const person = await this.named(email);
     const kept = person?.credential;
     if (person === undefined || kept?.passwordHash == null) {
@@ -124,17 +138,42 @@ export class Sessions {
       const cost = await this.parts.tries.wrong(person);
       return { signedIn: false, why: cost.kind === 'LOCKED' ? 'LOCKED' : 'WRONG' };
     }
+    const now = this.parts.clock.now();
+    // The second step, for a person who has an authenticator: only once the password is right.
+    let step: number | undefined;
+    if (kept.twoStepSecret !== null) {
+      if (code === undefined) return { signedIn: false, why: 'CODE_NEEDED' };
+      step = this.parts.twoStep.taken(
+        person.id,
+        kept.twoStepSecret,
+        code,
+        kept.twoStepLastStep,
+        now,
+      );
+      if (step === undefined) return this.wrongCode(person);
+    }
     // Made again where it has no key or was made under settings since raised.
     const passwordHash = this.parts.hasher.stale(kept.passwordHash)
       ? await this.parts.hasher.hash(password)
       : undefined;
-    const now = this.parts.clock.now();
     const requestId = this.parts.requestNow();
     const made = this.parts.tokens.newRefresh();
     const expiresAt = this.until(now, now);
     const session = await this.db.$write(
       { actorId: person.id, source: 'BACK_OFFICE' },
       async (tx) => {
+        // A code is good once: its step is kept only where no later one is, so of two sign-ins
+        // with one code, one finds it spent.
+        if (step !== undefined) {
+          const { count } = await tx.userCredential.updateMany({
+            where: {
+              userId: person.id,
+              OR: [{ twoStepLastStep: null }, { twoStepLastStep: { lt: step } }],
+            },
+            data: { twoStepLastStep: step },
+          });
+          if (count !== 1) return undefined;
+        }
         if (kept.failedSignIns > 0 || kept.lockedUntil !== null || passwordHash !== undefined) {
           await tx.userCredential.update({
             where: { userId: person.id },
@@ -159,6 +198,7 @@ export class Sessions {
         });
       },
     );
+    if (session === undefined) return this.wrongCode(person);
     return {
       signedIn: true,
       ...this.opened(
@@ -168,6 +208,7 @@ export class Sessions {
           name: person.name,
           role: person.role,
           passwordChangeRequired: kept.passwordChangeRequired,
+          ...this.twoStepOf(person.role, kept.twoStepSecret),
         },
         made.secret,
         expiresAt,
@@ -282,6 +323,8 @@ export class Sessions {
                 failedSignIns: true,
                 lockedUntil: true,
                 passwordChangeRequired: true,
+                twoStepSecret: true,
+                twoStepLastStep: true,
               },
             },
           },
@@ -312,8 +355,33 @@ export class Sessions {
         name: row.user.name,
         role: row.user.role,
         passwordChangeRequired: row.user.credential?.passwordChangeRequired ?? false,
+        ...this.twoStepOf(row.user.role, row.user.credential?.twoStepSecret ?? null),
       },
     };
+  }
+
+  // Where a person stands with the second step: whether they have an authenticator, and whether
+  // their role needs one they haven't.
+  private twoStepOf(
+    role: string,
+    kept: string | null,
+  ): Pick<Caller, 'twoStepSetUp' | 'twoStepSetupRequired'> {
+    const twoStepSetUp = kept !== null;
+    return {
+      twoStepSetUp,
+      twoStepSetupRequired: !twoStepSetUp && this.parts.twoStep.need(role) === 'REQUIRED',
+    };
+  }
+
+  // A code that isn't the authenticator's, or was used before: a wrong try at the login, counted
+  // and written as a wrong password is (NIST SP 800-63B-4 §3.2.2).
+  private async wrongCode(person: {
+    readonly id: string;
+    readonly name: string;
+    readonly email: string | null;
+  }): Promise<SignInOutcome> {
+    const cost = await this.parts.tries.wrong(person);
+    return { signedIn: false, why: cost.kind === 'LOCKED' ? 'LOCKED' : 'WRONG_CODE' };
   }
 
   // When a session used at `now` ends unless it is used again: after the policy's quiet minutes,

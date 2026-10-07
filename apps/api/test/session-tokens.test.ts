@@ -5,6 +5,9 @@
 import { randomUUID } from 'node:crypto';
 
 import {
+  beginTwoStepSetupEndpoint,
+  clearTwoStepEndpoint,
+  confirmTwoStepSetupEndpoint,
   currentSessionEndpoint,
   endpoints,
   errorAnswerSchema,
@@ -168,9 +171,23 @@ describe('an endpoint that asks for a session, before anything is read', () => {
         .filter(({ beforePasswordChange }) => beforePasswordChange === true)
         .map(({ name }) => name),
     ).toEqual(['currentSession', 'changePassword']);
+    // And one who must first set an authenticator up, only what that takes (ADR-412).
+    expect(
+      endpoints
+        .filter(({ beforeTwoStepSetup }) => beforeTwoStepSetup === true)
+        .map(({ name }) => name),
+    ).toEqual(['currentSession', 'changePassword', 'beginTwoStepSetup', 'confirmTwoStepSetup']);
   });
 
-  it.each([currentSessionEndpoint, refreshSessionEndpoint, signOutEndpoint, sessionCsrfEndpoint])(
+  it.each([
+    currentSessionEndpoint,
+    refreshSessionEndpoint,
+    signOutEndpoint,
+    sessionCsrfEndpoint,
+    beginTwoStepSetupEndpoint,
+    confirmTwoStepSetupEndpoint,
+    clearTwoStepEndpoint,
+  ])(
     'AC-10-27 $name with no cookie, or one the server never made, is refused as not signed in',
     async ({ method, path }) => {
       for (const cookie of [

@@ -1135,8 +1135,12 @@ model UserCredential {
   userId                 String    @unique @map("user_id") @db.Uuid
   // Argon2id, as a PHC string; none until a password is set.
   passwordHash           String?   @map("password_hash")
-  // The authenticator app's secret for two-step sign-in (ADR-170); none until it is set up.
+  // The authenticator app's secret for two-step sign-in (ADR-170), sealed by the API with a key
+  // the database never holds (ADR-412); none until the person has proved a code from it.
   twoStepSecret          String?   @map("two_step_secret")
+  // The thirty-second step of the last authenticator code taken from this person: no code of
+  // that step or an earlier one is taken again, so a code is good once (ADR-412).
+  twoStepLastStep        Int?      @map("two_step_last_step")
   // Sign-in refuses this person until then: the wait wrong tries put on the login (ADR-409).
   lockedUntil            DateTime? @map("locked_until") @db.Timestamptz(3)
   // Wrong tries in a row since the last sign-in that worked or the last password set. At the
@@ -1178,6 +1182,9 @@ enum SecurityEventKind {
   SIGN_IN
   SIGN_IN_FAILED
   LOCKOUT
+  // A person set their authenticator up, and an admin cleared one (ADR-412).
+  TWO_STEP_SET_UP
+  TWO_STEP_CLEARED
   DEVICE_SETUP
   DEVICE_SWITCH
   MASTER_PASSCODE_USE

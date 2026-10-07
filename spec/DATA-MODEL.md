@@ -180,7 +180,8 @@ worker, which reads people, holds nothing on it, and no read-only viewer reads i
 | **id** | uuid | |
 | **userId** | → `User`, unique | Whose it is; never changes. Never the system actor, which never signs in (check; ADR-273, C21) |
 | passwordHash | text | Argon2id, as a PHC string, and nothing else (check); none until a password is set. Keyed with a secret of the API's that is never in the database: the string names the key, never holds it (ADR-411). **Kept out of the audit log** |
-| twoStepSecret | text | The authenticator app's secret (ADR-170); none until two-step sign-in is set up; never blank (check). **Kept out of the audit log.** How it is kept at rest is task 2.2.4's |
+| twoStepSecret | text | The authenticator app's secret (ADR-170), **only as the API sealed it** (AES-256-GCM under a key drawn from the API's signing secret, bound to this person, written `v1.…`; a check refuses anything else, and a blank); none until the person has proved a code from it. **Kept out of the audit log** (task 2.2.4, ADR-412) |
+| **twoStepLastStep** | whole number | The thirty-second step of the last authenticator code taken from this person: no code of that step or an earlier one is taken again, so a code is good once. Never below nought, and none without a secret (checks) (task 2.2.4, ADR-412) |
 | lockedUntil | instant | Sign-in refuses the person until then: the wait that wrong tries put on the login, which is over by itself (ADR-409) |
 | **failedSignIns** | whole number | Wrong tries in a row since the last sign-in that worked or the last password set; never below nought (check). At the policy's count (`SIGN_IN_TRIES_BEFORE_LOCK`) the login is locked until its password is set anew (task 2.2.3, ADR-409) |
 | **passwordChangeRequired** | bool | Somebody else set this password: its owner sets their own at their next sign-in, before anything else (task 2.2.3, ADR-410). False unless set |
@@ -220,7 +221,7 @@ API reads the table**; who is shown them on a screen is the back office's (Phase
 | Field | Type | Notes |
 |---|---|---|
 | **id** | uuid | |
-| **kind** | enum `SecurityEventKind` | `SIGN_IN` · `SIGN_IN_FAILED` · `LOCKOUT` · `DEVICE_SETUP` · `DEVICE_SWITCH` · `MASTER_PASSCODE_USE` (REQ-202b's list; a task that needs another adds it) |
+| **kind** | enum `SecurityEventKind` | `SIGN_IN` · `SIGN_IN_FAILED` · `LOCKOUT` · `TWO_STEP_SET_UP` · `TWO_STEP_CLEARED` (ADR-412) · `DEVICE_SETUP` · `DEVICE_SWITCH` · `MASTER_PASSCODE_USE` (REQ-202b's list; a task that needs another adds it) |
 | userId | → `User` | Who it is about: the person a try named, when the firm has such a person. Never the name that was typed |
 | deviceId | → `Device` | The phone, when it happened on one |
 | requestId | text | The API request it happened in; never blank (check) |
@@ -1822,7 +1823,7 @@ A new value in any of them is a code change with an ADR (`spec/LISTS.md` Group 2
 | `TicketStatus` ✅ | `PENDING` · `COMPLETED` · `MANUAL_REVIEW` · `VOID` | `FieldEvent`, `ReconciliationDecision` |
 | `UserRole` ✅ | `ADMIN` · `MANAGER_ANALYST` · `MONITOR` · `READ_ONLY_VIEWER` · `SYSTEM` | `User` |
 | `DeviceStatus` ✅ | `ACTIVE` · `LOST` · `RETIRED` | `Device` |
-| `SecurityEventKind` ✅ | `SIGN_IN` · `SIGN_IN_FAILED` · `LOCKOUT` · `DEVICE_SETUP` · `DEVICE_SWITCH` · `MASTER_PASSCODE_USE` | `SecurityEvent` (ADR-399) |
+| `SecurityEventKind` ✅ | `SIGN_IN` · `SIGN_IN_FAILED` · `LOCKOUT` · `TWO_STEP_SET_UP` · `TWO_STEP_CLEARED` (ADR-412) · `DEVICE_SETUP` · `DEVICE_SWITCH` · `MASTER_PASSCODE_USE` | `SecurityEvent` (ADR-399) |
 | `NumberSeries` ✅ | `LOAD` · `HAUL_OUT` · `UNIT_RATE` · `CERTIFICATION` · `ROE` (✅ ADR-323) | `ProjectNumberSeries`, `ControlRange`, `NumberBlock` |
 | `NumberBlockStatus` ✅ | `ISSUED` · `RECLAIMED` · `RETIRED` | `NumberBlock` |
 | `AssignmentOrigin` ✅ | `PLANNED` · `UNPLANNED` | `Assignment` |
