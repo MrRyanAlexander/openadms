@@ -5,58 +5,67 @@
 > the bottom accurate. Milestone detail lives in `agent_store/BACKLOG.md`.
 
 
-## Active Phase — `PHASE 1: DATA CORE AND ENGINE, REBUILT` *(opened by the user 2026-10-01, ADR-299)*
+## Active Phase — `PHASE 2: API AND SYNC` *(opened by the user 2026-10-06, ADR-376)*
 
-**User, 2026-10-01:** "phase 1 is open, begin working on the next task".
+**User, 2026-10-06:** "phase 2 is open, begin working on the next task".
 
-**What it is.** The whole product without a screen or an endpoint: setup records, certifications and
-capacity, field events and their numbers, sync intake with quarantine, reconciliation, the rule
-engine, the ledger and audit, review, QC and the invoice lock, rebuilt in TypeScript with Prisma on
-Phase 0's foundation (ADR-093, 094).
+**What it is.** The server in front of what Phase 1 built: the API as a running process over HTTPS,
+sign-in and permissions, a phone's enrolment and its proof of itself, the sync endpoints, and
+reconciliation as queued jobs drained by the worker's own process. **It adds no rule: it wraps,
+signs in, queues and hardens.**
 
-**Objective.** The golden mission runs from a terminal and comes out with the statuses, review
-queue, ledger and audit trail the user approved (`spec/golden/MISSION.md`, ADR-297).
+**Objective.** The golden mission syncs through the real endpoints, is reconciled by queued jobs,
+and comes out with the numbers the user approved (`spec/golden/MISSION.md`, ADR-297).
 
-**The plan.** `BACKLOG.md`, "Active — Phase 1": ten milestones, 47 tasks, **one task per response**
-(ADR-300). Each milestone opens with its part's acceptance scenarios (`spec/acceptance/`), then the
-schema from `spec/DATA-MODEL.md`, then the rules, then its story.
+**The plan.** `BACKLOG.md`, "Active — Phase 2": eight milestones, 32 tasks, **one task per
+response** (ADR-377). Read its brief before any task.
 
 **Scope boundary.**
-- **In:** `packages/db` (schema, guard migrations, tests), `packages/domain` (every rule),
-  `packages/contracts`, `packages/scenarios` (stories), `apps/worker` (the reconciliation run),
-  `apps/api` (service classes only: no HTTP, no sign-in), `tools/`, `spec/acceptance/`.
-- **Not Phase 1's:** endpoints, sign-in and the sync contract (Phase 2); the phone (Phase 3);
-  screens, exports and the time clock's tables (Phases 3–4). Say which phase and ask; never widen
-  silently.
-- `database/` and `development/` stay read-only history and reference.
+- **In:** `apps/api` (the process, endpoints, sign-in), `apps/worker` (the process, the queue),
+  `packages/contracts` (every payload), `packages/db` (sign-in's, the queue's and sync's records,
+  their guards and tests), `packages/domain` (password rules and any rule a task's ADR records),
+  `packages/scenarios`, `infra/local` (the API behind Caddy), `tools/` (the installer, the security
+  checks), `spec/acceptance/`, `spec/THREAT-MODEL.md`.
+- **Not Phase 2's:** any screen, the phone's own store, real secure hardware, printing and scanning
+  (Phase 3); the back office's and the portal's pages, exports, the time clock's tables (Phases
+  3–4); the demo deploy, cloud TLS, pgAudit, the outside penetration test (Phase 5a). Say which
+  phase and ask; never widen silently.
+- `development/` stays read-only reference.
 
 **Environment.** Node 24 through fnm (`eval "$(fnm env --shell zsh)"` first), pnpm 11, TypeScript
 6.0.3, Prisma 7.10.0, Postgres 18.6 in the local stack (`pnpm local:up`; stopped at every close-out).
 
 ---
 
-## Exit criteria for Phase 1 *(ADR-299)*: all seven met 2026-10-06 (ADR-371, 372)
+## Exit criteria for Phase 2 *(ADR-376; agent default, the user may change them)*
 
 All observed and reported, not assumed:
 
-1. **The golden mission runs as a story** with the exact statuses, review queue, ledger (P1
-   $5,548.25 on 19 lines; P2 $324.00) and audit rows the user approved (REQ-017, 142, 143).
-2. **Every Phase 1 acceptance scenario passes at the engine**, reported as N of M (VISION §8).
-3. **All 98 Phase 1 REQs** ticked from runs that were seen, or re-filed with an ADR.
-4. **The rebuild lessons hold:** the behaviour of KD-01, 04, 05, 10, 12, 13, 15, 55 and 56 right and
-   verified; every other rebuild-lesson KD closed or re-filed.
+1. **The golden mission syncs through the real endpoints and is reconciled by queued jobs**, with
+   the exact statuses, review queue, ledger (P1 $5,548.25 on 19 lines; P2 $324.00) and audit rows
+   the user approved; every other story still passes.
+2. **Every acceptance scenario with a Phase 2 part passes at the API**, reported as N of M.
+3. **All 14 Phase 2 REQs** ticked from runs that were seen, or re-filed with an ADR.
+4. **The security checklist for this layer** (ARCHITECTURE §16: OWASP ASVS Level 2, API Security
+   Top 10, NIST SP 800-63B): each item answered by a named test or by the phase that owns it; the
+   threat model written; `pnpm security` passing.
 5. **The database still enforces the rules:** every new table guarded, every grant and refusal
-   tested, a row-level-security decision for each table a viewer sees, `guard_gaps()` empty,
-   `pnpm security` passing.
-6. **The chain is green** with real counts: typecheck, lint, licences, tests, stories.
-7. **Rules live once:** none outside `packages/domain`, and nothing in it touches Postgres
-   (REQ-003, 128).
+   tested, `guard_gaps()` empty, each service login under a statement timeout.
+6. **The chain is green** with real counts (typecheck, lint, licences, tests, stories), and the
+   API is reached only over HTTPS through Caddy.
+7. **Rules and shapes live once:** no rule outside `packages/domain`, no payload shape outside
+   `packages/contracts`, only `packages/db` and the two server apps reaching Postgres.
 
-Only then is **Phase 2 (API and sync)** offered to the user to open.
+Only then is **Phase 3 (the field app)** offered to the user to open.
 
 ---
 
-## Phase 0 and the spec track: done *(the record moved 2026-10-02, ADR-307)*
+## Phases 0 and 1 and the spec track: done *(the record moved 2026-10-02, ADR-307, and 2026-10-06, ADR-375)*
+
+**Phase 1 (data core and engine) met its seven exit criteria on 2026-10-06** (ADR-371, 372): 49
+tasks, 93 of 98 REQs ticked and 5 moved to Phases 3 and 4; the user opened Phase 2 the same day
+(ADR-376). Its task-by-task record is in `DECISIONS.md`'s scratchpad, "Moved 2026-10-06 (ADR-375)".
+
 
 **Phase 0 (Foundation) closed on 2026-10-01** with its seven exit criteria met and all 17 of its
 REQs ticked (ADR-281…288); the user opened Phase 1 the same day (ADR-299). **Every spec page is
@@ -65,7 +74,7 @@ approved:** `ARCHITECTURE.md` (ADR-104…144), `VISION.md`, `INDEX.md`, the part
 thirteen points settled, ADR-292…295), the golden mission and its numbers (ADR-297). Their full
 record (why Phase 0 existed, its exit criteria and how each was met, the spec track and the 26
 question rounds) moved word for word to `DECISIONS.md`'s scratchpad, "Moved from NEXT.md,
-2026-10-02"; `ROADMAP.md` §3a keeps the table.
+2026-10-02"; `ROADMAP.md` §3b keeps the table.
 
 **Still live from the spec track:** nothing. All nine acceptance files are approved by the user
 (01…05 by ADR-335; 06…09 on 2026-10-06, ADR-374). Their count is `spec/acceptance/README.md`'s
@@ -80,27 +89,26 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-06, through ADR-375)
-- **Phase 1 (data core and engine) has met all seven exit criteria (ADR-371, 372).** Its 49 tasks
-  are ticked in `BACKLOG.md`; 93 of its 98 REQs are ticked and 5 moved to the phase that finishes
-  them (REQ-112b, 124c, 124f, 125c to Phase 3; REQ-124b to Phase 4); every rebuild-lesson KD is
-  closed; 693 of the 708 scenarios with a Phase 1 part are proven whole, the other 15 in part.
-- **Phase 2 (API and sync) is the user's to open.** Offer it; never open it. When they do, its plan
-  is written into `BACKLOG.md` first, from `REQUIREMENTS-LATER.md`'s Phase 2 (14 REQs) and the
-  carry-forward register (C71, C83 and the items marked Phase 2).
-- **The chain, seen whole on 2026-10-06:** 80 test files, 1,753 tests; lint clean; 358 licences
-  allowed; fifteen stories; `pnpm security` 7 passed, 0 failed; eighty migrations. The expected
-  output of each command is `adms-verify`'s.
+### Where things stand (2026-10-06, through ADR-378)
+- **Phase 2 (API and sync) is open (ADR-376).** Its plan is `BACKLOG.md`'s eight milestones and 32
+  tasks (ADR-377); task 2.0.1 (the opening and the plan) is done, **nothing of it is built yet**.
+  Its 14 REQs are in `REQUIREMENTS.md`, none ticked.
+- **Phase 1 is done:** all seven exit criteria met (ADR-371, 372); 693 of the 708 scenarios with a
+  Phase 1 part proven whole, 15 in part. 48 scenario rows name Phase 2 (37 as "API (Phase 2)").
+- **The chain, seen whole on 2026-10-06 (not run since: the opening was docs only):** 80 test
+  files, 1,753 tests; lint clean; 358 licences allowed; fifteen stories; `pnpm security` 7 passed,
+  0 failed; eighty migrations. The expected output of each command is `adms-verify`'s.
 - **What exists:** `packages/db` (schema, guards, tests), `packages/domain` (every rule; one
   dependency, no database), `packages/contracts`, `packages/scenarios` (the harness and stories,
   the golden mission among them), `apps/worker/src/reconciliation/` (the run: group, check,
-  price, write), `apps/api/src/` (service classes only: setup, certifications, numbering, intake,
-  review; no HTTP, no sign-in), `tools/`, `infra/local`.
-- **Open deviations:** KD-63 only (the conventions draft in `development/`; the user, 2026-10-06:
-  "not approved yet; but mostly seems good"). KD-30 is re-filed to Phase 5 (REQ-518).
-- **The task-by-task record of Phase 1** (what each task built, found and left) moved word for word
-  to `DECISIONS.md`'s scratchpad, "Moved 2026-10-06 (ADR-375)". Read it there when a later task
-  needs how something was built; the rules themselves are `SUMMARY.md`'s and the skills'.
+  price, write; no process, no queue), `apps/api/src/` (service classes only: setup,
+  certifications, numbering, intake, review; no HTTP, no sign-in), `tools/`, `infra/local`.
+- **Open deviations:** none. KD-63 closed when the user marked `spec/CONVENTIONS.md` approved
+  (ADR-378). KD-30 is re-filed to Phase 5 (REQ-518).
+- **`pnpm-workspace.yaml` holds the user's own uncommitted edit:** the `minimumReleaseAgeExclude`
+  entry commented out. Until 2026-10-07 14:08 UTC `pnpm install --frozen-lockfile` fails with it
+  (seen, ADR-378's session line); from then it passes, and the next task's first step deletes the
+  commented lines and their three comment lines (ADR-372).
 
 ### The model as it stands now (today's words; `SUMMARY.md` has each rule and its ADR)
 The firm's setup decides how things play out (ADR-197), and there are **two sides** (ADR-224): the
@@ -149,7 +157,7 @@ Update it at close-out when a task, milestone or phase closes.
 | 5 | **Truth-up the docs** ✅ done 2026-09-29 (ADR-247…253; KD-33, 58, 61, 62 closed) | `RATE-SHEET.md`, `RULES.md`, `LISTS.md`, parts 01/04/06/07 and the skills rewritten to today's rules, one per response (ADR-138) | Before step 7's engine work |
 | 6 | **Acceptance scenarios + golden mission** ✅ the mission is approved (ADR-297) and runs as a story (ADR-368); the nine scenario files are written and approved (ADR-335, 374) | `spec/acceptance/`, `spec/golden/` with the user's signed-off numbers | Steps 2, 5 |
 | 7 | **Phase 1: data core + engine, rebuilt** ✅ exit met 2026-10-06 (ADR-371, 372); opened 2026-10-01 (ADR-299); its tasks are ticked in `BACKLOG.md` | Setup records, certifications and capacity, tickets and numbers, sync intake with quarantine, reconciliation, the rule engine, the ledger and audit, review, QC, invoice lock and batches; KD-01, 04, 05, 10, 12, 13, 15, 55, 56 closed; the golden mission passing at the engine | Steps 3–6 |
-| 8 | **Phases 2–5** | API and sync → field app (browser, iPhone, Android) → back office (setup screens with the setup check, rule builder, review queue, exports, viewers) → later features and the demo deploy | Each phase's REQs refreshed before it opens |
+| 8 | **Phases 2–5**: **Phase 2 open since 2026-10-06 (ADR-376)**, its plan in `BACKLOG.md` (ADR-377) | API and sync → field app (browser, iPhone, Android) → back office (setup screens with the setup check, rule builder, review queue, exports, viewers) → later features and the demo deploy | Each phase's REQs refreshed before it opens |
 
 ### What is still to be asked (so nothing is guessed later)
 - **Nothing is open** (ADR-230). New questions only under the shot-clock rule above.
@@ -159,7 +167,7 @@ Update it at close-out when a task, milestone or phase closes.
   candidate; `RULES.md` §7 "Is valid"; whether to keep hand re-entry of the ticket number (ADR-209)
   when the field app is built.
 - **Approvals as part of later steps:** none left for the spec pages (`DATA-MODEL.md` and
-  `FLAGS.md` are approved, ADR-289, 290; the golden mission and its numbers, ADR-297). The names in `spec/CONVENTIONS.md` are agent defaults the user may overturn.
+  `FLAGS.md` are approved, ADR-289, 290; the golden mission and its numbers, ADR-297; `spec/CONVENTIONS.md`, ADR-378). To come in Phase 2: `spec/THREAT-MODEL.md` and `spec/acceptance/10-api-and-sync.md` (task 2.1.1).
 - **Ours, not the user's:** design tasks Q-166 (regional map data) and Q-167 (upgrading an
   installation).
 
@@ -240,18 +248,22 @@ Update it at close-out when a task, milestone or phase closes.
 and the topic you are touching. Product discovery is closed (ADR-230): don't open new rounds of
 questions.
 
-**There is no Phase 1 task left: its exit is met (ADR-371, 372). Phase 2 (API and sync) is the
-user's to open. Offer it; never open it.**
+**Phase 2 is open (ADR-376). Its plan is `BACKLOG.md`, "Active — Phase 2" (ADR-377): read its
+brief first. One task per response.**
 
-1. **Owed, on or after 2026-10-07 14:08 UTC (ADR-372):** in `pnpm-workspace.yaml` delete the
-   `minimumReleaseAgeExclude` entry for `source-map-js@1.2.2` and its three comment lines; keep the
-   override. Then `pnpm install --frozen-lockfile` (nothing else should change), `pnpm security`
-   (expect `7 passed, 0 failed`), and strike BACKLOG C74's last line. The user said "skipped for
-   now, will do later" on 2026-10-06: do it when asked, or as the first step of the next task.
-2. **When the user opens Phase 2:** record the opening as an ADR, then write its plan into
-   `BACKLOG.md` (milestones and tasks, as ADR-300 did for Phase 1) before any code: read
-   `REQUIREMENTS-LATER.md`'s Phase 2, `spec/ARCHITECTURE.md` §6…§9 and §16, BACKLOG C71 and C83,
-   and the scenarios marked "API (Phase 2)" in `spec/acceptance/`. One task per response.
+1. **First, if it is 2026-10-07 14:08 UTC or later (ADR-372):** `pnpm-workspace.yaml` has the
+   `minimumReleaseAgeExclude` entry commented out by the user. Delete those two commented lines and
+   the three comment lines above them; keep the override. Then `pnpm install --frozen-lockfile`
+   (nothing else should change), `pnpm security` (expect `7 passed, 0 failed`), and strike BACKLOG
+   C74's last line. Before that time the install fails on the seven-day rule: leave the file alone.
+2. **Task 2.1.1, the threat model and the API's scenarios** (docs only; BACKLOG has the task in
+   full): `spec/THREAT-MODEL.md` over ARCHITECTURE §2's layers (C40 (a)), and
+   `spec/acceptance/10-api-and-sync.md`: scenarios for what ARCHITECTURE §6, §7.4, §9 and §13
+   decide and no scenario states yet, plus the list by ID of every existing scenario with a Phase 2
+   part and the task that proves it, each tied to its checklist item (ASVS Level 2, API Security
+   Top 10, NIST SP 800-63B). Read `spec/acceptance/README.md` for how a scenario is written, and
+   `spec/VISION.md` §8. Both pages are for the user's approval; building doesn't wait (ADR-230).
+   **Next after it: 2.1.2, the API as a process** (the first code and the first dependency ADRs).
 
 **Every command starts with** `eval "$(fnm env --shell zsh)"`. The checks are `adms-verify`'s; the
 database tests, the map servers' tests, the stories and `pnpm security` need `pnpm local:up` first,

@@ -3,39 +3,12 @@
 > **2026-09-25:** Phase 0 (Foundation) now comes first (ADR-103); how each phase is built and
 > secured is `spec/ARCHITECTURE.md`. Device wording is **setup**, never provisioning (ADR-095).
 
-Phases 2–5. **Do not build from these until `agent_store/NEXT.md` says the phase has opened.**
+Phases 3–5 (Phase 2 opened 2026-10-06 and moved out). **Do not build from these until `agent_store/NEXT.md` says the phase has opened.**
 The active phase's checklist is `agent_store/REQUIREMENTS.md`.
 
-## Phase 2 — HTTP API (Railway) 🔒 gated
+## Phase 2 — API and sync: open since 2026-10-06 (ADR-376)
 
-> **Refreshed at Phase 1's exit, 2026-10-06 (ADR-371), against `SUMMARY.md` and the carry-forward
-> register.** Phase 1 built what an endpoint will call, with no HTTP: the setup services
-> (`apps/api/src/setup/`), `Certifications`, `NumberAllocator`, `Intake` (`src/sync/`: each record
-> answered saved, already saved or quarantined; a phone's blocks topped up) and the review services
-> (`src/review/`: corrections, renumbering, quarantine, void, unvoid, accept, QC, lock, batch,
-> unlock), each one `db.$write` as the person, each reading the person's grant itself; and the
-> worker's run (`apps/worker/src/reconciliation/`), asked for by whoever calls it. **So Phase 2 adds
-> no rule: it wraps, signs in, queues and hardens.** Each REQ below says what is already there.
-> REQ-207…209 are new: work the register left to this phase that no REQ named. The Phase 2
-> scenarios are already written: those marked "API (Phase 2)" in `spec/acceptance/` (most of the 52
-> that wait for Phases 2–4, and the rest of the 15 proven in part).
-
-**Carried from Phase 0** *(ADR-287)*
-- [ ] **REQ-004** One shared **contracts** package: Zod schemas for every API and sync payload; OpenAPI generated from them; nothing hand-writes a payload shape. *(ADR-094)* — the package and its dependency direction exist (ADR-261).
-- [ ] **REQ-006** The local stack starts with one command and serves every service over **HTTPS** (a reverse proxy with a local CA); nothing listens on plain HTTP to the outside. *(ADR-098/099)* — met for the six services that exist (ADR-263, 282); re-checked as the API, the worker and each web app join through Caddy, and ticked when the last one has.
-- [ ] **REQ-016** Every synced record carries an ID made on the device; the server's idempotency ledger answers a retry "already saved" and never quarantines it as a duplicate number. *(KD-56, ARCHITECTURE §9)* — the phone-made id exists on every field event (ADR-268); the ledger is the sync endpoint's.
-
-- [ ] **REQ-201** The API (`apps/api`) wraps the `domain` and `db` packages: zero new domain logic, zero duplicated validation. *(ARCHITECTURE §18; revised 2026-09-29, ADR-247)* — *refreshed (ADR-371): the services exist; each endpoint calls one, states the request id and, on a read-only login's request, the viewer (`adms.viewer_id`, C22), and checks the grant again from the database on every request (AC-02-12, AC-09-18; C78…C81).*
-- [ ] **REQ-202** Authentication and roles: `ADMIN` (full), manager/analyst (granted permissions), `MONITOR` (on an enrolled phone holding their assignment, ADR-240), and read-only client / contractor / auditor logins scoped to their projects. Back office: short-lived access tokens + rotating, server-revocable refresh tokens in `HttpOnly; Secure; SameSite` cookies (never `localStorage`), CSRF protection; permissions checked from the database on every request so a revoke is immediate; Argon2id password hashing; NIST SP 800-63B password rules. *(ADR-050/093/095, ARCHITECTURE §6)*
-- [ ] **REQ-202a** Device authentication: a device key pair made at **enrolment** in the phone's secure hardware; each sync signs a server challenge. A phone taken out of service is still **received** at its next sync: what it made after its removal time arrives flagged, then its number block is retired and it's wiped, and only then is it refused. *(ADR-095, 134, 240; ARCHITECTURE §7.4; revised 2026-09-29, ADR-247)*
-- [ ] **REQ-202b** Every sign-in, failure, lockout, device setup, device switch and master-passcode use is a security audit event. *(ADR-095/097)*
-- [ ] **REQ-203** Sync endpoints per ARCHITECTURE §9: records before photos; an idempotency ledger on device-made record IDs (REQ-016); a per-record answer (saved / already saved / quarantined); resumable photo upload with hash check; device clock reported; fresh manifest, number-block top-up and master passcode verifier returned. *(ADR-022/065/095/100)* — *refreshed (ADR-371): `Intake.receive` and `topUp` are the answers; still to build: the endpoint and the phone's proof of itself, `Sync` and `SyncedRecord` with the clock difference kept (AC-06-58), a monitor's own reopen as the edit log (`FieldEventEdit`, C79), the manifest (the harness's `phone-lists.ts` is its stand-in; a site's quantity lookup with it, REQ-124f), who makes a photograph's place in storage and the upload (C65), and a certification sent with its five photographs (C82).*
-- [ ] **REQ-204** HTTPS only with HSTS; an explicit CORS allow-list of exact origins (no wildcards or hosting-domain patterns; the back office same-origin through a proxy path); rate limits per IP, account and device; sign-in back-off and lockout; security headers; no internal errors in responses; logs without secrets or personal details. *(ADR-098, ARCHITECTURE §6)*
-- [ ] **REQ-205** Only `packages/db` and the two server apps touch Postgres; no hand-written SQL for modelling. *(invariant 12, ADR-094)* *(revised 2026-09-29, ADR-247)*
-- [ ] **REQ-206** Reprocessing is **jobs, not requests**: a sync, a correction or a back-office "Reprocess" queues worker jobs; there is no synchronous reconcile endpoint. *(ARCHITECTURE §13)* *(revised 2026-09-29, ADR-247)* — *refreshed (ADR-371): the run exists and takes the tickets a review call answers (`reprocess`). Still to build: the queue and the worker's process; **the queue holds only what is active or was changed** (the user, ADR-360): a sync, a correction, an unlock or a setup change names its tickets and the run works only those, a settled ticket staying off it (C71, C75; AC-06-02, 03, AC-05-53); when a certification is made after a field event scanned its number, the field event's link is found again and its tickets queued (C83, AC-06-36); the worker's map settings in its env file, written by the installer (C71).*
-- [ ] **REQ-207** *(new, ADR-371; from C74, C82, C83)* The setup check and a site's quantity lookup are services in `apps/api` (they are rules in `packages/domain` today, called only by tests), and what a story still writes as the person has its service: a rate added or changed, a pay item's unit, a project's active window, a site's own shape, a certification's photographs. *(ADR-229, 243, 357)*
-- [ ] **REQ-208** *(new, ADR-371; from C34)* Each service login has a statement timeout, set by the installer from a policy value, checked by `installer:check` and asserted by the database's configuration test. *(ADR-276 (7))*
-- [ ] **REQ-209** *(new, ADR-371; from C45, C47)* An act under the master passcode (enrolment, creating a monitor, an unplanned assignment) states an actor, decided with the device endpoints, and is logged as a security event; once a lost or retired phone has synced, been confirmed and wiped, its key is revoked (`Device.keyRevokedAt` exists) and the server refuses it. *(ADR-281 (11), ARCHITECTURE §7.4, §7.5)*
+Its 14 REQs moved to `REQUIREMENTS.md`, the active phase's checklist, word for word.
 
 ---
 

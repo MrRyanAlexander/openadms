@@ -1,5 +1,7 @@
 # Open ADMS — Names, codes and examples
 
+✅ **Approved**
+
 > **Agent default (ADR-234, ADR-235, ADR-236, ADR-237), 2026-09-29.** This page is the naming pass (`BACKLOG.md`
 > 0.2b.1), done at the user's word; the user may overturn any name. It **decides what things are
 > called**, not what they do: what a thing *is* stays with the newest ADR, `agent_store/SUMMARY.md`
@@ -7,7 +9,8 @@
 > take names from; that file stays in `development/` as read-only background, and §8 says what we
 > took from it and what it gets wrong. **The user, 2026-10-06: "not approved yet; but mostly seems
 > good"**; the "In code" column of §2 was filled and corrected against the schema that day, and
-> the formats gathered under §3 (ADR-375). KD-63 stays open until the user approves §8.
+> the formats gathered under §3 (ADR-375). **The user then marked the page approved (the mark
+> above; recorded 2026-10-06, ADR-378): the whole page, §8 with it, and KD-63 is closed.**
 
 ← [Index](INDEX.md)
 

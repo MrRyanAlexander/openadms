@@ -1,18 +1,18 @@
 # Open ADMS — Current decisions and gaps, at a glance
 
 **The present tense of the project on one page.** `DECISIONS.md` and `DEVIATIONS.md` are the full
-history, with 375 ADRs and 74 KDs, many superseded. This page says what is true **now** and which
+history, with 378 ADRs and 74 KDs, many superseded. This page says what is true **now** and which
 entries to cite. The reasons live in the ADRs and the skills.
 
 - **Keep it current:** when you add, amend or supersede an ADR, or open or close a KD, update this
   page **in the same response** (`adms-decisions`).
 - **If this page and a log entry disagree,** the newest ADR wins: fix this page and say so.
-- **Updated 2026-10-06, through ADR-375 / KD-74.** **Phase 1's seven exit criteria are met (ADR-371,
-  372); Phase 2 (API and sync) is the user's to open.** Owed from 2026-10-07 14:08 UTC: delete the
-  one `minimumReleaseAgeExclude` entry (ADR-372). The same day the user settled KD-72 and KD-71
-  (ADR-373: a ticket waiting on a to-be-negotiated rate is in the review queue like any flagged
-  ticket), approved acceptance files 06…09 and the agent defaults of tasks 1.8.2…1.9.2 (ADR-374),
-  and had the state files cut to what is live (ADR-375). Open: KD-63 only.
+- **Updated 2026-10-06, through ADR-378 / KD-74.** **Phase 2 (API and sync) is open, at the user's
+  word (ADR-376); its plan is `BACKLOG.md`'s eight milestones and 32 tasks (ADR-377); nothing of
+  it is built yet.** Phase 1's seven exit criteria are met (ADR-371, 372). `spec/CONVENTIONS.md`
+  is approved by the user and KD-63 closed (ADR-378): **no KD is open.** Owed from 2026-10-07
+  14:08 UTC, the first step of task 2.1.1: delete the `minimumReleaseAgeExclude` entry the user
+  has commented out (ADR-372).
 - **Where things stand, the road and the next task:** `NEXT.md`. The roadmap in tables:
   `ROADMAP.md`. Names, examples and formats: `spec/CONVENTIONS.md`. The task-by-task record of
   Phase 1 that used to sit here: `DECISIONS.md`'s scratchpad, "Moved 2026-10-06 (ADR-375)".
@@ -1268,7 +1268,7 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   **retired examples** (`1A`, `54A`, `90A`, Bobs, TFR, Ceres, Charlotte County Landfill, Hwy 20 TDSR,
   `M003490`, `610810`…) stay only in `QUESTIONS.md`, `DECISIONS.md` and `FROM-BUILD-1.md` as history,
   and each skill or spec page drops them when it's rewritten. `development/Open_ADMS_Initial_Conventions.md`
-  is read-only background; its errors are listed in CONVENTIONS §8 (KD-63). [234, 235]
+  is read-only background; its errors are listed in CONVENTIONS §8 (KD-63, closed). **The page is approved by the user, whole** (their mark at its head; ADR-378). [234, 235, 378]
 - **`NEXT.md`'s Handoff** is where a new agent learns where the product ends up and the road there
   (state, road to done, open areas, how the user works); round history lives in `DECISIONS.md`'s
   session log. [225]
@@ -1304,7 +1304,28 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   who entered it. **KD-65 is closed (ADR-295):** a completed haul-out has a completed
   load's shape (a row per collection event) and carries the tandem's `weightIsShare` mark. [140, 284,
   285, 289, 290, 292, 293, 294, 295]
-- **Phase 1 is the active phase, opened by the user on 2026-10-01** ("phase 1 is open, begin working
+- **Phase 2 (API and sync) is the active phase, opened by the user on 2026-10-06** ("phase 2 is
+  open, begin working on the next task"). **It adds no rule: it wraps, signs in, queues and
+  hardens.** **Its exit** (agent default): the golden mission syncing through the real endpoints,
+  reconciled by queued jobs, with the approved numbers; every scenario with a Phase 2 part passing
+  at the API (N of M); all 14 REQs ticked or re-filed; ARCHITECTURE §16's checklist for this layer
+  answered item by item, the threat model written, `pnpm security` passing; every new table
+  guarded and each service login under a statement timeout; the chain green, the API only over
+  HTTPS through Caddy; no rule outside `packages/domain`, no payload shape outside
+  `packages/contracts`. Phase 3 opens only on the user's word after that. [376] **Its plan**
+  (`BACKLOG.md`, "Active — Phase 2"): 2.0 open · 2.1 the answer and the foundation (the threat
+  model and `spec/acceptance/10-api-and-sync.md` first; the API as a process; the boundary; time
+  limits) · 2.2 sign-in, sessions and permissions · 2.3 jobs and the worker's process · 2.4 the
+  back office's endpoints · 2.5 phones: enrolment, sign-in, the lists · 2.6 sync · 2.7 prove it.
+  **Jobs come before the endpoints that queue them**, so nothing is built against a stand-in. One
+  task per response. **Every endpoint is added with its permission (read from the database on that
+  request), its rate limit, its request id and its tests as each kind of caller, in one task;
+  every payload is a Zod schema in `packages/contracts`; every dependency gets an ADR first.** A
+  read endpoint only a screen needs comes with that screen (Phase 4). The exact packages, where a
+  security event is kept, Argon2id's parameters, the device key's kind, who a record names for an
+  act under the master passcode (C45) and `FieldEventEdit`'s fields are each decided, by ADR, in
+  the task that meets them. *Agent default.* [377]
+- **Phase 1 was opened by the user on 2026-10-01 and met its exit on 2026-10-06 (ADR-371, 372)** ("phase 1 is open, begin working
   on the next task"). **Its exit:** the golden mission running as a story with the approved statuses,
   queue, ledger and audit rows; every Phase 1 acceptance scenario passing at the engine (N of M); all
   98 REQs ticked from runs that were seen; the rebuild-lesson KDs closed; every new table guarded and
@@ -1442,8 +1463,8 @@ Full text: `DEVIATIONS.md`.
 > **2026-10-06 (ADR-371), at Phase 1's exit: every rebuild-lesson KD in the table below is closed**
 > (01, 02, 04, 05, 06, 10…19, 22…29, 35…50, 52…56), each with the scenario IDs that prove the
 > rebuilt behaviour, in `DEVIATIONS.md`. **KD-30** (the HHW trail) is re-filed to Phase 5, REQ-518.
-> **Open now:** KD-63 only (the `development/` conventions draft; the user, 2026-10-06: "not
-> approved yet; but mostly seems good"). KD-71 (2) and KD-72 are closed (ADR-373: the catalogue is
+> **Open now: none.** KD-63 (the `development/` conventions draft) closed when the user marked
+> `spec/CONVENTIONS.md` approved, §8 with it (ADR-378). KD-71 (2) and KD-72 are closed (ADR-373: the catalogue is
 > 78 flags; a ticket waiting on a negotiated rate is in the review queue until its flag is accepted). The table is kept as the list of what the rebuild had to get right.
 
 | Area | KDs | The gist |
@@ -1466,7 +1487,7 @@ per-login timeout with Phase 2, TLS with the demo deploy); nothing states the vi
 minimum, the behaviour of **01, 04, 05, 10, 12, 13, 15, 55, 56** right and verified. `BACKLOG.md`'s
 Phase 1 milestones name the KDs each closes (ADR-300).
 
-**Closed:** 03, 07, 08, 09, 20, 21, 31, 32, 33, 51, 57, 58, 60, 61, 62, 64, 65, 66, 68, 69, 70
+**Closed:** 03, 07, 08, 09, 20, 21, 31, 32, 33, 51, 57, 58, 60, 61, 62, 63 (2026-10-06, ADR-378), 64, 65, 66, 68, 69, 70
 (70, 2026-10-03, ADR-321: Prisma wrote `map_version.loaded_at`'s default again into every later
 migration; the default is now `transaction_timestamp()`). **Milestone 1.2 built the behaviour
 of KD-11, 45, 46 and 48, and KD-10's uniqueness** (its issuer: 1.3.2), each under a test named by
@@ -1476,12 +1497,15 @@ its scenario.
 
 ## 4. Waiting on the user
 
-**Live today (2026-10-06, ADR-373…375):**
-- **Opening Phase 2** is the user's call; nothing of it is built before they say so.
-- **Owed, the user's "will do later":** from 2026-10-07 14:08 UTC, delete the one
-  `minimumReleaseAgeExclude` entry (ADR-372).
-- **KD-63:** `spec/CONVENTIONS.md` §8 (what the conventions draft gets wrong) is "not approved yet;
-  but mostly seems good" (the user, 2026-10-06).
+**Live today (2026-10-06, ADR-376…378):**
+- **Nothing blocks the next task** (2.1.1, the threat model and the API's scenarios).
+- **Phase 2's exit criteria and its plan are agent defaults (ADR-376, 377)**, the user's to change:
+  jobs built before the endpoints that queue them; a tenth acceptance file and a threat model
+  written first, for the user's approval; reads that only a screen needs left to Phase 4.
+- **`spec/CONVENTIONS.md` read as approved whole, §8 included (ADR-378).** If the mark was meant
+  for less, the user says so and KD-63 reopens.
+- **Owed:** from 2026-10-07 14:08 UTC, delete the `minimumReleaseAgeExclude` entry (ADR-372). The
+  user has commented it out already; until that time `pnpm install --frozen-lockfile` fails.
 - **Approved by the user 2026-10-06 (ADR-374), no longer waiting:** acceptance files 06…09, and the
   agent defaults of tasks 1.8.2, 1.8.3, 1.8.5, 1.9.1 and 1.9.2 (ADR-363, 364, 367, 368, 369) as
   they were listed here; the list moved word for word to `DECISIONS.md`'s scratchpad, "Moved

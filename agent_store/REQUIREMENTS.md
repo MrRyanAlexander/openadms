@@ -11,6 +11,9 @@ code present *and* covered by a passing test.
 >
 > **2026-10-01 (ADR-299): Phase 0 is done (17 of 17) and the user opened Phase 1, now active.** Each
 > of its 98 REQs is named by the `BACKLOG.md` task that ticks it (ADR-300).
+>
+> **2026-10-06 (ADR-376): Phase 1's exit is met and the user opened Phase 2, now active.** Its 14
+> REQs are at the end of this file; Phases 3–5 are in `REQUIREMENTS-LATER.md`.
 
 ---
 ## Phase 0 — Foundation and security ✅ done 2026-10-01 *(ADR-093…103, `spec/ARCHITECTURE.md`)*
@@ -61,7 +64,7 @@ code present *and* covered by a passing test.
 | REQ-016 (the server's idempotency ledger) | Phase 2, `REQUIREMENTS-LATER.md` | Every field event's id is made on the phone (ADR-268); the harness's phones keep it across a retry (ADR-275) |
 
 ---
-## Phase 1 — Data core and reconciliation engine ← **ACTIVE** *(rebuilt on Phase 0; opened 2026-10-01, ADR-299)*
+## Phase 1 — Data core and reconciliation engine ✅ exit met 2026-10-06 *(rebuilt on Phase 0; opened 2026-10-01, ADR-299; ADR-371, 372)*
 
 **Carried from Phase 0** *(ADR-287)*
 - [x] **REQ-003** One shared TypeScript **domain** package holds every rule that must give the same answer on the phone and the server (capacity math, load-call volume, apportionment and split shares, number blocks, time rules), as readable classes, with unit tests from the paper-form examples. *(ADR-094)* — the package and its test wiring exist (ADR-261). — its first rule is in: the capacity math (`Capacity`, ADR-320). ✅ *2026-10-06, the phase exit, ADR-371: every rule is a class in `packages/domain` (its one dependency is `geographiclib-geodesic`; it imports nothing of the database), with unit tests named by scenario ID: 575 tests in 29 files in the final run.*
@@ -190,3 +193,41 @@ code present *and* covered by a passing test.
 | REQ-124b (the project map) | Phase 4 | the map as dated versions, never edited, AC-01-59 (database); the boundary flag, the zone and map version attached by the worker, in no zone flagged, AC-06-42…45 (domain, story `p1-reconciled`); a new version worked by the next run (story `p1-left-out`). Left: the imports (shapefile, KML, an Esri layer link; GeoJSON is taken today) and the job that queues the reprocess (Phase 2, REQ-206) |
 
 **Phase 1's count (ADR-371): 98 REQs, 93 ticked from runs that were seen, 5 moved to the phase that finishes them; none open.**
+
+---
+## Phase 2 — API and sync ← **ACTIVE** *(opened by the user 2026-10-06, ADR-376; moved here word for word from `REQUIREMENTS-LATER.md`)*
+
+> **2026-10-06 (ADR-377): each of the 14 REQs below is named by the `BACKLOG.md` task that ticks
+> it** (the list is at the end of BACKLOG's Phase 2 plan). Railway is the demo deploy's host
+> (Phase 5a), not this phase's: Phase 2 is built and proven on the local stack.
+
+> **Refreshed at Phase 1's exit, 2026-10-06 (ADR-371), against `SUMMARY.md` and the carry-forward
+> register.** Phase 1 built what an endpoint will call, with no HTTP: the setup services
+> (`apps/api/src/setup/`), `Certifications`, `NumberAllocator`, `Intake` (`src/sync/`: each record
+> answered saved, already saved or quarantined; a phone's blocks topped up) and the review services
+> (`src/review/`: corrections, renumbering, quarantine, void, unvoid, accept, QC, lock, batch,
+> unlock), each one `db.$write` as the person, each reading the person's grant itself; and the
+> worker's run (`apps/worker/src/reconciliation/`), asked for by whoever calls it. **So Phase 2 adds
+> no rule: it wraps, signs in, queues and hardens.** Each REQ below says what is already there.
+> REQ-207…209 are new: work the register left to this phase that no REQ named. The Phase 2
+> scenarios are already written: those marked "API (Phase 2)" in `spec/acceptance/` (most of the 52
+> that wait for Phases 2–4, and the rest of the 15 proven in part).
+
+**Carried from Phase 0** *(ADR-287)*
+- [ ] **REQ-004** One shared **contracts** package: Zod schemas for every API and sync payload; OpenAPI generated from them; nothing hand-writes a payload shape. *(ADR-094)* — the package and its dependency direction exist (ADR-261).
+- [ ] **REQ-006** The local stack starts with one command and serves every service over **HTTPS** (a reverse proxy with a local CA); nothing listens on plain HTTP to the outside. *(ADR-098/099)* — met for the six services that exist (ADR-263, 282); re-checked as the API, the worker and each web app join through Caddy, and ticked when the last one has.
+- [ ] **REQ-016** Every synced record carries an ID made on the device; the server's idempotency ledger answers a retry "already saved" and never quarantines it as a duplicate number. *(KD-56, ARCHITECTURE §9)* — the phone-made id exists on every field event (ADR-268); the ledger is the sync endpoint's.
+
+- [ ] **REQ-201** The API (`apps/api`) wraps the `domain` and `db` packages: zero new domain logic, zero duplicated validation. *(ARCHITECTURE §18; revised 2026-09-29, ADR-247)* — *refreshed (ADR-371): the services exist; each endpoint calls one, states the request id and, on a read-only login's request, the viewer (`adms.viewer_id`, C22), and checks the grant again from the database on every request (AC-02-12, AC-09-18; C78…C81).*
+- [ ] **REQ-202** Authentication and roles: `ADMIN` (full), manager/analyst (granted permissions), `MONITOR` (on an enrolled phone holding their assignment, ADR-240), and read-only client / contractor / auditor logins scoped to their projects. Back office: short-lived access tokens + rotating, server-revocable refresh tokens in `HttpOnly; Secure; SameSite` cookies (never `localStorage`), CSRF protection; permissions checked from the database on every request so a revoke is immediate; Argon2id password hashing; NIST SP 800-63B password rules. *(ADR-050/093/095, ARCHITECTURE §6)*
+- [ ] **REQ-202a** Device authentication: a device key pair made at **enrolment** in the phone's secure hardware; each sync signs a server challenge. A phone taken out of service is still **received** at its next sync: what it made after its removal time arrives flagged, then its number block is retired and it's wiped, and only then is it refused. *(ADR-095, 134, 240; ARCHITECTURE §7.4; revised 2026-09-29, ADR-247)*
+- [ ] **REQ-202b** Every sign-in, failure, lockout, device setup, device switch and master-passcode use is a security audit event. *(ADR-095/097)*
+- [ ] **REQ-203** Sync endpoints per ARCHITECTURE §9: records before photos; an idempotency ledger on device-made record IDs (REQ-016); a per-record answer (saved / already saved / quarantined); resumable photo upload with hash check; device clock reported; fresh manifest, number-block top-up and master passcode verifier returned. *(ADR-022/065/095/100)* — *refreshed (ADR-371): `Intake.receive` and `topUp` are the answers; still to build: the endpoint and the phone's proof of itself, `Sync` and `SyncedRecord` with the clock difference kept (AC-06-58), a monitor's own reopen as the edit log (`FieldEventEdit`, C79), the manifest (the harness's `phone-lists.ts` is its stand-in; a site's quantity lookup with it, REQ-124f), who makes a photograph's place in storage and the upload (C65), and a certification sent with its five photographs (C82).*
+- [ ] **REQ-204** HTTPS only with HSTS; an explicit CORS allow-list of exact origins (no wildcards or hosting-domain patterns; the back office same-origin through a proxy path); rate limits per IP, account and device; sign-in back-off and lockout; security headers; no internal errors in responses; logs without secrets or personal details. *(ADR-098, ARCHITECTURE §6)*
+- [ ] **REQ-205** Only `packages/db` and the two server apps touch Postgres; no hand-written SQL for modelling. *(invariant 12, ADR-094)* *(revised 2026-09-29, ADR-247)*
+- [ ] **REQ-206** Reprocessing is **jobs, not requests**: a sync, a correction or a back-office "Reprocess" queues worker jobs; there is no synchronous reconcile endpoint. *(ARCHITECTURE §13)* *(revised 2026-09-29, ADR-247)* — *refreshed (ADR-371): the run exists and takes the tickets a review call answers (`reprocess`). Still to build: the queue and the worker's process; **the queue holds only what is active or was changed** (the user, ADR-360): a sync, a correction, an unlock or a setup change names its tickets and the run works only those, a settled ticket staying off it (C71, C75; AC-06-02, 03, AC-05-53); when a certification is made after a field event scanned its number, the field event's link is found again and its tickets queued (C83, AC-06-36); the worker's map settings in its env file, written by the installer (C71).*
+- [ ] **REQ-207** *(new, ADR-371; from C74, C82, C83)* The setup check and a site's quantity lookup are services in `apps/api` (they are rules in `packages/domain` today, called only by tests), and what a story still writes as the person has its service: a rate added or changed, a pay item's unit, a project's active window, a site's own shape, a certification's photographs. *(ADR-229, 243, 357)*
+- [ ] **REQ-208** *(new, ADR-371; from C34)* Each service login has a statement timeout, set by the installer from a policy value, checked by `installer:check` and asserted by the database's configuration test. *(ADR-276 (7))*
+- [ ] **REQ-209** *(new, ADR-371; from C45, C47)* An act under the master passcode (enrolment, creating a monitor, an unplanned assignment) states an actor, decided with the device endpoints, and is logged as a security event; once a lost or retired phone has synced, been confirmed and wiped, its key is revoked (`Device.keyRevokedAt` exists) and the server refuses it. *(ADR-281 (11), ARCHITECTURE §7.4, §7.5)*
+
+**Phase 2's count: 14 REQs, 0 ticked.**

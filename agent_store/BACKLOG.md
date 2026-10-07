@@ -3,7 +3,262 @@
 > Milestone detail for the active phase. Read when picking up new work; the single active task
 > is in `agent_store/NEXT.md`. Tick boxes as you complete them.
 
-## Active — Phase 1: Data core and engine, rebuilt *(opened by the user 2026-10-01, ADR-299; this plan is ADR-300)*
+## Active — Phase 2: API and sync *(opened by the user 2026-10-06, ADR-376; this plan is ADR-377)*
+
+**What Phase 2 is.** Phase 1 built everything a request will call, with no HTTP. Phase 2 puts the
+server in front of it: the API as a running process over HTTPS, sign-in and permissions, a phone's
+enrolment and its proof of itself, the sync endpoints, and reconciliation as queued jobs drained by
+the worker's own process. **It adds no rule: it wraps, signs in, queues and hardens**
+(`REQUIREMENTS.md`, Phase 2). **Done when the golden mission syncs through the real endpoints, is
+reconciled by queued jobs, and comes out with the numbers the user approved** (P1 $5,548.25 on 19
+lines, P2 $324.00), every scenario with a Phase 2 part passes at the API, and its 14 REQs are
+ticked from runs that were seen. Exit criteria: `NEXT.md`.
+
+**The order** is `ROADMAP.md` §4's, with jobs moved ahead of the endpoints that queue them: the
+answer and the foundation → sign-in, sessions and permissions → jobs and the worker's process → the
+back office's endpoints → phones (enrolment, sign-in, the lists) → sync → prove it.
+
+### Brief for every Phase 2 task (ADR-377)
+
+- **One task per response.** Each ends with real observed output (`adms-verify`), the close-out
+  (`adms-close-out`) and the user's git block with named paths. Don't tick a box on "should work".
+- **Read first:** `spec/ARCHITECTURE.md` §6…§9, §13, §16 and the ⚠️ ADR-240 notes in §7 and §9;
+  the task's scenarios (`spec/acceptance/`, the rows that name Phase 2, and file 10 once task
+  2.1.1 has written it); `spec/THREAT-MODEL.md` once written; `spec/DATA-MODEL.md` §2.2 and §4.5
+  for every model and field name; the task's carried items in the register below; the owning
+  skill (`adms-field-app` for a phone's side, `adms-exceptions` for quarantine and a phone out of
+  service).
+- **No new rule.** An endpoint calls one service of `apps/api/src/<part>/`, which calls
+  `packages/domain`. If a task finds it needs a rule nothing records, that is an ADR (agent
+  default, or a question under ADR-230), written into `packages/domain`, never into a controller.
+- **Every payload is a Zod schema in `packages/contracts`,** never a shape written by hand in a
+  controller, a test or the harness; unknown fields are refused; OpenAPI is generated from them.
+- **Every endpoint, in the same task that adds it:** who may call it (role and grant, read from
+  the database on that request), tested as each kind of caller, the refusals included; its rate
+  limit; its request id stated to `db.$write`; the security event it writes, if any; nothing
+  secret or personal in its logs or its errors (a test reads them).
+- **A schema task** follows Phase 1's brief unchanged (the model in its `.prisma` file → Prisma's
+  migration → a one-line guard migration → the installer → the exact lists in the grant and
+  catalog tests → a row-level-security decision → each new guard's removal shown caught). **A
+  column that holds a secret's hash or an authenticator's secret is named on its audit trigger**,
+  so the audit log says it changed and never what to (C21).
+- **Every dependency gets an ADR first** (exact version, at least seven days old, licence,
+  maintenance; `pnpm licences` and `pnpm security` after, and the clean-copy check). Phase 2 brings
+  the first big ones: the web framework, the job queue, the object store's client, whatever signs
+  tokens and checks authenticator codes. Prefer what Node 24 and Postgres already give.
+- **A secret never appears** in a log, an error, a test's output, a fixture committed to git or
+  this conversation. Dev-only seeded accounts and authenticator secrets live in the dev stack only
+  (ADR-170) and are named in the secrets scan's allow-list with a reason.
+- **Tests are the API layer of ARCHITECTURE §15**, named by scenario ID, run from the terminal
+  against the local stack over HTTPS; the harness's stories move onto the real endpoints in
+  Milestone 2.7, not before.
+- **Not Phase 2's:** any screen, the phone's own store, keys in real secure hardware, printing and
+  scanning (Phase 3); the back office's screens, the dispatch board's screen, exports, the portal's
+  pages, the time clock's tables (Phases 3–4); the demo deploy, TLS to a cloud database, pgAudit,
+  the outside penetration test (Phase 5a; C25, C33, C40 (b)). A read endpoint that only a screen
+  needs comes with that screen. Don't build ahead.
+- **A REQ is ticked, and a scenario marked passing, only from a run you saw.**
+- Docker's disk here is 8 GB (`NEXT.md`, Tools and housekeeping); stop the stack at close-out.
+
+### Milestone 2.0 — Open the phase
+- [x] **2.0.1** ✅ **done 2026-10-06 (ADR-376, 377):** the phase opened at the user's word; this
+  plan; Phase 2's 14 REQs moved into `REQUIREMENTS.md`; the state files turned to Phase 2.
+
+### Milestone 2.1 — The answer and the foundation (ARCHITECTURE §6, §16)
+- [ ] **2.1.1 The threat model and the API's scenarios** *(docs; for the user's approval, building
+  doesn't wait, ADR-230)*. `spec/THREAT-MODEL.md`: who attacks what, over the layers of
+  ARCHITECTURE §2 (a guessed monitor password, a copied phone, a stolen session, a contractor's
+  login reaching another prime's tickets, a replayed sync, a forged load call, a poisoned upload,
+  a leaked log), each with the control that answers it and where it is tested (C40 (a), "before
+  Phase 2's API is built"). `spec/acceptance/10-api-and-sync.md`: scenarios for what ARCHITECTURE
+  §6, §7.4, §9 and §13 decide and no scenario states yet (sessions and cookies, CSRF, back-off and
+  lockout, the CORS list, rate limits, validation at the boundary, what an error says, headers,
+  logs, the job queue), written as `spec/acceptance/README.md` says; plus **the list by ID of
+  every existing scenario with a Phase 2 part** (48 rows name Phase 2 today, 37 of them as "API
+  (Phase 2)") and the task that proves each. Each scenario names the checklist item it answers
+  (OWASP ASVS Level 2, API Security Top 10, NIST SP 800-63B). A scenario never states a rule
+  nothing records: what isn't settled is listed for the task that decides it. **Done when:** both
+  pages exist, every Phase 2 scenario has a task, the README's table has file 10's row.
+- [ ] **2.1.2 The API as a process.** NestJS on the Fastify adapter (ARCHITECTURE §3; versions by
+  ADR), `apps/api` gets a `main` beside its services; its settings read once from its env file and
+  checked (a missing or malformed one stops the start, naming the key, never the value);
+  structured logs with a request id and no secret, token, password or full personal detail (a test
+  reads them); a health answer; one error filter, so no stack trace or internal error leaves the
+  server. Served only through Caddy at `https://api.adms.localhost` (C24), no port published;
+  `pnpm local:up` and the installer take it in. The API test layer joins the one Vitest run.
+  **REQ-006** re-checked for the API (it is ticked when the last web app has joined: Phase 4).
+  **Done when:** the health answer is seen over HTTPS through Caddy, plain HTTP is redirected,
+  and the chain is green with the new counts.
+- [ ] **2.1.3 The boundary.** Every body, query and path validated by its schema from
+  `packages/contracts` (unknown fields refused, size limits); plain error codes; HSTS and the
+  security headers; **the CORS allow-list of exact origins from configuration**, tested with an
+  origin on it, one off it and a look-alike (no wildcard, no pattern; ADR-098); the request id
+  carried into `db.$write`; **OpenAPI generated from the contracts** by one command and checked
+  current in the chain (C23). **REQ-004** starts here and is ticked when the last payload has its
+  schema (2.6.1). **REQ-204** in part.
+- [ ] **2.1.4 Time limits and policy for the services.** A statement timeout for `adms_api` and
+  `adms_worker`, set by the installer from a policy value, checked by `installer:check`, asserted
+  by `configuration.test.ts` (**REQ-208**, C34); whether a value of the same name in a service's
+  own env file overrides a built-in policy default (C53), decided here with the API's
+  configuration.
+
+### Milestone 2.2 — Sign-in, sessions and permissions (ARCHITECTURE §6, §7.0; Part 2)
+- [ ] **2.2.1 Sign-in's records** *(schema)*. The columns `spec/DATA-MODEL.md` §2.2 leaves to this
+  phase (`passwordHash`, `twoStepSecret`, `lockedUntil`…), a session's refresh token kept only as
+  a hash and revocable, and **where a security event is kept** (decided here: every sign-in,
+  failure, lockout, device setup and master-passcode use must be one, REQ-202b); each guarded,
+  each secret column kept out of the audit log (C21); no viewer reads any of it. `DATA-MODEL.md`
+  gains what is decided.
+- [ ] **2.2.2 Passwords.** Argon2id with OWASP's parameters set in an ADR (the installer already
+  hashes the master passcode that way, ADR-281); the rules of NIST SP 800-63B in `packages/domain`
+  (length over complexity, no forced rotation); **breached-password screening** for every password
+  a person sets and for the master passcode (C35), in a way that needs no outside service (the
+  firm runs its own installation, ADR-197); an admin sets and resets a password; reset by email
+  where the firm has mail (Mailpit locally), never required (ADR-170).
+- [ ] **2.2.3 Sessions.** Sign in and out; a short-lived access token and a rotating refresh token
+  in `HttpOnly; Secure; SameSite` cookies, never in a response body the page keeps; CSRF protection
+  on cookie-authenticated writes; a refresh token used twice ends its family; back-off and lockout;
+  **role `SYSTEM` never signs in** (C21) and **a monitor's credentials are refused here** (AC-02-39,
+  the web half); each sign-in, failure and lockout a security event. `ADMS_TOKEN_SIGNING_SECRET`
+  gets its use (C23). **REQ-202** in part, **REQ-202b** in part.
+- [ ] **2.2.4 Two-step sign-in.** An authenticator-app code, required for an admin and a
+  manager/analyst, optional for a read-only viewer, none for a monitor (ADR-170; AC-02-14, 74);
+  setting it up, and an admin clearing it for someone who lost their phone (a security event);
+  seeded dev accounts with known secrets in the dev stack only, never in a shipped build.
+- [ ] **2.2.5 Permissions on every request, and people.** The guard reads the caller's role and
+  grants from the database on each request, so a revoke bites at once (AC-02-12, AC-09-18); an
+  admin creates back-office and outside users, gives and takes grants and a viewer's projects
+  (AC-02-08); nobody grants what they don't hold, and the last admin can't be removed or locked
+  out (AC-02-13); a manager/analyst never reads a monitor's phone number (AC-02-72). **REQ-202**
+  ticked when seen whole.
+- [ ] **2.2.6 Rate limits.** Per IP and per account (per device comes with 2.6.5), the numbers
+  policy values, never literals; what a limited caller is told. **REQ-204** in part.
+
+### Milestone 2.3 — Jobs and the worker's process (ARCHITECTURE §13)
+- [ ] **2.3.1 The job queue.** The choice by ADR (ARCHITECTURE §3 names a Postgres-backed queue,
+  "e.g. pg-boss"; weigh it against a guarded table of our own written through Prisma: grants,
+  audit, no hand-written SQL, what each login may do to it). A job names its project and its
+  tickets; **it is queued in the same piece of work as the change that asks for it**, so neither
+  exists without the other.
+- [ ] **2.3.2 The worker as a process.** `apps/worker` gets a `main`: it drains the queue, one run
+  per project at a time under the database lock, **working only the tickets a job names** (C71;
+  the user's rule, ADR-360: a settled ticket stays off the queue until it or its setup changes,
+  C75); a group that errors is flagged and skipped; its settings (both map servers' addresses, the
+  certificate authority, the extract's SHA-256, the longest a run holds its lock) in its env file,
+  written by the installer; a health answer. **REQ-206** in part.
+- [ ] **2.3.3 What queues work.** A correction, a renumber, a void, an unvoid, an acceptance and an
+  unlock hand their `reprocess` to the queue (today the caller asks the worker; C79…C81); a rate
+  or rule change queues the project's un-invoiced tickets it touches (ADR-090); **a certification
+  made after a field event scanned its number is linked to that field event again and its tickets
+  queued** (C83, C62; AC-06-36); AC-06-02, 03 and AC-05-53. No endpoint reconciles while the
+  caller waits. **REQ-206** ticked when seen whole.
+
+### Milestone 2.4 — The back office's endpoints (REQ-201, 207)
+- [ ] **2.4.1 The services Phase 1 left to a story's hand** (**REQ-207**; C74, C83): the setup
+  check and a site's quantity lookup as services in `apps/api` (rules in `packages/domain` today,
+  called only by tests); a rate added or changed, a pay item's unit, a project's active window, a
+  site's own shape. The stories that wrote these as the person call the service instead.
+- [ ] **2.4.2 Setup's endpoints.** Each `setup/` service behind its request, schema and grant
+  (C60): the client, declaration event and project, contractors and contracts, lists, forms, pay
+  items and their "Pays when", sites and the map, rules; a refusal answered in the domain's own
+  words; a refusal by the database's constraints answered plainly, never as an internal error.
+- [ ] **2.4.3 Dispatch and phones, from the back office.** A day's assignments written and
+  withdrawn (ADR-240; the board's screen is Phase 4); a phone taken out of service with its
+  removal time; the master passcode changed (a new version, each phone's check moving at its next
+  sync; C47). Whether a service for assignments exists is read first: the stories write them.
+- [ ] **2.4.4 Certifications and review.** `Certifications` (only an admin revokes, AC-03-55;
+  `measure`, `signaturesOnFile`, a merge), `Corrections`, `QuarantineReview`, `BackOfficeRecords`,
+  voids, unvoids, acceptances, `QcMarks`, `InvoiceLocks` and batches: **each call checks its own
+  grant again on the request** (`CORRECT`, `VOID`, `ACCEPT_FLAG`, `QC`, `LOCK_INVOICED`,
+  `UNLOCK_INVOICED`…; C78…C81), states the request id, and queues its `reprocess`; a correction
+  to an ROE or a form behind its request too (C66); a load call past
+  100 or a blank label is refused in plain words by the request's schema (C79).
+- [ ] **2.4.5 The read-only viewer's path.** `adms.viewer_id` stated from one shared place on
+  every `adms_readonly` request, as `$write` states the actor (C22, C59); a viewer's money read
+  joined from `viewer_transaction_money` (C76); private citizens by the viewer's own setting
+  (C67 (d)); the reads this phase's scenarios need (AC-02-74), each tried as a client user, a
+  prime's and a sub's contractor user, an auditor, and nobody. **REQ-201** ticked when 2.4.2…2.4.5
+  are seen.
+
+### Milestone 2.5 — Phones: enrolment, sign-in, the lists (ARCHITECTURE §7, §7.4, §7.5; Part 2)
+- [ ] **2.5.1 Enrolment and a phone's proof of itself.** The key's kind by ADR (what iOS's Secure
+  Enclave and Android's Keystore both make and Node verifies without a dependency); the master
+  passcode checked with back-off; the phone's public key kept; a server challenge signed on every
+  later call (AC-02-18, AC-05-03). **Who the record names for an act under the master passcode**
+  (C45, REQ-209) is decided here: the passcode isn't a person, and `$write` needs one. The
+  harness's phone holds a software key; real secure hardware is Phase 3's.
+- [ ] **2.5.2 Monitors on phones.** A monitor created on a phone, online, under the master passcode
+  (ARCHITECTURE §7.0); a monitor signing in online on any enrolled phone and **the phone taking
+  their assignment** with no passcode and no picking (AC-02-35); the same Monitor ID and password
+  refused everywhere but a phone's calls (AC-02-39); the device's session token.
+- [ ] **2.5.3 The lists a phone takes.** `SetupManifest` and its version (DATA-MODEL §4.5); the
+  harness's `phone-lists.ts` gives way to a service in `apps/api` (C68): certifications, sites,
+  ROEs, the number block or control ranges, the forms' debris types without those *Hidden on
+  phones* (AC-01-26), field tags, the unit rate pay items the assignment names, the site's
+  quantity lookup by setup version (REQ-124f's server half), **the login list, each entry a slow
+  hash salted for that phone** (AC-02-41), the master passcode's check; **never a rate, a code on
+  a load, a rule or a transaction** (AC-02-37, AC-07-91: a test reads every list for one); a phone
+  refreshes its lists at any time (AC-03-09); an address looked up for a phone's GPS, the address
+  server staying private to the API (AC-04-24).
+- [ ] **2.5.4 What a phone reports besides field events.** An unplanned assignment, a monitor
+  switch, a site move, a temporary session and each use of the master passcode, each with the
+  phone's instant, its offset and the server's received time (C46; AC-02-38, AC-05-40), each use
+  a security event. **REQ-202b** ticked when seen whole.
+
+### Milestone 2.6 — Sync (ARCHITECTURE §9, §11; Part 5)
+- [ ] **2.6.1 The sync contract.** Every payload and every answer as schemas in
+  `packages/contracts`, with **the test suite any client must pass** (the harness now, the field
+  app in Phase 3). **REQ-004** ticked when OpenAPI covers every endpoint.
+- [ ] **2.6.2 Records.** `Sync` and `SyncedRecord` *(schema)*; the endpoint in front of `Intake`:
+  the phone proves itself and reports its clock, **the difference kept with the sync** and
+  `DEVICE_CLOCK_OFF`'s threshold a policy value (AC-05-04, AC-06-58; C53, C70); the idempotency
+  ledger answers a retry "already saved" and never quarantines it (**REQ-016**, AC-05-16); each
+  record its own answer (AC-05-20, 45); **what a record the database's constraints refuse is
+  answered** (an unknown project, phone, monitor or assignment, a pick that isn't the project's:
+  C69, 05-sync.md point 11), never an internal error and never "saved"; number blocks topped up
+  from each series' last used number (C64); fresh lists and any new passcode check returned;
+  reconciliation queued, never waited for (AC-05-05); a certification made on a phone arrives
+  through `Certifications.certify` (C62).
+- [ ] **2.6.3 The edit log.** `FieldEventEdit` *(schema, its fields decided here)*: a monitor's own
+  reopen before their shift ends, sent for a field event already synced, written under the monitor
+  and audited, the ticket queued; refused once the shift has ended (AC-02-45, AC-05-08, AC-08-06;
+  REQ-105g's server half).
+- [ ] **2.6.4 Photographs.** Who makes a photograph's place in storage (C65); a resumable upload
+  after the records; the fingerprint checked against the one taken at capture; type and size
+  checked, stored outside the web root, never executed; the API's store identity without
+  bucket-delete (C24, ADR-263); **a certification sent with its five photographs** (C82), so
+  `CERTIFICATION_PHOTO_MISSING` stops standing on every story's certifications (AC-05-09,
+  AC-04-77). The store's client by ADR.
+- [ ] **2.6.5 A phone out of service, and turn-in.** A lost or retired phone still proves itself
+  and is **received**: what it made after its removal time arrives flagged, nothing refused
+  (AC-02-60); "Sync and turn in" confirms every record, takes back the unused numbers, and only
+  then is the phone told to wipe (AC-02-58); its blocks retired or reclaimed (C64); **then its key
+  is revoked and the server refuses it** (`Device.keyRevokedAt`; C47). Rate limits per device.
+  **REQ-202a**, **REQ-203**, **REQ-209** ticked when seen whole.
+
+### Milestone 2.7 — Prove it
+- [ ] **2.7.1 The stories sync through the real endpoints.** The harness's phones enrol, sign in,
+  take their lists and sync over HTTPS (C31); the worker's process drains the queue; **the golden
+  mission comes out with the approved numbers** and every story still passes.
+- [ ] **2.7.2 A burst, and knowing it is well.** Every phone of a project syncing at once: each
+  record stored once, none lost, no limit dropping work (AC-05-51); health answers for the API,
+  the worker and the queue, and what of C38 this layer settles (the rest is the demo deploy's).
+- [ ] **2.7.3 The security checklist, item by item.** Each item of 2.1.1's list with the test that
+  proves it, or the phase that owns it; **REQ-205** held by a check that only `packages/db` and
+  the two server apps reach Postgres; **REQ-204** ticked whole; `pnpm security` extended where the
+  phase added a kind of secret.
+- [ ] **2.7.4 The phase exit.** The 14 REQs ticked or re-filed with an ADR (REQ-006 can only be
+  finished by the web apps); the scenario count by part; Phase 3's REQs in `REQUIREMENTS-LATER.md`
+  refreshed against what was built; the state files turned to "Phase 3 is the user's to open".
+
+**Every one of Phase 2's 14 REQs is named by a task:** 004 → 2.1.3, 2.6.1 · 006 → 2.1.2, 2.7.4 ·
+016 → 2.6.2 · 201 → 2.4.2…2.4.5 · 202 → 2.2.3…2.2.5 · 202a → 2.5.1, 2.6.5 · 202b → 2.2.3, 2.5.4 ·
+203 → 2.5.3, 2.6.1…2.6.5 · 204 → 2.1.3, 2.2.6, 2.6.5, 2.7.3 · 205 → 2.7.3 · 206 → 2.3.1…2.3.3 ·
+207 → 2.4.1, 2.6.4 · 208 → 2.1.4 · 209 → 2.5.1, 2.6.5.
+
+---
+
+## Done — Phase 1: Data core and engine, rebuilt *(opened by the user 2026-10-01, ADR-299; its plan is ADR-300; exit met 2026-10-06, ADR-371, 372)*
 
 **What Phase 1 is.** The whole product without a screen or an endpoint: every setup record, the
 certification and its capacity, field events and their numbers, sync intake with quarantine,
@@ -1022,6 +1277,7 @@ delete one.
 - **C64. What numbering left for later** (ADR-323). **Task 1.3.6** (ROEs): a phone-made ROE's number is the next of its phone's ROE block, written by `NumberSeriesRules('ROE').written` (`R-0007`); a typed paper number kept as typed. *(ADR-327: `roe.roe_number` keeps either as written; the phone that takes the next of its block is the harness's, 1.3.7, and intake's, 1.4.2.)* ~~**Task 1.3.7** (the harness's phones): a phone gives its field event the next number of its block (`PhoneNumbers.next`), and a certifying phone its cert number.~~ **Done (ADR-332: `SimulatedDevice.complete` with `made`, `takeCertNumber`).** **Task 1.4.2 / Phase 2** (sync): the sync carries each series' last used number and calls `NumberAllocator.topUp`; a top-up thrown because the series moved on is asked again; a lost phone's blocks are retired after its last sync and wipe (ADR-134), a reset phone's reclaimed. **Task 1.5.5:** whether a control ticket scanned outside the entered ranges is flagged after sync (no such flag in the catalogue). **Phase 4:** setup's screen suggests a cert-number seed "that doesn't look made up" (Q-96); today the firm states it, and a project without one types its cert numbers. **Not guarded, on purpose:** a series' next number going back (the exclusion constraint then refuses the block).
 
 **For Phase 2 (API, worker, apps) and the demo deploy**
+*Mapped to Phase 2's tasks by ADR-377:* C21 → 2.2.1, 2.2.3 · C22 → 2.4.5 · C23 → 2.1.3, 2.2.3 · C24 → 2.1.2, 2.6.4 · C31 → 2.7.1 · C34 → 2.1.4 · C35 → 2.2.2 · C38 → 2.7.2 · C40 (a) → 2.1.1 · C45 → 2.5.1 · C46 → 2.5.4 · C47 → 2.4.3, 2.6.5 · C53 → 2.1.4, 2.6.2 · C59, C67 (d), C76 → 2.4.5 · C60 → 2.4.2 · C62 → 2.3.3, 2.4.4, 2.6.2 · C83 → 2.3.3, 2.4.1 · C64 → 2.6.2, 2.6.5 · C65, C82 → 2.6.4 · C66 → 2.4.4 · C70 → 2.6.2 · C68 → 2.5.3 · C69 → 2.6.2 · C71, C75 → 2.3.2, 2.3.3 · C74 → 2.4.1 (and its owed line, the first step of 2.1.1) · C78…C81 → 2.3.3, 2.4.4. **Not Phase 2's, the demo deploy's (5a):** C25, C33, C39, C40 (b) and (c), C48, C49.
 - **C21.** Sign-in refuses role `SYSTEM`; the system actor never gets a password (ADR-273 (4)). A
   password hash or an authenticator secret on `user` is named on its audit trigger, so it's kept out
   of the audit log as the master passcode's hash is (ADR-281 (7)).

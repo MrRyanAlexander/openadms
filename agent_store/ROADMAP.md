@@ -9,7 +9,7 @@
 > requirement) and `spec/VISION.md` §7–§8 (the finished surfaces, and what "done" means). If this
 > page disagrees with them, they win.
 >
-> **Last updated:** 2026-10-06 (**Phase 1's exit is met in full (ADR-371, 372). Phase 2, API and sync, is yours to open.** Owed after 7 October 14:08 UTC: removing the one exception to the seven-day rule. The same day you settled the last two open points of Phase 1 (ADR-373), approved the scenario files 06…09 and the defaults of the review tasks (ADR-374), and had the project's state files cut to what is live (ADR-375: this line's long history moved to `DECISIONS.md`).)
+> **Last updated:** 2026-10-06 (**You opened Phase 2, API and sync (ADR-376). Its plan is written: eight milestones, 32 tasks (ADR-377); nothing of it is built yet.** Your approval mark on the names page is recorded and the last open deviation closed (ADR-378). Owed after 7 October 14:08 UTC: removing the one exception to the seven-day rule, which you have already commented out.)
 
 **Key:** ✅ done · 🟡 in progress · ⬜ not started · 🔒 gated (doesn't open until the phase before it exits)
 
@@ -20,8 +20,8 @@
 | | |
 |---|---|
 | **Start** | 2026-09-25: the rebuild decision (ADR-093). Security first, the plan is the core, TypeScript end to end with Prisma, the old `database/` code is history |
-| **Now** | **Phase 1, Data core and engine: exit met 2026-10-06** (ADR-371, 372); opened 2026-10-01 at your word (ADR-299). All ten milestones are done (§3): the whole product without a screen runs from a terminal, and the golden mission comes out with the numbers you approved (P1 $5,548.25 on 19 lines, P2 $324.00). 80 test files, 1,753 tests, fifteen stories, the security check 7 of 7 |
-| **Next task** | **None in Phase 1. Phase 2, API and sync, is yours to open.** Owed first, after 7 October 14:08 UTC: delete the one exception to the seven-day rule (ADR-372) |
+| **Now** | **Phase 2, API and sync: open since 2026-10-06 at your word** (ADR-376). Task 1 of 32 is done: the plan (§3). Phase 1 met its exit the same day (ADR-371, 372): the whole product without a screen runs from a terminal, and the golden mission comes out with the numbers you approved (P1 $5,548.25 on 19 lines, P2 $324.00) |
+| **Next task** | **2.1.1, the threat model and the API's scenarios** (two pages for your approval; building doesn't wait). First, after 7 October 14:08 UTC: delete the exception to the seven-day rule (ADR-372) |
 | **Finish line** | A firm installs Open ADMS, and its back office and its monitors run a real mission on it: every app built, tested and working |
 | **How "done" is judged** | Not boxes ticked. A deliberately messy mission (the **golden mission**) comes out with the exact statuses, review queue and ledger you signed off, at every layer: engine, then API, then the apps (`spec/VISION.md` §8) |
 
@@ -34,8 +34,8 @@
 | — | **Design** | Read the whole product on paper: the rules, the spec, the architecture, all approved | 26 rounds of questions, ADR-001…279 | ✅ done 2026-09-29 |
 | **0** | **Foundation** | Start the whole local stack with one command over HTTPS, the mileage and address servers included; watch the database itself refuse what the rules forbid; run a ticket's story from a terminal | 17 of 17 | ✅ done 2026-10-01: every task and every requirement, and committed |
 | — | **The answer key** | Hold the golden mission's signed-off numbers and the acceptance scenarios that every later phase must pass | not counted in REQs | 🟡 the golden mission is approved, numbers included (2026-10-01, ADR-297: P1 $5,548.25 on 19 lines, P2 $324.00); the acceptance scenarios are written part by part, each before the code it judges (ADR-300): 9 of 9 files (review and corrections' 65 and invoicing and closeout's 31 written 2026-10-06, ADR-362; pricing, the ledger and audit's 114 written 2026-10-05, ADR-353; reconciliation's 162 written 2026-10-05, ADR-339; the counts before it: setup 82, people and devices 74, certifications 60, capture 98, sync 56; the passing counts are in `spec/acceptance/README.md`) |
-| **1** | **Data core and engine** | Run a whole messy mission from a terminal, no screens, and see the right statuses, flags, ledger and audit trail come out | 93 of 98 ticked; the other 5 moved to Phases 3 and 4 with what Phase 1 built for each (ADR-371) | ✅ exit met 2026-10-06 (ADR-371, 372), 49 of 49 tasks; open since 2026-10-01 (ADR-299); before the last check: 48 of 49 tasks (1.9.2 done 2026-10-06, ADR-369; 1.9.1 done 2026-10-06, ADR-368; 1.8.3 done 2026-10-06, ADR-364; 1.8.2 done 2026-10-06, ADR-363; 1.8.1 done 2026-10-06, ADR-362; 1.7.3 filed 2026-10-06, ADR-358, done the same day, ADR-361). The requirement count moves slowly for now: see the note under §3's table |
-| **2** | **API and sync** | Have phones and the back office talk to the server: sign-in, permissions, device enrolment, sync, background jobs, all hardened | 0 of 14 (three added at Phase 1's exit, ADR-371: the setup check and lookup as services, a statement timeout, the master passcode's actor and key revocation) | 🔒 |
+| **1** | **Data core and engine** | Run a whole messy mission from a terminal, no screens, and see the right statuses, flags, ledger and audit trail come out | 93 of 98 ticked; the other 5 moved to Phases 3 and 4 with what Phase 1 built for each (ADR-371) | ✅ exit met 2026-10-06 (ADR-371, 372), 49 of 49 tasks; open since 2026-10-01 (ADR-299) |
+| **2** | **API and sync** | Have phones and the back office talk to the server: sign-in, permissions, device enrolment, sync, background jobs, all hardened | 0 of 14 (three added at Phase 1's exit, ADR-371: the setup check and lookup as services, a statement timeout, the master passcode's actor and key revocation) | 🟡 open since 2026-10-06 (ADR-376); 1 of 32 tasks: the plan (ADR-377) |
 | **3** | **Field app** | Hand a monitor a phone: enrol it, take the day's assignment, capture every kind of field event offline for days, scan, print, sync. Browser first, then iPhone, then Android | 0 of 29 (four carried from Phase 1, ADR-371) | 🔒 |
 | **4** | **Back office and read-only portal** | Set up a project, dispatch the day, review and correct, QC, lock as invoiced, export; clients, contractors and auditors see their own projects | 0 of 19 (one carried from Phase 1, ADR-371) | 🔒 |
 | **5a** | **Deploy and go-live checks** | Run it in a real cloud (the shipped demo: Railway + Netlify), passing the scenario suite and load tests, with an outside security test done | 0 of 1 (REQ-517), plus carried-forward items C25, C33, C38…C40, C48, C49 | 🔒 |
@@ -51,7 +51,36 @@ the relative size: Phase 1 is by far the largest piece.
 
 ---
 
-## 3. Phase 1, Data core and engine: exit met 2026-10-06
+## 3. Phase 2, API and sync: open
+
+Opened 2026-10-06 at your word (ADR-376). The plan is `BACKLOG.md`'s (ADR-377). It adds no rule to
+what Phase 1 built: it puts the server in front of it. The first task writes the threat model and
+the scenarios the API must pass, so the answer exists before the code.
+
+| Milestone | What it is | When it's done, you can… | Tasks | Status |
+|---|---|---|---|---|
+| 2.0 | Open the phase: the plan | Read every Phase 2 task, with the requirements each one meets | 1 of 1 | ✅ 2026-10-06 |
+| 2.1 | The answer and the foundation | Read who could attack what and what stops them; reach the API over HTTPS on your own machine, refusing anything malformed or from a site not on its list | 0 of 4 | ⬜ next: 2.1.1 |
+| 2.2 | Sign-in, sessions and permissions | Sign in to the server as an admin with an authenticator code; take a permission from someone and see their very next request refused | 0 of 6 | ⬜ |
+| 2.3 | Jobs and the worker's process | Change a ticket and watch the worker pick up just that ticket by itself, with nothing asked to wait | 0 of 3 | ⬜ |
+| 2.4 | The back office's endpoints | Do everything the back office does (setup, dispatch, corrections, void, QC, lock) by a request, each checked against the person's permissions; see a contractor's login read only its own tickets | 0 of 5 | ⬜ |
+| 2.5 | Phones: enrolment, sign-in, the lists | Enrol a phone with the master passcode, sign a monitor in on it and have it take the day's assignment and its lists, with never a rate among them | 0 of 4 | ⬜ |
+| 2.6 | Sync | Sync a phone's day: records first, photographs after, a retry answered "already saved", a duplicate held for a person, a lost phone's work received and flagged | 0 of 5 | ⬜ |
+| 2.7 | Prove it | Run the golden mission through the real endpoints and get the numbers you approved; read the security checklist with a test beside each item | 0 of 4 | ⬜ |
+
+**Phase 2's exit criteria** (`NEXT.md`; the agent's, yours to change): the golden mission through
+the real endpoints and the job queue with the approved numbers; every scenario with a Phase 2 part
+passing at the API; all 14 requirements ticked from real runs; the security checklist answered
+item by item; every new table guarded; the whole check chain green over HTTPS; every rule and every
+payload shape in one shared place.
+
+**Scenarios with a Phase 2 part:** 48 rows in the nine approved files name Phase 2 (37 as "API
+(Phase 2)"); task 2.1.1 adds a tenth file for what the architecture decides about the API itself.
+None is proven at the API yet.
+
+---
+
+## 3a. Phase 1, Data core and engine: exit met 2026-10-06
 
 Opened 2026-10-01 at your word (ADR-299). The plan is `BACKLOG.md`'s (ADR-300). Each milestone
 starts by writing its part's acceptance scenarios, so the answer exists before the code.
@@ -86,7 +115,7 @@ mission among them (27 checks); `pnpm security` 7 passed, 0 failed; 358 licences
 
 ---
 
-## 3a. Phase 0, Foundation: done 2026-10-01
+## 3b. Phase 0, Foundation: done 2026-10-01
 
 | Milestone | What it is | Tasks | Status |
 |---|---|---|---|
@@ -122,7 +151,7 @@ work, and what Phase 0 delivered for each is listed in `REQUIREMENTS.md`.
 | Phase | The pieces, in build order | Proven by |
 |---|---|---|
 | **1. Data core and engine** | Setup records · certifications and capacity · tickets and numbers · sync intake with quarantine · reconciliation · the rule engine · the ledger and audit · review, QC, invoice lock and batches | The golden mission passing at the engine, from a terminal |
-| **2. API and sync** | The API wrapping the same rules (no new logic) · sign-in, roles and permissions · device enrolment and device keys · the sync endpoints · reprocessing as jobs · HTTPS, exact CORS list, rate limits | API tests; the same scenarios syncing through the real endpoints |
+| **2. API and sync** (as planned, ADR-377) | The threat model and the API's scenarios · the API as a process over HTTPS, exact CORS list · sign-in, roles and permissions · reprocessing as jobs and the worker's process · the back office's endpoints wrapping the same rules (no new logic) · device enrolment and device keys · the sync endpoints · rate limits throughout | API tests; the same scenarios syncing through the real endpoints |
 | **3. Field app** | Enrol once, take the assignment · encrypted offline store · collection, disposal, haul-out, unit rate and forms · scanning · Zebra printing · photos · switching monitors, sync and turn in · the time clock | Browser end-to-end tests, then on real iPhones, then Android |
 | **4. Back office and portal** | Project setup with its check · contractors and contracts · certification intake · rule builder · dispatch board · one review queue and quarantine resolution · ledger, lock and batches · audit viewer · reports, exports, photo PDFs · worker administration · read-only portal | Browser end-to-end tests; the golden mission run through the screens |
 | **5a. Deploy and go-live checks** | The demo deploy · monitoring and alerts · availability and backups rehearsed · an outside penetration test · how upgrades reach an installation (Q-167) · map data per region (Q-166) | The scenario suite and load tests passing in the cloud |
@@ -130,7 +159,7 @@ work, and what Phase 0 delivered for each is listed in `REQUIREMENTS.md`.
 
 Phase 1 by area (98 requirements; two added for split haul-outs, ADR-296): schema and data model 35 · reconciliation engine 36 · ticket
 workflows 12 · ledger and audit 8 · verification 4 · carried from Phase 0, 3. **Phase 1's task-by-task milestones are
-in `BACKLOG.md`** (ADR-300) and summarised in §3: every one of the 98 is named by the task that meets it.
+in `BACKLOG.md`** (ADR-300) and summarised in §3a: every one of the 98 is named by the task that meets it.
 
 ---
 
@@ -143,7 +172,7 @@ in `BACKLOG.md`** (ADR-300) and summarised in §3: every one of the 98 is named 
 | Unit | The shared rules: capacity math, volume, split shares, checks, pricing, time, number blocks | Phase 1 | ✅ 575 tests of the rules, none needing a database |
 | Database | Every grant and every refusal; audit can't be forged or edited | Phase 0 | ✅ in place, grows with each new table |
 | Scenario harness | Whole missions told as stories; exact statuses, queue and ledger | Phases 0–1 | ✅ fifteen stories, the golden mission the fourteenth (ADR-368) and what it leaves out the fifteenth (ADR-369) |
-| API | Sign-in, permissions, CORS, rate limits, the sync contract | Phase 2 | ⬜ |
+| API | Sign-in, permissions, CORS, rate limits, the sync contract | Phase 2 | ⬜ open, none written yet |
 | Browser end-to-end | The web apps and the field app's browser build | Phases 3–4 | ⬜ |
 | On device | iPhone, then Android: airplane mode, printing, scanning, camera, encryption, turn in | Phase 3 | ⬜ |
 
@@ -155,10 +184,12 @@ Nothing here blocks the next task. Each is listed with the point where it starts
 
 | What | Why it's yours | Matters by |
 |---|---|---|
-| **Opening Phase 2** | Phase 1's exit is met (ADR-371, 372). The next phase (API and sync) is yours to open; nothing is built in it before you say so | Now |
-| **Three requirements the agent added to Phase 2 (ADR-371)** | Work the build notes had left for Phase 2 without a requirement of its own: the setup check and a site's lookup as services; a time limit on each service's database statements; who is recorded for an act under the master passcode, and refusing a lost phone's key once it is wiped. None changes a rule | When you open Phase 2 |
+| ~~Opening Phase 2~~ | ✅ Opened by you 2026-10-06 (ADR-376) | Done |
+| **Phase 2's plan and exit criteria (ADR-376, 377)** | The agent wrote them, as it did Phase 1's: eight milestones, 32 tasks; the job queue built before the endpoints that use it; a threat model and a tenth scenario file written first, for your approval; read-only requests that only a screen needs left to Phase 4. Yours to change | Any time; building doesn't wait |
+| **Your approval of the names page, as the agent read it (ADR-378)** | You marked `spec/CONVENTIONS.md` "Approved" at its top. The agent read that as the whole page, its last section included (what the earlier conventions draft gets wrong), and closed the one open deviation (KD-63). Say so if you meant less | Any time |
+| **Three requirements the agent added to Phase 2 (ADR-371)**, each now named by a task (2.4.1, 2.1.4, 2.5.1 and 2.6.5) | Work the build notes had left for Phase 2 without a requirement of its own: the setup check and a site's lookup as services; a time limit on each service's database statements; who is recorded for an act under the master passcode, and refusing a lost phone's key once it is wiped. None changes a rule | When you open Phase 2 |
 | **Whether *photos required* should take a number** (asked 2026-10-05, ADR-345) | Today a pay item's *photos required* is yes or no, meaning at least one. Your example spoke of a ticket that requires 4. If you want a firm to set a number, it is a new pay item setting; if "at least one" is enough, nothing changes. Nothing waits on it |
-| **Removing the one exception to the seven-day rule** (ADR-372) | The security fix was let in early by name, at your word; the exception is deleted once the fix is seven days old. You said "will do later" (2026-10-06) | From 7 October 14:08 UTC |
+| **Removing the one exception to the seven-day rule** (ADR-372) | The security fix was let in early by name, at your word; the exception is deleted once the fix is seven days old. You said "will do later" (2026-10-06), then commented the entry out yourself. Until 14:08 UTC on 7 October an install fails with it commented out (seen); after that it passes, and the next task deletes the lines for good | From 7 October 14:08 UTC |
 | **The agent's details on what a contractor's login sees (ADR-361)** | You decided the money: a sub's login sees none. The rest is the agent's, yours to change: a contractor's login sees no flag on its tickets, no monitor's name, no ROE and no form; a first-tier sub above a second-tier sub sees the ticket but not its priced lines; where a load's two ends scanned badges of two different contractors, each sees its own end; every login given a project reads all its pay items' codes and descriptions, site names and debris type names. Five new scenarios, AC-02-78…82 in `spec/acceptance/02-people-and-devices.md`, wait for your approval | Before the read-only portal, Phase 4 |
 | ~~A ticket waiting on a negotiated rate (KD-72)~~ | ✅ Settled 2026-10-06 (ADR-373): it sits in the review queue like any flagged ticket until someone accepts the flag, as built | Done |
 | ~~The defaults of corrections and renumbering (ADR-364)~~ | ✅ Approved by you 2026-10-06 (ADR-374) | Done |
