@@ -371,12 +371,21 @@ export class Corrections extends ReviewService {
     changes: ScaleReceiptCorrection,
     note?: string,
   ): Promise<Outcome<Reviewed<ScaleReceipt>>> {
-    return this.review(person, 'CORRECT', note, async (tx) => {
-      const record = await tx.scaleReceipt.update({ where: { id: scaleReceiptId }, data: changes });
-      // Every disposal that points at it: a tandem's two share the one receipt (ADR-034).
-      const tickets = await ReviewService.ticketsOf(tx, { scaleReceiptId });
-      return { record, projectId: record.projectId, tickets };
-    });
+    return this.review(
+      person,
+      'CORRECT',
+      note,
+      async (tx) => {
+        const record = await tx.scaleReceipt.update({
+          where: { id: scaleReceiptId },
+          data: changes,
+        });
+        // Every disposal that points at it: a tandem's two share the one receipt (ADR-034).
+        const tickets = await ReviewService.ticketsOf(tx, { scaleReceiptId });
+        return { record, projectId: record.projectId, tickets };
+      },
+      'PASSED_BY',
+    );
   }
 
   roe(
@@ -385,23 +394,29 @@ export class Corrections extends ReviewService {
     changes: RoeCorrection,
     note?: string,
   ): Promise<Outcome<Reviewed<Roe>>> {
-    return this.review(person, 'CORRECT', note, async (tx) => {
-      const { signedDate, ...rest } = changes;
-      const record = await tx.roe.update({
-        where: { id: roeId },
-        data: {
-          ...rest,
-          ...(signedDate === undefined
-            ? {}
-            : { signedDate: signedDate === null ? null : day(signedDate) }),
-        },
-      });
-      return {
-        record,
-        projectId: record.projectId,
-        tickets: await ReviewService.ticketsOf(tx, { roeId }),
-      };
-    });
+    return this.review(
+      person,
+      'CORRECT',
+      note,
+      async (tx) => {
+        const { signedDate, ...rest } = changes;
+        const record = await tx.roe.update({
+          where: { id: roeId },
+          data: {
+            ...rest,
+            ...(signedDate === undefined
+              ? {}
+              : { signedDate: signedDate === null ? null : day(signedDate) }),
+          },
+        });
+        return {
+          record,
+          projectId: record.projectId,
+          tickets: await ReviewService.ticketsOf(tx, { roeId }),
+        };
+      },
+      'PASSED_BY',
+    );
   }
 
   // An ROE's scope: a pick added, taken off (the row stays, marked) or put back.
@@ -412,45 +427,51 @@ export class Corrections extends ReviewService {
     inScope: boolean,
     note?: string,
   ): Promise<Outcome<Reviewed<RoeScopeItem>>> {
-    return this.review(person, 'CORRECT', note, async (tx) => {
-      const roe = await tx.roe.findUniqueOrThrow({ where: { id: roeId } });
-      const { projectId } = roe;
-      const standing = await tx.roeScopeItem.findFirst({
-        where:
-          'formDebrisTypeId' in pick
-            ? { roeId, formDebrisTypeId: pick.formDebrisTypeId }
-            : { roeId, payableTypeId: pick.payableTypeId },
-      });
-      const count = pick.count === undefined ? {} : { count: pick.count };
-      let record: RoeScopeItem;
-      if (standing !== null) {
-        record = await tx.roeScopeItem.update({
-          where: { id: standing.id },
-          data: { ...count, archivedAt: inScope ? null : this.clock.now() },
+    return this.review(
+      person,
+      'CORRECT',
+      note,
+      async (tx) => {
+        const roe = await tx.roe.findUniqueOrThrow({ where: { id: roeId } });
+        const { projectId } = roe;
+        const standing = await tx.roeScopeItem.findFirst({
+          where:
+            'formDebrisTypeId' in pick
+              ? { roeId, formDebrisTypeId: pick.formDebrisTypeId }
+              : { roeId, payableTypeId: pick.payableTypeId },
         });
-      } else if (!inScope) {
-        throw new Error(`ROE ${roe.roeNumber} has no such pick in its scope to take off.`);
-      } else if ('formDebrisTypeId' in pick) {
-        const entry = await tx.formDebrisType.findUniqueOrThrow({
-          where: { id: pick.formDebrisTypeId },
-        });
-        record = await tx.roeScopeItem.create({
-          data: {
-            projectId,
-            roeId,
-            formDebrisTypeId: entry.id,
-            formId: entry.formId,
-            formDocumentType: entry.documentType,
-            ...count,
-          },
-        });
-      } else {
-        record = await tx.roeScopeItem.create({
-          data: { projectId, roeId, payableTypeId: pick.payableTypeId, ...count },
-        });
-      }
-      return { record, projectId, tickets: await ReviewService.ticketsOf(tx, { roeId }) };
-    });
+        const count = pick.count === undefined ? {} : { count: pick.count };
+        let record: RoeScopeItem;
+        if (standing !== null) {
+          record = await tx.roeScopeItem.update({
+            where: { id: standing.id },
+            data: { ...count, archivedAt: inScope ? null : this.clock.now() },
+          });
+        } else if (!inScope) {
+          throw new Error(`ROE ${roe.roeNumber} has no such pick in its scope to take off.`);
+        } else if ('formDebrisTypeId' in pick) {
+          const entry = await tx.formDebrisType.findUniqueOrThrow({
+            where: { id: pick.formDebrisTypeId },
+          });
+          record = await tx.roeScopeItem.create({
+            data: {
+              projectId,
+              roeId,
+              formDebrisTypeId: entry.id,
+              formId: entry.formId,
+              formDocumentType: entry.documentType,
+              ...count,
+            },
+          });
+        } else {
+          record = await tx.roeScopeItem.create({
+            data: { projectId, roeId, payableTypeId: pick.payableTypeId, ...count },
+          });
+        }
+        return { record, projectId, tickets: await ReviewService.ticketsOf(tx, { roeId }) };
+      },
+      'PASSED_BY',
+    );
   }
 
   survey(

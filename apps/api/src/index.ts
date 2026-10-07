@@ -6,8 +6,8 @@
 // server's alone (ADR-065, 323); intake is spec/parts/05-sync.md's, what the server does with
 // each record a phone sends (ADR-338); the review services are
 // spec/parts/08-review-and-corrections.md's: a reviewer's corrections and renumbers, a
-// quarantined record resolved, a record created in the back office, each answering the run to
-// ask the worker for (ADR-364).
+// quarantined record resolved, a record created in the back office (ADR-364), a ticket voided
+// and unvoided, a flag accepted (ADR-365), each answering the run to ask the worker for.
 export {
   Certifications,
   type BoxInput,
@@ -48,6 +48,7 @@ export {
   type SiteFactSettings,
 } from './setup/site-setup.ts';
 
+export { Acceptances } from './review/acceptances.ts';
 export { BackOfficeRecords, type NewBackOfficeFieldEvent } from './review/back-office-records.ts';
 export {
   Corrections,
@@ -60,13 +61,17 @@ export {
   type ScopePick,
   type SurveyCorrection,
 } from './review/corrections.ts';
+export { InvoiceLocks } from './review/invoice-locks.ts';
+export { QcMarks, type QcMarked } from './review/qc-marks.ts';
 export { QuarantineReview, type NewNumber } from './review/quarantine-review.ts';
 export {
   ReviewService,
   type Reprocess,
   type Reviewed,
+  type TicketMarked,
   type TicketNamed,
 } from './review/review-service.ts';
+export { Voids } from './review/voids.ts';
 
 export { Intake } from './sync/intake.ts';
 export type {

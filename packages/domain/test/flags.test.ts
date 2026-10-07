@@ -176,4 +176,16 @@ describe('a ticket’s flags on a reprocess', () => {
     const low = flags.raise('LOAD_CALL_LOW', ticket('101003'), { loadCall: 96 }, high(96).facts);
     expect(Flags.compared([before], [high(96), low]).raised).toEqual([low]);
   });
+
+  it('AC-08-44, 45 a flag raised now is accepted only where the same flag stands accepted: changed facts are a flag nobody has accepted', () => {
+    const accepted = standing('flag-1', high(96), true);
+    const low = flags.raise('LOAD_CALL_LOW', ticket('101003'), { loadCall: 96 }, high(96).facts);
+
+    expect(Flags.accepted([accepted], [high(96), low])).toEqual([
+      { accepted: true },
+      { accepted: false },
+    ]);
+    expect(Flags.accepted([accepted], [high(97)])).toEqual([{ accepted: false }]);
+    expect(Flags.accepted([], [high(96)])).toEqual([{ accepted: false }]);
+  });
 });

@@ -742,6 +742,10 @@ export interface FlagStanding {
   readonly factsSha256: string;
 }
 
+// What makes a flag the same flag: its code, the field event it is about and its facts.
+const markOf = (flag: FlagStanding | FlagRaised): string =>
+  JSON.stringify([flag.code, flag.fieldEventId, flag.factsSha256]);
+
 // What a reprocess does with a ticket's flags (spec/FLAGS.md §1; ADR-166).
 export interface FlagsCompared<Standing extends FlagStanding> {
   // Raised before on the same facts: kept as it is, with its acceptance.
@@ -784,6 +788,16 @@ export class Flags {
     return sha256(written(facts));
   }
 
+  // Which of the flags a ticket's facts raise now a reviewer has accepted: the same flag as one
+  // that stands accepted. Changed facts are another flag, to be looked at again (ADR-166).
+  static accepted(
+    standingAccepted: readonly FlagStanding[],
+    now: readonly FlagRaised[],
+  ): { accepted: boolean }[] {
+    const accepted = new Set(standingAccepted.map(markOf));
+    return now.map((flag) => ({ accepted: accepted.has(markOf(flag)) }));
+  }
+
   // The flags a ticket has against the ones its current facts raise. A flag is the same flag when
   // its code, the field event it is about and its facts are: nothing else is compared, so a
   // message reworded by a renamed site changes no flag.
@@ -791,8 +805,7 @@ export class Flags {
     standing: readonly Standing[],
     now: readonly FlagRaised[],
   ): FlagsCompared<Standing> {
-    const mark = (flag: FlagStanding | FlagRaised): string =>
-      JSON.stringify([flag.code, flag.fieldEventId, flag.factsSha256]);
+    const mark = markOf;
     const raisedNow = new Set(now.map(mark));
     const raisedBefore = new Set(standing.map(mark));
     return {

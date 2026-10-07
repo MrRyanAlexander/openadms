@@ -12,15 +12,16 @@
 // office, a certification's box. Each answers the run to ask the worker for; the story asks it,
 // and reads what the worker concluded.
 //
-// Not here: voiding the phantom, unvoiding and accepting a flag (1.8.4); QC, the lock, a batch
-// and the unlock as services (1.8.5): where this story needs a lock or an unlock it writes it as
-// the API's login may. The golden mission's whole review is 1.9.1.
+// Not here: voiding the phantom, unvoiding and accepting a flag (the story `p1-voided`); QC, the
+// lock and a batch (the story `p1-invoiced`): where this story needs a lock it writes it as the
+// API's login may, and unlocks through the service. The golden mission's whole review is 1.9.1.
 import {
   BackOfficeRecords,
   Certifications,
   ContractorSetup,
   Corrections,
   FormSetup,
+  InvoiceLocks,
   PayItemSetup,
   QuarantineReview,
   SiteSetup,
@@ -1315,20 +1316,15 @@ export const p1Reviewed: Story = {
         [65],
       ],
     );
-    story.at(
-      on('15', '11:20'),
-      'Dana unlocks 101001 (the unlock itself is Part 9’s; Luis holds no unlock); the worker runs',
+    story.at(on('15', '11:20'), 'Dana unlocks 101001 (Luis holds no unlock); the worker runs');
+    const unlocked = await saved(
+      new InvoiceLocks(api, clock).unlock(
+        dana,
+        { completedLoadId: load101001?.id ?? '' },
+        'Capacity corrected',
+      ),
     );
-    await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
-      const lock = await tx.invoiceLock.findFirstOrThrow({
-        where: { completedLoadId: load101001?.id ?? '', unlockedAt: null },
-      });
-      await tx.invoiceLock.update({
-        where: { id: lock.id },
-        data: { unlockedById: dana, unlockedAt: clock.now(), unlockNote: 'Capacity corrected' },
-      });
-    });
-    await reconciliation.run(measured.reprocess);
+    await reconciliation.run(unlocked.reprocess);
     story.check(
       'AC-09-16 unlocked first, the unlock audited under Dana, it reprocesses at the new capacity: 62 × 70% = 43.4 CY, $325.50',
       [

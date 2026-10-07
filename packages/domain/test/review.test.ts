@@ -1,14 +1,25 @@
 // Who may act on a record after the worker has looked at it, and what a renumber, a picked
 // reason and a quarantined record's resolution are told (spec/acceptance/
-// 08-review-and-corrections.md AC-08-05, 21, 26, 27, 29, 30; ADR-364).
+// 08-review-and-corrections.md AC-08-05, 21, 26, 27, 29, 30; ADR-364), and what a void, an
+// unvoid and an acceptance are told (AC-08-33, 37, 40, 48, 49; ADR-365), and what a lock as
+// invoiced, an unlock, a change to a locked ticket and a batch's name are told
+// (spec/acceptance/09-invoice-deliver-closeout.md AC-09-02, 03, 04, 06, 07, 15, 22; AC-08-55, 62;
+// ADR-367).
 import { describe, expect, it } from 'vitest';
 
 import {
+  BatchName,
+  FlagAccepting,
+  InvoiceLocking,
+  LockedTicket,
   PickedReason,
   QuarantineResolution,
   Renumber,
   Reviewer,
   reviewPermissions,
+  TicketOnItsOwn,
+  TicketVoiding,
+  type LockableTicket,
   type ReviewingPerson,
 } from '../src/index.ts';
 
@@ -198,5 +209,204 @@ describe('a quarantined record’s resolution', () => {
       'ROE R-0007: this project already has an ROE with that number. Nothing was changed.',
     );
     expect(waiting.roeNumberHeld('').code).toBe('NUMBER_BLANK');
+  });
+});
+
+describe('who may accept a flag', () => {
+  it('AC-08-05 accept flags is a grant of its own: a manager/analyst granted correct alone can’t accept (the user, 2026-10-06, KD-74)', () => {
+    const correctsOnly = new Reviewer({ ...luis, granted: ['CORRECT'] });
+
+    expect(correctsOnly.refusal('CORRECT')).toBeNull();
+    expect(correctsOnly.refusal('ACCEPT_FLAG')).toEqual({
+      code: 'NOT_PERMITTED',
+      message:
+        'Luis Ortega may not accept a flag: it takes an admin, or a manager/analyst granted "accept flags". Nothing was changed.',
+    });
+    expect(new Reviewer({ ...luis, granted: ['ACCEPT_FLAG'] }).refusal('CORRECT')?.code).toBe(
+      'NOT_PERMITTED',
+    );
+  });
+});
+
+describe('a person’s void and unvoid', () => {
+  const ticket = { ticketNumber: '301003', fieldEvents: 1, voidInForce: false, standsVoid: false };
+
+  it('AC-08-31 a ticket that isn’t void may be voided; whether the work happened isn’t asked', () => {
+    expect(new TicketVoiding(ticket).voidRefusal()).toBeNull();
+  });
+
+  it('AC-08-33 a void names a ticket: a number no field event is under is refused', () => {
+    expect(
+      new TicketVoiding({ ...ticket, ticketNumber: '301099', fieldEvents: 0 }).voidRefusal(),
+    ).toEqual({
+      code: 'NOT_A_TICKET',
+      message:
+        'No field event of this project is under 301099: there is no such ticket to void. Nothing was saved.',
+    });
+  });
+
+  it('a void ticket isn’t voided again, whether a person voided it or a rule did', () => {
+    const already = {
+      code: 'ALREADY_VOID',
+      message: 'Ticket 301003 is already void. Nothing was saved.',
+    };
+    expect(new TicketVoiding({ ...ticket, voidInForce: true }).voidRefusal()).toEqual(already);
+    expect(new TicketVoiding({ ...ticket, standsVoid: true }).voidRefusal()).toEqual(already);
+  });
+
+  it('AC-08-37, 38 an unvoid lifts a person’s void and a rule’s; a ticket that isn’t void has nothing to lift', () => {
+    expect(new TicketVoiding({ ...ticket, voidInForce: true }).unvoidRefusal()).toBeNull();
+    expect(new TicketVoiding({ ...ticket, standsVoid: true }).unvoidRefusal()).toBeNull();
+    expect(new TicketVoiding(ticket).unvoidRefusal()).toEqual({
+      code: 'NOT_VOID',
+      message: 'Ticket 301003 isn’t void. Nothing was changed.',
+    });
+  });
+});
+
+describe('accepting a flag', () => {
+  const message = 'Ticket 101003: load call 96%. Flagged for review.';
+
+  it('AC-08-43 a flag that stands and nobody has accepted may be accepted', () => {
+    expect(new FlagAccepting({ message, cleared: false, accepted: false }).refusal()).toBeNull();
+  });
+
+  it('AC-08-49 a flag is accepted once', () => {
+    expect(new FlagAccepting({ message, cleared: false, accepted: true }).refusal()).toEqual({
+      code: 'ALREADY_ACCEPTED',
+      message:
+        'This flag is already accepted ("Ticket 101003: load call 96%. Flagged for review."). Nothing was saved.',
+    });
+  });
+
+  it('AC-08-40 a flag the worker has cleared is history: there is nothing to accept', () => {
+    expect(new FlagAccepting({ message, cleared: true, accepted: false }).refusal()).toEqual({
+      code: 'FLAG_CLEARED',
+      message:
+        'This flag no longer stands ("Ticket 101003: load call 96%. Flagged for review."): there is nothing to accept. Nothing was saved.',
+    });
+  });
+});
+
+describe('locking a ticket as invoiced', () => {
+  const approved: LockableTicket = {
+    ticketNumber: '101001',
+    dissolved: false,
+    statuses: ['COMPLETED'],
+    qcStatus: 'QC_APPROVED',
+    locked: false,
+  };
+
+  it('AC-09-01, 06 a ticket that is whole, COMPLETED and QC Approved locks', () => {
+    expect(new InvoiceLocking(approved).lockRefusal()).toBeNull();
+  });
+
+  it('AC-09-02 QC Review, QC Issues and QC Void all block: only a QC Approved ticket locks', () => {
+    const told = (['QC_REVIEW', 'QC_ISSUES', 'QC_VOID'] as const).map(
+      (qcStatus) => new InvoiceLocking({ ...approved, qcStatus }).lockRefusal()?.message,
+    );
+    expect(told).toEqual([
+      'Ticket 101001 is at QC Review: only a QC Approved ticket can be locked as invoiced. Nothing was locked.',
+      'Ticket 101001 is at QC Issues: only a QC Approved ticket can be locked as invoiced. Nothing was locked.',
+      'Ticket 101001 is at QC Void: only a QC Approved ticket can be locked as invoiced. Nothing was locked.',
+    ]);
+    expect(new InvoiceLocking({ ...approved, qcStatus: 'QC_ISSUES' }).lockRefusal()?.code).toBe(
+      'NOT_QC_APPROVED',
+    );
+  });
+
+  it('AC-09-03, 04 a ticket in review is resolved first, QC Approved or not', () => {
+    expect(
+      new InvoiceLocking({
+        ...approved,
+        ticketNumber: '101003',
+        statuses: ['MANUAL_REVIEW'],
+      }).lockRefusal(),
+    ).toEqual({
+      code: 'NOT_COMPLETED',
+      message:
+        'Ticket 101003 is in review: every flag on it is fixed or accepted before it is locked as invoiced. Nothing was locked.',
+    });
+  });
+
+  it('a void ticket bills nothing and isn’t locked; a ticket that isn’t completed yet neither', () => {
+    expect(
+      new InvoiceLocking({
+        ...approved,
+        ticketNumber: '301003',
+        statuses: ['VOID'],
+      }).lockRefusal(),
+    ).toEqual({
+      code: 'NOT_COMPLETED',
+      message:
+        'Ticket 301003 is void: it bills nothing and isn’t locked as invoiced. Nothing was locked.',
+    });
+    expect(new InvoiceLocking({ ...approved, statuses: ['PENDING'] }).lockRefusal()?.message).toBe(
+      'Ticket 101001 isn’t completed yet. Nothing was locked.',
+    );
+    expect(new InvoiceLocking({ ...approved, statuses: [] }).lockRefusal()?.code).toBe(
+      'NOT_COMPLETED',
+    );
+  });
+
+  it('a ticket whose completed record was dissolved has nothing to lock', () => {
+    expect(new InvoiceLocking({ ...approved, dissolved: true }).lockRefusal()).toEqual({
+      code: 'NOT_WHOLE',
+      message:
+        'Ticket 101001 is no longer whole: there is nothing to lock until it is. Nothing was locked.',
+    });
+  });
+
+  it('AC-09-07 a ticket has one lock in force: a second is refused in plain words', () => {
+    expect(new InvoiceLocking({ ...approved, locked: true }).lockRefusal()).toEqual({
+      code: 'ALREADY_LOCKED',
+      message: 'Ticket 101001 is already locked as invoiced. Nothing was changed.',
+    });
+  });
+
+  it('AC-09-22 an unlock asks only that the ticket is locked, whatever else has changed since', () => {
+    expect(
+      new InvoiceLocking({
+        ...approved,
+        locked: true,
+        qcStatus: 'QC_ISSUES',
+        statuses: ['MANUAL_REVIEW'],
+      }).unlockRefusal(),
+    ).toBeNull();
+    expect(new InvoiceLocking(approved).unlockRefusal()).toEqual({
+      code: 'NOT_LOCKED',
+      message: 'Ticket 101001 isn’t locked as invoiced. Nothing was changed.',
+    });
+  });
+
+  it('AC-09-15 a change to a locked ticket’s own records is refused: it is unlocked first', () => {
+    expect(new LockedTicket([]).refusal()).toBeNull();
+    expect(new LockedTicket(['101001', '101003']).refusal()).toEqual({
+      code: 'LOCKED_AS_INVOICED',
+      message: 'Ticket 101001 is locked as invoiced: unlock it first. Nothing was changed.',
+    });
+  });
+
+  it('AC-08-55, 62 only a unit rate ticket is QC’d or locked as its one field event', () => {
+    expect(new TicketOnItsOwn('UNIT_RATE').refusal()).toBeNull();
+    expect(new TicketOnItsOwn('COLLECTION').refusal()).toEqual({
+      code: 'NOT_QCD_ALONE',
+      message:
+        'A collection is never QC’d or locked on its own: its completed load or haul-out is, once the ticket is whole. Nothing was saved.',
+    });
+    expect(new TicketOnItsOwn('HAUL_OUT_DISPOSAL').refusal()?.code).toBe('NOT_QCD_ALONE');
+  });
+
+  it('AC-09-09 a batch has a name, used once on its project', () => {
+    const named = new BatchName('  Bayline ROW, week of 12 Oct ');
+    expect([named.name, named.refusal()]).toEqual(['Bayline ROW, week of 12 Oct', null]);
+    expect(new BatchName('   ').refusal()).toEqual({
+      code: 'BATCH_NAME_BLANK',
+      message: 'An invoice batch needs a name. Nothing was saved.',
+    });
+    expect(named.used().message).toBe(
+      'This project already has an invoice batch named "Bayline ROW, week of 12 Oct". Nothing was saved.',
+    );
+    expect(BatchName.onAnotherProject().code).toBe('BATCH_ON_ANOTHER_PROJECT');
   });
 });

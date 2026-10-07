@@ -131,6 +131,7 @@ model Project {
   invoiceLocks                InvoiceLock[]
   flagAcceptances             FlagAcceptance[]
   ticketVoids                 TicketVoid[]
+  ticketUnvoids               TicketUnvoid[]
   // The read-only viewers who may see it.
   viewers                     ViewerProject[]
 
@@ -1061,6 +1062,7 @@ model User {
   flagAcceptances             FlagAcceptance[]
   ticketVoids                 TicketVoid[]          @relation("TicketVoidVoidedBy")
   ticketVoidsLifted           TicketVoid[]          @relation("TicketVoidLiftedBy")
+  ticketUnvoids               TicketUnvoid[]
   reconciliationRunsRequested ReconciliationRun[]   @relation("ReconciliationRunRequestedBy")
   auditRecords                AuditRecord[]
 

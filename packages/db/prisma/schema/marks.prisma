@@ -161,3 +161,25 @@ model TicketVoid {
   @@index([projectId, workflow, ticketNumber])
   @@map("ticket_void")
 }
+
+// An unvoid: the audited override that puts a void ticket back in the run, whoever voided it, a
+// person or a rule (the user, ADR-366: unvoiding anything always leaves a record). Keyed as a
+// ticket is, with the reviewer's note, who and when; never changed once written. A person's void
+// is also marked lifted on its own row; a rule's void has no row, so this is its only record.
+// The worker works a void ticket again when it has an unvoid newer than its last decision.
+model TicketUnvoid {
+  id           String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  projectId    String   @map("project_id") @db.Uuid
+  workflow     Workflow
+  ticketNumber String   @map("ticket_number")
+  note         String?
+  unvoidedById String   @map("unvoided_by_id") @db.Uuid
+  unvoidedAt   DateTime @map("unvoided_at") @db.Timestamptz(3)
+
+  project    Project @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  unvoidedBy User    @relation(fields: [unvoidedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  // A ticket's unvoids, as the worker reads them.
+  @@index([projectId, workflow, ticketNumber])
+  @@map("ticket_unvoid")
+}

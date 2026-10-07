@@ -683,6 +683,18 @@ describe('a ticket’s times, and where its records came from', () => {
     expect(ticketOf(events).status(flags.map(() => ({ accepted: false })))).toBe('PENDING');
   });
 
+  it('AC-03-50 a collection waiting alone, on a tag that had expired at its work time, shows that flag and stays PENDING', () => {
+    const events = [collection('101017', at(mon, '09:40'), { certNumber: '730416' })];
+    const flags = flagsOf(events, {
+      certifications: [certified('730416', 48, { tagExpiry: '2026-09-30' })],
+    });
+
+    expect(messagesOf(flags)).toEqual([
+      'Ticket 101017: review certification 730416 (tag expired 30-Sep-2026). Flagged for review.',
+    ]);
+    expect(ticketOf(events).status(flags.map(() => ({ accepted: false })))).toBe('PENDING');
+  });
+
   it('AC-06-64 a record created in the back office is flagged with the person and the reason, and pairs like any other', () => {
     const events = [
       collection('101029', at(mon, '09:40')),

@@ -235,6 +235,15 @@ export class ProjectSetup extends SetupService {
     );
   }
 
+  // Closes the project: the mark and its time, audited. Nothing is deleted and nothing is
+  // refused over it afterwards: a late field event still comes in, and a ticket is still
+  // unlocked by whoever holds the grant (invariant 1; ADR-025, 052, 367).
+  close(person: string, projectId: string): Promise<Outcome<Project>> {
+    return this.write(person, (tx) =>
+      tx.project.update({ where: { id: projectId }, data: { closedAt: this.clock.now() } }),
+    );
+  }
+
   // A field tag: the project's own list, starting empty; added at the end of it (ADR-216).
   fieldTag(person: string, projectId: string, name: string): Promise<Outcome<FieldTag>> {
     return this.write(person, async (tx) => {

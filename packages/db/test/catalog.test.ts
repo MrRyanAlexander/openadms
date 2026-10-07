@@ -103,6 +103,8 @@ const domains: Record<string, string> = {
   invoice_batch: 'BILLING',
   flag_acceptance: 'OPERATIONS',
   ticket_void: 'BILLING',
+  // An unvoid's own record: like the void, it says what is billed (ADR-366).
+  ticket_unvoid: 'BILLING',
   // The firm's lists: none holds a rate, a login or a ticket (ADR-302).
   ...Object.fromEntries(listTables.map((table) => [table, 'OPERATIONS'])),
 };
@@ -147,6 +149,8 @@ const triggers = [
   `CREATE TRIGGER flag_acceptance_refuse_flag_edit BEFORE UPDATE OF id, project_id, flag_id, accepted_by_id, accepted_at ON public.flag_acceptance FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
   `CREATE TRIGGER ticket_void_refuse_void_edit BEFORE UPDATE OF id, project_id, workflow, ticket_number, voided_by_id, voided_at ON public.ticket_void FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
   `CREATE TRIGGER ticket_void_refuse_edit_once_lifted BEFORE UPDATE ON public.ticket_void FOR EACH ROW WHEN ((old.lifted_at IS NOT NULL)) EXECUTE FUNCTION refuse_edit()`,
+  // An unvoid, once written, is history (ADR-366).
+  `CREATE TRIGGER ticket_unvoid_refuse_edit BEFORE UPDATE ON public.ticket_unvoid FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
   // A container has its primary box, asked when the piece of work that wrote it ends (ADR-321).
   `CREATE CONSTRAINT TRIGGER certification_has_primary_box AFTER INSERT OR UPDATE OF kind ON public.certification DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION certification_has_primary_box()`,
   `CREATE CONSTRAINT TRIGGER certification_box_keeps_primary AFTER UPDATE OF certification_id, "position" ON public.certification_box DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION certification_has_primary_box()`,
@@ -980,6 +984,12 @@ describe('the guards in the catalog', () => {
         name: 'ticket_void_lift_check',
         definition:
           "CHECK ((((num_nonnulls(lifted_by_id, lifted_at) = ANY (ARRAY[0, 2])) AND ((lift_note IS NULL) OR ((lifted_at IS NOT NULL) AND (btrim(lift_note) <> ''::text))) AND (lifted_by_id IS DISTINCT FROM '00000000-0000-7000-8000-000000000001'::uuid)) IS TRUE))",
+      },
+      // An unvoid names its ticket, and a person makes it (ADR-366).
+      {
+        name: 'ticket_unvoid_ticket_check',
+        definition:
+          "CHECK ((((btrim(ticket_number) <> ''::text) AND ((note IS NULL) OR (btrim(note) <> ''::text)) AND (unvoided_by_id <> '00000000-0000-7000-8000-000000000001'::uuid)) IS TRUE))",
       },
       ...listChecks,
     ];

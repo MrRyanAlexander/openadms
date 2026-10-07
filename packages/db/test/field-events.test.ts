@@ -182,12 +182,14 @@ describe('a field event', () => {
          WHERE table_schema = 'public' AND table_name LIKE '%ticket%' ORDER BY table_name`,
       ),
       // The tables with the word are the list of numbers a load's collection carries, a number
-      // as written (ADR-325), and a person's void of a number (ADR-363), each with its viewer
+      // as written (ADR-325), and a person's void of a number (ADR-363) and an unvoid of one (ADR-366), each with its viewer
       // view: never a ticket's record.
     ).toEqual([
       { table_name: 'carried_ticket' },
+      { table_name: 'ticket_unvoid' },
       { table_name: 'ticket_void' },
       { table_name: 'viewer_carried_ticket' },
+      { table_name: 'viewer_ticket_unvoid' },
       { table_name: 'viewer_ticket_void' },
     ]);
     expect(await valuesOf('field_event_kind')).toEqual([

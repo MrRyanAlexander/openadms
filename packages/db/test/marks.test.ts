@@ -1112,6 +1112,96 @@ describe('a person’s void', () => {
       await db.rows(`SELECT 1 FROM "ticket_void" WHERE "ticket_number" = '301002'`),
     ).toHaveLength(4);
   });
+
+  it('AC-08-67 an unvoid is its own record, written by the back office’s login and audited under the person, whether a person voided the ticket or a rule did; it names its ticket, is a person’s, and never changes; the worker reads it and writes none; nobody deletes one', async () => {
+    const { db, world } = tested;
+    const reviewer = await luis();
+    await actingAs(reviewer);
+    const unvoidLike = (more: Row = {}): Row => ({
+      project_id: world.p1,
+      workflow: 'LOAD',
+      ticket_number: '101009',
+      unvoided_by_id: reviewer,
+      unvoided_at: wednesday,
+      ...more,
+    });
+    for (const [what, row, how] of [
+      ['no ticket', unvoidLike({ ticket_number: ' ' }), refusedBy.check],
+      ['a blank note', unvoidLike({ note: ' ' }), refusedBy.check],
+      ['the system actor', unvoidLike({ unvoided_by_id: systemActor }), refusedBy.check],
+      ['nobody', unvoidLike({ unvoided_by_id: nobody }), refusedBy.foreignKey],
+      ['no project', unvoidLike({ project_id: nobody }), refusedBy.foreignKey],
+      ['no time', unvoidLike({ unvoided_at: null }), refusedBy.notNull],
+      ['nobody named', unvoidLike({ unvoided_by_id: null }), refusedBy.notNull],
+    ] as const) {
+      expect(await tickets.refused('ticket_unvoid', row), what).toBe(how);
+    }
+    await db.administer();
+    expect(await db.rows(`SELECT 1 FROM "ticket_unvoid"`)).toEqual([]);
+
+    // No void row stands behind 101009 (a rule voided it): the unvoid is still a record.
+    await actingAs(reviewer);
+    const unvoided = await tickets.add('ticket_unvoid', unvoidLike({ note: 'Asked by the prime' }));
+    const [record, ...more] = await audited(unvoided);
+    expect({ ...record, changed: undefined, more }).toEqual({
+      operation: 'INSERT',
+      actor: reviewer,
+      domain: 'BILLING',
+      changed: undefined,
+      more: [],
+    });
+    // A ticket may be unvoided more than once over its life: each is a record.
+    const again = await tickets.add('ticket_unvoid', unvoidLike());
+    expect(again).not.toBe(unvoided);
+    expect(await columnsOf('ticket_unvoid')).toEqual([
+      'id',
+      'project_id',
+      'workflow',
+      'ticket_number',
+      'note',
+      'unvoided_by_id',
+      'unvoided_at',
+    ]);
+    for (const who of ['adms_api', 'adms_owner'] as const) {
+      await db.as(who);
+      await db.actor(world.admin, 'BACK_OFFICE');
+      for (const set of [
+        `"note" = 'Something else'`,
+        `"ticket_number" = '101010'`,
+        `"unvoided_by_id" = '${world.admin}'`,
+        `"unvoided_at" = '2026-10-01T00:00:00Z'`,
+      ]) {
+        expect(
+          await db.refused(`UPDATE "ticket_unvoid" SET ${set} WHERE "id" = $1`, [unvoided]),
+          `${who}: ${set}`,
+        ).toEqual(neverEdited('ticket_unvoid'));
+      }
+      expect(
+        (await db.refused(`DELETE FROM "ticket_unvoid" WHERE "id" = $1`, [unvoided])).code,
+        `${who}: delete`,
+      ).toBe(who === 'adms_api' ? refusedBy.grant : refusedBy.trigger);
+    }
+    await tickets.asTheWorker();
+    expect(await db.rows(`SELECT 1 FROM "ticket_unvoid" WHERE "id" = $1`, [unvoided])).toHaveLength(
+      1,
+    );
+    expect(await refusedChange('ticket_unvoid', unvoided, '"project_id" = "project_id"')).toBe(
+      refusedBy.grant,
+    );
+    expect(await tickets.refused('ticket_unvoid', unvoidLike())).toBe(refusedBy.grant);
+    // A client user and an auditor see it on their project; a contractor user doesn't.
+    await db.administer();
+    for (const [viewer, seen] of [
+      [world.clientViewer, 2],
+      [world.auditor, 2],
+      [world.coastlineViewer, 0],
+    ] as const) {
+      await db.viewer(viewer);
+      await db.as('adms_readonly');
+      expect(await db.rows(`SELECT 1 FROM "viewer_ticket_unvoid"`), viewer).toHaveLength(seen);
+      await db.administer();
+    }
+  });
 });
 
 describe('what a viewer sees of the marks', () => {

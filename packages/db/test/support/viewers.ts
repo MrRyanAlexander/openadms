@@ -166,6 +166,7 @@ export const viewerSights: Record<string, Sight> = {
   ),
   flag_acceptance: project(),
   ticket_void: project(),
+  ticket_unvoid: project(),
   client: namedBy('client', 'viewer_project_setup', 'client_id', [...contact, 'notes']),
   declaration_event: namedBy('declaration_event', 'viewer_project_setup', 'declaration_event_id'),
   contractor: namedBy('contractor', 'project_contractor', 'contractor_id', contact),

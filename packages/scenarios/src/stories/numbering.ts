@@ -239,6 +239,24 @@ export const numbering: Story = {
     );
 
     // ------------------------------------------------------------------------------------------
+    story.at(
+      on('13', '18:20'),
+      'The certifying phone syncs, having issued 730415 to 730417: it reports its last cert number and is topped up',
+    );
+    const certNumbers = await saved(
+      allocator.topUp(haulOut, { ...load, series: 'CERTIFICATION', lastUsedNumber: 730417 }),
+    );
+    story.check(
+      'AC-05-47 a certifying phone is topped up to a full block of 100 unused cert numbers: its first block’s 97, and 3 more',
+      [
+        cut(certNumbers),
+        new PhoneNumbers(certNumbers).unused(),
+        new PhoneNumbers(certNumbers).next(),
+      ],
+      [['730415–730514', '730515–730517'], 100, 730418],
+    );
+
+    // ------------------------------------------------------------------------------------------
     story.at(on('13', '18:30'), 'P1-COL-3 takes a block of ROE numbers');
     const roes = await saved(allocator.topUp(col3, { ...load, series: 'ROE' }));
     story.check(

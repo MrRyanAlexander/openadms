@@ -109,11 +109,50 @@ export class TicketWrite {
               worked.lines,
             )
           : await this.unitRateLines(ticket, worked.lines);
+    // A void ticket has no open flag: what stood is cleared, kept in its history (ADR-365).
     const flags = await this.flags(
       { workflow: ticket.workflow, ticketNumber: ticket.ticketNumber },
-      worked.flags,
+      worked.status === 'VOID' ? [] : worked.flags,
     );
     return { flags, lines };
+  }
+
+  // A ticket a person voided: its field events stand at VOID, its lines are removed (the
+  // database copies each to the audit log first) and its flags are cleared. Its completed
+  // record, where it has one, is left as it is (ADR-028, 060, 085, 365).
+  async voided(ticket: {
+    readonly workflow: WorkflowName;
+    readonly ticketNumber: string;
+    readonly events: readonly WorkerFieldEvent[];
+  }): Promise<{ readonly linesRemoved: number; readonly flagsCleared: number }> {
+    for (const event of ticket.events) {
+      await this.fieldEvent(event, {
+        status: 'VOID',
+        zoneId: event.zoneId,
+        mapVersionId: event.mapVersionId,
+        workedOutPayItemId: event.workedOutPayItemId,
+      });
+    }
+    const ids = ticket.events.map((event) => event.id);
+    const ofIts = {
+      OR: [
+        { disposalEventId: { in: ids } },
+        { collections: { some: { collectionEventId: { in: ids }, dissolvedAt: null } } },
+      ],
+    };
+    const lines = await this.lines(
+      ticket.workflow === 'UNIT_RATE'
+        ? { fieldEventId: { in: ids } }
+        : ticket.workflow === 'LOAD'
+          ? { completedLoad: ofIts }
+          : { completedHaulOut: ofIts },
+      [],
+    );
+    const flags = await this.flags(
+      { workflow: ticket.workflow, ticketNumber: ticket.ticketNumber },
+      [],
+    );
+    return { linesRemoved: lines.removed, flagsCleared: flags.cleared };
   }
 
   private loadLines(completed: CompletedWritten, lines: readonly PricedLine[]) {

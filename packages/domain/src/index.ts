@@ -297,12 +297,21 @@ export {
 } from './project-settings.ts';
 
 export {
+  BatchName,
+  FlagAccepting,
+  InvoiceLocking,
+  LockedTicket,
   PickedReason,
+  qcStatuses,
   QuarantineResolution,
   Renumber,
   Reviewer,
   reviewPermissions,
+  TicketOnItsOwn,
+  TicketVoiding,
+  type LockableTicket,
   type NumberWritten,
+  type QcStatusName,
   type ReasonUseName,
   type ReviewPermission,
   type ReviewRefusal,

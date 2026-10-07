@@ -136,12 +136,30 @@ export interface CompletedRead {
 
 // A flag that stands (not cleared), with what it is on.
 export interface StandingFlag extends FlagStanding {
+  // A reviewer has accepted it (ADR-166): it stands, and counts for nothing in the status.
+  readonly accepted: boolean;
   readonly workflow: 'LOAD' | 'HAUL_OUT' | 'UNIT_RATE' | null;
   readonly ticketNumber: string | null;
   readonly certificationId: string | null;
   readonly disposalSiteId: string | null;
   readonly surveyId: string | null;
 }
+
+// A ticket as the worker groups one: its workflow and bare number.
+export interface TicketNamed {
+  readonly workflow: 'LOAD' | 'HAUL_OUT' | 'UNIT_RATE';
+  readonly ticketNumber: string;
+}
+
+// A person's void in force, with the ticket's field events as they stand.
+export interface PersonsVoid extends TicketNamed {
+  readonly voidedBy: string;
+  readonly reason: string;
+  readonly events: readonly WorkerFieldEvent[];
+}
+
+const ticketKey = (ticket: TicketNamed): string =>
+  JSON.stringify([ticket.workflow, ticket.ticketNumber]);
 
 export interface ProjectSnapshot {
   readonly project: {
@@ -169,6 +187,10 @@ export interface ProjectSnapshot {
   // Every field event of the project that isn't void. A voided ticket is out of the run until a
   // person unvoids it, whoever voided it, a person or a rule (the user, ADR-360).
   readonly fieldEvents: readonly WorkerFieldEvent[];
+  // The tickets a person has voided that the worker hasn't yet written as void: their field
+  // events are in no ticket's checks, and the run marks them VOID and removes their lines
+  // (ADR-365).
+  readonly voided: readonly PersonsVoid[];
   readonly completedLoads: readonly CompletedRead[];
   readonly completedHaulOuts: readonly CompletedRead[];
   readonly standingFlags: readonly StandingFlag[];
@@ -286,7 +308,49 @@ export class ProjectRead {
         null) as BuiltInKey<'surveyWorkType'> | null,
     }));
 
-    const fieldEvents = await this.fieldEvents(projectId, certifications, sites, roes);
+    // A person's void in force: the ticket is void from the moment it is made, whatever the
+    // worker last wrote on its field events (ADR-360, 365).
+    const voids = new Map(
+      (
+        await db.ticketVoid.findMany({
+          where: { projectId, liftedAt: null },
+          include: { voidedBy: { select: { name: true } }, reason: { select: { name: true } } },
+        })
+      ).map((row) => [ticketKey(row), row]),
+    );
+    const read = await this.fieldEvents(
+      projectId,
+      certifications,
+      sites,
+      roes,
+      await this.unvoided(projectId),
+      voids,
+    );
+    const fieldEvents = read.filter((event) => !voids.has(ticketKey(event)));
+    const voided: PersonsVoid[] = [...voids.values()].flatMap((row) => {
+      const events = read.filter(
+        (event) => ticketKey(event) === ticketKey(row) && event.status !== 'VOID',
+      );
+      return events.length === 0
+        ? []
+        : [
+            {
+              workflow: row.workflow,
+              ticketNumber: row.ticketNumber,
+              voidedBy: row.voidedBy.name,
+              reason: row.reason.name,
+              events,
+            },
+          ];
+    });
+    const accepted = new Set(
+      (
+        await db.flagAcceptance.findMany({
+          where: { projectId, flag: { clearedAt: null } },
+          select: { flagId: true },
+        })
+      ).map((acceptance) => acceptance.flagId),
+    );
     return {
       project: {
         id: project.id,
@@ -310,6 +374,7 @@ export class ProjectRead {
       pricing: await this.pricing(projectId),
       surveys,
       fieldEvents,
+      voided,
       completedLoads: await this.completedLoads(projectId),
       completedHaulOuts: await this.completedHaulOuts(projectId),
       standingFlags: (
@@ -319,6 +384,7 @@ export class ProjectRead {
         code: flag.code,
         fieldEventId: flag.fieldEventId,
         factsSha256: flag.factsSha256,
+        accepted: accepted.has(flag.id),
         workflow: flag.workflow,
         ticketNumber: flag.ticketNumber,
         certificationId: flag.certificationId,
@@ -518,15 +584,53 @@ export class ProjectRead {
     );
   }
 
+  // The void tickets a person has unvoided and the worker hasn't worked since: each has an
+  // unvoid's record newer than its last decision. Their field events are read back in, unless a
+  // person's void is in force on them. Both ids are the database's own, made in time order, so
+  // "newer" is told without any clock of the worker's (ADR-366). A decision that ended in an
+  // error doesn't count: the ticket is tried again on the next run.
+  private async unvoided(projectId: string): Promise<TicketNamed[]> {
+    const { db } = this;
+    const standVoid = await db.fieldEvent.findMany({
+      where: { projectId, status: 'VOID' },
+      select: { workflow: true, ticketNumber: true },
+      distinct: ['workflow', 'ticketNumber'],
+    });
+    const unvoided: TicketNamed[] = [];
+    for (const { workflow, ticketNumber } of standVoid) {
+      const unvoid = await db.ticketUnvoid.findFirst({
+        where: { projectId, workflow, ticketNumber },
+        orderBy: { id: 'desc' },
+        select: { id: true },
+      });
+      if (unvoid === null) continue;
+      const decided = await db.reconciliationDecision.findFirst({
+        where: { workflow, ticketNumber, error: null, reconciliationRun: { projectId } },
+        orderBy: { id: 'desc' },
+        select: { id: true },
+      });
+      if (decided === null || decided.id < unvoid.id) unvoided.push({ workflow, ticketNumber });
+    }
+    return unvoided;
+  }
+
   private async fieldEvents(
     projectId: string,
     certifications: readonly ReadCertification[],
     sites: readonly ReadSite[],
     roes: ReadonlyMap<string, CheckedRoe>,
+    unvoided: readonly TicketNamed[],
+    voids: ReadonlyMap<string, unknown>,
   ): Promise<WorkerFieldEvent[]> {
     const { db } = this;
     const rows = await db.fieldEvent.findMany({
-      where: { projectId, status: { not: 'VOID' } },
+      where: {
+        projectId,
+        OR: [
+          { status: { not: 'VOID' } },
+          ...unvoided.map(({ workflow, ticketNumber }) => ({ workflow, ticketNumber })),
+        ],
+      },
       orderBy: { id: 'asc' },
     });
     const ids = rows.map((row) => row.id);
@@ -595,7 +699,7 @@ export class ProjectRead {
     // says two containers were weighed together (ADR-038, 114).
     const disposalsOn = new Map<string, ReceiptDisposal[]>();
     for (const row of rows) {
-      if (row.scaleReceiptId === null) continue;
+      if (row.scaleReceiptId === null || voids.has(ticketKey(row))) continue;
       const pointing: ReceiptDisposal = {
         fieldEventId: row.id,
         ticketNumber: row.ticketNumber,

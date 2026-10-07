@@ -11,12 +11,28 @@
 // The person's grant is read here, inside the same piece of work, before anything is changed:
 // an admin may do every action, a manager/analyst the ones granted, nobody else any (ADR-364).
 //
+// Tasks 1.8.4's services stand on the same ground: a void, an unvoid and a flag's acceptance
+// are marks of their own beside the records, written here and read by the worker (ADR-365, 366).
+//
+// Task 1.8.5's services stand on it too: a QC mark, a lock as invoiced, its batch and its unlock
+// (ADR-367). A QC mark and a lock change nothing the worker reads, so they answer no run; an
+// unlock does. **While a ticket is locked as invoiced, a change to its own records is refused
+// here** (its field events, their lines and photographs, a void, an acceptance): it is unlocked
+// first. A record several tickets share (a certification, an ROE, a scale receipt) is still
+// corrected, and each locked ticket on it is named and waits for its unlock.
+//
 // Afterwards the ticket reprocesses. The service doesn't run the worker: it answers the run to
 // ask for, naming who asked and the tickets it touched, and which of those are locked as
 // invoiced, so are left as they are until unlocked (ADR-057). Phase 2's job queue takes that
 // answer; until then whoever called the service asks the worker for the run.
 import type { Prisma } from '@open-adms/db';
-import { Reviewer, type ReviewPermission, type WorkflowName } from '@open-adms/domain';
+import {
+  LockedTicket,
+  Reviewer,
+  TicketOnItsOwn,
+  type ReviewPermission,
+  type WorkflowName,
+} from '@open-adms/domain';
 
 import { type Outcome, Refused, SetupService } from '../setup/setup-service.ts';
 
@@ -31,7 +47,8 @@ export interface TicketNamed {
 // The run to ask the worker for after a reviewer's action.
 export interface Reprocess {
   readonly projectId: string;
-  readonly trigger: 'CORRECTION';
+  // An unlock corrects nothing: its run only works the ticket again.
+  readonly trigger: 'CORRECTION' | 'REPROCESS';
   readonly requestedById: string;
   // The tickets the action touched: under a renumber, the number it left and the one it took.
   readonly tickets: readonly TicketNamed[];
@@ -52,6 +69,26 @@ export interface Touched<T> {
   readonly tickets: readonly TicketNamed[];
 }
 
+// A ticket as a QC mark and a lock name one: its completed load or haul-out (a split as one),
+// or a unit rate ticket's one field event; never a single field event of a load (ADR-168).
+export type TicketMarked =
+  | { readonly completedLoadId: string }
+  | { readonly completedHaulOutId: string }
+  | { readonly unitRateTicketId: string };
+
+// What a mark on a ticket is written with, and the ticket it is on.
+export interface MarkedTicket {
+  readonly projectId: string;
+  readonly ticket: TicketNamed;
+  // Its completed record was dissolved: the ticket is no longer whole.
+  readonly dissolved: boolean;
+  // The mark's own columns for it.
+  readonly key:
+    | { readonly completedLoadId: string }
+    | { readonly completedHaulOutId: string }
+    | { readonly fieldEventId: string; readonly fieldEventKind: 'UNIT_RATE' };
+}
+
 export const ticketOf = (event: {
   readonly workflow: WorkflowName;
   readonly ticketNumber: string;
@@ -59,20 +96,41 @@ export const ticketOf = (event: {
 
 export abstract class ReviewService extends SetupService {
   // Runs the work as the person, if they may do it; the note, where one was given, is kept in
-  // the audit record of every row the work changes.
+  // the audit record of every row the work changes. A ticket it touched that is locked as
+  // invoiced undoes all of it, unless the record is one several tickets share (`PASSED_BY`).
   protected review<T>(
     person: string,
     permission: ReviewPermission,
     note: string | undefined,
     work: (tx: Tx) => Promise<Touched<T>>,
+    lockedTickets: 'REFUSED' | 'PASSED_BY' = 'REFUSED',
   ): Promise<Outcome<Reviewed<T>>> {
+    return this.mark(person, permission, note, async (tx) => {
+      const { record, projectId, tickets } = await work(tx);
+      const reprocess = await ReviewService.reprocess(tx, person, projectId, tickets);
+      if (lockedTickets === 'REFUSED') {
+        const refusal = new LockedTicket(
+          reprocess.lockedAsInvoiced.map((ticket) => ticket.ticketNumber),
+        ).refusal();
+        if (refusal !== null) throw new Refused(refusal);
+      }
+      return { record, reprocess };
+    });
+  }
+
+  // The same for a mark that asks for no run: a QC status, a lock, a batch.
+  protected mark<T>(
+    person: string,
+    permission: ReviewPermission,
+    note: string | undefined,
+    work: (tx: Tx) => Promise<T>,
+  ): Promise<Outcome<T>> {
     const reason = note?.trim() ?? '';
     return this.writeAs(
       { actorId: person, source: 'BACK_OFFICE', ...(reason === '' ? {} : { reason }) },
       async (tx) => {
         await ReviewService.permitted(tx, person, permission);
-        const { record, projectId, tickets } = await work(tx);
-        return { record, reprocess: await ReviewService.reprocess(tx, person, projectId, tickets) };
+        return work(tx);
       },
     );
   }
@@ -115,7 +173,7 @@ export abstract class ReviewService extends SetupService {
 
   // Whether a lock as invoiced is in force on the ticket: on its completed load or haul-out,
   // found by any of its field events, or on its unit rate field event, as the worker asks it.
-  private static async locked(tx: Tx, projectId: string, ticket: TicketNamed): Promise<boolean> {
+  protected static async locked(tx: Tx, projectId: string, ticket: TicketNamed): Promise<boolean> {
     const events = await tx.fieldEvent.findMany({
       where: { projectId, ...ticket },
       select: { id: true },
@@ -138,6 +196,42 @@ export abstract class ReviewService extends SetupService {
       },
     });
     return locks > 0;
+  }
+
+  // The ticket a QC mark or a lock names. A load's or a haul-out's single field event is refused
+  // in plain words before the database's own check would.
+  protected static async ticketMarked(tx: Tx, target: TicketMarked): Promise<MarkedTicket> {
+    if ('completedLoadId' in target) {
+      const load = await tx.completedLoad.findUniqueOrThrow({
+        where: { id: target.completedLoadId },
+      });
+      return {
+        projectId: load.projectId,
+        ticket: { workflow: 'LOAD', ticketNumber: load.ticketNumber },
+        dissolved: load.dissolvedAt !== null,
+        key: { completedLoadId: load.id },
+      };
+    }
+    if ('completedHaulOutId' in target) {
+      const haulOut = await tx.completedHaulOut.findUniqueOrThrow({
+        where: { id: target.completedHaulOutId },
+      });
+      return {
+        projectId: haulOut.projectId,
+        ticket: { workflow: 'HAUL_OUT', ticketNumber: haulOut.ticketNumber },
+        dissolved: haulOut.dissolvedAt !== null,
+        key: { completedHaulOutId: haulOut.id },
+      };
+    }
+    const event = await tx.fieldEvent.findUniqueOrThrow({ where: { id: target.unitRateTicketId } });
+    const refusal = new TicketOnItsOwn(event.kind).refusal();
+    if (refusal !== null) throw new Refused(refusal);
+    return {
+      projectId: event.projectId,
+      ticket: ticketOf(event),
+      dissolved: false,
+      key: { fieldEventId: event.id, fieldEventKind: 'UNIT_RATE' },
+    };
   }
 
   // The tickets of the field events a query finds.

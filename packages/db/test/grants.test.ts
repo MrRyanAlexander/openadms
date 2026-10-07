@@ -115,6 +115,8 @@ const tableGrants: Record<string, Record<string, string>> = {
   invoice_lock: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   flag_acceptance: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   ticket_void: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
+  // An unvoid's own record (ADR-366): no update of it ever passes its trigger.
+  ticket_unvoid: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   audit_record: { adms_api: 'SELECT', adms_worker: 'SELECT' },
   viewer_project: { adms_readonly: 'SELECT' },
   viewer_field_event: { adms_readonly: 'SELECT' },

@@ -15,6 +15,10 @@
 //   is written, the lines it had are still there (and the flag says so), and the run goes on.
 // - A ticket a rule's Void ticket voids is VOID from then on and out of every later run, like a
 //   person's void, until a person unvoids it (the user, ADR-360).
+// - A ticket a person voided is marked VOID, its lines removed and its flags cleared, and no
+//   other ticket's checks read its field events. A void ticket a person has unvoided since its
+//   last decision is read back in and worked; a rule that still passes voids it again (ADR-167,
+//   365, 366).
 // - A ticket locked as invoiced is left exactly as it is, whatever changed (ADR-090): the run
 //   records that it left it.
 // - A rate or a rule that changes needs no list of the tickets it touches: a run works every
@@ -40,7 +44,13 @@ import {
 } from '@open-adms/domain';
 
 import { MileageStanding } from './mileage-standing.ts';
-import { ProjectRead, type ProjectSnapshot, type WorkerFieldEvent } from './project-read.ts';
+import {
+  ProjectRead,
+  type PersonsVoid,
+  type ProjectSnapshot,
+  type TicketNamed,
+  type WorkerFieldEvent,
+} from './project-read.ts';
 import { TicketWork, type MileageStep, type WorkSettings } from './ticket-work.ts';
 import { TicketWrite } from './ticket-write.ts';
 
@@ -163,6 +173,13 @@ export class Reconciliation {
       );
       await this.projectRecords(snapshot, run.id);
 
+      for (const voided of snapshot.voided) {
+        await stillHeld();
+        const outcome = await this.voided(projectId, voided, run.id);
+        tickets.push(outcome);
+        if (outcome.error === null) done += 1;
+        else failed += 1;
+      }
       const gathered = new Tickets(snapshot.fieldEvents);
       for (const ticket of gathered.tickets) {
         await stillHeld();
@@ -206,7 +223,6 @@ export class Reconciliation {
     runId: string,
   ): Promise<TicketOutcome> {
     const { db, clock } = this;
-    const on = { workflow: ticket.workflow, ticketNumber: ticket.ticketNumber };
     const outcome = (
       status: WorkerFieldEvent['status'],
       error: string | null,
@@ -222,19 +238,21 @@ export class Reconciliation {
         return await outcome(stoodAt, null);
       }
       const worked = await work.of(ticket);
+      // Read back in after a person's unvoid: its field events stood at VOID.
+      const unvoided = ticket.events.some((event) => event.status === 'VOID');
       await db.$write(systemActor, async (tx) => {
         const write = new TicketWrite(tx, ticket.projectId, runId, clock.now());
         const { flags, lines } = await write.conclusions(worked);
         await write.decision(ticket, worked.status, {
           waitingFor: [...ticket.missing],
-          why:
+          why: `${unvoided ? 'Unvoided: worked again. ' : ''}${Reconciliation.why(ticket)}${
             worked.voidedBy.length === 0
-              ? Reconciliation.why(ticket)
-              : `${Reconciliation.why(ticket)} Voided by ${worked.voidedBy
-                  .map((rule) => `the rule "${rule.name}"`)
-                  .join(' and ')}.`,
+              ? ''
+              : ` Voided by ${worked.voidedBy.map((rule) => `the rule "${rule.name}"`).join(' and ')}.`
+          }`,
           // A rule's void has no record of its own: its reason is the rule, here (ADR-118).
           voidedBy: worked.voidedBy.map((rule) => ({ id: rule.id, name: rule.name })),
+          unvoided,
           completed: worked.completed === null ? null : Reconciliation.figures(worked.completed),
           lines: worked.lines.map((line) => ({ ...line })),
           linesKept: lines.kept,
@@ -248,70 +266,123 @@ export class Reconciliation {
       });
       return await outcome(worked.status, null);
     } catch (caught) {
-      const error = errorWords(caught);
-      // The status it stood at: nothing but the flag and the decision is written.
-      const stoodAt = ticket.events[0]?.status ?? 'PENDING';
+      return this.notProcessed(ticket, runId, caught);
+    }
+  }
+
+  // A ticket a person voided, written as void: one piece of work, like any ticket's.
+  private async voided(
+    projectId: string,
+    voided: PersonsVoid,
+    runId: string,
+  ): Promise<TicketOutcome> {
+    const { db, clock } = this;
+    const ticket = { ...voided, projectId, missing: [] };
+    try {
+      if (await this.lockedAsInvoiced(ticket)) {
+        const stoodAt = ticket.events[0]?.status ?? 'PENDING';
+        await db.$write(systemActor, (tx) =>
+          new TicketWrite(tx, projectId, runId, clock.now()).decision(ticket, stoodAt, {
+            why: 'Locked as invoiced: left as it is.',
+          }),
+        );
+        return await this.outcome(ticket, stoodAt, null);
+      }
       await db.$write(systemActor, async (tx) => {
-        const write = new TicketWrite(tx, ticket.projectId, runId, clock.now());
-        const standing = await tx.flag.findFirst({
+        const write = new TicketWrite(tx, projectId, runId, clock.now());
+        const { linesRemoved, flagsCleared } = await write.voided(ticket);
+        await write.decision(ticket, 'VOID', {
+          why: `Voided by ${voided.voidedBy} (${voided.reason}).`,
+          voidedByPerson: { name: voided.voidedBy, reason: voided.reason },
+          linesRemoved,
+          flagsCleared,
+        });
+      });
+      return await this.outcome(ticket, 'VOID', null);
+    } catch (caught) {
+      return this.notProcessed(ticket, runId, caught);
+    }
+  }
+
+  // A ticket that could not be processed: nothing of the failed work is kept; the ticket is
+  // flagged in a piece of work of its own, and the run goes on.
+  private async notProcessed(
+    ticket: TicketNamed & {
+      readonly projectId: string;
+      readonly events: readonly WorkerFieldEvent[];
+      readonly missing: readonly FieldEventKindName[];
+    },
+    runId: string,
+    caught: unknown,
+  ): Promise<TicketOutcome> {
+    const { db, clock } = this;
+    const on = { workflow: ticket.workflow, ticketNumber: ticket.ticketNumber };
+    const error = errorWords(caught);
+    // The status it stood at: nothing but the flag and the decision is written.
+    const stoodAt = ticket.events[0]?.status ?? 'PENDING';
+    await db.$write(systemActor, async (tx) => {
+      const write = new TicketWrite(tx, ticket.projectId, runId, clock.now());
+      const standing = await tx.flag.findFirst({
+        where: {
+          projectId: ticket.projectId,
+          ...on,
+          clearedAt: null,
+          code: { in: ['NOT_PROCESSED', 'NOT_PROCESSED_LINES_STAND'] },
+        },
+        select: { id: true },
+      });
+      if (standing === null) {
+        // Nothing of the failed work is kept, so a ticket priced before still has its lines:
+        // the flag says which (the user, ADR-360).
+        const lines = await tx.transaction.count({
           where: {
             projectId: ticket.projectId,
+            ...(ticket.workflow === 'UNIT_RATE'
+              ? { fieldEventId: { in: ticket.events.map((event) => event.id) } }
+              : ticket.workflow === 'LOAD'
+                ? { completedLoad: { ticketNumber: ticket.ticketNumber } }
+                : { completedHaulOut: { ticketNumber: ticket.ticketNumber } }),
+          },
+        });
+        const flag = new Flags('UTC').raise(
+          lines > 0 ? 'NOT_PROCESSED_LINES_STAND' : 'NOT_PROCESSED',
+          { ticketNumber: ticket.ticketNumber },
+          {},
+          {},
+        );
+        await tx.flag.create({
+          data: {
+            projectId: ticket.projectId,
             ...on,
-            clearedAt: null,
-            code: { in: ['NOT_PROCESSED', 'NOT_PROCESSED_LINES_STAND'] },
+            code: flag.code,
+            message: flag.message,
+            facts: {},
+            factsSha256: flag.factsSha256,
+            billing: flag.billing,
+            raisedAt: clock.now(),
+            reconciliationRunId: runId,
           },
           select: { id: true },
         });
-        if (standing === null) {
-          // Nothing of the failed work is kept, so a ticket priced before still has its lines:
-          // the flag says which (the user, ADR-360).
-          const lines = await tx.transaction.count({
-            where: {
-              projectId: ticket.projectId,
-              ...(ticket.workflow === 'UNIT_RATE'
-                ? { fieldEventId: { in: ticket.events.map((event) => event.id) } }
-                : ticket.workflow === 'LOAD'
-                  ? { completedLoad: { ticketNumber: ticket.ticketNumber } }
-                  : { completedHaulOut: { ticketNumber: ticket.ticketNumber } }),
-            },
-          });
-          const flag = new Flags('UTC').raise(
-            lines > 0 ? 'NOT_PROCESSED_LINES_STAND' : 'NOT_PROCESSED',
-            { ticketNumber: ticket.ticketNumber },
-            {},
-            {},
-          );
-          await tx.flag.create({
-            data: {
-              projectId: ticket.projectId,
-              ...on,
-              code: flag.code,
-              message: flag.message,
-              facts: {},
-              factsSha256: flag.factsSha256,
-              billing: flag.billing,
-              raisedAt: clock.now(),
-              reconciliationRunId: runId,
-            },
-            select: { id: true },
-          });
-        }
-        await write.decision(
-          ticket,
-          stoodAt,
-          { waitingFor: [...ticket.missing], why: 'It could not be processed.' },
-          error,
-        );
-      });
-      return outcome(stoodAt, error);
-    }
+      }
+      await write.decision(
+        ticket,
+        stoodAt,
+        { waitingFor: [...ticket.missing], why: 'It could not be processed.' },
+        error,
+      );
+    });
+    return this.outcome(ticket, stoodAt, error);
   }
 
   // Whether the ticket is locked as invoiced: its completed load or haul-out, found by any of
   // its field events, or its unit rate field event (ADR-057, 090). Only a lock in force counts:
   // one a person unlocked is history, and the ticket is worked again (ADR-363). Asked as the
   // ticket's turn comes, never from what the run read at its start.
-  private async lockedAsInvoiced(ticket: Ticket<WorkerFieldEvent>): Promise<boolean> {
+  private async lockedAsInvoiced(ticket: {
+    readonly workflow: WorkflowName;
+    readonly events: readonly WorkerFieldEvent[];
+  }): Promise<boolean> {
     const ids = ticket.events.map((event) => event.id);
     const ofIts = {
       OR: [
@@ -434,7 +505,10 @@ export class Reconciliation {
   }
 
   private async outcome(
-    ticket: Ticket<WorkerFieldEvent>,
+    ticket: TicketNamed & {
+      readonly projectId: string;
+      readonly missing: readonly FieldEventKindName[];
+    },
     status: WorkerFieldEvent['status'],
     error: string | null,
   ): Promise<TicketOutcome> {

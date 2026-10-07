@@ -23,7 +23,7 @@ import {
   placeOf,
   type CarriedTicketRead,
   type FlagRaised,
-  type Flags,
+  Flags,
   type MileageEnds,
   type MileageMeasured,
   type Named,
@@ -251,11 +251,22 @@ export class TicketWork {
     return {
       ticket,
       // A rule's void wins over everything else the ticket would be (ADR-167); once written, the
-      // ticket is out of the run until a person unvoids it (ADR-360). A reviewer's
-      // acceptance is a mark of its own, task 1.8.x's: until it is built no flag is read as
-      // accepted.
+      // ticket is out of the run until a person unvoids it (ADR-360). A flag a reviewer accepted
+      // counts for nothing in the status while the same flag stands (ADR-166, 365).
       status:
-        priced.voidedBy.length > 0 ? 'VOID' : ticket.status(all.map(() => ({ accepted: false }))),
+        priced.voidedBy.length > 0
+          ? 'VOID'
+          : ticket.status(
+              Flags.accepted(
+                this.snapshot.standingFlags.filter(
+                  (flag) =>
+                    flag.accepted &&
+                    flag.workflow === ticket.workflow &&
+                    flag.ticketNumber === ticket.ticketNumber,
+                ),
+                all,
+              ),
+            ),
       flags: all,
       zones: place.zones,
       workedOut: unitRate.workedOut,
