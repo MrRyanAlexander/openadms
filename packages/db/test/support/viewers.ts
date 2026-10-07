@@ -217,6 +217,10 @@ export const unseenTables = [
   'user_viewer_project',
   'device',
   'master_passcode',
+  // Sign-in's records are the API's alone (ADR-397…399).
+  'user_credential',
+  'session',
+  'security_event',
   'number_block',
   'assignment',
   'assignment_pay_item',

@@ -1,19 +1,19 @@
 # Open ADMS — Current decisions and gaps, at a glance
 
 **The present tense of the project on one page.** `DECISIONS.md` and `DEVIATIONS.md` are the full
-history, with 396 ADRs and 74 KDs, many superseded. This page says what is true **now** and which
+history, with 399 ADRs and 74 KDs, many superseded. This page says what is true **now** and which
 entries to cite. The reasons live in the ADRs and the skills.
 
 - **Keep it current:** when you add, amend or supersede an ADR, or open or close a KD, update this
   page **in the same response** (`adms-decisions`).
 - **If this page and a log entry disagree,** the newest ADR wins: fix this page and say so.
-- **Updated 2026-10-07, through ADR-396 / KD-74.** **Phase 2 (API and sync) is open (ADR-376);
+- **Updated 2026-10-07, through ADR-399 / KD-74.** **Phase 2 (API and sync) is open (ADR-376);
   its plan is `BACKLOG.md`'s eight milestones and 32 tasks (ADR-377). Tasks 2.1.1 (ADR-379) and
   2.1.2 (ADR-380…385) are done: the API runs as a process, reached only at
   `https://api.adms.localhost` through Caddy, with a health answer and nothing else yet. Task
   2.1.3 (ADR-387…392) is done: the boundary every request passes. Task 2.1.4 (ADR-394, 395) is
   done: each service login is under a statement timeout, and an installation may state its own
-  policy values.**
+  policy values. Task 2.2.1 (ADR-397…399) is done: sign-in's records, in the database only.**
   `spec/acceptance/10-api-and-sync.md` and `spec/THREAT-MODEL.md` are approved by the user
   (their marks, ADR-386, 393). **No KD is open.**
   The exception to the seven-day rule is gone from `pnpm-workspace.yaml` (ADR-372's owed step,
@@ -454,6 +454,26 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   24 and `settings` 38 need nothing; `door` 15 and `request-id` 2 need the stack and the
   installation), `packages/contracts/test/endpoints.test.ts`. AC-10-04…08, 34, 36, 39, 43 pass.
   Adding an endpoint, and what is left: BACKLOG C86. *Agent defaults.*
+- **Sign-in's records (task 2.2.1; the database only, no endpoint yet).** [397, 398, 399] Three
+  tables, **each with its own guards, tighter than `guard_table`'s, and read by the API alone**
+  (the worker and the read-only login hold nothing on them; no viewer view), audited in the
+  security domain, never deleted. **`UserCredential`** (`user_credential`): what sign-in keeps
+  of a person, one row a person, **apart from `user`** (which the worker and every reader of a
+  person read whole): `passwordHash` (only an Argon2id PHC string), `twoStepSecret` (never
+  blank), `lockedUntil`; whose it is never changes; the system actor can have none (C21).
+  **`Session`** (`session`): one row a back-office or portal sign-in, holding **the SHA-256 of
+  the one refresh token in force** (64 lower-case hexadecimal digits, unique; the token itself
+  is refused), rotated in place, `expiresAt` after `createdAt`, **`revokedAt` final** (a revoked
+  row is never changed again). **`SecurityEvent`** (`security_event`): a sign-in, a wrong try, a
+  lockout, a phone's setup or switch, a use of the master passcode (`SecurityEventKind`, REQ-202b's
+  list); added and never edited; **the audit capture copies each into `audit_record` in the
+  security domain**, which is how it is "in the same log"; it holds who it is about, the phone,
+  the request and when, **never a typed name, an address or a secret**. **The three secret
+  columns** (`password_hash`, `two_step_secret`, `refresh_token_hash`) **are named on their audit
+  triggers**: the audit log says one changed, never what from or to. Tests:
+  `packages/db/test/sign-in.test.ts` (17). AC-10-10, 11 pass at the database; AC-10-19 in part.
+  Eighty-two migrations. **Open, for the task that first writes one (C88):** who is stated as
+  the actor when nobody is signed in. *Agent defaults.*
 - **The threat model and the API's scenarios (task 2.1.1; both approved by the user, ADR-386,
   393).**
   `spec/THREAT-MODEL.md`: eleven kinds of attacker, 36 threats over the layers of ARCHITECTURE §2,
@@ -1574,8 +1594,14 @@ its scenario.
 
 ## 4. Waiting on the user
 
-**Live today (2026-10-07, ADR-376…396):**
-- **Nothing blocks the next task** (2.2.1, sign-in's records).
+**Live today (2026-10-07, ADR-376…399):**
+- **Nothing blocks the next task** (2.2.2, passwords).
+- **Agent defaults of 2.2.1 to confirm or overturn (ADR-397…399):** a person's password hash,
+  authenticator secret and lock are kept in a record of their own, not on the person's record
+  (`spec/DATA-MODEL.md` §2.2 had listed them as the person's columns); a session keeps the hash
+  of the one refresh token in force and is rotated in place; a security event is its own
+  record, copied into the audit log's security domain, holding no typed name and no address;
+  the API alone reads all three.
 - **Agent defaults of 2.1.4 to confirm or overturn (ADR-394, 395):** a statement of a service's
   database login is stopped after thirty seconds; the read-only login is under it too, the
   owner's is not; an installation may override any policy value by the same name in a service's

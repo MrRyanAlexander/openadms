@@ -89,12 +89,16 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-07, through ADR-396)
+### Where things stand (2026-10-07, through ADR-399)
 - **Phase 2 (API and sync) is open (ADR-376).** Its plan is `BACKLOG.md`'s eight milestones and 32
   tasks (ADR-377); tasks 2.0.1 (the opening and the plan), 2.1.1 (the threat model and the
   API's scenarios, ADR-379; docs), 2.1.2 (the API as a process, ADR-380…385), 2.1.3 (the
   boundary, ADR-387…392) and **2.1.4 (time limits and policy, ADR-394…396)** are done:
-  Milestone 2.1 is complete. **Each service login (`adms_api`, `adms_worker`, `adms_readonly`) is
+  Milestone 2.1 is complete. **Task 2.2.1 (sign-in's records, ADR-397…399) is done:** three
+  tables read by the API alone, each with its own guards: `user_credential` (a person's password
+  hash, authenticator secret and locked-until, apart from `user`), `session` (the SHA-256 of
+  the refresh token in force) and `security_event` (copied by the database into the audit
+  log's security domain); no endpoint writes them yet (BACKLOG C88). **Each service login (`adms_api`, `adms_worker`, `adms_readonly`) is
   under a statement timeout**, the policy value `STATEMENT_TIMEOUT_MS` (30,000 ms), set by
   `pnpm installer` and read by `installer:check`; **an installation may state its own value for
   any policy value** by the same name in a service's own env file or environment.
@@ -104,14 +108,14 @@ of `DECISIONS.md`.
   `@Serves`; `Boundary` reads its path, query and body by its schemas first** (BACKLOG C86 is the
   recipe for adding one); the CORS list is `ADMS_CORS_ORIGINS`; every answer carries the API's own
   headers; the API's database client states the request's id on every write; `pnpm openapi`
-  writes `apps/api/openapi.json`. `spec/acceptance/10-api-and-sync.md` (56 scenarios, 15 passing)
+  writes `apps/api/openapi.json`. `spec/acceptance/10-api-and-sync.md` (56 scenarios, 17 passing)
   and `spec/THREAT-MODEL.md` are both **approved by the user** (their marks, ADR-386, 393).
   Its 14 REQs are in `REQUIREMENTS.md`, one ticked (REQ-208).
 - **Phase 1 is done:** all seven exit criteria met (ADR-371, 372); 693 of the 708 scenarios with a
   Phase 1 part proven whole, 15 in part. 48 scenario rows name Phase 2 (37 as "API (Phase 2)").
-- **The chain, seen whole on 2026-10-07:** 88 test
-  files, 1,865 tests; lint clean; 420 licences allowed; fifteen stories; `pnpm security` 7 passed,
-  0 failed; eighty migrations. The expected output of each command is `adms-verify`'s.
+- **The chain, seen whole on 2026-10-07:** 89 test
+  files, 1,885 tests; lint clean; 420 licences allowed; fifteen stories; `pnpm security` 7 passed,
+  0 failed; eighty-two migrations. The expected output of each command is `adms-verify`'s.
 - **What exists:** `packages/db` (schema, guards, tests), `packages/domain` (every rule; one
   dependency, no database), `packages/contracts`, `packages/scenarios` (the harness and stories,
   the golden mission among them), `apps/worker/src/reconciliation/` (the run: group, check,
@@ -267,19 +271,21 @@ questions.
 **Phase 2 is open (ADR-376). Its plan is `BACKLOG.md`, "Active — Phase 2" (ADR-377): read its
 brief first. One task per response.**
 
-**Task 2.2.1, sign-in's records** *(schema; BACKLOG has the task in full)*. Read first:
-`spec/DATA-MODEL.md` §2.2 (the columns it leaves to this phase); `spec/THREAT-MODEL.md` T-14,
-T-26, T-43 and its §4 rows on sign-in; `spec/acceptance/10-api-and-sync.md`'s **AC-10-10, 11**
-(this task's) and AC-10-19 with **point 8** (where a security event is kept, what it holds and
-who reads it: decided here, register C84); BACKLOG C21 (sign-in refuses role `SYSTEM`; each
-secret column kept out of the audit log), C85's 2.2.1 line (AC-10-32's second half), C87;
-ARCHITECTURE §5.3, §5.6 (a guard migration is written only into Prisma's empty stub, tried on a
-throw-away copy with the tests) and §6, §7.0; `adms-verify`, "The schema". **Done when:** the
-columns, the session's record (a refresh token only as a hash, revocable) and the security
-event's record exist, each table guarded (`guard_gaps()` empty), no viewer reads any of it, a
-secret column's value never reaches `audit_record`, `DATA-MODEL.md` says what was decided,
-AC-10-10 and 11 pass at the database, and the chain is green with the new counts. **Next after
-it: 2.2.2, passwords.**
+**Task 2.2.2, passwords** *(BACKLOG has the task in full)*. Read first: `spec/THREAT-MODEL.md`
+T-16, T-43 and its §4 rows on passwords; `spec/acceptance/10-api-and-sync.md`'s **AC-10-20, 21,
+23, 24, 25** (this task's) with **points 3 and 4** (the revision of NIST SP 800-63B, the shortest
+password, Argon2id's parameters, and a monitor's password read as exempt: ADR-105 is the
+user's); BACKLOG C35 (breached-password screening, the master passcode too, no outside service),
+C88's 2.2.2 line (`user_credential.passwordHash` takes only an Argon2id PHC string; it is read
+by the API alone), C85 and C86 (an endpoint's recipe, `pnpm local:up` again after a change to
+`apps/api`); ARCHITECTURE §6 (Passwords) and §7.0; how the installer hashes the master passcode
+(`tools/setup`, ADR-281); `spec/DATA-MODEL.md` §2.2, `UserCredential`. **A dependency needs its
+ADR first** (prefer what Node 24 gives). **Done when:** a password a person sets is kept only as
+an Argon2id hash with parameters an ADR states, the rules live in `packages/domain`, a known
+breached password is refused for a person and for the master passcode with no outside service,
+an admin sets and resets a password, reset by email works where the firm has mail and is never
+required, AC-10-20, 21, 23, 24 and 25 pass, and the chain is green with the new counts. **Next
+after it: 2.2.3, sessions.**
 
 **Every command starts with** `eval "$(fnm env --shell zsh)"`. The checks are `adms-verify`'s; the
 database tests, the map servers' tests, the stories and `pnpm security` need `pnpm local:up` first,

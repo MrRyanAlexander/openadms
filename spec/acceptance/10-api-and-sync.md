@@ -67,8 +67,8 @@ states one that nothing records: they are listed under "Left to the task that bu
 | ID | Scenario | From | Answers | Proven at | Passing |
 |---|---|---|---|---|---|
 | AC-10-09 | **When** Dana Reyes signs in to the back office, **then** her access token and her refresh token arrive only as cookies marked `HttpOnly`, `Secure` and `SameSite`; no token is in the body of the answer, so no page script can read or keep one | ARCHITECTURE §6 (Back-office sessions), §17 · REQ-202 | ASVS V3, V7 · API2 · 800-63B sessions | API (2.2.3) |  |
-| AC-10-10 | **Given** Dana is signed in, **then** the server holds her refresh token only as a hash: nothing in the database is the token itself | ARCHITECTURE §6 (Back-office sessions) · REQ-202 | ASVS V7, V11 | database (2.2.1) |  |
-| AC-10-11 | **When** a person's password hash or authenticator secret is written or changed, **then** the audit log says that it changed and never holds the value, before or after; no read-only viewer reads either | ADR-281 (7); BACKLOG C21 | ASVS V14, V16 | database (2.2.1) |  |
+| AC-10-10 | **Given** Dana is signed in, **then** the server holds her refresh token only as a hash: nothing in the database is the token itself | ARCHITECTURE §6 (Back-office sessions) · REQ-202 | ASVS V7, V11 | database (2.2.1) | ✅ at the database, 2.2.1 (ADR-398): `packages/db/test/sign-in.test.ts` (the token itself is refused; nothing kept or audited is a token). That a real sign-in writes it so: 2.2.3 |
+| AC-10-11 | **When** a person's password hash or authenticator secret is written or changed, **then** the audit log says that it changed and never holds the value, before or after; no read-only viewer reads either | ADR-281 (7); BACKLOG C21 | ASVS V14, V16 | database (2.2.1) | ✅ 2.2.1 (ADR-397): `packages/db/test/sign-in.test.ts` |
 | AC-10-12 | **Given** Dana's access token has run past its lifetime, **when** she sends a request with it and nothing else, **then** it is refused; her page gets a new one with her refresh token and carries on | ARCHITECTURE §6 (short-lived access token) · REQ-202 | ASVS V7 · API2 | API (2.2.3) |  |
 | AC-10-13 | **When** Dana's refresh token is used, **then** she is given a new one and the old one is no longer good: a refresh token is used once | ARCHITECTURE §6 (a rotating refresh token) · REQ-202 | ASVS V7 · 800-63B sessions | API (2.2.3) |  |
 | AC-10-14 | **Given** a refresh token of Dana's was copied, **when** the same token is presented a second time, by her or by whoever copied it, **then** every token that came from that sign-in stops working and she signs in again | ARCHITECTURE §6 (rotating, revocable); BACKLOG task 2.2.3 | ASVS V7 · API2 | API (2.2.3) |  |
@@ -81,7 +81,7 @@ states one that nothing records: they are listed under "Left to the task that bu
 | ID | Scenario | From | Answers | Proven at | Passing |
 |---|---|---|---|---|---|
 | AC-10-18 | **Given** somebody keeps trying Luis Ortega's login with wrong passwords, **then** tries are made to wait longer and longer, and after the policy's count the login is locked: while it is locked the right password is refused too | ARCHITECTURE §6 (Abuse: sign-in back-off and lockout) · REQ-204 | ASVS V6 · API2 · 800-63B rate limiting | API (2.2.3) |  |
-| AC-10-19 | **Given** a sign-in that worked, one that failed and a lockout, **then** each is a security event with who, when and from which request; a billing reviewer reading the audit log by domain doesn't read them among the billing entries | ARCHITECTURE §5.3 (domains), §6 (Abuse) · REQ-202b | ASVS V16 | API (2.2.3); where a security event is kept: database (2.2.1) |  |
+| AC-10-19 | **Given** a sign-in that worked, one that failed and a lockout, **then** each is a security event with who, when and from which request; a billing reviewer reading the audit log by domain doesn't read them among the billing entries | ARCHITECTURE §5.3 (domains), §6 (Abuse) · REQ-202b | ASVS V16 | API (2.2.3); where a security event is kept: database (2.2.1) | in part, 2.2.1 (ADR-399): where one is kept, what it holds, that it reaches the audit log's security domain with its actor and request (`packages/db/test/sign-in.test.ts`); a real sign-in, failure and lockout writing one: 2.2.3 |
 | AC-10-20 | **When** a person's password is set, **then** the server keeps an Argon2id hash of it and nothing else | ARCHITECTURE §6 (Passwords) · REQ-202 | ASVS V6, V11 · 800-63B passwords | database and domain (2.2.2) |  |
 | AC-10-21 | **When** a back-office or outside user sets the password `marsh heron delphine ferry`, **then** it is taken: long is enough, and it is never refused for lacking a capital, a digit or a symbol | ARCHITECTURE §6 (length over complexity) | ASVS V6 · 800-63B passwords | domain (2.2.2) |  |
 | AC-10-22 | **Given** a phone being enrolled, **when** the master passcode is entered wrong again and again, **then** the server makes each try wait longer; and every use of the master passcode, right or wrong, is a security event | ARCHITECTURE §6 (Abuse), §7.5; BACKLOG task 2.5.1 · REQ-202b, 209 | ASVS V6, V16 · API2 | API (2.5.1, 2.5.4) |  |
@@ -230,7 +230,7 @@ passing in its own file, from a run that was seen, by the task named.
 | | Scenarios |
 |---|---|
 | Written in this file (A…L) | **56** |
-| Passing | **14** (AC-10-01, 02, 03, 33, 55; task 2.1.2, ADR-385; AC-10-04…08, 34, 36, 39, 43; task 2.1.3, ADR-387…392), and AC-10-32 in part |
+| Passing | **17** (AC-10-01, 02, 03, 33, 55; task 2.1.2, ADR-385; AC-10-04…08, 34, 36, 39, 43; task 2.1.3, ADR-387…392; AC-10-42; task 2.1.4, ADR-394; AC-10-10, 11 at the database; task 2.2.1, ADR-397, 398), and AC-10-19 and 32 in part |
 | Earlier scenarios with a Phase 2 part (M) | 48, and AC-06-36 |
 | **Phase 2 proves, at the API** | **104**, and AC-06-36's link |
 
@@ -258,7 +258,7 @@ evidence or a monitor's work (ADR-230).
 | 5 | **How CSRF protection works** (what the back office's page sends with a write), and the cookies' `SameSite` value | 2.2.3 |
 | 6 | **What a failed sign-in is told**, and whether it says the same for a name nobody has and a wrong password (the checklist asks that it does) | 2.2.3 |
 | 7 | **What ends a session besides signing out**: a person archived, a password reset, two-step cleared, a role or a grant changed | 2.2.3, 2.2.5 |
-| 8 | **Where a security event is kept**, what it holds, and who reads it | 2.2.1 |
+| 8 | **Where a security event is kept**, what it holds, and who reads it. **✅ ADR-399, an agent default:** its own record, `SecurityEvent`, added and never edited, copied by the database into the audit log's security domain; it holds a kind, who it is about, the phone, the request and when, never a typed name or an address; the API alone reads the table. **Still open:** who is stated as the actor of an event when nobody is signed in (a wrong try, the master passcode) | ~~2.2.1~~; the actor: 2.2.3, 2.5.1 |
 | 9 | **A record that disagrees with who sent it**: a field event naming another monitor, another phone or another project than the phone and monitor that synced it; and a record a phone sends that fails its schema. Sync refuses nothing over eligibility (ADR-052), and "saved" is said only for what was stored: the answer must hold both (`05-sync.md` point 11; BACKLOG C69) | 2.6.1, 2.6.2 |
 | 10 | **A challenge's lifetime**, the key's kind, and the device session token's lifetime | 2.5.1, 2.5.2 |
 | 11 | **Who the record names for an act under the master passcode** (BACKLOG C45) | 2.5.1 |

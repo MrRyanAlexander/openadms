@@ -76,6 +76,11 @@ const domains: Record<string, string> = {
   incident: 'RECORDS',
   drop_off_log: 'RECORDS',
   master_passcode: 'SECURITY',
+  // Sign-in's records (ADR-397…399): what sign-in keeps of a person, a session and a security
+  // event are the security reviewer's to read.
+  user_credential: 'SECURITY',
+  session: 'SECURITY',
+  security_event: 'SECURITY',
   field_event: 'RECORDS',
   // An itemised unit rate event's lines and the tickets a load carries: the field event's own
   // domain (ADR-325).
@@ -110,7 +115,12 @@ const domains: Record<string, string> = {
 };
 
 // The columns an audit trigger names so the capture leaves them out of the audit log (ADR-281).
-const keptOut: Record<string, string[]> = { master_passcode: ['hash'] };
+const keptOut: Record<string, string[]> = {
+  master_passcode: ['hash'],
+  // A password's hash, an authenticator's secret and a refresh token's hash (ADR-397, 398).
+  user_credential: ['password_hash', 'two_step_secret'],
+  session: ['refresh_token_hash'],
+};
 
 const on = (table: string): string => (table === 'user' ? 'public."user"' : `public.${table}`);
 const capture = (table: string, domain: string): string =>
@@ -151,6 +161,12 @@ const triggers = [
   `CREATE TRIGGER ticket_void_refuse_edit_once_lifted BEFORE UPDATE ON public.ticket_void FOR EACH ROW WHEN ((old.lifted_at IS NOT NULL)) EXECUTE FUNCTION refuse_edit()`,
   // An unvoid, once written, is history (ADR-366).
   `CREATE TRIGGER ticket_unvoid_refuse_edit BEFORE UPDATE ON public.ticket_unvoid FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
+  // Whose sign-in record or session it is never changes; a session once revoked is history; a
+  // security event is never edited (ADR-397…399).
+  `CREATE TRIGGER user_credential_refuse_person_edit BEFORE UPDATE OF id, user_id, created_at ON public.user_credential FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
+  `CREATE TRIGGER session_refuse_person_edit BEFORE UPDATE OF id, user_id, created_at ON public.session FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
+  `CREATE TRIGGER session_refuse_edit_once_revoked BEFORE UPDATE ON public.session FOR EACH ROW WHEN ((old.revoked_at IS NOT NULL)) EXECUTE FUNCTION refuse_edit()`,
+  `CREATE TRIGGER security_event_refuse_edit BEFORE UPDATE ON public.security_event FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
   // A container has its primary box, asked when the piece of work that wrote it ends (ADR-321).
   `CREATE CONSTRAINT TRIGGER certification_has_primary_box AFTER INSERT OR UPDATE OF kind ON public.certification DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION certification_has_primary_box()`,
   `CREATE CONSTRAINT TRIGGER certification_box_keeps_primary AFTER UPDATE OF certification_id, "position" ON public.certification_box DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION certification_has_primary_box()`,
@@ -990,6 +1006,37 @@ describe('the guards in the catalog', () => {
         name: 'ticket_unvoid_ticket_check',
         definition:
           "CHECK ((((btrim(ticket_number) <> ''::text) AND ((note IS NULL) OR (btrim(note) <> ''::text)) AND (unvoided_by_id <> '00000000-0000-7000-8000-000000000001'::uuid)) IS TRUE))",
+      },
+      // Sign-in's records (ADR-397…399): only ever a hash, never the system actor's, a session
+      // that ends after it began.
+      {
+        name: 'user_credential_password_hash_check',
+        definition: "CHECK ((password_hash ~~ '$argon2id$%'::text))",
+      },
+      {
+        name: 'user_credential_two_step_secret_check',
+        definition: "CHECK ((btrim(two_step_secret) <> ''::text))",
+      },
+      {
+        name: 'user_credential_system_actor_check',
+        definition: "CHECK ((user_id <> '00000000-0000-7000-8000-000000000001'::uuid))",
+      },
+      {
+        name: 'session_refresh_token_hash_check',
+        definition: "CHECK ((refresh_token_hash ~ '^[0-9a-f]{64}$'::text))",
+      },
+      {
+        name: 'session_times_check',
+        definition:
+          'CHECK ((((expires_at > created_at) AND ((revoked_at IS NULL) OR (revoked_at >= created_at))) IS TRUE))',
+      },
+      {
+        name: 'session_system_actor_check',
+        definition: "CHECK ((user_id <> '00000000-0000-7000-8000-000000000001'::uuid))",
+      },
+      {
+        name: 'security_event_request_id_check',
+        definition: "CHECK ((btrim(request_id) <> ''::text))",
       },
       ...listChecks,
     ];

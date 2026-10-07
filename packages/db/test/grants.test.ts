@@ -85,6 +85,11 @@ const tableGrants: Record<string, Record<string, string>> = {
   ),
   // A version is added, never edited, and the worker has no business reading it (ADR-281).
   master_passcode: { adms_api: 'INSERT SELECT' },
+  // Sign-in's records (ADR-397…399): the API's alone. What sign-in keeps of a person and a
+  // session are changed in place; a security event is added, never edited.
+  user_credential: { adms_api: 'INSERT SELECT UPDATE' },
+  session: { adms_api: 'INSERT SELECT UPDATE' },
+  security_event: { adms_api: 'INSERT SELECT' },
   // The API writes people, so the Monitor ID's default runs as it (ADR-281).
   monitor_number_seq: { adms_api: 'USAGE' },
   field_event: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },

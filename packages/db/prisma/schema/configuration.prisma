@@ -1033,6 +1033,10 @@ model User {
   employer                    Contractor?           @relation("Employer", fields: [employerId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   permissions                 UserPermission[]
   viewerProjects              ViewerProject[]
+  // What sign-in keeps of them, their sessions, and the security events about them.
+  credential                  UserCredential?
+  sessions                    Session[]
+  securityEvents              SecurityEvent[]
   assignments                 Assignment[]          @relation("AssignmentPerson")
   assignmentsMade             Assignment[]          @relation("AssignmentMadeBy")
   formDefinitions             FormDefinition[]      @relation("FormDefinitionCreatedBy")
@@ -1121,6 +1125,82 @@ model ViewerProject {
   @@map("user_viewer_project")
 }
 
+// What sign-in keeps of one person (ARCHITECTURE §6; ADR-397): one row a person, apart from
+// "user", so nothing that reads a person reads a secret with them. Only the API reads it; the
+// worker and the read-only login can't. The password hash and the authenticator's secret are
+// kept out of the audit log, which says that one changed and never what to (the guard migration;
+// BACKLOG C21). The system actor never has one.
+model UserCredential {
+  id            String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId        String    @unique @map("user_id") @db.Uuid
+  // Argon2id, as a PHC string; none until a password is set.
+  passwordHash  String?   @map("password_hash")
+  // The authenticator app's secret for two-step sign-in (ADR-170); none until it is set up.
+  twoStepSecret String?   @map("two_step_secret")
+  // Sign-in refuses this person until then (lockout).
+  lockedUntil   DateTime? @map("locked_until") @db.Timestamptz(3)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@map("user_credential")
+}
+
+// One sign-in to the back office or the portal, alive until it runs out or is revoked
+// (ARCHITECTURE §6; ADR-398). The refresh token is kept only as its SHA-256, the one in force:
+// rotating it writes the new hash over the old on this row. Revoked, the row is history and never
+// changes again. Only the API reads it; the hash is kept out of the audit log.
+model Session {
+  id               String @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId           String @map("user_id") @db.Uuid
+  refreshTokenHash String @unique @map("refresh_token_hash")
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([userId])
+  @@map("session")
+}
+
+// What a security event says happened (ARCHITECTURE §6, Abuse; REQ-202b): one closed set, fixed
+// in code.
+enum SecurityEventKind {
+  SIGN_IN
+  SIGN_IN_FAILED
+  LOCKOUT
+  DEVICE_SETUP
+  DEVICE_SWITCH
+  MASTER_PASSCODE_USE
+
+  @@map("security_event_kind")
+}
+
+// Something sign-in or a phone's setup saw that changes no other record: a sign-in, a wrong try,
+// a lockout, a use of the master passcode (ARCHITECTURE §6; ADR-399). Written once and never
+// edited; the database copies it into the audit log's security domain like any insert. Who it is
+// about is the person the try named, when there is one; the audit record's actor says who wrote
+// it. Only the API reads it.
+model SecurityEvent {
+  id        String            @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  kind      SecurityEventKind
+  userId    String?           @map("user_id") @db.Uuid
+  deviceId  String?           @map("device_id") @db.Uuid
+  requestId String?           @map("request_id")
+
+  occurredAt DateTime @map("occurred_at") @db.Timestamptz(3)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  device Device? @relation(fields: [deviceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([userId, occurredAt])
+  @@map("security_event")
+}
+
 // The firm's one master passcode (ADR-106), kept only as its slow hash (ARCHITECTURE §7.5). A
 // change is a new version, never an edit: the highest version is the current one. The hash is
 // kept out of the audit log, and only the API may read it (the guard migrations, ADR-281).
@@ -1180,6 +1260,7 @@ model Device {
   incidents          Incident[]
   dropOffLogs        DropOffLog[]
   quarantinedRecords QuarantinedRecord[]
+  securityEvents     SecurityEvent[]
   auditRecords       AuditRecord[]
 
   @@map("device")

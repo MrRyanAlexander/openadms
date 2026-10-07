@@ -372,7 +372,7 @@ example world doesn't hold are `test/support/priced-tickets.ts`'s.
   `AssignmentPayItem` rows, each a `PayItem` of its own project (ADR-286) and a unit rate one: the
   row repeats the pay item's kind of work, held by a three-column foreign key (C42, ADR-309); the forms it names are
   `formDocumentTypes`, held to ROE, survey, incident and drop-off log (ADR-308). `MasterPasscode`: a version and its slow hash, never edited, read only by
-  the API. A field event's `assignmentId` and `setupVersion` are captured columns, required on a phone's record and empty on one created in the back office (ADR-324).
+  the API. **Sign-in's records (ADR-397…399), each read by the API alone:** `UserCredential` (a person's password hash, authenticator secret and locked-until, apart from `User`), `Session` (the SHA-256 of the refresh token in force, final once revoked) and `SecurityEvent` (added, never edited; the database copies it into the audit log's security domain); a secret column is named on its audit trigger and never reaches the audit log. A field event's `assignmentId` and `setupVersion` are captured columns, required on a phone's record and empty on one created in the back office (ADR-324).
 
 ## 3.2 Fixed in code, or the firm's to extend
 
