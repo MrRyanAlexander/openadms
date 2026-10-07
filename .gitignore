@@ -57,18 +57,6 @@ infra/local/.generated/
 # The installer's record of the installation (no secrets; its env files are ignored above).
 tools/setup/.state/
 
-# ── Historical tree (database/, read-only, ADR-093) ──
-database/node_modules/
-database/dist/
-database/prisma/generated/
-database/python/.venv/
-database/python/**/__pycache__/
-database/python/.pytest_cache/
-database/python/**/*.pyc
-database/python/**/*.pyo
-database/python/htmlcov/
-database/python/.coverage
-
 # ── Reference material, never committed ──────
 development/
 old_openadms(do not copy)/

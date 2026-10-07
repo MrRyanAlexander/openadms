@@ -2,7 +2,7 @@
 name: adms-ledger-audit
 description: Open ADMS money and the permanent record, in today's rules. Covers pay items (the only place a rate lives, one rate per prime), how a ticket is priced (the rules of its form that name its prime's contract, Add transaction in # order, Remove, Void ticket), quantity and rate, the Transaction ledger (the current truth, regenerated per ticket, each removed row copied to the audit log first), rate and rule changes, the append-only AuditRecord written by the database, QC status, the invoice lock and invoice batches, and the client package. Use when touching pay items, rates, transactions, pricing, the audit trail, QC, invoicing or anything that must leave an immutable trail. The rule builder's screens and every criterion are spec/RULES.md; how the worker runs rules and the pricing flags are adms-validation §5.3.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-249; a pay item names no form, ADR-292; a unique code and a description, a duplicate rule refused, ADR-301; cent rounding, a crew day's decimals and hours in no step, ADR-355) -->
+<!-- skill-status: current (QC, the lock, batches and the unlock as services, ADR-367; ADR-138, rewritten 2026-09-29, ADR-249; a pay item names no form, ADR-292; a unique code and a description, a duplicate rule refused, ADR-301; cent rounding, a crew day's decimals and hours in no step, ADR-355) -->
 
 > **This page states today's rules** (last changed by ADR-301, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
@@ -107,7 +107,7 @@ it (four decimals) × the rate (**User, 2026-10-05**, picking "Half up"; ADR-355
 | `EA` | the count: white goods, **every item removed** (or the items a rule's *Quantity from* chooses) | 126, 128, 131 |
 | `LB` | the pounds the monitor entered as the count (HHW) | 054 |
 | `HR`, `CREW_DAY` | **the highest item's hours, once**, through the pay item's conversion (per hour, ÷ the day length, or steps). By exact division the quantity keeps **four decimals** (10.25 h ÷ 12 = 0.8542); hours that fall **in no step bill nothing on that line, flagged** (the user, 2026-10-05, ADR-355) | 084, 087, 126, 355 |
-| `TBN` | nothing: the ticket completes and writes no money until the rate is agreed; then its tickets reprocess | 068 |
+| `TBN` | nothing: no line is written and the ticket is flagged "rate to be negotiated. Not billed yet.", so it is `MANUAL_REVIEW` like any flagged ticket until a reviewer accepts the flag (then `COMPLETED`, still billing nothing on that line); its other lines bill. When the rate is agreed and entered, its tickets reprocess (the user, 2026-10-06, ADR-373; KD-72 closed) | 068, 373 |
 
 **Who bills** (ADR-060): `COMPLETED` **and `MANUAL_REVIEW`** tickets bill wherever an amount can be
 computed; review means "resolve this", not "hold the money". **User, 2026-09-24 (Q-13):** "Things
@@ -144,6 +144,15 @@ table: the audit log is the only history.
 - **QC marks, locks, batch membership and flag acceptances are people's records**, each its own
   record written by the API and keyed to what it marks, so the API never writes a derived row and a
   reprocess never loses one (agent default, ADR-245; `adms-data-model` §3.1b).
+- **Built (ADR-367; agent defaults, the user's to overturn):** `apps/api`'s `QcMarks` and
+  `InvoiceLocks`. A ticket locks only when it is whole, `COMPLETED` and QC Approved; a void ticket
+  isn't locked (it bills nothing); a `COMPLETED` ticket that bills nothing is. **While a lock
+  stands, the review services refuse any change to the ticket's own records** (a correction, a
+  renumber, a void, an acceptance, its QC mark): "Ticket 101001 is locked as invoiced: unlock it
+  first. Nothing was changed." A record several tickets share (a certification, an ROE, a scale
+  receipt) is still corrected, and each locked ticket on it waits for its unlock. The unlock is a
+  grant of its own, kept on the lock's row with who, when and a note, and answers the run that
+  works the ticket again. Closing a project marks it closed and refuses nothing.
 - **The client package** is the deliverable: the project's final tickets with photos and receipts,
   its transactions and its other records, **assembled by hand** by the back office from the exports
   and zipped. The system doesn't generate it and moves no money (ADR-057, 061, 088).

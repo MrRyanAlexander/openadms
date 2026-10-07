@@ -43,7 +43,7 @@ one line saying what kind of record it is (§1) and what it is for, then one tab
 | 3 | A project and its setup | `Project` · `ProjectKindOfWork` · `Contract` · `Form` · `FormDebrisType` · `FormDefinition` · `PayItem` · `PayItemCrewDayStep` · `PayItemRate` · `Rule` · `RuleCriterion` · `RuleCriterionPick` · `RuleAction` · `RuleActionItem` · `DisposalSite` · `DisposalSiteLabel` · `SiteAreaVersion` · `MapVersion` · `Zone` · `ProjectNumberSeries` · `ControlRange` · `NumberBlock` · `Certification` · `CertificationBox` · `CertificationHelper` · `Roe` · `RoeScopeItem` · `ClockEntry` · `ClockActivityLine` · `ApprovedDay` |
 | 4 | Evidence: what monitors saw | `FieldEvent` · `FieldEventItem` · `CarriedTicket` · `ScaleReceipt` · `Survey` · `Incident` · `DropOffLog` · `Photo` · `Sync` · `SyncedRecord` · `QuarantinedRecord` · `FieldEventEdit` · `SetupManifest` |
 | 5 | Derived: the worker's conclusions | `CompletedLoad` · `CompletedLoadCollection` · `CompletedHaulOut` · `CompletedHaulOutCollection` · `Transaction` · `Flag` · `ReconciliationRun` · `ReconciliationDecision` |
-| 6 | Marks: what people set | `QcMark` · `InvoiceLock` · `InvoiceBatch` · `FlagAcceptance` · `TicketVoid` · `ApprovedDay` |
+| 6 | Marks: what people set | `QcMark` · `InvoiceLock` · `InvoiceBatch` · `FlagAcceptance` · `TicketVoid` · `TicketUnvoid` · `ApprovedDay` |
 | 7 | Audit | `AuditRecord` |
 | 8 | What the database refuses by itself | |
 | 9 | The closed sets | |
@@ -1633,6 +1633,24 @@ stays until a person unvoids the ticket (ADR-360).
 | liftedAt | instant | |
 | liftNote | text | |
 
+#### `TicketUnvoid`
+
+An unvoid's own record (the user, 2026-10-06, ADR-366: "Unvoiding anything should always leave an
+audit record, even if it's the system"). Written for every unvoid, whoever voided the ticket: a
+person's void is also marked lifted on its `TicketVoid` row; a rule's void has no row, so this is
+its only record. Never changed once written; a ticket may have several over its life. The worker
+reads it: a void ticket whose newest unvoid is newer than its last decision is worked again (the
+seventy-ninth and eightieth migrations).
+
+| Field | Type | Notes |
+|---|---|---|
+| **projectId** | → `Project` | |
+| **workflow** | enum `Workflow` | |
+| **ticketNumber** | text | |
+| note | text | The reviewer's own words; never blank |
+| **unvoidedById** | → `User` | A person, never the system actor |
+| **unvoidedAt** | instant | |
+
 #### `ApprovedDay`
 
 In §3, with the time clock.
@@ -1731,7 +1749,7 @@ A new value in any of them is a code change with an ADR (`spec/LISTS.md` Group 2
 
 | Enum | Values | Used by |
 |---|---|---|
-| `Workflow` ✅ | `LOAD` · `HAUL_OUT` · `UNIT_RATE` | `FieldEvent`, `Project.workflows`, `Flag`, `TicketVoid` |
+| `Workflow` ✅ | `LOAD` · `HAUL_OUT` · `UNIT_RATE` | `FieldEvent`, `Project.workflows`, `Flag`, `TicketVoid`, `TicketUnvoid` |
 | `FieldEventKind` ✅ | `COLLECTION` · `DISPOSAL` · `HAUL_OUT_COLLECTION` · `HAUL_OUT_DISPOSAL` · `UNIT_RATE` | `FieldEvent`, `Assignment` |
 | `TicketStatus` ✅ | `PENDING` · `COMPLETED` · `MANUAL_REVIEW` · `VOID` | `FieldEvent`, `ReconciliationDecision` |
 | `UserRole` ✅ | `ADMIN` · `MANAGER_ANALYST` · `MONITOR` · `READ_ONLY_VIEWER` · `SYSTEM` | `User` |

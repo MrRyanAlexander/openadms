@@ -2,7 +2,7 @@
 name: adms-validation
 description: Open ADMS checks, flags, statuses, how rules run, and the quantity math, in today's rules. Covers the checks between a ticket's field events and on each event against the setup (certification, place and time, where debris went, quantity, pay item settings, forms, pricing), what is never flagged, how the worker runs a form's rules (one contract per rule, criteria read only the ticket, Add in # order then Remove then Void ticket, a rule's void wins), why no rule or setting may be silently inert, the four statuses and what sets them, timing contradictions, how a flag reads and how a reviewer accepts one, and every quantity formula (capacity × load call, scale weight and a tandem's split, split shares, circumference to diameter, stump CY, fill CY, carried tickets, white goods, crew hours, mileage rounding). Use when writing a check or a flag, the rule engine, a threshold or project setting, status changes, or any quantity math. Setup and workflows live in adms-ticket-workflows, pricing and the ledger in adms-ledger-audit, duplicates and corrections in adms-exceptions.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-244; the flag catalogue approved, ADR-290; split haul-outs, ADR-295; a split haul-out's pile weights, ADR-297; *Haul-outs leave here* only on a TDSR, ADR-298; a duplicate rule refused, ADR-301; the flags for a record that should not have been possible and what a removed photograph counts for, ADR-345; how the place checks are built, ADR-346; how the quantity, unit rate and ROE checks are built, ADR-347; two more flags, ADR-348; the setup check built, ADR-357) -->
+<!-- skill-status: current (accept flags a grant of its own, and how void, unvoid and accept are built, ADR-365; ADR-138, rewritten 2026-09-29, ADR-244; the flag catalogue approved, ADR-290; split haul-outs, ADR-295; a split haul-out's pile weights, ADR-297; *Haul-outs leave here* only on a TDSR, ADR-298; a duplicate rule refused, ADR-301; the flags for a record that should not have been possible and what a removed photograph counts for, ADR-345; how the place checks are built, ADR-346; how the quantity, unit rate and ROE checks are built, ADR-347; two more flags, ADR-348; the setup check built, ADR-357) -->
 
 > **This page states today's rules** (last changed by ADR-301, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
@@ -289,12 +289,22 @@ dumped that its expired."
 **Each flag keeps its code and the inputs it was raised on**, so "have the facts changed?" can be
 answered (ADR-166).
 
-**Accepting a flag** (ADR-166): a reviewer who may correct may also **accept** a flag that's right
-as it is, with a reason picked from the firm's list (ADR-173), audited. An accepted flag stays in the
+**Accepting a flag** (ADR-166): a reviewer granted *accept flags* may **accept** a flag that's right
+as it is, with a reason picked from the firm's list (ADR-173), audited. **It is a grant of its own:
+*correct* doesn't carry it** (ADR-365). **User, 2026-10-06**, asked whether Luis, granted *correct*
+but not *accept flags*, may accept a flag: "No, two separate grants". An accepted flag stays in the
 ticket's history and **isn't raised again on reprocess unless the facts it was about change** (the GPS
 is corrected, the site's shape changes). When every flag is fixed or accepted, the worker marks the
 ticket `COMPLETED`. There is no "accepted void": a rule's void wins (ADR-167). Example (golden
 mission, 101003): a 96% call, accepted "Heaped; photos confirm" → `COMPLETED`, billed throughout.
+
+**How it is built** (agent defaults, ADR-365; `apps/api`'s `Acceptances` and `Voids`, the worker's
+run): an acceptance belongs to one flag and is made once; a flag is on a ticket by its number, so a
+renumbered field event's flag is a new one, accepted again; a flag on a `PENDING` ticket may be
+accepted; an acceptance isn't taken back (correct the record instead); a flag the worker cleared
+can't be accepted. **A void ticket has no open flag**: its flags are cleared when a person or a
+rule voids it, kept in its history, and raised fresh if it is unvoided. A voided ticket's field
+events are read by no other ticket's checks from the moment the void is made.
 
 ## 5.5 Quantity math
 
@@ -369,6 +379,9 @@ weight) is stored apart from what was observed, and the parts **sum exactly** to
 ## History
 
 What this page used to say, and why it changed. Never build from the left-hand side.
+
+- "A reviewer who may correct may also accept" a flag (ADR-166) → *accept flags* is a grant of its
+  own; *correct* doesn't carry it (the user, 2026-10-06, ADR-365; KD-74).
 
 - Titled "as implemented": validators as Python pure functions in `validators.py`, `evaluate_rules`
   with JSON condition keys and error codes (`RULE_DEBRIS_TYPE`, `RULE_DISTANCE_EXCEEDED`…), unit

@@ -5,7 +5,9 @@
 > called**, not what they do: what a thing *is* stays with the newest ADR, `agent_store/SUMMARY.md`
 > and the skills. It replaces `development/Open_ADMS_Initial_Conventions.md` as the place agents
 > take names from; that file stays in `development/` as read-only background, and §8 says what we
-> took from it and what it gets wrong.
+> took from it and what it gets wrong. **The user, 2026-10-06: "not approved yet; but mostly seems
+> good"**; the "In code" column of §2 was filled and corrected against the schema that day, and
+> the formats gathered under §3 (ADR-375). KD-63 stays open until the user approves §8.
 
 ← [Index](INDEX.md)
 
@@ -45,26 +47,26 @@ like Services or anything that is not clearly idetified by keyword."
 | `service_code`, the string on a Service | the pay item's **code** | `PayItem.code` | One name for the record, one for its field |
 | a load's **half** / **halves**, a ticket half, a lone half | a **field event** (a collection event, a disposal event…); an **unpartnered event** | `FieldEvent` | What each monitor records is one event under the ticket number (ADR-236) |
 | **Classification** (legacy "Service Classification", ADR-207) | **payable type** | `PayableType` | ADR-173's own word. Seeded from USACE's umbrella debris types (§4) |
-| **debris class** (legacy "Debris Classes", ADR-211/214) | **debris type** | `DebrisType` | FEMA/USACE keyword; ADR-233 says they are one thing |
-| Is Reduced / Reduction Method / Is Disabled (on a debris class) | **Reduced** / **reduction method** / **Hidden on phones** | `reduced`, `reductionMethod`, `hiddenOnPhones` | Reduction method is a keyword; the others are plain |
+| **debris class** (legacy "Debris Classes", ADR-211/214) | **debris type** | `DebrisType` (the firm's list); on a form, `FormDebrisType` | FEMA/USACE keyword; ADR-233 says they are one thing |
+| Is Reduced / Reduction Method / Is Disabled (on a debris class) | **Reduced** / **reduction method** / **Hidden on phones** | `FormDebrisType.reduced`, `.reductionMethodId` (the list `ReductionMethod`), `.hiddenOnPhones` | Reduction method is a keyword; the others are plain |
 | **Special Class** (legacy, ADR-216/218) | **field tag** | `FieldTag` | Plain: an optional mark the collecting or unit rate monitor picks from the project's list |
 | Document Format (legacy) | **form** (already ours) | `Form` | The user's "everything is a form" |
-| Location / **Location Type** (legacy) | **disposal site** / **site type** | `DisposalSite.siteType` | ADR-190's word; USACE site roles |
-| Allow Disposal (site box) | **Takes loads** | key `TAKES_LOADS` | Plain |
-| Allow Collection (site box) | **Haul-outs leave here** | key `HAUL_OUTS_LEAVE` | Plain |
-| Disposal Fee (site box), the fee Service | **Charges a tipping fee**; the site's **tipping fee** pay item | key `TIPPING_FEE` | Industry keyword |
-| Ineligible (site box) | **Ineligible site** | key `INELIGIBLE` | Plain |
-| measure min / max (a Service's band) | **size band** (from, to) | `bandFrom`, `bandTo` | Plain |
+| Location / **Location Type** (legacy) | **disposal site** / **site type** | `DisposalSite`; `SiteType` (the list), `DisposalSite.siteTypeId` | ADR-190's word; USACE site roles |
+| Allow Disposal (site box) | **Takes loads** | `DisposalSite.takesLoads` | Plain |
+| Allow Collection (site box) | **Haul-outs leave here** | `DisposalSite.haulOutsLeaveHere` | Plain |
+| Disposal Fee (site box), the fee Service | **Charges a tipping fee**; the site's **tipping fee** pay item | `DisposalSite.chargesTippingFee`; `DisposalSiteTippingFee` (the fee pay items) | Industry keyword |
+| Ineligible (site box) | **Ineligible site** | `DisposalSite.ineligibleSite` | Plain |
+| measure min / max (a Service's band) | **size band** (from, to) | `PayItem.bandFrom`, `.bandTo` | Plain |
 | force unit count to 1 | **Count is always 1** | `countIsAlwaysOne` | Plain |
 | require GPS / require measurement | **GPS required** / **Measurement required** | `gpsRequired`, `measurementRequired` | Plain |
 | use decimal accuracy | **Decimals allowed** | `decimalsAllowed` | Plain |
 | use eligibility flag | **Monitor may mark ineligible** | `monitorMayMarkIneligible` | Says what it does |
-| Rule actions *Create Transaction #n* / *Delete Transaction #n* / *Void Ticket* | ***Add transaction #n*** / ***Remove transaction #n*** / ***Void ticket*** | `ADD_TRANSACTION`, `REMOVE_TRANSACTION`, `VOID_TICKET` | Plain; not the legacy buttons |
-| Rule screen *Is Valid* / *Get Statistics* / *Reapply* | ***Check*** / ***Show matches*** / ***Reprocess*** | | Plain |
-| Criterion *Load Location* | ***Collection address*** | | Says which end |
-| Criteria *Debris class*, *Special class* | ***Debris type***, ***Field tag*** | | Follow the renames |
-| Field buttons "Get GPS", "Get address info" | **Capture GPS**, **Look up address** | | Plain |
-| Billing unit keys `TON`, `EACH` | `TN`, `EA` (§4) | | USACE unit abbreviations |
+| Rule actions *Create Transaction #n* / *Delete Transaction #n* / *Void Ticket* | ***Add transaction #n*** / ***Remove transaction #n*** / ***Void ticket*** | `RuleActionKind`: `ADD_TRANSACTION`, `REMOVE_TRANSACTION`, `VOID_TICKET` | Plain; not the legacy buttons |
+| Rule screen *Is Valid* / *Get Statistics* / *Reapply* | ***Check*** / ***Show matches*** / ***Reprocess*** | Screen labels (Phase 4); nothing stored. What *Check* shows is worked out by `RuleValidity` in `packages/domain`, which still says "Is valid" as `spec/RULES.md` §7 does | Plain |
+| Criterion *Load Location* | ***Collection address*** | `RuleCriterionKey.COLLECTION_ADDRESS` | Says which end |
+| Criteria *Debris class*, *Special class* | ***Debris type***, ***Field tag*** | `RuleCriterionKey.DEBRIS_TYPE`, `.FIELD_TAG` | Follow the renames |
+| Field buttons "Get GPS", "Get address info" | **Capture GPS**, **Look up address** | Screen labels (Phase 3, the field app); nothing stored | Plain |
+| Billing unit keys `TON`, `EACH` | `TN`, `EA` (§4) | `BillingUnit.TN`, `.EA` | USACE unit abbreviations |
 
 **Field events** (ADR-236). A ticket is its **number and the events recorded under it**. Say
 **field event**, or its kind: **collection event** (`COL`), **disposal event** (`DIS`), **haul-out
@@ -122,6 +124,29 @@ For code we create (ARCHITECTURE §18). Each is an agent default unless an ADR a
   the offset. Printed receipts, PDFs and reports use `12-Oct-2026 14:35` (24-hour, the USACE work
   statement's format).
 - **"Transaction"** means only the ledger line. Never use it for a ticket or a sync.
+
+**Formats, in one place** (added 2026-10-06, ADR-375; each is decided where the last column says,
+this table only gathers them):
+
+| What | Format | Example | Decided in |
+|---|---|---|---|
+| Internal ID | UUIDv7; made on the phone for anything a phone makes | | `spec/DATA-MODEL.md` §1 |
+| Ticket number | Digits only, bare, from a series per project and workflow, 100,001 to 9,999,999; pre-printed control tickets keep the printer's own numbers | `101001` | DATA-MODEL, Numbering (ADR-046, 056, 062) |
+| Split suffix | A hyphen and a letter, kept beside the number, never in it | `102001-A` | ADR-055, 062 |
+| Type label | Three letters, display only, never stored in a number | `COL` `DIS` `CLT` `HOC` `HOD` `CHO` `URT` | §2 |
+| Cert number (= placard = badge) | Digits, from the project's series or a pre-printed sheet; unique on its project | `730415` | `adms-certifications` |
+| Monitor ID | `M` and six digits, issued by the database | `M004127` | DATA-MODEL §2.2 (ADR-281) |
+| ROE number | From the project's series, written `R-` and four digits when a phone makes it; a paper one as typed | `R-0007` | DATA-MODEL, Numbering (ADR-323) |
+| Pay item code | Capitals, digits and hyphens, at most 24 characters, `TYPE-WORK-UNIT[-DETAIL]`; the firm may type any other | `VEG-HAUL-CY-15` | §5 |
+| Built-in key, closed set | UPPER_SNAKE | `MANUAL_REVIEW` | §3 |
+| Money | A rate `decimal(14,4)`; an amount `decimal(14,2)`, to the cent, half up. Never a float | `$352.63` | DATA-MODEL §1 (ADR-268, 355) |
+| Quantities | A line's quantity `decimal(14,4)`; a volume in CY to hundredths; tons to four places; a crew day to four places; hours to the quarter hour | `52.00 CY` · `17.1000 TN` · `9.75 h` | DATA-MODEL §1, §4, §5 |
+| Measurements | Whole inches for a container; a diameter or circumference to a tenth of an inch | `360 × 96 × 72` · `24.0 in` | DATA-MODEL §1 (ADR-076, 177) |
+| Coordinates | Latitude and longitude, WGS84, eight decimal places. Never a float | `39.09000000, −75.62000000` | DATA-MODEL §1 (ADR-005) |
+| Mileage | Road miles, stored unrounded, compared in tenths | `6.2050` → 6.2 mi | ADR-125, 208 |
+| Time | Stored UTC, shown in the project's time zone; exports ISO 8601 with the offset; print `12-Oct-2026 14:35` | | above (ADR-100) |
+| Table, column / model, field | snake_case / PascalCase, camelCase | `disposal_site_id` / `DisposalSite.id` | above |
+| API path / JSON field | Plural kebab-case / camelCase | `/pay-items` | above |
 
 ---
 
@@ -238,6 +263,8 @@ full. Draw every example from it. Add to it where you need more, and record the 
 | What task 1.6.4's tests add (2026-10-05, ADR-357; made up, agent defaults) | **Ash** on P1's haul-out form (a debris type no rule pays) and **Stumps** on its load form (a load paid from the tickets it carries). **Pay items of the tests' own:** `LNR-RMV-EA-30` (20–30 in, overlapping both Leaners bands) and `STP-RMV-EA-72` (60–72 in, leaving 48.1–59.9 in in no band); `HHW-HAUL-LB` $1.85 a pound; `VEG-HAUL-TN`, `STP-HAUL-CY`, `WG-FRN-EA-STG`, `HNG-SPECIAL-TBN` and `CREW-TIME-DAY-STP` as above. **Rules:** "Summit VEG haul 0–15 mi" on "Summit, Bayline ROW 2026"; "Old C&D rule" (not valid). **Old Quarry Pit** as a site that charges a tipping fee with no fee pay item linked |
 | What the priced story adds (2026-10-06, ADR-359; made up, agent defaults) | **Where the mission's later loads are collected** (it names no address for them): `101003` and `101005`, the dump trailer `730415`, at 14 Heron St's point again (6.2050 road miles from Marsh Road TDSR); `101004` and `101006`, Rivera's self-loader `730416`, at 22 Elm St's point (7.8200 mi); each records its fix and no address. **Summit on P1:** added on Friday 9 October with "Summit, Bayline ROW 2026"; its truck `88120` certified on Saturday (a Hydraulic Dump Trailer, 240 × 90 × 60 in, 28 CY); its load `101044` on Wednesday 14 October from Heron St to Marsh Road TDSR. **`101009`** on the same Wednesday: `730415`, Vegetative, from Heron St to **Old Quarry Pit** (site type Other, *Ineligible site*, no permit), called 60% = 39.0 CY, $292.50, until the rule "Old Quarry Pit: void" voids it; it stays void. **Figures after a change:** `101003` at $7.75 is $483.60, `101005` $352.63 (45.5 × $7.75 = $352.625, a half up). **The ledger before any review:** 17 lines, $4,879.00 on Tuesday night; 19 lines, $5,400.25 after Wednesday's sync |
 | What the reviewed story adds (2026-10-06, ADR-364; made up, agent defaults) | **Wednesday 14 October on P1:** `101008`, collected as Vegetative on the dump trailer `730415` and dumped as C&D under `730416`'s badge, called 80% (52 CY, $390.00 once both are corrected); Scenario A's `101020` (called 50%) and `101021` (the quarantined 11:40 disposal, called 75%: 36 CY, $270.00) on Rivera's `730416`; `101029`, C&D to the Landfill, its tower disposal created in the back office for Tariq Patel with the shipped reason "Device failed", called 50% (24 CY: $198.00 and the $96.00 tipping fee); Scenario B's `101030` and its phantom `101031`, both loaded 14:10–14:40 on `730415`, the phantom wrongly renumbered to `101035`; haul-out `201002`, recorded at Marsh Road TDSR and corrected to the Landfill (99 CY: $504.90 and $396.00). **P2:** `102005` from 416 Cedar Ct, called 50% (24 CY × $9.00 = $216.00), on ROE `R-0008`, entered with a scope of C&D only until Vegetative is added; the split `102001`, whose second collection came in as `-C`. **Corrections:** `101001`'s call 80% → 70% (note: "Tower photo shows 70%"); `101003`'s 96% → 90% ($438.75); `301006`'s Dryer line taken off (5 × $40.00 = $200.00) and put back; certification `730415`'s sideboards 16 in → 12 in, 65 CY → 62 CY (`101003` then 55.8 CY, $418.50; `101001` and `101005` 43.4 CY, $325.50). **The photograph's label:** "Hanger, before the cut" |
+| What the voided story adds (2026-10-06, ADR-365; made up, agent defaults) | **Wednesday 14 October on P1** (the story `p1-voided`, its own database): `101008` as the reviewed story has it, both flags accepted instead of corrected; `101009` to Old Quarry Pit as the priced story has it (39 CY, $292.50), voided by the rule "Old Quarry Pit: void", unvoided three times; Scenario B's `101030` (called 70%: 45.5 CY, $341.25) and its phantom `101031`, voided "Work never happened"; **`101032`**, the dump trailer `730415` to Marsh Road TDSR, called 0%, its flag accepted; `101003`'s call corrected to 97% (63.05 CY, $472.88); a second hanger ticket synced under the voided `301003`, quarantined; Old Quarry Pit's "permit outstanding" accepted. The reasons picked are the shipped list's; the mission's words are the notes |
+| What the left-out story adds (2026-10-06, ADR-369; made up, agent defaults) | **The tandem's boxes:** `730421` primary 240 × 90 × 65 = 1,404,000 cu in ÷ 46,656 = 30.09 → **30 CY**; `730422` primary 240 × 96 × 81 = 1,866,240 ÷ 46,656 = **40 CY**. In the story the tandem dumps at **Cypress Creek Landfill**, which has the scale, on receipt **`CCL-51310`** (62,800 lb gross, 28,600 tare, 34,200 net, 17.10 tons; the scenarios' `BCL-88241` is the same weight), as debris type **"Vegetative to FDS"** on P1's load form, paid by `VEG-HAUL-TN` $21.00. **White Goods** on P1's load form, paid by `WG-HAUL-EA-60` $12.00 from the tickets a load carries (load `101014` carries `301006`: 6 × $12.00 = $72.00). **A truck certified after its load:** `730499`, Coastline's, 240 × 90 × 60 → 28 CY, certified Wednesday 14 October 13:00 (load `101015`, 14.0 CY, $105.00), revoked from 15 October, "Tailgate missing" (load `101018`). **`730420`**, which replaces `730416` on 14 October: the same boxes with Sideboards 264 × 92 × 12 added → **55 CY** (load `101019` on the old badge, 15 October). **Haul-outs:** `201005`, 201004's three piles dumped at Bayline County Landfill (six lines, $850.85); `201006`, piles called 35% then 30%, corrected to 60% (38.5 and 27.5 CY, $600.60). **`HNG-SPECIAL-TBN`**, "Hanger over a road, special handling", agreed at **$85.00** each. **P1's map version 2:** the line between Zone 2 and Zone 3 at 75.56° W. **Marsh Road TDSR's own shape:** version 1 from 75.62° W to 75.61° W (the tower outside), version 2 from 75.63° W; both 39.085° N to 39.095° N. **Load `101023`**, collected 3 February 2027 (32.5 CY, $243.75) |
 | The firm's own list values | Debris type **Marine-Vegetative** (the user's own example, `spec/LISTS.md`), renamed "Marine Vegetative"; incident sub-type **Mailbox struck** under Property damage; reason **Barcode damaged** (a typed ticket number). For tests of a list's own columns: a reason "Monitor's mistake", a kind of work "Fencing", an item "Chainsaw", vehicle types "Bucket truck" (a crew) and "Flatbed" (added 2026-10-02 for the lists' tests, ADR-302) |
 
 **Flag messages built from it** (the style; `spec/FLAGS.md` owns the wording, ADR-290):

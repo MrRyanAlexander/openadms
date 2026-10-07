@@ -271,7 +271,8 @@ Some loads take their quantity **from the unit rate tickets they carry**, a sett
   stump ticket's number painted on each stump, or the white goods ticket's number. A number that
   matches no ticket, or one already on another load, is flagged, never refused (ADR-192).
 - **At the tower:** no load call, no weight. The site's lookup (§4.2) tells the phone to ask for a
-  **count** of the stumps or items on the truck. The tower phone holds no ticket list (ADR-071) and
+  **count of the tickets** the load carries, never of the items on them (the user, 2026-10-06,
+  ADR-370: "the tower counts the tickets"; a white goods ticket of six items counts as one). The tower phone holds no ticket list (ADR-071) and
   needs none: **the worker compares the tower's count with the tickets the collection event lists,
   after sync**, and flags a difference (ADR-192, 243).
 - **The quantity:** a load of stumps is **each stump's CY rounded to a tenth, then added** (4.8 +

@@ -2,7 +2,7 @@
 name: adms-exceptions
 description: Open ADMS failure cases and how people resolve them, in today's rules. Covers the special cases around a ticket's field events, why nothing can be validated in the field, duplicate field events quarantined at sync and resolved by a person, four worked scenarios (a barcode scanned twice at the tower, a phantom collection, sync in any order, a legitimate split load), renumber versus void versus accept, corrections in place by permission (a monitor's own reopen until the shift ends, the back office after), reprocessing completed tickets, back-office-created records, an out-of-service phone, and the other duplicate and orphan shapes. Use when handling duplicates, quarantine, unpartnered field events, preloads, corrections, voids, renumbering or split chains. Flags and their wording live in adms-validation; pricing in adms-ledger-audit.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-248; an ROE's duplicate number quarantined, ADR-338) -->
+<!-- skill-status: current (a change to a locked ticket refused by the review services, ADR-367; how void and unvoid are built, ADR-365; an unvoid's own record, ADR-366; ADR-138, rewritten 2026-09-29, ADR-248; an ROE's duplicate number quarantined, ADR-338) -->
 
 > **This page states today's rules** (last changed by ADR-248, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
@@ -254,7 +254,10 @@ and puts history in a log built for it.
   log**, is written to `AuditRecord` under the monitor, and reprocesses the ticket.
 - **After the shift, only permitted people** in the back office (those granted correct, renumber,
   void, accept). The monitor never edits again.
-- **A ticket locked as invoiced is unlocked first** (audited), then corrected (ADR-057).
+- **A ticket locked as invoiced is unlocked first** (audited), then corrected (ADR-057). **Built
+  (ADR-367):** the review services refuse a correction, a renumber, a void or an acceptance on a
+  locked ticket in plain words and save nothing; a certification, an ROE or a scale receipt that
+  several tickets share is still corrected, and each locked ticket on it waits for its unlock.
 
 **What a correction requires:** a permission for it (KD-25); every edit path audited (invariant 3;
 the database refuses a write with no actor); the real person as the actor, never the system; the
@@ -287,6 +290,15 @@ ticket simply waits with it.
 - **Accept** (ADR-166): the flag stays in the ticket's history and isn't raised again unless the
   facts it was about change; when every flag is fixed or accepted, the ticket is `COMPLETED`. There
   is no "accepted void".
+- **How void and unvoid are built** (agent defaults, ADR-365): a person's void is a record of its
+  own (the reason, a note, who, when), and the worker writes the rest in the run it asks for: the
+  field events `VOID`, the lines removed, the flags cleared; the completed load is left as it is.
+  **An unvoid always leaves a record of its own** (`TicketUnvoid`: a note, who, when), audited under
+  the person, whoever voided the ticket; a person's void is also marked lifted on its own row. **User,
+  2026-10-06 (ADR-366):** "Unvoiding anything should always leave an audit record, even if it's the
+  system". The worker reads that record and works the ticket again; its decision says so. A field event of a void ticket is corrected like
+  any other, and that alone brings nothing back. *Accept flags* is a grant of its own (the user,
+  ADR-365).
 - **A ticket in review keeps billing** until resolved, where an amount can be computed (ADR-060).
 - **Nothing technically stops a wrong choice** (renumbering a phantom): the audit trail is the
   backstop (ADR-051).

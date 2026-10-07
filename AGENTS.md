@@ -41,8 +41,8 @@ The system of record for a debris mission, from declaration to audit:
 | Explain, demo or test the domain | **`spec/golden/MISSION.md`**: one mission, every kind of record, each one's life. Never invent coverage |
 | Name anything, or write an example, a test fixture or a seed | **`spec/CONVENTIONS.md`**: today's words, code names, the pay item code convention, the example world, the retired examples |
 
-**Security first, at every layer.** `database/` is historical (read-only, never ported from); the
-platform is rebuilt, TypeScript end to end with Prisma (ADR-093/094). `spec/VISION.md` and the
+**Security first, at every layer.** The platform is rebuilt, TypeScript end to end with Prisma
+(ADR-093/094); the old code is gone and is never a source. `spec/VISION.md` and the
 other spec pages are approved (ADR-269). Phases are the build order; the spec is the target.
 
 ## Load the right skill before you work
@@ -105,7 +105,6 @@ the option that keeps the firm's choice open, record an ADR marked "agent defaul
 
 | Path | Access |
 |---|---|
-| `database/` | ❌ **historical, read-only** (ADR-093) — never edit, extend or port from it |
 | `agent_store/` | ✅ all files |
 | `.claude/skills/` | ⚠️ domain content came from the user — record their decisions (marked with the ADR), never "correct" it; log a KD instead |
 | `spec/` | ⚠️ agent drafts, user approves; approved content is treated like a skill (ADR-043) |
@@ -114,7 +113,7 @@ the option that keeps the firm's choice open, record an ADR marked "agent defaul
 | `apps/`, `packages/`, `infra/`, `tools/` (ARCHITECTURE §18) | ✅ open for the scaffold (ADR-143), built in `BACKLOG.md` order; every dependency pinned by an ADR, lockfiles committed |
 | Root monorepo files: `package.json`, `pnpm-workspace.yaml`, `tsconfig.json` + `tsconfig.base.json`, `eslint.config.js`, `vitest.config.js`, `.nvmrc`, `.editorconfig`, `LICENSE`, `.gitignore` | ✅ for the scaffold (ADR-231, 255, 259) |
 | `pnpm-lock.yaml`; `README.md`; the root `docker-compose.yml` | ❌ by hand: pnpm writes the lockfile; the README is the user's; a root compose file was the historical stack, retired by the user (KD-59, closed): never recreate one, the local stack is `infra/local/compose.yaml` |
-| `api/`, `field-webapp/`, `back-office-webapp/` | 🔒 old placeholders (gone from the working folder; never recreate them: the layout is ARCHITECTURE §18) |
+| `database/`, `api/`, `field-webapp/`, `back-office-webapp/` | 🔒 the old code and its placeholders, gone from the working folder (ADR-093): never recreate them or port from a copy; the hook refuses a write under `database/`. The layout is ARCHITECTURE §18 |
 | `**/node_modules/`, `**/.venv/`, `**/.pytest_cache/`, `**/__pycache__/`, `.git/`; generated: `**/dist/`, `**/src/generated/`, `**/.generated/`, `**/.cache/`, `**/.state/` | ❌ never (change the source, rerun the tool) |
 | `**/prisma/migrations/*.sql` | ❌ never edit a generated or applied migration; a guard migration is written only into Prisma's empty `--create-only` stub, reviewed and tested (ADR-113, enforced by the hook) |
 | `**/.env*`, secrets | ❌ never read, write or print an env file (the hook blocks it; `.env.example` is fine): reference keys by name, load one in a subshell, compare `shasum`s; never echo, log or commit a secret |

@@ -32,7 +32,8 @@
   - **yes**: the ticket bills as if the flag weren't there;
   - **that line no**: one line can't be computed and bills nothing; the ticket's other lines bill;
   - **no**: nothing can be computed, so the ticket bills nothing until it's corrected.
-- **A reviewer fixes it or accepts it** (ADR-166). Whoever may correct may **accept** any flag that
+- **A reviewer fixes it or accepts it** (ADR-166). Whoever is granted *accept flags* (a grant of
+  its own: *correct* doesn't carry it; the user, 2026-10-06, ADR-365) may **accept** any flag that
   is right as it is, with a reason from the firm's list, audited. **Accepting never changes what
   bills**: a flag whose *Bills* is "no" still bills nothing once accepted. When every flag on a
   ticket is fixed or accepted, the worker marks it `COMPLETED`.
@@ -189,7 +190,7 @@ A ticket's ROE flags still bill.
 **Retired:** `HELPER_NOT_FOUND` (ADR-294). A certification's helper is picked from the people assigned
 to the project, never typed, so an ID that matches no user can't happen.
 
-**Added:** `PILE_CALL_NOT_HIGHER` (§3.5, ADR-295; the agent's wording). The catalogue is 67 flags.
+**Added:** `PILE_CALL_NOT_HIGHER` (§3.5, ADR-295; the agent's wording). The catalogue was 67 flags then (78 today: the count at the end of §3.10's notes; KD-71 (2) closed, ADR-373).
 
 ### 3.8 Pricing
 
