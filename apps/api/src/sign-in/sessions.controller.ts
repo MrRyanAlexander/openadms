@@ -1,0 +1,144 @@
+// Signing in and out, and keeping a session going (ARCHITECTURE §6, Back-office sessions;
+// AC-10-09, 12…18; ADR-408…410). The tokens leave only as cookies; an answer's body holds who is
+// signed in and the session's CSRF value, never a token. The log says that a sign-in worked or
+// why it didn't, never the name or the password that was typed.
+import {
+  changePasswordEndpoint,
+  csrfAnswerSchema,
+  currentSessionEndpoint,
+  passwordSetAnswerSchema,
+  refreshSessionEndpoint,
+  sessionAnswerSchema,
+  sessionCsrfEndpoint,
+  signedOutAnswerSchema,
+  signInEndpoint,
+  signOutEndpoint,
+  type CsrfAnswer,
+  type PasswordSetAnswer,
+  type SessionAnswer,
+  type SignedOutAnswer,
+} from '@open-adms/contracts';
+import { Body, Controller, Inject, Req, Res } from '@nestjs/common';
+import type { FastifyReply, FastifyRequest } from 'fastify';
+
+import { Refusal } from '../process/refusal.ts';
+import { Serves } from '../process/serves.ts';
+import { callerOf, refreshTokenOf } from './admission.ts';
+import { apiPasswords } from './password-resets.controller.ts';
+import { Passwords } from './passwords.ts';
+import { accessCookie, cookieSet, cookiesCleared, refreshCookie } from './session-cookies.ts';
+import { SessionTokens } from './session-tokens.ts';
+import { Sessions, type Caller, type Opened } from './sessions.ts';
+
+export const apiSessions = Symbol('the API’s sessions');
+export const apiSessionTokens = Symbol('the API’s session tokens');
+
+@Controller()
+export class SessionsController {
+  private readonly sessions: Sessions;
+  private readonly tokens: SessionTokens;
+  private readonly passwords: Passwords;
+
+  constructor(
+    @Inject(apiSessions) sessions: Sessions,
+    @Inject(apiSessionTokens) tokens: SessionTokens,
+    @Inject(apiPasswords) passwords: Passwords,
+  ) {
+    this.sessions = sessions;
+    this.tokens = tokens;
+    this.passwords = passwords;
+  }
+
+  @Serves(signInEndpoint)
+  async signIn(
+    @Body() body: { email: string; password: string },
+    @Req() request: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<SessionAnswer> {
+    const outcome = await this.sessions.signIn(body.email, body.password);
+    if (!outcome.signedIn) {
+      request.log.info({ why: outcome.why }, 'A sign-in was refused.');
+      throw new Refusal('SIGN_IN_REFUSED', 401);
+    }
+    request.log.info('A sign-in worked.');
+    return this.opened(reply, outcome);
+  }
+
+  @Serves(refreshSessionEndpoint)
+  async refresh(
+    @Req() request: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<SessionAnswer> {
+    const outcome = await this.sessions.refresh(refreshTokenOf(request));
+    if (!outcome.refreshed) {
+      if (outcome.reused) {
+        request.log.warn('A refresh token was presented a second time: its session is ended.');
+      }
+      void reply.header('set-cookie', cookiesCleared);
+      throw new Refusal('NOT_SIGNED_IN', 401);
+    }
+    return this.opened(reply, outcome);
+  }
+
+  @Serves(signOutEndpoint)
+  async signOut(
+    @Req() request: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<SignedOutAnswer> {
+    await this.sessions.signOut(refreshTokenOf(request));
+    void reply.header('set-cookie', cookiesCleared);
+    return signedOutAnswerSchema.parse({ status: 'signed-out' });
+  }
+
+  @Serves(currentSessionEndpoint)
+  current(@Req() request: FastifyRequest): SessionAnswer {
+    return this.answer(callerOf(request));
+  }
+
+  @Serves(sessionCsrfEndpoint)
+  async csrf(@Req() request: FastifyRequest): Promise<CsrfAnswer> {
+    const csrf = await this.sessions.csrfFor(refreshTokenOf(request));
+    if (csrf === undefined) throw new Refusal('NOT_SIGNED_IN', 401);
+    return csrfAnswerSchema.parse({ csrf });
+  }
+
+  @Serves(changePasswordEndpoint)
+  async changePassword(
+    @Body() body: { current: string; password: string },
+    @Req() request: FastifyRequest,
+  ): Promise<PasswordSetAnswer> {
+    const caller = callerOf(request);
+    const outcome = await this.passwords.changeOwn(
+      caller.userId,
+      caller.sessionId,
+      body.current,
+      body.password,
+    );
+    if (!outcome.set) {
+      if (outcome.code === 'NOT_FOUND' || outcome.code === 'NOT_ALLOWED') {
+        throw new Refusal('NOT_SIGNED_IN', 401);
+      }
+      if (outcome.code === 'RESET_REFUSED' || outcome.code === 'NO_MAIL') {
+        throw new Error('Changing a password answered as a reset does.');
+      }
+      throw new Refusal(outcome.code, 422);
+    }
+    return passwordSetAnswerSchema.parse({ status: 'ok' });
+  }
+
+  private opened(reply: FastifyReply, opened: Opened): SessionAnswer {
+    void reply.header('set-cookie', [
+      cookieSet(accessCookie, opened.access, this.tokens.accessSeconds),
+      cookieSet(refreshCookie, opened.refresh, opened.refreshSeconds),
+    ]);
+    return this.answer(opened.caller);
+  }
+
+  private answer(caller: Caller): SessionAnswer {
+    return sessionAnswerSchema.parse({
+      user: { id: caller.userId, name: caller.name, role: caller.role },
+      passwordChangeRequired: caller.passwordChangeRequired,
+      csrf: this.tokens.csrf(caller.sessionId),
+    });
+  }
+}

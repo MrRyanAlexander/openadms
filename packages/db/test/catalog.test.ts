@@ -1021,6 +1021,11 @@ describe('the guards in the catalog', () => {
         name: 'user_credential_system_actor_check',
         definition: "CHECK ((user_id <> '00000000-0000-7000-8000-000000000001'::uuid))",
       },
+      // A count of wrong tries is never below nought (ADR-409).
+      {
+        name: 'user_credential_failed_sign_ins_check',
+        definition: 'CHECK ((failed_sign_ins >= 0))',
+      },
       {
         name: 'session_refresh_token_hash_check',
         definition: "CHECK ((refresh_token_hash ~ '^[0-9a-f]{64}$'::text))",

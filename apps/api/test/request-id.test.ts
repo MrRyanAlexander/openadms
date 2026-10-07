@@ -37,6 +37,7 @@ class WritingController {
     endpoint({
       name: 'testWrite',
       summary: 'A test’s own.',
+      access: 'ANYBODY',
       method: 'POST',
       path: '/writes',
       answer: healthAnswerSchema,

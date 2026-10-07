@@ -1,0 +1,141 @@
+// What wrong tries at a login cost (ARCHITECTURE §6, Abuse; spec/acceptance/10-api-and-sync.md
+// AC-10-18; spec/THREAT-MODEL.md T-16; ADR-408, 409): NIST SP 800-63B-4 §2.2.3 and §3.2.2. The
+// rule, and the policy values it and a session are held to.
+import { describe, expect, it } from 'vitest';
+
+import { Policy, SignInTries } from '../src/index.ts';
+
+const shipped = {
+  LOAD_CALL_LOW_LIMIT: '5',
+  LOAD_CALL_HIGH_LIMIT: '95',
+  DISPOSAL_SITE_PROXIMITY_M: '200',
+  STUMP_FILL_DEPTH_INCHES: '31',
+  CREW_DAY_HOURS: '12',
+  TICKET_NUMBER_BLOCK_SIZE: '1000',
+  CERT_NUMBER_BLOCK_SIZE: '100',
+  ROE_NUMBER_BLOCK_SIZE: '100',
+  REQUEST_BODY_LIMIT_BYTES: '1048576',
+  STATEMENT_TIMEOUT_MS: '30000',
+  PASSWORD_MINIMUM_LENGTH: '15',
+  PASSWORD_MAXIMUM_LENGTH: '128',
+  PASSWORD_RESET_MINUTES: '60',
+  ACCESS_TOKEN_MINUTES: '5',
+  SESSION_INACTIVITY_MINUTES: '30',
+  SESSION_OVERALL_HOURS: '12',
+  SIGN_IN_TRIES_BEFORE_WAIT: '5',
+  SIGN_IN_TRIES_BEFORE_LOCK: '10',
+  SIGN_IN_FIRST_WAIT_SECONDS: '30',
+  SIGN_IN_LONGEST_WAIT_MINUTES: '60',
+};
+
+// Monday 12 October 2026, 10:00 in Bayline County.
+const now = new Date('2026-10-12T14:00:00Z');
+const inSeconds = (seconds: number): Date => new Date(now.getTime() + seconds * 1000);
+
+describe('wrong tries at a login', () => {
+  const tries = new SignInTries(Policy.from(shipped));
+
+  it('AC-10-18 the first four in a row are only counted', () => {
+    for (const count of [1, 2, 3, 4]) expect(tries.after(count, now)).toEqual({ kind: 'COUNTED' });
+  });
+
+  it('AC-10-18 from the fifth, each makes the login wait twice as long as the one before: 30 s, 1, 2, 4, 8 minutes', () => {
+    expect([5, 6, 7, 8, 9].map((count) => tries.after(count, now))).toEqual(
+      [30, 60, 120, 240, 480].map((seconds) => ({ kind: 'WAIT', until: inSeconds(seconds) })),
+    );
+  });
+
+  it('AC-10-18 the tenth locks the login, and so would any after it', () => {
+    for (const count of [10, 11, 100]) expect(tries.after(count, now)).toEqual({ kind: 'LOCKED' });
+    expect([9, 10, 11].map((count) => tries.locked(count))).toEqual([false, true, true]);
+  });
+
+  it('AC-10-18 a login may not be tried while it waits or once it is locked; a wait that is over closes nothing', () => {
+    expect(tries.closed(5, inSeconds(30), now)).toBe(true);
+    expect(tries.closed(5, inSeconds(30), inSeconds(29))).toBe(true);
+    expect(tries.closed(5, inSeconds(30), inSeconds(30))).toBe(false);
+    expect(tries.closed(4, null, now)).toBe(false);
+    expect(tries.closed(0, null, now)).toBe(false);
+    // Locked, whatever its wait was: it opens only when its password is set anew.
+    expect(tries.closed(10, null, now)).toBe(true);
+    expect(tries.closed(10, inSeconds(-3600), now)).toBe(true);
+  });
+
+  it('a wait is never over the policy’s longest, however late the firm puts the lock', () => {
+    const late = new SignInTries(
+      Policy.from({
+        ...shipped,
+        SIGN_IN_TRIES_BEFORE_LOCK: '100',
+        SIGN_IN_LONGEST_WAIT_MINUTES: '60',
+      }),
+    );
+    expect(late.after(11, now)).toEqual({ kind: 'WAIT', until: inSeconds(1920) });
+    for (const count of [12, 13, 50, 99]) {
+      expect(late.after(count, now)).toEqual({ kind: 'WAIT', until: inSeconds(3600) });
+    }
+    expect(late.after(100, now)).toEqual({ kind: 'LOCKED' });
+  });
+});
+
+describe('the policy values of sign-in and sessions', () => {
+  const refused = (name: string, written: string, range: string): void => {
+    expect(() => Policy.from({ ...shipped, [name]: written }), `${name}=${written}`).toThrow(
+      `The policy value ${name} must be a whole number, ${range}: "${written}".`,
+    );
+  };
+
+  it('AC-10-12 an access token lasts 5 minutes, a quiet session 30, any session 12 hours, unless changed: never over the standard’s hour and day', () => {
+    const policy = Policy.from(shipped);
+    expect([
+      policy.accessTokenMinutes,
+      policy.sessionInactivityMinutes,
+      policy.sessionOverallHours,
+    ]).toEqual([5, 30, 12]);
+    for (const written of ['0', '16']) refused('ACCESS_TOKEN_MINUTES', written, 'from 1 to 15');
+    for (const written of ['1', '61']) {
+      refused('SESSION_INACTIVITY_MINUTES', written, 'from 2 to 60');
+    }
+    for (const written of ['0', '25']) refused('SESSION_OVERALL_HOURS', written, 'from 1 to 24');
+    expect(Policy.from({ ...shipped, SESSION_OVERALL_HOURS: '24' }).sessionOverallHours).toBe(24);
+    expect(
+      Policy.from({ ...shipped, SESSION_INACTIVITY_MINUTES: '60' }).sessionInactivityMinutes,
+    ).toBe(60);
+  });
+
+  it('an access token never lasts as long as a session may stay quiet', () => {
+    expect(() =>
+      Policy.from({ ...shipped, ACCESS_TOKEN_MINUTES: '15', SESSION_INACTIVITY_MINUTES: '15' }),
+    ).toThrow('The policy value ACCESS_TOKEN_MINUTES must be under SESSION_INACTIVITY_MINUTES.');
+    expect(() =>
+      Policy.from({ ...shipped, ACCESS_TOKEN_MINUTES: '15', SESSION_INACTIVITY_MINUTES: '16' }),
+    ).not.toThrow();
+  });
+
+  it('AC-10-18 a wait after 5 wrong tries and a lock after 10, unless changed: a lock never later than the standard’s hundred, and never before the first wait', () => {
+    const policy = Policy.from(shipped);
+    expect([
+      policy.signInTriesBeforeWait,
+      policy.signInTriesBeforeLock,
+      policy.signInFirstWaitSeconds,
+      policy.signInLongestWaitMinutes,
+    ]).toEqual([5, 10, 30, 60]);
+    for (const written of ['0', '100'])
+      refused('SIGN_IN_TRIES_BEFORE_WAIT', written, 'from 1 to 99');
+    for (const written of ['1', '101'])
+      refused('SIGN_IN_TRIES_BEFORE_LOCK', written, 'from 2 to 100');
+    for (const written of ['0', '3601']) {
+      refused('SIGN_IN_FIRST_WAIT_SECONDS', written, 'from 1 to 3600');
+    }
+    for (const written of ['0', '1441']) {
+      refused('SIGN_IN_LONGEST_WAIT_MINUTES', written, 'from 1 to 1440');
+    }
+    expect(() =>
+      Policy.from({ ...shipped, SIGN_IN_TRIES_BEFORE_WAIT: '10', SIGN_IN_TRIES_BEFORE_LOCK: '10' }),
+    ).toThrow(
+      'The policy value SIGN_IN_TRIES_BEFORE_WAIT must be under SIGN_IN_TRIES_BEFORE_LOCK.',
+    );
+    expect(
+      Policy.from({ ...shipped, SIGN_IN_TRIES_BEFORE_LOCK: '100' }).signInTriesBeforeLock,
+    ).toBe(100);
+  });
+});

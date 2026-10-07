@@ -3,7 +3,7 @@
 // hang on the proxy a firm puts in front. CORS answers an origin only when it is, whole, one of
 // the configured list: no wildcard, no pattern, nothing by ending or hosting domain. An origin off
 // the list is told nothing about itself; the browser then keeps the answer from its page.
-import { endpointMethods } from '@open-adms/contracts';
+import { csrfHeader, endpointMethods } from '@open-adms/contracts';
 import type { FastifyInstance } from 'fastify';
 
 // An API answer is data, never a page: nothing may frame it, run it, guess its type or keep it.
@@ -27,8 +27,11 @@ export function answersWith(server: FastifyInstance, corsOrigins: readonly strin
       done();
       return;
     }
+    // A listed origin's page may send the session's cookies with its calls (ADR-408): allowed
+    // only beside an origin named whole, never beside a wildcard.
     void reply.headers({
       'access-control-allow-origin': origin,
+      'access-control-allow-credentials': 'true',
       'access-control-expose-headers': requestIdHeader,
     });
     // A browser asking first whether its page may send the real request.
@@ -39,7 +42,7 @@ export function answersWith(server: FastifyInstance, corsOrigins: readonly strin
       void reply
         .headers({
           'access-control-allow-methods': endpointMethods.join(', '),
-          'access-control-allow-headers': 'content-type',
+          'access-control-allow-headers': `content-type, ${csrfHeader}`,
         })
         .status(204)
         .send();

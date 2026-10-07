@@ -36,6 +36,8 @@ function operation(served: Endpoint): Json {
   return {
     operationId: served.name,
     summary: served.summary,
+    // Who may call it (ADR-408): anybody, a signed-in person, or the holder of a refresh token.
+    'x-open-adms-access': served.access,
     ...(taken.length === 0 ? {} : { parameters: taken }),
     ...(served.body === undefined
       ? {}

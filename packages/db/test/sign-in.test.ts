@@ -60,8 +60,10 @@ describe('what sign-in keeps of a person', () => {
     const { db, world } = tested;
     expect(await columnsOf('user_credential')).toEqual([
       'created_at',
+      'failed_sign_ins',
       'id',
       'locked_until',
+      'password_change_required',
       'password_hash',
       'two_step_secret',
       'user_id',
@@ -73,6 +75,34 @@ describe('what sign-in keeps of a person', () => {
     await asTheApi();
     await db.one(keep, [world.admin, aHash]);
     expect((await db.refused(keep, [world.admin, anotherHash])).code).toBe(refusedBy.unique);
+  });
+
+  it('AC-10-18 counts wrong tries from nought, never below it, and starts with no password to change (ADR-409, 410)', async () => {
+    const { db, world } = tested;
+    await asTheApi();
+    const { id } = await db.one<{ id: string }>(keep, [world.admin, aHash]);
+    expect(
+      await db.one(
+        `SELECT "failed_sign_ins", "password_change_required", "locked_until"
+         FROM "user_credential" WHERE "id" = $1`,
+        [id],
+      ),
+    ).toEqual({ failed_sign_ins: 0, password_change_required: false, locked_until: null });
+    await db.run(`UPDATE "user_credential" SET "failed_sign_ins" = 10 WHERE "id" = $1`, [id]);
+    expect(
+      (
+        await db.refused(`UPDATE "user_credential" SET "failed_sign_ins" = -1 WHERE "id" = $1`, [
+          id,
+        ])
+      ).code,
+    ).toBe(refusedBy.check);
+    // The worker and the read-only login read none of it.
+    for (const login of ['adms_worker', 'adms_readonly'] as const) {
+      await db.as(login);
+      expect((await db.refused(`SELECT "failed_sign_ins" FROM "user_credential"`)).code).toBe(
+        refusedBy.grant,
+      );
+    }
   });
 
   it('AC-10-11 the audit log says a password hash or an authenticator secret changed, never what from or to', async () => {
@@ -96,8 +126,10 @@ describe('what sign-in keeps of a person', () => {
         domain: 'SECURITY',
         changed_fields: [
           'created_at',
+          'failed_sign_ins',
           'id',
           'locked_until',
+          'password_change_required',
           'password_hash',
           'two_step_secret',
           'user_id',

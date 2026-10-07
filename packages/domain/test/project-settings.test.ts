@@ -22,6 +22,13 @@ const shipped = {
   PASSWORD_MINIMUM_LENGTH: '15',
   PASSWORD_MAXIMUM_LENGTH: '128',
   PASSWORD_RESET_MINUTES: '60',
+  ACCESS_TOKEN_MINUTES: '5',
+  SESSION_INACTIVITY_MINUTES: '30',
+  SESSION_OVERALL_HOURS: '12',
+  SIGN_IN_TRIES_BEFORE_WAIT: '5',
+  SIGN_IN_TRIES_BEFORE_LOCK: '10',
+  SIGN_IN_FIRST_WAIT_SECONDS: '30',
+  SIGN_IN_LONGEST_WAIT_MINUTES: '60',
 };
 
 // The program types of the example world: PPDR requires an ROE, ROW doesn't.
@@ -96,6 +103,13 @@ describe('the policy values', () => {
       passwordMinimumLength: 'PASSWORD_MINIMUM_LENGTH',
       passwordMaximumLength: 'PASSWORD_MAXIMUM_LENGTH',
       passwordResetMinutes: 'PASSWORD_RESET_MINUTES',
+      accessTokenMinutes: 'ACCESS_TOKEN_MINUTES',
+      sessionInactivityMinutes: 'SESSION_INACTIVITY_MINUTES',
+      sessionOverallHours: 'SESSION_OVERALL_HOURS',
+      signInTriesBeforeWait: 'SIGN_IN_TRIES_BEFORE_WAIT',
+      signInTriesBeforeLock: 'SIGN_IN_TRIES_BEFORE_LOCK',
+      signInFirstWaitSeconds: 'SIGN_IN_FIRST_WAIT_SECONDS',
+      signInLongestWaitMinutes: 'SIGN_IN_LONGEST_WAIT_MINUTES',
     });
     expect(Object.keys(shipped).sort()).toEqual(Object.values(policyNames).sort());
   });

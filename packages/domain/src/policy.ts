@@ -36,6 +36,19 @@ export const policyNames = {
   passwordMaximumLength: 'PASSWORD_MAXIMUM_LENGTH',
   // How long a password reset sent by email stays good, in minutes (ADR-404).
   passwordResetMinutes: 'PASSWORD_RESET_MINUTES',
+  // How long a back-office access token is good for, in minutes; how long a session lasts with
+  // nothing asked of it, in minutes; and how long it lasts at the very most, in hours
+  // (ARCHITECTURE §6, Back-office sessions; NIST SP 800-63B-4 §2.2.3; ADR-408).
+  accessTokenMinutes: 'ACCESS_TOKEN_MINUTES',
+  sessionInactivityMinutes: 'SESSION_INACTIVITY_MINUTES',
+  sessionOverallHours: 'SESSION_OVERALL_HOURS',
+  // Wrong tries in a row at one login before a wait is put on it, and before it is locked; the
+  // first wait, in seconds, and the longest, in minutes (ARCHITECTURE §6, Abuse; NIST SP
+  // 800-63B-4 §3.2.2; ADR-409).
+  signInTriesBeforeWait: 'SIGN_IN_TRIES_BEFORE_WAIT',
+  signInTriesBeforeLock: 'SIGN_IN_TRIES_BEFORE_LOCK',
+  signInFirstWaitSeconds: 'SIGN_IN_FIRST_WAIT_SECONDS',
+  signInLongestWaitMinutes: 'SIGN_IN_LONGEST_WAIT_MINUTES',
 } as const;
 
 export type PolicyName = (typeof policyNames)[keyof typeof policyNames];
@@ -46,7 +59,10 @@ export type PolicyName = (typeof policyNames)[keyof typeof policyNames];
 // one millisecond (nought would switch it off) and at most what Postgres takes. A password's
 // shortest length is never under the eight characters the standard allows beside a second step,
 // nor over the 64 it says must be permitted; its longest never under those 64. A reset by email
-// is good for a day at most, the standard's limit.
+// is good for a day at most, the standard's limit. A session lasts a day at most and an hour at
+// most with nothing asked of it (the standard's limits where a second step is required), and its
+// access token never as long as that hour. A login is locked after a hundred wrong tries in a row
+// at the very most, the standard's limit.
 const ranges: Record<PolicyName, { least: number; most: number }> = {
   [policyNames.loadCallLowLimit]: { least: 0, most: 100 },
   [policyNames.loadCallHighLimit]: { least: 0, most: 100 },
@@ -61,6 +77,13 @@ const ranges: Record<PolicyName, { least: number; most: number }> = {
   [policyNames.passwordMinimumLength]: { least: 8, most: 64 },
   [policyNames.passwordMaximumLength]: { least: 64, most: 1024 },
   [policyNames.passwordResetMinutes]: { least: 1, most: 1440 },
+  [policyNames.accessTokenMinutes]: { least: 1, most: 15 },
+  [policyNames.sessionInactivityMinutes]: { least: 2, most: 60 },
+  [policyNames.sessionOverallHours]: { least: 1, most: 24 },
+  [policyNames.signInTriesBeforeWait]: { least: 1, most: 99 },
+  [policyNames.signInTriesBeforeLock]: { least: 2, most: 100 },
+  [policyNames.signInFirstWaitSeconds]: { least: 1, most: 3600 },
+  [policyNames.signInLongestWaitMinutes]: { least: 1, most: 1440 },
 };
 
 export class Policy {
@@ -77,6 +100,13 @@ export class Policy {
   readonly passwordMinimumLength: number;
   readonly passwordMaximumLength: number;
   readonly passwordResetMinutes: number;
+  readonly accessTokenMinutes: number;
+  readonly sessionInactivityMinutes: number;
+  readonly sessionOverallHours: number;
+  readonly signInTriesBeforeWait: number;
+  readonly signInTriesBeforeLock: number;
+  readonly signInFirstWaitSeconds: number;
+  readonly signInLongestWaitMinutes: number;
 
   private constructor(values: Readonly<Record<string, string | undefined>>) {
     this.loadCallLowLimit = Policy.read(values, policyNames.loadCallLowLimit);
@@ -92,6 +122,26 @@ export class Policy {
     this.passwordMinimumLength = Policy.read(values, policyNames.passwordMinimumLength);
     this.passwordMaximumLength = Policy.read(values, policyNames.passwordMaximumLength);
     this.passwordResetMinutes = Policy.read(values, policyNames.passwordResetMinutes);
+    this.accessTokenMinutes = Policy.read(values, policyNames.accessTokenMinutes);
+    this.sessionInactivityMinutes = Policy.read(values, policyNames.sessionInactivityMinutes);
+    this.sessionOverallHours = Policy.read(values, policyNames.sessionOverallHours);
+    this.signInTriesBeforeWait = Policy.read(values, policyNames.signInTriesBeforeWait);
+    this.signInTriesBeforeLock = Policy.read(values, policyNames.signInTriesBeforeLock);
+    this.signInFirstWaitSeconds = Policy.read(values, policyNames.signInFirstWaitSeconds);
+    this.signInLongestWaitMinutes = Policy.read(values, policyNames.signInLongestWaitMinutes);
+    // Two pairs hold only together: an access token that outlasted the session's quiet time would
+    // keep a session nobody uses alive, and a lock that came no later than the first wait would
+    // leave no wait at all.
+    if (this.accessTokenMinutes >= this.sessionInactivityMinutes) {
+      throw new Error(
+        `The policy value ${policyNames.accessTokenMinutes} must be under ${policyNames.sessionInactivityMinutes}.`,
+      );
+    }
+    if (this.signInTriesBeforeWait >= this.signInTriesBeforeLock) {
+      throw new Error(
+        `The policy value ${policyNames.signInTriesBeforeWait} must be under ${policyNames.signInTriesBeforeLock}.`,
+      );
+    }
   }
 
   // From an environment: an env file's values, or a process's. A value that is missing or isn't a

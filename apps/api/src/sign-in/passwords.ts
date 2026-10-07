@@ -12,6 +12,14 @@
 //   the new password with it. The change is written as that person: holding the code is their
 //   proof. It signs nobody in and clears no second step (ASVS 6.4.3).
 //
+// - **The person changes their own**, signed in, giving the one they have (ASVS 6.2.2, 6.2.3).
+//
+// A password an admin set is known to that admin. So it is marked, and its owner sets their own
+// at their next sign-in before they may do anything else (ADR-410). A password set anew, any of
+// the three ways, opens a login that wrong tries had locked and ends the person's sessions (their
+// own change keeps the one it was made in): whoever held a stolen session, or the old password,
+// is out (ASVS 7.4.3).
+//
 // Either way the person is told by email where there is mail and they have an address (NIST SP
 // 800-63B-4 §4.6). A monitor never resets by email: their password is the firm's practice
 // (ADR-105), set by whoever holds the master passcode or by an admin.
@@ -22,6 +30,8 @@ import type { Clock } from '../setup/setup-service.ts';
 import type { Mail } from './mail.ts';
 import type { PasswordHasher } from './password-hasher.ts';
 import type { ResetCodes } from './reset-codes.ts';
+import type { Sessions } from './sessions.ts';
+import type { WrongTries } from './wrong-tries.ts';
 
 type Tx = Prisma.TransactionClient;
 
@@ -32,7 +42,10 @@ export type PasswordRefusalCode =
   // Nobody with a login has that id.
   | 'NOT_FOUND'
   | 'RESET_REFUSED'
-  | 'NO_MAIL';
+  | 'NO_MAIL'
+  // Changing one's own: the current password given is wrong, or the new one is the same.
+  | 'PASSWORD_WRONG'
+  | 'PASSWORD_UNCHANGED';
 
 export type PasswordOutcome =
   // `told`: whether the person was sent the message that their password changed.
@@ -53,6 +66,8 @@ export interface PasswordParts {
   readonly clock: Clock;
   // How long a reset is good for, in minutes, as the message says it.
   readonly resetMinutes: number;
+  readonly sessions: Pick<Sessions, 'endAll'>;
+  readonly tries: WrongTries;
 }
 
 // Who may reset their own password by email: a back-office or outside user. Never a monitor, and
@@ -98,12 +113,52 @@ export class Passwords {
         if (person?.archivedAt !== null || person.role === 'SYSTEM') {
           return { refused: { set: false, code: 'NOT_FOUND' } };
         }
-        const refused = await this.keep(tx, person, password);
+        // Known to the admin who typed it, so its owner sets their own at their next sign-in. A
+        // monitor's is the firm's practice (ADR-105), and never signs in here.
+        const refused = await this.keep(tx, person, password, {
+          changeRequired: person.id !== adminId && person.role !== 'MONITOR',
+        });
         return refused === undefined ? { person } : { refused };
       },
     );
     if ('refused' in outcome) return outcome.refused;
     return { set: true, told: await this.tell(outcome.person) };
+  }
+
+  // The signed-in person sets a new password, giving the one they have. A wrong current one
+  // counts as a wrong try at their login, so a stolen session can't be used to guess it.
+  async changeOwn(
+    userId: string,
+    sessionId: string,
+    current: string,
+    password: string,
+  ): Promise<PasswordOutcome> {
+    const person = await this.db.$read((tx) =>
+      tx.user.findUnique({
+        where: { id: userId },
+        select: {
+          ...personRead,
+          credential: { select: { passwordHash: true, failedSignIns: true, lockedUntil: true } },
+        },
+      }),
+    );
+    const kept = person?.credential;
+    if (person?.archivedAt !== null || kept?.passwordHash == null) {
+      return { set: false, code: 'NOT_FOUND' };
+    }
+    if (this.parts.tries.closed(kept)) return { set: false, code: 'PASSWORD_WRONG' };
+    if (!(await this.parts.hasher.verify(current, kept.passwordHash))) {
+      await this.parts.tries.wrong(person);
+      return { set: false, code: 'PASSWORD_WRONG' };
+    }
+    if (await this.parts.hasher.verify(password, kept.passwordHash)) {
+      return { set: false, code: 'PASSWORD_UNCHANGED' };
+    }
+    const refused = await this.db.$write({ actorId: userId, source: 'BACK_OFFICE' }, (tx) =>
+      this.keep(tx, person, password, { changeRequired: false, keepSession: sessionId }),
+    );
+    if (refused !== undefined) return refused;
+    return { set: true, told: await this.tell(person) };
   }
 
   // Somebody asks for a reset to be sent to an address. Nothing is written. A message goes out
@@ -162,7 +217,7 @@ export class Passwords {
         ) {
           return { refused: { set: false, code: 'RESET_REFUSED' } };
         }
-        const refused = await this.keep(tx, person, password);
+        const refused = await this.keep(tx, person, password, { changeRequired: false });
         return refused === undefined ? { person } : { refused };
       },
     );
@@ -170,11 +225,13 @@ export class Passwords {
     return { set: true, told: await this.tell(outcome.person) };
   }
 
-  // Checks the password for this person and keeps its hash, and nothing else of it.
+  // Checks the password for this person and keeps its hash, and nothing else of it. The count of
+  // wrong tries starts again, a lock opens, and the person's sessions end (all but `keepSession`).
   private async keep(
     tx: Tx,
     person: Person,
     password: string,
+    how: { readonly changeRequired: boolean; readonly keepSession?: string },
   ): Promise<PasswordOutcome | undefined> {
     const problem = this.parts.rules.problem(password, {
       monitor: person.role === 'MONITOR',
@@ -184,9 +241,15 @@ export class Passwords {
     const passwordHash = await this.parts.hasher.hash(password);
     await tx.userCredential.upsert({
       where: { userId: person.id },
-      create: { userId: person.id, passwordHash },
-      update: { passwordHash },
+      create: { userId: person.id, passwordHash, passwordChangeRequired: how.changeRequired },
+      update: {
+        passwordHash,
+        passwordChangeRequired: how.changeRequired,
+        failedSignIns: 0,
+        lockedUntil: null,
+      },
     });
+    await this.parts.sessions.endAll(tx, person.id, how.keepSession);
     return undefined;
   }
 

@@ -42,6 +42,7 @@ export async function undone(
         await tx.$queryRaw`SELECT
           set_config('adms.actor_id', ${actor.actorId}, true),
           set_config('adms.source', ${actor.source}, true),
+          set_config('adms.reason', ${actor.reason ?? ''}, true),
           set_config('adms.request_id', ${actor.requestId ?? requestNow() ?? ''}, true)`;
       };
       const within = {

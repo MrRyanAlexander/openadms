@@ -198,6 +198,9 @@ describe('what every answer carries, and which pages may read one, through the d
     expect(asked.status).toBe(204);
     expect(asked.headers['access-control-allow-origin']).toBe('https://adms.localhost');
     expect(asked.headers['access-control-allow-methods']).toBe('GET, POST, PUT, PATCH');
+    // Its page may send the session's cookies and the CSRF header with a call (ADR-408).
+    expect(asked.headers['access-control-allow-credentials']).toBe('true');
+    expect(asked.headers['access-control-allow-headers']).toBe('content-type, x-adms-csrf');
   });
 
   it('AC-10-06: a page at an origin off the list is allowed nothing', async () => {
@@ -288,6 +291,24 @@ describe('what an error and the log say, through the door', () => {
     expect(completed.status).toBe(400);
     expect(errorAnswerSchema.parse(JSON.parse(completed.body)).code).toBe('RESET_REFUSED');
 
+    // A sign-in tried through the door at a name nobody has (ADR-409): refused by one code,
+    // no cookie set, and neither the name nor the password in any line. A session's endpoints
+    // with cookies the server never made are refused before anything is read.
+    const signIn = await ask('/sessions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: address, password: `${sent} marsh heron delphine` }),
+    });
+    expect(signIn.status).toBe(401);
+    expect(errorAnswerSchema.parse(JSON.parse(signIn.body)).code).toBe('SIGN_IN_REFUSED');
+    expect(signIn.headers['set-cookie']).toBeUndefined();
+    const refresh = await ask('/sessions/refreshes', {
+      method: 'POST',
+      headers: { cookie: `__Host-adms-refresh=${sent}; __Host-adms-access=${sent}` },
+    });
+    expect(refresh.status).toBe(401);
+    expect(errorAnswerSchema.parse(JSON.parse(refresh.body)).code).toBe('NOT_SIGNED_IN');
+
     const log = compose(['logs', '--no-log-prefix', '--no-color', 'api']);
     const lines = log.trim().split('\n');
     expect(lines.length).toBeGreaterThan(3);
@@ -296,6 +317,9 @@ describe('what an error and the log say, through the door', () => {
     expect(parsed.some((line) => line['msg'] === 'A password reset by email was asked for.')).toBe(
       reset.status === 200,
     );
+    expect(
+      parsed.some((line) => line['msg'] === 'A sign-in was refused.' && line['why'] === 'NOBODY'),
+    ).toBe(true);
     for (const line of parsed) {
       if (line['req'] !== undefined || line['res'] !== undefined) {
         expect(line['requestId']).toMatch(/^[0-9a-f-]{36}$/);
@@ -305,6 +329,7 @@ describe('what an error and the log say, through the door', () => {
       sent,
       'Bearer',
       'session=',
+      '__Host-',
       '"password"',
       'password=',
       'token=',

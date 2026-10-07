@@ -179,9 +179,11 @@ worker, which reads people, holds nothing on it, and no read-only viewer reads i
 |---|---|---|
 | **id** | uuid | |
 | **userId** | → `User`, unique | Whose it is; never changes. Never the system actor, which never signs in (check; ADR-273, C21) |
-| passwordHash | text | Argon2id, as a PHC string, and nothing else (check); none until a password is set. **Kept out of the audit log** |
+| passwordHash | text | Argon2id, as a PHC string, and nothing else (check); none until a password is set. Keyed with a secret of the API's that is never in the database: the string names the key, never holds it (ADR-411). **Kept out of the audit log** |
 | twoStepSecret | text | The authenticator app's secret (ADR-170); none until two-step sign-in is set up; never blank (check). **Kept out of the audit log.** How it is kept at rest is task 2.2.4's |
-| lockedUntil | instant | Sign-in refuses the person until then. How a lock opens is task 2.2.3's |
+| lockedUntil | instant | Sign-in refuses the person until then: the wait that wrong tries put on the login, which is over by itself (ADR-409) |
+| **failedSignIns** | whole number | Wrong tries in a row since the last sign-in that worked or the last password set; never below nought (check). At the policy's count (`SIGN_IN_TRIES_BEFORE_LOCK`) the login is locked until its password is set anew (task 2.2.3, ADR-409) |
+| **passwordChangeRequired** | bool | Somebody else set this password: its owner sets their own at their next sign-in, before anything else (task 2.2.3, ADR-410). False unless set |
 | **createdAt** | instant | |
 
 Audited in the security domain: a change of a secret column writes an audit record that names
@@ -200,8 +202,8 @@ the back office or the portal. **Only the API reads it.** A phone's session is t
 | **userId** | → `User` | Whose it is; never changes. Never the system actor (check) |
 | **refreshTokenHash** | text, unique | The SHA-256, as 64 lower-case hexadecimal digits, of the refresh token in force, and nothing else (check): the server never holds the token (AC-10-10). Rotating the token writes the new hash over the old. **Kept out of the audit log** |
 | **createdAt** | instant | When they signed in; never changes |
-| **expiresAt** | instant | After `createdAt` (check). The lifetime is a policy value of task 2.2.3 |
-| revokedAt | instant | Signed out, or ended by the server. **Once set, the row never changes again** (trigger): no rotation, no second life |
+| **expiresAt** | instant | After `createdAt` (check). The policy's quiet minutes after its last use (`SESSION_INACTIVITY_MINUTES`), moved on by each refresh, and never later than the policy's hours after `createdAt` (`SESSION_OVERALL_HOURS`) (task 2.2.3, ADR-408) |
+| revokedAt | instant | Signed out, or ended by the server: its refresh token was presented a second time, or the person's password was set anew (ADR-408, 410). **Once set, the row never changes again** (trigger): no rotation, no second life |
 
 Audited in the security domain: the audit log shows a session opened, each rotation (that the
 hash changed, never a hash) and the revocation, each with its actor and request.

@@ -89,7 +89,7 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-07, through ADR-406)
+### Where things stand (2026-10-07, through ADR-411)
 - **Phase 2 (API and sync) is open (ADR-376).** Its plan is `BACKLOG.md`'s eight milestones and 32
   tasks (ADR-377); tasks 2.0.1 (the opening and the plan), 2.1.1 (the threat model and the
   API's scenarios, ADR-379; docs), 2.1.2 (the API as a process, ADR-380…385), 2.1.3 (the
@@ -108,7 +108,20 @@ of `DECISIONS.md`.
   who calls) and a back-office or outside user reset theirs by email through two endpoints
   (`POST /password-resets`, `/password-resets/completions`) with a signed code, good once for 60
   minutes, that stores nothing; mail is `nodemailer` and never required. What it leaves: BACKLOG
-  C89. **The user's word (ADR-401):
+  C89. **Task 2.2.3 (sessions, ADR-407…411) is done:** an admin, a manager/analyst or a
+  read-only viewer signs in with their email address and password (`POST /sessions`) and gets
+  two `__Host-` cookies (`HttpOnly; Secure; SameSite=Strict`): an access token good for five
+  minutes and a refresh token that rotates and is good once (used twice, its session ends).
+  **Every endpoint says who may call it** (`access` in the contracts), asked by `Admission`
+  before the schemas read anything; a call that isn't a GET carries the session's CSRF value
+  in `x-adms-csrf`. A session ends after 30 quiet minutes and 12 hours at most. Wrong tries
+  are counted on `user_credential` (the domain's `SignInTries`): a wait from the 5th in a row,
+  a lock at the 10th until the password is set anew; each a security event, written with the
+  person whose login was tried as its actor; a name nobody has writes nothing. A password an
+  admin set is changed by its owner first (`passwordChangeRequired`); a new password ends the
+  person's sessions; the password hash is keyed from `ADMS_TOKEN_SIGNING_SECRET`. A monitor
+  and the system actor are refused. **Until 2.2.4 an admin signs in with a password alone.**
+  What it leaves: BACKLOG C90. **The user's word (ADR-401):
   sign-in follows NIST SP 800-63B and ASVS Level 2; when a direction in security is suggested,
   say what the standard asks before building it** (ADR-400 was built first and withdrawn). **Each service login (`adms_api`, `adms_worker`, `adms_readonly`) is
   under a statement timeout**, the policy value `STATEMENT_TIMEOUT_MS` (30,000 ms), set by
@@ -120,7 +133,7 @@ of `DECISIONS.md`.
   `@Serves`; `Boundary` reads its path, query and body by its schemas first** (BACKLOG C86 is the
   recipe for adding one); the CORS list is `ADMS_CORS_ORIGINS`; every answer carries the API's own
   headers; the API's database client states the request's id on every write; `pnpm openapi`
-  writes `apps/api/openapi.json`. `spec/acceptance/10-api-and-sync.md` (56 scenarios, 21 passing)
+  writes `apps/api/openapi.json`. `spec/acceptance/10-api-and-sync.md` (56 scenarios, 30 passing)
   and `spec/THREAT-MODEL.md` are both **approved by the user** (their marks, ADR-386, 393).
   Its 14 REQs are in `REQUIREMENTS.md`, one ticked (REQ-208).
 - **A test of the API that must write** runs in one piece of work on the installation's database,
@@ -128,9 +141,9 @@ of `DECISIONS.md`.
   database, mail and clock (ADR-405).
 - **Phase 1 is done:** all seven exit criteria met (ADR-371, 372); 693 of the 708 scenarios with a
   Phase 1 part proven whole, 15 in part. 48 scenario rows name Phase 2 (37 as "API (Phase 2)").
-- **The chain, seen whole on 2026-10-07:** 92 test
-  files, 1,940 tests; lint clean; 421 licences allowed; fifteen stories; `pnpm security` 7 passed,
-  0 failed; eighty-two migrations. The expected output of each command is `adms-verify`'s.
+- **The chain, seen whole on 2026-10-07:** 95 test
+  files, 2,000 tests; lint clean; 421 licences allowed; fifteen stories; `pnpm security` 7 passed,
+  0 failed; eighty-four migrations. The expected output of each command is `adms-verify`'s.
 - **What exists:** `packages/db` (schema, guards, tests), `packages/domain` (every rule; one
   dependency, no database), `packages/contracts`, `packages/scenarios` (the harness and stories,
   the golden mission among them), `apps/worker/src/reconciliation/` (the run: group, check,
@@ -286,27 +299,27 @@ questions.
 **Phase 2 is open (ADR-376). Its plan is `BACKLOG.md`, "Active — Phase 2" (ADR-377): read its
 brief first. One task per response.**
 
-**Task 2.2.3, sessions** *(BACKLOG has the task in full)*. Read first: `spec/THREAT-MODEL.md`
-T-14, T-15, T-16, T-24 and its §4 rows on sessions; `spec/acceptance/10-api-and-sync.md`'s
-**AC-10-09, 12…19** (this task's) and AC-02-39's web half, with **points 1, 2, 3a, 5, 6, 7 and 8**
-(token lifetimes, the counts before back-off and lockout and how a lock opens, CSRF's mechanism
-and the cookies' `SameSite`, what a failed sign-in is told, what ends a session, the actor of an
-event when nobody is signed in); **ADR-401** (the standard: lockout state in the database, a
-failed sign-in and a lockout as security events, a try at a name nobody has writes no row; say
-what NIST SP 800-63B-4 and ASVS 5.0 ask before departing from them); BACKLOG **C88's and C89's
-2.2.3 lines** (what a person signs in with; `PasswordHasher.verify`; a password an admin set
-changed by its owner at next sign-in; the keyed hash; a person changing their own password),
-C85 and C86 (`Access-Control-Allow-Credentials`, the allowed headers, whether the boundary runs
-before sign-in's check; `pnpm local:up` again after a change to `apps/api`); ARCHITECTURE §6
-(Back-office sessions, Abuse); `spec/DATA-MODEL.md` §2.2, `Session`, `SecurityEvent`. **A
-dependency needs its ADR first** (prefer what Node 24 gives: tokens can be signed with
-`node:crypto`). **Done when:** a back-office or outside user signs in and out; the access token
-is short-lived and the refresh token rotates, both only in `HttpOnly; Secure; SameSite` cookies;
-a refresh token used twice ends its session; a cookie-authenticated write without CSRF's proof
-is refused; wrong tries back off and lock, kept in the database; role `SYSTEM` and a monitor's
-credentials are refused; each sign-in, failure and lockout is a security event; AC-10-09, 12…18
-pass and AC-10-19 is whole; and the chain is green with the new counts. **Next after it: 2.2.4,
-two-step sign-in.**
+**Task 2.2.4, two-step sign-in** *(BACKLOG has the task in full)*. Read first:
+`spec/THREAT-MODEL.md` T-14, T-16 and its §4 rows on sign-in; `spec/acceptance/10-api-and-sync.md`'s
+**AC-10-26** (this task's), AC-10-32 (an authenticator code never in the log) and, in file 02,
+**AC-02-14 and 74** (required for an admin and a manager/analyst, optional for a read-only
+viewer, none for a monitor); **ADR-170** (the user's rule) and **ADR-401** (say what NIST SP
+800-63B-4 and ASVS 5.0 ask of a one-time code, before building: read the published texts);
+**ADR-408…410** (sessions as built: sign-in must give a session only once the second step is
+done, where one is required; `Sessions.signIn`, `Admission`, the `access` of an endpoint);
+BACKLOG **C88's and C90's 2.2.4 lines** (how `twoStepSecret` is kept at rest, since the server
+must read it to check a code and the audit log never holds it; whether "confirmed" needs a
+column; a wrong code as a wrong try; clearing it ends the person's sessions and is a security
+event, perhaps a kind of its own); ARCHITECTURE §6 (Two-step sign-in and email: seeded dev
+accounts with known secrets in the dev stack only, never in a shipped build); `spec/DATA-MODEL.md`
+§2.2, `UserCredential`. **A dependency needs its ADR first** (prefer what Node 24 gives: a
+time-based code is an HMAC, `node:crypto`). **Done when:** an admin and a manager/analyst can't
+get a session without a code once two-step is set up, and are made to set it up first; a
+read-only viewer may choose it; a person sets it up by proving a code; an admin clears it for
+someone who lost their phone and that is a security event; a code is good once, and wrong codes
+count as wrong tries; no secret or code is in a log or the audit log; AC-10-26, AC-02-14 and
+AC-02-74's sign-in half pass; and the chain is green with the new counts. **Next after it:
+2.2.5, permissions on every request, and people.**
 
 **Every command starts with** `eval "$(fnm env --shell zsh)"`. The checks are `adms-verify`'s; the
 database tests, the map servers' tests, the stories and `pnpm security` need `pnpm local:up` first,

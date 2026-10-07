@@ -13,6 +13,7 @@
       "get": {
         "operationId": "health",
         "summary": "That the API answers. Anybody may ask.",
+        "x-open-adms-access": "ANYBODY",
         "responses": {
           "200": {
             "description": "The answer.",
@@ -49,6 +50,7 @@
       "post": {
         "operationId": "requestPasswordReset",
         "summary": "Asks for a password reset to be sent to an email address. Anybody may ask; the answer is the same whether or not a person has that address.",
+        "x-open-adms-access": "ANYBODY",
         "requestBody": {
           "required": true,
           "content": {
@@ -104,6 +106,7 @@
       "post": {
         "operationId": "completePasswordReset",
         "summary": "Sets a new password with the code a reset message carried. The code is good once.",
+        "x-open-adms-access": "ANYBODY",
         "requestBody": {
           "required": true,
           "content": {
@@ -123,6 +126,342 @@
                   }
                 },
                 "required": ["code", "password"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "const": "ok"
+                    }
+                  },
+                  "required": ["status"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions": {
+      "post": {
+        "operationId": "signIn",
+        "summary": "Signs a back-office or outside user in with their email address and password. The tokens are set as cookies; the answer holds none.",
+        "x-open-adms-access": "ANYBODY",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 320
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  }
+                },
+                "required": ["email", "password"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "role": {
+                          "type": "string",
+                          "enum": ["ADMIN", "MANAGER_ANALYST", "READ_ONLY_VIEWER"]
+                        }
+                      },
+                      "required": ["id", "name", "role"],
+                      "additionalProperties": false
+                    },
+                    "passwordChangeRequired": {
+                      "type": "boolean"
+                    },
+                    "csrf": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": ["user", "passwordChangeRequired", "csrf"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/refreshes": {
+      "post": {
+        "operationId": "refreshSession",
+        "summary": "Gives a session a new access token and a new refresh token. A refresh token is good once: one presented a second time ends its session.",
+        "x-open-adms-access": "REFRESH_TOKEN",
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "role": {
+                          "type": "string",
+                          "enum": ["ADMIN", "MANAGER_ANALYST", "READ_ONLY_VIEWER"]
+                        }
+                      },
+                      "required": ["id", "name", "role"],
+                      "additionalProperties": false
+                    },
+                    "passwordChangeRequired": {
+                      "type": "boolean"
+                    },
+                    "csrf": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": ["user", "passwordChangeRequired", "csrf"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/sign-outs": {
+      "post": {
+        "operationId": "signOut",
+        "summary": "Ends the session on the server and clears its cookies.",
+        "x-open-adms-access": "REFRESH_TOKEN",
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "const": "signed-out"
+                    }
+                  },
+                  "required": ["status"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/current": {
+      "get": {
+        "operationId": "currentSession",
+        "summary": "Who is signed in.",
+        "x-open-adms-access": "SIGNED_IN",
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "role": {
+                          "type": "string",
+                          "enum": ["ADMIN", "MANAGER_ANALYST", "READ_ONLY_VIEWER"]
+                        }
+                      },
+                      "required": ["id", "name", "role"],
+                      "additionalProperties": false
+                    },
+                    "passwordChangeRequired": {
+                      "type": "boolean"
+                    },
+                    "csrf": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": ["user", "passwordChangeRequired", "csrf"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/csrf": {
+      "get": {
+        "operationId": "sessionCsrf",
+        "summary": "The CSRF value of the session the refresh token belongs to, for a page that was loaded anew.",
+        "x-open-adms-access": "REFRESH_TOKEN",
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "csrf": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": ["csrf"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/password-changes": {
+      "post": {
+        "operationId": "changePassword",
+        "summary": "The signed-in person sets a new password, giving their current one. Their other sessions end.",
+        "x-open-adms-access": "SIGNED_IN",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "current": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  }
+                },
+                "required": ["current", "password"],
                 "additionalProperties": false
               }
             }
@@ -179,7 +518,13 @@
               "PASSWORD_BREACHED",
               "PASSWORD_EASY_TO_GUESS",
               "RESET_REFUSED",
-              "NO_MAIL"
+              "NO_MAIL",
+              "SIGN_IN_REFUSED",
+              "NOT_SIGNED_IN",
+              "CSRF_REFUSED",
+              "PASSWORD_CHANGE_REQUIRED",
+              "PASSWORD_WRONG",
+              "PASSWORD_UNCHANGED"
             ]
           },
           "requestId": {

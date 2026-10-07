@@ -6,7 +6,7 @@
 import 'reflect-metadata';
 
 import type { Database } from '@open-adms/db';
-import { PasswordRules, type Policy } from '@open-adms/domain';
+import { PasswordRules, SignInTries, type Policy } from '@open-adms/domain';
 import {
   Inject,
   Module,
@@ -18,15 +18,20 @@ import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 
 import type { Clock } from '../setup/setup-service.ts';
+import { Admission } from '../sign-in/admission.ts';
 import { shippedBreachedPasswords } from '../sign-in/breached-list.ts';
 import { mailFor, type Mail } from '../sign-in/mail.ts';
 import { PasswordHasher } from '../sign-in/password-hasher.ts';
 import { apiPasswords } from '../sign-in/password-resets.controller.ts';
 import { Passwords } from '../sign-in/passwords.ts';
 import { ResetCodes } from '../sign-in/reset-codes.ts';
+import { SessionTokens } from '../sign-in/session-tokens.ts';
+import { apiSessions, apiSessionTokens } from '../sign-in/sessions.controller.ts';
+import { Sessions } from '../sign-in/sessions.ts';
+import { WrongTries } from '../sign-in/wrong-tries.ts';
 import { answersWith } from './answer-headers.ts';
 import { apiDatabase, openApiDatabase } from './api-database.ts';
-import { Boundary } from './boundary.ts';
+import { Boundary, requestNow } from './boundary.ts';
 import { ErrorFilter } from './error-filter.ts';
 import { logged, ProcessLog } from './logs.ts';
 import type { Settings } from './settings.ts';
@@ -49,6 +54,13 @@ export type ProcessPolicy = Pick<
   | 'passwordMinimumLength'
   | 'passwordMaximumLength'
   | 'passwordResetMinutes'
+  | 'accessTokenMinutes'
+  | 'sessionInactivityMinutes'
+  | 'sessionOverallHours'
+  | 'signInTriesBeforeWait'
+  | 'signInTriesBeforeLock'
+  | 'signInFirstWaitSeconds'
+  | 'signInLongestWaitMinutes'
 >;
 
 // What a test puts in place of the process's own: where the log goes instead of standard output,
@@ -75,7 +87,13 @@ class ProcessModule implements OnApplicationShutdown {
     this.database = database;
   }
 
-  static around(module: Type<unknown>, database: Database, passwords: Passwords): DynamicModule {
+  static around(
+    module: Type<unknown>,
+    database: Database,
+    passwords: Passwords,
+    sessions: Sessions,
+    tokens: SessionTokens,
+  ): DynamicModule {
     return {
       module: ProcessModule,
       global: true,
@@ -83,8 +101,10 @@ class ProcessModule implements OnApplicationShutdown {
       providers: [
         { provide: apiDatabase, useValue: database },
         { provide: apiPasswords, useValue: passwords },
+        { provide: apiSessions, useValue: sessions },
+        { provide: apiSessionTokens, useValue: tokens },
       ],
-      exports: [apiDatabase, apiPasswords],
+      exports: [apiDatabase, apiPasswords, apiSessions, apiSessionTokens],
     };
   }
 
@@ -124,21 +144,34 @@ export class ApiProcess {
     });
     answersWith(server, settings.corsOrigins);
     const database = more.database ?? openApiDatabase(settings);
+    const clock = more.clock ?? { now: () => new Date() };
+    const mail = more.mail ?? mailFor(settings);
+    const hasher = new PasswordHasher(settings.tokenSigningSecret);
+    const tokens = new SessionTokens(settings.tokenSigningSecret, policy.accessTokenMinutes);
+    const tries = new WrongTries(database, {
+      rules: new SignInTries(policy),
+      clock,
+      mail,
+      requestNow,
+    });
+    const sessions = new Sessions(database, { tokens, hasher, tries, clock, policy, requestNow });
     const passwords = new Passwords(database, {
       rules: new PasswordRules(policy, shippedBreachedPasswords()),
-      hasher: new PasswordHasher(),
+      hasher,
       resetCodes: new ResetCodes(settings.tokenSigningSecret, policy.passwordResetMinutes),
-      mail: more.mail ?? mailFor(settings),
-      clock: more.clock ?? { now: () => new Date() },
+      mail,
+      clock,
       resetMinutes: policy.passwordResetMinutes,
+      sessions,
+      tries,
     });
     const app = await NestFactory.create<NestFastifyApplication>(
-      ProcessModule.around(module, database, passwords),
+      ProcessModule.around(module, database, passwords, sessions, tokens),
       adapter,
       { logger: new ProcessLog(server.log) },
     );
     app.useGlobalFilters(new ErrorFilter());
-    app.useGlobalInterceptors(new Boundary());
+    app.useGlobalInterceptors(new Boundary(new Admission(sessions, tokens)));
     app.enableShutdownHooks();
     return new ApiProcess(app, routes, settings);
   }

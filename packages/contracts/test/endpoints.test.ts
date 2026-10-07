@@ -21,6 +21,7 @@ import {
 const correction = endpoint({
   name: 'testCorrection',
   summary: 'A test’s own.',
+  access: 'ANYBODY',
   method: 'PATCH',
   path: '/tickets/:ticketNumber',
   params: z.strictObject({ ticketNumber: z.string().regex(/^\d{6}$/) }),
@@ -82,6 +83,7 @@ describe('an endpoint is defined whole, or not at all', () => {
   const base = {
     name: 'test',
     summary: 'A test’s own.',
+    access: 'ANYBODY',
     method: 'POST',
     answer: healthAnswerSchema,
   } as const;

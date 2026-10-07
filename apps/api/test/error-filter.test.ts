@@ -21,6 +21,7 @@ const fails = (name: string, method: 'GET' | 'POST' = 'GET') =>
   endpoint({
     name,
     summary: 'A test’s own.',
+    access: 'ANYBODY',
     method,
     path: `/fails/${name}`,
     answer: healthAnswerSchema,

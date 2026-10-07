@@ -1131,14 +1131,20 @@ model ViewerProject {
 // kept out of the audit log, which says that one changed and never what to (the guard migration;
 // BACKLOG C21). The system actor never has one.
 model UserCredential {
-  id            String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  userId        String    @unique @map("user_id") @db.Uuid
+  id                     String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId                 String    @unique @map("user_id") @db.Uuid
   // Argon2id, as a PHC string; none until a password is set.
-  passwordHash  String?   @map("password_hash")
+  passwordHash           String?   @map("password_hash")
   // The authenticator app's secret for two-step sign-in (ADR-170); none until it is set up.
-  twoStepSecret String?   @map("two_step_secret")
-  // Sign-in refuses this person until then (lockout).
-  lockedUntil   DateTime? @map("locked_until") @db.Timestamptz(3)
+  twoStepSecret          String?   @map("two_step_secret")
+  // Sign-in refuses this person until then: the wait wrong tries put on the login (ADR-409).
+  lockedUntil            DateTime? @map("locked_until") @db.Timestamptz(3)
+  // Wrong tries in a row since the last sign-in that worked or the last password set. At the
+  // policy's count the login is locked until its password is set anew (ADR-409).
+  failedSignIns          Int       @default(0) @map("failed_sign_ins")
+  // Somebody else set this password and so knows it: its owner sets their own at their next
+  // sign-in, and may do nothing else until then (ADR-410).
+  passwordChangeRequired Boolean   @default(false) @map("password_change_required")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 

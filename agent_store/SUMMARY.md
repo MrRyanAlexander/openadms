@@ -1,13 +1,13 @@
 # Open ADMS — Current decisions and gaps, at a glance
 
 **The present tense of the project on one page.** `DECISIONS.md` and `DEVIATIONS.md` are the full
-history, with 406 ADRs and 74 KDs, many superseded. This page says what is true **now** and which
+history, with 411 ADRs and 74 KDs, many superseded. This page says what is true **now** and which
 entries to cite. The reasons live in the ADRs and the skills.
 
 - **Keep it current:** when you add, amend or supersede an ADR, or open or close a KD, update this
   page **in the same response** (`adms-decisions`).
 - **If this page and a log entry disagree,** the newest ADR wins: fix this page and say so.
-- **Updated 2026-10-07, through ADR-406 / KD-74.** **Phase 2 (API and sync) is open (ADR-376);
+- **Updated 2026-10-07, through ADR-411 / KD-74.** **Phase 2 (API and sync) is open (ADR-376);
   its plan is `BACKLOG.md`'s eight milestones and 32 tasks (ADR-377). Tasks 2.1.1 (ADR-379) and
   2.1.2 (ADR-380…385) are done: the API runs as a process, reached only at
   `https://api.adms.localhost` through Caddy, with a health answer and nothing else yet. Task
@@ -15,7 +15,8 @@ entries to cite. The reasons live in the ADRs and the skills.
   done: each service login is under a statement timeout, and an installation may state its own
   policy values. Task 2.2.1 (ADR-397…399) is done: sign-in's records, in the database only. Task
   2.2.2 (ADR-402…406) is done: passwords (the rules, the breached list, the hash, an admin's set,
-  reset by email).**
+  reset by email). Task 2.2.3 (ADR-407…411) is done: sessions (sign-in and out, the two cookies,
+  CSRF, wrong tries and the lock, a password to change first, the keyed hash).**
   `spec/acceptance/10-api-and-sync.md` and `spec/THREAT-MODEL.md` are approved by the user
   (their marks, ADR-386, 393). **No KD is open.**
   The exception to the seven-day rule is gone from `pnpm-workspace.yaml` (ADR-372's owed step,
@@ -520,9 +521,67 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   `packages/domain/test/passwords.test.ts`, `apps/api/test/passwords.test.ts` (no stack) and
   `password-set.test.ts` (the installation's database, each test undone; the mail catcher),
   `tools/setup/test/secrets.test.ts`. AC-10-20, 21, 23, 24 pass; AC-10-25 in part (the admin's
-  endpoint: 2.2.5). **Not built, said:** the keyed hash the standard says a verifier SHOULD add;
-  a change of an admin-set password at next sign-in; rate limits on the reset endpoints (C89).
-  *Agent defaults.*
+  endpoint: 2.2.5). **Built since, by task 2.2.3:** the keyed hash (ADR-411) and the change of
+  an admin-set password at its owner's next sign-in (ADR-410). **Not built, said:** rate limits
+  on the reset endpoints (C89). *Agent defaults, confirmed by the user (ADR-407); AC-10-24's
+  example for a person is now `1q2w3e4r5t6y7u8i`.*
+- **Sessions (task 2.2.3).** [407, 408, 409, 410, 411] **The standard, read first (ADR-401):**
+  NIST SP 800-63B-4 §2.2.3, §3.2.2, §5 and OWASP ASVS 5.0 V3, V6, V7; nothing built departs
+  from them. **Who signs in here:** an admin, a manager/analyst or a read-only viewer, with
+  **the email address the firm holds for them** and their password; never a monitor (their ID
+  and password open a phone's calls only) and never the system actor. Where two such people
+  share an address neither is signed in by it (refusing the second person is 2.2.5's).
+  **Endpoints:** `POST /sessions`, `POST /sessions/refreshes`, `POST /sessions/sign-outs`,
+  `GET /sessions/current`, `GET /sessions/csrf`, `POST /password-changes`. **Every endpoint
+  says who may call it** in the contracts (`access`: `ANYBODY` · `SIGNED_IN` · `REFRESH_TOKEN`),
+  and `Admission` asks it inside the boundary **before** the schemas read anything. **The
+  tokens are cookies only**, `__Host-adms-access` and `__Host-adms-refresh`, each `Path=/;
+  HttpOnly; Secure; SameSite=Strict`; no body holds one. The access token is the session's id
+  and its end, signed with HMAC-SHA-256 by a key of that purpose drawn from
+  `ADMS_TOKEN_SIGNING_SECRET` (`node:crypto`, no dependency), good for `ACCESS_TOKEN_MINUTES`
+  (5); **the session, its person, their role and that they aren't archived are read from the
+  database on every request.** The refresh token is the session's id and 32 random bytes, the
+  row keeping their SHA-256; **good once**: a refresh writes the new hash over the old, and **a
+  token that isn't the one in force ends the session** (so two tabs refreshing at once sign
+  the person out: the page takes a lock, Phase 4). **CSRF:** every call that isn't a GET on a
+  `SIGNED_IN` or `REFRESH_TOKEN` endpoint carries the session's own value (a signature over
+  its id, given in the sign-in and refresh answers and by `GET /sessions/csrf`) in the header
+  `x-adms-csrf`, or is refused `CSRF_REFUSED`; a listed origin is answered
+  `Access-Control-Allow-Credentials: true`. **A firm's back office and its API must be one
+  site** (`SameSite=Strict`). **A session ends** at sign-out, after
+  `SESSION_INACTIVITY_MINUTES` (30) with nothing asked, at `SESSION_OVERALL_HOURS` (12) after
+  sign-in, when its refresh token is used twice, when the person's password is set anew, and
+  at once for a person archived. **Wrong tries** (the domain's `SignInTries`): counted on
+  `user_credential.failed_sign_ins`; from `SIGN_IN_TRIES_BEFORE_WAIT` (5) each puts a wait on
+  the login (`locked_until`: `SIGN_IN_FIRST_WAIT_SECONDS`, 30, doubling, at most
+  `SIGN_IN_LONGEST_WAIT_MINUTES`, 60); at `SIGN_IN_TRIES_BEFORE_LOCK` (10; never over 100)
+  **the login is locked until its password is set anew** (a reset by email, or an admin),
+  never by time; while it waits or is locked the right password is refused too and **nothing
+  is written**. **Every failed sign-in is told `SIGN_IN_REFUSED` and nothing else**; a try at
+  a name nobody has writes no row. **Security events:** `SIGN_IN`, `SIGN_IN_FAILED`,
+  `LOCKOUT`, each with who it is about, when and the request; **a failed try is written with
+  the person whose login was tried as its actor** (nobody is signed in; only the worker states
+  the system actor). A locked person is told by email where the firm has mail. **A password
+  somebody else set** (`user_credential.password_change_required`, set by an admin's set for
+  anybody but themselves and a monitor) **is changed by its owner first**: until then every
+  `SIGNED_IN` endpoint not marked `beforePasswordChange` answers `PASSWORD_CHANGE_REQUIRED`.
+  **A person changes their own** giving the current one (a wrong one is a wrong try); **a
+  password set anew ends the person's sessions** (their own change keeps the one it was made
+  in) and opens a lock. **The password hash is keyed** (Argon2id's secret input, a key drawn
+  from the signing secret, named `keyid=djE` in the string, never in the database); an
+  unkeyed hash still checks and is made again at sign-in; **losing or changing
+  `ADMS_TOKEN_SIGNING_SECRET` means every password is set anew**. The master passcode's hash
+  is not keyed (2.5.1). Refusal codes: `SIGN_IN_REFUSED`, `NOT_SIGNED_IN` (401),
+  `CSRF_REFUSED`, `PASSWORD_CHANGE_REQUIRED` (403), `PASSWORD_WRONG`, `PASSWORD_UNCHANGED`
+  (422). Eighty-four migrations. Tests: `packages/domain/test/sign-in-tries.test.ts`,
+  `apps/api/test/session-tokens.test.ts` (no stack), `sessions.test.ts` (the installation's
+  database, each test undone), `door.test.ts`, `packages/db/test/sign-in.test.ts`. AC-10-09,
+  12…19 pass; AC-02-39 in part. **Not built, said:** the second step (2.2.4: **until then an
+  admin signs in with a password alone**); a way in for the last admin, locked, of a firm
+  with no mail (2.2.5); rate limits (2.2.6); a person's list of their own sessions and an
+  admin ending somebody's (ASVS 7.5.2, 7.4.5). What it leaves: BACKLOG C90. *Agent defaults,
+  but (a) the change of an admin-set password and (b) the keyed hash, built at the user's
+  word (ADR-407).*
 - **The threat model and the API's scenarios (task 2.1.1; both approved by the user, ADR-386,
   393).**
   `spec/THREAT-MODEL.md`: eleven kinds of attacker, 36 threats over the layers of ARCHITECTURE §2,
@@ -1642,37 +1701,29 @@ its scenario.
 
 ## 4. Waiting on the user
 
-**Live today (2026-10-07, ADR-376…401):**
-- **Nothing blocks the next task** (2.2.3, sessions).
-- **Agent defaults of 2.2.2 to confirm or overturn (ADR-402…406):** 15 characters at least for
-  every back-office and outside user (the standard's number where a password may be the only
-  factor; 8 is its floor beside a required second step); the breached list is the NCSC's
-  100,000 most used, 46,483 of them 8 characters and up; a password made only of the person's
-  own name or address is refused; a reset by email is good for 60 minutes, and sends nothing
-  where two people share an address. **Three things for you to decide, each said with what the
-  standard asks:** (a) **an admin types and so knows a person's new password** (ADR-170 is
-  yours; ASVS Level 2 allows it, Level 3 does not): recommended that the person must set their
-  own at their next sign-in, built with 2.2.3; (b) **a keyed hash over the password hash**
-  with a secret kept apart from the database (NIST: SHOULD), not built, for passwords or the
-  master passcode; (c) **AC-10-24 says `password1234` is refused "as a known breached
-  password"**: as shipped it is refused first for being under 15 characters, and as breached
-  only where a firm lowers the minimum; the scenario's wording is yours to keep or change.
-  **A monitor's password is recorded as exempt** from the rules (ADR-402 (5), ADR-105).
-- **2.2.1's agent defaults were seen by the user on 2026-10-07** ("make sense"). **Agent
-  default of ADR-401 (3) to confirm or overturn:** a try at a name nobody has writes no row,
-  and once an account is locked further wrong tries add nothing until it opens.
-- **Agent defaults of 2.1.4 to confirm or overturn (ADR-394, 395):** a statement of a service's
-  database login is stopped after thirty seconds; the read-only login is under it too, the
-  owner's is not; an installation may override any policy value by the same name in a service's
-  own env file, the worker's and the API's each for its own logins.
-- **Nothing waits for approval:** `spec/acceptance/10-api-and-sync.md` and
-  `spec/THREAT-MODEL.md` carry the user's approval marks (ADR-386, 393: say if either was not
-  meant). **Agent defaults of 2.1.3 to confirm or overturn (ADR-387…392):** a request's body of
-  one mebibyte at most; a plain `http://` origin never on the CORS list; an origin off the list
-  told nothing rather than refused; the six headers of an API answer, `no-store` and the
-  request's id among them; a refused request told a code only until 2.4.4. **Agent defaults of 2.1.2 to confirm or overturn (ADR-380, 385):** NestJS 12
-  (six weeks old) rather than 11; the health answer says only that the process answers; an
-  error answers `{ code, requestId }`. The other sixteen open points are engineering, each an agent default in its task's ADR.
+**Live today (2026-10-07, ADR-376…411):**
+- **Nothing blocks the next task** (2.2.4, two-step sign-in).
+- **Settled at the user's word, 2026-10-07 (ADR-407: "I differ to your recommendations on the
+  points in the summary"), no longer waiting:** the agent defaults of tasks 2.1.2, 2.1.3,
+  2.1.4, 2.2.2 and of ADR-401 (3) as they were listed here; (a) a password an admin set is
+  changed by its owner at their next sign-in (built, ADR-410); (b) the keyed hash (built for
+  passwords, ADR-411; the master passcode's with 2.5.1); (c) AC-10-24's example for a person
+  is now `1q2w3e4r5t6y7u8i`, with `password1234` kept for the master passcode. **Said back so
+  a misreading shows:** (b) and (c) had no recommendation written here; the two above are the
+  ones made and acted on. Say if either was not what you meant.
+- **Agent defaults of 2.2.3 to confirm or overturn (ADR-408…410):** a person signs in with
+  their **email address**; a session ends after **30 quiet minutes** and **12 hours** at most
+  (the standard allows up to an hour and a day), its access token after 5 minutes; a login
+  **waits after 5 wrong tries in a row** (30 seconds, doubling) and is **locked at the 10th
+  until its password is set anew**, never by time (the standard's rule; its limit is 100);
+  every failed sign-in is told the same; a wrong try is recorded with the person whose login
+  was tried as its actor; a new password ends the person's sessions; two tabs refreshing with
+  one token sign the person out (the page will take a lock, Phase 4).
+- **Two things for you to know, neither blocking:** (1) **the last admin, locked, of a firm
+  with no mail server has no way in yet.** ARCHITECTURE §6 says the last admin can't be locked
+  out; the standard says a lock opens only by a new password. Task 2.2.5 owns it; recommended:
+  a command on the server, beside the installer, that sets an admin's password. (2) **Until
+  task 2.2.4 an admin signs in with a password alone**; nothing is shipped between the two.
 - **Phase 2's exit criteria and its plan are agent defaults (ADR-376, 377)**, the user's to change:
   jobs built before the endpoints that queue them; a tenth acceptance file and a threat model
   written first, for the user's approval; reads that only a screen needs left to Phase 4.

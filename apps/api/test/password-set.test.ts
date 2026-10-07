@@ -12,57 +12,24 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { errorAnswerSchema } from '@open-adms/contracts';
 import { systemActorId, type Database } from '@open-adms/db';
-import { PasswordRules } from '@open-adms/domain';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { ApiModule } from '../src/process/api-module.ts';
 import { ApiProcess } from '../src/process/api-process.ts';
 import { Settings } from '../src/process/settings.ts';
-import { shippedBreachedPasswords } from '../src/sign-in/breached-list.ts';
 import { SmtpMail, type Mail, type Message } from '../src/sign-in/mail.ts';
 import { PasswordHasher } from '../src/sign-in/password-hasher.ts';
 import { Passwords } from '../src/sign-in/passwords.ts';
 import { ResetCodes } from '../src/sign-in/reset-codes.ts';
 import { installationSettings, openInstallation, undone, type Tx } from './support/database.ts';
 import { madeUpSettings, ready, shippedPolicy } from './support/process.ts';
+import { NoServer, Outbox, signingSecret, signInOn, TestClock } from './support/sign-in.ts';
 
 const long = 'marsh heron delphine ferry';
 const longer = 'ferry delphine heron marsh';
 const keptOut = '[kept out of the audit]';
-const hasher = new PasswordHasher();
-const secret = 'made-up-signing-secret-for-this-test-only';
-
-// What the firm's mail server would have been handed.
-class Outbox implements Mail {
-  readonly available = true;
-  readonly sent: Message[] = [];
-
-  send(message: Message): Promise<void> {
-    this.sent.push(message);
-    return Promise.resolve();
-  }
-}
-
-class NoServer implements Mail {
-  readonly available = false;
-
-  send(): Promise<void> {
-    return Promise.reject(new Error('no mail server'));
-  }
-}
-
-// Monday 12 October 2026, 10:00 in Bayline County; a test moves it on.
-class TestClock {
-  at = new Date('2026-10-12T14:00:00Z');
-
-  now(): Date {
-    return this.at;
-  }
-
-  later(minutes: number): void {
-    this.at = new Date(this.at.getTime() + minutes * 60_000);
-  }
-}
+const secret = signingSecret;
+const hasher = new PasswordHasher(secret);
 
 // The example world's people (CONVENTIONS §6): Gates Disaster Recovery's back office, Bayline
 // County's debris manager, and a monitor.
@@ -95,16 +62,8 @@ async function people(tx: Tx, dana: string): Promise<People> {
   return { dana, luis: luis.id, viewer: viewer.id, kim: kim.id };
 }
 
-function passwordsOn(within: Database, mail: Mail, clock = new TestClock()): Passwords {
-  return new Passwords(within, {
-    rules: new PasswordRules(shippedPolicy, shippedBreachedPasswords()),
-    hasher,
-    resetCodes: new ResetCodes(secret, shippedPolicy.passwordResetMinutes),
-    mail,
-    clock,
-    resetMinutes: shippedPolicy.passwordResetMinutes,
-  });
-}
+const passwordsOn = (within: Database, mail: Mail, clock = new TestClock()): Passwords =>
+  signInOn(within, mail, clock).passwords;
 
 const hashOf = async (tx: Tx, userId: string): Promise<string | null> =>
   (await tx.userCredential.findUnique({ where: { userId } }))?.passwordHash ?? null;
@@ -137,7 +96,7 @@ describe('an admin sets a password', () => {
       const set = await passwordsOn(within, new NoServer()).setByAdmin(dana, luis, long);
       expect(set).toEqual({ set: true, told: false });
       const kept = await tx.userCredential.findUniqueOrThrow({ where: { userId: luis } });
-      expect(kept.passwordHash).toMatch(/^\$argon2id\$v=19\$m=19456,t=2,p=1\$/);
+      expect(kept.passwordHash).toMatch(/^\$argon2id\$v=19\$m=19456,t=2,p=1,keyid=djE\$/);
       expect(await hasher.verify(long, kept.passwordHash ?? '')).toBe(true);
       const audited = await tx.auditRecord.findMany({
         where: { tableName: 'user_credential', recordId: kept.id },
@@ -281,7 +240,8 @@ describe('a person resets their password by email', () => {
         [dana, 'INSERT'],
         [luis, 'UPDATE'],
       ]);
-      expect(audited[1]?.changedFields).toEqual(['password_hash']);
+      // Dana had set the first, so it was marked for him to change; his own reset clears that.
+      expect(audited[1]?.changedFields).toEqual(['password_change_required', 'password_hash']);
       // He is told it changed; the message carries no code and no password.
       expect(outbox.sent[1]).toMatchObject({
         to: 'Luis.Ortega@gates.example',

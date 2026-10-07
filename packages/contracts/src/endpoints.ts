@@ -7,9 +7,12 @@
 import { z } from 'zod';
 
 import {
+  csrfAnswerSchema,
   healthAnswerSchema,
   passwordSetAnswerSchema,
   resetAskedAnswerSchema,
+  sessionAnswerSchema,
+  signedOutAnswerSchema,
 } from './api-answers.ts';
 
 // No endpoint deletes (invariant 1).
@@ -17,10 +20,23 @@ export const endpointMethods = ['GET', 'POST', 'PUT', 'PATCH'] as const;
 
 export type EndpointMethod = (typeof endpointMethods)[number];
 
+// Who may call an endpoint (ARCHITECTURE §6; AC-10-27; ADR-408), checked before anything it was
+// sent is read. `ANYBODY`: nobody need be signed in. `SIGNED_IN`: a back-office or outside user's
+// session, by its access token. `REFRESH_TOKEN`: the session's refresh token, for the calls that
+// keep a session going or end it. With either of the last two, a call that isn't a GET carries
+// the session's CSRF value.
+export const endpointAccess = ['ANYBODY', 'SIGNED_IN', 'REFRESH_TOKEN'] as const;
+
+export type EndpointAccess = (typeof endpointAccess)[number];
+
 export interface Endpoint {
   // Its name in the OpenAPI description, unique in the list.
   readonly name: string;
   readonly summary: string;
+  readonly access: EndpointAccess;
+  // Served even to a person who must first set a password of their own (ADR-410): only what
+  // they need to do that. Left out, such a person is refused.
+  readonly beforePasswordChange?: true;
   readonly method: EndpointMethod;
   // From the root, a parameter written `:name`: `/projects/:projectId`.
   readonly path: string;
@@ -96,6 +112,7 @@ export function taken(served: Endpoint, sent: Sent): Sent | undefined {
 export const healthEndpoint = endpoint({
   name: 'health',
   summary: 'That the API answers. Anybody may ask.',
+  access: 'ANYBODY',
   method: 'GET',
   path: '/health',
   answer: healthAnswerSchema,
@@ -110,6 +127,7 @@ export const requestPasswordResetEndpoint = endpoint({
   name: 'requestPasswordReset',
   summary:
     'Asks for a password reset to be sent to an email address. Anybody may ask; the answer is the same whether or not a person has that address.',
+  access: 'ANYBODY',
   method: 'POST',
   path: '/password-resets',
   body: z.strictObject({ email: z.string().min(3).max(320) }),
@@ -119,10 +137,90 @@ export const requestPasswordResetEndpoint = endpoint({
 export const completePasswordResetEndpoint = endpoint({
   name: 'completePasswordReset',
   summary: 'Sets a new password with the code a reset message carried. The code is good once.',
+  access: 'ANYBODY',
   method: 'POST',
   path: '/password-resets/completions',
   body: z.strictObject({
     code: z.string().min(1).max(512),
+    password: z.string().min(1).max(4096),
+  }),
+  answer: passwordSetAnswerSchema,
+});
+
+// A back-office or outside user's session (ARCHITECTURE §6, Back-office sessions; AC-10-09,
+// 12…18; ADR-408…410). The access token and the refresh token travel only as cookies the server
+// sets (`HttpOnly; Secure; SameSite=Strict`); no answer's body holds either. What a body does
+// hold is the session's CSRF value, which the page sends back in the header named below with
+// every call that isn't a GET: it proves the call came from a page that could read an answer,
+// and opens nothing by itself.
+export const csrfHeader = 'x-adms-csrf';
+
+// What a person signs in with is the email address the firm holds for them. The limits here only
+// bound what is read: a wrong name and a wrong password are refused alike, by one code.
+export const signInEndpoint = endpoint({
+  name: 'signIn',
+  summary:
+    'Signs a back-office or outside user in with their email address and password. The tokens are set as cookies; the answer holds none.',
+  access: 'ANYBODY',
+  method: 'POST',
+  path: '/sessions',
+  body: z.strictObject({
+    email: z.string().min(1).max(320),
+    password: z.string().min(1).max(4096),
+  }),
+  answer: sessionAnswerSchema,
+});
+
+export const refreshSessionEndpoint = endpoint({
+  name: 'refreshSession',
+  summary:
+    'Gives a session a new access token and a new refresh token. A refresh token is good once: one presented a second time ends its session.',
+  access: 'REFRESH_TOKEN',
+  method: 'POST',
+  path: '/sessions/refreshes',
+  answer: sessionAnswerSchema,
+});
+
+export const signOutEndpoint = endpoint({
+  name: 'signOut',
+  summary: 'Ends the session on the server and clears its cookies.',
+  access: 'REFRESH_TOKEN',
+  method: 'POST',
+  path: '/sessions/sign-outs',
+  answer: signedOutAnswerSchema,
+});
+
+export const currentSessionEndpoint = endpoint({
+  name: 'currentSession',
+  summary: 'Who is signed in.',
+  access: 'SIGNED_IN',
+  beforePasswordChange: true,
+  method: 'GET',
+  path: '/sessions/current',
+  answer: sessionAnswerSchema,
+});
+
+export const sessionCsrfEndpoint = endpoint({
+  name: 'sessionCsrf',
+  summary:
+    'The CSRF value of the session the refresh token belongs to, for a page that was loaded anew.',
+  access: 'REFRESH_TOKEN',
+  method: 'GET',
+  path: '/sessions/csrf',
+  answer: csrfAnswerSchema,
+});
+
+// A person changes their own password, giving the one they have (ASVS 6.2.2, 6.2.3; ADR-410).
+export const changePasswordEndpoint = endpoint({
+  name: 'changePassword',
+  summary:
+    'The signed-in person sets a new password, giving their current one. Their other sessions end.',
+  access: 'SIGNED_IN',
+  beforePasswordChange: true,
+  method: 'POST',
+  path: '/password-changes',
+  body: z.strictObject({
+    current: z.string().min(1).max(4096),
     password: z.string().min(1).max(4096),
   }),
   answer: passwordSetAnswerSchema,
@@ -133,4 +231,10 @@ export const endpoints: readonly Endpoint[] = [
   healthEndpoint,
   requestPasswordResetEndpoint,
   completePasswordResetEndpoint,
+  signInEndpoint,
+  refreshSessionEndpoint,
+  signOutEndpoint,
+  currentSessionEndpoint,
+  sessionCsrfEndpoint,
+  changePasswordEndpoint,
 ];

@@ -28,6 +28,7 @@ import { listedOrigin, madeUpSettings, ready, shippedPolicy } from './support/pr
 const everyPart = endpoint({
   name: 'testEveryPart',
   summary: 'A test’s own.',
+  access: 'ANYBODY',
   method: 'PUT',
   path: '/taken/:status',
   params: healthAnswerSchema,
@@ -39,6 +40,7 @@ const good = { code: 'NOT_FOUND', requestId: 'r-1' };
 const noPart = endpoint({
   name: 'testNoPart',
   summary: 'A test’s own.',
+  access: 'ANYBODY',
   method: 'POST',
   path: '/nothing',
   answer: healthAnswerSchema,
@@ -271,7 +273,9 @@ describe('the boundary', () => {
       expect(asked.headers).toMatchObject({
         'access-control-allow-origin': listedOrigin,
         'access-control-allow-methods': 'GET, POST, PUT, PATCH',
-        'access-control-allow-headers': 'content-type',
+        // The session's cookies may come with a listed origin's call, and its CSRF header.
+        'access-control-allow-credentials': 'true',
+        'access-control-allow-headers': 'content-type, x-adms-csrf',
       });
     });
 

@@ -26,14 +26,14 @@ import { madeUpSettings, ready, shippedPolicy } from './support/process.ts';
 const long = 'marsh heron delphine ferry';
 
 describe('a password’s slow hash', () => {
-  const hasher = new PasswordHasher();
+  const hasher = new PasswordHasher('made-up-signing-secret-for-this-test-only');
 
   it('AC-10-20 is Argon2id at OWASP’s 19 MiB, 2 passes, 1 lane, as a PHC string with its own salt', async () => {
     const [first, second] = [await hasher.hash(long), await hasher.hash(long)];
     expect(PasswordHasher.cost).toEqual({ memory: 19456, passes: 2, parallelism: 1 });
     // A 16-byte salt and a 32-byte tag, in unpadded base64: 22 and 43 characters.
     expect(first).toMatch(
-      /^\$argon2id\$v=19\$m=19456,t=2,p=1\$[A-Za-z0-9+/]{22}\$[A-Za-z0-9+/]{43}$/,
+      /^\$argon2id\$v=19\$m=19456,t=2,p=1,keyid=djE\$[A-Za-z0-9+/]{22}\$[A-Za-z0-9+/]{43}$/,
     );
     expect(second).not.toBe(first);
     expect(first).not.toContain('marsh');
@@ -52,6 +52,29 @@ describe('a password’s slow hash', () => {
   it('hashes Unicode’s composed form, so one password typed two ways is one password', async () => {
     const kept = await hasher.hash('caf\u00e9 au lait at the marsh');
     expect(await hasher.verify('cafe\u0301 au lait at the marsh', kept)).toBe(true);
+  });
+
+  it('is keyed with a secret that is never in the database: the same password under another secret, or with no key, is another hash (ADR-411)', async () => {
+    const kept = await hasher.hash(long);
+    expect(
+      await new PasswordHasher('another-made-up-secret-for-this-test').verify(long, kept),
+    ).toBe(false);
+    // Whoever holds the string alone can't check a guess: with the key's name taken off, the
+    // string is an ordinary Argon2id hash, and the password doesn't check against it.
+    expect(await hasher.verify(long, kept.replace(',keyid=djE', ''))).toBe(false);
+    // A key the process doesn't hold checks nothing.
+    expect(await hasher.verify(long, kept.replace('keyid=djE', 'keyid=djI'))).toBe(false);
+    expect(hasher.stale(kept)).toBe(false);
+  });
+
+  it('a hash with no key, or made under lower settings, still checks and is made again (stale)', async () => {
+    const earlier =
+      '$argon2id$v=19$m=19456,t=2,p=1$rLnL+hWkLjJHDKTBWGSsdw$tYeMf5WEtzZTIdv2JQR18zDWwcllaJjVO71qautLsGY';
+    expect(hasher.stale(earlier)).toBe(true);
+    const kept = await hasher.hash(long);
+    expect(hasher.stale(kept.replace('m=19456', 'm=9728'))).toBe(true);
+    expect(hasher.stale(kept.replace('t=2', 't=1'))).toBe(true);
+    expect(hasher.stale('not-a-hash')).toBe(true);
   });
 
   it('still checks a hash made under other settings: the string carries its own', async () => {

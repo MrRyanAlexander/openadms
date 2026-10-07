@@ -174,6 +174,7 @@ export {
   type PasswordProblem,
   type PasswordProblemCode,
 } from './passwords.ts';
+export { SignInTries, type SignInTriesPolicy, type WrongTry } from './sign-in-tries.ts';
 export {
   PaysWhen,
   type PaysWhenContract,
