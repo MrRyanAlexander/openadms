@@ -7,7 +7,7 @@ entries to cite. The reasons live in the ADRs and the skills.
 - **Keep it current:** when you add, amend or supersede an ADR, or open or close a KD, update this
   page **in the same response** (`adms-decisions`).
 - **If this page and a log entry disagree,** the newest ADR wins: fix this page and say so.
-- **Updated 2026-10-07, through ADR-415 / KD-74.** **Phase 2 (API and sync) is open (ADR-376);
+- **Updated 2026-10-07, through ADR-416 / KD-74.** **Phase 2 (API and sync) is open (ADR-376);
   its plan is `BACKLOG.md`'s eight milestones and 32 tasks (ADR-377). Tasks 2.1.1 (ADR-379) and
   2.1.2 (ADR-380…385) are done: the API runs as a process, reached only at
   `https://api.adms.localhost` through Caddy, with a health answer and nothing else yet. Task
@@ -22,7 +22,10 @@ entries to cite. The reasons live in the ADRs and the skills.
   2.2.5 (ADR-415) is done: permissions on every request, and people (each endpoint's roles and
   permission asked at the door from the database; an admin creates people, gives and takes
   grants and a viewer's projects, sets a password, ends sessions, archives; one email address a
-  person who signs in and the last admin, both held by the database; `pnpm installer:admin`).**
+  person who signs in and the last admin, both held by the database; `pnpm installer:admin`).
+  Task 2.2.6 (ADR-416) is done: rate limits (429 `LIMITED` with `Retry-After`; by address, by
+  signed-in person, and refused tries by address and by address at one login; nine policy
+  values; the counts in the API's memory; `ADMS_TRUSTED_PROXIES`). Milestone 2.2 is complete.**
   `spec/acceptance/10-api-and-sync.md` and `spec/THREAT-MODEL.md` are approved by the user
   (their marks, ADR-386, 393). **No KD is open.**
   The exception to the seven-day rule is gone from `pnpm-workspace.yaml` (ADR-372's owed step,
@@ -669,6 +672,39 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   said:** a list of people; editing a person or their role; taking a person out of the archive;
   a person's own sessions; rate limits (2.2.6). What it leaves: BACKLOG C92. *Agent defaults
   but for the server command.* [415]
+- **Rate limits (task 2.2.6).** Read against NIST SP 800-63B-4 §3.2.2 and ASVS 5.0 2.4.1,
+  6.1.1, 6.3.1 first (ADR-401): the standard's SHALL is the login's own count and lock (ADR-409,
+  in the database, unchanged); this adds the anti-automation, and is no departure. **A caller
+  over a limit is answered 429 `LIMITED`**, with the whole seconds to wait in the header
+  `Retry-After` and in the body's `retryAfterSeconds`; never which limit. The rule is the
+  domain's (`RateLimits`: so many in a stretch that starts with the first one counted; a
+  refused request isn't counted). **Six limits on nine policy values**, each an installation's
+  to state: every request **by address** (`RATE_LIMIT_REQUESTS_PER_ADDRESS` 3,000 in
+  `RATE_LIMIT_WINDOW_SECONDS` 60; an office and its phones share one address) and **by
+  signed-in person** (`RATE_LIMIT_REQUESTS_PER_ACCOUNT` 600; a call with only a refresh token,
+  by its session); **refused tries at a secret by address** (`SIGN_IN_WRONG_TRIES_PER_ADDRESS`
+  30 in `SIGN_IN_ADDRESS_WINDOW_MINUTES` 60: a sign-in, a reset's code, a current password, an
+  authenticator's code) and **by address at one login**
+  (`SIGN_IN_WRONG_TRIES_PER_ADDRESS_AT_LOGIN` 4, always under `SIGN_IN_TRIES_BEFORE_WAIT`);
+  **resets by email** by who asks (`PASSWORD_RESET_ASKS_PER_ADDRESS` 10) and who is asked for
+  (`PASSWORD_RESET_ASKS_PER_LOGIN` 3), counted whether or not anybody has the address. **Per
+  account at sign-in is the login's own count** (AC-10-40's "limited by login"). **A try
+  stopped by a limit never reaches the login**: it is no wrong try, writes nothing, and the
+  right password from there is told the same; the owner signs in from any other address; a
+  sign-in that works from the address, or the password set anew, starts that count again.
+  **Narrowed, not closed:** one address coming back each hour still reaches a login's lock in
+  the third hour (about sixteen minutes before), unless the owner signs in between. **The
+  counts are in the API's own memory, never the database** (ADR-401 (3)): they start again
+  with the process, each process keeps its own, and past `RATE_LIMIT_COUNTS_KEPT` (100,000)
+  the oldest goes. **A caller's address** is the one that connected unless a proxy listed in
+  the new optional setting `ADMS_TRUSTED_PROXIES` (addresses or networks) says whose request
+  it carries; the local stack's network has fixed addresses and Caddy is `172.30.213.2`; an
+  IPv6 caller is counted by its first 64 bits; a login is kept as a hash. **No address is
+  logged or stored**, and a limit's refusal is one warning in the log, no security event. No
+  dependency, no migration. Tests: `packages/domain/test/rate-limits.test.ts`,
+  `apps/api/test/limits.test.ts`. AC-10-40 passes. **Not built, said:** per device and what a
+  phone does when limited (2.6.5); a shared store for several API processes (5a). What it
+  leaves: BACKLOG C93. *Agent defaults.* [416]
 - **The threat model and the API's scenarios (task 2.1.1; both approved by the user, ADR-386,
   393).**
   `spec/THREAT-MODEL.md`: eleven kinds of attacker, 36 threats over the layers of ARCHITECTURE §2,
@@ -1788,8 +1824,17 @@ its scenario.
 
 ## 4. Waiting on the user
 
-**Live today (2026-10-07, ADR-376…415):**
-- **Nothing blocks the next task** (2.2.6, rate limits).
+**Live today (2026-10-07, ADR-376…416):**
+- **Nothing blocks the next task** (2.3.1, the job queue).
+- **Agent defaults of 2.2.6 to confirm or overturn (ADR-416):** (a) **the numbers**: 3,000
+  requests a minute from one address, 600 from one signed-in person; in an hour, 30 refused
+  tries from one address, 4 at one login, 10 resets asked by one address, 3 for one login; (b)
+  **after four wrong tries at one login from one address, that address waits out the hour for
+  that login** (or the owner resets the password, which opens it at once), where before the
+  fifth wrong try only cost 30 seconds; (c) the counts are in the API's memory, so a restart
+  clears them; (d) **no caller's address is logged or stored**, so a firm sees who is flooding
+  it in its proxy's log, not ours; (e) one patient address can still lock a known login over
+  about three hours: closing that means a count that fades with time, which changes ADR-409.
 - **Agent defaults of 2.2.5 to confirm or overturn (ADR-415):** (a) **only an admin** creates
   people, gives and takes permissions and a viewer's projects, sets another's password, ends
   sessions and archives: there is no "manage people" permission a manager/analyst could hold;

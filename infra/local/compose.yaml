@@ -186,6 +186,9 @@ services:
       # The exact origins whose pages may read an answer (ADR-098, 391): the stack's own page
       # today. Each web app's origin joins the list when it gets its hostname.
       ADMS_CORS_ORIGINS: https://adms.localhost
+      # The one proxy whose word is taken for a caller's address (ADR-416): Caddy, at the address
+      # the stack's network gives it below. Rate limits count by that address.
+      ADMS_TRUSTED_PROXIES: 172.30.213.2
     secrets:
       - api_env
     volumes:
@@ -221,6 +224,10 @@ services:
   caddy:
     <<: *hardening
     image: caddy:2.11.4-alpine@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b
+    # A fixed address, so that the API can name the proxy it believes (ADMS_TRUSTED_PROXIES).
+    networks:
+      default:
+        ipv4_address: 172.30.213.2
     ports:
       - '127.0.0.1:${ADMS_HTTPS_PORT:-443}:443'
       - '127.0.0.1:${ADMS_HTTP_PORT:-80}:80'
@@ -240,6 +247,15 @@ services:
       timeout: 5s
       retries: 20
       start_period: 10s
+
+# The stack's own network, its addresses fixed so that Caddy's can be named (ADR-416): Caddy
+# takes .2, and every other service is handed one from the upper half, never Caddy's.
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.30.213.0/24
+          ip_range: 172.30.213.128/25
 
 secrets:
   postgres_password:

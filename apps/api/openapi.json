@@ -1725,7 +1725,8 @@
               "NOT_A_MANAGER_ANALYST",
               "NOT_A_VIEWER",
               "UNKNOWN_CONTRACTOR",
-              "UNKNOWN_PROJECT"
+              "UNKNOWN_PROJECT",
+              "LIMITED"
             ]
           },
           "requestId": {
@@ -1735,6 +1736,11 @@
           "message": {
             "type": "string",
             "minLength": 1
+          },
+          "retryAfterSeconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
           }
         },
         "required": ["code", "requestId"],

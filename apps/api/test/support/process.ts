@@ -13,6 +13,8 @@ export const madeUpSettings: ProcessSettings = {
   port: 0,
   databaseUrl: `postgresql://adms_api:${word}@127.0.0.1:1/adms`,
   corsOrigins: [listedOrigin],
+  // No proxy stands in front of a test's process: a caller's address is the one that connected.
+  trustedProxies: [],
   // Made up as the login's password is; the installer's is 32 random bytes.
   tokenSigningSecret: [word, word].join('-'),
   // No mail server, unless a test hands the process a mail of its own.

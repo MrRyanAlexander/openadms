@@ -5,6 +5,7 @@ import { errorAnswerSchema, type ErrorCode } from '@open-adms/contracts';
 import { Catch, HttpException, type ArgumentsHost, type ExceptionFilter } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
+import { Limited } from './limits.ts';
 import { errorLogged } from './logs.ts';
 import { Refusal } from './refusal.ts';
 
@@ -25,6 +26,11 @@ export class ErrorFilter implements ExceptionFilter {
     if (status >= 500) {
       request.log.error({ err: errorLogged(thrown) }, 'A request failed inside the server.');
     }
+    // A caller over a rate limit: the log says which limit, never who (ADR-416).
+    if (thrown instanceof Limited) {
+      request.log.warn({ limit: thrown.limit }, 'A caller was limited.');
+      void reply.header('retry-after', String(thrown.retryAfterSeconds));
+    }
     void reply
       .status(status)
       .header('content-type', 'application/json; charset=utf-8')
@@ -40,6 +46,7 @@ export class ErrorFilter implements ExceptionFilter {
           ...(status < 500 && thrown instanceof Refusal && thrown.said !== undefined
             ? { message: thrown.said }
             : {}),
+          ...(thrown instanceof Limited ? { retryAfterSeconds: thrown.retryAfterSeconds } : {}),
         }),
       );
   }

@@ -17,6 +17,7 @@ import { csrfHeader, type Endpoint } from '@open-adms/contracts';
 import { Access } from '@open-adms/domain';
 import type { FastifyRequest } from 'fastify';
 
+import type { Limits } from '../process/limits.ts';
 import { Refusal } from '../process/refusal.ts';
 import { accessCookie, cookiesOf, refreshCookie } from './session-cookies.ts';
 import type { SessionTokens } from './session-tokens.ts';
@@ -48,10 +49,12 @@ export function refreshTokenOf(request: object): string {
 export class Admission {
   private readonly sessions: Sessions;
   private readonly tokens: SessionTokens;
+  private readonly limits: Pick<Limits, 'asked'>;
 
-  constructor(sessions: Sessions, tokens: SessionTokens) {
+  constructor(sessions: Sessions, tokens: SessionTokens, limits: Pick<Limits, 'asked'>) {
     this.sessions = sessions;
     this.tokens = tokens;
+    this.limits = limits;
   }
 
   // Lets the request through, or refuses it with a plain code.
@@ -62,12 +65,16 @@ export class Admission {
       const refreshToken = cookies.get(refreshCookie);
       const read = this.tokens.readRefresh(refreshToken);
       if (refreshToken === undefined || read === undefined) throw new Refusal('NOT_SIGNED_IN', 401);
+      // Only the token says whose call this is, so it is counted for its session (ADR-416).
+      this.limits.asked(`session ${read.sessionId}`);
       this.proven(endpoint, request, read.sessionId);
       admitted.set(request, { refreshToken });
       return;
     }
     const caller = await this.sessions.caller(cookies.get(accessCookie));
     if (caller === undefined) throw new Refusal('NOT_SIGNED_IN', 401);
+    // Counted for the person, whatever address and whichever of their sessions it came by.
+    this.limits.asked(`person ${caller.userId}`);
     this.proven(endpoint, request, caller.sessionId);
     if (caller.passwordChangeRequired && endpoint.beforePasswordChange !== true) {
       throw new Refusal('PASSWORD_CHANGE_REQUIRED', 403);

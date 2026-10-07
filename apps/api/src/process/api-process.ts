@@ -6,7 +6,13 @@
 import 'reflect-metadata';
 
 import type { Database } from '@open-adms/db';
-import { PasswordRules, SignInTries, TwoStepRules, type Policy } from '@open-adms/domain';
+import {
+  PasswordRules,
+  RateLimits,
+  SignInTries,
+  TwoStepRules,
+  type Policy,
+} from '@open-adms/domain';
 import {
   Inject,
   Module,
@@ -39,6 +45,7 @@ import { answersWith } from './answer-headers.ts';
 import { apiDatabase, openApiDatabase } from './api-database.ts';
 import { Boundary, requestNow } from './boundary.ts';
 import { ErrorFilter } from './error-filter.ts';
+import { apiLimits, Limits } from './limits.ts';
 import { logged, ProcessLog } from './logs.ts';
 import type { Settings } from './settings.ts';
 
@@ -48,6 +55,7 @@ export type ProcessSettings = Pick<
   | 'port'
   | 'databaseUrl'
   | 'corsOrigins'
+  | 'trustedProxies'
   | 'tokenSigningSecret'
   | 'smtpUrl'
   | 'smtpAddress'
@@ -69,6 +77,15 @@ export type ProcessPolicy = Pick<
   | 'signInLongestWaitMinutes'
   | 'twoStepCodeStepsEitherSide'
   | 'twoStepSetupMinutes'
+  | 'rateLimitWindowSeconds'
+  | 'rateLimitRequestsPerAddress'
+  | 'rateLimitRequestsPerAccount'
+  | 'rateLimitCountsKept'
+  | 'signInAddressWindowMinutes'
+  | 'signInWrongTriesPerAddress'
+  | 'signInWrongTriesPerAddressAtLogin'
+  | 'passwordResetAsksPerAddress'
+  | 'passwordResetAsksPerLogin'
 >;
 
 // What a test puts in place of the process's own: where the log goes instead of standard output,
@@ -103,6 +120,7 @@ class ProcessModule implements OnApplicationShutdown {
     tokens: SessionTokens,
     twoStep: TwoStep,
     people: People,
+    limits: Limits,
   ): DynamicModule {
     return {
       module: ProcessModule,
@@ -115,8 +133,17 @@ class ProcessModule implements OnApplicationShutdown {
         { provide: apiSessionTokens, useValue: tokens },
         { provide: apiTwoStep, useValue: twoStep },
         { provide: apiPeople, useValue: people },
+        { provide: apiLimits, useValue: limits },
       ],
-      exports: [apiDatabase, apiPasswords, apiSessions, apiSessionTokens, apiTwoStep, apiPeople],
+      exports: [
+        apiDatabase,
+        apiPasswords,
+        apiSessions,
+        apiSessionTokens,
+        apiTwoStep,
+        apiPeople,
+        apiLimits,
+      ],
     };
   }
 
@@ -148,15 +175,19 @@ export class ApiProcess {
       logger: { ...logged.logger, ...(more.stream === undefined ? {} : { stream: more.stream }) },
       // A body that says it is larger, or turns out to be, is refused before it is read whole.
       bodyLimit: policy.requestBodyLimitBytes,
+      // Whose word is taken for the address a request came from: a listed proxy's, nobody
+      // else's. With none listed it is the address that connected (ADR-416).
+      trustProxy: settings.trustedProxies.length > 0 ? [...settings.trustedProxies] : false,
     });
     const server = adapter.getInstance();
     const routes: Route[] = [];
     server.addHook('onRoute', (route) => {
       for (const method of [route.method].flat()) routes.push({ method, path: route.url });
     });
-    answersWith(server, settings.corsOrigins);
     const database = more.database ?? openApiDatabase(settings);
     const clock = more.clock ?? { now: () => new Date() };
+    const limits = new Limits(new RateLimits(policy), clock);
+    answersWith(server, settings.corsOrigins, (request) => limits.arrived(request.ip));
     const mail = more.mail ?? mailFor(settings);
     const hasher = new PasswordHasher(settings.tokenSigningSecret);
     const tokens = new SessionTokens(settings.tokenSigningSecret, policy.accessTokenMinutes);
@@ -190,15 +221,16 @@ export class ApiProcess {
       resetMinutes: policy.passwordResetMinutes,
       sessions,
       tries,
+      limits,
     });
     const people = new People(database, { clock, sessions });
     const app = await NestFactory.create<NestFastifyApplication>(
-      ProcessModule.around(module, database, passwords, sessions, tokens, twoStep, people),
+      ProcessModule.around(module, database, passwords, sessions, tokens, twoStep, people, limits),
       adapter,
       { logger: new ProcessLog(server.log) },
     );
     app.useGlobalFilters(new ErrorFilter());
-    app.useGlobalInterceptors(new Boundary(new Admission(sessions, tokens)));
+    app.useGlobalInterceptors(new Boundary(new Admission(sessions, tokens, limits)));
     app.enableShutdownHooks();
     return new ApiProcess(app, routes, settings);
   }

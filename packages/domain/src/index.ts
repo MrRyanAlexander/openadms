@@ -185,6 +185,15 @@ export {
   type PeopleRefusalCode,
   type PermissionName,
 } from './people.ts';
+export {
+  addressCounted,
+  RateLimit,
+  rateLimitNames,
+  RateLimits,
+  type Counted,
+  type RateLimitName,
+  type RateLimitsPolicy,
+} from './rate-limits.ts';
 export { SignInTries, type SignInTriesPolicy, type WrongTry } from './sign-in-tries.ts';
 export { TwoStepRules, twoStepCode, type TwoStepNeed, type TwoStepPolicy } from './two-step.ts';
 export {

@@ -2,9 +2,10 @@
 // the process's environment and then from its env file (the installer's apps/api/.env, or the
 // file ADMS_ENV_FILE names), and checked. A missing or malformed one stops the start and names
 // its key, never its value. ADMS_CORS_ORIGINS may be left out: no page of another origin is then
-// let in. ADMS_SMTP_ADDRESS and ADMS_MAIL_FROM may be left out too (ADR-405).
+// let in. ADMS_SMTP_ADDRESS and ADMS_MAIL_FROM may be left out too (ADR-405), and so may
+// ADMS_TRUSTED_PROXIES: no proxy's word is then taken for a caller's address (ADR-416).
 import { existsSync, readFileSync } from 'node:fs';
-import { isIP } from 'node:net';
+import { BlockList, isIP } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { parseEnv } from 'node:util';
 
@@ -42,6 +43,10 @@ export class Settings {
   readonly port: number;
   // The exact origins whose pages may read an answer (ADR-098, 391); none unless listed.
   readonly corsOrigins: readonly string[];
+  // The proxies in front of the API, each an address or a network (`10.0.0.0/8`): only one of
+  // them is believed about the address a request came from (its X-Forwarded-For). With none
+  // listed, a caller's address is the one that connected (ADR-416).
+  readonly trustedProxies: readonly string[];
 
   private constructor(values: {
     databaseUrl: string;
@@ -53,6 +58,7 @@ export class Settings {
     host: string;
     port: number;
     corsOrigins: readonly string[];
+    trustedProxies: readonly string[];
   }) {
     this.databaseUrl = values.databaseUrl;
     this.readOnlyDatabaseUrl = values.readOnlyDatabaseUrl;
@@ -63,6 +69,7 @@ export class Settings {
     this.host = values.host;
     this.port = values.port;
     this.corsOrigins = values.corsOrigins;
+    this.trustedProxies = values.trustedProxies;
   }
 
   static read(environment: Environment): Settings {
@@ -110,6 +117,14 @@ export class Settings {
       origins.every((origin) => Settings.isOrigin(origin)),
     );
 
+    const proxies = (environment['ADMS_TRUSTED_PROXIES'] ?? '')
+      .split(',')
+      .map((proxy) => proxy.trim())
+      .filter((proxy) => proxy !== '');
+    checked('ADMS_TRUSTED_PROXIES', environment['ADMS_TRUSTED_PROXIES'], () =>
+      proxies.every((proxy) => Settings.isProxy(proxy)),
+    );
+
     const values = {
       databaseUrl: database('DATABASE_URL'),
       readOnlyDatabaseUrl: database('READONLY_DATABASE_URL'),
@@ -131,6 +146,7 @@ export class Settings {
         checked('ADMS_API_PORT', required('ADMS_API_PORT'), (value) => Settings.isPort(value)),
       ),
       corsOrigins: origins,
+      trustedProxies: proxies,
     };
     if (problems.length > 0) throw new SettingsProblem(problems);
     return new Settings(values);
@@ -169,6 +185,22 @@ export class Settings {
       /^(https|capacitor):\/\/[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?(?::(\d+))?$/.exec(value) ?? [];
     if (scheme === undefined) return false;
     return port === undefined || (Settings.isPort(port) && !(scheme === 'https' && port === '443'));
+  }
+
+  // One address, or a network as an address and its prefix's length. Never everything: a
+  // network of no bits would believe whoever connects.
+  private static isProxy(value: string): boolean {
+    const [address = '', prefix, ...more] = value.split('/');
+    const family = isIP(address);
+    if (family === 0 || more.length > 0) return false;
+    if (prefix === undefined) return true;
+    if (!/^[1-9]\d{0,2}$/.test(prefix)) return false;
+    try {
+      new BlockList().addSubnet(address, Number(prefix), family === 4 ? 'ipv4' : 'ipv6');
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private static isAddress(value: string): boolean {

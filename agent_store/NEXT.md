@@ -89,7 +89,7 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-07, through ADR-415)
+### Where things stand (2026-10-07, through ADR-416)
 - **Phase 2 (API and sync) is open (ADR-376).** Its plan is `BACKLOG.md`'s eight milestones and 32
   tasks (ADR-377); tasks 2.0.1 (the opening and the plan), 2.1.1 (the threat model and the
   API's scenarios, ADR-379; docs), 2.1.2 (the API as a process, ADR-380…385), 2.1.3 (the
@@ -145,7 +145,15 @@ of `DECISIONS.md`.
   database keeps one email address a person who signs in and the firm's last admin; **`pnpm
   installer:admin`** on the server makes the first admin and lets an admin back in (it has
   not been run for real here: the installation still holds no person but the system actor).
-  What it leaves: BACKLOG C92. **Milestone 2.2 has one task left, 2.2.6.** **The user's word (ADR-401):
+  What it leaves: BACKLOG C92. **Task 2.2.6 (rate limits, ADR-416) is done:** a caller over
+  a limit is answered 429 `LIMITED` with `Retry-After` (and `retryAfterSeconds` in the body);
+  every request is counted by address and, signed in, by person; refused tries at a secret by
+  address and by address at one login (four, under the login's own wait: the fifth from one
+  address never reaches the login); resets by email by who asks and who is asked for; nine
+  policy values; the counts in the API's own memory (gone at a restart, per process), never
+  the database; a caller's address taken from a proxy only where `ADMS_TRUSTED_PROXIES` lists
+  it (the local stack's Caddy is `172.30.213.2` on a network of fixed addresses); no address
+  logged or stored. What it leaves: BACKLOG C93. **Milestone 2.2 is complete.** **The user's word (ADR-401):
   sign-in follows NIST SP 800-63B and ASVS Level 2; when a direction in security is suggested,
   say what the standard asks before building it** (ADR-400 was built first and withdrawn). **Each service login (`adms_api`, `adms_worker`, `adms_readonly`) is
   under a statement timeout**, the policy value `STATEMENT_TIMEOUT_MS` (30,000 ms), set by
@@ -157,7 +165,7 @@ of `DECISIONS.md`.
   `@Serves`; `Boundary` reads its path, query and body by its schemas first** (BACKLOG C86 is the
   recipe for adding one); the CORS list is `ADMS_CORS_ORIGINS`; every answer carries the API's own
   headers; the API's database client states the request's id on every write; `pnpm openapi`
-  writes `apps/api/openapi.json`. `spec/acceptance/10-api-and-sync.md` (56 scenarios, 31 passing)
+  writes `apps/api/openapi.json`. `spec/acceptance/10-api-and-sync.md` (56 scenarios, 33 passing)
   and `spec/THREAT-MODEL.md` are both **approved by the user** (their marks, ADR-386, 393).
   Its 14 REQs are in `REQUIREMENTS.md`, one ticked (REQ-208).
 - **A test of the API that must write** runs in one piece of work on the installation's database,
@@ -169,10 +177,13 @@ of `DECISIONS.md`.
   **The API's test files run one at a time** (ADR-415): the database keeps two who sign in
   from one address, and every test's world has Dana's. A test that archives Dana gives the
   firm another admin first; what needs a firm with no admin is a story (`first-admin`).
+  **A test's requests come from `served.from`** (ADR-416): one that makes more than four wrong
+  tries at one login moves it, and one that needs other limits hands `worldOn` a policy from
+  `installationPolicy({ … })`.
 - **Phase 1 is done:** all seven exit criteria met (ADR-371, 372); 693 of the 708 scenarios with a
   Phase 1 part proven whole, 15 in part. 48 scenario rows name Phase 2 (37 as "API (Phase 2)").
-- **The chain, seen whole on 2026-10-07:** 101 test
-  files, 2,091 tests; lint clean; 421 licences allowed; sixteen stories; `pnpm security` 7 passed,
+- **The chain, seen whole on 2026-10-07:** 103 test
+  files, 2,134 tests; lint clean; 421 licences allowed; sixteen stories; `pnpm security` 7 passed,
   0 failed; eighty-seven migrations. The expected output of each command is `adms-verify`'s.
 - **What exists:** `packages/db` (schema, guards, tests), `packages/domain` (every rule; one
   dependency, no database), `packages/contracts`, `packages/scenarios` (the harness and stories,
@@ -329,19 +340,18 @@ questions.
 **Phase 2 is open (ADR-376). Its plan is `BACKLOG.md`, "Active — Phase 2" (ADR-377): read its
 brief first. One task per response.**
 
-**Task 2.2.6, rate limits** *(BACKLOG has the task in full)*. Read first:
-`spec/THREAT-MODEL.md` T-16 and its rows on abuse; `spec/acceptance/10-api-and-sync.md`'s
-**AC-10-40** and its point 13 (what a limited caller is told); ARCHITECTURE §6 (Abuse); **ADR-404
-(9), 409 (5), 412 (13)**; BACKLOG **C85** (the forwarded address, before any per-IP limit),
-**C89's, C90's, C91's and C92's 2.2.6 lines**: per IP and per account (per device comes with
-2.6.5), the numbers policy values, never literals; `POST /sessions` (with and without a code),
-`/password-resets` and its completion, `/password-changes`, `/two-step/setups/confirmations`,
-`GET /sessions/csrf` and the endpoints of the firm's people are limited today only by a login's
-own wait and lock. **A dependency needs its ADR first; say what the standard asks before
-building (ADR-401).** **Done when:** a caller over a limit is refused with a plain code and told
-when to try again; a stranger can't hold a known login in its wait from one address; the limits
-are policy values an installation may state; AC-10-40 passes; REQ-204 is noted in part; and the
-chain is green with the new counts. **Next after it: 2.3.1, the job queue.**
+**Task 2.3.1, the job queue** *(BACKLOG has the task in full)*. Read first: ARCHITECTURE §13
+and §3 (a Postgres-backed queue, "e.g. pg-boss"); `spec/acceptance/10-api-and-sync.md`'s scenarios
+on the queue (AC-10-50 on) and its points 14 and 15; `spec/THREAT-MODEL.md` §4.4 (T-30…33); BACKLOG **C84**
+(points 14, 15), **C71, C75** and **C87** where they name the queue; ADR-094 (no hand-written SQL
+for modelling), ADR-097 (the database enforces), ADR-276 (the worker's login and the system
+actor). **The choice is an ADR before any code:** a library (a dependency needs its ADR, its
+licence and the clean-copy check) weighed against a guarded table of our own written through
+Prisma (grants, audit, what each login may do to it). **Done when:** a job names its project
+and its tickets and is queued in the same piece of work as the change that asks for it, so
+neither exists without the other; the table (or the library's) is guarded and its grants
+tested; `guard_gaps()` is empty; and the chain is green with the new counts. **Next after it:
+2.3.2, the worker as a process.**
 
 **Every command starts with** `eval "$(fnm env --shell zsh)"`. The checks are `adms-verify`'s; the
 database tests, the map servers' tests, the stories and `pnpm security` need `pnpm local:up` first,

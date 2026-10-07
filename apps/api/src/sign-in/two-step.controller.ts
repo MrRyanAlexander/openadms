@@ -15,6 +15,7 @@ import {
 import { Body, Controller, Inject, Param, Req } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 
+import { apiLimits, Limits } from '../process/limits.ts';
 import { Refusal } from '../process/refusal.ts';
 import { Serves } from '../process/serves.ts';
 import { callerOf } from './admission.ts';
@@ -36,13 +37,16 @@ const statusOf = {
 export class TwoStepController {
   private readonly twoStep: TwoStep;
   private readonly tokens: SessionTokens;
+  private readonly limits: Limits;
 
   constructor(
     @Inject(apiTwoStep) twoStep: TwoStep,
     @Inject(apiSessionTokens) tokens: SessionTokens,
+    @Inject(apiLimits) limits: Limits,
   ) {
     this.twoStep = twoStep;
     this.tokens = tokens;
+    this.limits = limits;
   }
 
   @Serves(beginTwoStepSetupEndpoint)
@@ -64,6 +68,7 @@ export class TwoStepController {
     @Req() request: FastifyRequest,
   ): Promise<SessionAnswer> {
     const caller = callerOf(request);
+    this.limits.mayTry(request.ip);
     const outcome = await this.twoStep.confirm(
       caller.userId,
       caller.sessionId,
@@ -72,6 +77,7 @@ export class TwoStepController {
     );
     if (!outcome.confirmed) {
       request.log.info({ why: outcome.code }, 'The setup of an authenticator was refused.');
+      if (outcome.code === 'TWO_STEP_REFUSED') this.limits.wrongTry(request.ip);
       throw new Refusal(outcome.code, statusOf[outcome.code]);
     }
     request.log.info('An authenticator was set up.');

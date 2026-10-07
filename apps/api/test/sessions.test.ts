@@ -416,15 +416,21 @@ describe('a write made on the strength of a cookie', () => {
 describe('wrong tries at a login', () => {
   it('AC-10-18 tries are made to wait longer and longer: while a login waits the right password is refused too, and nothing more is written', async () => {
     await world(async (served, tx, { luis }) => {
+      // Each try from an address of its own: one address alone is stopped before the fifth
+      // (AC-10-40, limits.test.ts), and the login's own count is what many addresses meet.
+      const home = served.from;
       for (let tried = 0; tried < 4; tried += 1) {
+        served.from = `203.0.113.${String(tried + 1)}`;
         refused401(await served.signIn(luissEmail, wrong), 'SIGN_IN_REFUSED');
       }
       expect(await tx.userCredential.findUniqueOrThrow({ where: { userId: luis } })).toMatchObject({
         failedSignIns: 4,
         lockedUntil: null,
       });
+      served.from = '203.0.113.5';
       const fifth = await served.signIn(luissEmail, wrong);
       refused401(fifth, 'SIGN_IN_REFUSED');
+      served.from = home;
       const at = served.clock.now().getTime();
       expect(await tx.userCredential.findUniqueOrThrow({ where: { userId: luis } })).toMatchObject({
         failedSignIns: 5,
@@ -438,7 +444,9 @@ describe('wrong tries at a login', () => {
       expect(await kindsOf(tx, luis)).toEqual(Array(5).fill('SIGN_IN_FAILED'));
       // The next wrong try, once the wait is over, doubles it.
       served.clock.later(0.5);
+      served.from = '203.0.113.6';
       refused401(await served.signIn(luissEmail, wrong), 'SIGN_IN_REFUSED');
+      served.from = home;
       expect(await tx.userCredential.findUniqueOrThrow({ where: { userId: luis } })).toMatchObject({
         failedSignIns: 6,
         lockedUntil: new Date(served.clock.now().getTime() + 60_000),

@@ -52,6 +52,34 @@ describe('the settings the API starts with', () => {
     expect(problemOf({ ...good, SMTP_URL: 'http://127.0.0.1:1025' }).keys).toEqual(['SMTP_URL']);
   });
 
+  it('take the proxies whose word is believed about a caller’s address, each an address or a network; none unless listed (ADR-416)', () => {
+    expect(Settings.from(good).trustedProxies).toEqual([]);
+    expect(Settings.from({ ...good, ADMS_TRUSTED_PROXIES: ' ' }).trustedProxies).toEqual([]);
+    expect(
+      Settings.from({ ...good, ADMS_TRUSTED_PROXIES: '172.30.213.2, 10.0.0.0/8,fd00::/8, ::1' })
+        .trustedProxies,
+    ).toEqual(['172.30.213.2', '10.0.0.0/8', 'fd00::/8', '::1']);
+    // Never a name, a pattern or everybody: a network of no bits would believe whoever connects.
+    for (const off of [
+      'caddy',
+      '*',
+      'loopback',
+      '0.0.0.0/0',
+      '::/0',
+      '10.0.0.0/33',
+      'fd00::/129',
+      '10.0.0.0/8/8',
+      '10.0.0.0/',
+      '10.0.0.0/08',
+      '172.30.213.2 10.0.0.1',
+      '172.30.213.2,caddy',
+    ]) {
+      const problem = problemOf({ ...good, ADMS_TRUSTED_PROXIES: off });
+      expect(problem.keys, off).toEqual(['ADMS_TRUSTED_PROXIES']);
+      expect(problem.message).toBe('The API did not start: ADMS_TRUSTED_PROXIES is malformed.');
+    }
+  });
+
   it.each(Object.keys(good))('AC-10-55: without %s the API does not start, and says so', (key) => {
     const problem = problemOf(without(key));
     expect(problem.keys).toEqual([key]);

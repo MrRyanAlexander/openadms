@@ -31,6 +31,15 @@ const shipped = {
   SIGN_IN_LONGEST_WAIT_MINUTES: '60',
   TWO_STEP_CODE_STEPS_EITHER_SIDE: '1',
   TWO_STEP_SETUP_MINUTES: '10',
+  RATE_LIMIT_WINDOW_SECONDS: '60',
+  RATE_LIMIT_REQUESTS_PER_ADDRESS: '3000',
+  RATE_LIMIT_REQUESTS_PER_ACCOUNT: '600',
+  RATE_LIMIT_COUNTS_KEPT: '100000',
+  SIGN_IN_ADDRESS_WINDOW_MINUTES: '60',
+  SIGN_IN_WRONG_TRIES_PER_ADDRESS: '30',
+  SIGN_IN_WRONG_TRIES_PER_ADDRESS_AT_LOGIN: '4',
+  PASSWORD_RESET_ASKS_PER_ADDRESS: '10',
+  PASSWORD_RESET_ASKS_PER_LOGIN: '3',
 };
 
 // The program types of the example world: PPDR requires an ROE, ROW doesn't.
@@ -114,6 +123,15 @@ describe('the policy values', () => {
       signInLongestWaitMinutes: 'SIGN_IN_LONGEST_WAIT_MINUTES',
       twoStepCodeStepsEitherSide: 'TWO_STEP_CODE_STEPS_EITHER_SIDE',
       twoStepSetupMinutes: 'TWO_STEP_SETUP_MINUTES',
+      rateLimitWindowSeconds: 'RATE_LIMIT_WINDOW_SECONDS',
+      rateLimitRequestsPerAddress: 'RATE_LIMIT_REQUESTS_PER_ADDRESS',
+      rateLimitRequestsPerAccount: 'RATE_LIMIT_REQUESTS_PER_ACCOUNT',
+      rateLimitCountsKept: 'RATE_LIMIT_COUNTS_KEPT',
+      signInAddressWindowMinutes: 'SIGN_IN_ADDRESS_WINDOW_MINUTES',
+      signInWrongTriesPerAddress: 'SIGN_IN_WRONG_TRIES_PER_ADDRESS',
+      signInWrongTriesPerAddressAtLogin: 'SIGN_IN_WRONG_TRIES_PER_ADDRESS_AT_LOGIN',
+      passwordResetAsksPerAddress: 'PASSWORD_RESET_ASKS_PER_ADDRESS',
+      passwordResetAsksPerLogin: 'PASSWORD_RESET_ASKS_PER_LOGIN',
     });
     expect(Object.keys(shipped).sort()).toEqual(Object.values(policyNames).sort());
   });

@@ -31,6 +31,7 @@ import type { Mail } from './mail.ts';
 import type { PasswordHasher } from './password-hasher.ts';
 import type { ResetCodes } from './reset-codes.ts';
 import type { Sessions } from './sessions.ts';
+import type { Limits } from '../process/limits.ts';
 import type { WrongTries } from './wrong-tries.ts';
 
 type Tx = Prisma.TransactionClient;
@@ -68,6 +69,8 @@ export interface PasswordParts {
   readonly resetMinutes: number;
   readonly sessions: Pick<Sessions, 'endAll'>;
   readonly tries: WrongTries;
+  // A password set anew starts the count of what each address was refused at the login again.
+  readonly limits: Pick<Limits, 'setAnew'>;
 }
 
 // Who may reset their own password by email: a back-office or outside user. Never a monitor, and
@@ -250,6 +253,7 @@ export class Passwords {
       },
     });
     await this.parts.sessions.endAll(tx, person.id, how.keepSession);
+    this.parts.limits.setAnew(person.email);
     return undefined;
   }
 

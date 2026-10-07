@@ -55,6 +55,22 @@ export const policyNames = {
   // person has to finish setting an authenticator up, in minutes.
   twoStepCodeStepsEitherSide: 'TWO_STEP_CODE_STEPS_EITHER_SIDE',
   twoStepSetupMinutes: 'TWO_STEP_SETUP_MINUTES',
+  // Rate limits (ARCHITECTURE §6, Abuse; ASVS 2.4.1; ADR-416): how long the stretch is that
+  // requests are counted over, in seconds; how many one address and one signed-in person may send
+  // in it; and how many callers' counts the server keeps at once.
+  rateLimitWindowSeconds: 'RATE_LIMIT_WINDOW_SECONDS',
+  rateLimitRequestsPerAddress: 'RATE_LIMIT_REQUESTS_PER_ADDRESS',
+  rateLimitRequestsPerAccount: 'RATE_LIMIT_REQUESTS_PER_ACCOUNT',
+  rateLimitCountsKept: 'RATE_LIMIT_COUNTS_KEPT',
+  // Tries at sign-in from one address (ASVS 6.1.1, 6.3.1; ADR-416): how long the stretch is, in
+  // minutes; how many refused tries one address may make in it, whoever's login it tries, and
+  // how many at one login; how many resets by email one address may ask for, and how many may be
+  // asked for one login.
+  signInAddressWindowMinutes: 'SIGN_IN_ADDRESS_WINDOW_MINUTES',
+  signInWrongTriesPerAddress: 'SIGN_IN_WRONG_TRIES_PER_ADDRESS',
+  signInWrongTriesPerAddressAtLogin: 'SIGN_IN_WRONG_TRIES_PER_ADDRESS_AT_LOGIN',
+  passwordResetAsksPerAddress: 'PASSWORD_RESET_ASKS_PER_ADDRESS',
+  passwordResetAsksPerLogin: 'PASSWORD_RESET_ASKS_PER_LOGIN',
 } as const;
 
 export type PolicyName = (typeof policyNames)[keyof typeof policyNames];
@@ -70,7 +86,9 @@ export type PolicyName = (typeof policyNames)[keyof typeof policyNames];
 // access token never as long as that hour. A login is locked after a hundred wrong tries in a row
 // at the very most, the standard's limit. An authenticator's code is taken one step either side
 // of the server's own at the most (the standard has its clock value change at least every two
-// minutes), and nought takes the server's own step alone.
+// minutes), and nought takes the server's own step alone. A rate limit counts over an hour at the
+// most, a limit on tries over a day at the most, and each allows at least one; the server keeps
+// at least a thousand callers' counts and at most ten million.
 const ranges: Record<PolicyName, { least: number; most: number }> = {
   [policyNames.loadCallLowLimit]: { least: 0, most: 100 },
   [policyNames.loadCallHighLimit]: { least: 0, most: 100 },
@@ -94,6 +112,15 @@ const ranges: Record<PolicyName, { least: number; most: number }> = {
   [policyNames.signInLongestWaitMinutes]: { least: 1, most: 1440 },
   [policyNames.twoStepCodeStepsEitherSide]: { least: 0, most: 1 },
   [policyNames.twoStepSetupMinutes]: { least: 1, most: 60 },
+  [policyNames.rateLimitWindowSeconds]: { least: 1, most: 3600 },
+  [policyNames.rateLimitRequestsPerAddress]: { least: 1, most: Number.MAX_SAFE_INTEGER },
+  [policyNames.rateLimitRequestsPerAccount]: { least: 1, most: Number.MAX_SAFE_INTEGER },
+  [policyNames.rateLimitCountsKept]: { least: 1000, most: 10000000 },
+  [policyNames.signInAddressWindowMinutes]: { least: 1, most: 1440 },
+  [policyNames.signInWrongTriesPerAddress]: { least: 1, most: Number.MAX_SAFE_INTEGER },
+  [policyNames.signInWrongTriesPerAddressAtLogin]: { least: 1, most: 98 },
+  [policyNames.passwordResetAsksPerAddress]: { least: 1, most: Number.MAX_SAFE_INTEGER },
+  [policyNames.passwordResetAsksPerLogin]: { least: 1, most: Number.MAX_SAFE_INTEGER },
 };
 
 export class Policy {
@@ -119,6 +146,15 @@ export class Policy {
   readonly signInLongestWaitMinutes: number;
   readonly twoStepCodeStepsEitherSide: number;
   readonly twoStepSetupMinutes: number;
+  readonly rateLimitWindowSeconds: number;
+  readonly rateLimitRequestsPerAddress: number;
+  readonly rateLimitRequestsPerAccount: number;
+  readonly rateLimitCountsKept: number;
+  readonly signInAddressWindowMinutes: number;
+  readonly signInWrongTriesPerAddress: number;
+  readonly signInWrongTriesPerAddressAtLogin: number;
+  readonly passwordResetAsksPerAddress: number;
+  readonly passwordResetAsksPerLogin: number;
 
   private constructor(values: Readonly<Record<string, string | undefined>>) {
     this.loadCallLowLimit = Policy.read(values, policyNames.loadCallLowLimit);
@@ -143,9 +179,22 @@ export class Policy {
     this.signInLongestWaitMinutes = Policy.read(values, policyNames.signInLongestWaitMinutes);
     this.twoStepCodeStepsEitherSide = Policy.read(values, policyNames.twoStepCodeStepsEitherSide);
     this.twoStepSetupMinutes = Policy.read(values, policyNames.twoStepSetupMinutes);
-    // Two pairs hold only together: an access token that outlasted the session's quiet time would
-    // keep a session nobody uses alive, and a lock that came no later than the first wait would
-    // leave no wait at all.
+    this.rateLimitWindowSeconds = Policy.read(values, policyNames.rateLimitWindowSeconds);
+    this.rateLimitRequestsPerAddress = Policy.read(values, policyNames.rateLimitRequestsPerAddress);
+    this.rateLimitRequestsPerAccount = Policy.read(values, policyNames.rateLimitRequestsPerAccount);
+    this.rateLimitCountsKept = Policy.read(values, policyNames.rateLimitCountsKept);
+    this.signInAddressWindowMinutes = Policy.read(values, policyNames.signInAddressWindowMinutes);
+    this.signInWrongTriesPerAddress = Policy.read(values, policyNames.signInWrongTriesPerAddress);
+    this.signInWrongTriesPerAddressAtLogin = Policy.read(
+      values,
+      policyNames.signInWrongTriesPerAddressAtLogin,
+    );
+    this.passwordResetAsksPerAddress = Policy.read(values, policyNames.passwordResetAsksPerAddress);
+    this.passwordResetAsksPerLogin = Policy.read(values, policyNames.passwordResetAsksPerLogin);
+    // Three pairs hold only together: an access token that outlasted the session's quiet time would
+    // keep a session nobody uses alive; a lock that came no later than the first wait would
+    // leave no wait at all; and one address allowed as many wrong tries at a login as put a wait
+    // on it could, by itself, keep that login waiting.
     if (this.accessTokenMinutes >= this.sessionInactivityMinutes) {
       throw new Error(
         `The policy value ${policyNames.accessTokenMinutes} must be under ${policyNames.sessionInactivityMinutes}.`,
@@ -154,6 +203,11 @@ export class Policy {
     if (this.signInTriesBeforeWait >= this.signInTriesBeforeLock) {
       throw new Error(
         `The policy value ${policyNames.signInTriesBeforeWait} must be under ${policyNames.signInTriesBeforeLock}.`,
+      );
+    }
+    if (this.signInWrongTriesPerAddressAtLogin >= this.signInTriesBeforeWait) {
+      throw new Error(
+        `The policy value ${policyNames.signInWrongTriesPerAddressAtLogin} must be under ${policyNames.signInTriesBeforeWait}.`,
       );
     }
   }

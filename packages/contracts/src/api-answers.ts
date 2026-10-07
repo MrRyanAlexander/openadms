@@ -59,16 +59,21 @@ export const errorCodes = [
   // A contractor user's contractor, or a viewer's project, that the firm doesn't hold.
   'UNKNOWN_CONTRACTOR',
   'UNKNOWN_PROJECT',
+  // The caller is over a rate limit (ADR-416): status 429, with how long to wait.
+  'LIMITED',
 ] as const;
 
 export type ErrorCode = (typeof errorCodes)[number];
 
 // `message`: only where a rule of the domain's has plain words for the person who typed
 // something (why a password wasn't taken); never anything from inside the server.
+// `retryAfterSeconds`: only with `LIMITED`, the whole seconds until the caller may ask again, as
+// the answer's `Retry-After` header says too (RFC 9110 §10.2.3).
 export const errorAnswerSchema = z.strictObject({
   code: z.enum(errorCodes),
   requestId: z.string().min(1),
   message: z.string().min(1).optional(),
+  retryAfterSeconds: z.number().int().min(1).optional(),
 });
 
 export type ErrorAnswer = z.infer<typeof errorAnswerSchema>;

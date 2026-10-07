@@ -4,7 +4,7 @@
 // the configured list: no wildcard, no pattern, nothing by ending or hosting domain. An origin off
 // the list is told nothing about itself; the browser then keeps the answer from its page.
 import { csrfHeader, endpointMethods } from '@open-adms/contracts';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 
 // An API answer is data, never a page: nothing may frame it, run it, guess its type or keep it.
 export const answerHeaders = {
@@ -18,22 +18,36 @@ export const answerHeaders = {
 // The request's id, also as a header: an answer that worked has no body field for it.
 export const requestIdHeader = 'x-request-id';
 
-export function answersWith(server: FastifyInstance, corsOrigins: readonly string[]): void {
+// `door`: asked of every request once its answer has its headers, a browser's asking-first
+// included; what it returns refuses the request (a caller over a rate limit, ADR-416).
+export function answersWith(
+  server: FastifyInstance,
+  corsOrigins: readonly string[],
+  door: (request: FastifyRequest) => Error | undefined = () => undefined,
+): void {
   const listed = new Set(corsOrigins);
   server.addHook('onRequest', (request, reply, done) => {
     void reply.headers({ ...answerHeaders, [requestIdHeader]: request.id, vary: 'Origin' });
     const origin = request.headers.origin;
-    if (origin === undefined || !listed.has(origin)) {
+    const listedOrigin = origin !== undefined && listed.has(origin);
+    if (listedOrigin) {
+      // A listed origin's page may send the session's cookies with its calls (ADR-408): allowed
+      // only beside an origin named whole, never beside a wildcard.
+      void reply.headers({
+        'access-control-allow-origin': origin,
+        'access-control-allow-credentials': 'true',
+        'access-control-expose-headers': `${requestIdHeader}, retry-after`,
+      });
+    }
+    const refused = door(request);
+    if (refused !== undefined) {
+      done(refused);
+      return;
+    }
+    if (!listedOrigin) {
       done();
       return;
     }
-    // A listed origin's page may send the session's cookies with its calls (ADR-408): allowed
-    // only beside an origin named whole, never beside a wildcard.
-    void reply.headers({
-      'access-control-allow-origin': origin,
-      'access-control-allow-credentials': 'true',
-      'access-control-expose-headers': requestIdHeader,
-    });
     // A browser asking first whether its page may send the real request.
     if (
       request.method === 'OPTIONS' &&

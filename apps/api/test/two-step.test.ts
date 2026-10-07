@@ -130,7 +130,9 @@ describe('the second step at sign-in', () => {
       }
       expect(await kindsOf(tx, dana)).toEqual(Array(4).fill('SIGN_IN_FAILED'));
       expect(await kept(tx, dana)).toMatchObject({ failedSignIns: 4, twoStepLastStep: null });
-      // Luis's code is not hers.
+      // Luis's code is not hers. From another address: this one has had its four tries at her
+      // login (AC-10-40).
+      served.from = '203.0.113.5';
       expect(
         told(await served.signIn(danasEmail, long, codes.codeAt(luissSecret, served.step()))),
       ).toEqual([401, 'SIGN_IN_REFUSED']);

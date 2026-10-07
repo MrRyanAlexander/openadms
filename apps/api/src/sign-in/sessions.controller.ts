@@ -21,6 +21,7 @@ import {
 import { Body, Controller, Inject, Req, Res } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
+import { apiLimits, Limits } from '../process/limits.ts';
 import { Refusal } from '../process/refusal.ts';
 import { Serves } from '../process/serves.ts';
 import { callerOf, refreshTokenOf } from './admission.ts';
@@ -49,15 +50,18 @@ export class SessionsController {
   private readonly sessions: Sessions;
   private readonly tokens: SessionTokens;
   private readonly passwords: Passwords;
+  private readonly limits: Limits;
 
   constructor(
     @Inject(apiSessions) sessions: Sessions,
     @Inject(apiSessionTokens) tokens: SessionTokens,
     @Inject(apiPasswords) passwords: Passwords,
+    @Inject(apiLimits) limits: Limits,
   ) {
     this.sessions = sessions;
     this.tokens = tokens;
     this.passwords = passwords;
+    this.limits = limits;
   }
 
   @Serves(signInEndpoint)
@@ -66,14 +70,19 @@ export class SessionsController {
     @Req() request: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<SessionAnswer> {
+    // An address refused too often already, here or at this login, is stopped before the login
+    // is touched: its try is never a wrong try there (ADR-416).
+    this.limits.mayTry(request.ip, body.email);
     const outcome = await this.sessions.signIn(body.email, body.password, body.code);
     if (!outcome.signedIn) {
       request.log.info({ why: outcome.why }, 'A sign-in was refused.');
       // The one refusal told apart: the password was right, and the authenticator's code is
       // asked for. Nothing was opened and nothing written.
       if (outcome.why === 'CODE_NEEDED') throw new Refusal('TWO_STEP_CODE_NEEDED', 401);
+      this.limits.wrongTry(request.ip, body.email);
       throw new Refusal('SIGN_IN_REFUSED', 401);
     }
+    this.limits.signedIn(request.ip, body.email);
     request.log.info('A sign-in worked.');
     return this.opened(reply, outcome);
   }
@@ -122,6 +131,7 @@ export class SessionsController {
     @Req() request: FastifyRequest,
   ): Promise<PasswordSetAnswer> {
     const caller = callerOf(request);
+    this.limits.mayTry(request.ip);
     const outcome = await this.passwords.changeOwn(
       caller.userId,
       caller.sessionId,
@@ -135,6 +145,7 @@ export class SessionsController {
       if (outcome.code === 'RESET_REFUSED' || outcome.code === 'NO_MAIL') {
         throw new Error('Changing a password answered as a reset does.');
       }
+      if (outcome.code === 'PASSWORD_WRONG') this.limits.wrongTry(request.ip);
       throw new Refusal(outcome.code, 422, outcome.message);
     }
     return passwordSetAnswerSchema.parse({ status: 'ok' });

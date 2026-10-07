@@ -16,7 +16,7 @@ import { Body, Controller, Module } from '@nestjs/common';
 import { expect } from 'vitest';
 
 import { ApiModule } from '../../src/process/api-module.ts';
-import { ApiProcess } from '../../src/process/api-process.ts';
+import { ApiProcess, type ProcessPolicy } from '../../src/process/api-process.ts';
 import { Serves } from '../../src/process/serves.ts';
 import type { Mail } from '../../src/sign-in/mail.ts';
 import { OneTimeCodes } from '../../src/sign-in/one-time-codes.ts';
@@ -132,6 +132,7 @@ export type Cookies = Readonly<Record<string, string>>;
 
 export interface Answer {
   readonly status: number;
+  readonly headers: Readonly<Record<string, unknown>>;
   readonly body: unknown;
   readonly text: string;
   readonly code: string | undefined;
@@ -155,14 +156,20 @@ export class Served {
   // each holds, and the step of the last code it gave.
   readonly authenticators = new Map<string, Buffer>();
   private readonly shown = new Map<string, number>();
+  // The address this browser's requests come from; a test that is somebody else moves it.
+  from = '198.51.100.10';
   private api: ApiProcess | undefined;
 
-  static async on(within: Database, mail: Mail = new NoServer()): Promise<Served> {
+  static async on(
+    within: Database,
+    mail: Mail = new NoServer(),
+    policy: ProcessPolicy = shippedPolicy,
+  ): Promise<Served> {
     const served = new Served();
     served.api = await ApiProcess.create(
       WritingModule,
       { ...madeUpSettings, tokenSigningSecret: signingSecret },
-      shippedPolicy,
+      policy,
       {
         stream: { write: (line) => served.lines.push(line) },
         database: within,
@@ -190,6 +197,7 @@ export class Served {
     const answered = await this.api.app.inject({
       method,
       url,
+      remoteAddress: this.from,
       headers: {
         ...(cookie === '' ? {} : { cookie }),
         ...(more.csrf === undefined ? {} : { 'x-adms-csrf': more.csrf }),
@@ -201,6 +209,7 @@ export class Served {
     const refused = errorAnswerSchema.safeParse(body);
     return {
       status: answered.statusCode,
+      headers: answered.headers,
       body,
       text: answered.body,
       code: refused.success ? refused.data.code : undefined,
@@ -270,12 +279,16 @@ export const luissSecret = Buffer.from('09876543210987654321');
 export type Work = (served: Served, tx: Tx, who: People, within: Database) => Promise<void>;
 
 export function worldOn(db: () => Database) {
-  return (work: Work, mail: Mail = new NoServer()): Promise<void> => {
+  return (
+    work: Work,
+    mail: Mail = new NoServer(),
+    policy: ProcessPolicy = shippedPolicy,
+  ): Promise<void> => {
     const dana = randomUUID();
     return undone(db(), dana, async (within, tx) => {
       const who = await people(tx, dana);
       const { hasher, check } = signInOn(within, mail);
-      const served = await Served.on(within, mail);
+      const served = await Served.on(within, mail, policy);
       for (const [userId, password, email, secret] of [
         [who.dana, long, danasEmail, danasSecret],
         [who.luis, longer, luissEmail, luissSecret],

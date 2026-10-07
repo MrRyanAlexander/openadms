@@ -5,7 +5,7 @@ description: Run the Open ADMS verification chain and report real observed outpu
 
 <!-- skill-status: current (rewritten for the rebuild's chain 2026-09-29, ADR-259; cut to today's expected output 2026-10-06, ADR-375: the count history is in DECISIONS.md's scratchpad; the API's tests and container, 2026-10-07, ADR-385; the boundary's tests and `pnpm openapi`, ADR-387…392; the statement timeout, ADR-394…396; sign-in's records, ADR-397…399; passwords, ADR-402…406; sessions, ADR-407…411; two-step sign-in, ADR-412; permissions and people, the sixteenth story, the API's files one at a time, ADR-415) -->
 
-> **This page states today's chain** (expected output as seen 2026-10-07, ADR-415). The rule never changes: **report real
+> **This page states today's chain** (expected output as seen 2026-10-07, ADR-416). The rule never changes: **report real
 > observed output, never "should pass".** The layers still to come are listed at the end of Part 1.
 
 # PART 1 — THE CHAIN
@@ -33,7 +33,7 @@ pnpm security                    # audit, secrets scan, env files, grant tests (
 |---|---|---|
 | `pnpm install --frozen-lockfile` | The lockfile matches every `package.json`; no version younger than 7 days; no install script ran (none is allowed); no git or tarball sub-dependency (ADR-255) | `✓ Lockfile passes supply-chain policies`, exit 0; with everything already installed, `Already up to date`, exit 0 |
 | `pnpm typecheck` | Generates the Prisma client (`pnpm generate`, into the git-ignored `packages/db/src/generated/`; also run first by `test` and `lint`, ADR-273), then strict TypeScript across every workspace **and its tests**, through project references (ADR-256) | `✔ Generated Prisma Client (7.10.0)`, then exit 0 with no output after `tsc --build` |
-| `pnpm test` | Typechecks, then Vitest runs every project in `vitest.config.js` (ADR-259); the database tests and the map servers' tests need the local stack up and the installation at head (§1.3, §1.3a) | **`Test Files 101 passed (101)`, `Tests 2091 passed (2091)`** (seen 2026-10-07, ADR-415). By project: `packages/domain` 646 in 33 files and `packages/contracts` 27 in 6 (neither needs a database); `apps/api` 210 in 12, its files one at a time (the settings 42, the error filter 7, the boundary 24, the passwords 19, the session tokens 16 and the one-time codes 13 need nothing; the door 15, the request id 2, setting a password 15, the sessions 22, two-step sign-in 15 and permissions and people 20 **need `pnpm local:up` after `pnpm installer`**, §1.3b); `packages/db` 953 in 37 files; `packages/scenarios` 126 in 4 (the flag catalogue against `spec/FLAGS.md`, 78 flags; the harness; every story once); `apps/worker` 13 in 1 and `infra/local` 22 in 3 (the map servers: **need `pnpm local:up`**; the dev stack's accounts, 5, whose writing needs the installation too, ADR-412); `tools/security` 80 in 2 (the scan's rules 23, the guard hook 57); `tools/setup` 14 in 3 |
+| `pnpm test` | Typechecks, then Vitest runs every project in `vitest.config.js` (ADR-259); the database tests and the map servers' tests need the local stack up and the installation at head (§1.3, §1.3a) | **`Test Files 103 passed (103)`, `Tests 2134 passed (2134)`** (seen 2026-10-07, ADR-416). By project: `packages/domain` 673 in 34 files and `packages/contracts` 27 in 6 (neither needs a database); `apps/api` 226 in 13, its files one at a time (the settings 43, the error filter 7, the boundary 24, the passwords 19, the session tokens 16 and the one-time codes 13 need nothing; the door 15, the request id 2, setting a password 15, the sessions 22, two-step sign-in 15, permissions and people 20 and the rate limits 15 (five of them need nothing) **need `pnpm local:up` after `pnpm installer`**, §1.3b); `packages/db` 953 in 37 files; `packages/scenarios` 126 in 4 (the flag catalogue against `spec/FLAGS.md`, 78 flags; the harness; every story once); `apps/worker` 13 in 1 and `infra/local` 22 in 3 (the map servers: **need `pnpm local:up`**; the dev stack's accounts, 5, whose writing needs the installation too, ADR-412); `tools/security` 80 in 2 (the scan's rules 23, the guard hook 57); `tools/setup` 14 in 3 |
 | `pnpm lint` | ESLint's type-checked rules (floating promises, `any`, unsafe access…) on all code and tests; Prettier formatting (ADR-257) | `All matched files use Prettier code style!`, exit 0 |
 | `pnpm licences` | No licence refused or undecided (ADR-258, 260) | `421 packages: 421 allowed, 0 refused, 0 undecided.` (since `nodemailer`, ADR-405) The package count moves with dependencies; **0 refused, 0 undecided** doesn't |
 | `pnpm scenarios` | Every story passes on its own database, which is dropped afterwards (ADR-275; needs the local stack and the installation) | per story `passed: N checks, N passed, 0 failed` (`ticket-101001`: 16; `dispatch-monday`: 18; `setup`: 52, ADR-316, 323; `certification`: 25, ADR-321, 323, 330; `numbering`: 16, ADR-323, 371; `p1-field-days`: 35, ADR-332; `sync`: 47 and `p1-any-order`: 4, ADR-338; `p1-reconciled`: 39, ADR-352, `p1-priced`: 28, ADR-359, 360, `p1-reviewed`: 30, ADR-364, `p1-voided`: 27, ADR-365, `p1-invoiced`: 26, ADR-367, `golden-mission`: 27, ADR-368, and `p1-left-out`: 25, ADR-369, all seven of which ask the map servers; `first-admin`: 32, ADR-415), then `Stories: 16 passed, 0 failed.`, exit 0 |
@@ -288,6 +288,14 @@ that swaps one string, runs the files and puts the source back (format first, or
 don't match; a loosening that isn't found in the source proves nothing: count it as not
 tried). **To copy `adms` for a guard's loosening, stop the API's container first** (`docker
 stop open-adms-local-api-1`: it holds a connection), and `pnpm local:up` again afterwards.
+
+`limits.test.ts` (ADR-416): rate limits. **A test's requests come from `served.from`**
+(`support/served.ts`): four wrong tries at one login from one address and the fifth is answered
+429 before the login is touched, so a test that makes more moves `served.from`; a test that
+needs other numbers hands `worldOn` (or `Served.on`) a policy from `installationPolicy({ … })`.
+A new policy value is added to `policy.env`, the three whole maps in `packages/domain/test/`
+(they have no Node types to read the file with), `project-settings.test.ts`'s list of names and
+`packages/scenarios/test/policy.test.ts`.
 
 `people.test.ts` (ADR-415) writes, as `sessions.test.ts` does: permissions on every request
 and the firm's people, by scenario ID. **Every `SIGNED_IN` endpoint a test defines names its
