@@ -1,7 +1,9 @@
 // The local stack's helper (ARCHITECTURE §4; BACKLOG 0.2.3; ADR-263). Run from the root:
 //   pnpm local:up      generate the dev passwords if missing, fetch the map extract if missing and
 //                      check it against its pinned SHA-256, start every service, wait until all are
-//                      healthy, copy out Caddy's root certificate, check each page over HTTPS
+//                      healthy, copy out Caddy's root certificate, check each page over HTTPS;
+//                      then, once `pnpm installer` has made the API's settings, build the API,
+//                      start its container afresh and check its health answer over HTTPS (ADR-385)
 //   pnpm local:down    stop and remove the containers and network; data volumes are kept
 //   pnpm local:wipe    down, plus the data volumes, the generated .env and the root certificate;
 //                      the downloaded map extract (public data, infra/local/.cache/) is kept
@@ -18,6 +20,8 @@ import { fileURLToPath } from 'node:url';
 import { MapExtract } from './map-extract.ts';
 
 const project = 'open-adms-local';
+// The API's container is in its own profile: it exists only once the installer has run.
+const withApi = ['--profile', 'api'];
 
 class DevSecrets {
   // Generated once, into a git-ignored file readable only by its owner.
@@ -44,12 +48,17 @@ class LocalStack {
   readonly generated: string;
   readonly rootCert: string;
   readonly map: MapExtract;
+  // The repository's root, and the API's own settings, written by `pnpm installer`.
+  readonly repository: string;
+  readonly apiEnvFile: string;
 
   constructor(root: string) {
     this.root = root;
     this.envFile = join(root, '.env');
     this.generated = join(root, '.generated');
     this.rootCert = join(this.generated, 'caddy-root.crt');
+    this.repository = join(root, '..', '..');
+    this.apiEnvFile = join(this.repository, 'apps', 'api', '.env');
     this.map = MapExtract.fromSettings((key) => this.setting(key), join(root, '.cache', 'maps'));
   }
 
@@ -63,14 +72,15 @@ class LocalStack {
     await this.checkPage('adms.localhost', '/health');
     await this.checkPage('routing.adms.localhost', '/status');
     await this.checkPage('addresses.adms.localhost', '/status');
+    await this.api();
   }
 
   down(): void {
-    this.compose(['down', '--remove-orphans']);
+    this.compose([...withApi, 'down', '--remove-orphans']);
   }
 
   wipe(): void {
-    this.compose(['down', '--volumes', '--remove-orphans']);
+    this.compose([...withApi, 'down', '--volumes', '--remove-orphans']);
     rmSync(this.envFile, { force: true });
     rmSync(this.generated, { recursive: true, force: true });
     console.log('Removed the data volumes, the generated .env and the root certificate.');
@@ -78,7 +88,39 @@ class LocalStack {
   }
 
   status(): void {
-    this.compose(['ps', '--all']);
+    this.compose([...withApi, 'ps', '--all']);
+  }
+
+  // `pnpm installer` asks for this alone once it has written the API's settings (the stack is up).
+  // The API runs the code as built, so it is built first and its container made afresh: a
+  // container left from an earlier `up` would still be running what it loaded then.
+  async api(): Promise<void> {
+    if (!existsSync(this.apiEnvFile)) {
+      console.log('The API waits for `pnpm installer`: it has no settings yet (apps/api/.env).');
+      return;
+    }
+    console.log('Building the API (pnpm generate, tsc --build apps/api) …');
+    this.build('pnpm', ['generate']);
+    this.build(join(this.repository, 'node_modules', '.bin', 'tsc'), ['--build', 'apps/api']);
+    this.compose([
+      ...withApi,
+      'up',
+      '--detach',
+      '--wait',
+      '--wait-timeout',
+      '120',
+      '--force-recreate',
+      '--no-deps',
+      'api',
+    ]);
+    await this.checkPage('api.adms.localhost', '/health');
+  }
+
+  private build(command: string, args: string[]): void {
+    const result = spawnSync(command, args, { cwd: this.repository, stdio: 'inherit' });
+    if (result.status !== 0) {
+      throw new Error(`${args.join(' ')} failed (exit ${String(result.status)}).`);
+    }
   }
 
   // A first run generates the passwords. If the data volumes outlived their .env, the passwords
@@ -187,7 +229,8 @@ class LocalStack {
       { stdio: 'inherit', env: { ...process.env, ...this.map.environment() } },
     );
     if (result.status !== 0) {
-      throw new Error(`docker compose ${args[0] ?? ''} failed (exit ${String(result.status)}).`);
+      const what = args.find((arg) => !arg.startsWith('--') && arg !== 'api') ?? '';
+      throw new Error(`docker compose ${what} failed (exit ${String(result.status)}).`);
     }
   }
 
@@ -203,6 +246,7 @@ class LocalStack {
 const folder = join(dirname(fileURLToPath(import.meta.url)), '..');
 const commands: Record<string, (stack: LocalStack) => Promise<void> | void> = {
   up: (stack) => stack.up(),
+  api: (stack) => stack.api(),
   down: (stack) => {
     stack.down();
   },

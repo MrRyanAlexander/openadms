@@ -48,9 +48,9 @@ states one that nothing records: they are listed under "Left to the task that bu
 
 | ID | Scenario | From | Answers | Proven at | Passing |
 |---|---|---|---|---|---|
-| AC-10-01 | **Given** the local stack is up, **when** the API's health answer is asked for at `https://api.adms.localhost`, **then** it answers, under a certificate of the stack's own authority; the API publishes no port of its own and is reached only through the proxy | ARCHITECTURE §4, §6 (Transport); ADR-098; BACKLOG C24 · REQ-006 | ASVS V12 · API8 | API (2.1.2) |  |
-| AC-10-02 | **When** the same address is asked for over plain HTTP, **then** the caller is redirected to HTTPS and nothing is answered over HTTP | ARCHITECTURE §6 (Transport) · REQ-204 | ASVS V12 | API (2.1.2) |  |
-| AC-10-03 | **When** a caller offers nothing newer than TLS 1.1, **then** no connection is made; TLS 1.2 and 1.3 are taken | ARCHITECTURE §6 (Transport) | ASVS V12 | API (2.1.2) |  |
+| AC-10-01 | **Given** the local stack is up, **when** the API's health answer is asked for at `https://api.adms.localhost`, **then** it answers, under a certificate of the stack's own authority; the API publishes no port of its own and is reached only through the proxy | ARCHITECTURE §4, §6 (Transport); ADR-098; BACKLOG C24 · REQ-006 | ASVS V12 · API8 | API (2.1.2) | ✅ 2.1.2 (ADR-385): `apps/api/test/door.test.ts` |
+| AC-10-02 | **When** the same address is asked for over plain HTTP, **then** the caller is redirected to HTTPS and nothing is answered over HTTP | ARCHITECTURE §6 (Transport) · REQ-204 | ASVS V12 | API (2.1.2) | ✅ 2.1.2 (ADR-385): `apps/api/test/door.test.ts` |
+| AC-10-03 | **When** a caller offers nothing newer than TLS 1.1, **then** no connection is made; TLS 1.2 and 1.3 are taken | ARCHITECTURE §6 (Transport) | ASVS V12 | API (2.1.2) | ✅ 2.1.2 (ADR-385): `apps/api/test/door.test.ts` |
 | AC-10-04 | **Given** any answer of the API, **then** it carries HSTS and the security headers ARCHITECTURE §6 names for an answer; the page headers (the content security policy, `frame-ancestors 'none'`) are the web apps' | ARCHITECTURE §6 (Transport, Output) · REQ-204 | ASVS V3, V12 · API8 | API (2.1.3); the web apps' pages: back office (Phase 4) |  |
 
 ## B. The CORS list
@@ -104,8 +104,8 @@ states one that nothing records: they are listed under "Left to the task that bu
 
 | ID | Scenario | From | Answers | Proven at | Passing |
 |---|---|---|---|---|---|
-| AC-10-32 | **Given** Dana signed in with her password and an authenticator code, and a phone was enrolled with the master passcode, **when** the API's log is read, **then** every line is structured and carries its request's id, and none holds a password, a code, a token, a cookie, the master passcode, or a full personal detail (a monitor's phone number, a driver's licence number) | ARCHITECTURE §6 (Logs) · REQ-204 | ASVS V14, V16 · API8 | API (2.1.2, and each task that adds an endpoint: a test reads the log) |  |
-| AC-10-33 | **When** something fails inside the server, **then** the caller gets a plain error code and no stack trace, query, file path or internal message | ARCHITECTURE §6 (Output) · REQ-204 | ASVS V16 · API8 | API (2.1.2) |  |
+| AC-10-32 | **Given** Dana signed in with her password and an authenticator code, and a phone was enrolled with the master passcode, **when** the API's log is read, **then** every line is structured and carries its request's id, and none holds a password, a code, a token, a cookie, the master passcode, or a full personal detail (a monitor's phone number, a driver's licence number) | ARCHITECTURE §6 (Logs) · REQ-204 | ASVS V14, V16 · API8 | API (2.1.2, and each task that adds an endpoint: a test reads the log) | in part, 2.1.2 (ADR-385): the log is structured, a request's lines carry its id, and nothing a caller sends or a failure says is in it (`error-filter.test.ts`, `door.test.ts`); a real sign-in and enrolment: 2.2.3, 2.5.1 |
+| AC-10-33 | **When** something fails inside the server, **then** the caller gets a plain error code and no stack trace, query, file path or internal message | ARCHITECTURE §6 (Output) · REQ-204 | ASVS V16 · API8 | API (2.1.2) | ✅ 2.1.2 (ADR-385): `apps/api/test/error-filter.test.ts`, `door.test.ts` |
 
 ## G. The boundary: what is taken in
 
@@ -157,7 +157,7 @@ states one that nothing records: they are listed under "Left to the task that bu
 
 | ID | Scenario | From | Answers | Proven at | Passing |
 |---|---|---|---|---|---|
-| AC-10-55 | **When** the API or the worker is started with a setting missing or malformed, **then** it doesn't start, and says which key, never its value | ARCHITECTURE §4 (Secrets); BACKLOG tasks 2.1.2, 2.3.2 | ASVS V13 · API8 | API (2.1.2, 2.3.2) |  |
+| AC-10-55 | **When** the API or the worker is started with a setting missing or malformed, **then** it doesn't start, and says which key, never its value | ARCHITECTURE §4 (Secrets); BACKLOG tasks 2.1.2, 2.3.2 | ASVS V13 · API8 | API (2.1.2, 2.3.2) | ✅ the API, 2.1.2 (ADR-385): `apps/api/test/settings.test.ts`; the worker: 2.3.2 |
 | AC-10-56 | **Given** the repository, **then** only `packages/db`, `apps/api` and `apps/worker` open a connection to Postgres, and no model is written in SQL by hand | ADR-094; ARCHITECTURE §18; invariant 12 · REQ-205 | ASVS V15 | a check in the chain (2.7.3) |  |
 
 ---
@@ -230,7 +230,7 @@ passing in its own file, from a run that was seen, by the task named.
 | | Scenarios |
 |---|---|
 | Written in this file (A…L) | **56** |
-| Passing | **0** (nothing of Phase 2 is built) |
+| Passing | **5** (AC-10-01, 02, 03, 33, 55; task 2.1.2, ADR-385), and AC-10-32 in part |
 | Earlier scenarios with a Phase 2 part (M) | 48, and AC-06-36 |
 | **Phase 2 proves, at the API** | **104**, and AC-06-36's link |
 
@@ -267,4 +267,4 @@ evidence or a monitor's work (ADR-230).
 | 14 | **The queue**: the library or a guarded table of our own; how often a failed job is tried again and what one that keeps failing becomes; what each database login may do to it | 2.3.1 |
 | 15 | **Whether two projects' runs may go at once** (ARCHITECTURE §13 says one run per project at a time) | 2.3.2 |
 | 16 | **Which headers an API answer carries** beyond HSTS, since ARCHITECTURE §6 lists the page headers "on the web apps" | 2.1.3 |
-| 17 | **The health answer**: what it says, and to whom | 2.1.2, 2.7.2 |
+| 17 | ~~**The health answer**: what it says, and to whom~~ ✅ ADR-385 (5), an agent default: `{"status":"ok"}`, to anybody, that the process answers and nothing else. Whether it also says the database answers | 2.7.2 |

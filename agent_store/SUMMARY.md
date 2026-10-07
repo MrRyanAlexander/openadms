@@ -1,18 +1,20 @@
 # Open ADMS — Current decisions and gaps, at a glance
 
 **The present tense of the project on one page.** `DECISIONS.md` and `DEVIATIONS.md` are the full
-history, with 379 ADRs and 74 KDs, many superseded. This page says what is true **now** and which
+history, with 386 ADRs and 74 KDs, many superseded. This page says what is true **now** and which
 entries to cite. The reasons live in the ADRs and the skills.
 
 - **Keep it current:** when you add, amend or supersede an ADR, or open or close a KD, update this
   page **in the same response** (`adms-decisions`).
 - **If this page and a log entry disagree,** the newest ADR wins: fix this page and say so.
-- **Updated 2026-10-07, through ADR-379 / KD-74.** **Phase 2 (API and sync) is open (ADR-376);
-  its plan is `BACKLOG.md`'s eight milestones and 32 tasks (ADR-377). Task 2.1.1 is done
-  (ADR-379): `spec/THREAT-MODEL.md` and `spec/acceptance/10-api-and-sync.md` (56 scenarios) are
-  written, drafts for the user's approval; no code of Phase 2 is built yet.** **No KD is open.**
-  Owed from 2026-10-07 14:08 UTC, the first step of task 2.1.2: delete the
-  `minimumReleaseAgeExclude` entry the user has commented out (ADR-372).
+- **Updated 2026-10-07, through ADR-386 / KD-74.** **Phase 2 (API and sync) is open (ADR-376);
+  its plan is `BACKLOG.md`'s eight milestones and 32 tasks (ADR-377). Tasks 2.1.1 (ADR-379) and
+  2.1.2 (ADR-380…385) are done: the API runs as a process, reached only at
+  `https://api.adms.localhost` through Caddy, with a health answer and nothing else yet.**
+  `spec/acceptance/10-api-and-sync.md` is approved by the user (ADR-386); `spec/THREAT-MODEL.md`
+  is still a draft for their approval. **No KD is open.**
+  The exception to the seven-day rule is gone from `pnpm-workspace.yaml` (ADR-372's owed step,
+  done 2026-10-07 14:09 UTC, ADR-385).
 - **Where things stand, the road and the next task:** `NEXT.md`. The roadmap in tables:
   `ROADMAP.md`. Names, examples and formats: `spec/CONVENTIONS.md`. The task-by-task record of
   Phase 1 that used to sit here: `DECISIONS.md`'s scratchpad, "Moved 2026-10-06 (ADR-375)".
@@ -391,7 +393,32 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   three with Phase 2 and the demo deploy, accessibility before the first screen. Server backups
   (ARCHITECTURE §4) and upgrades (Q-167) were already recorded; single sign-on is not planned. [279]
 
-- **The threat model and the API's scenarios (task 2.1.1; drafts for the user's approval).**
+- **The API as a process (task 2.1.2).** [380, 381, 382, 383, 384, 385] **NestJS 12.1.2 on
+  Fastify 5.12.5** (`reflect-metadata` 0.2.2, `rxjs` 7.8.2), in `apps/api/src/process/` beside the
+  services, started by `apps/api/src/main.ts`. Decorators through `experimentalDecorators` in
+  `apps/api` only, **no `emitDecoratorMetadata`** (name what a class needs with `@Inject`), so the
+  API runs as built, never by type stripping. **Locally it is the stack's seventh service**: the
+  pinned image `node:24.21.0-alpine3.23`, the built code and dependencies mounted read-only folder
+  by folder, uid 1000, read-only root, no capability, **no port published**; compose profile
+  `api`, started by `pnpm local:up` only once `apps/api/.env` exists (it builds first and makes
+  the container afresh) and by `pnpm installer` at the end of a run; `installer:check` asks its
+  health answer. Caddy's `api.adms.localhost` is the only way in (HTTPS, TLS 1.2 and 1.3; plain
+  HTTP → 308). **Settings** (`Settings`): the process's environment first, then its env file
+  (`ADMS_ENV_FILE`, a compose secret in the stack; else `apps/api/.env`); `DATABASE_URL`,
+  `READONLY_DATABASE_URL`, `ADMS_TOKEN_SIGNING_SECRET`, `SMTP_URL`, `ADMS_API_HOST`,
+  `ADMS_API_PORT`, and optionally `ADMS_DATABASE_ADDRESS` (the stack's `postgres:5432`); a missing
+  or malformed key stops the start, **named, never its value**. **The log** is one JSON object a
+  line and safe by construction: a request as its method and path, an error as its kind and
+  frames, never a query, a header, a body or a message; **the request id is the server's own**
+  (`requestId`). **One error filter:** every refusal or failure answers `{ code, requestId }`
+  (`packages/contracts`' `errorAnswerSchema`; codes `BAD_REQUEST`, `NOT_FOUND`, `TOO_LARGE`,
+  `UNSUPPORTED_MEDIA_TYPE`, `INTERNAL_ERROR`; a task adds its own). **`GET /health` →
+  `{"status":"ok"}`**, to anybody, nothing else *(agent default; 2.7.2 looks again)*. Nothing
+  opens the database yet. Tests: `apps/api/test` (40; `door.test.ts` needs `pnpm local:up` after
+  `pnpm installer`, **and `pnpm local:up` again after any change to `apps/api`**). AC-10-01, 02,
+  03, 33, 55 pass; AC-10-32 in part. What it leaves: BACKLOG C85.
+- **The threat model and the API's scenarios (task 2.1.1; file 10 approved by the user, ADR-386;
+  the threat model a draft for their approval).**
   `spec/THREAT-MODEL.md`: eleven kinds of attacker, 36 threats over the layers of ARCHITECTURE §2,
   each with the recorded control that answers it and the test or Phase 2 task that proves it, and
   what the software records but doesn't stop (people who agree to lie, an admin, the master
@@ -1510,10 +1537,13 @@ its scenario.
 
 ## 4. Waiting on the user
 
-**Live today (2026-10-07, ADR-376…379):**
-- **Nothing blocks the next task** (2.1.2, the API as a process).
-- **For the user's approval (ADR-379), building doesn't wait:** `spec/THREAT-MODEL.md` and
-  `spec/acceptance/10-api-and-sync.md`. **One reading to confirm or overturn:** a monitor's
+**Live today (2026-10-07, ADR-376…386):**
+- **Nothing blocks the next task** (2.1.3, the boundary).
+- **For the user's approval (ADR-379), building doesn't wait:** `spec/THREAT-MODEL.md`
+  (`spec/acceptance/10-api-and-sync.md` carries the user's approval mark, ADR-386: say if that
+  was not meant). **Agent defaults of 2.1.2 to confirm or overturn (ADR-380, 385):** NestJS 12
+  (six weeks old) rather than 11; the health answer says only that the process answers; an
+  error answers `{ code, requestId }`. **One reading to confirm or overturn:** a monitor's
   password (their phone number without the area code, ADR-105) is exempt from the password rules
   of NIST SP 800-63B, which then apply to back-office and outside users only; task 2.2.2 records
   it. The other sixteen open points are engineering, each an agent default in its task's ADR.

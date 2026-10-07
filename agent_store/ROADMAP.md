@@ -9,7 +9,7 @@
 > requirement) and `spec/VISION.md` §7–§8 (the finished surfaces, and what "done" means). If this
 > page disagrees with them, they win.
 >
-> **Last updated:** 2026-10-07 (**Task 2.1.1 is done (ADR-379): the threat model and the API's 56 scenarios are written, two pages for your approval; no code of Phase 2 yet.** Before it: **You opened Phase 2, API and sync (ADR-376). Its plan is written: eight milestones, 32 tasks (ADR-377); nothing of it is built yet.** Your approval mark on the names page is recorded and the last open deviation closed (ADR-378). Owed after 7 October 14:08 UTC: removing the one exception to the seven-day rule, which you have already commented out.)
+> **Last updated:** 2026-10-07 (**Task 2.1.2 is done (ADR-380…385): the API runs as a process on your own machine, reached only over HTTPS at `https://api.adms.localhost`; it answers a health check and nothing else yet. Your approval mark on the API's scenarios is recorded (ADR-386); the threat model still waits for you.** Before it: task 2.1.1 (ADR-379), the threat model and the API's 56 scenarios. Before it: **You opened Phase 2, API and sync (ADR-376). Its plan is written: eight milestones, 32 tasks (ADR-377); nothing of it is built yet.** Your approval mark on the names page is recorded and the last open deviation closed (ADR-378). Owed after 7 October 14:08 UTC: removing the one exception to the seven-day rule, which you have already commented out.)
 
 **Key:** ✅ done · 🟡 in progress · ⬜ not started · 🔒 gated (doesn't open until the phase before it exits)
 
@@ -20,8 +20,8 @@
 | | |
 |---|---|
 | **Start** | 2026-09-25: the rebuild decision (ADR-093). Security first, the plan is the core, TypeScript end to end with Prisma, the old `database/` code is history |
-| **Now** | **Phase 2, API and sync: open since 2026-10-06 at your word** (ADR-376). Tasks 2 of 32 are done: the plan, and the threat model with the API's scenarios (ADR-379; §3). Phase 1 met its exit the same day (ADR-371, 372): the whole product without a screen runs from a terminal, and the golden mission comes out with the numbers you approved (P1 $5,548.25 on 19 lines, P2 $324.00) |
-| **Next task** | **2.1.2, the API as a process**: the first code of Phase 2, reached over HTTPS on your own machine. First, after 7 October 14:08 UTC: delete the exception to the seven-day rule (ADR-372) |
+| **Now** | **Phase 2, API and sync: open since 2026-10-06 at your word** (ADR-376). Tasks 3 of 32 are done: the plan, the threat model with the API's scenarios (ADR-379), and the API as a process over HTTPS (ADR-385; §3). Phase 1 met its exit the same day (ADR-371, 372): the whole product without a screen runs from a terminal, and the golden mission comes out with the numbers you approved (P1 $5,548.25 on 19 lines, P2 $324.00) |
+| **Next task** | **2.1.3, the boundary**: every request checked against its schema, plain error codes, the security headers, the exact CORS list, OpenAPI generated from the contracts |
 | **Finish line** | A firm installs Open ADMS, and its back office and its monitors run a real mission on it: every app built, tested and working |
 | **How "done" is judged** | Not boxes ticked. A deliberately messy mission (the **golden mission**) comes out with the exact statuses, review queue and ledger you signed off, at every layer: engine, then API, then the apps (`spec/VISION.md` §8) |
 
@@ -60,7 +60,7 @@ the scenarios the API must pass, so the answer exists before the code.
 | Milestone | What it is | When it's done, you can… | Tasks | Status |
 |---|---|---|---|---|
 | 2.0 | Open the phase: the plan | Read every Phase 2 task, with the requirements each one meets | 1 of 1 | ✅ 2026-10-06 |
-| 2.1 | The answer and the foundation | Read who could attack what and what stops them; reach the API over HTTPS on your own machine, refusing anything malformed or from a site not on its list | 1 of 4 | 🔨 2.1.1 ✅ 2026-10-07 (ADR-379); next: 2.1.2 |
+| 2.1 | The answer and the foundation | Read who could attack what and what stops them; reach the API over HTTPS on your own machine, refusing anything malformed or from a site not on its list | 2 of 4 | 🔨 2.1.1 ✅ 2026-10-07 (ADR-379); 2.1.2 ✅ 2026-10-07 (ADR-380…385); next: 2.1.3 |
 | 2.2 | Sign-in, sessions and permissions | Sign in to the server as an admin with an authenticator code; take a permission from someone and see their very next request refused | 0 of 6 | ⬜ |
 | 2.3 | Jobs and the worker's process | Change a ticket and watch the worker pick up just that ticket by itself, with nothing asked to wait | 0 of 3 | ⬜ |
 | 2.4 | The back office's endpoints | Do everything the back office does (setup, dispatch, corrections, void, QC, lock) by a request, each checked against the person's permissions; see a contractor's login read only its own tickets | 0 of 5 | ⬜ |
@@ -186,7 +186,7 @@ Nothing here blocks the next task. Each is listed with the point where it starts
 | What | Why it's yours | Matters by |
 |---|---|---|
 | ~~Opening Phase 2~~ | ✅ Opened by you 2026-10-06 (ADR-376) | Done |
-| **The threat model and the API's scenarios (ADR-379)** | Two pages to read and mark approved, or change: `spec/THREAT-MODEL.md` (who attacks what, and what stops them; its §5 says what the software only records) and `spec/acceptance/10-api-and-sync.md` (56 scenarios). **One reading to confirm:** a monitor's password stays their phone number without the area code, as you decided (ADR-105), so the password rules for length and known breached passwords apply to back-office and outside users only | Building doesn't wait |
+| **The threat model (ADR-379), and your mark on the API's scenarios (ADR-386)** | One page to read and mark approved, or change: `spec/THREAT-MODEL.md` (who attacks what, and what stops them; its §5 says what the software only records). `spec/acceptance/10-api-and-sync.md` (56 scenarios) carries your "Approved" mark in your last commit, and is recorded as approved: say if you didn't mean it. **Three agent defaults of the API's first code (ADR-380, 385):** NestJS 12 (six weeks old) rather than 11; the health check says only that the server answers; an error says a plain code and a request id. **One reading to confirm:** a monitor's password stays their phone number without the area code, as you decided (ADR-105), so the password rules for length and known breached passwords apply to back-office and outside users only | Building doesn't wait |
 | **Phase 2's plan and exit criteria (ADR-376, 377)** | The agent wrote them, as it did Phase 1's: eight milestones, 32 tasks; the job queue built before the endpoints that use it; a threat model and a tenth scenario file written first, for your approval; read-only requests that only a screen needs left to Phase 4. Yours to change | Any time; building doesn't wait |
 | **Your approval of the names page, as the agent read it (ADR-378)** | You marked `spec/CONVENTIONS.md` "Approved" at its top. The agent read that as the whole page, its last section included (what the earlier conventions draft gets wrong), and closed the one open deviation (KD-63). Say so if you meant less | Any time |
 | **Three requirements the agent added to Phase 2 (ADR-371)**, each now named by a task (2.4.1, 2.1.4, 2.5.1 and 2.6.5) | Work the build notes had left for Phase 2 without a requirement of its own: the setup check and a site's lookup as services; a time limit on each service's database statements; who is recorded for an act under the master passcode, and refusing a lost phone's key once it is wiped. None changes a rule | When you open Phase 2 |

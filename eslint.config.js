@@ -19,6 +19,11 @@ export default defineConfig(
     },
   },
   {
+    // A NestJS module is a class that holds only its decorator (ADR-380).
+    files: ['apps/api/**/*.ts'],
+    rules: { '@typescript-eslint/no-extraneous-class': ['error', { allowWithDecorator: true }] },
+  },
+  {
     files: ['**/*.js'],
     extends: [js.configs.recommended],
   },

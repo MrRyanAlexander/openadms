@@ -12,7 +12,7 @@
 # downloaded and checked against its pinned SHA-256 by `pnpm local:up` into infra/local/.cache/maps/
 # (git-ignored) and mounted read-only (REQ-022, ADR-282). Each builds its own data from it on a
 # first run, and again when the extract changes. Neither publishes a port: both are reached through
-# Caddy, over HTTPS.
+# Caddy, over HTTPS. The API is the seventh service, in its own profile (below).
 name: open-adms-local
 
 x-hardening: &hardening
@@ -159,6 +159,59 @@ services:
       # The import (a first run, or a new extract) comes before the first answer.
       start_period: 1800s
 
+  api:
+    <<: *hardening
+    # The API (ARCHITECTURE §4, §6; ADR-384, 385). Node alone, pinned like every image: the built
+    # code and its dependencies are mounted read-only from this checkout, each folder by name, so no
+    # env file but its own reaches the container. Started by `pnpm local:up` once `pnpm installer`
+    # has written apps/api/.env (the profile), after building apps/api. No port is published: Caddy
+    # is the only way in, over HTTPS.
+    profiles: ['api']
+    image: node:24.21.0-alpine3.23@sha256:9ec4a2e289874ed0d722e1772ec2de45d2801541db8612f3638b26f128c69ac2
+    user: '1000:1000'
+    cap_drop:
+      - ALL
+    read_only: true
+    working_dir: /srv/open-adms
+    command: ['node', 'apps/api/dist/main.js']
+    environment:
+      NODE_ENV: production
+      ADMS_ENV_FILE: /run/secrets/api_env
+      ADMS_API_HOST: 0.0.0.0
+      ADMS_API_PORT: '3000'
+      # The installer wrote the logins as this machine reaches Postgres; in here it is a service.
+      ADMS_DATABASE_ADDRESS: postgres:5432
+    secrets:
+      - api_env
+    volumes:
+      - ../../node_modules:/srv/open-adms/node_modules:ro
+      - ../../apps/api/package.json:/srv/open-adms/apps/api/package.json:ro
+      - ../../apps/api/node_modules:/srv/open-adms/apps/api/node_modules:ro
+      - ../../apps/api/dist:/srv/open-adms/apps/api/dist:ro
+      - ../../packages/contracts/package.json:/srv/open-adms/packages/contracts/package.json:ro
+      - ../../packages/contracts/node_modules:/srv/open-adms/packages/contracts/node_modules:ro
+      - ../../packages/contracts/dist:/srv/open-adms/packages/contracts/dist:ro
+      - ../../packages/db/package.json:/srv/open-adms/packages/db/package.json:ro
+      - ../../packages/db/node_modules:/srv/open-adms/packages/db/node_modules:ro
+      - ../../packages/db/dist:/srv/open-adms/packages/db/dist:ro
+      - ../../packages/domain/package.json:/srv/open-adms/packages/domain/package.json:ro
+      - ../../packages/domain/node_modules:/srv/open-adms/packages/domain/node_modules:ro
+      - ../../packages/domain/dist:/srv/open-adms/packages/domain/dist:ro
+      - ../../packages/domain/policy.env:/srv/open-adms/packages/domain/policy.env:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
   caddy:
     <<: *hardening
     image: caddy:2.11.4-alpine@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b
@@ -185,6 +238,10 @@ services:
 secrets:
   postgres_password:
     environment: POSTGRES_PASSWORD
+  # The API's own settings, the installer's file, read by the process itself (never an env_file:
+  # that would put each value in the container's description).
+  api_env:
+    file: ../../apps/api/.env
 
 configs:
   s3_identities:

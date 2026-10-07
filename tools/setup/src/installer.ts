@@ -5,7 +5,8 @@
 // The master passcode's slow hash is kept in the database alone (ARCHITECTURE §7.5; ADR-281): the
 // installer makes it from what the firm types and hands it to the seed, never through a file.
 import { spawnSync } from 'node:child_process';
-import { rmSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { request } from 'node:https';
 import { join } from 'node:path';
 
 import { Database, loginRoles, type LoginRole, type Server } from './database.ts';
@@ -29,6 +30,8 @@ const warning = 'Git-ignored. Never commit, print or share it.';
 // How the hash reaches the seed (its process's environment), and where an installation made before
 // the database kept it still has it (packages/db/.env, ADR-266).
 const passcodeKey = 'ADMS_MASTER_PASSCODE_HASH';
+// The API is reached only through the local stack's proxy, over HTTPS (ADR-385).
+const apiHostname = 'api.adms.localhost';
 
 interface Login {
   role: LoginRole;
@@ -107,6 +110,7 @@ export class Installer {
       this.seed();
       await this.clearEarlierHash();
       this.state.save(record);
+      this.startApi();
       console.log(`\nInstalled for ${record.firm}. Rerun \`pnpm installer\` any time to re-check.`);
     } finally {
       await database.close();
@@ -489,7 +493,55 @@ export class Installer {
       ok: actorProblem === undefined,
       text: `the system actor is the seed's, alone, unchanged and guarded${actorProblem === undefined ? '' : ` (${actorProblem})`}`,
     });
+    const apiProblem = await this.apiProblem();
+    checks.push({
+      ok: apiProblem === undefined,
+      text: `the API answers over HTTPS at https://${apiHostname}/health${apiProblem === undefined ? '' : ` (${apiProblem})`}`,
+    });
     return checks;
+  }
+
+  // The API's settings are this installer's, so its container starts only now (ADR-385): the
+  // local stack builds it, starts it afresh and checks its health answer over HTTPS.
+  private startApi(): void {
+    console.log('\nStarting the API in the local stack:');
+    const result = spawnSync(
+      process.execPath,
+      [join(this.root, 'infra/local/src/index.ts'), 'api'],
+      { stdio: 'inherit' },
+    );
+    if (result.status !== 0) throw new Error('The API did not start. Stopped.');
+  }
+
+  // Asked as a caller would: through the proxy, the certificate checked against the stack's own.
+  private apiProblem(): Promise<string | undefined> {
+    const rootCert = join(this.root, 'infra/local/.generated/caddy-root.crt');
+    if (!existsSync(rootCert)) return Promise.resolve('start it with `pnpm local:up`');
+    const port = this.stackEnv.exists() ? this.stackEnv.read()['ADMS_HTTPS_PORT'] : undefined;
+    return new Promise((resolve) => {
+      const asked = request(
+        {
+          host,
+          port: Number(port ?? '443'),
+          path: '/health',
+          servername: apiHostname,
+          headers: { host: apiHostname },
+          ca: readFileSync(rootCert),
+        },
+        (answer) => {
+          answer.resume();
+          resolve(
+            answer.statusCode === 200
+              ? undefined
+              : `it answered ${String(answer.statusCode)}: start it with \`pnpm local:up\``,
+          );
+        },
+      );
+      asked.on('error', () => {
+        resolve('no answer: start it with `pnpm local:up`');
+      });
+      asked.end();
+    });
   }
 
   // The database keeps the master passcode's slow hash, and no file does (ADR-281).

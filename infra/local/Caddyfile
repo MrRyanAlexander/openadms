@@ -21,11 +21,18 @@
 	}
 }
 
-# The stack's own health page. The API and web apps get their own hostnames when they arrive.
+# The stack's own health page. The web apps get their own hostnames when they arrive.
 adms.localhost {
 	import headers
 	respond /health "ok" 200
 	respond 404
+}
+
+# The API (ARCHITECTURE §6; ADR-385): its container publishes no port, so this is the only way in.
+# Until `pnpm installer` has made its settings there is no container, and this answers 502.
+api.adms.localhost {
+	import headers
+	reverse_proxy api:3000
 }
 
 # The S3-compatible object store (SeaweedFS). Caddy keeps the Host header, so S3 signatures verify.

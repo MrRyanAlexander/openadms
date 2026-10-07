@@ -3,6 +3,14 @@
 import { workspace as domainWorkspace } from '@open-adms/domain';
 import { z } from 'zod';
 
+export {
+  errorAnswerSchema,
+  errorCodes,
+  healthAnswerSchema,
+  type ErrorAnswer,
+  type ErrorCode,
+  type HealthAnswer,
+} from './api-answers.ts';
 export { fieldEventDetailsSchema, type FieldEventDetailsPayload } from './field-event-details.ts';
 export { formAnswersSchema, type FormAnswers } from './form-answers.ts';
 export {

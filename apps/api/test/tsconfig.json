@@ -1,0 +1,13 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "experimentalDecorators": true,
+    "tsBuildInfoFile": "../dist/test.tsbuildinfo",
+    "types": ["node"]
+  },
+  "include": ["."],
+  "references": [{ "path": ".." }, { "path": "../../../packages/contracts" }]
+}

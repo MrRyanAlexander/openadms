@@ -12,6 +12,9 @@ export default defineConfig({
       'tools/security',
       // The local stack's map servers (ADR-282): they need the stack up, like the database tests.
       'infra/local',
+      // The API as a process (ADR-385): its settings and its error filter need nothing; the door
+      // (HTTPS through Caddy, the log) needs the stack up and the installation, and says so.
+      'apps/api',
       // The worker's questions to the map servers (ADR-349): they need the stack up too.
       'apps/worker',
       // The database tests (ADR-272) need the local stack and an installation at head. Their files
