@@ -14,6 +14,7 @@
     "@open-adms/db": "workspace:*",
     "@open-adms/domain": "workspace:*",
     "fastify": "5.12.5",
+    "nodemailer": "10.0.13",
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.2"
   },

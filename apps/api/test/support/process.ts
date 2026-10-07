@@ -13,6 +13,12 @@ export const madeUpSettings: ProcessSettings = {
   port: 0,
   databaseUrl: `postgresql://adms_api:${word}@127.0.0.1:1/adms`,
   corsOrigins: [listedOrigin],
+  // Made up as the login's password is; the installer's is 32 random bytes.
+  tokenSigningSecret: [word, word].join('-'),
+  // No mail server, unless a test hands the process a mail of its own.
+  smtpUrl: '',
+  smtpAddress: undefined,
+  mailFrom: 'open-adms@adms.localhost',
 };
 
 export const shippedPolicy = builtInPolicy();

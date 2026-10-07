@@ -165,6 +165,16 @@ export {
 } from './numbers.ts';
 export { Policy, policyNames, type PolicyName } from './policy.ts';
 export {
+  BreachedPasswords,
+  PasswordRules,
+  contextWords,
+  passwordAsKept,
+  passwordProblemCodes,
+  type PasswordHolder,
+  type PasswordProblem,
+  type PasswordProblemCode,
+} from './passwords.ts';
+export {
   PaysWhen,
   type PaysWhenContract,
   type PaysWhenOnForm,

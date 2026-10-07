@@ -7,7 +7,8 @@
 // each record a phone sends (ADR-338); the review services are
 // spec/parts/08-review-and-corrections.md's: a reviewer's corrections and renumbers, a
 // quarantined record resolved, a record created in the back office (ADR-364), a ticket voided
-// and unvoided, a flag accepted (ADR-365), each answering the run to ask the worker for.
+// and unvoided, a flag accepted (ADR-365), each answering the run to ask the worker for; and setting a password is
+// ARCHITECTURE §6's (ADR-402…405).
 export {
   Certifications,
   type BoxInput,
@@ -72,6 +73,25 @@ export {
   type TicketNamed,
 } from './review/review-service.ts';
 export { Voids } from './review/voids.ts';
+
+export { shippedBreachedPasswords } from './sign-in/breached-list.ts';
+export {
+  mailFor,
+  NoMail,
+  SmtpMail,
+  type Mail,
+  type MailSettings,
+  type Message,
+} from './sign-in/mail.ts';
+export { PasswordHasher } from './sign-in/password-hasher.ts';
+export {
+  Passwords,
+  type PasswordOutcome,
+  type PasswordParts,
+  type PasswordRefusalCode,
+  type ResetAsked,
+} from './sign-in/passwords.ts';
+export { ResetCodes, type ResetNamed } from './sign-in/reset-codes.ts';
 
 export { Intake } from './sync/intake.ts';
 export type {

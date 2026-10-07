@@ -181,6 +181,8 @@ services:
       ADMS_API_PORT: '3000'
       # The installer wrote the logins as this machine reaches Postgres; in here it is a service.
       ADMS_DATABASE_ADDRESS: postgres:5432
+      # The same for the mail catcher, where the installation sends mail through it (ADR-405).
+      ADMS_SMTP_ADDRESS: mail:1025
       # The exact origins whose pages may read an answer (ADR-098, 391): the stack's own page
       # today. Each web app's origin joins the list when it gets its hostname.
       ADMS_CORS_ORIGINS: https://adms.localhost
@@ -201,6 +203,7 @@ services:
       - ../../packages/domain/node_modules:/srv/open-adms/packages/domain/node_modules:ro
       - ../../packages/domain/dist:/srv/open-adms/packages/domain/dist:ro
       - ../../packages/domain/policy.env:/srv/open-adms/packages/domain/policy.env:ro
+      - ../../packages/domain/breached-passwords.txt:/srv/open-adms/packages/domain/breached-passwords.txt:ro
     depends_on:
       postgres:
         condition: service_healthy

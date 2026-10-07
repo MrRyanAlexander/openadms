@@ -6,6 +6,7 @@ import { Catch, HttpException, type ArgumentsHost, type ExceptionFilter } from '
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { errorLogged } from './logs.ts';
+import { Refusal } from './refusal.ts';
 
 const codes: Readonly<Record<number, ErrorCode>> = {
   400: 'BAD_REQUEST',
@@ -29,7 +30,12 @@ export class ErrorFilter implements ExceptionFilter {
       .header('content-type', 'application/json; charset=utf-8')
       .send(
         errorAnswerSchema.parse({
-          code: status >= 500 ? 'INTERNAL_ERROR' : (codes[status] ?? 'BAD_REQUEST'),
+          code:
+            status >= 500
+              ? 'INTERNAL_ERROR'
+              : thrown instanceof Refusal
+                ? thrown.code
+                : (codes[status] ?? 'BAD_REQUEST'),
           requestId: request.id,
         }),
       );

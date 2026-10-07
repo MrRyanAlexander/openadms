@@ -268,18 +268,52 @@ describe('what an error and the log say, through the door', () => {
       body: JSON.stringify({ password: sent, phone: sent }),
     });
     const { requestId } = errorAnswerSchema.parse(JSON.parse(asked.body));
+    // A reset by email, asked for and tried through the door (ADR-404): the address, the code and
+    // the password sent are in no line. The word "password" is in a path now (/password-resets),
+    // so what is looked for is a password as a field or a value, never the bare word (ADR-405).
+    const address = `luis.ortega+${sent}@gates.example`;
+    const reset = await ask('/password-resets', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: address }),
+    });
+    // The same answer whoever has the address, where the firm has mail; NO_MAIL where it has none.
+    expect([200, 409]).toContain(reset.status);
+    expect(reset.body).toMatch(/^\{"status":"accepted"\}$|"code":"NO_MAIL"/);
+    const completed = await ask('/password-resets/completions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ code: `${sent}.${sent}`, password: `${sent} marsh heron delphine` }),
+    });
+    expect(completed.status).toBe(400);
+    expect(errorAnswerSchema.parse(JSON.parse(completed.body)).code).toBe('RESET_REFUSED');
+
     const log = compose(['logs', '--no-log-prefix', '--no-color', 'api']);
     const lines = log.trim().split('\n');
     expect(lines.length).toBeGreaterThan(3);
     const parsed = lines.map((line) => JSON.parse(line) as Record<string, unknown>);
     expect(parsed.some((line) => line['requestId'] === requestId)).toBe(true);
+    expect(parsed.some((line) => line['msg'] === 'A password reset by email was asked for.')).toBe(
+      reset.status === 200,
+    );
     for (const line of parsed) {
       if (line['req'] !== undefined || line['res'] !== undefined) {
         expect(line['requestId']).toMatch(/^[0-9a-f-]{36}$/);
       }
     }
-    for (const never of [sent, 'Bearer', 'session=', 'password', 'token=']) {
-      expect(log).not.toContain(never);
+    for (const never of [
+      sent,
+      'Bearer',
+      'session=',
+      '"password"',
+      'password=',
+      'token=',
+      '"email"',
+      '"code":',
+      'gates.example',
+      'marsh heron',
+    ]) {
+      expect(log, never).not.toContain(never);
     }
     // None of the API's own settings is in its log: each value is read here and never printed.
     const settings = parseEnv(readFileSync(join(repository, 'apps', 'api', '.env'), 'utf8'));

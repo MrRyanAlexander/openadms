@@ -6,7 +6,11 @@
 // refuses the whole request, and an endpoint whose schema would let one through can't be defined.
 import { z } from 'zod';
 
-import { healthAnswerSchema } from './api-answers.ts';
+import {
+  healthAnswerSchema,
+  passwordSetAnswerSchema,
+  resetAskedAnswerSchema,
+} from './api-answers.ts';
 
 // No endpoint deletes (invariant 1).
 export const endpointMethods = ['GET', 'POST', 'PUT', 'PATCH'] as const;
@@ -97,5 +101,36 @@ export const healthEndpoint = endpoint({
   answer: healthAnswerSchema,
 });
 
+// A password reset by email, for a back-office or outside user of a firm that has mail
+// (ARCHITECTURE §6; AC-10-25; ADR-170, 404). Nobody is signed in for either call. The first asks
+// for a message to the address a person has on record; the second sets the new password with the
+// code that message carried. What a password must be is the domain's (its rules), never a schema's:
+// the limits here only bound what is read.
+export const requestPasswordResetEndpoint = endpoint({
+  name: 'requestPasswordReset',
+  summary:
+    'Asks for a password reset to be sent to an email address. Anybody may ask; the answer is the same whether or not a person has that address.',
+  method: 'POST',
+  path: '/password-resets',
+  body: z.strictObject({ email: z.string().min(3).max(320) }),
+  answer: resetAskedAnswerSchema,
+});
+
+export const completePasswordResetEndpoint = endpoint({
+  name: 'completePasswordReset',
+  summary: 'Sets a new password with the code a reset message carried. The code is good once.',
+  method: 'POST',
+  path: '/password-resets/completions',
+  body: z.strictObject({
+    code: z.string().min(1).max(512),
+    password: z.string().min(1).max(4096),
+  }),
+  answer: passwordSetAnswerSchema,
+});
+
 // Each task that adds an endpoint names it here; the API's tests hold its routes to this list.
-export const endpoints: readonly Endpoint[] = [healthEndpoint];
+export const endpoints: readonly Endpoint[] = [
+  healthEndpoint,
+  requestPasswordResetEndpoint,
+  completePasswordResetEndpoint,
+];

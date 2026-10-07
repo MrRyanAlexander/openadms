@@ -1,6 +1,8 @@
+import { readFileSync } from 'node:fs';
+
 import { describe, expect, it } from 'vitest';
 
-import { PasscodeHasher, ScramVerifier, SecretMaker } from '../src/secrets.ts';
+import { BreachedList, PasscodeHasher, ScramVerifier, SecretMaker } from '../src/secrets.ts';
 
 describe('SecretMaker', () => {
   it('makes a URL-safe 256-bit password, new each time', () => {
@@ -36,6 +38,25 @@ describe('PasscodeHasher', () => {
     expect(hasher.problem('🌀'.repeat(8))).toBeUndefined();
     expect(hasher.problem('🌀'.repeat(7))).toBeDefined();
     expect(hasher.problem('x'.repeat(129))).toBeDefined();
+  });
+
+  it('AC-10-24 refuses a known breached password as the master passcode, from the release’s own list, asking nothing outside', () => {
+    const breached = new BreachedList(
+      readFileSync(
+        new URL('../../../packages/domain/breached-passwords.txt', import.meta.url),
+        'utf8',
+      ),
+    );
+    expect(breached.size).toBe(46483);
+    for (const known of ['password1234', 'PASSWORD1234', '12345678']) {
+      expect(hasher.problem(known, breached), known).toBe(
+        'That is on a list of passwords known from breaches. Choose another.',
+      );
+    }
+    // All of it is compared, never a part; the length is still asked first.
+    expect(hasher.problem('password1234-heron', breached)).toBeUndefined();
+    expect(hasher.problem('heron-marsh-delphine', breached)).toBeUndefined();
+    expect(hasher.problem('1234567', breached)).toBe('It needs at least 8 characters.');
   });
 
   it('keeps an Argon2id hash that accepts the passcode and nothing else', async () => {

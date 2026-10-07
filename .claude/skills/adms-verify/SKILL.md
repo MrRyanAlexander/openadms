@@ -3,9 +3,9 @@ name: adms-verify
 description: Run the Open ADMS verification chain and report real observed output. Covers loading Node 24 through fnm, the frozen pnpm install, typecheck, the Vitest run with its expected counts, lint and format, the licence report, the clean-copy check after a dependency change, where tests live and how a workspace joins the run, and which ARCHITECTURE §15 layers are still to come. Use after any code or config edit, before closing out any code task, or whenever asked to verify, test, typecheck, or confirm the build is green.
 ---
 
-<!-- skill-status: current (rewritten for the rebuild's chain 2026-09-29, ADR-259; cut to today's expected output 2026-10-06, ADR-375: the count history is in DECISIONS.md's scratchpad; the API's tests and container, 2026-10-07, ADR-385; the boundary's tests and `pnpm openapi`, ADR-387…392; the statement timeout, ADR-394…396; sign-in's records, ADR-397…399) -->
+<!-- skill-status: current (rewritten for the rebuild's chain 2026-09-29, ADR-259; cut to today's expected output 2026-10-06, ADR-375: the count history is in DECISIONS.md's scratchpad; the API's tests and container, 2026-10-07, ADR-385; the boundary's tests and `pnpm openapi`, ADR-387…392; the statement timeout, ADR-394…396; sign-in's records, ADR-397…399; passwords, ADR-402…406) -->
 
-> **This page states today's chain** (expected output as seen 2026-10-07, ADR-394). The rule never changes: **report real
+> **This page states today's chain** (expected output as seen 2026-10-07, ADR-402). The rule never changes: **report real
 > observed output, never "should pass".** The layers still to come are listed at the end of Part 1.
 
 # PART 1 — THE CHAIN
@@ -31,9 +31,9 @@ pnpm security                    # audit, secrets scan, env files, grant tests (
 |---|---|---|
 | `pnpm install --frozen-lockfile` | The lockfile matches every `package.json`; no version younger than 7 days; no install script ran (none is allowed); no git or tarball sub-dependency (ADR-255) | `✓ Lockfile passes supply-chain policies`, exit 0; with everything already installed, `Already up to date`, exit 0 |
 | `pnpm typecheck` | Generates the Prisma client (`pnpm generate`, into the git-ignored `packages/db/src/generated/`; also run first by `test` and `lint`, ADR-273), then strict TypeScript across every workspace **and its tests**, through project references (ADR-256) | `✔ Generated Prisma Client (7.10.0)`, then exit 0 with no output after `tsc --build` |
-| `pnpm test` | Typechecks, then Vitest runs every project in `vitest.config.js` (ADR-259); the database tests and the map servers' tests need the local stack up and the installation at head (§1.3, §1.3a) | **`Test Files 89 passed (89)`, `Tests 1885 passed (1885)`** (seen 2026-10-07, ADR-397). By project: `packages/domain` 580 in 29 files and `packages/contracts` 27 in 6 (neither needs a database); `apps/api` 90 in 5 (the settings 42, the error filter 7 and the boundary 24 need nothing; the door 15 and the request id 2 **need `pnpm local:up` after `pnpm installer`**, §1.3b); `packages/db` 944 in 37 files; `packages/scenarios` 125 in 4 (the flag catalogue against `spec/FLAGS.md`, 78 flags; the harness; every story once); `apps/worker` 13 in 1 and `infra/local` 17 in 2 (the map servers: **need `pnpm local:up`**); `tools/security` 76 in 2 (the scan's rules 19, the guard hook 57); `tools/setup` 13 in 3 |
+| `pnpm test` | Typechecks, then Vitest runs every project in `vitest.config.js` (ADR-259); the database tests and the map servers' tests need the local stack up and the installation at head (§1.3, §1.3a) | **`Test Files 92 passed (92)`, `Tests 1940 passed (1940)`** (seen 2026-10-07, ADR-402). By project: `packages/domain` 598 in 30 files and `packages/contracts` 27 in 6 (neither needs a database); `apps/api` 122 in 7 (the settings 42, the error filter 7, the boundary 24 and the passwords 17 need nothing; the door 15, the request id 2 and setting a password 15 **need `pnpm local:up` after `pnpm installer`**, §1.3b); `packages/db` 944 in 37 files; `packages/scenarios` 125 in 4 (the flag catalogue against `spec/FLAGS.md`, 78 flags; the harness; every story once); `apps/worker` 13 in 1 and `infra/local` 17 in 2 (the map servers: **need `pnpm local:up`**); `tools/security` 80 in 2 (the scan's rules 23, the guard hook 57); `tools/setup` 14 in 3 |
 | `pnpm lint` | ESLint's type-checked rules (floating promises, `any`, unsafe access…) on all code and tests; Prettier formatting (ADR-257) | `All matched files use Prettier code style!`, exit 0 |
-| `pnpm licences` | No licence refused or undecided (ADR-258, 260) | `420 packages: 420 allowed, 0 refused, 0 undecided.` (since NestJS and Fastify, ADR-380…383) The package count moves with dependencies; **0 refused, 0 undecided** doesn't |
+| `pnpm licences` | No licence refused or undecided (ADR-258, 260) | `421 packages: 421 allowed, 0 refused, 0 undecided.` (since `nodemailer`, ADR-405) The package count moves with dependencies; **0 refused, 0 undecided** doesn't |
 | `pnpm scenarios` | Every story passes on its own database, which is dropped afterwards (ADR-275; needs the local stack and the installation) | per story `passed: N checks, N passed, 0 failed` (`ticket-101001`: 16; `dispatch-monday`: 18; `setup`: 52, ADR-316, 323; `certification`: 25, ADR-321, 323, 330; `numbering`: 16, ADR-323, 371; `p1-field-days`: 35, ADR-332; `sync`: 47 and `p1-any-order`: 4, ADR-338; `p1-reconciled`: 39, ADR-352, `p1-priced`: 28, ADR-359, 360, `p1-reviewed`: 30, ADR-364, `p1-voided`: 27, ADR-365, `p1-invoiced`: 26, ADR-367, `golden-mission`: 27, ADR-368, and `p1-left-out`: 25, ADR-369, all seven of which ask the map servers), then `Stories: 15 passed, 0 failed.`, exit 0 |
 | `pnpm security` | The dependency audit, the secrets scan, the env files and the grant tests, with real counts; never prints a secret (§1.5; needs the registry, the local stack and the installation) | `✓ 0 open advisories` (3 accepted by id), secretlint `0 found`, the installation's own secrets `0 found`, a password-like setting `0 found`, env files `✓ every one ignored by git and untracked`, the grant tests `37 files, 944 tests: 944 passed, 0 failed`, ending **`Security checks: 7 passed, 0 failed.`**, exit 0 (seen 2026-10-06). `source-map-js` is forced to 1.2.2 by an override (ADR-356, 372); nothing is let past the seven-day rule (ADR-385). Any ✗ is a finding, never accepted to get green |
 
@@ -106,7 +106,7 @@ finding, not noise.
 
 A new or changed dependency (a pin, a lockfile change, a new `allowBuilds` entry) is proven from a
 clean copy, so nothing already on disk hides a missing piece. Copy the repo into the scratchpad
-without `node_modules`, `dist`, `.git`, `development/`, `spec/`, `agent_store/` and `.claude/`, then run the whole chain there and paste its output. Every dependency needs its ADR
+without `node_modules`, `dist`, `.git`, `development/`, `spec/`, `agent_store/` and `.claude/`, then run the whole chain there and paste its output. **Three test files fail in such a copy by its own making** (seen 2026-10-07, ADR-405): `guard-hook.test.ts` (35 tests; the hook is in `.claude/`) and the two that read `spec/FLAGS.md` (`derived-records.test.ts`, `flag-catalogue.test.ts`); anything else failing is a finding. The copy holds the env files: remove it when the run is read. Every dependency needs its ADR
 first (exact version, licence, maintenance, at least 7 days old; `BACKLOG.md` Milestone 0.2).
 
 ## 1.2 Where tests live, and how a workspace joins the run
@@ -258,6 +258,19 @@ curl --cacert infra/local/.generated/caddy-root.crt https://api.adms.localhost/h
 curl -sI http://api.adms.localhost/health                                               # → 308 to https
 ```
 
+`passwords.test.ts` (ADR-402…405) needs no stack: the hash, the release's breached list, the
+reset code, the mail settings and what the two reset endpoints refuse before anything is read.
+`password-set.test.ts` writes: it opens `adms` as the API's login and **runs each test in one
+piece of work that is undone** (`test/support/database.ts`, `undone`; the services are handed a
+database whose `$write` and `$read` run inside it; a Prisma piece of work ends after five
+seconds, so a test stays short), hands the process its own database, mail and clock
+(`ProcessParts`), and sends one message through the stack's mail catcher, read back at
+`https://mail.adms.localhost/api/v1/…` and deleted. **A loosening of the password rules, the
+hash, the reset code or `Passwords` is tried on these files and on
+`packages/domain/test/passwords.test.ts`** (change the source, run the file, put it back). The
+secrets scan reads `apps/api/openapi.json` and every test: a made-up login URL is put together
+in `support/process.ts`, never written whole.
+
 `pnpm installer:check` (25 `✓`) ends with `✓ the API answers over HTTPS at https://api.adms.localhost/health`.
 `pnpm local:down` removes seven containers and the network (8 `Removed` lines). Only this project:
 `./node_modules/.bin/vitest run --project @open-adms/api`. **A loosening of the log, the error filter, the boundary, the headers or the CORS list is tried on
@@ -274,7 +287,7 @@ to look at; `clean` drops every leftover (only while no story runs; `installer:t
 `adms_owner` while one is left, C28). A story is a `Story` in `packages/scenarios/src/stories/`, listed
 in its `index.ts`; the runner's test runs every listed story in `pnpm test`, so a new story joins the
 chain by itself. A story's context carries `policy`, the release's policy values read from
-`packages/domain/policy.env` (`src/policy.ts`; held to 5, 95, 200, 31, 12, 1000, 100, 100, 1048576, 30000 by `test/policy.test.ts`,
+`packages/domain/policy.env` (`src/policy.ts`; held to 5, 95, 200, 31, 12, 1000, 100, 100, 1048576, 30000, 15, 128, 60 by `test/policy.test.ts`,
 which needs no database), and `src/stories/p1.ts` sets up P1's client, declaration event and project
 for both of today's stories (ADR-303), its prime and its contract with them (ADR-305). After a run, `adms` still holds only the seed (1 user, 1 master passcode version,
 the lists' 94 values, 96 audit records). Every story's database is seeded with the same made-up master passcode's hash

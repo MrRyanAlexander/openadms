@@ -19,6 +19,9 @@ const shipped = {
   ROE_NUMBER_BLOCK_SIZE: '100',
   REQUEST_BODY_LIMIT_BYTES: '1048576',
   STATEMENT_TIMEOUT_MS: '30000',
+  PASSWORD_MINIMUM_LENGTH: '15',
+  PASSWORD_MAXIMUM_LENGTH: '128',
+  PASSWORD_RESET_MINUTES: '60',
 };
 
 // The program types of the example world: PPDR requires an ROE, ROW doesn't.
@@ -78,7 +81,7 @@ describe('a new project’s settings', () => {
 });
 
 describe('the policy values', () => {
-  it('are ten, each under its own name in the environment', () => {
+  it('are thirteen, each under its own name in the environment', () => {
     expect(policyNames).toEqual({
       loadCallLowLimit: 'LOAD_CALL_LOW_LIMIT',
       loadCallHighLimit: 'LOAD_CALL_HIGH_LIMIT',
@@ -90,6 +93,9 @@ describe('the policy values', () => {
       roeNumberBlockSize: 'ROE_NUMBER_BLOCK_SIZE',
       requestBodyLimitBytes: 'REQUEST_BODY_LIMIT_BYTES',
       statementTimeoutMs: 'STATEMENT_TIMEOUT_MS',
+      passwordMinimumLength: 'PASSWORD_MINIMUM_LENGTH',
+      passwordMaximumLength: 'PASSWORD_MAXIMUM_LENGTH',
+      passwordResetMinutes: 'PASSWORD_RESET_MINUTES',
     });
     expect(Object.keys(shipped).sort()).toEqual(Object.values(policyNames).sort());
   });
@@ -167,6 +173,34 @@ describe('the policy values', () => {
     for (const written of ['1', '2147483647']) {
       expect(() => Policy.from({ ...shipped, STATEMENT_TIMEOUT_MS: written })).not.toThrow();
     }
+  });
+
+  it('AC-10-21 a password’s shortest length is 15 unless changed: never under the standard’s 8, never over the 64 it says must be permitted; its longest never under those 64', () => {
+    const policy = Policy.from(shipped);
+    expect([policy.passwordMinimumLength, policy.passwordMaximumLength]).toEqual([15, 128]);
+    for (const written of ['7', '65']) {
+      expect(() => Policy.from({ ...shipped, PASSWORD_MINIMUM_LENGTH: written })).toThrow(
+        `The policy value PASSWORD_MINIMUM_LENGTH must be a whole number, from 8 to 64: "${written}".`,
+      );
+    }
+    for (const written of ['63', '1025']) {
+      expect(() => Policy.from({ ...shipped, PASSWORD_MAXIMUM_LENGTH: written })).toThrow(
+        `The policy value PASSWORD_MAXIMUM_LENGTH must be a whole number, from 64 to 1024: "${written}".`,
+      );
+    }
+    expect(Policy.from({ ...shipped, PASSWORD_MINIMUM_LENGTH: '8' }).passwordMinimumLength).toBe(8);
+  });
+
+  it('AC-10-25 a reset by email is good for an hour unless changed: a minute or more, a day at most', () => {
+    expect(Policy.from(shipped).passwordResetMinutes).toBe(60);
+    for (const written of ['0', '1441']) {
+      expect(() => Policy.from({ ...shipped, PASSWORD_RESET_MINUTES: written })).toThrow(
+        `The policy value PASSWORD_RESET_MINUTES must be a whole number, from 1 to 1440: "${written}".`,
+      );
+    }
+    expect(Policy.from({ ...shipped, PASSWORD_RESET_MINUTES: '1440' }).passwordResetMinutes).toBe(
+      1440,
+    );
   });
 
   it('are read as written, spaces round a value aside', () => {

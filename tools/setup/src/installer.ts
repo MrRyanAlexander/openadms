@@ -13,7 +13,7 @@ import { Database, loginRoles, type LoginRole, type Server } from './database.ts
 import { EnvFile, InstallationState, MigrationFolder, type InstallationRecord } from './files.ts';
 import { Interview } from './interview.ts';
 import { StatementTimeout, statementTimeoutName } from './policy.ts';
-import { PasscodeHasher, SecretMaker } from './secrets.ts';
+import { BreachedList, PasscodeHasher, SecretMaker } from './secrets.ts';
 
 const databaseName = 'adms';
 const host = '127.0.0.1';
@@ -217,9 +217,13 @@ export class Installer {
 
   private async askPasscode(interview: Interview): Promise<string> {
     const hasher = new PasscodeHasher();
+    // The release's list of known breached passwords: committed, no secret in it (ADR-403).
+    const breached = new BreachedList(
+      readFileSync(join(this.root, 'packages/domain/breached-passwords.txt'), 'utf8'),
+    );
     for (;;) {
       const passcode = await interview.askSecret('   Master passcode');
-      const problem = hasher.problem(passcode);
+      const problem = hasher.problem(passcode, breached);
       if (problem !== undefined) console.log(`   ${problem}`);
       else if ((await interview.askSecret('   Once more')) === passcode) return passcode;
       else console.log('   They differ. Again, please.');

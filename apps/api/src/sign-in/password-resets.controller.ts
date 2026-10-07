@@ -1,0 +1,52 @@
+// A password reset by email (ARCHITECTURE §6; AC-10-25; ADR-170, 404, 405): two calls nobody is
+// signed in for. Asking never says whether anybody has the address; the log says only whether a
+// message went out, never to whom. A firm with no mail server answers NO_MAIL: there an admin
+// sets the password.
+import {
+  completePasswordResetEndpoint,
+  passwordSetAnswerSchema,
+  requestPasswordResetEndpoint,
+  resetAskedAnswerSchema,
+  type PasswordSetAnswer,
+  type ResetAskedAnswer,
+} from '@open-adms/contracts';
+import { Body, Controller, Inject, Req } from '@nestjs/common';
+import type { FastifyRequest } from 'fastify';
+
+import { Refusal } from '../process/refusal.ts';
+import { Serves } from '../process/serves.ts';
+import { Passwords } from './passwords.ts';
+
+export const apiPasswords = Symbol('the API’s passwords');
+
+@Controller()
+export class PasswordResetsController {
+  private readonly passwords: Passwords;
+
+  constructor(@Inject(apiPasswords) passwords: Passwords) {
+    this.passwords = passwords;
+  }
+
+  @Serves(requestPasswordResetEndpoint)
+  async ask(
+    @Body() body: { email: string },
+    @Req() request: FastifyRequest,
+  ): Promise<ResetAskedAnswer> {
+    const asked = await this.passwords.requestReset(body.email);
+    if (!asked.asked) throw new Refusal(asked.code, 409);
+    request.log.info({ sent: asked.sent }, 'A password reset by email was asked for.');
+    return resetAskedAnswerSchema.parse({ status: 'accepted' });
+  }
+
+  @Serves(completePasswordResetEndpoint)
+  async complete(@Body() body: { code: string; password: string }): Promise<PasswordSetAnswer> {
+    const outcome = await this.passwords.completeReset(body.code, body.password);
+    if (!outcome.set) {
+      if (outcome.code === 'NOT_ALLOWED' || outcome.code === 'NOT_FOUND') {
+        throw new Refusal('RESET_REFUSED', 400);
+      }
+      throw new Refusal(outcome.code, outcome.code === 'RESET_REFUSED' ? 400 : 422);
+    }
+    return passwordSetAnswerSchema.parse({ status: 'ok' });
+  }
+}

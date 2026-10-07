@@ -1,19 +1,21 @@
 # Open ADMS — Current decisions and gaps, at a glance
 
 **The present tense of the project on one page.** `DECISIONS.md` and `DEVIATIONS.md` are the full
-history, with 401 ADRs and 74 KDs, many superseded. This page says what is true **now** and which
+history, with 406 ADRs and 74 KDs, many superseded. This page says what is true **now** and which
 entries to cite. The reasons live in the ADRs and the skills.
 
 - **Keep it current:** when you add, amend or supersede an ADR, or open or close a KD, update this
   page **in the same response** (`adms-decisions`).
 - **If this page and a log entry disagree,** the newest ADR wins: fix this page and say so.
-- **Updated 2026-10-07, through ADR-401 / KD-74.** **Phase 2 (API and sync) is open (ADR-376);
+- **Updated 2026-10-07, through ADR-406 / KD-74.** **Phase 2 (API and sync) is open (ADR-376);
   its plan is `BACKLOG.md`'s eight milestones and 32 tasks (ADR-377). Tasks 2.1.1 (ADR-379) and
   2.1.2 (ADR-380…385) are done: the API runs as a process, reached only at
   `https://api.adms.localhost` through Caddy, with a health answer and nothing else yet. Task
   2.1.3 (ADR-387…392) is done: the boundary every request passes. Task 2.1.4 (ADR-394, 395) is
   done: each service login is under a statement timeout, and an installation may state its own
-  policy values. Task 2.2.1 (ADR-397…399) is done: sign-in's records, in the database only.**
+  policy values. Task 2.2.1 (ADR-397…399) is done: sign-in's records, in the database only. Task
+  2.2.2 (ADR-402…406) is done: passwords (the rules, the breached list, the hash, an admin's set,
+  reset by email).**
   `spec/acceptance/10-api-and-sync.md` and `spec/THREAT-MODEL.md` are approved by the user
   (their marks, ADR-386, 393). **No KD is open.**
   The exception to the seven-day rule is gone from `pnpm-workspace.yaml` (ADR-372's owed step,
@@ -485,6 +487,42 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   Eighty-two migrations. **Open, for the task that first writes one (C88):** who is stated as
   the actor when nobody is signed in. *Agent defaults, seen by the user ("make sense"; the
   secrets apart from the person: "Security is key here").*
+- **Passwords (task 2.2.2).** [402, 403, 404, 405, 406] **The standard:** NIST SP 800-63B-4
+  (August 2025) §3.1.1.2 and OWASP ASVS 5.0 §6.2, read before building (ADR-401). **The rules
+  are `packages/domain`'s** (`PasswordRules`, `BreachedPasswords`, `passwordAsKept`): a
+  back-office or outside user's password is **15 to 128 characters** (the policy values
+  `PASSWORD_MINIMUM_LENGTH`, never under 8, and `PASSWORD_MAXIMUM_LENGTH`), each Unicode code
+  point one character, of any characters; **never a composition rule, never a forced change**
+  (nothing knows a password's age: no rule, no policy value, no column); compared and hashed
+  in Unicode's composed form (NFC), otherwise exactly as typed. It is refused, with a code and
+  a plain reason, when it is too short or long, when **all of it** (whatever its capitals) is
+  on **the release's list of 46,483 known breached passwords**
+  (`packages/domain/breached-passwords.txt`: the NCSC's 100,000 most used, 8 characters and up;
+  read by the API at its start; **no outside service**; never on a phone), or when it is made
+  only of the product's words and the person's own name, address or Monitor ID. **A monitor's
+  password is exempt** (their phone number without the area code, ADR-105): never empty, kept
+  the same way. **The master passcode** is refused by `pnpm installer` when it is on the same
+  list (C35; its 8 to 128 characters unchanged). **The hash:** Argon2id, 19 MiB, 2 passes, 1
+  lane, a 16-byte salt, a PHC string, by `node:crypto` (`PasswordHasher`). **An admin sets
+  anybody's password** (`Passwords.setByAdmin`: admin read from the database in the same piece
+  of work; never the system actor's); **its endpoint is mapped with 2.2.5**, when a session
+  says who calls. **Reset by email**, where the firm has mail, for a back-office or outside
+  user, never a monitor: `POST /password-resets` `{ email }` (always `accepted`; a message only
+  when exactly one such person has the address, sent to the address the database holds) and
+  `POST /password-resets/completions` `{ code, password }`; the code is signed over the person,
+  its end and their current password hash, so the server stores nothing, it is **good once**
+  and for `PASSWORD_RESET_MINUTES` (60; a day at most); the change is written as the person;
+  it signs nobody in and clears no second step; the person is told by a second message. **No
+  mail server → `NO_MAIL` (409), and nothing else changes.** Mail: `nodemailer` 10.0.13;
+  optional settings `ADMS_SMTP_ADDRESS` (the stack's `mail:1025`) and `ADMS_MAIL_FROM`; TLS
+  required except to the local mail catcher. Refusal codes: `PASSWORD_TOO_SHORT`, `_TOO_LONG`,
+  `_BREACHED`, `_EASY_TO_GUESS` (422), `RESET_REFUSED` (400), `NO_MAIL` (409). Tests:
+  `packages/domain/test/passwords.test.ts`, `apps/api/test/passwords.test.ts` (no stack) and
+  `password-set.test.ts` (the installation's database, each test undone; the mail catcher),
+  `tools/setup/test/secrets.test.ts`. AC-10-20, 21, 23, 24 pass; AC-10-25 in part (the admin's
+  endpoint: 2.2.5). **Not built, said:** the keyed hash the standard says a verifier SHOULD add;
+  a change of an admin-set password at next sign-in; rate limits on the reset endpoints (C89).
+  *Agent defaults.*
 - **The threat model and the API's scenarios (task 2.1.1; both approved by the user, ADR-386,
   393).**
   `spec/THREAT-MODEL.md`: eleven kinds of attacker, 36 threats over the layers of ARCHITECTURE §2,
@@ -494,10 +532,8 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   towards any caller, each tied to its checklist chapter (ASVS Level 2, API Security Top 10, NIST
   SP 800-63B; the numbered requirements are pinned by task 2.7.3), with the 48 earlier scenarios
   that have a Phase 2 part beside their tasks. **Neither decides anything:** seventeen points
-  nothing records are left to the tasks that build them (BACKLOG C84). **Read as, until 2.2.2's
-  ADR:** the password rules (length, breached-password screening) are for back-office and outside
-  users; a monitor's password stays the firm's practice (ADR-105). Every Phase 2 task reads its
-  threats first. [379]
+  nothing records are left to the tasks that build them (BACKLOG C84). Every Phase 2 task reads
+  its threats first. [379]
 
 ### Product and scope
 - **The firm's setup decides how things play out.** Hardcode as little as possible; ship defaults
@@ -1607,7 +1643,21 @@ its scenario.
 ## 4. Waiting on the user
 
 **Live today (2026-10-07, ADR-376…401):**
-- **Nothing blocks the next task** (2.2.2, passwords).
+- **Nothing blocks the next task** (2.2.3, sessions).
+- **Agent defaults of 2.2.2 to confirm or overturn (ADR-402…406):** 15 characters at least for
+  every back-office and outside user (the standard's number where a password may be the only
+  factor; 8 is its floor beside a required second step); the breached list is the NCSC's
+  100,000 most used, 46,483 of them 8 characters and up; a password made only of the person's
+  own name or address is refused; a reset by email is good for 60 minutes, and sends nothing
+  where two people share an address. **Three things for you to decide, each said with what the
+  standard asks:** (a) **an admin types and so knows a person's new password** (ADR-170 is
+  yours; ASVS Level 2 allows it, Level 3 does not): recommended that the person must set their
+  own at their next sign-in, built with 2.2.3; (b) **a keyed hash over the password hash**
+  with a secret kept apart from the database (NIST: SHOULD), not built, for passwords or the
+  master passcode; (c) **AC-10-24 says `password1234` is refused "as a known breached
+  password"**: as shipped it is refused first for being under 15 characters, and as breached
+  only where a firm lowers the minimum; the scenario's wording is yours to keep or change.
+  **A monitor's password is recorded as exempt** from the rules (ADR-402 (5), ADR-105).
 - **2.2.1's agent defaults were seen by the user on 2026-10-07** ("make sense"). **Agent
   default of ADR-401 (3) to confirm or overturn:** a try at a name nobody has writes no row,
   and once an account is locked further wrong tries add nothing until it opens.
@@ -1622,10 +1672,7 @@ its scenario.
   told nothing rather than refused; the six headers of an API answer, `no-store` and the
   request's id among them; a refused request told a code only until 2.4.4. **Agent defaults of 2.1.2 to confirm or overturn (ADR-380, 385):** NestJS 12
   (six weeks old) rather than 11; the health answer says only that the process answers; an
-  error answers `{ code, requestId }`. **One reading to confirm or overturn:** a monitor's
-  password (their phone number without the area code, ADR-105) is exempt from the password rules
-  of NIST SP 800-63B, which then apply to back-office and outside users only; task 2.2.2 records
-  it. The other sixteen open points are engineering, each an agent default in its task's ADR.
+  error answers `{ code, requestId }`. The other sixteen open points are engineering, each an agent default in its task's ADR.
 - **Phase 2's exit criteria and its plan are agent defaults (ADR-376, 377)**, the user's to change:
   jobs built before the endpoints that queue them; a tenth acceptance file and a threat model
   written first, for the user's approval; reads that only a screen needs left to Phase 4.

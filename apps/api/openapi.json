@@ -44,6 +44,121 @@
           }
         }
       }
+    },
+    "/password-resets": {
+      "post": {
+        "operationId": "requestPasswordReset",
+        "summary": "Asks for a password reset to be sent to an email address. Anybody may ask; the answer is the same whether or not a person has that address.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 320
+                  }
+                },
+                "required": ["email"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "const": "accepted"
+                    }
+                  },
+                  "required": ["status"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/password-resets/completions": {
+      "post": {
+        "operationId": "completePasswordReset",
+        "summary": "Sets a new password with the code a reset message carried. The code is good once.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  }
+                },
+                "required": ["code", "password"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "const": "ok"
+                    }
+                  },
+                  "required": ["status"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -58,7 +173,13 @@
               "NOT_FOUND",
               "TOO_LARGE",
               "UNSUPPORTED_MEDIA_TYPE",
-              "INTERNAL_ERROR"
+              "INTERNAL_ERROR",
+              "PASSWORD_TOO_SHORT",
+              "PASSWORD_TOO_LONG",
+              "PASSWORD_BREACHED",
+              "PASSWORD_EASY_TO_GUESS",
+              "RESET_REFUSED",
+              "NO_MAIL"
             ]
           },
           "requestId": {

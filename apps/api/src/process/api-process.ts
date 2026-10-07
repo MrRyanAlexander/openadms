@@ -6,7 +6,7 @@
 import 'reflect-metadata';
 
 import type { Database } from '@open-adms/db';
-import type { Policy } from '@open-adms/domain';
+import { PasswordRules, type Policy } from '@open-adms/domain';
 import {
   Inject,
   Module,
@@ -17,6 +17,13 @@ import {
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 
+import type { Clock } from '../setup/setup-service.ts';
+import { shippedBreachedPasswords } from '../sign-in/breached-list.ts';
+import { mailFor, type Mail } from '../sign-in/mail.ts';
+import { PasswordHasher } from '../sign-in/password-hasher.ts';
+import { apiPasswords } from '../sign-in/password-resets.controller.ts';
+import { Passwords } from '../sign-in/passwords.ts';
+import { ResetCodes } from '../sign-in/reset-codes.ts';
 import { answersWith } from './answer-headers.ts';
 import { apiDatabase, openApiDatabase } from './api-database.ts';
 import { Boundary } from './boundary.ts';
@@ -24,7 +31,34 @@ import { ErrorFilter } from './error-filter.ts';
 import { logged, ProcessLog } from './logs.ts';
 import type { Settings } from './settings.ts';
 
-export type ProcessSettings = Pick<Settings, 'host' | 'port' | 'databaseUrl' | 'corsOrigins'>;
+export type ProcessSettings = Pick<
+  Settings,
+  | 'host'
+  | 'port'
+  | 'databaseUrl'
+  | 'corsOrigins'
+  | 'tokenSigningSecret'
+  | 'smtpUrl'
+  | 'smtpAddress'
+  | 'mailFrom'
+>;
+
+export type ProcessPolicy = Pick<
+  Policy,
+  | 'requestBodyLimitBytes'
+  | 'passwordMinimumLength'
+  | 'passwordMaximumLength'
+  | 'passwordResetMinutes'
+>;
+
+// What a test puts in place of the process's own: where the log goes instead of standard output,
+// the database (a test's own piece of work, undone afterwards), the mail and the time.
+export interface ProcessParts {
+  readonly stream?: { write(line: string): void };
+  readonly database?: Database;
+  readonly mail?: Mail;
+  readonly clock?: Clock;
+}
 
 export interface Route {
   readonly method: string;
@@ -32,7 +66,7 @@ export interface Route {
 }
 
 // The given endpoints with what every one of them may be handed: the API's database, opened once
-// and closed when the process stops.
+// and closed when the process stops, and the services that stand on it.
 @Module({})
 class ProcessModule implements OnApplicationShutdown {
   private readonly database: Database;
@@ -41,13 +75,16 @@ class ProcessModule implements OnApplicationShutdown {
     this.database = database;
   }
 
-  static around(module: Type<unknown>, database: Database): DynamicModule {
+  static around(module: Type<unknown>, database: Database, passwords: Passwords): DynamicModule {
     return {
       module: ProcessModule,
       global: true,
       imports: [module],
-      providers: [{ provide: apiDatabase, useValue: database }],
-      exports: [apiDatabase],
+      providers: [
+        { provide: apiDatabase, useValue: database },
+        { provide: apiPasswords, useValue: passwords },
+      ],
+      exports: [apiDatabase, apiPasswords],
     };
   }
 
@@ -68,12 +105,11 @@ export class ApiProcess {
     this.settings = settings;
   }
 
-  // `more` is where the server's own log goes instead of standard output (a test reads it).
   static async create(
     module: Type<unknown>,
     settings: ProcessSettings,
-    policy: Pick<Policy, 'requestBodyLimitBytes'>,
-    more: { stream?: { write(line: string): void } } = {},
+    policy: ProcessPolicy,
+    more: ProcessParts = {},
   ): Promise<ApiProcess> {
     const adapter = new FastifyAdapter({
       ...logged,
@@ -87,8 +123,17 @@ export class ApiProcess {
       for (const method of [route.method].flat()) routes.push({ method, path: route.url });
     });
     answersWith(server, settings.corsOrigins);
+    const database = more.database ?? openApiDatabase(settings);
+    const passwords = new Passwords(database, {
+      rules: new PasswordRules(policy, shippedBreachedPasswords()),
+      hasher: new PasswordHasher(),
+      resetCodes: new ResetCodes(settings.tokenSigningSecret, policy.passwordResetMinutes),
+      mail: more.mail ?? mailFor(settings),
+      clock: more.clock ?? { now: () => new Date() },
+      resetMinutes: policy.passwordResetMinutes,
+    });
     const app = await NestFactory.create<NestFastifyApplication>(
-      ProcessModule.around(module, openApiDatabase(settings)),
+      ProcessModule.around(module, database, passwords),
       adapter,
       { logger: new ProcessLog(server.log) },
     );
