@@ -17,6 +17,8 @@ import {
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 
+import { apiPeople } from '../people/people.controller.ts';
+import { People } from '../people/people.ts';
 import type { Clock } from '../setup/setup-service.ts';
 import { Admission } from '../sign-in/admission.ts';
 import { shippedBreachedPasswords } from '../sign-in/breached-list.ts';
@@ -100,6 +102,7 @@ class ProcessModule implements OnApplicationShutdown {
     sessions: Sessions,
     tokens: SessionTokens,
     twoStep: TwoStep,
+    people: People,
   ): DynamicModule {
     return {
       module: ProcessModule,
@@ -111,8 +114,9 @@ class ProcessModule implements OnApplicationShutdown {
         { provide: apiSessions, useValue: sessions },
         { provide: apiSessionTokens, useValue: tokens },
         { provide: apiTwoStep, useValue: twoStep },
+        { provide: apiPeople, useValue: people },
       ],
-      exports: [apiDatabase, apiPasswords, apiSessions, apiSessionTokens, apiTwoStep],
+      exports: [apiDatabase, apiPasswords, apiSessions, apiSessionTokens, apiTwoStep, apiPeople],
     };
   }
 
@@ -187,8 +191,9 @@ export class ApiProcess {
       sessions,
       tries,
     });
+    const people = new People(database, { clock, sessions });
     const app = await NestFactory.create<NestFastifyApplication>(
-      ProcessModule.around(module, database, passwords, sessions, tokens, twoStep),
+      ProcessModule.around(module, database, passwords, sessions, tokens, twoStep, people),
       adapter,
       { logger: new ProcessLog(server.log) },
     );

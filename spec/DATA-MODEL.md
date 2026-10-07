@@ -158,15 +158,15 @@ primes; a sub belongs to one prime, at most two tiers, never shared (ADR-108).
 | **id** | uuid | |
 | **name** | text | |
 | **role** | enum `UserRole` | `ADMIN` · `MANAGER_ANALYST` · `MONITOR` · `READ_ONLY_VIEWER` · `SYSTEM` (the worker's one actor, never a login, ADR-273) |
-| monitorNumber | text, unique | The Monitor ID (`M004127`), issued by the database; every monitor has one (ADR-281) |
+| monitorNumber | text, unique | The Monitor ID (`M004127`), issued by the database; every monitor has one (ADR-281); a person an admin creates in the back office is issued none (ADR-415) |
 | employerId | → `Contractor` | Who employs them when it isn't the firm |
 | employerNumber | text | That employer's own ID for them (`HS-0417`) |
 | contractorId | → `Contractor` | A contractor user's contractor: what they may see (ADR-169). **Built (ADR-315):** set on a contractor user and on nobody else (check) |
 | viewerKind | enum `ViewerKind` | `CLIENT` · `CONTRACTOR` · `AUDITOR`, on a read-only viewer only. **Built (ADR-315):** every read-only viewer states it, nobody else does (check) |
 | seesPrivateCitizens | boolean | Whether this viewer sees private citizens by name (an ROE's owner; a drop-off log's resident and origin address). On a read-only viewer only: every one states it, nobody else does (check). No database default: a new viewer starts at yes (`packages/domain`, `ViewerSettings.starting()`), and the firm changes it for that viewer at any time, audited (ADR-328 (4); **built, ADR-336**) |
-| email, phone | text | Each optional. A monitor's phone is shown to admins only (ADR-169). **Built (ADR-315):** no read-only viewer reads either: the read-only login has no grant on `user` at all |
+| email, phone | text | Each optional. A monitor's phone is shown to admins only (ADR-169; **built at the API, ADR-415**). **The email address is what an admin, a manager/analyst and a read-only viewer sign in with (ADR-409): among those who aren't archived no two have one address, whatever its capitals (the exclusion `user_sign_in_email_once`, ADR-415); a monitor's is no key.** **Built (ADR-315):** no read-only viewer reads either: the read-only login has no grant on `user` at all |
 | **createdAt** | instant | |
-| archivedAt | instant | |
+| archivedAt | instant | **The firm's last admin stays (ADR-415):** an admin in service is never archived, or made another role, while no other admin is in service (the trigger `user_last_admin`) |
 | ~~*Phase 2:* passwordHash, twoStepSecret, lockedUntil…~~ | | **Built apart from the person (ADR-397):** sign-in's columns are `UserCredential`'s, below, so nothing that reads a person reads a secret with them |
 
 #### `UserCredential`

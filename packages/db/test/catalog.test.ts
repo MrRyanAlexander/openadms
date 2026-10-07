@@ -172,6 +172,8 @@ const triggers = [
   `CREATE CONSTRAINT TRIGGER certification_box_keeps_primary AFTER UPDATE OF certification_id, "position" ON public.certification_box DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION certification_has_primary_box()`,
   // The system actor's row (ADR-276).
   `CREATE TRIGGER user_system_actor BEFORE INSERT OR UPDATE ON public."user" FOR EACH ROW EXECUTE FUNCTION user_system_actor_guard()`,
+  // The firm's last admin stays (ADR-415).
+  `CREATE TRIGGER user_last_admin BEFORE UPDATE OF role, archived_at ON public."user" FOR EACH ROW EXECUTE FUNCTION user_last_admin_guard()`,
   // Only a release writes a list value's key (ADR-302).
   ...listTables.map(
     (table) =>
@@ -1138,6 +1140,13 @@ describe('the guards in the catalog', () => {
         name: 'ticket_void_voided_once',
         definition:
           'EXCLUDE USING btree (project_id WITH =, workflow WITH =, ticket_number WITH =) WHERE ((lifted_at IS NULL))',
+      },
+      // One email address per person who signs in at the back office or the portal (AC-02-83;
+      // ADR-415).
+      {
+        name: 'user_sign_in_email_once',
+        definition:
+          "EXCLUDE USING btree (lower(btrim(email)) WITH =) WHERE (((role = ANY (ARRAY['ADMIN'::user_role, 'MANAGER_ANALYST'::user_role, 'READ_ONLY_VIEWER'::user_role])) AND (archived_at IS NULL) AND (email IS NOT NULL)))",
       },
     ]);
   });

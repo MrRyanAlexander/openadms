@@ -89,7 +89,7 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-07, through ADR-413)
+### Where things stand (2026-10-07, through ADR-415)
 - **Phase 2 (API and sync) is open (ADR-376).** Its plan is `BACKLOG.md`'s eight milestones and 32
   tasks (ADR-377); tasks 2.0.1 (the opening and the plan), 2.1.1 (the threat model and the
   API's scenarios, ADR-379; docs), 2.1.2 (the API as a process, ADR-380…385), 2.1.3 (the
@@ -135,7 +135,17 @@ of `DECISIONS.md`.
   writes an admin, a manager/analyst and a viewer with known passwords and authenticator
   secrets into this machine's installation (`--show` only shows them; it has not been run
   for real here, so the installation holds no person but the system actor). What it leaves:
-  BACKLOG C91. **The user's word (ADR-401):
+  BACKLOG C91. **Task 2.2.5 (permissions on every request, and people, ADR-415) is done:**
+  every `SIGNED_IN` endpoint names its `roles` and may name one `permission`; `Admission` asks
+  them on each request from the database (`NOT_ALLOWED`), the rule the domain's (`Access`); an
+  admin creates back-office and outside users (`POST /people`), reads one (`GET
+  /people/:userId`, a monitor's phone number an admin's alone), gives and takes permissions and
+  a viewer's projects (`PUT …/permissions`, `…/viewer-projects`), sets a password
+  (`POST …/passwords`), ends sessions (`…/session-endings`) and archives (`…/archivings`); the
+  database keeps one email address a person who signs in and the firm's last admin; **`pnpm
+  installer:admin`** on the server makes the first admin and lets an admin back in (it has
+  not been run for real here: the installation still holds no person but the system actor).
+  What it leaves: BACKLOG C92. **Milestone 2.2 has one task left, 2.2.6.** **The user's word (ADR-401):
   sign-in follows NIST SP 800-63B and ASVS Level 2; when a direction in security is suggested,
   say what the standard asks before building it** (ADR-400 was built first and withdrawn). **Each service login (`adms_api`, `adms_worker`, `adms_readonly`) is
   under a statement timeout**, the policy value `STATEMENT_TIMEOUT_MS` (30,000 ms), set by
@@ -156,11 +166,14 @@ of `DECISIONS.md`.
   `apps/api/test/support/served.ts`: `worldOn` gives Dana and Luis a password and an
   authenticator, and `served.signedIn(email, password)` sends the code their app shows (a code
   is good once, so a second sign-in in one step moves the test's clock on thirty seconds).
+  **The API's test files run one at a time** (ADR-415): the database keeps two who sign in
+  from one address, and every test's world has Dana's. A test that archives Dana gives the
+  firm another admin first; what needs a firm with no admin is a story (`first-admin`).
 - **Phase 1 is done:** all seven exit criteria met (ADR-371, 372); 693 of the 708 scenarios with a
   Phase 1 part proven whole, 15 in part. 48 scenario rows name Phase 2 (37 as "API (Phase 2)").
-- **The chain, seen whole on 2026-10-07:** 99 test
-  files, 2,048 tests; lint clean; 421 licences allowed; fifteen stories; `pnpm security` 7 passed,
-  0 failed; eighty-six migrations. The expected output of each command is `adms-verify`'s.
+- **The chain, seen whole on 2026-10-07:** 101 test
+  files, 2,091 tests; lint clean; 421 licences allowed; sixteen stories; `pnpm security` 7 passed,
+  0 failed; eighty-seven migrations. The expected output of each command is `adms-verify`'s.
 - **What exists:** `packages/db` (schema, guards, tests), `packages/domain` (every rule; one
   dependency, no database), `packages/contracts`, `packages/scenarios` (the harness and stories,
   the golden mission among them), `apps/worker/src/reconciliation/` (the run: group, check,
@@ -316,24 +329,19 @@ questions.
 **Phase 2 is open (ADR-376). Its plan is `BACKLOG.md`, "Active — Phase 2" (ADR-377): read its
 brief first. One task per response.**
 
-**Task 2.2.5, permissions on every request, and people** *(BACKLOG has the task in full)*. Read
-first: `spec/THREAT-MODEL.md` T-14, T-15 and its §4 rows on authorization;
-`spec/acceptance/02-people-and-devices.md`'s **AC-02-08, 12, 13, 72** and AC-09-18, and
-`spec/acceptance/10-api-and-sync.md`'s AC-10-25 (the admin's half), 27…31; ARCHITECTURE §6
-(Authorization) and §7.0 (creating people); **ADR-315, 364** (grants and how a service reads
-them), **ADR-406, 408 (3), 409 (5), (7), 410, 412 (9), 413 (2)**; BACKLOG **C89's, C90's and
-C91's 2.2.5 lines**: `Admission` is where a role and a grant per endpoint are asked, read from
-the database on each request; the endpoints of `Passwords.setByAdmin` and of creating a person;
-refusing a second back-office or outside user with an email address somebody has (the service,
-and a key of the database's); **the server command, beside the installer, that makes the first
-admin and gives a firm's only admin a way back in** (it sets a password and clears an
-authenticator; ADR-413 (2)); an admin ending anybody's sessions; the last admin never removed.
-**A dependency needs its ADR first.** **Done when:** a grant taken away refuses the person's
-very next request; an admin creates back-office and outside users and gives and takes grants and
-a viewer's projects; nobody grants what they don't hold; the last admin can't be removed or left
-with no way in; a manager/analyst never reads a monitor's phone number; AC-02-08, 12, 13, 72 and
-AC-10-25 pass at the API; REQ-202 is ticked if seen whole; and the chain is green with the new
-counts. **Next after it: 2.2.6, rate limits.**
+**Task 2.2.6, rate limits** *(BACKLOG has the task in full)*. Read first:
+`spec/THREAT-MODEL.md` T-16 and its rows on abuse; `spec/acceptance/10-api-and-sync.md`'s
+**AC-10-40** and its point 13 (what a limited caller is told); ARCHITECTURE §6 (Abuse); **ADR-404
+(9), 409 (5), 412 (13)**; BACKLOG **C85** (the forwarded address, before any per-IP limit),
+**C89's, C90's, C91's and C92's 2.2.6 lines**: per IP and per account (per device comes with
+2.6.5), the numbers policy values, never literals; `POST /sessions` (with and without a code),
+`/password-resets` and its completion, `/password-changes`, `/two-step/setups/confirmations`,
+`GET /sessions/csrf` and the endpoints of the firm's people are limited today only by a login's
+own wait and lock. **A dependency needs its ADR first; say what the standard asks before
+building (ADR-401).** **Done when:** a caller over a limit is refused with a plain code and told
+when to try again; a stranger can't hold a known login in its wait from one address; the limits
+are policy values an installation may state; AC-10-40 passes; REQ-204 is noted in part; and the
+chain is green with the new counts. **Next after it: 2.3.1, the job queue.**
 
 **Every command starts with** `eval "$(fnm env --shell zsh)"`. The checks are `adms-verify`'s; the
 database tests, the map servers' tests, the stories and `pnpm security` need `pnpm local:up` first,

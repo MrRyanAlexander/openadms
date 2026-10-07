@@ -1,13 +1,13 @@
 # Open ADMS — Current decisions and gaps, at a glance
 
 **The present tense of the project on one page.** `DECISIONS.md` and `DEVIATIONS.md` are the full
-history, with 413 ADRs and 74 KDs, many superseded. This page says what is true **now** and which
+history, with 415 ADRs and 74 KDs, many superseded. This page says what is true **now** and which
 entries to cite. The reasons live in the ADRs and the skills.
 
 - **Keep it current:** when you add, amend or supersede an ADR, or open or close a KD, update this
   page **in the same response** (`adms-decisions`).
 - **If this page and a log entry disagree,** the newest ADR wins: fix this page and say so.
-- **Updated 2026-10-07, through ADR-413 / KD-74.** **Phase 2 (API and sync) is open (ADR-376);
+- **Updated 2026-10-07, through ADR-415 / KD-74.** **Phase 2 (API and sync) is open (ADR-376);
   its plan is `BACKLOG.md`'s eight milestones and 32 tasks (ADR-377). Tasks 2.1.1 (ADR-379) and
   2.1.2 (ADR-380…385) are done: the API runs as a process, reached only at
   `https://api.adms.localhost` through Caddy, with a health answer and nothing else yet. Task
@@ -18,7 +18,11 @@ entries to cite. The reasons live in the ADRs and the skills.
   reset by email). Task 2.2.3 (ADR-407…411) is done: sessions (sign-in and out, the two cookies,
   CSRF, wrong tries and the lock, a password to change first, the keyed hash). Task 2.2.4
   (ADR-412) is done: two-step sign-in (an authenticator's code, required for an admin and a
-  manager/analyst, set up by proving a code, cleared by an admin; the dev stack's accounts).**
+  manager/analyst, set up by proving a code, cleared by an admin; the dev stack's accounts). Task
+  2.2.5 (ADR-415) is done: permissions on every request, and people (each endpoint's roles and
+  permission asked at the door from the database; an admin creates people, gives and takes
+  grants and a viewer's projects, sets a password, ends sessions, archives; one email address a
+  person who signs in and the last admin, both held by the database; `pnpm installer:admin`).**
   `spec/acceptance/10-api-and-sync.md` and `spec/THREAT-MODEL.md` are approved by the user
   (their marks, ADR-386, 393). **No KD is open.**
   The exception to the seven-day rule is gone from `pnpm-workspace.yaml` (ADR-372's owed step,
@@ -597,7 +601,7 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   (`SIGN_IN_REFUSED`, counted, a `SIGN_IN_FAILED` event, the wait and the lock of ADR-409).
   **A code is good once:** `user_credential.two_step_last_step` keeps the step of the last one
   taken and none at or before it is taken again. **Which steps:** the server's own and
-  `TWO_STEP_CODE_STEPS_EITHER_SIDE` (1; 0 or 1) either side. *The reading:* ASVS 6.5.5's
+  `TWO_STEP_CODE_STEPS_EITHER_SIDE` (1; 0 or 1) either side. *The reading, confirmed by the user (ADR-414):* ASVS 6.5.5's
   "30 seconds at most" is read as the step's length, as the apps and comparable products work;
   to the letter it is the value 0, which an installation may state. **A required person with
   no authenticator** gets a session that opens nothing but setting one up: every `SIGNED_IN`
@@ -626,6 +630,45 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   or removing their own authenticator; recovery codes; a way in for the only admin who lost
   their phone (2.2.5, with the locked last admin); rate limits (2.2.6). What it leaves:
   BACKLOG C91. *Agent defaults.*
+- **Permissions on every request, and people (task 2.2.5).** **Every `SIGNED_IN` endpoint names
+  its `roles` and may name the one `permission` it takes** (`packages/contracts`; one that names
+  no role can't be defined; OpenAPI carries both). **`Admission` asks them before the schemas
+  read anything**, after the session, the CSRF value, the password to change and the
+  authenticator to set up: 403 `NOT_ALLOWED`. The person's role and the permissions they hold
+  now are read with their session on each request (`Caller.granted`), never from a token: **a
+  grant taken away, a role changed or a person archived refuses their very next request.** The
+  rule is the domain's (`packages/domain/src/people.ts`: `Access`, `PeopleRules`): an admin holds
+  every permission and needs none granted; a manager/analyst the ones granted and not taken
+  away; a monitor, a read-only viewer, the system actor and anyone archived none. A service
+  behind an endpoint asks again in its own piece of work (ADR-364). **No endpoint takes a
+  permission yet** (the reviewer's: 2.4.4). **People** (`apps/api/src/people/`, `People`):
+  `POST /people` (an admin, a manager/analyst, or a read-only viewer with its kind and, for a
+  contractor user, its contractor; **never a monitor**; an email address required; no Monitor
+  ID; no password until an admin sets one), `GET /people/:userId` (an admin or a
+  manager/analyst; **a monitor's phone number is in an admin's answer only**),
+  `PUT /people/:userId/permissions` and `/viewer-projects` (the whole of what the person holds
+  from now on; one not named is archived, never deleted; **only an admin gives a permission,
+  and an admin holds every one, so nobody gives what they don't hold**; a permission to a
+  manager/analyst only, a project to a read-only viewer only), `POST /people/:userId/passwords`
+  (an admin sets a password; its owner changes it first), `/session-endings` (an admin ends
+  anybody's sessions), `/archivings` (the person's sessions end). **One email address a person
+  who signs in**: 409 `EMAIL_HELD`, and the database's exclusion `user_sign_in_email_once`
+  (admins, manager/analysts and read-only viewers who aren't archived, without regard to
+  capitals; a monitor's address is no key). **The last admin stays**: 409 `LAST_ADMIN`, and the
+  database's trigger `user_last_admin` refuses archiving the only admin in service or making
+  them anything else, whoever asks. **`pnpm installer:admin`** (the user's decision, ADR-413
+  (2), 414 (2)), on the firm's own server: makes the firm's first admin where it has none; sets
+  an admin's password anew (a lock opens, their sessions end) and, asked, clears their
+  authenticator; never makes a second admin; written with the admin as the actor and the reason
+  "Done on the server, by pnpm installer:admin." **A refusal may carry the domain's plain
+  words** (`message` on the error answer: why a password wasn't taken; nothing else). Eighty-
+  seven migrations (the 87th a guard alone). Tests: `packages/domain/test/people.test.ts`,
+  `apps/api/test/people.test.ts`, `packages/db/test/people.test.ts`, the story `first-admin`;
+  **the API's test files run one at a time**. AC-02-08, 12, 13, 72, AC-10-25 pass at the API;
+  AC-02-83, 84 added for the user's approval; AC-09-18 and AC-10-27 in part. **Not built,
+  said:** a list of people; editing a person or their role; taking a person out of the archive;
+  a person's own sessions; rate limits (2.2.6). What it leaves: BACKLOG C92. *Agent defaults
+  but for the server command.* [415]
 - **The threat model and the API's scenarios (task 2.1.1; both approved by the user, ADR-386,
   393).**
   `spec/THREAT-MODEL.md`: eleven kinds of attacker, 36 threats over the layers of ARCHITECTURE §2,
@@ -1745,8 +1788,19 @@ its scenario.
 
 ## 4. Waiting on the user
 
-**Live today (2026-10-07, ADR-376…411):**
-- **Nothing blocks the next task** (2.2.5, permissions on every request, and people).
+**Live today (2026-10-07, ADR-376…415):**
+- **Nothing blocks the next task** (2.2.6, rate limits).
+- **Agent defaults of 2.2.5 to confirm or overturn (ADR-415):** (a) **only an admin** creates
+  people, gives and takes permissions and a viewer's projects, sets another's password, ends
+  sessions and archives: there is no "manage people" permission a manager/analyst could hold;
+  (b) any admin or manager/analyst reads a person, a manager/analyst without a monitor's phone
+  number and with everybody else's; (c) nobody created in the back office is issued a Monitor
+  ID; (d) an archived person's email address is free for somebody new; (e) `pnpm
+  installer:admin` lets any admin back in, not only a firm's only one, and never makes a
+  second admin; (f) a refused password's reason reaches the caller in plain words.
+- **For your approval, two scenarios added to the approved file 02:** AC-02-83 (one email
+  address a person who signs in) and AC-02-84 (the server command); and the note under
+  ARCHITECTURE §7.0.
 - **Settled at the user's word, 2026-10-07 (ADR-413: "as it relates to the previous task FLAGS,
   Im going with your recommendations"), no longer waiting:** the agent defaults of task 2.2.3
   (the email address; 30 quiet minutes, 12 hours, 5 minutes; a wait after 5 wrong tries and a
@@ -1754,20 +1808,16 @@ its scenario.
   actor of a wrong try; a new password ending sessions; two tabs), and **the server command
   that sets an admin's password for a firm's locked last admin, which task 2.2.5 builds**.
   Before it, ADR-407 settled tasks 2.1.2…2.2.2's.
-- **Agent defaults of 2.2.4 to confirm or overturn (ADR-412):** **(a) a code is taken in one
-  thirty-second step either side of the server's own** (what authenticator apps and RFC 6238
-  expect; ASVS's "30 seconds at most" read to the letter would be none either side, a policy
-  value an installation may state, at the cost of failed sign-ins near a step's end);
-  (b) a right password without a code is told "a code is needed", the one failed sign-in told
-  apart; (c) a wrong code counts as a wrong try and locks the login at the 10th like a wrong
-  password; (d) an admin never clears their own authenticator; (e) setting one up ends the
-  person's other sessions, and must be finished within ten minutes; (f) the dev accounts'
-  names and the command `pnpm local:accounts`.
-- **Two things for you to know, neither blocking:** (1) **the only admin of a firm who loses
-  their phone has no way in yet**, like the locked last admin of a firm with no mail: task
-  2.2.5's server command is recommended to do both (set the password, clear the
-  authenticator). (2) **Nobody can yet replace their own authenticator** (a new phone while the
-  old one still works): an admin clears it and they set it up again; a page for it is Phase 4's.
+- **Settled at the user's word, 2026-10-07 (ADR-414), no longer waiting:** a code is taken in
+  one thirty-second step either side of the server's own (`TWO_STEP_CODE_STEPS_EITHER_SIDE`
+  stays 1); **task 2.2.5's server command also clears an admin's authenticator**, for the only
+  admin who lost their phone; a person replacing their own authenticator is Phase 4's; the
+  approach (an authenticator app's code) confirmed for the product's level, with a passkey or
+  hardware key a later candidate (BACKLOG C91), never assumed.
+- **Agent defaults of 2.2.4 still yours to overturn (ADR-412):** a right password without a
+  code is told "a code is needed"; a wrong code counts as a wrong try and locks at the 10th; an
+  admin never clears their own authenticator; setting one up ends the person's other sessions
+  and must be finished within ten minutes; the dev accounts' names and `pnpm local:accounts`.
 - **Phase 2's exit criteria and its plan are agent defaults (ADR-376, 377)**, the user's to change:
   jobs built before the endpoints that queue them; a tenth acceptance file and a threat model
   written first, for the user's approval; reads that only a screen needs left to Phase 4.

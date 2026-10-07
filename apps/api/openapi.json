@@ -376,6 +376,7 @@
         "operationId": "currentSession",
         "summary": "Who is signed in.",
         "x-open-adms-access": "SIGNED_IN",
+        "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST", "READ_ONLY_VIEWER"],
         "responses": {
           "200": {
             "description": "The answer.",
@@ -484,6 +485,7 @@
         "operationId": "changePassword",
         "summary": "The signed-in person sets a new password, giving their current one. Their other sessions end.",
         "x-open-adms-access": "SIGNED_IN",
+        "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST", "READ_ONLY_VIEWER"],
         "requestBody": {
           "required": true,
           "content": {
@@ -545,6 +547,7 @@
         "operationId": "beginTwoStepSetup",
         "summary": "Begins setting up the signed-in person’s authenticator: answers the secret for the app. Nothing is kept until a code proves it.",
         "x-open-adms-access": "SIGNED_IN",
+        "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST", "READ_ONLY_VIEWER"],
         "responses": {
           "200": {
             "description": "The answer.",
@@ -595,6 +598,7 @@
         "operationId": "confirmTwoStepSetup",
         "summary": "Finishes setting up the signed-in person’s authenticator with a code from it. Their other sessions end.",
         "x-open-adms-access": "SIGNED_IN",
+        "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST", "READ_ONLY_VIEWER"],
         "requestBody": {
           "required": true,
           "content": {
@@ -690,6 +694,7 @@
         "operationId": "clearTwoStep",
         "summary": "An admin clears another person’s authenticator. Their sessions end; it is a security event.",
         "x-open-adms-access": "SIGNED_IN",
+        "x-open-adms-roles": ["ADMIN"],
         "parameters": [
           {
             "name": "userId",
@@ -716,6 +721,955 @@
                     }
                   },
                   "required": ["status"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/people": {
+      "post": {
+        "operationId": "createPerson",
+        "summary": "An admin creates an admin, a manager/analyst or a read-only viewer (a client user, a contractor user with its contractor, or an auditor). Never a monitor. The person has no password until an admin sets one.",
+        "x-open-adms-access": "SIGNED_IN",
+        "x-open-adms-roles": ["ADMIN"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      },
+                      "email": {
+                        "type": "string",
+                        "maxLength": 320,
+                        "format": "email",
+                        "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                      },
+                      "phone": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 40
+                      },
+                      "role": {
+                        "type": "string",
+                        "enum": ["ADMIN", "MANAGER_ANALYST"]
+                      }
+                    },
+                    "required": ["name", "email", "role"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      },
+                      "email": {
+                        "type": "string",
+                        "maxLength": 320,
+                        "format": "email",
+                        "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                      },
+                      "phone": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 40
+                      },
+                      "role": {
+                        "type": "string",
+                        "const": "READ_ONLY_VIEWER"
+                      },
+                      "viewerKind": {
+                        "type": "string",
+                        "enum": ["CLIENT", "AUDITOR"]
+                      },
+                      "seesPrivateCitizens": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": ["name", "email", "role", "viewerKind"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      },
+                      "email": {
+                        "type": "string",
+                        "maxLength": 320,
+                        "format": "email",
+                        "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                      },
+                      "phone": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 40
+                      },
+                      "role": {
+                        "type": "string",
+                        "const": "READ_ONLY_VIEWER"
+                      },
+                      "viewerKind": {
+                        "type": "string",
+                        "const": "CONTRACTOR"
+                      },
+                      "contractorId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "seesPrivateCitizens": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": ["name", "email", "role", "viewerKind", "contractorId"],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string",
+                      "enum": ["ADMIN", "MANAGER_ANALYST", "MONITOR", "READ_ONLY_VIEWER"]
+                    },
+                    "viewerKind": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": ["CLIENT", "CONTRACTOR", "AUDITOR"]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "contractorId": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "seesPrivateCitizens": {
+                      "type": ["boolean", "null"]
+                    },
+                    "monitorId": {
+                      "type": ["string", "null"]
+                    },
+                    "email": {
+                      "type": ["string", "null"]
+                    },
+                    "phone": {
+                      "type": ["string", "null"]
+                    },
+                    "archived": {
+                      "type": "boolean"
+                    },
+                    "permissions": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "CORRECT",
+                          "RENUMBER",
+                          "VOID",
+                          "ACCEPT_FLAG",
+                          "QC",
+                          "LOCK_INVOICED",
+                          "UNLOCK_INVOICED",
+                          "APPROVE_HOURS",
+                          "SETUP",
+                          "DISPATCH"
+                        ]
+                      }
+                    },
+                    "projectIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "role",
+                    "viewerKind",
+                    "contractorId",
+                    "seesPrivateCitizens",
+                    "monitorId",
+                    "email",
+                    "archived",
+                    "permissions",
+                    "projectIds"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/people/{userId}": {
+      "get": {
+        "operationId": "readPerson",
+        "summary": "One person, as an admin or a manager/analyst reads them. A monitor’s phone number is in an admin’s answer only.",
+        "x-open-adms-access": "SIGNED_IN",
+        "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string",
+                      "enum": ["ADMIN", "MANAGER_ANALYST", "MONITOR", "READ_ONLY_VIEWER"]
+                    },
+                    "viewerKind": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": ["CLIENT", "CONTRACTOR", "AUDITOR"]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "contractorId": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "seesPrivateCitizens": {
+                      "type": ["boolean", "null"]
+                    },
+                    "monitorId": {
+                      "type": ["string", "null"]
+                    },
+                    "email": {
+                      "type": ["string", "null"]
+                    },
+                    "phone": {
+                      "type": ["string", "null"]
+                    },
+                    "archived": {
+                      "type": "boolean"
+                    },
+                    "permissions": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "CORRECT",
+                          "RENUMBER",
+                          "VOID",
+                          "ACCEPT_FLAG",
+                          "QC",
+                          "LOCK_INVOICED",
+                          "UNLOCK_INVOICED",
+                          "APPROVE_HOURS",
+                          "SETUP",
+                          "DISPATCH"
+                        ]
+                      }
+                    },
+                    "projectIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "role",
+                    "viewerKind",
+                    "contractorId",
+                    "seesPrivateCitizens",
+                    "monitorId",
+                    "email",
+                    "archived",
+                    "permissions",
+                    "projectIds"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/people/{userId}/permissions": {
+      "put": {
+        "operationId": "setPermissions",
+        "summary": "An admin states the permissions a manager/analyst holds from now on. One taken away refuses that person’s very next request.",
+        "x-open-adms-access": "SIGNED_IN",
+        "x-open-adms-roles": ["ADMIN"],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "permissions": {
+                    "maxItems": 10,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "CORRECT",
+                        "RENUMBER",
+                        "VOID",
+                        "ACCEPT_FLAG",
+                        "QC",
+                        "LOCK_INVOICED",
+                        "UNLOCK_INVOICED",
+                        "APPROVE_HOURS",
+                        "SETUP",
+                        "DISPATCH"
+                      ]
+                    }
+                  }
+                },
+                "required": ["permissions"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string",
+                      "enum": ["ADMIN", "MANAGER_ANALYST", "MONITOR", "READ_ONLY_VIEWER"]
+                    },
+                    "viewerKind": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": ["CLIENT", "CONTRACTOR", "AUDITOR"]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "contractorId": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "seesPrivateCitizens": {
+                      "type": ["boolean", "null"]
+                    },
+                    "monitorId": {
+                      "type": ["string", "null"]
+                    },
+                    "email": {
+                      "type": ["string", "null"]
+                    },
+                    "phone": {
+                      "type": ["string", "null"]
+                    },
+                    "archived": {
+                      "type": "boolean"
+                    },
+                    "permissions": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "CORRECT",
+                          "RENUMBER",
+                          "VOID",
+                          "ACCEPT_FLAG",
+                          "QC",
+                          "LOCK_INVOICED",
+                          "UNLOCK_INVOICED",
+                          "APPROVE_HOURS",
+                          "SETUP",
+                          "DISPATCH"
+                        ]
+                      }
+                    },
+                    "projectIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "role",
+                    "viewerKind",
+                    "contractorId",
+                    "seesPrivateCitizens",
+                    "monitorId",
+                    "email",
+                    "archived",
+                    "permissions",
+                    "projectIds"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/people/{userId}/viewer-projects": {
+      "put": {
+        "operationId": "setViewerProjects",
+        "summary": "An admin states the projects a read-only viewer sees from now on. One not named is taken away.",
+        "x-open-adms-access": "SIGNED_IN",
+        "x-open-adms-roles": ["ADMIN"],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "projectIds": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    }
+                  }
+                },
+                "required": ["projectIds"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string",
+                      "enum": ["ADMIN", "MANAGER_ANALYST", "MONITOR", "READ_ONLY_VIEWER"]
+                    },
+                    "viewerKind": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": ["CLIENT", "CONTRACTOR", "AUDITOR"]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "contractorId": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "seesPrivateCitizens": {
+                      "type": ["boolean", "null"]
+                    },
+                    "monitorId": {
+                      "type": ["string", "null"]
+                    },
+                    "email": {
+                      "type": ["string", "null"]
+                    },
+                    "phone": {
+                      "type": ["string", "null"]
+                    },
+                    "archived": {
+                      "type": "boolean"
+                    },
+                    "permissions": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "CORRECT",
+                          "RENUMBER",
+                          "VOID",
+                          "ACCEPT_FLAG",
+                          "QC",
+                          "LOCK_INVOICED",
+                          "UNLOCK_INVOICED",
+                          "APPROVE_HOURS",
+                          "SETUP",
+                          "DISPATCH"
+                        ]
+                      }
+                    },
+                    "projectIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "role",
+                    "viewerKind",
+                    "contractorId",
+                    "seesPrivateCitizens",
+                    "monitorId",
+                    "email",
+                    "archived",
+                    "permissions",
+                    "projectIds"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/people/{userId}/passwords": {
+      "post": {
+        "operationId": "setPersonPassword",
+        "summary": "An admin sets a person’s password. Their sessions end, and they set one of their own at their next sign-in.",
+        "x-open-adms-access": "SIGNED_IN",
+        "x-open-adms-roles": ["ADMIN"],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "password": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  }
+                },
+                "required": ["password"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "const": "ok"
+                    }
+                  },
+                  "required": ["status"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/people/{userId}/session-endings": {
+      "post": {
+        "operationId": "endPersonSessions",
+        "summary": "An admin ends every session a person has open.",
+        "x-open-adms-access": "SIGNED_IN",
+        "x-open-adms-roles": ["ADMIN"],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "const": "ended"
+                    },
+                    "sessions": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": ["status", "sessions"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/people/{userId}/archivings": {
+      "post": {
+        "operationId": "archivePerson",
+        "summary": "An admin archives a person. Their sessions end and they are refused at once. The only admin can’t be archived.",
+        "x-open-adms-access": "SIGNED_IN",
+        "x-open-adms-roles": ["ADMIN"],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string",
+                      "enum": ["ADMIN", "MANAGER_ANALYST", "MONITOR", "READ_ONLY_VIEWER"]
+                    },
+                    "viewerKind": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": ["CLIENT", "CONTRACTOR", "AUDITOR"]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "contractorId": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "seesPrivateCitizens": {
+                      "type": ["boolean", "null"]
+                    },
+                    "monitorId": {
+                      "type": ["string", "null"]
+                    },
+                    "email": {
+                      "type": ["string", "null"]
+                    },
+                    "phone": {
+                      "type": ["string", "null"]
+                    },
+                    "archived": {
+                      "type": "boolean"
+                    },
+                    "permissions": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "CORRECT",
+                          "RENUMBER",
+                          "VOID",
+                          "ACCEPT_FLAG",
+                          "QC",
+                          "LOCK_INVOICED",
+                          "UNLOCK_INVOICED",
+                          "APPROVE_HOURS",
+                          "SETUP",
+                          "DISPATCH"
+                        ]
+                      }
+                    },
+                    "projectIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "role",
+                    "viewerKind",
+                    "contractorId",
+                    "seesPrivateCitizens",
+                    "monitorId",
+                    "email",
+                    "archived",
+                    "permissions",
+                    "projectIds"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -765,10 +1719,20 @@
               "TWO_STEP_REFUSED",
               "TWO_STEP_ALREADY_SET_UP",
               "TWO_STEP_NOT_SET_UP",
-              "NOT_ALLOWED"
+              "NOT_ALLOWED",
+              "EMAIL_HELD",
+              "LAST_ADMIN",
+              "NOT_A_MANAGER_ANALYST",
+              "NOT_A_VIEWER",
+              "UNKNOWN_CONTRACTOR",
+              "UNKNOWN_PROJECT"
             ]
           },
           "requestId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "message": {
             "type": "string",
             "minLength": 1
           }

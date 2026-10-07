@@ -135,7 +135,7 @@ export class SessionsController {
       if (outcome.code === 'RESET_REFUSED' || outcome.code === 'NO_MAIL') {
         throw new Error('Changing a password answered as a reset does.');
       }
-      throw new Refusal(outcome.code, 422);
+      throw new Refusal(outcome.code, 422, outcome.message);
     }
     return passwordSetAnswerSchema.parse({ status: 'ok' });
   }

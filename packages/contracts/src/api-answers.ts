@@ -1,6 +1,6 @@
 // What the API says about itself and about a refusal (ARCHITECTURE §6, Output; ADR-385).
 // Every answer's shape lives here, never in a controller.
-import { passwordProblemCodes } from '@open-adms/domain';
+import { passwordProblemCodes, permissions } from '@open-adms/domain';
 import { z } from 'zod';
 
 // The health answer says that the process answers, and nothing else: no version, no setting, no
@@ -46,15 +46,29 @@ export const errorCodes = [
   // The person already has an authenticator, or has none to clear.
   'TWO_STEP_ALREADY_SET_UP',
   'TWO_STEP_NOT_SET_UP',
-  // Signed in, and not somebody who may do this.
+  // Signed in, and not somebody who may do this: the endpoint isn't open to their role, or takes a
+  // permission they don't hold now (ADR-415).
   'NOT_ALLOWED',
+  // Creating a person: a back-office or outside user already signs in with that email address.
+  'EMAIL_HELD',
+  // The firm's only admin can't be archived (ARCHITECTURE §6).
+  'LAST_ADMIN',
+  // A permission is given to a manager/analyst only; a project to a read-only viewer only.
+  'NOT_A_MANAGER_ANALYST',
+  'NOT_A_VIEWER',
+  // A contractor user's contractor, or a viewer's project, that the firm doesn't hold.
+  'UNKNOWN_CONTRACTOR',
+  'UNKNOWN_PROJECT',
 ] as const;
 
 export type ErrorCode = (typeof errorCodes)[number];
 
+// `message`: only where a rule of the domain's has plain words for the person who typed
+// something (why a password wasn't taken); never anything from inside the server.
 export const errorAnswerSchema = z.strictObject({
   code: z.enum(errorCodes),
   requestId: z.string().min(1),
+  message: z.string().min(1).optional(),
 });
 
 export type ErrorAnswer = z.infer<typeof errorAnswerSchema>;
@@ -112,3 +126,32 @@ export type TwoStepSetupAnswer = z.infer<typeof twoStepSetupAnswerSchema>;
 export const twoStepClearedAnswerSchema = z.strictObject({ status: z.literal('cleared') });
 
 export type TwoStepClearedAnswer = z.infer<typeof twoStepClearedAnswerSchema>;
+
+// A person, as an admin or a manager/analyst reads them (ARCHITECTURE §7.0; AC-02-08, 72;
+// ADR-169, 415): never a secret of sign-in. `phone` is left out where the reader may not read it:
+// a monitor's phone number is an admin's alone to see. `permissions` are the ones held now;
+// `projectIds`, a read-only viewer's projects now.
+export const personAnswerSchema = z.strictObject({
+  id: z.uuid(),
+  name: z.string(),
+  role: z.enum(['ADMIN', 'MANAGER_ANALYST', 'MONITOR', 'READ_ONLY_VIEWER']),
+  viewerKind: z.enum(['CLIENT', 'CONTRACTOR', 'AUDITOR']).nullable(),
+  contractorId: z.uuid().nullable(),
+  seesPrivateCitizens: z.boolean().nullable(),
+  monitorId: z.string().nullable(),
+  email: z.string().nullable(),
+  phone: z.string().nullable().optional(),
+  archived: z.boolean(),
+  permissions: z.array(z.enum(permissions)),
+  projectIds: z.array(z.uuid()),
+});
+
+export type PersonAnswer = z.infer<typeof personAnswerSchema>;
+
+// An admin ended a person's sessions: how many were open.
+export const sessionsEndedAnswerSchema = z.strictObject({
+  status: z.literal('ended'),
+  sessions: z.number().int().min(0),
+});
+
+export type SessionsEndedAnswer = z.infer<typeof sessionsEndedAnswerSchema>;

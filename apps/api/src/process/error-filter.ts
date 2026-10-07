@@ -37,6 +37,9 @@ export class ErrorFilter implements ExceptionFilter {
                 ? thrown.code
                 : (codes[status] ?? 'BAD_REQUEST'),
           requestId: request.id,
+          ...(status < 500 && thrown instanceof Refusal && thrown.said !== undefined
+            ? { message: thrown.said }
+            : {}),
         }),
       );
   }

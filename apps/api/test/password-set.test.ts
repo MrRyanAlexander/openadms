@@ -145,9 +145,11 @@ describe('an admin sets a password', () => {
           code: 'NOT_ALLOWED',
         });
       }
-      await within.$write({ actorId: dana, source: 'BACK_OFFICE' }, (inner) =>
-        inner.user.update({ where: { id: dana }, data: { archivedAt: new Date() } }),
-      );
+      // The firm has another admin, or Dana, its last, couldn't be archived at all (ADR-415).
+      await within.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (inner) => {
+        await inner.user.create({ data: { name: 'Priya Shah', role: 'ADMIN' } });
+        await inner.user.update({ where: { id: dana }, data: { archivedAt: new Date() } });
+      });
       expect((await passwords.setByAdmin(dana, luis, long)).set).toBe(false);
       expect(await hashOf(tx, luis)).toBeNull();
     });
@@ -296,21 +298,19 @@ describe('a person resets their password by email', () => {
     });
   });
 
-  it('nothing is sent for an address nobody has, a monitor’s, an archived person’s, or one two people share; the answer is the same', async () => {
+  // Two who sign in can no longer share an address: the database refuses the second (AC-02-83,
+  // ADR-415; packages/db/test/people.test.ts), so that case is no longer one to make here.
+  it('nothing is sent for an address nobody has, a monitor’s or an archived person’s; the answer is the same', async () => {
     await world(async (within, tx, { dana, viewer }) => {
       const outbox = new Outbox();
       const passwords = passwordsOn(within, outbox);
-      await within.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (inner) => {
-        await inner.user.update({ where: { id: viewer }, data: { archivedAt: new Date() } });
-        await inner.user.create({
-          data: { name: 'Dana Reyes', role: 'MANAGER_ANALYST', email: 'DANA.REYES@gates.example' },
-        });
-      });
+      await within.$write({ actorId: dana, source: 'BACK_OFFICE' }, (inner) =>
+        inner.user.update({ where: { id: viewer }, data: { archivedAt: new Date() } }),
+      );
       for (const address of [
         'nobody@gates.example',
         'kim.nguyen@harbor.example',
         'debris@baylinecounty.example',
-        'dana.reyes@gates.example',
         '%',
         '%@gates.example',
         'luis_ortega@gates.example',

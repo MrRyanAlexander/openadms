@@ -272,3 +272,125 @@ describe("a manager/analyst's permissions", () => {
     expect((await db.refused(`SELECT 1 FROM "user_permission"`)).code).toBe(refusedBy.grant);
   });
 });
+
+// What a person signs in with at the back office and the portal is their email address
+// (ADR-409 (7), 415): the database keeps two who sign in there from one address.
+describe('the email address a person signs in with', () => {
+  const luis = { name: 'Luis Ortega', role: 'MANAGER_ANALYST', email: 'luis.ortega@gates.example' };
+
+  it('AC-02-83 belongs to one person who signs in: a second admin, manager/analyst or viewer with it is refused, whatever its capitals or the spaces around it', async () => {
+    const { db } = tested;
+    await asTheApi();
+    await add('user', luis);
+    for (const [role, email] of [
+      ['MANAGER_ANALYST', 'luis.ortega@gates.example'],
+      ['ADMIN', 'Luis.Ortega@Gates.Example'],
+      ['ADMIN', '  luis.ortega@gates.example '],
+    ] as const) {
+      const again = await db.refused(...insertOf('user', { name: 'Another', role, email }));
+      expect(again.code, email).toBe(refusedBy.exclusion);
+      expect(again.message).toContain('"user_sign_in_email_once"');
+    }
+    const viewer = await db.refused(
+      ...insertOf('user', {
+        name: 'Bayline County debris manager',
+        role: 'READ_ONLY_VIEWER',
+        viewer_kind: 'CLIENT',
+        sees_private_citizens: true,
+        email: 'LUIS.ORTEGA@GATES.EXAMPLE',
+      }),
+    );
+    expect(viewer.code).toBe(refusedBy.exclusion);
+    // Another address is another person.
+    await add('user', { ...luis, name: 'Luisa Ortega', email: 'luisa.ortega@gates.example' });
+  });
+
+  it('AC-02-83 is no key for a monitor, who signs in with a Monitor ID, nor for people with no address', async () => {
+    await asTheApi();
+    await add('user', luis);
+    await add('user', { name: 'Ana Brooks', role: 'MONITOR', email: luis.email });
+    await add('user', { name: 'Kim Nguyen', role: 'MONITOR', email: luis.email });
+    await add('user', { name: 'No Address', role: 'MANAGER_ANALYST' });
+    await add('user', { name: 'None Either', role: 'MANAGER_ANALYST' });
+  });
+
+  it('AC-02-83 is free again once its person is archived, and can’t then be taken back from whoever has it', async () => {
+    const { db } = tested;
+    await asTheApi();
+    const first = await add('user', luis);
+    await db.run(`UPDATE "user" SET "archived_at" = '2026-10-16T21:00:00Z' WHERE "id" = $1`, [
+      first,
+    ]);
+    await add('user', { ...luis, name: 'Luis Ortega, back' });
+    const back = await db.refused(`UPDATE "user" SET "archived_at" = NULL WHERE "id" = $1`, [
+      first,
+    ]);
+    expect(back.code).toBe(refusedBy.exclusion);
+  });
+
+  it('AC-02-83 a person can’t be given somebody’s address later, or be made somebody who signs in while holding one', async () => {
+    const { db } = tested;
+    await asTheApi();
+    await add('user', luis);
+    const other = await add('user', {
+      name: 'Dana Reyes',
+      role: 'ADMIN',
+      email: 'dana.reyes@gates.example',
+    });
+    const monitor = await add('user', { name: 'Ana Brooks', role: 'MONITOR', email: luis.email });
+    expect(
+      (await db.refused(`UPDATE "user" SET "email" = $2 WHERE "id" = $1`, [other, luis.email]))
+        .code,
+    ).toBe(refusedBy.exclusion);
+    expect(
+      (await db.refused(`UPDATE "user" SET "role" = 'MANAGER_ANALYST' WHERE "id" = $1`, [monitor]))
+        .code,
+    ).toBe(refusedBy.exclusion);
+  });
+});
+
+describe('the last admin', () => {
+  const lastAdmin = {
+    code: refusedBy.trigger,
+    message:
+      "The firm's last admin can't be archived or made anything else: make another admin first",
+  };
+  const archive = `UPDATE "user" SET "archived_at" = '2026-10-16T21:00:00Z' WHERE "id" = $1`;
+  const demote = `UPDATE "user" SET "role" = 'MANAGER_ANALYST' WHERE "id" = $1`;
+
+  it('AC-02-13 can’t be archived or made anything else, by any login: the firm’s only admin stays', async () => {
+    const { db, world } = tested;
+    for (const who of ['adms_api', 'adms_owner', 'administrator'] as const) {
+      if (who === 'administrator') await db.administer();
+      else await db.as(who);
+      await db.actor(world.admin, 'BACK_OFFICE');
+      expect(await db.refused(archive, [world.admin]), who).toEqual(lastAdmin);
+      expect(await db.refused(demote, [world.admin]), who).toEqual(lastAdmin);
+    }
+    // Anything else about them changes as before.
+    await asTheApi();
+    expect(
+      await db.run(`UPDATE "user" SET "phone" = '555-0100' WHERE "id" = $1`, [world.admin]),
+    ).toBe(1);
+  });
+
+  it('AC-02-13 one of two admins may go, and then the other is the last', async () => {
+    const { db, world } = tested;
+    await asTheApi();
+    const second = await add('user', { name: 'Morgan Ellis', role: 'ADMIN' });
+    expect(await db.run(archive, [world.admin])).toBe(1);
+    expect(await db.refused(archive, [second])).toEqual(lastAdmin);
+    expect(await db.refused(demote, [second])).toEqual(lastAdmin);
+  });
+
+  it('AC-02-13 an archived admin and a manager/analyst don’t count as one in service; anybody who is no admin is archived as before', async () => {
+    const { db, world } = tested;
+    await asTheApi();
+    const gone = await add('user', { name: 'Morgan Ellis', role: 'ADMIN' });
+    const luis = await add('user', { name: 'Luis Ortega', role: 'MANAGER_ANALYST' });
+    expect(await db.run(archive, [gone])).toBe(1);
+    expect(await db.refused(archive, [world.admin])).toEqual(lastAdmin);
+    expect(await db.run(archive, [luis])).toBe(1);
+    expect(await db.run(archive, [world.monitor])).toBe(1);
+  });
+});

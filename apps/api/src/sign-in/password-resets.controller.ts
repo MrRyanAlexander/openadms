@@ -45,7 +45,8 @@ export class PasswordResetsController {
       if (outcome.code === 'NOT_ALLOWED' || outcome.code === 'NOT_FOUND') {
         throw new Refusal('RESET_REFUSED', 400);
       }
-      throw new Refusal(outcome.code, outcome.code === 'RESET_REFUSED' ? 400 : 422);
+      if (outcome.code === 'RESET_REFUSED') throw new Refusal('RESET_REFUSED', 400);
+      throw new Refusal(outcome.code, 422, outcome.message);
     }
     return passwordSetAnswerSchema.parse({ status: 'ok' });
   }

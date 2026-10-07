@@ -174,18 +174,14 @@ describe('signing in', () => {
 
   it('a failed sign-in is told the same thing whatever was wrong, and a try at a name nobody has writes nothing (ADR-401)', async () => {
     await world(async (served, tx, { dana, luis }) => {
-      await tx.user.create({
-        data: { name: 'Luis Ortega (second)', role: 'MANAGER_ANALYST', email: luissEmail },
-      });
       const before = await tx.auditRecord.count();
+      // (Two who sign in can no longer share an address: the database refuses the second,
+      // AC-02-83, ADR-415.)
       const answers = [
         await served.signIn('nobody@gates.example', long),
-        // Two people share Luis's address: neither is meant by it.
-        await served.signIn(luissEmail, longer),
         await served.signIn('', long).then((answer) => answer),
       ];
       expect(answers.map(({ status, code }) => [status, code])).toEqual([
-        [401, 'SIGN_IN_REFUSED'],
         [401, 'SIGN_IN_REFUSED'],
         [400, 'BAD_REQUEST'],
       ]);

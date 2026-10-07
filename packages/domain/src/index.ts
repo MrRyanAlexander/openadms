@@ -174,6 +174,17 @@ export {
   type PasswordProblem,
   type PasswordProblemCode,
 } from './passwords.ts';
+export {
+  Access,
+  PeopleRules,
+  backOfficeCreated,
+  permissions,
+  type Asked,
+  type BackOfficeCreated,
+  type Holder,
+  type PeopleRefusalCode,
+  type PermissionName,
+} from './people.ts';
 export { SignInTries, type SignInTriesPolicy, type WrongTry } from './sign-in-tries.ts';
 export { TwoStepRules, twoStepCode, type TwoStepNeed, type TwoStepPolicy } from './two-step.ts';
 export {

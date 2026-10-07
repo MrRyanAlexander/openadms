@@ -8,7 +8,8 @@
 // spec/parts/08-review-and-corrections.md's: a reviewer's corrections and renumbers, a
 // quarantined record resolved, a record created in the back office (ADR-364), a ticket voided
 // and unvoided, a flag accepted (ADR-365), each answering the run to ask the worker for; and setting a password is
-// ARCHITECTURE §6's (ADR-402…405), as two-step sign-in is (ADR-412).
+// ARCHITECTURE §6's (ADR-402…405), as two-step sign-in is (ADR-412), and the firm's people and
+// the server's own command for its admins are (ADR-415).
 export {
   Certifications,
   type BoxInput,
@@ -74,6 +75,24 @@ export {
   type TicketNamed,
 } from './review/review-service.ts';
 export { Voids } from './review/voids.ts';
+
+export { AdminCommand, type Questions } from './people/admin-command.ts';
+export {
+  People,
+  type NewPerson,
+  type PeopleParts,
+  type PeopleRefused,
+  type PersonOutcome,
+  type PersonRead,
+  type SessionsEnded,
+} from './people/people.ts';
+export {
+  ServerAdmin,
+  serverReason,
+  type AdminStanding,
+  type ServerAdminOutcome,
+  type ServerAdminParts,
+} from './people/server-admin.ts';
 
 export { shippedBreachedPasswords } from './sign-in/breached-list.ts';
 export {

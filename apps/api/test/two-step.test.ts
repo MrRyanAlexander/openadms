@@ -511,6 +511,8 @@ describe('an admin clears somebody’s authenticator', () => {
       const { twoStep } = signInOn(within, new Outbox());
       await tx.user.update({ where: { id: luis }, data: { archivedAt: new Date() } });
       expect(await twoStep.clearByAdmin(dana, luis)).toEqual({ cleared: false, code: 'NOT_FOUND' });
+      // The firm has another admin, or Dana, its last, couldn't be archived at all (ADR-415).
+      await tx.user.create({ data: { name: 'Priya Shah', role: 'ADMIN' } });
       await tx.user.update({ where: { id: dana }, data: { archivedAt: new Date() } });
       expect(await twoStep.clearByAdmin(dana, luis)).toEqual({
         cleared: false,

@@ -4,14 +4,17 @@
 // checks what was sent against it before any service runs; the OpenAPI description is made from
 // this list (openapi.ts). An object a caller sends is strict: a field its schema doesn't name
 // refuses the whole request, and an endpoint whose schema would let one through can't be defined.
+import { backOfficeCreated, permissions, type PermissionName } from '@open-adms/domain';
 import { z } from 'zod';
 
 import {
   csrfAnswerSchema,
   healthAnswerSchema,
   passwordSetAnswerSchema,
+  personAnswerSchema,
   resetAskedAnswerSchema,
   sessionAnswerSchema,
+  sessionsEndedAnswerSchema,
   signedOutAnswerSchema,
   twoStepClearedAnswerSchema,
   twoStepSetupAnswerSchema,
@@ -31,11 +34,29 @@ export const endpointAccess = ['ANYBODY', 'SIGNED_IN', 'REFRESH_TOKEN'] as const
 
 export type EndpointAccess = (typeof endpointAccess)[number];
 
+// Who signs in at the back office and the portal: the roles a `SIGNED_IN` endpoint is open to
+// are named from these (ARCHITECTURE §6, Authorization; AC-10-27; ADR-415).
+export const signedInRoles = backOfficeCreated;
+
+export type SignedInRole = (typeof signedInRoles)[number];
+
+export const adminOnly = ['ADMIN'] as const satisfies readonly SignedInRole[];
+export const backOfficeRoles = [
+  'ADMIN',
+  'MANAGER_ANALYST',
+] as const satisfies readonly SignedInRole[];
+
 export interface Endpoint {
   // Its name in the OpenAPI description, unique in the list.
   readonly name: string;
   readonly summary: string;
   readonly access: EndpointAccess;
+  // On a `SIGNED_IN` endpoint, and only there: the roles it is open to. Every such endpoint
+  // names them; the API reads the caller's role from the database on each request.
+  readonly roles?: readonly SignedInRole[];
+  // The one permission it takes: an admin needs none granted, a manager/analyst must hold it
+  // at that moment (a grant taken away refuses their very next request, AC-02-12).
+  readonly permission?: PermissionName;
   // Served even to a person who must first set a password of their own (ADR-410): only what
   // they need to do that. Left out, such a person is refused.
   readonly beforePasswordChange?: true;
@@ -89,6 +110,16 @@ export function endpoint<const E extends Endpoint>(defined: E): E {
   if (open.length > 0) {
     throw new Error(
       `The endpoint ${defined.name} would take a field nobody named: ${open.join(', ')}.`,
+    );
+  }
+  const roles = defined.roles ?? [];
+  const signedIn = defined.access === 'SIGNED_IN';
+  if (
+    signedIn !== roles.length > 0 ||
+    (defined.permission !== undefined && !roles.includes('MANAGER_ANALYST'))
+  ) {
+    throw new Error(
+      `The endpoint ${defined.name} doesn’t say whole who may call it: a signed-in endpoint names its roles, no other does, and a permission is asked only where a manager/analyst may call.`,
     );
   }
   return defined;
@@ -202,6 +233,7 @@ export const currentSessionEndpoint = endpoint({
   name: 'currentSession',
   summary: 'Who is signed in.',
   access: 'SIGNED_IN',
+  roles: signedInRoles,
   beforePasswordChange: true,
   beforeTwoStepSetup: true,
   method: 'GET',
@@ -225,6 +257,7 @@ export const changePasswordEndpoint = endpoint({
   summary:
     'The signed-in person sets a new password, giving their current one. Their other sessions end.',
   access: 'SIGNED_IN',
+  roles: signedInRoles,
   beforePasswordChange: true,
   beforeTwoStepSetup: true,
   method: 'POST',
@@ -246,6 +279,7 @@ export const beginTwoStepSetupEndpoint = endpoint({
   summary:
     'Begins setting up the signed-in person’s authenticator: answers the secret for the app. Nothing is kept until a code proves it.',
   access: 'SIGNED_IN',
+  roles: signedInRoles,
   beforeTwoStepSetup: true,
   method: 'POST',
   path: '/two-step/setups',
@@ -257,6 +291,7 @@ export const confirmTwoStepSetupEndpoint = endpoint({
   summary:
     'Finishes setting up the signed-in person’s authenticator with a code from it. Their other sessions end.',
   access: 'SIGNED_IN',
+  roles: signedInRoles,
   beforeTwoStepSetup: true,
   method: 'POST',
   path: '/two-step/setups/confirmations',
@@ -274,10 +309,132 @@ export const clearTwoStepEndpoint = endpoint({
   summary:
     'An admin clears another person’s authenticator. Their sessions end; it is a security event.',
   access: 'SIGNED_IN',
+  roles: adminOnly,
   method: 'POST',
   path: '/people/:userId/two-step-clearings',
   params: z.strictObject({ userId: z.uuid() }),
   answer: twoStepClearedAnswerSchema,
+});
+
+// The firm's people (ARCHITECTURE §6, Authorization, §7.0; AC-02-08, 12, 13, 72; AC-10-25;
+// ADR-105, 169, 315, 406, 415). An admin creates a back-office or an outside user, never a
+// monitor (who is created on a phone under the master passcode) and never the system actor: the
+// body takes no other role. What a person signs in with is their email address, so each has one,
+// and no two who sign in here share one.
+const personId = z.strictObject({ userId: z.uuid() });
+const newPerson = {
+  name: z.string().trim().min(1).max(200),
+  email: z.email().max(320),
+  phone: z.string().trim().min(1).max(40).optional(),
+};
+const newViewer = { ...newPerson, role: z.literal('READ_ONLY_VIEWER') };
+// Whether this viewer sees private citizens by name; left out, the domain's start (ADR-336).
+const seesPrivateCitizens = z.boolean().optional();
+
+export const createPersonEndpoint = endpoint({
+  name: 'createPerson',
+  summary:
+    'An admin creates an admin, a manager/analyst or a read-only viewer (a client user, a contractor user with its contractor, or an auditor). Never a monitor. The person has no password until an admin sets one.',
+  access: 'SIGNED_IN',
+  roles: adminOnly,
+  method: 'POST',
+  path: '/people',
+  body: z.union([
+    z.strictObject({ ...newPerson, role: z.enum(['ADMIN', 'MANAGER_ANALYST']) }),
+    z.strictObject({
+      ...newViewer,
+      viewerKind: z.enum(['CLIENT', 'AUDITOR']),
+      seesPrivateCitizens,
+    }),
+    z.strictObject({
+      ...newViewer,
+      viewerKind: z.literal('CONTRACTOR'),
+      contractorId: z.uuid(),
+      seesPrivateCitizens,
+    }),
+  ]),
+  answer: personAnswerSchema,
+});
+
+export const readPersonEndpoint = endpoint({
+  name: 'readPerson',
+  summary:
+    'One person, as an admin or a manager/analyst reads them. A monitor’s phone number is in an admin’s answer only.',
+  access: 'SIGNED_IN',
+  roles: backOfficeRoles,
+  method: 'GET',
+  path: '/people/:userId',
+  params: personId,
+  answer: personAnswerSchema,
+});
+
+// The whole of what the person holds from now on: one not named is taken away, one named and
+// not held is given. Nothing is deleted: a grant taken away is archived (ADR-315).
+export const setPermissionsEndpoint = endpoint({
+  name: 'setPermissions',
+  summary:
+    'An admin states the permissions a manager/analyst holds from now on. One taken away refuses that person’s very next request.',
+  access: 'SIGNED_IN',
+  roles: adminOnly,
+  method: 'PUT',
+  path: '/people/:userId/permissions',
+  params: personId,
+  body: z.strictObject({ permissions: z.array(z.enum(permissions)).max(permissions.length) }),
+  answer: personAnswerSchema,
+});
+
+export const setViewerProjectsEndpoint = endpoint({
+  name: 'setViewerProjects',
+  summary:
+    'An admin states the projects a read-only viewer sees from now on. One not named is taken away.',
+  access: 'SIGNED_IN',
+  roles: adminOnly,
+  method: 'PUT',
+  path: '/people/:userId/viewer-projects',
+  params: personId,
+  body: z.strictObject({ projectIds: z.array(z.uuid()).max(1000) }),
+  answer: personAnswerSchema,
+});
+
+// An admin sets a person's password: a new person's first, or one forgotten, where the firm has
+// no mail or the person can't reset by it (AC-10-25; ADR-170, 406). Its owner changes it at
+// their next sign-in before anything else (ADR-410). What a password must be is the domain's.
+export const setPersonPasswordEndpoint = endpoint({
+  name: 'setPersonPassword',
+  summary:
+    'An admin sets a person’s password. Their sessions end, and they set one of their own at their next sign-in.',
+  access: 'SIGNED_IN',
+  roles: adminOnly,
+  method: 'POST',
+  path: '/people/:userId/passwords',
+  params: personId,
+  body: z.strictObject({ password: z.string().min(1).max(4096) }),
+  answer: passwordSetAnswerSchema,
+});
+
+export const endPersonSessionsEndpoint = endpoint({
+  name: 'endPersonSessions',
+  summary: 'An admin ends every session a person has open.',
+  access: 'SIGNED_IN',
+  roles: adminOnly,
+  method: 'POST',
+  path: '/people/:userId/session-endings',
+  params: personId,
+  answer: sessionsEndedAnswerSchema,
+});
+
+// A person who left is archived, never deleted: every record they made still names them
+// (AC-02-09). The firm's only admin can't be (AC-02-13).
+export const archivePersonEndpoint = endpoint({
+  name: 'archivePerson',
+  summary:
+    'An admin archives a person. Their sessions end and they are refused at once. The only admin can’t be archived.',
+  access: 'SIGNED_IN',
+  roles: adminOnly,
+  method: 'POST',
+  path: '/people/:userId/archivings',
+  params: personId,
+  answer: personAnswerSchema,
 });
 
 // Each task that adds an endpoint names it here; the API's tests hold its routes to this list.
@@ -294,4 +451,11 @@ export const endpoints: readonly Endpoint[] = [
   beginTwoStepSetupEndpoint,
   confirmTwoStepSetupEndpoint,
   clearTwoStepEndpoint,
+  createPersonEndpoint,
+  readPersonEndpoint,
+  setPermissionsEndpoint,
+  setViewerProjectsEndpoint,
+  setPersonPasswordEndpoint,
+  endPersonSessionsEndpoint,
+  archivePersonEndpoint,
 ];

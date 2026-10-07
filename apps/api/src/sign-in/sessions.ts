@@ -17,6 +17,8 @@
 //   at the policy's hours after sign-in whatever was asked, when its refresh token is used twice,
 //   when the person's password is set anew, and at once for a person who was archived or is no
 //   longer a kind of user that signs in here: all of that is read from the database each time.
+// - **What the person may do** is read with it: their role and the permissions they hold at that
+//   moment (ADR-415). A grant taken away, or a role changed, bites at their very next request.
 import { randomBytes } from 'node:crypto';
 
 import type { Database, Prisma } from '@open-adms/db';
@@ -41,6 +43,8 @@ export interface Caller {
   readonly userId: string;
   readonly name: string;
   readonly role: SignsInHere;
+  // The permissions they hold now: one taken away isn't among them (ADR-315, 415).
+  readonly granted: readonly string[];
   // Somebody else set their password: they set their own before anything else (ADR-410).
   readonly passwordChangeRequired: boolean;
   // Whether they have an authenticator, and whether they must set one up before anything else:
@@ -96,6 +100,7 @@ const sessionRead = {
       name: true,
       role: true,
       archivedAt: true,
+      permissions: { where: { archivedAt: null }, select: { permission: true } },
       credential: { select: { passwordChangeRequired: true, twoStepSecret: true } },
     },
   },
@@ -207,6 +212,7 @@ export class Sessions {
           userId: person.id,
           name: person.name,
           role: person.role,
+          granted: person.permissions.map(({ permission }) => permission),
           passwordChangeRequired: kept.passwordChangeRequired,
           ...this.twoStepOf(person.role, kept.twoStepSecret),
         },
@@ -295,12 +301,14 @@ export class Sessions {
   }
 
   // Ends every session of a person but one, inside the piece of work that changed their
-  // password (ADR-410; ASVS 7.4.3).
-  async endAll(tx: Tx, userId: string, except?: string): Promise<void> {
-    await tx.session.updateMany({
+  // password, cleared their authenticator or archived them, or in which an admin ended them
+  // (ADR-410, 415; ASVS 7.4.3, 7.4.5). Answers how many were open.
+  async endAll(tx: Tx, userId: string, except?: string): Promise<number> {
+    const { count } = await tx.session.updateMany({
       where: { userId, revokedAt: null, ...(except === undefined ? {} : { id: { not: except } }) },
       data: { revokedAt: this.parts.clock.now() },
     });
+    return count;
   }
 
   // The one person the firm holds that address for, among those who sign in here. Compared
@@ -317,6 +325,7 @@ export class Sessions {
             name: true,
             role: true,
             email: true,
+            permissions: { where: { archivedAt: null }, select: { permission: true } },
             credential: {
               select: {
                 passwordHash: true,
@@ -354,6 +363,7 @@ export class Sessions {
         userId: row.user.id,
         name: row.user.name,
         role: row.user.role,
+        granted: row.user.permissions.map(({ permission }) => permission),
         passwordChangeRequired: row.user.credential?.passwordChangeRequired ?? false,
         ...this.twoStepOf(row.user.role, row.user.credential?.twoStepSecret ?? null),
       },

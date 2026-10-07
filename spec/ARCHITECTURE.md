@@ -490,6 +490,14 @@ ADR-106 (master passcode) and ADR-120 (changing monitors, username). **The word 
   without the area code**, so a worker who forgets it is told "your ID, and your own phone number",
   and an admin can sign in as them.
 
+> ⚠️ **ADR-415 (2026-10-07; the server command is the user's decision, ADR-413 (2), 414 (2); this
+> note awaits approval, building didn't wait):** the installer seeds nobody who can sign in, so
+> **the firm's first admin is made on its own server by `pnpm installer:admin`**, which also lets
+> an admin back in who has no other admin to ask (a login locked by wrong tries, a forgotten
+> password where the firm has no mail, a lost authenticator). It never makes a second admin. A
+> person signs in with their email address, so no two back-office or outside users share one;
+> and the database itself keeps the firm's last admin from being archived or made anything else.
+
 ### 7.1 Setting up a phone (online only)
 
 > ⚠️ **What a phone's lists carry, today (ADR-207, 213, 223, 227, 240, 243; this note awaits

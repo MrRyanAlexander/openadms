@@ -2,12 +2,19 @@
 // controller here.
 import { Module } from '@nestjs/common';
 
+import { PeopleController } from '../people/people.controller.ts';
 import { PasswordResetsController } from '../sign-in/password-resets.controller.ts';
 import { SessionsController } from '../sign-in/sessions.controller.ts';
 import { TwoStepController } from '../sign-in/two-step.controller.ts';
 import { HealthController } from './health.controller.ts';
 
 @Module({
-  controllers: [HealthController, PasswordResetsController, SessionsController, TwoStepController],
+  controllers: [
+    HealthController,
+    PasswordResetsController,
+    SessionsController,
+    TwoStepController,
+    PeopleController,
+  ],
 })
 export class ApiModule {}

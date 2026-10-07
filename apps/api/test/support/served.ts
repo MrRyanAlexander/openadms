@@ -4,10 +4,12 @@
 import { randomUUID } from 'node:crypto';
 
 import {
+  backOfficeRoles,
   endpoint,
   errorAnswerSchema,
   healthAnswerSchema,
   sessionAnswerSchema,
+  signedInRoles,
 } from '@open-adms/contracts';
 import type { Database } from '@open-adms/db';
 import { Body, Controller, Module } from '@nestjs/common';
@@ -37,6 +39,7 @@ class WritingController {
       name: 'testVoid',
       summary: 'A test’s own.',
       access: 'SIGNED_IN',
+      roles: signedInRoles,
       method: 'POST',
       path: '/test/voids',
       body: healthAnswerSchema,
@@ -45,6 +48,42 @@ class WritingController {
   )
   void(@Body() body: { status: string }) {
     ran.push(body.status);
+    return { status: 'ok' };
+  }
+
+  // Two that take a permission, as a reviewer's real ones will (task 2.4.4): a void and an
+  // unlock, each open to an admin and to a manager/analyst who holds its grant now.
+  @Serves(
+    endpoint({
+      name: 'testGrantedVoid',
+      summary: 'A test’s own.',
+      access: 'SIGNED_IN',
+      roles: backOfficeRoles,
+      permission: 'VOID',
+      method: 'POST',
+      path: '/test/granted-voids',
+      answer: healthAnswerSchema,
+    }),
+  )
+  grantedVoid() {
+    ran.push('void');
+    return { status: 'ok' };
+  }
+
+  @Serves(
+    endpoint({
+      name: 'testUnlock',
+      summary: 'A test’s own.',
+      access: 'SIGNED_IN',
+      roles: backOfficeRoles,
+      permission: 'UNLOCK_INVOICED',
+      method: 'POST',
+      path: '/test/unlocks',
+      answer: healthAnswerSchema,
+    }),
+  )
+  unlock() {
+    ran.push('unlock');
     return { status: 'ok' };
   }
 }
@@ -140,7 +179,7 @@ export class Served {
   }
 
   async ask(
-    method: 'GET' | 'POST',
+    method: 'GET' | 'POST' | 'PUT',
     url: string,
     more: { cookies?: Cookies; csrf?: string; payload?: object } = {},
   ): Promise<Answer> {
