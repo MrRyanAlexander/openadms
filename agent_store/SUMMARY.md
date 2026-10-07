@@ -1,13 +1,13 @@
 # Open ADMS — Current decisions and gaps, at a glance
 
 **The present tense of the project on one page.** `DECISIONS.md` and `DEVIATIONS.md` are the full
-history, with 399 ADRs and 74 KDs, many superseded. This page says what is true **now** and which
+history, with 401 ADRs and 74 KDs, many superseded. This page says what is true **now** and which
 entries to cite. The reasons live in the ADRs and the skills.
 
 - **Keep it current:** when you add, amend or supersede an ADR, or open or close a KD, update this
   page **in the same response** (`adms-decisions`).
 - **If this page and a log entry disagree,** the newest ADR wins: fix this page and say so.
-- **Updated 2026-10-07, through ADR-399 / KD-74.** **Phase 2 (API and sync) is open (ADR-376);
+- **Updated 2026-10-07, through ADR-401 / KD-74.** **Phase 2 (API and sync) is open (ADR-376);
   its plan is `BACKLOG.md`'s eight milestones and 32 tasks (ADR-377). Tasks 2.1.1 (ADR-379) and
   2.1.2 (ADR-380…385) are done: the API runs as a process, reached only at
   `https://api.adms.localhost` through Caddy, with a health answer and nothing else yet. Task
@@ -454,6 +454,16 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   24 and `settings` 38 need nothing; `door` 15 and `request-id` 2 need the stack and the
   installation), `packages/contracts/test/endpoints.test.ts`. AC-10-04…08, 34, 36, 39, 43 pass.
   Adding an endpoint, and what is left: BACKLOG C86. *Agent defaults.*
+- **Sign-in follows the named standards; a departure is said before it is built (the user,
+  2026-10-07).** [401] NIST SP 800-63B and OWASP ASVS Level 2 (ARCHITECTURE §16). **A failed
+  sign-in and a lockout are security audit events, and lockout state is kept in the database**
+  (on the person's sign-in record: it must outlast a restart and be shared by every API
+  process). *Agent default, for 2.2.3 to build and test:* a try at a name nobody has writes no
+  row (a log line), nothing a stranger typed is ever stored, and writes for a real account are
+  bounded by the lockout itself. **When anyone suggests a direction in security, say what the
+  standard asks and what comparable products do before building it**; a departure is built only
+  as a risk the user accepted knowing that. ADR-400 (nothing an unsigned caller does is written;
+  lockout in memory) stood for an hour, was never committed, and is withdrawn: never cite it.
 - **Sign-in's records (task 2.2.1; the database only, no endpoint yet).** [397, 398, 399] Three
   tables, **each with its own guards, tighter than `guard_table`'s, and read by the API alone**
   (the worker and the read-only login hold nothing on them; no viewer view), audited in the
@@ -473,7 +483,8 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   triggers**: the audit log says one changed, never what from or to. Tests:
   `packages/db/test/sign-in.test.ts` (17). AC-10-10, 11 pass at the database; AC-10-19 in part.
   Eighty-two migrations. **Open, for the task that first writes one (C88):** who is stated as
-  the actor when nobody is signed in. *Agent defaults.*
+  the actor when nobody is signed in. *Agent defaults, seen by the user ("make sense"; the
+  secrets apart from the person: "Security is key here").*
 - **The threat model and the API's scenarios (task 2.1.1; both approved by the user, ADR-386,
   393).**
   `spec/THREAT-MODEL.md`: eleven kinds of attacker, 36 threats over the layers of ARCHITECTURE §2,
@@ -1544,6 +1555,7 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
 | 125 (the builder only ever warns) for an exact copy | 301 | An exact duplicate of a rule is refused before it is saved; overlapping ranges still only warn |
 | 365 (5), the unvoid of a rule's void carried only by the run it asks for; `reprocess.unvoided` | 366 | Every unvoid writes a `TicketUnvoid`, audited under the person; the worker reads it (the user) |
 | 166, "whoever may correct may accept" (and `spec/FLAGS.md` §1, `adms-validation` §5.4b as they read before) | 365 | *Accept flags* is a grant of its own; *correct* doesn't carry it (the user, KD-74) |
+| 400, nothing a caller who isn't signed in does is written to the database; a failed sign-in and a lockout only in the server's log; lockout held in the API process | 401 | The standards stand: a failed sign-in and a lockout are security audit events; lockout state is in the database (the user, the same day) |
 
 ---
 
@@ -1594,14 +1606,11 @@ its scenario.
 
 ## 4. Waiting on the user
 
-**Live today (2026-10-07, ADR-376…399):**
+**Live today (2026-10-07, ADR-376…401):**
 - **Nothing blocks the next task** (2.2.2, passwords).
-- **Agent defaults of 2.2.1 to confirm or overturn (ADR-397…399):** a person's password hash,
-  authenticator secret and lock are kept in a record of their own, not on the person's record
-  (`spec/DATA-MODEL.md` §2.2 had listed them as the person's columns); a session keeps the hash
-  of the one refresh token in force and is rotated in place; a security event is its own
-  record, copied into the audit log's security domain, holding no typed name and no address;
-  the API alone reads all three.
+- **2.2.1's agent defaults were seen by the user on 2026-10-07** ("make sense"). **Agent
+  default of ADR-401 (3) to confirm or overturn:** a try at a name nobody has writes no row,
+  and once an account is locked further wrong tries add nothing until it opens.
 - **Agent defaults of 2.1.4 to confirm or overturn (ADR-394, 395):** a statement of a service's
   database login is stopped after thirty seconds; the read-only login is under it too, the
   owner's is not; an installation may override any policy value by the same name in a service's

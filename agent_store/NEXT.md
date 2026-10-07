@@ -89,7 +89,7 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-07, through ADR-399)
+### Where things stand (2026-10-07, through ADR-401)
 - **Phase 2 (API and sync) is open (ADR-376).** Its plan is `BACKLOG.md`'s eight milestones and 32
   tasks (ADR-377); tasks 2.0.1 (the opening and the plan), 2.1.1 (the threat model and the
   API's scenarios, ADR-379; docs), 2.1.2 (the API as a process, ADR-380…385), 2.1.3 (the
@@ -98,7 +98,9 @@ of `DECISIONS.md`.
   tables read by the API alone, each with its own guards: `user_credential` (a person's password
   hash, authenticator secret and locked-until, apart from `user`), `session` (the SHA-256 of
   the refresh token in force) and `security_event` (copied by the database into the audit
-  log's security domain); no endpoint writes them yet (BACKLOG C88). **Each service login (`adms_api`, `adms_worker`, `adms_readonly`) is
+  log's security domain); no endpoint writes them yet (BACKLOG C88). **The user's word (ADR-401):
+  sign-in follows NIST SP 800-63B and ASVS Level 2; when a direction in security is suggested,
+  say what the standard asks before building it** (ADR-400 was built first and withdrawn). **Each service login (`adms_api`, `adms_worker`, `adms_readonly`) is
   under a statement timeout**, the policy value `STATEMENT_TIMEOUT_MS` (30,000 ms), set by
   `pnpm installer` and read by `installer:check`; **an installation may state its own value for
   any policy value** by the same name in a service's own env file or environment.
@@ -250,7 +252,7 @@ Update it at close-out when a task, milestone or phase closes.
   with throw-away databases, containers and volumes gone. Something stays up only with a line here
   saying what, why and who stops it. **Nothing needs to stay running today.** The historical root
   stack is gone: the user retired its file and volume on 2026-10-01 (KD-59 closed, ADR-291).
-- **The local installation was re-made on 2026-10-07** (ADR-396: teardown, then a first run, at
+- **The local installation was re-made on 2026-10-07, twice** (the second time for ADR-401, to take an uncommitted migration back out; the first, ADR-396: teardown, then a first run, at
   the user's word, to prove the statement timeout on a first run; before it on 2026-10-01, ADR-281). Its master passcode is a throw-away random value; the user sets
   their own with `pnpm installer:teardown`, then `pnpm installer`. `prisma migrate dev --create-only`
   applies earlier pending migrations to `adms` itself and wants a terminal when the new migration
