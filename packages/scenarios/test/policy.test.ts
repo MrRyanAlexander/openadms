@@ -12,7 +12,7 @@ import { builtInPolicy } from '../src/policy.ts';
 const policyFile = new URL('../../domain/policy.env', import.meta.url);
 
 describe('the release’s policy values', () => {
-  it('AC-01-11 are the built-in defaults: load calls flagged at or under 5 and at or over 95 (ADR-164), a 200 m site circle (ADR-142), a 31 in stump fill depth (ADR-203); AC-01-50 a 12 h crew day (ADR-087); AC-04-04, AC-03-06 blocks of 1,000 ticket numbers and 100 cert numbers (ADR-065, 181), 100 ROE numbers (ADR-323); AC-10-39 a request’s body of one mebibyte at most (ADR-389)', () => {
+  it('AC-01-11 are the built-in defaults: load calls flagged at or under 5 and at or over 95 (ADR-164), a 200 m site circle (ADR-142), a 31 in stump fill depth (ADR-203); AC-01-50 a 12 h crew day (ADR-087); AC-04-04, AC-03-06 blocks of 1,000 ticket numbers and 100 cert numbers (ADR-065, 181), 100 ROE numbers (ADR-323); AC-10-39 a request’s body of one mebibyte at most (ADR-389); AC-10-42 a statement of a service’s database login stopped after 30 s (ADR-394)', () => {
     const policy = builtInPolicy();
     expect([
       policy.loadCallLowLimit,
@@ -24,7 +24,8 @@ describe('the release’s policy values', () => {
       policy.certNumberBlockSize,
       policy.roeNumberBlockSize,
       policy.requestBodyLimitBytes,
-    ]).toEqual([5, 95, 200, 31, 12, 1000, 100, 100, 1048576]);
+      policy.statementTimeoutMs,
+    ]).toEqual([5, 95, 200, 31, 12, 1000, 100, 100, 1048576, 30000]);
   });
 
   it('are written in the env file under the domain’s names, and nothing else is in it', () => {

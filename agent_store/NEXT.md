@@ -89,24 +89,28 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-07, through ADR-393)
+### Where things stand (2026-10-07, through ADR-396)
 - **Phase 2 (API and sync) is open (ADR-376).** Its plan is `BACKLOG.md`'s eight milestones and 32
   tasks (ADR-377); tasks 2.0.1 (the opening and the plan), 2.1.1 (the threat model and the
-  API's scenarios, ADR-379; docs), 2.1.2 (the API as a process, ADR-380…385) and **2.1.3 (the
-  boundary, ADR-387…392)** are done.
+  API's scenarios, ADR-379; docs), 2.1.2 (the API as a process, ADR-380…385), 2.1.3 (the
+  boundary, ADR-387…392) and **2.1.4 (time limits and policy, ADR-394…396)** are done:
+  Milestone 2.1 is complete. **Each service login (`adms_api`, `adms_worker`, `adms_readonly`) is
+  under a statement timeout**, the policy value `STATEMENT_TIMEOUT_MS` (30,000 ms), set by
+  `pnpm installer` and read by `installer:check`; **an installation may state its own value for
+  any policy value** by the same name in a service's own env file or environment.
   **The API runs**: NestJS 12.1.2 on Fastify 5.12.5, the local stack's seventh service, reached
   only at `https://api.adms.localhost`; settings checked at the start, a structured log, one error
   filter, `GET /health`. **Every endpoint is defined in `packages/contracts` and served through
   `@Serves`; `Boundary` reads its path, query and body by its schemas first** (BACKLOG C86 is the
   recipe for adding one); the CORS list is `ADMS_CORS_ORIGINS`; every answer carries the API's own
   headers; the API's database client states the request's id on every write; `pnpm openapi`
-  writes `apps/api/openapi.json`. `spec/acceptance/10-api-and-sync.md` (56 scenarios, 14 passing)
+  writes `apps/api/openapi.json`. `spec/acceptance/10-api-and-sync.md` (56 scenarios, 15 passing)
   and `spec/THREAT-MODEL.md` are both **approved by the user** (their marks, ADR-386, 393).
-  Its 14 REQs are in `REQUIREMENTS.md`, none ticked.
+  Its 14 REQs are in `REQUIREMENTS.md`, one ticked (REQ-208).
 - **Phase 1 is done:** all seven exit criteria met (ADR-371, 372); 693 of the 708 scenarios with a
   Phase 1 part proven whole, 15 in part. 48 scenario rows name Phase 2 (37 as "API (Phase 2)").
-- **The chain, seen whole on 2026-10-07:** 87 test
-  files, 1,852 tests; lint clean; 420 licences allowed; fifteen stories; `pnpm security` 7 passed,
+- **The chain, seen whole on 2026-10-07:** 88 test
+  files, 1,865 tests; lint clean; 420 licences allowed; fifteen stories; `pnpm security` 7 passed,
   0 failed; eighty migrations. The expected output of each command is `adms-verify`'s.
 - **What exists:** `packages/db` (schema, guards, tests), `packages/domain` (every rule; one
   dependency, no database), `packages/contracts`, `packages/scenarios` (the harness and stories,
@@ -242,8 +246,8 @@ Update it at close-out when a task, milestone or phase closes.
   with throw-away databases, containers and volumes gone. Something stays up only with a line here
   saying what, why and who stops it. **Nothing needs to stay running today.** The historical root
   stack is gone: the user retired its file and volume on 2026-10-01 (KD-59 closed, ADR-291).
-- **The local installation was re-made on 2026-10-01** (ADR-281: teardown, then a first run, to
-  prove the installer's new paths). Its master passcode is a throw-away random value; the user sets
+- **The local installation was re-made on 2026-10-07** (ADR-396: teardown, then a first run, at
+  the user's word, to prove the statement timeout on a first run; before it on 2026-10-01, ADR-281). Its master passcode is a throw-away random value; the user sets
   their own with `pnpm installer:teardown`, then `pnpm installer`. `prisma migrate dev --create-only`
   applies earlier pending migrations to `adms` itself and wants a terminal when the new migration
   carries a warning (`adms-verify`, "The schema").
@@ -263,18 +267,19 @@ questions.
 **Phase 2 is open (ADR-376). Its plan is `BACKLOG.md`, "Active — Phase 2" (ADR-377): read its
 brief first. One task per response.**
 
-**Task 2.1.4, time limits and policy for the services** (BACKLOG has the task in full). Read
-first: `spec/THREAT-MODEL.md` §4.2 (T-17) and its §4.5 rows on the database's logins;
-`spec/acceptance/10-api-and-sync.md`'s **AC-10-42** and its point 1 (the statement timeout's
-value is decided here, register C84); BACKLOG C34 (the installer sets `ALTER ROLE … SET
-statement_timeout` for `adms_api` and `adms_worker` from a policy value, `installer:check` checks
-it, `configuration.test.ts` asserts it), C53 (whether a value of the same name in a service's own
-env file overrides a built-in policy default: `Settings` already lets the environment win over
-the file; `REQUEST_BODY_LIMIT_BYTES` is the first server-side policy value, ADR-389), C85 and
-C86's 2.1.4 lines; ARCHITECTURE §5.7. **Done when:** both logins have the timeout, set from the
-policy value by the installer on a first run and a rerun, the check and the test see it, C53 is
-decided with an ADR, **REQ-208** is ticked from a run that was seen, and the chain is green with
-the new counts. **Next after it: 2.2.1, sign-in's records (schema).**
+**Task 2.2.1, sign-in's records** *(schema; BACKLOG has the task in full)*. Read first:
+`spec/DATA-MODEL.md` §2.2 (the columns it leaves to this phase); `spec/THREAT-MODEL.md` T-14,
+T-26, T-43 and its §4 rows on sign-in; `spec/acceptance/10-api-and-sync.md`'s **AC-10-10, 11**
+(this task's) and AC-10-19 with **point 8** (where a security event is kept, what it holds and
+who reads it: decided here, register C84); BACKLOG C21 (sign-in refuses role `SYSTEM`; each
+secret column kept out of the audit log), C85's 2.2.1 line (AC-10-32's second half), C87;
+ARCHITECTURE §5.3, §5.6 (a guard migration is written only into Prisma's empty stub, tried on a
+throw-away copy with the tests) and §6, §7.0; `adms-verify`, "The schema". **Done when:** the
+columns, the session's record (a refresh token only as a hash, revocable) and the security
+event's record exist, each table guarded (`guard_gaps()` empty), no viewer reads any of it, a
+secret column's value never reaches `audit_record`, `DATA-MODEL.md` says what was decided,
+AC-10-10 and 11 pass at the database, and the chain is green with the new counts. **Next after
+it: 2.2.2, passwords.**
 
 **Every command starts with** `eval "$(fnm env --shell zsh)"`. The checks are `adms-verify`'s; the
 database tests, the map servers' tests, the stories and `pnpm security` need `pnpm local:up` first,

@@ -54,11 +54,17 @@ export class Settings {
     this.corsOrigins = values.corsOrigins;
   }
 
-  // A key set in the process's environment wins over the same key in the file.
   static read(environment: Environment): Settings {
+    return Settings.from(Settings.environment(environment));
+  }
+
+  // What the API is told: its env file, then its process's environment. A key set in the
+  // process's environment wins over the same key in the file. The policy values an installation
+  // states for itself are read from the same place (policy.ts; ADR-395).
+  static environment(environment: Environment): Environment {
     const file = environment['ADMS_ENV_FILE'] ?? Settings.defaultFile;
     const fromFile: Environment = existsSync(file) ? parseEnv(readFileSync(file, 'utf8')) : {};
-    return Settings.from({ ...fromFile, ...Settings.set(environment) });
+    return { ...fromFile, ...Settings.set(environment) };
   }
 
   static from(environment: Environment): Settings {

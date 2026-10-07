@@ -67,6 +67,22 @@ export class Database {
     }
   }
 
+  // How long a statement of this login may run, in milliseconds, as the login itself finds it on
+  // signing in (ADR-394): nought means no limit.
+  static async statementTimeout(
+    server: Server,
+    role: LoginRole,
+    password: string,
+    name: string,
+  ): Promise<number> {
+    return Database.asLogin(server, role, password, name, async (client) => {
+      const result = await client.query<{ ms: number }>(
+        `SELECT setting::int AS ms FROM pg_settings WHERE name = 'statement_timeout'`,
+      );
+      return result.rows[0]?.ms ?? 0;
+    });
+  }
+
   // Every table the guard migrations don't cover yet, as "table: what it misses" (ADR-271). Asked
   // as the owner, who runs the migrations; an empty list means every table is guarded.
   static async guardGaps(
@@ -175,6 +191,52 @@ export class Database {
   async createRole(role: LoginRole, password: string): Promise<void> {
     const verifier = this.client.escapeLiteral(new ScramVerifier().make(password));
     await this.client.query(`CREATE ROLE ${this.identifier(role)} ${limits} PASSWORD ${verifier}`);
+  }
+
+  // The statement timeout kept on a login, as written (milliseconds when the installer wrote it),
+  // or undefined when it has none.
+  async statementTimeout(role: LoginRole): Promise<string | undefined> {
+    const result = await this.client.query<{ setting: string }>(
+      `SELECT unnest(s.setconfig) AS setting FROM pg_db_role_setting s
+       JOIN pg_roles r ON r.oid = s.setrole
+       WHERE s.setdatabase = 0 AND r.rolname = $1`,
+      [role],
+    );
+    const name = 'statement_timeout=';
+    return result.rows.find(({ setting }) => setting.startsWith(name))?.setting.slice(name.length);
+  }
+
+  // The databases in which a login has a statement timeout of its own, which would stand in
+  // front of the one kept on the login.
+  async statementTimeoutDatabases(role: LoginRole): Promise<string[]> {
+    const result = await this.client.query<{ name: string }>(
+      `SELECT d.datname AS name FROM pg_db_role_setting s
+       JOIN pg_roles r ON r.oid = s.setrole
+       JOIN pg_database d ON d.oid = s.setdatabase
+       WHERE r.rolname = $1
+         AND EXISTS (SELECT 1 FROM unnest(s.setconfig) AS c WHERE c LIKE 'statement_timeout=%')
+       ORDER BY d.datname`,
+      [role],
+    );
+    return result.rows.map(({ name }) => name);
+  }
+
+  // Takes a login's statement timeout off: the one kept on the login, or its own in one database.
+  async clearStatementTimeout(role: LoginRole, inDatabase?: string): Promise<void> {
+    const where = inDatabase === undefined ? '' : ` IN DATABASE ${this.identifier(inDatabase)}`;
+    await this.client.query(`ALTER ROLE ${this.identifier(role)}${where} RESET statement_timeout`);
+  }
+
+  // Kept on the login, so every connection it opens from now on is under it, whatever the
+  // service asks for (ARCHITECTURE §5.7; ADR-394). A whole number of milliseconds, checked here
+  // too since a setting's value can't be handed over as a parameter.
+  async setStatementTimeout(role: LoginRole, milliseconds: number): Promise<void> {
+    if (!Number.isSafeInteger(milliseconds) || milliseconds < 1) {
+      throw new Error(`A statement timeout is a whole number of milliseconds, 1 or more.`);
+    }
+    await this.client.query(
+      `ALTER ROLE ${this.identifier(role)} SET statement_timeout = ${String(milliseconds)}`,
+    );
   }
 
   // A database's owner, or undefined when it doesn't exist.

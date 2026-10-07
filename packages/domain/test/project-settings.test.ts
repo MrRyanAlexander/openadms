@@ -18,6 +18,7 @@ const shipped = {
   CERT_NUMBER_BLOCK_SIZE: '100',
   ROE_NUMBER_BLOCK_SIZE: '100',
   REQUEST_BODY_LIMIT_BYTES: '1048576',
+  STATEMENT_TIMEOUT_MS: '30000',
 };
 
 // The program types of the example world: PPDR requires an ROE, ROW doesn't.
@@ -77,7 +78,7 @@ describe('a new project’s settings', () => {
 });
 
 describe('the policy values', () => {
-  it('are eight, each under its own name in the environment', () => {
+  it('are ten, each under its own name in the environment', () => {
     expect(policyNames).toEqual({
       loadCallLowLimit: 'LOAD_CALL_LOW_LIMIT',
       loadCallHighLimit: 'LOAD_CALL_HIGH_LIMIT',
@@ -88,6 +89,7 @@ describe('the policy values', () => {
       certNumberBlockSize: 'CERT_NUMBER_BLOCK_SIZE',
       roeNumberBlockSize: 'ROE_NUMBER_BLOCK_SIZE',
       requestBodyLimitBytes: 'REQUEST_BODY_LIMIT_BYTES',
+      statementTimeoutMs: 'STATEMENT_TIMEOUT_MS',
     });
     expect(Object.keys(shipped).sort()).toEqual(Object.values(policyNames).sort());
   });
@@ -149,6 +151,21 @@ describe('the policy values', () => {
     }
     for (const written of ['1', '24']) {
       expect(() => Policy.from({ ...shipped, CREW_DAY_HOURS: written })).not.toThrow();
+    }
+  });
+
+  it('AC-10-42 a statement’s time limit is 30 s unless changed: a millisecond or more, never off, and no more than the database takes', () => {
+    expect(Policy.from(shipped).statementTimeoutMs).toBe(30000);
+    expect(Policy.from({ ...shipped, STATEMENT_TIMEOUT_MS: '120000' }).statementTimeoutMs).toBe(
+      120000,
+    );
+    for (const written of ['0', '2147483648']) {
+      expect(() => Policy.from({ ...shipped, STATEMENT_TIMEOUT_MS: written })).toThrow(
+        `The policy value STATEMENT_TIMEOUT_MS must be a whole number, from 1 to 2147483647: "${written}".`,
+      );
+    }
+    for (const written of ['1', '2147483647']) {
+      expect(() => Policy.from({ ...shipped, STATEMENT_TIMEOUT_MS: written })).not.toThrow();
     }
   });
 

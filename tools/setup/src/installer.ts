@@ -12,6 +12,7 @@ import { join } from 'node:path';
 import { Database, loginRoles, type LoginRole, type Server } from './database.ts';
 import { EnvFile, InstallationState, MigrationFolder, type InstallationRecord } from './files.ts';
 import { Interview } from './interview.ts';
+import { StatementTimeout, statementTimeoutName } from './policy.ts';
 import { PasscodeHasher, SecretMaker } from './secrets.ts';
 
 const databaseName = 'adms';
@@ -26,6 +27,10 @@ const databases: readonly { name: string; connect: readonly LoginRole[]; what: s
   },
   { name: 'adms_shadow', connect: [], what: "Prisma's shadow, only its owner connects" },
 ];
+// The logins a service runs as, each under a statement timeout (ADR-394). adms_owner has none:
+// it runs the migrations and the seed, never a service.
+const timed: readonly LoginRole[] = ['adms_api', 'adms_worker', 'adms_readonly'];
+const untimed = 'adms_owner, which runs the migrations, is under no statement timeout';
 const warning = 'Git-ignored. Never commit, print or share it.';
 // How the hash reaches the seed (its process's environment), and where an installation made before
 // the database kept it still has it (packages/db/.env, ADR-266).
@@ -52,6 +57,8 @@ export class Installer {
   private readonly ownerEnv: EnvFile;
   private readonly apiEnv: EnvFile;
   private readonly workerEnv: EnvFile;
+  // The release's policy values: committed, no secret in it (ADR-303).
+  private readonly policyEnv: EnvFile;
   private readonly logins: Login[];
   private interview: Interview | undefined;
   // The master passcode's slow hash, in memory only, when this run has one to hand to the seed.
@@ -65,6 +72,7 @@ export class Installer {
     this.ownerEnv = new EnvFile(join(root, 'packages/db/.env'));
     this.apiEnv = new EnvFile(join(root, 'apps/api/.env'));
     this.workerEnv = new EnvFile(join(root, 'apps/worker/.env'));
+    this.policyEnv = new EnvFile(join(root, 'packages/domain/policy.env'));
     this.logins = [
       { role: 'adms_owner', file: this.ownerEnv, key: 'DATABASE_URL' },
       { role: 'adms_api', file: this.apiEnv, key: 'DATABASE_URL' },
@@ -102,6 +110,7 @@ export class Installer {
       }
       console.log('');
       await this.ensureRoles(database, record);
+      await this.ensureTimeouts(database);
       await this.ensureDatabase(database, record);
       await this.verifyLogins();
       this.migrate();
@@ -312,6 +321,36 @@ export class Installer {
     record.steps.roles = new Date().toISOString();
   }
 
+  // Each service login's statement timeout, from the policy value (ARCHITECTURE §5.7; ADR-394):
+  // set on a first run, and put back on a rerun when the login has another or none. It holds for
+  // the connections a login opens from now on; the API's container is started afresh below.
+  private async ensureTimeouts(database: Database): Promise<void> {
+    for (const login of this.logins) {
+      // One kept for a login in one database only would stand in front of the login's own.
+      for (const name of await database.statementTimeoutDatabases(login.role)) {
+        await database.clearStatementTimeout(login.role, name);
+        console.log(`- took off ${login.role}'s own statement timeout in database ${name}`);
+      }
+      if (!timed.includes(login.role)) {
+        if ((await database.statementTimeout(login.role)) !== undefined) {
+          await database.clearStatementTimeout(login.role);
+          console.log(`- took off ${login.role}'s statement timeout: it runs the migrations`);
+        } else {
+          console.log(`✓ ${untimed}`);
+        }
+        continue;
+      }
+      const milliseconds = this.timeoutFor(login);
+      const told = `a statement of ${login.role} is stopped after ${String(milliseconds)} ms (${statementTimeoutName})`;
+      if ((await database.statementTimeout(login.role)) === String(milliseconds)) {
+        console.log(`✓ ${told}`);
+      } else {
+        await database.setStatementTimeout(login.role, milliseconds);
+        console.log(`+ set: ${told}`);
+      }
+    }
+  }
+
   private async ensureDatabase(database: Database, record: InstallationRecord): Promise<void> {
     for (const { name, connect, what } of databases) {
       const owner = await database.owner(name);
@@ -469,6 +508,13 @@ export class Installer {
         text: `${login.role} opens ${record.database.name} with its own password${problem === undefined ? '' : ` (${problem})`}`,
       });
     }
+    for (const login of this.logins) {
+      checks.push(
+        timed.includes(login.role)
+          ? await this.timeoutCheck(login)
+          : await this.noTimeoutCheck(database, login.role),
+      );
+    }
     const migrations = this.prisma(['migrate', 'status']);
     const summary = migrations.output.trim().split('\n').at(-1)?.trim() ?? '';
     checks.push({ ok: migrations.status === 0, text: `migrations at head (${summary})` });
@@ -544,6 +590,44 @@ export class Installer {
     });
   }
 
+  // Read from what the server keeps on the login, not from what it finds on signing in: a host's
+  // own default for every login is the host's, and is not this installation's to judge.
+  private async noTimeoutCheck(database: Database, role: LoginRole): Promise<Check> {
+    const kept =
+      (await database.statementTimeout(role)) !== undefined ||
+      (await database.statementTimeoutDatabases(role)).length > 0;
+    return {
+      ok: !kept,
+      text: `${untimed}${kept ? ' (it has one: `pnpm installer` takes it off)' : ''}`,
+    };
+  }
+
+  // Asked as the login itself: what it finds on signing in is what its service runs under.
+  private async timeoutCheck(login: Login): Promise<Check> {
+    let told = `a statement of ${login.role} is stopped after the policy value ${statementTimeoutName}`;
+    let problem: string | undefined;
+    try {
+      const milliseconds = this.timeoutFor(login);
+      told = `a statement of ${login.role} is stopped after ${String(milliseconds)} ms (${statementTimeoutName})`;
+      const url = new URL(login.file.read()[login.key] ?? 'postgresql://missing');
+      const found = await Database.statementTimeout(
+        { host: url.hostname, port: Number(url.port) },
+        login.role,
+        decodeURIComponent(url.password),
+        url.pathname.slice(1),
+      );
+      if (found !== milliseconds) {
+        problem = `${found === 0 ? 'it has no limit' : `it is ${String(found)} ms`}: \`pnpm installer\` sets it`;
+      }
+    } catch (error) {
+      problem = error instanceof Error ? error.message : String(error);
+    }
+    return {
+      ok: problem === undefined,
+      text: `${told}${problem === undefined ? '' : ` (${problem})`}`,
+    };
+  }
+
   // The database keeps the master passcode's slow hash, and no file does (ADR-281).
   private async masterPasscodeCheck(): Promise<Check> {
     const earlier = this.ownerEnv.exists() && this.ownerEnv.read()[passcodeKey] !== undefined;
@@ -615,6 +699,15 @@ export class Installer {
     if (url === undefined)
       throw new Error(`${this.relative(login.file.path)} has no ${login.key}.`);
     return decodeURIComponent(new URL(url).password);
+  }
+
+  // The login's statement timeout: its service's own value when its env file states one,
+  // otherwise the release's (ADR-395).
+  private timeoutFor(login: Login): number {
+    return new StatementTimeout(this.policyEnv.read()).for(
+      login.file.exists() ? login.file.read() : {},
+      this.relative(login.file.path),
+    );
   }
 
   private logInProblem(login: Login): Promise<string | undefined> {

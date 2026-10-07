@@ -29,6 +29,7 @@ const policy = Policy.from({
   CERT_NUMBER_BLOCK_SIZE: '100',
   ROE_NUMBER_BLOCK_SIZE: '100',
   REQUEST_BODY_LIMIT_BYTES: '1048576',
+  STATEMENT_TIMEOUT_MS: '30000',
 });
 
 const block = (

@@ -15,7 +15,7 @@ export {
   type NewCertification,
 } from './certification/certifications.ts';
 export { NumberAllocator, type LastUsed, type PhoneAtSync } from './numbering/number-allocator.ts';
-export { builtInPolicy } from './policy.ts';
+export { builtInPolicy, installationPolicy } from './policy.ts';
 export {
   ContractorSetup,
   SubPlaces,

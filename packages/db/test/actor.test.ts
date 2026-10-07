@@ -3,6 +3,8 @@
 // with its transaction, and the worker writes as the seeded system actor. Each test connects as the
 // service's own login and undoes its work (service.ts).
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { parseEnv } from 'node:util';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -370,6 +372,26 @@ describe('the worker writes as the system actor', () => {
     expect(
       await refusal(undone(worker, systemActor, (tx) => tx.client.create({ data: bayline }))),
     ).toContain('permission denied for table client');
+  });
+});
+
+describe('a service’s own connection is under the statement timeout (ADR-394)', () => {
+  it('AC-10-42 the API’s and the worker’s, each as its login finds it on signing in: the policy value', async () => {
+    // As the release ships it (packages/domain/policy.env); no secret is in that file.
+    const shipped = parseEnv(
+      readFileSync(new URL('../../domain/policy.env', import.meta.url), 'utf8'),
+    )['STATEMENT_TIMEOUT_MS'];
+    for (const service of [api, worker]) {
+      const [found] = await service.$read(
+        (tx) =>
+          tx.$queryRaw<{ login: string; ms: number }[]>`SELECT current_user AS login,
+            setting::int AS ms FROM pg_settings WHERE name = 'statement_timeout'`,
+      );
+      expect(found).toEqual({
+        login: service === api ? 'adms_api' : 'adms_worker',
+        ms: Number(shipped),
+      });
+    }
   });
 });
 

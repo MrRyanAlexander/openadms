@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { builtInPolicy, installationPolicy } from '../src/policy.ts';
 import { Settings, SettingsProblem } from '../src/process/settings.ts';
 
 // Made-up values, this test's own; a login's URL is put together here so that no file holds one.
@@ -117,6 +118,36 @@ describe('the settings the API starts with', () => {
   });
 });
 
+describe('a policy value the installation states for itself (C53, ADR-395)', () => {
+  it('is the release’s when the installation states none, or leaves it blank', () => {
+    expect(installationPolicy({})).toEqual(builtInPolicy());
+    expect(installationPolicy({ ...good, REQUEST_BODY_LIMIT_BYTES: ' ' })).toEqual(builtInPolicy());
+  });
+
+  it('wins over the release’s under the same name, the others left as shipped', () => {
+    const own = installationPolicy({ ...good, REQUEST_BODY_LIMIT_BYTES: '2097152' });
+    expect(own.requestBodyLimitBytes).toBe(2097152);
+    const shipped = builtInPolicy();
+    expect(own.requestBodyLimitBytes).not.toBe(shipped.requestBodyLimitBytes);
+    expect(Object.entries(own).filter(([name]) => name !== 'requestBodyLimitBytes')).toEqual(
+      Object.entries(shipped).filter(([name]) => name !== 'requestBodyLimitBytes'),
+    );
+  });
+
+  it('is held to the range the release’s is: one the domain refuses stops the start, each named, never its value', () => {
+    let problem: unknown;
+    try {
+      installationPolicy({ REQUEST_BODY_LIMIT_BYTES: 'big-9f3c', LOAD_CALL_HIGH_LIMIT: '101' });
+    } catch (thrown) {
+      problem = thrown;
+    }
+    expect(problem).toBeInstanceOf(SettingsProblem);
+    expect((problem as SettingsProblem).message).toBe(
+      'The API did not start: LOAD_CALL_HIGH_LIMIT is malformed; REQUEST_BODY_LIMIT_BYTES is malformed.',
+    );
+  });
+});
+
 describe('the API as a process, started with settings that are off', () => {
   const main = fileURLToPath(new URL('../dist/main.js', import.meta.url));
   const folders: string[] = [];
@@ -163,6 +194,22 @@ describe('the API as a process, started with settings that are off', () => {
     expect(started.status).toBe(1);
     expect((JSON.parse(started.stderr) as { msg: string }).msg).toBe(
       'The API did not start: ADMS_API_PORT is malformed.',
+    );
+    expect(started.stderr).not.toContain('9f3c');
+  });
+
+  it('AC-10-55: a policy value of its own that is off stops it the same way (ADR-395)', () => {
+    const started = startWith(
+      [
+        ...Object.entries(good).map(([key, value]) => `${key}=${value}`),
+        'REQUEST_BODY_LIMIT_BYTES=0',
+      ],
+      { STATEMENT_TIMEOUT_MS: 'never-9f3c' },
+    );
+    expect(started.status).toBe(1);
+    expect(started.stdout).toBe('');
+    expect((JSON.parse(started.stderr) as { msg: string }).msg).toBe(
+      'The API did not start: REQUEST_BODY_LIMIT_BYTES is malformed; STATEMENT_TIMEOUT_MS is malformed.',
     );
     expect(started.stderr).not.toContain('9f3c');
   });

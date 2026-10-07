@@ -1,17 +1,19 @@
 # Open ADMS — Current decisions and gaps, at a glance
 
 **The present tense of the project on one page.** `DECISIONS.md` and `DEVIATIONS.md` are the full
-history, with 393 ADRs and 74 KDs, many superseded. This page says what is true **now** and which
+history, with 396 ADRs and 74 KDs, many superseded. This page says what is true **now** and which
 entries to cite. The reasons live in the ADRs and the skills.
 
 - **Keep it current:** when you add, amend or supersede an ADR, or open or close a KD, update this
   page **in the same response** (`adms-decisions`).
 - **If this page and a log entry disagree,** the newest ADR wins: fix this page and say so.
-- **Updated 2026-10-07, through ADR-393 / KD-74.** **Phase 2 (API and sync) is open (ADR-376);
+- **Updated 2026-10-07, through ADR-396 / KD-74.** **Phase 2 (API and sync) is open (ADR-376);
   its plan is `BACKLOG.md`'s eight milestones and 32 tasks (ADR-377). Tasks 2.1.1 (ADR-379) and
   2.1.2 (ADR-380…385) are done: the API runs as a process, reached only at
   `https://api.adms.localhost` through Caddy, with a health answer and nothing else yet. Task
-  2.1.3 (ADR-387…392) is done: the boundary every request passes.**
+  2.1.3 (ADR-387…392) is done: the boundary every request passes. Task 2.1.4 (ADR-394, 395) is
+  done: each service login is under a statement timeout, and an installation may state its own
+  policy values.**
   `spec/acceptance/10-api-and-sync.md` and `spec/THREAT-MODEL.md` are approved by the user
   (their marks, ADR-386, 393). **No KD is open.**
   The exception to the seven-day rule is gone from `pnpm-workspace.yaml` (ADR-372's owed step,
@@ -155,8 +157,11 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   `LOAD_CALL_HIGH_LIMIT`, `DISPOSAL_SITE_PROXIMITY_M`, `STUMP_FILL_DEPTH_INCHES`); the domain's
   `Policy` refuses one that is missing or out of range and never stands a number in for it; **the
   release's built-in defaults are the committed env file `packages/domain/policy.env`** (5, 95,
-  200, 31), read by a server app and handed to the domain (invariant 16 as built). Whether an
-  installation may override a built-in default for every new project is left open (C53). The
+  200, 31), read by a server app and handed to the domain (invariant 16 as built). **An
+  installation may state its own value** under the same name in a service's own settings (its
+  env file or its environment): it wins over the release's, is held to the same range, and one
+  the domain refuses stops the start, named, never shown; for a new project's settings it holds
+  for projects made afterwards (C53 decided, ADR-395). The
   database itself refuses a project with no ticket-type list, a window that ends before it starts,
   a load-call limit outside 0–100, and a fill depth or site circle under 1. The three new tables
   are guarded in one line each, in the operations domain; no read-only viewer sees them, and the
@@ -430,7 +435,13 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   from that list by **`pnpm openapi`** (Zod's own JSON Schema; no dependency), written to
   `apps/api/openapi.json`, and a test fails when the file is stale. **A body is one mebibyte at
   most:** the policy value `REQUEST_BODY_LIMIT_BYTES`, refused as `TOO_LARGE` before it is read
-  whole; one limit for every endpoint today. **CORS:** the setting `ADMS_CORS_ORIGINS`, exact
+  whole; one limit for every endpoint today. **Each service login is under a statement
+  timeout:** the policy value `STATEMENT_TIMEOUT_MS` (30,000 ms), set by `pnpm installer` on
+  `adms_api`, `adms_worker` and `adms_readonly` with `ALTER ROLE … SET statement_timeout` on a
+  first run and a rerun, never on `adms_owner`; `installer:check` reads it signed in as each
+  login and checks the owner has none (25 `✓`); a run takes off an owner's timeout and one kept
+  for a login in a single database; a service's own env file may state another for its logins
+  (ADR-394, 395, 396; a first run and an override both seen in real runs). **CORS:** the setting `ADMS_CORS_ORIGINS`, exact
   origins (`https://` or `capacitor://`, lower case, no path, `*` or pattern; plain `http://` is
   not taken; a malformed list stops the start), matched whole; left out, no other origin's page
   is let in; an origin off the list is told nothing. The local stack lists
@@ -1563,8 +1574,12 @@ its scenario.
 
 ## 4. Waiting on the user
 
-**Live today (2026-10-07, ADR-376…393):**
-- **Nothing blocks the next task** (2.1.4, time limits and policy for the services).
+**Live today (2026-10-07, ADR-376…396):**
+- **Nothing blocks the next task** (2.2.1, sign-in's records).
+- **Agent defaults of 2.1.4 to confirm or overturn (ADR-394, 395):** a statement of a service's
+  database login is stopped after thirty seconds; the read-only login is under it too, the
+  owner's is not; an installation may override any policy value by the same name in a service's
+  own env file, the worker's and the API's each for its own logins.
 - **Nothing waits for approval:** `spec/acceptance/10-api-and-sync.md` and
   `spec/THREAT-MODEL.md` carry the user's approval marks (ADR-386, 393: say if either was not
   meant). **Agent defaults of 2.1.3 to confirm or overturn (ADR-387…392):** a request's body of
