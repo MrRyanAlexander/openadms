@@ -205,6 +205,8 @@ Code is written against it in `BACKLOG.md` order, each dependency pinned by an A
 | `spec/DATA-MODEL.md` | The schema on paper: every record, its fields, who may write it, what the database refuses, the export columns | Approved (ADR-289; changed at the user's word, ADR-292…295) |
 | `spec/FLAGS.md` | The flag catalogue: every flag's code, trigger, message, whether it still bills, the facts it keeps | Approved (ADR-290) |
 | `spec/acceptance/*.md` | The acceptance scenarios: what each part must do, each naming the decision it restates and where a test proves it | **Draft** (ADR-300); agent drafts part by part, user approves |
+| `spec/acceptance/10-api-and-sync.md` | How the server behaves towards any caller (the door, sessions, lockout, the CORS list, limits, errors, logs, a phone's proof, uploads, the job queue), and every earlier scenario with a Phase 2 part beside its task | **Draft** (ADR-379); for the user's approval |
+| `spec/THREAT-MODEL.md` | Who attacks what, layer by layer, the control that answers each and where it is tested; what the software records but doesn't stop | **Draft** (ADR-379); for the user's approval |
 | `.claude/skills/adms-*/SKILL.md` | Domain rules and their reasons, one topic each | User-owned; agent edits only to record a user decision, marked with its ADR |
 | `agent_store/SUMMARY.md` | What's decided and open **now**, on one page | Agent, kept current |
 | `agent_store/*.md` | Build state, decisions, deviations, requirements | Agent |

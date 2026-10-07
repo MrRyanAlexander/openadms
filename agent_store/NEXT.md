@@ -89,9 +89,12 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-06, through ADR-378)
+### Where things stand (2026-10-07, through ADR-379)
 - **Phase 2 (API and sync) is open (ADR-376).** Its plan is `BACKLOG.md`'s eight milestones and 32
-  tasks (ADR-377); task 2.0.1 (the opening and the plan) is done, **nothing of it is built yet**.
+  tasks (ADR-377); tasks 2.0.1 (the opening and the plan) and **2.1.1 (the threat model and the
+  API's scenarios, ADR-379; docs)** are done, **no code of it is built yet**. `spec/THREAT-MODEL.md`
+  and `spec/acceptance/10-api-and-sync.md` (56 scenarios, none passing) are **drafts waiting for the
+  user's approval**; building doesn't wait.
   Its 14 REQs are in `REQUIREMENTS.md`, none ticked.
 - **Phase 1 is done:** all seven exit criteria met (ADR-371, 372); 693 of the 708 scenarios with a
   Phase 1 part proven whole, 15 in part. 48 scenario rows name Phase 2 (37 as "API (Phase 2)").
@@ -167,7 +170,7 @@ Update it at close-out when a task, milestone or phase closes.
   candidate; `RULES.md` §7 "Is valid"; whether to keep hand re-entry of the ticket number (ADR-209)
   when the field app is built.
 - **Approvals as part of later steps:** none left for the spec pages (`DATA-MODEL.md` and
-  `FLAGS.md` are approved, ADR-289, 290; the golden mission and its numbers, ADR-297; `spec/CONVENTIONS.md`, ADR-378). To come in Phase 2: `spec/THREAT-MODEL.md` and `spec/acceptance/10-api-and-sync.md` (task 2.1.1).
+  `FLAGS.md` are approved, ADR-289, 290; the golden mission and its numbers, ADR-297; `spec/CONVENTIONS.md`, ADR-378). **Waiting for the user's approval (ADR-379):** `spec/THREAT-MODEL.md` and `spec/acceptance/10-api-and-sync.md`.
 - **Ours, not the user's:** design tasks Q-166 (regional map data) and Q-167 (upgrading an
   installation).
 
@@ -251,19 +254,21 @@ questions.
 **Phase 2 is open (ADR-376). Its plan is `BACKLOG.md`, "Active — Phase 2" (ADR-377): read its
 brief first. One task per response.**
 
-1. **First, if it is 2026-10-07 14:08 UTC or later (ADR-372):** `pnpm-workspace.yaml` has the
-   `minimumReleaseAgeExclude` entry commented out by the user. Delete those two commented lines and
-   the three comment lines above them; keep the override. Then `pnpm install --frozen-lockfile`
-   (nothing else should change), `pnpm security` (expect `7 passed, 0 failed`), and strike BACKLOG
-   C74's last line. Before that time the install fails on the seven-day rule: leave the file alone.
-2. **Task 2.1.1, the threat model and the API's scenarios** (docs only; BACKLOG has the task in
-   full): `spec/THREAT-MODEL.md` over ARCHITECTURE §2's layers (C40 (a)), and
-   `spec/acceptance/10-api-and-sync.md`: scenarios for what ARCHITECTURE §6, §7.4, §9 and §13
-   decide and no scenario states yet, plus the list by ID of every existing scenario with a Phase 2
-   part and the task that proves it, each tied to its checklist item (ASVS Level 2, API Security
-   Top 10, NIST SP 800-63B). Read `spec/acceptance/README.md` for how a scenario is written, and
-   `spec/VISION.md` §8. Both pages are for the user's approval; building doesn't wait (ADR-230).
-   **Next after it: 2.1.2, the API as a process** (the first code and the first dependency ADRs).
+1. **First, if it is 2026-10-07 14:08 UTC or later (ADR-372; it was 12:07 UTC when 2.1.1 ran, so
+   this is still owed):** `pnpm-workspace.yaml` has the `minimumReleaseAgeExclude` entry commented
+   out by the user. Delete those two commented lines and the three comment lines above them; keep
+   the override. Then `pnpm install --frozen-lockfile` (nothing else should change), `pnpm
+   security` (expect `7 passed, 0 failed`), and strike BACKLOG C74's last line. Before that time
+   the install fails on the seven-day rule: leave the file alone.
+2. **Task 2.1.2, the API as a process** (the first code and the first dependency ADRs; BACKLOG has
+   the task in full). Read first: `spec/THREAT-MODEL.md` §4.2, §4.3 and §4.6 (T-10, T-26, T-50,
+   T-51); `spec/acceptance/10-api-and-sync.md`'s scenarios for this task, **AC-10-01, 02, 03, 33,
+   55, and AC-10-32's first half** (a test reads the log), and its points 16 and 17 (the health
+   answer is decided here, register C84); ARCHITECTURE §3, §4, §6. NestJS on the Fastify adapter,
+   each version by its own ADR (exact, seven days old, licence, `pnpm licences`, `pnpm security`,
+   the clean-copy check). **Done when:** the health answer is seen over HTTPS through Caddy at
+   `https://api.adms.localhost`, plain HTTP is redirected, and the chain is green with the new
+   counts. **Next after it: 2.1.3, the boundary.**
 
 **Every command starts with** `eval "$(fnm env --shell zsh)"`. The checks are `adms-verify`'s; the
 database tests, the map servers' tests, the stories and `pnpm security` need `pnpm local:up` first,

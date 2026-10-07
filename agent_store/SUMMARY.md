@@ -1,18 +1,18 @@
 # Open ADMS — Current decisions and gaps, at a glance
 
 **The present tense of the project on one page.** `DECISIONS.md` and `DEVIATIONS.md` are the full
-history, with 378 ADRs and 74 KDs, many superseded. This page says what is true **now** and which
+history, with 379 ADRs and 74 KDs, many superseded. This page says what is true **now** and which
 entries to cite. The reasons live in the ADRs and the skills.
 
 - **Keep it current:** when you add, amend or supersede an ADR, or open or close a KD, update this
   page **in the same response** (`adms-decisions`).
 - **If this page and a log entry disagree,** the newest ADR wins: fix this page and say so.
-- **Updated 2026-10-06, through ADR-378 / KD-74.** **Phase 2 (API and sync) is open, at the user's
-  word (ADR-376); its plan is `BACKLOG.md`'s eight milestones and 32 tasks (ADR-377); nothing of
-  it is built yet.** Phase 1's seven exit criteria are met (ADR-371, 372). `spec/CONVENTIONS.md`
-  is approved by the user and KD-63 closed (ADR-378): **no KD is open.** Owed from 2026-10-07
-  14:08 UTC, the first step of task 2.1.1: delete the `minimumReleaseAgeExclude` entry the user
-  has commented out (ADR-372).
+- **Updated 2026-10-07, through ADR-379 / KD-74.** **Phase 2 (API and sync) is open (ADR-376);
+  its plan is `BACKLOG.md`'s eight milestones and 32 tasks (ADR-377). Task 2.1.1 is done
+  (ADR-379): `spec/THREAT-MODEL.md` and `spec/acceptance/10-api-and-sync.md` (56 scenarios) are
+  written, drafts for the user's approval; no code of Phase 2 is built yet.** **No KD is open.**
+  Owed from 2026-10-07 14:08 UTC, the first step of task 2.1.2: delete the
+  `minimumReleaseAgeExclude` entry the user has commented out (ADR-372).
 - **Where things stand, the road and the next task:** `NEXT.md`. The roadmap in tables:
   `ROADMAP.md`. Names, examples and formats: `spec/CONVENTIONS.md`. The task-by-task record of
   Phase 1 that used to sit here: `DECISIONS.md`'s scratchpad, "Moved 2026-10-06 (ADR-375)".
@@ -390,6 +390,19 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   carry-forward register (C38…C41) with what exists, what's missing and when to raise it: the first
   three with Phase 2 and the demo deploy, accessibility before the first screen. Server backups
   (ARCHITECTURE §4) and upgrades (Q-167) were already recorded; single sign-on is not planned. [279]
+
+- **The threat model and the API's scenarios (task 2.1.1; drafts for the user's approval).**
+  `spec/THREAT-MODEL.md`: eleven kinds of attacker, 36 threats over the layers of ARCHITECTURE §2,
+  each with the recorded control that answers it and the test or Phase 2 task that proves it, and
+  what the software records but doesn't stop (people who agree to lie, an admin, the master
+  passcode's reach). `spec/acceptance/10-api-and-sync.md`: AC-10-01…56, how the server behaves
+  towards any caller, each tied to its checklist chapter (ASVS Level 2, API Security Top 10, NIST
+  SP 800-63B; the numbered requirements are pinned by task 2.7.3), with the 48 earlier scenarios
+  that have a Phase 2 part beside their tasks. **Neither decides anything:** seventeen points
+  nothing records are left to the tasks that build them (BACKLOG C84). **Read as, until 2.2.2's
+  ADR:** the password rules (length, breached-password screening) are for back-office and outside
+  users; a monitor's password stays the firm's practice (ADR-105). Every Phase 2 task reads its
+  threats first. [379]
 
 ### Product and scope
 - **The firm's setup decides how things play out.** Hardcode as little as possible; ship defaults
@@ -1497,8 +1510,13 @@ its scenario.
 
 ## 4. Waiting on the user
 
-**Live today (2026-10-06, ADR-376…378):**
-- **Nothing blocks the next task** (2.1.1, the threat model and the API's scenarios).
+**Live today (2026-10-07, ADR-376…379):**
+- **Nothing blocks the next task** (2.1.2, the API as a process).
+- **For the user's approval (ADR-379), building doesn't wait:** `spec/THREAT-MODEL.md` and
+  `spec/acceptance/10-api-and-sync.md`. **One reading to confirm or overturn:** a monitor's
+  password (their phone number without the area code, ADR-105) is exempt from the password rules
+  of NIST SP 800-63B, which then apply to back-office and outside users only; task 2.2.2 records
+  it. The other sixteen open points are engineering, each an agent default in its task's ADR.
 - **Phase 2's exit criteria and its plan are agent defaults (ADR-376, 377)**, the user's to change:
   jobs built before the endpoints that queue them; a tenth acceptance file and a threat model
   written first, for the user's approval; reads that only a screen needs left to Phase 4.
