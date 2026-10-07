@@ -17,7 +17,11 @@ const root = new URL('../../../../', import.meta.url);
 
 // Opens the service's client on the installation's database (or ADMS_TEST_DATABASE, as the guard
 // tests do). The guard tests' GuardedDatabase.open() has already refused a stale database.
-export function openService(service: Service, maxConnections = 2): Database {
+export function openService(
+  service: Service,
+  maxConnections = 2,
+  requestNow?: () => string | undefined,
+): Database {
   const envFile = new URL(`apps/${service}/.env`, root);
   if (!existsSync(envFile)) {
     throw new Error(`apps/${service}/.env is missing: run \`pnpm installer\`.`);
@@ -27,7 +31,11 @@ export function openService(service: Service, maxConnections = 2): Database {
   const url = new URL(written);
   const database = process.env['ADMS_TEST_DATABASE'];
   if (database !== undefined) url.pathname = `/${database}`;
-  return openDatabase({ url: url.toString(), maxConnections });
+  return openDatabase({
+    url: url.toString(),
+    maxConnections,
+    ...(requestNow === undefined ? {} : { requestNow }),
+  });
 }
 
 class Undone extends Error {}

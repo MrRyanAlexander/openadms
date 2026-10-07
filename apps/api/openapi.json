@@ -1,0 +1,74 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Open ADMS API",
+    "version": "0.0.0",
+    "license": {
+      "name": "AGPL-3.0-only",
+      "identifier": "AGPL-3.0-only"
+    }
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "health",
+        "summary": "That the API answers. Anybody may ask.",
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "const": "ok"
+                    }
+                  },
+                  "required": ["status"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ErrorAnswer": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "BAD_REQUEST",
+              "NOT_FOUND",
+              "TOO_LARGE",
+              "UNSUPPORTED_MEDIA_TYPE",
+              "INTERNAL_ERROR"
+            ]
+          },
+          "requestId": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["code", "requestId"],
+        "additionalProperties": false
+      }
+    }
+  }
+}

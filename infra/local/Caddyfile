@@ -30,8 +30,10 @@ adms.localhost {
 
 # The API (ARCHITECTURE §6; ADR-385): its container publishes no port, so this is the only way in.
 # Until `pnpm installer` has made its settings there is no container, and this answers 502.
+# The API sets its own headers on every answer (ADR-392); the proxy's name is no caller's business.
 api.adms.localhost {
 	import headers
+	header -Via
 	reverse_proxy api:3000
 }
 

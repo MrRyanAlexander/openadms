@@ -181,6 +181,9 @@ services:
       ADMS_API_PORT: '3000'
       # The installer wrote the logins as this machine reaches Postgres; in here it is a service.
       ADMS_DATABASE_ADDRESS: postgres:5432
+      # The exact origins whose pages may read an answer (ADR-098, 391): the stack's own page
+      # today. Each web app's origin joins the list when it gets its hostname.
+      ADMS_CORS_ORIGINS: https://adms.localhost
     secrets:
       - api_env
     volumes:

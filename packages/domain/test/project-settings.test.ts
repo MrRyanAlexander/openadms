@@ -17,6 +17,7 @@ const shipped = {
   TICKET_NUMBER_BLOCK_SIZE: '1000',
   CERT_NUMBER_BLOCK_SIZE: '100',
   ROE_NUMBER_BLOCK_SIZE: '100',
+  REQUEST_BODY_LIMIT_BYTES: '1048576',
 };
 
 // The program types of the example world: PPDR requires an ROE, ROW doesn't.
@@ -86,6 +87,7 @@ describe('the policy values', () => {
       ticketNumberBlockSize: 'TICKET_NUMBER_BLOCK_SIZE',
       certNumberBlockSize: 'CERT_NUMBER_BLOCK_SIZE',
       roeNumberBlockSize: 'ROE_NUMBER_BLOCK_SIZE',
+      requestBodyLimitBytes: 'REQUEST_BODY_LIMIT_BYTES',
     });
     expect(Object.keys(shipped).sort()).toEqual(Object.values(policyNames).sort());
   });
@@ -128,6 +130,7 @@ describe('the policy values', () => {
       policyNames.ticketNumberBlockSize,
       policyNames.certNumberBlockSize,
       policyNames.roeNumberBlockSize,
+      policyNames.requestBodyLimitBytes,
     ]) {
       expect(() => Policy.from({ ...shipped, [name]: '0' })).toThrow(
         `The policy value ${name} must be a whole number, 1 or more: "0".`,

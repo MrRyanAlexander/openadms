@@ -3,9 +3,9 @@ name: adms-verify
 description: Run the Open ADMS verification chain and report real observed output. Covers loading Node 24 through fnm, the frozen pnpm install, typecheck, the Vitest run with its expected counts, lint and format, the licence report, the clean-copy check after a dependency change, where tests live and how a workspace joins the run, and which ARCHITECTURE §15 layers are still to come. Use after any code or config edit, before closing out any code task, or whenever asked to verify, test, typecheck, or confirm the build is green.
 ---
 
-<!-- skill-status: current (rewritten for the rebuild's chain 2026-09-29, ADR-259; cut to today's expected output 2026-10-06, ADR-375: the count history is in DECISIONS.md's scratchpad; the API's tests and container, 2026-10-07, ADR-385) -->
+<!-- skill-status: current (rewritten for the rebuild's chain 2026-09-29, ADR-259; cut to today's expected output 2026-10-06, ADR-375: the count history is in DECISIONS.md's scratchpad; the API's tests and container, 2026-10-07, ADR-385; the boundary's tests and `pnpm openapi`, ADR-387…392) -->
 
-> **This page states today's chain** (expected output as seen 2026-10-07, ADR-385). The rule never changes: **report real
+> **This page states today's chain** (expected output as seen 2026-10-07, ADR-392). The rule never changes: **report real
 > observed output, never "should pass".** The layers still to come are listed at the end of Part 1.
 
 # PART 1 — THE CHAIN
@@ -22,6 +22,7 @@ pnpm typecheck                   # pnpm generate (the Prisma client), then tsc -
 pnpm test                        # tsc --build, then vitest run: one run, real counts
 pnpm lint                        # ESLint (type-aware) + Prettier check
 pnpm licences                    # every installed package's licence against ADR-171
+pnpm openapi                     # after a changed endpoint: writes apps/api/openapi.json (§1.3b)
 pnpm scenarios                   # every story, each on its own database (§1.4)
 pnpm security                    # audit, secrets scan, env files, grant tests (§1.5)
 ```
@@ -30,11 +31,11 @@ pnpm security                    # audit, secrets scan, env files, grant tests (
 |---|---|---|
 | `pnpm install --frozen-lockfile` | The lockfile matches every `package.json`; no version younger than 7 days; no install script ran (none is allowed); no git or tarball sub-dependency (ADR-255) | `✓ Lockfile passes supply-chain policies`, exit 0; with everything already installed, `Already up to date`, exit 0 |
 | `pnpm typecheck` | Generates the Prisma client (`pnpm generate`, into the git-ignored `packages/db/src/generated/`; also run first by `test` and `lint`, ADR-273), then strict TypeScript across every workspace **and its tests**, through project references (ADR-256) | `✔ Generated Prisma Client (7.10.0)`, then exit 0 with no output after `tsc --build` |
-| `pnpm test` | Typechecks, then Vitest runs every project in `vitest.config.js` (ADR-259); the database tests and the map servers' tests need the local stack up and the installation at head (§1.3, §1.3a) | **`Test Files 84 passed (84)`, `Tests 1792 passed (1792)`** (seen 2026-10-07, ADR-385). By project: `packages/domain` 575 in 29 files and `packages/contracts` 19 in 5 (neither needs a database); `apps/api` 40 in 3 (the settings 27 and the error filter 7 need nothing; the door 6 **needs `pnpm local:up` after `pnpm installer`**, §1.3b); `packages/db` 921 in 36 files; `packages/scenarios` 125 in 4 (the flag catalogue against `spec/FLAGS.md`, 78 flags; the harness; every story once); `apps/worker` 13 in 1 and `infra/local` 17 in 2 (the map servers: **need `pnpm local:up`**); `tools/security` 76 in 2 (the scan's rules 19, the guard hook 57); `tools/setup` 9 |
+| `pnpm test` | Typechecks, then Vitest runs every project in `vitest.config.js` (ADR-259); the database tests and the map servers' tests need the local stack up and the installation at head (§1.3, §1.3a) | **`Test Files 87 passed (87)`, `Tests 1852 passed (1852)`** (seen 2026-10-07, ADR-392). By project: `packages/domain` 577 in 29 files and `packages/contracts` 27 in 6 (neither needs a database); `apps/api` 86 in 5 (the settings 38, the error filter 7 and the boundary 24 need nothing; the door 15 and the request id 2 **need `pnpm local:up` after `pnpm installer`**, §1.3b); `packages/db` 922 in 36 files; `packages/scenarios` 125 in 4 (the flag catalogue against `spec/FLAGS.md`, 78 flags; the harness; every story once); `apps/worker` 13 in 1 and `infra/local` 17 in 2 (the map servers: **need `pnpm local:up`**); `tools/security` 76 in 2 (the scan's rules 19, the guard hook 57); `tools/setup` 9 |
 | `pnpm lint` | ESLint's type-checked rules (floating promises, `any`, unsafe access…) on all code and tests; Prettier formatting (ADR-257) | `All matched files use Prettier code style!`, exit 0 |
 | `pnpm licences` | No licence refused or undecided (ADR-258, 260) | `420 packages: 420 allowed, 0 refused, 0 undecided.` (since NestJS and Fastify, ADR-380…383) The package count moves with dependencies; **0 refused, 0 undecided** doesn't |
 | `pnpm scenarios` | Every story passes on its own database, which is dropped afterwards (ADR-275; needs the local stack and the installation) | per story `passed: N checks, N passed, 0 failed` (`ticket-101001`: 16; `dispatch-monday`: 18; `setup`: 52, ADR-316, 323; `certification`: 25, ADR-321, 323, 330; `numbering`: 16, ADR-323, 371; `p1-field-days`: 35, ADR-332; `sync`: 47 and `p1-any-order`: 4, ADR-338; `p1-reconciled`: 39, ADR-352, `p1-priced`: 28, ADR-359, 360, `p1-reviewed`: 30, ADR-364, `p1-voided`: 27, ADR-365, `p1-invoiced`: 26, ADR-367, `golden-mission`: 27, ADR-368, and `p1-left-out`: 25, ADR-369, all seven of which ask the map servers), then `Stories: 15 passed, 0 failed.`, exit 0 |
-| `pnpm security` | The dependency audit, the secrets scan, the env files and the grant tests, with real counts; never prints a secret (§1.5; needs the registry, the local stack and the installation) | `✓ 0 open advisories` (3 accepted by id), secretlint `0 found`, the installation's own secrets `0 found`, a password-like setting `0 found`, env files `✓ every one ignored by git and untracked`, the grant tests `36 files, 921 tests: 921 passed, 0 failed`, ending **`Security checks: 7 passed, 0 failed.`**, exit 0 (seen 2026-10-06). `source-map-js` is forced to 1.2.2 by an override (ADR-356, 372); nothing is let past the seven-day rule (ADR-385). Any ✗ is a finding, never accepted to get green |
+| `pnpm security` | The dependency audit, the secrets scan, the env files and the grant tests, with real counts; never prints a secret (§1.5; needs the registry, the local stack and the installation) | `✓ 0 open advisories` (3 accepted by id), secretlint `0 found`, the installation's own secrets `0 found`, a password-like setting `0 found`, env files `✓ every one ignored by git and untracked`, the grant tests `36 files, 922 tests: 922 passed, 0 failed`, ending **`Security checks: 7 passed, 0 failed.`**, exit 0 (seen 2026-10-06). `source-map-js` is forced to 1.2.2 by an override (ADR-356, 372); nothing is let past the seven-day rule (ADR-385). Any ✗ is a finding, never accepted to get green |
 
 **The local stack** (ADR-263; Docker running). Run it after a change to `infra/local`, and before any
 work that needs the database or the object store:
@@ -236,9 +237,15 @@ version, the 94 values the firm's lists start with, 96 audit records (ADR-302).
 
 ## 1.3b The API's tests (ADR-385)
 
-`apps/api/test`, by scenario ID of `spec/acceptance/10-api-and-sync.md`. `settings.test.ts` and
-`error-filter.test.ts` need no stack (the second runs the real process in memory, with one more
-controller whose work is to fail; two of the first start the built `apps/api/dist/main.js`).
+`apps/api/test`, by scenario ID of `spec/acceptance/10-api-and-sync.md`. `settings.test.ts`,
+`error-filter.test.ts` and `boundary.test.ts` need no stack (the last two run the real process in
+memory, with one more controller of the test's own, started through `test/support/process.ts`;
+two of the first start the built `apps/api/dist/main.js`). `request-id.test.ts` runs the process
+in memory too but opens `adms` as the API's own login, and undoes its write by failing out of it.
+**After a change to an endpoint in `packages/contracts`, `pnpm openapi`** (it writes
+`apps/api/openapi.json`; `boundary.test.ts` fails on a stale file, and on a route the contracts
+don't list). A test's own endpoint is made with `endpoint()` from schemas the contracts export:
+`apps/api` has no Zod of its own (ADR-387).
 `door.test.ts` asks the API's own container through Caddy over HTTPS and reads its log with
 `docker compose logs`: it **needs `pnpm local:up` after `pnpm installer`**, and fails saying so.
 **The container runs what was built when it started: after any change to `apps/api`, `pnpm
@@ -253,8 +260,8 @@ curl -sI http://api.adms.localhost/health                                       
 
 `pnpm installer:check` ends with `✓ the API answers over HTTPS at https://api.adms.localhost/health`.
 `pnpm local:down` removes seven containers and the network (8 `Removed` lines). Only this project:
-`./node_modules/.bin/vitest run --project @open-adms/api`. **A loosening of the log or the error
-filter is tried on `error-filter.test.ts`** (change the source, run the file, put the source back
+`./node_modules/.bin/vitest run --project @open-adms/api`. **A loosening of the log, the error filter, the boundary, the headers or the CORS list is tried on
+`error-filter.test.ts` and `boundary.test.ts`** (change the source, run the file, put the source back
 from a copy kept in the scratchpad): it imports the source, so no build is needed.
 
 ## 1.4 The scenario harness (ADR-275)

@@ -2,43 +2,56 @@
 // AC-10-33 and AC-10-32's first half; T-26; ADR-385). The real process, in this test's own
 // memory, with one more controller whose only work is to fail; nothing listens and no stack is
 // needed. The same answers through the door, over HTTPS, are door.test.ts's.
-import { errorAnswerSchema } from '@open-adms/contracts';
-import { Controller, Get, HttpException, Module, Post } from '@nestjs/common';
+import { endpoint, errorAnswerSchema, healthAnswerSchema } from '@open-adms/contracts';
+import { Controller, HttpException, Module } from '@nestjs/common';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { ApiProcess } from '../src/process/api-process.ts';
 import { HealthController } from '../src/process/health.controller.ts';
+import { Serves } from '../src/process/serves.ts';
+import { madeUpSettings, shippedPolicy } from './support/process.ts';
 
 // What must never leave the server or reach its log: said by a failing service, or sent by a caller.
 const inside = 'SELECT * FROM "user" WHERE monitor_id = M004127 -- /srv/open-adms/apps/api';
 const sent = 'sent-9f3c-never-logged';
 
-@Controller('fails')
+// This test's own endpoints: each is served as any endpoint is, through the boundary. None takes
+// a query or a body, so what the last test sends to `taken` is refused there, and logged the same.
+const fails = (name: string, method: 'GET' | 'POST' = 'GET') =>
+  endpoint({
+    name,
+    summary: 'A test’s own.',
+    method,
+    path: `/fails/${name}`,
+    answer: healthAnswerSchema,
+  });
+
+@Controller()
 class FailingController {
-  @Get('inside')
+  @Serves(fails('inside'))
   inside(): never {
     throw new Error(inside);
   }
 
-  @Get('refused')
+  @Serves(fails('refused'))
   refused(): never {
     throw new HttpException({ message: inside, detail: [inside] }, 400);
   }
 
-  @Get('teapot')
+  @Serves(fails('teapot'))
   teapot(): never {
     throw new HttpException(inside, 418);
   }
 
-  @Get('not-an-error')
+  @Serves(fails('not-an-error'))
   notAnError(): never {
     // eslint-disable-next-line @typescript-eslint/only-throw-error -- what careless code may do
     throw inside;
   }
 
-  @Post('taken')
-  taken(): { taken: true } {
-    return { taken: true };
+  @Serves(fails('taken', 'POST'))
+  taken(): { status: 'ok' } {
+    return { status: 'ok' };
   }
 }
 
@@ -58,11 +71,9 @@ describe('what an error and a log say', () => {
   let api: ApiProcess;
 
   beforeAll(async () => {
-    api = await ApiProcess.create(
-      FailingModule,
-      { host: '127.0.0.1', port: 0 },
-      { stream: { write: (line) => written.push(line) } },
-    );
+    api = await ApiProcess.create(FailingModule, madeUpSettings, shippedPolicy, {
+      stream: { write: (line) => written.push(line) },
+    });
     await api.app.init();
     await api.app.getHttpAdapter().getInstance().ready();
   });

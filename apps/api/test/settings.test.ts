@@ -70,6 +70,19 @@ describe('the settings the API starts with', () => {
     ['ADMS_API_PORT', '65536'],
     ['ADMS_DATABASE_ADDRESS', 'postgres-9f3c'],
     ['ADMS_DATABASE_ADDRESS', 'postgres:9f3c'],
+    ['ADMS_CORS_ORIGINS', '*'],
+    ['ADMS_CORS_ORIGINS', 'https://*.adms-9f3c.example'],
+    ['ADMS_CORS_ORIGINS', 'https://adms.localhost,*'],
+    ['ADMS_CORS_ORIGINS', 'http://adms-9f3c.localhost'],
+    ['ADMS_CORS_ORIGINS', 'https://adms.localhost/9f3c'],
+    ['ADMS_CORS_ORIGINS', 'https://adms.localhost/'],
+    ['ADMS_CORS_ORIGINS', 'https://ADMS-9f3c.localhost'],
+    ['ADMS_CORS_ORIGINS', 'adms-9f3c.localhost'],
+    ['ADMS_CORS_ORIGINS', 'https://adms.localhost:443'],
+    ['ADMS_CORS_ORIGINS', 'https://adms.localhost:9f3c'],
+    ['ADMS_CORS_ORIGINS', 'https://adms.localhost https://adms-9f3c.example'],
+    ['ADMS_CORS_ORIGINS', 'null'],
+    ['ADMS_CORS_ORIGINS', 'off-9f3c'],
   ])('AC-10-55: a malformed %s is named, and its value never said', (key, value) => {
     const problem = problemOf({ ...good, [key]: value });
     expect(problem.keys).toEqual([key]);
@@ -80,6 +93,19 @@ describe('the settings the API starts with', () => {
   it('AC-10-55: every key that is off is named at once', () => {
     const problem = problemOf({ ...without('SMTP_URL'), ADMS_API_PORT: 'x', DATABASE_URL: 'y' });
     expect(problem.keys).toEqual(['DATABASE_URL', 'SMTP_URL', 'ADMS_API_PORT']);
+  });
+
+  it('AC-10-08: the CORS origins are a list of exact values, the web apps’ and the field app’s native ones', () => {
+    const listed =
+      'https://adms.localhost, capacitor://localhost,https://localhost,https://office.example:8443';
+    expect(Settings.from({ ...good, ADMS_CORS_ORIGINS: listed }).corsOrigins).toEqual([
+      'https://adms.localhost',
+      'capacitor://localhost',
+      'https://localhost',
+      'https://office.example:8443',
+    ]);
+    // Left out, no page of another origin is let in: there is no value that lets every one in.
+    expect(Settings.from(good).corsOrigins).toEqual([]);
   });
 
   it('reach the database where the stack says it is, with the same login', () => {

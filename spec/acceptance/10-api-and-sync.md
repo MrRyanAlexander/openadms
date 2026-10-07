@@ -51,16 +51,16 @@ states one that nothing records: they are listed under "Left to the task that bu
 | AC-10-01 | **Given** the local stack is up, **when** the API's health answer is asked for at `https://api.adms.localhost`, **then** it answers, under a certificate of the stack's own authority; the API publishes no port of its own and is reached only through the proxy | ARCHITECTURE §4, §6 (Transport); ADR-098; BACKLOG C24 · REQ-006 | ASVS V12 · API8 | API (2.1.2) | ✅ 2.1.2 (ADR-385): `apps/api/test/door.test.ts` |
 | AC-10-02 | **When** the same address is asked for over plain HTTP, **then** the caller is redirected to HTTPS and nothing is answered over HTTP | ARCHITECTURE §6 (Transport) · REQ-204 | ASVS V12 | API (2.1.2) | ✅ 2.1.2 (ADR-385): `apps/api/test/door.test.ts` |
 | AC-10-03 | **When** a caller offers nothing newer than TLS 1.1, **then** no connection is made; TLS 1.2 and 1.3 are taken | ARCHITECTURE §6 (Transport) | ASVS V12 | API (2.1.2) | ✅ 2.1.2 (ADR-385): `apps/api/test/door.test.ts` |
-| AC-10-04 | **Given** any answer of the API, **then** it carries HSTS and the security headers ARCHITECTURE §6 names for an answer; the page headers (the content security policy, `frame-ancestors 'none'`) are the web apps' | ARCHITECTURE §6 (Transport, Output) · REQ-204 | ASVS V3, V12 · API8 | API (2.1.3); the web apps' pages: back office (Phase 4) |  |
+| AC-10-04 | **Given** any answer of the API, **then** it carries HSTS and the security headers ARCHITECTURE §6 names for an answer; the page headers (the content security policy, `frame-ancestors 'none'`) are the web apps' | ARCHITECTURE §6 (Transport, Output) · REQ-204 | ASVS V3, V12 · API8 | API (2.1.3); the web apps' pages: back office (Phase 4) | ✅ the API's answers, 2.1.3 (ADR-392): `apps/api/test/boundary.test.ts`, `door.test.ts`; the web apps' pages: Phase 4 |
 
 ## B. The CORS list
 
 | ID | Scenario | From | Answers | Proven at | Passing |
 |---|---|---|---|---|---|
-| AC-10-05 | **Given** the API's configuration lists the origin `https://adms.localhost`, **when** a browser page at that origin calls the API, **then** the answer allows exactly that origin, by name | ADR-098; ARCHITECTURE §6 (CORS) · REQ-204 | ASVS V3 · API8 | API (2.1.3) |  |
-| AC-10-06 | **When** a page at `https://evil.example`, an origin not on the list, calls the API, **then** the answer allows no origin, and the browser keeps the answer from that page | ADR-098; ARCHITECTURE §6 (CORS) | ASVS V3 · API8 | API (2.1.3) |  |
-| AC-10-07 | **When** a page at a look-alike origin calls (`https://adms.localhost.evil.example`, or `http://adms.localhost` over plain HTTP), **then** it is treated as any origin off the list: origins are matched whole, never by pattern, ending or hosting domain | ADR-098; ARCHITECTURE §6 (CORS), §17 (Build 1 allowed any `*.netlify.app`) | ASVS V3 · API8 | API (2.1.3) |  |
-| AC-10-08 | **Given** the API's configuration, **then** its origins are a list of exact values read from it: the back office's where it isn't served same-origin, the field app's native origins (`capacitor://localhost`, `https://localhost`) and the browser test build's. A `*` or a pattern is not a value the list takes (a malformed setting, AC-10-55); CORS is never switched off | ADR-098; ARCHITECTURE §4, §6 (CORS) | ASVS V13 · API8 | API (2.1.3) |  |
+| AC-10-05 | **Given** the API's configuration lists the origin `https://adms.localhost`, **when** a browser page at that origin calls the API, **then** the answer allows exactly that origin, by name | ADR-098; ARCHITECTURE §6 (CORS) · REQ-204 | ASVS V3 · API8 | API (2.1.3) | ✅ 2.1.3 (ADR-391): `apps/api/test/boundary.test.ts`, `door.test.ts` |
+| AC-10-06 | **When** a page at `https://evil.example`, an origin not on the list, calls the API, **then** the answer allows no origin, and the browser keeps the answer from that page | ADR-098; ARCHITECTURE §6 (CORS) | ASVS V3 · API8 | API (2.1.3) | ✅ 2.1.3 (ADR-391): `apps/api/test/boundary.test.ts`, `door.test.ts` |
+| AC-10-07 | **When** a page at a look-alike origin calls (`https://adms.localhost.evil.example`, or `http://adms.localhost` over plain HTTP), **then** it is treated as any origin off the list: origins are matched whole, never by pattern, ending or hosting domain | ADR-098; ARCHITECTURE §6 (CORS), §17 (Build 1 allowed any `*.netlify.app`) | ASVS V3 · API8 | API (2.1.3) | ✅ 2.1.3 (ADR-391): `apps/api/test/boundary.test.ts`, `door.test.ts` |
+| AC-10-08 | **Given** the API's configuration, **then** its origins are a list of exact values read from it: the back office's where it isn't served same-origin, the field app's native origins (`capacitor://localhost`, `https://localhost`) and the browser test build's. A `*` or a pattern is not a value the list takes (a malformed setting, AC-10-55); CORS is never switched off | ADR-098; ARCHITECTURE §4, §6 (CORS) | ASVS V13 · API8 | API (2.1.3) | ✅ 2.1.3 (ADR-391): `apps/api/test/settings.test.ts`, `door.test.ts` |
 
 ## C. Back-office sessions
 
@@ -111,9 +111,9 @@ states one that nothing records: they are listed under "Left to the task that bu
 
 | ID | Scenario | From | Answers | Proven at | Passing |
 |---|---|---|---|---|---|
-| AC-10-34 | **When** a back-office request carries a field its schema doesn't name, **then** the whole request is refused and nothing is saved | ARCHITECTURE §6 (Input) · REQ-004 | ASVS V2 · API3 | API (2.1.3) |  |
+| AC-10-34 | **When** a back-office request carries a field its schema doesn't name, **then** the whole request is refused and nothing is saved | ARCHITECTURE §6 (Input) · REQ-004 | ASVS V2 · API3 | API (2.1.3) | ✅ 2.1.3 (ADR-387): `packages/contracts/test/endpoints.test.ts`, `apps/api/test/boundary.test.ts`, `door.test.ts`; no endpoint that saves exists yet, and none can be defined that takes an unnamed field |
 | AC-10-35 | **When** any caller sends an amount, a rate, a transaction, a certified capacity or a completed load, **then** nothing takes it: no schema names such a field, no endpoint writes a transaction, a flag or a completed record, and the API's database login couldn't | VISION §5.7; ARCHITECTURE §2, §5.1, §6; invariants 4, 7 · REQ-201 | ASVS V2, V8 · API3, API6 | API (2.4.4, 2.6.1); the login's grants: built (`grants.test.ts`, `derived-records.test.ts`) |  |
-| AC-10-36 | **Given** any endpoint, **then** its body, its query and its path are each checked against a schema of `packages/contracts`, and the OpenAPI description is generated from those schemas by one command; the chain fails when the description is out of date | ADR-094; ARCHITECTURE §3, §6 (Input); BACKLOG C23 · REQ-004 | ASVS V2, V4 · API9 | API (2.1.3); the last payload: 2.6.1 |  |
+| AC-10-36 | **Given** any endpoint, **then** its body, its query and its path are each checked against a schema of `packages/contracts`, and the OpenAPI description is generated from those schemas by one command; the chain fails when the description is out of date | ADR-094; ARCHITECTURE §3, §6 (Input); BACKLOG C23 · REQ-004 | ASVS V2, V4 · API9 | API (2.1.3); the last payload: 2.6.1 | ✅ 2.1.3 (ADR-387, 388): `packages/contracts/test/endpoints.test.ts`, `apps/api/test/boundary.test.ts` (the routes held to the contracts' list; `apps/api/openapi.json` held to what `pnpm openapi` makes); the last payload's schema: 2.6.1 |
 | AC-10-37 | **When** Luis sends a correction of `101001`'s load call to 140, or a photograph's label that is blank, **then** the request is refused in plain words by its schema, before any service runs | ARCHITECTURE §5.4 (a load call 0–100); ADR-337; BACKLOG C79, task 2.4.4 | ASVS V2 | API (2.4.4) |  |
 | AC-10-38 | **When** Dana sends a second rate for Coastline on `VEG-HAUL-CY-15`, which the database's own constraint refuses, **then** she is told so plainly; the answer is never an internal error | AC-01-80; BACKLOG task 2.4.2 | ASVS V2, V16 | API (2.4.2) |  |
 
@@ -121,11 +121,11 @@ states one that nothing records: they are listed under "Left to the task that bu
 
 | ID | Scenario | From | Answers | Proven at | Passing |
 |---|---|---|---|---|---|
-| AC-10-39 | **When** a caller sends a body larger than the limit for that endpoint, **then** it is refused before it is read whole | ARCHITECTURE §6 (Input: size limits) · REQ-204 | ASVS V2 · API4 | API (2.1.3) |  |
+| AC-10-39 | **When** a caller sends a body larger than the limit for that endpoint, **then** it is refused before it is read whole | ARCHITECTURE §6 (Input: size limits) · REQ-204 | ASVS V2 · API4 | API (2.1.3) | ✅ 2.1.3 (ADR-389): `apps/api/test/boundary.test.ts`; one limit for every endpoint today, an endpoint's own with the task that needs it |
 | AC-10-40 | **Given** one address sending requests faster than the policy allows, or one login tried from many addresses, **then** the caller is limited by address and by login, each on its own count; the counts are policy values | ARCHITECTURE §6 (Abuse); invariant 16 · REQ-204 | ASVS V2 · API4 · 800-63B rate limiting | API (2.2.6) |  |
 | AC-10-41 | **Given** a phone held back by a limit in the middle of a sync, **then** it was told "saved" only for what was stored; the rest is still on the phone and is taken at its next try. A limit never loses field work | ARCHITECTURE §6 (per device), §9; ADR-030; AC-05-51 · REQ-204, 308c | API4 | API (2.6.5); the burst: story (2.7.2) |  |
 | AC-10-42 | **Given** the API's and the worker's database logins, **then** each has a statement timeout, set by the installer from a policy value and checked by the installer's own check | ARCHITECTURE §5.7; ADR-276 (7); BACKLOG C34 · REQ-208 | ASVS V13 · API4 | database (2.1.4: `configuration.test.ts`) |  |
-| AC-10-43 | **Given** a write the API makes for a request, **then** the audit record the database writes carries that request's id, the same one the log lines carry | ARCHITECTURE §5.3 (the request ID), §6 (Logs); BACKLOG task 2.1.3 | ASVS V16 | API (2.1.3) |  |
+| AC-10-43 | **Given** a write the API makes for a request, **then** the audit record the database writes carries that request's id, the same one the log lines carry | ARCHITECTURE §5.3 (the request ID), §6 (Logs); BACKLOG task 2.1.3 | ASVS V16 | API (2.1.3) | ✅ 2.1.3 (ADR-390): `apps/api/test/request-id.test.ts`, `packages/db/test/actor.test.ts` |
 
 ## I. A phone's proof of itself
 
@@ -230,7 +230,7 @@ passing in its own file, from a run that was seen, by the task named.
 | | Scenarios |
 |---|---|
 | Written in this file (A…L) | **56** |
-| Passing | **5** (AC-10-01, 02, 03, 33, 55; task 2.1.2, ADR-385), and AC-10-32 in part |
+| Passing | **14** (AC-10-01, 02, 03, 33, 55; task 2.1.2, ADR-385; AC-10-04…08, 34, 36, 39, 43; task 2.1.3, ADR-387…392), and AC-10-32 in part |
 | Earlier scenarios with a Phase 2 part (M) | 48, and AC-06-36 |
 | **Phase 2 proves, at the API** | **104**, and AC-06-36's link |
 
@@ -251,7 +251,7 @@ evidence or a monitor's work (ADR-230).
 
 | # | What isn't settled | Decided with |
 |---|---|---|
-| 1 | **The numbers.** How long an access token and a refresh token live; how many wrong tries before the wait grows and before a login locks; each rate limit; each size limit; the statement timeout. All policy values, none recorded (ARCHITECTURE §7.2's 5 and 10 are the phone's own sign-in screen) | 2.1.3, 2.1.4, 2.2.3, 2.2.6 |
+| 1 | **The numbers.** How long an access token and a refresh token live; how many wrong tries before the wait grows and before a login locks; each rate limit; each size limit; the statement timeout. All policy values, none recorded (ARCHITECTURE §7.2's 5 and 10 are the phone's own sign-in screen). **The size limit ✅ ADR-389, an agent default:** one mebibyte for a request's body, the policy value `REQUEST_BODY_LIMIT_BYTES` | ~~2.1.3~~, 2.1.4, 2.2.3, 2.2.6 |
 | 2 | **How a locked login opens again** (after a time, as `lockedUntil` suggests, or by an admin), and how "the last admin can't be … locked out" (ARCHITECTURE §6) stands beside a lockout that anybody's wrong tries can cause | 2.2.3, 2.2.5 |
 | 3 | **Which revision of NIST SP 800-63B**, the shortest password allowed, and Argon2id's parameters | 2.2.2 |
 | 4 | **Whether any password rule applies to a monitor's password.** By the firm's practice it is their phone number without the area code (the user, ADR-105), which no length rule or breached-password list would pass; BACKLOG 2.2.2 says "every password a person sets". Scenarios AC-10-21 and 24 are written for back-office and outside users only. *Read as:* ADR-105 is the user's and stands, so a monitor's password is exempt, and the controls of ARCHITECTURE §7.2 protect it | 2.2.2 |
@@ -266,5 +266,5 @@ evidence or a monitor's work (ADR-230).
 | 13 | **What a limited caller is told**, and what a phone does with it | 2.2.6, 2.6.5 |
 | 14 | **The queue**: the library or a guarded table of our own; how often a failed job is tried again and what one that keeps failing becomes; what each database login may do to it | 2.3.1 |
 | 15 | **Whether two projects' runs may go at once** (ARCHITECTURE §13 says one run per project at a time) | 2.3.2 |
-| 16 | **Which headers an API answer carries** beyond HSTS, since ARCHITECTURE §6 lists the page headers "on the web apps" | 2.1.3 |
+| 16 | ~~**Which headers an API answer carries** beyond HSTS, since ARCHITECTURE §6 lists the page headers "on the web apps"~~ ✅ ADR-392, an agent default: HSTS, `nosniff`, no referrer, a content security policy that lets nothing load or frame it, `no-store`, and the request's id | 2.1.3 |
 | 17 | ~~**The health answer**: what it says, and to whom~~ ✅ ADR-385 (5), an agent default: `{"status":"ok"}`, to anybody, that the process answers and nothing else. Whether it also says the database answers | 2.7.2 |

@@ -137,6 +137,28 @@ describe('a write through $write is audited with its actor', () => {
     expect(records[1]?.newValue).toMatchObject({ name: p1.name, time_zone: p1.timeZone });
   });
 
+  it('AC-10-43: the request the work is for, when the service says it and the actor names none', async () => {
+    // The API's client is opened with its own answer to "which request is this for?" (ADR-390).
+    let now: string | undefined = 'req-0002';
+    const forRequests = openService('api', 1, () => now);
+    const dana = randomUUID();
+    const write = (actor: Actor) =>
+      undone(forRequests, actor, async (tx) => {
+        await tx.user.create({ data: { id: dana, name: 'Dana Reyes', role: 'ADMIN' } });
+        return (await tx.auditRecord.findFirstOrThrow({ where: { recordId: dana } })).requestId;
+      });
+    try {
+      const actor: Actor = { actorId: dana, source: 'BACK_OFFICE' };
+      expect(await write(actor)).toBe('req-0002');
+      // An actor that states a request keeps its own; outside any request, none is recorded.
+      expect(await write({ ...actor, requestId: 'req-0003' })).toBe('req-0003');
+      now = undefined;
+      expect(await write(actor)).toBeNull();
+    } finally {
+      await forRequests.$disconnect();
+    }
+  });
+
   it('the device it came from: Ana Brooks on her phone', async () => {
     // Dana sets up herself, Ana, the phone, P1 and Ana's assignment; then the same work states Ana
     // on her phone, as the API will for a sync (a test-only restatement: the phone and Ana must

@@ -19,8 +19,11 @@ export interface Actor {
   readonly requestId?: string;
 }
 
-// Extends a client with $write. Applied once, by openDatabase, to the service's client.
-export function statesTheActor(client: PrismaClient) {
+// Extends a client with $write. Applied once, by openDatabase, to the service's client. `requestNow`
+// is the service's answer to "which request is this work for?": the API's says the request it is
+// answering, so that no write of a service can leave its request out (ADR-390); an actor that
+// states a request keeps its own.
+export function statesTheActor(client: PrismaClient, requestNow?: () => string | undefined) {
   return client.$extends({
     name: 'states-the-actor',
     client: {
@@ -33,7 +36,7 @@ export function statesTheActor(client: PrismaClient) {
             set_config('adms.source', ${actor.source}, true),
             set_config('adms.device_id', ${actor.deviceId ?? ''}, true),
             set_config('adms.reason', ${actor.reason ?? ''}, true),
-            set_config('adms.request_id', ${actor.requestId ?? ''}, true)`;
+            set_config('adms.request_id', ${actor.requestId ?? requestNow?.() ?? ''}, true)`;
           return work(tx);
         });
       },

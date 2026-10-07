@@ -1,7 +1,8 @@
 // The API's settings (ARCHITECTURE §4, Secrets; AC-10-55; ADR-385): read once at the start, from
 // the process's environment and then from its env file (the installer's apps/api/.env, or the
 // file ADMS_ENV_FILE names), and checked. A missing or malformed one stops the start and names
-// its key, never its value.
+// its key, never its value. ADMS_CORS_ORIGINS may be left out: no page of another origin is then
+// let in.
 import { existsSync, readFileSync } from 'node:fs';
 import { isIP } from 'node:net';
 import { fileURLToPath } from 'node:url';
@@ -32,6 +33,8 @@ export class Settings {
   readonly smtpUrl: string;
   readonly host: string;
   readonly port: number;
+  // The exact origins whose pages may read an answer (ADR-098, 391); none unless listed.
+  readonly corsOrigins: readonly string[];
 
   private constructor(values: {
     databaseUrl: string;
@@ -40,6 +43,7 @@ export class Settings {
     smtpUrl: string;
     host: string;
     port: number;
+    corsOrigins: readonly string[];
   }) {
     this.databaseUrl = values.databaseUrl;
     this.readOnlyDatabaseUrl = values.readOnlyDatabaseUrl;
@@ -47,6 +51,7 @@ export class Settings {
     this.smtpUrl = values.smtpUrl;
     this.host = values.host;
     this.port = values.port;
+    this.corsOrigins = values.corsOrigins;
   }
 
   // A key set in the process's environment wins over the same key in the file.
@@ -75,6 +80,14 @@ export class Settings {
       return address === undefined || problems.length > 0 ? url : Settings.at(url, address);
     };
 
+    const origins = (environment['ADMS_CORS_ORIGINS'] ?? '')
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter((origin) => origin !== '');
+    checked('ADMS_CORS_ORIGINS', environment['ADMS_CORS_ORIGINS'], () =>
+      origins.every((origin) => Settings.isOrigin(origin)),
+    );
+
     const values = {
       databaseUrl: database('DATABASE_URL'),
       readOnlyDatabaseUrl: database('READONLY_DATABASE_URL'),
@@ -93,6 +106,7 @@ export class Settings {
       port: Number(
         checked('ADMS_API_PORT', required('ADMS_API_PORT'), (value) => Settings.isPort(value)),
       ),
+      corsOrigins: origins,
     };
     if (problems.length > 0) throw new SettingsProblem(problems);
     return new Settings(values);
@@ -116,6 +130,16 @@ export class Settings {
 
   private static isPort(value: string): boolean {
     return /^[1-9]\d{0,4}$/.test(value) && Number(value) <= 65535;
+  }
+
+  // An origin as a browser sends it, whole: a scheme, a host in lower case, a port only when it
+  // isn't the scheme's own; no path, no `*`, no pattern. HTTPS, or a native app's own scheme
+  // (Capacitor's on iOS): a page loaded over plain HTTP is never let in.
+  private static isOrigin(value: string): boolean {
+    const [, scheme, port] =
+      /^(https|capacitor):\/\/[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?(?::(\d+))?$/.exec(value) ?? [];
+    if (scheme === undefined) return false;
+    return port === undefined || (Settings.isPort(port) && !(scheme === 'https' && port === '443'));
   }
 
   private static isAddress(value: string): boolean {

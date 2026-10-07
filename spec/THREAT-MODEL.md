@@ -1,6 +1,6 @@
 # Open ADMS — Threat model
 
-⚠️ **Draft**: agent-written (task 2.1.1, ADR-379); the user approves. Building doesn't wait
+✅ **Approved**: agent-written (task 2.1.1, ADR-379); the user approves. Building doesn't wait
 (ADR-230).
 
 ← [Index](INDEX.md) · How each layer is built and secured: [ARCHITECTURE](ARCHITECTURE.md) · The

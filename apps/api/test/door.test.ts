@@ -1,5 +1,6 @@
-// The door (ARCHITECTURE §4, §6, Transport; acceptance file 10, section A, AC-10-33 and
-// AC-10-32's first half; T-10, T-26; ADR-385): the API's own container, asked as a caller would,
+// The door (ARCHITECTURE §4, §6, Transport, CORS, Input; acceptance file 10, sections A and B,
+// AC-10-33, 34, 36 and AC-10-32's first half; T-10, T-15, T-26; ADR-385, 387…392): the API's own
+// container, asked as a caller would,
 // through the local stack's proxy. It needs `pnpm local:up` after `pnpm installer`; without them
 // these fail and say so. After a change to apps/api, `pnpm local:up` again: the container runs
 // what was built when it started.
@@ -152,6 +153,87 @@ describe('the door: HTTPS only, through the proxy', () => {
     expect(await tls({ min: 'TLSv1.3', max: 'TLSv1.3' })).toBe('TLSv1.3');
     expect(await tls({ min: 'TLSv1.2', max: 'TLSv1.2' })).toBe('TLSv1.2');
     await expect(tls({ min: 'TLSv1', max: 'TLSv1.1' })).rejects.toThrow(/protocol version|alert/i);
+  });
+});
+
+describe('what every answer carries, and which pages may read one, through the door', () => {
+  const carried = {
+    'strict-transport-security': 'max-age=31536000',
+    'x-content-type-options': 'nosniff',
+    'referrer-policy': 'no-referrer',
+    'content-security-policy': "default-src 'none'; frame-ancestors 'none'",
+    'cache-control': 'no-store',
+    vary: 'Origin',
+  };
+  const cors = (answer: Answer) =>
+    Object.keys(answer.headers).filter((name) => name.startsWith('access-control-'));
+
+  it('AC-10-04: HSTS and the security headers, each once, on an answer, a refusal and a path nobody serves; nothing names the server or the proxy', async () => {
+    const answers = [await ask('/health'), await ask('/health?verbose=1'), await ask('/nowhere')];
+    expect(answers.map(({ status }) => status)).toEqual([200, 400, 404]);
+    for (const answer of answers) {
+      expect(answer.headers).toMatchObject(carried);
+      expect(answer.headers['x-request-id']).toMatch(/^[0-9a-f-]{36}$/);
+      for (const never of ['server', 'via', 'x-powered-by']) {
+        expect(answer.headers[never]).toBeUndefined();
+      }
+    }
+  });
+
+  it('AC-10-34, AC-10-36: a query the health endpoint doesn’t name is refused by its schema', async () => {
+    const answer = await ask(`/health?password=${sent}`);
+    expect(answer.status).toBe(400);
+    expect(errorAnswerSchema.parse(JSON.parse(answer.body)).code).toBe('BAD_REQUEST');
+    expect(answer.body).not.toContain(sent);
+  });
+
+  it('AC-10-05, AC-10-08: a page at the origin the configuration lists is allowed, by name', async () => {
+    const answer = await ask('/health', { headers: { origin: 'https://adms.localhost' } });
+    expect(answer.status).toBe(200);
+    expect(answer.headers['access-control-allow-origin']).toBe('https://adms.localhost');
+    const asked = await ask('/health', {
+      method: 'OPTIONS',
+      headers: { origin: 'https://adms.localhost', 'access-control-request-method': 'GET' },
+    });
+    expect(asked.status).toBe(204);
+    expect(asked.headers['access-control-allow-origin']).toBe('https://adms.localhost');
+    expect(asked.headers['access-control-allow-methods']).toBe('GET, POST, PUT, PATCH');
+  });
+
+  it('AC-10-06: a page at an origin off the list is allowed nothing', async () => {
+    const answer = await ask('/health', { headers: { origin: 'https://evil.example' } });
+    expect(answer.status).toBe(200);
+    expect(cors(answer)).toEqual([]);
+    const asked = await ask('/health', {
+      method: 'OPTIONS',
+      headers: { origin: 'https://evil.example', 'access-control-request-method': 'GET' },
+    });
+    expect(asked.status).toBe(404);
+    expect(cors(asked)).toEqual([]);
+  });
+
+  it.each([
+    'https://adms.localhost.evil.example',
+    'http://adms.localhost',
+    'https://api.adms.localhost',
+    'https://adms.localhost:8443',
+  ])('AC-10-07: the look-alike %s is treated as any origin off the list', async (origin) => {
+    expect(cors(await ask('/health', { headers: { origin } }))).toEqual([]);
+  });
+});
+
+describe('the API’s container and the database', () => {
+  it('reaches Postgres where the stack says it is, as its own login', () => {
+    const script = [
+      "import { Settings } from './apps/api/dist/process/settings.js';",
+      "import { openApiDatabase } from './apps/api/dist/process/api-database.js';",
+      'const database = openApiDatabase(Settings.read(process.env));',
+      'const [row] = await database.$queryRaw`SELECT current_user AS login, current_database() AS name`;',
+      'console.log(JSON.stringify(row));',
+      'await database.$disconnect();',
+    ].join('\n');
+    const said = compose(['exec', '-T', 'api', 'node', '--input-type=module', '-e', script]);
+    expect(JSON.parse(said)).toEqual({ login: 'adms_api', name: 'adms' });
   });
 });
 

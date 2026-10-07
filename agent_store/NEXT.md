@@ -89,27 +89,32 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-07, through ADR-386)
+### Where things stand (2026-10-07, through ADR-393)
 - **Phase 2 (API and sync) is open (ADR-376).** Its plan is `BACKLOG.md`'s eight milestones and 32
   tasks (ADR-377); tasks 2.0.1 (the opening and the plan), 2.1.1 (the threat model and the
-  API's scenarios, ADR-379; docs) and **2.1.2 (the API as a process, ADR-380…385)** are done.
+  API's scenarios, ADR-379; docs), 2.1.2 (the API as a process, ADR-380…385) and **2.1.3 (the
+  boundary, ADR-387…392)** are done.
   **The API runs**: NestJS 12.1.2 on Fastify 5.12.5, the local stack's seventh service, reached
   only at `https://api.adms.localhost`; settings checked at the start, a structured log, one error
-  filter, `GET /health`; nothing opens the database yet. `spec/acceptance/10-api-and-sync.md` (56
-  scenarios, 5 passing) is **approved by the user** (their mark, ADR-386); `spec/THREAT-MODEL.md`
-  is a **draft waiting for the user's approval**; building doesn't wait.
+  filter, `GET /health`. **Every endpoint is defined in `packages/contracts` and served through
+  `@Serves`; `Boundary` reads its path, query and body by its schemas first** (BACKLOG C86 is the
+  recipe for adding one); the CORS list is `ADMS_CORS_ORIGINS`; every answer carries the API's own
+  headers; the API's database client states the request's id on every write; `pnpm openapi`
+  writes `apps/api/openapi.json`. `spec/acceptance/10-api-and-sync.md` (56 scenarios, 14 passing)
+  and `spec/THREAT-MODEL.md` are both **approved by the user** (their marks, ADR-386, 393).
   Its 14 REQs are in `REQUIREMENTS.md`, none ticked.
 - **Phase 1 is done:** all seven exit criteria met (ADR-371, 372); 693 of the 708 scenarios with a
   Phase 1 part proven whole, 15 in part. 48 scenario rows name Phase 2 (37 as "API (Phase 2)").
-- **The chain, seen whole on 2026-10-07:** 84 test
-  files, 1,792 tests; lint clean; 420 licences allowed; fifteen stories; `pnpm security` 7 passed,
+- **The chain, seen whole on 2026-10-07:** 87 test
+  files, 1,852 tests; lint clean; 420 licences allowed; fifteen stories; `pnpm security` 7 passed,
   0 failed; eighty migrations. The expected output of each command is `adms-verify`'s.
 - **What exists:** `packages/db` (schema, guards, tests), `packages/domain` (every rule; one
   dependency, no database), `packages/contracts`, `packages/scenarios` (the harness and stories,
   the golden mission among them), `apps/worker/src/reconciliation/` (the run: group, check,
   price, write; no process, no queue), `apps/api/src/` (the service classes: setup,
   certifications, numbering, intake, review; and `process/` with `main.ts`, the HTTP process with
-  a health answer: no endpoint of the services, no sign-in), `tools/`, `infra/local`.
+  a health answer, the boundary, the headers and the API's database client: no endpoint of the
+  services, no sign-in), `tools/`, `infra/local`.
 - **Open deviations:** none. KD-63 closed when the user marked `spec/CONVENTIONS.md` approved
   (ADR-378). KD-30 is re-filed to Phase 5 (REQ-518).
 - **After a change to `apps/api`, `pnpm local:up` again** before the chain: the API's container
@@ -174,7 +179,7 @@ Update it at close-out when a task, milestone or phase closes.
   candidate; `RULES.md` §7 "Is valid"; whether to keep hand re-entry of the ticket number (ADR-209)
   when the field app is built.
 - **Approvals as part of later steps:** none left for the spec pages (`DATA-MODEL.md` and
-  `FLAGS.md` are approved, ADR-289, 290; the golden mission and its numbers, ADR-297; `spec/CONVENTIONS.md`, ADR-378). **Waiting for the user's approval (ADR-379):** `spec/THREAT-MODEL.md` and `spec/acceptance/10-api-and-sync.md`.
+  `FLAGS.md` are approved, ADR-289, 290; the golden mission and its numbers, ADR-297; `spec/CONVENTIONS.md`, ADR-378; `spec/acceptance/10-api-and-sync.md`, ADR-386; `spec/THREAT-MODEL.md`, ADR-393).
 - **Ours, not the user's:** design tasks Q-166 (regional map data) and Q-167 (upgrading an
   installation).
 
@@ -258,16 +263,18 @@ questions.
 **Phase 2 is open (ADR-376). Its plan is `BACKLOG.md`, "Active — Phase 2" (ADR-377): read its
 brief first. One task per response.**
 
-**Task 2.1.3, the boundary** (BACKLOG has the task in full). Read first: `spec/THREAT-MODEL.md`
-§4.2 and §4.3 (T-12, T-15, T-17, T-28); `spec/acceptance/10-api-and-sync.md`'s scenarios for this
-task, **AC-10-04…08, 34, 36, 39, 43**, and its points 1 and 16 (the size limits and which headers
-an API answer carries are decided here, register C84); BACKLOG C85's 2.1.3 line (the first use of
-`Settings.databaseUrl`, the request id into `db.$write`, Fastify's own 1 MiB body limit, Caddy's
-four headers); ARCHITECTURE §6. Each new dependency by its own ADR. **Done when:** a body, query
-and path are refused by their schema with a plain code, the CORS list answers an origin on it and
-neither one off it nor a look-alike, OpenAPI is generated by one command and checked current in
-the chain, and the chain is green with the new counts. **Next after it: 2.1.4, time limits and
-policy for the services.**
+**Task 2.1.4, time limits and policy for the services** (BACKLOG has the task in full). Read
+first: `spec/THREAT-MODEL.md` §4.2 (T-17) and its §4.5 rows on the database's logins;
+`spec/acceptance/10-api-and-sync.md`'s **AC-10-42** and its point 1 (the statement timeout's
+value is decided here, register C84); BACKLOG C34 (the installer sets `ALTER ROLE … SET
+statement_timeout` for `adms_api` and `adms_worker` from a policy value, `installer:check` checks
+it, `configuration.test.ts` asserts it), C53 (whether a value of the same name in a service's own
+env file overrides a built-in policy default: `Settings` already lets the environment win over
+the file; `REQUEST_BODY_LIMIT_BYTES` is the first server-side policy value, ADR-389), C85 and
+C86's 2.1.4 lines; ARCHITECTURE §5.7. **Done when:** both logins have the timeout, set from the
+policy value by the installer on a first run and a rerun, the check and the test see it, C53 is
+decided with an ADR, **REQ-208** is ticked from a run that was seen, and the chain is green with
+the new counts. **Next after it: 2.2.1, sign-in's records (schema).**
 
 **Every command starts with** `eval "$(fnm env --shell zsh)"`. The checks are `adms-verify`'s; the
 database tests, the map servers' tests, the stories and `pnpm security` need `pnpm local:up` first,

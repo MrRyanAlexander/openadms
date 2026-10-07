@@ -28,6 +28,7 @@ const policy = Policy.from({
   TICKET_NUMBER_BLOCK_SIZE: '1000',
   CERT_NUMBER_BLOCK_SIZE: '100',
   ROE_NUMBER_BLOCK_SIZE: '100',
+  REQUEST_BODY_LIMIT_BYTES: '1048576',
 });
 
 const block = (

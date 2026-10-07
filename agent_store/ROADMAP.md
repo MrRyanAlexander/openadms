@@ -9,7 +9,7 @@
 > requirement) and `spec/VISION.md` §7–§8 (the finished surfaces, and what "done" means). If this
 > page disagrees with them, they win.
 >
-> **Last updated:** 2026-10-07 (**Task 2.1.2 is done (ADR-380…385): the API runs as a process on your own machine, reached only over HTTPS at `https://api.adms.localhost`; it answers a health check and nothing else yet. Your approval mark on the API's scenarios is recorded (ADR-386); the threat model still waits for you.** Before it: task 2.1.1 (ADR-379), the threat model and the API's 56 scenarios. Before it: **You opened Phase 2, API and sync (ADR-376). Its plan is written: eight milestones, 32 tasks (ADR-377); nothing of it is built yet.** Your approval mark on the names page is recorded and the last open deviation closed (ADR-378). Owed after 7 October 14:08 UTC: removing the one exception to the seven-day rule, which you have already commented out.)
+> **Last updated:** 2026-10-07 (**Task 2.1.3 is done (ADR-387…392): the API now checks every request against its schema before anything runs, answers only pages from the origins on its list, puts its own security headers on every answer, refuses a body over one mebibyte, and writes each request's id into the audit log; `pnpm openapi` writes the API's description. Your approval mark on the threat model is recorded (ADR-393).** Before it: **Task 2.1.2 is done (ADR-380…385): the API runs as a process on your own machine, reached only over HTTPS at `https://api.adms.localhost`; it answers a health check and nothing else yet. Your approval mark on the API's scenarios is recorded (ADR-386); the threat model still waits for you.** Before it: task 2.1.1 (ADR-379), the threat model and the API's 56 scenarios. Before it: **You opened Phase 2, API and sync (ADR-376). Its plan is written: eight milestones, 32 tasks (ADR-377); nothing of it is built yet.** Your approval mark on the names page is recorded and the last open deviation closed (ADR-378). Owed after 7 October 14:08 UTC: removing the one exception to the seven-day rule, which you have already commented out.)
 
 **Key:** ✅ done · 🟡 in progress · ⬜ not started · 🔒 gated (doesn't open until the phase before it exits)
 
@@ -20,8 +20,8 @@
 | | |
 |---|---|
 | **Start** | 2026-09-25: the rebuild decision (ADR-093). Security first, the plan is the core, TypeScript end to end with Prisma, the old `database/` code is history |
-| **Now** | **Phase 2, API and sync: open since 2026-10-06 at your word** (ADR-376). Tasks 3 of 32 are done: the plan, the threat model with the API's scenarios (ADR-379), and the API as a process over HTTPS (ADR-385; §3). Phase 1 met its exit the same day (ADR-371, 372): the whole product without a screen runs from a terminal, and the golden mission comes out with the numbers you approved (P1 $5,548.25 on 19 lines, P2 $324.00) |
-| **Next task** | **2.1.3, the boundary**: every request checked against its schema, plain error codes, the security headers, the exact CORS list, OpenAPI generated from the contracts |
+| **Now** | **Phase 2, API and sync: open since 2026-10-06 at your word** (ADR-376). Tasks 4 of 32 are done: the plan, the threat model with the API's scenarios (ADR-379), the API as a process over HTTPS (ADR-385) and the boundary every request passes (ADR-387…392; §3). Phase 1 met its exit the same day (ADR-371, 372): the whole product without a screen runs from a terminal, and the golden mission comes out with the numbers you approved (P1 $5,548.25 on 19 lines, P2 $324.00) |
+| **Next task** | **2.1.4, time limits and policy for the services**: a statement timeout on the API's and the worker's database logins, set by the installer from a policy value and checked |
 | **Finish line** | A firm installs Open ADMS, and its back office and its monitors run a real mission on it: every app built, tested and working |
 | **How "done" is judged** | Not boxes ticked. A deliberately messy mission (the **golden mission**) comes out with the exact statuses, review queue and ledger you signed off, at every layer: engine, then API, then the apps (`spec/VISION.md` §8) |
 
@@ -60,7 +60,7 @@ the scenarios the API must pass, so the answer exists before the code.
 | Milestone | What it is | When it's done, you can… | Tasks | Status |
 |---|---|---|---|---|
 | 2.0 | Open the phase: the plan | Read every Phase 2 task, with the requirements each one meets | 1 of 1 | ✅ 2026-10-06 |
-| 2.1 | The answer and the foundation | Read who could attack what and what stops them; reach the API over HTTPS on your own machine, refusing anything malformed or from a site not on its list | 2 of 4 | 🔨 2.1.1 ✅ 2026-10-07 (ADR-379); 2.1.2 ✅ 2026-10-07 (ADR-380…385); next: 2.1.3 |
+| 2.1 | The answer and the foundation | Read who could attack what and what stops them; reach the API over HTTPS on your own machine, refusing anything malformed or from a site not on its list | 3 of 4 | 🔨 2.1.1 ✅ 2026-10-07 (ADR-379); 2.1.2 ✅ 2026-10-07 (ADR-380…385); 2.1.3 ✅ 2026-10-07 (ADR-387…392); next: 2.1.4 |
 | 2.2 | Sign-in, sessions and permissions | Sign in to the server as an admin with an authenticator code; take a permission from someone and see their very next request refused | 0 of 6 | ⬜ |
 | 2.3 | Jobs and the worker's process | Change a ticket and watch the worker pick up just that ticket by itself, with nothing asked to wait | 0 of 3 | ⬜ |
 | 2.4 | The back office's endpoints | Do everything the back office does (setup, dispatch, corrections, void, QC, lock) by a request, each checked against the person's permissions; see a contractor's login read only its own tickets | 0 of 5 | ⬜ |

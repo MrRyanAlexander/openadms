@@ -1,0 +1,41 @@
+// The boundary (ARCHITECTURE §6, Input; AC-10-34, 36, 43; T-12, T-28; ADR-387, 390): before any
+// controller runs, the request's path parameters, query and body are each read by the schemas of
+// the endpoint it serves. Anything they don't take refuses the whole request with a plain code; a
+// route that names no endpoint serves nothing. The controller then runs as its request, so that a
+// write it makes carries the request's id (api-database.ts).
+import { AsyncLocalStorage } from 'node:async_hooks';
+
+import { taken } from '@open-adms/contracts';
+import {
+  BadRequestException,
+  type CallHandler,
+  type ExecutionContext,
+  type NestInterceptor,
+} from '@nestjs/common';
+import type { FastifyRequest } from 'fastify';
+import { Observable } from 'rxjs';
+
+import { servedBy } from './serves.ts';
+
+const requests = new AsyncLocalStorage<{ readonly requestId: string }>();
+
+// The id of the request the work now running is for; none outside a request.
+export function requestNow(): string | undefined {
+  return requests.getStore()?.requestId;
+}
+
+export class Boundary implements NestInterceptor {
+  intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
+    const endpoint = servedBy(context.getHandler());
+    if (endpoint === undefined) {
+      throw new Error('A route was mapped that names no endpoint of the contracts.');
+    }
+    const request = context.switchToHttp().getRequest<FastifyRequest>();
+    const read = taken(endpoint, request);
+    if (read === undefined) throw new BadRequestException();
+    Object.assign(request, read);
+    return new Observable((to) =>
+      requests.run({ requestId: request.id }, () => next.handle().subscribe(to)),
+    );
+  }
+}

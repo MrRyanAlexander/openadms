@@ -1,18 +1,19 @@
 # Open ADMS — Current decisions and gaps, at a glance
 
 **The present tense of the project on one page.** `DECISIONS.md` and `DEVIATIONS.md` are the full
-history, with 386 ADRs and 74 KDs, many superseded. This page says what is true **now** and which
+history, with 393 ADRs and 74 KDs, many superseded. This page says what is true **now** and which
 entries to cite. The reasons live in the ADRs and the skills.
 
 - **Keep it current:** when you add, amend or supersede an ADR, or open or close a KD, update this
   page **in the same response** (`adms-decisions`).
 - **If this page and a log entry disagree,** the newest ADR wins: fix this page and say so.
-- **Updated 2026-10-07, through ADR-386 / KD-74.** **Phase 2 (API and sync) is open (ADR-376);
+- **Updated 2026-10-07, through ADR-393 / KD-74.** **Phase 2 (API and sync) is open (ADR-376);
   its plan is `BACKLOG.md`'s eight milestones and 32 tasks (ADR-377). Tasks 2.1.1 (ADR-379) and
   2.1.2 (ADR-380…385) are done: the API runs as a process, reached only at
-  `https://api.adms.localhost` through Caddy, with a health answer and nothing else yet.**
-  `spec/acceptance/10-api-and-sync.md` is approved by the user (ADR-386); `spec/THREAT-MODEL.md`
-  is still a draft for their approval. **No KD is open.**
+  `https://api.adms.localhost` through Caddy, with a health answer and nothing else yet. Task
+  2.1.3 (ADR-387…392) is done: the boundary every request passes.**
+  `spec/acceptance/10-api-and-sync.md` and `spec/THREAT-MODEL.md` are approved by the user
+  (their marks, ADR-386, 393). **No KD is open.**
   The exception to the seven-day rule is gone from `pnpm-workspace.yaml` (ADR-372's owed step,
   done 2026-10-07 14:09 UTC, ADR-385).
 - **Where things stand, the road and the next task:** `NEXT.md`. The roadmap in tables:
@@ -417,8 +418,33 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   opens the database yet. Tests: `apps/api/test` (40; `door.test.ts` needs `pnpm local:up` after
   `pnpm installer`, **and `pnpm local:up` again after any change to `apps/api`**). AC-10-01, 02,
   03, 33, 55 pass; AC-10-32 in part. What it leaves: BACKLOG C85.
-- **The threat model and the API's scenarios (task 2.1.1; file 10 approved by the user, ADR-386;
-  the threat model a draft for their approval).**
+- **The boundary (task 2.1.3).** [387, 388, 389, 390, 391, 392] **Every endpoint is said once,
+  in `packages/contracts`** (`endpoint()`, the list `endpoints`): a name, a method (`GET · POST ·
+  PUT · PATCH`), a path, the schema of its path parameters, its query, its body and its answer.
+  A definition that would take a field nobody named, at any depth, is refused when it is
+  written. **The API maps a route only with `@Serves(endpoint)`**, and one interceptor,
+  `Boundary`, reads the path, the query and the body by those schemas before any controller
+  runs: a field not named, a part the endpoint doesn't name, a wrong value → 400 `BAD_REQUEST`
+  (a code, never what was sent; which field, in plain words, is 2.4.4's); a route that names no
+  endpoint → 500. A test holds the API's routes to the contracts' list. **OpenAPI 3.1** is made
+  from that list by **`pnpm openapi`** (Zod's own JSON Schema; no dependency), written to
+  `apps/api/openapi.json`, and a test fails when the file is stale. **A body is one mebibyte at
+  most:** the policy value `REQUEST_BODY_LIMIT_BYTES`, refused as `TOO_LARGE` before it is read
+  whole; one limit for every endpoint today. **CORS:** the setting `ADMS_CORS_ORIGINS`, exact
+  origins (`https://` or `capacitor://`, lower case, no path, `*` or pattern; plain `http://` is
+  not taken; a malformed list stops the start), matched whole; left out, no other origin's page
+  is let in; an origin off the list is told nothing. The local stack lists
+  `https://adms.localhost`. **Every answer carries the API's own headers:** HSTS, `nosniff`,
+  no referrer, a content security policy that lets nothing load or frame it, `no-store`, and
+  `X-Request-Id`; Caddy removes `Server` and `Via`. **Every write made while a request is
+  answered states that request's id**: the API's one database client (`@Inject(apiDatabase)`,
+  the first use of `Settings.databaseUrl`) asks which request the running controller is, so no
+  service passes it along (`openDatabase`'s `requestNow`). Tests: `apps/api/test` 86 (`boundary`
+  24 and `settings` 38 need nothing; `door` 15 and `request-id` 2 need the stack and the
+  installation), `packages/contracts/test/endpoints.test.ts`. AC-10-04…08, 34, 36, 39, 43 pass.
+  Adding an endpoint, and what is left: BACKLOG C86. *Agent defaults.*
+- **The threat model and the API's scenarios (task 2.1.1; both approved by the user, ADR-386,
+  393).**
   `spec/THREAT-MODEL.md`: eleven kinds of attacker, 36 threats over the layers of ARCHITECTURE §2,
   each with the recorded control that answers it and the test or Phase 2 task that proves it, and
   what the software records but doesn't stop (people who agree to lie, an admin, the master
@@ -1537,11 +1563,14 @@ its scenario.
 
 ## 4. Waiting on the user
 
-**Live today (2026-10-07, ADR-376…386):**
-- **Nothing blocks the next task** (2.1.3, the boundary).
-- **For the user's approval (ADR-379), building doesn't wait:** `spec/THREAT-MODEL.md`
-  (`spec/acceptance/10-api-and-sync.md` carries the user's approval mark, ADR-386: say if that
-  was not meant). **Agent defaults of 2.1.2 to confirm or overturn (ADR-380, 385):** NestJS 12
+**Live today (2026-10-07, ADR-376…393):**
+- **Nothing blocks the next task** (2.1.4, time limits and policy for the services).
+- **Nothing waits for approval:** `spec/acceptance/10-api-and-sync.md` and
+  `spec/THREAT-MODEL.md` carry the user's approval marks (ADR-386, 393: say if either was not
+  meant). **Agent defaults of 2.1.3 to confirm or overturn (ADR-387…392):** a request's body of
+  one mebibyte at most; a plain `http://` origin never on the CORS list; an origin off the list
+  told nothing rather than refused; the six headers of an API answer, `no-store` and the
+  request's id among them; a refused request told a code only until 2.4.4. **Agent defaults of 2.1.2 to confirm or overturn (ADR-380, 385):** NestJS 12
   (six weeks old) rather than 11; the health answer says only that the process answers; an
   error answers `{ code, requestId }`. **One reading to confirm or overturn:** a monitor's
   password (their phone number without the area code, ADR-105) is exempt from the password rules
