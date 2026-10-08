@@ -12,9 +12,10 @@
 // after the project's window, which is then extended.
 //
 // Not here: a project numbered from control tickets (P1 generates its numbers; its flag is
-// proven at the domain, AC-06-164). Where no service writes a setup change yet (a rate, a pay
-// item's unit, a project's window, a site's shape) the story writes it as the person, through
-// the API's login, as the story `p1-priced` does.
+// proven at the domain, AC-06-164). Every setup change is made through its service (a rate, a
+// pay item's unit, a project's window, a site's shape: BACKLOG 2.4.1, ADR-423), and the setup
+// check and the sites' quantity lookup are asked of the API's own service as the setup moves
+// (AC-01-69…77).
 import {
   Certifications,
   ContractorSetup,
@@ -24,6 +25,7 @@ import {
   PayItemSetup,
   ProjectSetup,
   RuleSetup,
+  SetupStanding,
   SiteSetup,
   WorkQueue,
   type NewCertification,
@@ -109,6 +111,52 @@ export const p1LeftOut: Story = {
     const projects = new ProjectSetup(api, clock, story.policy);
     const certifications = new Certifications(api, clock, story.policy);
     const corrections = new Corrections(api, clock, story.policy);
+
+    // The setup check and the sites' lookup, asked of the API's service, as lines a person
+    // reads.
+    const setupStanding = new SetupStanding(api);
+    const gaps = async (): Promise<string[]> =>
+      (await setupStanding.gaps(p1)).map((gap) => gap.message);
+    const phonesAsk = async (...sitesAsked: string[]): Promise<string[]> => {
+      const nameOf = new Map<string, string>();
+      for (const each of await api.disposalSite.findMany({ where: { projectId: p1 } })) {
+        nameOf.set(each.id, each.name);
+      }
+      for (const each of await api.contractor.findMany()) nameOf.set(each.id, each.name);
+      for (const each of await api.formDebrisType.findMany({
+        where: { form: { projectId: p1 } },
+        include: { debrisType: true },
+      })) {
+        nameOf.set(each.id, each.debrisType.name);
+      }
+      const said = (id: string): string => nameOf.get(id) ?? id;
+      return (await setupStanding.quantityLookup(p1))
+        .map(
+          (row) =>
+            `${said(row.siteId)} · ${row.form} · ${said(row.debrisTypeId)} · ${said(row.primeId)} → ${row.asks}`,
+        )
+        .filter(
+          (line) => sitesAsked.length === 0 || sitesAsked.some((name) => line.startsWith(name)),
+        );
+    };
+    story.check(
+      'AC-01-69, 74 the setup check lists nothing on P1 as set up, and each site’s phones ask for one quantity, worked out from the rules: the load call for a load, tipping fee or not; nothing more for a haul-out paid by the CY; the scale weight where the only rule that could pay it is by the ton',
+      [await gaps(), await phonesAsk()],
+      [
+        [],
+        [
+          'Bayline County Landfill · LOAD · Vegetative · Coastline Haulers LLC → LOAD_CALL',
+          'Bayline County Landfill · LOAD · C&D · Coastline Haulers LLC → LOAD_CALL',
+          'Bayline County Landfill · HAUL_OUT · Mulch · Coastline Haulers LLC → NOTHING_MORE',
+          'Cypress Creek Landfill · LOAD · Vegetative · Coastline Haulers LLC → LOAD_CALL',
+          'Cypress Creek Landfill · LOAD · C&D · Coastline Haulers LLC → LOAD_CALL',
+          'Cypress Creek Landfill · HAUL_OUT · Mulch · Coastline Haulers LLC → SCALE_WEIGHT',
+          'Marsh Road TDSR · LOAD · Vegetative · Coastline Haulers LLC → LOAD_CALL',
+          'Marsh Road TDSR · LOAD · C&D · Coastline Haulers LLC → LOAD_CALL',
+          'Marsh Road TDSR · HAUL_OUT · Mulch · Coastline Haulers LLC → NOTHING_MORE',
+        ],
+      ],
+    );
 
     story.at(
       on('09', '09:00'),
@@ -614,6 +662,7 @@ export const p1LeftOut: Story = {
         actions: [{ kind: 'ADD_TRANSACTION', slot: 1, payItemId: veg15 }],
       }),
     );
+    const noRateListed = await gaps();
     const noRate = await reconciliation.run(setupChange);
     story.check(
       'AC-06-122 a rule passes and its pay item has no rate for Summit: the line is written at $0 and the ticket is flagged; no Coastline line changed',
@@ -627,10 +676,16 @@ export const p1LeftOut: Story = {
       ],
     );
     story.at(on('14', '13:40'), 'Dana enters Summit’s rate, $7.80; the worker runs');
-    await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, (tx) =>
-      tx.payItemRate.create({
-        data: { projectId: p1, payItemId: veg15, primeId: summit, rate: '7.80' },
-      }),
+    await saved(payItems.rate(dana, veg15, summit, '7.80'));
+    story.check(
+      'AC-01-72 the setup check listed the pay item and the prime before any ticket was worked, and lists neither once the rate is in',
+      [noRateListed, await gaps()],
+      [
+        [
+          'Pay item VEG-HAUL-CY-15 has no rate for Summit Debris Services, and "Summit VEG haul 0–15 mi" adds it on a Summit Debris Services contract.',
+        ],
+        [],
+      ],
     );
     const rated = await reconciliation.run(setupChange);
     story.check(
@@ -658,6 +713,7 @@ export const p1LeftOut: Story = {
       'Dana ticks Charges a tipping fee on Cypress Creek Landfill by mistake: it charges none, and no rule gives its loads a fee. The worker runs',
     );
     await saved(sites.change(dana, cypress, { chargesTippingFee: true }));
+    const feeListed = await gaps();
     const feeMissing = await reconciliation.run(setupChange);
     story.check(
       'AC-06-70 the haul-out dumped there is flagged, and its three lines bill as before; a haul-out that only left a site, a load dumped elsewhere and unit rate work are not flagged for it',
@@ -671,6 +727,16 @@ export const p1LeftOut: Story = {
     );
     story.at(on('14', '14:10'), 'She unticks it; the worker runs');
     await saved(sites.change(dana, cypress, { chargesTippingFee: false }));
+    story.check(
+      'AC-01-70 the setup check listed the site while it was ticked, and no longer does',
+      [feeListed, await gaps()],
+      [
+        [
+          'Cypress Creek Landfill charges a tipping fee, but no tipping fee pay item is linked to it.',
+        ],
+        [],
+      ],
+    );
     const feeFixed = await reconciliation.run(setupChange);
     story.check(
       'the setup is fixed and the flag is cleared: 201004 is COMPLETED again, its lines the same',
@@ -741,12 +807,8 @@ export const p1LeftOut: Story = {
       on('14', '14:50'),
       'The price is agreed: $85.00 each. Dana changes the pay item’s unit to EA and enters Coastline’s rate; the worker runs',
     );
-    await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
-      await tx.payItem.update({ where: { id: special.id }, data: { unit: 'EA' } });
-      await tx.payItemRate.create({
-        data: { projectId: p1, payItemId: special.id, primeId: coastline, rate: '85.00' },
-      });
-    });
+    const unitChanged = await payItems.change(dana, special.id, { unit: 'EA' });
+    await saved(payItems.rate(dana, special.id, coastline, '85.00'));
     const agreed = await reconciliation.run(setupChange);
     story.check(
       'AC-07-63 the pay item’s un-invoiced tickets are reprocessed and bill: each hanger ticket gains its #2, 1 × $85.00, and the flag is cleared',
@@ -878,6 +940,25 @@ export const p1LeftOut: Story = {
         ]),
       );
     }
+
+    story.check(
+      'AC-01-75, 76, 77 the lookup is worked out again from the setup as it stands: a load of Vegetative to FDS on a Coastline truck is weighed, a load of white goods is counted from the tickets it carries, and a Summit truck, whose contract has no such rule, is asked for the load call',
+      [
+        await gaps(),
+        (await phonesAsk('Cypress Creek Landfill')).filter(
+          (line) => line.includes('Vegetative to FDS') || line.includes('White Goods'),
+        ),
+      ],
+      [
+        [],
+        [
+          'Cypress Creek Landfill · LOAD · Vegetative to FDS · Coastline Haulers LLC → SCALE_WEIGHT',
+          'Cypress Creek Landfill · LOAD · Vegetative to FDS · Summit Debris Services → LOAD_CALL',
+          'Cypress Creek Landfill · LOAD · White Goods · Coastline Haulers LLC → CARRIED_COUNT',
+          'Cypress Creek Landfill · LOAD · White Goods · Summit Debris Services → LOAD_CALL',
+        ],
+      ],
+    );
 
     story.at(
       on('15', '13:00'),
@@ -1082,27 +1163,16 @@ export const p1LeftOut: Story = {
       on('15', '14:30'),
       'Dana draws Marsh Road TDSR its own shape, but leaves the tower out of it: the yard east of the gate only. The worker runs',
     );
-    const drawShape = (version: number, west: number, east: number) =>
-      api.$write({ actorId: dana, source: 'BACK_OFFICE' }, (tx) =>
-        tx.siteAreaVersion.create({
-          data: {
-            siteId: tdsr,
-            version,
-            geometry: rectangle(west, 39.085, east, 39.095),
-            westLongitude: String(west),
-            southLatitude: '39.085',
-            eastLongitude: String(east),
-            northLatitude: '39.095',
-            source: 'DRAWN',
-            createdById: dana,
-            effectiveFrom: clock.now(),
-          },
-        }),
-      );
+    const drawShape = (west: number, east: number) =>
+      sites.shape(dana, tdsr, { source: 'DRAWN', shape: rectangle(west, 39.085, east, 39.095) });
     const flaggedForPlace = async (): Promise<string[]> =>
       (await openFlags()).filter((message) => message.includes('Marsh Road TDSR'));
     const before = await flaggedForPlace();
-    await drawShape(1, -75.62, -75.61);
+    const notAShape = await sites.shape(dana, tdsr, {
+      source: 'UPLOAD',
+      shape: { type: 'Point', coordinates: [-75.615, 39.09] },
+    });
+    const shapeDrawn = await drawShape(-75.62, -75.61);
     await reconciliation.run(setupChange);
     const outside = await flaggedForPlace();
     story.check(
@@ -1135,7 +1205,7 @@ export const p1LeftOut: Story = {
       on('15', '14:40'),
       'She draws it again, a kilometre and a half wide with the tower inside; the worker runs',
     );
-    await drawShape(2, -75.63, -75.61);
+    await saved(drawShape(-75.63, -75.61));
     await reconciliation.run(setupChange);
     story.check(
       'AC-06-47 inside the shape nothing is flagged, however far from the site’s GPS; the first shape is still there as version 1',
@@ -1176,9 +1246,7 @@ export const p1LeftOut: Story = {
       '2027-02-04T09:30:00-05:00',
       'Dana extends P1’s window to 28 February 2027; the worker runs',
     );
-    await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, (tx) =>
-      tx.project.update({ where: { id: p1 }, data: { activeTo: new Date('2027-02-28') } }),
-    );
+    const windowChanged = await projects.changeWindow(dana, p1, { activeTo: '2027-02-28' });
     const extended = await reconciliation.run(setupChange);
     story.check(
       'AC-09-25 the change is an ordinary edit, audited under Dana with the date before; on the next run the flag on 101023 is cleared and the ticket is COMPLETED, its line the same',
@@ -1209,6 +1277,28 @@ export const p1LeftOut: Story = {
     );
 
     // ------------------------------------------------------------------------------------------
+    const queuedBy = (outcome: Outcome<unknown>): unknown =>
+      outcome.saved
+        ? [
+            outcome.queued?.jobs.length ?? 0,
+            outcome.queued?.tickets ?? 0,
+            outcome.queued?.lockedAsInvoiced ?? 0,
+          ]
+        : outcome.refusal;
+    story.check(
+      'BACKLOG 2.4.1 each of these changes was saved by its service, which queued the tickets it moves in the same piece of work: the pay item’s unit and the project’s window every ticket of P1 that isn’t void, the site’s shape the tickets with a field event at the site. What isn’t a shape isn’t saved, and queues nothing',
+      [queuedBy(unitChanged), queuedBy(shapeDrawn), queuedBy(windowChanged), queuedBy(notAShape)],
+      [
+        [1, 20, 0],
+        [1, 14, 0],
+        [1, 26, 0],
+        {
+          code: 'SITE_SHAPE_NOT_READ',
+          message: "Not saved: A shape is a Polygon or a MultiPolygon: Point can't be kept.",
+        },
+      ],
+    );
+
     story.check(
       'what is still open at the end is what a person must look at, and nothing else: the 96% call, the stump no band fits, the typed number, the revoked and the replaced certification, and the shared weight',
       await openFlags(),

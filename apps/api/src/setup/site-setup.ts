@@ -4,8 +4,14 @@
 // Before it saves, setup asks packages/domain's SiteFacts: Haul-outs leave here can be ticked only
 // on a TDSR/DMS site, and a marked site's type can't change away from it. A site states its
 // type's built-in key again, which is how the database holds the same rule.
-import type { DisposalSite, DisposalSiteTippingFee, Prisma } from '@open-adms/db';
-import { type BuiltInKey, SiteFacts, type SiteSetting } from '@open-adms/domain';
+import type {
+  DisposalSite,
+  DisposalSiteTippingFee,
+  Prisma,
+  SiteAreaSource,
+  SiteAreaVersion,
+} from '@open-adms/db';
+import { type BuiltInKey, MapShapes, SiteFacts, type SiteSetting } from '@open-adms/domain';
 
 import { day, type Outcome, QueueingService, Refused } from './setup-service.ts';
 
@@ -38,8 +44,18 @@ export type SiteChanges = Partial<
     readonly shortCode: string | null;
     readonly siteTypeId: string;
     readonly permitNumber: string | null;
+    // The site's GPS corrected: WGS84, exact decimals.
+    readonly latitude: string;
+    readonly longitude: string;
   }
 >;
+
+// A site's own shape, as drawn on the map or as a file gave it: GeoJSON, a geometry, a Feature
+// or a FeatureCollection.
+export interface NewSiteShape {
+  readonly source: SiteAreaSource;
+  readonly shape: unknown;
+}
 
 // A site added or changed is checked by the worker's next run (its permit; where its tickets'
 // debris went, their area and their mileage): the job is queued in the same piece of work,
@@ -97,6 +113,37 @@ export class SiteSetup extends QueueingService {
       });
       await this.setupChanged(tx, person, site.projectId, { siteId }, true);
       return changed;
+    });
+  }
+
+  // The site's own shape, as its next version: from then on the site is checked against the
+  // shape in place of the project's circle, and an earlier shape stays as it was (ADR-142, 144;
+  // AC-01-56, AC-06-47). What isn't a shape isn't saved. The un-invoiced tickets with a field
+  // event at the site are queued.
+  shape(person: string, siteId: string, input: NewSiteShape): Promise<Outcome<SiteAreaVersion>> {
+    return this.write(person, async (tx) => {
+      const site = await tx.disposalSite.findUniqueOrThrow({ where: { id: siteId } });
+      const shape = new MapShapes(input.shape).shape();
+      if (shape.read === null) {
+        throw new Refused({ code: 'SITE_SHAPE_NOT_READ', message: `Not saved: ${shape.problem}` });
+      }
+      const last = await tx.siteAreaVersion.aggregate({
+        where: { siteId },
+        _max: { version: true },
+      });
+      const version = await tx.siteAreaVersion.create({
+        data: {
+          siteId,
+          version: (last._max.version ?? 0) + 1,
+          geometry: shape.read.geometry satisfies Prisma.InputJsonObject,
+          ...shape.read.box,
+          source: input.source,
+          createdById: person,
+          effectiveFrom: this.clock.now(),
+        },
+      });
+      await this.setupChanged(tx, person, site.projectId, { siteId });
+      return version;
     });
   }
 

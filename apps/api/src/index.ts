@@ -30,11 +30,13 @@ export { ListSetup } from './setup/list-setup.ts';
 export {
   PayItemSetup,
   type NewPayItem,
+  type PayItemChanges,
   type PaysWhenInput,
   type RulesKept,
 } from './setup/pay-item-setup.ts';
 export {
   ProjectSetup,
+  type ActiveWindow,
   type NewClient,
   type NewControlRange,
   type NewDeclarationEvent,
@@ -51,10 +53,12 @@ export {
   type QueuedBySetup,
   type Refusal,
 } from './setup/setup-service.ts';
+export { SetupStanding } from './setup/setup-standing.ts';
 export { WorkQueue, type WorkAsked, type WorkQueued } from './jobs/work-queue.ts';
 export {
   SiteSetup,
   type NewSite,
+  type NewSiteShape,
   type SiteChanges,
   type SiteFactSettings,
 } from './setup/site-setup.ts';

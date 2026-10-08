@@ -63,6 +63,9 @@ export interface NewProject {
   readonly numbersFrom?: Readonly<Partial<Record<NumberSeries, number>>>;
 }
 
+// A project's active window, changed: either end, as calendar days; the end may be emptied.
+export type ActiveWindow = Partial<Pick<NewProject, 'activeFrom' | 'activeTo'>>;
+
 export interface NewControlRange {
   readonly projectId: string;
   readonly series: NumberSeries;
@@ -231,6 +234,26 @@ export class ProjectSetup extends QueueingService {
   ): Promise<Outcome<Project>> {
     return this.write(person, async (tx) => {
       const project = await tx.project.update({ where: { id: projectId }, data: changes });
+      await this.setupChanged(tx, person, projectId);
+      return project;
+    });
+  }
+
+  // The project's active window, changed: an ordinary edit, audited with the dates before
+  // (AC-09-25). A ticket outside the window is flagged and one now inside it no longer is, so
+  // the project's un-invoiced tickets are queued. An end before the start is the database's to
+  // refuse: the call throws, and nothing is saved.
+  changeWindow(person: string, projectId: string, window: ActiveWindow): Promise<Outcome<Project>> {
+    return this.write(person, async (tx) => {
+      const project = await tx.project.update({
+        where: { id: projectId },
+        data: {
+          ...(window.activeFrom === undefined ? {} : { activeFrom: day(window.activeFrom) }),
+          ...(window.activeTo === undefined
+            ? {}
+            : { activeTo: window.activeTo === null ? null : day(window.activeTo) }),
+        },
+      });
       await this.setupChanged(tx, person, projectId);
       return project;
     });

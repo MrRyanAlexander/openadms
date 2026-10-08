@@ -1,13 +1,13 @@
 # Open ADMS — Current decisions and gaps, at a glance
 
 **The present tense of the project on one page.** `DECISIONS.md` and `DEVIATIONS.md` are the full
-history, with 422 ADRs and 74 KDs, many superseded. This page says what is true **now** and which
+history, with 423 ADRs and 74 KDs, many superseded. This page says what is true **now** and which
 entries to cite. The reasons live in the ADRs and the skills.
 
 - **Keep it current:** when you add, amend or supersede an ADR, or open or close a KD, update this
   page **in the same response** (`adms-decisions`).
 - **If this page and a log entry disagree,** the newest ADR wins: fix this page and say so.
-- **Updated 2026-10-08, through ADR-422 / KD-74.** **Phase 2 (API and sync) is open (ADR-376);
+- **Updated 2026-10-08, through ADR-423 / KD-74.** **Phase 2 (API and sync) is open (ADR-376);
   its plan is `BACKLOG.md`'s eight milestones and 32 tasks (ADR-377). Tasks 2.1.1 (ADR-379) and
   2.1.2 (ADR-380…385) are done: the API runs as a process, reached only at
   `https://api.adms.localhost` through Caddy, with a health answer and nothing else yet. Task
@@ -31,7 +31,10 @@ entries to cite. The reasons live in the ADRs and the skills.
   done: the worker runs as a process that drains the queue, one run per project at a time, only
   the tickets its jobs name. Task 2.3.3 (ADR-420) is done: every change that moves a ticket
   queues its own job in its own piece of work, naming the tickets touched and their neighbours;
-  Milestone 2.3 is complete.**
+  Milestone 2.3 is complete. Task 2.4.1 (ADR-423) is done: the setup check and the sites'
+  quantity lookup are a service in `apps/api` (`SetupStanding`), and a pay item's unit, a
+  project's active window, a site's own shape and a site's GPS each change through a service
+  that queues the tickets it moves; no story writes a setup change by hand.**
   `spec/acceptance/10-api-and-sync.md` and `spec/THREAT-MODEL.md` are approved by the user
   (their marks, ADR-386, 393). **No KD is open.**
   The exception to the seven-day rule is gone from `pnpm-workspace.yaml` (ADR-372's owed step,
@@ -1573,6 +1576,7 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   pay item HNG-RMV-EA" and edited only there; free-standing rules stay for everything else (delete, void,
   date ranges). A **setup check** lists gaps before the field day, and every change shows **what it
   would change** first. The agent's "pay items" (pay item and rule as one record) is withdrawn. [229]
+- **The setup check and the sites' quantity lookup are asked of a service in `apps/api` (task 2.4.1, 2026-10-08, ADR-423):** `new SetupStanding(db)` answers `gaps(projectId)`, `quantityLookup(projectId)` and `quantityLookupAt(siteId)`, reading the project's setup in one read-only piece of work (live primes, contracts, load and haul-out forms, debris types and sites; every pay item and rule) and keeping nothing: each answer is the setup as it stands when asked. Its endpoint is 2.4.2's; the lookup with a phone's lists is 2.6.x and Phase 3. **Setup changes that had no service have one, each queueing the tickets it moves (ADR-420, 423):** `PayItemSetup.change` (the unit, the crew-time conversion, the capture settings; never the code, description, payable type, kind of work or band), `ProjectSetup.changeWindow`, `SiteSetup.shape` (GeoJSON, the next version; `SITE_SHAPE_NOT_READ` when it isn't a shape) and a site's GPS on `SiteSetup.change`. [229, 243, 357, 420, 423]
 - **The setup check and the sites' quantity lookup are built at the domain (task 1.6.4, 2026-10-05):** `new SetupCheck(setup).gaps()` lists, never refuses: a tipping fee site with no live fee pay item linked; a debris type on a load or haul-out form no running rule of that form can pay (a fee pays no debris type; once per form, not per prime); a pay item a rule adds on a prime's contract holding other primes' rates and none for that prime (a $0 pay item and a TBN one aren't listed); bands that overlap or leave a stretch between them; a crew day's steps that leave hours between them, or none at all; every active rule that isn't valid, with each reason. **A rule that names an archived form, contract or pay item is not valid and never runs** (`RuleEntry`'s `formArchived`, `contract.archived`, an action's `payItem.archived`; `spec/RULES.md` §7). `new QuantityLookup(setup).asks({ siteId, form, debrisTypeId, primeId })`: from the running rules of the truck's prime that could meet a ticket dumped there (debris type, disposal site, site type, contractor; anything else left open), tipping fee pay items left out: a load → a count where every paying pay item is paid from the tickets it carries, the scale weight where every one is per ton or pound, else the load call; a haul-out's disposal → the scale weight where every one is per ton or pound, else nothing more. Who runs them and where they show are Phases 2…4 (BACKLOG C74). *Agent defaults.* [357]
 - **The back office's rule builder:** ticket type → name → **contract** (once, ADR-239) → criteria ("ifs", operand · operator ·
   value from a list, all must hold; each criterion names the field event it reads, agent default) → **actions**: *Add transaction #n* (order #, pay item;
@@ -1901,6 +1905,7 @@ its scenario.
 
 **Live today (2026-10-07, ADR-376…420):**
 - **Nothing blocks the next task** (2.4.1, the services Phase 1 left to a story's hand).
+- **Agent defaults of 2.4.1 to confirm or overturn (ADR-423):** (a) **what may be changed on a pay item after it is entered:** its Unit of Measure, its crew-time conversion and its capture settings; its code, description, payable type, kind of work and size band stay as entered until 2.4.2 decides each; (b) **the setup check reads every live load and haul-out form**, whether or not the project's workflows use it, and a debris type hidden on the phones; (c) **the check and the lookup are worked out when asked and kept nowhere**; (d) a pay item's unit and a project's window queue every un-invoiced, un-voided ticket of the project, a site's shape or GPS the tickets with a field event at the site.
 - **Agent defaults of 2.3.3 to confirm or overturn (ADR-420):** (a) **a rate, a pay item, a "Pays when", a project setting, a control range or a new map queues every un-invoiced, un-voided ticket of the project** (a rule its form's, a site its own), rather than a narrower guess; the run writes only what differs; (b) **a job names 200 tickets at most and a run takes up 200 at a time** (`JOB_TICKETS_AT_MOST`); (c) ~~a ticket locked as invoiced is left off every job~~ ✅ **decided by the user 2026-10-08 (ADR-422)**: left off, and the change's answer says how many were left; (d) **a certification that arrives from a phone queues the tickets that named its number as a sync's job, with nobody named as having asked for the run** (the certification is still its certifier's; certifying is done where there is signal, ADR-151, so normally no ticket has the number yet); (e) a change to a site, a new certification, a corrected survey or an accepted flag on one queues a job that names no ticket; (f) a contractor merged, a contract or prime added, a form's debris type and a list's value queue nothing yet (BACKLOG C96).
 - **Agent defaults of 2.3.2 to confirm or overturn (ADR-419):** (a) **one worker process works its projects one after another**, looking at the queue every five seconds; two processes may work two projects at once; (b) **the worker's numbers**, all policy values a firm's server may state for itself: a job set aside after 5 tries, a run of 10 minutes at most, a map server given 30 seconds to answer, a pool of 10 database connections for each service; (c) **the longest run is a policy value**, not a line the installer writes into the env file as the backlog first said; (d) **a run the queue starts still checks the flags that sit on no ticket** (a certification's photographs, a site's permit) every time; (e) **when one run works several jobs**, its record names the oldest job's reason, and a person only where all were asked for by the same one; (f) **the worker's health answer** gives two counts (jobs waiting, jobs set aside) and is asked only from inside its own container. **For 2.3.3, not a question yet:** a job must name the neighbours a change can move (C95).
 - **Agent defaults of 2.3.1 to confirm or overturn (ADR-418):** (a) **the queue is two tables

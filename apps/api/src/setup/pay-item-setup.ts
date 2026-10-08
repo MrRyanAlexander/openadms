@@ -49,6 +49,25 @@ export interface NewPayItem {
   readonly rates: readonly { readonly primeId: string; readonly rate: string }[];
 }
 
+// What may be changed on a pay item the project holds: its Unit of Measure, how crew time's
+// hours become a quantity on it, and its capture settings. Its code, payable type, kind of work
+// and band say which pay item it is and stay as entered (ADR-423).
+export type PayItemChanges = Partial<
+  Pick<
+    NewPayItem,
+    | 'unit'
+    | 'crewTimeConversion'
+    | 'crewDayHours'
+    | 'countIsAlwaysOne'
+    | 'gpsRequired'
+    | 'measurementRequired'
+    | 'decimalsAllowed'
+    | 'photosRequired'
+    | 'monitorMayMarkIneligible'
+    | 'quantityFromCarriedTickets'
+  >
+>;
+
 // What "Pays when" says for one form: the criteria, and the # its transaction takes.
 export interface PaysWhenInput {
   readonly formId: string;
@@ -104,6 +123,19 @@ export class PayItemSetup extends QueueingService {
       // A unit rate ticket's pay item is worked out from its payable type and its band: a new
       // pay item may be the one.
       await this.setupChanged(tx, person, input.projectId);
+      return payItem;
+    });
+  }
+
+  // A change to a pay item the project holds, audited with the value before: a price agreed at
+  // last takes it from TBN to its unit (AC-07-63); a capture setting ticked or unticked. What
+  // the database's own checks refuse (a conversion on a pay item that isn't by the hour or the
+  // crew day) throws, and nothing is saved. Tickets locked as invoiced keep the lines they have
+  // (ADR-090).
+  change(person: string, payItemId: string, changes: PayItemChanges): Promise<Outcome<PayItem>> {
+    return this.write(person, async (tx) => {
+      const payItem = await tx.payItem.update({ where: { id: payItemId }, data: changes });
+      await this.setupChanged(tx, person, payItem.projectId);
       return payItem;
     });
   }

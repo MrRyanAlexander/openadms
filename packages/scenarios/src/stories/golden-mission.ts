@@ -1378,13 +1378,12 @@ export const goldenMission: Story = {
       on('21', '09:00'),
       'A week later Dana changes Coastline’s rate on VEG-HAUL-CY-15 from $7.50 to $7.75; the worker runs',
     );
-    const rateTo = (rate: string) =>
-      api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
-        const standing = await tx.payItemRate.findFirstOrThrow({
-          where: { payItem: { projectId: p1, code: 'VEG-HAUL-CY-15' }, primeId: coastline },
-        });
-        await tx.payItemRate.update({ where: { id: standing.id }, data: { rate } });
+    const rateTo = async (rate: string) => {
+      const veg15 = await api.payItem.findFirstOrThrow({
+        where: { projectId: p1, code: 'VEG-HAUL-CY-15' },
       });
+      return saved(payItems.rate(dana, veg15.id, coastline, rate));
+    };
     await rateTo('7.75');
     const rated = await reconciliation.run({ projectId: p1, trigger: 'SETUP_CHANGE' });
     const passedBy = (

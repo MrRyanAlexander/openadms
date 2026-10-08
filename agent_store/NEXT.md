@@ -89,7 +89,7 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-08, through ADR-422)
+### Where things stand (2026-10-08, through ADR-423)
 - **Phase 2 (API and sync) is open (ADR-376).** Its plan is `BACKLOG.md`'s eight milestones and 32
   tasks (ADR-377); tasks 2.0.1 (the opening and the plan), 2.1.1 (the threat model and the
   API's scenarios, ADR-379; docs), 2.1.2 (the API as a process, ADR-380…385), 2.1.3 (the
@@ -194,7 +194,14 @@ of `DECISIONS.md`.
   the phone warns, asks to refresh if it has a connection, and otherwise the truck is keyed in
   by hand (Phase 3, REQ-317); certifying is done where there is signal (ADR-151). **(ADR-422):** a
   ticket locked as invoiced is on no job, and a saved setup change answers how many tickets
-  it queued and how many locked ones it left (`Outcome.queued`). **The user's word (ADR-401):
+  it queued and how many locked ones it left (`Outcome.queued`). **Task 2.4.1 (the services a
+  story still did by hand, ADR-423) is done:** `SetupStanding` (`apps/api/src/setup/`, made with
+  the database client alone) answers the setup check (`gaps`) and the sites' quantity lookup
+  (`quantityLookup`, `quantityLookupAt`) from one read-only reading of the project's setup,
+  kept nowhere; `PayItemSetup.change` (the unit, the crew-time conversion, the capture
+  settings), `ProjectSetup.changeWindow`, `SiteSetup.shape` (GeoJSON, the next version) and a
+  site's GPS on `SiteSetup.change` each queue the tickets they move; **no story writes a setup
+  change by hand any more.** No endpoint yet (2.4.2). What it leaves: BACKLOG C97. **The user's word (ADR-401):
   sign-in follows NIST SP 800-63B and ASVS Level 2; when a direction in security is suggested,
   say what the standard asks before building it** (ADR-400 was built first and withdrawn). **Each service login (`adms_api`, `adms_worker`, `adms_readonly`) is
   under a statement timeout**, the policy value `STATEMENT_TIMEOUT_MS` (30,000 ms), set by
@@ -223,8 +230,8 @@ of `DECISIONS.md`.
   `installationPolicy({ … })`.
 - **Phase 1 is done:** all seven exit criteria met (ADR-371, 372); 693 of the 708 scenarios with a
   Phase 1 part proven whole, 15 in part. 48 scenario rows name Phase 2 (37 as "API (Phase 2)").
-- **The chain, seen whole on 2026-10-07:** 108 test
-  files, 2,191 tests; lint clean; 421 licences allowed; seventeen stories; `pnpm security` 7 passed,
+- **The chain, seen whole on 2026-10-08:** 108 test
+  files, 2,191 tests; lint clean; 421 licences allowed; seventeen stories (`p1-left-out` 31 checks); `pnpm security` 7 passed,
   0 failed; eighty-nine migrations; `installer:check` 27 `✓`. The expected output of each command is `adms-verify`'s.
 - **What exists:** `packages/db` (schema, guards, tests), `packages/domain` (every rule; one
   dependency, no database), `packages/contracts`, `packages/scenarios` (the harness and stories,
@@ -382,17 +389,19 @@ questions.
 **Phase 2 is open (ADR-376). Its plan is `BACKLOG.md`, "Active — Phase 2" (ADR-377): read its
 brief first. One task per response.**
 
-**Task 2.4.1, the services Phase 1 left to a story's hand** *(BACKLOG has the task in full;
-REQ-207)*. Read first: BACKLOG **C74, C83, C96** (each new setup service queues its tickets
-through `QueueingService.setupChanged`, and is made with `(db, clock, policy)`; `PayItemSetup.rate`
-exists since ADR-420); ADR-229, 243, 357 (the setup check, a site's quantity lookup);
-`apps/api/src/setup/`; `packages/domain/src/setup-check.ts`, `quantity-lookup.ts`;
-`spec/acceptance/01-setup.md` for the scenarios each service answers. **Done when:** the setup
-check and a site's quantity lookup are services in `apps/api`; a pay item's unit, a project's
-active window and a site's own shape each have a service that queues the tickets it moves; the
-stories that wrote these as the person call the service instead; and the chain is green with
-the new counts. **After a change to `apps/api` or `apps/worker`, `pnpm local:up` again.**
-**Next after it: 2.4.2.**
+**Task 2.4.2, setup's endpoints** *(BACKLOG has the task in full; REQ-201 in part)*. Read
+first: BACKLOG **C86** (the recipe for adding an endpoint), **C92** (roles, the `SETUP`
+permission, how a test tries each caller; its line headed 2.4.1 is this task's), **C96, C97**
+(a queueing service is made with `(db, clock, policy)`, `SetupStanding` with the database
+alone; what `PayItemSetup.change` leaves to decide; refusals the database throws answered
+plainly), C60; `apps/api/src/setup/`, `apps/api/src/people/` for a served service's shape;
+`packages/contracts`; `spec/acceptance/01-setup.md` and `10-api-and-sync.md`. **Done when:**
+each `setup/` service is behind its request, schema, role and grant, defined in
+`packages/contracts`; a refusal is answered in the domain's own words and a database
+constraint's plainly, never as an internal error; `pnpm openapi` is current; and the chain is
+green with the new counts. **It is a large task: say at the start how it is cut if it won't
+fit one response.** **After a change to `apps/api` or `apps/worker`, `pnpm local:up` again.**
+**Next after it: 2.4.3.**
 
 **Every command starts with** `eval "$(fnm env --shell zsh)"`. The checks are `adms-verify`'s; the
 database tests, the map servers' tests, the stories and `pnpm security` need `pnpm local:up` first,

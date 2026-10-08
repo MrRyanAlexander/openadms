@@ -534,12 +534,14 @@ export const p1Priced: Story = {
       }),
     );
     const rateTo = (rate: string) =>
-      api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
-        const held = await tx.payItemRate.findFirstOrThrow({
-          where: { payItemId: pricing.payItems['VEG-HAUL-CY-15'] ?? '', primeId: coastline },
-        });
-        await tx.payItemRate.update({ where: { id: held.id }, data: { rate } });
-      });
+      saved(
+        new PayItemSetup(api, clock, story.policy).rate(
+          dana,
+          pricing.payItems['VEG-HAUL-CY-15'] ?? '',
+          coastline,
+          rate,
+        ),
+      );
     const beforeRate = await lines();
     await rateTo('7.75');
     const rated = await reconciliation.run(setupChange);
@@ -718,11 +720,7 @@ export const p1Priced: Story = {
     );
     const veg15 = pricing.payItems['VEG-HAUL-CY-15'] ?? '';
     const payItemsBefore = await api.payItem.count({ where: { projectId: p1 } });
-    await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, (tx) =>
-      tx.payItemRate.create({
-        data: { projectId: p1, payItemId: veg15, primeId: summit, rate: '7.80' },
-      }),
-    );
+    await saved(new PayItemSetup(api, clock, story.policy).rate(dana, veg15, summit, '7.80'));
     const kept = await saved(
       new PayItemSetup(api, clock, story.policy).paysWhen(dana, veg15, [
         {
