@@ -31,6 +31,16 @@ import { apiMasterPasscode, apiPhones } from '../dispatch/phones.controller.ts';
 import { Phones } from '../dispatch/phones.ts';
 import { apiPeople } from '../people/people.controller.ts';
 import { People } from '../people/people.ts';
+import { Acceptances } from '../review/acceptances.ts';
+import { InvoiceLocks } from '../review/invoice-locks.ts';
+import { QcMarks } from '../review/qc-marks.ts';
+import {
+  apiAcceptances,
+  apiInvoiceLocks,
+  apiQcMarks,
+  apiVoids,
+} from '../review/review-marks.controller.ts';
+import { Voids } from '../review/voids.ts';
 import { apiContractorSetup } from '../setup/contractor-setup.controller.ts';
 import { ContractorSetup } from '../setup/contractor-setup.ts';
 import { apiFormSetup } from '../setup/form-setup.controller.ts';
@@ -223,6 +233,11 @@ export class ApiProcess {
           // Dispatch and phones (task 2.4.3).
           [apiPhones, new Phones(database, clock)],
           [apiAssignments, new Assignments(database, clock)],
+          // Review's marks (task 2.4.4): each queues the run its action needs.
+          [apiVoids, new Voids(database, clock, policy)],
+          [apiAcceptances, new Acceptances(database, clock, policy)],
+          [apiQcMarks, new QcMarks(database, clock, policy)],
+          [apiInvoiceLocks, new InvoiceLocks(database, clock, policy)],
           [
             apiMasterPasscode,
             new MasterPasscode(database, {

@@ -145,6 +145,14 @@ const words: Readonly<Record<string, string>> = {
     'Not saved: an assignment names the unit rate pay items of its own project.',
   assignment_pay_item_project_id_pay_item_id_kind_of_work_id_fkey:
     'Not saved: an assignment names the unit rate pay items of its own project.',
+  // Review's marks (task 2.4.4, part 1). The service asks each of these first: the database
+  // answers only where two people act at the same moment, or the project isn't on record.
+  ticket_void_voided_once: 'Not saved: the ticket is already void.',
+  flag_acceptance_flag_id_key: 'Not saved: the flag is already accepted.',
+  invoice_lock_load_locked_once: 'Not saved: the ticket is already locked as invoiced.',
+  invoice_lock_haul_out_locked_once: 'Not saved: the ticket is already locked as invoiced.',
+  invoice_lock_unit_rate_ticket_locked_once: 'Not saved: the ticket is already locked as invoiced.',
+  invoice_batch_project_id_fkey: 'Not saved: the project an invoice batch is for isn’t on record.',
 };
 
 const notFound: DatabaseRefusal = {

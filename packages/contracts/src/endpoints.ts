@@ -14,6 +14,7 @@ import {
   numberSeries,
   permissions,
   phoneRemovals,
+  qcStatuses,
   ruleActionKinds,
   ruleCriterionKeys,
   ruleOperators,
@@ -41,6 +42,14 @@ import {
   twoStepSetupAnswerSchema,
 } from './api-answers.ts';
 import { formDefinitionFields } from './form-definition.ts';
+import {
+  flagAcceptanceRecordSchema,
+  invoiceBatchRecordSchema,
+  invoiceLockRecordSchema,
+  qcMarkRecordSchema,
+  ticketUnvoidRecordSchema,
+  ticketVoidRecordSchema,
+} from './review-answers.ts';
 import {
   billingUnits,
   clientRecordSchema,
@@ -1412,6 +1421,153 @@ export const withdrawAssignmentEndpoint = endpoint({
   answer: savedAnswer(assignmentRecordSchema),
 });
 
+// Review's marks (spec/parts/08-review-and-corrections.md steps 5…7; spec/parts/09, invoicing;
+// AC-02-12; AC-08-05; AC-09-18; AC-10-27, 28; BACKLOG 2.4.4, C78…C81, C92; ADR-050, 107, 166, 228,
+// 364…367, 430): a ticket voided and unvoided, a flag accepted, a QC status set, an invoice batch
+// named, a ticket locked as invoiced, put in a batch and unlocked. **Each takes its own
+// permission**: open to an admin, and to a manager/analyst who holds that one now; the service
+// asks again inside its own piece of work. None of them writes a status, a flag or a line: a
+// void, an unvoid, an acceptance and an unlock queue the run that does, and the answer says how
+// many tickets it queued. What may be voided, accepted or locked is the domain's to say, answered
+// `NOT_SAVED` with the rule's code and its plain words; the limits here only bound what is read.
+const reviewer = { access: 'SIGNED_IN', roles: backOfficeRoles } as const;
+// Why, in the reviewer's own words: kept on the mark, and beside the change in the audit log.
+const reviewNote = z.string().trim().min(1).max(500).optional();
+// A ticket as the worker groups one, in the path's project: its workflow and its bare number,
+// never a split's suffix (ADR-062).
+const ticketNamed = {
+  workflow: z.enum(workflows),
+  ticketNumber: z.string().trim().min(1).max(40),
+};
+// A ticket as QC and a lock name one: a load's or a haul-out's completed record (a split as
+// one), or a unit rate ticket by its field event; never a load's single field event (ADR-168).
+const ticketMarked = z.union([
+  z.strictObject({ completedLoadId: z.uuid() }),
+  z.strictObject({ completedHaulOutId: z.uuid() }),
+  z.strictObject({ unitRateTicketId: z.uuid() }),
+]);
+// What a QC status is set on: a ticket, or a record QC'd on its own.
+const qcMarked = z.union([
+  ...ticketMarked.options,
+  z.strictObject({ certificationId: z.uuid() }),
+  z.strictObject({ roeId: z.uuid() }),
+  z.strictObject({ surveyId: z.uuid() }),
+  z.strictObject({ incidentId: z.uuid() }),
+  z.strictObject({ dropOffLogId: z.uuid() }),
+]);
+
+// The work never happened (ADR-028): a reason picked from the ones the firm offers for voiding.
+export const voidTicketEndpoint = endpoint({
+  name: 'voidTicket',
+  summary:
+    'A ticket is voided, with a reason picked from the firm’s list and the reviewer’s own note. Nothing asks whether the choice is right. Refused for a number no field event of the project is under, a ticket already void, a reason the firm doesn’t offer for voiding and a ticket locked as invoiced.',
+  ...reviewer,
+  permission: 'VOID',
+  method: 'POST',
+  path: '/projects/:projectId/ticket-voids',
+  params: projectId,
+  body: z.strictObject({ ...ticketNamed, reasonId: z.uuid(), note: reviewNote }),
+  answer: savedAnswer(ticketVoidRecordSchema),
+});
+
+// The override, with a record of its own whoever or whatever voided the ticket (ADR-366); a rule
+// whose Void ticket still passes voids it again on the run (ADR-167).
+export const unvoidTicketEndpoint = endpoint({
+  name: 'unvoidTicket',
+  summary:
+    'A void ticket is unvoided: the unvoid is a record of its own, and a person’s void is kept, marked lifted. Refused for a ticket that isn’t void.',
+  ...reviewer,
+  permission: 'VOID',
+  method: 'POST',
+  path: '/projects/:projectId/ticket-unvoids',
+  params: projectId,
+  body: z.strictObject({ ...ticketNamed, note: reviewNote }),
+  answer: savedAnswer(ticketUnvoidRecordSchema),
+});
+
+// A flag that is right as it is (ADR-166): any that stands, a ticket's or one on a
+// certification, a site or a survey, once.
+export const acceptFlagEndpoint = endpoint({
+  name: 'acceptFlag',
+  summary:
+    'A flag that stands is accepted, with a reason picked from the firm’s list and the reviewer’s own note. Refused for a flag the worker has cleared, one already accepted, a reason the firm doesn’t offer for accepting a flag and a ticket locked as invoiced.',
+  ...reviewer,
+  permission: 'ACCEPT_FLAG',
+  method: 'POST',
+  path: '/flags/:flagId/acceptances',
+  params: z.strictObject({ flagId: z.uuid() }),
+  body: z.strictObject({ reasonId: z.uuid(), note: reviewNote }),
+  answer: savedAnswer(flagAcceptanceRecordSchema),
+});
+
+// A record has one QC mark, so the status is put: set again, it is the same mark changed, the
+// status before kept in the audit log (ADR-107). It changes nothing on the record and queues
+// nothing.
+export const setQcStatusEndpoint = endpoint({
+  name: 'setQcStatus',
+  summary:
+    'The QC status of a completed load or haul-out, a unit rate ticket, a certification, an ROE, a survey, an incident or a drop-off log is set. Refused for a load’s or a haul-out’s single field event and for a ticket locked as invoiced.',
+  ...reviewer,
+  permission: 'QC',
+  method: 'PUT',
+  path: '/qc-marks',
+  body: z.strictObject({ record: qcMarked, status: z.enum(qcStatuses), note: reviewNote }),
+  answer: savedAnswer(qcMarkRecordSchema),
+});
+
+// "Invoicing" is a person locking tickets, optionally in a named batch (ADR-057, 228): there is
+// no invoice record and no amount.
+export const createInvoiceBatchEndpoint = endpoint({
+  name: 'createInvoiceBatch',
+  summary:
+    'An invoice batch is named on a project. Refused for a name another batch of the project has.',
+  ...reviewer,
+  permission: 'LOCK_INVOICED',
+  method: 'POST',
+  path: '/projects/:projectId/invoice-batches',
+  params: projectId,
+  body: z.strictObject({ name: named }),
+  answer: savedAnswer(invoiceBatchRecordSchema),
+});
+
+export const lockAsInvoicedEndpoint = endpoint({
+  name: 'lockAsInvoiced',
+  summary:
+    'A ticket is locked as invoiced, in a batch of its project where one is named. Refused for a ticket that isn’t whole, COMPLETED and QC Approved, one already locked and a batch of another project.',
+  ...reviewer,
+  permission: 'LOCK_INVOICED',
+  method: 'POST',
+  path: '/invoice-locks',
+  body: z.strictObject({ ticket: ticketMarked, invoiceBatchId: z.uuid().optional() }),
+  answer: savedAnswer(invoiceLockRecordSchema),
+});
+
+// The batch of a ticket's lock in force, put: another batch of its project, or none.
+export const setLockBatchEndpoint = endpoint({
+  name: 'setLockBatch',
+  summary:
+    'A locked ticket is put in an invoice batch of its project, moved to another or taken out of one. Refused for a ticket that isn’t locked and a batch of another project.',
+  ...reviewer,
+  permission: 'LOCK_INVOICED',
+  method: 'PUT',
+  path: '/invoice-locks/batch',
+  body: z.strictObject({ ticket: ticketMarked, invoiceBatchId: z.uuid().nullable() }),
+  answer: savedAnswer(invoiceLockRecordSchema),
+});
+
+// A grant of its own (AC-09-18): the lock's row is kept and says who unlocked it, when and why.
+export const unlockInvoicedEndpoint = endpoint({
+  name: 'unlockInvoiced',
+  summary:
+    'A ticket locked as invoiced is unlocked, and queued to be worked again as the setup now stands. Refused for a ticket that isn’t locked.',
+  ...reviewer,
+  permission: 'UNLOCK_INVOICED',
+  method: 'POST',
+  path: '/invoice-unlocks',
+  body: z.strictObject({ ticket: ticketMarked, note: reviewNote }),
+  answer: savedAnswer(invoiceLockRecordSchema),
+});
+
 export const endpoints: readonly Endpoint[] = [
   healthEndpoint,
   requestPasswordResetEndpoint,
@@ -1479,4 +1635,12 @@ export const endpoints: readonly Endpoint[] = [
   writeAssignmentEndpoint,
   changeAssignmentEndpoint,
   withdrawAssignmentEndpoint,
+  voidTicketEndpoint,
+  unvoidTicketEndpoint,
+  acceptFlagEndpoint,
+  setQcStatusEndpoint,
+  createInvoiceBatchEndpoint,
+  lockAsInvoicedEndpoint,
+  setLockBatchEndpoint,
+  unlockInvoicedEndpoint,
 ];
