@@ -89,7 +89,7 @@ describe('the dev stack’s accounts', () => {
         });
         await tx.userCredential.update({
           where: { userId: dana.id },
-          data: { failedSignIns: 10, twoStepLastStep: 58677600, passwordChangeRequired: true },
+          data: { failedSignIns: 50, twoStepLastStep: 58677600, passwordChangeRequired: true },
         });
         await accounts.writeIn(tx, actorId);
         for (const account of devAccounts) {

@@ -23,6 +23,7 @@ import {
   type Served,
   type Signed,
 } from './support/served.ts';
+import { shippedPolicy } from './support/process.ts';
 import { Outbox, signInOn } from './support/sign-in.ts';
 
 const codes = new OneTimeCodes();
@@ -142,7 +143,10 @@ describe('the second step at sign-in', () => {
 
   it('wrong codes lock the login as wrong passwords do: after the policy’s count the right code is refused too', async () => {
     await world(async (served, tx, { dana }) => {
-      await tx.userCredential.update({ where: { userId: dana }, data: { failedSignIns: 9 } });
+      await tx.userCredential.update({
+        where: { userId: dana },
+        data: { failedSignIns: shippedPolicy.signInTriesBeforeLock - 1 },
+      });
       const right = (): string => codes.codeAt(danasSecret, served.step());
       const not = right() === '000000' ? '000001' : '000000';
       expect(told(await served.signIn(danasEmail, long, not))).toEqual([401, 'SIGN_IN_REFUSED']);

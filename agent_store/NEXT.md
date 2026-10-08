@@ -89,7 +89,7 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-07, through ADR-416)
+### Where things stand (2026-10-07, through ADR-417)
 - **Phase 2 (API and sync) is open (ADR-376).** Its plan is `BACKLOG.md`'s eight milestones and 32
   tasks (ADR-377); tasks 2.0.1 (the opening and the plan), 2.1.1 (the threat model and the
   API's scenarios, ADR-379; docs), 2.1.2 (the API as a process, ADR-380…385), 2.1.3 (the
@@ -116,7 +116,7 @@ of `DECISIONS.md`.
   before the schemas read anything; a call that isn't a GET carries the session's CSRF value
   in `x-adms-csrf`. A session ends after 30 quiet minutes and 12 hours at most. Wrong tries
   are counted on `user_credential` (the domain's `SignInTries`): a wait from the 5th in a row,
-  a lock at the 10th until the password is set anew; each a security event, written with the
+  a lock at the 50th (ADR-417, the user's decision; the 10th before) until the password is set anew; each a security event, written with the
   person whose login was tried as its actor; a name nobody has writes nothing. A password an
   admin set is changed by its owner first (`passwordChangeRequired`); a new password ends the
   person's sessions; the password hash is keyed from `ADMS_TOKEN_SIGNING_SECRET`. A monitor
@@ -153,7 +153,8 @@ of `DECISIONS.md`.
   policy values; the counts in the API's own memory (gone at a restart, per process), never
   the database; a caller's address taken from a proxy only where `ADMS_TRUSTED_PROXIES` lists
   it (the local stack's Caddy is `172.30.213.2` on a network of fixed addresses); no address
-  logged or stored. What it leaves: BACKLOG C93. **Milestone 2.2 is complete.** **The user's word (ADR-401):
+  logged or stored. **The user confirmed its defaults and put the lock at fifty wrong tries
+  (ADR-417).** What it leaves: BACKLOG C93. **Milestone 2.2 is complete.** **The user's word (ADR-401):
   sign-in follows NIST SP 800-63B and ASVS Level 2; when a direction in security is suggested,
   say what the standard asks before building it** (ADR-400 was built first and withdrawn). **Each service login (`adms_api`, `adms_worker`, `adms_readonly`) is
   under a statement timeout**, the policy value `STATEMENT_TIMEOUT_MS` (30,000 ms), set by
@@ -183,7 +184,7 @@ of `DECISIONS.md`.
 - **Phase 1 is done:** all seven exit criteria met (ADR-371, 372); 693 of the 708 scenarios with a
   Phase 1 part proven whole, 15 in part. 48 scenario rows name Phase 2 (37 as "API (Phase 2)").
 - **The chain, seen whole on 2026-10-07:** 103 test
-  files, 2,134 tests; lint clean; 421 licences allowed; sixteen stories; `pnpm security` 7 passed,
+  files, 2,135 tests; lint clean; 421 licences allowed; sixteen stories; `pnpm security` 7 passed,
   0 failed; eighty-seven migrations. The expected output of each command is `adms-verify`'s.
 - **What exists:** `packages/db` (schema, guards, tests), `packages/domain` (every rule; one
   dependency, no database), `packages/contracts`, `packages/scenarios` (the harness and stories,

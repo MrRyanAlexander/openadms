@@ -22,6 +22,7 @@ import {
   wrong,
   type Answer,
 } from './support/served.ts';
+import { shippedPolicy } from './support/process.ts';
 import { NoServer, Outbox, signInOn } from './support/sign-in.ts';
 
 const keptOut = '[kept out of the audit]';
@@ -465,26 +466,29 @@ describe('wrong tries at a login', () => {
   it('AC-10-18 after the policy’s count the login is locked, the right password refused too, until his password is set anew; AC-10-19 each failure and the lockout is a security event', async () => {
     const outbox = new Outbox();
     await world(async (served, tx, { dana, luis }, within) => {
-      // Nine wrong tries in a row already, the last wait over.
-      await tx.userCredential.update({ where: { userId: luis }, data: { failedSignIns: 9 } });
-      const tenth = await served.signIn(luissEmail, wrong);
-      refused401(tenth, 'SIGN_IN_REFUSED');
+      // One wrong try short of the policy's count already (49 in a row), the last wait over.
+      await tx.userCredential.update({
+        where: { userId: luis },
+        data: { failedSignIns: shippedPolicy.signInTriesBeforeLock - 1 },
+      });
+      const last = await served.signIn(luissEmail, wrong);
+      refused401(last, 'SIGN_IN_REFUSED');
       expect(await events(tx, luis)).toMatchObject([
         {
           kind: 'SIGN_IN_FAILED',
           userId: luis,
-          requestId: tenth.requestId,
+          requestId: last.requestId,
           occurredAt: served.clock.now(),
         },
         {
           kind: 'LOCKOUT',
           userId: luis,
-          requestId: tenth.requestId,
+          requestId: last.requestId,
           occurredAt: served.clock.now(),
         },
       ]);
       const audited = await tx.auditRecord.findMany({
-        where: { tableName: 'security_event', requestId: tenth.requestId },
+        where: { tableName: 'security_event', requestId: last.requestId },
       });
       // Written for the login that was tried: nobody was signed in (ADR-409).
       expect(audited.map(({ actorId, domain, source }) => [actorId, domain, source])).toEqual([

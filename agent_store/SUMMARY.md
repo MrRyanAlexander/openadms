@@ -7,7 +7,7 @@ entries to cite. The reasons live in the ADRs and the skills.
 - **Keep it current:** when you add, amend or supersede an ADR, or open or close a KD, update this
   page **in the same response** (`adms-decisions`).
 - **If this page and a log entry disagree,** the newest ADR wins: fix this page and say so.
-- **Updated 2026-10-07, through ADR-416 / KD-74.** **Phase 2 (API and sync) is open (ADR-376);
+- **Updated 2026-10-07, through ADR-417 / KD-74.** **Phase 2 (API and sync) is open (ADR-376);
   its plan is `BACKLOG.md`'s eight milestones and 32 tasks (ADR-377). Tasks 2.1.1 (ADR-379) and
   2.1.2 (ADR-380…385) are done: the API runs as a process, reached only at
   `https://api.adms.localhost` through Caddy, with a health answer and nothing else yet. Task
@@ -563,7 +563,7 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   at once for a person archived. **Wrong tries** (the domain's `SignInTries`): counted on
   `user_credential.failed_sign_ins`; from `SIGN_IN_TRIES_BEFORE_WAIT` (5) each puts a wait on
   the login (`locked_until`: `SIGN_IN_FIRST_WAIT_SECONDS`, 30, doubling, at most
-  `SIGN_IN_LONGEST_WAIT_MINUTES`, 60); at `SIGN_IN_TRIES_BEFORE_LOCK` (10; never over 100)
+  `SIGN_IN_LONGEST_WAIT_MINUTES`, 60); at `SIGN_IN_TRIES_BEFORE_LOCK` (**50** since ADR-417, the user's decision; 10 before; never over 100)
   **the login is locked until its password is set anew** (a reset by email, or an admin),
   never by time; while it waits or is locked the right password is refused too and **nothing
   is written**. **Every failed sign-in is told `SIGN_IN_REFUSED` and nothing else**; a try at
@@ -692,8 +692,9 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   stopped by a limit never reaches the login**: it is no wrong try, writes nothing, and the
   right password from there is told the same; the owner signs in from any other address; a
   sign-in that works from the address, or the password set anew, starts that count again.
-  **Narrowed, not closed:** one address coming back each hour still reaches a login's lock in
-  the third hour (about sixteen minutes before), unless the owner signs in between. **The
+  **With the lock at fifty wrong tries (ADR-417, the user's decision)** one address needs about
+  forty hours of steady trying to lock a login, and any sign-in by the owner starts the count
+  again. **The
   counts are in the API's own memory, never the database** (ADR-401 (3)): they start again
   with the process, each process keeps its own, and past `RATE_LIMIT_COUNTS_KEPT` (100,000)
   the oldest goes. **A caller's address** is the one that connected unless a proxy listed in
@@ -1824,17 +1825,14 @@ its scenario.
 
 ## 4. Waiting on the user
 
-**Live today (2026-10-07, ADR-376…416):**
+**Live today (2026-10-07, ADR-376…417):**
 - **Nothing blocks the next task** (2.3.1, the job queue).
-- **Agent defaults of 2.2.6 to confirm or overturn (ADR-416):** (a) **the numbers**: 3,000
-  requests a minute from one address, 600 from one signed-in person; in an hour, 30 refused
-  tries from one address, 4 at one login, 10 resets asked by one address, 3 for one login; (b)
-  **after four wrong tries at one login from one address, that address waits out the hour for
-  that login** (or the owner resets the password, which opens it at once), where before the
-  fifth wrong try only cost 30 seconds; (c) the counts are in the API's memory, so a restart
-  clears them; (d) **no caller's address is logged or stored**, so a firm sees who is flooding
-  it in its proxy's log, not ours; (e) one patient address can still lock a known login over
-  about three hours: closing that means a count that fades with time, which changes ADR-409.
+- **Answered by the user 2026-10-07 (ADR-417: "Going with your recommendation here, and for
+  the rest of the flags … your recommended approach as well"), no longer waiting:** the lock
+  comes at the fiftieth wrong try in a row, not the tenth; and the agent defaults of task 2.2.6
+  stand (the limits' numbers; four wrong tries at one login from one address closing that
+  address for the hour; the counts in the API's memory; no caller's address logged or stored).
+  Not done, by the same word: a count that fades with time, a memory of known addresses.
 - **Agent defaults of 2.2.5 to confirm or overturn (ADR-415):** (a) **only an admin** creates
   people, gives and takes permissions and a viewer's projects, sets another's password, ends
   sessions and archives: there is no "manage people" permission a manager/analyst could hold;
@@ -1849,7 +1847,7 @@ its scenario.
 - **Settled at the user's word, 2026-10-07 (ADR-413: "as it relates to the previous task FLAGS,
   Im going with your recommendations"), no longer waiting:** the agent defaults of task 2.2.3
   (the email address; 30 quiet minutes, 12 hours, 5 minutes; a wait after 5 wrong tries and a
-  lock at the 10th until the password is set anew; one answer to every failed sign-in; the
+  lock at the 10th (the 50th since ADR-417) until the password is set anew; one answer to every failed sign-in; the
   actor of a wrong try; a new password ending sessions; two tabs), and **the server command
   that sets an admin's password for a firm's locked last admin, which task 2.2.5 builds**.
   Before it, ADR-407 settled tasks 2.1.2…2.2.2's.
@@ -1860,7 +1858,7 @@ its scenario.
   approach (an authenticator app's code) confirmed for the product's level, with a passkey or
   hardware key a later candidate (BACKLOG C91), never assumed.
 - **Agent defaults of 2.2.4 still yours to overturn (ADR-412):** a right password without a
-  code is told "a code is needed"; a wrong code counts as a wrong try and locks at the 10th; an
+  code is told "a code is needed"; a wrong code counts as a wrong try and locks at the policy's count (the 50th, ADR-417); an
   admin never clears their own authenticator; setting one up ends the person's other sessions
   and must be finished within ten minutes; the dev accounts' names and `pnpm local:accounts`.
 - **Phase 2's exit criteria and its plan are agent defaults (ADR-376, 377)**, the user's to change:

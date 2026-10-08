@@ -23,7 +23,7 @@ const shipped = {
   SESSION_INACTIVITY_MINUTES: '30',
   SESSION_OVERALL_HOURS: '12',
   SIGN_IN_TRIES_BEFORE_WAIT: '5',
-  SIGN_IN_TRIES_BEFORE_LOCK: '10',
+  SIGN_IN_TRIES_BEFORE_LOCK: '50',
   SIGN_IN_FIRST_WAIT_SECONDS: '30',
   SIGN_IN_LONGEST_WAIT_MINUTES: '60',
   TWO_STEP_CODE_STEPS_EITHER_SIDE: '1',
@@ -56,9 +56,18 @@ describe('wrong tries at a login', () => {
     );
   });
 
-  it('AC-10-18 the tenth locks the login, and so would any after it', () => {
-    for (const count of [10, 11, 100]) expect(tries.after(count, now)).toEqual({ kind: 'LOCKED' });
-    expect([9, 10, 11].map((count) => tries.locked(count))).toEqual([false, true, true]);
+  it('AC-10-18 from the twelfth the wait is the policy’s longest, an hour, and stays there until the lock', () => {
+    expect([10, 11].map((count) => tries.after(count, now))).toEqual(
+      [960, 1920].map((seconds) => ({ kind: 'WAIT', until: inSeconds(seconds) })),
+    );
+    for (const count of [12, 13, 30, 49]) {
+      expect(tries.after(count, now)).toEqual({ kind: 'WAIT', until: inSeconds(3600) });
+    }
+  });
+
+  it('AC-10-18 the fiftieth locks the login, and so would any after it (ADR-417)', () => {
+    for (const count of [50, 51, 100]) expect(tries.after(count, now)).toEqual({ kind: 'LOCKED' });
+    expect([49, 50, 51].map((count) => tries.locked(count))).toEqual([false, true, true]);
   });
 
   it('AC-10-18 a login may not be tried while it waits or once it is locked; a wait that is over closes nothing', () => {
@@ -68,8 +77,10 @@ describe('wrong tries at a login', () => {
     expect(tries.closed(4, null, now)).toBe(false);
     expect(tries.closed(0, null, now)).toBe(false);
     // Locked, whatever its wait was: it opens only when its password is set anew.
-    expect(tries.closed(10, null, now)).toBe(true);
-    expect(tries.closed(10, inSeconds(-3600), now)).toBe(true);
+    expect(tries.closed(50, null, now)).toBe(true);
+    expect(tries.closed(50, inSeconds(-3600), now)).toBe(true);
+    // Short of the lock, a wait that is over closes nothing, however many tries came before.
+    expect(tries.closed(49, inSeconds(-1), now)).toBe(false);
   });
 
   it('a wait is never over the policy’s longest, however late the firm puts the lock', () => {
@@ -122,14 +133,14 @@ describe('the policy values of sign-in and sessions', () => {
     ).not.toThrow();
   });
 
-  it('AC-10-18 a wait after 5 wrong tries and a lock after 10, unless changed: a lock never later than the standard’s hundred, and never before the first wait', () => {
+  it('AC-10-18 a wait after 5 wrong tries and a lock after 50, unless changed: a lock never later than the standard’s hundred, and never before the first wait', () => {
     const policy = Policy.from(shipped);
     expect([
       policy.signInTriesBeforeWait,
       policy.signInTriesBeforeLock,
       policy.signInFirstWaitSeconds,
       policy.signInLongestWaitMinutes,
-    ]).toEqual([5, 10, 30, 60]);
+    ]).toEqual([5, 50, 30, 60]);
     for (const written of ['0', '100'])
       refused('SIGN_IN_TRIES_BEFORE_WAIT', written, 'from 1 to 99');
     for (const written of ['1', '101'])
