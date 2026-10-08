@@ -76,6 +76,34 @@ export class Access {
   }
 }
 
+// Who may change the firm's setup (ARCHITECTURE §6, Authorization; ADR-050, 316, 424): an admin, or
+// a manager/analyst who holds the permission Setup now; nobody else. A setup service asks this
+// inside its own piece of work, before anything is changed, whatever the door already asked.
+export interface SetupRightsRefusal {
+  readonly code: 'NOT_ALLOWED';
+  readonly message: string;
+}
+
+export class SetupRights {
+  private readonly name: string;
+  private readonly access: Access | null;
+
+  // `person`: whoever asks, as the database has them now; null where it has nobody of that id.
+  constructor(person: (Holder & { readonly name: string }) | null) {
+    this.name = person?.name ?? 'Somebody the firm has no record of';
+    this.access = person === null ? null : new Access(person);
+  }
+
+  // Why this person may not change the setup, or nothing.
+  refusal(): SetupRightsRefusal | null {
+    if (this.access?.holds('SETUP') === true) return null;
+    return {
+      code: 'NOT_ALLOWED',
+      message: `${this.name} may not change the setup: it takes an admin, or a manager/analyst granted "setup". Nothing was changed.`,
+    };
+  }
+}
+
 export type PeopleRefusalCode =
   'NOT_ALLOWED' | 'NOT_A_MANAGER_ANALYST' | 'NOT_A_VIEWER' | 'LAST_ADMIN';
 

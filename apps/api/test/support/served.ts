@@ -186,7 +186,7 @@ export class Served {
   }
 
   async ask(
-    method: 'GET' | 'POST' | 'PUT',
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH',
     url: string,
     more: { cookies?: Cookies; csrf?: string; payload?: object } = {},
   ): Promise<Answer> {

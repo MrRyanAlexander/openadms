@@ -89,7 +89,7 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-08, through ADR-423)
+### Where things stand (2026-10-08, through ADR-424)
 - **Phase 2 (API and sync) is open (ADR-376).** Its plan is `BACKLOG.md`'s eight milestones and 32
   tasks (ADR-377); tasks 2.0.1 (the opening and the plan), 2.1.1 (the threat model and the
   API's scenarios, ADR-379; docs), 2.1.2 (the API as a process, ADR-380…385), 2.1.3 (the
@@ -201,7 +201,7 @@ of `DECISIONS.md`.
   kept nowhere; `PayItemSetup.change` (the unit, the crew-time conversion, the capture
   settings), `ProjectSetup.changeWindow`, `SiteSetup.shape` (GeoJSON, the next version) and a
   site's GPS on `SiteSetup.change` each queue the tickets they move; **no story writes a setup
-  change by hand any more.** No endpoint yet (2.4.2). What it leaves: BACKLOG C97. **The user's word (ADR-401):
+  change by hand any more.** What it leaves: BACKLOG C97. **Task 2.4.2 (setup's endpoints) is in four parts (ADR-424), and part 1 is done:** every setup endpoint takes the permission `SETUP` at the door, and every setup service asks again inside its own piece of work (`SetupService.setup`, the domain's `SetupRights`); a setting the domain refuses is answered `NOT_SAVED` with the rule's code (`reason`) and words; **what the database's own constraints refuse is answered plainly by the error filter, for every endpoint** (`process/database-refusal.ts`: 409 `ALREADY_HELD`, 422 `UNKNOWN_RECORD` and `REFUSED_BY_THE_DATABASE`, 404 `NOT_FOUND`), never as an internal error; eighteen requests serve the client, the declaration event, the project (its settings, window, close, number series, control ranges, field tags), contractors, primes, contracts and the two lists. Parts 2 to 4 are to come. What it leaves: BACKLOG C98. **The user's word (ADR-401):
   sign-in follows NIST SP 800-63B and ASVS Level 2; when a direction in security is suggested,
   say what the standard asks before building it** (ADR-400 was built first and withdrawn). **Each service login (`adms_api`, `adms_worker`, `adms_readonly`) is
   under a statement timeout**, the policy value `STATEMENT_TIMEOUT_MS` (30,000 ms), set by
@@ -230,8 +230,8 @@ of `DECISIONS.md`.
   `installationPolicy({ … })`.
 - **Phase 1 is done:** all seven exit criteria met (ADR-371, 372); 693 of the 708 scenarios with a
   Phase 1 part proven whole, 15 in part. 48 scenario rows name Phase 2 (37 as "API (Phase 2)").
-- **The chain, seen whole on 2026-10-08:** 108 test
-  files, 2,191 tests; lint clean; 421 licences allowed; seventeen stories (`p1-left-out` 31 checks); `pnpm security` 7 passed,
+- **The chain, seen whole on 2026-10-08 (ADR-424):** 110 test
+  files, 2,211 tests; lint clean; 421 licences allowed; seventeen stories (`p1-left-out` 31 checks); `pnpm security` 7 passed,
   0 failed; eighty-nine migrations; `installer:check` 27 `✓`. The expected output of each command is `adms-verify`'s.
 - **What exists:** `packages/db` (schema, guards, tests), `packages/domain` (every rule; one
   dependency, no database), `packages/contracts`, `packages/scenarios` (the harness and stories,
@@ -389,19 +389,20 @@ questions.
 **Phase 2 is open (ADR-376). Its plan is `BACKLOG.md`, "Active — Phase 2" (ADR-377): read its
 brief first. One task per response.**
 
-**Task 2.4.2, setup's endpoints** *(BACKLOG has the task in full; REQ-201 in part)*. Read
-first: BACKLOG **C86** (the recipe for adding an endpoint), **C92** (roles, the `SETUP`
-permission, how a test tries each caller; its line headed 2.4.1 is this task's), **C96, C97**
-(a queueing service is made with `(db, clock, policy)`, `SetupStanding` with the database
-alone; what `PayItemSetup.change` leaves to decide; refusals the database throws answered
-plainly), C60; `apps/api/src/setup/`, `apps/api/src/people/` for a served service's shape;
-`packages/contracts`; `spec/acceptance/01-setup.md` and `10-api-and-sync.md`. **Done when:**
-each `setup/` service is behind its request, schema, role and grant, defined in
-`packages/contracts`; a refusal is answered in the domain's own words and a database
-constraint's plainly, never as an internal error; `pnpm openapi` is current; and the chain is
-green with the new counts. **It is a large task: say at the start how it is cut if it won't
-fit one response.** **After a change to `apps/api` or `apps/worker`, `pnpm local:up` again.**
-**Next after it: 2.4.3.**
+**Task 2.4.2, setup's endpoints, part 2 of 4: forms, pay items, "Pays when" and rules**
+*(ADR-424 has the cut; part 1 is done; REQ-201 in part)*. Read first: BACKLOG **C98** (the
+recipe part 1 left: `setup` in `endpoints.ts`, `this.setup` in the service, `answered`, the
+records' shapes and mappers, the plain words for each constraint a request can reach, the door
+test's list), C97 (`PayItemSetup.change`'s open points), C96, C86, C92;
+`apps/api/src/setup/project-setup.controller.ts` and `apps/api/test/setup-endpoints.test.ts` as
+the pattern; `form-setup.ts`, `pay-item-setup.ts`, `rule-setup.ts`, `rule-book.ts`;
+`spec/RULES.md`; `spec/acceptance/01-setup.md` sections C, E and G and AC-10-38. **Done when:**
+`FormSetup`, `PayItemSetup` and `RuleSetup` are each behind their requests with `SETUP`, their
+refusals in the domain's words and the database's plainly (AC-10-38 on its own case); `pnpm
+openapi` is current; the chain is green with the new counts. **Then part 3** (sites, the map, a
+contractor merge that queues its tickets, the setup check and lookup) **and part 4** (the
+firm's people); task 2.4.2 and its BACKLOG line are ticked only after part 4. **After a change
+to `apps/api` or `apps/worker`, `pnpm local:up` again.**
 
 **Every command starts with** `eval "$(fnm env --shell zsh)"`. The checks are `adms-verify`'s; the
 database tests, the map servers' tests, the stories and `pnpm security` need `pnpm local:up` first,

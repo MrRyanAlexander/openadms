@@ -192,9 +192,16 @@ describe('permissions, read from the database on every request', () => {
       'endPersonSessions',
       'archivePerson',
     ]);
-    expect(open(backOfficeRoles)).toEqual(['readPerson']);
-    // No endpoint of the API takes a permission yet: the reviewer's are task 2.4.4's.
-    expect(endpoints.filter(({ permission }) => permission !== undefined)).toEqual([]);
+    expect(
+      signedIn
+        .filter(({ roles, permission }) => roles?.join() === backOfficeRoles.join() && !permission)
+        .map(({ name }) => name),
+    ).toEqual(['readPerson']);
+    // The only permission an endpoint takes yet is Setup (task 2.4.2; the list by name is
+    // setup-endpoints.test.ts's): the reviewer's are task 2.4.4's.
+    expect([...new Set(endpoints.flatMap(({ permission }) => permission ?? []))]).toEqual([
+      'SETUP',
+    ]);
   });
 
   it('AC-10-27 each endpoint of the firm’s people is refused to nobody, to a manager/analyst and to a read-only viewer before anything sent is read; a person is read by the back office only', async () => {

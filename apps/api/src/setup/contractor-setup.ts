@@ -163,14 +163,16 @@ export interface NewContract {
 export class ContractorSetup extends SetupService {
   // A contractor the firm already has is picked, never entered again.
   findContractors(search: string): Promise<Contractor[]> {
-    return this.db.contractor.findMany({
-      where: { name: { contains: search, mode: 'insensitive' }, archivedAt: null },
-      orderBy: { name: 'asc' },
-    });
+    return this.db.$read((tx) =>
+      tx.contractor.findMany({
+        where: { name: { contains: search, mode: 'insensitive' }, archivedAt: null },
+        orderBy: { name: 'asc' },
+      }),
+    );
   }
 
   contractor(person: string, input: NewContractor): Promise<Outcome<Contractor>> {
-    return this.write(person, (tx) =>
+    return this.setup(person, (tx) =>
       tx.contractor.create({
         data: {
           name: input.name,
@@ -188,7 +190,7 @@ export class ContractorSetup extends SetupService {
     projectId: string,
     contractorId: string,
   ): Promise<Outcome<ProjectContractor>> {
-    return this.write(person, (tx) =>
+    return this.setup(person, (tx) =>
       tx.projectContractor.create({
         data: { projectId, contractorId, position: 'PRIME', asPrimeId: contractorId },
       }),
@@ -201,7 +203,7 @@ export class ContractorSetup extends SetupService {
   // is taken off; then the duplicate is archived, pointing at the kept one. Nothing is deleted, and
   // every row changed is audited as the person (ADR-108, 321).
   merge(person: string, duplicateId: string, keptId: string): Promise<Outcome<Contractor>> {
-    return this.write(person, async (tx) => {
+    return this.setup(person, async (tx) => {
       const merge = new ContractorMerge(
         await ContractorSetup.party(tx, duplicateId),
         await ContractorSetup.party(tx, keptId),
@@ -247,7 +249,7 @@ export class ContractorSetup extends SetupService {
   }
 
   contract(person: string, input: NewContract): Promise<Outcome<Contract>> {
-    return this.write(person, (tx) =>
+    return this.setup(person, (tx) =>
       tx.contract.create({
         data: {
           projectId: input.projectId,

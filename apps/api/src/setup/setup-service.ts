@@ -6,10 +6,14 @@
 // Setup refuses only a bad setting (AC-01-80): the domain's rules say which, in plain words, and
 // the call answers with the refusal and saves nothing. A warning is saved as it is and handed
 // back. What the database's own constraints refuse (a second form of one document type, a pay
-// item code the project already has…) isn't caught here: the call throws, and nothing is saved.
-// Who may do setup (an admin, or a manager/analyst granted it) is read at sign-in, Phase 2.
+// item code the project already has…) isn't caught here: the call throws, nothing is saved, and
+// the API answers it plainly (process/database-refusal.ts).
+//
+// Who may change the setup (an admin, or a manager/analyst granted Setup) is read here, inside the
+// same piece of work and before anything is changed, whatever the door already asked (ADR-364,
+// 424): `setup` is what every setup service writes through.
 import type { Actor, Database, Prisma } from '@open-adms/db';
-import type { Policy, SetupWarning } from '@open-adms/domain';
+import { SetupRights, type Policy, type SetupWarning } from '@open-adms/domain';
 
 import { WorkQueue, type WorkAsked, type WorkQueued } from '../jobs/work-queue.ts';
 
@@ -70,6 +74,33 @@ export abstract class SetupService {
     work: (tx: Prisma.TransactionClient, warn: Warn) => Promise<T>,
   ): Promise<Outcome<T>> {
     return this.writeAs({ actorId: person, source: 'BACK_OFFICE' }, work);
+  }
+
+  // A change to the firm's setup, by a person at the back office: refused, with nothing changed,
+  // to anybody who may not make one now.
+  protected setup<T>(
+    person: string,
+    work: (tx: Prisma.TransactionClient, warn: Warn) => Promise<T>,
+  ): Promise<Outcome<T>> {
+    return this.write(person, async (tx, warn) => {
+      const user = await tx.user.findUnique({ where: { id: person } });
+      const granted =
+        user === null
+          ? []
+          : await tx.userPermission.findMany({ where: { userId: person, archivedAt: null } });
+      const refusal = new SetupRights(
+        user === null
+          ? null
+          : {
+              name: user.name,
+              role: user.role,
+              archived: user.archivedAt !== null,
+              granted: granted.map((grant) => grant.permission),
+            },
+      ).refusal();
+      if (refusal !== null) throw new Refused(refusal);
+      return work(tx, warn);
+    });
   }
 
   // The same, as whoever is stated: a monitor on a phone states the phone too (ADR-321).

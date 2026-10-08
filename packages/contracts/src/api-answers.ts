@@ -61,18 +61,30 @@ export const errorCodes = [
   'UNKNOWN_PROJECT',
   // The caller is over a rate limit (ADR-416): status 429, with how long to wait.
   'LIMITED',
+  // A setup change the domain's rules won't save (AC-01-80; ADR-424): `reason` is the rule's own
+  // code and `message` its plain words. Nothing was saved.
+  'NOT_SAVED',
+  // What the database's own constraints refused, told plainly and never as an internal error
+  // (AC-10-38; ADR-424): it already holds one; a record the request names isn't on record; a
+  // value isn't one it takes. Nothing was saved.
+  'ALREADY_HELD',
+  'UNKNOWN_RECORD',
+  'REFUSED_BY_THE_DATABASE',
 ] as const;
 
 export type ErrorCode = (typeof errorCodes)[number];
 
 // `message`: only where a rule of the domain's has plain words for the person who typed
-// something (why a password wasn't taken); never anything from inside the server.
+// something (why a password wasn't taken, why a setting wasn't saved), or the API has plain words
+// for what the database refused; never anything from inside the server.
+// `reason`: only with `NOT_SAVED`, the domain's own code for the rule that refused.
 // `retryAfterSeconds`: only with `LIMITED`, the whole seconds until the caller may ask again, as
 // the answer's `Retry-After` header says too (RFC 9110 §10.2.3).
 export const errorAnswerSchema = z.strictObject({
   code: z.enum(errorCodes),
   requestId: z.string().min(1),
   message: z.string().min(1).optional(),
+  reason: z.string().min(1).max(64).optional(),
   retryAfterSeconds: z.number().int().min(1).optional(),
 });
 

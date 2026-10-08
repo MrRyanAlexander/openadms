@@ -91,14 +91,16 @@ export interface NewMap {
 export class ProjectSetup extends QueueingService {
   // Step 1: search first; a client that exists is picked, never created again (ADR-023).
   findClients(search: string): Promise<Client[]> {
-    return this.db.client.findMany({
-      where: { name: { contains: search, mode: 'insensitive' }, archivedAt: null },
-      orderBy: { name: 'asc' },
-    });
+    return this.db.$read((tx) =>
+      tx.client.findMany({
+        where: { name: { contains: search, mode: 'insensitive' }, archivedAt: null },
+        orderBy: { name: 'asc' },
+      }),
+    );
   }
 
   client(person: string, input: NewClient): Promise<Outcome<Client>> {
-    return this.write(person, (tx) =>
+    return this.setup(person, (tx) =>
       tx.client.create({
         data: {
           name: input.name,
@@ -114,20 +116,22 @@ export class ProjectSetup extends QueueingService {
   // Step 2: by its name or its reference; one declaration event is shared by every client's
   // projects under it (ADR-026).
   findDeclarationEvents(search: string): Promise<DeclarationEvent[]> {
-    return this.db.declarationEvent.findMany({
-      where: {
-        archivedAt: null,
-        OR: [
-          { name: { contains: search, mode: 'insensitive' } },
-          { reference: { contains: search, mode: 'insensitive' } },
-        ],
-      },
-      orderBy: { name: 'asc' },
-    });
+    return this.db.$read((tx) =>
+      tx.declarationEvent.findMany({
+        where: {
+          archivedAt: null,
+          OR: [
+            { name: { contains: search, mode: 'insensitive' } },
+            { reference: { contains: search, mode: 'insensitive' } },
+          ],
+        },
+        orderBy: { name: 'asc' },
+      }),
+    );
   }
 
   declarationEvent(person: string, input: NewDeclarationEvent): Promise<Outcome<DeclarationEvent>> {
-    return this.write(person, (tx) =>
+    return this.setup(person, (tx) =>
       tx.declarationEvent.create({
         data: {
           name: input.name,
@@ -141,7 +145,7 @@ export class ProjectSetup extends QueueingService {
   // Step 3: the project, with a new project's settings, the kinds of unit rate work it allows and
   // its number series.
   project(person: string, input: NewProject): Promise<Outcome<Project>> {
-    return this.write(person, async (tx) => {
+    return this.setup(person, async (tx) => {
       const numbers = new NewProjectNumbers(input.ticketNumberSource).series(
         input.numbersFrom ?? {},
       );
@@ -183,7 +187,7 @@ export class ProjectSetup extends QueueingService {
     series: NumberSeries,
     firstNumber: number,
   ): Promise<Outcome<ProjectNumberSeries>> {
-    return this.write(person, async (tx) => {
+    return this.setup(person, async (tx) => {
       const project = await tx.project.findUniqueOrThrow({ where: { id: projectId } });
       const refusal =
         new NewProjectNumbers(project.ticketNumberSource).refusal(series) ??
@@ -199,7 +203,7 @@ export class ProjectSetup extends QueueingService {
   // (ADR-056): sent with the phones' lists. Refused when it shares a number with a range of the
   // same series already entered.
   controlRange(person: string, input: NewControlRange): Promise<Outcome<ControlRange>> {
-    return this.write(person, async (tx) => {
+    return this.setup(person, async (tx) => {
       const project = await tx.project.findUniqueOrThrow({ where: { id: input.projectId } });
       const entered = await tx.controlRange.findMany({ where: { projectId: input.projectId } });
       const refusal = new ControlRanges(
@@ -216,7 +220,7 @@ export class ProjectSetup extends QueueingService {
 
   // A range entered by mistake is taken off, never deleted.
   archiveControlRange(person: string, controlRangeId: string): Promise<Outcome<ControlRange>> {
-    return this.write(person, async (tx) => {
+    return this.setup(person, async (tx) => {
       const range = await tx.controlRange.update({
         where: { id: controlRangeId },
         data: { archivedAt: this.clock.now() },
@@ -232,7 +236,7 @@ export class ProjectSetup extends QueueingService {
     projectId: string,
     changes: Partial<ProjectSettings>,
   ): Promise<Outcome<Project>> {
-    return this.write(person, async (tx) => {
+    return this.setup(person, async (tx) => {
       const project = await tx.project.update({ where: { id: projectId }, data: changes });
       await this.setupChanged(tx, person, projectId);
       return project;
@@ -244,7 +248,7 @@ export class ProjectSetup extends QueueingService {
   // the project's un-invoiced tickets are queued. An end before the start is the database's to
   // refuse: the call throws, and nothing is saved.
   changeWindow(person: string, projectId: string, window: ActiveWindow): Promise<Outcome<Project>> {
-    return this.write(person, async (tx) => {
+    return this.setup(person, async (tx) => {
       const project = await tx.project.update({
         where: { id: projectId },
         data: {
@@ -263,14 +267,14 @@ export class ProjectSetup extends QueueingService {
   // refused over it afterwards: a late field event still comes in, and a ticket is still
   // unlocked by whoever holds the grant (invariant 1; ADR-025, 052, 367).
   close(person: string, projectId: string): Promise<Outcome<Project>> {
-    return this.write(person, (tx) =>
+    return this.setup(person, (tx) =>
       tx.project.update({ where: { id: projectId }, data: { closedAt: this.clock.now() } }),
     );
   }
 
   // A field tag: the project's own list, starting empty; added at the end of it (ADR-216).
   fieldTag(person: string, projectId: string, name: string): Promise<Outcome<FieldTag>> {
-    return this.write(person, async (tx) => {
+    return this.setup(person, async (tx) => {
       const last = await tx.fieldTag.aggregate({ where: { projectId }, _max: { position: true } });
       return tx.fieldTag.create({
         data: { projectId, name, position: (last._max.position ?? 0) + 1 },
@@ -282,7 +286,7 @@ export class ProjectSetup extends QueueingService {
   // zones stay as they were (ADR-141). The zones are written with their version, in the same piece
   // of work: the database takes them no other way. Phase 1 takes GeoJSON only (ADR-311).
   loadMap(person: string, input: NewMap): Promise<Outcome<MapVersion>> {
-    return this.write(person, async (tx) => {
+    return this.setup(person, async (tx) => {
       const boundary = new MapShapes(input.boundary).shape();
       if (boundary.read === null) throw ProjectSetup.notLoaded(boundary.problem);
       const zones =

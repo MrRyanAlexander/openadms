@@ -124,7 +124,11 @@ export const p1Reviewed: Story = {
 
     story.at(
       on('09', '09:00'),
-      'Friday: Luis Ortega sets up P2, the PPDR project: Coastline its prime, a load form with Vegetative and C&D, an ROE form, VEG-HAUL-CY at $9.00, Marsh Road TDSR entered again',
+      'Friday: Dana grants Luis Ortega Setup, and he sets up P2, the PPDR project: Coastline its prime, a load form with Vegetative and C&D, an ROE form, VEG-HAUL-CY at $9.00, Marsh Road TDSR entered again',
+    );
+    // A setup service asks whether its caller holds Setup, inside its own piece of work (ADR-424).
+    await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, (tx) =>
+      tx.userPermission.create({ data: { userId: luis, permission: 'SETUP' } }),
     );
     const p2 = await api.$write({ actorId: luis, source: 'BACK_OFFICE' }, async (tx) => {
       const first = await tx.project.findUniqueOrThrow({ where: { id: p1 } });

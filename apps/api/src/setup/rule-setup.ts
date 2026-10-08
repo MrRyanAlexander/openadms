@@ -34,7 +34,7 @@ export interface SavedRule {
 // same piece of work, a void one left where it is (ADR-090, 360, 420).
 export class RuleSetup extends QueueingService {
   save(person: string, input: RuleInput): Promise<Outcome<SavedRule>> {
-    return this.write(person, async (tx, warn) => {
+    return this.setup(person, async (tx, warn) => {
       const book = new RuleBook(tx, input.projectId, this.clock);
       const rules = await book.entries();
       const stored = rules.find((rule) => rule.id === input.id);

@@ -1,10 +1,12 @@
 // The one error filter (ARCHITECTURE §6, Output; AC-10-33; T-26; ADR-385): whatever is thrown,
 // the caller gets a plain code and the request's id. No stack trace, query, file path or internal
-// message leaves the server; what failed inside is logged, by its kind (logs.ts).
+// message leaves the server; what failed inside is logged, by its kind (logs.ts). What the
+// database's own constraints refused is a refusal, not a failure (database-refusal.ts).
 import { errorAnswerSchema, type ErrorCode } from '@open-adms/contracts';
 import { Catch, HttpException, type ArgumentsHost, type ExceptionFilter } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
+import { databaseRefusalOf } from './database-refusal.ts';
 import { Limited } from './limits.ts';
 import { errorLogged } from './logs.ts';
 import { Refusal } from './refusal.ts';
@@ -22,6 +24,25 @@ export class ErrorFilter implements ExceptionFilter {
     const http = host.switchToHttp();
     const request = http.getRequest<FastifyRequest>();
     const reply = http.getResponse<FastifyReply>();
+    // What the database's own constraints refused is the caller's to hear, plainly (ADR-424).
+    const refused = databaseRefusalOf(thrown);
+    if (refused !== undefined) {
+      request.log.info(
+        { why: refused.code, sqlState: refused.sqlState, constraint: refused.constraint },
+        'The database refused what a request asked for.',
+      );
+      void reply
+        .status(refused.status)
+        .header('content-type', 'application/json; charset=utf-8')
+        .send(
+          errorAnswerSchema.parse({
+            code: refused.code,
+            requestId: request.id,
+            message: refused.said,
+          }),
+        );
+      return;
+    }
     const status = ErrorFilter.statusOf(thrown);
     if (status >= 500) {
       request.log.error({ err: errorLogged(thrown) }, 'A request failed inside the server.');
@@ -45,6 +66,9 @@ export class ErrorFilter implements ExceptionFilter {
           requestId: request.id,
           ...(status < 500 && thrown instanceof Refusal && thrown.said !== undefined
             ? { message: thrown.said }
+            : {}),
+          ...(status < 500 && thrown instanceof Refusal && thrown.reason !== undefined
+            ? { reason: thrown.reason }
             : {}),
           ...(thrown instanceof Limited ? { retryAfterSeconds: thrown.retryAfterSeconds } : {}),
         }),

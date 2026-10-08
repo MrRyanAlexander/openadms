@@ -3,6 +3,9 @@
 import { Module } from '@nestjs/common';
 
 import { PeopleController } from '../people/people.controller.ts';
+import { ContractorSetupController } from '../setup/contractor-setup.controller.ts';
+import { ListSetupController } from '../setup/list-setup.controller.ts';
+import { ProjectSetupController } from '../setup/project-setup.controller.ts';
 import { PasswordResetsController } from '../sign-in/password-resets.controller.ts';
 import { SessionsController } from '../sign-in/sessions.controller.ts';
 import { TwoStepController } from '../sign-in/two-step.controller.ts';
@@ -15,6 +18,9 @@ import { HealthController } from './health.controller.ts';
     SessionsController,
     TwoStepController,
     PeopleController,
+    ProjectSetupController,
+    ContractorSetupController,
+    ListSetupController,
   ],
 })
 export class ApiModule {}

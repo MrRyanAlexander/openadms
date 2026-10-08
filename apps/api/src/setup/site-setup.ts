@@ -62,7 +62,7 @@ export interface NewSiteShape {
 // naming the un-invoiced tickets with a field event at the site (ADR-090, 420; AC-06-03).
 export class SiteSetup extends QueueingService {
   site(person: string, input: NewSite): Promise<Outcome<DisposalSite>> {
-    return this.write(person, async (tx) => {
+    return this.setup(person, async (tx) => {
       const type = await SiteSetup.typeOf(tx, input.siteTypeId);
       SiteSetup.checked({ ...type, name: input.name, haulOutsLeaveHere: input.haulOutsLeaveHere });
       const site = await tx.disposalSite.create({
@@ -91,7 +91,7 @@ export class SiteSetup extends QueueingService {
 
   // A change to a site the project holds, audited with the value before.
   change(person: string, siteId: string, changes: SiteChanges): Promise<Outcome<DisposalSite>> {
-    return this.write(person, async (tx) => {
+    return this.setup(person, async (tx) => {
       const site = await tx.disposalSite.findUniqueOrThrow({ where: { id: siteId } });
       const before: SiteSetting = {
         ...(await SiteSetup.typeOf(tx, site.siteTypeId)),
@@ -121,7 +121,7 @@ export class SiteSetup extends QueueingService {
   // AC-01-56, AC-06-47). What isn't a shape isn't saved. The un-invoiced tickets with a field
   // event at the site are queued.
   shape(person: string, siteId: string, input: NewSiteShape): Promise<Outcome<SiteAreaVersion>> {
-    return this.write(person, async (tx) => {
+    return this.setup(person, async (tx) => {
       const site = await tx.disposalSite.findUniqueOrThrow({ where: { id: siteId } });
       const shape = new MapShapes(input.shape).shape();
       if (shape.read === null) {
@@ -154,7 +154,7 @@ export class SiteSetup extends QueueingService {
     siteId: string,
     payItemId: string,
   ): Promise<Outcome<DisposalSiteTippingFee>> {
-    return this.write(person, async (tx) => {
+    return this.setup(person, async (tx) => {
       const site = await tx.disposalSite.findUniqueOrThrow({ where: { id: siteId } });
       const link = await tx.disposalSiteTippingFee.create({
         data: { projectId: site.projectId, siteId, payItemId },

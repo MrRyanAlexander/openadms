@@ -77,6 +77,9 @@ export const certification: Story = {
     const world = await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
       await tx.user.create({ data: { id: dana, name: 'Dana Reyes', role: 'ADMIN' } });
       const luis = await tx.user.create({ data: { name: 'Luis Ortega', role: 'MANAGER_ANALYST' } });
+      // He merges two spellings of a sub later: a contractor's record is setup's, and its
+      // service asks whether he holds Setup (ADR-424).
+      await tx.userPermission.create({ data: { userId: luis.id, permission: 'SETUP' } });
       const sam = await tx.user.create({ data: { name: 'Sam Grant', role: 'MONITOR' } });
       const lee = await tx.user.create({ data: { name: 'Lee Morgan', role: 'MONITOR' } });
       const p1 = await setUpP1(tx, story.policy);

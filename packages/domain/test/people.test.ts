@@ -2,7 +2,14 @@
 // Authorization, §7.0; AC-02-08, 11, 12, 13, 72; AC-10-27; ADR-050, 105, 169, 315, 415).
 import { describe, expect, it } from 'vitest';
 
-import { Access, PeopleRules, backOfficeCreated, permissions, type Holder } from '../src/index.ts';
+import {
+  Access,
+  PeopleRules,
+  SetupRights,
+  backOfficeCreated,
+  permissions,
+  type Holder,
+} from '../src/index.ts';
 
 const roles = ['ADMIN', 'MANAGER_ANALYST', 'MONITOR', 'READ_ONLY_VIEWER', 'SYSTEM'];
 const dana: Holder = { role: 'ADMIN', archived: false, granted: [] };
@@ -88,6 +95,32 @@ describe('who may call an endpoint', () => {
   it('one that names no role is open to nobody, and nothing is open to an archived person', () => {
     expect(new Access(dana).allowed({ roles: [] })).toBe(false);
     expect(new Access({ ...dana, archived: true }).allowed({ roles: ['ADMIN'] })).toBe(false);
+  });
+});
+
+describe('who may change the setup', () => {
+  const refusal = (person: Holder, name: string) => new SetupRights({ ...person, name }).refusal();
+
+  it('an admin may, and a manager/analyst who holds Setup now; a manager/analyst without it is told who may, in plain words', () => {
+    expect(refusal(dana, 'Dana Reyes')).toBeNull();
+    expect(refusal({ ...luis, granted: [...luis.granted, 'SETUP'] }, 'Luis Ortega')).toBeNull();
+    expect(refusal(luis, 'Luis Ortega')).toEqual({
+      code: 'NOT_ALLOWED',
+      message:
+        'Luis Ortega may not change the setup: it takes an admin, or a manager/analyst granted "setup". Nothing was changed.',
+    });
+  });
+
+  it('nobody else may, whatever is written beside them: a monitor, a read-only viewer, the system actor, an archived admin, somebody the firm has no record of', () => {
+    for (const role of ['MONITOR', 'READ_ONLY_VIEWER', 'SYSTEM']) {
+      expect(refusal({ role, archived: false, granted: ['SETUP'] }, 'Somebody')?.code).toBe(
+        'NOT_ALLOWED',
+      );
+    }
+    expect(refusal({ ...dana, archived: true }, 'Dana Reyes')?.code).toBe('NOT_ALLOWED');
+    expect(new SetupRights(null).refusal()?.message).toBe(
+      'Somebody the firm has no record of may not change the setup: it takes an admin, or a manager/analyst granted "setup". Nothing was changed.',
+    );
   });
 });
 

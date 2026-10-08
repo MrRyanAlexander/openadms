@@ -4,7 +4,13 @@
 // checks what was sent against it before any service runs; the OpenAPI description is made from
 // this list (openapi.ts). An object a caller sends is strict: a field its schema doesn't name
 // refuses the whole request, and an endpoint whose schema would let one through can't be defined.
-import { backOfficeCreated, permissions, type PermissionName } from '@open-adms/domain';
+import {
+  backOfficeCreated,
+  numberSeries,
+  permissions,
+  workflows,
+  type PermissionName,
+} from '@open-adms/domain';
 import { z } from 'zod';
 
 import {
@@ -19,6 +25,22 @@ import {
   twoStepClearedAnswerSchema,
   twoStepSetupAnswerSchema,
 } from './api-answers.ts';
+import {
+  clientRecordSchema,
+  contractorKinds,
+  contractorPlaceRecordSchema,
+  contractorRecordSchema,
+  contractRecordSchema,
+  controlRangeRecordSchema,
+  declarationEventRecordSchema,
+  fieldTagRecordSchema,
+  foundAnswer,
+  listValueRecordSchema,
+  numberSeriesRecordSchema,
+  projectRecordSchema,
+  savedAnswer,
+  ticketNumberSources,
+} from './setup-answers.ts';
 
 // No endpoint deletes (invariant 1).
 export const endpointMethods = ['GET', 'POST', 'PUT', 'PATCH'] as const;
@@ -124,6 +146,13 @@ export function endpoint<const E extends Endpoint>(defined: E): E {
   }
   return defined;
 }
+
+// What an endpoint's schemas read, for the controller that serves it.
+export type ParamsOf<E extends Endpoint> = z.infer<NonNullable<E['params']>>;
+export type QueryOf<E extends Endpoint> = z.infer<NonNullable<E['query']>>;
+export type BodyOf<E extends Endpoint> = z.infer<NonNullable<E['body']>>;
+// What it answers, for whoever reads the answer.
+export type AnswerOf<E extends Endpoint> = z.infer<E['answer']>;
 
 const nothing = z.strictObject({});
 
@@ -437,6 +466,287 @@ export const archivePersonEndpoint = endpoint({
   answer: personAnswerSchema,
 });
 
+// Setup, steps 1 to 4 and the firm's own lists (spec/parts/01-setup.md; ARCHITECTURE §6;
+// AC-01-80; AC-10-27, 38; BACKLOG 2.4.2, C60; ADR-316, 424): each call is one thing a person does
+// on a setup screen. **Every one is open to an admin and to a manager/analyst who holds Setup
+// now**, the searches too. What a setting must be is the domain's and the database's to say: the
+// limits here only bound what is read. A setting the domain's rules refuse is answered
+// `NOT_SAVED` with the rule's code and its plain words; what the database's own constraints
+// refuse, plainly too (`ALREADY_HELD`, `UNKNOWN_RECORD`, `REFUSED_BY_THE_DATABASE`).
+const setup = { access: 'SIGNED_IN', roles: backOfficeRoles, permission: 'SETUP' } as const;
+
+const named = z.string().trim().min(1).max(200);
+const contact = {
+  contactName: z.string().trim().min(1).max(200).optional(),
+  contactEmail: z.email().max(320).optional(),
+  contactPhone: z.string().trim().min(1).max(40).optional(),
+};
+// A calendar day: 2026-10-12.
+const day = z.iso.date();
+// The start of what a search matches, anywhere in the name; left out, everything not archived.
+const searched = z.strictObject({ search: z.string().trim().max(200).optional() });
+const projectId = z.strictObject({ projectId: z.uuid() });
+// A number of a series: the database says where a series may start and end.
+const seriesNumber = z.number().int().min(1).max(2_000_000_000);
+const once = (values: readonly string[]): boolean => new Set(values).size === values.length;
+const stated = (changes: object): boolean => Object.keys(changes).length > 0;
+
+// Step 1: search first; a client the firm has is picked, never created again (ADR-023).
+export const findClientsEndpoint = endpoint({
+  ...setup,
+  name: 'findClients',
+  summary: 'The firm’s clients whose name holds what was typed; none archived.',
+  method: 'GET',
+  path: '/clients',
+  query: searched,
+  answer: foundAnswer(clientRecordSchema),
+});
+
+export const createClientEndpoint = endpoint({
+  ...setup,
+  name: 'createClient',
+  summary: 'Creates a client: the jurisdiction or agency paying for the work.',
+  method: 'POST',
+  path: '/clients',
+  body: z.strictObject({
+    name: named,
+    ...contact,
+    notes: z.string().trim().min(1).max(4000).optional(),
+  }),
+  answer: savedAnswer(clientRecordSchema),
+});
+
+// Step 2: by its name or its reference; one declaration event is shared by every client's
+// projects under it (ADR-026).
+export const findDeclarationEventsEndpoint = endpoint({
+  ...setup,
+  name: 'findDeclarationEvents',
+  summary: 'The declaration events whose name or reference holds what was typed; none archived.',
+  method: 'GET',
+  path: '/declaration-events',
+  query: searched,
+  answer: foundAnswer(declarationEventRecordSchema),
+});
+
+export const createDeclarationEventEndpoint = endpoint({
+  ...setup,
+  name: 'createDeclarationEvent',
+  summary:
+    'Creates a declaration event: the disaster and its reference as written, its reference type picked from the firm’s list.',
+  method: 'POST',
+  path: '/declaration-events',
+  body: z.strictObject({ name: named, reference: named, referenceTypeId: z.uuid() }),
+  answer: savedAnswer(declarationEventRecordSchema),
+});
+
+// Step 3: the project. Its settings start as a new project's do (the domain's, from the policy
+// values); its number series start with it.
+export const createProjectEndpoint = endpoint({
+  ...setup,
+  name: 'createProject',
+  summary:
+    'Creates a project under a client and a declaration event, with its time zone, active window, ticket-number source, ticket types and kinds of unit rate work.',
+  method: 'POST',
+  path: '/projects',
+  body: z.strictObject({
+    name: named,
+    clientId: z.uuid(),
+    declarationEventId: z.uuid(),
+    programTypeId: z.uuid(),
+    // An IANA name: America/New_York. The database says which it takes.
+    timeZone: z.string().min(1).max(64),
+    activeFrom: day,
+    // Empty: the window has no end yet.
+    activeTo: day.nullable(),
+    ticketNumberSource: z.enum(ticketNumberSources),
+    workflows: z.array(z.enum(workflows)).min(1).max(workflows.length).refine(once),
+    kindOfWorkIds: z.array(z.uuid()).max(200),
+    // Where a series starts, where the firm says.
+    numbersFrom: z
+      .strictObject({
+        LOAD: seriesNumber.optional(),
+        HAUL_OUT: seriesNumber.optional(),
+        UNIT_RATE: seriesNumber.optional(),
+        CERTIFICATION: seriesNumber.optional(),
+        ROE: seriesNumber.optional(),
+      })
+      .optional(),
+  }),
+  answer: savedAnswer(projectRecordSchema),
+});
+
+export const changeProjectSettingsEndpoint = endpoint({
+  ...setup,
+  name: 'changeProjectSettings',
+  summary:
+    'Changes a project’s own settings; one left out stays as it is. Its tickets not locked as invoiced are queued.',
+  method: 'PATCH',
+  path: '/projects/:projectId/settings',
+  params: projectId,
+  body: z
+    .strictObject({
+      allowSplitLoads: z.boolean().optional(),
+      // Empty switches the limit off.
+      loadCallLowLimit: z.number().int().nullable().optional(),
+      loadCallHighLimit: z.number().int().nullable().optional(),
+      stumpFillDepthInches: z.number().int().optional(),
+      stumpCheckRootBallWider: z.boolean().optional(),
+      stumpCheckFillNeedsExposure: z.boolean().optional(),
+      siteCircleMeters: z.number().int().optional(),
+      timeClockEnabled: z.boolean().optional(),
+    })
+    .refine(stated),
+  answer: savedAnswer(projectRecordSchema),
+});
+
+export const changeProjectWindowEndpoint = endpoint({
+  ...setup,
+  name: 'changeProjectWindow',
+  summary:
+    'Changes a project’s active window: either end; the end may be emptied. Its tickets not locked as invoiced are queued.',
+  method: 'PATCH',
+  path: '/projects/:projectId/active-window',
+  params: projectId,
+  body: z
+    .strictObject({ activeFrom: day.optional(), activeTo: day.nullable().optional() })
+    .refine(stated),
+  answer: savedAnswer(projectRecordSchema),
+});
+
+export const closeProjectEndpoint = endpoint({
+  ...setup,
+  name: 'closeProject',
+  summary: 'Closes a project: the mark and its time. Nothing under it is deleted or refused after.',
+  method: 'POST',
+  path: '/projects/:projectId/closings',
+  params: projectId,
+  answer: savedAnswer(projectRecordSchema),
+});
+
+export const startNumberSeriesEndpoint = endpoint({
+  ...setup,
+  name: 'startNumberSeries',
+  summary:
+    'Starts a number series the project doesn’t have yet (its cert numbers), from the number the firm says.',
+  method: 'POST',
+  path: '/projects/:projectId/number-series',
+  params: projectId,
+  body: z.strictObject({ series: z.enum(numberSeries), firstNumber: seriesNumber }),
+  answer: savedAnswer(numberSeriesRecordSchema),
+});
+
+export const enterControlRangeEndpoint = endpoint({
+  ...setup,
+  name: 'enterControlRange',
+  summary:
+    'Enters a run of pre-printed control tickets on a project that numbers its tickets from them.',
+  method: 'POST',
+  path: '/projects/:projectId/control-ranges',
+  params: projectId,
+  body: z.strictObject({
+    series: z.enum(numberSeries),
+    firstNumber: seriesNumber,
+    lastNumber: seriesNumber,
+  }),
+  answer: savedAnswer(controlRangeRecordSchema),
+});
+
+export const archiveControlRangeEndpoint = endpoint({
+  ...setup,
+  name: 'archiveControlRange',
+  summary: 'Takes off a control range entered by mistake. It is archived, never deleted.',
+  method: 'POST',
+  path: '/control-ranges/:controlRangeId/archivings',
+  params: z.strictObject({ controlRangeId: z.uuid() }),
+  answer: savedAnswer(controlRangeRecordSchema),
+});
+
+export const addFieldTagEndpoint = endpoint({
+  ...setup,
+  name: 'addFieldTag',
+  summary: 'Adds a field tag at the end of the project’s own list.',
+  method: 'POST',
+  path: '/projects/:projectId/field-tags',
+  params: projectId,
+  body: z.strictObject({ name: named }),
+  answer: savedAnswer(fieldTagRecordSchema),
+});
+
+// Step 4: a contractor the firm has is picked, never entered again; a prime is added to a
+// project; a contract is a name, its prime and an optional link (ADR-108, 146, 305). Subs are
+// typed in at certification, never here.
+export const findContractorsEndpoint = endpoint({
+  ...setup,
+  name: 'findContractors',
+  summary: 'The firm’s contractors whose name holds what was typed; none archived.',
+  method: 'GET',
+  path: '/contractors',
+  query: searched,
+  answer: foundAnswer(contractorRecordSchema),
+});
+
+export const createContractorEndpoint = endpoint({
+  ...setup,
+  name: 'createContractor',
+  summary: 'Creates a contractor record, firm-wide. Whoever adds it says its kind.',
+  method: 'POST',
+  path: '/contractors',
+  body: z.strictObject({ name: named, kind: z.enum(contractorKinds), ...contact }),
+  answer: savedAnswer(contractorRecordSchema),
+});
+
+export const addPrimeEndpoint = endpoint({
+  ...setup,
+  name: 'addPrime',
+  summary: 'Adds a contractor to a project as a prime.',
+  method: 'POST',
+  path: '/projects/:projectId/primes',
+  params: projectId,
+  body: z.strictObject({ contractorId: z.uuid() }),
+  answer: savedAnswer(contractorPlaceRecordSchema),
+});
+
+// The link to the signed copy is opened from a page: only an `https` address is taken.
+export const createContractEndpoint = endpoint({
+  ...setup,
+  name: 'createContract',
+  summary:
+    'Creates a contract on a project: its name, one of the project’s primes, and an optional link to the signed copy.',
+  method: 'POST',
+  path: '/projects/:projectId/contracts',
+  params: projectId,
+  body: z.strictObject({
+    name: named,
+    primeId: z.uuid(),
+    signedCopyUrl: z
+      .url({ protocol: /^https$/ })
+      .max(2000)
+      .optional(),
+  }),
+  answer: savedAnswer(contractRecordSchema),
+});
+
+// The firm's own values on its lists (spec/LISTS.md): added at the end, with a name and no key.
+export const addDebrisTypeEndpoint = endpoint({
+  ...setup,
+  name: 'addDebrisType',
+  summary: 'Adds a debris type to the firm’s library, named as its contracts name the work.',
+  method: 'POST',
+  path: '/debris-types',
+  body: z.strictObject({ name: named }),
+  answer: savedAnswer(listValueRecordSchema),
+});
+
+export const addPayableTypeEndpoint = endpoint({
+  ...setup,
+  name: 'addPayableType',
+  summary: 'Adds a payable type to the firm’s list: the work a pay item prices.',
+  method: 'POST',
+  path: '/payable-types',
+  body: z.strictObject({ name: named }),
+  answer: savedAnswer(listValueRecordSchema),
+});
+
 // Each task that adds an endpoint names it here; the API's tests hold its routes to this list.
 export const endpoints: readonly Endpoint[] = [
   healthEndpoint,
@@ -458,4 +768,22 @@ export const endpoints: readonly Endpoint[] = [
   setPersonPasswordEndpoint,
   endPersonSessionsEndpoint,
   archivePersonEndpoint,
+  findClientsEndpoint,
+  createClientEndpoint,
+  findDeclarationEventsEndpoint,
+  createDeclarationEventEndpoint,
+  createProjectEndpoint,
+  changeProjectSettingsEndpoint,
+  changeProjectWindowEndpoint,
+  closeProjectEndpoint,
+  startNumberSeriesEndpoint,
+  enterControlRangeEndpoint,
+  archiveControlRangeEndpoint,
+  addFieldTagEndpoint,
+  findContractorsEndpoint,
+  createContractorEndpoint,
+  addPrimeEndpoint,
+  createContractEndpoint,
+  addDebrisTypeEndpoint,
+  addPayableTypeEndpoint,
 ];

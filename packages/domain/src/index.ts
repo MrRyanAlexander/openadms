@@ -183,6 +183,7 @@ export {
 export {
   Access,
   PeopleRules,
+  SetupRights,
   backOfficeCreated,
   permissions,
   type Asked,
@@ -190,6 +191,7 @@ export {
   type Holder,
   type PeopleRefusalCode,
   type PermissionName,
+  type SetupRightsRefusal,
 } from './people.ts';
 export {
   addressCounted,

@@ -87,7 +87,7 @@ export interface RulesKept {
 
 export class PayItemSetup extends QueueingService {
   payItem(person: string, input: NewPayItem): Promise<Outcome<PayItem>> {
-    return this.write(person, async (tx, warn) => {
+    return this.setup(person, async (tx, warn) => {
       const { rates, ...settings } = input;
       const payableType = await tx.payableType.findUniqueOrThrow({
         where: { id: input.payableTypeId },
@@ -133,7 +133,7 @@ export class PayItemSetup extends QueueingService {
   // crew day) throws, and nothing is saved. Tickets locked as invoiced keep the lines they have
   // (ADR-090).
   change(person: string, payItemId: string, changes: PayItemChanges): Promise<Outcome<PayItem>> {
-    return this.write(person, async (tx) => {
+    return this.setup(person, async (tx) => {
       const payItem = await tx.payItem.update({ where: { id: payItemId }, data: changes });
       await this.setupChanged(tx, person, payItem.projectId);
       return payItem;
@@ -149,7 +149,7 @@ export class PayItemSetup extends QueueingService {
     primeId: string,
     rate: string,
   ): Promise<Outcome<PayItemRate>> {
-    return this.write(person, async (tx) => {
+    return this.setup(person, async (tx) => {
       const payItem = await tx.payItem.findUniqueOrThrow({ where: { id: payItemId } });
       const saved = await tx.payItemRate.upsert({
         where: { payItemId_primeId: { payItemId, primeId } },
@@ -171,7 +171,7 @@ export class PayItemSetup extends QueueingService {
     payItemId: string,
     pays: readonly PaysWhenInput[],
   ): Promise<Outcome<RulesKept>> {
-    return this.write(person, async (tx, warn) => {
+    return this.setup(person, async (tx, warn) => {
       const payItem = await tx.payItem.findUniqueOrThrow({
         where: { id: payItemId },
         include: { rates: { where: { archivedAt: null } } },

@@ -25,6 +25,12 @@ import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fa
 
 import { apiPeople } from '../people/people.controller.ts';
 import { People } from '../people/people.ts';
+import { apiContractorSetup } from '../setup/contractor-setup.controller.ts';
+import { ContractorSetup } from '../setup/contractor-setup.ts';
+import { apiListSetup } from '../setup/list-setup.controller.ts';
+import { ListSetup } from '../setup/list-setup.ts';
+import { apiProjectSetup } from '../setup/project-setup.controller.ts';
+import { ProjectSetup } from '../setup/project-setup.ts';
 import type { Clock } from '../setup/setup-service.ts';
 import { Admission } from '../sign-in/admission.ts';
 import { shippedBreachedPasswords } from '../sign-in/breached-list.ts';
@@ -62,32 +68,9 @@ export type ProcessSettings = Pick<
   | 'mailFrom'
 >;
 
-export type ProcessPolicy = Pick<
-  Policy,
-  | 'requestBodyLimitBytes'
-  | 'databasePoolConnections'
-  | 'passwordMinimumLength'
-  | 'passwordMaximumLength'
-  | 'passwordResetMinutes'
-  | 'accessTokenMinutes'
-  | 'sessionInactivityMinutes'
-  | 'sessionOverallHours'
-  | 'signInTriesBeforeWait'
-  | 'signInTriesBeforeLock'
-  | 'signInFirstWaitSeconds'
-  | 'signInLongestWaitMinutes'
-  | 'twoStepCodeStepsEitherSide'
-  | 'twoStepSetupMinutes'
-  | 'rateLimitWindowSeconds'
-  | 'rateLimitRequestsPerAddress'
-  | 'rateLimitRequestsPerAccount'
-  | 'rateLimitCountsKept'
-  | 'signInAddressWindowMinutes'
-  | 'signInWrongTriesPerAddress'
-  | 'signInWrongTriesPerAddressAtLogin'
-  | 'passwordResetAsksPerAddress'
-  | 'passwordResetAsksPerLogin'
->;
+// The installation's policy, whole: the process reads its own values (the body limit, the pool,
+// sign-in's and the rate limits'), and each service behind an endpoint reads its own.
+export type ProcessPolicy = Policy;
 
 // What a test puts in place of the process's own: where the log goes instead of standard output,
 // the database (a test's own piece of work, undone afterwards), the mail and the time.
@@ -113,38 +96,14 @@ class ProcessModule implements OnApplicationShutdown {
     this.database = database;
   }
 
-  static around(
-    module: Type<unknown>,
-    database: Database,
-    passwords: Passwords,
-    sessions: Sessions,
-    tokens: SessionTokens,
-    twoStep: TwoStep,
-    people: People,
-    limits: Limits,
-  ): DynamicModule {
+  // `handed`: each thing a controller may name to be handed, by the symbol it names it with.
+  static around(module: Type<unknown>, handed: ReadonlyMap<symbol, unknown>): DynamicModule {
     return {
       module: ProcessModule,
       global: true,
       imports: [module],
-      providers: [
-        { provide: apiDatabase, useValue: database },
-        { provide: apiPasswords, useValue: passwords },
-        { provide: apiSessions, useValue: sessions },
-        { provide: apiSessionTokens, useValue: tokens },
-        { provide: apiTwoStep, useValue: twoStep },
-        { provide: apiPeople, useValue: people },
-        { provide: apiLimits, useValue: limits },
-      ],
-      exports: [
-        apiDatabase,
-        apiPasswords,
-        apiSessions,
-        apiSessionTokens,
-        apiTwoStep,
-        apiPeople,
-        apiLimits,
-      ],
+      providers: [...handed].map(([provide, useValue]) => ({ provide, useValue })),
+      exports: [...handed.keys()],
     };
   }
 
@@ -226,7 +185,22 @@ export class ApiProcess {
     });
     const people = new People(database, { clock, sessions });
     const app = await NestFactory.create<NestFastifyApplication>(
-      ProcessModule.around(module, database, passwords, sessions, tokens, twoStep, people, limits),
+      ProcessModule.around(
+        module,
+        new Map<symbol, unknown>([
+          [apiDatabase, database],
+          [apiPasswords, passwords],
+          [apiSessions, sessions],
+          [apiSessionTokens, tokens],
+          [apiTwoStep, twoStep],
+          [apiPeople, people],
+          [apiLimits, limits],
+          // Setup's services (task 2.4.2): each change is written as the signed-in person.
+          [apiProjectSetup, new ProjectSetup(database, clock, policy)],
+          [apiContractorSetup, new ContractorSetup(database, clock)],
+          [apiListSetup, new ListSetup(database, clock)],
+        ]),
+      ),
       adapter,
       { logger: new ProcessLog(server.log) },
     );
