@@ -195,6 +195,8 @@ describe('permissions, read from the database on every request', () => {
       'archivePerson',
       'setPersonRole',
       'unarchivePerson',
+      // The firm's master passcode: ADR-428.
+      'changeMasterPasscode',
     ]);
     expect(
       signedIn
@@ -202,11 +204,21 @@ describe('permissions, read from the database on every request', () => {
         .map(({ name }) => name),
       // Reading a person or a page of them (ADR-427), and the setup as it stands (the setup
       // check and the lookups, ADR-426).
-    ).toEqual(['listPeople', 'readPerson', 'setupCheck', 'quantityLookup', 'siteQuantityLookup']);
-    // The only permission an endpoint takes yet is Setup (task 2.4.2; the list by name is
-    // setup-endpoints.test.ts's): the reviewer's are task 2.4.4's.
+    ).toEqual([
+      'listPeople',
+      'readPerson',
+      'setupCheck',
+      'quantityLookup',
+      'siteQuantityLookup',
+      // The firm's phones (ADR-428).
+      'listPhones',
+    ]);
+    // The permissions an endpoint takes yet are Setup (task 2.4.2; the list by name is
+    // setup-endpoints.test.ts's) and Dispatch (task 2.4.3; phones.test.ts's): the reviewer's
+    // are task 2.4.4's.
     expect([...new Set(endpoints.flatMap(({ permission }) => permission ?? []))]).toEqual([
       'SETUP',
+      'DISPATCH',
     ]);
   });
 

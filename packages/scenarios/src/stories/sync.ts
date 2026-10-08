@@ -22,6 +22,7 @@ import {
   NumberAllocator,
   type Outcome,
   PayItemSetup,
+  Phones,
   ProjectSetup,
   type SyncAnswer,
 } from '@open-adms/api';
@@ -108,6 +109,8 @@ export const sync: Story = {
     const office = await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
       await tx.user.create({ data: { id: dana, name: 'Dana Reyes', role: 'ADMIN' } });
       const luis = await tx.user.create({ data: { name: 'Luis Ortega', role: 'MANAGER_ANALYST' } });
+      // Luis writes the board and marks a phone lost: Dana grants him *dispatch* (ADR-428).
+      await tx.userPermission.create({ data: { userId: luis.id, permission: 'DISPATCH' } });
       const p1 = await setUpP1(tx, story.policy);
       const { tdsr, landfill } = await setUpP1Sites(tx, p1.project);
       const ppdr = await tx.programType.findFirstOrThrow({ where: { name: 'PPDR' } });
@@ -875,12 +878,10 @@ export const sync: Story = {
       monday('18:10'),
       'P1-TWR-LF can’t be found. Luis marks it lost; whatever it holds is still to come',
     );
-    await api.$write({ actorId: luis, source: 'BACK_OFFICE' }, (tx) =>
-      tx.device.update({
-        where: { id: device('P1-TWR-LF') },
-        data: { status: 'LOST', outOfServiceAt: clock.now() },
-      }),
-    );
+    const removed = await new Phones(api, clock).remove(luis, device('P1-TWR-LF'), {
+      status: 'LOST',
+    });
+    if (!removed.saved) throw new Error(removed.refusal.message);
     story.at(
       monday('18:20'),
       'It is in Tariq’s truck. A late load reaches the landfill: he scans 730415',

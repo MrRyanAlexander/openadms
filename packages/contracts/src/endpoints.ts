@@ -11,6 +11,7 @@ import {
   incidentOffers,
   numberSeries,
   permissions,
+  phoneRemovals,
   ruleActionKinds,
   ruleCriterionKeys,
   ruleOperators,
@@ -22,9 +23,12 @@ import { z } from 'zod';
 import {
   csrfAnswerSchema,
   healthAnswerSchema,
+  masterPasscodeAnswerSchema,
   passwordSetAnswerSchema,
   peopleAnswerSchema,
   personAnswerSchema,
+  phoneRecordSchema,
+  phonesAnswerSchema,
   resetAskedAnswerSchema,
   sessionAnswerSchema,
   sessionsEndedAnswerSchema,
@@ -1260,6 +1264,68 @@ export const siteQuantityLookupEndpoint = endpoint({
 });
 
 // Each task that adds an endpoint names it here; the API's tests hold its routes to this list.
+// Dispatch and phones, from the back office (ARCHITECTURE §7.4, §7.5; spec/parts/02; AC-02-21, 23,
+// 59; AC-10-24, 27; BACKLOG 2.4.3, C47, C89; ADR-106, 134, 240, 428). **A dispatch change is open
+// to an admin and to a manager/analyst who holds Dispatch now**; the firm's phones are read by
+// the whole back office; the master passcode is an admin's alone to change.
+const dispatch = { access: 'SIGNED_IN', roles: backOfficeRoles, permission: 'DISPATCH' } as const;
+
+export const listPhonesEndpoint = endpoint({
+  name: 'listPhones',
+  summary:
+    'The firm’s phones, a page at a time, in the order they were enrolled: those in service, or those taken out of it. Each says which version of the master passcode’s check it holds.',
+  access: 'SIGNED_IN',
+  roles: backOfficeRoles,
+  method: 'GET',
+  path: '/phones',
+  query: z.strictObject({
+    outOfService: z.enum(['true', 'false']).optional(),
+    // The last phone of the page before: the answer's `next`.
+    after: z.uuid().optional(),
+    // How many at most: 50 where none is said.
+    limit: z
+      .string()
+      .regex(/^([1-9][0-9]?|1[0-9]{2}|200)$/)
+      .optional(),
+  }),
+  answer: phonesAnswerSchema,
+});
+
+export const removePhoneEndpoint = endpoint({
+  name: 'removePhone',
+  summary:
+    'A phone is taken out of service, as lost or retired, from this moment. Its record is kept; what it made later is received and flagged, never refused. Refused for a phone already out of service.',
+  ...dispatch,
+  method: 'POST',
+  path: '/phones/:deviceId/removals',
+  params: z.strictObject({ deviceId: z.uuid() }),
+  body: z.strictObject({
+    status: z.enum(phoneRemovals),
+    // Why, in the person's own words: kept beside the change in the audit log.
+    note: z.string().trim().min(1).max(500).optional(),
+  }),
+  answer: savedAnswer(phoneRecordSchema),
+});
+
+// The firm's one master passcode (ADR-106). A change is a new version: no earlier one is edited
+// or removed, and each phone's check moves to it at its next sync. Whoever changes it gives
+// their own password again (ASVS 5.0 7.5.1), and every admin is told by mail where the firm
+// has any (ASVS 6.3.7).
+export const changeMasterPasscodeEndpoint = endpoint({
+  name: 'changeMasterPasscode',
+  summary:
+    'An admin changes the firm’s master passcode, giving their own password again. A new version is kept, as a slow hash only; each phone’s check moves to it at its next sync. Refused for a passcode under 8 or over 128 characters, or known from breaches.',
+  access: 'SIGNED_IN',
+  roles: adminOnly,
+  method: 'POST',
+  path: '/master-passcode/versions',
+  body: z.strictObject({
+    currentPassword: z.string().min(1).max(4096),
+    passcode: z.string().min(1).max(4096),
+  }),
+  answer: masterPasscodeAnswerSchema,
+});
+
 export const endpoints: readonly Endpoint[] = [
   healthEndpoint,
   requestPasswordResetEndpoint,
@@ -1320,4 +1386,7 @@ export const endpoints: readonly Endpoint[] = [
   setupCheckEndpoint,
   quantityLookupEndpoint,
   siteQuantityLookupEndpoint,
+  listPhonesEndpoint,
+  removePhoneEndpoint,
+  changeMasterPasscodeEndpoint,
 ];

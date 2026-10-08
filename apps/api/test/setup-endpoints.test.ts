@@ -114,8 +114,8 @@ const setupEndpoints = [
 ] as const;
 
 describe('who may change the setup', () => {
-  it('AC-10-27 every setup endpoint is open to the back office’s roles and takes the permission Setup; no other endpoint takes a permission yet', () => {
-    const taking = endpoints.filter(({ permission }) => permission !== undefined);
+  it('AC-10-27 every setup endpoint is open to the back office’s roles and takes the permission Setup; no other endpoint takes it', () => {
+    const taking = endpoints.filter(({ permission }) => permission === 'SETUP');
     expect(taking.map(({ name }) => name)).toEqual(setupEndpoints.map(({ name }) => name));
     for (const { name, access, roles, permission } of taking) {
       expect([name, access, roles, permission]).toEqual([

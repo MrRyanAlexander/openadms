@@ -184,3 +184,38 @@ export const sessionsEndedAnswerSchema = z.strictObject({
 });
 
 export type SessionsEndedAnswer = z.infer<typeof sessionsEndedAnswerSchema>;
+
+// One of the firm's phones as the back office reads it (ARCHITECTURE §7.4; AC-02-15, 59; ADR-134,
+// 240, 428): its name on the dispatch board, whether it is in service and, if not, from when;
+// when its key was revoked, once it was wiped; and which version of the master passcode's check
+// it holds, with whether that is the current one (a change reaches a phone at its next sync).
+// Never its key.
+export const phoneRecordSchema = z.strictObject({
+  id: z.uuid(),
+  name: z.string(),
+  status: z.enum(['ACTIVE', 'LOST', 'RETIRED']),
+  enrolledAt: z.iso.datetime(),
+  outOfServiceAt: z.iso.datetime().nullable(),
+  keyRevokedAt: z.iso.datetime().nullable(),
+  masterPasscodeVersion: z.number().int().min(1),
+  holdsCurrentPasscode: z.boolean(),
+});
+
+export type PhoneRecord = z.infer<typeof phoneRecordSchema>;
+
+// A page of the firm's phones, in the order they were enrolled. `next` is what to send as
+// `after` for the page that follows; null when this is the last.
+export const phonesAnswerSchema = z.strictObject({
+  phones: z.array(phoneRecordSchema),
+  next: z.uuid().nullable(),
+});
+
+export type PhonesAnswer = z.infer<typeof phonesAnswerSchema>;
+
+// The master passcode was changed: the version now current. Never the passcode or its hash.
+export const masterPasscodeAnswerSchema = z.strictObject({
+  status: z.literal('ok'),
+  version: z.number().int().min(1),
+});
+
+export type MasterPasscodeAnswer = z.infer<typeof masterPasscodeAnswerSchema>;

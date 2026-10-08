@@ -53,6 +53,23 @@ export class PasswordHasher {
     return `$argon2id$v=19$${settings}$${this.encode(salt)}$${this.encode(tag)}`;
   }
 
+  // The master passcode's hash, with no key, as the installer makes the firm's first one
+  // (`tools/setup`, which reads it back by that format; whether it is keyed is task 2.5.1's,
+  // with what a phone's own check is made from).
+  async hashWithoutKey(passcode: string): Promise<string> {
+    const salt = randomBytes(PasswordHasher.saltBytes);
+    const tag = await this.derive(
+      passcode,
+      salt,
+      PasswordHasher.cost,
+      PasswordHasher.tagBytes,
+      undefined,
+    );
+    const { memory, passes, parallelism } = PasswordHasher.cost;
+    const settings = `m=${String(memory)},t=${String(passes)},p=${String(parallelism)}`;
+    return `$argon2id$v=19$${settings}$${this.encode(salt)}$${this.encode(tag)}`;
+  }
+
   async verify(password: string, phc: string): Promise<boolean> {
     const parts = PasswordHasher.format.exec(phc);
     if (parts === null) return false;

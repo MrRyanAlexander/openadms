@@ -182,6 +182,7 @@ export {
 } from './passwords.ts';
 export {
   Access,
+  DispatchRights,
   PeopleRules,
   SetupRights,
   backOfficeCreated,
@@ -190,11 +191,19 @@ export {
   type Asked,
   type BackOfficeCreated,
   type BackOfficeRole,
+  type DispatchRightsRefusal,
   type Holder,
   type PeopleRefusalCode,
   type PermissionName,
   type SetupRightsRefusal,
 } from './people.ts';
+export {
+  MasterPasscodeRules,
+  PhoneRules,
+  phoneRemovals,
+  type PhoneRemoval,
+  type PhoneRemovalRefusal,
+} from './phones.ts';
 export {
   addressCounted,
   RateLimit,

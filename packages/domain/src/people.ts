@@ -108,6 +108,34 @@ export class SetupRights {
   }
 }
 
+// Who may dispatch (ARCHITECTURE §6, Authorization; ADR-050, 240, 428): write and withdraw a day's
+// assignments, and take a phone out of service. An admin, or a manager/analyst who holds the
+// permission Dispatch now; nobody else. Asked inside the service's own piece of work, as Setup is.
+export interface DispatchRightsRefusal {
+  readonly code: 'NOT_ALLOWED';
+  readonly message: string;
+}
+
+export class DispatchRights {
+  private readonly name: string;
+  private readonly access: Access | null;
+
+  // `person`: whoever asks, as the database has them now; null where it has nobody of that id.
+  constructor(person: (Holder & { readonly name: string }) | null) {
+    this.name = person?.name ?? 'Somebody the firm has no record of';
+    this.access = person === null ? null : new Access(person);
+  }
+
+  // Why this person may not dispatch, or nothing.
+  refusal(): DispatchRightsRefusal | null {
+    if (this.access?.holds('DISPATCH') === true) return null;
+    return {
+      code: 'NOT_ALLOWED',
+      message: `${this.name} may not dispatch: it takes an admin, or a manager/analyst granted "dispatch". Nothing was changed.`,
+    };
+  }
+}
+
 export type PeopleRefusalCode =
   'NOT_ALLOWED' | 'NOT_A_MANAGER_ANALYST' | 'NOT_A_VIEWER' | 'LAST_ADMIN' | 'NOT_BACK_OFFICE';
 

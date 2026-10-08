@@ -7,6 +7,7 @@ import 'reflect-metadata';
 
 import type { Database } from '@open-adms/db';
 import {
+  MasterPasscodeRules,
   PasswordRules,
   RateLimits,
   SignInTries,
@@ -23,6 +24,9 @@ import {
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 
+import { MasterPasscode } from '../dispatch/master-passcode.ts';
+import { apiMasterPasscode, apiPhones } from '../dispatch/phones.controller.ts';
+import { Phones } from '../dispatch/phones.ts';
 import { apiPeople } from '../people/people.controller.ts';
 import { People } from '../people/people.ts';
 import { apiContractorSetup } from '../setup/contractor-setup.controller.ts';
@@ -181,8 +185,9 @@ export class ApiProcess {
       requestNow,
     });
     const twoStep = new TwoStep(database, { check, clock, mail, sessions, requestNow });
+    const breached = shippedBreachedPasswords();
     const passwords = new Passwords(database, {
-      rules: new PasswordRules(policy, shippedBreachedPasswords()),
+      rules: new PasswordRules(policy, breached),
       hasher,
       resetCodes: new ResetCodes(settings.tokenSigningSecret, policy.passwordResetMinutes),
       mail,
@@ -213,6 +218,18 @@ export class ApiProcess {
           [apiRuleSetup, new RuleSetup(database, clock, policy)],
           [apiSiteSetup, new SiteSetup(database, clock, policy)],
           [apiSetupStanding, new SetupStanding(database)],
+          // Dispatch and phones (task 2.4.3).
+          [apiPhones, new Phones(database, clock)],
+          [
+            apiMasterPasscode,
+            new MasterPasscode(database, {
+              rules: new MasterPasscodeRules(breached),
+              hasher,
+              tries,
+              mail,
+              clock,
+            }),
+          ],
         ]),
       ),
       adapter,

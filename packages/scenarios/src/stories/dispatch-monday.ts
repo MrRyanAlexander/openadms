@@ -12,7 +12,7 @@
 // (ADR-303): the client, the declaration event and the project, whose settings start as the
 // release's policy values; then the fourth (ADR-305): the prime added to the project, and its
 // contract.
-import { NumberAllocator } from '@open-adms/api';
+import { NumberAllocator, Phones } from '@open-adms/api';
 
 import { projectTime } from '../clock.ts';
 import { made, scanned } from '../device.ts';
@@ -45,6 +45,8 @@ export const dispatchMonday: Story = {
         data: { id: dana, name: 'Dana Reyes', role: 'ADMIN' },
       });
       const luis = await tx.user.create({ data: { name: 'Luis Ortega', role: 'MANAGER_ANALYST' } });
+      // Luis writes the board and marks a phone lost: Dana grants him *dispatch* (ADR-428).
+      await tx.userPermission.create({ data: { userId: luis.id, permission: 'DISPATCH' } });
       const p1 = await setUpP1(tx, story.policy);
       const { tdsr, landfill } = await setUpP1Sites(tx, p1.project);
       return {
@@ -596,14 +598,11 @@ export const dispatchMonday: Story = {
     );
 
     story.at(at('18:10'), 'P1-TWR-LF isn’t handed in and can’t be found: Luis marks it lost');
-    await api.$write(
-      { actorId: luis, source: 'BACK_OFFICE', reason: 'Not handed in at the yard on Monday' },
-      (tx) =>
-        tx.device.update({
-          where: { id: phones.landfillTower.id },
-          data: { status: 'LOST', outOfServiceAt: clock.now() },
-        }),
-    );
+    const removed = await new Phones(api, clock).remove(luis, phones.landfillTower.id, {
+      status: 'LOST',
+      note: 'Not handed in at the yard on Monday',
+    });
+    if (!removed.saved) throw new Error(removed.refusal.message);
     const lost = await api.device.findUniqueOrThrow({ where: { id: phones.landfillTower.id } });
     story.check(
       'it’s out of service from 6:10 pm: what it made later will arrive flagged, never refused',

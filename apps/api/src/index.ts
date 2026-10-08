@@ -154,6 +154,19 @@ export {
   type WrongTriesParts,
 } from './sign-in/wrong-tries.ts';
 
+export {
+  MasterPasscode,
+  type MasterPasscodeParts,
+  type PasscodeOutcome,
+  type PasscodeRefusalCode,
+} from './dispatch/master-passcode.ts';
+export {
+  Phones,
+  type PhoneRead,
+  type PhoneRemoved,
+  type PhonesAsked,
+  type PhonesPage,
+} from './dispatch/phones.ts';
 export { Intake } from './sync/intake.ts';
 export type {
   IntakeNote,
