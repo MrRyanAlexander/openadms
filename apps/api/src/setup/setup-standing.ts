@@ -43,13 +43,19 @@ export class SetupStanding {
   }
 
   // One site's rows: what its phones carry. A site taken off its project has none.
-  async quantityLookupAt(siteId: string): Promise<QuantityAsk[]> {
-    const site = await this.db.disposalSite.findUniqueOrThrow({ where: { id: siteId } });
-    return new QuantityLookup(await this.read(site.projectId)).at(siteId);
+  quantityLookupAt(siteId: string): Promise<QuantityAsk[]> {
+    return this.db.$read(async (tx) => {
+      const site = await tx.disposalSite.findUniqueOrThrow({ where: { id: siteId } });
+      return new QuantityLookup(await SetupStanding.readIn(tx, site.projectId)).at(siteId);
+    });
   }
 
+  // A project nobody has isn't read as one with nothing set up: the call throws.
   private read(projectId: string): Promise<SetupChecked & LookupSetup> {
-    return this.db.$read((tx) => SetupStanding.readIn(tx, projectId));
+    return this.db.$read(async (tx) => {
+      await tx.project.findUniqueOrThrow({ where: { id: projectId }, select: { id: true } });
+      return SetupStanding.readIn(tx, projectId);
+    });
   }
 
   // One query at a time: a piece of work has one connection.

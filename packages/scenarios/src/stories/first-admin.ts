@@ -101,7 +101,7 @@ export const firstAdmin: Story = {
       requestNow,
     });
     const admin = new ServerAdmin(api, { rules, hasher, sessions, clock });
-    const people = new People(api, { clock, sessions });
+    const people = new People(api, { clock, sessions, mail });
     const command = async (answers: readonly string[]) => {
       const typed = new Typed(answers);
       const exit = await new AdminCommand(admin, typed, (line) => typed.said.push(line)).run();

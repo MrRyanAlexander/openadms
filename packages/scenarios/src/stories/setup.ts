@@ -90,7 +90,7 @@ export const setup: Story = {
   async run(story) {
     const { api, clock } = story;
     const projects = new ProjectSetup(api, clock, story.policy);
-    const contractors = new ContractorSetup(api, clock);
+    const contractors = new ContractorSetup(api, clock, story.policy);
     const lists = new ListSetup(api, clock);
     const forms = new FormSetup(api, clock);
     const payItems = new PayItemSetup(api, clock, story.policy);

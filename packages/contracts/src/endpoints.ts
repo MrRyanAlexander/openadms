@@ -6,6 +6,7 @@
 // refuses the whole request, and an endpoint whose schema would let one through can't be defined.
 import {
   backOfficeCreated,
+  backOfficeRolesChanged,
   crewTimeConversions,
   incidentOffers,
   numberSeries,
@@ -22,6 +23,7 @@ import {
   csrfAnswerSchema,
   healthAnswerSchema,
   passwordSetAnswerSchema,
+  peopleAnswerSchema,
   personAnswerSchema,
   resetAskedAnswerSchema,
   sessionAnswerSchema,
@@ -47,14 +49,22 @@ import {
   formRecordSchema,
   foundAnswer,
   listValueRecordSchema,
+  mapSources,
+  mapVersionRecordSchema,
   numberSeriesRecordSchema,
   payItemRateRecordSchema,
   payItemRecordSchema,
   projectRecordSchema,
   quantityFroms,
+  quantityLookupAnswerSchema,
   rulesKeptRecordSchema,
   savedAnswer,
   savedRuleRecordSchema,
+  setupCheckAnswerSchema,
+  siteAreaSources,
+  siteAreaVersionRecordSchema,
+  siteRecordSchema,
+  siteTippingFeeRecordSchema,
   ticketNumberSources,
 } from './setup-answers.ts';
 
@@ -478,6 +488,94 @@ export const archivePersonEndpoint = endpoint({
   roles: adminOnly,
   method: 'POST',
   path: '/people/:userId/archivings',
+  params: personId,
+  answer: personAnswerSchema,
+});
+
+// The firm's people, a page at a time (BACKLOG C92; ADR-427): in the order they were added,
+// those in service unless the archived ones are asked for (to take one out of the archive), of
+// one role where one is named. Never the system actor. Open to the back office, as reading one
+// person is: a monitor's phone number is in an admin's answer only.
+// A page holds 200 at most, as `limit`'s pattern says.
+export const peoplePageAtMost = 200;
+
+export const listPeopleEndpoint = endpoint({
+  name: 'listPeople',
+  summary:
+    'The firm’s people, a page at a time, in the order they were added: those in service, or the archived ones. A monitor’s phone number is in an admin’s answer only.',
+  access: 'SIGNED_IN',
+  roles: backOfficeRoles,
+  method: 'GET',
+  path: '/people',
+  query: z.strictObject({
+    role: z.enum(['ADMIN', 'MANAGER_ANALYST', 'MONITOR', 'READ_ONLY_VIEWER']).optional(),
+    archived: z.enum(['true', 'false']).optional(),
+    // The last person of the page before: the answer's `next`.
+    after: z.uuid().optional(),
+    // How many at most: 50 where none is said.
+    limit: z
+      .string()
+      .regex(/^([1-9][0-9]?|1[0-9]{2}|200)$/)
+      .optional(),
+  }),
+  answer: peopleAnswerSchema,
+});
+
+// What an admin changes of a person, each thing only where it is stated (AC-02-06, 75; BACKLOG
+// C92; ADR-427): their name, the address and phone the firm holds for them (a phone number is
+// cleared with null; an address is changed, never cleared), and on a read-only viewer whose user
+// they are and whether they see private citizens by name. A contractor user always names its
+// contractor, and nobody else does: a kind changed to contractor comes with one.
+export const changePersonEndpoint = endpoint({
+  name: 'changePerson',
+  summary:
+    'An admin changes a person’s name, email address or phone number, and a read-only viewer’s kind, contractor and whether they see private citizens by name. Only what is stated changes. A changed sign-in address is told to the old one where the firm has mail.',
+  access: 'SIGNED_IN',
+  roles: adminOnly,
+  method: 'PATCH',
+  path: '/people/:userId',
+  params: personId,
+  body: z
+    .strictObject({
+      name: newPerson.name.optional(),
+      email: newPerson.email.optional(),
+      phone: z.string().trim().min(1).max(40).nullable().optional(),
+      viewerKind: z.enum(['CLIENT', 'CONTRACTOR', 'AUDITOR']).optional(),
+      contractorId: z.uuid().optional(),
+      seesPrivateCitizens: z.boolean().optional(),
+    })
+    .refine((changes) => Object.keys(changes).length > 0),
+  answer: personAnswerSchema,
+});
+
+// A role is changed between the back office's two only (ADR-427): the firm's only admin stays
+// one, by this and by the database. What a manager/analyst was granted stays beside them while
+// they are an admin (who needs none) and is theirs again if they are made one again: the answer
+// says what they hold, and an admin clears it with their permissions.
+export const setPersonRoleEndpoint = endpoint({
+  name: 'setPersonRole',
+  summary:
+    'An admin makes a manager/analyst an admin, or an admin a manager/analyst. Their very next request is asked as the new role. The only admin stays one; a monitor’s and a read-only viewer’s role never changes.',
+  access: 'SIGNED_IN',
+  roles: adminOnly,
+  method: 'PUT',
+  path: '/people/:userId/role',
+  params: personId,
+  body: z.strictObject({ role: z.enum(backOfficeRolesChanged) }),
+  answer: personAnswerSchema,
+});
+
+// Out of the archive (BACKLOG C92; ADR-427): a person who comes back is the person they were,
+// with what they held. They have no session; whoever signs in with an email address comes back
+// only while nobody in service has taken theirs.
+export const unarchivePersonEndpoint = endpoint({
+  name: 'unarchivePerson',
+  summary:
+    'An admin takes a person out of the archive. They are in service again with what they held, and sign in again; refused while somebody in service signs in with their email address.',
+  access: 'SIGNED_IN',
+  roles: adminOnly,
+  method: 'POST',
+  path: '/people/:userId/unarchivings',
   params: personId,
   answer: personAnswerSchema,
 });
@@ -994,6 +1092,173 @@ export const changeRuleEndpoint = endpoint({
   answer: savedAnswer(savedRuleRecordSchema),
 });
 
+// Setup, steps 3, 4 and 7, and the setup as it stands (spec/parts/01-setup.md; AC-01-21, 52…59,
+// 69…77; BACKLOG 2.4.2, C97, C98; ADR-426): a contractor typed twice merged into one; a
+// project's disposal sites, a site's own shape and its tipping fee pay item; the project's map.
+// Each takes Setup, as every setup endpoint.
+const siteId = z.strictObject({ siteId: z.uuid() });
+// WGS84 as an exact decimal, never a float: `39.09000000`. The database says how far it may go.
+const coordinate = z.string().regex(/^-?\d{1,3}(\.\d{1,8})?$/);
+const shortCode = z.string().trim().min(1).max(20);
+// The four site facts: every one stated, none has a default (ADR-215).
+const siteFacts = {
+  takesLoads: z.boolean(),
+  haulOutsLeaveHere: z.boolean(),
+  chargesTippingFee: z.boolean(),
+  ineligibleSite: z.boolean(),
+};
+// GeoJSON as a map or a drawing gives it: a geometry, a Feature or a FeatureCollection, whose
+// properties are the map's own. It is read by the domain's MapShapes, which takes the shapes
+// and a zone's name and nothing else; what it can't read isn't saved, and the answer says why.
+const geoJson = z.json();
+
+// The second spelling is archived, pointing at the one kept; nothing is deleted (ADR-108, 321).
+export const mergeContractorEndpoint = endpoint({
+  ...setup,
+  name: 'mergeContractor',
+  summary:
+    'Merges a sub typed twice at certification into the contractor that is kept: the kept one takes its place on each project, the certifications that named it name the kept one, and it is archived. The tickets of those certifications not locked as invoiced are queued.',
+  method: 'POST',
+  path: '/contractors/:contractorId/merges',
+  params: z.strictObject({ contractorId: z.uuid() }),
+  body: z.strictObject({ intoContractorId: z.uuid() }),
+  answer: savedAnswer(contractorRecordSchema),
+});
+
+// Step 7. A site belongs to one project and is entered again on each that uses it (ADR-145).
+export const createSiteEndpoint = endpoint({
+  ...setup,
+  name: 'createSite',
+  summary:
+    'Enters a disposal site on a project: its site type, the four site facts, its GPS, a permit number (empty: permit outstanding) and its dates. "Haul-outs leave here" is saved only on a TDSR/DMS site.',
+  method: 'POST',
+  path: '/projects/:projectId/sites',
+  params: projectId,
+  body: z.strictObject({
+    name: named,
+    shortCode: shortCode.optional(),
+    siteTypeId: z.uuid(),
+    ...siteFacts,
+    permitNumber: named.nullable(),
+    latitude: coordinate,
+    longitude: coordinate,
+    activationDate: day,
+    closeDate: day.optional(),
+  }),
+  answer: savedAnswer(siteRecordSchema),
+});
+
+export const changeSiteEndpoint = endpoint({
+  ...setup,
+  name: 'changeSite',
+  summary:
+    'Changes a site: its name, short code, site type, site facts, permit number, GPS or dates; one left out stays as it is. The tickets with a field event at the site not locked as invoiced are queued.',
+  method: 'PATCH',
+  path: '/sites/:siteId',
+  params: siteId,
+  body: z
+    .strictObject({
+      name: named.optional(),
+      shortCode: shortCode.nullable().optional(),
+      siteTypeId: z.uuid().optional(),
+      takesLoads: z.boolean().optional(),
+      haulOutsLeaveHere: z.boolean().optional(),
+      chargesTippingFee: z.boolean().optional(),
+      ineligibleSite: z.boolean().optional(),
+      permitNumber: named.nullable().optional(),
+      latitude: coordinate.optional(),
+      longitude: coordinate.optional(),
+      activationDate: day.optional(),
+      // Empty: the site has no close date.
+      closeDate: day.nullable().optional(),
+    })
+    .refine(stated),
+  answer: savedAnswer(siteRecordSchema),
+});
+
+export const addSiteShapeEndpoint = endpoint({
+  ...setup,
+  name: 'addSiteShape',
+  summary:
+    'Saves a site’s own shape as its next version: from then on the site is checked against the shape in place of the project’s circle, and an earlier shape stays as it was. The tickets with a field event at the site not locked as invoiced are queued.',
+  method: 'POST',
+  path: '/sites/:siteId/shapes',
+  params: siteId,
+  body: z.strictObject({ source: z.enum(siteAreaSources), shape: geoJson }),
+  answer: savedAnswer(siteAreaVersionRecordSchema),
+});
+
+export const linkTippingFeeEndpoint = endpoint({
+  ...setup,
+  name: 'linkTippingFee',
+  summary:
+    'Links a site to a tipping fee pay item written from it: how a fee line is told from a hauling line. A site may keep several.',
+  method: 'POST',
+  path: '/sites/:siteId/tipping-fees',
+  params: siteId,
+  body: z.strictObject({ payItemId: z.uuid() }),
+  answer: savedAnswer(siteTippingFeeRecordSchema),
+});
+
+// Step 3's map (ADR-135, 141, 311): GeoJSON only. A map is as large as a request's body may be.
+export const loadMapEndpoint = endpoint({
+  ...setup,
+  name: 'loadMap',
+  summary:
+    'Loads a project’s map as its next version: its boundary and, if it has any, its zones, each named in the field picked. An earlier version and its zones stay as they were. The project’s tickets not locked as invoiced are queued.',
+  method: 'POST',
+  path: '/projects/:projectId/map-versions',
+  params: projectId,
+  body: z.strictObject({
+    source: z.enum(mapSources),
+    // The file's name, or the layer's address.
+    sourceName: z.string().trim().min(1).max(2000).nullable(),
+    boundary: geoJson,
+    // Empty: the map has no zones.
+    zones: geoJson.nullable(),
+    zoneNameField: named.nullable(),
+  }),
+  answer: savedAnswer(mapVersionRecordSchema),
+});
+
+// The setup as it stands (AC-01-69…77; ADR-229, 423, 426): the setup check and what each site's
+// phones ask for. They read and change nothing, and hold no rate: **open to every admin and
+// manager/analyst, whether or not they hold Setup**, since whoever reviews a ticket that paid
+// nothing needs the list that says why.
+const standing = { access: 'SIGNED_IN', roles: backOfficeRoles } as const;
+
+export const setupCheckEndpoint = endpoint({
+  ...standing,
+  name: 'setupCheck',
+  summary:
+    'The setup check: everything a project’s setup leaves open, in plain words; none when it is whole. It lists and never refuses.',
+  method: 'GET',
+  path: '/projects/:projectId/setup-check',
+  params: projectId,
+  answer: setupCheckAnswerSchema,
+});
+
+export const quantityLookupEndpoint = endpoint({
+  ...standing,
+  name: 'quantityLookup',
+  summary:
+    'What each site’s phones ask for: the load call, the scale weight, a count of the items carried or nothing more, for each site, debris type and prime. Worked out from the setup as it stands.',
+  method: 'GET',
+  path: '/projects/:projectId/quantity-lookup',
+  params: projectId,
+  answer: quantityLookupAnswerSchema,
+});
+
+export const siteQuantityLookupEndpoint = endpoint({
+  ...standing,
+  name: 'siteQuantityLookup',
+  summary: 'What one site’s phones ask for: its rows of the project’s quantity lookup.',
+  method: 'GET',
+  path: '/sites/:siteId/quantity-lookup',
+  params: siteId,
+  answer: quantityLookupAnswerSchema,
+});
+
 // Each task that adds an endpoint names it here; the API's tests hold its routes to this list.
 export const endpoints: readonly Endpoint[] = [
   healthEndpoint,
@@ -1009,12 +1274,16 @@ export const endpoints: readonly Endpoint[] = [
   confirmTwoStepSetupEndpoint,
   clearTwoStepEndpoint,
   createPersonEndpoint,
+  listPeopleEndpoint,
   readPersonEndpoint,
+  changePersonEndpoint,
   setPermissionsEndpoint,
   setViewerProjectsEndpoint,
   setPersonPasswordEndpoint,
   endPersonSessionsEndpoint,
   archivePersonEndpoint,
+  setPersonRoleEndpoint,
+  unarchivePersonEndpoint,
   findClientsEndpoint,
   createClientEndpoint,
   findDeclarationEventsEndpoint,
@@ -1042,4 +1311,13 @@ export const endpoints: readonly Endpoint[] = [
   savePaysWhenEndpoint,
   createRuleEndpoint,
   changeRuleEndpoint,
+  mergeContractorEndpoint,
+  createSiteEndpoint,
+  changeSiteEndpoint,
+  addSiteShapeEndpoint,
+  linkTippingFeeEndpoint,
+  loadMapEndpoint,
+  setupCheckEndpoint,
+  quantityLookupEndpoint,
+  siteQuantityLookupEndpoint,
 ];

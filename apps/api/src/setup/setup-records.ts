@@ -12,12 +12,16 @@ import type {
   FormDefinitionRecord,
   FormRecord,
   ListValueRecord,
+  MapVersionRecord,
   NumberSeriesRecord,
   PayItemRateRecord,
   PayItemRecord,
   ProjectRecord,
   RulesKeptRecord,
   SavedRuleRecord,
+  SiteAreaVersionRecord,
+  SiteRecord,
+  SiteTippingFeeRecord,
 } from '@open-adms/contracts';
 import { formDefinitionFields } from '@open-adms/contracts';
 import type {
@@ -27,16 +31,20 @@ import type {
   ControlRange,
   DebrisType,
   DeclarationEvent,
+  DisposalSite,
+  DisposalSiteTippingFee,
   FieldTag,
   Form,
   FormDebrisType,
   FormDefinition,
+  MapVersion,
   PayableType,
   PayItem,
   PayItemRate,
   Project,
   ProjectContractor,
   ProjectNumberSeries,
+  SiteAreaVersion,
 } from '@open-adms/db';
 
 import type { RulesKept } from './pay-item-setup.ts';
@@ -219,4 +227,49 @@ export const savedRuleRecord = (rule: SavedRule): SavedRuleRecord => ({
   id: rule.id,
   valid: rule.valid,
   reasons: [...rule.reasons],
+});
+
+// Its GPS as the exact decimals the database holds: `39.09000000`.
+export const siteRecord = (site: DisposalSite): SiteRecord => ({
+  id: site.id,
+  projectId: site.projectId,
+  name: site.name,
+  shortCode: site.shortCode,
+  siteTypeId: site.siteTypeId,
+  takesLoads: site.takesLoads,
+  haulOutsLeaveHere: site.haulOutsLeaveHere,
+  chargesTippingFee: site.chargesTippingFee,
+  ineligibleSite: site.ineligibleSite,
+  permitNumber: site.permitNumber,
+  latitude: site.latitude.toFixed(8),
+  longitude: site.longitude.toFixed(8),
+  activationDate: day(site.activationDate),
+  closeDate: site.closeDate === null ? null : day(site.closeDate),
+  archived: site.archivedAt !== null,
+});
+
+export const siteAreaVersionRecord = (version: SiteAreaVersion): SiteAreaVersionRecord => ({
+  id: version.id,
+  siteId: version.siteId,
+  version: version.version,
+  source: version.source,
+  effectiveFrom: version.effectiveFrom.toISOString(),
+});
+
+export const siteTippingFeeRecord = (link: DisposalSiteTippingFee): SiteTippingFeeRecord => ({
+  id: link.id,
+  projectId: link.projectId,
+  siteId: link.siteId,
+  payItemId: link.payItemId,
+  archived: link.archivedAt !== null,
+});
+
+export const mapVersionRecord = (version: MapVersion): MapVersionRecord => ({
+  id: version.id,
+  projectId: version.projectId,
+  version: version.version,
+  source: version.source,
+  sourceName: version.sourceName,
+  zoneNameField: version.zoneNameField,
+  loadedAt: version.loadedAt.toISOString(),
 });

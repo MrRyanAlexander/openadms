@@ -1,26 +1,36 @@
 // The endpoints of the firm's people (ARCHITECTURE §6, Authorization, §7.0; AC-02-08, 12, 13, 72;
 // AC-10-25; ADR-406, 415): an admin creates a back-office or an outside user, gives and takes a
 // manager/analyst's permissions and a viewer's projects, sets a password, ends sessions and
-// archives; an admin or a manager/analyst reads a person. The door has already asked the
+// archives; changes a person, their role between the back office's two, and takes one out of the
+// archive (BACKLOG C92; ADR-427); an admin or a manager/analyst reads a person, or a page of
+// them. The door has already asked the
 // caller's role (admission.ts); each service asks again inside its own piece of work. The log
 // says what was done, never a name, an address or a password.
 import {
   archivePersonEndpoint,
+  changePersonEndpoint,
   createPersonEndpoint,
   endPersonSessionsEndpoint,
+  listPeopleEndpoint,
   passwordSetAnswerSchema,
+  peopleAnswerSchema,
   personAnswerSchema,
   readPersonEndpoint,
   sessionsEndedAnswerSchema,
   setPermissionsEndpoint,
   setPersonPasswordEndpoint,
+  setPersonRoleEndpoint,
   setViewerProjectsEndpoint,
+  unarchivePersonEndpoint,
+  type BodyOf,
   type PasswordSetAnswer,
+  type PeopleAnswer,
   type PersonAnswer,
+  type QueryOf,
   type SessionsEndedAnswer,
 } from '@open-adms/contracts';
 import type { PermissionName } from '@open-adms/domain';
-import { Body, Controller, Inject, Param, Req } from '@nestjs/common';
+import { Body, Controller, Inject, Param, Query, Req } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 
 import { Refusal } from '../process/refusal.ts';
@@ -32,6 +42,9 @@ import { People, type NewPerson, type PeopleRefused, type PersonOutcome } from '
 
 export const apiPeople = Symbol('the API’s people');
 
+// A page's size where the request names none.
+const peoplePage = 50;
+
 const statusOf: Readonly<Record<PeopleRefused, number>> = {
   NOT_ALLOWED: 403,
   NOT_FOUND: 404,
@@ -39,6 +52,7 @@ const statusOf: Readonly<Record<PeopleRefused, number>> = {
   LAST_ADMIN: 409,
   NOT_A_MANAGER_ANALYST: 422,
   NOT_A_VIEWER: 422,
+  NOT_BACK_OFFICE: 422,
   UNKNOWN_CONTRACTOR: 422,
   UNKNOWN_PROJECT: 422,
 };
@@ -68,6 +82,48 @@ export class PeopleController {
     const outcome = await this.people.read(callerOf(request).userId, params.userId);
     if (!outcome.done) throw new Refusal(outcome.code, statusOf[outcome.code]);
     return personAnswerSchema.parse(outcome.person);
+  }
+
+  @Serves(listPeopleEndpoint)
+  async list(
+    @Query() query: QueryOf<typeof listPeopleEndpoint>,
+    @Req() request: FastifyRequest,
+  ): Promise<PeopleAnswer> {
+    const outcome = await this.people.list(callerOf(request).userId, {
+      role: query.role,
+      archived: query.archived === 'true',
+      after: query.after,
+      limit: query.limit === undefined ? peoplePage : Number(query.limit),
+    });
+    if (!outcome.done) throw new Refusal(outcome.code, statusOf[outcome.code]);
+    return peopleAnswerSchema.parse({ people: outcome.people, next: outcome.next });
+  }
+
+  @Serves(changePersonEndpoint)
+  async change(
+    @Param() params: Named,
+    @Body() body: BodyOf<typeof changePersonEndpoint>,
+    @Req() request: FastifyRequest,
+  ): Promise<PersonAnswer> {
+    const outcome = await this.people.change(callerOf(request).userId, params.userId, body);
+    return this.answered(request, outcome, 'A person was changed.');
+  }
+
+  @Serves(setPersonRoleEndpoint)
+  async setRole(
+    @Param() params: Named,
+    @Body() body: BodyOf<typeof setPersonRoleEndpoint>,
+    @Req() request: FastifyRequest,
+  ): Promise<PersonAnswer> {
+    const outcome = await this.people.setRole(callerOf(request).userId, params.userId, body.role);
+    if (outcome.done) request.log.warn({ role: body.role }, 'An admin set a person’s role.');
+    return this.answered(request, outcome, 'A person’s role was set.');
+  }
+
+  @Serves(unarchivePersonEndpoint)
+  async unarchive(@Param() params: Named, @Req() request: FastifyRequest): Promise<PersonAnswer> {
+    const outcome = await this.people.unarchive(callerOf(request).userId, params.userId);
+    return this.answered(request, outcome, 'A person was taken out of the archive.');
   }
 
   @Serves(setPermissionsEndpoint)

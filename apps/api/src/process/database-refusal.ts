@@ -114,6 +114,20 @@ const words: Readonly<Record<string, string>> = {
   rule_action_slot_check: 'Not saved: a Void ticket takes no transaction #.',
   rule_action_project_id_pay_item_id_fkey:
     'Not saved: an Add transaction names one of the project’s pay items.',
+  // Setup, steps 3, 4 and 7: the merge, sites and the map (task 2.4.2, part 3).
+  disposal_site_dates_check: 'Not saved: the site closes before it is activated.',
+  disposal_site_coordinates_check:
+    'Not saved: a latitude is from -90 to 90 and a longitude from -180 to 180.',
+  disposal_site_haul_outs_check:
+    'Not saved: "Haul-outs leave here" is ticked only on a TDSR/DMS site.',
+  disposal_site_tipping_fee_site_id_pay_item_id_key:
+    'Not saved: the site is already linked to that pay item.',
+  disposal_site_tipping_fee_project_id_pay_item_id_fkey:
+    'Not saved: a site’s tipping fee pay item is one of its own project’s pay items.',
+  zone_map_version_id_name_key: 'Not loaded: two zones of the map have the same name.',
+  map_version_boundary_check: 'Not loaded: the boundary isn’t a shape.',
+  zone_geometry_check: 'Not loaded: a zone isn’t a shape.',
+  site_area_version_geometry_check: 'Not saved: that isn’t a shape.',
 };
 
 const notFound: DatabaseRefusal = {

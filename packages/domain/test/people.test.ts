@@ -167,6 +167,38 @@ describe('the firm’s people', () => {
     expect(rules.lastAdmin({ ...dana, archived: true }, 0)).toBe(false);
   });
 
+  it('a role is changed between admin and manager/analyst only: never a monitor’s, a read-only viewer’s, the system actor’s or an archived person’s, and never to one of theirs (ADR-427)', () => {
+    expect(rules.roleChangeRefusal(luis, 'ADMIN', 1)).toBeNull();
+    expect(rules.roleChangeRefusal(dana, 'MANAGER_ANALYST', 1)).toBeNull();
+    for (const person of [ana, viewer, { role: 'SYSTEM', archived: false }]) {
+      expect(rules.roleChangeRefusal(person, 'ADMIN', 1)).toBe('NOT_BACK_OFFICE');
+      expect(rules.roleChangeRefusal(person, 'MANAGER_ANALYST', 1)).toBe('NOT_BACK_OFFICE');
+    }
+    for (const to of ['MONITOR', 'READ_ONLY_VIEWER', 'SYSTEM', 'OWNER']) {
+      expect(rules.roleChangeRefusal(luis, to, 1)).toBe('NOT_BACK_OFFICE');
+    }
+    expect(rules.roleChangeRefusal({ ...luis, archived: true }, 'ADMIN', 1)).toBe(
+      'NOT_BACK_OFFICE',
+    );
+  });
+
+  it('AC-02-13 the firm’s only admin is never made a manager/analyst; one of two may be, and an admin stated an admin again is no change to refuse', () => {
+    expect(rules.roleChangeRefusal(dana, 'MANAGER_ANALYST', 0)).toBe('LAST_ADMIN');
+    expect(rules.roleChangeRefusal(dana, 'MANAGER_ANALYST', 1)).toBeNull();
+    expect(rules.roleChangeRefusal(dana, 'ADMIN', 0)).toBeNull();
+    expect(rules.roleChangeRefusal(luis, 'MANAGER_ANALYST', 0)).toBeNull();
+  });
+
+  it('AC-02-83 who signs in with their email address: everybody created in the back office, never a monitor or the system actor', () => {
+    expect(roles.map((role) => rules.signsInByEmail(role))).toEqual([
+      true,
+      true,
+      false,
+      true,
+      false,
+    ]);
+  });
+
   it('AC-02-72 a monitor’s phone number is read by an admin, never by a manager/analyst; no viewer reads anybody’s', () => {
     expect(rules.readsPhoneOf(dana, 'MONITOR')).toBe(true);
     expect(rules.readsPhoneOf(luis, 'MONITOR')).toBe(false);

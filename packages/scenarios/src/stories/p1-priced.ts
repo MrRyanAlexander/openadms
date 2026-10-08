@@ -100,7 +100,7 @@ export const p1Priced: Story = {
       on('09', '09:00'),
       'Friday: Summit Debris Services joins P1 as a second prime, with its own contract, "Summit, Bayline ROW 2026". Nobody has priced its work yet',
     );
-    const contractors = new ContractorSetup(api, clock);
+    const contractors = new ContractorSetup(api, clock, story.policy);
     const summit = (
       await saved(contractors.contractor(dana, { name: 'Summit Debris Services', kind: 'HAULER' }))
     ).id;

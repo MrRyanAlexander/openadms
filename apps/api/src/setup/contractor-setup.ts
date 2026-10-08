@@ -6,7 +6,8 @@
 // it: the key a contract's prime, a rate's prime and a sub's prime are held to (ADR-305; C56).
 // Beside it, `SubPlaces` is the one place that gives a sub its place: when it is typed in at
 // certification, inside the piece of work that saves the certification (ADR-108, 321). Two
-// spellings of one sub are merged here by the back office.
+// spellings of one sub are merged here by the back office, and the merge queues the tickets of
+// the certifications it moved (ADR-420, 426).
 import type {
   Contract,
   Contractor,
@@ -25,7 +26,7 @@ import {
   type SubTier,
 } from '@open-adms/domain';
 
-import { type Outcome, Refused, SetupService, type Warn } from './setup-service.ts';
+import { type Outcome, QueueingService, Refused, type Warn } from './setup-service.ts';
 
 const tierOf: Record<ContractorPosition, SubTier | null> = {
   PRIME: null,
@@ -160,7 +161,7 @@ export interface NewContract {
   readonly signedCopyUrl?: string;
 }
 
-export class ContractorSetup extends SetupService {
+export class ContractorSetup extends QueueingService {
   // A contractor the firm already has is picked, never entered again.
   findContractors(search: string): Promise<Contractor[]> {
     return this.db.$read((tx) =>
@@ -201,7 +202,9 @@ export class ContractorSetup extends SetupService {
   // each project the duplicate is on, the kept contractor takes its place there (or keeps its
   // own), the certifications that named the duplicate name the kept one, and the duplicate's place
   // is taken off; then the duplicate is archived, pointing at the kept one. Nothing is deleted, and
-  // every row changed is audited as the person (ADR-108, 321).
+  // every row changed is audited as the person (ADR-108, 321). A ticket's lines name the sub its
+  // certification names, so on each project the tickets whose field events carry a certification
+  // the merge moved are queued in the same piece of work, one locked as invoiced left as it is.
   merge(person: string, duplicateId: string, keptId: string): Promise<Outcome<Contractor>> {
     return this.setup(person, async (tx) => {
       const merge = new ContractorMerge(
@@ -228,6 +231,13 @@ export class ContractorSetup extends SetupService {
             data: { archivedAt: null },
           });
         }
+        const moved = await tx.certification.findMany({
+          where: {
+            projectId,
+            OR: [{ firstTierSubId: duplicateId }, { secondTierSubId: duplicateId }],
+          },
+          select: { id: true },
+        });
         await tx.certification.updateMany({
           where: { projectId, firstTierSubId: duplicateId },
           data: { firstTierSubId: keptId },
@@ -240,6 +250,11 @@ export class ContractorSetup extends SetupService {
           where: { projectId, contractorId: duplicateId, archivedAt: null },
           data: { archivedAt: now },
         });
+        if (moved.length > 0) {
+          await this.setupChanged(tx, person, projectId, {
+            certificationId: { in: moved.map((certification) => certification.id) },
+          });
+        }
       }
       return tx.contractor.update({
         where: { id: duplicateId },

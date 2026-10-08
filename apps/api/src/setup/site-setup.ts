@@ -47,6 +47,9 @@ export type SiteChanges = Partial<
     // The site's GPS corrected: WGS84, exact decimals.
     readonly latitude: string;
     readonly longitude: string;
+    // Calendar days in the project's time zone; the close date may be emptied.
+    readonly activationDate: string;
+    readonly closeDate: string | null;
   }
 >;
 
@@ -89,7 +92,8 @@ export class SiteSetup extends QueueingService {
     });
   }
 
-  // A change to a site the project holds, audited with the value before.
+  // A change to a site the project holds, audited with the value before. A close date before
+  // the activation date is the database's to refuse: the call throws, and nothing is saved.
   change(person: string, siteId: string, changes: SiteChanges): Promise<Outcome<DisposalSite>> {
     return this.setup(person, async (tx) => {
       const site = await tx.disposalSite.findUniqueOrThrow({ where: { id: siteId } });
@@ -107,9 +111,17 @@ export class SiteSetup extends QueueingService {
         },
         before,
       );
+      const { activationDate, closeDate, ...others } = changes;
       const changed = await tx.disposalSite.update({
         where: { id: siteId },
-        data: { ...changes, siteTypeKey: type.siteTypeKey },
+        data: {
+          ...others,
+          ...(activationDate === undefined ? {} : { activationDate: day(activationDate) }),
+          ...(closeDate === undefined
+            ? {}
+            : { closeDate: closeDate === null ? null : day(closeDate) }),
+          siteTypeKey: type.siteTypeKey,
+        },
       });
       await this.setupChanged(tx, person, site.projectId, { siteId }, true);
       return changed;

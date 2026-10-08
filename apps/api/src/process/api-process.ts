@@ -37,6 +37,10 @@ import { apiProjectSetup } from '../setup/project-setup.controller.ts';
 import { ProjectSetup } from '../setup/project-setup.ts';
 import { RuleSetup } from '../setup/rule-setup.ts';
 import type { Clock } from '../setup/setup-service.ts';
+import { apiSetupStanding } from '../setup/setup-standing.controller.ts';
+import { SetupStanding } from '../setup/setup-standing.ts';
+import { apiSiteSetup } from '../setup/site-setup.controller.ts';
+import { SiteSetup } from '../setup/site-setup.ts';
 import { Admission } from '../sign-in/admission.ts';
 import { shippedBreachedPasswords } from '../sign-in/breached-list.ts';
 import { mailFor, type Mail } from '../sign-in/mail.ts';
@@ -188,7 +192,7 @@ export class ApiProcess {
       tries,
       limits,
     });
-    const people = new People(database, { clock, sessions });
+    const people = new People(database, { clock, sessions, mail });
     const app = await NestFactory.create<NestFastifyApplication>(
       ProcessModule.around(
         module,
@@ -202,11 +206,13 @@ export class ApiProcess {
           [apiLimits, limits],
           // Setup's services (task 2.4.2): each change is written as the signed-in person.
           [apiProjectSetup, new ProjectSetup(database, clock, policy)],
-          [apiContractorSetup, new ContractorSetup(database, clock)],
+          [apiContractorSetup, new ContractorSetup(database, clock, policy)],
           [apiListSetup, new ListSetup(database, clock)],
           [apiFormSetup, new FormSetup(database, clock)],
           [apiPayItemSetup, new PayItemSetup(database, clock, policy)],
           [apiRuleSetup, new RuleSetup(database, clock, policy)],
+          [apiSiteSetup, new SiteSetup(database, clock, policy)],
+          [apiSetupStanding, new SetupStanding(database)],
         ]),
       ),
       adapter,

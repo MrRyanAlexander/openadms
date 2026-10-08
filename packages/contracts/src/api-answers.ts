@@ -56,6 +56,9 @@ export const errorCodes = [
   // A permission is given to a manager/analyst only; a project to a read-only viewer only.
   'NOT_A_MANAGER_ANALYST',
   'NOT_A_VIEWER',
+  // A role is changed between admin and manager/analyst only: never a monitor's, a read-only
+  // viewer's or an archived person's, and never to one of theirs (ADR-427).
+  'NOT_BACK_OFFICE',
   // A contractor user's contractor, or a viewer's project, that the firm doesn't hold.
   'UNKNOWN_CONTRACTOR',
   'UNKNOWN_PROJECT',
@@ -164,6 +167,15 @@ export const personAnswerSchema = z.strictObject({
 });
 
 export type PersonAnswer = z.infer<typeof personAnswerSchema>;
+
+// A page of the firm's people, in the order they were added (ADR-427). `next` is what to send
+// as `after` for the page that follows; null when this is the last.
+export const peopleAnswerSchema = z.strictObject({
+  people: z.array(personAnswerSchema),
+  next: z.uuid().nullable(),
+});
+
+export type PeopleAnswer = z.infer<typeof peopleAnswerSchema>;
 
 // An admin ended a person's sessions: how many were open.
 export const sessionsEndedAnswerSchema = z.strictObject({

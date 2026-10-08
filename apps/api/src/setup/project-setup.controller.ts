@@ -1,7 +1,7 @@
 // Setup's endpoints, steps 1 to 3 and the project's own lists (spec/parts/01-setup.md;
 // ARCHITECTURE §6; AC-01-80; AC-10-27, 38; BACKLOG 2.4.2; ADR-316, 424): the client and the
 // declaration event, searched for and picked or created; the project; its settings, its active
-// window and its close; its number series and control ranges; its field tags. The door has
+// window and its close; its number series and control ranges; its field tags; its map. The door has
 // already asked the caller's role and that they hold Setup (admission.ts); each service asks
 // again inside its own piece of work, and writes as that person.
 import {
@@ -16,6 +16,7 @@ import {
   enterControlRangeEndpoint,
   findClientsEndpoint,
   findDeclarationEventsEndpoint,
+  loadMapEndpoint,
   startNumberSeriesEndpoint,
   type BodyOf,
   type ParamsOf,
@@ -33,6 +34,7 @@ import {
   controlRangeRecord,
   declarationEventRecord,
   fieldTagRecord,
+  mapVersionRecord,
   numberSeriesRecord,
   projectRecord,
 } from './setup-records.ts';
@@ -199,6 +201,22 @@ export class ProjectSetupController {
     );
     return addFieldTagEndpoint.answer.parse(
       answered(request, outcome, fieldTagRecord, 'A field tag was added.'),
+    );
+  }
+
+  // The map as GeoJSON, read by the domain's MapShapes: what it can't read isn't loaded.
+  @Serves(loadMapEndpoint)
+  async loadMap(
+    @Param() params: InProject,
+    @Body() body: BodyOf<typeof loadMapEndpoint>,
+    @Req() request: FastifyRequest,
+  ) {
+    const outcome = await this.projects.loadMap(callerOf(request).userId, {
+      projectId: params.projectId,
+      ...body,
+    });
+    return loadMapEndpoint.answer.parse(
+      answered(request, outcome, mapVersionRecord, 'A project’s map was loaded.'),
     );
   }
 }

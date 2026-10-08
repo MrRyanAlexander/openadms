@@ -4,7 +4,14 @@
 // its id, its fields, whether it is archived; a calendar day as `2026-10-12`. Nothing here is a
 // secret or a field of another record. **A rate is said in one answer only: the one to whoever
 // just set it** (a setup endpoint, so an admin or a manager/analyst who holds Setup; ADR-425).
-import { crewTimeConversions, incidentOffers, numberSeries, workflows } from '@open-adms/domain';
+import {
+  crewTimeConversions,
+  incidentOffers,
+  numberSeries,
+  quantityAsks,
+  setupGapCodes,
+  workflows,
+} from '@open-adms/domain';
 import { z } from 'zod';
 
 import { formDefinitionFields } from './form-definition.ts';
@@ -28,6 +35,9 @@ export const formDocumentTypes = [
 ] as const;
 export const billingUnits = ['CY', 'TN', 'EA', 'LB', 'HR', 'CREW_DAY', 'TBN'] as const;
 export const quantityFroms = ['ALL_ITEMS', 'CHOSEN_ITEMS'] as const;
+export const siteAreaSources = ['DRAWN', 'UPLOAD'] as const;
+export const mapSources = ['UPLOAD', 'ESRI_LAYER', 'DRAWN'] as const;
+export const dumpedForms = ['LOAD', 'HAUL_OUT'] as const;
 
 // Saved all the same, and said to whoever saved it: the domain's code and its plain words.
 export const setupWarningSchema = z.strictObject({
@@ -285,3 +295,97 @@ export const savedRuleRecordSchema = z.strictObject({
 });
 
 export type SavedRuleRecord = z.infer<typeof savedRuleRecordSchema>;
+
+// A disposal site as the firm entered it on one project (ADR-145, 215): its site type, the four
+// site facts, its GPS as exact decimals (`39.09000000`), its permit and its dates. An empty
+// permit number is "permit outstanding" (ADR-111).
+export const siteRecordSchema = z.strictObject({
+  id,
+  projectId: id,
+  name: z.string(),
+  shortCode: z.string().nullable(),
+  siteTypeId: id,
+  takesLoads: z.boolean(),
+  haulOutsLeaveHere: z.boolean(),
+  chargesTippingFee: z.boolean(),
+  ineligibleSite: z.boolean(),
+  permitNumber: z.string().nullable(),
+  latitude: z.string(),
+  longitude: z.string(),
+  activationDate: day,
+  closeDate: day.nullable(),
+  archived: z.boolean(),
+});
+
+export type SiteRecord = z.infer<typeof siteRecordSchema>;
+
+// One version of a site's own shape (ADR-142, 144): which version, how it came and from when
+// the site is checked against it. The shape itself isn't said back.
+export const siteAreaVersionRecordSchema = z.strictObject({
+  id,
+  siteId: id,
+  version: z.number().int(),
+  source: z.enum(siteAreaSources),
+  effectiveFrom: z.iso.datetime(),
+});
+
+export type SiteAreaVersionRecord = z.infer<typeof siteAreaVersionRecordSchema>;
+
+// The link from a site that charges a tipping fee to a tipping fee pay item (ADR-222).
+export const siteTippingFeeRecordSchema = z.strictObject({
+  id,
+  projectId: id,
+  siteId: id,
+  payItemId: id,
+  archived: z.boolean(),
+});
+
+export type SiteTippingFeeRecord = z.infer<typeof siteTippingFeeRecordSchema>;
+
+// One version of a project's map (ADR-141): which version, how it came and the field its zones
+// are named in. The shapes themselves aren't said back.
+export const mapVersionRecordSchema = z.strictObject({
+  id,
+  projectId: id,
+  version: z.number().int(),
+  source: z.enum(mapSources),
+  sourceName: z.string().nullable(),
+  zoneNameField: z.string().nullable(),
+  loadedAt: z.iso.datetime(),
+});
+
+export type MapVersionRecord = z.infer<typeof mapVersionRecordSchema>;
+
+// The setup check's answer (ADR-229): everything the project's setup leaves open, each a plain
+// message with the records it is about; none when the setup is whole. It lists, never refuses.
+export const setupCheckAnswerSchema = z.strictObject({
+  gaps: z.array(
+    z.strictObject({
+      code: z.enum(setupGapCodes),
+      message: z.string().min(1),
+      siteId: id.nullable(),
+      debrisTypeId: id.nullable(),
+      payItemId: id.nullable(),
+      primeId: id.nullable(),
+      ruleId: id.nullable(),
+    }),
+  ),
+});
+
+export type SetupCheckAnswer = z.infer<typeof setupCheckAnswerSchema>;
+
+// What a site's phones ask for (ADR-223, 227, 243): a row for each site, debris type of a load
+// or haul-out form (the form's own entry) and prime. Worked out when asked, kept nowhere.
+export const quantityLookupAnswerSchema = z.strictObject({
+  asks: z.array(
+    z.strictObject({
+      siteId: id,
+      form: z.enum(dumpedForms),
+      debrisTypeId: id,
+      primeId: id,
+      asks: z.enum(quantityAsks),
+    }),
+  ),
+});
+
+export type QuantityLookupAnswer = z.infer<typeof quantityLookupAnswerSchema>;

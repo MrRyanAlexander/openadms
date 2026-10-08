@@ -15,6 +15,10 @@
 //   be archived or made anything else.
 // - **A monitor's phone number** is read by admins only (by the firm's practice it is their
 //   password, ADR-105).
+// - **A role is changed between admin and manager/analyst only** (ADR-427): a monitor signs in
+//   on a phone with a Monitor ID and a password the password rules don't read, and a read-only
+//   viewer's record says whose user they are, so neither is made a back-office user by a
+//   change of role, nor the other way.
 
 // The permissions a manager/analyst can be granted, as the database's Permission keeps them: one
 // closed set (spec/DATA-MODEL.md §2.2).
@@ -105,7 +109,12 @@ export class SetupRights {
 }
 
 export type PeopleRefusalCode =
-  'NOT_ALLOWED' | 'NOT_A_MANAGER_ANALYST' | 'NOT_A_VIEWER' | 'LAST_ADMIN';
+  'NOT_ALLOWED' | 'NOT_A_MANAGER_ANALYST' | 'NOT_A_VIEWER' | 'LAST_ADMIN' | 'NOT_BACK_OFFICE';
+
+// The two roles of the back office itself: a role is changed from one to the other only.
+export const backOfficeRolesChanged = ['ADMIN', 'MANAGER_ANALYST'] as const;
+
+export type BackOfficeRole = (typeof backOfficeRolesChanged)[number];
 
 export class PeopleRules {
   // Whether a person of that role is created by an admin in the back office: never a monitor,
@@ -143,6 +152,26 @@ export class PeopleRules {
   // leave the firm with no admin: they are an admin in service and no other is.
   lastAdmin(person: Pick<Holder, 'role' | 'archived'>, otherAdminsInService: number): boolean {
     return person.role === 'ADMIN' && !person.archived && otherAdminsInService < 1;
+  }
+
+  // Whether a person of that role signs in with their email address, so that it is theirs alone
+  // among the people in service who do (ADR-409): everybody created in the back office.
+  signsInByEmail(role: string): boolean {
+    return this.createdHere(role);
+  }
+
+  // Why that person's role may not be changed to that one, or nothing: from admin to
+  // manager/analyst or back, on a person in service, and never the firm's only admin.
+  roleChangeRefusal(
+    person: Pick<Holder, 'role' | 'archived'>,
+    to: string,
+    otherAdminsInService: number,
+  ): PeopleRefusalCode | null {
+    const backOffice = (role: string): boolean =>
+      backOfficeRolesChanged.some((here) => here === role);
+    if (person.archived || !backOffice(person.role) || !backOffice(to)) return 'NOT_BACK_OFFICE';
+    if (to !== 'ADMIN' && this.lastAdmin(person, otherAdminsInService)) return 'LAST_ADMIN';
+    return null;
   }
 
   // Whether the reader is shown that person's phone number: an admin always; a manager/analyst

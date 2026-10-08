@@ -187,7 +187,7 @@ export const goldenMission: Story = {
       'Friday: Dana sets up P2, the PPDR project, under the same client and declaration event: Coastline its prime, its contract, a load form with Vegetative, an ROE form and a survey form, VEG-HAUL-CY at $9.00, Marsh Road TDSR entered again, and two phones',
     );
     const projects = new ProjectSetup(api, clock, story.policy);
-    const contractors = new ContractorSetup(api, clock);
+    const contractors = new ContractorSetup(api, clock, story.policy);
     const forms = new FormSetup(api, clock);
     const payItems = new PayItemSetup(api, clock, story.policy);
     const first = await api.project.findUniqueOrThrow({ where: { id: p1 } });

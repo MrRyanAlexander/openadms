@@ -51,7 +51,7 @@ export const certification: Story = {
   async run(story) {
     const { api, clock } = story;
     const certifications = new Certifications(api, clock, story.policy);
-    const contractors = new ContractorSetup(api, clock);
+    const contractors = new ContractorSetup(api, clock, story.policy);
 
     const saved = async <T>(attempt: Promise<Outcome<T>>): Promise<T> => {
       const outcome = await attempt;

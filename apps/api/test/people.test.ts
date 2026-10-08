@@ -186,17 +186,23 @@ describe('permissions, read from the database on every request', () => {
     expect(open(adminOnly)).toEqual([
       'clearTwoStep',
       'createPerson',
+      // Changing a person, their role, and out of the archive: ADR-427.
+      'changePerson',
       'setPermissions',
       'setViewerProjects',
       'setPersonPassword',
       'endPersonSessions',
       'archivePerson',
+      'setPersonRole',
+      'unarchivePerson',
     ]);
     expect(
       signedIn
         .filter(({ roles, permission }) => roles?.join() === backOfficeRoles.join() && !permission)
         .map(({ name }) => name),
-    ).toEqual(['readPerson']);
+      // Reading a person or a page of them (ADR-427), and the setup as it stands (the setup
+      // check and the lookups, ADR-426).
+    ).toEqual(['listPeople', 'readPerson', 'setupCheck', 'quantityLookup', 'siteQuantityLookup']);
     // The only permission an endpoint takes yet is Setup (task 2.4.2; the list by name is
     // setup-endpoints.test.ts's): the reviewer's are task 2.4.4's.
     expect([...new Set(endpoints.flatMap(({ permission }) => permission ?? []))]).toEqual([
@@ -246,6 +252,7 @@ describe('permissions, read from the database on every request', () => {
       const people = new People(within, {
         clock: { now: () => new Date('2026-10-12T14:00:00Z') },
         sessions: signInOn(within, new Outbox()).sessions,
+        mail: new Outbox(),
       });
       const other = await tx.user.create({ data: { name: 'Morgan Ellis', role: 'ADMIN' } });
       await tx.user.update({ where: { id: other.id }, data: { archivedAt: new Date() } });
@@ -258,6 +265,19 @@ describe('permissions, read from the database on every request', () => {
         expect(await people.setViewerProjects(caller, who.viewer, [])).toEqual(refused);
         expect(await people.archive(caller, who.kim)).toEqual(refused);
         expect(await people.endSessions(caller, who.luis)).toEqual(refused);
+        expect(await people.change(caller, who.kim, { name: 'Kim N.' })).toEqual(refused);
+        expect(await people.setRole(caller, who.luis, 'ADMIN')).toEqual(refused);
+        expect(await people.unarchive(caller, other.id)).toEqual(refused);
+      }
+      expect((await tx.user.findUniqueOrThrow({ where: { id: who.kim } })).name).toBe('Kim Nguyen');
+      expect((await tx.user.findUniqueOrThrow({ where: { id: who.luis } })).role).toBe(
+        'MANAGER_ANALYST',
+      );
+      for (const caller of [who.viewer, who.kim, other.id]) {
+        expect(await people.list(caller, { archived: false, limit: 50 })).toEqual({
+          done: false,
+          code: 'NOT_ALLOWED',
+        });
       }
       expect(await tx.userPermission.count()).toBe(0);
       expect((await people.read(who.kim, who.luis)).done).toBe(false);

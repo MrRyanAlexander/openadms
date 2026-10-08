@@ -14,12 +14,14 @@ import {
   addFormDefinitionEndpoint,
   addPayableTypeEndpoint,
   addPrimeEndpoint,
+  addSiteShapeEndpoint,
   archiveControlRangeEndpoint,
   backOfficeRoles,
   changePayItemEndpoint,
   changeProjectSettingsEndpoint,
   changeProjectWindowEndpoint,
   changeRuleEndpoint,
+  changeSiteEndpoint,
   closeProjectEndpoint,
   createClientEndpoint,
   createContractEndpoint,
@@ -29,12 +31,16 @@ import {
   createPayItemEndpoint,
   createProjectEndpoint,
   createRuleEndpoint,
+  createSiteEndpoint,
   endpoints,
   enterControlRangeEndpoint,
   errorAnswerSchema,
   findClientsEndpoint,
   findContractorsEndpoint,
   findDeclarationEventsEndpoint,
+  linkTippingFeeEndpoint,
+  loadMapEndpoint,
+  mergeContractorEndpoint,
   savePaysWhenEndpoint,
   setPayItemRateEndpoint,
   startNumberSeriesEndpoint,
@@ -70,7 +76,7 @@ afterAll(async () => {
 
 const world = worldOn(() => db);
 
-// Setup's endpoints of this task's first two parts, in the order the contracts list them.
+// Setup's endpoints of this task's first three parts, in the order the contracts list them.
 const setupEndpoints = [
   findClientsEndpoint,
   createClientEndpoint,
@@ -99,6 +105,12 @@ const setupEndpoints = [
   savePaysWhenEndpoint,
   createRuleEndpoint,
   changeRuleEndpoint,
+  mergeContractorEndpoint,
+  createSiteEndpoint,
+  changeSiteEndpoint,
+  addSiteShapeEndpoint,
+  linkTippingFeeEndpoint,
+  loadMapEndpoint,
 ] as const;
 
 describe('who may change the setup', () => {
@@ -141,6 +153,12 @@ describe('who may change the setup', () => {
       'PUT /pay-items/:payItemId/pays-when',
       'POST /projects/:projectId/rules',
       'PUT /rules/:ruleId',
+      'POST /contractors/:contractorId/merges',
+      'POST /projects/:projectId/sites',
+      'PATCH /sites/:siteId',
+      'POST /sites/:siteId/shapes',
+      'POST /sites/:siteId/tipping-fees',
+      'POST /projects/:projectId/map-versions',
     ]);
   });
 
@@ -159,6 +177,10 @@ describe('who may change the setup', () => {
         await tx.payItem.count(),
         await tx.payItemRate.count(),
         await tx.rule.count(),
+        await tx.disposalSite.count(),
+        await tx.siteAreaVersion.count(),
+        await tx.disposalSiteTippingFee.count(),
+        await tx.mapVersion.count(),
       ];
       const before = await counted();
       for (const served of setupEndpoints) {
@@ -216,7 +238,7 @@ describe('who may change the setup', () => {
     await world(async (_api, tx, who, within) => {
       const clock = { now: () => new Date('2026-10-12T14:00:00Z') };
       const projects = new ProjectSetup(within, clock, shippedPolicy);
-      const contractors = new ContractorSetup(within, clock);
+      const contractors = new ContractorSetup(within, clock, shippedPolicy);
       const lists = new ListSetup(within, clock);
       const gone = await tx.user.create({ data: { name: 'Morgan Ellis', role: 'ADMIN' } });
       await tx.user.update({ where: { id: gone.id }, data: { archivedAt: new Date() } });
