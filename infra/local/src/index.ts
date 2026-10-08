@@ -3,7 +3,9 @@
 //                      check it against its pinned SHA-256, start every service, wait until all are
 //                      healthy, copy out Caddy's root certificate, check each page over HTTPS;
 //                      then, once `pnpm installer` has made the API's settings, build the API,
-//                      start its container afresh and check its health answer over HTTPS (ADR-385)
+//                      start its container afresh and check its health answer over HTTPS (ADR-385),
+//                      and the same for the worker, whose health answer is asked inside its own
+//                      container (ADR-419)
 //   pnpm local:down    stop and remove the containers and network; data volumes are kept
 //   pnpm local:wipe    down, plus the data volumes, the generated .env and the root certificate;
 //                      the downloaded map extract (public data, infra/local/.cache/) is kept
@@ -16,12 +18,18 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { request } from 'node:https';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parseEnv } from 'node:util';
 
 import { MapExtract } from './map-extract.ts';
 
 const project = 'open-adms-local';
-// The API's container is in its own profile: it exists only once the installer has run.
+// The API's and the worker's containers are each in a profile of their own: they exist only once
+// the installer has run.
 const withApi = ['--profile', 'api'];
+const withWorker = ['--profile', 'worker'];
+const withServices = [...withApi, ...withWorker];
+// What the worker's settings must name before it can start (apps/worker/src/process/settings.ts).
+const workerMapKeys = ['ADMS_ROUTING_URL', 'ADMS_ADDRESSES_URL'];
 
 class DevSecrets {
   // Generated once, into a git-ignored file readable only by its owner.
@@ -51,6 +59,7 @@ class LocalStack {
   // The repository's root, and the API's own settings, written by `pnpm installer`.
   readonly repository: string;
   readonly apiEnvFile: string;
+  readonly workerEnvFile: string;
 
   constructor(root: string) {
     this.root = root;
@@ -59,6 +68,7 @@ class LocalStack {
     this.rootCert = join(this.generated, 'caddy-root.crt');
     this.repository = join(root, '..', '..');
     this.apiEnvFile = join(this.repository, 'apps', 'api', '.env');
+    this.workerEnvFile = join(this.repository, 'apps', 'worker', '.env');
     this.map = MapExtract.fromSettings((key) => this.setting(key), join(root, '.cache', 'maps'));
   }
 
@@ -73,14 +83,15 @@ class LocalStack {
     await this.checkPage('routing.adms.localhost', '/status');
     await this.checkPage('addresses.adms.localhost', '/status');
     await this.api();
+    this.worker();
   }
 
   down(): void {
-    this.compose([...withApi, 'down', '--remove-orphans']);
+    this.compose([...withServices, 'down', '--remove-orphans']);
   }
 
   wipe(): void {
-    this.compose([...withApi, 'down', '--volumes', '--remove-orphans']);
+    this.compose([...withServices, 'down', '--volumes', '--remove-orphans']);
     rmSync(this.envFile, { force: true });
     rmSync(this.generated, { recursive: true, force: true });
     console.log('Removed the data volumes, the generated .env and the root certificate.');
@@ -88,7 +99,7 @@ class LocalStack {
   }
 
   status(): void {
-    this.compose([...withApi, 'ps', '--all']);
+    this.compose([...withServices, 'ps', '--all']);
   }
 
   // `pnpm installer` asks for this alone once it has written the API's settings (the stack is up).
@@ -114,6 +125,64 @@ class LocalStack {
       'api',
     ]);
     await this.checkPage('api.adms.localhost', '/health');
+  }
+
+  // `pnpm installer` asks for this alone once the worker's settings name the map servers. As the
+  // API: built first, its container made afresh. Its container is healthy once its own health
+  // answer is; the answer is then asked for and shown.
+  worker(): void {
+    const keys = existsSync(this.workerEnvFile)
+      ? Object.keys(parseEnv(readFileSync(this.workerEnvFile, 'utf8')))
+      : [];
+    if (!workerMapKeys.every((key) => keys.includes(key))) {
+      console.log(
+        'The worker waits for `pnpm installer`: its settings (apps/worker/.env) don’t name the map servers yet.',
+      );
+      return;
+    }
+    console.log('Building the worker (pnpm generate, tsc --build apps/worker) …');
+    this.build('pnpm', ['generate']);
+    this.build(join(this.repository, 'node_modules', '.bin', 'tsc'), ['--build', 'apps/worker']);
+    this.compose([
+      ...withWorker,
+      'up',
+      '--detach',
+      '--wait',
+      '--wait-timeout',
+      '120',
+      '--force-recreate',
+      '--no-deps',
+      'worker',
+    ]);
+    this.workerHealth();
+  }
+
+  // The worker's health answer, asked inside its own container: it publishes no port.
+  workerHealth(): void {
+    const result = spawnSync(
+      'docker',
+      [
+        ...this.composeArgs(),
+        ...withWorker,
+        'exec',
+        '--no-TTY',
+        'worker',
+        'node',
+        '-e',
+        "fetch('http://127.0.0.1:3001/health').then(async (r) => { console.log(String(r.status) + ' ' + (await r.text())); process.exit(r.ok ? 0 : 1); }, () => process.exit(1))",
+      ],
+      { encoding: 'utf8', env: { ...process.env, ...this.map.environment() } },
+    );
+    console.log(
+      `the worker’s health answer → ${result.status === 0 ? result.stdout.trim() : 'no answer'}`,
+    );
+    if (result.status !== 0) process.exitCode = 1;
+  }
+
+  // The SHA-256 of the extract the stack's map servers are built from: public, and the
+  // installer's to write into the worker's settings.
+  mapSha256(): void {
+    console.log(this.map.sha256);
   }
 
   private build(command: string, args: string[]): void {
@@ -217,21 +286,19 @@ class LocalStack {
   private compose(args: string[]): void {
     const result = spawnSync(
       'docker',
-      [
-        'compose',
-        '--project-directory',
-        this.root,
-        '--file',
-        join(this.root, 'compose.yaml'),
-        ...args,
-      ],
+      [...this.composeArgs(), ...args],
       // The map extract's path, name and hash reach compose from here, never from a file.
       { stdio: 'inherit', env: { ...process.env, ...this.map.environment() } },
     );
     if (result.status !== 0) {
-      const what = args.find((arg) => !arg.startsWith('--') && arg !== 'api') ?? '';
+      const what =
+        args.find((arg) => !arg.startsWith('--') && arg !== 'api' && arg !== 'worker') ?? '';
       throw new Error(`docker compose ${what} failed (exit ${String(result.status)}).`);
     }
+  }
+
+  private composeArgs(): string[] {
+    return ['compose', '--project-directory', this.root, '--file', join(this.root, 'compose.yaml')];
   }
 
   private run(command: string, args: string[]): string {
@@ -247,6 +314,15 @@ const folder = join(dirname(fileURLToPath(import.meta.url)), '..');
 const commands: Record<string, (stack: LocalStack) => Promise<void> | void> = {
   up: (stack) => stack.up(),
   api: (stack) => stack.api(),
+  worker: (stack) => {
+    stack.worker();
+  },
+  'worker-health': (stack) => {
+    stack.workerHealth();
+  },
+  'map-sha256': (stack) => {
+    stack.mapSha256();
+  },
   down: (stack) => {
     stack.down();
   },

@@ -12,7 +12,8 @@
 # downloaded and checked against its pinned SHA-256 by `pnpm local:up` into infra/local/.cache/maps/
 # (git-ignored) and mounted read-only (REQ-022, ADR-282). Each builds its own data from it on a
 # first run, and again when the extract changes. Neither publishes a port: both are reached through
-# Caddy, over HTTPS. The API is the seventh service, in its own profile (below).
+# Caddy, over HTTPS. The API is the seventh service and the worker the eighth, each in its own
+# profile (below).
 name: open-adms-local
 
 x-hardening: &hardening
@@ -221,6 +222,63 @@ services:
       retries: 12
       start_period: 20s
 
+  worker:
+    <<: *hardening
+    # The worker (ARCHITECTURE §4, §13; ADR-419), as the API above: Node alone, the built code and
+    # its dependencies mounted read-only, no env file but its own. Started by `pnpm local:up` once
+    # `pnpm installer` has written apps/worker/.env (the profile), after building apps/worker. It
+    # publishes no port and no proxy leads to it: its health answer listens on its own loopback,
+    # for the check below and for `pnpm installer:check`.
+    profiles: ['worker']
+    image: node:24.21.0-alpine3.23@sha256:9ec4a2e289874ed0d722e1772ec2de45d2801541db8612f3638b26f128c69ac2
+    user: '1000:1000'
+    cap_drop:
+      - ALL
+    read_only: true
+    working_dir: /srv/open-adms
+    command: ['node', 'apps/worker/dist/main.js']
+    environment:
+      NODE_ENV: production
+      ADMS_ENV_FILE: /run/secrets/worker_env
+      ADMS_WORKER_HOST: 127.0.0.1
+      ADMS_WORKER_PORT: '3001'
+      # The installer wrote the login as this machine reaches Postgres; in here it is a service.
+      ADMS_DATABASE_ADDRESS: postgres:5432
+      # The map servers are asked by their own names, over HTTPS, through Caddy: in here Caddy is
+      # at the address the stack's network gives it, and its root certificate is mounted below.
+      ADMS_MAP_SERVERS_ADDRESS: 172.30.213.2:443
+      ADMS_MAP_CA_FILE: /run/adms/caddy-root.crt
+      # The extract both map servers were built from: the stack's own word (`pnpm local:up`).
+      ADMS_MAP_EXTRACT_SHA256: ${ADMS_MAP_SHA256:?run pnpm local:up}
+    secrets:
+      - worker_env
+    volumes:
+      - ../../node_modules:/srv/open-adms/node_modules:ro
+      - ../../apps/worker/package.json:/srv/open-adms/apps/worker/package.json:ro
+      - ../../apps/worker/node_modules:/srv/open-adms/apps/worker/node_modules:ro
+      - ../../apps/worker/dist:/srv/open-adms/apps/worker/dist:ro
+      - ../../packages/db/package.json:/srv/open-adms/packages/db/package.json:ro
+      - ../../packages/db/node_modules:/srv/open-adms/packages/db/node_modules:ro
+      - ../../packages/db/dist:/srv/open-adms/packages/db/dist:ro
+      - ../../packages/domain/package.json:/srv/open-adms/packages/domain/package.json:ro
+      - ../../packages/domain/node_modules:/srv/open-adms/packages/domain/node_modules:ro
+      - ../../packages/domain/dist:/srv/open-adms/packages/domain/dist:ro
+      - ../../packages/domain/policy.env:/srv/open-adms/packages/domain/policy.env:ro
+      - ./.generated/caddy-root.crt:/run/adms/caddy-root.crt:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3001/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
   caddy:
     <<: *hardening
     image: caddy:2.11.4-alpine@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b
@@ -264,6 +322,9 @@ secrets:
   # that would put each value in the container's description).
   api_env:
     file: ../../apps/api/.env
+  # The worker's, the same way.
+  worker_env:
+    file: ../../apps/worker/.env
 
 configs:
   s3_identities:

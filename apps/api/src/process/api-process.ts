@@ -65,6 +65,7 @@ export type ProcessSettings = Pick<
 export type ProcessPolicy = Pick<
   Policy,
   | 'requestBodyLimitBytes'
+  | 'databasePoolConnections'
   | 'passwordMinimumLength'
   | 'passwordMaximumLength'
   | 'passwordResetMinutes'
@@ -184,7 +185,7 @@ export class ApiProcess {
     server.addHook('onRoute', (route) => {
       for (const method of [route.method].flat()) routes.push({ method, path: route.url });
     });
-    const database = more.database ?? openApiDatabase(settings);
+    const database = more.database ?? openApiDatabase(settings, policy.databasePoolConnections);
     const clock = more.clock ?? { now: () => new Date() };
     const limits = new Limits(new RateLimits(policy), clock);
     answersWith(server, settings.corsOrigins, (request) => limits.arrived(request.ip));

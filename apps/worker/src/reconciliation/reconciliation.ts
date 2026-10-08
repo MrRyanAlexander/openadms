@@ -21,8 +21,16 @@
 //   365, 366).
 // - A ticket locked as invoiced is left exactly as it is, whatever changed (ADR-090): the run
 //   records that it left it.
-// - A rate or a rule that changes needs no list of the tickets it touches: a run works every
-//   ticket of the project and writes only what differs, so only the tickets it touches change.
+// - A run the queue starts works the tickets its project's waiting jobs name, each once, and no
+//   other (the user, ADR-360; ADR-418, 419): a settled ticket is on no waiting job. It still
+//   reads the whole project, since a ticket's checks read its neighbours. Each job is finished
+//   under the run that worked it, in the run's own closing piece of work; a try that fails whole
+//   is counted, its reason kept, and the job set aside after the policy's number of tries.
+// - A run asked for directly (`run`: a story's, until the stories move onto the queue, 2.7.1)
+//   works every ticket of the project and writes only what differs, whatever tickets the review
+//   service that answered it names: a change to one ticket can change what stands on another
+//   (an overlap on one truck, a weight two containers share), and which others a job must name
+//   is the task's that queues it (2.3.3; BACKLOG C95).
 // - Running again over unchanged input changes nothing but the record of the run itself.
 // - Each run is recorded, with one decision for each ticket: its status and why.
 // - Everything is written as the system actor, and the database audits it (ADR-273, 276). A
@@ -53,6 +61,7 @@ import {
 } from './project-read.ts';
 import { TicketWork, type MileageStep, type WorkSettings } from './ticket-work.ts';
 import { TicketWrite } from './ticket-write.ts';
+import { WaitingJobs } from './waiting-jobs.ts';
 
 // The time the worker states on what it writes: the server's, or a story's.
 export interface Clock {
@@ -71,6 +80,34 @@ export interface RunAsked {
   // The person who asked for a reprocess; none on a run a sync or a setup change started.
   readonly requestedById?: string;
 }
+
+// What became of a project's waiting jobs when the worker went to take them up.
+export type JobsOutcome =
+  | {
+      readonly worked: false;
+      readonly reason: 'RUN_UNDER_WAY' | 'NOTHING_WAITING';
+      // The jobs found spent (taken up as often as the policy lets, with no word since) and
+      // set aside.
+      readonly setAside: readonly string[];
+    }
+  | {
+      readonly worked: false;
+      // The try failed whole: every job it took up is still waiting, or set aside.
+      readonly reason: 'FAILED';
+      readonly error: string;
+      readonly jobs: readonly string[];
+      readonly setAside: readonly string[];
+    }
+  | {
+      readonly worked: true;
+      readonly run: Extract<RunOutcome, { ran: true }>;
+      // The jobs the run finished.
+      readonly jobs: readonly string[];
+      readonly setAside: readonly string[];
+    };
+
+const ticketKey = (ticket: TicketNamed): string =>
+  JSON.stringify([ticket.workflow, ticket.ticketNumber]);
 
 // What a run did with one ticket.
 export interface TicketOutcome {
@@ -121,19 +158,8 @@ export class Reconciliation {
   }
 
   async run(asked: RunAsked): Promise<RunOutcome> {
-    const outcome = await this.db.$transaction(
-      async (lock) => {
-        // Held until this piece of work ends, however it ends; it writes nothing itself.
-        const [answer] = await lock.$queryRaw<{ locked: boolean }[]>`
-          SELECT pg_try_advisory_xact_lock(
-            hashtextextended(${`adms.reconciliation ${asked.projectId}`}, 0)
-          ) AS locked`;
-        if (answer?.locked !== true) return null;
-        return this.locked(asked, async () => {
-          await lock.$queryRaw`SELECT 1`;
-        });
-      },
-      { timeout: this.settings.longestRunMs, maxWait: this.settings.longestRunMs },
+    const outcome = await this.underLock(asked.projectId, (stillHeld) =>
+      this.locked(asked, stillHeld),
     );
     return (
       outcome ?? {
@@ -144,7 +170,93 @@ export class Reconciliation {
     );
   }
 
-  private async locked(asked: RunAsked, stillHeld: () => Promise<void>): Promise<RunOutcome> {
+  // The project's waiting jobs, taken up under its lock, which is the claim (ADR-418): one run
+  // works the tickets they name, each once, and finishes them. `triesBeforeSetAside` is the
+  // policy's.
+  async waitingJobs(projectId: string, triesBeforeSetAside: number): Promise<JobsOutcome> {
+    const jobs = new WaitingJobs(this.db, this.clock, triesBeforeSetAside);
+    const outcome = await this.underLock<JobsOutcome>(projectId, async (stillHeld) => {
+      const taken = await jobs.takeUp(projectId);
+      const [first] = taken.jobs;
+      if (first === undefined) {
+        return { worked: false, reason: 'NOTHING_WAITING', setAside: taken.setAside };
+      }
+      const ids = taken.jobs.map((job) => job.id);
+      // The run is the oldest job's; a person is named on it only where every job names the
+      // same one. Each job keeps who asked for it, and names its run.
+      const sameAsker = taken.jobs.every((job) => job.requestedById === first.requestedById);
+      try {
+        const run = await this.locked(
+          {
+            projectId,
+            trigger: first.trigger,
+            ...(sameAsker && first.requestedById !== null
+              ? { requestedById: first.requestedById }
+              : {}),
+          },
+          stillHeld,
+          { tickets: taken.tickets, closing: (tx, runId) => jobs.finish(tx, ids, runId) },
+        );
+        return { worked: true, run, jobs: ids, setAside: taken.setAside };
+      } catch (caught) {
+        const error = errorWords(caught);
+        const spent = await jobs.failed(taken.jobs, error);
+        return {
+          worked: false,
+          reason: 'FAILED',
+          error,
+          jobs: ids,
+          setAside: [...taken.setAside, ...spent],
+        };
+      }
+    });
+    return outcome ?? { worked: false, reason: 'RUN_UNDER_WAY', setAside: [] };
+  }
+
+  // Runs the work while holding the project's lock; answers nothing where another run holds it.
+  // The lock is a piece of work held open for the length of the run, so it is let go however
+  // the run ends. What the work answered stands even where its time ran out just before.
+  private async underLock<T>(
+    projectId: string,
+    work: (stillHeld: () => Promise<void>) => Promise<T>,
+  ): Promise<T | null> {
+    let answered: { readonly outcome: T | null } | undefined;
+    try {
+      await this.db.$transaction(
+        async (lock) => {
+          // Held until this piece of work ends, however it ends; it writes nothing itself.
+          const [answer] = await lock.$queryRaw<{ locked: boolean }[]>`
+            SELECT pg_try_advisory_xact_lock(
+              hashtextextended(${`adms.reconciliation ${projectId}`}, 0)
+            ) AS locked`;
+          if (answer?.locked !== true) {
+            answered = { outcome: null };
+            return;
+          }
+          const outcome = await work(async () => {
+            await lock.$queryRaw`SELECT 1`;
+          });
+          answered = { outcome };
+        },
+        { timeout: this.settings.longestRunMs, maxWait: this.settings.longestRunMs },
+      );
+    } catch (caught) {
+      if (answered === undefined) throw caught;
+    }
+    if (answered === undefined) throw new Error('The run ended without an answer.');
+    return answered.outcome;
+  }
+
+  private async locked(
+    asked: RunAsked,
+    stillHeld: () => Promise<void>,
+    // A run the queue starts: the tickets to work, and no other; and what is written with the
+    // run's own closing, where the run went through whole.
+    queued?: {
+      readonly tickets: readonly TicketNamed[];
+      readonly closing: (tx: Prisma.TransactionClient, runId: string) => Promise<void>;
+    },
+  ): Promise<Extract<RunOutcome, { ran: true }>> {
     const { db, clock } = this;
     const { projectId } = asked;
     const run = await db.$write(systemActor, (tx) =>
@@ -161,6 +273,11 @@ export class Reconciliation {
     const tickets: TicketOutcome[] = [];
     let done = 0;
     let failed = 0;
+    let whole = false;
+    const named =
+      queued === undefined ? null : new Set(queued.tickets.map((each) => ticketKey(each)));
+    const isAsked = (ticket: TicketNamed): boolean =>
+      named === null || named.has(ticketKey(ticket));
     try {
       const snapshot = await new ProjectRead(db).of(projectId);
       const flags = new Flags(snapshot.project.timeZone);
@@ -174,6 +291,7 @@ export class Reconciliation {
       await this.projectRecords(snapshot, run.id);
 
       for (const voided of snapshot.voided) {
+        if (!isAsked(voided)) continue;
         await stillHeld();
         const outcome = await this.voided(projectId, voided, run.id);
         tickets.push(outcome);
@@ -182,6 +300,7 @@ export class Reconciliation {
       }
       const gathered = new Tickets(snapshot.fieldEvents);
       for (const ticket of gathered.tickets) {
+        if (!isAsked(ticket)) continue;
         await stillHeld();
         const outcome = await this.ticket(work, ticket, run.id);
         tickets.push(outcome);
@@ -190,20 +309,24 @@ export class Reconciliation {
       }
       // A field event whose number isn't digits is in no ticket (ADR-329 (6), 345).
       for (const group of Reconciliation.byNumber(gathered.notTicketNumbers)) {
+        const [first] = group;
+        if (first === undefined || !isAsked(first)) continue;
         await stillHeld();
         tickets.push(await this.notATicket(snapshot, group, run.id));
         done += 1;
       }
       await stillHeld();
       await this.numbersGone(snapshot, run.id);
+      whole = true;
     } finally {
-      await db.$write(systemActor, (tx) =>
-        tx.reconciliationRun.update({
+      await db.$write(systemActor, async (tx) => {
+        await tx.reconciliationRun.update({
           where: { id: run.id },
           data: { finishedAt: clock.now(), ticketsDone: done, ticketsFailed: failed },
           select: { id: true },
-        }),
-      );
+        });
+        if (whole) await queued?.closing(tx, run.id);
+      });
     }
     return {
       ran: true,

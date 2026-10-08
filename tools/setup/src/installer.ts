@@ -35,6 +35,13 @@ const warning = 'Git-ignored. Never commit, print or share it.';
 // How the hash reaches the seed (its process's environment), and where an installation made before
 // the database kept it still has it (packages/db/.env, ADR-266).
 const passcodeKey = 'ADMS_MASTER_PASSCODE_HASH';
+// What the worker's settings name of the map servers (apps/worker/src/process/settings.ts).
+const workerMapKeys = [
+  'ADMS_ROUTING_URL',
+  'ADMS_ADDRESSES_URL',
+  'ADMS_MAP_CA_FILE',
+  'ADMS_MAP_EXTRACT_SHA256',
+];
 // The API is reached only through the local stack's proxy, over HTTPS (ADR-385).
 const apiHostname = 'api.adms.localhost';
 
@@ -119,7 +126,9 @@ export class Installer {
       this.seed();
       await this.clearEarlierHash();
       this.state.save(record);
+      this.ensureWorkerSettings();
       this.startApi();
+      this.startWorker();
       console.log(`\nInstalled for ${record.firm}. Rerun \`pnpm installer\` any time to re-check.`);
     } finally {
       await database.close();
@@ -257,8 +266,9 @@ export class Installer {
       ['ADMS_TOKEN_SIGNING_SECRET', maker.password()],
       ['SMTP_URL', answers.mail === 'mail catcher' ? `smtp://${host}:${smtpPort}` : ''],
     ]);
-    this.workerEnv.create(header('the worker, with its own login'), [
+    this.workerEnv.create(header('the worker, with its own login and the map servers it asks'), [
       ['DATABASE_URL', url('adms_worker')],
+      ...this.workerMapSettings(),
     ]);
     for (const file of [this.ownerEnv, this.apiEnv, this.workerEnv]) {
       console.log(`+ wrote ${this.relative(file.path)} (mode 0600)`);
@@ -543,12 +553,71 @@ export class Installer {
       ok: actorProblem === undefined,
       text: `the system actor is the seed's, alone, unchanged and guarded${actorProblem === undefined ? '' : ` (${actorProblem})`}`,
     });
+    const stated = this.workerEnv.exists() ? this.workerEnv.read() : {};
+    const unnamed = workerMapKeys.filter((key) => !(key in stated));
+    checks.push({
+      ok: unnamed.length === 0,
+      text: `apps/worker/.env names the map servers the worker asks${unnamed.length === 0 ? '' : ` (missing ${unnamed.join(', ')}: pnpm installer adds them)`}`,
+    });
     const apiProblem = await this.apiProblem();
     checks.push({
       ok: apiProblem === undefined,
       text: `the API answers over HTTPS at https://${apiHostname}/health${apiProblem === undefined ? '' : ` (${apiProblem})`}`,
     });
+    checks.push({
+      ok: this.helper(['worker-health']).status === 0,
+      text: 'the worker answers its health check in the local stack',
+    });
     return checks;
+  }
+
+  // What the worker is told of the map servers (ARCHITECTURE §3; ADR-349, 419): the local
+  // stack's own, each by its name over HTTPS, the stack's certificate authority, and the SHA-256
+  // of the extract the stack built them from. Nothing here is secret.
+  private workerMapSettings(): [string, string][] {
+    const port = this.stackEnv.exists() ? this.stackEnv.read()['ADMS_HTTPS_PORT'] : undefined;
+    const at = port === undefined || port === '443' ? '' : `:${port}`;
+    const sha256 = this.helper(['map-sha256']).stdout.trim();
+    if (!/^[0-9a-f]{64}$/.test(sha256)) {
+      throw new Error('The local stack did not say which map extract it has. Stopped.');
+    }
+    return [
+      ['ADMS_ROUTING_URL', `https://routing.adms.localhost${at}`],
+      ['ADMS_ADDRESSES_URL', `https://addresses.adms.localhost${at}`],
+      ['ADMS_MAP_CA_FILE', join(this.root, 'infra/local/.generated/caddy-root.crt')],
+      ['ADMS_MAP_EXTRACT_SHA256', sha256],
+    ];
+  }
+
+  // An installation made before the worker had a process has a worker's env file with its login
+  // alone: the map settings are added at its end, every line already there left as it was.
+  private ensureWorkerSettings(): void {
+    const name = this.relative(this.workerEnv.path);
+    const added = this.workerEnv.add(this.workerMapSettings());
+    if (added.length === 0) console.log(`✓ ${name} names the map servers the worker asks`);
+    else console.log(`+ added to ${name}: ${added.join(', ')}`);
+  }
+
+  // The worker's settings are this installer's too: the local stack builds it, starts its
+  // container afresh and asks its health answer (ADR-419).
+  private startWorker(): void {
+    console.log('\nStarting the worker in the local stack:');
+    const result = spawnSync(
+      process.execPath,
+      [join(this.root, 'infra/local/src/index.ts'), 'worker'],
+      { stdio: 'inherit' },
+    );
+    if (result.status !== 0) throw new Error('The worker did not start. Stopped.');
+  }
+
+  // Asks the local stack's helper (infra/local/src/index.ts) and takes its answer.
+  private helper(args: string[]): { status: number | null; stdout: string } {
+    const result = spawnSync(
+      process.execPath,
+      [join(this.root, 'infra/local/src/index.ts'), ...args],
+      { encoding: 'utf8' },
+    );
+    return { status: result.status, stdout: result.stdout };
   }
 
   // The API's settings are this installer's, so its container starts only now (ADR-385): the

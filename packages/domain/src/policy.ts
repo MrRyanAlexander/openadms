@@ -30,6 +30,9 @@ export const policyNames = {
   // How long one statement of a service's database login may run, in milliseconds, before the
   // database stops it (ARCHITECTURE §5.7; ADR-394). The installer sets it on each login.
   statementTimeoutMs: 'STATEMENT_TIMEOUT_MS',
+  // The most connections a service's pool opens to the database (ARCHITECTURE §5.7; ADR-419).
+  // Never under two: a run holds its project's lock on one and writes on another.
+  databasePoolConnections: 'DATABASE_POOL_CONNECTIONS',
   // The shortest and the longest password a back-office or outside user may set, in characters
   // (ARCHITECTURE §6, Passwords; NIST SP 800-63B-4 §3.1.1.2; ADR-402).
   passwordMinimumLength: 'PASSWORD_MINIMUM_LENGTH',
@@ -71,6 +74,14 @@ export const policyNames = {
   signInWrongTriesPerAddressAtLogin: 'SIGN_IN_WRONG_TRIES_PER_ADDRESS_AT_LOGIN',
   passwordResetAsksPerAddress: 'PASSWORD_RESET_ASKS_PER_ADDRESS',
   passwordResetAsksPerLogin: 'PASSWORD_RESET_ASKS_PER_LOGIN',
+  // The worker's own (ARCHITECTURE §13; ADR-418, 419), read by the worker's process alone: how
+  // many runs may take a job up before it is set aside; the longest a run may hold its project's
+  // lock, in minutes; how often the worker looks for waiting jobs, in seconds; and how long a map
+  // server has to answer one question, in seconds.
+  jobTriesBeforeSetAside: 'JOB_TRIES_BEFORE_SET_ASIDE',
+  reconciliationRunLongestMinutes: 'RECONCILIATION_RUN_LONGEST_MINUTES',
+  jobQueuePollSeconds: 'JOB_QUEUE_POLL_SECONDS',
+  mapServerAnswerSeconds: 'MAP_SERVER_ANSWER_SECONDS',
 } as const;
 
 export type PolicyName = (typeof policyNames)[keyof typeof policyNames];
@@ -100,6 +111,7 @@ const ranges: Record<PolicyName, { least: number; most: number }> = {
   [policyNames.roeNumberBlockSize]: { least: 1, most: Number.MAX_SAFE_INTEGER },
   [policyNames.requestBodyLimitBytes]: { least: 1, most: Number.MAX_SAFE_INTEGER },
   [policyNames.statementTimeoutMs]: { least: 1, most: 2147483647 },
+  [policyNames.databasePoolConnections]: { least: 2, most: 1000 },
   [policyNames.passwordMinimumLength]: { least: 8, most: 64 },
   [policyNames.passwordMaximumLength]: { least: 64, most: 1024 },
   [policyNames.passwordResetMinutes]: { least: 1, most: 1440 },
@@ -121,6 +133,10 @@ const ranges: Record<PolicyName, { least: number; most: number }> = {
   [policyNames.signInWrongTriesPerAddressAtLogin]: { least: 1, most: 98 },
   [policyNames.passwordResetAsksPerAddress]: { least: 1, most: Number.MAX_SAFE_INTEGER },
   [policyNames.passwordResetAsksPerLogin]: { least: 1, most: Number.MAX_SAFE_INTEGER },
+  [policyNames.jobTriesBeforeSetAside]: { least: 1, most: 100 },
+  [policyNames.reconciliationRunLongestMinutes]: { least: 1, most: 1440 },
+  [policyNames.jobQueuePollSeconds]: { least: 1, most: 3600 },
+  [policyNames.mapServerAnswerSeconds]: { least: 1, most: 600 },
 };
 
 export class Policy {
@@ -134,6 +150,7 @@ export class Policy {
   readonly roeNumberBlockSize: number;
   readonly requestBodyLimitBytes: number;
   readonly statementTimeoutMs: number;
+  readonly databasePoolConnections: number;
   readonly passwordMinimumLength: number;
   readonly passwordMaximumLength: number;
   readonly passwordResetMinutes: number;
@@ -155,6 +172,10 @@ export class Policy {
   readonly signInWrongTriesPerAddressAtLogin: number;
   readonly passwordResetAsksPerAddress: number;
   readonly passwordResetAsksPerLogin: number;
+  readonly jobTriesBeforeSetAside: number;
+  readonly reconciliationRunLongestMinutes: number;
+  readonly jobQueuePollSeconds: number;
+  readonly mapServerAnswerSeconds: number;
 
   private constructor(values: Readonly<Record<string, string | undefined>>) {
     this.loadCallLowLimit = Policy.read(values, policyNames.loadCallLowLimit);
@@ -167,6 +188,7 @@ export class Policy {
     this.roeNumberBlockSize = Policy.read(values, policyNames.roeNumberBlockSize);
     this.requestBodyLimitBytes = Policy.read(values, policyNames.requestBodyLimitBytes);
     this.statementTimeoutMs = Policy.read(values, policyNames.statementTimeoutMs);
+    this.databasePoolConnections = Policy.read(values, policyNames.databasePoolConnections);
     this.passwordMinimumLength = Policy.read(values, policyNames.passwordMinimumLength);
     this.passwordMaximumLength = Policy.read(values, policyNames.passwordMaximumLength);
     this.passwordResetMinutes = Policy.read(values, policyNames.passwordResetMinutes);
@@ -191,6 +213,13 @@ export class Policy {
     );
     this.passwordResetAsksPerAddress = Policy.read(values, policyNames.passwordResetAsksPerAddress);
     this.passwordResetAsksPerLogin = Policy.read(values, policyNames.passwordResetAsksPerLogin);
+    this.jobTriesBeforeSetAside = Policy.read(values, policyNames.jobTriesBeforeSetAside);
+    this.reconciliationRunLongestMinutes = Policy.read(
+      values,
+      policyNames.reconciliationRunLongestMinutes,
+    );
+    this.jobQueuePollSeconds = Policy.read(values, policyNames.jobQueuePollSeconds);
+    this.mapServerAnswerSeconds = Policy.read(values, policyNames.mapServerAnswerSeconds);
     // Three pairs hold only together: an access token that outlasted the session's quiet time would
     // keep a session nobody uses alive; a lock that came no later than the first wait would
     // leave no wait at all; and one address allowed as many wrong tries at a login as put a wait

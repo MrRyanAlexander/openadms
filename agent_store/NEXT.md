@@ -89,7 +89,7 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-07, through ADR-418)
+### Where things stand (2026-10-07, through ADR-419)
 - **Phase 2 (API and sync) is open (ADR-376).** Its plan is `BACKLOG.md`'s eight milestones and 32
   tasks (ADR-377); tasks 2.0.1 (the opening and the plan), 2.1.1 (the threat model and the
   API's scenarios, ADR-379; docs), 2.1.2 (the API as a process, ADR-380…385), 2.1.3 (the
@@ -161,8 +161,21 @@ of `DECISIONS.md`.
   by `new ReconciliationJobs(tx).queue(…)` in `packages/db`; the API adds a job and changes
   nothing of it, the worker writes only how it went (`attempts`, `finishedAt` with its run,
   `lastError`, `setAsideAt`), nobody deletes, no viewer reads; a job once finished or set aside
-  never changes. **Nothing queues a job yet and nothing takes one up**: the worker's process is
-  2.3.2's, the callers 2.3.3's. What it leaves: BACKLOG C94. **The user's word (ADR-401):
+  never changes. What it leaves: BACKLOG C94. **Task 2.3.2 (the worker as a process, ADR-419) is
+  done:** `apps/worker/src/main.ts`, the stack's eighth service (profile `worker`), looks at the
+  queue every five seconds and hands each project with a job waiting to
+  `Reconciliation.waitingJobs`: under the project's lock a try is counted on each waiting job,
+  the tickets they name are worked and no other, each once, and each job is finished in the
+  run's closing piece of work; a try that fails whole keeps its reason, and a job is set aside
+  after five (`JOB_TRIES_BEFORE_SET_ASIDE`). Its settings stop the start when off, named; its
+  log is JSON by ids; its health answer (`{"status":"ok","jobsWaiting":N,"jobsSetAside":N}`) is
+  on its own loopback, asked from inside the container. Five policy values more, the pool's
+  size for both services among them. `pnpm installer` writes the worker's map settings (it
+  added them to this machine's `apps/worker/.env`), starts the worker and checks it.
+  **Nothing queues a job yet** (2.3.3), **and `Reconciliation.run`, which the stories call,
+  still works every ticket of the project:** a job must name the neighbours a change can move
+  (voiding 101031 clears a flag on 101030), which is 2.3.3's first decision. What it leaves:
+  BACKLOG C95. **The user's word (ADR-401):
   sign-in follows NIST SP 800-63B and ASVS Level 2; when a direction in security is suggested,
   say what the standard asks before building it** (ADR-400 was built first and withdrawn). **Each service login (`adms_api`, `adms_worker`, `adms_readonly`) is
   under a statement timeout**, the policy value `STATEMENT_TIMEOUT_MS` (30,000 ms), set by
@@ -191,21 +204,22 @@ of `DECISIONS.md`.
   `installationPolicy({ … })`.
 - **Phase 1 is done:** all seven exit criteria met (ADR-371, 372); 693 of the 708 scenarios with a
   Phase 1 part proven whole, 15 in part. 48 scenario rows name Phase 2 (37 as "API (Phase 2)").
-- **The chain, seen whole on 2026-10-07:** 105 test
-  files, 2,149 tests; lint clean; 421 licences allowed; sixteen stories; `pnpm security` 7 passed,
-  0 failed; eighty-nine migrations. The expected output of each command is `adms-verify`'s.
+- **The chain, seen whole on 2026-10-07:** 107 test
+  files, 2,178 tests; lint clean; 421 licences allowed; seventeen stories; `pnpm security` 7 passed,
+  0 failed; eighty-nine migrations; `installer:check` 27 `✓`. The expected output of each command is `adms-verify`'s.
 - **What exists:** `packages/db` (schema, guards, tests), `packages/domain` (every rule; one
   dependency, no database), `packages/contracts`, `packages/scenarios` (the harness and stories,
-  the golden mission among them), `apps/worker/src/reconciliation/` (the run: group, check,
-  price, write; no process; it reads no job yet), `apps/api/src/` (the service classes: setup,
+  the golden mission among them), `apps/worker/src/` (`reconciliation/`, the run: group, check,
+  price, write, and the waiting jobs it takes up; `process/` and `main.ts`, the process that
+  drains the queue), `apps/api/src/` (the service classes: setup,
   certifications, numbering, intake, review; and `process/` with `main.ts`, the HTTP process with
   a health answer, the boundary, the headers and the API's database client: no endpoint of the
   services, no sign-in), `tools/`, `infra/local`.
 - **Open deviations:** none. KD-63 closed when the user marked `spec/CONVENTIONS.md` approved
   (ADR-378). KD-30 is re-filed to Phase 5 (REQ-518).
-- **After a change to `apps/api`, `pnpm local:up` again** before the chain: the API's container
-  runs what was built when it started, and `apps/api/test/door.test.ts` asks that container
-  (BACKLOG C85). Docker Desktop may be closed at the start of a session: `open -a Docker`, and
+- **After a change to `apps/api` or `apps/worker`, `pnpm local:up` again** before the chain: each
+  container runs what was built when it started, and `apps/api/test/door.test.ts` and
+  `apps/worker/test/container.test.ts` ask those containers (BACKLOG C85, C95). Docker Desktop may be closed at the start of a session: `open -a Docker`, and
   quit it at close-out if you opened it.
 
 ### The model as it stands now (today's words; `SUMMARY.md` has each rule and its ADR)
@@ -349,19 +363,19 @@ questions.
 **Phase 2 is open (ADR-376). Its plan is `BACKLOG.md`, "Active — Phase 2" (ADR-377): read its
 brief first. One task per response.**
 
-**Task 2.3.2, the worker as a process** *(BACKLOG has the task in full)*. Read first:
-ARCHITECTURE §13, §4 (Secrets) and §5.7; **ADR-418** (the queue: `ReconciliationJob`,
-`ReconciliationJobTicket`, what each login may do, how a job goes) and BACKLOG **C94** (what it
-leaves this task); `spec/acceptance/10-api-and-sync.md` AC-10-52, 53, 54, 55 and its point 15;
-`spec/THREAT-MODEL.md` §4.4 (T-30, T-32, T-34); BACKLOG **C71, C75** (working only the tickets a
-job names; the worker's map settings), **C87** (its policy, its container, pool limits) and
-**C85**; ADR-352, 360 (the run; a settled ticket stays off the queue), ADR-385 (the API's process,
-the model for `main`, settings, log and health). **Done when:** `apps/worker` has a `main` that
-takes up its projects' waiting jobs, one run per project at a time under the database's lock,
-works only the tickets they name, finishes each job under its run, counts a try and sets a job
-aside after `JOB_TRIES_BEFORE_SET_ASIDE`; a missing or malformed setting stops the start, named;
-a health answer; the local stack and the installer take it in; and the chain is green with the
-new counts. **Next after it: 2.3.3, what queues work.**
+**Task 2.3.3, what queues work** *(BACKLOG has the task in full)*. Read first: ARCHITECTURE
+§13; **ADR-418, 419** and BACKLOG **C95** (its first decision: a job must name every ticket a
+change can move, not only the one changed, or the run must find them; the stories `p1-reviewed`,
+`p1-voided` and `p1-invoiced` prove it once they go through `waitingJobs`), **C94** (where each
+service calls `new ReconciliationJobs(tx).queue(…)`), **C79…C81, C83, C62**; ADR-090, 360;
+`spec/acceptance/10-api-and-sync.md` AC-10-50, 51, 54, `06-reconciliation.md` AC-06-02, 03, 36
+and `05-sync.md` AC-05-53; `adms-exceptions` and `adms-validation` for which checks read another
+ticket. **Done when:** a correction, a renumber, a void, an unvoid, an acceptance and an unlock
+queue their job in their own piece of work and no caller asks the worker; a rate or rule change
+queues the un-invoiced tickets it touches, in jobs a run can finish; a certification made after
+a field event scanned its number links it and queues its tickets; the neighbours are worked;
+AC-10-50 whole, AC-10-54 whole; and the chain is green with the new counts. **After a change to
+`apps/api` or `apps/worker`, `pnpm local:up` again.** **Next after it: 2.4.1.**
 
 **Every command starts with** `eval "$(fnm env --shell zsh)"`. The checks are `adms-verify`'s; the
 database tests, the map servers' tests, the stories and `pnpm security` need `pnpm local:up` first,

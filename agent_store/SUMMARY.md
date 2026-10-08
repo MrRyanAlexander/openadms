@@ -1,13 +1,13 @@
 # Open ADMS — Current decisions and gaps, at a glance
 
 **The present tense of the project on one page.** `DECISIONS.md` and `DEVIATIONS.md` are the full
-history, with 418 ADRs and 74 KDs, many superseded. This page says what is true **now** and which
+history, with 419 ADRs and 74 KDs, many superseded. This page says what is true **now** and which
 entries to cite. The reasons live in the ADRs and the skills.
 
 - **Keep it current:** when you add, amend or supersede an ADR, or open or close a KD, update this
   page **in the same response** (`adms-decisions`).
 - **If this page and a log entry disagree,** the newest ADR wins: fix this page and say so.
-- **Updated 2026-10-07, through ADR-418 / KD-74.** **Phase 2 (API and sync) is open (ADR-376);
+- **Updated 2026-10-07, through ADR-419 / KD-74.** **Phase 2 (API and sync) is open (ADR-376);
   its plan is `BACKLOG.md`'s eight milestones and 32 tasks (ADR-377). Tasks 2.1.1 (ADR-379) and
   2.1.2 (ADR-380…385) are done: the API runs as a process, reached only at
   `https://api.adms.localhost` through Caddy, with a health answer and nothing else yet. Task
@@ -27,7 +27,9 @@ entries to cite. The reasons live in the ADRs and the skills.
   signed-in person, and refused tries by address and by address at one login; nine policy
   values; the counts in the API's memory; `ADMS_TRUSTED_PROXIES`). Milestone 2.2 is complete.
   Task 2.3.1 (ADR-418) is done: the job queue, two guarded tables of our own and no library; a
-  job is added only in the piece of work of the change that asks for it.**
+  job is added only in the piece of work of the change that asks for it. Task 2.3.2 (ADR-419) is
+  done: the worker runs as a process that drains the queue, one run per project at a time, only
+  the tickets its jobs name; which tickets a change must name is 2.3.3's (BACKLOG C95).**
   `spec/acceptance/10-api-and-sync.md` and `spec/THREAT-MODEL.md` are approved by the user
   (their marks, ADR-386, 393). **No KD is open.**
   The exception to the seven-day rule is gone from `pnpm-workspace.yaml` (ADR-372's owed step,
@@ -708,6 +710,7 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   `apps/api/test/limits.test.ts`. AC-10-40 passes. **Not built, said:** per device and what a
   phone does when limited (2.6.5); a shared store for several API processes (5a). What it
   leaves: BACKLOG C93. *Agent defaults.* [416]
+- **The worker runs as a process (task 2.3.2, 2026-10-07)** [419, 418, 360, 352, 395]: `apps/worker/src/main.ts`, the local stack's eighth service (profile `worker`), started by `pnpm local:up` and `pnpm installer` after the API. **It looks at the queue every `JOB_QUEUE_POLL_SECONDS` (5) and hands each project with a job waiting to `Reconciliation.waitingJobs`, one project after another.** Under the project's lock (the claim) the run counts a try on each waiting job first, in its own piece of work; works the tickets they name and no other, each once; and finishes each job (`finishedAt`, its run) in the run's own closing piece of work. A try that fails whole writes `lastError`; a job is set aside (`setAsideAt`) after `JOB_TRIES_BEFORE_SET_ASIDE` (5) tries, also where the worker died each time without a word; a ticket that errors fails no job. With no job waiting nothing is written. **The run still reads the whole project** (a ticket's checks read its neighbours) and still checks the flags that sit on no ticket in every run. **A run asked for directly (`Reconciliation.run`, the stories' until 2.7.1) works every ticket of the project**, whatever tickets a review service names: a job must name the neighbours a change can move, which is 2.3.3's (C95). The run's trigger is the oldest job's, its person only where every job names the same one. Two projects' runs may go at once between two worker processes; one process works them in turn. **Settings** (a missing or malformed one stops the start, named, never shown): `DATABASE_URL`, `ADMS_ROUTING_URL`, `ADMS_ADDRESSES_URL`, `ADMS_MAP_EXTRACT_SHA256`, `ADMS_WORKER_HOST`, `ADMS_WORKER_PORT`; optional `ADMS_MAP_CA_FILE`, `ADMS_DATABASE_ADDRESS`, `ADMS_MAP_SERVERS_ADDRESS`. **Policy values added:** `JOB_TRIES_BEFORE_SET_ASIDE`, `RECONCILIATION_RUN_LONGEST_MINUTES` (10), `JOB_QUEUE_POLL_SECONDS`, `MAP_SERVER_ANSWER_SECONDS` (30), read by the worker alone, and `DATABASE_POOL_CONNECTIONS` (10, never under 2), read by each service for its own pool. **Log:** JSON lines, `service: worker`, ids only, never an error's message. **Health:** `GET /health` → `{"status":"ok","jobsWaiting":N,"jobsSetAside":N}` on the container's own loopback; no port published, no proxy leads to it. **The installer** writes the worker's map settings, adds them to an older installation's `apps/worker/.env` without touching a line that is there (`EnvFile.add`), starts the worker and checks it (27 `✓`). **After a change to `apps/worker`, `pnpm local:up` again** before the chain.
 - **The job queue is built (task 2.3.1, 2026-10-07)** [418, 360, 094, 097]: **two guarded
   tables of our own, written through Prisma, and no queue library** (pg-boss keeps its own
   schema by its own SQL outside the migration history and `guard_gaps()`, deletes finished jobs,
@@ -727,8 +730,8 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   job (it is flagged and skipped by the run); a job that fails whole stays waiting for its
   project's next run, and **after five tries is set aside**: kept, no longer taken up, shown to
   whoever runs the installation, with no new flag. Two waiting jobs may name one ticket; the run
-  works it once. **Not built, said:** the worker's process that takes a job up and finishes it,
-  and the policy value `JOB_TRIES_BEFORE_SET_ASIDE` (2.3.2); the review services and a setup
+  works it once. **Built since (2.3.2, ADR-419, the entry above):** the worker's process that takes a job up
+  and finishes it, and the policy value `JOB_TRIES_BEFORE_SET_ASIDE`. **Not built, said:** the review services and a setup
   change handing their work to the queue (2.3.3); a sync's jobs (2.6.2). Tests:
   `packages/db/test/reconciliation-jobs.test.ts`, `job-queue.test.ts`. What it leaves: BACKLOG
   C94. *Agent defaults.*
@@ -1851,8 +1854,9 @@ its scenario.
 
 ## 4. Waiting on the user
 
-**Live today (2026-10-07, ADR-376…418):**
-- **Nothing blocks the next task** (2.3.2, the worker as a process).
+**Live today (2026-10-07, ADR-376…419):**
+- **Nothing blocks the next task** (2.3.3, what queues work).
+- **Agent defaults of 2.3.2 to confirm or overturn (ADR-419):** (a) **one worker process works its projects one after another**, looking at the queue every five seconds; two processes may work two projects at once; (b) **the worker's numbers**, all policy values a firm's server may state for itself: a job set aside after 5 tries, a run of 10 minutes at most, a map server given 30 seconds to answer, a pool of 10 database connections for each service; (c) **the longest run is a policy value**, not a line the installer writes into the env file as the backlog first said; (d) **a run the queue starts still checks the flags that sit on no ticket** (a certification's photographs, a site's permit) every time; (e) **when one run works several jobs**, its record names the oldest job's reason, and a person only where all were asked for by the same one; (f) **the worker's health answer** gives two counts (jobs waiting, jobs set aside) and is asked only from inside its own container. **For 2.3.3, not a question yet:** a job must name the neighbours a change can move (C95).
 - **Agent defaults of 2.3.1 to confirm or overturn (ADR-418):** (a) **the queue is two tables
   of our own, not pg-boss**, which ARCHITECTURE §3 names as an example; (b) a job that fails
   whole is tried again by its project's next run and **set aside after five tries**, kept and

@@ -19,6 +19,7 @@ const shipped = {
   ROE_NUMBER_BLOCK_SIZE: '100',
   REQUEST_BODY_LIMIT_BYTES: '1048576',
   STATEMENT_TIMEOUT_MS: '30000',
+  DATABASE_POOL_CONNECTIONS: '10',
   PASSWORD_MINIMUM_LENGTH: '15',
   PASSWORD_MAXIMUM_LENGTH: '128',
   PASSWORD_RESET_MINUTES: '60',
@@ -40,6 +41,10 @@ const shipped = {
   SIGN_IN_WRONG_TRIES_PER_ADDRESS_AT_LOGIN: '4',
   PASSWORD_RESET_ASKS_PER_ADDRESS: '10',
   PASSWORD_RESET_ASKS_PER_LOGIN: '3',
+  JOB_TRIES_BEFORE_SET_ASIDE: '5',
+  RECONCILIATION_RUN_LONGEST_MINUTES: '10',
+  JOB_QUEUE_POLL_SECONDS: '5',
+  MAP_SERVER_ANSWER_SECONDS: '30',
 };
 
 // The program types of the example world: PPDR requires an ROE, ROW doesn't.
@@ -99,7 +104,7 @@ describe('a new project’s settings', () => {
 });
 
 describe('the policy values', () => {
-  it('are thirteen, each under its own name in the environment', () => {
+  it('are each under its own name in the environment', () => {
     expect(policyNames).toEqual({
       loadCallLowLimit: 'LOAD_CALL_LOW_LIMIT',
       loadCallHighLimit: 'LOAD_CALL_HIGH_LIMIT',
@@ -111,6 +116,7 @@ describe('the policy values', () => {
       roeNumberBlockSize: 'ROE_NUMBER_BLOCK_SIZE',
       requestBodyLimitBytes: 'REQUEST_BODY_LIMIT_BYTES',
       statementTimeoutMs: 'STATEMENT_TIMEOUT_MS',
+      databasePoolConnections: 'DATABASE_POOL_CONNECTIONS',
       passwordMinimumLength: 'PASSWORD_MINIMUM_LENGTH',
       passwordMaximumLength: 'PASSWORD_MAXIMUM_LENGTH',
       passwordResetMinutes: 'PASSWORD_RESET_MINUTES',
@@ -132,6 +138,10 @@ describe('the policy values', () => {
       signInWrongTriesPerAddressAtLogin: 'SIGN_IN_WRONG_TRIES_PER_ADDRESS_AT_LOGIN',
       passwordResetAsksPerAddress: 'PASSWORD_RESET_ASKS_PER_ADDRESS',
       passwordResetAsksPerLogin: 'PASSWORD_RESET_ASKS_PER_LOGIN',
+      jobTriesBeforeSetAside: 'JOB_TRIES_BEFORE_SET_ASIDE',
+      reconciliationRunLongestMinutes: 'RECONCILIATION_RUN_LONGEST_MINUTES',
+      jobQueuePollSeconds: 'JOB_QUEUE_POLL_SECONDS',
+      mapServerAnswerSeconds: 'MAP_SERVER_ANSWER_SECONDS',
     });
     expect(Object.keys(shipped).sort()).toEqual(Object.values(policyNames).sort());
   });

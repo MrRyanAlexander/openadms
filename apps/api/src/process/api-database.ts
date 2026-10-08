@@ -10,6 +10,14 @@ import type { Settings } from './settings.ts';
 // What a class names to be handed the database: `@Inject(apiDatabase)`.
 export const apiDatabase = Symbol('the API’s database');
 
-export function openApiDatabase(settings: Pick<Settings, 'databaseUrl'>): Database {
-  return openDatabase({ url: settings.databaseUrl, requestNow });
+// `maxConnections` is the policy's (ADR-419); a tool that opens it for one question leaves it out.
+export function openApiDatabase(
+  settings: Pick<Settings, 'databaseUrl'>,
+  maxConnections?: number,
+): Database {
+  return openDatabase({
+    url: settings.databaseUrl,
+    requestNow,
+    ...(maxConnections === undefined ? {} : { maxConnections }),
+  });
 }
