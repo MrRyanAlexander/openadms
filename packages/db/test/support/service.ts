@@ -59,3 +59,43 @@ export async function undone<T>(
   if (result === undefined) throw new Error('The work did not finish.');
   return result.value;
 }
+
+export const p1 = { name: 'Bayline County ROW, Hurricane Delphine', timeZone: 'America/New_York' };
+export const bayline = { name: 'Bayline County' };
+
+// P1 as it is written (the golden mission §1): under its client and declaration event, made in the
+// same work, its program type and the declaration's reference type picked from the firm's lists.
+export async function p1In(
+  tx: Prisma.TransactionClient,
+): Promise<Prisma.ProjectUncheckedCreateInput> {
+  const client = await tx.client.create({ data: bayline });
+  const referenceType = await tx.declarationReferenceType.findFirstOrThrow({
+    where: { name: 'FEMA disaster (DR)' },
+  });
+  const declarationEvent = await tx.declarationEvent.create({
+    data: {
+      name: 'Hurricane Delphine',
+      reference: 'DR-9001-FL',
+      referenceTypeId: referenceType.id,
+    },
+  });
+  const row = await tx.programType.findFirstOrThrow({ where: { name: 'ROW' } });
+  return {
+    ...p1,
+    clientId: client.id,
+    declarationEventId: declarationEvent.id,
+    programTypeId: row.id,
+    allowSplitLoads: true,
+    activeFrom: new Date('2026-10-12'),
+    activeTo: new Date('2027-01-31'),
+    ticketNumberSource: 'GENERATED',
+    workflows: ['LOAD', 'HAUL_OUT', 'UNIT_RATE'],
+    loadCallLowLimit: 5,
+    loadCallHighLimit: 95,
+    stumpFillDepthInches: 31,
+    stumpCheckRootBallWider: true,
+    stumpCheckFillNeedsExposure: true,
+    siteCircleMeters: 200,
+    timeClockEnabled: false,
+  };
+}

@@ -100,6 +100,9 @@ const domains: Record<string, string> = {
   flag: 'OPERATIONS',
   reconciliation_run: 'OPERATIONS',
   reconciliation_decision: 'OPERATIONS',
+  // The job queue (ADR-418): how the work went, like a run.
+  reconciliation_job: 'OPERATIONS',
+  reconciliation_job_ticket: 'OPERATIONS',
   transaction: 'BILLING',
   invoice_lock: 'BILLING',
   // People's marks (ADR-363): a lock, its batch and a person's void say what is billed; a QC mark
@@ -167,6 +170,11 @@ const triggers = [
   `CREATE TRIGGER session_refuse_person_edit BEFORE UPDATE OF id, user_id, created_at ON public.session FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
   `CREATE TRIGGER session_refuse_edit_once_revoked BEFORE UPDATE ON public.session FOR EACH ROW WHEN ((old.revoked_at IS NOT NULL)) EXECUTE FUNCTION refuse_edit()`,
   `CREATE TRIGGER security_event_refuse_edit BEFORE UPDATE ON public.security_event FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
+  // What a job was asked never changes; once finished or set aside it is history; a job's
+  // ticket is never edited (ADR-418).
+  `CREATE TRIGGER reconciliation_job_refuse_asked_edit BEFORE UPDATE OF id, project_id, trigger, requested_by_id, queued_at ON public.reconciliation_job FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
+  `CREATE TRIGGER reconciliation_job_refuse_edit_once_ended BEFORE UPDATE ON public.reconciliation_job FOR EACH ROW WHEN (((old.finished_at IS NOT NULL) OR (old.set_aside_at IS NOT NULL))) EXECUTE FUNCTION refuse_edit()`,
+  `CREATE TRIGGER reconciliation_job_ticket_refuse_edit BEFORE UPDATE ON public.reconciliation_job_ticket FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
   // A container has its primary box, asked when the piece of work that wrote it ends (ADR-321).
   `CREATE CONSTRAINT TRIGGER certification_has_primary_box AFTER INSERT OR UPDATE OF kind ON public.certification DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION certification_has_primary_box()`,
   `CREATE CONSTRAINT TRIGGER certification_box_keeps_primary AFTER UPDATE OF certification_id, "position" ON public.certification_box DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION certification_has_primary_box()`,
@@ -1060,6 +1068,19 @@ describe('the guards in the catalog', () => {
       {
         name: 'security_event_request_id_check',
         definition: "CHECK ((btrim(request_id) <> ''::text))",
+      },
+      {
+        name: 'reconciliation_job_attempts_check',
+        definition: 'CHECK ((attempts >= 0))',
+      },
+      {
+        name: 'reconciliation_job_ended_check',
+        definition:
+          "CHECK (((((finished_at IS NULL) OR (reconciliation_run_id IS NOT NULL)) AND ((finished_at IS NULL) OR (set_aside_at IS NULL)) AND ((set_aside_at IS NULL) OR (last_error IS NOT NULL)) AND ((last_error IS NULL) OR (btrim(last_error) <> ''::text))) IS TRUE))",
+      },
+      {
+        name: 'reconciliation_job_ticket_number_check',
+        definition: "CHECK ((btrim(ticket_number) <> ''::text))",
       },
       ...listChecks,
     ];

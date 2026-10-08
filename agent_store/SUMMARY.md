@@ -1,13 +1,13 @@
 # Open ADMS — Current decisions and gaps, at a glance
 
 **The present tense of the project on one page.** `DECISIONS.md` and `DEVIATIONS.md` are the full
-history, with 415 ADRs and 74 KDs, many superseded. This page says what is true **now** and which
+history, with 418 ADRs and 74 KDs, many superseded. This page says what is true **now** and which
 entries to cite. The reasons live in the ADRs and the skills.
 
 - **Keep it current:** when you add, amend or supersede an ADR, or open or close a KD, update this
   page **in the same response** (`adms-decisions`).
 - **If this page and a log entry disagree,** the newest ADR wins: fix this page and say so.
-- **Updated 2026-10-07, through ADR-417 / KD-74.** **Phase 2 (API and sync) is open (ADR-376);
+- **Updated 2026-10-07, through ADR-418 / KD-74.** **Phase 2 (API and sync) is open (ADR-376);
   its plan is `BACKLOG.md`'s eight milestones and 32 tasks (ADR-377). Tasks 2.1.1 (ADR-379) and
   2.1.2 (ADR-380…385) are done: the API runs as a process, reached only at
   `https://api.adms.localhost` through Caddy, with a health answer and nothing else yet. Task
@@ -25,7 +25,9 @@ entries to cite. The reasons live in the ADRs and the skills.
   person who signs in and the last admin, both held by the database; `pnpm installer:admin`).
   Task 2.2.6 (ADR-416) is done: rate limits (429 `LIMITED` with `Retry-After`; by address, by
   signed-in person, and refused tries by address and by address at one login; nine policy
-  values; the counts in the API's memory; `ADMS_TRUSTED_PROXIES`). Milestone 2.2 is complete.**
+  values; the counts in the API's memory; `ADMS_TRUSTED_PROXIES`). Milestone 2.2 is complete.
+  Task 2.3.1 (ADR-418) is done: the job queue, two guarded tables of our own and no library; a
+  job is added only in the piece of work of the change that asks for it.**
   `spec/acceptance/10-api-and-sync.md` and `spec/THREAT-MODEL.md` are approved by the user
   (their marks, ADR-386, 393). **No KD is open.**
   The exception to the seven-day rule is gone from `pnpm-workspace.yaml` (ADR-372's owed step,
@@ -706,6 +708,30 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   `apps/api/test/limits.test.ts`. AC-10-40 passes. **Not built, said:** per device and what a
   phone does when limited (2.6.5); a shared store for several API processes (5a). What it
   leaves: BACKLOG C93. *Agent defaults.* [416]
+- **The job queue is built (task 2.3.1, 2026-10-07)** [418, 360, 094, 097]: **two guarded
+  tables of our own, written through Prisma, and no queue library** (pg-boss keeps its own
+  schema by its own SQL outside the migration history and `guard_gaps()`, deletes finished jobs,
+  writes with no actor, and reaches Prisma's transaction only as raw SQL). `ReconciliationJob`
+  (`reconciliation_job`): its project, what asked for it (`trigger`), who (none on a sync's),
+  when; and how it went, the worker's to write: `attempts`, `finishedAt` with the run that
+  worked it, `lastError`, `setAsideAt`. `ReconciliationJobTicket`: the tickets it names, as the
+  worker groups one (workflow and bare number), each once, each its job's own project's. **A job
+  is added only inside the piece of work of the change that asks for it**:
+  `new ReconciliationJobs(tx).queue({ projectId, trigger, requestedById?, tickets })` in
+  `packages/db` takes the open piece of work and nothing else, so the change and its job commit
+  or are undone together (AC-10-50); it refuses a job with no ticket. **Who may do what:** the
+  API adds a job and its tickets and changes neither; the worker reads both and updates the job;
+  nobody deletes; the read-only login and every viewer hold nothing; audited in operations.
+  What was asked never changes; **a job is waiting while it is neither finished nor set aside,
+  and once either it never changes again.** **Retries:** a ticket that errors never fails its
+  job (it is flagged and skipped by the run); a job that fails whole stays waiting for its
+  project's next run, and **after five tries is set aside**: kept, no longer taken up, shown to
+  whoever runs the installation, with no new flag. Two waiting jobs may name one ticket; the run
+  works it once. **Not built, said:** the worker's process that takes a job up and finishes it,
+  and the policy value `JOB_TRIES_BEFORE_SET_ASIDE` (2.3.2); the review services and a setup
+  change handing their work to the queue (2.3.3); a sync's jobs (2.6.2). Tests:
+  `packages/db/test/reconciliation-jobs.test.ts`, `job-queue.test.ts`. What it leaves: BACKLOG
+  C94. *Agent defaults.*
 - **The threat model and the API's scenarios (task 2.1.1; both approved by the user, ADR-386,
   393).**
   `spec/THREAT-MODEL.md`: eleven kinds of attacker, 36 threats over the layers of ARCHITECTURE §2,
@@ -1825,8 +1851,15 @@ its scenario.
 
 ## 4. Waiting on the user
 
-**Live today (2026-10-07, ADR-376…417):**
-- **Nothing blocks the next task** (2.3.1, the job queue).
+**Live today (2026-10-07, ADR-376…418):**
+- **Nothing blocks the next task** (2.3.2, the worker as a process).
+- **Agent defaults of 2.3.1 to confirm or overturn (ADR-418):** (a) **the queue is two tables
+  of our own, not pg-boss**, which ARCHITECTURE §3 names as an example; (b) a job that fails
+  whole is tried again by its project's next run and **set aside after five tries**, kept and
+  shown to whoever runs the installation; (c) **a job set aside raises no flag on its tickets**
+  (it says the server failed, not that a ticket is wrong), so the back office learns of one
+  from the server's side until a screen shows it; (d) only the API adds a job, and the worker
+  never adds one of its own.
 - **Answered by the user 2026-10-07 (ADR-417: "Going with your recommendation here, and for
   the rest of the flags … your recommended approach as well"), no longer waiting:** the lock
   comes at the fiftieth wrong try in a row, not the tenth; and the agent defaults of task 2.2.6

@@ -13,7 +13,7 @@ import type { Database } from '../src/database.ts';
 import type { Prisma } from '../src/generated/prisma/client.ts';
 import { systemActor, systemActorId, systemActorName } from '../src/system-actor.ts';
 import { GuardedDatabase } from './support/database.ts';
-import { openService, undone } from './support/service.ts';
+import { bayline, openService, p1, p1In, undone } from './support/service.ts';
 
 let api: Database;
 let worker: Database;
@@ -56,44 +56,6 @@ async function refusal(write: Promise<unknown>): Promise<string> {
     return error instanceof Error ? error.message : String(error);
   }
   throw new Error('Expected the write to be refused, but it ran.');
-}
-
-const p1 = { name: 'Bayline County ROW, Hurricane Delphine', timeZone: 'America/New_York' };
-const bayline = { name: 'Bayline County' };
-
-// P1 as it is written (the golden mission §1): under its client and declaration event, made in the
-// same work, its program type and the declaration's reference type picked from the firm's lists.
-async function p1In(tx: Prisma.TransactionClient): Promise<Prisma.ProjectUncheckedCreateInput> {
-  const client = await tx.client.create({ data: bayline });
-  const referenceType = await tx.declarationReferenceType.findFirstOrThrow({
-    where: { name: 'FEMA disaster (DR)' },
-  });
-  const declarationEvent = await tx.declarationEvent.create({
-    data: {
-      name: 'Hurricane Delphine',
-      reference: 'DR-9001-FL',
-      referenceTypeId: referenceType.id,
-    },
-  });
-  const row = await tx.programType.findFirstOrThrow({ where: { name: 'ROW' } });
-  return {
-    ...p1,
-    clientId: client.id,
-    declarationEventId: declarationEvent.id,
-    programTypeId: row.id,
-    allowSplitLoads: true,
-    activeFrom: new Date('2026-10-12'),
-    activeTo: new Date('2027-01-31'),
-    ticketNumberSource: 'GENERATED',
-    workflows: ['LOAD', 'HAUL_OUT', 'UNIT_RATE'],
-    loadCallLowLimit: 5,
-    loadCallHighLimit: 95,
-    stumpFillDepthInches: 31,
-    stumpCheckRootBallWider: true,
-    stumpCheckFillNeedsExposure: true,
-    siteCircleMeters: 200,
-    timeClockEnabled: false,
-  };
 }
 
 describe('a write through $write is audited with its actor', () => {

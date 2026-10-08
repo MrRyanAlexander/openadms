@@ -42,7 +42,7 @@ one line saying what kind of record it is (§1) and what it is for, then one tab
 | 2 | Shared, firm-wide records | `Client` · `DeclarationEvent` · `Contractor` · `ProjectContractor` · `User` · `UserCredential` · `Session` · `SecurityEvent` · `UserPermission` · `ViewerProject` · `Device` · `MasterPasscode` · `Assignment` · `AssignmentPayItem` · the firm's lists |
 | 3 | A project and its setup | `Project` · `ProjectKindOfWork` · `Contract` · `Form` · `FormDebrisType` · `FormDefinition` · `PayItem` · `PayItemCrewDayStep` · `PayItemRate` · `Rule` · `RuleCriterion` · `RuleCriterionPick` · `RuleAction` · `RuleActionItem` · `DisposalSite` · `DisposalSiteLabel` · `SiteAreaVersion` · `MapVersion` · `Zone` · `ProjectNumberSeries` · `ControlRange` · `NumberBlock` · `Certification` · `CertificationBox` · `CertificationHelper` · `Roe` · `RoeScopeItem` · `ClockEntry` · `ClockActivityLine` · `ApprovedDay` |
 | 4 | Evidence: what monitors saw | `FieldEvent` · `FieldEventItem` · `CarriedTicket` · `ScaleReceipt` · `Survey` · `Incident` · `DropOffLog` · `Photo` · `Sync` · `SyncedRecord` · `QuarantinedRecord` · `FieldEventEdit` · `SetupManifest` |
-| 5 | Derived: the worker's conclusions | `CompletedLoad` · `CompletedLoadCollection` · `CompletedHaulOut` · `CompletedHaulOutCollection` · `Transaction` · `Flag` · `ReconciliationRun` · `ReconciliationDecision` |
+| 5 | Derived: the worker's conclusions | `CompletedLoad` · `CompletedLoadCollection` · `CompletedHaulOut` · `CompletedHaulOutCollection` · `Transaction` · `Flag` · `ReconciliationRun` · `ReconciliationDecision` · the job queue: `ReconciliationJob` · `ReconciliationJobTicket` |
 | 6 | Marks: what people set | `QcMark` · `InvoiceLock` · `InvoiceBatch` · `FlagAcceptance` · `TicketVoid` · `TicketUnvoid` · `ApprovedDay` |
 | 7 | Audit | `AuditRecord` |
 | 8 | What the database refuses by itself | |
@@ -1607,6 +1607,45 @@ lines without them (the user, 2026-10-06, ADR-361; §2.2).
 | **summary** | JSONB | For a person: the events grouped, the rules that passed |
 | error | text | |
 
+### The job queue (built 2026-10-07, task 2.3.1, ADR-418; an agent default)
+
+Not a conclusion and not evidence: **the work a change asks the worker for** (ARCHITECTURE §13,
+"Jobs, not requests"). A sync, a correction, a void or a setup change adds a job **in its own
+piece of work**, so the change and its job exist together or not at all (AC-10-50), and the
+worker's run works the tickets its project's waiting jobs name and no other (the user, ADR-360).
+Two tables of our own, written through Prisma; no queue library. **The API adds a job and its
+tickets and changes neither; the worker writes only how a job went; nobody deletes; no read-only
+viewer reads either;** both are audited in the operations domain.
+
+#### `ReconciliationJob`
+
+One ask for reconciliation. **Waiting** while it is neither finished nor set aside; once either,
+nothing of it changes again. What was asked (its project, `trigger`, `requestedById`, `queuedAt`)
+never changes.
+
+| Field | Type | Notes |
+|---|---|---|
+| **projectId** | → `Project` | |
+| **trigger** | enum `ReconciliationTrigger` | What asked for it: the run's own closed set |
+| requestedById | → `User` | The person who asked; none on a job a sync queued |
+| **queuedAt** | instant | The database's clock |
+| **attempts** | int | The runs that took it up; from 0, never below |
+| finishedAt | instant | When a run had worked its tickets |
+| reconciliationRunId | → `ReconciliationRun` | That run, one of its own project's; a finished job names it |
+| lastError | text | Why its last try failed whole; never blank |
+| setAsideAt | instant | When it had failed too often to be taken up again (five tries, a policy value of task 2.3.2); it says why; never together with `finishedAt` |
+
+#### `ReconciliationJobTicket`
+
+A ticket a job names, as the worker groups one. Once a job; never edited.
+
+| Field | Type | Notes |
+|---|---|---|
+| **projectId** | → `Project` | Its job's own project (a two-column key) |
+| **reconciliationJobId** | → `ReconciliationJob` | |
+| **workflow** | enum `Workflow` | |
+| **ticketNumber** | text | The bare number; never blank |
+
 ---
 
 ## 6. Marks: what people set, without changing the record (ADR-245)
@@ -1872,6 +1911,7 @@ A new value in any of them is a code change with an ADR (`spec/LISTS.md` Group 2
 | `User` | ✅ viewer kind, contact, permissions and viewer projects (ADR-315); whether a viewer sees private citizens by name (ADR-336); sign-in's columns in Phase 2 |
 | `Device`, `MasterPasscode`, `NumberBlock` | As built; a key's revocation; the overlap refusal |
 | `UserCredential`, `Session`, `SecurityEvent` | New in Phase 2 (task 2.2.1, ADR-397…399): sign-in's records, each with its own guards |
+| `ReconciliationJob`, `ReconciliationJobTicket` | New in Phase 2 (task 2.3.1, ADR-418): the job queue, with its own guards |
 | `DisposalSite` | ✅ built 2026-10-02 (ADR-311): its type (and the type's key), facts, permit, GPS, dates, with `DisposalSiteLabel`, `DisposalSiteTippingFee`, `SiteAreaVersion`, and the project map, `MapVersion` and `Zone` |
 | `Assignment` | ✅ `formDocumentTypes` built (ADR-308); its pay items (ADR-286), held to unit rate ones (ADR-309) |
 | `PayItem` | ✅ built 2026-10-02 (ADR-309): every field of §3, with `PayItemRate` and `PayItemCrewDayStep`; `AssignmentPayItem` gains the pay item's kind of work |

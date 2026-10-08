@@ -227,5 +227,8 @@ export const unseenTables = [
   // A run of the worker and what it decided for each ticket are the back office's (ADR-340).
   'reconciliation_run',
   'reconciliation_decision',
+  // The job queue is the API's and the worker's (ADR-418).
+  'reconciliation_job',
+  'reconciliation_job_ticket',
   'audit_record',
 ];

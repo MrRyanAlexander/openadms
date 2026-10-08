@@ -89,7 +89,7 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-07, through ADR-417)
+### Where things stand (2026-10-07, through ADR-418)
 - **Phase 2 (API and sync) is open (ADR-376).** Its plan is `BACKLOG.md`'s eight milestones and 32
   tasks (ADR-377); tasks 2.0.1 (the opening and the plan), 2.1.1 (the threat model and the
   API's scenarios, ADR-379; docs), 2.1.2 (the API as a process, ADR-380…385), 2.1.3 (the
@@ -154,7 +154,15 @@ of `DECISIONS.md`.
   the database; a caller's address taken from a proxy only where `ADMS_TRUSTED_PROXIES` lists
   it (the local stack's Caddy is `172.30.213.2` on a network of fixed addresses); no address
   logged or stored. **The user confirmed its defaults and put the lock at fifty wrong tries
-  (ADR-417).** What it leaves: BACKLOG C93. **Milestone 2.2 is complete.** **The user's word (ADR-401):
+  (ADR-417).** What it leaves: BACKLOG C93. **Milestone 2.2 is complete.** **Task 2.3.1 (the job queue, ADR-418) is done:** two guarded tables of our own
+  written through Prisma, `reconciliation_job` and `reconciliation_job_ticket`, and no queue
+  library; a job names its project, what asked for it and who, and its tickets (workflow and
+  bare number); **it is added only inside the piece of work of the change that asks for it**,
+  by `new ReconciliationJobs(tx).queue(…)` in `packages/db`; the API adds a job and changes
+  nothing of it, the worker writes only how it went (`attempts`, `finishedAt` with its run,
+  `lastError`, `setAsideAt`), nobody deletes, no viewer reads; a job once finished or set aside
+  never changes. **Nothing queues a job yet and nothing takes one up**: the worker's process is
+  2.3.2's, the callers 2.3.3's. What it leaves: BACKLOG C94. **The user's word (ADR-401):
   sign-in follows NIST SP 800-63B and ASVS Level 2; when a direction in security is suggested,
   say what the standard asks before building it** (ADR-400 was built first and withdrawn). **Each service login (`adms_api`, `adms_worker`, `adms_readonly`) is
   under a statement timeout**, the policy value `STATEMENT_TIMEOUT_MS` (30,000 ms), set by
@@ -183,13 +191,13 @@ of `DECISIONS.md`.
   `installationPolicy({ … })`.
 - **Phase 1 is done:** all seven exit criteria met (ADR-371, 372); 693 of the 708 scenarios with a
   Phase 1 part proven whole, 15 in part. 48 scenario rows name Phase 2 (37 as "API (Phase 2)").
-- **The chain, seen whole on 2026-10-07:** 103 test
-  files, 2,135 tests; lint clean; 421 licences allowed; sixteen stories; `pnpm security` 7 passed,
-  0 failed; eighty-seven migrations. The expected output of each command is `adms-verify`'s.
+- **The chain, seen whole on 2026-10-07:** 105 test
+  files, 2,149 tests; lint clean; 421 licences allowed; sixteen stories; `pnpm security` 7 passed,
+  0 failed; eighty-nine migrations. The expected output of each command is `adms-verify`'s.
 - **What exists:** `packages/db` (schema, guards, tests), `packages/domain` (every rule; one
   dependency, no database), `packages/contracts`, `packages/scenarios` (the harness and stories,
   the golden mission among them), `apps/worker/src/reconciliation/` (the run: group, check,
-  price, write; no process, no queue), `apps/api/src/` (the service classes: setup,
+  price, write; no process; it reads no job yet), `apps/api/src/` (the service classes: setup,
   certifications, numbering, intake, review; and `process/` with `main.ts`, the HTTP process with
   a health answer, the boundary, the headers and the API's database client: no endpoint of the
   services, no sign-in), `tools/`, `infra/local`.
@@ -341,18 +349,19 @@ questions.
 **Phase 2 is open (ADR-376). Its plan is `BACKLOG.md`, "Active — Phase 2" (ADR-377): read its
 brief first. One task per response.**
 
-**Task 2.3.1, the job queue** *(BACKLOG has the task in full)*. Read first: ARCHITECTURE §13
-and §3 (a Postgres-backed queue, "e.g. pg-boss"); `spec/acceptance/10-api-and-sync.md`'s scenarios
-on the queue (AC-10-50 on) and its points 14 and 15; `spec/THREAT-MODEL.md` §4.4 (T-30…33); BACKLOG **C84**
-(points 14, 15), **C71, C75** and **C87** where they name the queue; ADR-094 (no hand-written SQL
-for modelling), ADR-097 (the database enforces), ADR-276 (the worker's login and the system
-actor). **The choice is an ADR before any code:** a library (a dependency needs its ADR, its
-licence and the clean-copy check) weighed against a guarded table of our own written through
-Prisma (grants, audit, what each login may do to it). **Done when:** a job names its project
-and its tickets and is queued in the same piece of work as the change that asks for it, so
-neither exists without the other; the table (or the library's) is guarded and its grants
-tested; `guard_gaps()` is empty; and the chain is green with the new counts. **Next after it:
-2.3.2, the worker as a process.**
+**Task 2.3.2, the worker as a process** *(BACKLOG has the task in full)*. Read first:
+ARCHITECTURE §13, §4 (Secrets) and §5.7; **ADR-418** (the queue: `ReconciliationJob`,
+`ReconciliationJobTicket`, what each login may do, how a job goes) and BACKLOG **C94** (what it
+leaves this task); `spec/acceptance/10-api-and-sync.md` AC-10-52, 53, 54, 55 and its point 15;
+`spec/THREAT-MODEL.md` §4.4 (T-30, T-32, T-34); BACKLOG **C71, C75** (working only the tickets a
+job names; the worker's map settings), **C87** (its policy, its container, pool limits) and
+**C85**; ADR-352, 360 (the run; a settled ticket stays off the queue), ADR-385 (the API's process,
+the model for `main`, settings, log and health). **Done when:** `apps/worker` has a `main` that
+takes up its projects' waiting jobs, one run per project at a time under the database's lock,
+works only the tickets they name, finishes each job under its run, counts a try and sets a job
+aside after `JOB_TRIES_BEFORE_SET_ASIDE`; a missing or malformed setting stops the start, named;
+a health answer; the local stack and the installer take it in; and the chain is green with the
+new counts. **Next after it: 2.3.3, what queues work.**
 
 **Every command starts with** `eval "$(fnm env --shell zsh)"`. The checks are `adms-verify`'s; the
 database tests, the map servers' tests, the stories and `pnpm security` need `pnpm local:up` first,

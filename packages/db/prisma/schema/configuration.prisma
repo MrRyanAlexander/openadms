@@ -125,6 +125,9 @@ model Project {
   flags                       Flag[]
   reconciliationRuns          ReconciliationRun[]
   transactions                Transaction[]
+  // The work its changes ask the worker for (jobs.prisma).
+  reconciliationJobs          ReconciliationJob[]
+  reconciliationJobTickets    ReconciliationJobTicket[]
   // People's marks on its records (marks.prisma).
   qcMarks                     QcMark[]
   invoiceBatches              InvoiceBatch[]
@@ -1068,6 +1071,7 @@ model User {
   ticketVoidsLifted           TicketVoid[]          @relation("TicketVoidLiftedBy")
   ticketUnvoids               TicketUnvoid[]
   reconciliationRunsRequested ReconciliationRun[]   @relation("ReconciliationRunRequestedBy")
+  reconciliationJobsRequested ReconciliationJob[]   @relation("ReconciliationJobRequestedBy")
   auditRecords                AuditRecord[]
 
   @@map("user")
