@@ -9,7 +9,9 @@
 // item code the project already has…) isn't caught here: the call throws, and nothing is saved.
 // Who may do setup (an admin, or a manager/analyst granted it) is read at sign-in, Phase 2.
 import type { Actor, Database, Prisma } from '@open-adms/db';
-import type { SetupWarning } from '@open-adms/domain';
+import type { Policy, SetupWarning } from '@open-adms/domain';
+
+import { WorkQueue, type WorkAsked, type WorkQueued } from '../jobs/work-queue.ts';
 
 // A setting setup won't save, and why.
 export interface Refusal {
@@ -17,8 +19,23 @@ export interface Refusal {
   readonly message: string;
 }
 
+// What a saved change asked the worker for, said to whoever made it (the user, ADR-422): how
+// many tickets were queued to be worked again, and how many it reached that are locked as
+// invoiced and so were left exactly as they are.
+export interface QueuedBySetup {
+  readonly jobs: readonly string[];
+  readonly tickets: number;
+  readonly lockedAsInvoiced: number;
+}
+
 export type Outcome<T> =
-  | { readonly saved: true; readonly record: T; readonly warnings: readonly SetupWarning[] }
+  | {
+      readonly saved: true;
+      readonly record: T;
+      readonly warnings: readonly SetupWarning[];
+      // Stated where the change queued work or passed a locked ticket by.
+      readonly queued?: QueuedBySetup;
+    }
   | { readonly saved: false; readonly refusal: Refusal };
 
 // The time a service states when it archives something: the server's, or a story's.
@@ -72,6 +89,83 @@ export abstract class SetupService {
       if (error instanceof Refused) return { saved: false, refusal: error.refusal };
       throw error;
     }
+  }
+}
+
+// A service whose changes ask the worker for reconciliation (ARCHITECTURE §13; ADR-420): it
+// queues the job in the piece of work of the change itself, cut to the policy's size, and
+// nobody asks the worker afterwards.
+export abstract class QueueingService extends SetupService {
+  protected readonly policy: Policy;
+
+  constructor(db: Database, clock: Clock, policy: Policy) {
+    super(db, clock);
+    this.policy = policy;
+  }
+
+  // What each open piece of work has queued so far, for its answer.
+  private readonly asks = new WeakMap<Prisma.TransactionClient, WorkQueued[]>();
+
+  protected workQueue(tx: Prisma.TransactionClient): WorkQueue {
+    return new WorkQueue(tx, this.policy.jobTicketsAtMost);
+  }
+
+  // Queues the work in the open piece of work, and keeps what was queued for the answer.
+  protected async ask(tx: Prisma.TransactionClient, asked: WorkAsked): Promise<WorkQueued> {
+    const queued = await this.workQueue(tx).queue(asked);
+    const kept = this.asks.get(tx);
+    if (kept === undefined) this.asks.set(tx, [queued]);
+    else kept.push(queued);
+    return queued;
+  }
+
+  // As every service's piece of work, and the answer says what it queued: the tickets to be
+  // worked again, and the ones locked as invoiced that it left as they are (ADR-422).
+  protected override async writeAs<T>(
+    actor: Actor,
+    work: (tx: Prisma.TransactionClient, warn: Warn) => Promise<T>,
+  ): Promise<Outcome<T>> {
+    let asks: readonly WorkQueued[] = [];
+    const outcome = await super.writeAs(actor, async (tx, warn) => {
+      // A caller may hand several calls one piece of work: only this call's asks are its own.
+      const before = this.asks.get(tx)?.length ?? 0;
+      const record = await work(tx, warn);
+      asks = (this.asks.get(tx) ?? []).slice(before);
+      return record;
+    });
+    if (!outcome.saved || asks.length === 0) return outcome;
+    const count = (pick: (queued: WorkQueued) => readonly { ticketNumber: string }[]): number =>
+      new Set(asks.flatMap((queued) => pick(queued).map((ticket) => JSON.stringify(ticket)))).size;
+    return {
+      ...outcome,
+      queued: {
+        jobs: asks.flatMap((queued) => queued.jobs),
+        tickets: count((queued) => queued.tickets),
+        lockedAsInvoiced: count((queued) => queued.lockedAsInvoiced),
+      },
+    };
+  }
+
+  // A setup change by a person: every ticket of the project its query finds is queued, a void
+  // one and one locked as invoiced left off (ADR-090, 360). Where it finds none, a job for the
+  // records that are no ticket's is queued instead, if the change touched one. Setup moves a
+  // ticket's own conclusions, never what makes two tickets neighbours, so no neighbour is
+  // looked for here (a certification's capacity is the exception, and its service's own).
+  protected async setupChanged(
+    tx: Prisma.TransactionClient,
+    person: string,
+    projectId: string,
+    touched: Prisma.FieldEventWhereInput = {},
+    projectRecords = false,
+  ): Promise<void> {
+    await this.ask(tx, {
+      projectId,
+      trigger: 'SETUP_CHANGE',
+      requestedById: person,
+      tickets: [],
+      others: await this.workQueue(tx).ticketsWith(projectId, touched),
+      projectRecords,
+    });
   }
 }
 

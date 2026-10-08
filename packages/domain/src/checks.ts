@@ -22,6 +22,7 @@ import {
   type FlagRaised,
   type FlagSubject,
 } from './flags.ts';
+import { timesOverlap } from './neighbours.ts';
 import type { GroupedFieldEvent, Ticket } from './tickets.ts';
 
 // A picked value: its record and the name a message says.
@@ -390,8 +391,7 @@ export class TicketChecks<E extends CheckedFieldEvent = CheckedFieldEvent> {
           other.projectId !== ticket.projectId ||
           other.ticketNumber === ticket.ticketNumber ||
           other.certNumber !== collection.certNumber ||
-          collection.startedAt.getTime() >= other.endedAt.getTime() ||
-          other.startedAt.getTime() >= collection.endedAt.getTime()
+          !timesOverlap(collection, other)
         ) {
           continue;
         }

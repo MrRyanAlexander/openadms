@@ -8,7 +8,7 @@
 import { ProjectRules, type RuleEntry } from '@open-adms/domain';
 
 import { type ActionInput, type CriterionInput, RuleBook } from './rule-book.ts';
-import { type Outcome, Refused, SetupService } from './setup-service.ts';
+import { type Outcome, QueueingService, Refused } from './setup-service.ts';
 
 export interface RuleInput {
   // Given on a change to a rule the project holds; left out on a new one.
@@ -30,7 +30,9 @@ export interface SavedRule {
   readonly reasons: readonly string[];
 }
 
-export class RuleSetup extends SetupService {
+// A rule saved moves the lines of its form's tickets: each un-invoiced one is queued in the
+// same piece of work, a void one left where it is (ADR-090, 360, 420).
+export class RuleSetup extends QueueingService {
   save(person: string, input: RuleInput): Promise<Outcome<SavedRule>> {
     return this.write(person, async (tx, warn) => {
       const book = new RuleBook(tx, input.projectId, this.clock);
@@ -52,6 +54,10 @@ export class RuleSetup extends SetupService {
       if (check.refusal !== null) throw new Refused(check.refusal);
       warn(check.warnings);
       const said = { valid: check.valid, reasons: check.reasons };
+      // A rule runs on its form's tickets, and a form is a workflow's: the one it had too,
+      // where the rule moved.
+      const forms = [...new Set([entry.form, ...(stored === undefined ? [] : [stored.form])])];
+      await this.setupChanged(tx, person, input.projectId, { workflow: { in: forms } });
       if (stored?.id == null) return { id: await book.add(entry), ...said };
       await book.change(stored.id, entry, !sameLines(stored, entry));
       return { id: stored.id, ...said };

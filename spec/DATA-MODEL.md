@@ -1637,7 +1637,11 @@ never changes.
 
 #### `ReconciliationJobTicket`
 
-A ticket a job names, as the worker groups one. Once a job; never edited.
+A ticket a job names, as the worker groups one. Once a job; never edited. A job names the
+tickets its change touched and their neighbours, the other tickets whose conclusions read them
+(ADR-420), never a ticket locked as invoiced; a change larger than the policy value
+`JOB_TICKETS_AT_MOST` is several jobs. **A job with no ticket** asks only for the records the run
+flags by themselves (a certification, a site, a survey).
 
 | Field | Type | Notes |
 |---|---|---|

@@ -130,4 +130,72 @@ describe('AC-10-50 a job is queued in the piece of work of the change that asks 
       }),
     ).rejects.toThrow('A job names at least one ticket.');
   });
+
+  it('a change that touches many tickets is cut into jobs of a size, each ticket in one of them, in the order given; no ticket, no job', async () => {
+    const seen = await undone(api, actor, async (tx) => {
+      await tx.user.create({ data: { id: dana, name: 'Dana Reyes', role: 'ADMIN' } });
+      const project = await tx.project.create({ data: await p1In(tx) });
+      const asked = {
+        projectId: project.id,
+        trigger: 'SETUP_CHANGE',
+        requestedById: dana,
+      } as const;
+      const jobs = new ReconciliationJobs(tx);
+      const ids = await jobs.inJobsOf(2, {
+        ...asked,
+        tickets: ['101001', '101002', '101003', '101002', '101004', '101005'].map(
+          (ticketNumber) => ({ workflow: 'LOAD', ticketNumber }) as const,
+        ),
+      });
+      const none = await jobs.inJobsOf(2, { ...asked, tickets: [] });
+      const written = await tx.reconciliationJob.findMany({
+        where: { id: { in: ids } },
+        orderBy: { id: 'asc' },
+        include: { tickets: { orderBy: { ticketNumber: 'asc' } } },
+      });
+      return { ids, none, written };
+    });
+    expect(seen.none).toEqual([]);
+    expect(seen.written.map((job) => job.id)).toEqual(seen.ids);
+    expect(seen.written.map((job) => job.tickets.map((ticket) => ticket.ticketNumber))).toEqual([
+      ['101001', '101002'],
+      ['101003', '101004'],
+      ['101005'],
+    ]);
+    expect(seen.written.map((job) => [job.trigger, job.requestedById])).toEqual([
+      ['SETUP_CHANGE', dana],
+      ['SETUP_CHANGE', dana],
+      ['SETUP_CHANGE', dana],
+    ]);
+    await expect(
+      undone(api, actor, (tx) =>
+        new ReconciliationJobs(tx).inJobsOf(0, {
+          projectId: randomUUID(),
+          trigger: 'SETUP_CHANGE',
+          tickets: [{ workflow: 'LOAD', ticketNumber: '101001' }],
+        }),
+      ),
+    ).rejects.toThrow('A job names at least one ticket.');
+  });
+
+  it('a job for the records that are no ticket’s names no ticket, and is written with the change like any other', async () => {
+    const seen = await undone(api, actor, async (tx) => {
+      await tx.user.create({ data: { id: dana, name: 'Dana Reyes', role: 'ADMIN' } });
+      const project = await tx.project.create({ data: await p1In(tx) });
+      const id = await new ReconciliationJobs(tx).forProjectRecords({
+        projectId: project.id,
+        trigger: 'SETUP_CHANGE',
+        requestedById: dana,
+      });
+      return tx.reconciliationJob.findUniqueOrThrow({ where: { id }, include: { tickets: true } });
+    });
+    expect(seen).toMatchObject({
+      trigger: 'SETUP_CHANGE',
+      requestedById: dana,
+      attempts: 0,
+      finishedAt: null,
+      setAsideAt: null,
+      tickets: [],
+    });
+  });
 });

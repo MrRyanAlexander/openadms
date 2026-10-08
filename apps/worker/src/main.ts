@@ -55,6 +55,7 @@ const loop = new JobLoop(
   reconciliation,
   {
     triesBeforeSetAside: policy.jobTriesBeforeSetAside,
+    ticketsARun: policy.jobTicketsAtMost,
     pollMs: policy.jobQueuePollSeconds * 1_000,
   },
   log,

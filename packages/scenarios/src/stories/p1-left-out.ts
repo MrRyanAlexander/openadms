@@ -25,6 +25,7 @@ import {
   ProjectSetup,
   RuleSetup,
   SiteSetup,
+  WorkQueue,
   type NewCertification,
   type Outcome,
   type Reviewed,
@@ -42,6 +43,7 @@ import {
   p1FieldDaysHeld,
   P1Syncs,
   primaryBox,
+  QueueRuns,
   saved,
   setUpP1Pricing,
 } from './p1-office.ts';
@@ -99,14 +101,14 @@ export const p1LeftOut: Story = {
     story.at(on('08', '08:40'), 'Thursday: Dana loads P1’s map and enters its pay items and rules');
     await loadP1Map(story, office);
     const pricing = await setUpP1Pricing(story, office);
-    const payItems = new PayItemSetup(api, clock);
-    const rules = new RuleSetup(api, clock);
-    const sites = new SiteSetup(api, clock);
+    const payItems = new PayItemSetup(api, clock, story.policy);
+    const rules = new RuleSetup(api, clock, story.policy);
+    const sites = new SiteSetup(api, clock, story.policy);
     const forms = new FormSetup(api, clock);
     const lists = new ListSetup(api, clock);
     const projects = new ProjectSetup(api, clock, story.policy);
-    const certifications = new Certifications(api, clock);
-    const corrections = new Corrections(api, clock);
+    const certifications = new Certifications(api, clock, story.policy);
+    const corrections = new Corrections(api, clock, story.policy);
 
     story.at(
       on('09', '09:00'),
@@ -565,10 +567,15 @@ export const p1LeftOut: Story = {
       vehicleTypeId: dumpTrailer,
       boxes: [primaryBox(240, 90, 60)],
     });
-    const certified = await reconciliation.run(setupChange);
+    // Certifying queued the job itself: the tickets that scanned the number before it existed.
+    const lateJobs = (await new QueueRuns(story, reconciliation).waiting(p1)).filter((job) =>
+      job.tickets.includes('101015'),
+    );
+    const certified = await new QueueRuns(story, reconciliation).next(p1);
     story.check(
-      'AC-06-36, AC-03-42 the flag clears and 101015 bills at that certification’s capacity, 28 CY × 50% = 14.0 CY: it was unbilled only until one existed. The worker finds the certification by its number; the field events’ own link to the certification found, written when they arrived, is not found again (BACKLOG C83)',
+      'AC-06-36, AC-03-42 certifying 730499 queued 101015, which had scanned the number before it existed, as a job a sync brought and no person asked for; the flag clears and 101015 bills at that certification’s capacity, 28 CY × 50% = 14.0 CY: it was unbilled only until one existed. Its field events, which found no certification when they arrived, are linked to it now (BACKLOG C83)',
       [
+        lateJobs.slice(-1).map((job) => [job.trigger, job.requestedById]),
         of(certified, '101015'),
         await flagsOn('101015'),
         await linesOf('101015'),
@@ -577,12 +584,13 @@ export const p1LeftOut: Story = {
         ),
       ],
       [
+        [['SYNC', null]],
         ['101015 · COMPLETED'],
         [
           'Ticket 101015: no certification 730499 on this project. Flagged for review; not billed. (cleared)',
         ],
         ['101015 #1 VEG-HAUL-CY-15 14 × $7.50 = $105.00'],
-        [false, false],
+        [true, true],
       ],
     );
 
@@ -995,6 +1003,24 @@ export const p1LeftOut: Story = {
       'AC-07-54, AC-06-82 a load that carries a ticket bills from it, with no load call: the six items on 301006, 6 × $12.00. The tower’s count, one ticket, is the collection’s list, so nothing is flagged',
       [of(thursday, '101014'), await linesOf('101014')],
       [['101014 · COMPLETED'], ['101014 #1 WG-HAUL-EA-60 6 × $12.00 = $72.00']],
+    );
+    // What a change to one of these would queue besides the ticket itself (ADR-420).
+    const neighboursOf = (workflow: 'LOAD' | 'UNIT_RATE', ticketNumber: string) =>
+      api.$read(async (tx) =>
+        (
+          await new WorkQueue(tx, story.policy.jobTicketsAtMost).neighbours(p1, [
+            { workflow, ticketNumber },
+          ])
+        ).map((ticket) => `${ticket.workflow} ${ticket.ticketNumber}`),
+      );
+    story.check(
+      'AC-10-54 a job names the tickets a change can move, not only the one changed: a change to the truck body’s 101050 queues the trailer’s 101051, whose share of the one weight moves with it; a change to the white goods ticket 301006 queues the load that carries it, 101014; a change to that load queues no other ticket, since the carried ticket reads nothing of the load',
+      [
+        await neighboursOf('LOAD', '101050'),
+        await neighboursOf('UNIT_RATE', '301006'),
+        await neighboursOf('LOAD', '101014'),
+      ],
+      [['LOAD 101051'], ['LOAD 101014'], []],
     );
 
     // ------------------------------------------------------------------------------------------

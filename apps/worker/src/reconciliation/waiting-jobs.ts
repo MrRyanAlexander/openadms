@@ -33,16 +33,24 @@ export class WaitingJobs {
   private readonly db: Database;
   private readonly clock: Clock;
   private readonly triesBeforeSetAside: number;
+  private readonly ticketsARun: number;
 
-  constructor(db: Database, clock: Clock, triesBeforeSetAside: number) {
+  // Both numbers are the policy's: JOB_TRIES_BEFORE_SET_ASIDE and JOB_TICKETS_AT_MOST.
+  constructor(db: Database, clock: Clock, triesBeforeSetAside: number, ticketsARun: number) {
     this.db = db;
     this.clock = clock;
     this.triesBeforeSetAside = triesBeforeSetAside;
+    this.ticketsARun = ticketsARun;
   }
 
   // Counts a try on each waiting job before any of its tickets is worked, in a piece of work of
   // its own, so a try that dies is still counted. A job already tried as often as the policy
   // lets is set aside, never taken up again.
+  //
+  // A run takes up the waiting jobs, the oldest first, until the tickets they name come to the
+  // policy's number (ADR-420): always one job, and each next one only while it still fits. The
+  // jobs behind them wait for the project's next run, untouched, so a run has a size it can
+  // finish however much a setup change queued.
   async takeUp(projectId: string): Promise<TakenUp> {
     const waiting = await this.db.reconciliationJob.findMany({
       where: { projectId, finishedAt: null, setAsideAt: null },
@@ -58,7 +66,20 @@ export class WaitingJobs {
     });
     if (waiting.length === 0) return { jobs: [], tickets: [], setAside: [] };
     const spent = waiting.filter((job) => job.attempts >= this.triesBeforeSetAside);
-    const taken = waiting.filter((job) => job.attempts < this.triesBeforeSetAside);
+    const taken: typeof waiting = [];
+    const tickets = new Map<string, TicketNamed>();
+    for (const job of waiting) {
+      if (job.attempts >= this.triesBeforeSetAside) continue;
+      const withIt = new Map(tickets);
+      for (const ticket of job.tickets) {
+        withIt.set(JSON.stringify([ticket.workflow, ticket.ticketNumber]), ticket);
+      }
+      // In the order queued: a job that doesn't fit ends the run's take, and none behind it
+      // goes ahead of it.
+      if (taken.length > 0 && withIt.size > this.ticketsARun) break;
+      taken.push(job);
+      for (const [key, ticket] of withIt) tickets.set(key, ticket);
+    }
     await this.db.$write(systemActor, async (tx) => {
       for (const job of spent) {
         await tx.reconciliationJob.update({
@@ -75,12 +96,6 @@ export class WaitingJobs {
         });
       }
     });
-    const tickets = new Map<string, TicketNamed>();
-    for (const job of taken) {
-      for (const ticket of job.tickets) {
-        tickets.set(JSON.stringify([ticket.workflow, ticket.ticketNumber]), ticket);
-      }
-    }
     return {
       jobs: taken.map((job) => ({
         id: job.id,

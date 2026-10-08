@@ -89,7 +89,7 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-07, through ADR-419)
+### Where things stand (2026-10-08, through ADR-422)
 - **Phase 2 (API and sync) is open (ADR-376).** Its plan is `BACKLOG.md`'s eight milestones and 32
   tasks (ADR-377); tasks 2.0.1 (the opening and the plan), 2.1.1 (the threat model and the
   API's scenarios, ADR-379; docs), 2.1.2 (the API as a process, ADR-380…385), 2.1.3 (the
@@ -175,7 +175,26 @@ of `DECISIONS.md`.
   **Nothing queues a job yet** (2.3.3), **and `Reconciliation.run`, which the stories call,
   still works every ticket of the project:** a job must name the neighbours a change can move
   (voiding 101031 clears a flag on 101030), which is 2.3.3's first decision. What it leaves:
-  BACKLOG C95. **The user's word (ADR-401):
+  BACKLOG C95. **Task 2.3.3 (what queues work, ADR-420) is done: Milestone 2.3 is complete.**
+  Every change that moves a ticket queues its own job in its own piece of work, through
+  `WorkQueue` (`apps/api/src/jobs/`), and no caller asks the worker: the review services (a
+  correction, a renumber, a void, an unvoid, an acceptance, an unlock), the setup services (a
+  rule, a pay item, a rate by the new `PayItemSetup.rate`, "Pays when", a project's settings, a
+  control range, a map version, a site) and `Certifications` (one made later is linked to the
+  field events that scanned its number, and their tickets queued). **A job names the tickets
+  touched and their neighbours** (the domain's `TicketNeighbours`: an overlap on one truck, a
+  crew's day, one scale receipt, a carried ticket), asked before the change and after it;
+  never a ticket locked as invoiced, never a settled void; a change to a record that is no
+  ticket's (a site, a certification, a survey) queues a job that names none. The policy value
+  `JOB_TICKETS_AT_MOST` (200) cuts a change into jobs and caps what one run takes up. **Every
+  service that queues is made with `(db, clock, policy)`.** The stories `p1-reviewed`,
+  `p1-voided` and `p1-invoiced` run from the queue (`QueueRuns` in `p1-office.ts`); runs after
+  a sync are still asked for directly (2.6.2, 2.7.1). What it leaves: BACKLOG C96. **The user,
+  2026-10-08 (ADR-421):** a number at New that the phone's list of certifications doesn't hold:
+  the phone warns, asks to refresh if it has a connection, and otherwise the truck is keyed in
+  by hand (Phase 3, REQ-317); certifying is done where there is signal (ADR-151). **(ADR-422):** a
+  ticket locked as invoiced is on no job, and a saved setup change answers how many tickets
+  it queued and how many locked ones it left (`Outcome.queued`). **The user's word (ADR-401):
   sign-in follows NIST SP 800-63B and ASVS Level 2; when a direction in security is suggested,
   say what the standard asks before building it** (ADR-400 was built first and withdrawn). **Each service login (`adms_api`, `adms_worker`, `adms_readonly`) is
   under a statement timeout**, the policy value `STATEMENT_TIMEOUT_MS` (30,000 ms), set by
@@ -187,7 +206,7 @@ of `DECISIONS.md`.
   `@Serves`; `Boundary` reads its path, query and body by its schemas first** (BACKLOG C86 is the
   recipe for adding one); the CORS list is `ADMS_CORS_ORIGINS`; every answer carries the API's own
   headers; the API's database client states the request's id on every write; `pnpm openapi`
-  writes `apps/api/openapi.json`. `spec/acceptance/10-api-and-sync.md` (56 scenarios, 33 passing)
+  writes `apps/api/openapi.json`. `spec/acceptance/10-api-and-sync.md` (56 scenarios, 37 passing)
   and `spec/THREAT-MODEL.md` are both **approved by the user** (their marks, ADR-386, 393).
   Its 14 REQs are in `REQUIREMENTS.md`, one ticked (REQ-208).
 - **A test of the API that must write** runs in one piece of work on the installation's database,
@@ -204,8 +223,8 @@ of `DECISIONS.md`.
   `installationPolicy({ … })`.
 - **Phase 1 is done:** all seven exit criteria met (ADR-371, 372); 693 of the 708 scenarios with a
   Phase 1 part proven whole, 15 in part. 48 scenario rows name Phase 2 (37 as "API (Phase 2)").
-- **The chain, seen whole on 2026-10-07:** 107 test
-  files, 2,178 tests; lint clean; 421 licences allowed; seventeen stories; `pnpm security` 7 passed,
+- **The chain, seen whole on 2026-10-07:** 108 test
+  files, 2,191 tests; lint clean; 421 licences allowed; seventeen stories; `pnpm security` 7 passed,
   0 failed; eighty-nine migrations; `installer:check` 27 `✓`. The expected output of each command is `adms-verify`'s.
 - **What exists:** `packages/db` (schema, guards, tests), `packages/domain` (every rule; one
   dependency, no database), `packages/contracts`, `packages/scenarios` (the harness and stories,
@@ -363,19 +382,17 @@ questions.
 **Phase 2 is open (ADR-376). Its plan is `BACKLOG.md`, "Active — Phase 2" (ADR-377): read its
 brief first. One task per response.**
 
-**Task 2.3.3, what queues work** *(BACKLOG has the task in full)*. Read first: ARCHITECTURE
-§13; **ADR-418, 419** and BACKLOG **C95** (its first decision: a job must name every ticket a
-change can move, not only the one changed, or the run must find them; the stories `p1-reviewed`,
-`p1-voided` and `p1-invoiced` prove it once they go through `waitingJobs`), **C94** (where each
-service calls `new ReconciliationJobs(tx).queue(…)`), **C79…C81, C83, C62**; ADR-090, 360;
-`spec/acceptance/10-api-and-sync.md` AC-10-50, 51, 54, `06-reconciliation.md` AC-06-02, 03, 36
-and `05-sync.md` AC-05-53; `adms-exceptions` and `adms-validation` for which checks read another
-ticket. **Done when:** a correction, a renumber, a void, an unvoid, an acceptance and an unlock
-queue their job in their own piece of work and no caller asks the worker; a rate or rule change
-queues the un-invoiced tickets it touches, in jobs a run can finish; a certification made after
-a field event scanned its number links it and queues its tickets; the neighbours are worked;
-AC-10-50 whole, AC-10-54 whole; and the chain is green with the new counts. **After a change to
-`apps/api` or `apps/worker`, `pnpm local:up` again.** **Next after it: 2.4.1.**
+**Task 2.4.1, the services Phase 1 left to a story's hand** *(BACKLOG has the task in full;
+REQ-207)*. Read first: BACKLOG **C74, C83, C96** (each new setup service queues its tickets
+through `QueueingService.setupChanged`, and is made with `(db, clock, policy)`; `PayItemSetup.rate`
+exists since ADR-420); ADR-229, 243, 357 (the setup check, a site's quantity lookup);
+`apps/api/src/setup/`; `packages/domain/src/setup-check.ts`, `quantity-lookup.ts`;
+`spec/acceptance/01-setup.md` for the scenarios each service answers. **Done when:** the setup
+check and a site's quantity lookup are services in `apps/api`; a pay item's unit, a project's
+active window and a site's own shape each have a service that queues the tickets it moves; the
+stories that wrote these as the person call the service instead; and the chain is green with
+the new counts. **After a change to `apps/api` or `apps/worker`, `pnpm local:up` again.**
+**Next after it: 2.4.2.**
 
 **Every command starts with** `eval "$(fnm env --shell zsh)"`. The checks are `adms-verify`'s; the
 database tests, the map servers' tests, the stories and `pnpm security` need `pnpm local:up` first,

@@ -50,7 +50,7 @@ export const certification: Story = {
 
   async run(story) {
     const { api, clock } = story;
-    const certifications = new Certifications(api, clock);
+    const certifications = new Certifications(api, clock, story.policy);
     const contractors = new ContractorSetup(api, clock);
 
     const saved = async <T>(attempt: Promise<Outcome<T>>): Promise<T> => {
@@ -222,16 +222,20 @@ export const certification: Story = {
       orderBy: { id: 'asc' },
     });
     story.check(
-      'AC-03-59 the certification, its two boxes and its helper are each audited as Sam, from his phone',
+      'AC-03-59 the certification, its two boxes and its helper are each audited as Sam, from his phone; so is the job it queued in the same piece of work, for the worker to check its views (ADR-420)',
       trailerAudit.map((record) => [
         record.tableName,
         record.operation,
         record.source,
         record.deviceId,
       ]),
-      ['certification', 'certification_box', 'certification_box', 'certification_helper'].map(
-        (table) => [table, 'INSERT', 'DEVICE', world.phone],
-      ),
+      [
+        'certification',
+        'certification_box',
+        'certification_box',
+        'certification_helper',
+        'reconciliation_job',
+      ].map((table) => [table, 'INSERT', 'DEVICE', world.phone]),
     );
 
     // ------------------------------------------------------------------------------------------

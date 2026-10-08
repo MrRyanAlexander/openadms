@@ -32,6 +32,7 @@ import {
   loadP1Map,
   p1FieldDaysHeld,
   P1Syncs,
+  QueueRuns,
   saved,
   setUpP1Pricing,
 } from './p1-office.ts';
@@ -84,10 +85,10 @@ export const p1Voided: Story = {
       settings,
       new Mileages(new MapServers(localMapServers())),
     );
-    const voids = new Voids(api, clock);
-    const acceptances = new Acceptances(api, clock);
-    const corrections = new Corrections(api, clock);
-    const rules = new RuleSetup(api, clock);
+    const voids = new Voids(api, clock, story.policy);
+    const acceptances = new Acceptances(api, clock, story.policy);
+    const corrections = new Corrections(api, clock, story.policy);
+    const rules = new RuleSetup(api, clock, story.policy);
 
     const names = new Map<string | null, string>([
       [dana, 'Dana'],
@@ -189,9 +190,11 @@ export const p1Voided: Story = {
     const last: { run: RunOutcome } = {
       run: { ran: false, reason: 'RUN_UNDER_WAY', message: 'No run yet.' },
     };
+    // Nobody asks the worker: the action queued its job, and the worker takes it up.
+    const queue = new QueueRuns(story, reconciliation);
     const reviewed = async <T>(attempt: Promise<Outcome<Reviewed<T>>>): Promise<Reviewed<T>> => {
       const done = await saved(attempt);
-      last.run = await reconciliation.run(done.reprocess);
+      last.run = await queue.next(done.reprocess.projectId);
       return done;
     };
     const refusal = async <T>(attempt: Promise<Outcome<T>>): Promise<string> => {
@@ -235,6 +238,8 @@ export const p1Voided: Story = {
     await phones.arrive(wednesdayMorning);
     story.at(on('14', '07:20'), 'The worker runs');
     const before = await reconciliation.run(sync);
+    // What setup queued before the field days (each certification's own flags) is settled.
+    await queue.settle(p1);
     story.check(
       'P1 before any review: 101003 in review for its 96% call, the stump 301005 for its size and its missing survey, 101006 waiting for the disposal typed as 101060; the duplicate hanger 301003 is COMPLETED and bills $68.00',
       [
@@ -662,7 +667,7 @@ export const p1Voided: Story = {
     );
     const quarry = (
       await saved(
-        new SiteSetup(api, clock).site(dana, {
+        new SiteSetup(api, clock, story.policy).site(dana, {
           projectId: p1,
           name: 'Old Quarry Pit',
           siteTypeId: (await api.siteType.findFirstOrThrow({ where: { name: 'Other' } })).id,
@@ -829,7 +834,26 @@ export const p1Voided: Story = {
       actions: [{ kind: 'VOID_TICKET' }],
     } as const;
     const quarryRule = await saved(rules.save(dana, voidRule));
-    const byRule = await reconciliation.run(setupChange);
+    const ruleJobs = await queue.waiting(p1);
+    const voidNow = (
+      await api.fieldEvent.findMany({
+        where: { projectId: p1, status: 'VOID' },
+        select: { ticketNumber: true },
+        distinct: ['ticketNumber'],
+        orderBy: { ticketNumber: 'asc' },
+      })
+    ).map((event) => event.ticketNumber);
+    story.check(
+      'AC-10-51, AC-10-54 saving the rule queued its job in the same piece of work, as a setup change Dana asked for: it names the load tickets, the rule’s form’s, and no ticket that is void and settled',
+      [
+        ruleJobs.map((job) => [job.trigger, names.get(job.requestedById)]),
+        ruleJobs.flatMap((job) => job.tickets).filter((number) => voidNow.includes(number)),
+        ruleJobs.flatMap((job) => job.tickets).every((number) => number.startsWith('1')),
+        ruleJobs.flatMap((job) => job.tickets).includes('101009'),
+      ],
+      [[['SETUP_CHANGE', 'Dana']], [], true, true],
+    );
+    const byRule = await queue.next(p1);
     const ineligible = await api.flag.findFirstOrThrow({
       where: { projectId: p1, ticketNumber: '101009', code: 'INELIGIBLE_SITE' },
     });
@@ -901,19 +925,20 @@ export const p1Voided: Story = {
 
     story.at(on('15', '08:50'), 'Dana switches the rule off; the worker runs');
     await saved(rules.save(dana, { ...voidRule, id: quarryRule.id, active: false }));
-    const ruleOff = await reconciliation.run(setupChange);
+    const offJobs = (await queue.waiting(p1)).flatMap((job) => job.tickets);
+    const ruleOff = await queue.next(p1);
     const stillVoid = [of(ruleOff, '101009'), await statusOf('101009')];
     story.at(
       on('15', '08:55'),
-      'Luis unvoids 101009. Nobody asks for its run; the next sync’s run finds the unvoid by itself',
+      'Luis unvoids 101009. Nobody asks the worker: the unvoid queued its job, and the worker takes it up',
     );
-    await saved(voids.lift(luis, p1, load('101009')));
-    last.run = await reconciliation.run(sync);
+    await reviewed(voids.lift(luis, p1, load('101009')));
     story.check(
-      'AC-08-39, AC-08-67 switching the rule off brings nothing back by itself. Unvoided with the rule off, the ticket is worked by the next run of any kind, since the unvoid is a record the worker reads; it stays un-voided and is priced: 65 × 60% = 39 CY × $7.50 = $292.50, in review for the ineligible site',
-      [stillVoid, of(last.run, '101009'), await linesOf('101009')],
+      'AC-08-39, AC-08-67, AC-10-54 switching the rule off brings nothing back by itself: its job doesn’t name the void ticket, settled until a person unvoids it. Unvoided with the rule off, the ticket is worked by the job the unvoid queued, since the unvoid is a record the worker reads; it stays un-voided and is priced: 65 × 60% = 39 CY × $7.50 = $292.50, in review for the ineligible site',
+      [stillVoid, offJobs.includes('101009'), of(last.run, '101009'), await linesOf('101009')],
       [
         [[], ['VOID']],
+        false,
         [
           '101009 · MANUAL_REVIEW · Ticket 101009: dumped at Old Quarry Pit, an ineligible site. Flagged for review.',
         ],
@@ -923,7 +948,7 @@ export const p1Voided: Story = {
 
     story.at(on('15', '09:00'), 'Dana switches the rule back on; the worker runs');
     await saved(rules.save(dana, { ...voidRule, id: quarryRule.id, active: true }));
-    const ruleOn = await reconciliation.run(setupChange);
+    const ruleOn = await queue.next(p1);
     story.at(
       on('15', '09:05'),
       'The tower’s photographs show 101009 was dumped at Marsh Road TDSR: Luis corrects its disposal’s site and GPS; the worker runs',

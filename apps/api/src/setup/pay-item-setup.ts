@@ -4,7 +4,12 @@
 // writes and keeps the pay item's rules. Before a pay item is saved, setup asks packages/domain's
 // SizeBands: a band that overlaps another of its payable type isn't saved; a gap is saved with a
 // warning. No capture setting has a default: whoever enters a pay item states each (ADR-309).
-import type { BillingUnit, CrewTimeConversion, PayItem } from '@open-adms/db';
+//
+// A pay item added, a rate set and a "Pays when" saved each move what tickets bill: the
+// project's un-invoiced tickets are queued in the same piece of work (ADR-090, 420). Which
+// tickets a pay item or a rate reaches is the firm's rules' to say, so every ticket of the
+// project that isn't void or locked as invoiced is named: the run writes only what differs.
+import type { BillingUnit, CrewTimeConversion, PayItem, PayItemRate } from '@open-adms/db';
 import {
   PaysWhen,
   type PaysWhenOnForm,
@@ -16,7 +21,7 @@ import {
 
 import { type CriterionInput, RuleBook } from './rule-book.ts';
 import { sameLines } from './rule-setup.ts';
-import { type Outcome, Refused, SetupService } from './setup-service.ts';
+import { type Outcome, QueueingService, Refused } from './setup-service.ts';
 
 export interface NewPayItem {
   readonly projectId: string;
@@ -61,7 +66,7 @@ export interface RulesKept {
   readonly unchanged: readonly string[];
 }
 
-export class PayItemSetup extends SetupService {
+export class PayItemSetup extends QueueingService {
   payItem(person: string, input: NewPayItem): Promise<Outcome<PayItem>> {
     return this.write(person, async (tx, warn) => {
       const { rates, ...settings } = input;
@@ -96,7 +101,31 @@ export class PayItemSetup extends SetupService {
           data: { projectId: input.projectId, payItemId: payItem.id, primeId, rate },
         });
       }
+      // A unit rate ticket's pay item is worked out from its payable type and its band: a new
+      // pay item may be the one.
+      await this.setupChanged(tx, person, input.projectId);
       return payItem;
+    });
+  }
+
+  // A prime's rate on the pay item: set for the first time (a price agreed at last), changed,
+  // or put back after it was taken off; never a second row for the prime. Audited with the
+  // value before. Tickets locked as invoiced keep the lines they have (ADR-090).
+  rate(
+    person: string,
+    payItemId: string,
+    primeId: string,
+    rate: string,
+  ): Promise<Outcome<PayItemRate>> {
+    return this.write(person, async (tx) => {
+      const payItem = await tx.payItem.findUniqueOrThrow({ where: { id: payItemId } });
+      const saved = await tx.payItemRate.upsert({
+        where: { payItemId_primeId: { payItemId, primeId } },
+        create: { projectId: payItem.projectId, payItemId, primeId, rate },
+        update: { rate, archivedAt: null },
+      });
+      await this.setupChanged(tx, person, payItem.projectId);
+      return saved;
     });
   }
 
@@ -194,6 +223,9 @@ export class PayItemSetup extends SetupService {
           done.changed.push(heldId);
           rules = rules.map((other) => (other.id === heldId ? entry : other));
         }
+      }
+      if (done.added.length + done.changed.length + done.archived.length > 0) {
+        await this.setupChanged(tx, person, payItem.projectId);
       }
       return done;
     });

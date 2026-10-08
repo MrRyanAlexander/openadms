@@ -162,11 +162,11 @@ export const p1FieldDays: Story = {
       return id;
     };
 
-    const sites = new SiteSetup(api, clock);
+    const sites = new SiteSetup(api, clock, story.policy);
     const forms = new FormSetup(api, clock);
     const lists = new ListSetup(api, clock);
     const projects = new ProjectSetup(api, clock, story.policy);
-    const payItems = new PayItemSetup(api, clock);
+    const payItems = new PayItemSetup(api, clock, story.policy);
     const allocator = new NumberAllocator(api, clock, story.policy);
 
     const finalDisposal = await api.siteType.findUniqueOrThrow({

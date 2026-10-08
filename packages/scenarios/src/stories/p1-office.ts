@@ -18,6 +18,7 @@ import {
   type NewCertification,
   type NewPayItem,
 } from '@open-adms/api';
+import type { Reconciliation, RunOutcome } from '@open-adms/worker';
 
 import { createHash } from 'node:crypto';
 
@@ -47,6 +48,64 @@ export async function saved<T>(attempt: Saving<T>): Promise<T> {
   const outcome = await attempt;
   if (!outcome.saved) throw new Error(`Refused: ${outcome.refusal.message}`);
   return outcome.record;
+}
+
+// The worker's side of the job queue in a story (BACKLOG 2.3.3; ADR-420): nobody asks the worker
+// for a run after a person's action. The action queued its job in its own piece of work, and
+// here the worker takes its project's waiting jobs up, as its process does every few seconds.
+export class QueueRuns {
+  private readonly story: StoryContext;
+  private readonly reconciliation: Reconciliation;
+
+  constructor(story: StoryContext, reconciliation: Reconciliation) {
+    this.story = story;
+    this.reconciliation = reconciliation;
+  }
+
+  // One run of the project's waiting jobs. A story that expects one and finds none has lost a
+  // job: it stops.
+  async next(projectId: string): Promise<Extract<RunOutcome, { ran: true }>> {
+    const { policy } = this.story;
+    const outcome = await this.reconciliation.waitingJobs(
+      projectId,
+      policy.jobTriesBeforeSetAside,
+      policy.jobTicketsAtMost,
+    );
+    if (!outcome.worked) {
+      throw new Error(
+        `The worker found no job to work: ${outcome.reason}${'error' in outcome ? ` (${outcome.error})` : ''}.`,
+      );
+    }
+    return outcome.run;
+  }
+
+  // Every waiting job of the project worked, run after run; how many runs it took. What setup
+  // queued before the field days (a site's permit, a certification's views) is settled so.
+  async settle(projectId: string): Promise<number> {
+    let runs = 0;
+    while ((await this.waiting(projectId)).length > 0) {
+      await this.next(projectId);
+      runs += 1;
+    }
+    return runs;
+  }
+
+  // The project's waiting jobs, the oldest first: what asked for each, and the tickets it names.
+  async waiting(
+    projectId: string,
+  ): Promise<{ id: string; trigger: string; requestedById: string | null; tickets: string[] }[]> {
+    const jobs = await this.story.api.reconciliationJob.findMany({
+      where: { projectId, finishedAt: null, setAsideAt: null },
+      orderBy: { id: 'asc' },
+      include: { tickets: { orderBy: [{ workflow: 'asc' }, { ticketNumber: 'asc' }] } },
+    });
+    return jobs.map((job) => ({
+      id: job.id,
+      trigger: job.trigger,
+      requestedById: job.requestedById,
+      tickets: job.tickets.map((ticket) => ticket.ticketNumber),
+    }));
+  }
 }
 
 // A record a phone holds, with the time its phone found signal.
@@ -159,7 +218,7 @@ export async function certifyP1(story: StoryContext, office: P1Office): Promise<
       },
     }),
   );
-  const certifications = new Certifications(api, clock);
+  const certifications = new Certifications(api, clock, story.policy);
   const feature = async (name: string): Promise<string> =>
     (await api.vehicleFeature.findFirstOrThrow({ where: { name } })).id;
   const certify: P1Certify = async (time, more) => {
@@ -332,7 +391,7 @@ const unticked = {
 export async function setUpP1Pricing(story: StoryContext, office: P1Office): Promise<P1Pricing> {
   const { api, clock } = story;
   const { dana, p1, coastline, contract, landfill, cypress } = office;
-  const payItems = new PayItemSetup(api, clock);
+  const payItems = new PayItemSetup(api, clock, story.policy);
   const lists = new ListSetup(api, clock);
 
   const payableType = async (name: string): Promise<string> =>
@@ -380,7 +439,9 @@ export async function setUpP1Pricing(story: StoryContext, office: P1Office): Pro
     if (found === undefined) throw new Error(`No pay item ${code}`);
     return found;
   };
-  await saved(new SiteSetup(api, clock).tippingFee(dana, landfill, id('TIP-FEE-CY-BCL')));
+  await saved(
+    new SiteSetup(api, clock, story.policy).tippingFee(dana, landfill, id('TIP-FEE-CY-BCL')),
+  );
 
   const form = async (documentType: 'LOAD' | 'HAUL_OUT' | 'UNIT_RATE'): Promise<string> =>
     (await api.form.findFirstOrThrow({ where: { projectId: p1, documentType } })).id;
@@ -488,6 +549,6 @@ export async function setUpP1Pricing(story: StoryContext, office: P1Office): Pro
     criteria: [payItemIs(id('STP-RMV-EA-36'), id('STP-RMV-EA-48'))],
     actions: [{ kind: 'ADD_TRANSACTION', slot: 2, payItemId: id('STP-FILL-CY') }],
   } as const;
-  const fillRule = await saved(new RuleSetup(api, clock).save(dana, fill));
+  const fillRule = await saved(new RuleSetup(api, clock, story.policy).save(dana, fill));
   return { payItems: ids, forms, vegetative, fillRule: { id: fillRule.id, input: fill } };
 }

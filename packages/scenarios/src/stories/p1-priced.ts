@@ -583,7 +583,7 @@ export const p1Priced: Story = {
       on('14', '09:40'),
       'Dana switches the stump hole fill’s rule off in the rule builder; the worker runs',
     );
-    const rules = new RuleSetup(api, clock);
+    const rules = new RuleSetup(api, clock, story.policy);
     const fill = { ...pricing.fillRule.input, id: pricing.fillRule.id };
     const stumpLine = (await lines()).find((each) => each.line.startsWith('301004 #1'));
     await saved(rules.save(dana, { ...fill, active: false }));
@@ -622,7 +622,7 @@ export const p1Priced: Story = {
     const other = await api.siteType.findFirstOrThrow({ where: { name: 'Other' } });
     const quarry = (
       await saved(
-        new SiteSetup(api, clock).site(dana, {
+        new SiteSetup(api, clock, story.policy).site(dana, {
           projectId: p1,
           name: 'Old Quarry Pit',
           siteTypeId: other.id,
@@ -724,7 +724,7 @@ export const p1Priced: Story = {
       }),
     );
     const kept = await saved(
-      new PayItemSetup(api, clock).paysWhen(dana, veg15, [
+      new PayItemSetup(api, clock, story.policy).paysWhen(dana, veg15, [
         {
           formId: pricing.forms.load,
           slot: 1,

@@ -163,6 +163,12 @@ export {
   type NumbersTaken,
   type SeriesPosition,
 } from './numbers.ts';
+export {
+  TicketNeighbours,
+  timesOverlap,
+  type NeighbourEvent,
+  type TicketKey,
+} from './neighbours.ts';
 export { Policy, policyNames, type PolicyName } from './policy.ts';
 export {
   BreachedPasswords,

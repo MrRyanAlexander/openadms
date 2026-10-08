@@ -7,7 +7,6 @@
 import type {
   Client,
   ControlRange,
-  Database,
   DeclarationEvent,
   FieldTag,
   MapSource,
@@ -25,11 +24,10 @@ import {
   NewProjectNumbers,
   NewProjectSettings,
   NumberSeriesRules,
-  type Policy,
   type ProjectSettings,
 } from '@open-adms/domain';
 
-import { type Clock, day, type Outcome, Refused, SetupService } from './setup-service.ts';
+import { day, type Outcome, QueueingService, Refused } from './setup-service.ts';
 
 export interface NewClient {
   readonly name: string;
@@ -84,14 +82,10 @@ export interface NewMap {
   readonly zoneNameField: string | null;
 }
 
-export class ProjectSetup extends SetupService {
-  private readonly policy: Policy;
-
-  constructor(db: Database, clock: Clock, policy: Policy) {
-    super(db, clock);
-    this.policy = policy;
-  }
-
+// A change to what a project's tickets are checked against (its settings, a control range, a
+// new map version) queues its un-invoiced tickets in the same piece of work (ADR-090, 420;
+// AC-06-03).
+export class ProjectSetup extends QueueingService {
   // Step 1: search first; a client that exists is picked, never created again (ADR-023).
   findClients(search: string): Promise<Client[]> {
     return this.db.client.findMany({
@@ -210,18 +204,23 @@ export class ProjectSetup extends SetupService {
         entered.map((range) => ({ ...range, archived: range.archivedAt !== null })),
       ).check({ ...input, archived: false });
       if (refusal !== null) throw new Refused(refusal);
-      return tx.controlRange.create({ data: { ...input } });
+      const range = await tx.controlRange.create({ data: { ...input } });
+      // A number outside every range is flagged; one inside a new range no longer is.
+      await this.setupChanged(tx, person, input.projectId);
+      return range;
     });
   }
 
   // A range entered by mistake is taken off, never deleted.
   archiveControlRange(person: string, controlRangeId: string): Promise<Outcome<ControlRange>> {
-    return this.write(person, (tx) =>
-      tx.controlRange.update({
+    return this.write(person, async (tx) => {
+      const range = await tx.controlRange.update({
         where: { id: controlRangeId },
         data: { archivedAt: this.clock.now() },
-      }),
-    );
+      });
+      await this.setupChanged(tx, person, range.projectId);
+      return range;
+    });
   }
 
   // The firm changes a project's own settings afterwards, audited with the value before.
@@ -230,9 +229,11 @@ export class ProjectSetup extends SetupService {
     projectId: string,
     changes: Partial<ProjectSettings>,
   ): Promise<Outcome<Project>> {
-    return this.write(person, (tx) =>
-      tx.project.update({ where: { id: projectId }, data: changes }),
-    );
+    return this.write(person, async (tx) => {
+      const project = await tx.project.update({ where: { id: projectId }, data: changes });
+      await this.setupChanged(tx, person, projectId);
+      return project;
+    });
   }
 
   // Closes the project: the mark and its time, audited. Nothing is deleted and nothing is
@@ -292,6 +293,7 @@ export class ProjectSetup extends SetupService {
           },
         });
       }
+      await this.setupChanged(tx, person, input.projectId);
       return version;
     });
   }

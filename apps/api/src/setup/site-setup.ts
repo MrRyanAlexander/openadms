@@ -7,7 +7,7 @@
 import type { DisposalSite, DisposalSiteTippingFee, Prisma } from '@open-adms/db';
 import { type BuiltInKey, SiteFacts, type SiteSetting } from '@open-adms/domain';
 
-import { day, type Outcome, Refused, SetupService } from './setup-service.ts';
+import { day, type Outcome, QueueingService, Refused } from './setup-service.ts';
 
 // The four site facts: every one stated, none has a default (ADR-215).
 export interface SiteFactSettings {
@@ -41,12 +41,15 @@ export type SiteChanges = Partial<
   }
 >;
 
-export class SiteSetup extends SetupService {
+// A site added or changed is checked by the worker's next run (its permit; where its tickets'
+// debris went, their area and their mileage): the job is queued in the same piece of work,
+// naming the un-invoiced tickets with a field event at the site (ADR-090, 420; AC-06-03).
+export class SiteSetup extends QueueingService {
   site(person: string, input: NewSite): Promise<Outcome<DisposalSite>> {
     return this.write(person, async (tx) => {
       const type = await SiteSetup.typeOf(tx, input.siteTypeId);
       SiteSetup.checked({ ...type, name: input.name, haulOutsLeaveHere: input.haulOutsLeaveHere });
-      return tx.disposalSite.create({
+      const site = await tx.disposalSite.create({
         data: {
           projectId: input.projectId,
           name: input.name,
@@ -64,6 +67,9 @@ export class SiteSetup extends SetupService {
           closeDate: input.closeDate === undefined ? null : day(input.closeDate),
         },
       });
+      // No ticket is at a new site yet: the job is for its own flag, a permit outstanding.
+      await this.setupChanged(tx, person, site.projectId, { siteId: site.id }, true);
+      return site;
     });
   }
 
@@ -85,10 +91,12 @@ export class SiteSetup extends SetupService {
         },
         before,
       );
-      return tx.disposalSite.update({
+      const changed = await tx.disposalSite.update({
         where: { id: siteId },
         data: { ...changes, siteTypeKey: type.siteTypeKey },
       });
+      await this.setupChanged(tx, person, site.projectId, { siteId }, true);
+      return changed;
     });
   }
 
@@ -101,9 +109,11 @@ export class SiteSetup extends SetupService {
   ): Promise<Outcome<DisposalSiteTippingFee>> {
     return this.write(person, async (tx) => {
       const site = await tx.disposalSite.findUniqueOrThrow({ where: { id: siteId } });
-      return tx.disposalSiteTippingFee.create({
+      const link = await tx.disposalSiteTippingFee.create({
         data: { projectId: site.projectId, siteId, payItemId },
       });
+      await this.setupChanged(tx, person, site.projectId, { siteId });
+      return link;
     });
   }
 

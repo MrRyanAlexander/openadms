@@ -162,6 +162,13 @@ load **unbilled and flagged** until one exists (ADR-154).
 read; **the certification's capacity bills**, and a typed capacity that differs is flagged ("capacity
 typed 60, certified 65") (ADR-154).
 
+**A number the phone's list doesn't hold** (ADR-421). A badge carries only the number; the phone
+learns the capacity, the prime and the subs from the certifications in its lists. **User, 2026-10-08:** "when a cert is hand keyed the phone should warn, request refresh if avail, fallback to hand keyeed still". So where
+the number scanned or typed at New isn't in the phone's list: the phone **warns**, **asks to
+refresh its lists if it has a connection**, and otherwise the monitor **keys the truck in by
+hand**, as above. Nothing is refused. When the certification exists on the server, the field
+events that named its number are linked to it and their tickets queued (ADR-420).
+
 ## 3A.6 Lifecycle
 
 1. **Certifying happens where there is signal**, on a phone whose **assignment** includes certifying

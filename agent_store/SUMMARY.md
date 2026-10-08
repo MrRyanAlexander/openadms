@@ -1,13 +1,13 @@
 # Open ADMS — Current decisions and gaps, at a glance
 
 **The present tense of the project on one page.** `DECISIONS.md` and `DEVIATIONS.md` are the full
-history, with 419 ADRs and 74 KDs, many superseded. This page says what is true **now** and which
+history, with 422 ADRs and 74 KDs, many superseded. This page says what is true **now** and which
 entries to cite. The reasons live in the ADRs and the skills.
 
 - **Keep it current:** when you add, amend or supersede an ADR, or open or close a KD, update this
   page **in the same response** (`adms-decisions`).
 - **If this page and a log entry disagree,** the newest ADR wins: fix this page and say so.
-- **Updated 2026-10-07, through ADR-419 / KD-74.** **Phase 2 (API and sync) is open (ADR-376);
+- **Updated 2026-10-08, through ADR-422 / KD-74.** **Phase 2 (API and sync) is open (ADR-376);
   its plan is `BACKLOG.md`'s eight milestones and 32 tasks (ADR-377). Tasks 2.1.1 (ADR-379) and
   2.1.2 (ADR-380…385) are done: the API runs as a process, reached only at
   `https://api.adms.localhost` through Caddy, with a health answer and nothing else yet. Task
@@ -29,7 +29,9 @@ entries to cite. The reasons live in the ADRs and the skills.
   Task 2.3.1 (ADR-418) is done: the job queue, two guarded tables of our own and no library; a
   job is added only in the piece of work of the change that asks for it. Task 2.3.2 (ADR-419) is
   done: the worker runs as a process that drains the queue, one run per project at a time, only
-  the tickets its jobs name; which tickets a change must name is 2.3.3's (BACKLOG C95).**
+  the tickets its jobs name. Task 2.3.3 (ADR-420) is done: every change that moves a ticket
+  queues its own job in its own piece of work, naming the tickets touched and their neighbours;
+  Milestone 2.3 is complete.**
   `spec/acceptance/10-api-and-sync.md` and `spec/THREAT-MODEL.md` are approved by the user
   (their marks, ADR-386, 393). **No KD is open.**
   The exception to the seven-day rule is gone from `pnpm-workspace.yaml` (ADR-372's owed step,
@@ -710,6 +712,49 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   `apps/api/test/limits.test.ts`. AC-10-40 passes. **Not built, said:** per device and what a
   phone does when limited (2.6.5); a shared store for several API processes (5a). What it
   leaves: BACKLOG C93. *Agent defaults.* [416]
+- **A badge whose number the phone's list doesn't hold (the user, 2026-10-08)** [421, 151, 154, 209]:
+  a badge carries only the cert number, and a phone learns the capacity, the prime and the subs
+  from the certifications in its lists; certifying is done where there is signal, so the
+  project knows a certification before its truck works. **Where the number scanned or typed at
+  New isn't in the phone's list, the phone warns, asks to refresh its lists if it has a
+  connection, and otherwise lets the monitor key the truck in by hand** (marked manual,
+  flagged, billed at the certification's capacity once one exists). Nothing is refused. Phase
+  3 builds it (REQ-317); the server's half is built (ADR-420: the field events linked and
+  their tickets queued when the certification exists).
+- **A locked ticket and a setup change (the user, 2026-10-08)** [422, 420, 090, 057]: a ticket
+  locked as invoiced is on no job, and a setup change's run writes nothing on it. **A saved
+  change answers how many tickets it queued and how many it reached that are locked and were
+  left as they are** (`Outcome.queued`). Phase 4: the screen that shows it, and a mark on a
+  locked ticket that its setup has changed since it was priced (unlocking will move its
+  amount).
+- **What queues work (task 2.3.3, 2026-10-07)** [420, 419, 418, 360, 090]: **a change that
+  moves a ticket queues its own job in its own piece of work, and nobody asks the worker.**
+  Every such service hands its ask to `WorkQueue` (`apps/api/src/jobs/`) and is made with
+  `(db, clock, policy)` (`QueueingService`). **A job names the tickets the change touched and
+  their neighbours**, the other tickets whose conclusions read them. What makes two tickets
+  neighbours is the domain's `TicketNeighbours`, four things and no other: two loads on one
+  certification whose loading times overlap; two crew-time tickets of one crew that overlap or
+  share a day of the project; two tickets on one scale receipt; a load and a unit rate ticket
+  it carries (from the load's side only), and two loads listing the same carried ticket. **The
+  change names them, not the run, asked before the change and after it**, since only the change
+  knows what stood before. **Left off every job:** a ticket locked as invoiced (its unlock
+  queues it); and, among neighbours and a setup change's tickets, a void ticket (settled until
+  a person unvoids it). **Who queues what:** a correction, a renumber, a quarantined record
+  resolved, a back-office record, a void and an unvoid: their tickets and neighbours; an
+  acceptance and an unlock: the ticket alone; a rule: its form's tickets; a pay item, **a rate
+  (`PayItemSetup.rate`)**, "Pays when", a project's settings, a control range, a map version:
+  every ticket of the project; a site: the tickets with a field event at it; a certification
+  made (**its number's field events are linked to it**, AC-06-36), measured again or revoked:
+  the tickets on its number, and those sharing a scale receipt with one. A change to a record
+  that is no ticket's (a new site or certification, a corrected survey, an accepted flag on
+  one) queues **a job that names no ticket** (`forProjectRecords`). **Size:** the policy value
+  `JOB_TICKETS_AT_MOST` (200), read by both services: a change is cut into jobs of that size,
+  and a run takes up waiting jobs, the oldest first, until their tickets come to it. Tests:
+  `packages/domain/test/neighbours.test.ts`, `packages/db/test/job-queue.test.ts`; the stories
+  `p1-reviewed`, `p1-voided`, `p1-invoiced` (run from the queue), `p1-queued`, `p1-left-out`.
+  AC-10-50 and 54 whole, AC-10-51 in part. **Not built, said:** a sync's job (2.6.2); a
+  contractor merged, a contract, a prime added, a form's debris type and a list's value queue
+  nothing. What it leaves: BACKLOG C96. *Agent defaults.*
 - **The worker runs as a process (task 2.3.2, 2026-10-07)** [419, 418, 360, 352, 395]: `apps/worker/src/main.ts`, the local stack's eighth service (profile `worker`), started by `pnpm local:up` and `pnpm installer` after the API. **It looks at the queue every `JOB_QUEUE_POLL_SECONDS` (5) and hands each project with a job waiting to `Reconciliation.waitingJobs`, one project after another.** Under the project's lock (the claim) the run counts a try on each waiting job first, in its own piece of work; works the tickets they name and no other, each once; and finishes each job (`finishedAt`, its run) in the run's own closing piece of work. A try that fails whole writes `lastError`; a job is set aside (`setAsideAt`) after `JOB_TRIES_BEFORE_SET_ASIDE` (5) tries, also where the worker died each time without a word; a ticket that errors fails no job. With no job waiting nothing is written. **The run still reads the whole project** (a ticket's checks read its neighbours) and still checks the flags that sit on no ticket in every run. **A run asked for directly (`Reconciliation.run`, the stories' until 2.7.1) works every ticket of the project**, whatever tickets a review service names: a job must name the neighbours a change can move, which is 2.3.3's (C95). The run's trigger is the oldest job's, its person only where every job names the same one. Two projects' runs may go at once between two worker processes; one process works them in turn. **Settings** (a missing or malformed one stops the start, named, never shown): `DATABASE_URL`, `ADMS_ROUTING_URL`, `ADMS_ADDRESSES_URL`, `ADMS_MAP_EXTRACT_SHA256`, `ADMS_WORKER_HOST`, `ADMS_WORKER_PORT`; optional `ADMS_MAP_CA_FILE`, `ADMS_DATABASE_ADDRESS`, `ADMS_MAP_SERVERS_ADDRESS`. **Policy values added:** `JOB_TRIES_BEFORE_SET_ASIDE`, `RECONCILIATION_RUN_LONGEST_MINUTES` (10), `JOB_QUEUE_POLL_SECONDS`, `MAP_SERVER_ANSWER_SECONDS` (30), read by the worker alone, and `DATABASE_POOL_CONNECTIONS` (10, never under 2), read by each service for its own pool. **Log:** JSON lines, `service: worker`, ids only, never an error's message. **Health:** `GET /health` → `{"status":"ok","jobsWaiting":N,"jobsSetAside":N}` on the container's own loopback; no port published, no proxy leads to it. **The installer** writes the worker's map settings, adds them to an older installation's `apps/worker/.env` without touching a line that is there (`EnvFile.add`), starts the worker and checks it (27 `✓`). **After a change to `apps/worker`, `pnpm local:up` again** before the chain.
 - **The job queue is built (task 2.3.1, 2026-10-07)** [418, 360, 094, 097]: **two guarded
   tables of our own, written through Prisma, and no queue library** (pg-boss keeps its own
@@ -1854,8 +1899,9 @@ its scenario.
 
 ## 4. Waiting on the user
 
-**Live today (2026-10-07, ADR-376…419):**
-- **Nothing blocks the next task** (2.3.3, what queues work).
+**Live today (2026-10-07, ADR-376…420):**
+- **Nothing blocks the next task** (2.4.1, the services Phase 1 left to a story's hand).
+- **Agent defaults of 2.3.3 to confirm or overturn (ADR-420):** (a) **a rate, a pay item, a "Pays when", a project setting, a control range or a new map queues every un-invoiced, un-voided ticket of the project** (a rule its form's, a site its own), rather than a narrower guess; the run writes only what differs; (b) **a job names 200 tickets at most and a run takes up 200 at a time** (`JOB_TICKETS_AT_MOST`); (c) ~~a ticket locked as invoiced is left off every job~~ ✅ **decided by the user 2026-10-08 (ADR-422)**: left off, and the change's answer says how many were left; (d) **a certification that arrives from a phone queues the tickets that named its number as a sync's job, with nobody named as having asked for the run** (the certification is still its certifier's; certifying is done where there is signal, ADR-151, so normally no ticket has the number yet); (e) a change to a site, a new certification, a corrected survey or an accepted flag on one queues a job that names no ticket; (f) a contractor merged, a contract or prime added, a form's debris type and a list's value queue nothing yet (BACKLOG C96).
 - **Agent defaults of 2.3.2 to confirm or overturn (ADR-419):** (a) **one worker process works its projects one after another**, looking at the queue every five seconds; two processes may work two projects at once; (b) **the worker's numbers**, all policy values a firm's server may state for itself: a job set aside after 5 tries, a run of 10 minutes at most, a map server given 30 seconds to answer, a pool of 10 database connections for each service; (c) **the longest run is a policy value**, not a line the installer writes into the env file as the backlog first said; (d) **a run the queue starts still checks the flags that sit on no ticket** (a certification's photographs, a site's permit) every time; (e) **when one run works several jobs**, its record names the oldest job's reason, and a person only where all were asked for by the same one; (f) **the worker's health answer** gives two counts (jobs waiting, jobs set aside) and is asked only from inside its own container. **For 2.3.3, not a question yet:** a job must name the neighbours a change can move (C95).
 - **Agent defaults of 2.3.1 to confirm or overturn (ADR-418):** (a) **the queue is two tables
   of our own, not pg-boss**, which ARCHITECTURE §3 names as an example; (b) a job that fails

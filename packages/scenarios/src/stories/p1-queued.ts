@@ -9,8 +9,13 @@
 // job under its run. A try that fails whole is counted, and a job is set aside after the
 // policy's number of tries. The last step is the process's own pass over the queue.
 //
-// Not here: which change queues which tickets (2.3.3: here the story names them), a sync's own
-// job (2.6.2), and the worker's container (the local stack's; `apps/worker/test`).
+// Since task 2.3.3 (ADR-420) a change queues its own job: here the story still names a job's
+// tickets by hand, to show the worker's side alone; the stories `p1-reviewed`, `p1-voided` and
+// `p1-invoiced` show each change queueing its own. The last steps are the cap on a run's size
+// and the process's own pass over the queue.
+//
+// Not here: a sync's own job (2.6.2), and the worker's container (the local stack's;
+// `apps/worker/test`).
 import { ReconciliationJobs, systemActorId, type ReconciliationTrigger } from '@open-adms/db';
 import {
   JobLoop,
@@ -25,7 +30,14 @@ import {
 
 import { localMapServers } from '../map-servers.ts';
 import type { Story } from '../runner.ts';
-import { certifyP1, loadP1Map, p1FieldDaysHeld, P1Syncs, setUpP1Pricing } from './p1-office.ts';
+import {
+  certifyP1,
+  loadP1Map,
+  p1FieldDaysHeld,
+  P1Syncs,
+  QueueRuns,
+  setUpP1Pricing,
+} from './p1-office.ts';
 import { p1TimeZone as timeZone } from './p1.ts';
 
 const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-04:00`;
@@ -52,6 +64,7 @@ export const p1Queued: Story = {
     await certifyP1(story, office);
 
     const tries = story.policy.jobTriesBeforeSetAside;
+    const atMost = story.policy.jobTicketsAtMost;
     const settings = { crewItemHoursLimit: story.policy.crewDayHours, longestRunMs: 600_000 };
     const mileages = new Mileages(new MapServers(localMapServers()));
     const reconciliation = new Reconciliation(worker, clock, settings, mileages);
@@ -149,10 +162,24 @@ export const p1Queued: Story = {
     story.at(on('14', '07:20'), 'Wednesday: a run works every ticket of P1, as a story’s run does');
     const whole = await reconciliation.run({ projectId: p1, trigger: 'SYNC' });
     if (!whole.ran) throw new Error(whole.message);
+    // What the office's setup queued by itself, before any field event existed (task 2.3.3).
+    const queue = new QueueRuns(story, reconciliation);
+    const fromSetup = await queue.waiting(p1);
+    const settling = await queue.settle(p1);
+    story.check(
+      'AC-10-51 setup had queued its own jobs as it was saved, before any ticket existed: each names no ticket and asks only for the records the run flags by themselves (a certification’s views, a site’s permit); one run takes them all up and works no ticket',
+      [
+        fromSetup.length > 0,
+        fromSetup.every((job) => job.tickets.length === 0),
+        [...new Set(fromSetup.map((job) => job.trigger))].sort(),
+        settling,
+      ],
+      [true, true, ['SETUP_CHANGE', 'SYNC'], 1],
+    );
     story.check(
       'With no job waiting, the worker finds nothing to take up for P1: no run is recorded',
-      [await reconciliation.waitingJobs(p1, tries), await runs()],
-      [{ worked: false, reason: 'NOTHING_WAITING', setAside: [] }, 1],
+      [await reconciliation.waitingJobs(p1, tries, atMost), await runs()],
+      [{ worked: false, reason: 'NOTHING_WAITING', setAside: [] }, 2],
     );
 
     // ------------------------------------------------------------------------------------------
@@ -170,7 +197,7 @@ export const p1Queued: Story = {
       setAside: false,
     });
     story.at(on('14', '09:01'), 'The worker takes P1’s waiting job up');
-    const firstRun = worked(await reconciliation.waitingJobs(p1, tries));
+    const firstRun = worked(await reconciliation.waitingJobs(p1, tries, atMost));
     story.check(
       'AC-10-54 the run works the two tickets the job names and no other: P1’s other tickets get no decision from it',
       [ticketsOf(firstRun), await runOf(firstRun.run.runId), whole.tickets.length > 2],
@@ -206,7 +233,7 @@ export const p1Queued: Story = {
 
     story.at(on('14', '09:10'), 'Luis asks for the same two again; nothing has changed since');
     const second = await queued(luis, 'REPROCESS', '101001', '101003');
-    const secondRun = worked(await reconciliation.waitingJobs(p1, tries));
+    const secondRun = worked(await reconciliation.waitingJobs(p1, tries, atMost));
     story.check(
       'AC-10-53 worked a second time over unchanged field events and setup, nothing is written but the run, its two decisions and the job’s own record; the first job, finished, is not taken up again',
       [await concluded(), secondRun.jobs, ticketsOf(secondRun), (await jobOf(first)).run],
@@ -222,8 +249,8 @@ export const p1Queued: Story = {
     const danaJob = await queued(dana, 'SETUP_CHANGE', '101004', '101005');
     const runsBefore = await runs();
     const both = await Promise.all([
-      reconciliation.waitingJobs(p1, tries),
-      new Reconciliation(worker, clock, settings, mileages).waitingJobs(p1, tries),
+      reconciliation.waitingJobs(p1, tries, atMost),
+      new Reconciliation(worker, clock, settings, mileages).waitingJobs(p1, tries, atMost),
     ]);
     const [one] = both.filter((outcome) => outcome.worked);
     const other = both.find((outcome) => !outcome.worked);
@@ -285,7 +312,7 @@ export const p1Queued: Story = {
     const went: unknown[] = [];
     for (let attempt = 1; attempt <= tries; attempt += 1) {
       stops.left = 1;
-      const outcome = await failing.waitingJobs(p1, tries);
+      const outcome = await failing.waitingJobs(p1, tries, atMost);
       went.push([outcome.worked ? 'worked' : outcome.reason, outcome.setAside.length]);
       if (attempt === 1) {
         story.check(
@@ -316,7 +343,7 @@ export const p1Queued: Story = {
         tries,
         went,
         await jobOf(doomed),
-        await reconciliation.waitingJobs(p1, tries),
+        await reconciliation.waitingJobs(p1, tries, atMost),
         (await runs()) - runsBeforeDoomed,
         (await auditOf(doomed)).at(-1),
       ],
@@ -348,15 +375,51 @@ export const p1Queued: Story = {
       'A job whose worker dies each time before it can say anything: its tries are counted as it is taken up',
     );
     const silent = await queued(luis, 'REPROCESS', '101002');
-    const takes = new WaitingJobs(worker, clock, tries);
+    const takes = new WaitingJobs(worker, clock, tries, atMost);
     for (let attempt = 1; attempt <= tries; attempt += 1) await takes.takeUp(p1);
     story.check(
       'Taken up five times with no word since, it is set aside the next time the worker comes for it, saying so',
-      [await jobOf(silent), await reconciliation.waitingJobs(p1, tries), await jobOf(silent)],
+      [
+        await jobOf(silent),
+        await reconciliation.waitingJobs(p1, tries, atMost),
+        await jobOf(silent),
+      ],
       [
         { attempts: 5, finished: false, run: null, lastError: null, setAside: false },
         { worked: false, reason: 'NOTHING_WAITING', setAside: [silent] },
         { attempts: 5, finished: false, run: null, lastError: stoppedWithoutAWord, setAside: true },
+      ],
+    );
+
+    // ------------------------------------------------------------------------------------------
+    story.at(
+      on('14', '11:45'),
+      'Three jobs wait for P1, of two tickets, two and one; a run takes up three tickets at the most',
+    );
+    const cut = [
+      await queued(dana, 'SETUP_CHANGE', '101001', '101002'),
+      await queued(dana, 'SETUP_CHANGE', '101003', '101004'),
+      await queued(dana, 'SETUP_CHANGE', '101005'),
+    ];
+    const firstTake = worked(await reconciliation.waitingJobs(p1, tries, 3));
+    const afterFirst = await Promise.all(cut.map(async (id) => (await jobOf(id)).attempts));
+    const secondTake = worked(await reconciliation.waitingJobs(p1, tries, 3));
+    story.check(
+      'A run takes up the waiting jobs, the oldest first, until their tickets come to the policy’s number (JOB_TICKETS_AT_MOST), and always one: the first run works the first job alone, and the two behind it wait untouched, no try counted; the next run works both. A setup change cut into jobs of that size is so worked run after run, each of a size it can finish',
+      [
+        [firstTake.jobs, ticketsOf(firstTake).map((told) => told.slice(0, 6))],
+        afterFirst,
+        [secondTake.jobs, ticketsOf(secondTake).map((told) => told.slice(0, 6))],
+        await reconciliation.waitingJobs(p1, tries, 3),
+      ],
+      [
+        [[cut[0]], ['101001', '101002']],
+        [1, 0, 0],
+        [
+          [cut[1], cut[2]],
+          ['101003', '101004', '101005'],
+        ],
+        { worked: false, reason: 'NOTHING_WAITING', setAside: [] },
       ],
     );
 
@@ -367,7 +430,11 @@ export const p1Queued: Story = {
     const loop = new JobLoop(
       worker,
       reconciliation,
-      { triesBeforeSetAside: tries, pollMs: story.policy.jobQueuePollSeconds * 1_000 },
+      {
+        triesBeforeSetAside: tries,
+        ticketsARun: atMost,
+        pollMs: story.policy.jobQueuePollSeconds * 1_000,
+      },
       new WorkerLog({ write: (line) => lines.push(line) }),
     );
     await loop.pass();

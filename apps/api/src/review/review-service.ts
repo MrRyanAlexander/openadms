@@ -21,10 +21,13 @@
 // first. A record several tickets share (a certification, an ROE, a scale receipt) is still
 // corrected, and each locked ticket on it is named and waits for its unlock.
 //
-// Afterwards the ticket reprocesses. The service doesn't run the worker: it answers the run to
-// ask for, naming who asked and the tickets it touched, and which of those are locked as
-// invoiced, so are left as they are until unlocked (ADR-057). Phase 2's job queue takes that
-// answer; until then whoever called the service asks the worker for the run.
+// Afterwards the ticket reprocesses. The service doesn't run the worker and nobody asks it to:
+// **the job is queued here, in the action's own piece of work** (ADR-418, 420; AC-10-50), so
+// the action and its job are saved together or not at all. The job names the tickets the action
+// touched and their neighbours, the other tickets whose conclusions read them (the domain's
+// `TicketNeighbours`), as they stood before the action and as they stand after it; a ticket
+// locked as invoiced is left off it, and waits for its unlock (ADR-057, 090). The answer says
+// what was queued.
 import type { Prisma } from '@open-adms/db';
 import {
   LockedTicket,
@@ -34,7 +37,7 @@ import {
   type WorkflowName,
 } from '@open-adms/domain';
 
-import { type Outcome, Refused, SetupService } from '../setup/setup-service.ts';
+import { type Outcome, QueueingService, Refused } from '../setup/setup-service.ts';
 
 export type Tx = Prisma.TransactionClient;
 
@@ -44,7 +47,7 @@ export interface TicketNamed {
   readonly ticketNumber: string;
 }
 
-// The run to ask the worker for after a reviewer's action.
+// What a reviewer's action asked the worker for: its job is already queued.
 export interface Reprocess {
   readonly projectId: string;
   // An unlock corrects nothing: its run only works the ticket again.
@@ -55,7 +58,14 @@ export interface Reprocess {
   // Those of them locked as invoiced: the run leaves each exactly as it is until a person
   // unlocks it.
   readonly lockedAsInvoiced: readonly TicketNamed[];
+  // The other tickets queued with them: their neighbours, whose conclusions read them.
+  readonly neighbours: readonly TicketNamed[];
+  // The jobs queued, in the action's own piece of work; none where it left no ticket to work.
+  readonly jobs: readonly string[];
 }
+
+// The same before its job is queued.
+export type Asked = Omit<Reprocess, 'neighbours' | 'jobs'>;
 
 export interface Reviewed<T> {
   readonly record: T;
@@ -67,7 +77,14 @@ export interface Touched<T> {
   readonly record: T;
   readonly projectId: string;
   readonly tickets: readonly TicketNamed[];
+  // It touched a record the run flags by itself and no ticket (a survey).
+  readonly projectRecords?: boolean;
 }
+
+// Called by a piece of review work **before** it changes what makes two tickets neighbours (a
+// field event's certification, times, scale receipt or number, the tickets it carries): the
+// tickets that read this one as it stands are queued too, since afterwards nothing says so.
+export type Moves = (projectId: string, ticket: TicketNamed) => Promise<void>;
 
 // A ticket as a QC mark and a lock name one: its completed load or haul-out (a split as one),
 // or a unit rate ticket's one field event; never a single field event of a load (ADR-168).
@@ -94,28 +111,69 @@ export const ticketOf = (event: {
   readonly ticketNumber: string;
 }): TicketNamed => ({ workflow: event.workflow, ticketNumber: event.ticketNumber });
 
-export abstract class ReviewService extends SetupService {
+export abstract class ReviewService extends QueueingService {
   // Runs the work as the person, if they may do it; the note, where one was given, is kept in
   // the audit record of every row the work changes. A ticket it touched that is locked as
   // invoiced undoes all of it, unless the record is one several tickets share (`PASSED_BY`).
+  // The job is queued before the piece of work closes. An action that changes nothing another
+  // ticket reads (a flag's acceptance) leaves the neighbours where they are (`LEFT`).
   protected review<T>(
     person: string,
     permission: ReviewPermission,
     note: string | undefined,
-    work: (tx: Tx) => Promise<Touched<T>>,
+    work: (tx: Tx, moves: Moves) => Promise<Touched<T>>,
     lockedTickets: 'REFUSED' | 'PASSED_BY' = 'REFUSED',
+    neighbours: 'WORKED' | 'LEFT' = 'WORKED',
   ): Promise<Outcome<Reviewed<T>>> {
     return this.mark(person, permission, note, async (tx) => {
-      const { record, projectId, tickets } = await work(tx);
-      const reprocess = await ReviewService.reprocess(tx, person, projectId, tickets);
+      const queue = this.workQueue(tx);
+      const before: TicketNamed[] = [];
+      const { record, projectId, tickets, projectRecords } = await work(
+        tx,
+        async (inProject, ticket) => {
+          before.push(...(await queue.neighbours(inProject, [ticket])));
+        },
+      );
+      const asked = await ReviewService.asked(tx, person, projectId, tickets);
       if (lockedTickets === 'REFUSED') {
         const refusal = new LockedTicket(
-          reprocess.lockedAsInvoiced.map((ticket) => ticket.ticketNumber),
+          asked.lockedAsInvoiced.map((ticket) => ticket.ticketNumber),
         ).refusal();
         if (refusal !== null) throw new Refused(refusal);
       }
-      return { record, reprocess };
+      return {
+        record,
+        reprocess: await this.queued(tx, asked, {
+          others:
+            neighbours === 'LEFT'
+              ? []
+              : [...before, ...(await queue.neighbours(projectId, asked.tickets))],
+          projectRecords: projectRecords === true,
+        }),
+      };
     });
+  }
+
+  // Queues what an action asked for, in its piece of work, and says what was queued.
+  protected async queued(
+    tx: Tx,
+    asked: Asked,
+    more: { readonly others?: readonly TicketNamed[]; readonly projectRecords?: boolean } = {},
+  ): Promise<Reprocess> {
+    const { jobs, tickets } = await this.ask(tx, {
+      projectId: asked.projectId,
+      trigger: asked.trigger,
+      requestedById: asked.requestedById,
+      tickets: asked.tickets,
+      others: more.others ?? [],
+      projectRecords: more.projectRecords ?? false,
+    });
+    const touched = new Set(asked.tickets.map((ticket) => JSON.stringify(ticket)));
+    return {
+      ...asked,
+      neighbours: tickets.filter((ticket) => !touched.has(JSON.stringify(ticket))),
+      jobs,
+    };
   }
 
   // The same for a mark that asks for no run: a QC status, a lock, a batch.
@@ -154,15 +212,19 @@ export abstract class ReviewService extends SetupService {
     if (refusal !== null) throw new Refused(refusal);
   }
 
-  // The run to ask for: each ticket once, and which of them a lock in force holds still.
-  protected static async reprocess(
+  // What to ask for: each ticket once, and which of them a lock in force holds still.
+  protected static async asked(
     tx: Tx,
     person: string,
     projectId: string,
     touched: readonly TicketNamed[],
-  ): Promise<Reprocess> {
+  ): Promise<Asked> {
     const tickets = [
-      ...new Map(touched.map((ticket) => [JSON.stringify(ticket), ticket])).values(),
+      ...new Map(
+        touched
+          .map(({ workflow, ticketNumber }) => ({ workflow, ticketNumber }))
+          .map((ticket) => [JSON.stringify(ticket), ticket]),
+      ).values(),
     ];
     const lockedAsInvoiced: TicketNamed[] = [];
     for (const ticket of tickets) {

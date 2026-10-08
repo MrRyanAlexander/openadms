@@ -45,6 +45,7 @@ const shipped = {
   RECONCILIATION_RUN_LONGEST_MINUTES: '10',
   JOB_QUEUE_POLL_SECONDS: '5',
   MAP_SERVER_ANSWER_SECONDS: '30',
+  JOB_TICKETS_AT_MOST: '200',
 };
 
 // The program types of the example world: PPDR requires an ROE, ROW doesn't.
@@ -142,6 +143,7 @@ describe('the policy values', () => {
       reconciliationRunLongestMinutes: 'RECONCILIATION_RUN_LONGEST_MINUTES',
       jobQueuePollSeconds: 'JOB_QUEUE_POLL_SECONDS',
       mapServerAnswerSeconds: 'MAP_SERVER_ANSWER_SECONDS',
+      jobTicketsAtMost: 'JOB_TICKETS_AT_MOST',
     });
     expect(Object.keys(shipped).sort()).toEqual(Object.values(policyNames).sort());
   });

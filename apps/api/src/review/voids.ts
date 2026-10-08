@@ -6,8 +6,9 @@
 // A void says the work never happened. It is a mark of its own, keyed as a ticket is (project,
 // workflow, bare number), with a reason picked from the ones the firm offers for voiding, the
 // reviewer's own note, who and when. It changes no field event: the worker reads it in the run
-// this answers, marks the ticket's field events VOID, removes its lines (each copied to the
-// audit log first) and clears its flags. From the moment it is made, no other ticket's checks
+// of the job it queues, marks the ticket's field events VOID, removes its lines (each copied to
+// the audit log first) and clears its flags. The job names the ticket's neighbours too: a flag
+// that stood on another ticket because of this one (an overlap on one truck) is cleared there. From the moment it is made, no other ticket's checks
 // read the voided ticket's field events. Nothing here asks whether the choice is right: the
 // audit trail is the backstop (ADR-051).
 //

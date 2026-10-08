@@ -212,8 +212,8 @@ export const sync: Story = {
     const forms = new FormSetup(api, clock);
     const lists = new ListSetup(api, clock);
     const projects = new ProjectSetup(api, clock, story.policy);
-    const payItems = new PayItemSetup(api, clock);
-    const certifications = new Certifications(api, clock);
+    const payItems = new PayItemSetup(api, clock, story.policy);
+    const certifications = new Certifications(api, clock, story.policy);
     const allocator = new NumberAllocator(api, clock, story.policy);
 
     const form = async (

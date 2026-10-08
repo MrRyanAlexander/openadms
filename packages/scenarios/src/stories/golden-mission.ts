@@ -189,7 +189,7 @@ export const goldenMission: Story = {
     const projects = new ProjectSetup(api, clock, story.policy);
     const contractors = new ContractorSetup(api, clock);
     const forms = new FormSetup(api, clock);
-    const payItems = new PayItemSetup(api, clock);
+    const payItems = new PayItemSetup(api, clock, story.policy);
     const first = await api.project.findUniqueOrThrow({ where: { id: p1 } });
     const p2 = (
       await saved(
@@ -269,7 +269,7 @@ export const goldenMission: Story = {
     );
     const p2Tdsr = (
       await saved(
-        new SiteSetup(api, clock).site(dana, {
+        new SiteSetup(api, clock, story.policy).site(dana, {
           projectId: p2,
           name: 'Marsh Road TDSR',
           siteTypeId: (await api.siteType.findUniqueOrThrow({ where: { key: 'TDSR' } })).id,
@@ -314,7 +314,7 @@ export const goldenMission: Story = {
     const feature = async (name: string): Promise<string> =>
       (await api.vehicleFeature.findFirstOrThrow({ where: { name } })).id;
     await saved(
-      new Certifications(api, clock).certify({
+      new Certifications(api, clock, story.policy).certify({
         id: uuidv7(clock.now()),
         projectId: p2,
         kind: 'CONTAINER',
@@ -446,11 +446,11 @@ export const goldenMission: Story = {
       settings,
       new Mileages(new MapServers(localMapServers())),
     );
-    const corrections = new Corrections(api, clock);
-    const acceptances = new Acceptances(api, clock);
-    const voids = new Voids(api, clock);
-    const qc = new QcMarks(api, clock);
-    const locks = new InvoiceLocks(api, clock);
+    const corrections = new Corrections(api, clock, story.policy);
+    const acceptances = new Acceptances(api, clock, story.policy);
+    const voids = new Voids(api, clock, story.policy);
+    const qc = new QcMarks(api, clock, story.policy);
+    const locks = new InvoiceLocks(api, clock, story.policy);
 
     // The ledger of a project as it stands: every line with its ticket (and property or pile),
     // its #, its pay item, quantity × rate = amount.

@@ -1,7 +1,9 @@
 // What the worker's process does, over and over (ARCHITECTURE §13, "Jobs, not requests"; ADR-418,
 // 419): it looks for the projects that have a job waiting and hands each to the run, one project
 // after another. The run takes the project's lock, so a second worker's process would find a
-// project under way and leave it. A project whose try fails never stops the others'. What it
+// project under way and leave it. A run takes up only as many tickets as the policy lets, so a
+// pass that finished jobs and left others waiting is followed by the next at once. A project
+// whose try fails never stops the others'. What it
 // did is in the log, by ids only; how many jobs wait and how many are set aside is kept for the
 // health answer.
 import type { Database } from '@open-adms/db';
@@ -18,6 +20,8 @@ export interface QueueStanding {
 
 export interface LoopSettings {
   readonly triesBeforeSetAside: number;
+  // The most tickets one run takes up: JOB_TICKETS_AT_MOST.
+  readonly ticketsARun: number;
   readonly pollMs: number;
 }
 
@@ -29,6 +33,9 @@ export class JobLoop {
   private stopped = false;
   private wake: (() => void) | undefined;
   private last: QueueStanding = { jobsWaiting: 0, jobsSetAside: 0 };
+  // Whether the last pass finished a job: with more still waiting, the next pass follows at
+  // once, so a setup change cut into many jobs isn't worked one job every poll.
+  private finishedSome = false;
 
   constructor(
     db: Database,
@@ -57,6 +64,7 @@ export class JobLoop {
         this.log.error('The worker could not look at its queue.', caught);
       }
       if (this.isStopped()) break;
+      if (this.finishedSome && this.last.jobsWaiting > 0) continue;
       await new Promise<void>((resolve) => {
         const timer = setTimeout(resolve, this.settings.pollMs);
         this.wake = () => {
@@ -85,6 +93,7 @@ export class JobLoop {
       distinct: ['projectId'],
       orderBy: { projectId: 'asc' },
     });
+    this.finishedSome = false;
     for (const { projectId } of projects) {
       if (this.stopped) break;
       try {
@@ -105,8 +114,10 @@ export class JobLoop {
     const outcome = await this.reconciliation.waitingJobs(
       projectId,
       this.settings.triesBeforeSetAside,
+      this.settings.ticketsARun,
     );
     if (outcome.worked) {
+      this.finishedSome = true;
       this.log.info('A run worked its project’s waiting jobs.', {
         projectId,
         runId: outcome.run.runId,

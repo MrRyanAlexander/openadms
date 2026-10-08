@@ -82,6 +82,10 @@ export const policyNames = {
   reconciliationRunLongestMinutes: 'RECONCILIATION_RUN_LONGEST_MINUTES',
   jobQueuePollSeconds: 'JOB_QUEUE_POLL_SECONDS',
   mapServerAnswerSeconds: 'MAP_SERVER_ANSWER_SECONDS',
+  // The most tickets one job names, and the most a run takes up at once (ADR-420), read by both
+  // services: the API cuts a change that touches more into jobs of that size, and the worker
+  // takes up waiting jobs, the oldest first, until their tickets come to it.
+  jobTicketsAtMost: 'JOB_TICKETS_AT_MOST',
 } as const;
 
 export type PolicyName = (typeof policyNames)[keyof typeof policyNames];
@@ -99,7 +103,8 @@ export type PolicyName = (typeof policyNames)[keyof typeof policyNames];
 // of the server's own at the most (the standard has its clock value change at least every two
 // minutes), and nought takes the server's own step alone. A rate limit counts over an hour at the
 // most, a limit on tries over a day at the most, and each allows at least one; the server keeps
-// at least a thousand callers' counts and at most ten million.
+// at least a thousand callers' counts and at most ten million. A job names at least one ticket
+// and at most a hundred thousand.
 const ranges: Record<PolicyName, { least: number; most: number }> = {
   [policyNames.loadCallLowLimit]: { least: 0, most: 100 },
   [policyNames.loadCallHighLimit]: { least: 0, most: 100 },
@@ -137,6 +142,7 @@ const ranges: Record<PolicyName, { least: number; most: number }> = {
   [policyNames.reconciliationRunLongestMinutes]: { least: 1, most: 1440 },
   [policyNames.jobQueuePollSeconds]: { least: 1, most: 3600 },
   [policyNames.mapServerAnswerSeconds]: { least: 1, most: 600 },
+  [policyNames.jobTicketsAtMost]: { least: 1, most: 100000 },
 };
 
 export class Policy {
@@ -176,6 +182,7 @@ export class Policy {
   readonly reconciliationRunLongestMinutes: number;
   readonly jobQueuePollSeconds: number;
   readonly mapServerAnswerSeconds: number;
+  readonly jobTicketsAtMost: number;
 
   private constructor(values: Readonly<Record<string, string | undefined>>) {
     this.loadCallLowLimit = Policy.read(values, policyNames.loadCallLowLimit);
@@ -220,6 +227,7 @@ export class Policy {
     );
     this.jobQueuePollSeconds = Policy.read(values, policyNames.jobQueuePollSeconds);
     this.mapServerAnswerSeconds = Policy.read(values, policyNames.mapServerAnswerSeconds);
+    this.jobTicketsAtMost = Policy.read(values, policyNames.jobTicketsAtMost);
     // Three pairs hold only together: an access token that outlasted the session's quiet time would
     // keep a session nobody uses alive; a lock that came no later than the first wait would
     // leave no wait at all; and one address allowed as many wrong tries at a login as put a wait

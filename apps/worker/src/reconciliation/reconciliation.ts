@@ -26,11 +26,13 @@
 //   reads the whole project, since a ticket's checks read its neighbours. Each job is finished
 //   under the run that worked it, in the run's own closing piece of work; a try that fails whole
 //   is counted, its reason kept, and the job set aside after the policy's number of tries.
+// - A change to one ticket can change what stands on another (an overlap on one truck, a weight
+//   two containers share): the change's own job names those neighbours (the API's `WorkQueue`,
+//   the domain's `TicketNeighbours`; ADR-420), so the run needn't look for them.
+// - A run takes up waiting jobs, the oldest first, until their tickets come to the policy's
+//   number; the rest wait for the next run, so a run has a size it can finish (ADR-420).
 // - A run asked for directly (`run`: a story's, until the stories move onto the queue, 2.7.1)
-//   works every ticket of the project and writes only what differs, whatever tickets the review
-//   service that answered it names: a change to one ticket can change what stands on another
-//   (an overlap on one truck, a weight two containers share), and which others a job must name
-//   is the task's that queues it (2.3.3; BACKLOG C95).
+//   works every ticket of the project and writes only what differs.
 // - Running again over unchanged input changes nothing but the record of the run itself.
 // - Each run is recorded, with one decision for each ticket: its status and why.
 // - Everything is written as the system actor, and the database audits it (ADR-273, 276). A
@@ -171,10 +173,15 @@ export class Reconciliation {
   }
 
   // The project's waiting jobs, taken up under its lock, which is the claim (ADR-418): one run
-  // works the tickets they name, each once, and finishes them. `triesBeforeSetAside` is the
-  // policy's.
-  async waitingJobs(projectId: string, triesBeforeSetAside: number): Promise<JobsOutcome> {
-    const jobs = new WaitingJobs(this.db, this.clock, triesBeforeSetAside);
+  // works the tickets they name, each once, and finishes them. Both numbers are the policy's:
+  // the tries before a job is set aside, and the most tickets a run takes up (jobs past that
+  // wait for the project's next run).
+  async waitingJobs(
+    projectId: string,
+    triesBeforeSetAside: number,
+    ticketsARun: number,
+  ): Promise<JobsOutcome> {
+    const jobs = new WaitingJobs(this.db, this.clock, triesBeforeSetAside, ticketsARun);
     const outcome = await this.underLock<JobsOutcome>(projectId, async (stillHeld) => {
       const taken = await jobs.takeUp(projectId);
       const [first] = taken.jobs;

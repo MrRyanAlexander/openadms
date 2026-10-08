@@ -43,7 +43,15 @@ export {
 } from './setup/project-setup.ts';
 export type { ActionInput, CriterionInput } from './setup/rule-book.ts';
 export { RuleSetup, type RuleInput, type SavedRule } from './setup/rule-setup.ts';
-export { SetupService, type Clock, type Outcome, type Refusal } from './setup/setup-service.ts';
+export {
+  QueueingService,
+  SetupService,
+  type Clock,
+  type Outcome,
+  type QueuedBySetup,
+  type Refusal,
+} from './setup/setup-service.ts';
+export { WorkQueue, type WorkAsked, type WorkQueued } from './jobs/work-queue.ts';
 export {
   SiteSetup,
   type NewSite,
