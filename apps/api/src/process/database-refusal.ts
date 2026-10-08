@@ -80,6 +80,40 @@ const words: Readonly<Record<string, string>> = {
     'Not saved: that contractor already has a place on the project.',
   project_contractor_project_id_as_prime_id_key:
     'Not saved: that contractor already has a place on the project.',
+  // Setup, steps 5, 6 and 8: forms, pay items, rules (task 2.4.2, part 2).
+  form_project_id_document_type_key:
+    'Not saved: the project already has a form for that document type.',
+  form_gps_required_check: 'Not saved: "GPS required" is stated on an ROE form, and on no other.',
+  form_incident_offers_check:
+    'Not saved: what an incident offers is stated on an incident form, and on no other.',
+  form_debris_type_form_id_debris_type_id_key:
+    'Not saved: that debris type is already on the form.',
+  form_debris_type_document_type_check:
+    'Not saved: a debris type goes on a load or a haul-out form.',
+  form_definition_document_type_check:
+    'Not saved: only an ROE, survey, incident or drop-off log form takes the firm’s own fields.',
+  pay_item_project_id_code_key: 'Not saved: the project already has a pay item with that code.',
+  pay_item_crew_time_conversion_check:
+    'Not saved: a pay item by the hour converts crew time per hour, one by the crew day per day, and no other pay item has a conversion.',
+  pay_item_crew_day_hours_check:
+    'Not saved: a crew day by exact division states its day length, over 0 and up to 24 hours; no other pay item states one.',
+  pay_item_rate_pay_item_id_prime_id_key:
+    'Not saved: that prime already has a rate on the pay item.',
+  pay_item_rate_project_id_prime_id_fkey: 'Not saved: a rate is for one of the project’s primes.',
+  rule_document_type_check: 'Not saved: a rule goes on a load, haul-out or unit rate form.',
+  rule_project_id_contract_id_fkey: 'Not saved: a rule names one of the project’s contracts.',
+  rule_criterion_operator_check:
+    'Not saved: a criterion has an operator its kind of value doesn’t take.',
+  rule_criterion_value_check:
+    'Not saved: a criterion’s value isn’t the kind it takes: a number, a date or text; both ends on a BETWEEN, the lower first; none on IS EMPTY.',
+  rule_criterion_pick_value_check:
+    'Not saved: a criterion that takes no picked value was given one.',
+  rule_criterion_pick_form_id_form_debris_type_id_fkey:
+    'Not saved: a debris type a rule picks is one on the rule’s form.',
+  rule_action_pay_item_check: 'Not saved: only an Add transaction names a pay item.',
+  rule_action_slot_check: 'Not saved: a Void ticket takes no transaction #.',
+  rule_action_project_id_pay_item_id_fkey:
+    'Not saved: an Add transaction names one of the project’s pay items.',
 };
 
 const notFound: DatabaseRefusal = {

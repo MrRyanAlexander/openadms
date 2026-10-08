@@ -8,10 +8,18 @@ import type {
   ControlRangeRecord,
   DeclarationEventRecord,
   FieldTagRecord,
+  FormDebrisTypeRecord,
+  FormDefinitionRecord,
+  FormRecord,
   ListValueRecord,
   NumberSeriesRecord,
+  PayItemRateRecord,
+  PayItemRecord,
   ProjectRecord,
+  RulesKeptRecord,
+  SavedRuleRecord,
 } from '@open-adms/contracts';
+import { formDefinitionFields } from '@open-adms/contracts';
 import type {
   Client,
   Contract,
@@ -20,11 +28,19 @@ import type {
   DebrisType,
   DeclarationEvent,
   FieldTag,
+  Form,
+  FormDebrisType,
+  FormDefinition,
   PayableType,
+  PayItem,
+  PayItemRate,
   Project,
   ProjectContractor,
   ProjectNumberSeries,
 } from '@open-adms/db';
+
+import type { RulesKept } from './pay-item-setup.ts';
+import type { SavedRule } from './rule-setup.ts';
 
 // A calendar day, as the database's date holds it.
 const day = (date: Date): string => date.toISOString().slice(0, 10);
@@ -129,4 +145,78 @@ export const listValueRecord = (value: DebrisType | PayableType): ListValueRecor
   name: value.name,
   position: value.position,
   archived: value.archivedAt !== null,
+});
+
+export const formRecord = (form: Form): FormRecord => ({
+  id: form.id,
+  projectId: form.projectId,
+  documentType: form.documentType,
+  name: form.name,
+  enabled: form.enabled,
+  gpsRequired: form.gpsRequired,
+  incidentOffers: form.incidentOffers,
+  archived: form.archivedAt !== null,
+});
+
+export const formDebrisTypeRecord = (entry: FormDebrisType): FormDebrisTypeRecord => ({
+  id: entry.id,
+  formId: entry.formId,
+  debrisTypeId: entry.debrisTypeId,
+  reduced: entry.reduced,
+  reductionMethodId: entry.reductionMethodId,
+  hiddenOnPhones: entry.hiddenOnPhones,
+  archived: entry.archivedAt !== null,
+});
+
+export const formDefinitionRecord = (definition: FormDefinition): FormDefinitionRecord => ({
+  id: definition.id,
+  formId: definition.formId,
+  version: definition.version,
+  // As the contracts read them going in: the database holds them as JSON.
+  fields: formDefinitionFields.parse(definition.fields),
+});
+
+export const payItemRecord = (payItem: PayItem): PayItemRecord => ({
+  id: payItem.id,
+  projectId: payItem.projectId,
+  code: payItem.code,
+  description: payItem.description,
+  payableTypeId: payItem.payableTypeId,
+  unit: payItem.unit,
+  kindOfWorkId: payItem.kindOfWorkId,
+  bandFrom: payItem.bandFrom?.toNumber() ?? null,
+  bandTo: payItem.bandTo?.toNumber() ?? null,
+  countIsAlwaysOne: payItem.countIsAlwaysOne,
+  gpsRequired: payItem.gpsRequired,
+  measurementRequired: payItem.measurementRequired,
+  decimalsAllowed: payItem.decimalsAllowed,
+  photosRequired: payItem.photosRequired,
+  monitorMayMarkIneligible: payItem.monitorMayMarkIneligible,
+  quantityFromCarriedTickets: payItem.quantityFromCarriedTickets,
+  crewTimeConversion: payItem.crewTimeConversion,
+  crewDayHours: payItem.crewDayHours?.toNumber() ?? null,
+  archived: payItem.archivedAt !== null,
+});
+
+// An exact decimal with its cents, and its third and fourth places only where it has them:
+// `7.50`, `0.0125`.
+export const payItemRateRecord = (rate: PayItemRate): PayItemRateRecord => ({
+  id: rate.id,
+  payItemId: rate.payItemId,
+  primeId: rate.primeId,
+  rate: rate.rate.toFixed(4).replace(/0{1,2}$/, ''),
+  archived: rate.archivedAt !== null,
+});
+
+export const rulesKeptRecord = (kept: RulesKept): RulesKeptRecord => ({
+  added: [...kept.added],
+  changed: [...kept.changed],
+  archived: [...kept.archived],
+  unchanged: [...kept.unchanged],
+});
+
+export const savedRuleRecord = (rule: SavedRule): SavedRuleRecord => ({
+  id: rule.id,
+  valid: rule.valid,
+  reasons: [...rule.reasons],
 });

@@ -45,6 +45,12 @@ export class PaysWhen {
     this.contracts = contracts;
   }
 
+  // What a rule the pay item wrote is called: its code and its description (ADR-301). Said once,
+  // so a pay item whose code or description changes renames the rules it keeps the same way.
+  static ruleName(payItem: Pick<PaysWhenPayItem, 'code' | 'description'>): string {
+    return `${payItem.code} - ${payItem.description}`;
+  }
+
   // The rules the pay item keeps, as they are to be saved: form by form, and within a form contract
   // by contract, in the order given. Each goes through ProjectRules' check like any other rule.
   rules(pays: readonly PaysWhenOnForm[]): RuleEntry[] {
@@ -55,7 +61,7 @@ export class PaysWhen {
     return pays.flatMap((on) =>
       contracts.map((contract) => ({
         id: null,
-        name: `${payItem.code} - ${payItem.description}`,
+        name: PaysWhen.ruleName(payItem),
         formId: on.formId,
         form: on.form,
         contract: { id: contract.id, name: contract.name },

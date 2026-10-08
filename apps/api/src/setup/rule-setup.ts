@@ -5,10 +5,11 @@
 // change made here to a rule a pay item's "Pays when" wrote; two rules that add the same
 // transaction # on a ticket both could meet are saved with a warning. A rule that isn't valid is
 // saved all the same and never runs: the answer says whether it is, and why not.
+import type { Prisma } from '@open-adms/db';
 import { ProjectRules, type RuleEntry } from '@open-adms/domain';
 
 import { type ActionInput, type CriterionInput, RuleBook } from './rule-book.ts';
-import { type Outcome, QueueingService, Refused } from './setup-service.ts';
+import { type Outcome, QueueingService, Refused, type Warn } from './setup-service.ts';
 
 export interface RuleInput {
   // Given on a change to a rule the project holds; left out on a new one.
@@ -34,34 +35,54 @@ export interface SavedRule {
 // same piece of work, a void one left where it is (ADR-090, 360, 420).
 export class RuleSetup extends QueueingService {
   save(person: string, input: RuleInput): Promise<Outcome<SavedRule>> {
+    return this.setup(person, (tx, warn) => this.saved(tx, warn, person, input));
+  }
+
+  // A rule the project holds, stated anew by its id alone: its project is the rule's own, and
+  // a rule nobody has is not found, never written as a new one.
+  change(
+    person: string,
+    ruleId: string,
+    input: Omit<RuleInput, 'id' | 'projectId'>,
+  ): Promise<Outcome<SavedRule>> {
     return this.setup(person, async (tx, warn) => {
-      const book = new RuleBook(tx, input.projectId, this.clock);
-      const rules = await book.entries();
-      const stored = rules.find((rule) => rule.id === input.id);
-      const entry: RuleEntry = {
-        id: input.id ?? null,
-        name: input.name,
-        formId: input.formId,
-        form: await book.formOf(input.formId),
-        contract: await book.contractOf(input.contractId),
-        active: input.active,
-        archived: false,
-        fromPayItem: stored?.fromPayItem ?? null,
-        criteria: await book.linesOf(input.criteria),
-        actions: await book.actionsOf(input.actions),
-      };
-      const check = new ProjectRules(rules).check(entry, 'RULES');
-      if (check.refusal !== null) throw new Refused(check.refusal);
-      warn(check.warnings);
-      const said = { valid: check.valid, reasons: check.reasons };
-      // A rule runs on its form's tickets, and a form is a workflow's: the one it had too,
-      // where the rule moved.
-      const forms = [...new Set([entry.form, ...(stored === undefined ? [] : [stored.form])])];
-      await this.setupChanged(tx, person, input.projectId, { workflow: { in: forms } });
-      if (stored?.id == null) return { id: await book.add(entry), ...said };
-      await book.change(stored.id, entry, !sameLines(stored, entry));
-      return { id: stored.id, ...said };
+      const held = await tx.rule.findUniqueOrThrow({ where: { id: ruleId } });
+      return this.saved(tx, warn, person, { ...input, id: ruleId, projectId: held.projectId });
     });
+  }
+
+  private async saved(
+    tx: Prisma.TransactionClient,
+    warn: Warn,
+    person: string,
+    input: RuleInput,
+  ): Promise<SavedRule> {
+    const book = new RuleBook(tx, input.projectId, this.clock);
+    const rules = await book.entries();
+    const stored = rules.find((rule) => rule.id === input.id);
+    const entry: RuleEntry = {
+      id: input.id ?? null,
+      name: input.name,
+      formId: input.formId,
+      form: await book.formOf(input.formId),
+      contract: await book.contractOf(input.contractId),
+      active: input.active,
+      archived: false,
+      fromPayItem: stored?.fromPayItem ?? null,
+      criteria: await book.linesOf(input.criteria),
+      actions: await book.actionsOf(input.actions),
+    };
+    const check = new ProjectRules(rules).check(entry, 'RULES');
+    if (check.refusal !== null) throw new Refused(check.refusal);
+    warn(check.warnings);
+    const said = { valid: check.valid, reasons: check.reasons };
+    // A rule runs on its form's tickets, and a form is a workflow's: the one it had too,
+    // where the rule moved.
+    const forms = [...new Set([entry.form, ...(stored === undefined ? [] : [stored.form])])];
+    await this.setupChanged(tx, person, input.projectId, { workflow: { in: forms } });
+    if (stored?.id == null) return { id: await book.add(entry), ...said };
+    await book.change(stored.id, entry, !sameLines(stored, entry));
+    return { id: stored.id, ...said };
   }
 }
 

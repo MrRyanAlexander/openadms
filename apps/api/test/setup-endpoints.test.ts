@@ -10,27 +10,34 @@ import { randomUUID } from 'node:crypto';
 import {
   addDebrisTypeEndpoint,
   addFieldTagEndpoint,
+  addFormDebrisTypeEndpoint,
+  addFormDefinitionEndpoint,
   addPayableTypeEndpoint,
   addPrimeEndpoint,
   archiveControlRangeEndpoint,
   backOfficeRoles,
+  changePayItemEndpoint,
   changeProjectSettingsEndpoint,
   changeProjectWindowEndpoint,
+  changeRuleEndpoint,
   closeProjectEndpoint,
   createClientEndpoint,
   createContractEndpoint,
   createContractorEndpoint,
   createDeclarationEventEndpoint,
+  createFormEndpoint,
+  createPayItemEndpoint,
   createProjectEndpoint,
+  createRuleEndpoint,
   endpoints,
   enterControlRangeEndpoint,
   errorAnswerSchema,
   findClientsEndpoint,
   findContractorsEndpoint,
   findDeclarationEventsEndpoint,
+  savePaysWhenEndpoint,
+  setPayItemRateEndpoint,
   startNumberSeriesEndpoint,
-  type AnswerOf,
-  type Endpoint,
 } from '@open-adms/contracts';
 import type { Database } from '@open-adms/db';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -38,22 +45,19 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ContractorSetup } from '../src/setup/contractor-setup.ts';
 import { ListSetup } from '../src/setup/list-setup.ts';
 import { ProjectSetup } from '../src/setup/project-setup.ts';
-import { installationSettings, openInstallation, type Tx } from './support/database.ts';
+import { installationSettings, openInstallation } from './support/database.ts';
 import { shippedPolicy } from './support/process.ts';
+import { danasEmail, long, longer, luissEmail, worldOn } from './support/served.ts';
 import {
-  danasEmail,
-  long,
-  longer,
-  luissEmail,
-  worldOn,
-  type Answer,
-  type Served,
-  type Signed,
-} from './support/served.ts';
-import { Outbox, signInOn } from './support/sign-in.ts';
-
-const viewersEmail = 'debris@baylinecounty.example';
-const viewersPassword = 'delphine marsh ferry heron';
+  ask,
+  p1,
+  p1Through,
+  picked,
+  plainly,
+  saved,
+  told,
+  viewerSignsIn,
+} from './support/setup.ts';
 
 let db: Database;
 
@@ -66,9 +70,7 @@ afterAll(async () => {
 
 const world = worldOn(() => db);
 
-type Browser = Pick<Signed, 'cookies' | 'csrf'>;
-
-// Setup's endpoints of this task's first part, in the order the contracts list them.
+// Setup's endpoints of this task's first two parts, in the order the contracts list them.
 const setupEndpoints = [
   findClientsEndpoint,
   createClientEndpoint,
@@ -88,95 +90,16 @@ const setupEndpoints = [
   createContractEndpoint,
   addDebrisTypeEndpoint,
   addPayableTypeEndpoint,
+  createFormEndpoint,
+  addFormDebrisTypeEndpoint,
+  addFormDefinitionEndpoint,
+  createPayItemEndpoint,
+  changePayItemEndpoint,
+  setPayItemRateEndpoint,
+  savePaysWhenEndpoint,
+  createRuleEndpoint,
+  changeRuleEndpoint,
 ] as const;
-
-const told = (answer: Answer): [number, string | undefined] => [answer.status, answer.code];
-
-// A saved change's or a search's answer, read by its endpoint's own schema.
-function saved<E extends Endpoint>(served: E, answer: Answer): AnswerOf<E> {
-  expect(told(answer), served.name).toEqual([200, undefined]);
-  return served.answer.parse(answer.body) as AnswerOf<E>;
-}
-
-// The endpoint's path, each parameter given.
-const at = (served: Endpoint, ids: Readonly<Record<string, string>> = {}): string =>
-  served.path.replace(/:([A-Za-z]+)/g, (_, name: string) => ids[name] ?? randomUUID());
-
-const ask = (
-  api: Served,
-  signed: Browser | undefined,
-  served: Endpoint,
-  more: { ids?: Readonly<Record<string, string>>; payload?: object; query?: string } = {},
-): Promise<Answer> =>
-  api.ask(served.method, at(served, more.ids) + (more.query ?? ''), {
-    ...(signed === undefined ? {} : served.method === 'GET' ? { cookies: signed.cookies } : signed),
-    ...(more.payload === undefined ? {} : { payload: more.payload }),
-  });
-
-// The read-only viewer is given a password, so that they can sign in.
-async function viewerSignsIn(served: Served, tx: Tx, viewer: string, within: Database) {
-  await tx.userCredential.create({
-    data: {
-      userId: viewer,
-      passwordHash: await signInOn(within, new Outbox()).hasher.hash(viewersPassword),
-    },
-  });
-  return served.signedIn(viewersEmail, viewersPassword);
-}
-
-// What the firm's lists hold, picked by name (never typed): the release's own values.
-async function picked(tx: Tx) {
-  const fema = await tx.declarationReferenceType.findFirstOrThrow({
-    where: { name: 'FEMA disaster (DR)' },
-  });
-  const row = await tx.programType.findFirstOrThrow({ where: { name: 'ROW' } });
-  const kinds = await tx.kindOfWork.findMany({ orderBy: { position: 'asc' } });
-  return { fema: fema.id, row: row.id, kindOfWorkIds: kinds.map((kind) => kind.id) };
-}
-
-// P1 as Dana enters it (spec/CONVENTIONS.md §6), through the endpoints: the client, the
-// declaration event and the project.
-async function p1Through(api: Served, dana: Browser, tx: Tx, more: object = {}) {
-  const lists = await picked(tx);
-  const client = saved(
-    createClientEndpoint,
-    await ask(api, dana, createClientEndpoint, { payload: { name: 'Bayline County' } }),
-  ).record;
-  const declarationEvent = saved(
-    createDeclarationEventEndpoint,
-    await ask(api, dana, createDeclarationEventEndpoint, {
-      payload: { name: 'Hurricane Delphine', reference: 'DR-9001-FL', referenceTypeId: lists.fema },
-    }),
-  ).record;
-  const payload = {
-    name: 'Bayline County ROW, Hurricane Delphine',
-    clientId: client.id,
-    declarationEventId: declarationEvent.id,
-    programTypeId: lists.row,
-    timeZone: 'America/New_York',
-    activeFrom: '2026-10-12',
-    activeTo: '2027-01-31',
-    ticketNumberSource: 'GENERATED',
-    workflows: ['LOAD', 'HAUL_OUT', 'UNIT_RATE'],
-    kindOfWorkIds: lists.kindOfWorkIds,
-    ...more,
-  };
-  return { client, declarationEvent, payload, lists };
-}
-
-async function p1(api: Served, dana: Browser, tx: Tx) {
-  const entered = await p1Through(api, dana, tx);
-  const answer = await ask(api, dana, createProjectEndpoint, { payload: entered.payload });
-  return { ...entered, answer, project: saved(createProjectEndpoint, answer).record };
-}
-
-// A refusal's body: a plain code, the request's id and plain words; nothing from inside.
-function plainly(answer: Answer): string {
-  const refusal = errorAnswerSchema.parse(answer.body);
-  expect(Object.keys(refusal).sort()).toEqual(['code', 'message', 'requestId']);
-  expect(answer.text).not.toMatch(/constraint|prisma|violates|_check|_key|_fkey|\.ts|stack/i);
-  return refusal.message ?? '';
-}
 
 describe('who may change the setup', () => {
   it('AC-10-27 every setup endpoint is open to the back office’s roles and takes the permission Setup; no other endpoint takes a permission yet', () => {
@@ -209,6 +132,15 @@ describe('who may change the setup', () => {
       'POST /projects/:projectId/contracts',
       'POST /debris-types',
       'POST /payable-types',
+      'POST /projects/:projectId/forms',
+      'POST /forms/:formId/debris-types',
+      'POST /forms/:formId/definitions',
+      'POST /projects/:projectId/pay-items',
+      'PATCH /pay-items/:payItemId',
+      'PUT /pay-items/:payItemId/rates/:primeId',
+      'PUT /pay-items/:payItemId/pays-when',
+      'POST /projects/:projectId/rules',
+      'PUT /rules/:ruleId',
     ]);
   });
 
@@ -223,6 +155,10 @@ describe('who may change the setup', () => {
         await tx.contractor.count(),
         await tx.debrisType.count(),
         await tx.payableType.count(),
+        await tx.form.count(),
+        await tx.payItem.count(),
+        await tx.payItemRate.count(),
+        await tx.rule.count(),
       ];
       const before = await counted();
       for (const served of setupEndpoints) {

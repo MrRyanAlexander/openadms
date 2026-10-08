@@ -9,8 +9,9 @@
 // project's un-invoiced tickets are queued in the same piece of work (ADR-090, 420). Which
 // tickets a pay item or a rate reaches is the firm's rules' to say, so every ticket of the
 // project that isn't void or locked as invoiced is named: the run writes only what differs.
-import type { BillingUnit, CrewTimeConversion, PayItem, PayItemRate } from '@open-adms/db';
+import type { BillingUnit, CrewTimeConversion, PayItem, PayItemRate, Prisma } from '@open-adms/db';
 import {
+  type BandedPayItem,
   PaysWhen,
   type PaysWhenOnForm,
   ProjectRules,
@@ -21,7 +22,7 @@ import {
 
 import { type CriterionInput, RuleBook } from './rule-book.ts';
 import { sameLines } from './rule-setup.ts';
-import { type Outcome, QueueingService, Refused } from './setup-service.ts';
+import { type Outcome, QueueingService, Refused, type Warn } from './setup-service.ts';
 
 export interface NewPayItem {
   readonly projectId: string;
@@ -49,13 +50,18 @@ export interface NewPayItem {
   readonly rates: readonly { readonly primeId: string; readonly rate: string }[];
 }
 
-// What may be changed on a pay item the project holds: its Unit of Measure, how crew time's
-// hours become a quantity on it, and its capture settings. Its code, payable type, kind of work
-// and band say which pay item it is and stay as entered (ADR-423).
+// What may be changed on a pay item the project holds: its code and its description (the firm's
+// own words), its Unit of Measure, its size band, how crew time's hours become a quantity on it,
+// and its capture settings. Its payable type and its kind of work say what work it is and stay
+// as entered (ADR-423, 425).
 export type PayItemChanges = Partial<
   Pick<
     NewPayItem,
+    | 'code'
+    | 'description'
     | 'unit'
+    | 'bandFrom'
+    | 'bandTo'
     | 'crewTimeConversion'
     | 'crewDayHours'
     | 'countIsAlwaysOne'
@@ -89,31 +95,7 @@ export class PayItemSetup extends QueueingService {
   payItem(person: string, input: NewPayItem): Promise<Outcome<PayItem>> {
     return this.setup(person, async (tx, warn) => {
       const { rates, ...settings } = input;
-      const payableType = await tx.payableType.findUniqueOrThrow({
-        where: { id: input.payableTypeId },
-      });
-      const others = await tx.payItem.findMany({
-        where: { projectId: input.projectId, payableTypeId: input.payableTypeId },
-      });
-      const bands = new SizeBands(
-        payableType.name,
-        others.map((other) => ({
-          id: other.id,
-          code: other.code,
-          bandFrom: other.bandFrom?.toNumber() ?? null,
-          bandTo: other.bandTo?.toNumber() ?? null,
-          archived: other.archivedAt !== null,
-        })),
-      );
-      const check = bands.check({
-        id: '',
-        code: input.code,
-        bandFrom: input.bandFrom,
-        bandTo: input.bandTo,
-        archived: false,
-      });
-      if (check.refusal !== null) throw new Refused(check.refusal);
-      warn(check.warnings);
+      await this.band(tx, warn, input, { ...input, id: '', archived: false });
       const payItem = await tx.payItem.create({ data: settings });
       for (const { primeId, rate } of rates) {
         await tx.payItemRate.create({
@@ -128,16 +110,70 @@ export class PayItemSetup extends QueueingService {
   }
 
   // A change to a pay item the project holds, audited with the value before: a price agreed at
-  // last takes it from TBN to its unit (AC-07-63); a capture setting ticked or unticked. What
-  // the database's own checks refuse (a conversion on a pay item that isn't by the hour or the
-  // crew day) throws, and nothing is saved. Tickets locked as invoiced keep the lines they have
-  // (ADR-090).
+  // last takes it from TBN to its unit (AC-07-63); a capture setting ticked or unticked; a code
+  // or a description typed wrong; a band moved, asked of SizeBands as a new one is, the pay
+  // item itself left out of the others. The rules its "Pays when" wrote are named from its code
+  // and description, and are renamed with it. What the database's own checks refuse (a
+  // conversion on a pay item that isn't by the hour or the crew day) throws, and nothing is
+  // saved. Tickets locked as invoiced keep the lines they have (ADR-090).
   change(person: string, payItemId: string, changes: PayItemChanges): Promise<Outcome<PayItem>> {
-    return this.setup(person, async (tx) => {
+    return this.setup(person, async (tx, warn) => {
+      const held = await tx.payItem.findUniqueOrThrow({ where: { id: payItemId } });
+      if (changes.bandFrom !== undefined || changes.bandTo !== undefined) {
+        await this.band(tx, warn, held, {
+          id: held.id,
+          code: changes.code ?? held.code,
+          bandFrom:
+            changes.bandFrom === undefined ? (held.bandFrom?.toNumber() ?? null) : changes.bandFrom,
+          bandTo: changes.bandTo === undefined ? (held.bandTo?.toNumber() ?? null) : changes.bandTo,
+          archived: held.archivedAt !== null,
+        });
+      }
       const payItem = await tx.payItem.update({ where: { id: payItemId }, data: changes });
+      if (payItem.code !== held.code || payItem.description !== held.description) {
+        await tx.rule.updateMany({
+          where: { fromPayItemId: payItemId, archivedAt: null },
+          data: { name: PaysWhen.ruleName(payItem) },
+        });
+      }
       await this.setupChanged(tx, person, payItem.projectId);
       return payItem;
     });
+  }
+
+  // Asks packages/domain's SizeBands about a pay item's band beside the others of its payable
+  // type on the project: an overlap isn't saved; a gap is saved with a warning (ADR-217).
+  private async band(
+    tx: Prisma.TransactionClient,
+    warn: Warn,
+    of: Pick<PayItem, 'projectId' | 'payableTypeId'>,
+    payItem: BandedPayItem,
+  ): Promise<void> {
+    const payableType = await tx.payableType.findUniqueOrThrow({
+      where: { id: of.payableTypeId },
+    });
+    const others = await tx.payItem.findMany({
+      where: { projectId: of.projectId, payableTypeId: of.payableTypeId },
+    });
+    const bands = new SizeBands(
+      payableType.name,
+      others.map((other) => ({
+        id: other.id,
+        code: other.code,
+        bandFrom: other.bandFrom?.toNumber() ?? null,
+        bandTo: other.bandTo?.toNumber() ?? null,
+        archived: other.archivedAt !== null,
+      })),
+    );
+    const check = bands.check({
+      id: payItem.id,
+      code: payItem.code,
+      bandFrom: payItem.bandFrom,
+      bandTo: payItem.bandTo,
+      archived: payItem.archived,
+    });
+    if (check.refusal !== null) throw new Refused(check.refusal);
+    warn(check.warnings);
   }
 
   // A prime's rate on the pay item: set for the first time (a price agreed at last), changed,

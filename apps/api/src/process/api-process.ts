@@ -27,10 +27,15 @@ import { apiPeople } from '../people/people.controller.ts';
 import { People } from '../people/people.ts';
 import { apiContractorSetup } from '../setup/contractor-setup.controller.ts';
 import { ContractorSetup } from '../setup/contractor-setup.ts';
+import { apiFormSetup } from '../setup/form-setup.controller.ts';
+import { FormSetup } from '../setup/form-setup.ts';
 import { apiListSetup } from '../setup/list-setup.controller.ts';
 import { ListSetup } from '../setup/list-setup.ts';
+import { PayItemSetup } from '../setup/pay-item-setup.ts';
+import { apiPayItemSetup, apiRuleSetup } from '../setup/pricing-setup.controller.ts';
 import { apiProjectSetup } from '../setup/project-setup.controller.ts';
 import { ProjectSetup } from '../setup/project-setup.ts';
+import { RuleSetup } from '../setup/rule-setup.ts';
 import type { Clock } from '../setup/setup-service.ts';
 import { Admission } from '../sign-in/admission.ts';
 import { shippedBreachedPasswords } from '../sign-in/breached-list.ts';
@@ -199,6 +204,9 @@ export class ApiProcess {
           [apiProjectSetup, new ProjectSetup(database, clock, policy)],
           [apiContractorSetup, new ContractorSetup(database, clock)],
           [apiListSetup, new ListSetup(database, clock)],
+          [apiFormSetup, new FormSetup(database, clock)],
+          [apiPayItemSetup, new PayItemSetup(database, clock, policy)],
+          [apiRuleSetup, new RuleSetup(database, clock, policy)],
         ]),
       ),
       adapter,

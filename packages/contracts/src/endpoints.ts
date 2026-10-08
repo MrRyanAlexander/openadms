@@ -6,8 +6,13 @@
 // refuses the whole request, and an endpoint whose schema would let one through can't be defined.
 import {
   backOfficeCreated,
+  crewTimeConversions,
+  incidentOffers,
   numberSeries,
   permissions,
+  ruleActionKinds,
+  ruleCriterionKeys,
+  ruleOperators,
   workflows,
   type PermissionName,
 } from '@open-adms/domain';
@@ -25,7 +30,9 @@ import {
   twoStepClearedAnswerSchema,
   twoStepSetupAnswerSchema,
 } from './api-answers.ts';
+import { formDefinitionFields } from './form-definition.ts';
 import {
+  billingUnits,
   clientRecordSchema,
   contractorKinds,
   contractorPlaceRecordSchema,
@@ -34,11 +41,20 @@ import {
   controlRangeRecordSchema,
   declarationEventRecordSchema,
   fieldTagRecordSchema,
+  formDebrisTypeRecordSchema,
+  formDefinitionRecordSchema,
+  formDocumentTypes,
+  formRecordSchema,
   foundAnswer,
   listValueRecordSchema,
   numberSeriesRecordSchema,
+  payItemRateRecordSchema,
+  payItemRecordSchema,
   projectRecordSchema,
+  quantityFroms,
+  rulesKeptRecordSchema,
   savedAnswer,
+  savedRuleRecordSchema,
   ticketNumberSources,
 } from './setup-answers.ts';
 
@@ -747,6 +763,237 @@ export const addPayableTypeEndpoint = endpoint({
   answer: savedAnswer(listValueRecordSchema),
 });
 
+// Setup, steps 5, 6 and 8 (spec/parts/01-setup.md; spec/RULES.md; AC-01-22…30, 39…51, 60…68, 81;
+// AC-10-38; BACKLOG 2.4.2, C97, C98; ADR-425): a project's forms, the debris types on them and the
+// firm's own fields; its pay items, each prime's rate and "Pays when"; its rules. As every setup
+// endpoint, each takes Setup, and the limits here only bound what is read: which operator a
+// criterion takes, what a band or a conversion must be and which picks exist are the domain's
+// and the database's to say.
+const formId = z.strictObject({ formId: z.uuid() });
+const payItemId = z.strictObject({ payItemId: z.uuid() });
+
+// Step 5. A project has one form for each document type it uses (ADR-211).
+export const createFormEndpoint = endpoint({
+  ...setup,
+  name: 'createForm',
+  summary:
+    'Creates a project’s form for one document type. "GPS required" is stated on an ROE form, and what an incident offers its monitors on an incident form; on no other.',
+  method: 'POST',
+  path: '/projects/:projectId/forms',
+  params: projectId,
+  body: z.strictObject({
+    documentType: z.enum(formDocumentTypes),
+    name: named,
+    enabled: z.boolean(),
+    gpsRequired: z.boolean().optional(),
+    // An empty list: the incident form offers none of the three.
+    incidentOffers: z
+      .array(z.enum(incidentOffers))
+      .max(incidentOffers.length)
+      .refine(once)
+      .optional(),
+  }),
+  answer: savedAnswer(formRecordSchema),
+});
+
+export const addFormDebrisTypeEndpoint = endpoint({
+  ...setup,
+  name: 'addFormDebrisType',
+  summary:
+    'Adds a debris type from the firm’s library to a load or haul-out form. One not marked Reduced on a haul-out form is saved with a warning.',
+  method: 'POST',
+  path: '/forms/:formId/debris-types',
+  params: formId,
+  body: z.strictObject({
+    debrisTypeId: z.uuid(),
+    reduced: z.boolean(),
+    reductionMethodId: z.uuid().optional(),
+    hiddenOnPhones: z.boolean(),
+  }),
+  answer: savedAnswer(formDebrisTypeRecordSchema),
+});
+
+export const addFormDefinitionEndpoint = endpoint({
+  ...setup,
+  name: 'addFormDefinition',
+  summary:
+    'Saves the firm’s own fields on an ROE, survey, incident or drop-off log form as its next version. A version is never edited.',
+  method: 'POST',
+  path: '/forms/:formId/definitions',
+  params: formId,
+  body: z.strictObject({ fields: formDefinitionFields }),
+  answer: savedAnswer(formDefinitionRecordSchema),
+});
+
+// Step 6. A band's end is inches to a tenth; a rate is an exact decimal, never a float: `7.50`.
+const bandEnd = z.number().min(0).max(9_999_999);
+const rate = z.string().regex(/^\d{1,10}(\.\d{1,4})?$/);
+const payItemCode = z.string().trim().min(1).max(60);
+const crewDayHours = z.number().min(0).max(99);
+// No capture setting has a default: whoever enters a pay item states each (ADR-309).
+const captureSettings = {
+  countIsAlwaysOne: z.boolean(),
+  gpsRequired: z.boolean(),
+  measurementRequired: z.boolean(),
+  decimalsAllowed: z.boolean(),
+  photosRequired: z.boolean(),
+  monitorMayMarkIneligible: z.boolean(),
+  quantityFromCarriedTickets: z.boolean(),
+};
+
+export const createPayItemEndpoint = endpoint({
+  ...setup,
+  name: 'createPayItem',
+  summary:
+    'Enters a pay item read off the contract: its code, unique on the project, its description, payable type, Unit of Measure, size band, capture settings, and a rate for each prime. A band that overlaps another of its payable type isn’t saved. The project’s tickets not locked as invoiced are queued.',
+  method: 'POST',
+  path: '/projects/:projectId/pay-items',
+  params: projectId,
+  body: z.strictObject({
+    code: payItemCode,
+    description: named,
+    payableTypeId: z.uuid(),
+    unit: z.enum(billingUnits),
+    // Set on a unit rate pay item, one a monitor picks; empty on every other.
+    kindOfWorkId: z.uuid().nullable(),
+    bandFrom: bandEnd.nullable(),
+    bandTo: bandEnd.nullable(),
+    ...captureSettings,
+    // On a pay item by the hour or the crew day, and only there.
+    crewTimeConversion: z.enum(crewTimeConversions).nullable(),
+    crewDayHours: crewDayHours.nullable(),
+    // None at all is a $0 pay item (ADR-128).
+    rates: z.array(z.strictObject({ primeId: z.uuid(), rate })).max(200),
+  }),
+  answer: savedAnswer(payItemRecordSchema),
+});
+
+// Its payable type and its kind of work say what work it is, and stay as entered (ADR-425).
+export const changePayItemEndpoint = endpoint({
+  ...setup,
+  name: 'changePayItem',
+  summary:
+    'Changes a pay item: its code, description, Unit of Measure, size band, crew-time conversion or capture settings; one left out stays as it is. The rules its "Pays when" wrote are renamed with it. The project’s tickets not locked as invoiced are queued.',
+  method: 'PATCH',
+  path: '/pay-items/:payItemId',
+  params: payItemId,
+  body: z
+    .strictObject({
+      code: payItemCode.optional(),
+      description: named.optional(),
+      unit: z.enum(billingUnits).optional(),
+      bandFrom: bandEnd.nullable().optional(),
+      bandTo: bandEnd.nullable().optional(),
+      countIsAlwaysOne: z.boolean().optional(),
+      gpsRequired: z.boolean().optional(),
+      measurementRequired: z.boolean().optional(),
+      decimalsAllowed: z.boolean().optional(),
+      photosRequired: z.boolean().optional(),
+      monitorMayMarkIneligible: z.boolean().optional(),
+      quantityFromCarriedTickets: z.boolean().optional(),
+      crewTimeConversion: z.enum(crewTimeConversions).nullable().optional(),
+      crewDayHours: crewDayHours.nullable().optional(),
+    })
+    .refine(stated),
+  answer: savedAnswer(payItemRecordSchema),
+});
+
+// One rate a prime on a pay item, so the rate is put, never added: a second row is never made.
+export const setPayItemRateEndpoint = endpoint({
+  ...setup,
+  name: 'setPayItemRate',
+  summary:
+    'Sets a prime’s rate on a pay item: for the first time, changed (audited with the rate before), or put back. The project’s tickets not locked as invoiced are queued.',
+  method: 'PUT',
+  path: '/pay-items/:payItemId/rates/:primeId',
+  params: z.strictObject({ payItemId: z.uuid(), primeId: z.uuid() }),
+  body: z.strictObject({ rate }),
+  answer: savedAnswer(payItemRateRecordSchema),
+});
+
+// Step 8. One line of a rule's "ifs" (spec/RULES.md §3, §4): a picked value by its record's id
+// (a zone by its name), a typed one in the field of its kind.
+const ruleNumber = z.number().min(-9_999_999_999).max(9_999_999_999);
+const criterionLine = z.strictObject({
+  criterion: z.enum(ruleCriterionKeys),
+  operator: z.enum(ruleOperators),
+  picks: z.array(z.string().min(1).max(200)).max(200).optional(),
+  numberFrom: ruleNumber.optional(),
+  numberTo: ruleNumber.optional(),
+  dateFrom: day.optional(),
+  dateTo: day.optional(),
+  text: z.string().trim().min(1).max(500).optional(),
+});
+const criteria = z.array(criterionLine).max(50);
+// A transaction's #: its slot on the ticket (spec/RULES.md §5).
+const slot = z.number().int().min(1).max(999);
+// On an Add transaction for an itemised ticket: every item, or the chosen ones (ADR-128).
+const quantityFrom = {
+  quantityFrom: z.enum(quantityFroms).optional(),
+  itemNameIds: z.array(z.uuid()).max(200).optional(),
+};
+
+// The whole of what the pay item pays on from now on: a form not named is one it no longer pays
+// on, and the rule it kept there is archived.
+export const savePaysWhenEndpoint = endpoint({
+  ...setup,
+  name: 'savePaysWhen',
+  summary:
+    'Saves a pay item’s "Pays when": for each form it pays on, the criteria and the transaction # it adds. A rule is written and kept for each of the project’s contracts whose prime has a rate on it; the answer says which rules were added, changed, archived and left alone.',
+  method: 'PUT',
+  path: '/pay-items/:payItemId/pays-when',
+  params: payItemId,
+  body: z.strictObject({
+    pays: z.array(z.strictObject({ formId: z.uuid(), slot, criteria, ...quantityFrom })).max(20),
+  }),
+  answer: savedAnswer(rulesKeptRecordSchema),
+});
+
+// A rule as the rule builder states it, whole. One that isn't valid is saved all the same and
+// never runs (spec/RULES.md §7): the answer says whether it is, and why not.
+const ruleBody = z.strictObject({
+  formId: z.uuid(),
+  name: named,
+  // Empty only on a rule with no Add transaction.
+  contractId: z.uuid().nullable(),
+  active: z.boolean(),
+  criteria,
+  actions: z
+    .array(
+      z.strictObject({
+        kind: z.enum(ruleActionKinds),
+        slot: slot.optional(),
+        payItemId: z.uuid().optional(),
+        ...quantityFrom,
+      }),
+    )
+    .max(50),
+});
+
+export const createRuleEndpoint = endpoint({
+  ...setup,
+  name: 'createRule',
+  summary:
+    'Writes a rule on one of the project’s load, haul-out or unit rate forms. An exact copy of another rule isn’t saved. Its form’s tickets not locked as invoiced are queued.',
+  method: 'POST',
+  path: '/projects/:projectId/rules',
+  params: projectId,
+  body: ruleBody,
+  answer: savedAnswer(savedRuleRecordSchema),
+});
+
+export const changeRuleEndpoint = endpoint({
+  ...setup,
+  name: 'changeRule',
+  summary:
+    'States a rule anew, whole: its form, name, contract, Active tick, criteria and actions. A rule a pay item’s "Pays when" wrote is changed only there. The tickets of its form, and of the form it had, not locked as invoiced are queued.',
+  method: 'PUT',
+  path: '/rules/:ruleId',
+  params: z.strictObject({ ruleId: z.uuid() }),
+  body: ruleBody,
+  answer: savedAnswer(savedRuleRecordSchema),
+});
+
 // Each task that adds an endpoint names it here; the API's tests hold its routes to this list.
 export const endpoints: readonly Endpoint[] = [
   healthEndpoint,
@@ -786,4 +1033,13 @@ export const endpoints: readonly Endpoint[] = [
   createContractEndpoint,
   addDebrisTypeEndpoint,
   addPayableTypeEndpoint,
+  createFormEndpoint,
+  addFormDebrisTypeEndpoint,
+  addFormDefinitionEndpoint,
+  createPayItemEndpoint,
+  changePayItemEndpoint,
+  setPayItemRateEndpoint,
+  savePaysWhenEndpoint,
+  createRuleEndpoint,
+  changeRuleEndpoint,
 ];
