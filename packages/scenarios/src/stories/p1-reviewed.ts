@@ -53,6 +53,7 @@ import {
   saved,
   setUpP1Pricing,
 } from './p1-office.ts';
+import { assigned } from './board.ts';
 import { p1TimeZone as timeZone, startSeries } from './p1.ts';
 
 const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-04:00`;
@@ -1240,38 +1241,35 @@ export const p1Reviewed: Story = {
     );
     const lee = (await api.user.findFirstOrThrow({ where: { name: 'Lee Morgan' } })).id;
     const kim = (await api.user.findFirstOrThrow({ where: { name: 'Kim Nguyen' } })).id;
-    const p2Phones = await api.$write({ actorId: luis, source: 'BACK_OFFICE' }, async (tx) => {
-      const assigned = async (
-        name: string,
-        personId: string,
-        more: { fieldEventKinds: ('COLLECTION' | 'DISPOSAL')[]; siteId?: string },
-      ) => {
-        const phone = await tx.device.create({
+    // The phone is enrolled by hand (enrolment is 2.5.1's); its assignment is the board's.
+    const p2Assigned = async (
+      name: string,
+      personId: string,
+      more: { fieldEventKinds: ('COLLECTION' | 'DISPOSAL')[]; siteId?: string },
+    ) => {
+      const phone = await api.$write({ actorId: luis, source: 'BACK_OFFICE' }, (tx) =>
+        tx.device.create({
           data: {
             name,
             publicKey: `story-key-${name.toLowerCase()}`,
             masterPasscodeVersion: 1,
             enrolledAt: new Date(on('13', '17:00')),
           },
-        });
-        const assignment = await tx.assignment.create({
-          data: {
-            workDate: new Date('2026-10-14'),
-            projectId: p2,
-            madeById: luis,
-            personId,
-            deviceId: phone.id,
-            origin: 'PLANNED',
-            ...more,
-          },
-        });
-        return { monitorId: personId, deviceId: phone.id, assignmentId: assignment.id };
-      };
-      return {
-        lee: await assigned('P2-COL-1', lee, { fieldEventKinds: ['COLLECTION'] }),
-        kim: await assigned('P2-TWR-TDSR', kim, { fieldEventKinds: ['DISPOSAL'], siteId: p2Tdsr }),
-      };
-    });
+        }),
+      );
+      const assignmentId = await assigned(api, clock, luis, {
+        workDate: '2026-10-14',
+        projectId: p2,
+        personId,
+        deviceId: phone.id,
+        ...more,
+      });
+      return { monitorId: personId, deviceId: phone.id, assignmentId };
+    };
+    const p2Phones = {
+      lee: await p2Assigned('P2-COL-1', lee, { fieldEventKinds: ['COLLECTION'] }),
+      kim: await p2Assigned('P2-TWR-TDSR', kim, { fieldEventKinds: ['DISPOSAL'], siteId: p2Tdsr }),
+    };
     const roe = async (roeNumber: string, address: string, ownerName: string, at: string) => {
       const madeAt = new Date(on('14', at));
       const id = uuidv7(madeAt);

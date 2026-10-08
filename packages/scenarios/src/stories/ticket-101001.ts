@@ -13,6 +13,7 @@ import { made, scanned } from '../device.ts';
 import { uuidv7, uuidv7Time } from '../ids.ts';
 import { phoneLists } from '../phone-lists.ts';
 import type { Story } from '../runner.ts';
+import { assigned } from './board.ts';
 import { p1TimeZone as timeZone, setUpP1, setUpP1Sites } from './p1.ts';
 
 const at = (time: string): string => `2026-10-12T${time}:00-04:00`;
@@ -32,7 +33,7 @@ export const ticket101001: Story = {
     );
     // The first user is written with itself as the actor (ADR-270 (4)).
     const dana = uuidv7(clock.now());
-    const setup = await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
+    const entered = await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
       await tx.user.create({ data: { id: dana, name: 'Dana Reyes', role: 'ADMIN' } });
       const p1 = await setUpP1(tx, story.policy);
       const ana = await tx.user.create({
@@ -48,37 +49,33 @@ export const ticket101001: Story = {
         data: { name: 'P1-TWR-TDSR', publicKey: 'story-P1-TWR-TDSR', masterPasscodeVersion: 1 },
       });
       const { tdsr } = await setUpP1Sites(tx, p1.project);
-      const monday = { workDate: new Date('2026-10-12'), projectId: p1.project, madeById: dana };
-      const collections = await tx.assignment.create({
-        data: {
-          ...monday,
-          personId: ana.id,
-          fieldEventKinds: ['COLLECTION'],
-          deviceId: collectionPhone.id,
-          origin: 'PLANNED',
-        },
-      });
-      const tower = await tx.assignment.create({
-        data: {
-          ...monday,
-          personId: kim.id,
-          fieldEventKinds: ['DISPOSAL'],
-          siteId: tdsr,
-          deviceId: towerPhone.id,
-          origin: 'PLANNED',
-        },
-      });
       return {
         p1: p1.project,
         ana: ana.id,
         kim: kim.id,
         collectionPhone,
         towerPhone,
-        collections: collections.id,
-        tower: tower.id,
         tdsr,
       };
     });
+    // Monday's board, written by Dana: Ana on collections, Kim at the Marsh Road tower.
+    const monday = { workDate: '2026-10-12', projectId: entered.p1 } as const;
+    const setup = {
+      ...entered,
+      collections: await assigned(api, clock, dana, {
+        ...monday,
+        personId: entered.ana,
+        fieldEventKinds: ['COLLECTION'],
+        deviceId: entered.collectionPhone.id,
+      }),
+      tower: await assigned(api, clock, dana, {
+        ...monday,
+        personId: entered.kim,
+        fieldEventKinds: ['DISPOSAL'],
+        siteId: entered.tdsr,
+        deviceId: entered.towerPhone.id,
+      }),
+    };
     // At the yard, online, Ana's phone takes her assignment and its first block of load numbers:
     // the collection makes the ticket's number (ADR-065, 209).
     const block = await new NumberAllocator(api, clock, story.policy).topUp(

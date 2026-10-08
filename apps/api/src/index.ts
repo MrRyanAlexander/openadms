@@ -161,6 +161,14 @@ export {
   type PasscodeRefusalCode,
 } from './dispatch/master-passcode.ts';
 export {
+  Assignments,
+  type AssignedWork,
+  type AssignmentRead,
+  type AssignmentsAsked,
+  type AssignmentsPage,
+  type NewAssignment,
+} from './dispatch/assignments.ts';
+export {
   Phones,
   type PhoneRead,
   type PhoneRemoved,

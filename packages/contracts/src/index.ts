@@ -4,6 +4,8 @@ import { workspace as domainWorkspace } from '@open-adms/domain';
 import { z } from 'zod';
 
 export {
+  assignmentRecordSchema,
+  assignmentsAnswerSchema,
   csrfAnswerSchema,
   errorAnswerSchema,
   errorCodes,
@@ -20,6 +22,8 @@ export {
   signedOutAnswerSchema,
   twoStepClearedAnswerSchema,
   twoStepSetupAnswerSchema,
+  type AssignmentRecord,
+  type AssignmentsAnswer,
   type CsrfAnswer,
   type ErrorAnswer,
   type ErrorCode,
@@ -50,6 +54,7 @@ export {
   archivePersonEndpoint,
   backOfficeRoles,
   beginTwoStepSetupEndpoint,
+  changeAssignmentEndpoint,
   changeMasterPasscodeEndpoint,
   changePasswordEndpoint,
   changePayItemEndpoint,
@@ -89,6 +94,7 @@ export {
   mergeContractorEndpoint,
   quantityLookupEndpoint,
   listPeopleEndpoint,
+  listAssignmentsEndpoint,
   listPhonesEndpoint,
   peoplePageAtMost,
   readPersonEndpoint,
@@ -110,6 +116,8 @@ export {
   siteQuantityLookupEndpoint,
   startNumberSeriesEndpoint,
   taken,
+  withdrawAssignmentEndpoint,
+  writeAssignmentEndpoint,
   type AnswerOf,
   type BodyOf,
   type Endpoint,

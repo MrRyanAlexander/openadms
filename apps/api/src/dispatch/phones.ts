@@ -9,9 +9,10 @@
 //   moment; its record is kept. What it made later is received and flagged by the worker, never
 //   refused (ADR-134); revoking its key once it has synced and been wiped is the sync's (C47).
 import type { Prisma } from '@open-adms/db';
-import { DispatchRights, PhoneRules, type PhoneRemoval } from '@open-adms/domain';
+import { PhoneRules, type PhoneRemoval } from '@open-adms/domain';
 
-import { Refused, SetupService, type Outcome } from '../setup/setup-service.ts';
+import { Refused, type Outcome } from '../setup/setup-service.ts';
+import { DispatchService } from './dispatch-service.ts';
 
 type Tx = Prisma.TransactionClient;
 
@@ -57,7 +58,7 @@ export interface PhoneRemoved {
   readonly note?: string | undefined;
 }
 
-export class Phones extends SetupService {
+export class Phones extends DispatchService {
   private readonly rules = new PhoneRules();
 
   // A page of the firm's phones, in the order they were enrolled.
@@ -121,26 +122,6 @@ export class Phones extends SetupService {
         return this.shown(row, await this.currentVersion(tx));
       },
     );
-  }
-
-  // Refuses, with nothing changed, anybody who may not dispatch now.
-  private async mayDispatch(tx: Tx, person: string): Promise<void> {
-    const user = await tx.user.findUnique({ where: { id: person } });
-    const granted =
-      user === null
-        ? []
-        : await tx.userPermission.findMany({ where: { userId: person, archivedAt: null } });
-    const refusal = new DispatchRights(
-      user === null
-        ? null
-        : {
-            name: user.name,
-            role: user.role,
-            archived: user.archivedAt !== null,
-            granted: granted.map((grant) => grant.permission),
-          },
-    ).refusal();
-    if (refusal !== null) throw new Refused(refusal);
   }
 
   // The version of the master passcode in force: the highest.

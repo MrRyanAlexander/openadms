@@ -27,6 +27,7 @@ import {
   PayItemSetup,
   ProjectSetup,
   SiteSetup,
+  type NewAssignment,
 } from '@open-adms/api';
 import type { FieldEventKind, FormDocumentType, NumberSeries } from '@open-adms/db';
 
@@ -44,6 +45,7 @@ import {
 import { uuidv7, uuidv7Time } from '../ids.ts';
 import { phoneLists } from '../phone-lists.ts';
 import type { Story } from '../runner.ts';
+import { assigned } from './board.ts';
 import { p1TimeZone as timeZone, setUpP1, setUpP1Sites } from './p1.ts';
 
 const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-04:00`;
@@ -101,6 +103,8 @@ export const p1FieldDays: Story = {
     const office = await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
       await tx.user.create({ data: { id: dana, name: 'Dana Reyes', role: 'ADMIN' } });
       const luis = await tx.user.create({ data: { name: 'Luis Ortega', role: 'MANAGER_ANALYST' } });
+      // Luis writes each day's board: Dana grants him *dispatch* (ADR-428, 429).
+      await tx.userPermission.create({ data: { userId: luis.id, permission: 'DISPATCH' } });
       const p1 = await setUpP1(tx, story.policy);
       const { tdsr, landfill } = await setUpP1Sites(tx, p1.project);
       const monitors: Record<string, string> = {};
@@ -319,7 +323,7 @@ export const p1FieldDays: Story = {
       readonly monitor: string;
       readonly phone: string;
       readonly kinds: readonly FieldEventKind[];
-      readonly forms?: readonly FormDocumentType[];
+      readonly forms?: NewAssignment['formDocumentTypes'];
       readonly siteId?: string;
       readonly unitRate?: boolean;
       readonly tuesdayOnly?: boolean;
@@ -355,39 +359,23 @@ export const p1FieldDays: Story = {
         unitRate: true,
       },
     ];
-    const board = (workDate: string, people: readonly Planned[]) =>
-      api.$write({ actorId: luis, source: 'BACK_OFFICE' }, async (tx) => {
-        const assignments: Record<string, string> = {};
-        for (const planned of people) {
-          const assignment = await tx.assignment.create({
-            data: {
-              workDate: new Date(workDate),
-              projectId: p1,
-              madeById: luis,
-              personId: person(planned.monitor),
-              fieldEventKinds: [...planned.kinds],
-              formDocumentTypes: [...(planned.forms ?? [])],
-              siteId: planned.siteId ?? null,
-              deviceId: device(planned.phone),
-              origin: 'PLANNED',
-            },
-          });
-          assignments[planned.phone] = assignment.id;
-          if (planned.unitRate !== true) continue;
-          for (const payItem of unitRateWork) {
-            if (payItem.kindOfWorkId === null) continue;
-            await tx.assignmentPayItem.create({
-              data: {
-                assignmentId: assignment.id,
-                projectId: p1,
-                payItemId: payItem.id,
-                kindOfWorkId: payItem.kindOfWorkId,
-              },
-            });
-          }
-        }
-        return assignments;
-      });
+    const board = async (workDate: string, people: readonly Planned[]) => {
+      const assignments: Record<string, string> = {};
+      for (const planned of people) {
+        assignments[planned.phone] = await assigned(api, clock, luis, {
+          workDate,
+          projectId: p1,
+          personId: person(planned.monitor),
+          fieldEventKinds: [...planned.kinds],
+          formDocumentTypes: [...(planned.forms ?? [])],
+          siteId: planned.siteId ?? null,
+          deviceId: device(planned.phone),
+          // Each named with its own kind of work by the service (C42).
+          payItemIds: planned.unitRate === true ? unitRateWork.map(({ id }) => id) : [],
+        });
+      }
+      return assignments;
+    };
     const boards = {
       monday: await board(
         '2026-10-12',

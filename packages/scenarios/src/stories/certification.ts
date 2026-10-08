@@ -27,6 +27,7 @@ import { NewProjectSettings } from '@open-adms/domain';
 import { utcOffsetMinutes } from '../clock.ts';
 import { uuidv7 } from '../ids.ts';
 import type { Story } from '../runner.ts';
+import { assigned } from './board.ts';
 import { p1TimeZone as timeZone, setUpP1, startSeries } from './p1.ts';
 
 const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-04:00`;
@@ -103,17 +104,6 @@ export const certification: Story = {
       const phone = await tx.device.create({
         data: { name: 'P1-HO-TDSR', publicKey: 'story-key-p1-ho-tdsr', masterPasscodeVersion: 1 },
       });
-      const assigned = { workDate: new Date('2026-10-10'), projectId: p1.project, madeById: dana };
-      const certifying = await tx.assignment.create({
-        data: {
-          ...assigned,
-          personId: sam.id,
-          certifying: true,
-          deviceId: phone.id,
-          origin: 'PLANNED',
-        },
-      });
-      await tx.assignment.create({ data: { ...assigned, personId: lee.id, origin: 'PLANNED' } });
       return {
         luis: luis.id,
         sam: sam.id,
@@ -122,10 +112,18 @@ export const certification: Story = {
         p2: p2.id,
         coastline: p1.prime,
         phone: phone.id,
-        assignment: certifying.id,
       };
     });
     const { luis, sam, lee, p1, p2, coastline } = world;
+    // Saturday's board, written by Dana: Sam certifies on P1-HO-TDSR, Lee Morgan helps.
+    const saturdays = { workDate: '2026-10-10', projectId: p1 } as const;
+    const certifying = await assigned(api, clock, dana, {
+      ...saturdays,
+      personId: sam,
+      certifying: true,
+      deviceId: world.phone,
+    });
+    await assigned(api, clock, dana, { ...saturdays, personId: lee });
     const summit = (
       await saved(contractors.contractor(dana, { name: 'Summit Debris Services', kind: 'HAULER' }))
     ).id;
@@ -183,7 +181,7 @@ export const certification: Story = {
       primeId: coastline,
       certifiedById: sam,
       deviceId: world.phone,
-      assignmentId: world.assignment,
+      assignmentId: certifying,
       ...more,
       // Each is its own record, made on the phone at the phone's own time.
       id: uuidv7(clock.now()),

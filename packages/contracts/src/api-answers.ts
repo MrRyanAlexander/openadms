@@ -1,6 +1,11 @@
 // What the API says about itself and about a refusal (ARCHITECTURE §6, Output; ADR-385).
 // Every answer's shape lives here, never in a controller.
-import { passwordProblemCodes, permissions } from '@open-adms/domain';
+import {
+  assignmentFormDocumentTypes,
+  fieldEventKinds,
+  passwordProblemCodes,
+  permissions,
+} from '@open-adms/domain';
 import { z } from 'zod';
 
 // The health answer says that the process answers, and nothing else: no version, no setting, no
@@ -211,6 +216,42 @@ export const phonesAnswerSchema = z.strictObject({
 });
 
 export type PhonesAnswer = z.infer<typeof phonesAnswerSchema>;
+
+// One person's work for a day, as the dispatch board reads it (ARCHITECTURE §7; AC-02-24…32;
+// ADR-240, 286, 308, 429): who, which day (the project's own), which project, their work (the
+// kinds of field event, certifying, the forms that are no ticket's, the unit rate pay items named
+// now), one site where the work is at one, the phone where one is named; whether it was planned
+// on the board, and by whom, or made on a phone under the master passcode (unplanned, no
+// author); and when it was withdrawn, if it was. A pay item says its code and description, never
+// a rate.
+const named = z.strictObject({ id: z.uuid(), name: z.string() });
+
+export const assignmentRecordSchema = z.strictObject({
+  id: z.uuid(),
+  projectId: z.uuid(),
+  person: z.strictObject({ id: z.uuid(), name: z.string(), monitorId: z.string().nullable() }),
+  workDate: z.iso.date(),
+  fieldEventKinds: z.array(z.enum(fieldEventKinds)),
+  certifying: z.boolean(),
+  formDocumentTypes: z.array(z.enum(assignmentFormDocumentTypes)),
+  site: named.nullable(),
+  phone: named.nullable(),
+  payItems: z.array(z.strictObject({ id: z.uuid(), code: z.string(), description: z.string() })),
+  origin: z.enum(['PLANNED', 'UNPLANNED']),
+  madeBy: named.nullable(),
+  withdrawnAt: z.iso.datetime().nullable(),
+});
+
+export type AssignmentRecord = z.infer<typeof assignmentRecordSchema>;
+
+// A page of one project's board for one day, in the order the assignments were written. `next`
+// is what to send as `after` for the page that follows; null when this is the last.
+export const assignmentsAnswerSchema = z.strictObject({
+  assignments: z.array(assignmentRecordSchema),
+  next: z.uuid().nullable(),
+});
+
+export type AssignmentsAnswer = z.infer<typeof assignmentsAnswerSchema>;
 
 // The master passcode was changed: the version now current. Never the passcode or its hash.
 export const masterPasscodeAnswerSchema = z.strictObject({

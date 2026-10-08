@@ -27,6 +27,7 @@ import { SimulatedDevice, type PhoneRecord } from '../device.ts';
 import { uuidv7 } from '../ids.ts';
 import type { StoryContext } from '../runner.ts';
 import { p1FieldDays } from './p1-field-days.ts';
+import { assigned } from './board.ts';
 import { p1TimeZone as timeZone } from './p1.ts';
 import { p1Boundary, p1Zones } from './setup.ts';
 
@@ -205,19 +206,13 @@ export type P1Certify = (
 export async function certifyP1(story: StoryContext, office: P1Office): Promise<P1Certify> {
   const { api, clock } = story;
   const { luis, sam, lee, p1, coastline, samPhone } = office;
-  const certifying = await api.$write({ actorId: luis, source: 'BACK_OFFICE' }, (tx) =>
-    tx.assignment.create({
-      data: {
-        workDate: new Date('2026-10-10'),
-        projectId: p1,
-        madeById: luis,
-        personId: sam,
-        certifying: true,
-        deviceId: samPhone,
-        origin: 'PLANNED',
-      },
-    }),
-  );
+  const certifying = await assigned(api, clock, luis, {
+    workDate: '2026-10-10',
+    projectId: p1,
+    personId: sam,
+    certifying: true,
+    deviceId: samPhone,
+  });
   const certifications = new Certifications(api, clock, story.policy);
   const feature = async (name: string): Promise<string> =>
     (await api.vehicleFeature.findFirstOrThrow({ where: { name } })).id;
@@ -230,7 +225,7 @@ export async function certifyP1(story: StoryContext, office: P1Office): Promise<
         primeId: coastline,
         certifiedById: sam,
         deviceId: samPhone,
-        assignmentId: certifying.id,
+        assignmentId: certifying,
         helperIds: [lee],
         ...more,
         id: uuidv7(clock.now()),

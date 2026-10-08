@@ -198,6 +198,14 @@ export {
   type SetupRightsRefusal,
 } from './people.ts';
 export {
+  AssignmentRules,
+  assignableRoles,
+  assignmentFormDocumentTypes,
+  type AssignmentFormDocumentType,
+  type AssignmentRefusal,
+  type AssignmentRefusalCode,
+} from './assignments.ts';
+export {
   MasterPasscodeRules,
   PhoneRules,
   phoneRemovals,

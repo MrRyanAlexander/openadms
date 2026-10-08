@@ -19,6 +19,7 @@ import { made, scanned } from '../device.ts';
 import { uuidv7 } from '../ids.ts';
 import { phoneLists } from '../phone-lists.ts';
 import type { Story } from '../runner.ts';
+import { assigned } from './board.ts';
 import { p1TimeZone as timeZone, setUpP1, setUpP1Sites } from './p1.ts';
 
 const at = (time: string): string => `2026-10-12T${time}:00-04:00`;
@@ -349,47 +350,30 @@ export const dispatchMonday: Story = {
       at('06:00'),
       'Luis writes Monday’s board: Ana on collections, Kim at the TDSR tower, Jo on unit rate',
     );
-    const board = await api.$write({ actorId: luis, source: 'BACK_OFFICE' }, async (tx) => {
-      const planned = { workDate: monday, projectId: office.p1, madeById: luis } as const;
-      const collections = await tx.assignment.create({
-        data: {
-          ...planned,
-          personId: people.ana,
-          fieldEventKinds: ['COLLECTION'],
-          deviceId: phones.collection.id,
-          origin: 'PLANNED',
-        },
-      });
-      const tower = await tx.assignment.create({
-        data: {
-          ...planned,
-          personId: people.kim,
-          fieldEventKinds: ['DISPOSAL'],
-          siteId: office.tdsr,
-          deviceId: phones.tdsrTower.id,
-          origin: 'PLANNED',
-        },
-      });
-      // No phone named: Jo signs in on whichever enrolled phone she picks up.
-      const unitRate = await tx.assignment.create({
-        data: {
-          ...planned,
-          personId: people.jo,
-          fieldEventKinds: ['UNIT_RATE'],
-          origin: 'PLANNED',
-        },
-      });
-      await tx.assignmentPayItem.createMany({
-        data: [payItems.hangers, payItems.leaners].map((payItem) => ({
-          assignmentId: unitRate.id,
-          projectId: office.p1,
-          payItemId: payItem.id,
-          // A unit rate pay item's own kind of work: no other can be named (C42).
-          kindOfWorkId: payItem.kindOfWorkId,
-        })),
-      });
-      return { collections: collections.id, tower: tower.id, unitRate: unitRate.id };
-    });
+    const planned = { workDate: '2026-10-12', projectId: office.p1 } as const;
+    const board = {
+      collections: await assigned(api, clock, luis, {
+        ...planned,
+        personId: people.ana,
+        fieldEventKinds: ['COLLECTION'],
+        deviceId: phones.collection.id,
+      }),
+      tower: await assigned(api, clock, luis, {
+        ...planned,
+        personId: people.kim,
+        fieldEventKinds: ['DISPOSAL'],
+        siteId: office.tdsr,
+        deviceId: phones.tdsrTower.id,
+      }),
+      // No phone named: Jo signs in on whichever enrolled phone she picks up. Her unit rate
+      // pay items are named with each one's own kind of work by the service (C42).
+      unitRate: await assigned(api, clock, luis, {
+        ...planned,
+        personId: people.jo,
+        fieldEventKinds: ['UNIT_RATE'],
+        payItemIds: [payItems.hangers.id, payItems.leaners.id],
+      }),
+    };
     const joDay = await api.assignment.findUniqueOrThrow({
       where: { id: board.unitRate },
       include: { payItems: { include: { payItem: true }, orderBy: { payItem: { code: 'asc' } } } },

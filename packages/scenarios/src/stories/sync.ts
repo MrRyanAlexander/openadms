@@ -25,6 +25,7 @@ import {
   Phones,
   ProjectSetup,
   type SyncAnswer,
+  type NewAssignment,
 } from '@open-adms/api';
 import type { FieldEventKind, FormDocumentType, NumberSeries } from '@open-adms/db';
 import { NewProjectSettings } from '@open-adms/domain';
@@ -43,6 +44,7 @@ import {
 import { uuidv7 } from '../ids.ts';
 import { phoneLists } from '../phone-lists.ts';
 import type { Story } from '../runner.ts';
+import { assigned } from './board.ts';
 import { p1TimeZone as timeZone, setUpP1, setUpP1Sites, startSeries } from './p1.ts';
 
 const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-04:00`;
@@ -296,24 +298,16 @@ export const sync: Story = {
 
     // Saturday's certifying, on Sam's phone: P1's dump trailer 730415 and Rivera's self-loader
     // 730416; a pup trailer whose tag ran out on 30 September, 730420; and P2's own 730416.
-    const certifying = await api.$write({ actorId: luis, source: 'BACK_OFFICE' }, async (tx) => {
-      const made: Record<string, string> = {};
-      for (const projectId of [p1, p2]) {
-        const assignment = await tx.assignment.create({
-          data: {
-            workDate: new Date('2026-10-10'),
-            projectId,
-            madeById: luis,
-            personId: person('Sam Grant'),
-            certifying: true,
-            deviceId: device('P1-HO-TDSR'),
-            origin: 'PLANNED',
-          },
-        });
-        made[projectId] = assignment.id;
-      }
-      return made;
-    });
+    const certifying: Record<string, string> = {};
+    for (const projectId of [p1, p2]) {
+      certifying[projectId] = await assigned(api, clock, luis, {
+        workDate: '2026-10-10',
+        projectId,
+        personId: person('Sam Grant'),
+        certifying: true,
+        deviceId: device('P1-HO-TDSR'),
+      });
+    }
     const dumpTrailer = await api.vehicleType.findFirstOrThrow({
       where: { name: 'Hydraulic Dump Trailer' },
     });
@@ -355,41 +349,26 @@ export const sync: Story = {
       readonly phone: string;
       readonly projectId: string;
       readonly kinds: readonly FieldEventKind[];
-      readonly forms?: readonly FormDocumentType[];
+      readonly forms?: NewAssignment['formDocumentTypes'];
       readonly siteId?: string;
       readonly unitRate?: boolean;
     }
-    const board = (workDate: string, people: readonly Planned[]) =>
-      api.$write({ actorId: luis, source: 'BACK_OFFICE' }, async (tx) => {
-        const assignments: Record<string, string> = {};
-        for (const planned of people) {
-          const assignment = await tx.assignment.create({
-            data: {
-              workDate: new Date(workDate),
-              projectId: planned.projectId,
-              madeById: luis,
-              personId: person(planned.monitor),
-              fieldEventKinds: [...planned.kinds],
-              formDocumentTypes: [...(planned.forms ?? [])],
-              siteId: planned.siteId ?? null,
-              deviceId: device(planned.phone),
-              origin: 'PLANNED',
-            },
-          });
-          assignments[`${planned.phone} ${planned.monitor}`] = assignment.id;
-          if (planned.unitRate === true && hangerRemoval.kindOfWorkId !== null) {
-            await tx.assignmentPayItem.create({
-              data: {
-                assignmentId: assignment.id,
-                projectId: planned.projectId,
-                payItemId: hangerRemoval.id,
-                kindOfWorkId: hangerRemoval.kindOfWorkId,
-              },
-            });
-          }
-        }
-        return assignments;
-      });
+    const board = async (workDate: string, people: readonly Planned[]) => {
+      const assignments: Record<string, string> = {};
+      for (const planned of people) {
+        assignments[`${planned.phone} ${planned.monitor}`] = await assigned(api, clock, luis, {
+          workDate,
+          projectId: planned.projectId,
+          personId: person(planned.monitor),
+          fieldEventKinds: [...planned.kinds],
+          formDocumentTypes: [...(planned.forms ?? [])],
+          siteId: planned.siteId ?? null,
+          deviceId: device(planned.phone),
+          payItemIds: planned.unitRate === true ? [hangerRemoval.id] : [],
+        });
+      }
+      return assignments;
+    };
     const setupOf = async (planned: Planned, assignmentId: string | undefined) => {
       if (assignmentId === undefined) throw new Error(`${planned.phone} has no assignment.`);
       const deviceId = device(planned.phone);

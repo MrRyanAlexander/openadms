@@ -24,6 +24,8 @@ import {
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 
+import { apiAssignments } from '../dispatch/assignments.controller.ts';
+import { Assignments } from '../dispatch/assignments.ts';
 import { MasterPasscode } from '../dispatch/master-passcode.ts';
 import { apiMasterPasscode, apiPhones } from '../dispatch/phones.controller.ts';
 import { Phones } from '../dispatch/phones.ts';
@@ -220,6 +222,7 @@ export class ApiProcess {
           [apiSetupStanding, new SetupStanding(database)],
           // Dispatch and phones (task 2.4.3).
           [apiPhones, new Phones(database, clock)],
+          [apiAssignments, new Assignments(database, clock)],
           [
             apiMasterPasscode,
             new MasterPasscode(database, {

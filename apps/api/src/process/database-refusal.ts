@@ -128,6 +128,23 @@ const words: Readonly<Record<string, string>> = {
   map_version_boundary_check: 'Not loaded: the boundary isn’t a shape.',
   zone_geometry_check: 'Not loaded: a zone isn’t a shape.',
   site_area_version_geometry_check: 'Not saved: that isn’t a shape.',
+  // Dispatch: a day's assignments (task 2.4.3, part 2).
+  assignment_project_id_site_id_fkey:
+    'Not saved: an assignment’s site is one of its own project’s sites.',
+  assignment_person_id_fkey: 'Not saved: the person an assignment is for isn’t on record.',
+  assignment_device_id_fkey: 'Not saved: the phone an assignment names isn’t on record.',
+  assignment_origin_check:
+    'Not saved: an assignment written on the board says who wrote it; one made on a phone has no author and always its phone.',
+  assignment_system_actor_check:
+    'Not saved: an assignment is for a person and written by a person.',
+  assignment_form_document_types_check:
+    'Not saved: the forms an assignment names are an ROE, a survey, an incident or a drop-off log.',
+  assignment_pay_item_assignment_id_pay_item_id_key:
+    'Not saved: that pay item is already named on the assignment.',
+  assignment_pay_item_project_id_assignment_id_fkey:
+    'Not saved: an assignment names the unit rate pay items of its own project.',
+  assignment_pay_item_project_id_pay_item_id_kind_of_work_id_fkey:
+    'Not saved: an assignment names the unit rate pay items of its own project.',
 };
 
 const notFound: DatabaseRefusal = {

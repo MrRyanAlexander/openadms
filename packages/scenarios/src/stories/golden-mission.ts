@@ -56,6 +56,7 @@ import {
   saved,
   setUpP1Pricing,
 } from './p1-office.ts';
+import { assigned } from './board.ts';
 import { p1TimeZone as timeZone } from './p1.ts';
 
 const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-04:00`;
@@ -603,29 +604,23 @@ export const goldenMission: Story = {
       on('12', '06:35'),
       'Monday at the yard: Luis has written P2’s board too. Ana Brooks signs in on P2-COL-1, which takes a block of P2’s loads and of its ROE numbers, and Kim Nguyen on P2-TWR-TDSR: a second assignment and phone each, one project per phone',
     );
-    const p2Board = await api.$write({ actorId: luis, source: 'BACK_OFFICE' }, async (tx) => {
-      const assigned = async (phone: string, personId: string, more: object) =>
-        (
-          await tx.assignment.create({
-            data: {
-              workDate: new Date('2026-10-12'),
-              projectId: p2,
-              madeById: luis,
-              personId,
-              deviceId: p2Phone(phone),
-              origin: 'PLANNED',
-              ...more,
-            },
-          })
-        ).id;
-      return {
-        ana: await assigned('P2-COL-1', ana, {
-          fieldEventKinds: ['COLLECTION'],
-          formDocumentTypes: ['ROE', 'SURVEY'],
-        }),
-        kim: await assigned('P2-TWR-TDSR', kim, { fieldEventKinds: ['DISPOSAL'], siteId: p2Tdsr }),
-      };
-    });
+    const p2Monday = { workDate: '2026-10-12', projectId: p2 } as const;
+    const p2Board = {
+      ana: await assigned(api, clock, luis, {
+        ...p2Monday,
+        personId: ana,
+        deviceId: p2Phone('P2-COL-1'),
+        fieldEventKinds: ['COLLECTION'],
+        formDocumentTypes: ['ROE', 'SURVEY'],
+      }),
+      kim: await assigned(api, clock, luis, {
+        ...p2Monday,
+        personId: kim,
+        deviceId: p2Phone('P2-TWR-TDSR'),
+        fieldEventKinds: ['DISPOSAL'],
+        siteId: p2Tdsr,
+      }),
+    };
     const allocator = new NumberAllocator(api, clock, story.policy);
     for (const series of ['LOAD', 'ROE'] as const satisfies readonly NumberSeries[]) {
       await saved(

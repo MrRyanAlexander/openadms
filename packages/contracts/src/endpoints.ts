@@ -5,9 +5,11 @@
 // this list (openapi.ts). An object a caller sends is strict: a field its schema doesn't name
 // refuses the whole request, and an endpoint whose schema would let one through can't be defined.
 import {
+  assignmentFormDocumentTypes,
   backOfficeCreated,
   backOfficeRolesChanged,
   crewTimeConversions,
+  fieldEventKinds,
   incidentOffers,
   numberSeries,
   permissions,
@@ -21,6 +23,8 @@ import {
 import { z } from 'zod';
 
 import {
+  assignmentRecordSchema,
+  assignmentsAnswerSchema,
   csrfAnswerSchema,
   healthAnswerSchema,
   masterPasscodeAnswerSchema,
@@ -1326,6 +1330,88 @@ export const changeMasterPasscodeEndpoint = endpoint({
   answer: masterPasscodeAnswerSchema,
 });
 
+// A day's assignments, on the dispatch board (ARCHITECTURE §7; spec/parts/02 step 4; AC-02-24…32;
+// BACKLOG 2.4.3, C102; ADR-240, 286, 308, 429). One is written for a person, a day and a project,
+// and those three never change: it is withdrawn and written anew. What is stated of its work
+// (the kinds of field event, certifying, the forms, the unit rate pay items, each list stated
+// whole), its site and its phone may change while it stands. Nothing stops a second one for a
+// person or a phone on a day (AC-02-29). The board is read by the whole back office.
+const assignmentId = z.strictObject({ assignmentId: z.uuid() });
+const assignedWork = {
+  // The kinds of field event they may record; none on a certifier's or a helper's day.
+  fieldEventKinds: z.array(z.enum(fieldEventKinds)).max(fieldEventKinds.length).refine(once),
+  certifying: z.boolean(),
+  // The forms that are no ticket's (ADR-308).
+  formDocumentTypes: z
+    .array(z.enum(assignmentFormDocumentTypes))
+    .max(assignmentFormDocumentTypes.length)
+    .refine(once),
+  // One of the project's own sites, where the work is at one; null on a curb collection.
+  siteId: z.uuid().nullable(),
+  // The phone, where one is named; null where they sign in on whichever they pick up.
+  deviceId: z.uuid().nullable(),
+  // The project's unit rate pay items they do that day, each once.
+  payItemIds: z.array(z.uuid()).max(200).refine(once),
+};
+
+export const listAssignmentsEndpoint = endpoint({
+  name: 'listAssignments',
+  summary:
+    'One project’s dispatch board for one day, a page at a time, in the order the assignments were written: those that stand, or the withdrawn ones. One made on a phone under the master passcode is among them, marked unplanned.',
+  access: 'SIGNED_IN',
+  roles: backOfficeRoles,
+  method: 'GET',
+  path: '/projects/:projectId/assignments',
+  params: projectId,
+  query: z.strictObject({
+    workDate: day,
+    withdrawn: z.enum(['true', 'false']).optional(),
+    // The last assignment of the page before: the answer's `next`.
+    after: z.uuid().optional(),
+    // How many at most: 50 where none is said.
+    limit: z
+      .string()
+      .regex(/^([1-9][0-9]?|1[0-9]{2}|200)$/)
+      .optional(),
+  }),
+  answer: assignmentsAnswerSchema,
+});
+
+export const writeAssignmentEndpoint = endpoint({
+  name: 'writeAssignment',
+  summary:
+    'An assignment is written on a project’s board: a person, a day, their work, one site where the work is at one, optionally a phone. Planned, and it says who wrote it. Refused for a read-only viewer or an archived person, a phone out of service, and a pay item that is no unit rate pay item.',
+  ...dispatch,
+  method: 'POST',
+  path: '/projects/:projectId/assignments',
+  params: projectId,
+  body: z.strictObject({ personId: z.uuid(), workDate: day, ...assignedWork }),
+  answer: savedAnswer(assignmentRecordSchema),
+});
+
+export const changeAssignmentEndpoint = endpoint({
+  name: 'changeAssignment',
+  summary:
+    'An assignment’s work, site or phone is changed; only what is stated changes, and a list is stated whole. Its person, day and project never change. Refused for a withdrawn one and for one made on a phone.',
+  ...dispatch,
+  method: 'PATCH',
+  path: '/assignments/:assignmentId',
+  params: assignmentId,
+  body: z.strictObject(assignedWork).partial().refine(stated),
+  answer: savedAnswer(assignmentRecordSchema),
+});
+
+export const withdrawAssignmentEndpoint = endpoint({
+  name: 'withdrawAssignment',
+  summary:
+    'An assignment is withdrawn from the board, from this moment. It is kept, and so is everything recorded under it. Refused for one already withdrawn and for one made on a phone.',
+  ...dispatch,
+  method: 'POST',
+  path: '/assignments/:assignmentId/withdrawals',
+  params: assignmentId,
+  answer: savedAnswer(assignmentRecordSchema),
+});
+
 export const endpoints: readonly Endpoint[] = [
   healthEndpoint,
   requestPasswordResetEndpoint,
@@ -1389,4 +1475,8 @@ export const endpoints: readonly Endpoint[] = [
   listPhonesEndpoint,
   removePhoneEndpoint,
   changeMasterPasscodeEndpoint,
+  listAssignmentsEndpoint,
+  writeAssignmentEndpoint,
+  changeAssignmentEndpoint,
+  withdrawAssignmentEndpoint,
 ];

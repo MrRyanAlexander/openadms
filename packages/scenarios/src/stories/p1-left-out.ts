@@ -49,6 +49,7 @@ import {
   saved,
   setUpP1Pricing,
 } from './p1-office.ts';
+import { assigned } from './board.ts';
 import { p1TimeZone as timeZone } from './p1.ts';
 import { p1Boundary } from './setup.ts';
 
@@ -574,22 +575,14 @@ export const p1LeftOut: Story = {
       on('14', '13:00'),
       'Sam Grant certifies the truck that hauled 101015: badge 730499, Coastline’s, 28 CY. The worker runs',
     );
-    const certifyingOn = async (date: string): Promise<string> =>
-      (
-        await api.$write({ actorId: luis, source: 'BACK_OFFICE' }, (tx) =>
-          tx.assignment.create({
-            data: {
-              workDate: new Date(`2026-10-${date}`),
-              projectId: p1,
-              madeById: luis,
-              personId: sam,
-              certifying: true,
-              deviceId: samPhone,
-              origin: 'PLANNED',
-            },
-          }),
-        )
-      ).id;
+    const certifyingOn = (date: string): Promise<string> =>
+      assigned(api, clock, luis, {
+        workDate: `2026-10-${date}`,
+        projectId: p1,
+        personId: sam,
+        certifying: true,
+        deviceId: samPhone,
+      });
     const wednesdayCertifying = await certifyingOn('14');
     const certifyNow = (
       assignmentId: string,

@@ -212,6 +212,8 @@ describe('permissions, read from the database on every request', () => {
       'siteQuantityLookup',
       // The firm's phones (ADR-428).
       'listPhones',
+      // A day's dispatch board (ADR-429).
+      'listAssignments',
     ]);
     // The permissions an endpoint takes yet are Setup (task 2.4.2; the list by name is
     // setup-endpoints.test.ts's) and Dispatch (task 2.4.3; phones.test.ts's): the reviewer's
