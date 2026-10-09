@@ -226,4 +226,11 @@ export {
   type ProofRefused,
   type ProvenPhone,
 } from './phone/phone-proofs.ts';
+export {
+  PhoneSignIns,
+  type MonitorOnPhone,
+  type PhoneSignInOutcome,
+  type PhoneSignInRefused,
+  type PhoneSignInsParts,
+} from './phone/phone-sign-ins.ts';
 export { PhoneTokens } from './phone/phone-tokens.ts';

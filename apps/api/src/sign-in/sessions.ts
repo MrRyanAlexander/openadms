@@ -90,6 +90,7 @@ export interface SessionParts {
 
 const sessionRead = {
   id: true,
+  deviceId: true,
   refreshTokenHash: true,
   createdAt: true,
   expiresAt: true,
@@ -302,7 +303,8 @@ export class Sessions {
 
   // Ends every session of a person but one, inside the piece of work that changed their
   // password, cleared their authenticator or archived them, or in which an admin ended them
-  // (ADR-410, 415; ASVS 7.4.3, 7.4.5). Answers how many were open.
+  // (ADR-410, 415; ASVS 7.4.3, 7.4.5); a monitor's sign-ins on phones among them (ADR-443).
+  // Answers how many were open.
   async endAll(tx: Tx, userId: string, except?: string): Promise<number> {
     const { count } = await tx.session.updateMany({
       where: { userId, revokedAt: null, ...(except === undefined ? {} : { id: { not: except } }) },
@@ -355,6 +357,8 @@ export class Sessions {
     // Ended: signed out or revoked, or run out.
     if (row === null) return undefined;
     if (row.revokedAt !== null || row.expiresAt <= now) return undefined;
+    // A monitor's session on a phone (ADR-443) is never a back-office one, whatever its token.
+    if (row.deviceId !== null) return undefined;
     if (row.user.archivedAt !== null || !signsIn(row.user.role)) return undefined;
     return {
       row,

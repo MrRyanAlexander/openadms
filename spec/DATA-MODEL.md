@@ -194,17 +194,19 @@ Never deleted; a secret is taken away by clearing it.
 #### `Session`
 
 *Configuration, with its own guards; built (task 2.2.1, ADR-398; agent default).* One sign-in to
-the back office or the portal. **Only the API reads it.** A phone's session is the device's own
-(ARCHITECTURE §6, §7.4; tasks 2.5.x) and has no row here.
+the back office or the portal, **or a monitor's on a phone** (⚠️ ADR-443, an agent default awaiting
+approval: task 2.5.2). **Only the API reads it.** A phone's own proof of itself keeps no row
+(ADR-440); the monitor signed in on it does.
 
 | Field | Type | Notes |
 |---|---|---|
 | **id** | uuid | |
 | **userId** | → `User` | Whose it is; never changes. Never the system actor (check) |
-| **refreshTokenHash** | text, unique | The SHA-256, as 64 lower-case hexadecimal digits, of the refresh token in force, and nothing else (check): the server never holds the token (AC-10-10). Rotating the token writes the new hash over the old. **Kept out of the audit log** |
+| **refreshTokenHash** | text, unique | The SHA-256, as 64 lower-case hexadecimal digits, of the refresh token in force, and nothing else (check): the server never holds the token (AC-10-10). Rotating the token writes the new hash over the old. On a monitor's session on a phone, the hash of its session token, which never rotates (ADR-443). **Kept out of the audit log** |
+| deviceId | → `Device` | The phone a monitor signed in on (ADR-443). **A monitor's session always names one, and no other session does** (trigger): a monitor's ID and password open nothing but a phone (AC-02-39). Opened only for a monitor not archived, on a phone in service whose key stands, written as that monitor from that phone (trigger); never changes |
 | **createdAt** | instant | When they signed in; never changes |
-| **expiresAt** | instant | After `createdAt` (check). The policy's quiet minutes after its last use (`SESSION_INACTIVITY_MINUTES`), moved on by each refresh, and never later than the policy's hours after `createdAt` (`SESSION_OVERALL_HOURS`) (task 2.2.3, ADR-408) |
-| revokedAt | instant | Signed out, or ended by the server: its refresh token was presented a second time, or the person's password was set anew (ADR-408, 410). **Once set, the row never changes again** (trigger): no rotation, no second life |
+| **expiresAt** | instant | After `createdAt` (check). The policy's quiet minutes after its last use (`SESSION_INACTIVITY_MINUTES`), moved on by each refresh, and never later than the policy's hours after `createdAt` (`SESSION_OVERALL_HOURS`) (task 2.2.3, ADR-408). On a phone: `MONITOR_SESSION_HOURS` after `createdAt`, never moved, and quiet doesn't end it (ADR-443) |
+| revokedAt | instant | Signed out, or ended by the server: its refresh token was presented a second time, or the person's password was set anew (ADR-408, 410); on a phone, also another monitor signed in on it (ADR-443). **Once set, the row never changes again** (trigger): no rotation, no second life |
 
 Audited in the security domain: the audit log shows a session opened, each rotation (that the
 hash changed, never a hash) and the revocation, each with its actor and request.
@@ -1868,6 +1870,7 @@ Never relaxed to pass a test (ARCHITECTURE §5.4). ✅ = built today.
 | A password hash, an authenticator's secret and a refresh token's hash never reach the audit log: it says the column changed, never what from or to (ADR-281, 397, 398; C21) | ✅ each named on its table's audit trigger |
 | Whose a sign-in record or a session is, and when it began, never change; a session ends after it began, and once revoked never changes again; a security event is never edited; none of the three is deleted; none is the system actor's sign-in record or session (ADR-397…399) | ✅ `refuse_edit()` and `refuse_delete()` triggers, checks |
 | Only the API reads or writes sign-in's records: not the worker, not a read-only viewer (ADR-397…399) | ✅ grants (each table's own, no view) |
+| A monitor's session names the phone they signed in on and no other session names one; one on a phone is opened only for a monitor not archived, on a phone in service whose key stands, by that monitor from that phone; the phone it names never changes (ADR-443; AC-02-39) | ✅ triggers (`session_on_a_phone`, `session_refuse_device_edit`) |
 
 ---
 

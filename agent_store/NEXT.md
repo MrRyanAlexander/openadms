@@ -89,7 +89,7 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-09, through ADR-442)
+### Where things stand (2026-10-09, through ADR-443)
 - **Phase 2 (API and sync) is open (ADR-376).** Its plan is `BACKLOG.md`'s eight milestones and 32
   tasks (ADR-377); tasks 2.0.1 (the opening and the plan), 2.1.1 (the threat model and the
   API's scenarios, ADR-379; docs), 2.1.2 (the API as a process, ADR-380…385), 2.1.3 (the
@@ -231,10 +231,8 @@ of `DECISIONS.md`.
 - **Phase 1 is done:** all seven exit criteria met (ADR-371, 372); 693 of the 708 scenarios with a
   Phase 1 part proven whole, 15 in part. 48 scenario rows name Phase 2 (37 as "API (Phase 2)").
 - **Task 2.5.1 (enrolment and a phone's proof of itself) is in three parts (ADR-436), and part 1 is done (ADR-437):** the key's kind (ECDSA P-256, a SHA-256 signature over `PhoneProofRules.signed(challenge)`), `DeviceKeys` and `PhoneChallenges` in `apps/api/src/phone/` (the public key kept written one way; a challenge kept nowhere, the server's own, 256 random bits, good for `PHONE_CHALLENGE_SECONDS` and once), with their tests; What NIST SP 800-63B-4 and ASVS 5.0 ask is ADR-436. **Part 2 is done (ADR-439; ADR-438 built as proposed, the user having said nothing against it):** a phone enrols by `POST /phones/enrolments` (`ANYBODY`: a name, the master passcode, the public key; answered its id and the passcode's version), served by `apps/api/src/phone/`'s `Enrolment`; **every write under the master passcode is stated as the master passcode's own actor** (`underMasterPasscode(deviceId)` in `packages/db`; user `…0002`, role `MASTER_PASSCODE`, seeded; only the API states it, only with source `DEVICE`; no column that names a user may name it); wrong tries are counted on `master_passcode_tries` by sign-in's rule and numbers (the domain's `MasterPasscodeTries`), a wait from the fifth, a lock at the fiftieth until the passcode is changed; three security event kinds (`MASTER_PASSCODE_USE`, `_FAILED`, `_LOCKOUT`); the domain's `actorOnly` tells the two users that are no person. What it leaves: BACKLOG C111. **Part 3 is done (ADR-440), and with it task 2.5.1:** a phone asks for a challenge by its id (`POST /phones/:deviceId/challenges`, `ANYBODY`, made for any id, nothing kept) and answers it with its signature (`POST /phones/:deviceId/proofs`), served by `apps/api/src/phone/`'s `PhoneProofs`; **a challenge is good once on the phone's own record** (`Device.lastAnsweredChallengeMadeAt`, compared and written in one statement; the database lets only that phone's own proof write it, only later, never for a revoked key); **what a proof writes is stated as the device key's own actor** (`byDeviceKey(deviceId)` in `packages/db`; user `…0003`, role `DEVICE_KEY`, seeded; only the API, only source `DEVICE`, always naming the phone; no column that names a user may name it); a proof gives a token (`PhoneTokens`, the policy value `PHONE_TOKEN_MINUTES`, 15) sent as `Authorization: Bearer`; **an endpoint open to a proven phone says `access: 'PROVEN_PHONE'`** and reads its phone with `phoneOf(request)`; a phone out of service still proves itself, one whose key is revoked proves nothing and its token stops at once; a refused proof is 401 `PHONE_NOT_PROVEN` and writes nothing; `GET /phones/current` is the first call open to a proven phone; the database holds a device key to its shape. **No story and no test of the API writes a phone by hand:** a story enrols with `story.enrolled(name, at?)` and proves with `story.proofs`; an API test with `enrolledPhone(served, tx, name)` and `proven(served, phone)` (`apps/api/test/support/phones.ts`). What it leaves: BACKLOG C112.
-- **Task 2.5.2 (monitors on phones) is in three parts (ADR-441), and part 1 is done (ADR-442):** what NIST SP 800-63B-4 and ASVS 5.0 ask of a monitor's sign-in, and where the firm's practice departs, is ADR-441; a monitor is created by `POST /phones/current/monitors` (`PROVEN_PHONE`, a phone in service, the master passcode in the body; the database issues the Monitor ID), served by `apps/api/src/phone/`'s `PhoneMonitors`; **`MasterPasscodeCheck` is the one check of the passcode for every act under it** (`check`, then `used` inside the act's own piece of work), shared by `Enrolment`; no migration. What it leaves: BACKLOG C113.
-- **The chain, seen whole on 2026-10-09 (ADR-442):** 130 test
-  files, 2,436 tests; lint clean; 421 licences allowed; eighteen stories (`sync` 49 checks); `pnpm security` 7 passed,
-  0 failed; ninety-three migrations; `installer:check` 29 `✓`. The expected output of each command is `adms-verify`'s.
+- **Task 2.5.2 (monitors on phones) is in three parts (ADR-441), and part 1 is done (ADR-442):** what NIST SP 800-63B-4 and ASVS 5.0 ask of a monitor's sign-in, and where the firm's practice departs, is ADR-441; a monitor is created by `POST /phones/current/monitors` (`PROVEN_PHONE`, a phone in service, the master passcode in the body; the database issues the Monitor ID), served by `apps/api/src/phone/`'s `PhoneMonitors`; **`MasterPasscodeCheck` is the one check of the passcode for every act under it** (`check`, then `used` inside the act's own piece of work), shared by `Enrolment`; no migration. What it leaves: BACKLOG C113. **Part 2 is done (ADR-443; ADR-441 (6) built as proposed, no reply being in the files):** a monitor signs in on a proven phone in service by `POST /phones/current/sign-ins` (Monitor ID and password; one refusal code, `SIGN_IN_REFUSED`; a phone out of service 409 before the password is read), served by `apps/api/src/phone/`'s `PhoneSignIns`; **the device's session is a row of `session` naming the phone** (`device_id`, two migrations: the column and its guard, so only a monitor's session names a phone and a monitor's must), good for `MONITOR_SESSION_HOURS` (12) from the sign-in and never ended by quiet; one monitor at a time on a phone; **its token is sent as `x-adms-monitor-session` beside the phone's `Authorization: Bearer`**; the access **`MONITOR_ON_PHONE`** reads both from the database on every request (`monitorOf(request)`), on `GET /phones/current/monitor` and `POST /phones/current/sign-outs`; wrong tries counted on the monitor's own record and written as the monitor from that phone (`WrongTries.wrong(person, on)`). A test signs a monitor in with `phone-sign-ins.test.ts`'s `created` and `signedIn` and sends `served.ask(…, { bearer, monitorSession })`. What it leaves: BACKLOG C114.
+- **The chain, seen whole on 2026-10-09 (ADR-443):** 131 test files, 2,452 tests (`packages/domain` 728, `packages/db` 1,008 in 42, `apps/api` 413 in 30 with `phone-sign-ins.test.ts`, 10); lint clean; 420 licences allowed on Linux (the user's Mac installs one Mac-only package more: 421); eighteen stories, every one passing (`sync` 49 checks, `golden-mission` 27); `pnpm security` 7 passed, 0 failed (the grant tests 1,008); ninety-five migrations; `installer:check` 29 `✓`. The expected output of each command is `adms-verify`'s.
 - **What exists:** `packages/db` (schema, guards, tests), `packages/domain` (every rule; one
   dependency, no database), `packages/contracts`, `packages/scenarios` (the harness and stories,
   the golden mission among them), `apps/worker/src/` (`reconciliation/`, the run: group, check,
@@ -391,24 +389,24 @@ questions.
 **Phase 2 is open (ADR-376). Its plan is `BACKLOG.md`, "Active — Phase 2" (ADR-377): read its
 brief first. One task per response.**
 
-**Task 2.5.2, part 2 of 3: a monitor signs in on a phone** *(BACKLOG 2.5.2; ADR-441 (5), (6);
-read ADR-441 and 442, C113, C112 and C90 first, and ARCHITECTURE §6 (Device sessions), §7.2)*.
-**Read the user's reply to ADR-441 (6) first, if any** (`SUMMARY.md` §4: the wait and lock at a
-monitor's login, the twelve hours, the out-of-service phone, the monitor with no assignment); with
-none, build as proposed and say so. A monitor signs in online with Monitor ID and password, on a
-call from a proven phone in service (`PROVEN_PHONE`, `phoneOf`): wrong tries counted on their own
-`user_credential` by sign-in's rule (`WrongTries` writes as `BACK_OFFICE` today: a phone's try is
-source `DEVICE`, on that phone), one refusal code; **the device's session: the proven phone plus the
-signed-in monitor**, read from the database on every request (an archived monitor, a password set
-anew and a revoked key each stop it at once), with `Admission`'s access for it; the same ID and
-password refused everywhere but a phone's calls (AC-02-39); a sign-in and a failure are security
-events naming the phone. Then part 3: the phone takes the monitor's assignment (AC-02-35), and the
-stories make and sign in their monitors through the services. **Done when (the part):** its
-scenarios pass at the API by ID, `pnpm openapi` is current, the chain is green with the new counts.
-**The user may still overturn ADR-442's defaults, ADR-440's, ADR-438's two choices or ADR-439's
-(`SUMMARY.md` §4).** **After a change to `apps/api` or `apps/worker`, `pnpm local:up` again; if
-Docker answers 500, quit and reopen it; if `local:up` meets `ECONNRESET` or a container whose layer
-is gone, `pnpm local:down` and `up` once more.**
+**Task 2.5.2, part 3 of 3: the phone takes the monitor's assignment** *(BACKLOG 2.5.2; ADR-441
+(5), 443; read ADR-443, C114, C113, C103 and ARCHITECTURE §7 (the ⚠️ ADR-240 note), §7.1's
+lists note first)*. A monitor signing in online on a proven phone is answered **their assignment
+for the project's own day** (the project's time zone; AC-02-35's part at the API: no passcode, no
+picking; one assignment, so one project, on a phone at a time); a monitor with none that day still
+signs in and is told there is none (ADR-441 (6)(d)); the lists themselves are 2.5.3's. Then **the
+stories make their monitors through `PhoneMonitors` and sign them in through `PhoneSignIns`**
+(the database issues Monitor IDs, so a story reads the ID it was given; `story.monitor(name)`
+beside `story.enrolled`), and no story writes a monitor by hand. **Done when:** AC-02-35 passes at
+the API by ID, `pnpm openapi` is current, the chain is green with the new counts, every story
+still passes with its numbers (the golden mission's among them). **The user may still overturn
+ADR-443's defaults, ADR-442's, ADR-440's, ADR-438's two choices or ADR-439's (`SUMMARY.md` §4).**
+**After a change to `apps/api` or `apps/worker`, `pnpm local:up` again; if Docker answers 500,
+quit and reopen it; if `local:up` meets `ECONNRESET` or a container whose layer is gone, `pnpm
+local:down` and `up` once more.** **On a Linux host (a cloud session), the containers run as uid
+1000:** after `pnpm installer` the two service env files, and after each `local:up` the copied
+Caddy root, must be readable by it (`chown 1000:1000`), or the API or worker fails to start
+(seen 2026-10-09, ADR-443's session log).
 
 **Every command starts with** `eval "$(fnm env --shell zsh)"`. The checks are `adms-verify`'s; the
 database tests, the map servers' tests, the stories and `pnpm security` need `pnpm local:up` first,

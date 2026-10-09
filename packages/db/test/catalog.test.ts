@@ -172,6 +172,8 @@ const triggers = [
   `CREATE TRIGGER user_credential_refuse_person_edit BEFORE UPDATE OF id, user_id, created_at ON public.user_credential FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
   `CREATE TRIGGER session_refuse_person_edit BEFORE UPDATE OF id, user_id, created_at ON public.session FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
   `CREATE TRIGGER session_refuse_edit_once_revoked BEFORE UPDATE ON public.session FOR EACH ROW WHEN ((old.revoked_at IS NOT NULL)) EXECUTE FUNCTION refuse_edit()`,
+  // The phone a monitor's session names never changes (ADR-443).
+  `CREATE TRIGGER session_refuse_device_edit BEFORE UPDATE OF device_id ON public.session FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
   `CREATE TRIGGER security_event_refuse_edit BEFORE UPDATE ON public.security_event FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
   // Which version a record of wrong tries is of never changes (ADR-438).
   `CREATE TRIGGER master_passcode_tries_refuse_version_edit BEFORE UPDATE OF id, version, created_at ON public.master_passcode_tries FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
@@ -187,6 +189,8 @@ const triggers = [
   `CREATE TRIGGER user_system_actor BEFORE INSERT OR UPDATE ON public."user" FOR EACH ROW EXECUTE FUNCTION user_system_actor_guard()`,
   // Which challenge a phone last answered: its own proof's alone, only ever later (ADR-440).
   `CREATE TRIGGER device_answered_challenge BEFORE INSERT OR UPDATE ON public.device FOR EACH ROW EXECUTE FUNCTION device_answered_challenge_guard()`,
+  // A monitor's session names a phone in service, and only theirs does (ADR-443).
+  `CREATE TRIGGER session_on_a_phone BEFORE INSERT ON public.session FOR EACH ROW EXECUTE FUNCTION session_on_a_phone_guard()`,
   // The firm's last admin stays (ADR-415).
   `CREATE TRIGGER user_last_admin BEFORE UPDATE OF role, archived_at ON public."user" FOR EACH ROW EXECUTE FUNCTION user_last_admin_guard()`,
   // Only a release writes a list value's key (ADR-302).

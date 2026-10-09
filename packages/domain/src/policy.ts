@@ -64,6 +64,9 @@ export const policyNames = {
   // And how long the token a proof gives the phone is good for, in minutes (NIST SP 800-63B-4
   // §5.1; ADR-440): the calls of one sync carry it, and a phone proves itself again for another.
   phoneTokenMinutes: 'PHONE_TOKEN_MINUTES',
+  // How long a monitor's sign-in on a phone lasts, in hours, whatever is asked of it; quiet
+  // doesn't end it (ARCHITECTURE §6, Device sessions; NIST SP 800-63B-4 §2.2.3; ADR-443).
+  monitorSessionHours: 'MONITOR_SESSION_HOURS',
   // Rate limits (ARCHITECTURE §6, Abuse; ASVS 2.4.1; ADR-416): how long the stretch is that
   // requests are counted over, in seconds; how many one address and one signed-in person may send
   // in it; and how many callers' counts the server keeps at once.
@@ -137,6 +140,7 @@ const ranges: Record<PolicyName, { least: number; most: number }> = {
   [policyNames.twoStepSetupMinutes]: { least: 1, most: 60 },
   [policyNames.phoneChallengeSeconds]: { least: 10, most: 600 },
   [policyNames.phoneTokenMinutes]: { least: 1, most: 60 },
+  [policyNames.monitorSessionHours]: { least: 1, most: 24 },
   [policyNames.rateLimitWindowSeconds]: { least: 1, most: 3600 },
   [policyNames.rateLimitRequestsPerAddress]: { least: 1, most: Number.MAX_SAFE_INTEGER },
   [policyNames.rateLimitRequestsPerAccount]: { least: 1, most: Number.MAX_SAFE_INTEGER },
@@ -179,6 +183,7 @@ export class Policy {
   readonly twoStepSetupMinutes: number;
   readonly phoneChallengeSeconds: number;
   readonly phoneTokenMinutes: number;
+  readonly monitorSessionHours: number;
   readonly rateLimitWindowSeconds: number;
   readonly rateLimitRequestsPerAddress: number;
   readonly rateLimitRequestsPerAccount: number;
@@ -220,6 +225,7 @@ export class Policy {
     this.twoStepSetupMinutes = Policy.read(values, policyNames.twoStepSetupMinutes);
     this.phoneChallengeSeconds = Policy.read(values, policyNames.phoneChallengeSeconds);
     this.phoneTokenMinutes = Policy.read(values, policyNames.phoneTokenMinutes);
+    this.monitorSessionHours = Policy.read(values, policyNames.monitorSessionHours);
     this.rateLimitWindowSeconds = Policy.read(values, policyNames.rateLimitWindowSeconds);
     this.rateLimitRequestsPerAddress = Policy.read(values, policyNames.rateLimitRequestsPerAddress);
     this.rateLimitRequestsPerAccount = Policy.read(values, policyNames.rateLimitRequestsPerAccount);

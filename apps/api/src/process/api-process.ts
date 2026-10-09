@@ -44,6 +44,8 @@ import { PhoneMonitors } from '../phone/phone-monitors.ts';
 import { PhoneChallenges } from '../phone/phone-challenges.ts';
 import { apiPhoneProofs } from '../phone/phone-proofs.controller.ts';
 import { PhoneProofs } from '../phone/phone-proofs.ts';
+import { apiPhoneSignIns } from '../phone/phone-sign-ins.controller.ts';
+import { PhoneSignIns } from '../phone/phone-sign-ins.ts';
 import { PhoneTokens } from '../phone/phone-tokens.ts';
 import { Acceptances } from '../review/acceptances.ts';
 import { BackOfficeRecords } from '../review/back-office-records.ts';
@@ -259,6 +261,15 @@ export class ApiProcess {
       clock,
       challengeSeconds: policy.phoneChallengeSeconds,
     });
+    // A monitor's sign-in on a proven phone (task 2.5.2, part 2).
+    const phoneSignIns = new PhoneSignIns(database, {
+      tokens,
+      hasher,
+      tries,
+      clock,
+      hours: policy.monitorSessionHours,
+      requestNow,
+    });
     // The master passcode's one check, for every act under it (tasks 2.5.1, 2.5.2).
     const passcodeCheck = new MasterPasscodeCheck(database, {
       rules: new MasterPasscodeTries(policy),
@@ -318,6 +329,7 @@ export class ApiProcess {
             }),
           ],
           [apiPhoneProofs, phoneProofs],
+          [apiPhoneSignIns, phoneSignIns],
           [
             apiMasterPasscode,
             new MasterPasscode(database, {
@@ -334,7 +346,9 @@ export class ApiProcess {
       { logger: new ProcessLog(server.log) },
     );
     app.useGlobalFilters(new ErrorFilter());
-    app.useGlobalInterceptors(new Boundary(new Admission(sessions, tokens, limits, phoneProofs)));
+    app.useGlobalInterceptors(
+      new Boundary(new Admission(sessions, tokens, limits, phoneProofs, phoneSignIns)),
+    );
     app.enableShutdownHooks();
     return new ApiProcess(app, routes, settings);
   }

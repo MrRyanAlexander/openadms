@@ -7,7 +7,8 @@
 //
 // Nobody is signed in when a try fails, and every write states a person. The write is stated as
 // the person whose login was tried: the row is theirs, and the event says the try failed, never
-// that they made it (ADR-409).
+// that they made it (ADR-409). A try a phone made at a monitor's login (ADR-443) is written as a
+// phone's write, naming that phone, and the security events name it too.
 import type { Database } from '@open-adms/db';
 import type { SignInTries, WrongTry } from '@open-adms/domain';
 
@@ -23,6 +24,11 @@ export interface TriedPerson {
   readonly id: string;
   readonly name: string;
   readonly email: string | null;
+}
+
+// The proven phone a try came from: a monitor's sign-in on a phone (ADR-443).
+export interface TriedOn {
+  readonly deviceId: string;
 }
 
 export interface WrongTriesParts {
@@ -48,10 +54,14 @@ export class WrongTries {
   }
 
   // One more wrong try at the person's login: counted, and a wait or the lock put on it.
-  async wrong(person: TriedPerson): Promise<WrongTry> {
+  async wrong(person: TriedPerson, on?: TriedOn): Promise<WrongTry> {
     const now = this.parts.clock.now();
     const requestId = this.parts.requestNow();
-    const cost = await this.db.$write({ actorId: person.id, source: 'BACK_OFFICE' }, async (tx) => {
+    const writer =
+      on === undefined
+        ? { actorId: person.id, source: 'BACK_OFFICE' as const }
+        : { actorId: person.id, source: 'DEVICE' as const, deviceId: on.deviceId };
+    const cost = await this.db.$write(writer, async (tx) => {
       const { failedSignIns } = await tx.userCredential.update({
         where: { userId: person.id },
         data: { failedSignIns: { increment: 1 } },
@@ -64,14 +74,21 @@ export class WrongTries {
           data: { lockedUntil: after.until },
         });
       }
-      const event = { userId: person.id, occurredAt: now, ...(requestId ? { requestId } : {}) };
+      const event = {
+        userId: person.id,
+        occurredAt: now,
+        ...(on === undefined ? {} : { deviceId: on.deviceId }),
+        ...(requestId ? { requestId } : {}),
+      };
       await tx.securityEvent.create({ data: { ...event, kind: 'SIGN_IN_FAILED' } });
       if (after.kind === 'LOCKED') {
         await tx.securityEvent.create({ data: { ...event, kind: 'LOCKOUT' } });
       }
       return after;
     });
-    if (cost.kind === 'LOCKED') await this.tellLocked(person);
+    // A monitor has no reset by email, and no sign-in page that says so: an admin sets their
+    // password anew. They aren't sent this message.
+    if (cost.kind === 'LOCKED' && on === undefined) await this.tellLocked(person);
     return cost;
   }
 

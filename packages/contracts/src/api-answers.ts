@@ -37,7 +37,8 @@ export const errorCodes = [
   // A sign-in that didn't work. One code whatever the reason: a name nobody has, a wrong
   // password, a login that waits or is locked, one that may not sign in here (ADR-409).
   'SIGN_IN_REFUSED',
-  // No session, or one that has ended: signed out, run out, revoked (ADR-408).
+  // No session, or one that has ended: signed out, run out, revoked (ADR-408); on a phone, no
+  // monitor signed in on it, or a sign-in that has ended (ADR-443).
   'NOT_SIGNED_IN',
   // A call with a session's cookie and without the session's CSRF value (ADR-408).
   'CSRF_REFUSED',
@@ -493,3 +494,28 @@ export const monitorCreatedAnswerSchema = z.strictObject({
 });
 
 export type MonitorCreatedAnswer = z.infer<typeof monitorCreatedAnswerSchema>;
+
+// A monitor signed in on a phone (ARCHITECTURE §6, Device sessions; §7.2; AC-02-39; ADR-441,
+// 443): who, by their id, Monitor ID and name as kept, and how long the sign-in lasts. The token
+// is the phone's to keep in its secure storage and send, beside its own proof's token, in the
+// header the contracts name; the server keeps only its hash. Never the password.
+export const monitorSignedInAnswerSchema = z.strictObject({
+  token: z.string().min(1),
+  userId: z.uuid(),
+  monitorNumber: z.string().regex(/^M\d{6,}$/),
+  name: z.string(),
+  expiresInSeconds: z.number().int().min(1),
+});
+
+export type MonitorSignedInAnswer = z.infer<typeof monitorSignedInAnswerSchema>;
+
+// The monitor signed in on a phone, as the server has them now, and how long their sign-in has
+// left. Never the token.
+export const phoneMonitorAnswerSchema = z.strictObject({
+  userId: z.uuid(),
+  monitorNumber: z.string().regex(/^M\d{6,}$/),
+  name: z.string(),
+  expiresInSeconds: z.number().int().min(0),
+});
+
+export type PhoneMonitorAnswer = z.infer<typeof phoneMonitorAnswerSchema>;

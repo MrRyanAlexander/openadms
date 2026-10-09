@@ -3,7 +3,7 @@
 // hang on the proxy a firm puts in front. CORS answers an origin only when it is, whole, one of
 // the configured list: no wildcard, no pattern, nothing by ending or hosting domain. An origin off
 // the list is told nothing about itself; the browser then keeps the answer from its page.
-import { csrfHeader, endpointMethods } from '@open-adms/contracts';
+import { csrfHeader, endpointMethods, monitorSessionHeader } from '@open-adms/contracts';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 
 // An API answer is data, never a page: nothing may frame it, run it, guess its type or keep it.
@@ -56,8 +56,9 @@ export function answersWith(
       void reply
         .headers({
           'access-control-allow-methods': endpointMethods.join(', '),
-          // The field app's pages send a proven phone's token as Authorization (ADR-440).
-          'access-control-allow-headers': `content-type, ${csrfHeader}, authorization`,
+          // The field app's pages send a proven phone's token as Authorization (ADR-440), and
+          // the signed-in monitor's in a header of its own (ADR-443).
+          'access-control-allow-headers': `content-type, ${csrfHeader}, authorization, ${monitorSessionHeader}`,
         })
         .status(204)
         .send();

@@ -322,6 +322,7 @@ describe('a session', () => {
     const { db, world } = tested;
     expect(await columnsOf('session')).toEqual([
       'created_at',
+      'device_id',
       'expires_at',
       'id',
       'refresh_token_hash',
@@ -386,6 +387,7 @@ describe('a session', () => {
         domain: 'SECURITY',
         changed_fields: [
           'created_at',
+          'device_id',
           'expires_at',
           'id',
           'refresh_token_hash',
@@ -456,6 +458,139 @@ describe('a session', () => {
       expect((await db.refused(sql)).code, sql).toBe(refusedBy.grant);
     }
     expect((await db.refused(open, [world.admin, sha256('x'), null])).code).toBe(refusedBy.notNull);
+  });
+});
+
+describe('a monitor’s session on a phone (ADR-443)', () => {
+  const onPhone = `INSERT INTO "session" ("user_id", "refresh_token_hash", "expires_at", "device_id")
+    VALUES ($1, $2, $3, $4) RETURNING "id"::text`;
+  const ends = '2026-10-12T22:00:00Z';
+
+  // Ana signing in on her phone, as the API writes it: as Ana, from that phone.
+  async function asAnaOnHerPhone(deviceId?: string): Promise<void> {
+    const { db, world } = tested;
+    await db.as('adms_api');
+    await db.actor(world.monitor, 'DEVICE', { deviceId: deviceId ?? world.device });
+  }
+
+  it('AC-02-39 a monitor’s session names the phone they signed in on, and no other session names one: a monitor’s ID and password open nothing but a phone', async () => {
+    const { db, world } = tested;
+    await asAnaOnHerPhone();
+    const { id } = await db.one<{ id: string }>(onPhone, [
+      world.monitor,
+      sha256(aToken),
+      ends,
+      world.device,
+    ]);
+    expect(
+      await db.one(`SELECT "device_id"::text AS device FROM "session" WHERE "id" = $1`, [id]),
+    ).toEqual({ device: world.device });
+    // Ana's session with no phone, as the back office's sign-in would open one.
+    await asTheApi();
+    const noPhone = await db.refused(open, [world.monitor, sha256('ana-web'), ends]);
+    expect([noPhone.code, noPhone.message]).toEqual([
+      refusedBy.trigger,
+      'A monitor signs in on a phone only: their session names the phone',
+    ]);
+    // Dana's session on a phone, even stated as hers from that phone.
+    await db.actor(world.admin, 'DEVICE', { deviceId: world.device });
+    const admin = await db.refused(onPhone, [
+      world.admin,
+      sha256('dana-phone'),
+      ends,
+      world.device,
+    ]);
+    expect([admin.code, admin.message]).toEqual([
+      refusedBy.trigger,
+      'Only a monitor in service signs in on a phone',
+    ]);
+  });
+
+  it('is opened by the monitor’s own sign-in, from that phone: stated as anybody else, from the back office or from another phone, it is refused', async () => {
+    const { db, world } = tested;
+    await db.as('adms_api');
+    for (const [actorId, source, deviceId] of [
+      [world.admin, 'DEVICE', world.device],
+      [world.monitor, 'BACK_OFFICE', ''],
+      [world.monitor, 'BACK_OFFICE', world.device],
+      [world.monitor, 'DEVICE', ''],
+      [world.monitor, 'DEVICE', '00000000-0000-7000-8000-00000000abcd'],
+    ] as const) {
+      await db.actor(actorId, source, { deviceId });
+      const refusal = await db.refused(onPhone, [
+        world.monitor,
+        sha256(`${actorId}${source}${deviceId}`),
+        ends,
+        world.device,
+      ]);
+      expect([refusal.code, refusal.message], `${actorId} ${source} ${deviceId}`).toEqual([
+        refusedBy.grant,
+        "A monitor's session is opened by their own sign-in, on that phone",
+      ]);
+    }
+  });
+
+  it('ADR-134, 441 (6) a phone out of service, or one whose key is revoked, signs nobody in; nor is an archived monitor signed in', async () => {
+    const { db, world } = tested;
+    await asTheApi();
+    await db.run(`UPDATE "user" SET "archived_at" = '2026-10-12T09:00:00Z' WHERE "id" = $1`, [
+      world.monitor,
+    ]);
+    await asAnaOnHerPhone();
+    const archived = await db.refused(onPhone, [world.monitor, sha256('a'), ends, world.device]);
+    expect([archived.code, archived.message]).toEqual([
+      refusedBy.trigger,
+      'Only a monitor in service signs in on a phone',
+    ]);
+    await asTheApi();
+    await db.run(`UPDATE "user" SET "archived_at" = NULL WHERE "id" = $1`, [world.monitor]);
+    await db.run(
+      `UPDATE "device" SET "status" = 'LOST', "out_of_service_at" = '2026-10-12T09:30:00Z'
+       WHERE "id" = $1`,
+      [world.device],
+    );
+    await asAnaOnHerPhone();
+    const lost = await db.refused(onPhone, [world.monitor, sha256('b'), ends, world.device]);
+    expect([lost.code, lost.message]).toEqual([
+      refusedBy.trigger,
+      'A phone out of service signs nobody in',
+    ]);
+    await asTheApi();
+    await db.run(`UPDATE "device" SET "key_revoked_at" = '2026-10-12T10:00:00Z' WHERE "id" = $1`, [
+      world.device,
+    ]);
+    await asAnaOnHerPhone();
+    const revoked = await db.refused(onPhone, [world.monitor, sha256('c'), ends, world.device]);
+    expect([revoked.code, revoked.message]).toEqual([
+      refusedBy.trigger,
+      'A phone out of service signs nobody in',
+    ]);
+  });
+
+  it('the phone it names never changes, nor is one given to a session that had none; it ends when revoked', async () => {
+    const { db, world } = tested;
+    await asAnaOnHerPhone();
+    const { id } = await db.one<{ id: string }>(onPhone, [
+      world.monitor,
+      sha256(aToken),
+      ends,
+      world.device,
+    ]);
+    await asTheApi();
+    const web = await db.one<{ id: string }>(open, [world.admin, sha256('dana'), ends]);
+    for (const [session, to] of [
+      [id, null],
+      [id, '00000000-0000-7000-8000-00000000abcd'],
+      [web.id, world.device],
+    ] as const) {
+      const refusal = await db.refused(`UPDATE "session" SET "device_id" = $2 WHERE "id" = $1`, [
+        session,
+        to,
+      ]);
+      expect(refusal.code, `${session} ${String(to)}`).toBe(refusedBy.trigger);
+    }
+    await asAnaOnHerPhone();
+    expect(await db.run(`UPDATE "session" SET "revoked_at" = now() WHERE "id" = $1`, [id])).toBe(1);
   });
 });
 

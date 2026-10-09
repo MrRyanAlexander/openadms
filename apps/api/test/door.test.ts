@@ -205,7 +205,7 @@ describe('what every answer carries, and which pages may read one, through the d
     // Its page may send the session's cookies and the CSRF header with a call (ADR-408).
     expect(asked.headers['access-control-allow-credentials']).toBe('true');
     expect(asked.headers['access-control-allow-headers']).toBe(
-      'content-type, x-adms-csrf, authorization',
+      'content-type, x-adms-csrf, authorization, x-adms-monitor-session',
     );
   });
 

@@ -564,8 +564,14 @@ describe('the log', () => {
       await served.ask('POST', `/people/${dana}/two-step-clearings`, second);
 
       const parsed = served.lines.map((line) => JSON.parse(line) as Record<string, unknown>);
-      // Each line about a sign-in or an authenticator carries its request's id.
-      const about = parsed.filter((line) => /sign-in|authenticator/.test(String(line['msg'])));
+      // Each line about a sign-in or an authenticator carries its request's id. The process's
+      // own lines at its start, naming each route it serves (a phone's sign-ins among them,
+      // ADR-443), are about no request.
+      const about = parsed.filter(
+        (line) =>
+          /sign-in|authenticator/.test(String(line['msg'])) &&
+          !String(line['msg']).startsWith('Mapped {'),
+      );
       expect(about).toHaveLength(9);
       expect(about.every((line) => typeof line['requestId'] === 'string')).toBe(true);
       const said = (msg: string) =>
