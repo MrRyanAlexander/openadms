@@ -120,8 +120,9 @@ What each kind captures and bills, bands, stumps and fill: `adms-ticket-workflow
 
 Started as "start → pick the work type or type → details" (ADR-127): **ROE** (number, parcel, owner,
 signed and date, scope, a photo of the signed form; ADR-149, 181), **pre-work** and **post-work
-survey** (linked by ROE number; ADR-150), **incident** (type, then the firm's sub-type; records only,
-never stops work; ADR-052, 137), **citizen drop-off log** at a site (no quantity, number or cost;
+survey** (linked by ROE number; ADR-150), **incident** (type, then the firm's sub-type, then whichever of the contractor involved, a cert
+number and an ROE number the project offers, each optional; records only, never stops work;
+ADR-052, 137, 328), **citizen drop-off log** at a site (no quantity, number or cost;
 ADR-184, 188). Surveys, ROE forms, incidents and drop-off logs may carry the firm's own fields
 (ADR-160). Each is QC'd on its own (ADR-168).
 

@@ -4,6 +4,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { refusedBy } from './support/database.ts';
+import { eventInsertOf, fieldEventLike } from './support/example-world.ts';
 import { eachTestRolledBack } from './support/lifecycle.ts';
 
 const tested = eachTestRolledBack();
@@ -14,29 +15,21 @@ interface Synced {
   ticketNumber: string;
   splitSuffix?: string;
   loadCall?: number | null;
+  estimateCy?: number;
 }
 
 // A field event on P1 as the API writes it at sync; the test picks the shape.
 function syncStatement(event: Synced): [string, unknown[]] {
-  const { world } = tested;
-  return [
-    `INSERT INTO "field_event" ("id", "project_id", "workflow", "kind", "ticket_number",
-       "split_suffix", "monitor_id", "device_id", "assignment_id", "setup_version", "started_at",
-       "ended_at", "device_utc_offset_minutes", "load_call")
-     VALUES (uuidv7(), $1, $2, $3, $4, $5, $6, $7, $8, 1, '2026-10-13T13:00:00Z',
-       '2026-10-13T13:25:00Z', -240, $9)`,
-    [
-      world.p1,
-      event.workflow,
-      event.kind,
-      event.ticketNumber,
-      event.splitSuffix ?? '',
-      world.monitor,
-      world.device,
-      world.assignments.p1,
-      event.loadCall ?? null,
-    ],
-  ];
+  return eventInsertOf(
+    fieldEventLike(tested.world, {
+      workflow: event.workflow,
+      kind: event.kind,
+      ticket_number: event.ticketNumber,
+      split_suffix: event.splitSuffix ?? '',
+      load_call: event.loadCall ?? null,
+      estimate_cy: event.estimateCy ?? null,
+    }),
+  );
 }
 
 async function sync(event: Synced): Promise<void> {
@@ -96,43 +89,20 @@ describe('a field event', () => {
     expect(
       await refusedSync({ workflow: 'LOAD', kind: 'COLLECTION', ticketNumber: '101001' }),
     ).toBe(refusedBy.unique);
-    // A split load's collections, one per property, and a unit rate ticket reusing the number.
-    await sync({ workflow: 'LOAD', kind: 'COLLECTION', ticketNumber: '102001', splitSuffix: 'A' });
-    await sync({ workflow: 'LOAD', kind: 'COLLECTION', ticketNumber: '102001', splitSuffix: 'B' });
-    await sync({ workflow: 'UNIT_RATE', kind: 'UNIT_RATE', ticketNumber: '101001' });
-  });
-});
-
-describe('a completed load', () => {
-  it("links each field event once, so a load can't bill twice", async () => {
-    const { db, world } = tested;
-    // Two events no completed load links yet, so each attempt below breaks exactly one key.
-    await db.as('adms_api');
-    await sync({ workflow: 'LOAD', kind: 'COLLECTION', ticketNumber: '101040' });
-    await sync({ workflow: 'LOAD', kind: 'DISPOSAL', ticketNumber: '101040', loadCall: 60 });
-    const unlinked = await db.one<{ collection: string; disposal: string }>(
-      `SELECT max("id"::text) FILTER (WHERE "kind" = 'COLLECTION') AS collection,
-         max("id"::text) FILTER (WHERE "kind" = 'DISPOSAL') AS disposal
-       FROM "field_event" WHERE "project_id" = $1 AND "ticket_number" = '101040'`,
-      [world.p1],
-    );
-    const linked = world.loads.l101001;
-    await db.as('adms_worker');
-    await db.actor(world.worker, 'SYSTEM');
-    const conclude = `INSERT INTO "completed_load" ("project_id", "ticket_number", "collection_event_id", "disposal_event_id", "updated_at")
-       VALUES ($1, $2, $3, $4, now())`;
-    for (const [what, ticket, collectionId, disposalId] of [
-      ['its collection again', '101040', linked.collection, unlinked.disposal],
-      ['its disposal again', '101040', unlinked.collection, linked.disposal],
-      ['its ticket number again', '101001', unlinked.collection, unlinked.disposal],
-    ]) {
-      expect(
-        (await db.refused(conclude, [world.p1, ticket, collectionId, disposalId])).code,
-        what,
-      ).toBe(refusedBy.unique);
+    // A split load's collections, one per property, each with its estimate (ADR-055, 325), and a
+    // unit rate ticket reusing the number.
+    for (const [splitSuffix, estimateCy] of [
+      ['A', 12],
+      ['B', 18],
+    ] as const) {
+      await sync({
+        workflow: 'LOAD',
+        kind: 'COLLECTION',
+        ticketNumber: '102001',
+        splitSuffix,
+        estimateCy,
+      });
     }
-    expect(
-      await db.run(conclude, [world.p1, '101040', unlinked.collection, unlinked.disposal]),
-    ).toBe(1);
+    await sync({ workflow: 'UNIT_RATE', kind: 'UNIT_RATE', ticketNumber: '101001' });
   });
 });

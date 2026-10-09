@@ -2,9 +2,9 @@
 name: adms-ledger-audit
 description: Open ADMS money and the permanent record, in today's rules. Covers pay items (the only place a rate lives, one rate per prime), how a ticket is priced (the rules of its form that name its prime's contract, Add transaction in # order, Remove, Void ticket), quantity and rate, the Transaction ledger (the current truth, regenerated per ticket, each removed row copied to the audit log first), rate and rule changes, the append-only AuditRecord written by the database, QC status, the invoice lock and invoice batches, and the client package. Use when touching pay items, rates, transactions, pricing, the audit trail, QC, invoicing or anything that must leave an immutable trail. The rule builder's screens and every criterion are spec/RULES.md; how the worker runs rules and the pricing flags are adms-validation §5.3.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-249; a pay item names no form, ADR-292) -->
+<!-- skill-status: current (QC, the lock, batches and the unlock as services, ADR-367; ADR-138, rewritten 2026-09-29, ADR-249; a pay item names no form, ADR-292; a unique code and a description, a duplicate rule refused, ADR-301; cent rounding, a crew day's decimals and hours in no step, ADR-355) -->
 
-> **This page states today's rules** (through ADR-248). Each rule cites its ADR; what changed is in
+> **This page states today's rules** (last changed by ADR-301, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
 > `agent_store/SUMMARY.md` disagree, SUMMARY wins: log a KD (`adms-decisions`). The worked example
 > is `spec/golden/MISSION.md` §1 and §4; names and examples follow `spec/CONVENTIONS.md` (the pay
@@ -27,10 +27,9 @@ of the paper contract in by hand (ADR-089, 109). Each pay item holds:
 
 | Field | What it is | ADRs |
 |---|---|---|
-| **Code** | The firm's own string; setup **suggests** one from the convention (`VEG-HAUL-CY-15`, `TIP-FEE-CY-BCL`), never forces it. Codes and names may repeat: a dated rate change can be a second `VEG-HAUL-CY-15` with *Ticket date* criteria on the two rules | 109, 147, 235 |
-| **Name** | What people read ("ROW VEG haul 0–15 mi") | 207 |
+| **Code** | The firm's own string; setup **suggests** one from the convention (`VEG-HAUL-CY-15`, `TIP-FEE-CY-BCL`), never forces it. **Unique on its project**, archived pay items included: a rate that changes from a date is a second pay item with a code of its own, whatever the firm calls it, with *Ticket date* criteria on the two rules. **User, 2026-10-02:** "The "code" is the number+chars you assign it. This must be unique per project." | 109, 235, 301 |
+| **Description** | What the work is, in the firm's own words ("ROW VEG haul 0–15 mi"), shown with the code wherever a pay item is listed or exported. Nothing reads it; two may share one. There is no separate name. **User, 2026-10-02:** "The code should be unique, but the decription should be whatever the firm wants to make it." | 207, 301 |
 | **Payable type** | **The work** it prices, from the firm's list; each pay item is a priced line of it (the same work at two rates by distance is two pay items of one payable type). Every pay item has one, loads, haul-outs and fees included; exported as the type column | 173, 207, 221, 239 |
-| **Description** | The contract's words and line number, so every rate traces back to the contract | 207 |
 | **Unit of Measure** | A billing unit (`CY` `TN` `EA` `LB` `HR` `CREW_DAY` `TBN`); `TN` or `LB` means the load is weighed | 221, 223 |
 | **Size band** | From, to: its place among the pay items of one payable type (the phone and the engine pick the pay item by it) | 210, 213, 217 |
 | **Capture settings** | "Count is always 1", "GPS required", "Measurement required", "Decimals allowed", photos required, "Monitor may mark ineligible", quantity "from the tickets it carries"; for crew time, how hours become a quantity | 087, 157, 192, 210 |
@@ -97,7 +96,8 @@ load lacks (that line bills nothing); a site that charges a tipping fee with no 
 ### 6.1b Quantity and rate
 
 **Cost = quantity × rate.** The **rate** is the pay item's rate **for the rule's contract's prime**
-(ADR-212). The **quantity** comes from the pay item's Unit of Measure; the formulas are
+(ADR-212). **The amount is rounded to the cent a half up**, and it is the quantity as the line keeps
+it (four decimals) × the rate (**User, 2026-10-05**, picking "Half up"; ADR-355). The **quantity** comes from the pay item's Unit of Measure; the formulas are
 `adms-validation` §5.5:
 
 | Unit | Quantity | ADRs |
@@ -106,8 +106,8 @@ load lacks (that line bills nothing); a site that charges a tipping fee with no 
 | `TN` | the scale weight (a tandem's split by certified capacity, both flagged) | 175, `adms-scale-receipts` |
 | `EA` | the count: white goods, **every item removed** (or the items a rule's *Quantity from* chooses) | 126, 128, 131 |
 | `LB` | the pounds the monitor entered as the count (HHW) | 054 |
-| `HR`, `CREW_DAY` | **the highest item's hours, once**, through the pay item's conversion (per hour, ÷ the day length, or steps) | 084, 087, 126 |
-| `TBN` | nothing: the ticket completes and writes no money until the rate is agreed; then its tickets reprocess | 068 |
+| `HR`, `CREW_DAY` | **the highest item's hours, once**, through the pay item's conversion (per hour, ÷ the day length, or steps). By exact division the quantity keeps **four decimals** (10.25 h ÷ 12 = 0.8542); hours that fall **in no step bill nothing on that line, flagged** (the user, 2026-10-05, ADR-355) | 084, 087, 126, 355 |
+| `TBN` | nothing: no line is written and the ticket is flagged "rate to be negotiated. Not billed yet.", so it is `MANUAL_REVIEW` like any flagged ticket until a reviewer accepts the flag (then `COMPLETED`, still billing nothing on that line); its other lines bill. When the rate is agreed and entered, its tickets reprocess (the user, 2026-10-06, ADR-373; KD-72 closed) | 068, 373 |
 
 **Who bills** (ADR-060): `COMPLETED` **and `MANUAL_REVIEW`** tickets bill wherever an amount can be
 computed; review means "resolve this", not "hold the money". **User, 2026-09-24 (Q-13):** "Things
@@ -144,6 +144,15 @@ table: the audit log is the only history.
 - **QC marks, locks, batch membership and flag acceptances are people's records**, each its own
   record written by the API and keyed to what it marks, so the API never writes a derived row and a
   reprocess never loses one (agent default, ADR-245; `adms-data-model` §3.1b).
+- **Built (ADR-367; agent defaults, the user's to overturn):** `apps/api`'s `QcMarks` and
+  `InvoiceLocks`. A ticket locks only when it is whole, `COMPLETED` and QC Approved; a void ticket
+  isn't locked (it bills nothing); a `COMPLETED` ticket that bills nothing is. **While a lock
+  stands, the review services refuse any change to the ticket's own records** (a correction, a
+  renumber, a void, an acceptance, its QC mark): "Ticket 101001 is locked as invoiced: unlock it
+  first. Nothing was changed." A record several tickets share (a certification, an ROE, a scale
+  receipt) is still corrected, and each locked ticket on it waits for its unlock. The unlock is a
+  grant of its own, kept on the lock's row with who, when and a note, and answers the run that
+  works the ticket again. Closing a project marks it closed and refuses nothing.
 - **The client package** is the deliverable: the project's final tickets with photos and receipts,
   its transactions and its other records, **assembled by hand** by the back office from the exports
   and zipped. The system doesn't generate it and moves no money (ADR-057, 061, 088).
@@ -212,3 +221,8 @@ What this page used to say, and why it changed. Never build from the left-hand s
   pay item, the example world (ADR-234, 235, 237).
 - Round 13–22 and ADR-239 ⚠️ notes stacked on the historical body → absorbed; rewritten in the present
   tense (ADR-138, 249).
+- "Codes and names may repeat" (a dated rate change as a second pay item with the same code), a pay
+  item's separate name, and a description holding "the contract's words and line number" → the code
+  is unique on its project; a pay item's texts are its code and its description, the firm's own
+  words; "line number" was never the user's. ADR-147 had read the user's "Yes" to an either-or
+  question the wrong way round (ADR-147, 207, 235 → 301).

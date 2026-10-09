@@ -1,10 +1,10 @@
 ---
 name: adms-certifications
-description: Open ADMS certifications, in today's rules. Read before touching any certification code. Covers why a certification certifies a container or a crew and never a vehicle (a crew is its certification), why both share one base, the exact capacity math (whole inches, a primary box plus add/subtract boxes with optional ÷2, a two-length hoist, a round bottom, a radius corner, rounded to hundredths each step, ÷46,656, then a whole CY half up), why the cert number IS the placard and badge number (system-issued from the project's series in phone blocks, or pre-printed; unique per project), how it reaches a field event, the lifecycle (tag expiry, revoke, replace, copy to another project, a truck keyed in by hand; never ends on its own), attestation and QC, five photos, and the real paper form. Use when working on certifications, placards, badges, cert numbers, containers, crews or capacity.
+description: Open ADMS certifications, in today's rules. Read before touching any certification code. Covers why a certification certifies a container or a crew and never a vehicle (a crew is its certification), why both share one base, the exact capacity math (whole inches, a primary box plus add/subtract boxes with optional ÷2, a two-length hoist, a round bottom, a radius corner, rounded to hundredths each step, ÷46,656, then a whole CY half up), why the cert number IS the placard and badge number (system-issued from the project's series in phone blocks, or pre-printed; unique per project), how it reaches a field event, the lifecycle (tag expiry, revoke, replace, never copied, a truck keyed in by hand; never ends on its own), attestation and QC, five photos, and the real paper form. Use when working on certifications, placards, badges, cert numbers, containers, crews or capacity.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-250; the driver shown from the certification, ADR-289; helpers picked, ADR-294) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-250; the driver shown from the certification, ADR-289; helpers picked, ADR-294; the capacity math built, ADR-320; the records and the service built, ADR-321; never copied, ADR-328…330) -->
 
-> **This page states today's rules** (through ADR-249). Each rule cites its ADR; what changed is in
+> **This page states today's rules** (last changed by ADR-294, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
 > `agent_store/SUMMARY.md` disagree, SUMMARY wins: log a KD (`adms-decisions`). The worked example
 > is `spec/golden/MISSION.md`; names and examples follow `spec/CONVENTIONS.md` (its example world's
@@ -52,7 +52,7 @@ subject is measured** (ADR-009, 015):
    the cert number (§3A.4) · project · prime · sub and its tier (1 or 2) ·
    driver (name, phone, licence: recorded, never checked) · tag, state, expiry ·
    vehicle type and features · date and time · five photos · certifying monitor,
-   helpers, representatives' names · QC status · replaces / copied-from links ·
+   helpers, representatives' names · QC status · the replaces link ·
    revoked-from date and reason
               │                                   │
               ▼                                   ▼
@@ -188,10 +188,12 @@ typed 60, certified 65") (ADR-154).
      (sideboards added, 14 Oct)" / "replaced by 730420 on 14 Oct"); a **MOD** label may show beside the
      number, display only, **never a prefix**. The old number's field events after that date are
      flagged.
-   - **The same truck on another project** → **copy** it: a new number from that project's series and
-     a reference to the original. **User, 2026-09-27 (Q-143):** "Copy the cert. Give the new cert a
-     number. Created a reference to the old. If a mistake is later found in the copied version, the
-     older version is flagged for review."
+   - **The same truck on another project** → **certified there from scratch**, as any truck is. A
+     certification is **never copied** (ADR-328, 329). **User, 2026-10-04:** "We need to scrap
+     copying certifications. This would be like copying tickets or incidents or surveys, all of
+     which cannot and should not be able to be copied." … "a truck that moves to a second project
+     is certified there from scratch — measured and photographed again, with that project's own
+     number."
    - **Never deleted**: it is the evidence that a measurement was taken (invariant 1).
 5. **Attestation and QC** (ADR-080, 107): the certifying monitor, who makes and
    measures it, is recorded automatically; a **helper is picked** from the people assigned to the
@@ -210,7 +212,16 @@ typed 60, certified 65") (ADR-154).
 The capacity math and the number blocks in `packages/domain` (shared by the phone and the server);
 the certification records in `packages/db`; certifying on the phone in `apps/field` (Phase 3); the
 certification screens and QC in `apps/back-office` (Phase 4, REQ-403). The requirements are REQ-106,
-106a, 106b, 106d, 106e, 106f. Nothing is built yet (ADR-093).
+106a, 106b, 106d, 106e, 106f. **Built so far:** the capacity math, `packages/domain`'s `Capacity`
+(ADR-320: exact hundredths, every operation a step; a zero, missing or fractional measurement gives
+no capacity and a reason; agent defaults); **the records** (ADR-321, agent defaults: `Certification`,
+`CertificationBox`, `CertificationHelper` in `packages/db`; only a container holds boxes, and always
+its primary one; a sub held to its own prime's place on the project; a certification never archived
+or deleted) and **the service** `Certifications` in `apps/api/src/certification/` (certify as the
+monitor from their phone, the capacity worked out and never typed; correct a box; revoke), with `packages/domain`'s `CertificationSubs` (a typed sub matched to a known
+contractor ignoring case and spacing, or made; a name already placed elsewhere on the project
+saved as a separate contractor with a warning), `CertificationChanges` and `ContractorMerge`.
+"Replaced on" is the new certification's certified time, as a day in the project's time zone.
 
 ---
 
@@ -251,8 +262,11 @@ What this page used to say, and why it changed. Never build from the left-hand s
 - The operator's licence expiry (`operatorLicenseExpDate`) as the only check, `CERT_EXPIRED` →
   `FAILED`, compared to "now", checked at creation too → tag expiry, revocation and replacement flag,
   at work time; the licence flags nothing; nothing refused (ADR-048, 052, 079, 153; KD-35).
-- `CERT_WRONG_PROJECT` rejecting cross-project use → flagged; the copy to another project (ADR-052,
-  152).
+- `CERT_WRONG_PROJECT` rejecting cross-project use → flagged (ADR-052).
+- "The same truck on another project is copied, with a new number and a reference to the
+  original" (Q-143, ADR-152; `Certifications.copy`, `copiedFromId`, `REVIEW_ORIGINAL_CERTIFICATION`)
+  → never copied: certified on the other project from scratch (the user, ADR-328, 329; taken out
+  of the code, ADR-330).
 - `ticketService.ts` copying `certNumber`, `assertCertForProject()`, `validate_ticket_pair_cert`,
   `isCertValid()` → the rebuild's field events and checks (ADR-093).
 - The contract giving the prime and the tiers → typed at certification under the prime (ADR-081 →

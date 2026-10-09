@@ -25,6 +25,8 @@ export const refusedBy = {
   unique: '23505',
   foreignKey: '23503',
   notNull: '23502',
+  // exclusion_violation: two rows an exclusion constraint keeps apart (overlapping size bands)
+  exclusion: '23P01',
   badValue: '22P02',
   // invalid_parameter_value: a time zone the server's time zone data doesn't know
   unknownTimeZone: '22023',
@@ -121,17 +123,14 @@ export class GuardedDatabase {
     await this.settings({ 'adms.actor_id': '', 'adms.source': '' });
   }
 
-  // States the read-only viewer, as the API will for each request (ADR-270 (7)): their projects,
-  // and their contractor's id, or 'none' for a client user or an auditor.
-  async viewer(projectIds: readonly string[], contractorId: string): Promise<void> {
-    await this.settings({
-      'adms.viewer_project_ids': projectIds.join(','),
-      'adms.viewer_contractor_id': contractorId,
-    });
+  // States the read-only viewer, as the API will for each request (ADR-315; C22): the viewer's own
+  // id. What they may see is the database's to read from their record.
+  async viewer(viewerId: string): Promise<void> {
+    await this.settings({ 'adms.viewer_id': viewerId });
   }
 
   async noViewer(): Promise<void> {
-    await this.settings({ 'adms.viewer_project_ids': '', 'adms.viewer_contractor_id': '' });
+    await this.settings({ 'adms.viewer_id': '' });
   }
 
   async rows<Row extends pg.QueryResultRow>(

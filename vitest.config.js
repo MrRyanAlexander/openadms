@@ -12,6 +12,8 @@ export default defineConfig({
       'tools/security',
       // The local stack's map servers (ADR-282): they need the stack up, like the database tests.
       'infra/local',
+      // The worker's questions to the map servers (ADR-349): they need the stack up too.
+      'apps/worker',
       // The database tests (ADR-272) need the local stack and an installation at head. Their files
       // run one at a time: a refused truncate takes a table lock another file's open work could
       // deadlock on.

@@ -1,0 +1,185 @@
+// Marks: what people set on a record without changing it (spec/DATA-MODEL.md §6; adms-data-model
+// §3.1b; ADR-245). Each is its own record, written by the API for a person and keyed to what it
+// marks, so the API never updates a derived row and a reprocess that draws a completed load again
+// loses none of them. The worker reads them and writes none. Every mark repeats its project, which
+// holds it and what it marks to one project (ADR-363).
+
+enum QcStatus {
+  QC_REVIEW
+  QC_APPROVED
+  QC_ISSUES
+  QC_VOID
+
+  @@map("qc_status")
+}
+
+// The back office's QC status of one record, set only by people and never read by the engine
+// (ADR-107). On a load or a haul-out it marks the completed record, never a single field event
+// and never one property or pile (ADR-168, 295); a field event takes one only as a unit rate
+// ticket, so the mark repeats its kind. A record has one mark at most: a change of status is the
+// same mark changed, the status before kept in the audit log. No mark is QC Review. On a
+// certification, whoever set it is its "checked by" (ADR-080).
+model QcMark {
+  id                 String          @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  projectId          String          @map("project_id") @db.Uuid
+  // What it marks: exactly one (a check in the guard migration).
+  completedLoadId    String?         @unique @map("completed_load_id") @db.Uuid
+  completedHaulOutId String?         @unique @map("completed_haul_out_id") @db.Uuid
+  fieldEventId       String?         @unique @map("field_event_id") @db.Uuid
+  // With a field event, and UNIT_RATE.
+  fieldEventKind     FieldEventKind? @map("field_event_kind")
+  certificationId    String?         @unique @map("certification_id") @db.Uuid
+  roeId              String?         @unique @map("roe_id") @db.Uuid
+  surveyId           String?         @unique @map("survey_id") @db.Uuid
+  incidentId         String?         @unique @map("incident_id") @db.Uuid
+  dropOffLogId       String?         @unique @map("drop_off_log_id") @db.Uuid
+  status             QcStatus
+  setById            String          @map("set_by_id") @db.Uuid
+  setAt              DateTime        @map("set_at") @db.Timestamptz(3)
+  note               String?
+
+  project          Project           @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  completedLoad    CompletedLoad?    @relation(fields: [projectId, completedLoadId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  completedHaulOut CompletedHaulOut? @relation(fields: [projectId, completedHaulOutId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  fieldEvent       FieldEvent?       @relation("QcMarkFieldEvent", fields: [projectId, fieldEventId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  unitRateTicket   FieldEvent?       @relation("QcMarkUnitRateTicket", fields: [fieldEventId, fieldEventKind], references: [id, kind], onDelete: Restrict, onUpdate: Restrict)
+  certification    Certification?    @relation(fields: [projectId, certificationId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  roe              Roe?              @relation(fields: [projectId, roeId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  survey           Survey?           @relation(fields: [projectId, surveyId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  incident         Incident?         @relation(fields: [projectId, incidentId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  dropOffLog       DropOffLog?       @relation(fields: [projectId, dropOffLogId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  setBy            User              @relation(fields: [setById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([projectId])
+  @@map("qc_mark")
+}
+
+// A named set of tickets locked as invoiced: a name and its tickets, no amounts (ADR-228). A
+// contractor or the back office pulls a report by its name, so a name is used once on a project.
+model InvoiceBatch {
+  id          String  @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  projectId   String  @map("project_id") @db.Uuid
+  // "Bayline ROW, week of 12 Oct"
+  name        String
+  createdById String? @map("created_by_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  project   Project       @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  createdBy User?         @relation(fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  locks     InvoiceLock[]
+
+  @@unique([projectId, name])
+  // What a lock points at, so its batch is one of its own project's.
+  @@unique([projectId, id])
+  @@map("invoice_batch")
+}
+
+// A ticket locked as invoiced: a completed load, a completed haul-out or a unit rate ticket's
+// field event, exactly one (a check in the guard migration), optionally in a named batch. While
+// it stands its ticket gives up no transaction and takes none (ADR-057, 090). An unlock keeps the
+// row and says who and when; locking again is a new row, so a ticket has one lock in force at
+// most (an exclusion in the guard migration) and every lock it ever had is kept (C17).
+model InvoiceLock {
+  id                 String          @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  projectId          String          @map("project_id") @db.Uuid
+  completedLoadId    String?         @map("completed_load_id") @db.Uuid
+  completedHaulOutId String?         @map("completed_haul_out_id") @db.Uuid
+  fieldEventId       String?         @map("field_event_id") @db.Uuid
+  // With a field event, and UNIT_RATE.
+  fieldEventKind     FieldEventKind? @map("field_event_kind")
+  invoiceBatchId     String?         @map("invoice_batch_id") @db.Uuid
+  lockedById         String          @map("locked_by_id") @db.Uuid
+  lockedAt           DateTime        @default(now()) @map("locked_at") @db.Timestamptz(3)
+  // The unlock: who and when, both or neither, and a note only with them.
+  unlockedById       String?         @map("unlocked_by_id") @db.Uuid
+  unlockedAt         DateTime?       @map("unlocked_at") @db.Timestamptz(3)
+  unlockNote         String?         @map("unlock_note")
+
+  project          Project           @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  completedLoad    CompletedLoad?    @relation(fields: [projectId, completedLoadId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  completedHaulOut CompletedHaulOut? @relation(fields: [projectId, completedHaulOutId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  fieldEvent       FieldEvent?       @relation("InvoiceLockFieldEvent", fields: [projectId, fieldEventId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  unitRateTicket   FieldEvent?       @relation("InvoiceLockUnitRateTicket", fields: [fieldEventId, fieldEventKind], references: [id, kind], onDelete: Restrict, onUpdate: Restrict)
+  invoiceBatch     InvoiceBatch?     @relation(fields: [projectId, invoiceBatchId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  lockedBy         User              @relation("InvoiceLockLockedBy", fields: [lockedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  unlockedBy       User?             @relation("InvoiceLockUnlockedBy", fields: [unlockedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([projectId])
+  @@index([completedLoadId])
+  @@index([completedHaulOutId])
+  @@index([fieldEventId])
+  @@index([invoiceBatchId])
+  @@map("invoice_lock")
+}
+
+// A reviewer's acceptance of a flag that is right as it is: a reason from the firm's list, who
+// and when (ADR-166). The flag itself is the worker's and is never changed by it; a flag is
+// accepted once.
+model FlagAcceptance {
+  id           String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  projectId    String   @map("project_id") @db.Uuid
+  flagId       String   @unique @map("flag_id") @db.Uuid
+  reasonId     String   @map("reason_id") @db.Uuid
+  note         String?
+  acceptedById String   @map("accepted_by_id") @db.Uuid
+  acceptedAt   DateTime @map("accepted_at") @db.Timestamptz(3)
+
+  project    Project @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  flag       Flag    @relation(fields: [projectId, flagId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  reason     Reason  @relation(fields: [reasonId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  acceptedBy User    @relation(fields: [acceptedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([projectId])
+  @@map("flag_acceptance")
+}
+
+// A person's void of a ticket: work that never happened (C19). Keyed as a ticket is, by its
+// project, workflow and bare number, with a reason from the firm's list, who and when. An unvoid
+// lifts it on its own row; voiding again is a new row, so a ticket has one void in force at most
+// (an exclusion in the guard migration). A rule's void is the worker's own and has no row here.
+model TicketVoid {
+  id           String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  projectId    String    @map("project_id") @db.Uuid
+  workflow     Workflow
+  ticketNumber String    @map("ticket_number")
+  reasonId     String    @map("reason_id") @db.Uuid
+  note         String?
+  voidedById   String    @map("voided_by_id") @db.Uuid
+  voidedAt     DateTime  @map("voided_at") @db.Timestamptz(3)
+  // The unvoid: who and when, both or neither, and a note only with them.
+  liftedById   String?   @map("lifted_by_id") @db.Uuid
+  liftedAt     DateTime? @map("lifted_at") @db.Timestamptz(3)
+  liftNote     String?   @map("lift_note")
+
+  project  Project @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  reason   Reason  @relation(fields: [reasonId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  voidedBy User    @relation("TicketVoidVoidedBy", fields: [voidedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  liftedBy User?   @relation("TicketVoidLiftedBy", fields: [liftedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  // A ticket's voids, as the worker reads them.
+  @@index([projectId, workflow, ticketNumber])
+  @@map("ticket_void")
+}
+
+// An unvoid: the audited override that puts a void ticket back in the run, whoever voided it, a
+// person or a rule (the user, ADR-366: unvoiding anything always leaves a record). Keyed as a
+// ticket is, with the reviewer's note, who and when; never changed once written. A person's void
+// is also marked lifted on its own row; a rule's void has no row, so this is its only record.
+// The worker works a void ticket again when it has an unvoid newer than its last decision.
+model TicketUnvoid {
+  id           String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  projectId    String   @map("project_id") @db.Uuid
+  workflow     Workflow
+  ticketNumber String   @map("ticket_number")
+  note         String?
+  unvoidedById String   @map("unvoided_by_id") @db.Uuid
+  unvoidedAt   DateTime @map("unvoided_at") @db.Timestamptz(3)
+
+  project    Project @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  unvoidedBy User    @relation(fields: [unvoidedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  // A ticket's unvoids, as the worker reads them.
+  @@index([projectId, workflow, ticketNumber])
+  @@map("ticket_unvoid")
+}

@@ -24,9 +24,9 @@ a project in this order *(Q-117, ADR-122)*:
 4. **The pay items.** Each is added by hand from the contract's line items. A pay item is **the
    thing that denotes payable work**: there is no separate "work item" behind it (ADR-122). Each has:
    - a **code** the firm names itself (`VEG-HAUL-CY-15`, `HNG-RMV-EA`, `TIP-FEE-CY-BCL`…; a
-     convention is suggested, never forced, ADR-235), and a name; two may share a name (ADR-147);
-   - its **payable type** (the work it prices, from the firm's list) and a **description** (the
-     contract's words and line number);
+     convention is suggested, never forced, ADR-235), **unique on its project** (ADR-301), and a
+     **description**: what the work is, in the firm's own words ("ROW VEG haul 0–15 mi");
+   - its **payable type** (the work it prices, from the firm's list);
    - its **Unit of Measure** (a billing unit; `TN` or `LB` means the load is weighed, ADR-221, 223)
      and a **size band** where the payable type has several (ADR-213);
    - its **capture settings** ("Count is always 1", "GPS required", "Measurement required",
@@ -45,7 +45,7 @@ a project in this order *(Q-117, ADR-122)*:
 |---|---|
 | **Project** | The project it belongs to |
 | **Form** | The project's form for one ticket type: load, haul-out, unit rate (ADR-018, 211: the legacy "Document Format" is the form) |
-| **Name** | Free text, e.g. `VEG-HAUL-CY-15 - ROW VEG haul 0–15 mi` |
+| **Name** | Free text, the firm's own; usually named to match its pay item, e.g. `VEG-HAUL-CY-15 - ROW VEG haul 0–15 mi`. A rule "Pays when" writes is named from its pay item (ADR-301) |
 | **Contract** | One of the project's contracts; the rule runs only on tickets whose prime holds it. Blank only on a rule with no *Add transaction* (ADR-239) |
 | **Active** | On or off |
 | **Is valid** | Computed by the system (§7), never typed |
@@ -116,12 +116,40 @@ The legacy editor showed **EQUALS, NOT EQUALS, BETWEEN**. The approved set, by k
 | **Text** | collection address | EQUALS · NOT EQUALS · **CONTAINS** · **STARTS WITH** |
 | **Any** | all | **IS EMPTY** · **IS NOT EMPTY** |
 
+*Item* is in two rows because its value is both: **one picked item, and a number compared with its
+count** (*Item "Fridge, freon recovered" AT LEAST 1*). As built it takes the number operators, and
+IS EMPTY / IS NOT EMPTY for "the ticket lists none / some of this item"; the list operators aren't
+taken on *Item*, since one operator can't mean both "is this item" and "its count equals" *(agent
+default, ADR-313; the user may overturn it)*.
+
 "IS ONE OF" saves writing the same rule several times (e.g. *Disposal site IS ONE OF Marsh Road
 TDSR, Bayline Transfer Station*).
 
 - **BETWEEN includes both ends** (`Mileage BETWEEN 0 and 15` matches 15.0). When two rules' ranges
   overlap on the same transaction # (0–15 and 15–30 both creating #1), the builder **warns**; it
   never refuses the save. At run time a ticket caught by both is flagged (§6.4).
+  *As built (agent default, ADR-313):* the warning is given when two rules of one form, naming the
+  same contract, add the same # and nothing in their criteria keeps them apart; it names where a
+  shared range overlaps ("their Mileage ranges overlap at 15.0"), or says "a ticket could meet
+  both" where no range is involved.
+- **An exact duplicate of a rule is refused before it is saved** ✅ *(user, 2026-10-02; ADR-301)*,
+  with an error naming the rule it copies ("Not saved: this rule is the same as "VEG-HAUL-CY-15 -
+  ROW VEG haul 0–15 mi"."), so nobody goes on building from it. Two rules are the same when they are
+  on the same form, name the same contract (or both none) and have the same criteria and the same
+  actions, in any order; **the rule's name and its Active tick are ignored**, and it is compared with
+  every rule of the project that isn't archived, inactive ones included. An edit that would turn a
+  rule into a copy of another is refused the same way. *(The details are an agent default.)*
+- **A line that compares with something the ticket doesn't have never passes, however it is
+  worded** ✅ *(user, 2026-10-05; ADR-354)*. On a collection with no GPS fix there is no mileage and
+  no zone: neither *Mileage AT MOST 15.0* nor *Zone NOT EQUALS Zone 1* passes on it; only *IS EMPTY*
+  does (and *IS NOT EMPTY* doesn't). Nothing is priced on a guess: with no rule adding a line the
+  ticket is flagged "no pricing rule…" until it is corrected.
+- *As built (agent defaults, ADR-354):* text is compared without regard to capitals or to spaces at
+  either end; a number is compared by its exact value (*Volume EQUALS 14.4* meets 14.40), mileage
+  alone rounded first; *Contractor* reads the prime, so a line that picks a sub finds no ticket;
+  *Zone* reads the name the zone had on the map version the ticket was placed with; *Unit count* on
+  any itemised ticket other than crew time is the total of its items; *Item* on a ticket that isn't
+  itemised is empty.
 - **Mileage is rounded half up to tenths of a mile** before any rule compares it (15.04 → 15.0,
   15.05 → 15.1). The unrounded distance is stored too. The rounding lives in one place (the shared
   domain package), so Show matches and the engine always agree.
@@ -143,10 +171,11 @@ payable type groups them in exports (ADR-118, 246).
 ✅ **No *Flag* action** (ADR-164): project-wide settings raise flags, not rules. **A rule's Void
 ticket always wins** (ADR-167): a person's unvoid lasts until the next reprocess unless the data or
 the rule is changed. **Contracts** are a name, a prime and a link (ADR-146); **a rule names one** and
-runs only on tickets of its prime, so each prime still gets its own rules (ADR-239). **Two pay items
-may share a name** (ADR-147); a dated rate change is the firm's own setup, e.g. a second
-`VEG-HAUL-CY-15` with *Ticket date ON OR AFTER 15 Oct* on its rule and *ON OR BEFORE 14 Oct* on the
-old one; two creates of the same # stay flagged.
+runs only on tickets of its prime, so each prime still gets its own rules (ADR-239). **A pay item's
+code is unique on its project** (ADR-301, correcting ADR-147); a dated rate change is the firm's own
+setup, e.g. a second pay item with a code the firm chooses (say `VEG-HAUL-CY-15-B`) and *Ticket date
+ON OR AFTER 15 Oct* on its rule, *ON OR BEFORE 14 Oct* on the old one; two creates of the same #
+stay flagged.
 
 ✅ **A stump ticket's fill** (ADR-198, ADR-203) is an ordinary rule with no root-ball criteria:
 *Pay item = the stump pay item* → `Add transaction 2`, the fill pay item (`STP-FILL-CY`), quantity
@@ -197,6 +226,25 @@ When a ticket is reconciled or reprocessed (ADR-086, 090):
    pile** (ADR-295). **A haul-out dumped at a
    TDSR** skips the rules until corrected (ADR-226).
 
+**As built (task 1.6.3, ADR-355).** ✅ *The user, 2026-10-05:* **an amount is rounded to the cent a
+half up** (9.75 h × $151.25 = $1,474.6875 → $1,474.69), and it is the quantity as the line keeps it
+(four decimals) × the rate, so anyone can check a line by hand; **a crew day by exact division keeps
+four decimals** (10.25 h ÷ 12 = 0.8542; × $1,800.00 = $1,537.56); **hours that fall in no step** of
+a crew day paid in steps **bill nothing on that line, and the ticket is flagged** until the firm
+fixes the steps or the hours. *Agent defaults the user may overturn:*
+- A ticket under a flag that says "not billed" (a 0% call, no certification, no size band, piles
+  that can't be shared out) gets no lines until it is corrected (`spec/FLAGS.md` §1), and no pricing
+  flag joins the one it has; a rule's *Void ticket* still runs on it. A haul-out dumped at a TDSR
+  skips every rule.
+- Two creates of one # stop that # only: the ticket's other lines bill. Three are one flag.
+- A *Remove transaction* of a # nothing added does nothing. A tipping fee a rule added and another
+  removed is not "a missing rule"; a ticket whose only line was removed has no lines and no flag.
+- A pay item with no rate for any prime is a $0 pay item and raises nothing; "no rate for Summit" is
+  raised only where the pay item holds another prime's rate.
+- A TBN pay item writes no line; its flag keeps the # and the pay item.
+- *Quantity from* chosen items: their counts added up; on crew time, the highest of their hours.
+- A rule's void voids the whole ticket, a split included, and names every rule whose void ran.
+
 ## 7. "Is valid" *(agent default, ADR-247)*
 
 A rule is **valid** when:
@@ -204,7 +252,10 @@ A rule is **valid** when:
 - every criterion applies to that form and its value still exists (not archived);
 - a rule with an *Add transaction* names a contract (ADR-239), and every *Add transaction* has a #
   and a pay item;
-- every *Remove transaction* names a #.
+- every *Remove transaction* names a #;
+- its form, its contract and every pay item it adds are still on the project (not archived): a rule
+  left naming an archived one stops running until it is put back or the rule is changed (*agent
+  default*, ADR-357).
 
 An invalid rule can be saved but never runs; the builder says why, and **the setup check lists every
 invalid active rule** before the field day, so none is silently inert (ADR-229; `adms-validation`

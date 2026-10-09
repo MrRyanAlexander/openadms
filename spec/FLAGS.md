@@ -32,7 +32,8 @@
   - **yes**: the ticket bills as if the flag weren't there;
   - **that line no**: one line can't be computed and bills nothing; the ticket's other lines bill;
   - **no**: nothing can be computed, so the ticket bills nothing until it's corrected.
-- **A reviewer fixes it or accepts it** (ADR-166). Whoever may correct may **accept** any flag that
+- **A reviewer fixes it or accepts it** (ADR-166). Whoever is granted *accept flags* (a grant of
+  its own: *correct* doesn't carry it; the user, 2026-10-06, ADR-365) may **accept** any flag that
   is right as it is, with a reason from the firm's list, audited. **Accepting never changes what
   bills**: a flag whose *Bills* is "no" still bills nothing once accepted. When every flag on a
   ticket is fixed or accepted, the worker marks it `COMPLETED`.
@@ -142,6 +143,14 @@ pile's running call is never judged by the limits (ADR-295).
 | `CARRIED_TICKET_NOT_FOUND` | A carried ticket number (a stump or white goods ticket) matches no ticket | "Ticket 101014: carried ticket 301099 not found." | yes, from the tickets found | the number | 192 |
 | `CARRIED_TICKET_ON_ANOTHER_LOAD` | A carried ticket is already on another load | "Ticket 101014: carried ticket 301004 is already on load 101007." | yes | both loads | 192 |
 
+**`QUANTITY_MISSING_FOR_PAY_ITEM` says how the pay item is priced and what is lacking** (task 1.6.3,
+ADR-355; the wording beyond the row's own message is the agent's, the user may overturn it): "…is
+priced per ton, but the haul-out has no scale weight."; "…is priced per cubic yard, but the load
+carries no stump tickets."; and, **at the user's word (2026-10-05)**, hours that fall in no step of
+a crew day paid in steps: "Ticket 301029: CREW-TIME-DAY-STP is priced per crew day in steps, but
+13.25 h falls in no step. Flagged for review." That line bills nothing until the steps or the hours
+are fixed.
+
 ### 3.6 The pay item's settings, and unit rate work
 
 | Code | Raised when | Message | Bills | Facts kept | ADR |
@@ -173,7 +182,7 @@ A flag here sits on the record it's about; it never touches a ticket's status.
 | `ROE_OUT_OF_SCOPE` | Its ROE has a scope and the work isn't in it: a collection's debris type, or a unit rate ticket's payable type, isn't among the ROE's scope picks. An ROE with no scope picked is never flagged for scope | "Ticket 102005: outside the scope of ROE R-0008." | the ROE's scope, the work | 055, 149, 293 |
 | `NO_PRE_WORK_SURVEY` | A post-work survey with no pre-work survey on its ROE | "Survey on ROE R-0008: no pre-work survey." | the ROE | 150 |
 | `CERTIFICATION_PHOTO_MISSING` | A certification without one of its five views | "Certification 730416: no left side photo." | the views present | 179 |
-| `REVIEW_ORIGINAL_CERTIFICATION` | A mistake was corrected in a certification copied to another project: the original is flagged | "Certification 730416: its copy 880112 on Bayline County PPDR was corrected." | both numbers | 152 |
+| ~~`REVIEW_ORIGINAL_CERTIFICATION`~~ | Withdrawn (ADR-328): a certification is never copied, so there is no copy whose correction could flag an original | | | 152 → 328 |
 | `PERMIT_OUTSTANDING` | A disposal site with no permit | "Marsh Road TDSR: permit outstanding." | | 111 |
 
 A ticket's ROE flags still bill.
@@ -181,7 +190,7 @@ A ticket's ROE flags still bill.
 **Retired:** `HELPER_NOT_FOUND` (ADR-294). A certification's helper is picked from the people assigned
 to the project, never typed, so an ID that matches no user can't happen.
 
-**Added:** `PILE_CALL_NOT_HIGHER` (§3.5, ADR-295; the agent's wording). The catalogue is 67 flags.
+**Added:** `PILE_CALL_NOT_HIGHER` (§3.5, ADR-295; the agent's wording). The catalogue was 67 flags then (78 today: the count at the end of §3.10's notes; KD-71 (2) closed, ADR-373).
 
 ### 3.8 Pricing
 
@@ -196,7 +205,46 @@ to the project, never typed, so an ID that matches no user can't happen.
 
 | Code | Raised when | Message | Bills | Facts kept | ADR |
 |---|---|---|---|---|---|
-| `NOT_PROCESSED` | The worker hit an error on this ticket: it is flagged and skipped, and the run goes on | "Ticket 101035: could not be processed. Flagged for review; not billed." | no | the run | ARCHITECTURE §13 |
+| `NOT_PROCESSED` | The worker hit an error on this ticket, which has no lines: it is flagged and skipped, and the run goes on | "Ticket 101035: could not be processed. Flagged for review; not billed." | no | the run | ARCHITECTURE §13 |
+
+### 3.10 A record that should not have been possible
+
+The phone stops each of these before a monitor can finish the record, and setup stops the last
+three. One that reaches the server anyway is **kept and flagged, never thrown away** (the user,
+2026-10-04, ADR-329). The first six were worded by the agent and approved by the user on
+2026-10-05 ("Yes to all", ADR-345). The last three are backup catches the user asked for the same
+day: "If there is even a chance those could be created make them flag, but it really should be
+impossible if we build things the right way"; their wording is the agent's. The last two, for a
+scale receipt and a disposal's quantities, were approved the same day (ADR-348).
+
+| Code | Raised when | Message | Bills | Facts kept | ADR |
+|---|---|---|---|---|---|
+| `DETAIL_MISSING` | A field event arrived without a detail its kind always records: a load's or a haul-out's debris type at either end; a disposal with no load call, no scale receipt and no count; a haul-out collection's load call; a unit rate event's kind of work | "Ticket 101036: collection has no debris type." | yes, where an amount can be computed | the detail | 329, 345 |
+| `TYPED_NUMBER_NO_REASON` | The ticket number was typed instead of scanned and no reason was picked | "Ticket 101037: typed ticket number (no reason picked)." | yes | | 329, 345 |
+| `WRONG_KIND_OF_BADGE` | A load or a haul-out recorded on a crew's certification, or unit rate work on a container's | "Ticket 101038: a load recorded on crew certification 730417." | yes, where an amount can be computed | the cert number, its kind | 329, 345 |
+| `GPS_UNREADABLE` | The phone sent a GPS fix that can't be one (half a fix, a latitude past 90); the field event was saved without it | "Ticket 101039: GPS unreadable." | yes | the fix as sent | 329, 338, 345 |
+| `NOT_A_TICKET_NUMBER` | The ticket number isn't digits: the field event pairs with nothing until a person renumbers it | "Ticket 10A040: not a valid ticket number. Flagged for review; not billed." | no | the number as sent | 329, 345 |
+| `ENDED_BEFORE_STARTED` | A field event's end is before its start | "Ticket 101041: collection ended 09:10, before it started 09:40." | yes | both times | 329, 345 |
+| `SPLIT_NOT_ALLOWED` | A collection with a split suffix on a project whose *Allow split loads* is off | "Ticket 101042: a split load on a project that doesn't allow split loads." | yes | the suffixes | 137, 345 |
+| `OUTSIDE_CONTROL_RANGES` | On a project numbered from control tickets, a load's or a haul-out's number is in none of the ranges entered for its series | "Ticket 109999: number is in none of the project's control ticket ranges." | yes | the number, the ranges | 056, 345 |
+| `ASSIGNMENT_ON_ANOTHER_PROJECT` | A field event's assignment belongs to a different project from the field event | "Ticket 101043: recorded under an assignment on another project." | yes | both projects | 156, 345 |
+| `SCALE_NET_DISAGREES` | A scale receipt holds a gross, a tare and a net, and the net isn't the gross less the tare. The weights stay as typed, never corrected | "Ticket 101054: scale receipt BCL-88251's net (17.60 tons) is not its gross less its tare (17.10 tons)." | yes, from the net as written | the receipt's figures | 329, 348 |
+| `TWO_QUANTITIES` | A load's disposal holds a load call and a scale weight. Which one bills is read from the paying pay item; the two are never compared | "Ticket 101055: disposal has both a load call and a scale weight." | yes | the call, the receipt, its net | 329, 348 |
+
+### 3.11 The engine, on a ticket that was priced before
+
+| Code | Raised when | Message | Bills | Facts kept | ADR |
+|---|---|---|---|---|---|
+| `NOT_PROCESSED_LINES_STAND` | The worker hit an error on a ticket that was priced before: nothing of the failed run is kept, so its lines stay as its last good run wrote them until it is fixed (the user, 2026-10-06) | "Ticket 101035: could not be processed. Flagged for review; its lines are as of its last run." | yes, as its last run priced it | the run | 360 |
+
+(Listed last because the database keeps the codes in the order they were added; it belongs with
+§3.9's `NOT_PROCESSED`.)
+
+**Added:** the nine flags of §3.10 (ADR-345). The catalogue was 75 flags: 66 after ADR-328 withdrew
+one, and these nine. **Added:** `SCALE_NET_DISAGREES` and `TWO_QUANTITIES`, worded by the agent and
+approved by the user on 2026-10-05 ("Agree on both proposed in the two questions", ADR-348). The
+catalogue was 77 flags. **Added:** `NOT_PROCESSED_LINES_STAND` (the user, 2026-10-06: "KD-73
+recommended approved", ADR-360). The catalogue is 78 flags.
 
 ---
 

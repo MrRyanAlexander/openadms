@@ -2,9 +2,9 @@
 name: adms-exceptions
 description: Open ADMS failure cases and how people resolve them, in today's rules. Covers the special cases around a ticket's field events, why nothing can be validated in the field, duplicate field events quarantined at sync and resolved by a person, four worked scenarios (a barcode scanned twice at the tower, a phantom collection, sync in any order, a legitimate split load), renumber versus void versus accept, corrections in place by permission (a monitor's own reopen until the shift ends, the back office after), reprocessing completed tickets, back-office-created records, an out-of-service phone, and the other duplicate and orphan shapes. Use when handling duplicates, quarantine, unpartnered field events, preloads, corrections, voids, renumbering or split chains. Flags and their wording live in adms-validation; pricing in adms-ledger-audit.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-248) -->
+<!-- skill-status: current (a change to a locked ticket refused by the review services, ADR-367; how void and unvoid are built, ADR-365; an unvoid's own record, ADR-366; ADR-138, rewritten 2026-09-29, ADR-248; an ROE's duplicate number quarantined, ADR-338) -->
 
-> **This page states today's rules** (through ADR-247). Each rule cites its ADR; what changed is in
+> **This page states today's rules** (last changed by ADR-248, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
 > `agent_store/SUMMARY.md` disagree, SUMMARY wins: log a KD (`adms-decisions`). The worked example
 > is `spec/golden/MISSION.md`; names and examples follow `spec/CONVENTIONS.md`. The words (field
@@ -113,9 +113,16 @@ the same pile.
           └─ SAME pile, SAME truck, OVERLAPPING loading times
  10:05  DIS at Marsh Road TDSR: the driver hands over 101030  ✓
 
-   101030 → COL + DIS  → COMPLETED ✓
+   101030 → COL + DIS  → MANUAL_REVIEW, flagged: overlapping loads on cert 730415; still bills
    101031 → COL only   → PENDING for ever, flagged: overlapping loads on cert 730415
 ```
+
+**Both tickets are flagged** (ADR-342; `spec/FLAGS.md` `OVERLAPPING_LOADS`). **User, 2026-10-05:**
+"The agent was correct to flag both but let the first flow to billing as it is likely making sense. However like all flags it'll be prevented from being invoiced until resolved."
+So 101030, the ticket the truck dumped under, bills while in review and can't be locked as
+invoiced until its flag is fixed or accepted. The same flag is raised when two loads that both
+happened sit on one cert number (the monitor scanned the wrong badge for the next truck): the
+worker can't tell which it is, and a person decides.
 
 **How to recognise it:** two collections on one certification with **overlapping loading times and
 no disposal between** can't be two loads (Scenario A's rule). The same address and debris type make
@@ -247,7 +254,10 @@ and puts history in a log built for it.
   log**, is written to `AuditRecord` under the monitor, and reprocesses the ticket.
 - **After the shift, only permitted people** in the back office (those granted correct, renumber,
   void, accept). The monitor never edits again.
-- **A ticket locked as invoiced is unlocked first** (audited), then corrected (ADR-057).
+- **A ticket locked as invoiced is unlocked first** (audited), then corrected (ADR-057). **Built
+  (ADR-367):** the review services refuse a correction, a renumber, a void or an acceptance on a
+  locked ticket in plain words and save nothing; a certification, an ROE or a scale receipt that
+  several tickets share is still corrected, and each locked ticket on it waits for its unlock.
 
 **What a correction requires:** a permission for it (KD-25); every edit path audited (invariant 3;
 the database refuses a write with no actor); the real person as the actor, never the system; the
@@ -280,6 +290,15 @@ ticket simply waits with it.
 - **Accept** (ADR-166): the flag stays in the ticket's history and isn't raised again unless the
   facts it was about change; when every flag is fixed or accepted, the ticket is `COMPLETED`. There
   is no "accepted void".
+- **How void and unvoid are built** (agent defaults, ADR-365): a person's void is a record of its
+  own (the reason, a note, who, when), and the worker writes the rest in the run it asks for: the
+  field events `VOID`, the lines removed, the flags cleared; the completed load is left as it is.
+  **An unvoid always leaves a record of its own** (`TicketUnvoid`: a note, who, when), audited under
+  the person, whoever voided the ticket; a person's void is also marked lifted on its own row. **User,
+  2026-10-06 (ADR-366):** "Unvoiding anything should always leave an audit record, even if it's the
+  system". The worker reads that record and works the ticket again; its decision says so. A field event of a void ticket is corrected like
+  any other, and that alone brings nothing back. *Accept flags* is a grant of its own (the user,
+  ADR-365).
 - **A ticket in review keeps billing** until resolved, where an amount can be computed (ADR-060).
 - **Nothing technically stops a wrong choice** (renumbering a phantom): the audit trail is the
   backstop (ADR-051).
@@ -297,6 +316,7 @@ ticket simply waits with it.
 | `-A`…`-N` collections and one disposal on the base number | **Scenario D**: a split | Group on the base number; one load. Never renumber, never treat as duplicates |
 | A bare collection beside suffixed ones, or a gap in the suffixes | A mis-keyed number | Flagged (ADR-033, 173); the reviewer corrects the number |
 | A second disposal on a split's base number | A duplicate like any other: a load dumps once (ADR-155) | Quarantined at sync (ADR-022) |
+| An ROE made on a phone whose number another ROE of the project already has | Not a ticket's field event, but the same problem: one number, two records | Quarantined at sync in full, beside the ROE that holds the number; never saved under a taken number, never lost (ADR-338, agent default) |
 
 **Before renumbering anything, establish which scenario you're in** (ADR-028). Renumbering a
 Scenario B phantom double-bills; renumbering a Scenario D collection breaks it off its base number;
@@ -308,6 +328,10 @@ own. **Only Scenario A, real work wearing the wrong number, is a renumber.**
 ## History
 
 What this page used to say, and why it changed. Never build from the left-hand side.
+
+- Scenario B's diagram showed 101030, the ticket the truck dumped under, as `COMPLETED ✓` with no
+  flag → both tickets of an overlap are flagged; it is `MANUAL_REVIEW` and still bills (the user,
+  ADR-342; KD-71 (1)).
 
 - Ticket "halves", stage tickets (`CollectionTicket`, `DisposalTicket`) and a reconciled
   `LoadTicket` that a reviewer must never author → **field events** under a ticket number and the

@@ -37,6 +37,15 @@ export function statesTheActor(client: PrismaClient) {
           return work(tx);
         });
       },
+      // Runs reads as one database transaction that can write nothing: what a service reads
+      // through code written for a piece of work (the rules, read one way by setup and by the
+      // worker, ADR-359), when it has none open.
+      $read<T>(work: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
+        return client.$transaction(async (tx) => {
+          await tx.$executeRaw`SET TRANSACTION READ ONLY`;
+          return work(tx);
+        });
+      },
     },
   });
 }

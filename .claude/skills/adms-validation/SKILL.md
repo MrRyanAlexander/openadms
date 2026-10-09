@@ -2,9 +2,9 @@
 name: adms-validation
 description: Open ADMS checks, flags, statuses, how rules run, and the quantity math, in today's rules. Covers the checks between a ticket's field events and on each event against the setup (certification, place and time, where debris went, quantity, pay item settings, forms, pricing), what is never flagged, how the worker runs a form's rules (one contract per rule, criteria read only the ticket, Add in # order then Remove then Void ticket, a rule's void wins), why no rule or setting may be silently inert, the four statuses and what sets them, timing contradictions, how a flag reads and how a reviewer accepts one, and every quantity formula (capacity × load call, scale weight and a tandem's split, split shares, circumference to diameter, stump CY, fill CY, carried tickets, white goods, crew hours, mileage rounding). Use when writing a check or a flag, the rule engine, a threshold or project setting, status changes, or any quantity math. Setup and workflows live in adms-ticket-workflows, pricing and the ledger in adms-ledger-audit, duplicates and corrections in adms-exceptions.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-244; the flag catalogue approved, ADR-290; split haul-outs, ADR-295) -->
+<!-- skill-status: current (accept flags a grant of its own, and how void, unvoid and accept are built, ADR-365; ADR-138, rewritten 2026-09-29, ADR-244; the flag catalogue approved, ADR-290; split haul-outs, ADR-295; a split haul-out's pile weights, ADR-297; *Haul-outs leave here* only on a TDSR, ADR-298; a duplicate rule refused, ADR-301; the flags for a record that should not have been possible and what a removed photograph counts for, ADR-345; how the place checks are built, ADR-346; how the quantity, unit rate and ROE checks are built, ADR-347; two more flags, ADR-348; the setup check built, ADR-357) -->
 
-> **This page states today's rules** (through ADR-243). Each rule cites its ADR; what changed is in
+> **This page states today's rules** (last changed by ADR-301, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
 > `agent_store/SUMMARY.md` disagree, SUMMARY wins: log a KD (`adms-decisions`). The worked example
 > is `spec/golden/MISSION.md`; names and examples follow `spec/CONVENTIONS.md`. The words (field
@@ -22,8 +22,8 @@ worker draws everything again (`adms-exceptions`).
 **Flag, never block** (ADR-052, invariant 19). After setup nothing refuses field work or a record
 over eligibility: every problem is a **flag**, a plain message on the ticket, and the ticket goes to
 review. The only rejection at sync is a duplicate number, quarantined in full (ADR-022,
-`adms-exceptions` §4.3a). Setup itself may refuse a bad setting, such as overlapping size bands
-(ADR-217).
+`adms-exceptions` §4.3a). Setup itself may refuse a bad setting: overlapping size bands (ADR-217), a pay item code the
+project already has, an exact copy of a rule (ADR-301).
 
 **Where it lives.** Every check and formula lives **once, in `packages/domain`**, as plain classes
 that take a ticket's field events and the setup and return flags or quantities. The package touches
@@ -79,6 +79,10 @@ amount can be computed (§5.4), except where the table says it doesn't.
 | A ticket number **typed** instead of scanned (a reason picked) | "typed ticket number" | 111, 173 |
 | A record the back office created (person and reason kept) | flagged, then pairs like any other | 156 |
 
+**How the place checks are built** (agent defaults, ADR-346; `packages/domain`'s `place.ts`): a project with no map raises nothing and gives no zone; a map with no zones never says "not inside any zone"; outside the boundary is one flag and no zone is looked for; a haul-out's collection takes no zone; a field event with no GPS fix, or a disposal naming no site, isn't placed and nothing is raised for it here; a site is open on its activation date and its close date themselves, the day being the disposal's in the project's time zone; a point on a circle or on a shape's edge is inside.
+
+**How the quantity, unit rate and ROE checks are built** (agent defaults, ADR-347; `packages/domain`'s `quantity-checks.ts`, `unit-rate-checks.ts`, `roe-checks.ts`): a 0% call is said once, never as a low call too; a split haul-out's piles and its last call are read once the ticket is whole; a receipt with no weight at all isn't "unusable" (a lineage token), one with only a gross or only a tare is; a carried ticket on two loads flags both; several pay items and nothing measured is "no measurement" with no pay item; a stump under 24 in that no band holds carries that one flag; "marked ineligible" is flagged wherever the record says so; *Count is always 1* raises nothing (it makes the count 1 at pricing); crew time is a kind of work counted in items by hours, its day the project's calendar day, its limit handed in (the policy value `CREW_DAY_HOURS`), flagged on the ticket that takes an item over and each later one that day; the ROE flags are raised only where the program type requires ROEs, and **a ticket's ROE flag puts the ticket in review like any other** (§3.7's "never touches a ticket's status" is about a survey's, a certification's or a site's flag).
+
 **Where the debris went** (the site's facts; the system checks where debris went, never where it
 was headed). **User, 2026-09-28 (Q-197):** "The system simply verifies that the debris was allowed
 to go where it went" (ADR-205, 215):
@@ -130,6 +134,29 @@ every ticket they apply to):
 | The pay item has no rate for the prime | a **$0 line**, flagged: "Pay item VEG-HAUL-CY-15 has no rate for Summit." | 212 |
 | A pay item still to be negotiated (TBN) | "rate to be negotiated. Not billed yet." | 068 |
 
+**A record that should not have been possible** (`spec/FLAGS.md` §3.10; ADR-329, 345). The phone
+and setup stop each of these; one that reaches the server anyway is kept and flagged. **User,
+2026-10-05:** "If there is even a chance those could be created make them flag, but it really
+should be impossible if we build things the right way."
+| Check | The flag | ADRs |
+|---|---|---|
+| A field event with no debris type; a haul-out collection with no load call; a unit rate event with no kind of work; a load's disposal that took no load call, no scale weight and no count | "Ticket 101036: collection has no debris type." | 329, 345 |
+| A ticket number typed with no reason picked | "typed ticket number (no reason picked)" | 329, 345 |
+| A load or a haul-out on a crew's badge, or unit rate work on a container's | "a load recorded on crew certification 730417" | 329, 345 |
+| A GPS fix that can't be one, kept apart at intake | "GPS unreadable" | 329, 338, 345 |
+| A ticket number that isn't digits: in no ticket, pairs with nothing until renumbered | "not a valid ticket number. Flagged for review; not billed." | 329, 345 |
+| A field event that ends before it starts | "collection ended 09:10, before it started 09:40" | 329, 345 |
+| A scale receipt with a gross, a tare and a net, the net not the gross less the tare (pounds to the pound, tons to the hundredth); the weights stay as typed and it still bills from the net as written | "scale receipt BCL-88251's net (17.60 tons) is not its gross less its tare (17.10 tons)" | 329, 348 |
+| A load's disposal with a load call and a scale weight; which bills is the paying pay item's to say, and the two are never compared | "disposal has both a load call and a scale weight" | 329, 348 |
+| A lettered collection where *Allow split loads* is off; a control ticket number in none of the ranges entered for its series; a field event under another project's assignment | the three backup catches, each still bills | 345 |
+
+**What a record must have is counted from what is on it now** (the user, ADR-345). **User,
+2026-10-05:** "if say a ticket requires 4 photos and it has 4 but the back office were to delete 1
+leaving only 3 remaining... That ticket would then flag for not having enough photos". A
+photograph the back office removed from the record counts for nothing: not one of a
+certification's five views, not a photograph a pay item requires. (*Photos required* is yes or no
+today, meaning at least one.)
+
 ### 5.2a Never flagged
 
 As important as the checks: an agent must not add these.
@@ -177,6 +204,18 @@ section is how the worker runs them, after the checks, the zone and mileage, and
 5. **A rule's void always wins** (ADR-167): it names the rule as its reason; a person's unvoid lasts
    only until the next reprocess, so the reviewer corrects the data or the rule to keep it. **User,
    2026-09-27 (Q-159):** "the rule **always win**".
+   **A void stays until a person unvoids it, whoever voided it, and a voided ticket is out of
+   the run** (ADR-360): switching the rule off or changing it doesn't bring a voided ticket back; a
+   person's unvoid does, and the rule then voids it again if it still passes. **User, 2026-10-06:**
+   "A void that was voided should be voided unless unvoided manually. why would the system
+   re-check things like this? The processing que should only consist of active work ticketed
+   stuff that is being processed or changes that were made and so on. What I mean is for example,
+   say we have a project with 300k tickets and 40 were voided along the way for various reasons.
+   Those 40 shouldn't be getting reprocessed unless they were changed. So once they are changed
+   and cleared they drop off the que and until they are edited they remain out of the que. This
+   is how all such things should happen". So **only what is active or was changed is worked**:
+   a settled ticket stays off the queue until it, or the setup it is priced by, is edited (the
+   queue itself is Phase 2's).
 6. **No *Flag* action and no *Load call* criterion**: project settings raise those flags, the same
    over the whole project (ADR-164).
 7. The flags rules raise are §5.2's "Pricing" table. **A haul-out dumped at a TDSR skips the rules**
@@ -194,7 +233,10 @@ false confidence in a billing control. The rebuild closes the whole class (KD-15
   ignored.
 - **Show matches** says what a rule matches now, and the **setup check** lists gaps before the field
   day: a tipping fee site with no fee pay item, a debris type no rule pays, a prime with no rate,
-  overlapping bands (ADR-229). Whether the builder also marks a rule "valid" is a proposal
+  overlapping bands (ADR-229). Built at the domain (`SetupCheck`, ADR-357): it also lists a stretch
+  between two bands or two crew-day steps that falls in neither, and every active rule that isn't
+  valid, with why. **A rule that names an archived form, contract or pay item is not valid and
+  never runs** (agent default, ADR-357). Whether the builder also marks a rule "valid" is a proposal
   (`spec/RULES.md` §7).
 
 ## 5.4 Statuses, and what sets them
@@ -247,12 +289,22 @@ dumped that its expired."
 **Each flag keeps its code and the inputs it was raised on**, so "have the facts changed?" can be
 answered (ADR-166).
 
-**Accepting a flag** (ADR-166): a reviewer who may correct may also **accept** a flag that's right
-as it is, with a reason picked from the firm's list (ADR-173), audited. An accepted flag stays in the
+**Accepting a flag** (ADR-166): a reviewer granted *accept flags* may **accept** a flag that's right
+as it is, with a reason picked from the firm's list (ADR-173), audited. **It is a grant of its own:
+*correct* doesn't carry it** (ADR-365). **User, 2026-10-06**, asked whether Luis, granted *correct*
+but not *accept flags*, may accept a flag: "No, two separate grants". An accepted flag stays in the
 ticket's history and **isn't raised again on reprocess unless the facts it was about change** (the GPS
 is corrected, the site's shape changes). When every flag is fixed or accepted, the worker marks the
 ticket `COMPLETED`. There is no "accepted void": a rule's void wins (ADR-167). Example (golden
 mission, 101003): a 96% call, accepted "Heaped; photos confirm" → `COMPLETED`, billed throughout.
+
+**How it is built** (agent defaults, ADR-365; `apps/api`'s `Acceptances` and `Voids`, the worker's
+run): an acceptance belongs to one flag and is made once; a flag is on a ticket by its number, so a
+renumbered field event's flag is a new one, accepted again; a flag on a `PENDING` ticket may be
+accepted; an acceptance isn't taken back (correct the record instead); a flag the worker cleared
+can't be accepted. **A void ticket has no open flag**: its flags are cleared when a person or a
+rule voids it, kept in its history, and raised fresh if it is unvoided. A voided ticket's field
+events are read by no other ticket's checks from the moment the void is made.
 
 ## 5.5 Quantity math
 
@@ -279,7 +331,7 @@ weight) is stored apart from what was observed, and the parts **sum exactly** to
 - **Split haul-out shares** (ADR-295): each pile records a **running** load call, how full the
   container is after it; the last is the haul-out's call. A pile's part = its call − the call before
   it; its CY = capacity × that part ÷ 100; its share of a scale weight = that part ÷ the last call,
-  to two decimals, the remainder given to one pile so the shares sum exactly. Golden mission 201004: `730419`, 110 CY,
+  to two decimals, the remainder given to one pile (the largest, the last of equals: agent default, ADR-343) so the shares sum exactly. Golden mission 201004: `730419`, 110 CY,
   calls 10%, 35%, 85% → parts 10, 25, 50 → **11.0, 27.5 and 55.0 CY** (93.5 CY); the mission pays it
   by weight (ADR-297), and its 24.00-ton scale weight → **2.82, 7.06 and 14.12 t**, the billed quantities. A call not higher than the one before it is flagged and the piles
   aren't shared out until it's corrected. The load-call limits judge only the last call.
@@ -316,7 +368,9 @@ weight) is stored apart from what was observed, and the parts **sum exactly** to
 - **Crew time:** the **highest item's hours, once** (Skid Steer 9.75 h, Truck 8.50 h → **9.75 h**,
   golden mission 301007), then the pay item's conversion: **per hour**; **per day, exact** (hours ÷
   the day length, default 12); or **per day in steps** the admin sets. These three are the only ones;
-  a contract that fits none is a new ADR (ADR-084, 087, 126).
+  a contract that fits none is a new ADR (ADR-084, 087, 126). By exact division the quantity keeps
+  **four decimals, a half up** (10.25 h ÷ 12 = 0.8542); hours that fall in no step **bill nothing on
+  that line and the ticket is flagged** (the user, 2026-10-05, ADR-355).
 - **TBN** bills nothing until the rate is agreed; entering it reprocesses the un-invoiced tickets
   (ADR-068, 090).
 
@@ -325,6 +379,9 @@ weight) is stored apart from what was observed, and the parts **sum exactly** to
 ## History
 
 What this page used to say, and why it changed. Never build from the left-hand side.
+
+- "A reviewer who may correct may also accept" a flag (ADR-166) → *accept flags* is a grant of its
+  own; *correct* doesn't carry it (the user, 2026-10-06, ADR-365; KD-74).
 
 - Titled "as implemented": validators as Python pure functions in `validators.py`, `evaluate_rules`
   with JSON condition keys and error codes (`RULE_DEBRIS_TYPE`, `RULE_DISTANCE_EXCEEDED`…), unit

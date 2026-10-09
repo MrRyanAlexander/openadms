@@ -520,8 +520,8 @@ monitors"); the manifest carries each code's debris type so the phone never asks
 3. The phone receives its manifest:
    - the project's certified trucks and crews;
    - sites, ROEs, and control ranges or its number block;
-   - its chosen unit rate pay items (code, name and kind of work, never a rate) and the lists
-     its start menus need (ADR-127);
+   - its chosen unit rate pay items (code, description and kind of work, never a rate; ADR-301)
+     and the lists its start menus need (ADR-127);
    - the master passcode check;
    - **the login list**: a sign-in check for each monitor enabled on that project (ADR-105, Q-90).
 4. Now monitors can sign in and make tickets, offline.

@@ -74,11 +74,14 @@ describe('the routing server (Valhalla)', () => {
     expect([...answer.available_actions].sort()).toEqual(['locate', 'route', 'status']);
   });
 
+  // As the worker asks it (apps/worker, ADR-350): by distance, on the roads a car may drive.
   it('gives the shortest road distance between two points, in miles', async () => {
     const { status, body } = await ask(routing, '/route', {
       locations: [dover, sandtown],
       costing: 'auto',
-      costing_options: { auto: { shortest: true } },
+      costing_options: {
+        auto: { use_distance: 1, destination_only_penalty: 43_200, private_access_penalty: 43_200 },
+      },
       units: 'miles',
     });
     expect(status).toBe(200);

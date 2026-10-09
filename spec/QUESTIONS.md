@@ -215,7 +215,7 @@ person must resolve it — ADR-060). Expired at the time of the work → flagged
 - Reconciled records have unique FKs to both source tickets.
 - The run reads only `PENDING` rows (idempotent by status).
 - Phantoms are voided, never renumbered; a void clears anything already billed (ADR-085).
-- A scale receipt can be used only once per project.
+- A scale receipt can be used only once per project. *(Its **number** is never unique: a receipt book starts again at 001; the user, 2026-10-04, ADR-328, 331.)*
 
 *(ADR-021/022/028/034/056, `adms-ticket-workflows` §4.7, invariant 17)* ⚠️ `Transaction` has
 **no** uniqueness on its source record, so the ledger write path KD-01 adds must itself be
@@ -2104,9 +2104,11 @@ Contract" means that one; a rule that bills to the other contract names it.
 *Refs:* ADR-081, ADR-108, ADR-109, ADR-118; `spec/RULES.md` §5.
 
 ### ✅ Q-139 — A rate that changes from a date
-*(ADR-147)* **Decided:** the firm sets this up however it needs (e.g. a second `3A` plus *Ticket
-date* criteria); nothing forces a pattern; two codes may share a name. Two rules writing the same
-slot on a ticket stays flagged (ADR-118).
+*(ADR-147, corrected by ADR-301)* **Decided:** the firm sets this up however it needs (e.g. a
+second pay item, with a code of its own that the firm chooses, plus *Ticket date* criteria); nothing
+forces a pattern or a name; **a code is unique on its project** (ADR-147 had read the "Yes" below
+the wrong way round, as "two codes may share a name"). An exact duplicate of a rule is refused
+before it's saved, and two rules writing the same slot on a ticket stays flagged (ADR-118, 301).
 
 Changing a service code's rate reprices every ticket not locked as invoiced. That's right for
 fixing a wrong rate. It isn't right for a contract change that raises a rate **from a date**.
@@ -2119,13 +2121,23 @@ Tickets from 1–14 October aren't invoiced yet. Editing `3A`'s rate would repri
 Editing a rate stays the way to fix a mistake. That needs one answer from you: **may two service
 codes on a project share the name `3A`**, or should the second be named e.g. `3A-2`?
 
-> **User:** Yes but we don't want to make anything that forces this onto the firm. We would however
-> want to flag if there are two rules matching the same thing. So if we already have a transaction
-> in slot 1 a ticket and then we get another for it in the same slot, we'd know it's likely an issue
-> and flag it. This way allows for more flexibility on the firm side to set things up how they need
-> to use it, vs ridgid setup on on dev side.
+> **User, 2026-10-02 (the corrected answer, as they wrote it into this entry; ADR-301):** Yes (the
+> second should be named e.g. `3A-2`) but we don't want to make anything that forces this onto the
+> firm - we dont want to force this `3A-2` prefix naming - we want to let them decide what to nme it.
+> We would however want to flag if there are two rules matching the same thing (same details, same
+> name, i.e., a duplicate rule). So if we already have a transaction in slot 1 a ticket and then we
+> get another for it in the same slot, we'd know it's likely an issue and flag it. This way allows
+> for more flexibility on the firm side to set things up how they need to use it, vs ridgid setup on
+> on dev side.
 
-*Refs:* ADR-090, ADR-109, ADR-125; `spec/RULES.md` §4.
+> **User, 2026-09-27 (the first answer, which ADR-147 read as "yes, they may share a name"):** Yes
+> but we don't want to make anything that forces this onto the firm. We would however want to flag
+> if there are two rules matching the same thing. So if we already have a transaction in slot 1 a
+> ticket and then we get another for it in the same slot, we'd know it's likely an issue and flag
+> it. This way allows for more flexibility on the firm side to set things up how they need to use
+> it, vs ridgid setup on on dev side.
+
+*Refs:* ADR-090, ADR-109, ADR-125, ADR-301; `spec/RULES.md` §4.
 
 ### ✅ Q-140 — Work paid by different funders
 *(ADR-148)* **Decided:** a separate project per funder or kind of work; no funder field.
@@ -2225,7 +2237,9 @@ time, not only at the nightly sync.
 ### ✅ Q-143 — The same truck on two projects
 *(ADR-152)* **Decided:** copy the certification to the other project with a **new number** and a
 reference to the old one; if a mistake is later found in the copy, the original is flagged for
-review.
+review. **Superseded by the user, 2026-10-04 (ADR-328, 329): a certification is never copied; a
+truck that moves to a second project is certified there from scratch, with that project's own
+number.**
 
 A certification belongs to one project, so a truck working two projects needs one on each.
 
@@ -2773,7 +2787,22 @@ another prime's; monitors' phone numbers are shown only to admins.
 
 > **User:** Agent proposal makes sense.. Approved!
 
-*Refs:* ADR-050, ADR-105, Q-02, Q-100; ARCHITECTURE §5.5.
+**Asked again for a sub, 2026-10-06 (task 1.7.3, ADR-361; the back office's hat).** Ticket 101002 on
+P1: Rivera Trucking's truck `730416`, working as a sub under Coastline Haulers, hauls C&D to the
+Landfill. The ledger holds two lines for it: #1 `CD-HAUL-CY-15`, 36.0 CY × $8.25 = $297.00, and #2
+`TIP-FEE-CY-BCL`, 36.0 CY × $4.00 = $144.00. The $8.25 and $4.00 are Coastline's rates with Bayline
+County; what Coastline pays Rivera is not in the system. When Rivera's own read-only login opens
+ticket 101002, what should it see of those two lines? Options: *No money (Recommended)* · *Rate and
+amount too* · *The firm picks per login*.
+
+> **User, 2026-10-06:** "No money (Recommended)": "Rivera sees its ticket, the pay item and the
+> quantity (36.0 CY), but not the rate ($8.25) or the amount ($297.00). The prime's price with the
+> client stays between the prime, the client and the firm."
+
+**Decided (ADR-361):** a sub's contractor user reads its lines' pay item and quantity and no rate or
+amount; its prime's contractor user, a client user and an auditor read the money.
+
+*Refs:* ADR-050, ADR-105, ADR-361, Q-02, Q-100; ARCHITECTURE §5.5.
 
 ### ✅ Q-162 — Two-step sign-in, and email
 *(ADR-170)* **Decided: approved as proposed**, with local development testing kept workable.
@@ -3466,7 +3495,7 @@ Which is right: (a) the proposal, (b) the alternative, or (c) something else?
 
 *Refs:* ADR-056 (number then badge), ADR-071 (the disposal phone's truck list), ADR-081 and ADR-108
 (a rule's contractor is the prime; subs are certified under a prime), ADR-111 (crew badge), ADR-147
-(two codes may share a name), ADR-154 (a keyed-in truck), ADR-174 (one set of rules per prime),
+(a dated rate change is the firm's own setup; its "two codes may share a name" is corrected by ADR-301), ADR-154 (a keyed-in truck), ADR-174 (one set of rules per prime),
 ADR-175, ADR-182, ADR-185, ADR-186.
 
 ### ✅ Q-183 — Stumps: what exactly does the monitor measure?

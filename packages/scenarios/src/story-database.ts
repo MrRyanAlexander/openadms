@@ -141,11 +141,12 @@ export class StoryDatabase {
     }
   }
 
-  // A service's own client on this database: its login, from its env file.
+  // A service's own client on this database: its login, from its env file. The worker's takes
+  // more connections: each run holds one for its project's lock while it works (ADR-352).
   open(service: Service): Database {
     return openDatabase({
       url: this.url(new URL(`apps/${service}/.env`, root)),
-      maxConnections: 2,
+      maxConnections: service === 'worker' ? 4 : 2,
     });
   }
 

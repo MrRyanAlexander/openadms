@@ -10,5 +10,18 @@
     "rewriteRelativeImportExtensions": true
   },
   "include": ["src"],
-  "references": [{ "path": "../db" }]
+  "references": [
+    {
+      "path": "../../apps/api"
+    },
+    {
+      "path": "../../apps/worker"
+    },
+    {
+      "path": "../db"
+    },
+    {
+      "path": "../domain"
+    }
+  ]
 }

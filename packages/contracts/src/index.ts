@@ -3,6 +3,15 @@
 import { workspace as domainWorkspace } from '@open-adms/domain';
 import { z } from 'zod';
 
+export { fieldEventDetailsSchema, type FieldEventDetailsPayload } from './field-event-details.ts';
+export { formAnswersSchema, type FormAnswers } from './form-answers.ts';
+export {
+  formDefinitionFields,
+  formFieldTypes,
+  type FormDefinitionFields,
+  type FormField,
+} from './form-definition.ts';
+
 export const workspace = 'contracts';
 
 export const wiringProbe = z.object({

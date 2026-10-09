@@ -59,10 +59,11 @@ edited any time after (a change reprocesses the un-invoiced tickets it touches, 
    Reduced is added to the haul-out form (ADR-211, 214). The **kinds of unit rate work** the project
    allows (ADR-127). **Field tags**, a project list starting empty (ADR-216, 218).
 6. **Pay items.** Read the **line items off the paper contract** and enter each: its **code** (setup
-   suggests one, `VEG-HAUL-CY-15`, never forces it), name, **payable type** (the work it prices),
-   description (the contract's words and line number), **Unit of Measure** (`TN` or `LB` means the
-   load is weighed), a **size band** where one payable type has several pay items, its capture
-   settings, and **a rate for each prime** (ADR-206, 207, 213, 221, 223, 235). A contract usually
+   suggests one, `VEG-HAUL-CY-15`, never forces it; **unique on the project**), its **description**
+   (what the work is, in the firm's own words), **payable type** (the work it prices), **Unit of
+   Measure** (`TN` or `LB` means the load is weighed), a **size band** where one payable type has
+   several pay items, its capture settings, and **a rate for each prime** (ADR-206, 207, 213, 221,
+   223, 235, 301). A rate that changes from a date is a second pay item with a code of its own. A contract usually
    prices a line per CY and per ton; the firm enters the pay items it needs and its rules pick
    (ADR-202). There is no fee label on a pay item (ADR-246).
 7. **Disposal sites.** Entered **on each project** that uses one (ADR-145): a **site type**
@@ -79,7 +80,9 @@ edited any time after (a change reprocesses the un-invoiced tickets it touches, 
    on tickets of its prime; blank only on a rule that just removes or voids), **criteria** (all must
    hold; each value picked or typed), **actions** *Add transaction #n* (a pay item), *Remove
    transaction #n*, *Void ticket*; Active; Show matches; Reprocess (ADR-109, 118, 125, 239). The pay
-   item screen's **"Pays when"** writes and keeps most rules for the firm (ADR-229).
+   item screen's **"Pays when"** writes and keeps most rules for the firm (ADR-229). **A rule that is
+   an exact copy of another** (same form, contract, criteria and actions, whatever it is named) **is
+   refused before it's saved**, with an error naming the rule it copies (ADR-301).
 9. **Certifications.** On a phone whose assignment includes certifying ([Part 3](03-certification.md),
    ADR-240).
 10. **ROEs.** Where the program type requires them, in the back office or on a phone
@@ -91,12 +94,16 @@ edited any time after (a change reprocesses the un-invoiced tickets it touches, 
 **Reuse:** a firm **library** (debris types, pay items, incident types, reasons) and **copy from a
 past project** (ADR-228). **The setup check** lists gaps before the field day (a tipping fee site
 with no fee pay item, a debris type no rule pays, a prime with no rate, overlapping bands), and every
-change shows what it would change first (ADR-229).
+change shows what it would change first (ADR-229). It also lists a stretch between two size bands or
+two crew-day steps that falls in neither, and every active rule that isn't valid, with why (a rule
+left naming an archived form, contract or pay item among them); it never refuses anything (built at
+the domain, ADR-357: `SetupCheck`).
 
 **What each site's phones will ask for** is worked out here, ahead: for each site, debris type and
 prime, from the rules that could match there and the Unit of Measure and capture settings of the pay
 items they pay: a load call, a scale weight, or a count of the tickets a load carries. It's shown on
-the site's page and sent with the phones' lists (ADR-227, 243).
+the site's page and sent with the phones' lists (ADR-227, 243). A haul-out's disposal is asked for
+the scale weight or nothing more (built at the domain, ADR-357: `QuantityLookup`).
 
 **Then dispatch** ([Part 2](02-people-and-devices.md)): phones are enrolled once, and each day's
 **assignments** say who works where on what (ADR-240). Only then does a monitor record a field event.

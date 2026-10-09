@@ -1,0 +1,200 @@
+# Acceptance scenarios — Part 2, People and devices
+
+✅ ** Approved**: agent-written (ADR-314); the user approves.
+
+← [Acceptance scenarios](README.md) · The part page: [Part 2 — People & devices](../parts/02-people-and-devices.md)
+
+> Each scenario restates a recorded rule; **From** names it. Values are the example world's
+> (`spec/CONVENTIONS.md` §6; the golden mission §1): Gates Disaster Recovery's admin **Dana Reyes**
+> and manager/analyst **Luis Ortega**; the monitors Ana Brooks `M004127`, Kim Nguyen `M004128`,
+> Tariq Patel `M004129`, Jo Kim `M004130`, Sam Grant `M004131` and Lee Morgan `M004132`; the phones
+> of the golden mission's dispatch board. How to read the columns: [README](README.md). **The word
+> is "setup", never "provisioning"** (ADR-095).
+
+**How this file differs from Part 1's.** Most of Part 2 is not Phase 1's to build, so each scenario
+says which of three things it is:
+
+| Mark in **Proven at** | Meaning |
+|---|---|
+| **database (built, Phase 0)** | Phase 0 built it (ADR-281, 286; its forms and pay item check, ADR-308, 309) and a test proves it. The test named is the one that does; **since task 1.1.10 (ADR-315) its name starts with the scenario's ID**, so a search for the ID finds it (README, "Rules for whoever proves one"). **Passing** says "database" from the run of 2026-10-03 |
+| **database (1.1.10)** | Task 1.1.10 made it pass (ADR-315): people's permissions, viewers, and row-level security for the setup tables (C18's first part, C54) |
+| **API (Phase 2)** · **field app (Phase 3)** · **back office (Phase 4)** | The rule is recorded; nothing in Phase 1 builds it. Sign-in, the login list and the sync contract are Phase 2's; the phone is Phase 3's; the dispatch board's screen, the read-only portal and the time clock's approval are Phase 4's; the time clock's tables come with Phases 3–4 |
+
+**Throughout:** every write below is made by a named person and is audited by the database with
+that person as its actor (REQ-011, built in Phase 0); nothing is deleted.
+
+---
+
+## A. People (step 1)
+
+| ID | Scenario | From | Proven at | Passing |
+|---|---|---|---|---|
+| AC-02-01 | **Given** the last Monitor ID issued is `M004131`, **when** Lee Morgan is added and nobody types an ID, **then** the database issues `M004132`: "M" and six or more digits, the next of one series | ADR-105, 120, 281 · REQ-021 | database (built, Phase 0): `monitor-id.test.ts`, "is issued by the database…" | database |
+| AC-02-02 | **Given** Ana Brooks holds `M004127`, **when** a second person is written with `M004127`, **then** the database refuses it. Every monitor has a Monitor ID; whoever adds an admin, a manager/analyst or a viewer may leave it off | ADR-120, 281 · REQ-021 | database (built, Phase 0): `monitor-id.test.ts`, "belongs to one person", "may be left off anyone but a monitor…" | database |
+| AC-02-03 | **Given** Kim Nguyen is employed by Harbor Staffing, a contractor of the monitoring kind, **then** her record names that contractor as her employer, with its own ID for her, `HS-0417`. An employer that is no contractor record is refused, and so is an employer's ID with no employer | ADR-102 (Q-97), 281 · REQ-021 | database (built, Phase 0): `monitor-id.test.ts`, "a worker's employer" | database |
+| AC-02-04 | **Given** the worker's system actor, **then** it has no Monitor ID and no employer, and is never a login. Only the API may ask the database for a Monitor ID: the worker and the read-only login are refused | ADR-273, 276, 281 | database (built, Phase 0): `monitor-id.test.ts`, "is issued by the API alone…", "is never the system actor's…" | database |
+| AC-02-05 | **Given** Ana Brooks works on P1 and on P2, **then** she is one person record, added once: a person belongs to the firm, never to a project | ADR-050, 105 | database (1.1.10): `people.test.ts` | database |
+| AC-02-06 | **When** a person is added, **then** the record holds their name, their role (admin, manager/analyst, monitor or read-only viewer; fixed in code) and their contact email and phone, each optional | ADR-050, 105; `spec/DATA-MODEL.md` §2.2 | database (1.1.10): `people.test.ts` | database |
+| AC-02-07 | **Given** a supervisor holds the master passcode and the phone has a connection, **when** they choose "Create monitor" and set the password, **then** the monitor is saved on the server and their username is their Monitor ID. Without a connection a monitor can't be created | ADR-105, 120; ARCHITECTURE §7.0 | API (Phase 2; who the API states as the actor: C45); field app (Phase 3) |  |
+| AC-02-08 | **When** a back-office user, a client user, a contractor user or an auditor is needed, **then** an admin creates them in the back office; a monitor is never created there | ADR-105 | API (Phase 2); back office (Phase 4) |  |
+| AC-02-09 | **Given** a monitor has left the firm, **when** Dana removes them, **then** they are archived, every record they made still names them, and a delete is refused by the database for every login | ADR-007 · REQ-010 | database (1.1.10): `people.test.ts` | database |
+
+## B. Permissions and two-step sign-in (step 2)
+
+| ID | Scenario | From | Proven at | Passing |
+|---|---|---|---|---|
+| AC-02-10 | **When** Dana grants Luis Ortega *correct*, *renumber*, *void*, *accept flags*, *QC* and *lock as invoiced*, **then** each is kept as its own grant and audited with Dana as its actor; granting him *void* a second time is refused by the database | ADR-050; golden mission §1; `spec/DATA-MODEL.md` §2.2 | database (1.1.10): `people.test.ts` | database |
+| AC-02-11 | **Given** the permissions a manager/analyst can be granted, **then** they are one closed set, fixed in code: correct, renumber, void, accept flags, QC, lock as invoiced, unlock, approve hours, setup, dispatch. An admin needs none | ADR-050; `spec/DATA-MODEL.md` §2.2 (agent default, approved with it, ADR-289) | database (1.1.10): `people.test.ts` | database |
+| AC-02-12 | **Given** Luis was not granted *unlock*, **when** he tries to unlock an invoiced ticket, **then** the server refuses. Permissions are read from the database on every request, so when Dana takes *void* from him his next void is refused, not his next sign-in's | ARCHITECTURE §6 · REQ-202 | API (Phase 2) |  |
+| AC-02-13 | **Given** any back-office user, **then** they can never grant a permission they don't hold, and the last admin can't be removed or locked out | ARCHITECTURE §6 · REQ-415 | API (Phase 2) |  |
+| AC-02-14 | **When** Dana or Luis signs in to the back office, **then** an authenticator code is required; for a read-only viewer it is optional; a monitor's sign-in on a phone has none | ADR-170 · REQ-202 | API (Phase 2) |  |
+
+## C. Enrolling a phone, and the master passcode (step 3)
+
+| ID | Scenario | From | Proven at | Passing |
+|---|---|---|---|---|
+| AC-02-15 | **When** the phone `P1-COL-1` is enrolled, **then** it is one of the firm's phones, in service, with its name and its device key's public half, and with no project and no monitor | ADR-240, 281 · REQ-020 | database (built, Phase 0): `devices.test.ts`, "is enrolled once…" | database |
+| AC-02-16 | **Given** `P1-COL-1` is enrolled, **when** a second phone is written with the same key, **then** the database refuses it: one key, one phone | ADR-096, 281; ARCHITECTURE §7.4 | database (built, Phase 0): `devices.test.ts`, "can't be copied…" | database |
+| AC-02-17 | **Given** a phone holds a version of the master passcode's check, **then** that version is one the database has; a version that doesn't exist is refused | ADR-281; ARCHITECTURE §7.5 | database (built, Phase 0): `devices.test.ts`, "holds a version of the master passcode that exists" | database |
+| AC-02-18 | **When** a phone is enrolled, **then** it is online, the master passcode opens it, and the phone makes its device key in its secure hardware, where it can't be exported; every later sync proves the phone by signing the server's challenge | ADR-240; ARCHITECTURE §7.4 · REQ-202a | API (Phase 2); field app (Phase 3) |  |
+| AC-02-19 | **Given** an enrolled phone, **then** its data is encrypted with a key held on that phone only, never backed up, and never made from a monitor's password, so a supervisor can sync a phone its monitor walked away from | ADR-096; ARCHITECTURE §8 | field app (Phase 3) |  |
+| AC-02-20 | **Given** a fresh installation whose installer was given the firm's master passcode, **then** the database holds version 1 of it as an Argon2id hash and nothing else: one master passcode for the firm | ADR-106, 281 | database (built, Phase 0): `devices.test.ts`, "is kept by the seed as version 1…" | database |
+| AC-02-21 | **When** the firm changes its master passcode, **then** that is version 2 and version 1 is still there: the API reads the hash and adds a version, and never edits or removes one. The worker and the read-only login can't read it | ADR-106, 281 | database (built, Phase 0): `devices.test.ts`, "the API reads it and adds a version…", "is read by nobody else…" | database |
+| AC-02-22 | **Given** the master passcode is written or changed, **then** the audit log says that it changed and never holds its hash, before or after | ADR-281 | database (built, Phase 0): `devices.test.ts`, "never reaches the audit log…" | database |
+| AC-02-23 | **Given** the firm changed its master passcode, **then** each phone gets the new check at its next sync; and every use of the passcode on a phone is logged there and synced as a security event | ADR-106; ARCHITECTURE §7.5 | API (Phase 2; C45, C47) |  |
+
+## D. Dispatch: the day's assignments (step 4)
+
+| ID | Scenario | From | Proven at | Passing |
+|---|---|---|---|---|
+| AC-02-24 | **When** Luis writes Monday 12 October's board, **then** Kim Nguyen's assignment says P1, disposals, at Marsh Road TDSR, on `P1-TWR-TDSR`; Ana Brooks's says P1, collections, with no site (a curb collection has none) | ADR-195, 240, 281 · REQ-020 | database (built, Phase 0): `assignments.test.ts`, "says who works where, on what…" | database |
+| AC-02-25 | **When** an assignment on P1 names a site, **then** it is one of P1's own sites; P2's Marsh Road TDSR is refused by the database | ADR-145, 281 | database (built, Phase 0): `assignments.test.ts`, "is at one of its own project's sites…" | database |
+| AC-02-26 | **Given** an assignment written on the board, **then** it is *planned* and says who wrote it (Luis). **Given** one made on a phone under the master passcode, **then** it is *unplanned*, has no author, always names its phone, and its id comes from the phone | ADR-240, 281 · REQ-020 | database (built, Phase 0): `assignments.test.ts`, "written on the board says who wrote it…" | database |
+| AC-02-27 | **When** an assignment says what work the person does, **then** its ticket work is named by the kinds of field event (collection, disposal, haul-out collection, haul-out disposal, unit rate), certifying is its own tick, and the forms it names are only ROEs, surveys, incidents and drop-off logs | ADR-240, 281, 308 · REQ-020 | database (built, Phase 0 and ADR-308): `assignments.test.ts`, "names only work a phone can record…"; `forms.test.ts`, "the forms an assignment names" | database |
+| AC-02-28 | **Given** the worker's system actor, **then** it is never given an assignment and never writes one | ADR-276, 281 | database (built, Phase 0): `assignments.test.ts`, "is for a person and written by a person…" | database |
+| AC-02-29 | **Given** Ana Brooks works P1 and P2 on the same day, **then** she has two assignments, one on `P1-COL-1` and one on `P2-COL-1`; the database doesn't refuse the second | ADR-145, 240, 281 | database (built, Phase 0): `assignments.test.ts`, "never stops a second one…" | database |
+| AC-02-30 | **When** Luis withdraws an assignment, **then** it is archived, never deleted; an assignment never expires on its own. The worker reads assignments and writes none | ADR-240, 281 | database (built, Phase 0): `assignments.test.ts`, "is withdrawn, never deleted…" | database |
+| AC-02-31 | **When** Luis gives Jo Kim's unit rate assignment `HNG-RMV-EA` and `LNR-RMV-EA-24`, **then** both are kept on it. `VEG-HAUL-CY-15`, a hauling pay item, is refused (only a unit rate pay item can be named), and so is a pay item of another project | ADR-127, 240, 286, 309 (C42) · REQ-020, 112b | database (built, ADR-286, 309): `assignments.test.ts`, "an assignment's unit rate pay items" | database |
+| AC-02-32 | **Given** Jo's assignment names `HNG-RMV-EA`, **when** Luis names it again, **then** it is refused; **when** he takes it off, **then** it is archived and can be put back, never deleted; each step is audited with Luis as its actor | ADR-286 | database (built, ADR-286): `assignments.test.ts`, "name each pay item once…", "are audited…" | database |
+| AC-02-33 | **Given** Monday's board, **when** Luis copies it to Tuesday, **then** Tuesday has the same people, work, sites and phones, as new assignments he may change | ADR-240; golden mission §1 · REQ-417 | back office (Phase 4) |  |
+| AC-02-34 | **Given** a person assigned who records nothing, a site with field events and nobody assigned, or work a monitor did outside their assignment, **then** the board shows each as planned against actual; no ticket is flagged for it and no work is refused | ADR-240; `spec/FLAGS.md` §2 · REQ-125c, 417 | domain (Milestone 1.5: no flag is raised); the board's views: back office (Phase 4) | in part: no flag is raised, domain, as AC-06-133 (`packages/domain/test/checks.test.ts`); counted (2026-10-06, ADR-369); the board: Phase 4 |
+
+## E. Start of day and sign-in (steps 5–7)
+
+| ID | Scenario | From | Proven at | Passing |
+|---|---|---|---|---|
+| AC-02-35 | **Given** Kim Nguyen has Monday's assignment, **when** she signs in online on any enrolled phone with her Monitor ID and password, **then** the phone receives her assignment, its project's lists and its numbers; nobody enters the master passcode and nobody picks a project | ADR-240 · REQ-311 | API (Phase 2); field app (Phase 3) |  |
+| AC-02-36 | **Given** a phone holds an assignment, **then** it holds one, so one project; a tower monitor working P1 and P2 carries two phones | ADR-145, 240 | field app (Phase 3) |  |
+| AC-02-37 | **Given** a phone took its assignment, **then** its lists carry the project's certifications, sites, ROEs, its number block or control ranges, the forms' debris types and field tags, the login list, the setup version, the unit rate pay items its assignment names (for unit rate work) and its site's quantity lookup (for work at a site). They never carry a rate, a rule or a load's pay item, and a tower holds no ticket list: it trusts the scan | ADR-071, 207, 223, 227, 240, 243; `adms-field-app` §4A.2a | API (Phase 2) |  |
+| AC-02-38 | **Given** Tariq Patel has no assignment on Monday, **when** a supervisor enters the master passcode on his phone and sets it up (project, work, site, and Tariq from the login list), **then** he can work, and it is recorded as an unplanned assignment: marked, never flagged, and on the board once the phone syncs. Offline, this works only on the project whose lists the phone already holds | ADR-240 | the record: database (built, AC-02-26); the setup itself: field app (Phase 3); its arrival: API (Phase 2) | the record: database |
+| AC-02-39 | **Given** a phone with no connection, **when** a monitor on its login list signs in, **then** the phone checks them against the list. The same Monitor ID and password are refused by the back office, the portal and every API but device sync | ADR-105, 139; ARCHITECTURE §7.2 | API (Phase 2); field app (Phase 3) |  |
+| AC-02-40 | **Given** the sign-in screen, **when** the password is wrong 5 times, **then** tries back off; after 10 the phone locks until the master passcode is entered. The app also locks after inactivity | ADR-139; ARCHITECTURE §7.2 | field app (Phase 3) |  |
+| AC-02-41 | **Given** a phone's login list, **then** it lives only inside the phone's encrypted store, each entry a slow Argon2id hash with a salt unique to that phone, so a copy from one phone is useless on another | ADR-139; ARCHITECTURE §7.2 | API (Phase 2); field app (Phase 3) |  |
+| AC-02-42 | **When** a supervisor signs in as the phone's monitor with the master passcode, or opens a temporary session for a monitor picked from the roster, **then** the session and every record made in it are marked (a temporary session: "authorised by the master passcode, for M004127"), and a temporary session ends at day end | ADR-095, 106, 120; ARCHITECTURE §7.3 | the mark on a field event: database (1.3.3); the session: field app (Phase 3) | in part: the mark on a field event, database, as AC-04-28; counted (2026-10-06, ADR-369); the session: Phase 3 |
+
+## F. Working, switching monitors, moving site (steps 8–9)
+
+| ID | Scenario | From | Proven at | Passing |
+|---|---|---|---|---|
+| AC-02-43 | **Given** Kim records ticket 101001's disposal under Monday's assignment, **then** the field event carries that assignment (so who, and at which site) and the setup version of the phone's lists. Both are corrected by permission like any captured field, never by the worker; the system actor never records a field event | ADR-240, 281 · REQ-020, 105i | database (built, Phase 0): `assignments.test.ts`, "a field event"; the story `dispatch-monday` | database; story |
+| AC-02-44 | **Given** a phone that last synced two days ago, **when** a monitor scans a badge that isn't in its lists, **then** the phone asks ("this certification isn't in your list: continue?") and shows how stale it is; it never blocks the work | ADR-031, 052; `adms-field-app` §4A.2 | field app (Phase 3) |  |
+| AC-02-45 | **Given** a monitor finished a field event, **when** they reopen it before they end their shift, **then** the change is theirs: for one already synced it travels as the phone's edit log and is audited under the monitor. After the shift ends the monitor can change nothing | ADR-240 (agent default) · REQ-105g | API (Phase 2); field app (Phase 3) |  |
+| AC-02-46 | **When** a phone passes from Ana to Sam on the same project, **then** the master passcode comes first, and Sam then signs in with his own Monitor ID and password. Ana's unsynced work stays hers, is hidden from Sam, and syncs in the background | ADR-095, 120; ARCHITECTURE §7.3 · REQ-312 | field app (Phase 3) |  |
+| AC-02-47 | **When** a phone is moved from one of its project's sites to another, **then** it is done on the phone with the master passcode, offline if need be, and is recorded; each record keeps the site it was made at | ADR-195, 240 | a field event's own site: database (1.3.3; C42); the move: field app (Phase 3) | in part: each record keeps the site it was made at, database, as AC-04-23; counted (2026-10-06, ADR-369); the move: Phase 3 |
+| AC-02-48 | **Given** a phone failed and Luis creates the record in the back office, **then** it says who made it and why, has no phone and no assignment, and its ticket is flagged: "Ticket 101029: record created in the back office by Luis Ortega (Phone failed)." It pairs and bills as any other | ADR-156; `spec/FLAGS.md` `BACK_OFFICE_RECORD` · REQ-105i | database (1.3.3; C44); the flag: domain (Milestone 1.5) | the record: database, as AC-04-19; the flag: domain, as AC-06-64; counted (2026-10-06, ADR-369) |
+
+## G. The time clock (step 10)
+
+Its rules are settled (ADR-241); its tables (`ClockEntry`, `ClockActivityLine`, `ApprovedDay`) and
+screens are Phases 3–4 (REQ-310). Nothing here is Phase 1's but the project's own switch.
+
+| ID | Scenario | From | Proven at | Passing |
+|---|---|---|---|---|
+| AC-02-49 | **Given** a new project, **then** its time clock is off, and its workers aren't offered it until the firm switches it on | ADR-241, 303, 304 | domain and database (built, 1.1.3: AC-01-11) | as AC-01-11 |
+| AC-02-50 | **Given** P1's time clock is on, **then** anyone with an assignment clocks in, starts and ends a break and clocks out by hand, on their assignment | ADR-241 · REQ-310 | field app (Phase 3) |  |
+| AC-02-51 | **Given** a monitor who isn't clocked in, **when** they start a field event, **then** the phone asks "You're not clocked in. Clock in now?"; **when** they sign out while clocked in, **then** it asks "Clock out?". Neither stops the work | ADR-241 · REQ-310 | field app (Phase 3) |  |
+| AC-02-52 | **When** a worker clocks out, **then** the day's activity lines are pre-filled from their field events for them to edit and approve; what the app can't know (travel, standby, training) is picked from the firm's list | ADR-241 · REQ-310 | field app (Phase 3) |  |
+| AC-02-53 | **When** a manager approves a worker's day, **then** it is locked; an unlock is audited. Approved hours are exported for payroll and for billing the client; Open ADMS holds no hourly rate and no pay | ADR-241 · REQ-310 | back office (Phase 4) |  |
+| AC-02-54 | **Given** crew 730418's crew time ticket 301007 (Skid Steer 9.75 h), **then** nothing on it reads, or is checked against, anyone's clocked hours: the time clock and crew time share no field | ADR-241; golden mission §2 | field app and back office (Phases 3–4, with the clock's tables) |  |
+| AC-02-55 | **Given** a worker's day, **then** it ends before midnight in the project's time zone, and no limit is put on a monitor's hours | ADR-100, 241 | field app (Phase 3) |  |
+
+## H. Sync, turning a phone in, a lost phone (steps 11–13)
+
+| ID | Scenario | From | Proven at | Passing |
+|---|---|---|---|---|
+| AC-02-56 | **Given** `P1-TWR-TDSR`'s battery is flat on Tuesday, **when** it syncs on Wednesday, **then** everything on it is received: a phone syncs whenever it has a connection, records first and photos after, and needn't be handed in for its work to arrive | ADR-030, 240; golden mission §2 | story (1.9.1); the sync itself: API (Phase 2), in `05-sync.md` | story (2026-10-06, ADR-368): `packages/scenarios/src/stories/golden-mission.ts` |
+| AC-02-57 | **Given** P1's numbers are generated, **then** `P1-COL-1` holds the block 101001–102000 of P1's load series, issued once (the same start again is refused), used in order, and a tower holds none. The worker reads a block and writes nothing | ADR-065, 281 · REQ-020 | database (built, Phase 0): `devices.test.ts`, "a number block"; the series and the allocator: 1.3.2 (C43) | database |
+| AC-02-58 | **When** a supervisor enters the master passcode and chooses "Sync and turn in", with or without the monitor, **then** the phone uploads every queue (archived ones too), waits for the server to confirm each record, returns its unused numbers, and only then wipes itself | ADR-096, 134; ARCHITECTURE §8 · REQ-313 | field app (Phase 3); API (Phase 2) |  |
+| AC-02-59 | **Given** `P1-TWR-LF` can't be found on Monday evening, **when** Luis marks it lost at 6:10 pm, **then** it is out of service from exactly that time, and its record is kept, never deleted | ADR-134, 281 · REQ-020 | database (built, Phase 0): `devices.test.ts`, "is lost or retired exactly from its removal time…"; the story `dispatch-monday` | database; story |
+| AC-02-60 | **Given** that lost phone turns up and syncs, **then** everything on it is received. What it made before 6:10 pm comes in as usual; what it made after is flagged, "Ticket 101008: made on a phone taken out of service.", and still bills. Nothing is refused | ADR-134; `spec/FLAGS.md` `PHONE_OUT_OF_SERVICE` · REQ-202a | the flag: domain (Milestone 1.5); the receipt: API (Phase 2) | in part: the flag, domain, as AC-06-62; counted (2026-10-06, ADR-369); the receipt: Phase 2 |
+| AC-02-61 | **Given** the server has confirmed every record from that phone, **then** its number block is retired and it is wiped; only then is its key revoked and the phone refused | ADR-065, 134; ARCHITECTURE §7.4 | the revocation's time kept on the phone's record: database (1.1.10); the refusal: API (Phase 2; C47) | the time: database (`devices.test.ts`) |
+
+## I. Read-only viewers (step 14)
+
+| ID | Scenario | From | Proven at | Passing |
+|---|---|---|---|---|
+| AC-02-62 | **Given** a read-only request that doesn't state its viewer, or states someone who isn't a read-only viewer or who was removed, **then** it sees nothing: the database fails closed (reworded 2026-10-03, ADR-315: a request now states who is looking, and the database reads their projects from their record) | ADR-169, 270 · REQ-014 | database (built, Phase 0): `row-level-security.test.ts`, "unstated, sees nothing", "stated as someone who is no read-only viewer…" | database |
+| AC-02-63 | **Given** Bayline County's debris manager has a client user login for P1 and P2, **then** they see the whole of those projects' field events, completed loads and transactions, and nothing of the Town of Egret Point's project | ADR-050, 169 · REQ-014 | database (built, Phase 0): `row-level-security.test.ts`, "a client user sees the whole of their project…" | database |
+| AC-02-64 | **Given** an auditor is given P1 and P2, **then** they see both, as a client user does | ADR-169 · REQ-014 | database (built, Phase 0): `row-level-security.test.ts`, "an auditor sees every project they are given" | database |
+| AC-02-65 | **Given** Coastline Haulers' contractor user and Summit Debris Services' on P1, **then** each sees only its own transactions, never the other prime's | ADR-169 · REQ-014 | database (built, Phase 0): `row-level-security.test.ts`, "a contractor sees only its own transactions…" | database |
+| AC-02-66 | **Given** Rivera Trucking works under Coastline on P1, **then** Coastline's contractor user sees Rivera's tickets and transactions with its own; Rivera's would see only Rivera's. Until a ticket carries its contractor, a contractor user sees no field event and no completed load (fail closed) | ADR-169, 270; C18 | database (1.2.3 for a ticket's contractor; 1.7.1 for a transaction's operating sub) | database (2026-10-06): the transactions (ADR-358) and the tickets themselves (task 1.7.3, ADR-361), `packages/db/test/row-level-security.test.ts`; what a contractor user sees of a ticket in full: AC-02-78…82 |
+| AC-02-67 | **Given** the read-only login, **then** it can only read, and only through the viewer views and what they stand on; it can write nothing | ADR-097, 270 · REQ-014 | database (built, Phase 0): `grants.test.ts`, "the read-only login (adms_readonly)" | database |
+| AC-02-68 | **Given** any read-only viewer, **then** they see no phone, no assignment, no number block and nothing of the master passcode | ADR-281 (agent default) | database (built, Phase 0): `grants.test.ts`, "the read-only login (adms_readonly)"; `devices.test.ts`, "is read by nobody else…" | database |
+| AC-02-69 | **When** Dana issues the client user their login, **then** the record says what kind of viewer they are (client, contractor or auditor; kept on a read-only viewer only) and which projects they may see, each project once; a contractor user also names its contractor (Coastline Haulers). Row-level security reads exactly that | ADR-169; `spec/DATA-MODEL.md` §2.2 | database (1.1.10); stating the viewer on every read: API (Phase 2; C22) | database (`viewers.test.ts`, `row-level-security.test.ts`) |
+| AC-02-70 | **Given** the client user of AC-02-63, or an auditor, **then** they see their projects' setup too (the client, the declaration event, the project and its settings, its contractors and contracts, forms, pay items, sites, map and rules): the whole project, and none of another project's | ADR-169; C54 | database (1.1.10): `viewers.test.ts`, `catalog.test.ts` | database |
+| AC-02-71 | **Given** any client user or auditor, **then** nothing they can read shows a person's phone number or a driver's licence number | ADR-169 | database (1.1.10: a person's phone; 1.2.3: the licence number) | a person's phone: database (`viewers.test.ts`) |
+| AC-02-72 | **Given** Luis, a manager/analyst, **when** he looks at Ana Brooks, **then** he doesn't see her phone number; Dana, an admin, does | ADR-169 | API (Phase 2) |  |
+| AC-02-73 | **Given** P1's time clock is on, **then** no read-only viewer sees anybody's hours | ADR-241 (agent default) | Phases 3–4, with the clock's tables |  |
+| AC-02-74 | **When** a client user, a contractor user or an auditor signs in, **then** it is to a read-only web view of their own projects' tickets and reports, with an authenticator code only if they chose one | ADR-050, 170 · REQ-408 | API (Phase 2); back office (Phase 4) |  |
+| AC-02-75 | **When** Dana issues a read-only viewer their login, **then** the record says whether that viewer sees private citizens by name; every read-only viewer's record says so and nobody else's does. A new viewer starts seeing them; Dana may say otherwise for that one viewer, then or later, and each change is audited with her as the actor. No viewer reads or changes the setting *(added 2026-10-04, ADR-336, after the user's approval of this file: agent-written, for the user's approval)* | ADR-328 (4), 336 | database and domain (C67 (d)): `viewers.test.ts`, `viewer-settings.test.ts` | database and domain (2026-10-04, ADR-336) |
+| AC-02-76 | **Given** ROE `R-0007` on P1 is Rosa Delgado's, and Kim logged Carl Jensen's drop-off from 14 Heron St, **then** Bayline County's client user and the auditor, neither marked, read the ROE's owner and the log's resident and address by name, for their own projects only; a contractor user reads neither record *(added 2026-10-04, ADR-336: agent-written, for the user's approval)* | ADR-169, 327, 328 (4), 336 | database (C67 (d)): `roes-and-forms.test.ts`, `catalog.test.ts` | database (2026-10-04, ADR-336) |
+| AC-02-77 | **Given** Dana marked the auditor not to see private citizens, **then** the auditor still sees `R-0007` (its number, parcel, address, signature) and the drop-off log (its site, time, notes), and reads no owner, no resident and no origin address, through the viewer views or past them; the client user, not marked, still reads them; when Dana gives the auditor that sight back, they read them again *(added 2026-10-04, ADR-336: agent-written, for the user's approval)* | ADR-328 (4), 336 | database (C67 (d)): `roes-and-forms.test.ts` | database (2026-10-04, ADR-336) |
+| AC-02-78 | **Given** Coastline Haulers' contractor user, given P1, **then** they see the tickets on Coastline's certifications, Rivera's truck `730416` under it included: loads 101001 and 101002 and the split haul-out 201004, each with its field events, its completed record and its rows; those five certifications without the driver's phone or licence number; and Coastline and Rivera by name. They see nothing of Summit's load 101044, no flag, no monitor's name, no ROE, survey, incident or drop-off log, and nothing of setup. Summit's contractor user sees 101044 and nothing of Coastline's *(added 2026-10-06, ADR-361: agent-written, for the user's approval)* | ADR-169, 315, 361; Q-161; C18 · REQ-014 | database (1.7.3): `contractor-users.test.ts`, `viewers.test.ts`, `certifications.test.ts` (AC-03-60), `derived-records.test.ts` | database (2026-10-06, ADR-361) |
+| AC-02-79 | **Given** Rivera Trucking's own contractor user, given P1, **then** they see only what Rivera's truck worked: load 101002 with its two field events, its completed load, certification `730416` with its measured boxes, the Landfill's scale receipt `BCL-88241` once 101002's disposal points at it, and the photographs of those field events, that truck and that receipt; nothing of Coastline's 101001, no other contractor by name, and never where a photograph's file is kept *(added 2026-10-06, ADR-361: agent-written, for the user's approval)* | ADR-169, 361; C62, C65 · REQ-014 | database (1.7.3): `contractor-users.test.ts`, `scale-receipts-and-photos.test.ts` | database (2026-10-06, ADR-361) |
+| AC-02-80 | **Given** load 101002's line #1, `CD-HAUL-CY-15`, 36.0 CY × $8.25 = $297.00, the prime Coastline and the operating sub Rivera, **then** Rivera's contractor user reads the line's pay item and its quantity, 36.0 CY, and no rate and no amount, through the viewer views or past them; Coastline's contractor user reads $8.25 and $297.00 on it, as on its own $390.00 line; Summit's reads the money only on Summit's line; the client user and the auditor on every line | **the user, 2026-10-06** (ADR-361); ADR-169, 358; Q-161 · REQ-014 | database (1.7.3): `contractor-users.test.ts`, `catalog.test.ts`, `grants.test.ts` | database (2026-10-06, ADR-361) |
+| AC-02-81 | **Given** any read-only viewer given P1, a contractor user included, **then** they read the names a ticket is read with: each pay item's code and description (`VEG-HAUL-CY-15`, "ROW VEG haul 0–15 mi"), each disposal site's name (Marsh Road TDSR, Bayline County Landfill) and each debris type on the project's forms (Vegetative, C&D); a contractor user reads nothing more of setup (no rate, no pay item's settings, no site's facts, no rule, no list), and nobody reads a name of a project they aren't given *(added 2026-10-06, ADR-361: agent-written, for the user's approval)* | ADR-315, 361; C59 | database (1.7.3): `contractor-users.test.ts`, `catalog.test.ts` | database (2026-10-06, ADR-361) |
+| AC-02-82 | **Given** a collection on load 101020 whose badge `730499` found no certification, **then** no contractor user sees it (the client user does); **when** it is pointed at `730421`, Tidewater Hauling's truck, tier 2 under Rivera under Coastline, **then** Tidewater's, Rivera's and Coastline's contractor users each see it, and Summit's doesn't *(added 2026-10-06, ADR-361: agent-written, for the user's approval)* | ADR-108, 169, 361; AC-03-12 | database (1.7.3): `contractor-users.test.ts` | database (2026-10-06, ADR-361) |
+
+---
+
+## The count
+
+**82 scenarios** (74 approved by the user, ADR-335; AC-02-75…77 added after, ADR-336; AC-02-78…82 with task 1.7.3, ADR-361). By where each is proven:
+
+| | Scenarios | How many |
+|---|---|---|
+| Built in Phase 0 (and by ADR-286, 308, 309), passing at the database, each under a test whose name starts with its ID (since task 1.1.10, ADR-315) | AC-02-01…04, 15…17, 20…22, 24…32, 43, 57, 59, 62…65, 67, 68 | 28 |
+| Built, in part | AC-02-38 (the unplanned assignment's record), AC-02-49 (the project's switch, as AC-01-11) | 2 |
+| Built by task 1.1.10 (ADR-315), passing at the database | AC-02-05, 06, 09, 10, 11, 69, 70; and the database's part of AC-02-61 and 71 | 7, and 2 in part |
+| Built by C67 (d) (ADR-336), passing at the database and the domain | AC-02-75, 76, 77 | 3 |
+| Built by tasks 1.7.1 and 1.7.3 (ADR-358, 361), passing at the database | AC-02-66, 78…82 | 6 |
+| Later Phase 1 tasks | AC-02-34 and the flags of 48 and 60 (Milestone 1.5); 42, 47, 48 (1.3.3); 56 (1.9.1); 71's licence number (1.2.3) | |
+| Phases 2–4 only | AC-02-07, 08, 12…14, 18, 19, 23, 33, 35…37, 39…41, 44…46, 50…55, 58, 72…74 | 28 |
+
+**44 pass at the database, and four in part** (AC-02-38, 49, 61, 71): the 35 of 2026-10-03, AC-02-75…77 (2026-10-04, ADR-336), and AC-02-66 and 78…82 (2026-10-06, ADR-361). The run behind it
+(2026-10-03, on the local stack, ADR-315): `pnpm test`, `Test Files 43 passed (43)`, `Tests 859 passed (859)`,
+the database's 654 among them (`people`, `viewers`, `devices`, `assignments`, `monitor-id`,
+`row-level-security`, `grants`, `catalog`, `forms`); `pnpm scenarios`, 16 and 18 checks passed.
+
+## Left to the task that builds it
+
+Nothing recorded settles these, so no scenario asserts them. Each is decided in the ADR of the task
+named, as an agent default the user may overturn; none changes money, evidence or a monitor's work.
+
+| # | What isn't settled | Decided with |
+|---|---|---|
+| 1 | ~~How a permission is taken away from a manager/analyst when nothing is deleted~~ **Decided (ADR-315):** by archiving its grant; given back by clearing the archive, never a second row | 1.1.10 ✅ |
+| 2 | ~~What a **contractor user** sees of a project's setup~~ **Decided (ADR-315):** the project's name, time zone and dates, and nothing else: no settings, pay items, rates, rules, contractors, sites or lists, until the user says otherwise. **Since ADR-361 (task 1.7.3):** also its own place on the project and its subs', those contractors by name, and three names a ticket is read with (AC-02-81) | 1.1.10 ✅; 1.7.3 ✅ |
+| 3 | ~~Whether any read-only viewer sees a client's or a contractor's contact name, email and phone~~ **Decided (ADR-315):** none does; nor a client's notes | 1.1.10 ✅ |
+| 4 | ~~Whether the database, or only the API, refuses a contractor user with no contractor named~~ **Decided (ADR-315):** the database refuses it, and a contractor on anyone else; every read-only viewer states its kind | 1.1.10 ✅ |
+| 5 | ~~Which audit domain a permission grant and a viewer's project belong to~~ **Decided (ADR-315):** security, as a person's record is | 1.1.10 ✅ |
+| 6 | ~~The table name of `ViewerProject`~~ **Decided (ADR-315):** `user_viewer_project` | 1.1.10 ✅ |
+| 7 | Where a firm's Monitor ID series starts if it isn't `M000001` | 1.3.2 (C43) |
+| 8 | Who the API states as the actor for an act under the master passcode (enrolment, "Create monitor", an unplanned assignment), since the passcode isn't a user | Phase 2 (C45) |
+| 9 | The times a phone makes besides a field event's (an unplanned assignment, a monitor switch, a site move, a clock entry), and how the setup version is numbered | Phase 2, the sync contract (C46) |
+| 10 | How the end of a monitor's shift is recorded, so the server can tell an edit made before it from one after (ADR-240's "reopenable until the monitor ends the shift") | Phase 2, the sync contract |
+
+**Not in Phase 1** (their rules are recorded; ARCHITECTURE §6–§8): sign-in, sessions, two-step
+sign-in, the login list, enrolment's exchange and the sync contract (Phase 2, REQ-202, 202a, 203);
+the phone (Phase 3, REQ-311…313); the time clock (Phases 3–4, REQ-310); the dispatch board's
+screen, worker administration and the read-only portal (Phase 4, REQ-417, 415, 408).

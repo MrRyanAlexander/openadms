@@ -40,7 +40,7 @@ setup decides which price a contract means**; Open ADMS never chooses (ADR-197, 
    192).
 5. **The rate** is the pay item's rate **for the rule's contract's prime**; a pay item with no rate
    for that prime writes a **$0 line, flagged**; a pay item with no rate at all is a $0 line that
-   still writes (staged freon, `WG-FRN-EA-STG`) (ADR-128, 206, 212). **Cost = quantity × rate.**
+   still writes (staged freon, `WG-FRN-EA-STG`) (ADR-128, 206, 212). **Cost = quantity × rate.** The amount is rounded to the cent a half up, from the quantity as the line keeps it, four decimals (the user, 2026-10-05, ADR-355).
    Rates live nowhere else (invariant 7).
 6. **Write each `Transaction`**: the ticket (and the split property), the rule and its #, the pay
    item, the quantity, the rate, the cost, the contract, **the prime and the operating sub**

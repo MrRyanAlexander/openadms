@@ -6,12 +6,13 @@ import { describe, expect, it } from 'vitest';
 
 import { systemActorId } from '../src/system-actor.ts';
 import { refusedBy } from './support/database.ts';
+import { insertOf, projectLike } from './support/example-world.ts';
 import { eachTestRolledBack } from './support/lifecycle.ts';
 
 const tested = eachTestRolledBack();
 
-const newProject = `INSERT INTO "project" ("name", "time_zone")
-  VALUES ('Bayline County ROW, Hurricane Delphine (2)', 'America/New_York') RETURNING "id"::text`;
+// A new project, whole, under the example world's client and declaration event.
+const newProject = (): [string, unknown[]] => insertOf('project', projectLike(tested.world));
 
 async function auditedFor(recordId: string): Promise<{ actor: string; source: string }[]> {
   const { db } = tested;
@@ -30,7 +31,7 @@ describe('only the worker and the seed write as the system actor', () => {
     for (const source of ['BACK_OFFICE', 'DEVICE', 'SYSTEM'] as const) {
       await db.actor(systemActorId, source);
       const attempts: [string, unknown[], string][] = [
-        [newProject, [], 'project'],
+        [...newProject(), 'project'],
         [`UPDATE "user" SET "name" = 'Ana B.' WHERE "id" = $1`, [world.monitor], 'user'],
         [
           `UPDATE "field_event" SET "load_call" = 70 WHERE "id" = $1`,
@@ -53,7 +54,7 @@ describe('only the worker and the seed write as the system actor', () => {
     const { db, world } = tested;
     await db.as('adms_api');
     await db.actor(world.admin, 'SYSTEM');
-    expect(await db.refused(newProject)).toEqual({
+    expect(await db.refused(...newProject())).toEqual({
       code: refusedBy.grant,
       message:
         'Only the worker writes with source SYSTEM: adms_api may not state it (a write to project)',
@@ -68,7 +69,7 @@ describe('only the worker and the seed write as the system actor', () => {
     await db.run(`UPDATE "field_event" SET "status" = 'COMPLETED' WHERE "id" = $1`, [disposal]);
     await db.as('adms_owner');
     await db.actor(systemActorId, 'SYSTEM');
-    const { id } = await db.one<{ id: string }>(newProject);
+    const { id } = await db.one<{ id: string }>(...newProject());
     expect(await auditedFor(disposal)).toEqual([
       { actor: world.admin, source: 'BACK_OFFICE' },
       { actor: systemActorId, source: 'SYSTEM' },
@@ -94,7 +95,7 @@ describe('only the worker and the seed write as the system actor', () => {
     const { db } = tested;
     await db.administer();
     await db.actor(systemActorId, 'SYSTEM');
-    expect(await db.refused(newProject)).toEqual({
+    expect(await db.refused(...newProject())).toEqual({
       code: refusedBy.grant,
       message:
         'Only the worker writes as the system actor: postgres may not state it (a write to project)',

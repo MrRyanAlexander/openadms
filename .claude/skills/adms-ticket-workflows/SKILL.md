@@ -2,9 +2,9 @@
 name: adms-ticket-workflows
 description: Open ADMS ticket workflows and the setup spine, in today's rules. Covers what must exist before any field event (client, declaration event, project, contracts, forms and debris types, pay items, sites, rules, certifications, ROEs), ticket numbers, a ticket's life and statuses, how every capture starts (badge first, number last), Workflow A loads (collection and disposal events to the completed load, split loads, loads that carry tickets), Workflow B haul-outs, Workflow C unit rate (hangers, leaners, stumps and fill, white goods, HHW, crew time), Workflow D forms (ROE, surveys, incidents, citizen drop-off logs), and the order of a reconciliation run. Use when creating, matching or reconciling tickets, or when setting up a project, contract, pay item, site or ROE. Checks and flags live in adms-validation, pricing in adms-ledger-audit, duplicates and corrections in adms-exceptions, phone screens in adms-field-app.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-242; the tower's lookup, ADR-243; an ROE's scope, ADR-293; split haul-outs, ADR-295) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-242; the tower's lookup, ADR-243; an ROE's scope, ADR-293; split haul-outs, ADR-295; a pay item's unique code and description, a duplicate rule refused, ADR-301; a contractor's contact details, ADR-306) -->
 
-> **This page states today's rules** (through ADR-241). Each rule cites its ADR; what changed is in
+> **This page states today's rules** (last changed by ADR-306, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
 > `agent_store/SUMMARY.md` disagree, SUMMARY wins: log a KD (`adms-decisions`). The worked example
 > is `spec/golden/MISSION.md`; names and examples follow `spec/CONVENTIONS.md`. The words (field
@@ -67,12 +67,12 @@ anything new, check whether projects, names, pay items, rules and lists already 
 
 | Setup record | What it holds | ADRs |
 |---|---|---|
-| **Contractors → contracts** | Primes and their subs (at most two tiers; subs typed in at certification). A **contract** is a name, its prime and an optional link to the signed copy; the contractor is added to the project first | 081, 108, 146 |
+| **Contractors → contracts** | Primes and their subs (at most two tiers; subs typed in at certification). A contractor holds its name, its kind and **contact details** (a contact name, email and phone, each optional; the user, ADR-306). A **contract** is a name, its prime and an optional link to the signed copy; the contractor is added to the project first | 081, 108, 146, 305, 306 |
 | **Forms and debris types** | A form per document type (load, haul-out, unit rate ticket, truck certificate…). **Debris types are added to a form, named as the contract names the work** (Mulch and Ash are two debris types on the haul-out form), each with *Reduced*, a reduction method (firm list) and *Hidden on phones* (off the phone's list; tickets that have it keep it) | 211, 214 |
 | **Field tags** | A project list the firm fills, starting empty (e.g. Mixed); read only by the *Field tag* criterion and exports | 216, 218 |
-| **Payable types and pay items** | A **pay item** is a priced line: code (setup suggests one, `VEG-HAUL-CY-15`), name, **payable type** (the work, from a firm list), description (the contract's words and line), Unit of Measure, size band, capture settings ("Count is always 1", "GPS required", "Measurement required", "Decimals allowed", photos required, "Monitor may mark ineligible", "quantity from the tickets it carries") and **a rate for each prime**. A unit rate pay item also names its **kind of work** (§4.5c). The only place a rate lives | 206, 207, 210, 213, 221, 223, 235 |
+| **Payable types and pay items** | A **pay item** is a priced line: code (setup suggests one, `VEG-HAUL-CY-15`; **unique on its project**, ADR-301), description (what the work is, in the firm's own words), **payable type** (the work, from a firm list), Unit of Measure, size band, capture settings ("Count is always 1", "GPS required", "Measurement required", "Decimals allowed", photos required, "Monitor may mark ineligible", "quantity from the tickets it carries") and **a rate for each prime**. A unit rate pay item also names its **kind of work** (§4.5c). The only place a rate lives | 206, 207, 210, 213, 221, 223, 235 |
 | **Disposal sites** | Entered on each project that uses it. A **site type** (TDSR/DMS · Final Disposal · Transfer Station · Other) plus facts: **Takes loads**, **Haul-outs leave here**, **Charges a tipping fee**, **Ineligible site**; the firm's own labels. A permit, its GPS, an area (the project's circle or its own shape), an activation date and an optional close date. Ticking *Charges a tipping fee* leads the firm to write the site's **tipping fee pay item** (rate per prime) and its rule (*Add transaction #2*); the site keeps the link | 111, 136, 145, 173, 194, 215, 222 |
-| **Rules** | Per form. A rule **names one contract** and runs only on its prime's tickets; criteria read only the ticket; actions *Add transaction #n* (a pay item), *Remove transaction #n*, *Void ticket*. The pay item screen's "Pays when" writes and keeps most of them. Detail: `adms-ledger-audit`, `spec/RULES.md` | 109, 118, 130, 131, 229, 239 |
+| **Rules** | Per form. A rule **names one contract** and runs only on its prime's tickets; criteria read only the ticket; actions *Add transaction #n* (a pay item), *Remove transaction #n*, *Void ticket*. The pay item screen's "Pays when" writes and keeps most of them. **An exact copy of a rule** (same form, contract, criteria and actions, whatever its name) **is refused before it is saved**, with an error naming the rule it copies. Detail: `adms-ledger-audit`, `spec/RULES.md` | 109, 118, 130, 131, 229, 239, 301 |
 | **Certifications** | A container or a crew, never a vehicle; cert number = placard = badge. Made on a phone set up for certifying (`adms-certifications`) | 015, 045, 151, 228 |
 | **ROEs** | Where the program type requires them; made in the back office or on a phone (§4.6) | 149 |
 | **Other lists** | Incident types and sub-types (sub-types start empty), reasons (void, typed number, accepting a flag, a back-office-created record), firm-added fields on surveys, ROE forms, incidents and drop-off logs | 137, 160, 173 |
@@ -81,8 +81,8 @@ anything new, check whether projects, names, pay items, rules and lists already 
 reasons) plus **"copy from a past project"** (ADR-228). **A setup check** lists gaps before the
 field day (a tipping fee site with no fee pay item, a debris type no rule pays, a prime with no
 rate, overlapping bands), and every rule or pay item change shows what it would change first
-(ADR-229). Setup may refuse a bad setting (overlapping bands, ADR-217); **after setup nothing
-refuses field work** (ADR-052).
+(ADR-229). Setup may refuse a bad setting (overlapping bands, ADR-217; a pay item code the project
+already has, an exact copy of a rule, ADR-301); **after setup nothing refuses field work** (ADR-052).
 
 **Then dispatch.** A phone is **enrolled** once; the back office's **dispatch board** gives each
 person the day's **assignment**: one project, their work (ticket types, unit rate pay items,
@@ -103,7 +103,13 @@ pay items and their settings for unit rate work (ADR-176, 213); **no pay items f
   phones. **Generated**: each numbering phone takes a **1,000-number block** of the series, issues it
   in order offline, is topped up at sync; a reset reclaims the unused rest; a lost phone's block is
   retired. Disposal phones issue nothing. Gaps are normal (ADR-056, 065). Unit rate tickets are
-  always generated (ADR-056).
+  always generated (ADR-056). **Built (ADR-323):** a project has a series per workflow, one for its
+  cert numbers once seeded and one for its ROEs (`ProjectNumberSeries`); the rest a reset phone
+  hands back is cut again for the next phone, once, and the database refuses any block that would
+  put one number on two phones; a control-ticket project has ranges for its loads and haul-outs
+  (two of one series never share a number) and only a unit rate series; block sizes are policy
+  values (1,000 ticket numbers, 100 cert numbers, 100 ROE numbers); a phone-made ROE's number is
+  written `R-0007` (agent default).
 - **The truck carries the number** from the field event that makes it to the one that closes it; the
   driver carries one barcode, the base number, even on a split (ADR-032).
 - A number **typed instead of scanned** is flagged and needs a reason from the firm's list (ADR-111,
@@ -265,7 +271,8 @@ Some loads take their quantity **from the unit rate tickets they carry**, a sett
   stump ticket's number painted on each stump, or the white goods ticket's number. A number that
   matches no ticket, or one already on another load, is flagged, never refused (ADR-192).
 - **At the tower:** no load call, no weight. The site's lookup (§4.2) tells the phone to ask for a
-  **count** of the stumps or items on the truck. The tower phone holds no ticket list (ADR-071) and
+  **count of the tickets** the load carries, never of the items on them (the user, 2026-10-06,
+  ADR-370: "the tower counts the tickets"; a white goods ticket of six items counts as one). The tower phone holds no ticket list (ADR-071) and
   needs none: **the worker compares the tower's count with the tickets the collection event lists,
   after sync**, and flags a difference (ADR-192, 243).
 - **The quantity:** a load of stumps is **each stump's CY rounded to a tenth, then added** (4.8 +
@@ -468,7 +475,7 @@ any record too (ADR-156).
 | **ROE** (Right of Entry) | number (from the phone's block, or typed from the paper ROE), parcel ID, address, owner, signed and the date, **scope** (picked from what the project already has: its load form's debris types and its unit rate payable types, each with an optional count, ADR-293; GPS, with "GPS required" set on the form; the firm's other ROE form fields), a photo of the signed form | made offline on a phone or in the back office; reaches other phones when they sync. **On an ROE project every collection, unit rate ticket and survey carries one**; missing, unsigned or out of scope is flagged | 055, 149, 181 |
 | **Pre-work survey** | a property's condition before work, against false damage claims; its ROE | | 149 |
 | **Post-work survey** | the condition after and the work done; **linked to its pre-work survey by ROE number** | the phone's lists hold the ROEs whose pre-work survey is done, so another monitor can pick one; none is flagged | 150 |
-| **Incident** | type, then sub-type (the firm adds sub-types; none at install), parties, photos, description | **records only: never stops work**, whatever the incident | 052, 137 |
+| **Incident** | type, then sub-type (the firm adds sub-types; none at install), parties, photos, description; and, each optional and only where the project's incident form offers it, the contractor involved, a cert number, an ROE number | **records only: never stops work**, whatever the incident | 052, 137, 328, 334 |
 | **Citizen drop-off log** | at a site: the site, monitor, time, GPS, the resident's name and origin address (optional), up to 8 photos (optional), notes, the firm's fields | a reference log, not a ticket: **no quantity, number, receipt, pay item or cost**; searchable by site, dates, name, address; the pile is billed when it leaves on a haul-out. *Agent default:* not checked against the site's facts | 184, 188, 215 |
 
 **User, 2026-09-27 (Q-178):** "They are like surveys more than tickets and kinda like incident
@@ -559,3 +566,6 @@ What this page used to say, and why it changed. Never build from the left-hand s
   27, 28, 29, 35.
 - Round-by-round ⚠️ notes (rounds 13–22) on top of the historical body → absorbed; rewritten in the
   present tense, in field events and today's words (ADR-138, 234, 236, 242).
+- A pay item with a name and a description of "the contract's words and line", codes that could
+  repeat, and nothing said of a copied rule → a unique code and the firm's own description; an exact
+  duplicate of a rule refused before it is saved (ADR-147 → 301).

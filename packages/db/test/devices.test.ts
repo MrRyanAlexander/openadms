@@ -23,7 +23,7 @@ const enrol = `INSERT INTO "device" ("name", "public_key", "master_passcode_vers
   VALUES ($1, $2, $3) RETURNING "id"::text, "status"::text, "out_of_service_at"`;
 
 describe('a phone', () => {
-  it('is enrolled once: in service, with no project and no monitor', async () => {
+  it('AC-02-15 is enrolled once: in service, with no project and no monitor', async () => {
     const { db } = tested;
     await asTheApi();
     expect(await db.one(enrol, ['P1-TWR-TDSR', 'test-public-key-kim-nguyen', 1])).toMatchObject({
@@ -37,6 +37,7 @@ describe('a phone', () => {
     expect(columns.map((column) => column.column_name)).toEqual([
       'enrolled_at',
       'id',
+      'key_revoked_at',
       'master_passcode_version',
       'name',
       'out_of_service_at',
@@ -45,7 +46,7 @@ describe('a phone', () => {
     ]);
   });
 
-  it("can't be copied: one key, one phone", async () => {
+  it("AC-02-16 can't be copied: one key, one phone", async () => {
     const { db } = tested;
     await asTheApi();
     expect(
@@ -53,7 +54,7 @@ describe('a phone', () => {
     ).toBe(refusedBy.unique);
   });
 
-  it('holds a version of the master passcode that exists', async () => {
+  it('AC-02-17 holds a version of the master passcode that exists', async () => {
     const { db, world } = tested;
     await asTheApi();
     expect((await db.refused(enrol, ['P1-UR-1', 'test-public-key-jo-kim', 7])).code).toBe(
@@ -72,7 +73,7 @@ describe('a phone', () => {
     ).toBe(1);
   });
 
-  it('is lost or retired exactly from its removal time; never deleted', async () => {
+  it('AC-02-59 is lost or retired exactly from its removal time; never deleted', async () => {
     const { db, world } = tested;
     await asTheApi();
     const mark = `UPDATE "device" SET "status" = $2, "out_of_service_at" = $3 WHERE "id" = $1`;
@@ -103,8 +104,47 @@ describe('a phone', () => {
   });
 });
 
+describe("a phone's key", () => {
+  it('AC-02-61 is revoked only once the phone is out of service, never before its removal time; the time is kept on its record', async () => {
+    const { db, world } = tested;
+    await asTheApi();
+    const revoke = `UPDATE "device" SET "key_revoked_at" = $2 WHERE "id" = $1`;
+    // In service: its key can't be revoked.
+    const inService = await db.refused(revoke, [world.device, '2026-10-12T22:10:00Z']);
+    expect(inService.code).toBe(refusedBy.check);
+    expect(inService.message).toContain('"device_key_revoked_check"');
+    // Luis marks it lost at 6:10 pm on Monday; it syncs, is confirmed and wiped on Wednesday.
+    await db.run(
+      `UPDATE "device" SET "status" = 'LOST', "out_of_service_at" = '2026-10-12T22:10:00Z' WHERE "id" = $1`,
+      [world.device],
+    );
+    expect((await db.refused(revoke, [world.device, '2026-10-12T22:09:59Z'])).code).toBe(
+      refusedBy.check,
+    );
+    expect(await db.run(revoke, [world.device, '2026-10-14T13:30:00Z'])).toBe(1);
+    // Back in service, it can't keep a revoked key.
+    expect(
+      (
+        await db.refused(
+          `UPDATE "device" SET "status" = 'ACTIVE', "out_of_service_at" = NULL WHERE "id" = $1`,
+          [world.device],
+        )
+      ).code,
+    ).toBe(refusedBy.check);
+    const audited = await db.rows<{ changed_fields: string[] }>(
+      `SELECT "changed_fields" FROM "audit_record"
+       WHERE "table_name" = 'device' AND "record_id" = $1 AND "operation" = 'UPDATE' ORDER BY "id"`,
+      [world.device],
+    );
+    expect(audited.map((record) => record.changed_fields)).toEqual([
+      ['out_of_service_at', 'status'],
+      ['key_revoked_at'],
+    ]);
+  });
+});
+
 describe('the master passcode', () => {
-  it('is kept by the seed as version 1, an Argon2id hash', async () => {
+  it('AC-02-20 is kept by the seed as version 1, an Argon2id hash', async () => {
     const { db } = tested;
     await db.administer();
     expect(
@@ -114,7 +154,7 @@ describe('the master passcode', () => {
     ).toEqual([{ version: 1, argon2id: true }]);
   });
 
-  it('the API reads it and adds a version, and never edits or removes one', async () => {
+  it('AC-02-21 the API reads it and adds a version, and never edits or removes one', async () => {
     const { db } = tested;
     await asTheApi();
     expect(await db.rows(`SELECT "version" FROM "master_passcode"`)).toEqual([{ version: 1 }]);
@@ -146,7 +186,7 @@ describe('the master passcode', () => {
     expect(refusal.code).toBe(by);
   });
 
-  it('is read by nobody else: not the worker, not the read-only login', async () => {
+  it('AC-02-21 AC-02-68 is read by nobody else: not the worker, not the read-only login', async () => {
     const { db } = tested;
     for (const login of ['adms_worker', 'adms_readonly'] as const) {
       await db.as(login);
@@ -156,7 +196,7 @@ describe('the master passcode', () => {
     }
   });
 
-  it('never reaches the audit log: its hash is left out, before and after', async () => {
+  it('AC-02-22 never reaches the audit log: its hash is left out, before and after', async () => {
     const { db, world } = tested;
     await asTheApi();
     const { id } = await db.one<{ id: string }>(
@@ -205,7 +245,7 @@ describe('a number block', () => {
   const issue = `INSERT INTO "number_block" ("device_id", "project_id", "series", "first_number", "last_number")
     VALUES ($1, $2, $3, $4, $5) RETURNING "id"::text`;
 
-  it('is a run of one series of a project, issued to a phone, used in order, then ended', async () => {
+  it('AC-02-57 is a run of one series of a project, issued to a phone, used in order, then ended', async () => {
     const { db, world } = tested;
     await asTheApi();
     const { id } = await db.one<{ id: string }>(issue, [
@@ -256,22 +296,23 @@ describe('a number block', () => {
     ).toBe(refusedBy.check);
   });
 
-  it('is issued once: the same start in one series of one project is refused', async () => {
+  it('AC-02-57 is issued once: the same start in one series of one project is refused', async () => {
     const { db, world } = tested;
     await asTheApi();
     await db.one(issue, [world.device, world.p1, 'LOAD', 101001, 102000]);
+    // Refused because the two would hold the same numbers (numbering.test.ts, AC-04-05).
     expect((await db.refused(issue, [world.device, world.p1, 'LOAD', 101001, 101500])).code).toBe(
-      refusedBy.unique,
+      refusedBy.exclusion,
     );
     // Another series, and another project's own series, start where they like.
     await db.one(issue, [world.device, world.p1, 'UNIT_RATE', 101001, 102000]);
     await db.one(issue, [world.device, world.p2, 'LOAD', 101001, 102000]);
-    expect((await db.refused(issue, [world.device, world.p1, 'ROE', 1, 100])).code).toBe(
+    expect((await db.refused(issue, [world.device, world.p1, 'TICKET', 1, 100])).code).toBe(
       refusedBy.badValue,
     );
   });
 
-  it("is the server's to issue: the worker reads it and writes nothing", async () => {
+  it("AC-02-57 is the server's to issue: the worker reads it and writes nothing", async () => {
     const { db, world } = tested;
     await asTheApi();
     const { id } = await db.one<{ id: string }>(issue, [

@@ -2,6 +2,7 @@
 // (ARCHITECTURE §5, §18). Only this package and the two server apps touch Postgres (invariant 12).
 export { statesTheActor, type Actor } from './actor.ts';
 export { openDatabase, type Connection, type Database } from './database.ts';
+export { RuleRows, type RuleNamed } from './rule-rows.ts';
 export { Seed, type SeedOptions } from './seed.ts';
 export { systemActor, systemActorId, systemActorName } from './system-actor.ts';
 export * from './generated/prisma/client.ts';

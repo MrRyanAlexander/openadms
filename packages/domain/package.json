@@ -2,8 +2,11 @@
   "name": "@open-adms/domain",
   "version": "0.0.0",
   "private": true,
-  "description": "Open ADMS domain rules shared by phone and server; depends on nothing (ARCHITECTURE §18).",
+  "description": "Open ADMS domain rules shared by phone and server; depends on no other workspace (ARCHITECTURE §18).",
   "license": "AGPL-3.0-only",
   "type": "module",
-  "exports": "./dist/index.js"
+  "exports": "./dist/index.js",
+  "dependencies": {
+    "geographiclib-geodesic": "2.2.0"
+  }
 }

@@ -4,6 +4,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { refusedBy } from './support/database.ts';
+import { insertOf, projectLike } from './support/example-world.ts';
 import { eachTestRolledBack } from './support/lifecycle.ts';
 
 const tested = eachTestRolledBack();
@@ -34,7 +35,7 @@ async function auditOf(recordId: string): Promise<Audited[]> {
 }
 
 describe('capture', () => {
-  it('an insert: the whole row, every field, the actor and the source', async () => {
+  it('AC-07-104 an insert: the whole row, every field, the actor and the source', async () => {
     const { db, world } = tested;
     const [inserted] = await auditOf(world.loads.l101001.disposal);
     const row = await db.one<{ row: Record<string, unknown> }>(
@@ -58,7 +59,7 @@ describe('capture', () => {
     });
   });
 
-  it('a correction: before and after, only the changed field, with device, reason and request', async () => {
+  it('AC-07-104 a correction: before and after, only the changed field, with device, reason and request', async () => {
     const { db, world } = tested;
     const disposal = world.loads.l101001.disposal;
     await db.as('adms_api');
@@ -97,12 +98,12 @@ describe('capture', () => {
     expect(refusal.code).toBe(refusedBy.grant);
   });
 
-  it('each table in its domain', async () => {
+  it('AC-07-108 each table in its domain', async () => {
     const { db, world } = tested;
     await db.as('adms_api');
     const { id: lock } = await db.one<{ id: string }>(
-      `INSERT INTO "invoice_lock" ("completed_load_id", "locked_by_id") VALUES ($1, $2) RETURNING id::text`,
-      [world.loads.l101002.completedLoad, world.admin],
+      `INSERT INTO "invoice_lock" ("completed_load_id", "locked_by_id", "project_id") VALUES ($1, $2, $3) RETURNING id::text`,
+      [world.loads.l101002.completedLoad, world.admin, world.p1],
     );
     const written = [...Object.values(world.written).flat(), lock];
     const domains = await db.rows<{ table_name: string; domains: string[] }>(
@@ -112,15 +113,34 @@ describe('capture', () => {
     );
     expect(Object.fromEntries(domains.map((row) => [row.table_name, row.domains]))).toEqual({
       assignment: ['OPERATIONS'],
+      certification: ['BILLING'],
+      certification_box: ['BILLING'],
+      certification_helper: ['OPERATIONS'],
+      client: ['OPERATIONS'],
       completed_load: ['BILLING'],
+      completed_load_collection: ['BILLING'],
+      contract: ['BILLING'],
       contractor: ['OPERATIONS'],
+      declaration_event: ['OPERATIONS'],
       device: ['SECURITY'],
       disposal_site: ['OPERATIONS'],
       field_event: ['RECORDS'],
+      form: ['OPERATIONS'],
+      form_debris_type: ['OPERATIONS'],
       invoice_lock: ['BILLING'],
+      pay_item: ['BILLING'],
+      pay_item_rate: ['BILLING'],
       project: ['OPERATIONS'],
+      project_contractor: ['OPERATIONS'],
+      project_kind_of_work: ['OPERATIONS'],
+      project_number_series: ['OPERATIONS'],
+      rule: ['BILLING'],
+      rule_action: ['BILLING'],
+      rule_criterion: ['BILLING'],
+      rule_criterion_pick: ['BILLING'],
       transaction: ['BILLING'],
       user: ['SECURITY'],
+      user_viewer_project: ['SECURITY'],
     });
     const counts = await db.one<{ records: number; rows: number }>(
       `SELECT count(*)::int AS records, count(DISTINCT "record_id")::int AS rows
@@ -130,7 +150,7 @@ describe('capture', () => {
     expect(counts).toEqual({ records: written.length, rows: written.length });
   });
 
-  it("the worker's writes, as its system actor", async () => {
+  it("AC-07-107 the worker's writes, as its system actor", async () => {
     const { db, world } = tested;
     await db.as('adms_worker');
     await db.actor(world.worker, 'SYSTEM');
@@ -147,14 +167,12 @@ describe('capture', () => {
   });
 });
 
-describe('a write with no actor or source is refused', () => {
+describe('AC-07-105 a write with no actor or source is refused', () => {
   it('no actor stated', async () => {
-    const { db } = tested;
+    const { db, world } = tested;
     await db.as('adms_api');
     await db.noActor();
-    const refusal = await db.refused(
-      `INSERT INTO "project" ("name", "time_zone") VALUES ('P3', 'America/New_York')`,
-    );
+    const refusal = await db.refused(...insertOf('project', projectLike(world)));
     expect(refusal).toEqual({
       code: refusedBy.grant,
       message: 'A write to project needs its actor: state adms.actor_id before writing',
@@ -211,7 +229,7 @@ describe('a write with no actor or source is refused', () => {
   });
 });
 
-describe('audit_record is append-only', () => {
+describe('AC-07-106 audit_record is append-only', () => {
   it('update, delete and truncate are refused for the owner and the superuser, by its trigger', async () => {
     const { db, world } = tested;
     for (const who of ['adms_owner', 'superuser'] as const) {

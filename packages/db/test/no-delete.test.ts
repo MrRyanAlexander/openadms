@@ -12,7 +12,12 @@ const tested = eachTestRolledBack();
 // Each operational table but "transaction", and a row of it from the example world.
 const rowOf: Record<string, (world: World) => string> = {
   project: (world) => world.p1,
+  client: (world) => world.client,
+  declaration_event: (world) => world.declarationEvent,
+  project_kind_of_work: (world) => world.written['project_kind_of_work']?.[0] ?? 'none written',
   contractor: (world) => world.summit,
+  project_contractor: (world) => world.written['project_contractor']?.[0] ?? 'none written',
+  contract: (world) => world.contracts.coastlineP1,
   user: (world) => world.monitor,
   device: (world) => world.device,
   field_event: (world) => world.loads.l101001.collection,
@@ -26,8 +31,8 @@ async function lock(): Promise<string> {
   await db.administer();
   await db.actor(world.admin, 'BACK_OFFICE');
   const { id } = await db.one<{ id: string }>(
-    `INSERT INTO "invoice_lock" ("completed_load_id", "locked_by_id") VALUES ($1, $2) RETURNING id::text`,
-    [world.loads.l101002.completedLoad, world.admin],
+    `INSERT INTO "invoice_lock" ("completed_load_id", "locked_by_id", "project_id") VALUES ($1, $2, $3) RETURNING id::text`,
+    [world.loads.l101002.completedLoad, world.admin, world.p1],
   );
   return id;
 }

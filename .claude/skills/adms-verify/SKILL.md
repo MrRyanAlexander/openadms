@@ -3,11 +3,10 @@ name: adms-verify
 description: Run the Open ADMS verification chain and report real observed output. Covers loading Node 24 through fnm, the frozen pnpm install, typecheck, the Vitest run with its expected counts, lint and format, the licence report, the clean-copy check after a dependency change, where tests live and how a workspace joins the run, and which ARCHITECTURE §15 layers are still to come. Use after any code or config edit, before closing out any code task, or whenever asked to verify, test, typecheck, or confirm the build is green.
 ---
 
-<!-- skill-status: current (rewritten 2026-09-29, ADR-259; the local stack added, ADR-263; the installer, ADR-266; migrations through it, ADR-268; the database tests, ADR-272; the actor extension and the seed, ADR-273; the scenario harness, ADR-275; the security checks, ADR-276; the Phase 0 models and the master passcode in the database, ADR-281; the map servers, the guard hook's tests and the assignment's pay items, ADR-282, 283, 286; the historical chain is under History) -->
+<!-- skill-status: current (rewritten for the rebuild's chain 2026-09-29, ADR-259; cut to today's expected output 2026-10-06, ADR-375: the count history is in DECISIONS.md's scratchpad) -->
 
-> **This page states today's chain** (through ADR-287). The rule never changes: **report real
-> observed output, never "should pass".** The layers still to come are listed at the end of Part 1;
-> the historical chain for `database/` is under History and is never run.
+> **This page states today's chain** (expected output as seen 2026-10-06, ADR-375). The rule never changes: **report real
+> observed output, never "should pass".** The layers still to come are listed at the end of Part 1.
 
 # PART 1 — THE CHAIN
 
@@ -27,15 +26,15 @@ pnpm scenarios                   # every story, each on its own database (§1.4)
 pnpm security                    # audit, secrets scan, env files, grant tests (§1.5)
 ```
 
-| Command | What it proves | Expected today (2026-10-01, ADR-287) |
+| Command | What it proves | Expected today (seen 2026-10-06) |
 |---|---|---|
-| `pnpm install --frozen-lockfile` | The lockfile matches every `package.json`; no version younger than 7 days; no install script ran (none is allowed); no git or tarball sub-dependency (ADR-255) | `✓ Lockfile passes supply-chain policies`, exit 0 |
+| `pnpm install --frozen-lockfile` | The lockfile matches every `package.json`; no version younger than 7 days; no install script ran (none is allowed); no git or tarball sub-dependency (ADR-255) | `✓ Lockfile passes supply-chain policies`, exit 0; with everything already installed, `Already up to date`, exit 0 |
 | `pnpm typecheck` | Generates the Prisma client (`pnpm generate`, into the git-ignored `packages/db/src/generated/`; also run first by `test` and `lint`, ADR-273), then strict TypeScript across every workspace **and its tests**, through project references (ADR-256) | `✔ Generated Prisma Client (7.10.0)`, then exit 0 with no output after `tsc --build` |
-| `pnpm test` | Typechecks, then Vitest runs every project in `vitest.config.js` (ADR-259); the database tests and the map servers' tests need the local stack up and the installation at head (§1.3, §1.3a) | **`Test Files 26 passed (26)`, `Tests 317 passed (317)`**: `domain` 1, `contracts` 3, `tools/setup` 9 (secrets 5, env files 3, the migration folder 1; ADR-270, 281), `tools/security` 76 in 2 files (the scan's rules 19, ADR-276; the agents' guard hook 57, ADR-283), `infra/local` 17 in 2 files (the map extract's rules 10; the routing and address servers over HTTPS 7; ADR-282), `packages/db` 198 in 16 files (the guards 100, ADR-272, 281, 286; the actor extension 10, ADR-273, 276; the system actor's guard 9, the migration history 1, the configuration against CIS 5, ADR-276; the time zone and times 21, the Monitor ID 15, devices, the master passcode and number blocks 20, assignments and their pay items 17, ADR-281, 286), `packages/scenarios` 13 in 2 files (the clock, ids and phone 9; the two stories and the runner 4, each on its own database; ADR-275, 281) |
+| `pnpm test` | Typechecks, then Vitest runs every project in `vitest.config.js` (ADR-259); the database tests and the map servers' tests need the local stack up and the installation at head (§1.3, §1.3a) | **`Test Files 80 passed (80)`, `Tests 1753 passed (1753)`** (seen 2026-10-06). By project: `packages/domain` 575 in 29 files and `packages/contracts` 17 in 4 (neither needs a database); `packages/db` 921 in 36 files; `packages/scenarios` 125 in 4 (the flag catalogue against `spec/FLAGS.md`, 78 flags; the harness; every story once); `apps/worker` 13 in 1 and `infra/local` 17 in 2 (the map servers: **need `pnpm local:up`**); `tools/security` 76 in 2 (the scan's rules 19, the guard hook 57); `tools/setup` 9 |
 | `pnpm lint` | ESLint's type-checked rules (floating promises, `any`, unsafe access…) on all code and tests; Prettier formatting (ADR-257) | `All matched files use Prettier code style!`, exit 0 |
-| `pnpm licences` | No licence refused or undecided (ADR-258, 260) | `357 packages: 357 allowed, 0 refused, 0 undecided.` The package count moves with dependencies; **0 refused, 0 undecided** doesn't |
-| `pnpm scenarios` | Every story passes on its own database, which is dropped afterwards (ADR-275; needs the local stack and the installation) | per story `passed: N checks, N passed, 0 failed` (`ticket-101001`: 15; `dispatch-monday`: 13), then `Stories: 2 passed, 0 failed.`, exit 0 |
-| `pnpm security` | The dependency audit, the secrets scan, the env files and the grant tests, with real counts; never prints a secret (§1.5; needs the registry, the local stack and the installation) | `✓ 0 open advisories` (3 accepted by id), secretlint `0 found`, the installation's own secrets `0 found`, env files `✓ every one ignored by git and untracked`, the grant tests `16 files, 198 tests: 198 passed` (185 files scanned for secrets on 2026-10-01). **It ends `Security checks: 7 passed, 0 failed.`, exit 0** (since the user retired the historical root `docker-compose.yml`, 2026-10-01; KD-59 closed, ADR-291). Any ✗ is a finding |
+| `pnpm licences` | No licence refused or undecided (ADR-258, 260) | `358 packages: 358 allowed, 0 refused, 0 undecided.` (since `geographiclib-geodesic`, ADR-346) The package count moves with dependencies; **0 refused, 0 undecided** doesn't |
+| `pnpm scenarios` | Every story passes on its own database, which is dropped afterwards (ADR-275; needs the local stack and the installation) | per story `passed: N checks, N passed, 0 failed` (`ticket-101001`: 16; `dispatch-monday`: 18; `setup`: 52, ADR-316, 323; `certification`: 25, ADR-321, 323, 330; `numbering`: 16, ADR-323, 371; `p1-field-days`: 35, ADR-332; `sync`: 47 and `p1-any-order`: 4, ADR-338; `p1-reconciled`: 39, ADR-352, `p1-priced`: 28, ADR-359, 360, `p1-reviewed`: 30, ADR-364, `p1-voided`: 27, ADR-365, `p1-invoiced`: 26, ADR-367, `golden-mission`: 27, ADR-368, and `p1-left-out`: 25, ADR-369, all seven of which ask the map servers), then `Stories: 15 passed, 0 failed.`, exit 0 |
+| `pnpm security` | The dependency audit, the secrets scan, the env files and the grant tests, with real counts; never prints a secret (§1.5; needs the registry, the local stack and the installation) | `✓ 0 open advisories` (3 accepted by id), secretlint `0 found`, the installation's own secrets `0 found`, a password-like setting `0 found`, env files `✓ every one ignored by git and untracked`, the grant tests `36 files, 921 tests: 921 passed, 0 failed`, ending **`Security checks: 7 passed, 0 failed.`**, exit 0 (seen 2026-10-06). `source-map-js` is forced to 1.2.2 by an override (ADR-356, 372); its `minimumReleaseAgeExclude` entry is deleted from 2026-10-07 14:08 UTC. Any ✗ is a finding, never accepted to get green |
 
 **The local stack** (ADR-263; Docker running). Run it after a change to `infra/local`, and before any
 work that needs the database or the object store:
@@ -86,26 +85,27 @@ pnpm installer:teardown   # asks for the word `teardown` (or --yes); the next ru
 
 | Command | What it proves | Expected today (2026-10-01) |
 |---|---|---|
-| `pnpm installer` (first run) | Secrets made once into owner-only env files; four logins from SCRAM verifiers; database `adms` open only to them; the master passcode's slow hash handed to the seed in memory and kept in the database alone, never in a file (ADR-281) | `+ wrote` ×3, `+ created login` ×4, `+ created database adms` and `adms_shadow`, `✓ … opens adms with its own password` ×4, `All migrations have been successfully applied.`, `+ created the system actor, Open ADMS (system)`, `+ kept the master passcode's slow hash in the database, version 1`, `Installed for …`; `packages/db/.env` holds only `DATABASE_URL` |
-| `pnpm installer` (rerun) | Resume without new secrets; migrations at head (nineteen today: the models, nine guards, the guard helper and its fix, the `SYSTEM` role, the system actor's guard, ADR-270…273, 276; the Monitor ID's issuer, the Phase 0 models and their guards, ADR-281; the pay item and an assignment's pay items, and their guard, ADR-286); the seed re-checks the system actor and stops if it was changed (ADR-273); the install stops if `guard_gaps()` lists an unguarded table; a migration whose SQL is still only comments is refused, not applied | 20 `✓` lines, ending `✓ migrations at head (Database schema is up to date!)`, `✓ every table is guarded` (ADR-271), `✓ the master passcode's slow hash is kept in the database alone (Argon2id, version 1)` (ADR-281) and `✓ the system actor is the seed's, alone, unchanged and guarded` (ADR-276); one confirm; `No pending migrations to apply.`; `✓ the system actor exists, Open ADMS (system)`; `✓ the master passcode's slow hash is kept, version 1`; `shasum` of the three env files unchanged |
+| `pnpm installer` (first run) | Secrets made once into owner-only env files; four logins from SCRAM verifiers; database `adms` open only to them; the master passcode's slow hash handed to the seed in memory and kept in the database alone, never in a file (ADR-281) | `+ wrote` ×3, `+ created login` ×4, `+ created database adms` and `adms_shadow`, `✓ … opens adms with its own password` ×4, `All migrations have been successfully applied.`, `+ created the system actor, Open ADMS (system)`, `+ kept the master passcode's slow hash in the database, version 1`, `+ wrote 94 values to the firm's lists (…)` (ADR-302), `Installed for …`; `packages/db/.env` holds only `DATABASE_URL` |
+| `pnpm installer` (rerun) | Resume without new secrets; migrations at head (eighty today; `packages/db/prisma/migrations/` is the list); the seed re-checks the system actor and stops if it was changed (ADR-273); the install stops if `guard_gaps()` lists an unguarded table; a migration whose SQL is still only comments is refused, not applied | 20 `✓` lines, ending `✓ migrations at head (Database schema is up to date!)`, `✓ every table is guarded` (ADR-271), `✓ the master passcode's slow hash is kept in the database alone (Argon2id, version 1)` (ADR-281) and `✓ the system actor is the seed's, alone, unchanged and guarded` (ADR-276); one confirm; `No pending migrations to apply.`; `✓ the system actor exists, Open ADMS (system)`; `✓ the master passcode's slow hash is kept, version 1`; `✓ the firm's lists are as the firm keeps them, each built-in value in place` (ADR-302); `shasum` of the three env files unchanged |
 | `pnpm installer` (the database lost) | The logins and the database come back with the secrets it has; the master passcode, kept only in the database, is asked for again (ADR-281) | `The database holds no master passcode (it went with the database). Set it again:`, then `+ kept the master passcode's slow hash in the database, version 1`; with no answer it stops, exit 1; env files unchanged |
 | `pnpm installer:teardown` | The next run is a first run | `adms`, `adms_shadow` and four logins dropped, three env files and the record removed |
 
-**The schema** (ADR-267, 268), after a change to `packages/db/prisma/schema/`: in `packages/db`, `./node_modules/.bin/prisma validate` (→ `The schemas at prisma/schema are valid`), then `./node_modules/.bin/prisma migrate dev --create-only --name <what>` to generate a migration, reviewed, then `pnpm installer` to apply it. Call the CLI through `./node_modules/.bin/prisma`: `pnpm exec` re-runs the install first. Never edit a generated or applied migration (ADR-113). Two things seen (ADR-281): `migrate dev --create-only` **applies any earlier migration still pending to `adms` itself** before it makes the new one (as `adms_owner`, like the installer; so write a stub's SQL before generating the next migration); and when the generated migration carries a warning it asks to confirm and needs a terminal: `(sleep 6; printf 'y\n'; sleep 8) | script -q /dev/null ./node_modules/.bin/prisma migrate dev --create-only --name <what>`.
+**The schema** (ADR-267, 268), after a change to `packages/db/prisma/schema/`: in `packages/db`, `./node_modules/.bin/prisma validate` (→ `The schemas at prisma/schema are valid`), then `./node_modules/.bin/prisma migrate dev --create-only --name <what>` to generate a migration, reviewed, then `pnpm installer` to apply it. Call the CLI through `./node_modules/.bin/prisma`: `pnpm exec` re-runs the install first. Never edit a generated or applied migration (ADR-113). Two things seen (ADR-281): `migrate dev --create-only` **applies any earlier migration still pending to `adms` itself** before it makes the new one (as `adms_owner`, like the installer; so write a stub's SQL, and try it with its tests on a throw-away copy, before generating the next migration: ADR-311 (9)); and when the generated migration carries a warning it asks to confirm and needs a terminal: `(sleep 6; printf 'y\n'; sleep 8) | script -q /dev/null ./node_modules/.bin/prisma migrate dev --create-only --name <what>`. **A migration that writes a row** (a backfill) states its actor and writes inside one `DO` block: Prisma runs a migration's statements one by one, so `set_config(…, true)` in its own statement is gone by the next (seen on a throw-away copy, ADR-336). **The hook refuses a second write into a stub**: one never applied to `adms` is removed and made again with `--create-only`. **A guard's `--create-only` stub must come out empty** (`-- This is an empty migration.`): if it carries a line nobody asked for, Prisma is reading a `dbgenerated` default back differently from how the schema writes it (KD-70: `CURRENT_TIMESTAMP` comes back as `now()`; `transaction_timestamp()` comes back as written). Fix the schema, never write around the hook. **A deferred check** (a container's primary box, ADR-321) is asked at commit; a database test asks it with `SET CONSTRAINTS ALL IMMEDIATE`, and the example world does once it is built. **A field event's tests** (ADR-324): `field-events.test.ts`, one test per scenario ID of `spec/acceptance/04-field-capture.md`; a test writes one with `fieldEventLike` or `backOfficeEventLike` and `eventInsertOf`, since no column of where it came from has a default; a new column joins `captured` in `grants.test.ts` and AC-04-25's exact column list. **What each kind records** (ADR-325): `field-event-kinds.test.ts`, one test per scenario ID; a debris type is written with `debrisTypePicked(world, entryId[, form])` (the entry with its form and document type), a split collection with its estimate, a measurement with `measured_as`; a new kind-specific column also joins `packages/domain`'s `fieldEventDetails` and `packages/contracts`' `fieldEventDetailsSchema`, and the test "every detail on every kind" then tries it on all five kinds. **Scale receipts and photographs** (ADR-326): `scale-receipts-and-photos.test.ts`, one or more tests per scenario ID; a test writes a receipt with `scaleReceiptLike` and a photograph's record with `photoLike(world, owner)`, both through `phoneInsertOf` (the id a phone would make); a photograph's fingerprints and keys can't be updated, so a test that needs others writes another; a new owner of a photograph widens `photo_owner_check` and joins `correctable.photo` in `grants.test.ts` and AC-04-76's column list; a new latitude or longitude column joins the exact list in `sites.test.ts`. **ROEs and forms** (ADR-327): `roes-and-forms.test.ts`, one or more tests per scenario ID; a test writes an ROE with `roeLike` and a survey, an incident or a drop-off log from `formLike` or `backOfficeFormLike` plus its own columns, through `phoneInsertOf`; `answers` is always stated, and answers come with `form_definition_id`, `form_id` and `form_document_type` together; a new form table joins `formShared`'s users in `grants.test.ts`. **Intake and quarantine** (ADR-338): `quarantined-records.test.ts`, by scenario ID of `spec/acceptance/05-sync.md`; a test writes a quarantined record through `phoneInsertOf('quarantined_record', …)` with the field event or the ROE that holds its number, and what the phone sent can't be updated afterwards, so a test that needs other values writes another; the stories `sync` and `p1-any-order` drive `apps/api`'s `Intake`, and a record a phone never makes is a phone's record copied under a new id and handed to `story.intake.receive`. **The derived records** (ADR-340): `derived-records.test.ts`, by scenario ID of `spec/acceptance/06-reconciliation.md`; a test writes them as the worker (`db.as('adms_worker')`, `db.actor(world.worker, 'SYSTEM')`) with that file's `completedLoadLike`, `collectionRowLike`, `flagLike` and `runLike`; a rule that holds only among live rows is an exclusion `WHERE dissolved_at IS NULL` (refused as `refusedBy.exclusion`), never a partial unique index, and `./node_modules/.bin/prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema --exit-code` (→ `No difference detected.`) shows Prisma won't drop it; a cross-project refusal is tried with a record nothing else names yet, or another key answers first and the test proves nothing (seen: one of fifty loosenings slipped through that way). **A priced line** (ADR-358): `transactions.test.ts`, by scenario ID of `spec/acceptance/07-pricing-ledger-audit.md`; a test writes one as the worker with `transactionLike(world, more)`, and the tickets the example world doesn't hold with `new PricedTickets(tested)` (`test/support/priced-tickets.ts`); `transaction` has its own guards, so a new column means its viewer view and column grant written again by hand in the guard migration, `viewerColumns.transaction` in `grants.test.ts` and AC-07-89's column list; the two-column foreign keys to the completed load and to the completed haul-out are implied by the row's three-column key and the check, so loosening one alone is not caught, by construction. **People's marks** (ADR-363): `marks.test.ts`, by scenario ID of `spec/acceptance/08-review-and-corrections.md` and `09-invoice-deliver-closeout.md`; a test writes them as the API's login for the person (`actingAs`) with that file's `qcLike`, `lockLike`, `acceptanceLike` and `voidLike`; every mark states its `project_id`, and a mark on a field event `field_event_kind: 'UNIT_RATE'`; a second lock or void in force is `refusedBy.exclusion`; what a mark is on, who made it and when can't be updated, nor a lock once unlocked or a void once lifted, so a test that needs other values writes another. **A reviewer's services** (ADR-364, 365) have no test project of their own: their rules are `packages/domain/test/review.test.ts` and they are driven whole by the stories `p1-reviewed` (corrections and renumbering) and `p1-voided` (void, unvoid, accept; `pnpm scenarios p1-voided`, under ten seconds once built; both need the map servers); **a loosening of a service or of the worker's reading of a mark is tried on the story** (change the source, `./node_modules/.bin/tsc --build`, run the story, put the source back from a copy kept in the scratchpad, build again); the audit log's `occurred_at` is the database's clock, so a story tells "after" by the audit record's id. **Loosened guards may be tried on part of the tests** (ADR-363): the files that hold the table's guards (its own, `catalog`, `grants`, `transactions`, `transaction-delete`, `viewers`, `guard-table`, `audit`, `no-delete`; never `configuration`, which a bare copy fails by itself), since a loosening caught by part is caught by the whole; say that it was a part. **The tests ask the copy for the newest migration by name**, so a guard still in the scratchpad can't be tried as loose SQL unless the copy's `_prisma_migrations` is told the stub is applied (its file's SHA-256 as the checksum): do that on a throw-away copy only, then write the stub once and prove it again with `migrate deploy`. **A loop of loosened guards took about four minutes a pair here on 2026-10-05** (fifty took 110 minutes, with 873 tests a run; it was 75 seconds a copy at 500 tests)**; two at a time** (twenty took 25 minutes, ADR-323): run it in the background with no ten-minute limit, and give the script absolute paths.
 
 Never print the env files (`apps/api/.env`, `apps/worker/.env`, `packages/db/.env`); to prove
 nothing was rotated, compare their `shasum`s, never their contents. To script a first run without
 showing the passcode: `pc=$(openssl rand -base64 18)`, then pipe `"$pc"` twice.
 
-**Keep the expected column true.** A task that adds or removes tests updates the counts here in the
-same response; a count that differs from this table without a reason is a finding, not noise.
+**Keep the expected column true, and only today's.** A task that adds or removes tests replaces
+the counts here in the same response (never a "before it…" chain: the reason for a change is the
+task's ADR and its session-log line); a count that differs from this table without a reason is a
+finding, not noise.
 
 ## 1.1 After a dependency change: the clean-copy check
 
 A new or changed dependency (a pin, a lockfile change, a new `allowBuilds` entry) is proven from a
 clean copy, so nothing already on disk hides a missing piece. Copy the repo into the scratchpad
-without `node_modules`, `dist`, `.git`, `database/`, `development/`, `spec/`, `agent_store/` and
-`.claude/`, then run the whole chain there and paste its output. Every dependency needs its ADR
+without `node_modules`, `dist`, `.git`, `development/`, `spec/`, `agent_store/` and `.claude/`, then run the whole chain there and paste its output. Every dependency needs its ADR
 first (exact version, licence, maintenance, at least 7 days old; `BACKLOG.md` Milestone 0.2).
 
 ## 1.2 Where tests live, and how a workspace joins the run
@@ -141,8 +141,44 @@ models (ADR-281): `time.test.ts` (a project's IANA time zone; no time without it
 `monitor-id.test.ts` (the database issues it; the employer), `devices.test.ts` (the phone, the master
 passcode and its place outside the audit log, number blocks) and `assignments.test.ts` (the
 assignment and the unit rate pay items it names, each its own project's, ADR-286; a field event's
-assignment and setup version). They also refuse a database without the
-seed's master passcode. **The Monitor ID series on `adms` moves with every run** (a sequence isn't
+assignment and setup version). The firm's lists (ADR-302): `lists.test.ts`, section D of
+`spec/acceptance/01-setup.md` by scenario ID, read from the lists the installer's seed wrote (so a
+list changed by hand in `adms` fails it), with `test/support/lists.ts` naming the eighteen tables
+for the exact grant, trigger and check lists. The client, the declaration event and the project
+(ADR-303): `projects.test.ts`, section A by scenario ID; the example world
+(`test/support/example-world.ts`) is Bayline County, Hurricane Delphine, P1 and P2 as the golden
+mission sets them up, picking its program types and kinds of unit rate work from the seeded lists;
+**a test that writes another project uses `projectLike(world, …)` with `insertOf`**, since a project
+has no database default for any setting. Contractors on a project, and contracts (ADR-305):
+`contractors.test.ts`, section B by scenario ID; the example world has Coastline and Summit as P1's
+primes and Coastline as P2's, each with its contract, and Harbor Staffing on no project; **a test
+that places a contractor uses `primeOn(project, contractor)` or `subOn(project, contractor, prime,
+tier)`** with `insertOf`, since a prime's row carries its own contractor as `as_prime_id`.
+Forms, debris types, field tags and the firm's own fields (ADR-308): `forms.test.ts`, section C by
+scenario ID; the example world's P1 has a load form (Vegetative, C&D), a haul-out form and an
+incident form (`world.forms`, `world.formDebrisTypes`); a debris type's entry and a definition
+repeat their form's `document_type`. Disposal sites, their labels, tipping fees and own shapes, and
+the project map (ADR-311): `sites.test.ts`, section F by scenario ID; the example world's P1 has
+Marsh Road TDSR and Bayline County Landfill (`world.site`, `world.landfill`, `world.siteTypes`);
+**a test that writes a site uses `siteLike(world, siteTypeId, …)`**, a TDSR/DMS one stating
+`site_type_key`; a map version's zones are written in the same piece of work as the version. The
+extension `btree_gist` and its schema `extensions` (ADR-310): `grants.test.ts`; the size bands'
+exclusion: `catalog.test.ts`, `pay-items.test.ts`. Rules (ADR-313): `rules.test.ts`, section G by scenario ID
+(AC-01-60, the database's half of 61, 62 and 64, and AC-01-78); the example world's P1 has the
+golden mission's first rule in full (`world.rule`); **a test that writes a rule uses `ruleLike`,
+`criterionLike`, `pickLike` and `actionLike`**, since each row repeats its parent's project (and
+form, and criterion); the closed sets are checked against `packages/domain`'s lists. People and viewers (ADR-315): `people.test.ts` (Part 2's sections A and B by scenario ID) and
+`viewers.test.ts` (section I; `guard_viewer`); the example world has three read-only viewers
+(`world.clientViewer`, `world.auditor`, `world.coastlineViewer`); **a test states who is looking
+with `db.viewer(id)`** and issues another viewer with `viewerLike` and `given`;
+`test/support/viewers.ts` names every table a viewer sees, how, the columns hidden and the columns that name a private citizen (`citizen`, shown only by `viewer_<table>_citizen`, ADR-336), and the
+tables no viewer reads, for the exact policy, view and grant lists: **a new table goes in one
+list or the other**. **What a contractor user sees** (ADR-361): `contractor-users.test.ts`, AC-02-78…82; a table of which a contractor user sees its own rows is `projectOrOwn(question, hidden)` in `viewers.ts`, its question worded as the catalog words it, and **a rerun of `guard_viewer` on such a table repeats its `own`** (the exact policy list fails otherwise); a line's rate and amount are read from `viewer_transaction_money`, so a test that orders a viewer's lines orders by `quantity`. Pay items, their rates and a crew day's steps (ADR-309):
+`pay-items.test.ts`, section E by scenario ID (AC-01-41 moved there); the example world's P1 has six
+of the golden mission's pay items with Coastline's rates (`world.payItems`, `world.rates`); **a test
+that enters a pay item uses `payItemLike(world, …)`** with `insertOf`, since no capture setting has
+a database default, and an assignment's pay item repeats its `kind_of_work_id`. They also
+refuse a database without the seed's master passcode. **The Monitor ID series on `adms` moves with every run** (a sequence isn't
 rolled back); gaps are normal.
 
 **The actor extension's tests** (`actor.test.ts`, ADR-273) connect instead **as the services' own
@@ -150,9 +186,14 @@ logins**, with the URL in `apps/api/.env` or `apps/worker/.env` read in the test
 printed), through `openDatabase` and `$write`. What a login writes can't be deleted, so each test's
 work is undone by throwing out of `$write` (`test/support/service.ts`, `undone`); a committed
 `$write` may only read. After a run the database holds only the seed: 1 user, 1 master passcode
-version, 2 audit records.
+version, the 94 values the firm's lists start with, 96 audit records (ADR-302).
 
 - Only this project: `./node_modules/.bin/vitest run --project @open-adms/db`.
+- **Trying a guard migration before it is applied:** make the copy, apply the stub's SQL to it as
+  `adms_owner`, and **run the tests on it** (`ADMS_TEST_DATABASE=…`), not only `guard_gaps()`: a
+  check that applied cleanly once let a shape with no coordinates through (ADR-311 (9)).
+- **A loop over loosenings** that calls `docker exec -i` must close its stdin (`< /dev/null`), or
+  the first `docker exec` swallows the rest of the list (seen 2026-10-02).
 - **Proving a guard change is covered:** make a throw-away copy, change it, run the tests on it, drop
   it (no service may be connected to `adms` while it's copied):
   `CREATE DATABASE adms_mutation TEMPLATE adms OWNER adms_owner` (owned by `adms_owner`, or its
@@ -160,6 +201,18 @@ version, 2 audit records.
   `ADMS_TEST_DATABASE=adms_mutation ./node_modules/.bin/vitest run --project @open-adms/db`, then
   `DROP DATABASE adms_mutation`. The admin commands go through
   `docker exec -i open-adms-local-postgres-1 psql -U postgres` (no password on the command line).
+- **Several copies may be tried at once**, each under its own name (`adms_mutation_0`,
+  `adms_mutation_1`…; `ADMS_TEST_DATABASE` takes any name starting `adms`): four at a time took 43
+  loosenings a few minutes (ADR-305). **On this machine, two at a time** (ADR-313): a copy is
+  about 85 MB and a plain `CREATE DATABASE` writes it all to the write-ahead log, and four at once
+  filled Docker's 8 GB disk and stopped Postgres. Make each copy with `STRATEGY FILE_COPY`, and
+  `CHECKPOINT` after each drop.
+- **A guard stub is tried as a migration, not as loose SQL** (ADR-313): copy `adms` under a story's
+  name (`CREATE DATABASE adms_story_try_<what> TEMPLATE adms OWNER adms_owner`), apply the stub with
+  `ADMS_STORY_DATABASE=adms_story_try_<what> ./node_modules/.bin/prisma migrate deploy --config
+  prisma.story.config.js` (in `packages/db`), run the tests on it, and use it as the template for
+  the loosened copies; drop it before `pnpm installer`. While any is running, don't run `pnpm lint`, `pnpm test` or
+  `pnpm generate`, and don't connect to `adms` (a copy can't be made while anyone is).
 - A new table or guard adds its expectations to these tests in the same response: the grant, trigger
   and policy lists are exact, so an unexpected one fails.
 - **A bare copy fails one test by itself** (`configuration.test.ts`, "nobody but the logins may
@@ -190,10 +243,16 @@ and seeded, and it's dropped afterwards, pass or fail; a story never touches `ad
 to look at; `clean` drops every leftover (only while no story runs; `installer:teardown` can't drop
 `adms_owner` while one is left, C28). A story is a `Story` in `packages/scenarios/src/stories/`, listed
 in its `index.ts`; the runner's test runs every listed story in `pnpm test`, so a new story joins the
-chain by itself. After a run, `adms` still holds only the seed (1 user, 1 master passcode version, 2
-audit records). Every story's database is seeded with the same made-up master passcode's hash
-(`story-database.ts`); today's stories: `ticket-101001`, `dispatch-monday` (ADR-281; its unit rate
-monitor's pay items, ADR-286).
+chain by itself. A story's context carries `policy`, the release's policy values read from
+`packages/domain/policy.env` (`src/policy.ts`; held to 5, 95, 200, 31, 12, 1000, 100, 100 by `test/policy.test.ts`,
+which needs no database), and `src/stories/p1.ts` sets up P1's client, declaration event and project
+for both of today's stories (ADR-303), its prime and its contract with them (ADR-305). After a run, `adms` still holds only the seed (1 user, 1 master passcode version,
+the lists' 94 values, 96 audit records). Every story's database is seeded with the same made-up master passcode's hash
+(`story-database.ts`); today's stories: `numbering` (ADR-323: blocks cut, topped up, reclaimed and retired through `apps/api`'s `NumberAllocator`; control ranges), `ticket-101001`, `dispatch-monday` (ADR-281; its unit rate
+monitor's pay items, ADR-286) `certification` (ADR-321: P1's trucks and crews certified through `apps/api`'s `Certifications`) and `setup` (ADR-316: the example world's setup through `apps/api`'s
+setup services; the policy values are read by `apps/api/src/policy.ts`, which the harness
+re-exports). **If a workspace's `dist/` is stale** (a story stops on `Cannot find module …/dist/….ts`),
+rebuild it with `./node_modules/.bin/tsc --build --force <workspace>`; never edit `dist/`.
 
 ## 1.5 The security checks (ADR-276)
 
@@ -216,8 +275,8 @@ ARCHITECTURE §15's layers arrive with their milestones; each adds its command h
 
 | Layer | Arrives in |
 |---|---|
-| The **golden mission** as a story (REQ-017) | Phase 1 |
-| **Unit** tests of real rules (capacity math against the paper-form examples, `adms-certifications` §3A.3; volume, apportionment, time, number blocks) | Phase 1 |
+| ~~The **golden mission** as a story (REQ-017)~~ | ✅ in the chain since ADR-368: `pnpm scenarios golden-mission` (27 checks; its expected figures are `spec/golden/MISSION.md`'s and change only at the user's word) |
+| **Unit** tests of real rules (the capacity math is in, ADR-320; number blocks, ADR-323; volume and apportionment, ADR-343; the checks between field events, on the certification and on time, ADR-344; the checks on place, ADR-346; the checks on quantity, the pay item's settings, unit rate work and ROEs, ADR-347) | Phase 1 |
 | API, browser end-to-end, on device | Phases 2–4 |
 
 ## 1.7 Definition of done

@@ -2,11 +2,18 @@
 // kinds of field event, the unit rate pay items, certifying; one site where the work is at one,
 // optionally a phone), planned on the dispatch board or unplanned, and who made it; and every
 // field event carries its assignment and the setup version of the phone's lists (ADR-127, 195,
-// 240, 281, 286; BACKLOG carry-forward C15, C42).
+// 240, 281, 286, 309; BACKLOG carry-forward C15, C42). A pay item itself: pay-items.test.ts.
 import { describe, expect, it } from 'vitest';
 
 import { systemActorId } from '../src/system-actor.ts';
 import { refusedBy } from './support/database.ts';
+import {
+  eventInsertOf,
+  fieldEventLike,
+  insertOf,
+  payItemLike,
+  siteLike,
+} from './support/example-world.ts';
 import { eachTestRolledBack } from './support/lifecycle.ts';
 
 const tested = eachTestRolledBack();
@@ -57,7 +64,7 @@ async function refusedAssignment(written: Written): Promise<string> {
 }
 
 describe('an assignment', () => {
-  it('says who works where, on what: the tower at Marsh Road, a curb collection with no site', async () => {
+  it('AC-02-24 says who works where, on what: the tower at Marsh Road, a curb collection with no site', async () => {
     const { db, world } = tested;
     await asTheApi();
     const tower = await assign({ kinds: '{DISPOSAL}', site: world.site });
@@ -88,13 +95,19 @@ describe('an assignment', () => {
     ]);
   });
 
-  it('is at one of its own project’s sites, never another project’s', async () => {
+  it('AC-02-25 is at one of its own project’s sites, never another project’s', async () => {
     const { db, world } = tested;
     await asTheApi();
     // P2 enters the same landfill as its own site (ADR-145); P1's assignments can't use it.
     const { id: p2Site } = await db.one<{ id: string }>(
-      `INSERT INTO "disposal_site" ("project_id", "name") VALUES ($1, 'Marsh Road TDSR') RETURNING "id"::text`,
-      [world.p2],
+      ...insertOf(
+        'disposal_site',
+        siteLike({ p1: world.p2 }, world.siteTypes.tdsr, {
+          name: 'Marsh Road TDSR',
+          site_type_key: 'TDSR',
+          haul_outs_leave_here: true,
+        }),
+      ),
     );
     expect(await refusedAssignment({ site: p2Site })).toBe(refusedBy.foreignKey);
     const onP2 = await assign({ project: world.p2, site: p2Site });
@@ -104,7 +117,7 @@ describe('an assignment', () => {
     expect(await db.run(move, [onP2, world.p1, world.site])).toBe(1);
   });
 
-  it('written on the board says who wrote it; an unplanned one has no author and always its phone', async () => {
+  it('AC-02-26 written on the board says who wrote it; an unplanned one has no author and always its phone', async () => {
     await asTheApi();
     expect(await refusedAssignment({ origin: 'PLANNED', madeBy: null })).toBe(refusedBy.check);
     expect(await refusedAssignment({ origin: 'UNPLANNED' })).toBe(refusedBy.check);
@@ -117,13 +130,13 @@ describe('an assignment', () => {
     await assign({ origin: 'PLANNED' });
   });
 
-  it("names only work a phone can record: the kinds are the field event's own", async () => {
+  it("AC-02-27 names only work a phone can record: the kinds are the field event's own", async () => {
     await asTheApi();
     expect(await refusedAssignment({ kinds: '{TOWER}' })).toBe(refusedBy.badValue);
     await assign({ kinds: '{HAUL_OUT_COLLECTION,HAUL_OUT_DISPOSAL,UNIT_RATE}' });
   });
 
-  it('is for a person and written by a person, never the system actor', async () => {
+  it('AC-02-28 is for a person and written by a person, never the system actor', async () => {
     await asTheApi();
     expect(await refusedAssignment({ person: systemActorId })).toBe(refusedBy.check);
     expect(await refusedAssignment({ madeBy: systemActorId })).toBe(refusedBy.check);
@@ -132,7 +145,7 @@ describe('an assignment', () => {
     );
   });
 
-  it('never stops a second one: two projects in a day are two assignments, on two phones', async () => {
+  it('AC-02-29 never stops a second one: two projects in a day are two assignments, on two phones', async () => {
     const { db, world } = tested;
     await asTheApi();
     const { id: second } = await db.one<{ id: string }>(
@@ -145,7 +158,7 @@ describe('an assignment', () => {
     await assign({ project: world.p1 });
   });
 
-  it('is withdrawn, never deleted; the worker reads it and writes nothing', async () => {
+  it('AC-02-30 is withdrawn, never deleted; the worker reads it and writes nothing', async () => {
     const { db, world } = tested;
     await asTheApi();
     const id = await assign();
@@ -173,22 +186,17 @@ describe('an assignment', () => {
 });
 
 describe("an assignment's unit rate pay items", () => {
-  // A pay item, as far as this build holds one: its project, the firm's code and its name.
-  async function payItem(project: string, code: string, name: string): Promise<string> {
-    const { id } = await tested.db.one<{ id: string }>(
-      `INSERT INTO "pay_item" ("project_id", "code", "name") VALUES ($1, $2, $3) RETURNING "id"::text`,
-      [project, code, name],
-    );
-    return id;
-  }
+  // A pay item named on an assignment, with its kind of work as the pay item has it: only a unit
+  // rate pay item has one to give (C42).
   const name = (
     assignmentId: string,
     projectId: string,
     payItemId: string,
+    kindOfWorkId: string | null,
   ): [string, unknown[]] => [
-    `INSERT INTO "assignment_pay_item" ("assignment_id", "project_id", "pay_item_id")
-     VALUES ($1, $2, $3) RETURNING "id"::text`,
-    [assignmentId, projectId, payItemId],
+    `INSERT INTO "assignment_pay_item" ("assignment_id", "project_id", "pay_item_id", "kind_of_work_id")
+     VALUES ($1, $2, $3, $4) RETURNING "id"::text`,
+    [assignmentId, projectId, payItemId, kindOfWorkId],
   ];
   const named = (assignmentId: string): Promise<{ code: string; archived: boolean }[]> =>
     tested.db.rows(
@@ -197,32 +205,87 @@ describe("an assignment's unit rate pay items", () => {
        WHERE a."assignment_id" = $1 ORDER BY p."code"`,
       [assignmentId],
     );
+  // P2's own Hanger removal pay item.
+  async function p2Hangers(): Promise<string> {
+    const { world } = tested;
+    return (
+      await tested.db.one<{ id: string }>(
+        ...insertOf(
+          'pay_item',
+          payItemLike(world, {
+            project_id: world.p2,
+            code: 'HNG-RMV-EA',
+            description: 'Hanger removal',
+            payable_type_id: world.payableTypes.hangers,
+            kind_of_work_id: world.kindsOfWork.hangers,
+            unit: 'EA',
+          }),
+        ),
+      )
+    ).id;
+  }
 
-  it('are the ones the person does that day: hangers and leaners for the unit rate monitor', async () => {
+  it('AC-02-31 are the ones the person does that day: hangers and leaners for the unit rate monitor', async () => {
     const { db, world } = tested;
     await asTheApi();
-    const hangers = await payItem(world.p1, 'HNG-RMV-EA', 'Hanger removal');
-    const leaners = await payItem(world.p1, 'LNR-RMV-EA-24', 'Leaner removal 6–24 in');
-    await payItem(world.p1, 'STP-RMV-EA-36', 'Stump removal 24–36 in');
     const unitRate = await assign({ kinds: '{UNIT_RATE}', device: null });
-    await db.one(...name(unitRate, world.p1, hangers));
-    await db.one(...name(unitRate, world.p1, leaners));
+    await db.one(...name(unitRate, world.p1, world.payItems.hangers, world.kindsOfWork.hangers));
+    await db.one(...name(unitRate, world.p1, world.payItems.leaners24, world.kindsOfWork.leaners));
     expect(await named(unitRate)).toEqual([
       { code: 'HNG-RMV-EA', archived: false },
       { code: 'LNR-RMV-EA-24', archived: false },
     ]);
   });
 
-  it('are its own project’s, never another project’s', async () => {
+  it('AC-02-31 C42 are unit rate pay items only: a hauling pay item has no kind of work to name', async () => {
+    const { db, world } = tested;
+    await asTheApi();
+    const unitRate = await assign({ kinds: '{UNIT_RATE}' });
+    // VEG-HAUL-CY-15 is no unit rate pay item, whatever kind of work it is passed off as…
+    for (const kind of Object.values(world.kindsOfWork)) {
+      expect(
+        (await db.refused(...name(unitRate, world.p1, world.payItems.vegHaul15, kind))).code,
+      ).toBe(refusedBy.foreignKey);
+    }
+    // …and a unit rate pay item is named with its own kind of work, never another's.
+    expect(
+      (
+        await db.refused(
+          ...name(unitRate, world.p1, world.payItems.hangers, world.kindsOfWork.leaners),
+        )
+      ).code,
+    ).toBe(refusedBy.foreignKey);
+    // Its kind of work is always named: none is no unit rate pay item.
+    expect(
+      (await db.refused(...name(unitRate, world.p1, world.payItems.vegHaul15, null))).code,
+    ).toBe(refusedBy.notNull);
+    // A pay item named on an assignment keeps its kind of work.
+    await db.one(...name(unitRate, world.p1, world.payItems.hangers, world.kindsOfWork.hangers));
+    expect(
+      (
+        await db.refused(`UPDATE "pay_item" SET "kind_of_work_id" = $2 WHERE "id" = $1`, [
+          world.payItems.hangers,
+          world.kindsOfWork.leaners,
+        ])
+      ).code,
+    ).toBe(refusedBy.restrict);
+  });
+
+  it('AC-02-31 are its own project’s, never another project’s', async () => {
     const { db, world } = tested;
     await asTheApi();
     const onP1 = await assign({ kinds: '{UNIT_RATE}' });
-    const p2Hangers = await payItem(world.p2, 'HNG-RMV-EA', 'Hanger removal');
+    const hangers = await p2Hangers();
+    const kind = world.kindsOfWork.hangers;
     // Named as P2's (its true project) or passed off as P1's: neither reaches a P1 assignment.
-    expect((await db.refused(...name(onP1, world.p2, p2Hangers))).code).toBe(refusedBy.foreignKey);
-    expect((await db.refused(...name(onP1, world.p1, p2Hangers))).code).toBe(refusedBy.foreignKey);
+    expect((await db.refused(...name(onP1, world.p2, hangers, kind))).code).toBe(
+      refusedBy.foreignKey,
+    );
+    expect((await db.refused(...name(onP1, world.p1, hangers, kind))).code).toBe(
+      refusedBy.foreignKey,
+    );
     const onP2 = await assign({ kinds: '{UNIT_RATE}', project: world.p2 });
-    await db.one(...name(onP2, world.p2, p2Hangers));
+    await db.one(...name(onP2, world.p2, hangers, kind));
     // And an assignment that names pay items stays on its project: they are that project's.
     expect(
       (
@@ -234,13 +297,14 @@ describe("an assignment's unit rate pay items", () => {
     ).toBe(refusedBy.restrict);
   });
 
-  it('name each pay item once; one is taken off by archiving and put back, never deleted', async () => {
+  it('AC-02-32 name each pay item once; one is taken off by archiving and put back, never deleted', async () => {
     const { db, world } = tested;
     await asTheApi();
-    const hangers = await payItem(world.p1, 'HNG-RMV-EA', 'Hanger removal');
+    const hangers = world.payItems.hangers;
     const unitRate = await assign({ kinds: '{UNIT_RATE}' });
-    const { id } = await db.one<{ id: string }>(...name(unitRate, world.p1, hangers));
-    expect((await db.refused(...name(unitRate, world.p1, hangers))).code).toBe(refusedBy.unique);
+    const naming = name(unitRate, world.p1, hangers, world.kindsOfWork.hangers);
+    const { id } = await db.one<{ id: string }>(...naming);
+    expect((await db.refused(...naming)).code).toBe(refusedBy.unique);
     const archive = `UPDATE "assignment_pay_item" SET "archived_at" = $2 WHERE "id" = $1`;
     expect(await db.run(archive, [id, '2026-10-13T10:00:00Z'])).toBe(1);
     expect(await named(unitRate)).toEqual([{ code: 'HNG-RMV-EA', archived: true }]);
@@ -258,12 +322,14 @@ describe("an assignment's unit rate pay items", () => {
     );
   });
 
-  it('are audited: who put which pay item on whose day', async () => {
+  it('AC-02-32 are audited: who put which pay item on whose day', async () => {
     const { db, world } = tested;
     await asTheApi();
-    const hangers = await payItem(world.p1, 'HNG-RMV-EA', 'Hanger removal');
-    const unitRate = await assign({ kinds: '{UNIT_RATE}' });
-    const { id } = await db.one<{ id: string }>(...name(unitRate, world.p1, hangers));
+    const hangers = await p2Hangers();
+    const unitRate = await assign({ kinds: '{UNIT_RATE}', project: world.p2 });
+    const { id } = await db.one<{ id: string }>(
+      ...name(unitRate, world.p2, hangers, world.kindsOfWork.hangers),
+    );
     const audited = await db.rows(
       `SELECT "table_name", "operation"::text, "actor_id"::text AS actor, "domain"::text
        FROM "audit_record" WHERE "record_id" = ANY($1) ORDER BY "id"`,
@@ -283,87 +349,48 @@ describe("an assignment's unit rate pay items", () => {
   it('are read by the worker, never written by it', async () => {
     const { db, world } = tested;
     await asTheApi();
-    const hangers = await payItem(world.p1, 'HNG-RMV-EA', 'Hanger removal');
     const unitRate = await assign({ kinds: '{UNIT_RATE}' });
-    await db.one(...name(unitRate, world.p1, hangers));
+    await db.one(...name(unitRate, world.p1, world.payItems.hangers, world.kindsOfWork.hangers));
     await db.as('adms_worker');
     await db.actor(world.worker, 'SYSTEM');
     expect(await named(unitRate)).toHaveLength(1);
-    expect(
-      (
-        await db.refused(
-          `INSERT INTO "pay_item" ("project_id", "code", "name") VALUES ($1, 'X', 'X')`,
-          [world.p1],
-        )
-      ).code,
-    ).toBe(refusedBy.grant);
+    expect((await db.refused(...insertOf('pay_item', payItemLike(world)))).code).toBe(
+      refusedBy.grant,
+    );
     expect((await db.refused(`UPDATE "assignment_pay_item" SET "archived_at" = now()`)).code).toBe(
       refusedBy.grant,
     );
   });
 });
 
-describe('a pay item', () => {
-  it('may share its code and its name with another: a dated rate change is the firm’s own setup', async () => {
-    const { db, world } = tested;
-    await asTheApi();
-    const add = `INSERT INTO "pay_item" ("project_id", "code", "name") VALUES ($1, 'VEG-HAUL-CY-15', 'ROW VEG haul 0–15 mi')`;
-    expect(await db.run(add, [world.p1])).toBe(1);
-    expect(await db.run(add, [world.p1])).toBe(1);
-  });
-
-  it('belongs to a project, and is archived, never deleted', async () => {
-    const { db, world } = tested;
-    await asTheApi();
-    expect(
-      (await db.refused(`INSERT INTO "pay_item" ("code", "name") VALUES ('HNG-RMV-EA', 'x')`)).code,
-    ).toBe(refusedBy.notNull);
-    const { id } = await db.one<{ id: string }>(
-      `INSERT INTO "pay_item" ("project_id", "code", "name") VALUES ($1, 'HNG-RMV-EA', 'Hanger removal') RETURNING "id"::text`,
-      [world.p1],
-    );
-    expect(await db.run(`UPDATE "pay_item" SET "archived_at" = now() WHERE "id" = $1`, [id])).toBe(
-      1,
-    );
-    expect((await db.refused(`DELETE FROM "pay_item" WHERE "id" = $1`, [id])).code).toBe(
-      refusedBy.grant,
-    );
-  });
-});
-
 describe('a field event', () => {
-  const sync = (columns: string, values: string): string =>
-    `INSERT INTO "field_event" ("id", "project_id", "workflow", "kind", "ticket_number", "monitor_id",
-       "device_id", "started_at", "ended_at", "device_utc_offset_minutes"${columns})
-     VALUES (uuidv7(), $1, 'LOAD', 'COLLECTION', '101050', $2, $3, '2026-10-13T13:00:00Z',
-       '2026-10-13T13:25:00Z', -240${values})`;
+  // Ana's collection on load 101050, as her phone sends it; the test changes what it needs.
+  const sync = (more: Record<string, unknown>): [string, unknown[]] =>
+    eventInsertOf(fieldEventLike(tested.world, { ticket_number: '101050', ...more }));
 
-  it('carries its assignment and the setup version of the phone’s lists', async () => {
+  it('AC-02-43 carries its assignment and the setup version of the phone’s lists', async () => {
     const { db, world } = tested;
     await db.as('adms_api');
     await db.actor(world.monitor, 'DEVICE', { deviceId: world.device });
-    const place = [world.p1, world.monitor, world.device];
-    expect((await db.refused(sync('', ''), place)).code).toBe(refusedBy.notNull);
-    expect(
-      (await db.refused(sync(', "assignment_id"', ', $4'), [...place, world.assignments.p1])).code,
-    ).toBe(refusedBy.notNull);
-    expect((await db.refused(sync(', "setup_version"', ', 3'), place)).code).toBe(
-      refusedBy.notNull,
-    );
+    // A phone's record without either is refused by the check that tells it from one created in
+    // the back office (C44, ADR-324).
+    for (const missing of [
+      { assignment_id: null, setup_version: null },
+      { setup_version: null },
+      { assignment_id: null },
+    ]) {
+      expect((await db.refused(...sync(missing))).code, Object.keys(missing).join(' ')).toBe(
+        refusedBy.check,
+      );
+    }
     expect(
       (
-        await db.refused(sync(', "assignment_id", "setup_version"', ', $4, 3'), [
-          ...place,
-          '019a0000-0000-7000-8000-00000000dead',
-        ])
+        await db.refused(
+          ...sync({ assignment_id: '019a0000-0000-7000-8000-00000000dead', setup_version: 3 }),
+        )
       ).code,
     ).toBe(refusedBy.foreignKey);
-    expect(
-      await db.run(sync(', "assignment_id", "setup_version"', ', $4, 3'), [
-        ...place,
-        world.assignments.p1,
-      ]),
-    ).toBe(1);
+    expect(await db.run(...sync({ setup_version: 3 }))).toBe(1);
     expect(
       await db.one(
         `SELECT "assignment_id"::text AS assignment, "setup_version" FROM "field_event"
@@ -373,7 +400,7 @@ describe('a field event', () => {
     ).toEqual({ assignment: world.assignments.p1, setup_version: 3 });
   });
 
-  it('has both corrected by permission, like any captured field; never by the worker', async () => {
+  it('AC-02-43 has both corrected by permission, like any captured field; never by the worker', async () => {
     const { db, world } = tested;
     const event = world.loads.l101001.collection;
     await asTheApi();
@@ -395,7 +422,7 @@ describe('a field event', () => {
     expect((await db.refused(correct, [event, world.assignments.p1])).code).toBe(refusedBy.grant);
   });
 
-  it('is never recorded by the system actor', async () => {
+  it('AC-02-43 is never recorded by the system actor', async () => {
     const { db, world } = tested;
     await asTheApi();
     expect(

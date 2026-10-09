@@ -26,7 +26,7 @@ async function create(name: string, role: string): Promise<string> {
 }
 
 describe('a Monitor ID', () => {
-  it('is issued by the database: "M" and six digits, the next of one series', async () => {
+  it('AC-02-01 is issued by the database: "M" and six digits, the next of one series', async () => {
     await asTheApi();
     const kim = await create('Kim Nguyen', 'MONITOR');
     const tariq = await create('Tariq Patel', 'MONITOR');
@@ -49,7 +49,7 @@ describe('a Monitor ID', () => {
     for (const person of issued) expect(person.monitor_number).toMatch(/^M\d{6}$/);
   });
 
-  it('may be left off anyone but a monitor, when the writer says so', async () => {
+  it('AC-02-02 may be left off anyone but a monitor, when the writer says so', async () => {
     const { db } = tested;
     await asTheApi();
     const withNone = `INSERT INTO "user" ("name", "role", "monitor_number") VALUES ($1, $2, NULL)`;
@@ -65,7 +65,7 @@ describe('a Monitor ID', () => {
   });
 
   it.each(['4127', 'M4127', 'm004127', 'M00412A', 'M 004127', 'MON004127'])(
-    'is never another shape: "%s" is refused',
+    'AC-02-01 is never another shape: "%s" is refused',
     async (monitorNumber) => {
       const { db } = tested;
       await asTheApi();
@@ -80,7 +80,7 @@ describe('a Monitor ID', () => {
     },
   );
 
-  it('belongs to one person', async () => {
+  it('AC-02-02 belongs to one person', async () => {
     const { db, world } = tested;
     await asTheApi();
     const { monitor_number: anas } = await db.one<{ monitor_number: string }>(
@@ -97,7 +97,7 @@ describe('a Monitor ID', () => {
     ).toBe(refusedBy.unique);
   });
 
-  it('is issued by the API alone: the worker and the read-only login may not ask for one', async () => {
+  it('AC-02-04 is issued by the API alone: the worker and the read-only login may not ask for one', async () => {
     const { db } = tested;
     for (const login of ['adms_worker', 'adms_readonly'] as const) {
       await db.as(login);
@@ -108,7 +108,7 @@ describe('a Monitor ID', () => {
     }
   });
 
-  it("is never the system actor's, and nor is an employer", async () => {
+  it("AC-02-04 is never the system actor's, and nor is an employer", async () => {
     const { db, world } = tested;
     // Only the owner may touch the system actor's row at all (ADR-276); the checks stop even it.
     await db.as('adms_owner');
@@ -126,12 +126,10 @@ describe('a Monitor ID', () => {
 });
 
 describe("a worker's employer", () => {
-  it('is a contractor record, with the ID it gives them', async () => {
+  it('AC-02-03 is a contractor record, with the ID it gives them', async () => {
     const { db, world } = tested;
     await asTheApi();
-    const { id: agency } = await db.one<{ id: string }>(
-      `INSERT INTO "contractor" ("name") VALUES ('Harbor Staffing') RETURNING "id"::text`,
-    );
+    const agency = world.harbor;
     expect(
       await db.run(
         `UPDATE "user" SET "employer_id" = $2, "employer_number" = 'HS-0417' WHERE "id" = $1`,
@@ -148,7 +146,7 @@ describe("a worker's employer", () => {
     ).toBe(1);
   });
 
-  it('is never typed text: an employer that is no contractor record is refused', async () => {
+  it('AC-02-03 is never typed text: an employer that is no contractor record is refused', async () => {
     const { db, world } = tested;
     await asTheApi();
     expect(
@@ -167,7 +165,7 @@ describe("a worker's employer", () => {
     ).toBe(refusedBy.badValue);
   });
 
-  it("an employer's ID needs the employer", async () => {
+  it("AC-02-03 an employer's ID needs the employer", async () => {
     const { db, world } = tested;
     await asTheApi();
     expect(

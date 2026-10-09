@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  source-map-js: 1.2.2
+
 importers:
 
   .:
@@ -33,13 +36,38 @@ importers:
         specifier: 5.0.1
         version: 5.0.1(@types/node@24.13.6)(vite@8.3.0(@types/node@24.13.6)(jiti@2.7.0))
 
-  apps/api: {}
+  apps/api:
+    dependencies:
+      '@open-adms/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@open-adms/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@open-adms/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.6
+        version: 24.13.6
 
   apps/back-office: {}
 
   apps/field: {}
 
-  apps/worker: {}
+  apps/worker:
+    dependencies:
+      '@open-adms/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@open-adms/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.6
+        version: 24.13.6
 
   infra/local:
     devDependencies:
@@ -58,6 +86,9 @@ importers:
 
   packages/db:
     dependencies:
+      '@open-adms/domain':
+        specifier: workspace:*
+        version: link:../domain
       '@prisma/adapter-pg':
         specifier: 7.10.0
         version: 7.10.0
@@ -78,13 +109,26 @@ importers:
         specifier: 7.10.0
         version: 7.10.0(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@6.0.3)
 
-  packages/domain: {}
+  packages/domain:
+    dependencies:
+      geographiclib-geodesic:
+        specifier: 2.2.0
+        version: 2.2.0
 
   packages/scenarios:
     dependencies:
+      '@open-adms/api':
+        specifier: workspace:*
+        version: link:../../apps/api
       '@open-adms/db':
         specifier: workspace:*
         version: link:../db
+      '@open-adms/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@open-adms/worker':
+        specifier: workspace:*
+        version: link:../../apps/worker
       pg:
         specifier: 8.23.0
         version: 8.23.0
@@ -1061,6 +1105,9 @@ packages:
   generate-function@2.3.1:
     resolution: {integrity: sha512-eeB5GfMNeevm/GRYq20ShmsaGcmI81kIX2K9XQx5miC8KdHaC6Jm0qQ8ZNeGOi7wYB8OsdxKs+Y2oVuTFuVwKQ==}
 
+  geographiclib-geodesic@2.2.0:
+    resolution: {integrity: sha512-cIedo9VTYb0DFufodgibDmVfsWe9EASqb/kUByl09xc6PZYvLvlc89BHCThtGTPf2OII/zWJGxsR3Uz6O7QOVw==}
+
   get-port-please@3.2.0:
     resolution: {integrity: sha512-I9QVvBw5U/hw3RmWpYKRumUeaDgxTPd401x364rLmWBJcOQ753eov1eTgzDqRG9bqFIfDc7gfzcQEWrUri3o1A==}
 
@@ -1549,8 +1596,8 @@ packages:
     resolution: {integrity: sha512-qMCMfhY040cVHT43K9BFygqYbUPFZKHOg7K73mtTWJRb8pyP3fzf4Ixd5SzdEJQ6MRUg/WBnOLxghZtKKurENQ==}
     engines: {node: '>=10'}
 
-  source-map-js@1.2.1:
-    resolution: {integrity: sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==}
+  source-map-js@1.2.2:
+    resolution: {integrity: sha512-KGj/8Y43x35aZVDtt+J4mK1hoLGHULMYfSkODJNQjNDC3oW1PqPoxMwo0pLUsWM/UEGzON/NxeHywEfNXNP3Vw==}
     engines: {node: '>=0.10.0'}
 
   spdx-correct@3.2.0:
@@ -2793,6 +2840,8 @@ snapshots:
     dependencies:
       is-property: 1.0.2
 
+  geographiclib-geodesic@2.2.0: {}
+
   get-port-please@3.2.0: {}
 
   giget@3.3.1: {}
@@ -3067,7 +3116,7 @@ snapshots:
     dependencies:
       nanoid: 3.3.19
       picocolors: 1.1.1
-      source-map-js: 1.2.1
+      source-map-js: 1.2.2
 
   postgres-array@2.0.0: {}
 
@@ -3223,7 +3272,7 @@ snapshots:
       astral-regex: 2.0.0
       is-fullwidth-code-point: 3.0.0
 
-  source-map-js@1.2.1: {}
+  source-map-js@1.2.2: {}
 
   spdx-correct@3.2.0:
     dependencies:

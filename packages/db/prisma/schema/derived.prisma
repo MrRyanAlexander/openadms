@@ -2,62 +2,445 @@
 // person; drawn again on every reprocess (adms-data-model §3.1b, §3.1c; invariants 4, 21).
 // Also the invoice lock, a person's mark kept as its own record (ADR-245).
 
-// A load concluded from its collection and disposal events. PROVISIONAL: one collection; a split
-// load's several collections are spec/DATA-MODEL.md's to shape. The haul-out's CompletedHaulOut
-// follows the same shape and joins with it.
+// What gave a completed load or haul-out its quantity: one, never both (ADR-165, 223). A haul-out
+// never takes it from carried tickets (a check in the guard migration).
+enum QuantitySource {
+  LOAD_CALL
+  SCALE_WEIGHT
+  CARRIED_TICKETS
+
+  @@map("quantity_source")
+}
+
+// Where a mileage came from: the routing server's road route, or the straight line when it found
+// none, which is flagged (ADR-163).
+enum MileageSource {
+  ROAD_ROUTE
+  STRAIGHT_LINE
+
+  @@map("mileage_source")
+}
+
+// What started a run of the worker.
+enum ReconciliationTrigger {
+  SYNC
+  CORRECTION
+  SETUP_CHANGE
+  REPROCESS
+
+  @@map("reconciliation_trigger")
+}
+
+// What a flag does to the money (spec/FLAGS.md §1; ADR-294): the ticket bills as if the flag
+// weren't there; one line bills nothing and the others bill; nothing can be computed.
+enum FlagBilling {
+  BILLS
+  LINE_NOT_BILLED
+  NOT_BILLED
+
+  @@map("flag_billing")
+}
+
+// The flag catalogue, spec/FLAGS.md §3, in its order: a closed set. A flag that isn't on that page
+// can't be raised; a new one is a code change with an ADR (ADR-285, 290). A database test holds
+// this list to the page.
+enum FlagCode {
+  // §3.1 Between a ticket's field events
+  DEBRIS_TYPE_MISMATCH
+  CERT_NUMBER_MISMATCH
+  DISPOSAL_BEFORE_COLLECTION_ENDED
+  OVERLAPPING_LOADS
+  SPLIT_SUFFIX_GAP
+  CARRIED_COUNT_MISMATCH
+  // §3.2 The certification
+  NO_CERTIFICATION
+  TYPED_CAPACITY_DIFFERS
+  TAG_EXPIRED
+  CERTIFICATION_REVOKED
+  CERTIFICATION_REPLACED
+  // §3.3 Place and time
+  OUTSIDE_PROJECT_BOUNDARY
+  NO_ZONE
+  OUTSIDE_SITE_AREA
+  PROJECT_NOT_ACTIVE
+  SITE_NOT_YET_ACTIVE
+  SITE_CLOSED
+  NO_ROAD_ROUTE
+  DEVICE_CLOCK_OFF
+  WORK_TIME_AFTER_RECEIVED
+  WORK_TIME_BEFORE_ENROLMENT
+  DEVICE_TIME_ZONE_DIFFERS
+  PHONE_OUT_OF_SERVICE
+  TYPED_TICKET_NUMBER
+  BACK_OFFICE_RECORD
+  // §3.4 Where the debris went
+  SITE_DOES_NOT_TAKE_LOADS
+  SITE_NOT_FOR_HAUL_OUTS
+  INELIGIBLE_SITE
+  TIPPING_FEE_RULE_MISSING
+  HAUL_OUT_DUMPED_AT_TDSR
+  // §3.5 Quantity
+  LOAD_CALL_ZERO
+  LOAD_CALL_LOW
+  LOAD_CALL_HIGH
+  PILE_CALL_NOT_HIGHER
+  QUANTITY_MISSING_FOR_PAY_ITEM
+  SHARED_SCALE_WEIGHT
+  RECEIPT_TWO_DEBRIS_TYPES
+  SCALE_WEIGHT_UNUSABLE
+  CARRIED_TICKET_NOT_FOUND
+  CARRIED_TICKET_ON_ANOTHER_LOAD
+  // §3.6 The pay item's settings, and unit rate work
+  MEASUREMENT_MISSING
+  GPS_MISSING
+  PHOTOS_MISSING
+  DECIMAL_COUNT
+  NO_SIZE_BAND
+  OUTSIDE_SIZE_BAND
+  MARKED_INELIGIBLE
+  STUMP_UNDER_24
+  ROOT_BALL_NOT_WIDER
+  FILL_WITHOUT_EXPOSED_ROOT_BALL
+  ROOT_BALL_MISSING
+  NO_SURVEY
+  CREW_ITEM_OVER_12_HOURS
+  CREW_TIME_OVERLAP
+  // §3.7 Forms, certifications and sites
+  ROE_MISSING
+  ROE_NOT_ON_PROJECT
+  ROE_UNSIGNED
+  ROE_OUT_OF_SCOPE
+  NO_PRE_WORK_SURVEY
+  CERTIFICATION_PHOTO_MISSING
+  PERMIT_OUTSTANDING
+  // §3.8 Pricing
+  NO_PRICING_RULE
+  DUPLICATE_TRANSACTION_NUMBER
+  NO_RATE_FOR_PRIME
+  RATE_TO_BE_NEGOTIATED
+  // §3.9 The engine
+  NOT_PROCESSED
+  // §3.10 A record that should not have been possible (ADR-329, 345)
+  DETAIL_MISSING
+  TYPED_NUMBER_NO_REASON
+  WRONG_KIND_OF_BADGE
+  GPS_UNREADABLE
+  NOT_A_TICKET_NUMBER
+  ENDED_BEFORE_STARTED
+  SPLIT_NOT_ALLOWED
+  OUTSIDE_CONTROL_RANGES
+  ASSIGNMENT_ON_ANOTHER_PROJECT
+  SCALE_NET_DISAGREES
+  TWO_QUANTITIES
+  NOT_PROCESSED_LINES_STAND
+
+  @@map("flag_code")
+}
+
+// A load concluded from its field events (CLT): one per disposal event, for the life of that
+// event, updated in place and never duplicated (ADR-086). Its collections are rows of their own,
+// one on an ordinary load and one for each property on a split (ADR-055, 162). Its time is its
+// collection's end, read from the collection event, never copied here (ADR-161).
 model CompletedLoad {
-  id                String @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  projectId         String @map("project_id") @db.Uuid
-  ticketNumber      String @map("ticket_number")
-  // Unique links: one load's events can't bill twice (invariant 17).
-  collectionEventId String @unique @map("collection_event_id") @db.Uuid
-  disposalEventId   String @unique @map("disposal_event_id") @db.Uuid
+  id              String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  projectId       String         @map("project_id") @db.Uuid
+  // The load's bare number; once per project among live loads (the guard migration).
+  ticketNumber    String         @map("ticket_number")
+  // A load dumps once (ADR-155; invariant 17): one of its own project's field events.
+  disposalEventId String         @unique @map("disposal_event_id") @db.Uuid
+  quantitySource  QuantitySource @map("quantity_source")
+  // The certification's capacity, and the call that gave the volume.
+  capacityCy      Int?           @map("capacity_cy")
+  loadCall        Int?           @map("load_call")
+  // Capacity x load call / 100, or the carried stumps' CY summed.
+  volumeCy        Decimal?       @map("volume_cy") @db.Decimal(10, 2)
+  // The receipt's net, or this load's derived share of a tandem's; the mark says which (ADR-175).
+  weightTons      Decimal?       @map("weight_tons") @db.Decimal(12, 4)
+  weightIsShare   Boolean        @map("weight_is_share")
+  // The items on the tickets it carries.
+  carriedCount    Int?           @map("carried_count")
+  // Set when a correction leaves the ticket no longer whole (its events renumbered away); cleared
+  // when it is whole again. Nothing is deleted.
+  dissolvedAt     DateTime?      @map("dissolved_at") @db.Timestamptz(3)
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  project         Project       @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  collectionEvent FieldEvent    @relation("CollectionEvent", fields: [collectionEventId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  disposalEvent   FieldEvent    @relation("DisposalEvent", fields: [disposalEventId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  transactions    Transaction[]
-  invoiceLock     InvoiceLock?
+  project       Project                   @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  disposalEvent FieldEvent                @relation(fields: [projectId, disposalEventId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  collections   CompletedLoadCollection[]
+  transactions  Transaction[]
+  // People's marks on it: its QC status, and every lock as invoiced it has had (marks.prisma).
+  qcMarks       QcMark[]
+  invoiceLocks  InvoiceLock[]
 
-  @@unique([projectId, ticketNumber])
+  // What a collection row points at, so it is one of its own project's completed loads.
+  @@unique([projectId, id])
   @@map("completed_load")
 }
 
+// One collection event of a completed load: one on an ordinary load, one for each property on a
+// split (ADR-055, 162). A collection is a live row of one completed load at most, so it can't bill
+// twice (invariant 17; the guard migration). The row repeats its load's project, which holds the
+// load and the collection event to one project.
+model CompletedLoadCollection {
+  id                String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  projectId         String         @map("project_id") @db.Uuid
+  completedLoadId   String         @map("completed_load_id") @db.Uuid
+  collectionEventId String         @map("collection_event_id") @db.Uuid
+  // Empty on an ordinary load.
+  splitSuffix       String         @map("split_suffix")
+  // Its estimate / the sum of the estimates; 1 on an ordinary load.
+  shareFraction     Decimal        @map("share_fraction") @db.Decimal(9, 8)
+  // Its share; the shares sum exactly to the load's.
+  volumeCy          Decimal?       @map("volume_cy") @db.Decimal(10, 2)
+  weightTons        Decimal?       @map("weight_tons") @db.Decimal(12, 4)
+  // Road miles from its end GPS, snapped to the nearest road, to the site's own GPS; stored
+  // unrounded, compared in tenths (ADR-125, 208). With where it came from, the road point routed
+  // from and its looked-up address, and the map extract's date and hash, so a map update never
+  // silently changes a billed mileage (ADR-282). All empty where no mileage could be worked out.
+  mileage           Decimal?       @db.Decimal(10, 4)
+  mileageSource     MileageSource? @map("mileage_source")
+  snappedLatitude   Decimal?       @map("snapped_latitude") @db.Decimal(38, 8)
+  snappedLongitude  Decimal?       @map("snapped_longitude") @db.Decimal(38, 8)
+  snappedAddress    String?        @map("snapped_address")
+  mapDataDate       DateTime?      @map("map_data_date") @db.Date
+  mapDataSha256     String?        @map("map_data_sha256")
+  // As on the completed load.
+  dissolvedAt       DateTime?      @map("dissolved_at") @db.Timestamptz(3)
+
+  project         Project       @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  completedLoad   CompletedLoad @relation(fields: [projectId, completedLoadId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  collectionEvent FieldEvent    @relation(fields: [projectId, collectionEventId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  transactions    Transaction[]
+
+  // What a transaction points at, so the property it prices is a row of its own load.
+  @@unique([projectId, completedLoadId, id])
+  @@index([completedLoadId])
+  @@map("completed_load_collection")
+}
+
+// A haul-out concluded from its field events (CHO): the same shape as a completed load (ADR-295),
+// one per haul-out disposal event, with a row beside it for each haul-out collection: one on an
+// ordinary haul-out, one for each pile on a split. A weight-paid haul-out keeps its loading-end
+// call, unbilled (ADR-227).
+model CompletedHaulOut {
+  id              String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  projectId       String         @map("project_id") @db.Uuid
+  // The haul-out's bare number; once per project among live haul-outs (the guard migration).
+  ticketNumber    String         @map("ticket_number")
+  // A haul-out dumps once: one of its own project's field events.
+  disposalEventId String         @unique @map("disposal_event_id") @db.Uuid
+  quantitySource  QuantitySource @map("quantity_source")
+  capacityCy      Int?           @map("capacity_cy")
+  // The loading end's call; on a split, the last pile's: how full it left.
+  loadCall        Int?           @map("load_call")
+  volumeCy        Decimal?       @map("volume_cy") @db.Decimal(10, 2)
+  // The receipt's net, or this haul-out's derived share of a truck and trailer weighed once.
+  weightTons      Decimal?       @map("weight_tons") @db.Decimal(12, 4)
+  weightIsShare   Boolean        @map("weight_is_share")
+  dissolvedAt     DateTime?      @map("dissolved_at") @db.Timestamptz(3)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  project       Project                      @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  disposalEvent FieldEvent                   @relation(fields: [projectId, disposalEventId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  collections   CompletedHaulOutCollection[]
+  transactions  Transaction[]
+  // People's marks on it: its QC status, and every lock as invoiced it has had (marks.prisma).
+  qcMarks       QcMark[]
+  invoiceLocks  InvoiceLock[]
+
+  // What a collection row points at, so it is one of its own project's completed haul-outs.
+  @@unique([projectId, id])
+  @@map("completed_haul_out")
+}
+
+// One haul-out collection event of a completed haul-out: one on an ordinary haul-out, one for
+// each pile on a split (ADR-295). Held as a load's collection rows are.
+model CompletedHaulOutCollection {
+  id                 String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  projectId          String         @map("project_id") @db.Uuid
+  completedHaulOutId String         @map("completed_haul_out_id") @db.Uuid
+  collectionEventId  String         @map("collection_event_id") @db.Uuid
+  // Empty on an ordinary haul-out.
+  splitSuffix        String         @map("split_suffix")
+  // What this pile added: its running call less the call before it. The whole call on an
+  // ordinary haul-out.
+  pileLoadCall       Int            @map("pile_load_call")
+  // pileLoadCall / the haul-out's load call; 1 on an ordinary haul-out.
+  shareFraction      Decimal        @map("share_fraction") @db.Decimal(9, 8)
+  // Its share: capacity x pileLoadCall / 100, and its part of the weight.
+  volumeCy           Decimal?       @map("volume_cy") @db.Decimal(10, 2)
+  weightTons         Decimal?       @map("weight_tons") @db.Decimal(12, 4)
+  // As on a load's collection row.
+  mileage            Decimal?       @db.Decimal(10, 4)
+  mileageSource      MileageSource? @map("mileage_source")
+  snappedLatitude    Decimal?       @map("snapped_latitude") @db.Decimal(38, 8)
+  snappedLongitude   Decimal?       @map("snapped_longitude") @db.Decimal(38, 8)
+  snappedAddress     String?        @map("snapped_address")
+  mapDataDate        DateTime?      @map("map_data_date") @db.Date
+  mapDataSha256      String?        @map("map_data_sha256")
+  dissolvedAt        DateTime?      @map("dissolved_at") @db.Timestamptz(3)
+
+  project          Project          @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  completedHaulOut CompletedHaulOut @relation(fields: [projectId, completedHaulOutId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  collectionEvent  FieldEvent       @relation(fields: [projectId, collectionEventId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  transactions     Transaction[]
+
+  // What a transaction points at, so the pile it prices is a row of its own haul-out.
+  @@unique([projectId, completedHaulOutId, id])
+  @@index([completedHaulOutId])
+  @@map("completed_haul_out_collection")
+}
+
+// Every problem, as a plain message (spec/FLAGS.md is the catalogue; ADR-052). The worker's:
+// raised with the facts it was raised on and their hash, so "have the facts changed?" can be
+// answered on a reprocess (ADR-166); cleared when the facts no longer raise it, never deleted. A
+// reviewer's acceptance is a mark of its own (FlagAcceptance, marks.prisma).
+model Flag {
+  id                  String      @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  projectId           String      @map("project_id") @db.Uuid
+  // The ticket it's on: both, or neither on a flag that sits on another record.
+  workflow            Workflow?
+  ticketNumber        String?     @map("ticket_number")
+  // The record it's about, where it's about one: each one of its own project's.
+  fieldEventId        String?     @map("field_event_id") @db.Uuid
+  certificationId     String?     @map("certification_id") @db.Uuid
+  disposalSiteId      String?     @map("disposal_site_id") @db.Uuid
+  surveyId            String?     @map("survey_id") @db.Uuid
+  code                FlagCode
+  // "Ticket 101008: debris type mismatch (collection Vegetative, disposal C&D). Flagged for review."
+  message             String
+  // The inputs it was raised on, written and compared by the worker alone, and their hash.
+  facts               Json
+  factsSha256         String      @map("facts_sha256")
+  billing             FlagBilling
+  // The transaction # the flag is about, where it is about one line, and that line's pay item,
+  // kept because the line itself may not exist (a per-ton pay item on a load with no weight).
+  slot                Int?
+  payItemId           String?     @map("pay_item_id") @db.Uuid
+  raisedAt            DateTime    @map("raised_at") @db.Timestamptz(3)
+  clearedAt           DateTime?   @map("cleared_at") @db.Timestamptz(3)
+  // The run that raised it, one of its own project's.
+  reconciliationRunId String?     @map("reconciliation_run_id") @db.Uuid
+
+  project           Project            @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  fieldEvent        FieldEvent?        @relation(fields: [projectId, fieldEventId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  certification     Certification?     @relation(fields: [projectId, certificationId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  disposalSite      DisposalSite?      @relation(fields: [projectId, disposalSiteId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  survey            Survey?            @relation(fields: [projectId, surveyId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  payItem           PayItem?           @relation(fields: [projectId, payItemId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  reconciliationRun ReconciliationRun? @relation(fields: [projectId, reconciliationRunId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  // A reviewer's acceptance of it, a mark of its own (marks.prisma).
+  acceptances       FlagAcceptance[]
+
+  // What an acceptance points at, so it is one of its own project's flags.
+  @@unique([projectId, id])
+  // A ticket's flags, as the review queue reads them.
+  @@index([projectId, workflow, ticketNumber])
+  @@map("flag")
+}
+
+// One run of the worker: its project, what started it, when, and how many tickets it worked and
+// how many failed (ARCHITECTURE §13).
+model ReconciliationRun {
+  id            String                @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  projectId     String                @map("project_id") @db.Uuid
+  trigger       ReconciliationTrigger
+  requestedById String?               @map("requested_by_id") @db.Uuid
+  startedAt     DateTime              @map("started_at") @db.Timestamptz(3)
+  finishedAt    DateTime?             @map("finished_at") @db.Timestamptz(3)
+  ticketsDone   Int?                  @map("tickets_done")
+  ticketsFailed Int?                  @map("tickets_failed")
+
+  project      Project                  @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  requestedBy  User?                    @relation("ReconciliationRunRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  decisions    ReconciliationDecision[]
+  flags        Flag[]
+  transactions Transaction[]
+
+  // What a flag points at, so it is one of its own project's runs.
+  @@unique([projectId, id])
+  @@map("reconciliation_run")
+}
+
+// What a run decided for one ticket and why: its status and, for a person to read, the field
+// events grouped and the rules that passed (ARCHITECTURE §13). One for each ticket of the run.
+model ReconciliationDecision {
+  id                  String       @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  reconciliationRunId String       @map("reconciliation_run_id") @db.Uuid
+  workflow            Workflow
+  ticketNumber        String       @map("ticket_number")
+  status              TicketStatus
+  summary             Json
+  error               String?
+
+  reconciliationRun ReconciliationRun @relation(fields: [reconciliationRunId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([reconciliationRunId, workflow, ticketNumber])
+  @@map("reconciliation_decision")
+}
+
 // One priced line, the current truth: regenerated when its ticket changes, each removed row copied
-// in full to AuditRecord first (ADR-085). PROVISIONAL: a load's lines only; the pay item, rule,
-// contract and operating sub are spec/DATA-MODEL.md's.
+// in full to AuditRecord first, the delete refused on a ticket locked as invoiced (ADR-085, 090).
+// It is on exactly one kind of ticket (a check in the guard migration): a load, with the property
+// it prices; a haul-out, with the pile it prices (ADR-295); or a unit rate ticket, its one field
+// event. Everything it names is its own project's. It keeps no mileage: that is read from its
+// property's or pile's collection row (ADR-350).
 model Transaction {
-  id              String  @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  completedLoadId String  @map("completed_load_id") @db.Uuid
-  // The rule action's # slot (Add transaction #n).
-  slot            Int
-  quantity        Decimal @db.Decimal(14, 4)
-  rate            Decimal @db.Decimal(14, 4)
-  amount          Decimal @db.Decimal(14, 2)
-  primeId         String  @map("prime_id") @db.Uuid
+  id                           String      @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  projectId                    String      @map("project_id") @db.Uuid
+  // A load's line: the load, and the property it prices (its one row on an ordinary load).
+  completedLoadId              String?     @map("completed_load_id") @db.Uuid
+  completedLoadCollectionId    String?     @map("completed_load_collection_id") @db.Uuid
+  // A haul-out's line: the haul-out, and the pile it prices.
+  completedHaulOutId           String?     @map("completed_haul_out_id") @db.Uuid
+  completedHaulOutCollectionId String?     @map("completed_haul_out_collection_id") @db.Uuid
+  // A unit rate ticket's line.
+  fieldEventId                 String?     @map("field_event_id") @db.Uuid
+  // The rule action's # slot (Add transaction #n): once per ticket and property or pile.
+  slot                         Int
+  // The rule that made it, the pay item it pays, and the rule's contract (ADR-239, 292).
+  ruleId                       String      @map("rule_id") @db.Uuid
+  payItemId                    String      @map("pay_item_id") @db.Uuid
+  contractId                   String      @map("contract_id") @db.Uuid
+  // Whose rate (ADR-081, 212): one of its project's primes.
+  primeId                      String      @map("prime_id") @db.Uuid
+  // Who did the work: a sub placed on the project under that prime; empty on the prime's own.
+  operatingSubId               String?     @map("operating_sub_id") @db.Uuid
+  // The pay item's unit, as it was.
+  unit                         BillingUnit
+  quantity                     Decimal     @db.Decimal(14, 4)
+  rate                         Decimal     @db.Decimal(14, 4)
+  amount                       Decimal     @db.Decimal(14, 2)
+  // The run that wrote it, one of its own project's.
+  reconciliationRunId          String?     @map("reconciliation_run_id") @db.Uuid
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  completedLoad CompletedLoad @relation(fields: [completedLoadId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  prime         Contractor    @relation(fields: [primeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  project                    Project                     @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  completedLoad              CompletedLoad?              @relation(fields: [projectId, completedLoadId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  completedLoadCollection    CompletedLoadCollection?    @relation(fields: [projectId, completedLoadId, completedLoadCollectionId], references: [projectId, completedLoadId, id], onDelete: Restrict, onUpdate: Restrict)
+  completedHaulOut           CompletedHaulOut?           @relation(fields: [projectId, completedHaulOutId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  completedHaulOutCollection CompletedHaulOutCollection? @relation(fields: [projectId, completedHaulOutId, completedHaulOutCollectionId], references: [projectId, completedHaulOutId, id], onDelete: Restrict, onUpdate: Restrict)
+  fieldEvent                 FieldEvent?                 @relation(fields: [projectId, fieldEventId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  rule                       Rule                        @relation(fields: [ruleId, projectId], references: [id, projectId], onDelete: Restrict, onUpdate: Restrict)
+  payItem                    PayItem                     @relation(fields: [projectId, payItemId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  contract                   Contract                    @relation(fields: [projectId, contractId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  prime                      Contractor                  @relation("TransactionPrime", fields: [primeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  primePlace                 ProjectContractor           @relation("TransactionPrimePlace", fields: [projectId, primeId], references: [projectId, asPrimeId], onDelete: Restrict, onUpdate: Restrict)
+  operatingSub               Contractor?                 @relation("TransactionOperatingSub", fields: [operatingSubId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  operatingSubPlace          ProjectContractor?          @relation("TransactionOperatingSubPlace", fields: [projectId, operatingSubId, primeId], references: [projectId, contractorId, primeId], onDelete: Restrict, onUpdate: Restrict)
+  reconciliationRun          ReconciliationRun?          @relation(fields: [projectId, reconciliationRunId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
 
+  // A # once per ticket and property or pile (ADR-118): #1 on -A beside #1 on -B are two lines.
+  @@unique([completedLoadCollectionId, slot])
+  @@unique([completedHaulOutCollectionId, slot])
+  @@unique([fieldEventId, slot])
+  @@index([projectId])
   @@index([completedLoadId])
+  @@index([completedHaulOutId])
   @@map("transaction")
-}
-
-// A QC Approved load locked as invoiced; its transactions can't be regenerated until it's unlocked,
-// audited (ADR-057, 090).
-model InvoiceLock {
-  id              String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  completedLoadId String   @unique @map("completed_load_id") @db.Uuid
-  lockedById      String   @map("locked_by_id") @db.Uuid
-  lockedAt        DateTime @default(now()) @map("locked_at") @db.Timestamptz(3)
-
-  completedLoad CompletedLoad @relation(fields: [completedLoadId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  lockedBy      User          @relation(fields: [lockedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
-
-  @@map("invoice_lock")
 }

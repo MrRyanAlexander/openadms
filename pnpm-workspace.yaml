@@ -8,6 +8,15 @@ packages:
 # Supply chain (ARCHITECTURE §16; ADR-255).
 # Refuse any version published less than 7 days ago (minutes).
 minimumReleaseAge: 10080
+# One version is let past the 7-day rule, by name (the user, 2026-10-06, ADR-372): the fix for
+# GHSA-68fv-2mgg-jv7q. Delete this entry on or after 2026-10-07 14:08 UTC, when 1.2.2 is seven
+# days old; nothing else changes when it goes.
+minimumReleaseAgeExclude:
+  - source-map-js@1.2.2
+# A version forced on a dependency's dependency, each named in an ADR.
+overrides:
+  # GHSA-68fv-2mgg-jv7q (ADR-356): vitest → vite → postcss asks for 1.2.1; 1.2.2 is the fix.
+  source-map-js: 1.2.2
 # No dependency runs an install script unless it is allowed here, by name, in an ADR.
 strictDepBuilds: true
 allowBuilds:

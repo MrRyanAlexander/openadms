@@ -6,11 +6,15 @@
 // harness: its own database, the story's clock, offline phones, out-of-order sync, the audit trail.
 // Each phone holds its monitor's assignment for the day (ADR-240); the day's dispatch itself is the
 // next story's (dispatch-monday).
-import { projectTime } from '../clock.ts';
-import { uuidv7, uuidv7Time } from '../ids.ts';
-import type { Story } from '../runner.ts';
+import { NumberAllocator } from '@open-adms/api';
 
-const timeZone = 'America/New_York';
+import { projectTime } from '../clock.ts';
+import { made, scanned } from '../device.ts';
+import { uuidv7, uuidv7Time } from '../ids.ts';
+import { phoneLists } from '../phone-lists.ts';
+import type { Story } from '../runner.ts';
+import { p1TimeZone as timeZone, setUpP1, setUpP1Sites } from './p1.ts';
+
 const at = (time: string): string => `2026-10-12T${time}:00-04:00`;
 
 export const ticket101001: Story = {
@@ -24,15 +28,13 @@ export const ticket101001: Story = {
 
     story.at(
       at('06:30'),
-      'Dana Reyes sets up P1, its TDSR, Ana Brooks, Kim Nguyen, their two phones and their assignments',
+      'Dana Reyes sets up Bayline County, Hurricane Delphine and P1, its prime and contract, its TDSR, Ana Brooks, Kim Nguyen, their two phones and their assignments',
     );
     // The first user is written with itself as the actor (ADR-270 (4)).
     const dana = uuidv7(clock.now());
     const setup = await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
       await tx.user.create({ data: { id: dana, name: 'Dana Reyes', role: 'ADMIN' } });
-      const p1 = await tx.project.create({
-        data: { name: 'Bayline County ROW, Hurricane Delphine', timeZone },
-      });
+      const p1 = await setUpP1(tx, story.policy);
       const ana = await tx.user.create({
         data: { name: 'Ana Brooks', role: 'MONITOR', monitorNumber: 'M004127' },
       });
@@ -45,10 +47,8 @@ export const ticket101001: Story = {
       const towerPhone = await tx.device.create({
         data: { name: 'P1-TWR-TDSR', publicKey: 'story-P1-TWR-TDSR', masterPasscodeVersion: 1 },
       });
-      const tdsr = await tx.disposalSite.create({
-        data: { projectId: p1.id, name: 'Marsh Road TDSR' },
-      });
-      const monday = { workDate: new Date('2026-10-12'), projectId: p1.id, madeById: dana };
+      const { tdsr } = await setUpP1Sites(tx, p1.project);
+      const monday = { workDate: new Date('2026-10-12'), projectId: p1.project, madeById: dana };
       const collections = await tx.assignment.create({
         data: {
           ...monday,
@@ -63,21 +63,29 @@ export const ticket101001: Story = {
           ...monday,
           personId: kim.id,
           fieldEventKinds: ['DISPOSAL'],
-          siteId: tdsr.id,
+          siteId: tdsr,
           deviceId: towerPhone.id,
           origin: 'PLANNED',
         },
       });
       return {
-        p1: p1.id,
+        p1: p1.project,
         ana: ana.id,
         kim: kim.id,
         collectionPhone,
         towerPhone,
         collections: collections.id,
         tower: tower.id,
+        tdsr,
       };
     });
+    // At the yard, online, Ana's phone takes her assignment and its first block of load numbers:
+    // the collection makes the ticket's number (ADR-065, 209).
+    const block = await new NumberAllocator(api, clock, story.policy).topUp(
+      { person: setup.ana, deviceId: setup.collectionPhone.id },
+      { projectId: setup.p1, series: 'LOAD', lastUsedNumber: null },
+    );
+    if (!block.saved) throw new Error(block.refusal.message);
     const anaPhone = story.phone({
       name: 'P1-COL-1',
       deviceId: setup.collectionPhone.id,
@@ -85,6 +93,10 @@ export const ticket101001: Story = {
       assignmentId: setup.collections,
       projectId: setup.p1,
       setupVersion: 1,
+      lists: await phoneLists(api, {
+        assignmentId: setup.collections,
+        deviceId: setup.collectionPhone.id,
+      }),
       timeZone,
     });
     const kimPhone = story.phone({
@@ -93,26 +105,30 @@ export const ticket101001: Story = {
       monitorId: setup.kim,
       assignmentId: setup.tower,
       projectId: setup.p1,
+      siteId: setup.tdsr,
       setupVersion: 1,
       timeZone,
     });
 
     story.at(at('08:15'), 'Ana scans the truck’s badge at 14 Heron St, offline');
-    const collection = anaPhone.begin('LOAD', 'COLLECTION');
-    story.at(at('08:40'), 'Ana completes the collection, number 101001 last');
+    const collection = anaPhone.begin('LOAD', 'COLLECTION', '730415');
+    story.at(
+      at('08:40'),
+      'Ana completes the collection; her phone shows 101001, the first of its block, last',
+    );
     anaPhone.complete(collection, {
-      ticketNumber: '101001',
-      endLatitude: '27.94620000',
-      endLongitude: '-82.45870000',
+      number: made,
+      endLatitude: '39.13850000',
+      endLongitude: '-75.55370000',
     });
 
     story.at(at('09:05'), 'Kim scans the badge at the Marsh Road TDSR tower, offline');
-    const disposal = kimPhone.begin('LOAD', 'DISPOSAL');
+    const disposal = kimPhone.begin('LOAD', 'DISPOSAL', '730415');
     story.at(at('09:25'), 'Kim calls the load 80% and scans 101001 last');
     kimPhone.complete(disposal, {
-      ticketNumber: '101001',
-      endLatitude: '27.99810000',
-      endLongitude: '-82.39120000',
+      number: scanned('101001'),
+      endLatitude: '39.09030000',
+      endLongitude: '-75.62020000',
       loadCall: 80,
     });
     story.check(
@@ -174,14 +190,17 @@ export const ticket101001: Story = {
       ],
     );
     story.check(
-      'each carries its monitor’s assignment and the setup version its phone held',
+      'each says it came from a phone, with its monitor’s assignment, the setup version its phone held, the badge as scanned, and the tower’s its site',
       inFieldOrder.map((event) => [
+        event.source,
         event.assignmentId === setup.collections ? 'Ana’s' : 'Kim’s',
         event.setupVersion,
+        event.certNumber,
+        event.siteId === setup.tdsr ? 'Marsh Road TDSR' : (event.siteId ?? 'no site'),
       ]),
       [
-        ['Ana’s', 1],
-        ['Kim’s', 1],
+        ['DEVICE', 'Ana’s', 1, '730415', 'no site'],
+        ['DEVICE', 'Kim’s', 1, '730415', 'Marsh Road TDSR'],
       ],
     );
     story.check(
@@ -215,21 +234,46 @@ export const ticket101001: Story = {
         ['INSERT', 'Ana Brooks', 'DEVICE', 'P1-COL-1'],
       ],
     );
+    // The seed's rows come first, every one as the system actor: itself, the master passcode, then
+    // what the firm's lists start with (ADR-302; told value by value in packages/db's tests).
+    const afterSeed = audit.findIndex((record) => record.source !== 'SYSTEM');
+    const seeded = audit.slice(0, afterSeed).map((record) => record.tableName);
     story.check(
-      'the whole audit log: the seed’s system actor and master passcode, Dana’s nine setup rows, the two syncs',
-      audit.map((record) => [record.tableName, record.source]),
+      'the audit log opens with the seed: the system actor, the master passcode, the 94 values the firm’s 15 seeded lists start with',
+      [seeded.slice(0, 2), seeded.length - 2, new Set(seeded.slice(2)).size],
+      [['user', 'master_passcode'], 94, 15],
+    );
+    story.check(
+      'and then holds exactly Dana’s twenty-four setup rows (the client, the declaration event, P1, its five number series and its five kinds of unit rate work, Coastline, its place as P1’s prime and its contract among them), the block Ana’s phone took (the series moved on, the block cut) and the two syncs',
+      audit.slice(afterSeed).map((record) => [record.tableName, record.source]),
       [
-        ['user', 'SYSTEM'],
-        ['master_passcode', 'SYSTEM'],
         ['user', 'BACK_OFFICE'],
+        ['client', 'BACK_OFFICE'],
+        ['declaration_event', 'BACK_OFFICE'],
         ['project', 'BACK_OFFICE'],
+        ['project_number_series', 'BACK_OFFICE'],
+        ['project_number_series', 'BACK_OFFICE'],
+        ['project_number_series', 'BACK_OFFICE'],
+        ['project_number_series', 'BACK_OFFICE'],
+        ['project_number_series', 'BACK_OFFICE'],
+        ['project_kind_of_work', 'BACK_OFFICE'],
+        ['project_kind_of_work', 'BACK_OFFICE'],
+        ['project_kind_of_work', 'BACK_OFFICE'],
+        ['project_kind_of_work', 'BACK_OFFICE'],
+        ['project_kind_of_work', 'BACK_OFFICE'],
+        ['contractor', 'BACK_OFFICE'],
+        ['project_contractor', 'BACK_OFFICE'],
+        ['contract', 'BACK_OFFICE'],
         ['user', 'BACK_OFFICE'],
         ['user', 'BACK_OFFICE'],
         ['device', 'BACK_OFFICE'],
         ['device', 'BACK_OFFICE'],
         ['disposal_site', 'BACK_OFFICE'],
+        ['disposal_site', 'BACK_OFFICE'],
         ['assignment', 'BACK_OFFICE'],
         ['assignment', 'BACK_OFFICE'],
+        ['project_number_series', 'DEVICE'],
+        ['number_block', 'DEVICE'],
         ['field_event', 'DEVICE'],
         ['field_event', 'DEVICE'],
       ],
