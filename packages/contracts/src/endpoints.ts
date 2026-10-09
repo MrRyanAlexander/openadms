@@ -32,6 +32,8 @@ import {
   masterPasscodeAnswerSchema,
   phoneChallengeAnswerSchema,
   monitorCreatedAnswerSchema,
+  monitorSignedInAnswerSchema,
+  phoneMonitorAnswerSchema,
   phoneEnrolledAnswerSchema,
   phoneProvenAnswerSchema,
   provenPhoneAnswerSchema,
@@ -120,8 +122,16 @@ export type EndpointMethod = (typeof endpointMethods)[number];
 // keep a session going or end it. With either of those two, a call that isn't a GET carries
 // the session's CSRF value. `PROVEN_PHONE`: an enrolled phone that has proved itself with its
 // device key, by the token its proof gave it, sent as `Authorization: Bearer` and never as a
-// cookie (ARCHITECTURE §6, Device sessions; ADR-440).
-export const endpointAccess = ['ANYBODY', 'SIGNED_IN', 'REFRESH_TOKEN', 'PROVEN_PHONE'] as const;
+// cookie (ARCHITECTURE §6, Device sessions; ADR-440). `MONITOR_ON_PHONE`: a proven phone, by
+// that token, and the monitor signed in on it, by their session's token in the header named
+// below: both are read from the database on every request (ADR-443).
+export const endpointAccess = [
+  'ANYBODY',
+  'SIGNED_IN',
+  'REFRESH_TOKEN',
+  'PROVEN_PHONE',
+  'MONITOR_ON_PHONE',
+] as const;
 
 export type EndpointAccess = (typeof endpointAccess)[number];
 
@@ -1518,6 +1528,51 @@ export const createMonitorOnPhoneEndpoint = endpoint({
   answer: monitorCreatedAnswerSchema,
 });
 
+// A monitor signs in on a phone, online (ARCHITECTURE §6, Device sessions; §7.2; AC-02-39;
+// ADR-105, 120, 441, 443). The call is a proven phone's, in service, and carries the monitor's
+// ID and password: their ID and password open nothing else, and a back-office sign-in refuses
+// them. What it gives is the monitor's session token, which the phone's calls carry in the header
+// below beside the phone's own token, never as a cookie. A sign-in lasts the policy's hours and
+// doesn't end for quiet; it ends when the monitor signs out, another signs in on the phone, their
+// password is set anew, they are archived, or the phone's key is revoked. Wrong tries follow
+// sign-in's rule and numbers, and whatever is wrong is refused by one code. The limits here only
+// bound what is read.
+export const monitorSessionHeader = 'x-adms-monitor-session';
+
+export const signInOnPhoneEndpoint = endpoint({
+  name: 'signInOnPhone',
+  summary:
+    'A field monitor signs in on an enrolled phone, online, with their Monitor ID and password. The answer is their session’s token, which the phone’s calls carry in the x-adms-monitor-session header beside the phone’s own token, and how long it lasts. Open to a phone in service that has proved itself, by its token. Whatever is wrong is refused by one code; wrong tries in a row make the next wait longer, and at the policy’s count lock the login until an admin sets the password anew.',
+  access: 'PROVEN_PHONE',
+  method: 'POST',
+  path: '/phones/current/sign-ins',
+  body: z.strictObject({
+    monitorNumber: z.string().trim().min(1).max(20),
+    password: z.string().min(1).max(4096),
+  }),
+  answer: monitorSignedInAnswerSchema,
+});
+
+export const signOutOnPhoneEndpoint = endpoint({
+  name: 'signOutOnPhone',
+  summary:
+    'The monitor signed in on the phone signs out: their session ends on the server. Open to a proven phone with its monitor’s session token.',
+  access: 'MONITOR_ON_PHONE',
+  method: 'POST',
+  path: '/phones/current/sign-outs',
+  answer: signedOutAnswerSchema,
+});
+
+export const phoneMonitorEndpoint = endpoint({
+  name: 'phoneMonitor',
+  summary:
+    'The monitor signed in on the phone, as the server has them now, and how long their sign-in has left. Open to a proven phone with its monitor’s session token.',
+  access: 'MONITOR_ON_PHONE',
+  method: 'GET',
+  path: '/phones/current/monitor',
+  answer: phoneMonitorAnswerSchema,
+});
+
 export const removePhoneEndpoint = endpoint({
   name: 'removePhone',
   summary:
@@ -2322,6 +2377,9 @@ export const endpoints: readonly Endpoint[] = [
   provePhoneEndpoint,
   provenPhoneEndpoint,
   createMonitorOnPhoneEndpoint,
+  signInOnPhoneEndpoint,
+  signOutOnPhoneEndpoint,
+  phoneMonitorEndpoint,
   removePhoneEndpoint,
   changeMasterPasscodeEndpoint,
   listAssignmentsEndpoint,

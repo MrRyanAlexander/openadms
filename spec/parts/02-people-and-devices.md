@@ -52,8 +52,9 @@ Decides who can do what, and on which phone:
    field events; a site with field events and nobody assigned) as views, never ticket flags; an
    assignment never expires and never stops work (ADR-240).
 5. **Start of day.** The monitor signs in on any enrolled phone with their **Monitor ID** and
-   password (the firm's practice: their phone number without the area code). Online, the phone
-   receives **their assignment** and its project's lists (the certified trucks and crews, sites,
+   password (the firm's practice: their phone number without the area code). Online, the server
+   signs them in on that phone for the shift (twelve hours, one monitor at a time; ⚠️ ADR-443, an
+   agent default awaiting approval) and the phone receives **their assignment** and its project's lists (the certified trucks and crews, sites,
    ROEs, the roster and **login list**, number blocks or control ranges, the unit rate pay items and
    their settings for unit rate work, and **for a site, what it asks for**, ADR-227, 243). One
    assignment on a phone at a time, so **one project** (ADR-145). A disposal phone holds **no ticket

@@ -18,11 +18,17 @@
 // cookie (ARCHITECTURE §6, Device sessions; AC-10-46; ADR-440): no browser sends that header by
 // itself, so such a call needs no CSRF value. The phone is read from the database for this
 // request too: a key revoked a moment ago refuses now, whatever the token says.
-import { csrfHeader, type Endpoint } from '@open-adms/contracts';
+//
+// A monitor signed in on that phone (ADR-443) sends their session's token beside it, in a header
+// of its own, never as a cookie: the phone is read first, then the session, both from the
+// database on every request, so an archived monitor, a password set anew, a sign-out and a
+// revoked key each refuse at once. The session must be that phone's.
+import { csrfHeader, monitorSessionHeader, type Endpoint } from '@open-adms/contracts';
 import { Access } from '@open-adms/domain';
 import type { FastifyRequest } from 'fastify';
 
 import type { PhoneProofs, ProvenPhone } from '../phone/phone-proofs.ts';
+import type { MonitorOnPhone, PhoneSignIns } from '../phone/phone-sign-ins.ts';
 import type { Limits } from '../process/limits.ts';
 import { Refusal } from '../process/refusal.ts';
 import { accessCookie, cookiesOf, refreshCookie } from './session-cookies.ts';
@@ -37,6 +43,8 @@ export interface Admitted {
   readonly refreshToken?: string;
   // The phone that proved itself, on an endpoint open to one.
   readonly phone?: ProvenPhone;
+  // The monitor signed in on that phone, on an endpoint open to them.
+  readonly monitor?: MonitorOnPhone;
 }
 
 const admitted = new WeakMap<object, Admitted>();
@@ -61,6 +69,14 @@ export function phoneOf(request: object): ProvenPhone {
   return phone;
 }
 
+// The monitor signed in on the phone a request is from. Only an endpoint whose access is
+// `MONITOR_ON_PHONE` has one.
+export function monitorOf(request: object): MonitorOnPhone {
+  const monitor = admitted.get(request)?.monitor;
+  if (monitor === undefined) throw new Error('This endpoint has no monitor signed in on a phone.');
+  return monitor;
+}
+
 const bearer = /^Bearer ([A-Za-z0-9._-]{1,400})$/;
 
 export class Admission {
@@ -68,27 +84,42 @@ export class Admission {
   private readonly tokens: SessionTokens;
   private readonly limits: Pick<Limits, 'asked'>;
   private readonly phones: Pick<PhoneProofs, 'proven'>;
+  private readonly monitors: Pick<PhoneSignIns, 'onPhone'>;
 
   constructor(
     sessions: Sessions,
     tokens: SessionTokens,
     limits: Pick<Limits, 'asked'>,
     phones: Pick<PhoneProofs, 'proven'>,
+    monitors: Pick<PhoneSignIns, 'onPhone'>,
   ) {
     this.sessions = sessions;
     this.tokens = tokens;
     this.limits = limits;
     this.phones = phones;
+    this.monitors = monitors;
   }
 
   // Lets the request through, or refuses it with a plain code.
   async admit(endpoint: Endpoint, request: FastifyRequest): Promise<void> {
     if (endpoint.access === 'ANYBODY') return;
-    if (endpoint.access === 'PROVEN_PHONE') {
+    if (endpoint.access === 'PROVEN_PHONE' || endpoint.access === 'MONITOR_ON_PHONE') {
       const sent = request.headers.authorization;
       const phone = await this.phones.proven(bearer.exec(sent ?? '')?.[1]);
       if (phone === undefined) throw new Refusal('PHONE_NOT_PROVEN', 401);
-      admitted.set(request, { phone });
+      if (endpoint.access === 'PROVEN_PHONE') {
+        admitted.set(request, { phone });
+        return;
+      }
+      const token = request.headers[monitorSessionHeader];
+      const monitor = await this.monitors.onPhone(
+        phone.deviceId,
+        typeof token === 'string' ? token : undefined,
+      );
+      if (monitor === undefined) throw new Refusal('NOT_SIGNED_IN', 401);
+      // Counted for the monitor, as a signed-in person is (ADR-416).
+      this.limits.asked(`person ${monitor.userId}`);
+      admitted.set(request, { phone, monitor });
       return;
     }
     const cookies = cookiesOf(request.headers.cookie);

@@ -582,6 +582,17 @@ So the protection can't rest on the password. It rests on these:
 5. **A screen-lock passcode on every phone** (the firm's device management) is strongly
    recommended, because it's what makes point 2 hold.
 
+> ⚠️ **ADR-441, 443 (2026-10-09; agent defaults, this note awaits approval, building didn't
+> wait): signing in online.** With a connection, a monitor signs in on an enrolled phone that has
+> proved itself and is in service, with Monitor ID and password; the server answers with the
+> monitor's own session, which the phone's calls carry beside the phone's proof. It lasts twelve
+> hours from the sign-in and quiet doesn't end it; it ends at once when the monitor signs out,
+> another monitor signs in on the phone, an admin sets their password anew or archives them, or
+> the phone's key is revoked. Wrong tries online wait from the fifth and lock the login at the
+> fiftieth until an admin sets the password anew (the phone's own screen keeps its 5 and 10).
+> A phone taken out of service signs nobody in. The database itself lets a monitor's session be
+> opened on a phone only (point 1).
+
 ### 7.3 Switching monitors on a phone
 
 ✅ **Decided**:
