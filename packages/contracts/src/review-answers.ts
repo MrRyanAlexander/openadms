@@ -321,3 +321,31 @@ export const quarantinedRecordSchema = z.strictObject({
 });
 
 export type QuarantinedRecordAnswer = z.infer<typeof quarantinedRecordSchema>;
+
+// What a change to a certification answers with (spec/parts/03-certification.md steps 10…13;
+// spec/DATA-MODEL.md §3; BACKLOG 2.4.4; ADR-079, 080, 433): the certification as it now stands,
+// the same one. Its capacity is what its boxes work out to, never a value anybody sent. Never
+// the driver's phone or licence number, which a change here neither reads nor moves.
+export const certificationRecordSchema = z.strictObject({
+  id,
+  projectId: id,
+  // Cert = placard = badge, as written: never parsed (ADR-045).
+  certNumber: z.string(),
+  kind: z.enum(['CONTAINER', 'CREW']),
+  primeId: id,
+  firstTierSubId: id.nullable(),
+  secondTierSubId: id.nullable(),
+  // Whole cubic yards; a crew has none.
+  capacityCy: z.number().int().nullable(),
+  certifiedAt: at,
+  certifiedById: id,
+  signaturesOnFile: z.boolean(),
+  replacesId: id.nullable(),
+  replacedReason: z.string().nullable(),
+  // A day in the project's time zone, the reason and the admin: all three or none.
+  revokedFrom: day.nullable(),
+  revokedReason: z.string().nullable(),
+  revokedById: id.nullable(),
+});
+
+export type CertificationRecord = z.infer<typeof certificationRecordSchema>;

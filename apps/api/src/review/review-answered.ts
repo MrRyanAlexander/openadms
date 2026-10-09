@@ -8,6 +8,7 @@
 // number or a note.
 import type {
   CarriedTicket,
+  Certification,
   DropOffLog,
   FieldEvent,
   FieldEventItem,
@@ -28,6 +29,7 @@ import type {
 } from '@open-adms/db';
 import type {
   CarriedTicketRecord,
+  CertificationRecord,
   DropOffLogRecord,
   FieldEventRecord,
   FlagAcceptanceRecord,
@@ -319,4 +321,26 @@ export const quarantinedRecord = (kept: QuarantinedRecord): QuarantinedRecordAns
   resolvedById: kept.resolvedById,
   resolvedAt: time(kept.resolvedAt),
   resolution: kept.resolution,
+});
+
+const dayOf = (date: Date | null): string | null => date?.toISOString().slice(0, 10) ?? null;
+
+// A certification as it stands after a change: never the driver's phone or licence number.
+export const certificationRecord = (kept: Certification): CertificationRecord => ({
+  id: kept.id,
+  projectId: kept.projectId,
+  certNumber: kept.certNumber,
+  kind: kept.kind,
+  primeId: kept.primeId,
+  firstTierSubId: kept.firstTierSubId,
+  secondTierSubId: kept.secondTierSubId,
+  capacityCy: kept.capacityCy,
+  certifiedAt: kept.certifiedAt.toISOString(),
+  certifiedById: kept.certifiedById,
+  signaturesOnFile: kept.signaturesOnFile,
+  replacesId: kept.replacesId,
+  replacedReason: kept.replacedReason,
+  revokedFrom: dayOf(kept.revokedFrom),
+  revokedReason: kept.revokedReason,
+  revokedById: kept.revokedById,
 });

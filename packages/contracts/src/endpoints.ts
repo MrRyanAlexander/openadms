@@ -47,6 +47,7 @@ import { formDefinitionFields } from './form-definition.ts';
 import {
   addressSources,
   carriedTicketRecordSchema,
+  certificationRecordSchema,
   dropOffLogRecordSchema,
   fieldEventRecordSchema,
   flagAcceptanceRecordSchema,
@@ -1981,6 +1982,81 @@ export const createFieldEventEndpoint = endpoint({
   answer: savedAnswer(fieldEventRecordSchema),
 });
 
+// The back office's changes to a certification (spec/parts/03-certification.md steps 10…13;
+// AC-03-38, 55; AC-10-27, 28, 35, 37; BACKLOG 2.4.4, C106; ADR-079, 080, 082, 364, 433). **A
+// measuring mistake takes `CORRECT`, signatures on file take `QC`, and a revocation is an
+// admin's alone**: no permission opens it to a manager/analyst. Each service asks again inside
+// its own piece of work. **Nobody sends a capacity**: it is worked out again from the boxes, and
+// measurements that give none are answered `NOT_SAVED` in the domain's own words. Not here: a
+// certification is made, and a modified truck certified again, on a phone, so both arrive with
+// its sync (BACKLOG 2.6.2); its QC status is `setQcStatus`'s.
+const certificationId = z.strictObject({ certificationId: z.uuid() });
+// A whole number of inches, 1 or more (adms-certifications §3A.3).
+const inches = z.number().int().min(1).max(9999);
+
+export const correctCertificationBoxEndpoint = endpoint({
+  name: 'correctCertificationBox',
+  summary:
+    'A measuring mistake on one of a container certification’s boxes is corrected in place (box 0 is the primary): only the measurements stated change, in whole inches, and the capacity is worked out again from the boxes, never sent. Every ticket that scanned the certification is queued where the capacity changed; one locked as invoiced is left as it is. Refused for a box the certification doesn’t have, for measurements that give no capacity and for a measurement the box’s shape doesn’t hold. Never a box’s shape, its sign or its feature.',
+  ...reviewer,
+  permission: 'CORRECT',
+  method: 'PATCH',
+  path: '/certifications/:certificationId/boxes/:position',
+  params: z.strictObject({
+    certificationId: z.uuid(),
+    // The box by its place on the sheet: 0 is the primary.
+    position: z.string().regex(/^(0|[1-9][0-9]?)$/),
+  }),
+  body: z.strictObject({
+    changes: z
+      .strictObject({
+        length: inches,
+        // A hoist's or a dog house's second length.
+        secondLength: inches,
+        width: inches,
+        height: inches,
+        diameter: inches,
+        radius: inches,
+        run: inches,
+        // How many radius corners.
+        corners: z.number().int().min(1).max(99),
+      })
+      .partial()
+      .refine(stated),
+    note: reviewNote,
+  }),
+  answer: savedAnswer(certificationRecordSchema),
+});
+
+// Marked at QC, beside the QC status (ADR-080): the signatures themselves are kept elsewhere.
+export const markSignaturesOnFileEndpoint = endpoint({
+  name: 'markSignaturesOnFile',
+  summary:
+    'Whether a certification’s signatures are on file is marked, yes or no. It changes nothing a ticket reads and queues nothing.',
+  ...reviewer,
+  permission: 'QC',
+  method: 'PUT',
+  path: '/certifications/:certificationId/signatures-on-file',
+  params: certificationId,
+  body: z.strictObject({ onFile: z.boolean() }),
+  answer: savedAnswer(certificationRecordSchema),
+});
+
+// Only an admin revokes (ADR-079; AC-03-55). Nothing is blocked: the tickets worked on it from
+// that day are flagged for a certification review, and still bill.
+export const revokeCertificationEndpoint = endpoint({
+  name: 'revokeCertification',
+  summary:
+    'A certification is revoked from a day, in its project’s time zone, with a reason; it keeps the day, the reason and the admin. Nothing else on it changes. Every ticket that scanned it is queued; one locked as invoiced is left as it is.',
+  access: 'SIGNED_IN',
+  roles: adminOnly,
+  method: 'POST',
+  path: '/certifications/:certificationId/revocations',
+  params: certificationId,
+  body: z.strictObject({ from: day, reason: typed }),
+  answer: savedAnswer(certificationRecordSchema),
+});
+
 export const endpoints: readonly Endpoint[] = [
   healthEndpoint,
   requestPasswordResetEndpoint,
@@ -2070,4 +2146,7 @@ export const endpoints: readonly Endpoint[] = [
   renumberQuarantinedRecordEndpoint,
   markSecondCopyEndpoint,
   createFieldEventEndpoint,
+  correctCertificationBoxEndpoint,
+  markSignaturesOnFileEndpoint,
+  revokeCertificationEndpoint,
 ];

@@ -110,6 +110,8 @@ describe('who may ask', () => {
       'correctIncident',
       'correctDropOffLog',
       'createFieldEvent',
+      // Part 4's (certifications.test.ts): a measuring mistake on a certification.
+      'correctCertificationBox',
     ]);
     expect(taking('RENUMBER')).toEqual([
       'renumberFieldEvent',

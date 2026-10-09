@@ -2,6 +2,7 @@
 // controller here.
 import { Module } from '@nestjs/common';
 
+import { CertificationsController } from '../certification/certifications.controller.ts';
 import { AssignmentsController } from '../dispatch/assignments.controller.ts';
 import { PhonesController } from '../dispatch/phones.controller.ts';
 import { PeopleController } from '../people/people.controller.ts';
@@ -39,6 +40,7 @@ import { HealthController } from './health.controller.ts';
     ReviewMarksController,
     CorrectionsController,
     ReviewRecordsController,
+    CertificationsController,
   ],
 })
 export class ApiModule {}

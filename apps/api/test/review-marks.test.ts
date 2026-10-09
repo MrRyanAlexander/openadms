@@ -92,7 +92,8 @@ describe('who may ask', () => {
       endpoints.filter((one) => one.permission === permission).map(({ name }) => name);
     expect(taking('VOID')).toEqual(['voidTicket', 'unvoidTicket']);
     expect(taking('ACCEPT_FLAG')).toEqual(['acceptFlag']);
-    expect(taking('QC')).toEqual(['setQcStatus']);
+    // Signatures on file are marked at QC (certifications.test.ts; ADR-433).
+    expect(taking('QC')).toEqual(['setQcStatus', 'markSignaturesOnFile']);
     expect(taking('LOCK_INVOICED')).toEqual([
       'createInvoiceBatch',
       'lockAsInvoiced',

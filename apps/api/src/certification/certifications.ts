@@ -11,9 +11,15 @@
 // worked out again), signatures on file, a revocation from a date. A modified truck is
 // certified again, naming the certification it replaces. A certification is never copied: a truck
 // that works another project is certified there from scratch (ADR-328, 329). Nothing is deleted.
-// Who may do each (an admin revokes; a certifying assignment) is read at sign-in, Phase 2. A
-// certification's number is the phone's: the next of its block of the project's cert-number
+// A certification's number is the phone's: the next of its block of the project's cert-number
 // series, or the pre-printed sheet's, as written (ADR-323).
+//
+// Who may do each of the back office's is asked here, inside the change's own piece of work and
+// before anything is changed, whatever the door already asked (ADR-364, 433): only an admin
+// revokes (AC-03-55); signatures on file are marked at QC, by an admin or a manager/analyst who
+// holds QC (ADR-080); a measuring mistake is a reviewer's correction (`Corrections.certification`,
+// which takes correct and works through `measured`). Whether a monitor's assignment includes
+// certifying is flagged, never refused.
 //
 // Each change that moves a ticket queues its job in its own piece of work (ADR-420): a
 // certification made after a field event scanned its number is linked to that field event and
@@ -31,8 +37,9 @@ import {
 } from '@open-adms/domain';
 
 import type { WorkQueued } from '../jobs/work-queue.ts';
+import { ReviewService } from '../review/review-service.ts';
 import { SubPlaces } from '../setup/contractor-setup.ts';
-import { day, type Outcome, QueueingService, Refused, type Warn } from '../setup/setup-service.ts';
+import { day, type Outcome, Refused, type Warn } from '../setup/setup-service.ts';
 
 // A box's measurements, whole inches; a shape reads only its own.
 export interface BoxMeasurements {
@@ -95,7 +102,7 @@ export interface NewCertification {
   readonly notes?: string;
 }
 
-export class Certifications extends QueueingService {
+export class Certifications extends ReviewService {
   certify(input: NewCertification): Promise<Outcome<Certification>> {
     const actor: Actor =
       input.deviceId === undefined
@@ -252,9 +259,7 @@ export class Certifications extends QueueingService {
     const boxes = await Certifications.boxesOf(tx, certificationId);
     const box = boxes.find((candidate) => candidate.position === position);
     if (box === undefined) {
-      throw new Error(
-        `Certification ${certification.certNumber} has no box ${String(position)} to correct.`,
-      );
+      throw new Refused(new CertificationChanges(certification.certNumber).noBox(position));
     }
     const capacityCy = Certifications.capacity(
       certification.kind,
@@ -275,13 +280,14 @@ export class Certifications extends QueueingService {
     return { record, queued };
   }
 
-  // Marked at QC: whether the signatures are on file (they are kept elsewhere; ADR-080).
+  // Marked at QC: whether the signatures are on file (they are kept elsewhere; ADR-080). It
+  // takes QC, changes nothing a ticket reads and queues nothing.
   signaturesOnFile(
     person: string,
     certificationId: string,
     onFile: boolean,
   ): Promise<Outcome<Certification>> {
-    return this.write(person, (tx) =>
+    return this.mark(person, 'QC', undefined, (tx) =>
       tx.certification.update({
         where: { id: certificationId },
         data: { signaturesOnFile: onFile },
@@ -289,8 +295,8 @@ export class Certifications extends QueueingService {
     );
   }
 
-  // Revoked from a day (in the project's time zone), with a reason. Nothing else on it changes
-  // and nothing is blocked: later tickets are flagged (ADR-079).
+  // Revoked from a day (in the project's time zone), with a reason, by an admin and nobody else.
+  // Nothing else on it changes and nothing is blocked: later tickets are flagged (ADR-079).
   revoke(
     person: string,
     certificationId: string,
@@ -301,7 +307,14 @@ export class Certifications extends QueueingService {
       const certification = await tx.certification.findUniqueOrThrow({
         where: { id: certificationId },
       });
-      const refusal = new CertificationChanges(certification.certNumber).revocation(reason);
+      const changes = new CertificationChanges(certification.certNumber);
+      const asking = await tx.user.findUnique({ where: { id: person } });
+      const refusal =
+        changes.revoker(
+          asking === null
+            ? null
+            : { name: asking.name, role: asking.role, archived: asking.archivedAt !== null },
+        ) ?? changes.revocation(reason);
       if (refusal !== null) throw new Refused(refusal);
       const revoked = await tx.certification.update({
         where: { id: certificationId },

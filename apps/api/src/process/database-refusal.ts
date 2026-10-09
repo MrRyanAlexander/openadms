@@ -193,6 +193,9 @@ const words: Readonly<Record<string, string>> = {
   field_event_project_id_site_id_fkey:
     'Not saved: a field event’s site is one of its own project’s sites.',
   field_event_item_item_name_id_fkey: 'Not saved: an item line names an item on the firm’s list.',
+  // A certification's measured boxes (task 2.4.4, part 4).
+  certification_box_measurements_check:
+    'Not saved: a box holds the measurements of its own shape and no other, each a whole number of inches of 1 or more.',
   roe_project_id_roe_number_key: 'Not saved: the project already has an ROE with that number.',
   roe_scope_item_pick_check:
     'Not saved: an ROE’s scope takes a debris type of the project’s load form, or a payable type.',

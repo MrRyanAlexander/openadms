@@ -197,6 +197,8 @@ describe('permissions, read from the database on every request', () => {
       'unarchivePerson',
       // The firm's master passcode: ADR-428.
       'changeMasterPasscode',
+      // A certification revoked (AC-03-55): ADR-433.
+      'revokeCertification',
     ]);
     expect(
       signedIn

@@ -24,6 +24,8 @@ import {
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 
+import { apiCertifications } from '../certification/certifications.controller.ts';
+import { Certifications } from '../certification/certifications.ts';
 import { apiAssignments } from '../dispatch/assignments.controller.ts';
 import { Assignments } from '../dispatch/assignments.ts';
 import { MasterPasscode } from '../dispatch/master-passcode.ts';
@@ -246,6 +248,8 @@ export class ApiProcess {
           [apiCorrections, new Corrections(database, clock, policy)],
           [apiQuarantineReview, new QuarantineReview(database, clock, policy)],
           [apiBackOfficeRecords, new BackOfficeRecords(database, clock, policy)],
+          // A certification's changes (task 2.4.4, part 4): only an admin revokes.
+          [apiCertifications, new Certifications(database, clock, policy)],
           [
             apiMasterPasscode,
             new MasterPasscode(database, {

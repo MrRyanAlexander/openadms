@@ -143,7 +143,12 @@ export abstract class QueueingService extends SetupService {
 
   // Queues the work in the open piece of work, and keeps what was queued for the answer.
   protected async ask(tx: Prisma.TransactionClient, asked: WorkAsked): Promise<WorkQueued> {
-    const queued = await this.workQueue(tx).queue(asked);
+    return this.keep(tx, await this.workQueue(tx).queue(asked));
+  }
+
+  // Keeps for the answer what was queued in the open piece of work: this service's own ask, or
+  // what another service it worked through queued there.
+  protected keep(tx: Prisma.TransactionClient, queued: WorkQueued): WorkQueued {
     const kept = this.asks.get(tx);
     if (kept === undefined) this.asks.set(tx, [queued]);
     else kept.push(queued);

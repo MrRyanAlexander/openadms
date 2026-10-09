@@ -556,13 +556,16 @@ export class Corrections extends ReviewService {
     certificationId: string,
     position: number,
     measurements: BoxMeasurements,
+    note?: string,
   ): Promise<Outcome<Reviewed<Certification>>> {
-    return this.mark(person, 'CORRECT', undefined, async (tx) => {
+    return this.mark(person, 'CORRECT', note, async (tx) => {
       const { record, queued } = await new Certifications(
         this.db,
         this.clock,
         this.policy,
       ).measured(tx, person, certificationId, position, measurements);
+      // Queued by the certification's own service: said in this correction's answer.
+      if (queued.jobs.length > 0) this.keep(tx, queued);
       const asked = await ReviewService.asked(
         tx,
         person,
