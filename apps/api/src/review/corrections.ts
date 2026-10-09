@@ -166,7 +166,7 @@ function isUniqueViolation(error: unknown): boolean {
 }
 
 // A fix a reviewer typed that can't be one is refused: nobody is waiting at the curb for it.
-function fixOf(end: 'start' | 'end', corrected: CorrectedFix): CorrectedFix {
+export function fixOf(end: 'start' | 'end', corrected: CorrectedFix): CorrectedFix {
   if (corrected === null) return null;
   const read = new GpsFix(corrected).read();
   if (read.fix === null) {
@@ -441,12 +441,14 @@ export class Corrections extends ReviewService {
       async (tx) => {
         const roe = await tx.roe.findUniqueOrThrow({ where: { id: roeId } });
         const { projectId } = roe;
-        const standing = await tx.roeScopeItem.findFirst({
-          where:
-            'formDebrisTypeId' in pick
-              ? { roeId, formDebrisTypeId: pick.formDebrisTypeId }
-              : { roeId, payableTypeId: pick.payableTypeId },
-        });
+        const where =
+          'formDebrisTypeId' in pick
+            ? { roeId, formDebrisTypeId: pick.formDebrisTypeId }
+            : { roeId, payableTypeId: pick.payableTypeId };
+        // A pick its scope never had can't be taken off: not found, as a line never listed is.
+        const standing = inScope
+          ? await tx.roeScopeItem.findFirst({ where })
+          : await tx.roeScopeItem.findFirstOrThrow({ where });
         const count = pick.count === undefined ? {} : { count: pick.count };
         let record: RoeScopeItem;
         if (standing !== null) {
@@ -454,8 +456,6 @@ export class Corrections extends ReviewService {
             where: { id: standing.id },
             data: { ...count, archivedAt: inScope ? null : this.clock.now() },
           });
-        } else if (!inScope) {
-          throw new Error(`ROE ${roe.roeNumber} has no such pick in its scope to take off.`);
         } else if ('formDebrisTypeId' in pick) {
           const entry = await tx.formDebrisType.findUniqueOrThrow({
             where: { id: pick.formDebrisTypeId },

@@ -11,6 +11,7 @@ import {
   crewTimeConversions,
   fieldEventKinds,
   incidentOffers,
+  measuredAs,
   numberSeries,
   permissions,
   phoneRemovals,
@@ -41,12 +42,25 @@ import {
   twoStepClearedAnswerSchema,
   twoStepSetupAnswerSchema,
 } from './api-answers.ts';
+import { places } from './field-event-details.ts';
 import { formDefinitionFields } from './form-definition.ts';
 import {
+  addressSources,
+  carriedTicketRecordSchema,
+  dropOffLogRecordSchema,
+  fieldEventRecordSchema,
   flagAcceptanceRecordSchema,
+  incidentRecordSchema,
   invoiceBatchRecordSchema,
   invoiceLockRecordSchema,
+  itemLineRecordSchema,
+  photographRecordSchema,
   qcMarkRecordSchema,
+  quarantinedRecordSchema,
+  roeRecordSchema,
+  roeScopeItemRecordSchema,
+  scaleReceiptRecordSchema,
+  surveyRecordSchema,
   ticketUnvoidRecordSchema,
   ticketVoidRecordSchema,
 } from './review-answers.ts';
@@ -1568,6 +1582,405 @@ export const unlockInvoicedEndpoint = endpoint({
   answer: savedAnswer(invoiceLockRecordSchema),
 });
 
+// Corrections to a ticket's own records (spec/parts/08-review-and-corrections.md steps 2…4;
+// spec/acceptance/08 sections C and D; AC-04-102, 103; AC-10-27, 28, 37; BACKLOG 2.4.4, C79,
+// C104; ADR-028, 051, 337, 364, 431): a field event's captured details, its number, a line of
+// its items, a ticket it carries, a photograph's two marks and a scale receipt, each corrected in
+// place, the value before kept in the audit log under the reviewer. **A correction takes
+// `CORRECT` and a renumber `RENUMBER`**; the service asks again inside its own piece of work and
+// queues the tickets the change moves. Nothing here judges the correction (ADR-051): the
+// schemas only say what a value can be at all (a load call is a whole number 0 to 100, a blank
+// isn't a label), refused here in plain words before any service runs; which kind of field event
+// records which detail is the database's own check, answered plainly too.
+const fieldEventId = z.strictObject({ fieldEventId: z.uuid() });
+// Words a person typed: trimmed, never blank (empty is `null`, where a detail may be empty).
+const typed = z.string().trim().min(1).max(2000);
+// A number as written on a badge, a ticket or a site's paper: never parsed.
+const numberAsWritten = z.string().trim().min(1).max(40);
+const instant = z.iso.datetime();
+// A fix a reviewer corrects: both halves as exact decimal text, or `null` for none.
+const correctedFix = z.strictObject({ latitude: coordinate, longitude: coordinate }).nullable();
+const pounds = places(2).max(9_999_999_999.99);
+
+// What a field event captures beside its number, its kind and its lines: corrected one detail at
+// a time, and entered whole for a record created in the back office.
+const captured = {
+  monitorId: z.uuid(),
+  startedAt: instant,
+  endedAt: instant,
+  deviceUtcOffsetMinutes: z.number().int().min(-720).max(840),
+  start: correctedFix,
+  end: correctedFix,
+  address: typed.nullable(),
+  addressSource: z.enum(addressSources).nullable(),
+  notes: typed.nullable(),
+  certNumber: numberAsWritten,
+  certKeyedByHand: z.boolean(),
+  typedCapacityCy: z.number().int().min(0).max(9999).nullable(),
+  numberTyped: z.boolean(),
+  numberTypedReasonId: z.uuid().nullable(),
+  siteId: z.uuid().nullable(),
+  formDebrisTypeId: z.uuid().nullable(),
+  fieldTagId: z.uuid().nullable(),
+  roeNumber: numberAsWritten.nullable(),
+  estimateCy: places(1).max(9_999_999.9).nullable(),
+  // A whole number 0–100; 0 is taken (ADR-116).
+  loadCall: z.number().int().min(0).max(100).nullable(),
+  scaleReceiptId: z.uuid().nullable(),
+  carriedCount: z.number().int().min(0).max(9999).nullable(),
+  kindOfWorkId: z.uuid().nullable(),
+  payableTypeId: z.uuid().nullable(),
+  payItemId: z.uuid().nullable(),
+  unitCount: places(2).max(99_999_999.99).nullable(),
+  measurementInches: places(1).max(9_999_999.9).nullable(),
+  measuredAs: z.enum(measuredAs).nullable(),
+  rootBallInches: places(1).max(9_999_999.9).nullable(),
+  rootBallHalfExposed: z.boolean().nullable(),
+  surveyNumber: numberAsWritten.nullable(),
+  markedIneligible: z.boolean().nullable(),
+};
+
+export const correctFieldEventEndpoint = endpoint({
+  name: 'correctFieldEvent',
+  summary:
+    'A field event’s captured details are corrected in place: only what is stated changes, and `null` empties a detail that may be empty. A corrected cert number finds its certification again, an ROE number its ROE, a debris type its form. Its ticket and the tickets that read it are queued. Never its number (a renumber), its kind, its workflow or its project. Refused for a ticket locked as invoiced, and for a detail its kind of field event doesn’t record.',
+  ...reviewer,
+  permission: 'CORRECT',
+  method: 'PATCH',
+  path: '/field-events/:fieldEventId',
+  params: fieldEventId,
+  body: z.strictObject({
+    changes: z.strictObject(captured).partial().refine(stated),
+    note: reviewNote,
+  }),
+  answer: savedAnswer(fieldEventRecordSchema),
+});
+
+// Real work under the wrong number (ADR-028): the number, or a split collection's suffix, and
+// nothing else. No partner is named: the worker pairs by the number in its own run.
+export const renumberFieldEventEndpoint = endpoint({
+  name: 'renumberFieldEvent',
+  summary:
+    'A field event is given another ticket number, or a split’s collection another suffix (left out, its suffix stays). The ticket it leaves and the one it joins are both queued. Nothing asks whether the work is real. Refused for the number it already has, a number another field event of its kind holds, a suffix on a kind that takes none and a ticket locked as invoiced.',
+  ...reviewer,
+  permission: 'RENUMBER',
+  method: 'PUT',
+  path: '/field-events/:fieldEventId/number',
+  params: fieldEventId,
+  body: z.strictObject({
+    ticketNumber: numberAsWritten,
+    splitSuffix: z.string().max(4).optional(),
+    note: reviewNote,
+  }),
+  answer: savedAnswer(fieldEventRecordSchema),
+});
+
+// A line is put: its count or hours as they should be, or taken off. Nothing is deleted.
+export const correctItemLineEndpoint = endpoint({
+  name: 'correctItemLine',
+  summary:
+    'A line of an itemised unit rate ticket is corrected: its count or hours stated, a line it didn’t have added, or the line taken off (`TAKEN_OFF`: it stays, marked, and counts for nothing); stating its quantity again puts it back. Refused for a field event that isn’t unit rate work and for a ticket locked as invoiced.',
+  ...reviewer,
+  permission: 'CORRECT',
+  method: 'PUT',
+  path: '/field-events/:fieldEventId/item-lines/:itemNameId',
+  params: z.strictObject({ fieldEventId: z.uuid(), itemNameId: z.uuid() }),
+  body: z.strictObject({
+    quantity: z.union([places(2).max(99_999_999.99), z.literal('TAKEN_OFF')]),
+    note: reviewNote,
+  }),
+  answer: savedAnswer(itemLineRecordSchema),
+});
+
+export const correctCarriedTicketEndpoint = endpoint({
+  name: 'correctCarriedTicket',
+  summary:
+    'A ticket a load’s collection lists as carried is added, taken off (it stays, marked, and counts for nothing) or put back. Refused for a field event that isn’t a load’s collection and for a ticket locked as invoiced.',
+  ...reviewer,
+  permission: 'CORRECT',
+  method: 'PUT',
+  path: '/field-events/:fieldEventId/carried-tickets',
+  params: fieldEventId,
+  body: z.strictObject({
+    carriedTicketNumber: numberAsWritten,
+    carried: z.boolean(),
+    note: reviewNote,
+  }),
+  answer: savedAnswer(carriedTicketRecordSchema),
+});
+
+// The back office's two marks on a photograph (ADR-337): no phone sends either, and the worker
+// sets neither. A removed photograph counts for nothing a record must have (ADR-345).
+export const markPhotographEndpoint = endpoint({
+  name: 'markPhotograph',
+  summary:
+    'A photograph is removed from the record or put back, and labelled in the firm’s own words: only what is stated changes, and a `null` label takes the label off. Nothing is deleted: its record, its file and its fingerprints stay. The ticket it is on is queued. Refused for a ticket locked as invoiced.',
+  ...reviewer,
+  permission: 'CORRECT',
+  method: 'PATCH',
+  path: '/photographs/:photoId',
+  params: z.strictObject({ photoId: z.uuid() }),
+  body: z.strictObject({
+    marks: z
+      .strictObject({
+        removed: z.boolean(),
+        // A blank isn't a label.
+        label: z.string().trim().min(1).max(200).nullable(),
+      })
+      .partial()
+      .refine(stated),
+    note: reviewNote,
+  }),
+  answer: savedAnswer(photographRecordSchema),
+});
+
+// A receipt several tickets may share (a tandem's two): each ticket on it is queued, and one
+// locked as invoiced waits for its unlock.
+export const correctScaleReceiptEndpoint = endpoint({
+  name: 'correctScaleReceipt',
+  summary:
+    'A scale receipt is corrected in place: the site’s number as written, the site that issued it, its weights and its notes; only what is stated changes. Every ticket that points at it is queued; one locked as invoiced is left as it is.',
+  ...reviewer,
+  permission: 'CORRECT',
+  method: 'PATCH',
+  path: '/scale-receipts/:scaleReceiptId',
+  params: z.strictObject({ scaleReceiptId: z.uuid() }),
+  body: z.strictObject({
+    changes: z
+      .strictObject({
+        receiptNumber: numberAsWritten,
+        siteId: z.uuid(),
+        grossWeightLb: pounds.nullable(),
+        tareWeightLb: pounds.nullable(),
+        netWeightLb: pounds.nullable(),
+        netWeightTons: places(4).max(99_999_999.9999).nullable(),
+        notes: typed.nullable(),
+      })
+      .partial()
+      .refine(stated),
+    note: reviewNote,
+  }),
+  answer: savedAnswer(scaleReceiptRecordSchema),
+});
+
+// Corrections to an ROE and to the forms, a quarantined record resolved, and a record created in
+// the back office (spec/parts/08-review-and-corrections.md steps 2, 9, "One review queue";
+// AC-08-19, 21, 25, 26; AC-10-27, 28, 37; BACKLOG 2.4.4, C66, C79, C105; ADR-022, 149, 156, 327,
+// 338, 364, 432). **A correction and a record created in the back office take `CORRECT`;
+// resolving a quarantined record takes `RENUMBER`**, as their services ask again. Not here,
+// because no service does it yet (BACKLOG C79): an ROE's number corrected, the answers to a
+// form's own fields corrected, and an ROE, a survey, an incident or a drop-off log created in
+// the back office.
+const roeId = z.strictObject({ roeId: z.uuid() });
+
+export const correctRoeEndpoint = endpoint({
+  name: 'correctRoe',
+  summary:
+    'An ROE is corrected in place: its parcel, address, owner, whether and when it was signed, and its notes; only what is stated changes, and `null` empties a detail that may be empty. Every ticket on it is queued; one locked as invoiced is left as it is. Never its number.',
+  ...reviewer,
+  permission: 'CORRECT',
+  method: 'PATCH',
+  path: '/roes/:roeId',
+  params: roeId,
+  body: z.strictObject({
+    changes: z
+      .strictObject({
+        parcelId: numberAsWritten.nullable(),
+        address: typed.nullable(),
+        ownerName: named.nullable(),
+        signed: z.boolean(),
+        signedDate: day.nullable(),
+        notes: typed.nullable(),
+      })
+      .partial()
+      .refine(stated),
+    note: reviewNote,
+  }),
+  answer: savedAnswer(roeRecordSchema),
+});
+
+// How many, where the ROE says (three trees): recorded, never checked.
+const scopeCount = z.number().int().min(1).max(9999).nullable().optional();
+
+// A pick is put: in the ROE's scope or out of it. Nothing is deleted.
+export const correctRoeScopeEndpoint = endpoint({
+  name: 'correctRoeScope',
+  summary:
+    'A pick of an ROE’s scope, a debris type of the project’s load form or a payable type, is added, taken off (it stays, marked, and counts for nothing) or put back, with how many where the ROE says. Every ticket on the ROE is queued; one locked as invoiced is left as it is. Refused for a debris type that isn’t on the project’s load form.',
+  ...reviewer,
+  permission: 'CORRECT',
+  method: 'PUT',
+  path: '/roes/:roeId/scope',
+  params: roeId,
+  body: z.strictObject({
+    pick: z.union([
+      z.strictObject({ formDebrisTypeId: z.uuid(), count: scopeCount }),
+      z.strictObject({ payableTypeId: z.uuid(), count: scopeCount }),
+    ]),
+    inScope: z.boolean(),
+    note: reviewNote,
+  }),
+  answer: savedAnswer(roeScopeItemRecordSchema),
+});
+
+export const correctSurveyEndpoint = endpoint({
+  name: 'correctSurvey',
+  summary:
+    'A survey is corrected in place: its work type, its survey number, the ROE number it names and its notes; only what is stated changes. A corrected ROE number finds its ROE again. The project’s surveys are checked again on the next run. Never the answers to the firm’s own fields.',
+  ...reviewer,
+  permission: 'CORRECT',
+  method: 'PATCH',
+  path: '/surveys/:surveyId',
+  params: z.strictObject({ surveyId: z.uuid() }),
+  body: z.strictObject({
+    changes: z
+      .strictObject({
+        workTypeId: z.uuid(),
+        surveyNumber: numberAsWritten.nullable(),
+        roeNumber: numberAsWritten.nullable(),
+        notes: typed.nullable(),
+      })
+      .partial()
+      .refine(stated),
+    note: reviewNote,
+  }),
+  answer: savedAnswer(surveyRecordSchema),
+});
+
+export const correctIncidentEndpoint = endpoint({
+  name: 'correctIncident',
+  summary:
+    'An incident is corrected in place: its type and sub-type, what happened, who was involved, where, the contractor, cert number and ROE number it names, and its notes; only what is stated changes. A corrected cert number finds its certification again, an ROE number its ROE. It is on no ticket, so nothing is queued. Never the answers to the firm’s own fields.',
+  ...reviewer,
+  permission: 'CORRECT',
+  method: 'PATCH',
+  path: '/incidents/:incidentId',
+  params: z.strictObject({ incidentId: z.uuid() }),
+  body: z.strictObject({
+    changes: z
+      .strictObject({
+        incidentTypeId: z.uuid(),
+        incidentSubTypeId: z.uuid().nullable(),
+        description: typed.nullable(),
+        parties: typed.nullable(),
+        address: typed.nullable(),
+        contractorId: z.uuid().nullable(),
+        certNumber: numberAsWritten.nullable(),
+        roeNumber: numberAsWritten.nullable(),
+        notes: typed.nullable(),
+      })
+      .partial()
+      .refine(stated),
+    note: reviewNote,
+  }),
+  answer: savedAnswer(incidentRecordSchema),
+});
+
+export const correctDropOffLogEndpoint = endpoint({
+  name: 'correctDropOffLog',
+  summary:
+    'A citizen drop-off log is corrected in place: its site, the resident’s name, where the debris came from and its notes; only what is stated changes. It is on no ticket, so nothing is queued. Refused for a site of another project.',
+  ...reviewer,
+  permission: 'CORRECT',
+  method: 'PATCH',
+  path: '/drop-off-logs/:dropOffLogId',
+  params: z.strictObject({ dropOffLogId: z.uuid() }),
+  body: z.strictObject({
+    changes: z
+      .strictObject({
+        siteId: z.uuid(),
+        residentName: named.nullable(),
+        originAddress: typed.nullable(),
+        notes: typed.nullable(),
+      })
+      .partial()
+      .refine(stated),
+    note: reviewNote,
+  }),
+  answer: savedAnswer(dropOffLogRecordSchema),
+});
+
+const quarantinedRecordId = z.strictObject({ quarantinedRecordId: z.uuid() });
+
+// Real work whose number another record holds (ADR-022, 338): it becomes the record its phone
+// sent, under the number it should have had. The quarantined record stays, marked resolved.
+export const renumberQuarantinedRecordEndpoint = endpoint({
+  name: 'renumberQuarantinedRecord',
+  summary:
+    'A quarantined record is resolved by giving it the number it should have had: a field event a ticket number (and a split’s collection its suffix; left out, the suffix it was sent with stays), an ROE an ROE number. It is saved as a record of its own with the id its phone made and its photographs, written as the reviewer; a field event’s ticket is queued, and the tickets that were waiting for an ROE of that number. Resolved once. Refused for a number another record of its kind holds, the number it was sent with, the other kind of number and a ticket locked as invoiced.',
+  ...reviewer,
+  permission: 'RENUMBER',
+  method: 'POST',
+  path: '/quarantined-records/:quarantinedRecordId/renumberings',
+  params: quarantinedRecordId,
+  body: z.strictObject({
+    to: z.union([
+      z.strictObject({ ticketNumber: numberAsWritten, splitSuffix: z.string().max(4).optional() }),
+      z.strictObject({ roeNumber: numberAsWritten }),
+    ]),
+    note: reviewNote,
+  }),
+  answer: savedAnswer(quarantinedRecordSchema),
+});
+
+// The same work sent twice under two ids: the record that holds the number is the record.
+export const markSecondCopyEndpoint = endpoint({
+  name: 'markSecondCopy',
+  summary:
+    'A quarantined record is resolved as a second copy of the record that holds its number: nothing is made from it, and it stays, marked with who said so and when. Resolved once.',
+  ...reviewer,
+  permission: 'RENUMBER',
+  method: 'POST',
+  path: '/quarantined-records/:quarantinedRecordId/second-copies',
+  params: quarantinedRecordId,
+  body: z.strictObject({ note: reviewNote }),
+  answer: savedAnswer(quarantinedRecordSchema),
+});
+
+// A phone failed, and paper is never the record (ADR-156): the field event the monitor would have
+// made, entered whole. What its phone alone would have said (the phone, its assignment, a typed
+// number, a truck keyed in by hand with its capacity) isn't entered.
+export const createFieldEventEndpoint = endpoint({
+  name: 'createFieldEvent',
+  summary:
+    'A field event is created in the back office because a phone failed: its kind and number, the monitor whose work it was, when and where, the cert number and what its kind records, with a reason picked from the firm’s list. A detail left out is empty. It is a field event like any other: its ticket is queued, pairs by its number and is flagged as created in the back office. Refused for a number another field event of its kind holds, a fix that can’t be one, a reason the firm doesn’t offer for this, a detail its kind doesn’t record and a ticket locked as invoiced.',
+  ...reviewer,
+  permission: 'CORRECT',
+  method: 'POST',
+  path: '/projects/:projectId/field-events',
+  params: projectId,
+  body: z
+    .strictObject(captured)
+    .omit({
+      certKeyedByHand: true,
+      typedCapacityCy: true,
+      numberTyped: true,
+      numberTypedReasonId: true,
+    })
+    .partial()
+    .required({
+      monitorId: true,
+      startedAt: true,
+      endedAt: true,
+      deviceUtcOffsetMinutes: true,
+      certNumber: true,
+    })
+    .extend({
+      workflow: z.enum(workflows),
+      kind: z.enum(fieldEventKinds),
+      ticketNumber: numberAsWritten,
+      // A split's collection; left out, not split.
+      splitSuffix: z.string().max(4).optional(),
+      items: z
+        .array(z.strictObject({ itemNameId: z.uuid(), quantity: places(2).max(99_999_999.99) }))
+        .max(100)
+        .optional(),
+      carriedTickets: z.array(numberAsWritten).max(100).optional(),
+      reasonId: z.uuid(),
+    }),
+  answer: savedAnswer(fieldEventRecordSchema),
+});
+
 export const endpoints: readonly Endpoint[] = [
   healthEndpoint,
   requestPasswordResetEndpoint,
@@ -1643,4 +2056,18 @@ export const endpoints: readonly Endpoint[] = [
   lockAsInvoicedEndpoint,
   setLockBatchEndpoint,
   unlockInvoicedEndpoint,
+  correctFieldEventEndpoint,
+  renumberFieldEventEndpoint,
+  correctItemLineEndpoint,
+  correctCarriedTicketEndpoint,
+  markPhotographEndpoint,
+  correctScaleReceiptEndpoint,
+  correctRoeEndpoint,
+  correctRoeScopeEndpoint,
+  correctSurveyEndpoint,
+  correctIncidentEndpoint,
+  correctDropOffLogEndpoint,
+  renumberQuarantinedRecordEndpoint,
+  markSecondCopyEndpoint,
+  createFieldEventEndpoint,
 ];

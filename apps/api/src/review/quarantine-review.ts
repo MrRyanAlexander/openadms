@@ -105,9 +105,7 @@ export class QuarantineReview extends ReviewService {
         tickets = await ReviewService.ticketsOf(tx, { roeId: roe.id });
         numbered = `ROE ${roeNumber}`;
       } else {
-        throw new Error(
-          'A quarantined field event is given a ticket number, a quarantined ROE an ROE number.',
-        );
+        throw new Refused(resolution.wrongKindOfNumber(sent.record));
       }
       const record = await this.resolved(
         tx,

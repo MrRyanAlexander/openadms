@@ -30,7 +30,6 @@ import type { Database } from '@open-adms/db';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { Acceptances } from '../src/review/acceptances.ts';
-import { BackOfficeRecords } from '../src/review/back-office-records.ts';
 import { InvoiceLocks } from '../src/review/invoice-locks.ts';
 import { QcMarks } from '../src/review/qc-marks.ts';
 import { Refusal } from '../src/process/refusal.ts';
@@ -42,17 +41,9 @@ import {
 import { Voids } from '../src/review/voids.ts';
 import { installationSettings, openInstallation, type Tx } from './support/database.ts';
 import { shippedPolicy } from './support/process.ts';
-import { danasEmail, long, longer, luissEmail, worldOn, type Served } from './support/served.ts';
-import {
-  ask,
-  notSaved,
-  p1,
-  plainly,
-  saved,
-  told,
-  viewerSignsIn,
-  type Browser,
-} from './support/setup.ts';
+import { jobsFor, luisHolds, p1WithTickets, reasonNamed } from './support/review.ts';
+import { danasEmail, long, longer, luissEmail, worldOn } from './support/served.ts';
+import { ask, notSaved, plainly, saved, told, viewerSignsIn } from './support/setup.ts';
 
 let db: Database;
 
@@ -76,79 +67,6 @@ const marks = [
   [unlockInvoicedEndpoint, 'UNLOCK_INVOICED'],
 ] as const;
 
-const reasonNamed = async (tx: Tx, name: string): Promise<string> =>
-  (await tx.reason.findFirstOrThrow({ where: { name } })).id;
-
-// P1 as Dana entered it, with two field events she created in the back office because a phone
-// failed (ADR-156): the collection of load 101031 and the unit rate ticket 301001. Neither has
-// been worked: both are PENDING.
-async function p1WithTickets(api: Served, tx: Tx, within: Database, who: { dana: string }) {
-  const dana = await api.signedIn(danasEmail, long);
-  const { project } = await p1(api, dana, tx);
-  const records = new BackOfficeRecords(within, api.clock, shippedPolicy);
-  const created = async (
-    workflow: 'LOAD' | 'UNIT_RATE',
-    kind: 'COLLECTION' | 'UNIT_RATE',
-    ticketNumber: string,
-  ) => {
-    const outcome = await records.fieldEvent(who.dana, {
-      projectId: project.id,
-      workflow,
-      kind,
-      ticketNumber,
-      splitSuffix: '',
-      monitorId: who.dana,
-      certNumber: '730415',
-      certKeyedByHand: false,
-      siteId: null,
-      startedAt: new Date('2026-10-14T18:10:00Z'),
-      endedAt: new Date('2026-10-14T18:40:00Z'),
-      deviceUtcOffsetMinutes: -240,
-      endLatitude: null,
-      endLongitude: null,
-      address: null,
-      addressSource: null,
-      notes: null,
-      formDebrisTypeId: null,
-      fieldTagId: null,
-      roeNumber: null,
-      estimateCy: null,
-      loadCall: null,
-      scaleReceiptId: null,
-      carriedCount: null,
-      kindOfWorkId: null,
-      payableTypeId: null,
-      payItemId: null,
-      unitCount: null,
-      measurementInches: null,
-      measuredAs: null,
-      rootBallInches: null,
-      rootBallHalfExposed: null,
-      surveyNumber: null,
-      markedIneligible: null,
-      items: [],
-      carriedTickets: [],
-      reasonId: await reasonNamed(tx, 'Device failed'),
-    });
-    if (!outcome.saved) throw new Error(outcome.refusal.message);
-    return outcome.record.record;
-  };
-  return {
-    dana,
-    project,
-    ids: { projectId: project.id },
-    collection: await created('LOAD', 'COLLECTION', '101031'),
-    unitRate: await created('UNIT_RATE', 'UNIT_RATE', '301001'),
-  };
-}
-
-async function luisHolds(api: Served, tx: Tx, luis: string, ...held: string[]): Promise<Browser> {
-  for (const permission of held) {
-    await tx.userPermission.create({ data: { userId: luis, permission: permission as 'VOID' } });
-  }
-  return api.signedIn(luissEmail, longer);
-}
-
 const marksWritten = async (tx: Tx): Promise<number[]> => [
   await tx.ticketVoid.count(),
   await tx.ticketUnvoid.count(),
@@ -157,18 +75,6 @@ const marksWritten = async (tx: Tx): Promise<number[]> => [
   await tx.invoiceBatch.count(),
   await tx.invoiceLock.count(),
 ];
-
-const jobsFor = async (tx: Tx, projectId: string, requestedById: string) =>
-  (
-    await tx.reconciliationJob.findMany({
-      where: { projectId, requestedById },
-      orderBy: { id: 'asc' },
-      select: { trigger: true, tickets: { select: { workflow: true, ticketNumber: true } } },
-    })
-  ).map(({ trigger, tickets }) => [
-    trigger,
-    ...tickets.map(({ workflow, ticketNumber }) => `${workflow} ${ticketNumber}`),
-  ]);
 
 const voided = { workflow: 'LOAD', ticketNumber: '101031' };
 

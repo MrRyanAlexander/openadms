@@ -217,8 +217,8 @@ describe('permissions, read from the database on every request', () => {
     ]);
     // The permissions an endpoint takes yet are Setup (task 2.4.2; the list by name is
     // setup-endpoints.test.ts's), Dispatch (task 2.4.3; phones.test.ts's) and those of review's
-    // marks (task 2.4.4, part 1; review-marks.test.ts's): correct and renumber are its later
-    // parts'.
+    // marks (task 2.4.4, part 1; review-marks.test.ts's), then correct and renumber (part 2;
+    // corrections.test.ts's).
     expect([...new Set(endpoints.flatMap(({ permission }) => permission ?? []))]).toEqual([
       'SETUP',
       'DISPATCH',
@@ -227,6 +227,8 @@ describe('permissions, read from the database on every request', () => {
       'QC',
       'LOCK_INVOICED',
       'UNLOCK_INVOICED',
+      'CORRECT',
+      'RENUMBER',
     ]);
   });
 

@@ -8,14 +8,16 @@
 // pairs by its number in the worker's run, and is flagged as created in the back office, with
 // the person and the reason. It has no phone, assignment or list version.
 //
-// The one thing refused is a number another field event of its kind already holds: the person
-// is right there to be told, so nothing goes to quarantine.
+// What is refused is a number another field event of its kind already holds, and a fix the
+// person typed that can't be one (ADR-432): the person is right there to be told, so nothing
+// goes to quarantine and nothing is kept "as sent".
 import type { FieldEvent } from '@open-adms/db';
 import { PickedReason, Renumber } from '@open-adms/domain';
 
 import { type Outcome, Refused } from '../setup/setup-service.ts';
 import { RecordWrite } from '../sync/record-write.ts';
 import type { SentFieldEvent } from '../sync/sent.ts';
+import { fixOf } from './corrections.ts';
 import { ReviewService, type Reviewed, ticketOf } from './review-service.ts';
 
 // What the person enters: everything a phone would have recorded but the phone itself. The
@@ -64,6 +66,14 @@ export class BackOfficeRecords extends ReviewService {
         throw new Refused(
           new Renumber(entered.kind, { ticketNumber: '', splitSuffix: '' }, entered).held(),
         );
+      }
+      const ends = [
+        ['start', entered.startLatitude ?? null, entered.startLongitude ?? null],
+        ['end', entered.endLatitude, entered.endLongitude],
+      ] as const;
+      for (const [end, latitude, longitude] of ends) {
+        if (latitude === null && longitude === null) continue;
+        fixOf(end, { latitude: latitude ?? '', longitude: longitude ?? '' });
       }
       // The database makes the id a phone would have made (spec/DATA-MODEL.md §1, Keys).
       const [made] = await tx.$queryRaw<{ id: string }[]>`SELECT uuidv7()::text AS id`;

@@ -153,6 +153,61 @@ const words: Readonly<Record<string, string>> = {
   invoice_lock_haul_out_locked_once: 'Not saved: the ticket is already locked as invoiced.',
   invoice_lock_unit_rate_ticket_locked_once: 'Not saved: the ticket is already locked as invoiced.',
   invoice_batch_project_id_fkey: 'Not saved: the project an invoice batch is for isn’t on record.',
+  // Corrections to a ticket's own records (task 2.4.4, part 2): what each kind of field event
+  // records is the database's to hold (ADR-325), so a correction may be refused here alone.
+  field_event_load_call_check:
+    'Not saved: only a disposal and a haul-out collection have a load call, a whole number from 0 to 100.',
+  field_event_scale_receipt_check:
+    'Not saved: only a disposal and a haul-out disposal point at a scale receipt.',
+  field_event_estimate_check:
+    'Not saved: a split load’s collection has its suffix and its estimate together, and no other field event has an estimate.',
+  field_event_number_typed_check:
+    'Not saved: a reason for a typed number belongs only on a number that was typed.',
+  field_event_typed_capacity_check:
+    'Not saved: a typed capacity belongs only on a truck keyed in by hand.',
+  field_event_address_check:
+    'Not saved: an address says whether it was looked up or typed, and only an address does.',
+  field_event_debris_type_check:
+    'Not saved: the debris type isn’t one of the form for this kind of ticket.',
+  field_event_field_tag_check:
+    'Not saved: only a collection, a haul-out collection and unit rate work take a field tag.',
+  field_event_roe_number_check:
+    'Not saved: only a collection and unit rate work carry an ROE number.',
+  field_event_carried_count_check:
+    'Not saved: only a disposal has a count of the tickets its load carries.',
+  field_event_unit_rate_check:
+    'Not saved: only unit rate work records a kind of work, a payable type, a pay item, a count, a measurement, a root ball, a survey number or "marked ineligible".',
+  field_event_measurement_check:
+    'Not saved: a measurement says whether it was read as a circumference or a diameter, and only a measurement does.',
+  field_event_monitor_check: 'Not saved: a field event’s monitor is a person.',
+  field_event_item_kind_check: 'Not saved: only unit rate work has item lines.',
+  carried_ticket_kind_check: 'Not saved: only a load’s collection lists the tickets it carries.',
+  // An ROE and the forms corrected, a quarantined record resolved, a field event created in the
+  // back office (task 2.4.4, part 3).
+  field_event_kind_in_workflow_check:
+    'Not saved: a collection and a disposal are a load’s, a haul-out collection and a haul-out disposal a haul-out’s, and a unit rate event unit rate work’s.',
+  field_event_split_suffix_check:
+    'Not saved: only a collection and a haul-out collection take a split’s suffix, in capital letters.',
+  field_event_project_id_fkey: 'Not saved: the project a field event is for isn’t on record.',
+  field_event_monitor_id_fkey: 'Not saved: the monitor a field event names isn’t on record.',
+  field_event_project_id_site_id_fkey:
+    'Not saved: a field event’s site is one of its own project’s sites.',
+  field_event_item_item_name_id_fkey: 'Not saved: an item line names an item on the firm’s list.',
+  roe_project_id_roe_number_key: 'Not saved: the project already has an ROE with that number.',
+  roe_scope_item_pick_check:
+    'Not saved: an ROE’s scope takes a debris type of the project’s load form, or a payable type.',
+  roe_scope_item_project_id_form_id_form_document_type_fkey:
+    'Not saved: a debris type in an ROE’s scope is one on its own project’s load form.',
+  roe_scope_item_payable_type_id_fkey:
+    'Not saved: the payable type an ROE’s scope names isn’t on the firm’s list.',
+  survey_work_type_id_fkey: 'Not saved: a survey’s work type is one on the firm’s list.',
+  incident_incident_type_id_fkey: 'Not saved: an incident’s type is one on the firm’s list.',
+  incident_incident_sub_type_id_fkey:
+    'Not saved: an incident’s sub-type is one on the firm’s list.',
+  incident_project_id_contractor_id_fkey:
+    'Not saved: the contractor an incident names is one on its own project.',
+  drop_off_log_project_id_site_id_fkey:
+    'Not saved: a drop-off log’s site is one of its own project’s sites.',
 };
 
 const notFound: DatabaseRefusal = {

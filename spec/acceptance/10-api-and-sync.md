@@ -114,7 +114,7 @@ states one that nothing records: they are listed under "Left to the task that bu
 | AC-10-34 | **When** a back-office request carries a field its schema doesn't name, **then** the whole request is refused and nothing is saved | ARCHITECTURE §6 (Input) · REQ-004 | ASVS V2 · API3 | API (2.1.3) | ✅ 2.1.3 (ADR-387): `packages/contracts/test/endpoints.test.ts`, `apps/api/test/boundary.test.ts`, `door.test.ts`; no endpoint that saves exists yet, and none can be defined that takes an unnamed field |
 | AC-10-35 | **When** any caller sends an amount, a rate, a transaction, a certified capacity or a completed load, **then** nothing takes it: no schema names such a field, no endpoint writes a transaction, a flag or a completed record, and the API's database login couldn't | VISION §5.7; ARCHITECTURE §2, §5.1, §6; invariants 4, 7 · REQ-201 | ASVS V2, V8 · API3, API6 | API (2.4.4, 2.6.1); the login's grants: built (`grants.test.ts`, `derived-records.test.ts`) |  |
 | AC-10-36 | **Given** any endpoint, **then** its body, its query and its path are each checked against a schema of `packages/contracts`, and the OpenAPI description is generated from those schemas by one command; the chain fails when the description is out of date | ADR-094; ARCHITECTURE §3, §6 (Input); BACKLOG C23 · REQ-004 | ASVS V2, V4 · API9 | API (2.1.3); the last payload: 2.6.1 | ✅ 2.1.3 (ADR-387, 388): `packages/contracts/test/endpoints.test.ts`, `apps/api/test/boundary.test.ts` (the routes held to the contracts' list; `apps/api/openapi.json` held to what `pnpm openapi` makes); the last payload's schema: 2.6.1 |
-| AC-10-37 | **When** Luis sends a correction of `101001`'s load call to 140, or a photograph's label that is blank, **then** the request is refused in plain words by its schema, before any service runs | ARCHITECTURE §5.4 (a load call 0–100); ADR-337; BACKLOG C79, task 2.4.4 | ASVS V2 | API (2.4.4) |  |
+| AC-10-37 | **When** Luis sends a correction of `101001`'s load call to 140, or a photograph's label that is blank, **then** the request is refused in plain words by its schema, before any service runs | ARCHITECTURE §5.4 (a load call 0–100); ADR-337, 431; BACKLOG C79, task 2.4.4 | ASVS V2 | API (2.4.4) | API (2026-10-08, ADR-431): `apps/api/test/corrections.test.ts`; `packages/contracts/test/endpoints.test.ts` |
 | AC-10-38 | **When** Dana sends a second rate for Coastline on `VEG-HAUL-CY-15`, which the database's own constraint refuses, **then** she is told so plainly; the answer is never an internal error | AC-01-80; BACKLOG task 2.4.2 | ASVS V2, V16 | API (2.4.2) | ✅ 2.4.2 part 2 (ADR-425): `apps/api/test/setup-pricing-endpoints.test.ts` (the pay item entered with Coastline's rate twice: 409 `ALREADY_HELD`, "Not saved: that prime already has a rate on the pay item."); a later rate for Coastline changes the one it has (AC-01-51) |
 
 ## H. Limits
@@ -195,8 +195,8 @@ them. One more, AC-06-36, is named by the plan though its row doesn't say "Phase
 | AC-03-55 | Only an admin revokes a certification | 2.4.4 | ASVS V8 · API5 |
 | AC-04-24 | An address looked up for a phone's GPS, through the API | 2.5.3 | API7, API10 |
 | AC-04-77 | A photograph's file, kept and never overwritten | 2.6.4 | ASVS V5 |
-| AC-04-102 | Who may mark a photograph removed, and put it back | 2.4.4 (`Corrections`) | ASVS V8 · API5 |
-| AC-04-103 | Who may label a photograph | 2.4.4 (`Corrections`) | ASVS V8 · API5 |
+| AC-04-102 | Who may mark a photograph removed, and put it back | 2.4.4 (`Corrections`): ✅ an admin, or a manager/analyst who holds *correct* (2026-10-08, ADR-431; `apps/api/test/corrections.test.ts`) | ASVS V8 · API5 |
+| AC-04-103 | Who may label a photograph | 2.4.4 (`Corrections`): ✅ an admin, or a manager/analyst who holds *correct* (2026-10-08, ADR-431; `apps/api/test/corrections.test.ts`) | ASVS V8 · API5 |
 | AC-05-01 | A phone syncs whenever it has a connection | 2.6.2; told by the story: 2.7.1 | — |
 | AC-05-03 | A sync begins with the phone's proof and its clock | 2.5.1, 2.6.2 | ASVS V11 · API2 |
 | AC-05-04 | The clock difference kept with the sync | 2.6.2 | ASVS V16 |
@@ -230,7 +230,7 @@ passing in its own file, from a run that was seen, by the task named.
 | | Scenarios |
 |---|---|
 | Written in this file (A…L) | **56** |
-| Passing | **39** (AC-10-25; task 2.2.5, ADR-415; AC-10-01, 02, 03, 33, 55; task 2.1.2, ADR-385; AC-10-04…08, 34, 36, 39, 43; task 2.1.3, ADR-387…392; AC-10-42; task 2.1.4, ADR-394; AC-10-10, 11; task 2.2.1, ADR-397, 398; AC-10-20, 21, 23, 24; task 2.2.2, ADR-402, 403; AC-10-09, 12…19; task 2.2.3, ADR-408, 409; AC-10-26; task 2.2.4, ADR-412; AC-10-28; task 2.4.4 part 1, ADR-430; and the six this row had not yet counted though their own rows were marked: AC-10-38, 40, 50, 52, 53, 54), and AC-10-27, 32 and 51 in part |
+| Passing | **40** (AC-10-37; task 2.4.4 part 2, ADR-431; AC-10-25; task 2.2.5, ADR-415; AC-10-01, 02, 03, 33, 55; task 2.1.2, ADR-385; AC-10-04…08, 34, 36, 39, 43; task 2.1.3, ADR-387…392; AC-10-42; task 2.1.4, ADR-394; AC-10-10, 11; task 2.2.1, ADR-397, 398; AC-10-20, 21, 23, 24; task 2.2.2, ADR-402, 403; AC-10-09, 12…19; task 2.2.3, ADR-408, 409; AC-10-26; task 2.2.4, ADR-412; AC-10-28; task 2.4.4 part 1, ADR-430; and the six this row had not yet counted though their own rows were marked: AC-10-38, 40, 50, 52, 53, 54), and AC-10-27, 32 and 51 in part |
 | Earlier scenarios with a Phase 2 part (M) | 48, and AC-06-36 |
 | **Phase 2 proves, at the API** | **104**, and AC-06-36's link |
 

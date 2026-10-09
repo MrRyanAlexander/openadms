@@ -12,6 +12,7 @@ import {
   errorAnswerSchema,
   healthAnswerSchema,
   healthEndpoint,
+  notTaken,
   openApiDocument,
   taken,
 } from '../src/index.ts';
@@ -64,6 +65,69 @@ describe('what a request sent, as its endpoint reads it', () => {
     ]) {
       expect(taken(correction, refused)).toBeUndefined();
     }
+  });
+
+  it('AC-10-37: a request that isn’t taken is told which field of which part was refused and how, in the contracts’ own words: a limit is the schema’s, a field is named only where the schema names it, and nothing sent is said back', () => {
+    expect(notTaken(correction, sent)).toBeUndefined();
+    const why = (changed: object) => notTaken(correction, { ...sent, ...changed });
+    expect(why({ body: { ...sent.body, change: { loadCall: 140 } } })).toBe(
+      'Not taken: change.loadCall in the body can’t be more than 100.',
+    );
+    expect(why({ body: { ...sent.body, reason: '' } })).toBe(
+      'Not taken: reason in the body is blank.',
+    );
+    expect(why({ body: { change: { loadCall: 80 } } })).toBe(
+      'Not taken: reason in the body is missing.',
+    );
+    expect(why({ body: undefined })).toBe('Not taken: the body is missing.');
+    expect(why({ body: [] })).toBe(
+      'Not taken: the body isn’t the kind of value this request takes.',
+    );
+    expect(why({ params: { ticketNumber: '10100A' } })).toBe(
+      'Not taken: ticketNumber in the path isn’t written the way this request takes it.',
+    );
+    expect(why({ query: {} })).toBe('Not taken: project in the query is missing.');
+    expect(why({ query: { project: ['P1', 'P2'] } })).toBe(
+      'Not taken: project in the query isn’t the kind of value this request takes.',
+    );
+    // A field nobody named is never named back, wherever it is; neither is a value.
+    const unnamed = why({
+      body: { ...sent.body, amount: 412.5, change: { loadCall: 80, certifiedCapacity: 60 } },
+      query: { project: 'P1', rate: '7.25' },
+    });
+    expect(unnamed).toBe(
+      'Not taken: the query has a field this request doesn’t take; change in the body has a field this request doesn’t take; the body has a field this request doesn’t take.',
+    );
+    expect(unnamed).not.toMatch(/amount|certifiedCapacity|rate|412|7\.25/);
+    // Three are said, and how many more there are.
+    expect(why({ params: {}, query: {}, body: { reason: '', change: { loadCall: -1 } } })).toBe(
+      'Not taken: ticketNumber in the path is missing; project in the query is missing; reason in the body is blank; and 1 more.',
+    );
+    // A key the caller chose (a form's answers by their own keys) is never said back either.
+    const answers = endpoint({
+      name: 'testAnswers',
+      summary: 'A test’s own.',
+      access: 'ANYBODY',
+      method: 'PUT',
+      path: '/answers',
+      body: z.strictObject({ answers: z.record(z.string(), z.number()) }),
+      answer: healthAnswerSchema,
+    });
+    const keyed = notTaken(answers, {
+      params: {},
+      query: {},
+      body: { answers: { 'police-report-number': 'C-1' } },
+    });
+    expect(keyed).toBe('Not taken: answers in the body isn’t taken as it stands.');
+    // An endpoint that names no query and no body.
+    const nothing = { params: {}, query: {}, body: undefined };
+    expect(notTaken(healthEndpoint, nothing)).toBeUndefined();
+    expect(notTaken(healthEndpoint, { ...nothing, query: { verbose: '1' } })).toBe(
+      'Not taken: this request takes nothing in the query.',
+    );
+    expect(notTaken(healthEndpoint, { ...nothing, body: {} })).toBe(
+      'Not taken: this request takes nothing in the body.',
+    );
   });
 
   it('AC-10-36: an endpoint that names no query and no body takes none', () => {

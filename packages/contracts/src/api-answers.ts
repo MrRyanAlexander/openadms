@@ -83,8 +83,10 @@ export const errorCodes = [
 export type ErrorCode = (typeof errorCodes)[number];
 
 // `message`: only where a rule of the domain's has plain words for the person who typed
-// something (why a password wasn't taken, why a setting wasn't saved), or the API has plain words
-// for what the database refused; never anything from inside the server.
+// something (why a password wasn't taken, why a setting wasn't saved), the API has plain words
+// for what the database refused, or a request's schema refused a field (`BAD_REQUEST`: which
+// field and how, in the contracts' own words, ADR-431); never anything from inside the server,
+// and never anything the caller sent.
 // `reason`: only with `NOT_SAVED`, the domain's own code for the rule that refused.
 // `retryAfterSeconds`: only with `LIMITED`, the whole seconds until the caller may ask again, as
 // the answer's `Retry-After` header says too (RFC 9110 §10.2.3).

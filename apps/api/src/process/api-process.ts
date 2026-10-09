@@ -32,14 +32,19 @@ import { Phones } from '../dispatch/phones.ts';
 import { apiPeople } from '../people/people.controller.ts';
 import { People } from '../people/people.ts';
 import { Acceptances } from '../review/acceptances.ts';
+import { BackOfficeRecords } from '../review/back-office-records.ts';
+import { apiCorrections } from '../review/corrections.controller.ts';
+import { Corrections } from '../review/corrections.ts';
 import { InvoiceLocks } from '../review/invoice-locks.ts';
 import { QcMarks } from '../review/qc-marks.ts';
+import { QuarantineReview } from '../review/quarantine-review.ts';
 import {
   apiAcceptances,
   apiInvoiceLocks,
   apiQcMarks,
   apiVoids,
 } from '../review/review-marks.controller.ts';
+import { apiBackOfficeRecords, apiQuarantineReview } from '../review/review-records.controller.ts';
 import { Voids } from '../review/voids.ts';
 import { apiContractorSetup } from '../setup/contractor-setup.controller.ts';
 import { ContractorSetup } from '../setup/contractor-setup.ts';
@@ -238,6 +243,9 @@ export class ApiProcess {
           [apiAcceptances, new Acceptances(database, clock, policy)],
           [apiQcMarks, new QcMarks(database, clock, policy)],
           [apiInvoiceLocks, new InvoiceLocks(database, clock, policy)],
+          [apiCorrections, new Corrections(database, clock, policy)],
+          [apiQuarantineReview, new QuarantineReview(database, clock, policy)],
+          [apiBackOfficeRecords, new BackOfficeRecords(database, clock, policy)],
           [
             apiMasterPasscode,
             new MasterPasscode(database, {

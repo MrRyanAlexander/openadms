@@ -116,6 +116,15 @@ describe('the boundary', () => {
     ran.length = 0;
     const answer = await refused(put('/taken/ok?status=ok', { ...good, amount: 412.5 }));
     expect(answer.body).not.toContain('amount');
+    // AC-10-37: which part refused it, in plain words; never the field's own name or its value.
+    expect(errorAnswerSchema.parse(answer.json()).message).toBe(
+      'Not taken: the body has a field this request doesn’t take.',
+    );
+    const valued = await refused(put('/taken/ok?status=ok', { ...good, code: 'Something broke' }));
+    expect(errorAnswerSchema.parse(valued.json()).message).toBe(
+      'Not taken: code in the body isn’t one of the values this request takes.',
+    );
+    expect(valued.body).not.toContain('Something broke');
     await refused(put('/taken/ok?status=ok&rate=7.25', good));
     expect(ran).toEqual([]);
   });
