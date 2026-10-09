@@ -15,6 +15,16 @@ export const loginRoles = ['adms_owner', 'adms_api', 'adms_worker', 'adms_readon
 // The system actor's fixed id, the same in every installation (packages/db/src/system-actor.ts,
 // which the seed writes from; the installer doesn't load the Prisma client to read it).
 const systemActorId = '00000000-0000-7000-8000-000000000001';
+
+// The two users the seed makes that are no person, each with a fixed id and a role of its own:
+// the system actor the worker writes as, and the actor an act under the master passcode is
+// written as (packages/db/src/master-passcode-actor.ts; ADR-438).
+export const seededActors = {
+  system: { id: systemActorId, role: 'SYSTEM' },
+  masterPasscode: { id: '00000000-0000-7000-8000-000000000002', role: 'MASTER_PASSCODE' },
+} as const;
+
+export type SeededActor = (typeof seededActors)[keyof typeof seededActors];
 export type LoginRole = (typeof loginRoles)[number];
 
 // Every runtime login is limited to logging in: no superuser, no creating databases or roles, no
@@ -99,31 +109,32 @@ export class Database {
     });
   }
 
-  // What's wrong with the system actor (ADR-273, 276), or undefined when it's the seed's own row,
-  // the only SYSTEM user, never changed since it was made, and its guard is in place. Asked as the
-  // owner, like guardGaps.
-  static async systemActorProblem(
+  // What's wrong with one of the seed's two actors (ADR-273, 276, 438), or undefined when it's
+  // the seed's own row, the only user of its role, never changed since it was made, and the
+  // guard on both is in place. Asked as the owner, like guardGaps.
+  static async seededActorProblem(
     server: Server,
     role: LoginRole,
     password: string,
     name: string,
+    seeded: SeededActor,
   ): Promise<string | undefined> {
     return Database.asLogin(server, role, password, name, async (client) => {
       const found = await client.query<{ id: string; role: string; archived: boolean }>(
         `SELECT "id"::text AS id, "role"::text AS role, "archived_at" IS NOT NULL AS archived
-         FROM "user" WHERE "role" = 'SYSTEM' OR "id" = $1`,
-        [systemActorId],
+         FROM "user" WHERE "role"::text = $2 OR "id" = $1`,
+        [seeded.id, seeded.role],
       );
       const [actor, ...others] = found.rows;
       if (actor === undefined) return 'missing: run `pnpm installer`';
-      if (others.length > 0 || actor.id !== systemActorId || actor.role !== 'SYSTEM') {
-        return 'role SYSTEM is not on the system actor alone';
+      if (others.length > 0 || actor.id !== seeded.id || actor.role !== seeded.role) {
+        return `role ${seeded.role} is not on it alone`;
       }
       if (actor.archived) return 'archived';
       const changed = await client.query(
         `SELECT 1 FROM "audit_record"
          WHERE "table_name" = 'user' AND "record_id" = $1 AND "operation" <> 'INSERT'`,
-        [systemActorId],
+        [seeded.id],
       );
       if (changed.rowCount !== 0)
         return 'changed since the seed made it; its audit records say who';

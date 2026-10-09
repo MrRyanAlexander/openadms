@@ -10,6 +10,7 @@ import { parseEnv } from 'node:util';
 
 import pg from 'pg';
 
+import { masterPasscodeActorId } from '../../src/master-passcode-actor.ts';
 import { systemActorId } from '../../src/system-actor.ts';
 
 export type Login = 'adms_owner' | 'adms_api' | 'adms_worker' | 'adms_readonly';
@@ -206,6 +207,14 @@ export class GuardedDatabase {
     if (seeded.length === 0) {
       await this.close();
       throw new Error(`${needs} The seed's system actor is missing.`);
+    }
+    const underPasscode = await this.rows(
+      `SELECT 1 FROM "user" WHERE "id" = $1 AND "role" = 'MASTER_PASSCODE'`,
+      [masterPasscodeActorId],
+    );
+    if (underPasscode.length === 0) {
+      await this.close();
+      throw new Error(`${needs} The seed's master passcode actor is missing.`);
     }
     const passcode = await this.rows(`SELECT 1 FROM "master_passcode" WHERE "version" = 1`);
     if (passcode.length === 0) {

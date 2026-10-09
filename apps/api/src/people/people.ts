@@ -26,6 +26,8 @@ import type { Database, Prisma } from '@open-adms/db';
 import {
   PeopleRules,
   ViewerSettings,
+  actorOnly,
+  actorsOnly,
   type BackOfficeCreated,
   type BackOfficeRole,
   type Holder,
@@ -233,7 +235,7 @@ export class People {
         return { done: false, code: 'NOT_ALLOWED' };
       }
       const row = await tx.user.findUnique({ where: { id: userId }, select: personRead });
-      if (row === null || row.role === 'SYSTEM') return { done: false, code: 'NOT_FOUND' };
+      if (row === null || actorOnly(row.role)) return { done: false, code: 'NOT_FOUND' };
       return { done: true, person: this.shown(row, holder(reader)) };
     });
   }
@@ -251,7 +253,7 @@ export class People {
       }
       const rows = await tx.user.findMany({
         where: {
-          role: asked.role ?? { not: 'SYSTEM' },
+          role: asked.role ?? { notIn: [...actorsOnly] },
           archivedAt: asked.archived ? { not: null } : null,
           ...(asked.after === undefined ? {} : { id: { gt: asked.after } }),
         },
@@ -368,7 +370,7 @@ export class People {
     try {
       return await this.asAdmin(adminId, async (tx): Promise<Step<string>> => {
         const person = await tx.user.findUnique({ where: { id: userId }, select: personRead });
-        if (person === null || person.role === 'SYSTEM' || person.archivedAt === null) {
+        if (person === null || actorOnly(person.role) || person.archivedAt === null) {
           return { refused: 'NOT_FOUND' };
         }
         if (
@@ -485,7 +487,7 @@ export class People {
         return { done: false, code: 'NOT_ALLOWED' };
       }
       const person = await tx.user.findUnique({ where: { id: userId }, select: { role: true } });
-      if (person === null || person.role === 'SYSTEM') return { done: false, code: 'NOT_FOUND' };
+      if (person === null || actorOnly(person.role)) return { done: false, code: 'NOT_FOUND' };
       return { done: true, sessions: await this.parts.sessions.endAll(tx, userId) };
     });
   }
@@ -531,7 +533,7 @@ export class People {
   // A person who isn't archived, and never the system actor.
   private async inService(tx: Tx, userId: string): Promise<PersonRow | undefined> {
     const row = await tx.user.findUnique({ where: { id: userId }, select: personRead });
-    return row?.archivedAt !== null || row.role === 'SYSTEM' ? undefined : row;
+    return row?.archivedAt !== null || actorOnly(row.role) ? undefined : row;
   }
 
   // Whether somebody who signs in here, and isn't archived, has that address. Compared whole and
@@ -571,7 +573,7 @@ export class People {
   }
 
   private shown(row: PersonRow, reader: Holder): PersonRead {
-    if (row.role === 'SYSTEM') throw new Error('The system actor is nobody’s to read.');
+    if (actorOnly(row.role)) throw new Error('An actor that is no person is nobody’s to read.');
     return {
       id: row.id,
       name: row.name,

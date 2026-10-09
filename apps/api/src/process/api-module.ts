@@ -6,6 +6,7 @@ import { CertificationsController } from '../certification/certifications.contro
 import { AssignmentsController } from '../dispatch/assignments.controller.ts';
 import { PhonesController } from '../dispatch/phones.controller.ts';
 import { PeopleController } from '../people/people.controller.ts';
+import { EnrolmentController } from '../phone/enrolment.controller.ts';
 import { CorrectionsController } from '../review/corrections.controller.ts';
 import { ReviewMarksController } from '../review/review-marks.controller.ts';
 import { ReviewRecordsController } from '../review/review-records.controller.ts';
@@ -37,6 +38,7 @@ import { HealthController } from './health.controller.ts';
     SiteSetupController,
     SetupStandingController,
     PhonesController,
+    EnrolmentController,
     AssignmentsController,
     ReviewMarksController,
     CorrectionsController,

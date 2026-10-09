@@ -36,7 +36,8 @@ const permissionInWords: Record<ReviewPermission, { grant: string; action: strin
   UNLOCK_INVOICED: { grant: 'unlock', action: 'unlock an invoiced ticket' },
 };
 
-export type ReviewerRole = 'ADMIN' | 'MANAGER_ANALYST' | 'MONITOR' | 'READ_ONLY_VIEWER' | 'SYSTEM';
+export type ReviewerRole =
+  'ADMIN' | 'MANAGER_ANALYST' | 'MONITOR' | 'READ_ONLY_VIEWER' | 'SYSTEM' | 'MASTER_PASSCODE';
 
 // The person acting, as these rules read them: their role, whether they have been archived, and
 // the grants they hold now (one taken away isn't among them).

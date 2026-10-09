@@ -24,7 +24,7 @@
 // 800-63B-4 §4.6). A monitor never resets by email: their password is the firm's practice
 // (ADR-105), set by whoever holds the master passcode or by an admin.
 import type { Database, Prisma } from '@open-adms/db';
-import type { PasswordProblemCode, PasswordRules } from '@open-adms/domain';
+import { actorOnly, type PasswordProblemCode, type PasswordRules } from '@open-adms/domain';
 
 import type { Clock } from '../setup/setup-service.ts';
 import type { Mail } from './mail.ts';
@@ -113,7 +113,7 @@ export class Passwords {
           return { refused: { set: false, code: 'NOT_ALLOWED' } };
         }
         const person = await tx.user.findUnique({ where: { id: userId }, select: personRead });
-        if (person?.archivedAt !== null || person.role === 'SYSTEM') {
+        if (person?.archivedAt !== null || actorOnly(person.role)) {
           return { refused: { set: false, code: 'NOT_FOUND' } };
         }
         // Known to the admin who typed it, so its owner sets their own at their next sign-in. A

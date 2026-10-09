@@ -132,7 +132,11 @@ export const firstAdmin: Story = {
       at('05', '09:00'),
       'the installer has run: the installation holds nobody who can sign in',
     );
-    story.check('the only person is the system actor', await api.user.count(), 1);
+    story.check(
+      'no person is on record: only the seed’s two actors, the system actor and the master passcode’s',
+      await api.user.count(),
+      2,
+    );
     story.check('the firm has no admin yet', await admin.standing(danasEmail), {
       kind: 'NO_ADMIN_YET',
     });

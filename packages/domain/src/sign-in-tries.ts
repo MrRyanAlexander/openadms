@@ -50,3 +50,10 @@ export class SignInTries {
     return { kind: 'WAIT', until: new Date(now.getTime() + Math.min(seconds, longest) * 1000) };
   }
 }
+
+// Wrong tries at the firm's master passcode, when a phone is enrolled (ARCHITECTURE §7.5;
+// spec/acceptance/10-api-and-sync.md AC-10-22; ADR-438): sign-in's rule and sign-in's numbers,
+// counted against the passcode's version in force. The lock stays until the firm changes the
+// passcode: a new version has no wrong tries. Phones already enrolled keep working, since their
+// own check of the passcode is on the phone.
+export class MasterPasscodeTries extends SignInTries {}

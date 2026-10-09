@@ -9,7 +9,14 @@ import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { request } from 'node:https';
 import { join } from 'node:path';
 
-import { Database, loginRoles, type LoginRole, type Server } from './database.ts';
+import {
+  Database,
+  loginRoles,
+  seededActors,
+  type LoginRole,
+  type SeededActor,
+  type Server,
+} from './database.ts';
 import { EnvFile, InstallationState, MigrationFolder, type InstallationRecord } from './files.ts';
 import { Interview } from './interview.ts';
 import { StatementTimeout, statementTimeoutName } from './policy.ts';
@@ -543,16 +550,21 @@ export class Installer {
       text: `every table is guarded${gaps.length === 0 ? '' : ` (${gaps.join('; ')})`}`,
     });
     checks.push(await this.masterPasscodeCheck());
-    let actorProblem: string | undefined;
-    try {
-      actorProblem = await this.systemActorProblem();
-    } catch (error) {
-      actorProblem = error instanceof Error ? error.message : String(error);
+    for (const [seeded, called] of [
+      [seededActors.system, 'the system actor'],
+      [seededActors.masterPasscode, "the master passcode's actor"],
+    ] as const) {
+      let actorProblem: string | undefined;
+      try {
+        actorProblem = await this.seededActorProblem(seeded);
+      } catch (error) {
+        actorProblem = error instanceof Error ? error.message : String(error);
+      }
+      checks.push({
+        ok: actorProblem === undefined,
+        text: `${called} is the seed's, alone, unchanged and guarded${actorProblem === undefined ? '' : ` (${actorProblem})`}`,
+      });
     }
-    checks.push({
-      ok: actorProblem === undefined,
-      text: `the system actor is the seed's, alone, unchanged and guarded${actorProblem === undefined ? '' : ` (${actorProblem})`}`,
-    });
     const stated = this.workerEnv.exists() ? this.workerEnv.read() : {};
     const unnamed = workerMapKeys.filter((key) => !(key in stated));
     checks.push({
@@ -805,13 +817,14 @@ export class Installer {
   }
 
   // Asked as adms_owner too (ADR-276).
-  private systemActorProblem(): Promise<string | undefined> {
+  private seededActorProblem(seeded: SeededActor): Promise<string | undefined> {
     const url = new URL(this.ownerEnv.read()['DATABASE_URL'] ?? 'postgresql://missing');
-    return Database.systemActorProblem(
+    return Database.seededActorProblem(
       { host: url.hostname, port: Number(url.port) },
       'adms_owner',
       decodeURIComponent(url.password),
       url.pathname.slice(1),
+      seeded,
     );
   }
 

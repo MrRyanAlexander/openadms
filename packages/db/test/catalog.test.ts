@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import { eachTestRolledBack } from './support/lifecycle.ts';
 import { listTables } from './support/lists.ts';
+import { notMasterPasscodeChecks } from './support/master-passcode-actor.ts';
 import {
   citizenViews,
   fieldEventSeen,
@@ -81,6 +82,8 @@ const domains: Record<string, string> = {
   user_credential: 'SECURITY',
   session: 'SECURITY',
   security_event: 'SECURITY',
+  // Wrong tries at a version of the master passcode (ADR-438).
+  master_passcode_tries: 'SECURITY',
   field_event: 'RECORDS',
   // An itemised unit rate event's lines and the tickets a load carries: the field event's own
   // domain (ADR-325).
@@ -170,6 +173,8 @@ const triggers = [
   `CREATE TRIGGER session_refuse_person_edit BEFORE UPDATE OF id, user_id, created_at ON public.session FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
   `CREATE TRIGGER session_refuse_edit_once_revoked BEFORE UPDATE ON public.session FOR EACH ROW WHEN ((old.revoked_at IS NOT NULL)) EXECUTE FUNCTION refuse_edit()`,
   `CREATE TRIGGER security_event_refuse_edit BEFORE UPDATE ON public.security_event FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
+  // Which version a record of wrong tries is of never changes (ADR-438).
+  `CREATE TRIGGER master_passcode_tries_refuse_version_edit BEFORE UPDATE OF id, version, created_at ON public.master_passcode_tries FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
   // What a job was asked never changes; once finished or set aside it is history; a job's
   // ticket is never edited (ADR-418).
   `CREATE TRIGGER reconciliation_job_refuse_asked_edit BEFORE UPDATE OF id, project_id, trigger, requested_by_id, queued_at ON public.reconciliation_job FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
@@ -1082,6 +1087,18 @@ describe('the guards in the catalog', () => {
         name: 'reconciliation_job_ticket_number_check',
         definition: "CHECK ((btrim(ticket_number) <> ''::text))",
       },
+      // The master passcode's actor is one id, never a person, and no record names it; a
+      // count of wrong tries at the passcode is never below nought (ADR-438, 439).
+      {
+        name: 'user_master_passcode_actor_check',
+        definition:
+          "CHECK ((((role = 'MASTER_PASSCODE'::user_role) = (id = '00000000-0000-7000-8000-000000000002'::uuid)) AND ((role <> 'MASTER_PASSCODE'::user_role) OR ((monitor_number IS NULL) AND (contractor_id IS NULL) AND (employer_id IS NULL) AND (employer_number IS NULL) AND (email IS NULL) AND (phone IS NULL) AND (viewer_kind IS NULL) AND (sees_private_citizens IS NULL) AND (archived_at IS NULL)))))",
+      },
+      {
+        name: 'master_passcode_tries_failed_tries_check',
+        definition: 'CHECK ((failed_tries >= 0))',
+      },
+      ...notMasterPasscodeChecks,
       ...listChecks,
     ];
     expect(rows).toEqual(checks.sort((a, b) => (a.name < b.name ? -1 : 1)));

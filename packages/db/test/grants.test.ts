@@ -90,6 +90,8 @@ const tableGrants: Record<string, Record<string, string>> = {
   user_credential: { adms_api: 'INSERT SELECT UPDATE' },
   session: { adms_api: 'INSERT SELECT UPDATE' },
   security_event: { adms_api: 'INSERT SELECT' },
+  // Wrong tries at the master passcode: the API's alone, its count changed in place (ADR-438).
+  master_passcode_tries: { adms_api: 'INSERT SELECT UPDATE' },
   // The API writes people, so the Monitor ID's default runs as it (ADR-281).
   monitor_number_seq: { adms_api: 'USAGE' },
   field_event: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },

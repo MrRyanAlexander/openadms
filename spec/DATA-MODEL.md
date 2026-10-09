@@ -39,7 +39,7 @@ one line saying what kind of record it is (§1) and what it is for, then one tab
 | § | What | The records |
 |---|---|---|
 | 1 | Conventions every model follows | |
-| 2 | Shared, firm-wide records | `Client` · `DeclarationEvent` · `Contractor` · `ProjectContractor` · `User` · `UserCredential` · `Session` · `SecurityEvent` · `UserPermission` · `ViewerProject` · `Device` · `MasterPasscode` · `Assignment` · `AssignmentPayItem` · the firm's lists |
+| 2 | Shared, firm-wide records | `Client` · `DeclarationEvent` · `Contractor` · `ProjectContractor` · `User` · `UserCredential` · `Session` · `SecurityEvent` · `UserPermission` · `ViewerProject` · `Device` · `MasterPasscode` · `MasterPasscodeTries` · `Assignment` · `AssignmentPayItem` · the firm's lists |
 | 3 | A project and its setup | `Project` · `ProjectKindOfWork` · `Contract` · `Form` · `FormDebrisType` · `FormDefinition` · `PayItem` · `PayItemCrewDayStep` · `PayItemRate` · `Rule` · `RuleCriterion` · `RuleCriterionPick` · `RuleAction` · `RuleActionItem` · `DisposalSite` · `DisposalSiteLabel` · `SiteAreaVersion` · `MapVersion` · `Zone` · `ProjectNumberSeries` · `ControlRange` · `NumberBlock` · `Certification` · `CertificationBox` · `CertificationHelper` · `Roe` · `RoeScopeItem` · `ClockEntry` · `ClockActivityLine` · `ApprovedDay` |
 | 4 | Evidence: what monitors saw | `FieldEvent` · `FieldEventItem` · `CarriedTicket` · `ScaleReceipt` · `Survey` · `Incident` · `DropOffLog` · `Photo` · `Sync` · `SyncedRecord` · `QuarantinedRecord` · `FieldEventEdit` · `SetupManifest` |
 | 5 | Derived: the worker's conclusions | `CompletedLoad` · `CompletedLoadCollection` · `CompletedHaulOut` · `CompletedHaulOutCollection` · `Transaction` · `Flag` · `ReconciliationRun` · `ReconciliationDecision` · the job queue: `ReconciliationJob` · `ReconciliationJobTicket` |
@@ -157,7 +157,7 @@ primes; a sub belongs to one prime, at most two tiers, never shared (ADR-108).
 |---|---|---|
 | **id** | uuid | |
 | **name** | text | |
-| **role** | enum `UserRole` | `ADMIN` · `MANAGER_ANALYST` · `MONITOR` · `READ_ONLY_VIEWER` · `SYSTEM` (the worker's one actor, never a login, ADR-273) |
+| **role** | enum `UserRole` | `ADMIN` · `MANAGER_ANALYST` · `MONITOR` · `READ_ONLY_VIEWER` · `SYSTEM` (the worker's one actor, never a login, ADR-273) · `MASTER_PASSCODE` (the one actor an act under the master passcode is written as, never a person or a login; only the API states it, for a phone; no record names it, ADR-438, 439) |
 | monitorNumber | text, unique | The Monitor ID (`M004127`), issued by the database; every monitor has one (ADR-281); a person an admin creates in the back office is issued none (ADR-415) |
 | employerId | → `Contractor` | Who employs them when it isn't the firm |
 | employerNumber | text | That employer's own ID for them (`HS-0417`) |
@@ -221,7 +221,7 @@ API reads the table**; who is shown them on a screen is the back office's (Phase
 | Field | Type | Notes |
 |---|---|---|
 | **id** | uuid | |
-| **kind** | enum `SecurityEventKind` | `SIGN_IN` · `SIGN_IN_FAILED` · `LOCKOUT` · `TWO_STEP_SET_UP` · `TWO_STEP_CLEARED` (ADR-412) · `DEVICE_SETUP` · `DEVICE_SWITCH` · `MASTER_PASSCODE_USE` (REQ-202b's list; a task that needs another adds it) |
+| **kind** | enum `SecurityEventKind` | `SIGN_IN` · `SIGN_IN_FAILED` · `LOCKOUT` · `TWO_STEP_SET_UP` · `TWO_STEP_CLEARED` (ADR-412) · `DEVICE_SETUP` · `DEVICE_SWITCH` · `MASTER_PASSCODE_USE` · `MASTER_PASSCODE_FAILED` · `MASTER_PASSCODE_LOCKOUT` (a wrong try at the master passcode and the lock, ADR-439) (REQ-202b's list; a task that needs another adds it) |
 | userId | → `User` | Who it is about: the person a try named, when the firm has such a person. Never the name that was typed |
 | deviceId | → `Device` | The phone, when it happened on one |
 | requestId | text | The API request it happened in; never blank (check) |
@@ -347,6 +347,21 @@ neither table (ADR-361, *agent default*: ROEs and forms stay unseen unless the u
 | **id** | uuid | |
 | **version** | int, unique | |
 | **hash** | text | Kept out of the audit log (§7) |
+| **createdAt** | instant | |
+
+#### `MasterPasscodeTries`
+
+*Its own record, built (task 2.5.1 part 2, ADR-438, 439; agent default).* Wrong tries in a row at one
+version of the master passcode, since a version is never edited. One row a version, written at its
+first wrong try; a new version has none, so changing the passcode opens the lock. Read and written
+only by the API; audited in the security domain; never deleted.
+
+| Field | Type | Notes |
+|---|---|---|
+| **id** | uuid | |
+| **version** | int, unique → `MasterPasscode.version` | Never changes |
+| **failedTries** | int | Wrong tries in a row since the last right one; never below nought (check) |
+| lockedUntil | instant | The passcode is refused until then |
 | **createdAt** | instant | |
 
 `NumberBlock`, the third model built with these two, is under Numbering in §3.
@@ -1864,9 +1879,9 @@ A new value in any of them is a code change with an ADR (`spec/LISTS.md` Group 2
 | `Workflow` ✅ | `LOAD` · `HAUL_OUT` · `UNIT_RATE` | `FieldEvent`, `Project.workflows`, `Flag`, `TicketVoid`, `TicketUnvoid` |
 | `FieldEventKind` ✅ | `COLLECTION` · `DISPOSAL` · `HAUL_OUT_COLLECTION` · `HAUL_OUT_DISPOSAL` · `UNIT_RATE` | `FieldEvent`, `Assignment` |
 | `TicketStatus` ✅ | `PENDING` · `COMPLETED` · `MANUAL_REVIEW` · `VOID` | `FieldEvent`, `ReconciliationDecision` |
-| `UserRole` ✅ | `ADMIN` · `MANAGER_ANALYST` · `MONITOR` · `READ_ONLY_VIEWER` · `SYSTEM` | `User` |
+| `UserRole` ✅ | `ADMIN` · `MANAGER_ANALYST` · `MONITOR` · `READ_ONLY_VIEWER` · `SYSTEM` · `MASTER_PASSCODE` (ADR-439) | `User` |
 | `DeviceStatus` ✅ | `ACTIVE` · `LOST` · `RETIRED` | `Device` |
-| `SecurityEventKind` ✅ | `SIGN_IN` · `SIGN_IN_FAILED` · `LOCKOUT` · `TWO_STEP_SET_UP` · `TWO_STEP_CLEARED` (ADR-412) · `DEVICE_SETUP` · `DEVICE_SWITCH` · `MASTER_PASSCODE_USE` | `SecurityEvent` (ADR-399) |
+| `SecurityEventKind` ✅ | `SIGN_IN` · `SIGN_IN_FAILED` · `LOCKOUT` · `TWO_STEP_SET_UP` · `TWO_STEP_CLEARED` (ADR-412) · `DEVICE_SETUP` · `DEVICE_SWITCH` · `MASTER_PASSCODE_USE` · `MASTER_PASSCODE_FAILED` · `MASTER_PASSCODE_LOCKOUT` (ADR-439) | `SecurityEvent` (ADR-399) |
 | `NumberSeries` ✅ | `LOAD` · `HAUL_OUT` · `UNIT_RATE` · `CERTIFICATION` · `ROE` (✅ ADR-323) | `ProjectNumberSeries`, `ControlRange`, `NumberBlock` |
 | `NumberBlockStatus` ✅ | `ISSUED` · `RECLAIMED` · `RETIRED` | `NumberBlock` |
 | `AssignmentOrigin` ✅ | `PLANNED` · `UNPLANNED` | `Assignment` |

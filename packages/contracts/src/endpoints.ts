@@ -30,6 +30,7 @@ import {
   csrfAnswerSchema,
   healthAnswerSchema,
   masterPasscodeAnswerSchema,
+  phoneEnrolledAnswerSchema,
   passwordSetAnswerSchema,
   peopleAnswerSchema,
   personAnswerSchema,
@@ -1416,6 +1417,28 @@ export const listPhonesEndpoint = endpoint({
   answer: phonesAnswerSchema,
 });
 
+// A phone is enrolled, once, online, under the firm's master passcode (ARCHITECTURE §7.1, §7.4,
+// §7.5; AC-02-15, 18; AC-10-22, 44; ADR-240, 436…439). Nobody is signed in: the passcode is what
+// opens it, and whoever holds it is not known, so the record names the master passcode itself.
+// The phone sends what the dispatch board will call it and the public half of the key it made
+// (base64 SubjectPublicKeyInfo, ECDSA P-256); its private half never leaves it. A passcode that
+// isn't taken is refused by one code whatever the reason; every try, right or wrong, is a
+// security event. The limits here only bound what is read.
+export const enrolPhoneEndpoint = endpoint({
+  name: 'enrolPhone',
+  summary:
+    'A phone is enrolled, once, under the firm’s master passcode: it sends its name on the dispatch board and the public half of the key it made. The answer is the phone’s id and the version of the master passcode it was enrolled under. Nobody is signed in. A passcode that isn’t taken is refused by one code; wrong tries in a row make the next wait longer, and at the policy’s count lock enrolment until an admin changes the passcode.',
+  access: 'ANYBODY',
+  method: 'POST',
+  path: '/phones/enrolments',
+  body: z.strictObject({
+    name: z.string().trim().min(1).max(80),
+    passcode: z.string().min(1).max(4096),
+    publicKey: z.string().min(1).max(400),
+  }),
+  answer: phoneEnrolledAnswerSchema,
+});
+
 export const removePhoneEndpoint = endpoint({
   name: 'removePhone',
   summary:
@@ -2215,6 +2238,7 @@ export const endpoints: readonly Endpoint[] = [
   quantityLookupEndpoint,
   siteQuantityLookupEndpoint,
   listPhonesEndpoint,
+  enrolPhoneEndpoint,
   removePhoneEndpoint,
   changeMasterPasscodeEndpoint,
   listAssignmentsEndpoint,

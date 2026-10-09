@@ -528,6 +528,8 @@ describe('a security event', () => {
       // Added after (ADR-412): a new value of an enum goes last.
       'TWO_STEP_SET_UP',
       'TWO_STEP_CLEARED',
+      'MASTER_PASSCODE_FAILED',
+      'MASTER_PASSCODE_LOCKOUT',
     ]);
     const at = '2026-10-12T12:05:00Z';
     expect((await db.refused(note, ['PASSWORD_GUESSED', world.admin, null, at])).code).toBe(

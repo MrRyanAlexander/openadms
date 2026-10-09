@@ -42,6 +42,17 @@ export const backOfficeCreated = ['ADMIN', 'MANAGER_ANALYST', 'READ_ONLY_VIEWER'
 
 export type BackOfficeCreated = (typeof backOfficeCreated)[number];
 
+// The two users that are no person and never a login: the worker's own actor, and the actor an
+// act under the master passcode is written as (ADR-273, 438). Nobody reads, changes or signs in
+// as either.
+export const actorsOnly = ['SYSTEM', 'MASTER_PASSCODE'] as const;
+
+export type ActorOnly = (typeof actorsOnly)[number];
+
+export function actorOnly<Role extends string>(role: Role): role is Role & ActorOnly {
+  return actorsOnly.some((actor) => actor === role);
+}
+
 // A person as these rules read them: their role, whether they have been archived, and the
 // permissions they hold now (one taken away isn't among them).
 export interface Holder {

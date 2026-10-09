@@ -164,6 +164,8 @@ describe('an endpoint that asks for a session, before anything is read', () => {
       'requestPasswordReset',
       'completePasswordReset',
       'signIn',
+      // A phone is enrolled under the master passcode, which is nobody's session (ADR-439).
+      'enrolPhone',
     ]);
     // A person who must first set their own password is served only what that takes (ADR-410).
     expect(

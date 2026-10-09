@@ -13,7 +13,11 @@ const wrong: Story = {
   timeZone: 'America/New_York',
   start: '2026-10-12T06:30:00-04:00',
   async run(story) {
-    story.check('the seed made only the system actor', await story.api.user.count(), 1);
+    story.check(
+      'the seed made only the system actor and the master passcode’s actor',
+      await story.api.user.count(),
+      2,
+    );
     story.check('a field event arrived', await story.api.fieldEvent.count(), 1);
   },
 };

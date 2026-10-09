@@ -3,7 +3,7 @@
 // rule, and the policy values it and a session are held to.
 import { describe, expect, it } from 'vitest';
 
-import { Policy, SignInTries } from '../src/index.ts';
+import { MasterPasscodeTries, Policy, SignInTries } from '../src/index.ts';
 
 const shipped = {
   LOAD_CALL_LOW_LIMIT: '5',
@@ -166,5 +166,33 @@ describe('the policy values of sign-in and sessions', () => {
     expect(
       Policy.from({ ...shipped, SIGN_IN_TRIES_BEFORE_LOCK: '100' }).signInTriesBeforeLock,
     ).toBe(100);
+  });
+});
+
+describe('wrong tries at the master passcode', () => {
+  it('AC-10-22 follow sign-in’s rule and numbers: a wait from the fifth in a row, twice as long each time and an hour at most, and the lock at the fiftieth', () => {
+    const tries = new MasterPasscodeTries(Policy.from(shipped));
+    const now = new Date('2026-10-12T13:50:00Z');
+    const waitSeconds = (wrongInARow: number): number | string => {
+      const cost = tries.after(wrongInARow, now);
+      return cost.kind === 'WAIT' ? (cost.until.getTime() - now.getTime()) / 1000 : cost.kind;
+    };
+    expect([1, 4, 5, 6, 7, 12, 49, 50, 51].map(waitSeconds)).toEqual([
+      'COUNTED',
+      'COUNTED',
+      30,
+      60,
+      120,
+      3600,
+      3600,
+      'LOCKED',
+      'LOCKED',
+    ]);
+    // While it waits or is locked it may not be tried; a lock doesn't open with time.
+    const waiting = new Date('2026-10-12T13:50:30Z');
+    expect(tries.closed(5, waiting, now)).toBe(true);
+    expect(tries.closed(5, waiting, waiting)).toBe(false);
+    expect(tries.closed(50, null, new Date('2027-10-12T13:50:00Z'))).toBe(true);
+    expect(tries.closed(0, null, now)).toBe(false);
   });
 });

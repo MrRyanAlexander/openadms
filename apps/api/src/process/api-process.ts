@@ -8,6 +8,7 @@ import 'reflect-metadata';
 import type { Database, ViewerDatabase } from '@open-adms/db';
 import {
   MasterPasscodeRules,
+  MasterPasscodeTries,
   PasswordRules,
   RateLimits,
   SignInTries,
@@ -33,6 +34,9 @@ import { apiMasterPasscode, apiPhones } from '../dispatch/phones.controller.ts';
 import { Phones } from '../dispatch/phones.ts';
 import { apiPeople } from '../people/people.controller.ts';
 import { People } from '../people/people.ts';
+import { DeviceKeys } from '../phone/device-keys.ts';
+import { apiEnrolment } from '../phone/enrolment.controller.ts';
+import { Enrolment } from '../phone/enrolment.ts';
 import { Acceptances } from '../review/acceptances.ts';
 import { BackOfficeRecords } from '../review/back-office-records.ts';
 import { apiCorrections } from '../review/corrections.controller.ts';
@@ -272,6 +276,18 @@ export class ApiProcess {
           [apiBackOfficeRecords, new BackOfficeRecords(database, clock, policy)],
           // A certification's changes (task 2.4.4, part 4): only an admin revokes.
           [apiCertifications, new Certifications(database, clock, policy)],
+          // A phone enrolled under the master passcode (task 2.5.1): nobody is signed in.
+          [
+            apiEnrolment,
+            new Enrolment(database, {
+              rules: new MasterPasscodeTries(policy),
+              hasher,
+              keys: new DeviceKeys(),
+              mail,
+              clock,
+              requestNow,
+            }),
+          ],
           [
             apiMasterPasscode,
             new MasterPasscode(database, {

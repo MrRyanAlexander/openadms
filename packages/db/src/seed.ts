@@ -3,14 +3,15 @@
 // `prisma db seed` (prisma.config.js). Safe to repeat: it creates what's missing, and stops when
 // what it finds isn't what it made. It never prints the connection URL or the passcode's hash.
 //
-// Today it holds the system actor, the master passcode's slow hash and the firm's lists' starting
-// values. The firm and the first admin join when their models do (spec/DATA-MODEL.md).
+// Today it holds the system actor, the master passcode's own actor, the master passcode's slow
+// hash and the firm's lists' starting values. The firm and the first admin join when their models do (spec/DATA-MODEL.md).
 import { existsSync, readFileSync } from 'node:fs';
 import process from 'node:process';
 import { parseEnv } from 'node:util';
 
 import { openDatabase, type Database } from './database.ts';
 import { startingValues } from './list-seeds.ts';
+import { masterPasscodeActorId, masterPasscodeActorName } from './master-passcode-actor.ts';
 import { systemActor, systemActorId, systemActorName } from './system-actor.ts';
 
 export interface SeedOptions {
@@ -32,6 +33,7 @@ export class Seed {
   async run(): Promise<string[]> {
     return [
       await this.ensureSystemActor(),
+      await this.ensureMasterPasscodeActor(),
       await this.ensureMasterPasscode(),
       await this.ensureLists(),
     ];
@@ -56,6 +58,32 @@ export class Seed {
       );
     }
     return `✓ the system actor exists, ${systemActorName}`;
+  }
+
+  // The actor an act under the master passcode is written as (ADR-438): made by the system
+  // actor, as every later row of the seed is. Never a person: no Monitor ID, said outright.
+  private async ensureMasterPasscodeActor(): Promise<string> {
+    const found = await this.db.user.findUnique({ where: { id: masterPasscodeActorId } });
+    if (found === null) {
+      await this.db.$write(systemActor, (tx) =>
+        tx.user.create({
+          data: {
+            id: masterPasscodeActorId,
+            name: masterPasscodeActorName,
+            role: 'MASTER_PASSCODE',
+            monitorNumber: null,
+          },
+        }),
+      );
+      return `+ created the master passcode's actor, ${masterPasscodeActorName}`;
+    }
+    if (found.role !== 'MASTER_PASSCODE' || found.name !== masterPasscodeActorName) {
+      throw new Error(
+        `The master passcode's actor (user ${masterPasscodeActorId}) has been changed: ` +
+          `${found.name}, ${found.role}. Its audit records say who changed it. Stopped.`,
+      );
+    }
+    return `✓ the master passcode's actor exists, ${masterPasscodeActorName}`;
   }
 
   // The firm's one master passcode (ADR-106), kept in the database as its slow hash, version 1

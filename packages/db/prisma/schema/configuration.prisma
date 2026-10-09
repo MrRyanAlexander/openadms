@@ -985,6 +985,10 @@ enum UserRole {
   // Not a person and never a login: the one system actor the worker writes as, seeded by the
   // installer (ADR-273).
   SYSTEM
+  // Not a person and never a login: the one actor an act under the master passcode is written
+  // as, since whoever holds the passcode is not known (ADR-106, 438). Seeded by the installer;
+  // only the API states it, and only for a phone (the guard migration).
+  MASTER_PASSCODE
 
   @@map("user_role")
 }
@@ -1192,6 +1196,9 @@ enum SecurityEventKind {
   DEVICE_SETUP
   DEVICE_SWITCH
   MASTER_PASSCODE_USE
+  // A wrong try at the master passcode, and the lock its wrong tries put on it (ADR-438).
+  MASTER_PASSCODE_FAILED
+  MASTER_PASSCODE_LOCKOUT
 
   @@map("security_event_kind")
 }
@@ -1230,8 +1237,28 @@ model MasterPasscode {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   devices Device[]
+  tries   MasterPasscodeTries?
 
   @@map("master_passcode")
+}
+
+// Wrong tries at one version of the master passcode (ARCHITECTURE §6, Abuse; ADR-438): a record
+// of its own, since a version is never edited. One row a version, written at its first wrong
+// try. A new version has none, so changing the passcode opens the lock. Only the API reads it.
+model MasterPasscodeTries {
+  id          String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  version     Int       @unique
+  // Wrong tries in a row since the last right one. At the policy's count the passcode is locked
+  // until the firm changes it.
+  failedTries Int       @default(0) @map("failed_tries")
+  // The passcode is refused until then: the wait wrong tries put on it.
+  lockedUntil DateTime? @map("locked_until") @db.Timestamptz(3)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  masterPasscode MasterPasscode @relation(fields: [version], references: [version], onDelete: Restrict, onUpdate: Restrict)
+
+  @@map("master_passcode_tries")
 }
 
 // In service, or marked in the back office as lost or retired (ARCHITECTURE §7.4).

@@ -9112,6 +9112,78 @@
         }
       }
     },
+    "/phones/enrolments": {
+      "post": {
+        "operationId": "enrolPhone",
+        "summary": "A phone is enrolled, once, under the firm’s master passcode: it sends its name on the dispatch board and the public half of the key it made. The answer is the phone’s id and the version of the master passcode it was enrolled under. Nobody is signed in. A passcode that isn’t taken is refused by one code; wrong tries in a row make the next wait longer, and at the policy’s count lock enrolment until an admin changes the passcode.",
+        "x-open-adms-access": "ANYBODY",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "passcode": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  },
+                  "publicKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 400
+                  }
+                },
+                "required": ["name", "passcode", "publicKey"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "deviceId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "masterPasscodeVersion": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": ["deviceId", "masterPasscodeVersion"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/phones/{deviceId}/removals": {
       "post": {
         "operationId": "removePhone",
@@ -18749,7 +18821,9 @@
               "NOT_SAVED",
               "ALREADY_HELD",
               "UNKNOWN_RECORD",
-              "REFUSED_BY_THE_DATABASE"
+              "REFUSED_BY_THE_DATABASE",
+              "ENROLMENT_REFUSED",
+              "DEVICE_KEY_REFUSED"
             ]
           },
           "requestId": {

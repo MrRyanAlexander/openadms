@@ -84,6 +84,12 @@ export const errorCodes = [
   'ALREADY_HELD',
   'UNKNOWN_RECORD',
   'REFUSED_BY_THE_DATABASE',
+  // Enrolling a phone (ADR-439). The master passcode wasn't taken: one code whatever the reason,
+  // a wrong one, one that waits after wrong tries, or one locked by them (AC-10-22).
+  'ENROLMENT_REFUSED',
+  // The passcode was right, and what the phone sent as its key isn't a public key of the kind
+  // a phone makes (ADR-437).
+  'DEVICE_KEY_REFUSED',
 ] as const;
 
 export type ErrorCode = (typeof errorCodes)[number];
@@ -425,3 +431,13 @@ export const masterPasscodeAnswerSchema = z.strictObject({
 });
 
 export type MasterPasscodeAnswer = z.infer<typeof masterPasscodeAnswerSchema>;
+
+// A phone was enrolled (AC-02-15, 18; ADR-439): the id the server knows it by from now on, and
+// the version of the master passcode it was enrolled under. Never a key, the passcode or its
+// hash.
+export const phoneEnrolledAnswerSchema = z.strictObject({
+  deviceId: z.uuid(),
+  masterPasscodeVersion: z.number().int().min(1),
+});
+
+export type PhoneEnrolledAnswer = z.infer<typeof phoneEnrolledAnswerSchema>;

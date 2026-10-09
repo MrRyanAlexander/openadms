@@ -2,7 +2,7 @@
 name: adms-field-app
 description: Open ADMS field app and phones, in today's rules. Covers enrolling a phone once, the day's assignment it takes at sign-in, setup by master passcode when there's no assignment (an unplanned assignment), offline sign-in from the login list and its safeguards, switching monitors and moving site, encryption, the time clock on the phone, syncing whenever there's signal, sync and turn in, an out-of-service phone (the Phase 0 part, ARCHITECTURE §7–§8); what a phone holds for its assignment (lists, the site's quantity lookup, never rates or rules); and the later-phase capture notes: offline as the only mode, advisory on-device checks, badge first and number last, every start list, the split chain, printing, scanning, GPS and photos. Use when touching enrolment, sign-in, the phone's lists, sync from the phone's side, or anything a monitor captures. The workflows themselves are adms-ticket-workflows.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-251; the Phase 0 device and assignment models built, ADR-281; split haul-outs, ADR-295; a badge's number the phone's list doesn't hold, ADR-421) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-251; the Phase 0 device and assignment models built, ADR-281; split haul-outs, ADR-295; a badge's number the phone's list doesn't hold, ADR-421; enrolment through the API, ADR-439) -->
 
 > **This page states today's rules** (last changed by ADR-295, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
@@ -32,7 +32,11 @@ gets tracked on a spreadsheet."
    swapped) and joins the firm's phones. No project, no monitor (ADR-240; ARCHITECTURE §7.4).
    **The key is ECDSA on P-256; the phone proves itself by signing the server's challenge with
    SHA-256, the text to sign being the domain's `PhoneProofRules.signed`; the server is sent the
-   public half only** (ADR-437).
+   public half only** (ADR-437). **It enrols by `POST /phones/enrolments` (its name on the
+   dispatch board, the master passcode, the public key) and is answered its id and the version of
+   the master passcode it was enrolled under; the record names the master passcode itself, never a
+   person. A wrong passcode is refused by one code; from the fifth wrong try in a row the next
+   must wait, and the fiftieth locks enrolment until an admin changes the passcode** (ADR-438, 439).
 2. **Create field monitors on a phone, online**: the master passcode → "Create monitor" → the
    username is the system **Monitor ID** (`M004127`); the password is, by the firm's practice, the
    monitor's phone number without the area code (ADR-105, 120).

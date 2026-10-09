@@ -327,6 +327,19 @@ describe('what an error and the log say, through the door', () => {
       expect(errorAnswerSchema.parse(JSON.parse(refused.body)).code).toBe('NOT_SIGNED_IN');
     }
 
+    // An enrolment through the door that carries a master passcode and no key (ADR-439): its
+    // schema refuses it before the passcode is tried, so nothing is counted against the
+    // installation's own passcode, and neither the passcode nor the phone's name is in any
+    // line. A real enrolment's log is read in `enrolment.test.ts`, whose work is undone: a
+    // phone enrolled through this door could never be removed.
+    const enrolment = await ask('/phones/enrolments', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: `${sent} P1-COL-1`, passcode: `${sent}-heron-marsh` }),
+    });
+    expect(enrolment.status).toBe(400);
+    expect(errorAnswerSchema.parse(JSON.parse(enrolment.body)).code).toBe('BAD_REQUEST');
+
     const log = compose(['logs', '--no-log-prefix', '--no-color', 'api']);
     const lines = log.trim().split('\n');
     expect(lines.length).toBeGreaterThan(3);

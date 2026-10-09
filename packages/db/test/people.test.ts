@@ -69,6 +69,7 @@ describe('a person', () => {
       'MONITOR',
       'READ_ONLY_VIEWER',
       'SYSTEM',
+      'MASTER_PASSCODE',
     ]);
     await asTheApi();
     const luis = await add('user', {

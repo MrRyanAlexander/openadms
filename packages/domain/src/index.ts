@@ -185,9 +185,12 @@ export {
   DispatchRights,
   PeopleRules,
   SetupRights,
+  actorOnly,
+  actorsOnly,
   backOfficeCreated,
   backOfficeRolesChanged,
   permissions,
+  type ActorOnly,
   type Asked,
   type BackOfficeCreated,
   type BackOfficeRole,
@@ -222,7 +225,12 @@ export {
   type RateLimitName,
   type RateLimitsPolicy,
 } from './rate-limits.ts';
-export { SignInTries, type SignInTriesPolicy, type WrongTry } from './sign-in-tries.ts';
+export {
+  MasterPasscodeTries,
+  SignInTries,
+  type SignInTriesPolicy,
+  type WrongTry,
+} from './sign-in-tries.ts';
 export { TwoStepRules, twoStepCode, type TwoStepNeed, type TwoStepPolicy } from './two-step.ts';
 export {
   PaysWhen,

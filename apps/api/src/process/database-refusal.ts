@@ -133,6 +133,8 @@ const words: Readonly<Record<string, string>> = {
     'Not saved: an assignment’s site is one of its own project’s sites.',
   assignment_person_id_fkey: 'Not saved: the person an assignment is for isn’t on record.',
   assignment_device_id_fkey: 'Not saved: the phone an assignment names isn’t on record.',
+  // Enrolment (task 2.5.1): one key, one phone (AC-02-16).
+  device_public_key_key: 'Not enrolled: a phone is already enrolled with that key.',
   assignment_origin_check:
     'Not saved: an assignment written on the board says who wrote it; one made on a phone has no author and always its phone.',
   assignment_system_actor_check:

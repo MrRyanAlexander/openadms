@@ -16,7 +16,7 @@
 // Setting up and clearing are each told to the person by email where the firm has mail, so that
 // one they didn't make is noticed.
 import type { Database } from '@open-adms/db';
-import type { TwoStepNeed, TwoStepRules } from '@open-adms/domain';
+import { actorOnly, type TwoStepNeed, type TwoStepRules } from '@open-adms/domain';
 
 import type { Clock } from '../setup/setup-service.ts';
 import type { Mail } from './mail.ts';
@@ -210,7 +210,7 @@ export class TwoStep {
           return { refused: { cleared: false, code: 'NOT_ALLOWED' } };
         }
         const person = await tx.user.findUnique({ where: { id: userId }, select: personRead });
-        if (person?.archivedAt !== null || person.role === 'SYSTEM') {
+        if (person?.archivedAt !== null || actorOnly(person.role)) {
           return { refused: { cleared: false, code: 'NOT_FOUND' } };
         }
         const { count } = await tx.userCredential.updateMany({

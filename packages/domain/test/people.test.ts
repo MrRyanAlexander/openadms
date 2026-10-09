@@ -6,6 +6,8 @@ import {
   Access,
   PeopleRules,
   SetupRights,
+  actorOnly,
+  actorsOnly,
   backOfficeCreated,
   permissions,
   type Holder,
@@ -209,5 +211,15 @@ describe('the firm’s people', () => {
       expect(rules.readsPhoneOf(ana, role)).toBe(false);
       expect(rules.readsPhoneOf({ ...dana, archived: true }, role)).toBe(false);
     }
+  });
+});
+
+describe('the two users that are no person', () => {
+  it('ADR-438 the system actor and the master passcode’s actor, and nobody else', () => {
+    expect(actorsOnly).toEqual(['SYSTEM', 'MASTER_PASSCODE']);
+    expect([...roles, 'MASTER_PASSCODE'].filter((role) => actorOnly(role))).toEqual([
+      'SYSTEM',
+      'MASTER_PASSCODE',
+    ]);
   });
 });

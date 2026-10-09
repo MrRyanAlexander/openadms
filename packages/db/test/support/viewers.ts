@@ -221,6 +221,7 @@ export const unseenTables = [
   'user_credential',
   'session',
   'security_event',
+  'master_passcode_tries',
   'number_block',
   'assignment',
   'assignment_pay_item',
