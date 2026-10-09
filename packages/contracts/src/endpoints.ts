@@ -35,6 +35,7 @@ import {
   personAnswerSchema,
   phoneRecordSchema,
   phonesAnswerSchema,
+  viewerProjectsAnswerSchema,
   resetAskedAnswerSchema,
   sessionAnswerSchema,
   sessionsEndedAnswerSchema,
@@ -125,6 +126,8 @@ export const backOfficeRoles = [
   'ADMIN',
   'MANAGER_ANALYST',
 ] as const satisfies readonly SignedInRole[];
+// A read-only viewer's own reads (ADR-434): a client user's, a contractor user's, an auditor's.
+export const viewerOnly = ['READ_ONLY_VIEWER'] as const satisfies readonly SignedInRole[];
 
 export interface Endpoint {
   // Its name in the OpenAPI description, unique in the list.
@@ -1291,6 +1294,31 @@ export const siteQuantityLookupEndpoint = endpoint({
   answer: quantityLookupAnswerSchema,
 });
 
+// A read-only viewer's reads (ARCHITECTURE §5.5, §14; AC-02-74; AC-10-29, 30, 31; BACKLOG 2.4.5,
+// C22; ADR-050, 169, 315, 434). **Open to a read-only viewer and to nobody else**: the back
+// office reads the same records its own way. Every one is a GET: a viewer changes nothing. The
+// API reads each as the database's read-only login with the caller stated as the viewer, so
+// what comes back is what the database shows that viewer and no more.
+export const viewerProjectsEndpoint = endpoint({
+  name: 'viewerProjects',
+  summary:
+    'The projects the signed-in viewer is given, a page at a time, in the order they were entered: each by name, with its time zone and when it was closed.',
+  access: 'SIGNED_IN',
+  roles: viewerOnly,
+  method: 'GET',
+  path: '/viewer/projects',
+  query: z.strictObject({
+    // The last project of the page before: the answer's `next`.
+    after: z.uuid().optional(),
+    // How many at most: 50 where none is said.
+    limit: z
+      .string()
+      .regex(/^([1-9][0-9]?|1[0-9]{2}|200)$/)
+      .optional(),
+  }),
+  answer: viewerProjectsAnswerSchema,
+});
+
 // Each task that adds an endpoint names it here; the API's tests hold its routes to this list.
 // Dispatch and phones, from the back office (ARCHITECTURE §7.4, §7.5; spec/parts/02; AC-02-21, 23,
 // 59; AC-10-24, 27; BACKLOG 2.4.3, C47, C89; ADR-106, 134, 240, 428). **A dispatch change is open
@@ -2149,4 +2177,5 @@ export const endpoints: readonly Endpoint[] = [
   correctCertificationBoxEndpoint,
   markSignaturesOnFileEndpoint,
   revokeCertificationEndpoint,
+  viewerProjectsEndpoint,
 ];

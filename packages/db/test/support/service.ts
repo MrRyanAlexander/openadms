@@ -7,9 +7,12 @@ import { existsSync, readFileSync } from 'node:fs';
 import process from 'node:process';
 import { parseEnv } from 'node:util';
 
+import { PrismaPg } from '@prisma/adapter-pg';
+
 import type { Actor } from '../../src/actor.ts';
 import { openDatabase, type Database } from '../../src/database.ts';
-import type { Prisma } from '../../src/generated/prisma/client.ts';
+import { PrismaClient, type Prisma } from '../../src/generated/prisma/client.ts';
+import { ViewerDatabase } from '../../src/viewer.ts';
 
 export type Service = 'api' | 'worker';
 
@@ -36,6 +39,28 @@ export function openService(
     maxConnections,
     ...(requestNow === undefined ? {} : { requestNow }),
   });
+}
+
+// The read-only login's URL, as the API opens it for a viewer's reads (viewer.ts): the one the
+// installer wrote beside the API's own. Never printed.
+function viewerUrl(): string {
+  const envFile = new URL('apps/api/.env', root);
+  if (!existsSync(envFile)) throw new Error('apps/api/.env is missing: run `pnpm installer`.');
+  const written = parseEnv(readFileSync(envFile, 'utf8'))['READONLY_DATABASE_URL'];
+  if (written === undefined) throw new Error('apps/api/.env has no READONLY_DATABASE_URL.');
+  const url = new URL(written);
+  const database = process.env['ADMS_TEST_DATABASE'];
+  if (database !== undefined) url.pathname = `/${database}`;
+  return url.toString();
+}
+
+// The same login on one connection with the client beside it, for the test that asks what a
+// read left behind on the connection: the API is never handed the client.
+export function openViewerOnOneConnection(): { viewed: ViewerDatabase; client: PrismaClient } {
+  const client = new PrismaClient({
+    adapter: new PrismaPg({ connectionString: viewerUrl(), max: 1 }),
+  });
+  return { viewed: new ViewerDatabase(client), client };
 }
 
 class Undone extends Error {}

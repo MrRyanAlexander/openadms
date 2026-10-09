@@ -5,7 +5,7 @@
 // proxy's (Caddy locally), the only way in.
 import 'reflect-metadata';
 
-import type { Database } from '@open-adms/db';
+import type { Database, ViewerDatabase } from '@open-adms/db';
 import {
   MasterPasscodeRules,
   PasswordRules,
@@ -79,8 +79,15 @@ import { TwoStepSecrets } from '../sign-in/two-step-secrets.ts';
 import { apiTwoStep } from '../sign-in/two-step.controller.ts';
 import { TwoStep, TwoStepCheck } from '../sign-in/two-step.ts';
 import { WrongTries } from '../sign-in/wrong-tries.ts';
+import { apiViewerReads } from '../viewer/viewer-reads.controller.ts';
+import { ViewerReads } from '../viewer/viewer-reads.ts';
 import { answersWith } from './answer-headers.ts';
-import { apiDatabase, openApiDatabase } from './api-database.ts';
+import {
+  apiDatabase,
+  apiViewerDatabase,
+  openApiDatabase,
+  openApiViewerDatabase,
+} from './api-database.ts';
 import { Boundary, requestNow } from './boundary.ts';
 import { ErrorFilter } from './error-filter.ts';
 import { apiLimits, Limits } from './limits.ts';
@@ -92,6 +99,7 @@ export type ProcessSettings = Pick<
   | 'host'
   | 'port'
   | 'databaseUrl'
+  | 'readOnlyDatabaseUrl'
   | 'corsOrigins'
   | 'trustedProxies'
   | 'tokenSigningSecret'
@@ -105,10 +113,12 @@ export type ProcessSettings = Pick<
 export type ProcessPolicy = Policy;
 
 // What a test puts in place of the process's own: where the log goes instead of standard output,
-// the database (a test's own piece of work, undone afterwards), the mail and the time.
+// the database (a test's own piece of work, undone afterwards), the read-only login's database
+// for a viewer's reads, the mail and the time.
 export interface ProcessParts {
   readonly stream?: { write(line: string): void };
   readonly database?: Database;
+  readonly viewerDatabase?: ViewerDatabase;
   readonly mail?: Mail;
   readonly clock?: Clock;
 }
@@ -118,14 +128,20 @@ export interface Route {
   readonly path: string;
 }
 
-// The given endpoints with what every one of them may be handed: the API's database, opened once
-// and closed when the process stops, and the services that stand on it.
+// The given endpoints with what every one of them may be handed: the API's database and the
+// read-only login's, each opened once and closed when the process stops, and the services that
+// stand on them.
 @Module({})
 class ProcessModule implements OnApplicationShutdown {
   private readonly database: Database;
+  private readonly viewerDatabase: ViewerDatabase;
 
-  constructor(@Inject(apiDatabase) database: Database) {
+  constructor(
+    @Inject(apiDatabase) database: Database,
+    @Inject(apiViewerDatabase) viewerDatabase: ViewerDatabase,
+  ) {
     this.database = database;
+    this.viewerDatabase = viewerDatabase;
   }
 
   // `handed`: each thing a controller may name to be handed, by the symbol it names it with.
@@ -141,6 +157,7 @@ class ProcessModule implements OnApplicationShutdown {
 
   async onApplicationShutdown(): Promise<void> {
     await this.database.$disconnect();
+    await this.viewerDatabase.$disconnect();
   }
 }
 
@@ -177,6 +194,9 @@ export class ApiProcess {
       for (const method of [route.method].flat()) routes.push({ method, path: route.url });
     });
     const database = more.database ?? openApiDatabase(settings, policy.databasePoolConnections);
+    // A read-only viewer's reads go by the read-only login, its viewer stated (ADR-434).
+    const viewerDatabase =
+      more.viewerDatabase ?? openApiViewerDatabase(settings, policy.databasePoolConnections);
     const clock = more.clock ?? { now: () => new Date() };
     const limits = new Limits(new RateLimits(policy), clock);
     answersWith(server, settings.corsOrigins, (request) => limits.arrived(request.ip));
@@ -222,6 +242,8 @@ export class ApiProcess {
         module,
         new Map<symbol, unknown>([
           [apiDatabase, database],
+          [apiViewerDatabase, viewerDatabase],
+          [apiViewerReads, new ViewerReads(viewerDatabase)],
           [apiPasswords, passwords],
           [apiSessions, sessions],
           [apiSessionTokens, tokens],

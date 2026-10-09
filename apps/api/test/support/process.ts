@@ -12,6 +12,7 @@ export const madeUpSettings: ProcessSettings = {
   host: '127.0.0.1',
   port: 0,
   databaseUrl: `postgresql://adms_api:${word}@127.0.0.1:1/adms`,
+  readOnlyDatabaseUrl: `postgresql://adms_readonly:${word}@127.0.0.1:1/adms`,
   corsOrigins: [listedOrigin],
   // No proxy stands in front of a test's process: a caller's address is the one that connected.
   trustedProxies: [],

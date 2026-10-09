@@ -219,6 +219,27 @@ export const phonesAnswerSchema = z.strictObject({
 
 export type PhonesAnswer = z.infer<typeof phonesAnswerSchema>;
 
+// A project as a read-only viewer reads it (ARCHITECTURE §5.5; AC-02-74; ADR-169, 315, 434): its
+// name, its time zone, and when it was closed if it was. What every viewer given the project may
+// read of it, a contractor user included; never a setting, a rate or a rule.
+export const viewerProjectSchema = z.strictObject({
+  id: z.uuid(),
+  name: z.string(),
+  timeZone: z.string(),
+  closedAt: z.iso.datetime().nullable(),
+});
+
+export type ViewerProject = z.infer<typeof viewerProjectSchema>;
+
+// A page of the projects a viewer is given, in the order they were entered. `next` is what to
+// send as `after` for the page that follows; null when this is the last.
+export const viewerProjectsAnswerSchema = z.strictObject({
+  projects: z.array(viewerProjectSchema),
+  next: z.uuid().nullable(),
+});
+
+export type ViewerProjectsAnswer = z.infer<typeof viewerProjectsAnswerSchema>;
+
 // One person's work for a day, as the dispatch board reads it (ARCHITECTURE §7; AC-02-24…32;
 // ADR-240, 286, 308, 429): who, which day (the project's own), which project, their work (the
 // kinds of field event, certifying, the forms that are no ticket's, the unit rate pay items named

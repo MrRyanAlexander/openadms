@@ -6,4 +6,5 @@ export { ReconciliationJobs, type JobAsked, type JobTicket } from './reconciliat
 export { RuleRows, type RuleNamed } from './rule-rows.ts';
 export { Seed, type SeedOptions } from './seed.ts';
 export { systemActor, systemActorId, systemActorName } from './system-actor.ts';
+export { openViewerDatabase, ViewerDatabase } from './viewer.ts';
 export * from './generated/prisma/client.ts';

@@ -20,7 +20,7 @@ import { ApiProcess, type ProcessPolicy } from '../../src/process/api-process.ts
 import { Serves } from '../../src/process/serves.ts';
 import type { Mail } from '../../src/sign-in/mail.ts';
 import { OneTimeCodes } from '../../src/sign-in/one-time-codes.ts';
-import { undone, type Tx } from './database.ts';
+import { undone, ViewedWithin, type Tx } from './database.ts';
 import { madeUpSettings, ready, shippedPolicy } from './process.ts';
 import { NoServer, signingSecret, signInOn, TestClock } from './sign-in.ts';
 
@@ -158,6 +158,8 @@ export class Served {
   private readonly shown = new Map<string, number>();
   // The address this browser's requests come from; a test that is somebody else moves it.
   from = '198.51.100.10';
+  // Who each of a read-only viewer's reads was stated as to the database, in order.
+  viewerStated: readonly string[] = [];
   private api: ApiProcess | undefined;
 
   static async on(
@@ -166,6 +168,8 @@ export class Served {
     policy: ProcessPolicy = shippedPolicy,
   ): Promise<Served> {
     const served = new Served();
+    const viewed = new ViewedWithin(within);
+    served.viewerStated = viewed.stated;
     served.api = await ApiProcess.create(
       WritingModule,
       { ...madeUpSettings, tokenSigningSecret: signingSecret },
@@ -173,6 +177,7 @@ export class Served {
       {
         stream: { write: (line) => served.lines.push(line) },
         database: within,
+        viewerDatabase: viewed.asTheProcessHoldsIt(),
         mail,
         clock: served.clock,
       },

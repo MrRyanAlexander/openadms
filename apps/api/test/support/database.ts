@@ -4,7 +4,13 @@
 // piece of work that is then undone: the services under test are handed a database whose
 // `$write` and `$read` run in that same piece of work, each `$write` stating its own actor and
 // the request it is for, as the real one does.
-import { openDatabase, type Actor, type Database, type Prisma } from '@open-adms/db';
+import {
+  openDatabase,
+  type Actor,
+  type Database,
+  type Prisma,
+  type ViewerDatabase,
+} from '@open-adms/db';
 
 import { requestNow } from '../../src/process/boundary.ts';
 import { Settings, SettingsProblem } from '../../src/process/settings.ts';
@@ -58,5 +64,33 @@ export async function undone(
     });
   } catch (error) {
     if (error !== undo) throw error;
+  }
+}
+
+// A read-only viewer's reads in a test's piece of work (ADR-434). The read-only login can't see
+// what a test hasn't committed, so the process is handed this in its place: it keeps who each
+// read was stated as, and runs the read in the test's own piece of work, **as the API's login,
+// which is shown every row**. A test on it proves who was stated and what the answer holds;
+// what the database shows each viewer is proven as the read-only login itself
+// (`packages/db/test/viewer.test.ts`, `viewers.test.ts`, `contractor-users.test.ts`).
+export class ViewedWithin {
+  readonly stated: string[] = [];
+  private readonly within: Database;
+
+  constructor(within: Database) {
+    this.within = within;
+  }
+
+  $viewed<T>(viewerId: string, work: (tx: Tx) => Promise<T>): Promise<T> {
+    this.stated.push(viewerId);
+    return this.within.$read(work);
+  }
+
+  $disconnect(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  asTheProcessHoldsIt(): ViewerDatabase {
+    return this as unknown as ViewerDatabase;
   }
 }
