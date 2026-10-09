@@ -5,7 +5,7 @@
 import { isDeepStrictEqual } from 'node:util';
 
 import { Intake } from '@open-adms/api';
-import type { Database } from '@open-adms/db';
+import type { Database, ViewerDatabase } from '@open-adms/db';
 import type { Policy } from '@open-adms/domain';
 
 import { projectTime, StoryClock } from './clock.ts';
@@ -29,6 +29,8 @@ export interface StoryContext {
   // The services' own clients, on the story's database.
   readonly api: Database;
   readonly worker: Database;
+  // The read-only login's way in, for a read-only viewer's reads: `$viewed` alone (ADR-434).
+  readonly viewed: ViewerDatabase;
   // The release's policy values, which a new project's settings start from (ADR-303).
   readonly policy: Policy;
   // Where phones sync to: the API's intake, with no endpoint in front of it until Phase 2
@@ -72,7 +74,7 @@ export class Runner {
     let failed = 0;
     let error: string | undefined;
     let database: StoryDatabase | undefined;
-    const open: Database[] = [];
+    const open: Pick<Database, '$disconnect'>[] = [];
     try {
       database = await StoryDatabase.create();
       const migrations = database.migrate();
@@ -83,13 +85,15 @@ export class Runner {
       );
       const api = database.open('api');
       const worker = database.open('worker');
-      open.push(api, worker);
+      const viewed = database.openViewer();
+      open.push(api, worker, viewed);
       const clock = new StoryClock(story.start);
       const policy = builtInPolicy();
       const context: StoryContext = {
         clock,
         api,
         worker,
+        viewed,
         policy,
         intake: new Intake(api, clock, policy),
         at(time, what) {

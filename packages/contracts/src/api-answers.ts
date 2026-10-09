@@ -3,10 +3,16 @@
 import {
   assignmentFormDocumentTypes,
   fieldEventKinds,
+  mileageSources,
   passwordProblemCodes,
   permissions,
+  quantitySources,
+  workerStatuses,
+  workflows,
 } from '@open-adms/domain';
 import { z } from 'zod';
+
+import { billingUnits } from './setup-answers.ts';
 
 // The health answer says that the process answers, and nothing else: no version, no setting, no
 // word on the database. Anybody may ask (acceptance file 10, point 17).
@@ -239,6 +245,142 @@ export const viewerProjectsAnswerSchema = z.strictObject({
 });
 
 export type ViewerProjectsAnswer = z.infer<typeof viewerProjectsAnswerSchema>;
+
+// A ticket as a read-only viewer reads it (ARCHITECTURE §5.5; AC-02-74, 78…80; AC-10-29, 30;
+// ADR-169, 236, 361, 435). **Every part is what the database shows that viewer and no more**: a
+// contractor user reads its own contractor's tickets and nobody's name who recorded them, a
+// sub's no rate and no amount; a name the viewer isn't shown is `null`, never somebody else's.
+// A number the database keeps exactly is exact decimal text, never a float.
+const exact = z.string().regex(/^-?[0-9]+(\.[0-9]+)?$/);
+// A ticket's status is its field events': the worker's three, or VOID (ADR-060).
+export const ticketStatuses = [...workerStatuses, 'VOID'] as const;
+const payItemNamed = z.strictObject({ code: z.string(), description: z.string() });
+
+// One row of a project's tickets: a ticket is its workflow, its bare number and the field
+// events under it (there is no ticket record, ADR-236). `statuses` is what its field events
+// hold now: one, but for a ticket whose late field event the worker hasn't yet taken up.
+export const viewerTicketRowSchema = z.strictObject({
+  workflow: z.enum(workflows),
+  ticketNumber: z.string(),
+  statuses: z.array(z.enum(ticketStatuses)),
+  fieldEvents: z.int().min(1),
+});
+
+export type ViewerTicketRow = z.infer<typeof viewerTicketRowSchema>;
+
+// A page of one workflow's tickets on a project, by number as text. `next` is what to send as
+// `after` for the page that follows; null when this is the last.
+export const viewerTicketsAnswerSchema = z.strictObject({
+  tickets: z.array(viewerTicketRowSchema),
+  next: z.string().nullable(),
+});
+
+export type ViewerTicketsAnswer = z.infer<typeof viewerTicketsAnswerSchema>;
+
+// A field event of the ticket, as recorded and corrected: what one monitor witnessed. Its
+// debris type, its site and a unit rate event's pay item by name; `recordedBy` for a client
+// user and an auditor only (ADR-324).
+export const viewerFieldEventSchema = z.strictObject({
+  id: z.uuid(),
+  kind: z.enum(fieldEventKinds),
+  splitSuffix: z.string(),
+  status: z.enum(ticketStatuses),
+  startedAt: z.iso.datetime(),
+  endedAt: z.iso.datetime(),
+  latitude: exact.nullable(),
+  longitude: exact.nullable(),
+  address: z.string().nullable(),
+  certNumber: z.string(),
+  loadCall: z.int().nullable(),
+  estimateCy: exact.nullable(),
+  unitCount: exact.nullable(),
+  debrisType: z.string().nullable(),
+  site: z.string().nullable(),
+  payItem: payItemNamed.nullable(),
+  recordedBy: z.strictObject({ name: z.string(), monitorNumber: z.string().nullable() }).nullable(),
+});
+
+export type ViewerFieldEvent = z.infer<typeof viewerFieldEventSchema>;
+
+// What the worker concluded for a load or a haul-out, with a row for each collection: one on an
+// ordinary ticket, one for each property or pile on a split. `pileLoadCall` is a haul-out's.
+export const viewerCompletedSchema = z.strictObject({
+  id: z.uuid(),
+  quantitySource: z.enum(quantitySources),
+  capacityCy: z.int().nullable(),
+  loadCall: z.int().nullable(),
+  volumeCy: exact.nullable(),
+  weightTons: exact.nullable(),
+  weightIsShare: z.boolean(),
+  carriedCount: z.int().nullable(),
+  collections: z.array(
+    z.strictObject({
+      id: z.uuid(),
+      collectionEventId: z.uuid(),
+      splitSuffix: z.string(),
+      shareFraction: exact,
+      pileLoadCall: z.int().nullable(),
+      volumeCy: exact.nullable(),
+      weightTons: exact.nullable(),
+      mileage: exact.nullable(),
+      mileageSource: z.enum(mileageSources).nullable(),
+    }),
+  ),
+});
+
+export type ViewerCompleted = z.infer<typeof viewerCompletedSchema>;
+
+// A priced line of the ticket. `rate` and `amount` are null for a viewer the database shows no
+// money on the line: a sub's contractor user (ADR-361).
+export const viewerLineSchema = z.strictObject({
+  id: z.uuid(),
+  // The property or the pile it prices on a split; empty otherwise.
+  splitSuffix: z.string(),
+  slot: z.int(),
+  payItem: payItemNamed.nullable(),
+  unit: z.enum(billingUnits),
+  quantity: exact,
+  prime: z.string().nullable(),
+  operatingSub: z.string().nullable(),
+  rate: exact.nullable(),
+  amount: exact.nullable(),
+});
+
+export type ViewerLine = z.infer<typeof viewerLineSchema>;
+
+// One ticket, whole: its field events in the order of their field time, the completed record
+// if the worker has written one (never on a unit rate ticket), and its lines.
+export const viewerTicketAnswerSchema = z.strictObject({
+  workflow: z.enum(workflows),
+  ticketNumber: z.string(),
+  statuses: z.array(z.enum(ticketStatuses)),
+  fieldEvents: z.array(viewerFieldEventSchema).min(1),
+  completed: viewerCompletedSchema.nullable(),
+  lines: z.array(viewerLineSchema),
+});
+
+export type ViewerTicketAnswer = z.infer<typeof viewerTicketAnswerSchema>;
+
+// An ROE as a client user or an auditor reads it (a contractor user reads none, ADR-315): its
+// number, whether and when it was signed, and its owner's name only for a viewer the firm lets
+// see private citizens by name (ADR-336); `null` otherwise, and where none was recorded.
+export const viewerRoeSchema = z.strictObject({
+  id: z.uuid(),
+  roeNumber: z.string(),
+  signed: z.boolean(),
+  signedDate: z.iso.date().nullable(),
+  ownerName: z.string().nullable(),
+});
+
+export type ViewerRoe = z.infer<typeof viewerRoeSchema>;
+
+// A page of a project's ROEs, in the order they were made.
+export const viewerRoesAnswerSchema = z.strictObject({
+  roes: z.array(viewerRoeSchema),
+  next: z.uuid().nullable(),
+});
+
+export type ViewerRoesAnswer = z.infer<typeof viewerRoesAnswerSchema>;
 
 // One person's work for a day, as the dispatch board reads it (ARCHITECTURE §7; AC-02-24…32;
 // ADR-240, 286, 308, 429): who, which day (the project's own), which project, their work (the

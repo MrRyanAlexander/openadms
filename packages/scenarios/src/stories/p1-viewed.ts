@@ -1,0 +1,600 @@
+// The eighteenth story (BACKLOG 2.4.5; ADR-434, 435; spec/acceptance/10-api-and-sync.md
+// AC-10-29, 30; 02-people-and-devices.md AC-02-74, 78…80): what each read-only viewer reads of
+// P1 through the API's reads for a viewer (`ViewerReads`), as the database's read-only login
+// itself, with the viewer stated. That login sees only what is committed, so this is a story on
+// its own database and not a test on the installation's.
+//
+// P1's Monday and Tuesday are the story `p1-field-days`' own, sent at its phones' syncs; its
+// map, pay items, rules and certifications are the shared steps of `p1-office.ts`; Summit, its
+// truck 88120 and its load 101044 are told as the story `p1-priced` tells them. Each run of the
+// worker is asked for directly, as in that story.
+//
+// Dana then issues five viewers through `People` and gives each P1: Bayline County's debris
+// manager, an auditor the firm doesn't let see private citizens by name, and a contractor user
+// each for Coastline, Rivera and Summit. An ROE is written as the back office's by hand: no
+// service creates one yet (ADR-432), and P1, a ROW project, asks for none; it is here for its
+// owner's name alone.
+//
+// Not here: a viewer's sign-in and the door's refusals (`apps/api/test/viewer-reads.test.ts`,
+// `sessions.test.ts`); the same reads through the container (task 2.7.1); the portal's pages
+// and the exports (Phase 4).
+import {
+  ContractorSetup,
+  NoMail,
+  PayItemSetup,
+  People,
+  ViewerReads,
+  type NewPerson,
+} from '@open-adms/api';
+import { MapServers, Mileages, Reconciliation } from '@open-adms/worker';
+
+import { randomUUID } from 'node:crypto';
+
+import { utcOffsetMinutes } from '../clock.ts';
+import type { PhoneRecord } from '../device.ts';
+import { uuidv7 } from '../ids.ts';
+import { localMapServers } from '../map-servers.ts';
+import type { Story } from '../runner.ts';
+import {
+  certifyP1,
+  loadP1Map,
+  p1FieldDaysHeld,
+  P1Syncs,
+  primaryBox,
+  saved,
+  setUpP1Pricing,
+} from './p1-office.ts';
+import { p1TimeZone as timeZone } from './p1.ts';
+
+const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-04:00`;
+
+type Ticket = NonNullable<Awaited<ReturnType<ViewerReads['ticket']>>>;
+
+// A ticket's lines as a person reads them: the money only where the viewer was shown it.
+const linesOf = (ticket: Ticket | null): string[] =>
+  (ticket?.lines ?? []).map((line) =>
+    [
+      `${ticket?.ticketNumber ?? ''}${line.splitSuffix === '' ? '' : `-${line.splitSuffix}`}`,
+      `#${String(line.slot)}`,
+      line.payItem?.code ?? 'no pay item shown',
+      `${String(Number(line.quantity))} ${line.unit}`,
+      line.rate === null || line.amount === null
+        ? 'no money shown'
+        : `× $${Number(line.rate).toFixed(2)} = $${line.amount}`,
+      `· ${line.prime ?? 'prime not shown'}${line.operatingSub === null ? '' : ` + ${line.operatingSub}`}`,
+    ].join(' '),
+  );
+
+// A ticket's field events as a person reads them, and who recorded each where that is shown.
+const eventsOf = (ticket: Ticket | null): string[] =>
+  (ticket?.fieldEvents ?? []).map((event) =>
+    [
+      `${event.kind}${event.splitSuffix === '' ? '' : `-${event.splitSuffix}`}`,
+      event.status,
+      `badge ${event.certNumber}`,
+      event.debrisType ?? 'no debris type',
+      event.site ?? 'no site',
+      ...(event.loadCall === null ? [] : [`${String(event.loadCall)}%`]),
+      event.recordedBy === null ? 'recorded by: not shown' : `recorded by ${event.recordedBy.name}`,
+    ].join(' · '),
+  );
+
+export const p1Viewed: Story = {
+  name: 'p1-viewed',
+  title:
+    'What each read-only viewer reads of P1 through the API, as the database’s read-only login: the client user and the auditor every ticket; a contractor user its own contractor’s, a prime its sub’s too; a sub’s no rate and no amount; an ROE’s owner only where the firm lets the viewer see private citizens; nobody, nothing',
+  timeZone,
+  start: on('08', '08:00'),
+
+  async run(story) {
+    const { api, worker, clock } = story;
+    const office = await p1FieldDaysHeld(story);
+    const { held, dana, p1 } = office;
+
+    // ------------------------------------------------------------------------------------------
+    story.at(
+      on('08', '08:40'),
+      'Thursday: Dana loads P1’s map and enters its pay items and rules, each rule naming "Coastline, Bayline ROW 2026" (golden mission §1)',
+    );
+    await loadP1Map(story, office);
+    const pricing = await setUpP1Pricing(story, office);
+
+    story.at(
+      on('09', '09:00'),
+      'Friday: Summit Debris Services joins P1 as a second prime, with its own contract, "Summit, Bayline ROW 2026"',
+    );
+    const contractors = new ContractorSetup(api, clock, story.policy);
+    const summit = (
+      await saved(contractors.contractor(dana, { name: 'Summit Debris Services', kind: 'HAULER' }))
+    ).id;
+    await saved(contractors.addPrime(dana, p1, summit));
+    await saved(
+      contractors.contract(dana, {
+        projectId: p1,
+        name: 'Summit, Bayline ROW 2026',
+        primeId: summit,
+      }),
+    );
+
+    story.at(
+      on('10', '09:10'),
+      'Saturday: Sam Grant certifies P1’s three containers and two crews, Rivera Trucking’s self-loader 730416 under Coastline among them, then Summit’s truck on the pre-printed sheet 88120, 28 CY',
+    );
+    const certify = await certifyP1(story, office);
+    await certify('11:20', {
+      certNumber: '88120',
+      primeId: summit,
+      vehicleTypeId: (
+        await api.vehicleType.findFirstOrThrow({ where: { name: 'Hydraulic Dump Trailer' } })
+      ).id,
+      boxes: [primaryBox(240, 90, 60)],
+    });
+
+    // ------------------------------------------------------------------------------------------
+    const settings = { crewItemHoursLimit: story.policy.crewDayHours, longestRunMs: 600_000 };
+    const reconciliation = new Reconciliation(
+      worker,
+      clock,
+      settings,
+      new Mileages(new MapServers(localMapServers())),
+    );
+    const sync = { projectId: p1, trigger: 'SYNC' } as const;
+    const phones = new P1Syncs(story, held);
+    const [mondayEvening, tuesdayEvening, wednesdayMorning] = phones.times;
+    if (
+      mondayEvening === undefined ||
+      tuesdayEvening === undefined ||
+      wednesdayMorning === undefined
+    ) {
+      throw new Error('The field days synced fewer than three times.');
+    }
+    story.at(
+      mondayEvening.toISOString(),
+      'Monday evening: the phones find signal; the worker runs',
+    );
+    await phones.arrive(mondayEvening);
+    await phones.crewPhotographs(mondayEvening);
+    await reconciliation.run(sync);
+    story.at(tuesdayEvening.toISOString(), 'Tuesday evening: the same');
+    await phones.arrive(tuesdayEvening);
+    await phones.crewPhotographs(tuesdayEvening);
+    await reconciliation.run(sync);
+    story.at(
+      wednesdayMorning.toISOString(),
+      'Wednesday: the Marsh Road tower’s phone is charged and syncs Tuesday’s work; the worker runs',
+    );
+    await phones.arrive(wednesdayMorning);
+    await reconciliation.run(sync);
+
+    story.at(
+      on('14', '12:00'),
+      'Wednesday morning’s load syncs: 101044, Summit’s truck 88120 from Heron St to Marsh Road TDSR, called 50%. Dana enters Summit’s rate, $7.80, on VEG-HAUL-CY-15 and saves its "Pays when" again; the worker runs',
+    );
+    // The story `p1-field-days` ends on Tuesday, so each record is made as the phone that
+    // recorded Monday's 101001 would have sent it.
+    const heldEvent = (kind: 'COLLECTION' | 'DISPOSAL') => {
+      const found = held.find(
+        ({ sent }) =>
+          sent.record === 'FIELD_EVENT' &&
+          sent.fieldEvent.ticketNumber === '101001' &&
+          sent.fieldEvent.kind === kind,
+      )?.sent;
+      if (found?.record !== 'FIELD_EVENT') throw new Error(`No ${kind} on 101001`);
+      return found.fieldEvent;
+    };
+    const send = async (
+      like: ReturnType<typeof heldEvent>,
+      from: string,
+      to: string,
+      more: Partial<ReturnType<typeof heldEvent>>,
+    ): Promise<void> => {
+      const startedAt = new Date(on('14', from));
+      const endedAt = new Date(on('14', to));
+      const record: PhoneRecord = {
+        record: 'FIELD_EVENT',
+        fieldEvent: {
+          ...like,
+          id: uuidv7(startedAt),
+          startedAt,
+          endedAt,
+          deviceUtcOffsetMinutes: utcOffsetMinutes(timeZone, endedAt),
+          ...more,
+        },
+      };
+      const answer = await story.intake.receive(record);
+      if (answer.answer !== 'SAVED') throw new Error(`Not saved: ${answer.answer}`);
+    };
+    await send(heldEvent('COLLECTION'), '09:30', '09:50', {
+      address: null,
+      addressSource: null,
+      ticketNumber: '101044',
+      certNumber: '88120',
+    });
+    await send(heldEvent('DISPOSAL'), '10:20', '10:30', {
+      ticketNumber: '101044',
+      certNumber: '88120',
+      loadCall: 50,
+    });
+    await reconciliation.run(sync);
+    const veg15 = pricing.payItems['VEG-HAUL-CY-15'] ?? '';
+    const payItems = new PayItemSetup(api, clock, story.policy);
+    await saved(payItems.rate(dana, veg15, summit, '7.80'));
+    await saved(
+      payItems.paysWhen(dana, veg15, [
+        {
+          formId: pricing.forms.load,
+          slot: 1,
+          criteria: [
+            { criterion: 'DEBRIS_TYPE', operator: 'EQUALS', picks: [pricing.vegetative] },
+            { criterion: 'MILEAGE', operator: 'AT_MOST', numberFrom: 15 },
+          ],
+        },
+      ]),
+    );
+    await reconciliation.run({ projectId: p1, trigger: 'SETUP_CHANGE' });
+    const ledger = await api.transaction.findMany({ where: { projectId: p1 } });
+    story.check(
+      'what there is to read, as the back office holds it: P1’s Monday and Tuesday ($5,400.25 on 19 lines, the golden mission’s) and Summit’s 101044 ($109.20)',
+      [
+        ledger.length,
+        ledger.reduce((cents, line) => cents + Number(line.amount.toFixed(2).replace('.', '')), 0),
+      ],
+      [20, 550945],
+    );
+
+    // ------------------------------------------------------------------------------------------
+    story.at(
+      on('14', '14:00'),
+      'Dana types Rosa Delgado’s paper ROE, R-0007, in the back office, then issues five read-only viewers and gives each P1: Bayline County’s debris manager, an auditor marked not to see private citizens by name, and a contractor user each for Coastline, Rivera and Summit',
+    );
+    await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, (tx) =>
+      tx.roe.create({
+        data: {
+          projectId: p1,
+          roeNumber: 'R-0007',
+          parcelId: 'APN 14-0321-007',
+          address: '412 Cedar Ct',
+          ownerName: 'Rosa Delgado',
+          signed: true,
+          signedDate: new Date('2026-10-09'),
+          answers: {},
+          source: 'BACK_OFFICE',
+          madeById: dana,
+        },
+      }),
+    );
+    // Nobody signs in in this story, and nobody is archived: there is no session to end.
+    const people = new People(api, {
+      clock,
+      sessions: { endAll: () => Promise.resolve(0) },
+      mail: new NoMail(),
+    });
+    const issued = async (
+      person: Omit<NewPerson, 'role'>,
+      projects: readonly string[] = [p1],
+    ): Promise<string> => {
+      const made = await people.create(dana, { ...person, role: 'READ_ONLY_VIEWER' });
+      if (!made.done) throw new Error(`Not issued: ${made.code}`);
+      const given = await people.setViewerProjects(dana, made.person.id, projects);
+      if (!given.done) throw new Error(`Not given P1: ${given.code}`);
+      return made.person.id;
+    };
+    const contractorNamed = async (name: string): Promise<string> =>
+      (await api.contractor.findFirstOrThrow({ where: { name } })).id;
+    const client = await issued({
+      name: 'Bayline County debris manager',
+      email: 'debris@baylinecounty.example',
+      viewerKind: 'CLIENT',
+      seesPrivateCitizens: true,
+    });
+    const auditor = await issued({
+      name: 'Auditor',
+      email: 'auditor@stateaudit.example',
+      viewerKind: 'AUDITOR',
+      seesPrivateCitizens: false,
+    });
+    const coastlines = await issued({
+      name: 'Coastline Haulers LLC viewer',
+      email: 'office@coastlinehaulers.example',
+      viewerKind: 'CONTRACTOR',
+      contractorId: office.coastline,
+    });
+    const riveras = await issued({
+      name: 'Rivera Trucking viewer',
+      email: 'office@riveratrucking.example',
+      viewerKind: 'CONTRACTOR',
+      contractorId: await contractorNamed('Rivera Trucking'),
+    });
+    const summits = await issued({
+      name: 'Summit Debris Services viewer',
+      email: 'office@summitdebris.example',
+      viewerKind: 'CONTRACTOR',
+      contractorId: summit,
+    });
+    // A contractor user the firm issued and gave no project.
+    const notGiven = await issued(
+      {
+        name: 'Coastline Haulers LLC second viewer',
+        email: 'yard@coastlinehaulers.example',
+        viewerKind: 'CONTRACTOR',
+        contractorId: office.coastline,
+      },
+      [],
+    );
+
+    // ------------------------------------------------------------------------------------------
+    story.at(on('14', '14:30'), 'Each of them reads P1 through the API’s reads for a viewer');
+    const reads = new ViewerReads(story.viewed);
+    const numbers = async (viewer: string): Promise<Record<string, string[]>> => {
+      const read: Record<string, string[]> = {};
+      for (const workflow of ['LOAD', 'HAUL_OUT', 'UNIT_RATE'] as const) {
+        read[workflow] = (await reads.tickets(viewer, p1, { workflow, limit: 200 })).tickets.map(
+          (ticket) => ticket.ticketNumber,
+        );
+      }
+      return read;
+    };
+    const everyTicket = {
+      // 101060 is the tower's mistyped disposal of 101006, which nobody has renumbered here.
+      LOAD: ['101001', '101002', '101003', '101004', '101005', '101006', '101044', '101060'],
+      HAUL_OUT: ['201001', '201004'],
+      UNIT_RATE: ['301001', '301002', '301003', '301004', '301005', '301006', '301007'],
+    };
+    story.check(
+      'AC-02-74 the client user and the auditor read every ticket of P1, by workflow and number, the disposal typed as 101060 by mistake among them',
+      [await numbers(client), await numbers(auditor)],
+      [everyTicket, everyTicket],
+    );
+    const coastlinesTickets = await numbers(coastlines);
+    story.check(
+      'AC-02-78 Coastline’s contractor user reads the tickets on Coastline’s certifications, Rivera’s truck 730416 under it included (101002), and not Summit’s 101044; Rivera’s reads only what its own truck worked; Summit’s reads 101044 alone',
+      [
+        coastlinesTickets['LOAD']?.includes('101001'),
+        coastlinesTickets['LOAD']?.includes('101002'),
+        coastlinesTickets['LOAD']?.includes('101044'),
+        coastlinesTickets['HAUL_OUT'],
+        (await numbers(riveras))['LOAD']?.includes('101002'),
+        (await numbers(riveras))['LOAD']?.includes('101001'),
+        await numbers(summits),
+      ],
+      [
+        true,
+        true,
+        false,
+        ['201001', '201004'],
+        true,
+        false,
+        { LOAD: ['101044'], HAUL_OUT: [], UNIT_RATE: [] },
+      ],
+    );
+    const page = await reads.tickets(client, p1, { workflow: 'LOAD', limit: 3 });
+    const after = await reads.tickets(client, p1, {
+      workflow: 'LOAD',
+      after: page.next ?? '',
+      limit: 200,
+    });
+    story.check(
+      'a page of three loads says what follows it, and the page after starts there; each row holds its ticket’s status and how many field events it has',
+      [page.tickets, page.next, after.tickets.map((ticket) => ticket.ticketNumber), after.next],
+      [
+        [
+          { workflow: 'LOAD', ticketNumber: '101001', statuses: ['COMPLETED'], fieldEvents: 2 },
+          { workflow: 'LOAD', ticketNumber: '101002', statuses: ['COMPLETED'], fieldEvents: 2 },
+          {
+            workflow: 'LOAD',
+            ticketNumber: '101003',
+            statuses: ['MANUAL_REVIEW'],
+            fieldEvents: 2,
+          },
+        ],
+        '101003',
+        ['101004', '101005', '101006', '101044', '101060'],
+        null,
+      ],
+    );
+
+    const load = (viewer: string, ticketNumber: string) =>
+      reads.ticket(viewer, p1, 'LOAD', ticketNumber);
+    story.check(
+      'AC-10-29 Coastline’s contractor user, asking for Summit’s 101044 by its project, workflow and number, gets nothing of it: the same answer as for a number nobody has. Asked for its own 101001, it gets it',
+      [
+        await load(coastlines, '101044'),
+        await load(coastlines, '109999'),
+        (await load(coastlines, '101001'))?.ticketNumber,
+      ],
+      [null, null, '101001'],
+    );
+    story.check(
+      'and the other way about: Summit’s reads nothing of Coastline’s 101001 or of Rivera’s 101002; Rivera’s nothing of Coastline’s own 101001 or of the haul-out 201004',
+      [
+        await load(summits, '101001'),
+        await load(summits, '101002'),
+        await load(riveras, '101001'),
+        await reads.ticket(riveras, p1, 'HAUL_OUT', '201004'),
+      ],
+      [null, null, null, null],
+    );
+
+    const clients101001 = await load(client, '101001');
+    story.check(
+      'AC-02-74 the client user reads 101001 whole: its two field events in the order of their field time, who recorded each, the completed load the system concluded (65 CY called 80% = 52.00 CY) and its line with the money',
+      [
+        eventsOf(clients101001),
+        clients101001?.statuses,
+        clients101001?.completed === null || clients101001 === null
+          ? null
+          : [
+              clients101001.completed.quantitySource,
+              clients101001.completed.capacityCy,
+              clients101001.completed.loadCall,
+              clients101001.completed.volumeCy,
+              clients101001.completed.collections.map((row) => row.shareFraction),
+            ],
+        linesOf(clients101001),
+      ],
+      [
+        [
+          'COLLECTION · COMPLETED · badge 730415 · Vegetative · no site · recorded by Ana Brooks',
+          'DISPOSAL · COMPLETED · badge 730415 · Vegetative · Marsh Road TDSR · 80% · recorded by Kim Nguyen',
+        ],
+        ['COMPLETED'],
+        ['LOAD_CALL', 65, 80, '52.00', ['1.00000000']],
+        ['101001 #1 VEG-HAUL-CY-15 52 CY × $7.50 = $390.00 · Coastline Haulers LLC'],
+      ],
+    );
+    const coastlines101001 = await load(coastlines, '101001');
+    story.check(
+      'AC-02-78 Coastline’s contractor user reads the same ticket, its completed load and its money, and not who recorded it',
+      [
+        eventsOf(coastlines101001),
+        coastlines101001?.completed?.volumeCy,
+        linesOf(coastlines101001),
+      ],
+      [
+        [
+          'COLLECTION · COMPLETED · badge 730415 · Vegetative · no site · recorded by: not shown',
+          'DISPOSAL · COMPLETED · badge 730415 · Vegetative · Marsh Road TDSR · 80% · recorded by: not shown',
+        ],
+        '52.00',
+        ['101001 #1 VEG-HAUL-CY-15 52 CY × $7.50 = $390.00 · Coastline Haulers LLC'],
+      ],
+    );
+
+    const lines101002 = [
+      '101002 #1 CD-HAUL-CY-15 36 CY × $8.25 = $297.00 · Coastline Haulers LLC + Rivera Trucking',
+      '101002 #2 TIP-FEE-CY-BCL 36 CY × $4.00 = $144.00 · Coastline Haulers LLC + Rivera Trucking',
+    ];
+    const riveras101002 = await load(riveras, '101002');
+    story.check(
+      'AC-02-80, AC-10-30 a sub’s reads no money: Rivera’s contractor user reads 101002’s two lines, each with its pay item and its 36 CY, and no rate and no amount; it reads its own name on them and not its prime’s. Coastline’s reads $8.25 and $297.00, and the tipping fee, at Coastline’s rates; the client user and the auditor the same',
+      [
+        linesOf(riveras101002),
+        riveras101002?.lines.map((line) => [line.rate, line.amount]),
+        riveras101002?.completed?.volumeCy,
+        linesOf(await load(coastlines, '101002')),
+        linesOf(await load(client, '101002')),
+        linesOf(await load(auditor, '101002')),
+      ],
+      [
+        [
+          '101002 #1 CD-HAUL-CY-15 36 CY no money shown · prime not shown + Rivera Trucking',
+          '101002 #2 TIP-FEE-CY-BCL 36 CY no money shown · prime not shown + Rivera Trucking',
+        ],
+        [
+          [null, null],
+          [null, null],
+        ],
+        '36.00',
+        lines101002,
+        lines101002,
+        lines101002,
+      ],
+    );
+    story.check(
+      'AC-02-80 Summit’s contractor user reads the money on Summit’s own line, at Summit’s rate; the client user reads it too',
+      [linesOf(await load(summits, '101044')), linesOf(await load(client, '101044'))],
+      [
+        ['101044 #1 VEG-HAUL-CY-15 14 CY × $7.80 = $109.20 · Summit Debris Services'],
+        ['101044 #1 VEG-HAUL-CY-15 14 CY × $7.80 = $109.20 · Summit Debris Services'],
+      ],
+    );
+
+    const haulOut = await reads.ticket(coastlines, p1, 'HAUL_OUT', '201004');
+    story.check(
+      'AC-02-78 the split haul-out 201004, Coastline’s walking floor loaded from three piles and weighed: its four field events, its completed haul-out with a row for each pile, and a line for each pile at $20.00 a ton',
+      [
+        haulOut?.fieldEvents.map((event) => `${event.kind} ${event.splitSuffix}`.trim()),
+        haulOut?.completed === null || haulOut === null
+          ? null
+          : [
+              haulOut.completed.quantitySource,
+              haulOut.completed.weightTons,
+              haulOut.completed.collections.map(
+                (pile) =>
+                  `${pile.splitSuffix} ${String(pile.pileLoadCall)}% ${String(pile.weightTons)}`,
+              ),
+            ],
+        linesOf(haulOut),
+      ],
+      [
+        [
+          'HAUL_OUT_COLLECTION A',
+          'HAUL_OUT_COLLECTION B',
+          'HAUL_OUT_COLLECTION C',
+          'HAUL_OUT_DISPOSAL',
+        ],
+        ['SCALE_WEIGHT', '24.0000', ['A 10% 2.8200', 'B 25% 7.0600', 'C 50% 14.1200']],
+        [
+          '201004-A #1 MULCH-HO-TN 2.82 TN × $20.00 = $56.40 · Coastline Haulers LLC',
+          '201004-B #1 MULCH-HO-TN 7.06 TN × $20.00 = $141.20 · Coastline Haulers LLC',
+          '201004-C #1 MULCH-HO-TN 14.12 TN × $20.00 = $282.40 · Coastline Haulers LLC',
+        ],
+      ],
+    );
+    const stump = await reads.ticket(auditor, p1, 'UNIT_RATE', '301004');
+    story.check(
+      'a unit rate ticket has no completed record: the auditor reads 301004’s one field event with the pay item the system worked out, and its two lines',
+      [
+        stump?.fieldEvents.map((event) => `${event.kind} ${event.payItem?.code ?? 'none'}`),
+        stump?.completed,
+        linesOf(stump),
+      ],
+      [
+        ['UNIT_RATE STP-RMV-EA-36'],
+        null,
+        [
+          '301004 #1 STP-RMV-EA-36 1 EA × $110.00 = $110.00 · Coastline Haulers LLC',
+          '301004 #2 STP-FILL-CY 4.8 CY × $22.00 = $105.60 · Coastline Haulers LLC',
+        ],
+      ],
+    );
+
+    // ------------------------------------------------------------------------------------------
+    const owners = async (viewer: string): Promise<string[]> =>
+      (await reads.roes(viewer, p1, { limit: 200 })).roes.map(
+        (roe) =>
+          `${roe.roeNumber} · ${roe.signed ? `signed ${String(roe.signedDate)}` : 'unsigned'} · ${roe.ownerName ?? 'owner not shown'}`,
+      );
+    story.check(
+      'AC-02-75…77 an ROE’s owner by the viewer’s own setting: the client user, let see private citizens, reads Rosa Delgado; the auditor, marked not to, reads the ROE and no owner; a contractor user reads no ROE at all',
+      [await owners(client), await owners(auditor), await owners(coastlines)],
+      [
+        ['R-0007 · signed 2026-10-09 · Rosa Delgado'],
+        ['R-0007 · signed 2026-10-09 · owner not shown'],
+        [],
+      ],
+    );
+
+    // ------------------------------------------------------------------------------------------
+    const nothing = { LOAD: [], HAUL_OUT: [], UNIT_RATE: [] };
+    const nobody = randomUUID();
+    const projectsOf = async (viewer: string): Promise<string[]> =>
+      (await reads.projects(viewer, { limit: 200 })).projects.map((project) => project.name);
+    story.check(
+      'AC-10-30 nobody reads nothing: an id the firm issued no login, Dana herself (an admin is no viewer), and a contractor user given no project are each shown no project, no ticket, no line and no ROE',
+      [
+        await projectsOf(client),
+        ...(
+          await Promise.all(
+            [nobody, dana, notGiven].map(async (who) => [
+              await projectsOf(who),
+              await numbers(who),
+              await load(who, '101001'),
+              await owners(who),
+            ]),
+          )
+        ).flat(),
+      ],
+      [
+        ['Bayline County ROW, Hurricane Delphine'],
+        ...[nobody, dana, notGiven].flatMap(() => [[], nothing, null, []]),
+      ],
+    );
+    await people.setViewerProjects(dana, summits, []);
+    story.check(
+      'a project taken away is gone from the very next read: Summit’s contractor user reads no ticket once Dana takes P1 from them',
+      [await numbers(summits), await load(summits, '101044')],
+      [nothing, null],
+    );
+  },
+};

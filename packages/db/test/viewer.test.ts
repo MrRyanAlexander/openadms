@@ -110,6 +110,41 @@ describe('a read through $viewed', () => {
     expect(said).toContain('permission denied');
   });
 
+  it('AC-10-30 the owner’s views the schema declares are the database’s own, column for column, and show nobody anything', async () => {
+    // A view is made by a guard migration and only declared to Prisma (ADR-435): a column the
+    // declaration names and the view doesn't hold would be the database's refusal here.
+    const nobody = randomUUID();
+    expect(
+      await viewed.$viewed(nobody, async (tx) => [
+        await tx.viewerTransactionMoney.findMany(),
+        await tx.viewerRoeCitizen.findMany(),
+        await tx.viewerPayItemName.findMany(),
+        await tx.viewerDisposalSiteName.findMany(),
+        await tx.viewerDebrisTypeName.findMany(),
+        await tx.viewerFieldEventMonitor.findMany(),
+      ]),
+    ).toEqual([[], [], [], [], [], []]);
+    // And the declaration leaves no column of a view out.
+    const columns = await viewed.$viewed(
+      nobody,
+      (tx) => tx.$queryRaw<{ view: string; columns: string }[]>`
+        SELECT c.relname AS view, string_agg(a.attname, ' ' ORDER BY a.attnum) AS columns
+        FROM pg_class c JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0
+        WHERE c.relkind = 'v' AND c.relname IN ('viewer_transaction_money', 'viewer_roe_citizen',
+          'viewer_pay_item_name', 'viewer_disposal_site_name', 'viewer_debris_type_name',
+          'viewer_field_event_monitor')
+        GROUP BY c.relname ORDER BY 1`,
+    );
+    expect(columns).toEqual([
+      { view: 'viewer_debris_type_name', columns: 'id project_id name' },
+      { view: 'viewer_disposal_site_name', columns: 'id project_id name' },
+      { view: 'viewer_field_event_monitor', columns: 'id name monitor_number' },
+      { view: 'viewer_pay_item_name', columns: 'id project_id code description' },
+      { view: 'viewer_roe_citizen', columns: 'id project_id owner_name' },
+      { view: 'viewer_transaction_money', columns: 'id project_id rate amount' },
+    ]);
+  });
+
   it('AC-10-31 a write in it is refused', async () => {
     const said = await refusal(
       viewed.$viewed(randomUUID(), (tx) => tx.client.create({ data: { name: 'Bayline County' } })),

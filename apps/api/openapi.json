@@ -17954,6 +17954,757 @@
           }
         }
       }
+    },
+    "/viewer/projects/{projectId}/roes": {
+      "get": {
+        "operationId": "viewerRoes",
+        "summary": "A project’s ROEs as the signed-in viewer is shown them, a page at a time, in the order they were made: each by number, with whether and when it was signed, and its owner’s name only where the firm lets this viewer see private citizens by name.",
+        "x-open-adms-access": "SIGNED_IN",
+        "x-open-adms-roles": ["READ_ONLY_VIEWER"],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^([1-9][0-9]?|1[0-9]{2}|200)$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "roes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "roeNumber": {
+                            "type": "string"
+                          },
+                          "signed": {
+                            "type": "boolean"
+                          },
+                          "signedDate": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "format": "date",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "ownerName": {
+                            "type": ["string", "null"]
+                          }
+                        },
+                        "required": ["id", "roeNumber", "signed", "signedDate", "ownerName"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "next": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["roes", "next"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/viewer/projects/{projectId}/tickets": {
+      "get": {
+        "operationId": "viewerTickets",
+        "summary": "One workflow’s tickets on a project as the signed-in viewer is shown them, a page at a time, by number: each with the statuses its field events hold and how many field events it has. A contractor user is shown its own contractor’s tickets.",
+        "x-open-adms-access": "SIGNED_IN",
+        "x-open-adms-roles": ["READ_ONLY_VIEWER"],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "workflow",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["LOAD", "HAUL_OUT", "UNIT_RATE"]
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^([1-9][0-9]?|1[0-9]{2}|200)$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tickets": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "workflow": {
+                            "type": "string",
+                            "enum": ["LOAD", "HAUL_OUT", "UNIT_RATE"]
+                          },
+                          "ticketNumber": {
+                            "type": "string"
+                          },
+                          "statuses": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": ["PENDING", "COMPLETED", "MANUAL_REVIEW", "VOID"]
+                            }
+                          },
+                          "fieldEvents": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": ["workflow", "ticketNumber", "statuses", "fieldEvents"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "next": {
+                      "type": ["string", "null"]
+                    }
+                  },
+                  "required": ["tickets", "next"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/viewer/projects/{projectId}/tickets/{workflow}/{ticketNumber}": {
+      "get": {
+        "operationId": "viewerTicket",
+        "summary": "One ticket as the signed-in viewer is shown it: its field events, the completed record the system concluded from them, and its priced lines, with a line’s rate and amount only where this viewer is shown the money. A ticket the viewer isn’t shown is not found.",
+        "x-open-adms-access": "SIGNED_IN",
+        "x-open-adms-roles": ["READ_ONLY_VIEWER"],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "workflow",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["LOAD", "HAUL_OUT", "UNIT_RATE"]
+            }
+          },
+          {
+            "name": "ticketNumber",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "workflow": {
+                      "type": "string",
+                      "enum": ["LOAD", "HAUL_OUT", "UNIT_RATE"]
+                    },
+                    "ticketNumber": {
+                      "type": "string"
+                    },
+                    "statuses": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": ["PENDING", "COMPLETED", "MANUAL_REVIEW", "VOID"]
+                      }
+                    },
+                    "fieldEvents": {
+                      "minItems": 1,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "COLLECTION",
+                              "DISPOSAL",
+                              "HAUL_OUT_COLLECTION",
+                              "HAUL_OUT_DISPOSAL",
+                              "UNIT_RATE"
+                            ]
+                          },
+                          "splitSuffix": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": ["PENDING", "COMPLETED", "MANUAL_REVIEW", "VOID"]
+                          },
+                          "startedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                          },
+                          "endedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                          },
+                          "latitude": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "longitude": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "address": {
+                            "type": ["string", "null"]
+                          },
+                          "certNumber": {
+                            "type": "string"
+                          },
+                          "loadCall": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "estimateCy": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "unitCount": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "debrisType": {
+                            "type": ["string", "null"]
+                          },
+                          "site": {
+                            "type": ["string", "null"]
+                          },
+                          "payItem": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "code": {
+                                    "type": "string"
+                                  },
+                                  "description": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["code", "description"],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "recordedBy": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "monitorNumber": {
+                                    "type": ["string", "null"]
+                                  }
+                                },
+                                "required": ["name", "monitorNumber"],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "kind",
+                          "splitSuffix",
+                          "status",
+                          "startedAt",
+                          "endedAt",
+                          "latitude",
+                          "longitude",
+                          "address",
+                          "certNumber",
+                          "loadCall",
+                          "estimateCy",
+                          "unitCount",
+                          "debrisType",
+                          "site",
+                          "payItem",
+                          "recordedBy"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "completed": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "quantitySource": {
+                              "type": "string",
+                              "enum": ["LOAD_CALL", "SCALE_WEIGHT", "CARRIED_TICKETS"]
+                            },
+                            "capacityCy": {
+                              "anyOf": [
+                                {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "loadCall": {
+                              "anyOf": [
+                                {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "volumeCy": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "weightTons": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "weightIsShare": {
+                              "type": "boolean"
+                            },
+                            "carriedCount": {
+                              "anyOf": [
+                                {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "collections": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  "collectionEventId": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  "splitSuffix": {
+                                    "type": "string"
+                                  },
+                                  "shareFraction": {
+                                    "type": "string",
+                                    "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+                                  },
+                                  "pileLoadCall": {
+                                    "anyOf": [
+                                      {
+                                        "type": "integer",
+                                        "minimum": -9007199254740991,
+                                        "maximum": 9007199254740991
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "volumeCy": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "weightTons": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "mileage": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "mileageSource": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "enum": ["ROAD_ROUTE", "STRAIGHT_LINE"]
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "collectionEventId",
+                                  "splitSuffix",
+                                  "shareFraction",
+                                  "pileLoadCall",
+                                  "volumeCy",
+                                  "weightTons",
+                                  "mileage",
+                                  "mileageSource"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "quantitySource",
+                            "capacityCy",
+                            "loadCall",
+                            "volumeCy",
+                            "weightTons",
+                            "weightIsShare",
+                            "carriedCount",
+                            "collections"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "lines": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "splitSuffix": {
+                            "type": "string"
+                          },
+                          "slot": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "payItem": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "code": {
+                                    "type": "string"
+                                  },
+                                  "description": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["code", "description"],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "unit": {
+                            "type": "string",
+                            "enum": ["CY", "TN", "EA", "LB", "HR", "CREW_DAY", "TBN"]
+                          },
+                          "quantity": {
+                            "type": "string",
+                            "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+                          },
+                          "prime": {
+                            "type": ["string", "null"]
+                          },
+                          "operatingSub": {
+                            "type": ["string", "null"]
+                          },
+                          "rate": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "amount": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "splitSuffix",
+                          "slot",
+                          "payItem",
+                          "unit",
+                          "quantity",
+                          "prime",
+                          "operatingSub",
+                          "rate",
+                          "amount"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "workflow",
+                    "ticketNumber",
+                    "statuses",
+                    "fieldEvents",
+                    "completed",
+                    "lines"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {

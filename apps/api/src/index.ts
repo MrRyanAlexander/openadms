@@ -88,6 +88,8 @@ export {
 } from './review/review-service.ts';
 export { Voids } from './review/voids.ts';
 
+export { ViewerReads } from './viewer/viewer-reads.ts';
+
 export { AdminCommand, type Questions } from './people/admin-command.ts';
 export {
   People,

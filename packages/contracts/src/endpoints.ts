@@ -36,6 +36,9 @@ import {
   phoneRecordSchema,
   phonesAnswerSchema,
   viewerProjectsAnswerSchema,
+  viewerRoesAnswerSchema,
+  viewerTicketAnswerSchema,
+  viewerTicketsAnswerSchema,
   resetAskedAnswerSchema,
   sessionAnswerSchema,
   sessionsEndedAnswerSchema,
@@ -1319,6 +1322,72 @@ export const viewerProjectsEndpoint = endpoint({
   answer: viewerProjectsAnswerSchema,
 });
 
+// How many at most on a page of a viewer's read: 50 where none is said.
+const viewerPage = z
+  .string()
+  .regex(/^([1-9][0-9]?|1[0-9]{2}|200)$/)
+  .optional();
+// A ticket's bare number as written: text, never parsed (ADR-062).
+const viewedNumber = z.string().trim().min(1).max(40);
+
+// A project's ROEs (ADR-435). A contractor user is shown none; the owner's name is there only
+// for a viewer the firm lets see private citizens by name.
+export const viewerRoesEndpoint = endpoint({
+  name: 'viewerRoes',
+  summary:
+    'A project’s ROEs as the signed-in viewer is shown them, a page at a time, in the order they were made: each by number, with whether and when it was signed, and its owner’s name only where the firm lets this viewer see private citizens by name.',
+  access: 'SIGNED_IN',
+  roles: viewerOnly,
+  method: 'GET',
+  path: '/viewer/projects/:projectId/roes',
+  params: projectId,
+  query: z.strictObject({
+    // The last ROE of the page before: the answer's `next`.
+    after: z.uuid().optional(),
+    limit: viewerPage,
+  }),
+  answer: viewerRoesAnswerSchema,
+});
+
+// A project's tickets of one workflow (ADR-435): each number series is its workflow's own, so a
+// page is one workflow's, by number as text.
+export const viewerTicketsEndpoint = endpoint({
+  name: 'viewerTickets',
+  summary:
+    'One workflow’s tickets on a project as the signed-in viewer is shown them, a page at a time, by number: each with the statuses its field events hold and how many field events it has. A contractor user is shown its own contractor’s tickets.',
+  access: 'SIGNED_IN',
+  roles: viewerOnly,
+  method: 'GET',
+  path: '/viewer/projects/:projectId/tickets',
+  params: projectId,
+  query: z.strictObject({
+    workflow: z.enum(workflows),
+    // The last ticket number of the page before: the answer's `next`.
+    after: viewedNumber.optional(),
+    limit: viewerPage,
+  }),
+  answer: viewerTicketsAnswerSchema,
+});
+
+// One ticket, named as the worker groups one: its project, its workflow and its bare number
+// (there is no ticket record and so no ticket id, ADR-236, 435). **A ticket the viewer isn't
+// shown is answered exactly as one that doesn't exist**: 404 `NOT_FOUND` (AC-10-29).
+export const viewerTicketEndpoint = endpoint({
+  name: 'viewerTicket',
+  summary:
+    'One ticket as the signed-in viewer is shown it: its field events, the completed record the system concluded from them, and its priced lines, with a line’s rate and amount only where this viewer is shown the money. A ticket the viewer isn’t shown is not found.',
+  access: 'SIGNED_IN',
+  roles: viewerOnly,
+  method: 'GET',
+  path: '/viewer/projects/:projectId/tickets/:workflow/:ticketNumber',
+  params: z.strictObject({
+    projectId: z.uuid(),
+    workflow: z.enum(workflows),
+    ticketNumber: viewedNumber,
+  }),
+  answer: viewerTicketAnswerSchema,
+});
+
 // Each task that adds an endpoint names it here; the API's tests hold its routes to this list.
 // Dispatch and phones, from the back office (ARCHITECTURE §7.4, §7.5; spec/parts/02; AC-02-21, 23,
 // 59; AC-10-24, 27; BACKLOG 2.4.3, C47, C89; ADR-106, 134, 240, 428). **A dispatch change is open
@@ -2178,4 +2247,7 @@ export const endpoints: readonly Endpoint[] = [
   markSignaturesOnFileEndpoint,
   revokeCertificationEndpoint,
   viewerProjectsEndpoint,
+  viewerRoesEndpoint,
+  viewerTicketsEndpoint,
+  viewerTicketEndpoint,
 ];
