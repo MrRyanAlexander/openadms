@@ -3,6 +3,8 @@
 // with its transaction, and the worker writes as the seeded system actor. Each test connects as the
 // service's own login and undoes its work (service.ts).
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { parseEnv } from 'node:util';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -11,7 +13,8 @@ import type { Database } from '../src/database.ts';
 import type { Prisma } from '../src/generated/prisma/client.ts';
 import { systemActor, systemActorId, systemActorName } from '../src/system-actor.ts';
 import { GuardedDatabase } from './support/database.ts';
-import { openService, undone } from './support/service.ts';
+import { bayline, openService, p1, p1In, undone } from './support/service.ts';
+import { deviceKeyLike } from './support/device-keys.ts';
 
 let api: Database;
 let worker: Database;
@@ -54,44 +57,6 @@ async function refusal(write: Promise<unknown>): Promise<string> {
     return error instanceof Error ? error.message : String(error);
   }
   throw new Error('Expected the write to be refused, but it ran.');
-}
-
-const p1 = { name: 'Bayline County ROW, Hurricane Delphine', timeZone: 'America/New_York' };
-const bayline = { name: 'Bayline County' };
-
-// P1 as it is written (the golden mission §1): under its client and declaration event, made in the
-// same work, its program type and the declaration's reference type picked from the firm's lists.
-async function p1In(tx: Prisma.TransactionClient): Promise<Prisma.ProjectUncheckedCreateInput> {
-  const client = await tx.client.create({ data: bayline });
-  const referenceType = await tx.declarationReferenceType.findFirstOrThrow({
-    where: { name: 'FEMA disaster (DR)' },
-  });
-  const declarationEvent = await tx.declarationEvent.create({
-    data: {
-      name: 'Hurricane Delphine',
-      reference: 'DR-9001-FL',
-      referenceTypeId: referenceType.id,
-    },
-  });
-  const row = await tx.programType.findFirstOrThrow({ where: { name: 'ROW' } });
-  return {
-    ...p1,
-    clientId: client.id,
-    declarationEventId: declarationEvent.id,
-    programTypeId: row.id,
-    allowSplitLoads: true,
-    activeFrom: new Date('2026-10-12'),
-    activeTo: new Date('2027-01-31'),
-    ticketNumberSource: 'GENERATED',
-    workflows: ['LOAD', 'HAUL_OUT', 'UNIT_RATE'],
-    loadCallLowLimit: 5,
-    loadCallHighLimit: 95,
-    stumpFillDepthInches: 31,
-    stumpCheckRootBallWider: true,
-    stumpCheckFillNeedsExposure: true,
-    siteCircleMeters: 200,
-    timeClockEnabled: false,
-  };
 }
 
 describe('a write through $write is audited with its actor', () => {
@@ -137,6 +102,28 @@ describe('a write through $write is audited with its actor', () => {
     expect(records[1]?.newValue).toMatchObject({ name: p1.name, time_zone: p1.timeZone });
   });
 
+  it('AC-10-43: the request the work is for, when the service says it and the actor names none', async () => {
+    // The API's client is opened with its own answer to "which request is this for?" (ADR-390).
+    let now: string | undefined = 'req-0002';
+    const forRequests = openService('api', 1, () => now);
+    const dana = randomUUID();
+    const write = (actor: Actor) =>
+      undone(forRequests, actor, async (tx) => {
+        await tx.user.create({ data: { id: dana, name: 'Dana Reyes', role: 'ADMIN' } });
+        return (await tx.auditRecord.findFirstOrThrow({ where: { recordId: dana } })).requestId;
+      });
+    try {
+      const actor: Actor = { actorId: dana, source: 'BACK_OFFICE' };
+      expect(await write(actor)).toBe('req-0002');
+      // An actor that states a request keeps its own; outside any request, none is recorded.
+      expect(await write({ ...actor, requestId: 'req-0003' })).toBe('req-0003');
+      now = undefined;
+      expect(await write(actor)).toBeNull();
+    } finally {
+      await forRequests.$disconnect();
+    }
+  });
+
   it('the device it came from: Ana Brooks on her phone', async () => {
     // Dana sets up herself, Ana, the phone, P1 and Ana's assignment; then the same work states Ana
     // on her phone, as the API will for a sync (a test-only restatement: the phone and Ana must
@@ -159,7 +146,7 @@ describe('a write through $write is audited with its actor', () => {
         data: {
           id: phone,
           name: 'P1-COL-1',
-          publicKey: 'test-public-key-P1-COL-1',
+          publicKey: deviceKeyLike('P1-COL-1'),
           masterPasscodeVersion: 1,
         },
       });
@@ -348,6 +335,26 @@ describe('the worker writes as the system actor', () => {
     expect(
       await refusal(undone(worker, systemActor, (tx) => tx.client.create({ data: bayline }))),
     ).toContain('permission denied for table client');
+  });
+});
+
+describe('a service’s own connection is under the statement timeout (ADR-394)', () => {
+  it('AC-10-42 the API’s and the worker’s, each as its login finds it on signing in: the policy value', async () => {
+    // As the release ships it (packages/domain/policy.env); no secret is in that file.
+    const shipped = parseEnv(
+      readFileSync(new URL('../../domain/policy.env', import.meta.url), 'utf8'),
+    )['STATEMENT_TIMEOUT_MS'];
+    for (const service of [api, worker]) {
+      const [found] = await service.$read(
+        (tx) =>
+          tx.$queryRaw<{ login: string; ms: number }[]>`SELECT current_user AS login,
+            setting::int AS ms FROM pg_settings WHERE name = 'statement_timeout'`,
+      );
+      expect(found).toEqual({
+        login: service === api ? 'adms_api' : 'adms_worker',
+        ms: Number(shipped),
+      });
+    }
   });
 });
 

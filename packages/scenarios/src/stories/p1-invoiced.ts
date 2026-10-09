@@ -15,6 +15,7 @@ import {
   Acceptances,
   Corrections,
   InvoiceLocks,
+  PayItemSetup,
   ProjectSetup,
   QcMarks,
   Voids,
@@ -34,6 +35,7 @@ import {
   loadP1Map,
   p1FieldDaysHeld,
   P1Syncs,
+  QueueRuns,
   saved,
   setUpP1Pricing,
 } from './p1-office.ts';
@@ -89,11 +91,11 @@ export const p1Invoiced: Story = {
       settings,
       new Mileages(new MapServers(localMapServers())),
     );
-    const qc = new QcMarks(api, clock);
-    const locks = new InvoiceLocks(api, clock);
-    const voids = new Voids(api, clock);
-    const acceptances = new Acceptances(api, clock);
-    const corrections = new Corrections(api, clock);
+    const qc = new QcMarks(api, clock, story.policy);
+    const locks = new InvoiceLocks(api, clock, story.policy);
+    const voids = new Voids(api, clock, story.policy);
+    const acceptances = new Acceptances(api, clock, story.policy);
+    const corrections = new Corrections(api, clock, story.policy);
     const projects = new ProjectSetup(api, clock, story.policy);
 
     const names = new Map<string | null, string>([
@@ -196,9 +198,12 @@ export const p1Invoiced: Story = {
     const last: { run: RunOutcome } = {
       run: { ran: false, reason: 'RUN_UNDER_WAY', message: 'No run yet.' },
     };
+    // Nobody asks the worker: the action queued its job, and the worker takes it up.
+    const queue = new QueueRuns(story, reconciliation);
     const reviewed = async <T>(attempt: Promise<Outcome<Reviewed<T>>>): Promise<Reviewed<T>> => {
       const done = await saved(attempt);
-      last.run = await reconciliation.run(done.reprocess);
+      // An action that left no ticket to work queued no job, and no run follows it.
+      if (done.reprocess.jobs.length > 0) last.run = await queue.next(done.reprocess.projectId);
       return done;
     };
     const refusal = async <T>(attempt: Promise<Outcome<T>>): Promise<string> => {
@@ -286,13 +291,18 @@ export const p1Invoiced: Story = {
             '',
         )
         .sort();
-    const rateTo = (rate: string) =>
-      api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
-        const standing = await tx.payItemRate.findFirstOrThrow({
-          where: { payItemId: pricing.payItems['VEG-HAUL-CY-15'] ?? '', primeId: coastline },
-        });
-        await tx.payItemRate.update({ where: { id: standing.id }, data: { rate } });
-      });
+    // Through the setup service: the rate and the job for the tickets it moves are one piece
+    // of work.
+    const rateTo = async (rate: string) => {
+      const outcome = await new PayItemSetup(api, clock, story.policy).rate(
+        dana,
+        pricing.payItems['VEG-HAUL-CY-15'] ?? '',
+        coastline,
+        rate,
+      );
+      if (!outcome.saved) throw new Error(`Refused: ${outcome.refusal.message}`);
+      return outcome;
+    };
     const hauling = async (): Promise<string[]> =>
       (await lines())
         .filter((each) => each.line.includes('VEG-HAUL-CY-15'))
@@ -309,7 +319,6 @@ export const p1Invoiced: Story = {
       throw new Error('The field days synced fewer than three times.');
     }
     const sync = { projectId: p1, trigger: 'SYNC' } as const;
-    const setupChange = { projectId: p1, trigger: 'SETUP_CHANGE' } as const;
     story.at(
       mondayEvening.toISOString(),
       'Monday evening: the phones find signal; the worker runs',
@@ -328,6 +337,8 @@ export const p1Invoiced: Story = {
     await phones.arrive(wednesdayMorning);
     story.at(on('14', '07:20'), 'The worker runs');
     const before = await reconciliation.run(sync);
+    // What setup queued before the field days (each certification's own flags) is settled.
+    await queue.settle(p1);
     story.check(
       'P1 before any QC: 101001, 101002, 101004 and 101005 are COMPLETED, 101003 in review for its 96% call, 101006 waiting for its disposal; nobody has marked anything',
       [of(before, '10100'), await marks()],
@@ -685,11 +696,28 @@ export const p1Invoiced: Story = {
       on('14', '09:20'),
       'Dana changes Coastline’s rate on VEG-HAUL-CY-15 from $7.50 to $7.75; the worker runs',
     );
-    await rateTo('7.75');
-    const rated = await reconciliation.run(setupChange);
+    const rateSaved = await rateTo('7.75');
+    const lockedNow = await api.invoiceLock.count({ where: { projectId: p1, unlockedAt: null } });
+    const rateJobs = await queue.waiting(p1);
+    const rated = await queue.next(p1);
     story.check(
-      'AC-09-13 the un-invoiced 101004 and 101005 are regenerated at $7.75; 101001 and 101003, locked by the service, are left exactly as they are at $7.50, and the run’s decision on each says why',
-      [await hauling(), await decisionOf(rated, '101001'), await decisionOf(rated, '101003')],
+      'AC-09-13, AC-10-51 the rate change queued its own job, as a setup change Dana asked for, naming the un-invoiced tickets and neither locked one: 101004 and 101005 are regenerated at $7.75; 101001 and 101003, locked by the service, are left exactly as they are at $7.50, and the run has no decision on either. Dana is told as she saves it: how many tickets were queued, and that the four locked as invoiced were left as they are',
+      [
+        await hauling(),
+        rateJobs.map((job) => [job.trigger, names.get(job.requestedById)]),
+        ['101001', '101003', '101004', '101005'].map((number) =>
+          rateJobs.some((job) => job.tickets.includes(number)),
+        ),
+        await decisionOf(rated, '101001'),
+        await decisionOf(rated, '101003'),
+        // What Dana is told as the rate is saved (ADR-422).
+        [
+          rateSaved.queued?.jobs.length,
+          rateSaved.queued?.tickets === rateJobs.flatMap((job) => job.tickets).length,
+          rateSaved.queued?.lockedAsInvoiced === lockedNow,
+          lockedNow,
+        ],
+      ],
       [
         [
           '101001 #1 VEG-HAUL-CY-15 52 × $7.50 = $390.00',
@@ -697,8 +725,11 @@ export const p1Invoiced: Story = {
           '101004 #1 VEG-HAUL-CY-15 24 × $7.75 = $186.00',
           '101005 #1 VEG-HAUL-CY-15 45.5 × $7.75 = $352.63',
         ],
-        [['COMPLETED', 'Locked as invoiced: left as it is.']],
-        [['COMPLETED', 'Locked as invoiced: left as it is.']],
+        [['SETUP_CHANGE', 'Dana']],
+        [false, false, true, true],
+        [],
+        [],
+        [1, true, true, 4],
       ],
     );
     story.at(
@@ -706,32 +737,24 @@ export const p1Invoiced: Story = {
       'Dana lowers P1’s high load call limit from 95% to 70%; the worker runs',
     );
     await saved(projects.changeSettings(dana, p1, { loadCallHighLimit: 70 }));
-    const lowered = await reconciliation.run(setupChange);
+    const lowered = await queue.next(p1);
     const loweredTold = of(lowered, '10100');
     story.at(on('14', '09:35'), 'She puts 95% back; the worker runs');
     await saved(projects.changeSettings(dana, p1, { loadCallHighLimit: 95 }));
-    const raised = await reconciliation.run(setupChange);
+    const raised = await queue.next(p1);
     story.check(
-      'AC-09-14 a setup change works every un-invoiced ticket it touches again and passes every locked one by: 101002 (75%) and 101005 (70%) are flagged for a high load call and cleared again; 101001, called 80% and locked, is never flagged, and 101003 keeps the one flag it was locked with',
-      [loweredTold, of(raised, '10100'), await flagsOn('101001')],
+      'AC-09-14 a setup change works every un-invoiced ticket it touches again and passes every locked one by, which its job doesn’t name: 101002 (75%) and 101005 (70%) are flagged for a high load call and cleared again; 101001, called 80% and locked, is never flagged, and 101003 keeps the one flag it was locked with',
+      [loweredTold, of(raised, '10100'), await flagsOn('101001'), await flagsOn('101003')],
       [
         [
-          '101001 · COMPLETED',
           '101002 · MANUAL_REVIEW · Ticket 101002: load call 75%. Flagged for review.',
-          '101003 · COMPLETED · Ticket 101003: load call 96%. Flagged for review.',
           '101004 · COMPLETED',
           '101005 · MANUAL_REVIEW · Ticket 101005: load call 70%. Flagged for review.',
           '101006 · PENDING',
         ],
-        [
-          '101001 · COMPLETED',
-          '101002 · COMPLETED',
-          '101003 · COMPLETED · Ticket 101003: load call 96%. Flagged for review.',
-          '101004 · COMPLETED',
-          '101005 · COMPLETED',
-          '101006 · PENDING',
-        ],
+        ['101002 · COMPLETED', '101004 · COMPLETED', '101005 · COMPLETED', '101006 · PENDING'],
         [],
+        ['Ticket 101003: load call 96%. Flagged for review. (accepted: Photos confirm)'],
       ],
     );
 
@@ -795,7 +818,7 @@ export const p1Invoiced: Story = {
       'The agreed rate starts next month after all: Dana puts $7.50 back; the worker runs; Luis locks 101001 in the batch again',
     );
     await rateTo('7.50');
-    await reconciliation.run(setupChange);
+    await queue.next(p1);
     const relocked = await saved(locks.lock(luis, l101001, batch.id));
     const stoodAt = await linesOf('101001');
     story.at(

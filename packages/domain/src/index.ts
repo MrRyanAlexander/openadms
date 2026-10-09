@@ -163,7 +163,75 @@ export {
   type NumbersTaken,
   type SeriesPosition,
 } from './numbers.ts';
+export {
+  TicketNeighbours,
+  timesOverlap,
+  type NeighbourEvent,
+  type TicketKey,
+} from './neighbours.ts';
 export { Policy, policyNames, type PolicyName } from './policy.ts';
+export {
+  BreachedPasswords,
+  PasswordRules,
+  contextWords,
+  passwordAsKept,
+  passwordProblemCodes,
+  type PasswordHolder,
+  type PasswordProblem,
+  type PasswordProblemCode,
+} from './passwords.ts';
+export {
+  Access,
+  DispatchRights,
+  PeopleRules,
+  SetupRights,
+  actorOnly,
+  actorsOnly,
+  backOfficeCreated,
+  backOfficeRolesChanged,
+  permissions,
+  type ActorOnly,
+  type Asked,
+  type BackOfficeCreated,
+  type BackOfficeRole,
+  type DispatchRightsRefusal,
+  type Holder,
+  type PeopleRefusalCode,
+  type PermissionName,
+  type SetupRightsRefusal,
+} from './people.ts';
+export {
+  AssignmentRules,
+  assignableRoles,
+  assignmentFormDocumentTypes,
+  type AssignmentFormDocumentType,
+  type AssignmentRefusal,
+  type AssignmentRefusalCode,
+} from './assignments.ts';
+export {
+  MasterPasscodeRules,
+  PhoneRules,
+  phoneRemovals,
+  type PhoneRemoval,
+  type PhoneRemovalRefusal,
+} from './phones.ts';
+export { PhoneProofRules, phoneKeyKind, type PhoneProofPolicy } from './phone-proof.ts';
+export {
+  addressCounted,
+  RateLimit,
+  rateLimitNames,
+  RateLimits,
+  type Counted,
+  type RateLimitName,
+  type RateLimitsPolicy,
+} from './rate-limits.ts';
+export {
+  MasterPasscodeTries,
+  SignInTries,
+  type SignInTriesPolicy,
+  type WrongTry,
+} from './sign-in-tries.ts';
+export { TwoStepRules, twoStepCode, type TwoStepNeed, type TwoStepPolicy } from './two-step.ts';
 export {
   PaysWhen,
   type PaysWhenContract,

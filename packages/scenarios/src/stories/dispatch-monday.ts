@@ -12,13 +12,15 @@
 // (ADR-303): the client, the declaration event and the project, whose settings start as the
 // release's policy values; then the fourth (ADR-305): the prime added to the project, and its
 // contract.
-import { NumberAllocator } from '@open-adms/api';
+import { NumberAllocator, Phones } from '@open-adms/api';
+import { masterPasscodeActorId, masterPasscodeActorName } from '@open-adms/db';
 
 import { projectTime } from '../clock.ts';
 import { made, scanned } from '../device.ts';
 import { uuidv7 } from '../ids.ts';
 import { phoneLists } from '../phone-lists.ts';
 import type { Story } from '../runner.ts';
+import { assigned } from './board.ts';
 import { p1TimeZone as timeZone, setUpP1, setUpP1Sites } from './p1.ts';
 
 const at = (time: string): string => `2026-10-12T${time}:00-04:00`;
@@ -45,6 +47,8 @@ export const dispatchMonday: Story = {
         data: { id: dana, name: 'Dana Reyes', role: 'ADMIN' },
       });
       const luis = await tx.user.create({ data: { name: 'Luis Ortega', role: 'MANAGER_ANALYST' } });
+      // Luis writes the board and marks a phone lost: Dana grants him *dispatch* (ADR-428).
+      await tx.userPermission.create({ data: { userId: luis.id, permission: 'DISPATCH' } });
       const p1 = await setUpP1(tx, story.policy);
       const { tdsr, landfill } = await setUpP1Sites(tx, p1.project);
       return {
@@ -224,17 +228,14 @@ export const dispatchMonday: Story = {
       at('05:50'),
       'Three phones are enrolled, once: each its own key, no project, no monitor',
     );
-    const phones = await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
-      const enrol = (name: string) =>
-        tx.device.create({
-          data: { name, publicKey: `story-${name}`, masterPasscodeVersion: 1 },
-        });
-      return {
-        collection: await enrol('P1-COL-1'),
-        tdsrTower: await enrol('P1-TWR-TDSR'),
-        landfillTower: await enrol('P1-TWR-LF'),
-      };
-    });
+    // Each under the master passcode, through the API's enrolment (ADR-439, 440).
+    const enrol = async (name: string) =>
+      api.device.findUniqueOrThrow({ where: { id: (await story.enrolled(name)).id } });
+    const phones = {
+      collection: await enrol('P1-COL-1'),
+      tdsrTower: await enrol('P1-TWR-TDSR'),
+      landfillTower: await enrol('P1-TWR-LF'),
+    };
     story.check(
       'each is in service and holds version 1 of the master passcode’s check',
       Object.values(phones).map((phone) => [
@@ -347,47 +348,30 @@ export const dispatchMonday: Story = {
       at('06:00'),
       'Luis writes Monday’s board: Ana on collections, Kim at the TDSR tower, Jo on unit rate',
     );
-    const board = await api.$write({ actorId: luis, source: 'BACK_OFFICE' }, async (tx) => {
-      const planned = { workDate: monday, projectId: office.p1, madeById: luis } as const;
-      const collections = await tx.assignment.create({
-        data: {
-          ...planned,
-          personId: people.ana,
-          fieldEventKinds: ['COLLECTION'],
-          deviceId: phones.collection.id,
-          origin: 'PLANNED',
-        },
-      });
-      const tower = await tx.assignment.create({
-        data: {
-          ...planned,
-          personId: people.kim,
-          fieldEventKinds: ['DISPOSAL'],
-          siteId: office.tdsr,
-          deviceId: phones.tdsrTower.id,
-          origin: 'PLANNED',
-        },
-      });
-      // No phone named: Jo signs in on whichever enrolled phone she picks up.
-      const unitRate = await tx.assignment.create({
-        data: {
-          ...planned,
-          personId: people.jo,
-          fieldEventKinds: ['UNIT_RATE'],
-          origin: 'PLANNED',
-        },
-      });
-      await tx.assignmentPayItem.createMany({
-        data: [payItems.hangers, payItems.leaners].map((payItem) => ({
-          assignmentId: unitRate.id,
-          projectId: office.p1,
-          payItemId: payItem.id,
-          // A unit rate pay item's own kind of work: no other can be named (C42).
-          kindOfWorkId: payItem.kindOfWorkId,
-        })),
-      });
-      return { collections: collections.id, tower: tower.id, unitRate: unitRate.id };
-    });
+    const planned = { workDate: '2026-10-12', projectId: office.p1 } as const;
+    const board = {
+      collections: await assigned(api, clock, luis, {
+        ...planned,
+        personId: people.ana,
+        fieldEventKinds: ['COLLECTION'],
+        deviceId: phones.collection.id,
+      }),
+      tower: await assigned(api, clock, luis, {
+        ...planned,
+        personId: people.kim,
+        fieldEventKinds: ['DISPOSAL'],
+        siteId: office.tdsr,
+        deviceId: phones.tdsrTower.id,
+      }),
+      // No phone named: Jo signs in on whichever enrolled phone she picks up. Her unit rate
+      // pay items are named with each one's own kind of work by the service (C42).
+      unitRate: await assigned(api, clock, luis, {
+        ...planned,
+        personId: people.jo,
+        fieldEventKinds: ['UNIT_RATE'],
+        payItemIds: [payItems.hangers.id, payItems.leaners.id],
+      }),
+    };
     const joDay = await api.assignment.findUniqueOrThrow({
       where: { id: board.unitRate },
       include: { payItems: { include: { payItem: true }, orderBy: { payItem: { code: 'asc' } } } },
@@ -596,14 +580,11 @@ export const dispatchMonday: Story = {
     );
 
     story.at(at('18:10'), 'P1-TWR-LF isn’t handed in and can’t be found: Luis marks it lost');
-    await api.$write(
-      { actorId: luis, source: 'BACK_OFFICE', reason: 'Not handed in at the yard on Monday' },
-      (tx) =>
-        tx.device.update({
-          where: { id: phones.landfillTower.id },
-          data: { status: 'LOST', outOfServiceAt: clock.now() },
-        }),
-    );
+    const removed = await new Phones(api, clock).remove(luis, phones.landfillTower.id, {
+      status: 'LOST',
+      note: 'Not handed in at the yard on Monday',
+    });
+    if (!removed.saved) throw new Error(removed.refusal.message);
     const lost = await api.device.findUniqueOrThrow({ where: { id: phones.landfillTower.id } });
     story.check(
       'it’s out of service from 6:10 pm: what it made later will arrive flagged, never refused',
@@ -621,6 +602,7 @@ export const dispatchMonday: Story = {
       [people.kim, 'Kim Nguyen'],
       [people.tariq, 'Tariq Patel'],
       [people.jo, 'Jo Kim'],
+      [masterPasscodeActorId, masterPasscodeActorName],
       [phones.collection.id, 'P1-COL-1'],
       [phones.tdsrTower.id, 'P1-TWR-TDSR'],
       [phones.landfillTower.id, 'P1-TWR-LF'],
@@ -652,9 +634,10 @@ export const dispatchMonday: Story = {
         record.reason,
       ]),
       [
-        ['device', 'INSERT', 'Dana Reyes', 'BACK_OFFICE', '-', null],
-        ['device', 'INSERT', 'Dana Reyes', 'BACK_OFFICE', '-', null],
-        ['device', 'INSERT', 'Dana Reyes', 'BACK_OFFICE', '-', null],
+        // Whoever held the passcode is not known: the record names the passcode, on the phone.
+        ['device', 'INSERT', 'Master passcode', 'DEVICE', 'P1-COL-1', null],
+        ['device', 'INSERT', 'Master passcode', 'DEVICE', 'P1-TWR-TDSR', null],
+        ['device', 'INSERT', 'Master passcode', 'DEVICE', 'P1-TWR-LF', null],
         ['pay_item', 'INSERT', 'Dana Reyes', 'BACK_OFFICE', '-', null],
         ['pay_item_rate', 'INSERT', 'Dana Reyes', 'BACK_OFFICE', '-', null],
         ['pay_item', 'INSERT', 'Dana Reyes', 'BACK_OFFICE', '-', null],

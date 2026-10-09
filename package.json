@@ -21,9 +21,12 @@
     "local:down": "node infra/local/src/index.ts down",
     "local:wipe": "node infra/local/src/index.ts wipe",
     "local:status": "node infra/local/src/index.ts status",
+    "local:accounts": "pnpm generate && tsc --build && node infra/local/src/accounts.ts",
     "installer": "node tools/setup/src/index.ts install",
     "installer:check": "node tools/setup/src/index.ts check",
     "installer:teardown": "node tools/setup/src/index.ts teardown",
+    "installer:admin": "pnpm --silent generate && tsc --build && node apps/api/dist/admin.js",
+    "openapi": "pnpm generate && tsc --build && node apps/api/src/openapi.ts && prettier --write apps/api/openapi.json",
     "scenarios": "pnpm generate && tsc --build && node packages/scenarios/src/cli.ts",
     "clean": "tsc --build --clean"
   },

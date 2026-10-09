@@ -166,7 +166,7 @@ function isUniqueViolation(error: unknown): boolean {
 }
 
 // A fix a reviewer typed that can't be one is refused: nobody is waiting at the curb for it.
-function fixOf(end: 'start' | 'end', corrected: CorrectedFix): CorrectedFix {
+export function fixOf(end: 'start' | 'end', corrected: CorrectedFix): CorrectedFix {
   if (corrected === null) return null;
   const read = new GpsFix(corrected).read();
   if (read.fix === null) {
@@ -186,9 +186,12 @@ export class Corrections extends ReviewService {
     changes: FieldEventCorrection,
     note?: string,
   ): Promise<Outcome<Reviewed<FieldEvent>>> {
-    return this.review(person, 'CORRECT', note, async (tx) => {
+    return this.review(person, 'CORRECT', note, async (tx, moves) => {
       const event = await tx.fieldEvent.findUniqueOrThrow({ where: { id: fieldEventId } });
       const { projectId } = event;
+      // Its certification, its times or its scale receipt may be what is corrected: the
+      // tickets that read it as it stands are queued with it.
+      await moves(projectId, ticketOf(event));
       const data: Prisma.FieldEventUncheckedUpdateInput = {};
       for (const field of plain) {
         if (changes[field] !== undefined) Object.assign(data, { [field]: changes[field] });
@@ -261,8 +264,10 @@ export class Corrections extends ReviewService {
   ): Promise<Outcome<Reviewed<FieldEvent>>> {
     const asked: { renumber?: Renumber } = {};
     try {
-      return await this.review(person, 'RENUMBER', note, async (tx) => {
+      return await this.review(person, 'RENUMBER', note, async (tx, moves) => {
         const event = await tx.fieldEvent.findUniqueOrThrow({ where: { id: fieldEventId } });
+        // What read it under the number it leaves (a load that lists it as carried).
+        await moves(event.projectId, ticketOf(event));
         const renumber = new Renumber(event.kind, event, {
           ticketNumber: to.ticketNumber,
           splitSuffix: to.splitSuffix ?? event.splitSuffix,
@@ -322,8 +327,10 @@ export class Corrections extends ReviewService {
     carried: boolean,
     note?: string,
   ): Promise<Outcome<Reviewed<CarriedTicket>>> {
-    return this.review(person, 'CORRECT', note, async (tx) => {
+    return this.review(person, 'CORRECT', note, async (tx, moves) => {
       const event = await tx.fieldEvent.findUniqueOrThrow({ where: { id: fieldEventId } });
+      // Another load that lists the same ticket is flagged for it until this one stops.
+      await moves(event.projectId, ticketOf(event));
       const listed = { fieldEventId_carriedTicketNumber: { fieldEventId, carriedTicketNumber } };
       const record = carried
         ? await tx.carriedTicket.upsert({
@@ -434,12 +441,14 @@ export class Corrections extends ReviewService {
       async (tx) => {
         const roe = await tx.roe.findUniqueOrThrow({ where: { id: roeId } });
         const { projectId } = roe;
-        const standing = await tx.roeScopeItem.findFirst({
-          where:
-            'formDebrisTypeId' in pick
-              ? { roeId, formDebrisTypeId: pick.formDebrisTypeId }
-              : { roeId, payableTypeId: pick.payableTypeId },
-        });
+        const where =
+          'formDebrisTypeId' in pick
+            ? { roeId, formDebrisTypeId: pick.formDebrisTypeId }
+            : { roeId, payableTypeId: pick.payableTypeId };
+        // A pick its scope never had can't be taken off: not found, as a line never listed is.
+        const standing = inScope
+          ? await tx.roeScopeItem.findFirst({ where })
+          : await tx.roeScopeItem.findFirstOrThrow({ where });
         const count = pick.count === undefined ? {} : { count: pick.count };
         let record: RoeScopeItem;
         if (standing !== null) {
@@ -447,8 +456,6 @@ export class Corrections extends ReviewService {
             where: { id: standing.id },
             data: { ...count, archivedAt: inScope ? null : this.clock.now() },
           });
-        } else if (!inScope) {
-          throw new Error(`ROE ${roe.roeNumber} has no such pick in its scope to take off.`);
         } else if ('formDebrisTypeId' in pick) {
           const entry = await tx.formDebrisType.findUniqueOrThrow({
             where: { id: pick.formDebrisTypeId },
@@ -492,7 +499,8 @@ export class Corrections extends ReviewService {
             : { roeId: await Corrections.roeOf(tx, projectId, changes.roeNumber) }),
         },
       });
-      return { record, projectId, tickets: [] };
+      // A survey's flags sit on the survey, on no ticket: the run checks them by themselves.
+      return { record, projectId, tickets: [], projectRecords: true };
     });
   }
 
@@ -540,41 +548,43 @@ export class Corrections extends ReviewService {
   }
 
   // A measuring mistake on a certification: its box corrected, its capacity worked out again
-  // (Certifications.measure), and every ticket that scanned it reprocessed at the new capacity.
-  // One locked as invoiced is named, and waits for its unlock (ADR-057, 079).
-  async certification(
+  // (Certifications.measured), and every ticket that scanned it queued to reprocess at the new
+  // capacity, all in one piece of work. One locked as invoiced is named, left off the job, and
+  // waits for its unlock (ADR-057, 079).
+  certification(
     person: string,
     certificationId: string,
     position: number,
     measurements: BoxMeasurements,
+    note?: string,
   ): Promise<Outcome<Reviewed<Certification>>> {
-    const permitted = await this.db.$read(async (tx) => {
-      try {
-        await ReviewService.permitted(tx, person, 'CORRECT');
-        return null;
-      } catch (error) {
-        if (error instanceof Refused) return error.refusal;
-        throw error;
-      }
-    });
-    if (permitted !== null) return { saved: false, refusal: permitted };
-    const measured = await new Certifications(this.db, this.clock).measure(
-      person,
-      certificationId,
-      position,
-      measurements,
-    );
-    if (!measured.saved) return measured;
-    const record = measured.record;
-    const reprocess = await this.db.$read(async (tx) =>
-      ReviewService.reprocess(
+    return this.mark(person, 'CORRECT', note, async (tx) => {
+      const { record, queued } = await new Certifications(
+        this.db,
+        this.clock,
+        this.policy,
+      ).measured(tx, person, certificationId, position, measurements);
+      // Queued by the certification's own service: said in this correction's answer.
+      if (queued.jobs.length > 0) this.keep(tx, queued);
+      const asked = await ReviewService.asked(
         tx,
         person,
         record.projectId,
-        await ReviewService.ticketsOf(tx, { certificationId }),
-      ),
-    );
-    return { saved: true, record: { record, reprocess }, warnings: measured.warnings };
+        await ReviewService.ticketsOf(tx, {
+          projectId: record.projectId,
+          certNumber: record.certNumber,
+        }),
+      );
+      const touched = new Set(asked.tickets.map((ticket) => JSON.stringify(ticket)));
+      return {
+        record,
+        reprocess: {
+          ...asked,
+          neighbours: queued.tickets.filter((ticket) => !touched.has(JSON.stringify(ticket))),
+          jobs: queued.jobs,
+        },
+      };
+    });
   }
 
   private static async roeOf(

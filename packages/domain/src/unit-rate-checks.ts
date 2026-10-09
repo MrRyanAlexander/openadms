@@ -19,6 +19,7 @@ import type { BuiltInKey } from './built-in-keys.ts';
 import { workTimeOf, type Named } from './checks.ts';
 import { Flags, type FlagRaised, type FlagSubject } from './flags.ts';
 import type { GpsPoint } from './geodesic.ts';
+import { timesOverlap } from './neighbours.ts';
 import { enDash } from './project-clock.ts';
 import type { Amount } from './quantities.ts';
 import { SizeBands, type BandedPayItem, type TreeMeasurement } from './size-bands.ts';
@@ -377,12 +378,7 @@ export class UnitRateChecks<E extends UnitRateFieldEvent = UnitRateFieldEvent> {
     // Times that can't both be true (ADR-159): raised on this ticket for each one it overlaps;
     // the other's own run raises it there.
     for (const other of crew) {
-      if (
-        event.startedAt.getTime() >= other.endedAt.getTime() ||
-        other.startedAt.getTime() >= event.endedAt.getTime()
-      ) {
-        continue;
-      }
+      if (!timesOverlap(event, other)) continue;
       raised.push(
         this.flags.raise(
           'CREW_TIME_OVERLAP',

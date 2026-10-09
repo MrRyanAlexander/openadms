@@ -49,8 +49,17 @@ export interface CertificationRefusal {
     | 'SECOND_TIER_WITHOUT_FIRST'
     | 'SUB_TYPED_TWICE'
     | 'REPLACEMENT_NEEDS_REASON'
-    | 'REVOCATION_NEEDS_REASON';
+    | 'REVOCATION_NEEDS_REASON'
+    | 'NOT_PERMITTED'
+    | 'NO_SUCH_BOX';
   readonly message: string;
+}
+
+// Whoever asks to revoke, as the database has them now.
+export interface Revoker {
+  readonly name: string;
+  readonly role: string;
+  readonly archived: boolean;
 }
 
 export class CertificationSubs {
@@ -158,6 +167,25 @@ export class CertificationChanges {
     return {
       code: 'REVOCATION_NEEDS_REASON',
       message: `Not saved: certification ${this.certNumber} is revoked from a date with a reason.`,
+    };
+  }
+
+  // Only an admin revokes (ADR-079; AC-03-55): no permission opens it to anybody else. `person`
+  // is null where the database has nobody of that id.
+  revoker(person: Revoker | null): CertificationRefusal | null {
+    if (person !== null && person.role === 'ADMIN' && !person.archived) return null;
+    return {
+      code: 'NOT_PERMITTED',
+      message: `${person?.name ?? 'Somebody the firm has no record of'} may not revoke certification ${this.certNumber}: it takes an admin. Nothing was changed.`,
+    };
+  }
+
+  // A measuring mistake is corrected on a box the certification has: the primary is box 0, and
+  // a crew has none.
+  noBox(position: number): CertificationRefusal {
+    return {
+      code: 'NO_SUCH_BOX',
+      message: `Not saved: certification ${this.certNumber} has no box ${String(position)} to correct.`,
     };
   }
 }

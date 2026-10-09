@@ -7,7 +7,9 @@
 // each record a phone sends (ADR-338); the review services are
 // spec/parts/08-review-and-corrections.md's: a reviewer's corrections and renumbers, a
 // quarantined record resolved, a record created in the back office (ADR-364), a ticket voided
-// and unvoided, a flag accepted (ADR-365), each answering the run to ask the worker for.
+// and unvoided, a flag accepted (ADR-365), each answering the run to ask the worker for; and setting a password is
+// ARCHITECTURE §6's (ADR-402…405), as two-step sign-in is (ADR-412), and the firm's people and
+// the server's own command for its admins are (ADR-415).
 export {
   Certifications,
   type BoxInput,
@@ -15,7 +17,8 @@ export {
   type NewCertification,
 } from './certification/certifications.ts';
 export { NumberAllocator, type LastUsed, type PhoneAtSync } from './numbering/number-allocator.ts';
-export { builtInPolicy } from './policy.ts';
+export { builtInPolicy, installationPolicy } from './policy.ts';
+export { Settings, SettingsProblem } from './process/settings.ts';
 export {
   ContractorSetup,
   SubPlaces,
@@ -27,11 +30,13 @@ export { ListSetup } from './setup/list-setup.ts';
 export {
   PayItemSetup,
   type NewPayItem,
+  type PayItemChanges,
   type PaysWhenInput,
   type RulesKept,
 } from './setup/pay-item-setup.ts';
 export {
   ProjectSetup,
+  type ActiveWindow,
   type NewClient,
   type NewControlRange,
   type NewDeclarationEvent,
@@ -40,10 +45,20 @@ export {
 } from './setup/project-setup.ts';
 export type { ActionInput, CriterionInput } from './setup/rule-book.ts';
 export { RuleSetup, type RuleInput, type SavedRule } from './setup/rule-setup.ts';
-export { SetupService, type Clock, type Outcome, type Refusal } from './setup/setup-service.ts';
+export {
+  QueueingService,
+  SetupService,
+  type Clock,
+  type Outcome,
+  type QueuedBySetup,
+  type Refusal,
+} from './setup/setup-service.ts';
+export { SetupStanding } from './setup/setup-standing.ts';
+export { WorkQueue, type WorkAsked, type WorkQueued } from './jobs/work-queue.ts';
 export {
   SiteSetup,
   type NewSite,
+  type NewSiteShape,
   type SiteChanges,
   type SiteFactSettings,
 } from './setup/site-setup.ts';
@@ -73,6 +88,95 @@ export {
 } from './review/review-service.ts';
 export { Voids } from './review/voids.ts';
 
+export { ViewerReads } from './viewer/viewer-reads.ts';
+
+export { AdminCommand, type Questions } from './people/admin-command.ts';
+export {
+  People,
+  type NewPerson,
+  type PeopleParts,
+  type PeopleRefused,
+  type PersonOutcome,
+  type PersonRead,
+  type SessionsEnded,
+} from './people/people.ts';
+export {
+  ServerAdmin,
+  serverReason,
+  type AdminStanding,
+  type ServerAdminOutcome,
+  type ServerAdminParts,
+} from './people/server-admin.ts';
+
+export { shippedBreachedPasswords } from './sign-in/breached-list.ts';
+export {
+  mailFor,
+  NoMail,
+  SmtpMail,
+  type Mail,
+  type MailSettings,
+  type Message,
+} from './sign-in/mail.ts';
+export { OneTimeCodes } from './sign-in/one-time-codes.ts';
+export { PasswordHasher } from './sign-in/password-hasher.ts';
+export {
+  Passwords,
+  type PasswordOutcome,
+  type PasswordParts,
+  type PasswordRefusalCode,
+  type ResetAsked,
+} from './sign-in/passwords.ts';
+export { ResetCodes, type ResetNamed } from './sign-in/reset-codes.ts';
+export { SessionTokens, type RefreshRead } from './sign-in/session-tokens.ts';
+export {
+  Sessions,
+  signsInHere,
+  type Caller,
+  type Opened,
+  type RefreshOutcome,
+  type SessionParts,
+  type SessionPolicy,
+  type SignInOutcome,
+  type SignInRefused,
+  type SignsInHere,
+} from './sign-in/sessions.ts';
+export { TwoStepSecrets } from './sign-in/two-step-secrets.ts';
+export {
+  TwoStep,
+  TwoStepCheck,
+  type SetupBegun,
+  type SetupConfirmed,
+  type TwoStepCleared,
+  type TwoStepParts,
+} from './sign-in/two-step.ts';
+export {
+  WrongTries,
+  type Tried,
+  type TriedPerson,
+  type WrongTriesParts,
+} from './sign-in/wrong-tries.ts';
+
+export {
+  MasterPasscode,
+  type MasterPasscodeParts,
+  type PasscodeOutcome,
+  type PasscodeRefusalCode,
+} from './dispatch/master-passcode.ts';
+export {
+  Assignments,
+  type AssignedWork,
+  type AssignmentRead,
+  type AssignmentsAsked,
+  type AssignmentsPage,
+  type NewAssignment,
+} from './dispatch/assignments.ts';
+export {
+  Phones,
+  type PhoneRead,
+  type PhoneRemoved,
+  type PhonesAsked,
+  type PhonesPage,
+} from './dispatch/phones.ts';
 export { Intake } from './sync/intake.ts';
 export type {
   IntakeNote,
@@ -92,3 +196,34 @@ export type {
 } from './sync/sent.ts';
 
 export const workspace = 'api';
+// A phone's enrolment and its proof of itself (task 2.5.1): the harness's phone enrols and
+// proves itself through these, as a real one does through their endpoints.
+export { DeviceKeys } from './phone/device-keys.ts';
+export {
+  Enrolment,
+  type EnrolmentOutcome,
+  type EnrolmentParts,
+  type EnrolmentRefused,
+  type PhoneToEnrol,
+} from './phone/enrolment.ts';
+export {
+  MasterPasscodeCheck,
+  type MasterPasscodeCheckParts,
+  type PasscodeRefused,
+} from './phone/master-passcode-check.ts';
+export { PhoneChallenges, type Challenged } from './phone/phone-challenges.ts';
+export {
+  PhoneMonitors,
+  type MonitorOutcome,
+  type MonitorToCreate,
+  type PhoneMonitorsParts,
+} from './phone/phone-monitors.ts';
+export {
+  PhoneProofs,
+  type Challenge,
+  type PhoneProofParts,
+  type ProofOutcome,
+  type ProofRefused,
+  type ProvenPhone,
+} from './phone/phone-proofs.ts';
+export { PhoneTokens } from './phone/phone-tokens.ts';

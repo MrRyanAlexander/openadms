@@ -85,6 +85,13 @@ const tableGrants: Record<string, Record<string, string>> = {
   ),
   // A version is added, never edited, and the worker has no business reading it (ADR-281).
   master_passcode: { adms_api: 'INSERT SELECT' },
+  // Sign-in's records (ADR-397…399): the API's alone. What sign-in keeps of a person and a
+  // session are changed in place; a security event is added, never edited.
+  user_credential: { adms_api: 'INSERT SELECT UPDATE' },
+  session: { adms_api: 'INSERT SELECT UPDATE' },
+  security_event: { adms_api: 'INSERT SELECT' },
+  // Wrong tries at the master passcode: the API's alone, its count changed in place (ADR-438).
+  master_passcode_tries: { adms_api: 'INSERT SELECT UPDATE' },
   // The API writes people, so the Monitor ID's default runs as it (ADR-281).
   monitor_number_seq: { adms_api: 'USAGE' },
   field_event: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },
@@ -117,6 +124,10 @@ const tableGrants: Record<string, Record<string, string>> = {
   ticket_void: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   // An unvoid's own record (ADR-366): no update of it ever passes its trigger.
   ticket_unvoid: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
+  // The job queue (ADR-418): the API adds a job and its tickets and changes neither; the worker
+  // writes how a job went.
+  reconciliation_job: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT UPDATE' },
+  reconciliation_job_ticket: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },
   audit_record: { adms_api: 'SELECT', adms_worker: 'SELECT' },
   viewer_project: { adms_readonly: 'SELECT' },
   viewer_field_event: { adms_readonly: 'SELECT' },

@@ -100,7 +100,7 @@ export const p1Priced: Story = {
       on('09', '09:00'),
       'Friday: Summit Debris Services joins P1 as a second prime, with its own contract, "Summit, Bayline ROW 2026". Nobody has priced its work yet',
     );
-    const contractors = new ContractorSetup(api, clock);
+    const contractors = new ContractorSetup(api, clock, story.policy);
     const summit = (
       await saved(contractors.contractor(dana, { name: 'Summit Debris Services', kind: 'HAULER' }))
     ).id;
@@ -534,12 +534,14 @@ export const p1Priced: Story = {
       }),
     );
     const rateTo = (rate: string) =>
-      api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
-        const held = await tx.payItemRate.findFirstOrThrow({
-          where: { payItemId: pricing.payItems['VEG-HAUL-CY-15'] ?? '', primeId: coastline },
-        });
-        await tx.payItemRate.update({ where: { id: held.id }, data: { rate } });
-      });
+      saved(
+        new PayItemSetup(api, clock, story.policy).rate(
+          dana,
+          pricing.payItems['VEG-HAUL-CY-15'] ?? '',
+          coastline,
+          rate,
+        ),
+      );
     const beforeRate = await lines();
     await rateTo('7.75');
     const rated = await reconciliation.run(setupChange);
@@ -583,7 +585,7 @@ export const p1Priced: Story = {
       on('14', '09:40'),
       'Dana switches the stump hole fill’s rule off in the rule builder; the worker runs',
     );
-    const rules = new RuleSetup(api, clock);
+    const rules = new RuleSetup(api, clock, story.policy);
     const fill = { ...pricing.fillRule.input, id: pricing.fillRule.id };
     const stumpLine = (await lines()).find((each) => each.line.startsWith('301004 #1'));
     await saved(rules.save(dana, { ...fill, active: false }));
@@ -622,7 +624,7 @@ export const p1Priced: Story = {
     const other = await api.siteType.findFirstOrThrow({ where: { name: 'Other' } });
     const quarry = (
       await saved(
-        new SiteSetup(api, clock).site(dana, {
+        new SiteSetup(api, clock, story.policy).site(dana, {
           projectId: p1,
           name: 'Old Quarry Pit',
           siteTypeId: other.id,
@@ -718,13 +720,9 @@ export const p1Priced: Story = {
     );
     const veg15 = pricing.payItems['VEG-HAUL-CY-15'] ?? '';
     const payItemsBefore = await api.payItem.count({ where: { projectId: p1 } });
-    await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, (tx) =>
-      tx.payItemRate.create({
-        data: { projectId: p1, payItemId: veg15, primeId: summit, rate: '7.80' },
-      }),
-    );
+    await saved(new PayItemSetup(api, clock, story.policy).rate(dana, veg15, summit, '7.80'));
     const kept = await saved(
-      new PayItemSetup(api, clock).paysWhen(dana, veg15, [
+      new PayItemSetup(api, clock, story.policy).paysWhen(dana, veg15, [
         {
           formId: pricing.forms.load,
           slot: 1,

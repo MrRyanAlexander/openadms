@@ -33,7 +33,7 @@ export interface NewFormDebrisType {
 
 export class FormSetup extends SetupService {
   form(person: string, input: NewForm): Promise<Outcome<Form>> {
-    return this.write(person, (tx) =>
+    return this.setup(person, (tx) =>
       tx.form.create({
         data: {
           projectId: input.projectId,
@@ -51,7 +51,7 @@ export class FormSetup extends SetupService {
   }
 
   debrisType(person: string, input: NewFormDebrisType): Promise<Outcome<FormDebrisType>> {
-    return this.write(person, async (tx, warn) => {
+    return this.setup(person, async (tx, warn) => {
       const form = await tx.form.findUniqueOrThrow({ where: { id: input.formId } });
       const debrisType = await tx.debrisType.findUniqueOrThrow({
         where: { id: input.debrisTypeId },
@@ -77,7 +77,7 @@ export class FormSetup extends SetupService {
   // The firm's own fields on a form, as its next version; a version is never edited (ADR-308).
   // Their shape is packages/contracts' formDefinitionFields.
   ownFields(person: string, formId: string, fields: unknown): Promise<Outcome<FormDefinition>> {
-    return this.write(person, async (tx) => {
+    return this.setup(person, async (tx) => {
       const form = await tx.form.findUniqueOrThrow({ where: { id: formId } });
       const last = await tx.formDefinition.aggregate({
         where: { formId },

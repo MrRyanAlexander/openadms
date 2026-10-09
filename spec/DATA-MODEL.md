@@ -1,6 +1,6 @@
 # Open ADMS — The data model
 
-✅ **Approved** With the user's approval of the wording - 10.01.2026-1345 *(BACKLOG 0.2b.2; ADR-284; the approval is ADR-289; changed since, at the user's word, by ADR-292…295 and ADR-301)*
+✅ **Approved** With the user's approval of the wording - 10.01.2026-1345 *(BACKLOG 0.2b.2; ADR-284; the approval is ADR-289; changed since, at the user's word, by ADR-292…295 and ADR-301; **§2.2's sign-in records added by ADR-397…399, agent defaults, not yet seen by the user**)*
 
 ← [Index](INDEX.md)
 
@@ -39,10 +39,10 @@ one line saying what kind of record it is (§1) and what it is for, then one tab
 | § | What | The records |
 |---|---|---|
 | 1 | Conventions every model follows | |
-| 2 | Shared, firm-wide records | `Client` · `DeclarationEvent` · `Contractor` · `ProjectContractor` · `User` · `UserPermission` · `ViewerProject` · `Device` · `MasterPasscode` · `Assignment` · `AssignmentPayItem` · the firm's lists |
+| 2 | Shared, firm-wide records | `Client` · `DeclarationEvent` · `Contractor` · `ProjectContractor` · `User` · `UserCredential` · `Session` · `SecurityEvent` · `UserPermission` · `ViewerProject` · `Device` · `MasterPasscode` · `MasterPasscodeTries` · `Assignment` · `AssignmentPayItem` · the firm's lists |
 | 3 | A project and its setup | `Project` · `ProjectKindOfWork` · `Contract` · `Form` · `FormDebrisType` · `FormDefinition` · `PayItem` · `PayItemCrewDayStep` · `PayItemRate` · `Rule` · `RuleCriterion` · `RuleCriterionPick` · `RuleAction` · `RuleActionItem` · `DisposalSite` · `DisposalSiteLabel` · `SiteAreaVersion` · `MapVersion` · `Zone` · `ProjectNumberSeries` · `ControlRange` · `NumberBlock` · `Certification` · `CertificationBox` · `CertificationHelper` · `Roe` · `RoeScopeItem` · `ClockEntry` · `ClockActivityLine` · `ApprovedDay` |
 | 4 | Evidence: what monitors saw | `FieldEvent` · `FieldEventItem` · `CarriedTicket` · `ScaleReceipt` · `Survey` · `Incident` · `DropOffLog` · `Photo` · `Sync` · `SyncedRecord` · `QuarantinedRecord` · `FieldEventEdit` · `SetupManifest` |
-| 5 | Derived: the worker's conclusions | `CompletedLoad` · `CompletedLoadCollection` · `CompletedHaulOut` · `CompletedHaulOutCollection` · `Transaction` · `Flag` · `ReconciliationRun` · `ReconciliationDecision` |
+| 5 | Derived: the worker's conclusions | `CompletedLoad` · `CompletedLoadCollection` · `CompletedHaulOut` · `CompletedHaulOutCollection` · `Transaction` · `Flag` · `ReconciliationRun` · `ReconciliationDecision` · the job queue: `ReconciliationJob` · `ReconciliationJobTicket` |
 | 6 | Marks: what people set | `QcMark` · `InvoiceLock` · `InvoiceBatch` · `FlagAcceptance` · `TicketVoid` · `TicketUnvoid` · `ApprovedDay` |
 | 7 | Audit | `AuditRecord` |
 | 8 | What the database refuses by itself | |
@@ -157,17 +157,81 @@ primes; a sub belongs to one prime, at most two tiers, never shared (ADR-108).
 |---|---|---|
 | **id** | uuid | |
 | **name** | text | |
-| **role** | enum `UserRole` | `ADMIN` · `MANAGER_ANALYST` · `MONITOR` · `READ_ONLY_VIEWER` · `SYSTEM` (the worker's one actor, never a login, ADR-273) |
-| monitorNumber | text, unique | The Monitor ID (`M004127`), issued by the database; every monitor has one (ADR-281) |
+| **role** | enum `UserRole` | `ADMIN` · `MANAGER_ANALYST` · `MONITOR` · `READ_ONLY_VIEWER` · `SYSTEM` (the worker's one actor, never a login, ADR-273) · `MASTER_PASSCODE` (the one actor an act under the master passcode is written as, never a person or a login; only the API states it, for a phone; no record names it, ADR-438, 439) · `DEVICE_KEY` (the one actor a phone's own act is written as, done on the strength of its device key with nobody signed in; never a person or a login; only the API states it, for a phone, naming it; no record names it, ADR-440) |
+| monitorNumber | text, unique | The Monitor ID (`M004127`), issued by the database; every monitor has one (ADR-281); a person an admin creates in the back office is issued none (ADR-415) |
 | employerId | → `Contractor` | Who employs them when it isn't the firm |
 | employerNumber | text | That employer's own ID for them (`HS-0417`) |
 | contractorId | → `Contractor` | A contractor user's contractor: what they may see (ADR-169). **Built (ADR-315):** set on a contractor user and on nobody else (check) |
 | viewerKind | enum `ViewerKind` | `CLIENT` · `CONTRACTOR` · `AUDITOR`, on a read-only viewer only. **Built (ADR-315):** every read-only viewer states it, nobody else does (check) |
 | seesPrivateCitizens | boolean | Whether this viewer sees private citizens by name (an ROE's owner; a drop-off log's resident and origin address). On a read-only viewer only: every one states it, nobody else does (check). No database default: a new viewer starts at yes (`packages/domain`, `ViewerSettings.starting()`), and the firm changes it for that viewer at any time, audited (ADR-328 (4); **built, ADR-336**) |
-| email, phone | text | Each optional. A monitor's phone is shown to admins only (ADR-169). **Built (ADR-315):** no read-only viewer reads either: the read-only login has no grant on `user` at all |
+| email, phone | text | Each optional. A monitor's phone is shown to admins only (ADR-169; **built at the API, ADR-415**). **The email address is what an admin, a manager/analyst and a read-only viewer sign in with (ADR-409): among those who aren't archived no two have one address, whatever its capitals (the exclusion `user_sign_in_email_once`, ADR-415); a monitor's is no key.** **Built (ADR-315):** no read-only viewer reads either: the read-only login has no grant on `user` at all |
 | **createdAt** | instant | |
-| archivedAt | instant | |
-| *Phase 2:* passwordHash, twoStepSecret, lockedUntil… | | Sign-in's columns, each kept out of the audit log like the master passcode's hash (C21) |
+| archivedAt | instant | **The firm's last admin stays (ADR-415):** an admin in service is never archived, or made another role, while no other admin is in service (the trigger `user_last_admin`) |
+| ~~*Phase 2:* passwordHash, twoStepSecret, lockedUntil…~~ | | **Built apart from the person (ADR-397):** sign-in's columns are `UserCredential`'s, below, so nothing that reads a person reads a secret with them |
+
+#### `UserCredential`
+
+*Configuration, with its own guards; built (task 2.2.1, ADR-397; agent default).* What sign-in
+keeps of one person: one row a person, table `user_credential`. **Only the API reads it**: the
+worker, which reads people, holds nothing on it, and no read-only viewer reads it.
+
+| Field | Type | Notes |
+|---|---|---|
+| **id** | uuid | |
+| **userId** | → `User`, unique | Whose it is; never changes. Never the system actor, which never signs in (check; ADR-273, C21) |
+| passwordHash | text | Argon2id, as a PHC string, and nothing else (check); none until a password is set. Keyed with a secret of the API's that is never in the database: the string names the key, never holds it (ADR-411). **Kept out of the audit log** |
+| twoStepSecret | text | The authenticator app's secret (ADR-170), **only as the API sealed it** (AES-256-GCM under a key drawn from the API's signing secret, bound to this person, written `v1.…`; a check refuses anything else, and a blank); none until the person has proved a code from it. **Kept out of the audit log** (task 2.2.4, ADR-412) |
+| **twoStepLastStep** | whole number | The thirty-second step of the last authenticator code taken from this person: no code of that step or an earlier one is taken again, so a code is good once. Never below nought, and none without a secret (checks) (task 2.2.4, ADR-412) |
+| lockedUntil | instant | Sign-in refuses the person until then: the wait that wrong tries put on the login, which is over by itself (ADR-409) |
+| **failedSignIns** | whole number | Wrong tries in a row since the last sign-in that worked or the last password set; never below nought (check). At the policy's count (`SIGN_IN_TRIES_BEFORE_LOCK`) the login is locked until its password is set anew (task 2.2.3, ADR-409) |
+| **passwordChangeRequired** | bool | Somebody else set this password: its owner sets their own at their next sign-in, before anything else (task 2.2.3, ADR-410). False unless set |
+| **createdAt** | instant | |
+
+Audited in the security domain: a change of a secret column writes an audit record that names
+the column and holds `[kept out of the audit]` in place of its value, before and after (AC-10-11).
+Never deleted; a secret is taken away by clearing it.
+
+#### `Session`
+
+*Configuration, with its own guards; built (task 2.2.1, ADR-398; agent default).* One sign-in to
+the back office or the portal. **Only the API reads it.** A phone's session is the device's own
+(ARCHITECTURE §6, §7.4; tasks 2.5.x) and has no row here.
+
+| Field | Type | Notes |
+|---|---|---|
+| **id** | uuid | |
+| **userId** | → `User` | Whose it is; never changes. Never the system actor (check) |
+| **refreshTokenHash** | text, unique | The SHA-256, as 64 lower-case hexadecimal digits, of the refresh token in force, and nothing else (check): the server never holds the token (AC-10-10). Rotating the token writes the new hash over the old. **Kept out of the audit log** |
+| **createdAt** | instant | When they signed in; never changes |
+| **expiresAt** | instant | After `createdAt` (check). The policy's quiet minutes after its last use (`SESSION_INACTIVITY_MINUTES`), moved on by each refresh, and never later than the policy's hours after `createdAt` (`SESSION_OVERALL_HOURS`) (task 2.2.3, ADR-408) |
+| revokedAt | instant | Signed out, or ended by the server: its refresh token was presented a second time, or the person's password was set anew (ADR-408, 410). **Once set, the row never changes again** (trigger): no rotation, no second life |
+
+Audited in the security domain: the audit log shows a session opened, each rotation (that the
+hash changed, never a hash) and the revocation, each with its actor and request.
+
+#### `SecurityEvent`
+
+*Its own record, added and never edited; built (task 2.2.1, ADR-399; agent default).* Something
+sign-in or a phone's setup saw that changes no other record: a sign-in, a wrong try, a lockout,
+a use of the master passcode (ARCHITECTURE §6; REQ-202b). **The database copies each into the
+audit log's security domain** as it does every insert, so a security event is in the same log as
+every other change (§7) and is never among a billing reviewer's entries (AC-10-19). **Only the
+API reads the table**; who is shown them on a screen is the back office's (Phase 4).
+
+| Field | Type | Notes |
+|---|---|---|
+| **id** | uuid | |
+| **kind** | enum `SecurityEventKind` | `SIGN_IN` · `SIGN_IN_FAILED` · `LOCKOUT` · `TWO_STEP_SET_UP` · `TWO_STEP_CLEARED` (ADR-412) · `DEVICE_SETUP` · `DEVICE_SWITCH` · `MASTER_PASSCODE_USE` · `MASTER_PASSCODE_FAILED` · `MASTER_PASSCODE_LOCKOUT` (a wrong try at the master passcode and the lock, ADR-439) (REQ-202b's list; a task that needs another adds it) |
+| userId | → `User` | Who it is about: the person a try named, when the firm has such a person. Never the name that was typed |
+| deviceId | → `Device` | The phone, when it happened on one |
+| requestId | text | The API request it happened in; never blank (check) |
+| **occurredAt** | instant | When it happened (a phone's own time, for what a phone logged and synced) |
+| **createdAt** | instant | When the server wrote it |
+
+**Who wrote it** is the audit record's actor, as for every write: an event with nobody stated is
+refused. **Who that is when nobody is signed in yet** (a wrong try, a use of the master
+passcode) is decided with the endpoints that write them (tasks 2.2.3 and 2.5.1; REQ-209; BACKLOG
+C88). No caller's address is kept (C85: task 2.2.6 decides whether one is).
 
 #### `UserPermission`
 
@@ -246,7 +310,7 @@ time zone and dates (`viewer_project`), and nothing else of its setup (*agent de
 own place on the project and the three names above (ADR-361). A new
 setup table is given its viewer sight in one line, `SELECT guard_viewer('<table>', '<PROJECT|
 PART_OF|NAMED_BY|FIRM>'[, …]);`. No viewer reads a person, a permission, a phone, an assignment,
-a number block or the master passcode.
+a number block, the master passcode, or any of sign-in's records (ADR-397…399).
 
 **Private citizens by name (ADR-328 (4); built, ADR-336).** Whether a viewer reads the columns that
 name a private citizen is the firm's choice for each viewer (`User.seesPrivateCitizens`). Today
@@ -272,7 +336,8 @@ neither table (ADR-361, *agent default*: ROEs and forms stay unseen unless the u
 | **masterPasscodeVersion** | int → `MasterPasscode.version` | The passcode version the phone holds |
 | **enrolledAt** | instant | |
 | outOfServiceAt | instant | Work made after it arrives flagged (ADR-134) |
-| keyRevokedAt | instant | **Built (ADR-315):** when its key was revoked, once a lost or retired phone is wiped; only on a phone out of service, never before its removal time (check). Refusing the key is the API's (Phase 2, C47) |
+| keyRevokedAt | instant | **Built (ADR-315):** when its key was revoked, once a lost or retired phone is wiped; only on a phone out of service, never before its removal time (check). Refusing the key is the API's, built (ADR-440): a phone with one proves nothing and its token stops at once; nothing sets it yet (2.6.5) |
+| lastAnsweredChallengeMadeAt | instant | **Built (ADR-440):** when the server made the last challenge this phone proved itself with; a challenge is good once, so only one made later is taken. Written by that phone's own proof alone (the device key's actor, for that phone), only ever later, never once the key is revoked (the guard) |
 
 #### `MasterPasscode`
 
@@ -283,6 +348,21 @@ neither table (ADR-361, *agent default*: ROEs and forms stay unseen unless the u
 | **id** | uuid | |
 | **version** | int, unique | |
 | **hash** | text | Kept out of the audit log (§7) |
+| **createdAt** | instant | |
+
+#### `MasterPasscodeTries`
+
+*Its own record, built (task 2.5.1 part 2, ADR-438, 439; agent default).* Wrong tries in a row at one
+version of the master passcode, since a version is never edited. One row a version, written at its
+first wrong try; a new version has none, so changing the passcode opens the lock. Read and written
+only by the API; audited in the security domain; never deleted.
+
+| Field | Type | Notes |
+|---|---|---|
+| **id** | uuid | |
+| **version** | int, unique → `MasterPasscode.version` | Never changes |
+| **failedTries** | int | Wrong tries in a row since the last right one; never below nought (check) |
+| lockedUntil | instant | The passcode is refused until then |
 | **createdAt** | instant | |
 
 `NumberBlock`, the third model built with these two, is under Numbering in §3.
@@ -1543,6 +1623,49 @@ lines without them (the user, 2026-10-06, ADR-361; §2.2).
 | **summary** | JSONB | For a person: the events grouped, the rules that passed |
 | error | text | |
 
+### The job queue (built 2026-10-07, task 2.3.1, ADR-418; an agent default)
+
+Not a conclusion and not evidence: **the work a change asks the worker for** (ARCHITECTURE §13,
+"Jobs, not requests"). A sync, a correction, a void or a setup change adds a job **in its own
+piece of work**, so the change and its job exist together or not at all (AC-10-50), and the
+worker's run works the tickets its project's waiting jobs name and no other (the user, ADR-360).
+Two tables of our own, written through Prisma; no queue library. **The API adds a job and its
+tickets and changes neither; the worker writes only how a job went; nobody deletes; no read-only
+viewer reads either;** both are audited in the operations domain.
+
+#### `ReconciliationJob`
+
+One ask for reconciliation. **Waiting** while it is neither finished nor set aside; once either,
+nothing of it changes again. What was asked (its project, `trigger`, `requestedById`, `queuedAt`)
+never changes.
+
+| Field | Type | Notes |
+|---|---|---|
+| **projectId** | → `Project` | |
+| **trigger** | enum `ReconciliationTrigger` | What asked for it: the run's own closed set |
+| requestedById | → `User` | The person who asked; none on a job a sync queued |
+| **queuedAt** | instant | The database's clock |
+| **attempts** | int | The runs that took it up; from 0, never below |
+| finishedAt | instant | When a run had worked its tickets |
+| reconciliationRunId | → `ReconciliationRun` | That run, one of its own project's; a finished job names it |
+| lastError | text | Why its last try failed whole; never blank |
+| setAsideAt | instant | When it had failed too often to be taken up again (five tries, a policy value of task 2.3.2); it says why; never together with `finishedAt` |
+
+#### `ReconciliationJobTicket`
+
+A ticket a job names, as the worker groups one. Once a job; never edited. A job names the
+tickets its change touched and their neighbours, the other tickets whose conclusions read them
+(ADR-420), never a ticket locked as invoiced; a change larger than the policy value
+`JOB_TICKETS_AT_MOST` is several jobs. **A job with no ticket** asks only for the records the run
+flags by themselves (a certification, a site, a survey).
+
+| Field | Type | Notes |
+|---|---|---|
+| **projectId** | → `Project` | Its job's own project (a two-column key) |
+| **reconciliationJobId** | → `ReconciliationJob` | |
+| **workflow** | enum `Workflow` | |
+| **ticketNumber** | text | The bare number; never blank |
+
 ---
 
 ## 6. Marks: what people set, without changing the record (ADR-245)
@@ -1664,7 +1787,8 @@ In §3, with the time clock.
 *Audit, built.* Written by database triggers alone, one per insert and update on every table above,
 and one per removed `Transaction`; never updated or deleted by anyone (ADR-085, 097). A secret
 column is named on its table's trigger and kept out (ADR-281). Sign-ins, lockouts, device enrolment
-and master-passcode uses are security events in the same log (Phase 2, REQ-202b).
+and master-passcode uses are security events in the same log (REQ-202b): each is a
+`SecurityEvent` (§2.2), which the capture copies here in the security domain (built, ADR-399).
 
 | Field | Type | Notes |
 |---|---|---|
@@ -1740,6 +1864,10 @@ Never relaxed to pass a test (ARCHITECTURE §5.4). ✅ = built today.
 | Every read-only viewer says whether they see private citizens by name, and nobody else does; a viewer the firm marked reads no ROE owner and no drop-off log's resident or origin address (ADR-336) | ✅ a check; no column grant, and the `viewer_<table>_citizen` views (`guard_viewer`'s `citizen`) |
 | A phone's key is revoked only once it is out of service, never before its removal time (ADR-315) | ✅ check |
 | A client user and an auditor read only their own projects' setup; a contractor user none of it; no viewer a contact, a phone number or a person (ADR-315) | ✅ row-level security and column grants (`guard_viewer`) |
+| A password is kept only as an Argon2id hash and a refresh token only as its SHA-256; an authenticator's secret is never blank; a person has one sign-in record; a refresh token's hash is on one session (ADR-397, 398) | ✅ checks and unique keys |
+| A password hash, an authenticator's secret and a refresh token's hash never reach the audit log: it says the column changed, never what from or to (ADR-281, 397, 398; C21) | ✅ each named on its table's audit trigger |
+| Whose a sign-in record or a session is, and when it began, never change; a session ends after it began, and once revoked never changes again; a security event is never edited; none of the three is deleted; none is the system actor's sign-in record or session (ADR-397…399) | ✅ `refuse_edit()` and `refuse_delete()` triggers, checks |
+| Only the API reads or writes sign-in's records: not the worker, not a read-only viewer (ADR-397…399) | ✅ grants (each table's own, no view) |
 
 ---
 
@@ -1752,8 +1880,9 @@ A new value in any of them is a code change with an ADR (`spec/LISTS.md` Group 2
 | `Workflow` ✅ | `LOAD` · `HAUL_OUT` · `UNIT_RATE` | `FieldEvent`, `Project.workflows`, `Flag`, `TicketVoid`, `TicketUnvoid` |
 | `FieldEventKind` ✅ | `COLLECTION` · `DISPOSAL` · `HAUL_OUT_COLLECTION` · `HAUL_OUT_DISPOSAL` · `UNIT_RATE` | `FieldEvent`, `Assignment` |
 | `TicketStatus` ✅ | `PENDING` · `COMPLETED` · `MANUAL_REVIEW` · `VOID` | `FieldEvent`, `ReconciliationDecision` |
-| `UserRole` ✅ | `ADMIN` · `MANAGER_ANALYST` · `MONITOR` · `READ_ONLY_VIEWER` · `SYSTEM` | `User` |
+| `UserRole` ✅ | `ADMIN` · `MANAGER_ANALYST` · `MONITOR` · `READ_ONLY_VIEWER` · `SYSTEM` · `MASTER_PASSCODE` (ADR-439) · `DEVICE_KEY` (ADR-440) | `User` |
 | `DeviceStatus` ✅ | `ACTIVE` · `LOST` · `RETIRED` | `Device` |
+| `SecurityEventKind` ✅ | `SIGN_IN` · `SIGN_IN_FAILED` · `LOCKOUT` · `TWO_STEP_SET_UP` · `TWO_STEP_CLEARED` (ADR-412) · `DEVICE_SETUP` · `DEVICE_SWITCH` · `MASTER_PASSCODE_USE` · `MASTER_PASSCODE_FAILED` · `MASTER_PASSCODE_LOCKOUT` (ADR-439) | `SecurityEvent` (ADR-399) |
 | `NumberSeries` ✅ | `LOAD` · `HAUL_OUT` · `UNIT_RATE` · `CERTIFICATION` · `ROE` (✅ ADR-323) | `ProjectNumberSeries`, `ControlRange`, `NumberBlock` |
 | `NumberBlockStatus` ✅ | `ISSUED` · `RECLAIMED` · `RETIRED` | `NumberBlock` |
 | `AssignmentOrigin` ✅ | `PLANNED` · `UNPLANNED` | `Assignment` |
@@ -1801,6 +1930,8 @@ A new value in any of them is a code change with an ADR (`spec/LISTS.md` Group 2
 | `Contractor` | ✅ built 2026-10-02 (ADR-305, 306): its kind, contact and merge link, with `ProjectContractor` and `Contract` |
 | `User` | ✅ viewer kind, contact, permissions and viewer projects (ADR-315); whether a viewer sees private citizens by name (ADR-336); sign-in's columns in Phase 2 |
 | `Device`, `MasterPasscode`, `NumberBlock` | As built; a key's revocation; the overlap refusal |
+| `UserCredential`, `Session`, `SecurityEvent` | New in Phase 2 (task 2.2.1, ADR-397…399): sign-in's records, each with its own guards |
+| `ReconciliationJob`, `ReconciliationJobTicket` | New in Phase 2 (task 2.3.1, ADR-418): the job queue, with its own guards |
 | `DisposalSite` | ✅ built 2026-10-02 (ADR-311): its type (and the type's key), facts, permit, GPS, dates, with `DisposalSiteLabel`, `DisposalSiteTippingFee`, `SiteAreaVersion`, and the project map, `MapVersion` and `Zone` |
 | `Assignment` | ✅ `formDocumentTypes` built (ADR-308); its pay items (ADR-286), held to unit rate ones (ADR-309) |
 | `PayItem` | ✅ built 2026-10-02 (ADR-309): every field of §3, with `PayItemRate` and `PayItemCrewDayStep`; `AssignmentPayItem` gains the pay item's kind of work |

@@ -72,6 +72,32 @@ describe('EnvFile', () => {
     file.remove('ADMS_MASTER_PASSCODE_HASH');
     expect(readFileSync(file.path, 'utf8')).toBe(after);
   });
+
+  it('adds the keys the file does not state yet at its end, replaces no value and leaves every line as it was (ADR-419)', () => {
+    const file = new EnvFile(join(folder(), 'worker', '.env'));
+    file.create(['a header'], [['DATABASE_URL', 'kept-as-it-was']]);
+    const before = readFileSync(file.path, 'utf8');
+    expect(
+      file.add([
+        ['DATABASE_URL', 'never-written'],
+        ['ADMS_ROUTING_URL', 'https://routing.adms.localhost'],
+        ['ADMS_MAP_CA_FILE', '/a path/with a space.crt'],
+      ]),
+    ).toEqual(['ADMS_ROUTING_URL', 'ADMS_MAP_CA_FILE']);
+    const after = readFileSync(file.path, 'utf8');
+    expect(after.startsWith(before)).toBe(true);
+    expect(after).not.toContain('never-written');
+    expect(file.read()).toEqual({
+      DATABASE_URL: 'kept-as-it-was',
+      ADMS_ROUTING_URL: 'https://routing.adms.localhost',
+      ADMS_MAP_CA_FILE: '/a path/with a space.crt',
+    });
+    expect(statSync(file.path).mode & 0o777).toBe(0o600);
+    expect(readdirSync(join(file.path, '..'))).toEqual(['.env']);
+    // Nothing missing: nothing is written.
+    expect(file.add([['ADMS_ROUTING_URL', 'another']])).toEqual([]);
+    expect(readFileSync(file.path, 'utf8')).toBe(after);
+  });
 });
 
 describe('MigrationFolder', () => {

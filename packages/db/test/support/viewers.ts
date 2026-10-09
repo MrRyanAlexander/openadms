@@ -217,11 +217,19 @@ export const unseenTables = [
   'user_viewer_project',
   'device',
   'master_passcode',
+  // Sign-in's records are the API's alone (ADR-397…399).
+  'user_credential',
+  'session',
+  'security_event',
+  'master_passcode_tries',
   'number_block',
   'assignment',
   'assignment_pay_item',
   // A run of the worker and what it decided for each ticket are the back office's (ADR-340).
   'reconciliation_run',
   'reconciliation_decision',
+  // The job queue is the API's and the worker's (ADR-418).
+  'reconciliation_job',
+  'reconciliation_job_ticket',
   'audit_record',
 ];

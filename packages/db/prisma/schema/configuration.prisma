@@ -125,6 +125,9 @@ model Project {
   flags                       Flag[]
   reconciliationRuns          ReconciliationRun[]
   transactions                Transaction[]
+  // The work its changes ask the worker for (jobs.prisma).
+  reconciliationJobs          ReconciliationJob[]
+  reconciliationJobTickets    ReconciliationJobTicket[]
   // People's marks on its records (marks.prisma).
   qcMarks                     QcMark[]
   invoiceBatches              InvoiceBatch[]
@@ -982,6 +985,15 @@ enum UserRole {
   // Not a person and never a login: the one system actor the worker writes as, seeded by the
   // installer (ADR-273).
   SYSTEM
+  // Not a person and never a login: the one actor an act under the master passcode is written
+  // as, since whoever holds the passcode is not known (ADR-106, 438). Seeded by the installer;
+  // only the API states it, and only for a phone (the guard migration).
+  MASTER_PASSCODE
+  // Not a person and never a login: the one actor a phone's own act is written as, done on the
+  // strength of its device key with nobody signed in (a phone proving itself; ADR-440). Seeded
+  // by the installer; only the API states it, only for a phone, and always naming that phone
+  // (the guard migration).
+  DEVICE_KEY
 
   @@map("user_role")
 }
@@ -1033,6 +1045,10 @@ model User {
   employer                    Contractor?           @relation("Employer", fields: [employerId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   permissions                 UserPermission[]
   viewerProjects              ViewerProject[]
+  // What sign-in keeps of them, their sessions, and the security events about them.
+  credential                  UserCredential?
+  sessions                    Session[]
+  securityEvents              SecurityEvent[]
   assignments                 Assignment[]          @relation("AssignmentPerson")
   assignmentsMade             Assignment[]          @relation("AssignmentMadeBy")
   formDefinitions             FormDefinition[]      @relation("FormDefinitionCreatedBy")
@@ -1064,6 +1080,7 @@ model User {
   ticketVoidsLifted           TicketVoid[]          @relation("TicketVoidLiftedBy")
   ticketUnvoids               TicketUnvoid[]
   reconciliationRunsRequested ReconciliationRun[]   @relation("ReconciliationRunRequestedBy")
+  reconciliationJobsRequested ReconciliationJob[]   @relation("ReconciliationJobRequestedBy")
   auditRecords                AuditRecord[]
 
   @@map("user")
@@ -1121,6 +1138,98 @@ model ViewerProject {
   @@map("user_viewer_project")
 }
 
+// What sign-in keeps of one person (ARCHITECTURE §6; ADR-397): one row a person, apart from
+// "user", so nothing that reads a person reads a secret with them. Only the API reads it; the
+// worker and the read-only login can't. The password hash and the authenticator's secret are
+// kept out of the audit log, which says that one changed and never what to (the guard migration;
+// BACKLOG C21). The system actor never has one.
+model UserCredential {
+  id                     String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId                 String    @unique @map("user_id") @db.Uuid
+  // Argon2id, as a PHC string; none until a password is set.
+  passwordHash           String?   @map("password_hash")
+  // The authenticator app's secret for two-step sign-in (ADR-170), sealed by the API with a key
+  // the database never holds (ADR-412); none until the person has proved a code from it.
+  twoStepSecret          String?   @map("two_step_secret")
+  // The thirty-second step of the last authenticator code taken from this person: no code of
+  // that step or an earlier one is taken again, so a code is good once (ADR-412).
+  twoStepLastStep        Int?      @map("two_step_last_step")
+  // Sign-in refuses this person until then: the wait wrong tries put on the login (ADR-409).
+  lockedUntil            DateTime? @map("locked_until") @db.Timestamptz(3)
+  // Wrong tries in a row since the last sign-in that worked or the last password set. At the
+  // policy's count the login is locked until its password is set anew (ADR-409).
+  failedSignIns          Int       @default(0) @map("failed_sign_ins")
+  // Somebody else set this password and so knows it: its owner sets their own at their next
+  // sign-in, and may do nothing else until then (ADR-410).
+  passwordChangeRequired Boolean   @default(false) @map("password_change_required")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@map("user_credential")
+}
+
+// One sign-in to the back office or the portal, alive until it runs out or is revoked
+// (ARCHITECTURE §6; ADR-398). The refresh token is kept only as its SHA-256, the one in force:
+// rotating it writes the new hash over the old on this row. Revoked, the row is history and never
+// changes again. Only the API reads it; the hash is kept out of the audit log.
+model Session {
+  id               String @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId           String @map("user_id") @db.Uuid
+  refreshTokenHash String @unique @map("refresh_token_hash")
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([userId])
+  @@map("session")
+}
+
+// What a security event says happened (ARCHITECTURE §6, Abuse; REQ-202b): one closed set, fixed
+// in code.
+enum SecurityEventKind {
+  SIGN_IN
+  SIGN_IN_FAILED
+  LOCKOUT
+  // A person set their authenticator up, and an admin cleared one (ADR-412).
+  TWO_STEP_SET_UP
+  TWO_STEP_CLEARED
+  DEVICE_SETUP
+  DEVICE_SWITCH
+  MASTER_PASSCODE_USE
+  // A wrong try at the master passcode, and the lock its wrong tries put on it (ADR-438).
+  MASTER_PASSCODE_FAILED
+  MASTER_PASSCODE_LOCKOUT
+
+  @@map("security_event_kind")
+}
+
+// Something sign-in or a phone's setup saw that changes no other record: a sign-in, a wrong try,
+// a lockout, a use of the master passcode (ARCHITECTURE §6; ADR-399). Written once and never
+// edited; the database copies it into the audit log's security domain like any insert. Who it is
+// about is the person the try named, when there is one; the audit record's actor says who wrote
+// it. Only the API reads it.
+model SecurityEvent {
+  id        String            @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  kind      SecurityEventKind
+  userId    String?           @map("user_id") @db.Uuid
+  deviceId  String?           @map("device_id") @db.Uuid
+  requestId String?           @map("request_id")
+
+  occurredAt DateTime @map("occurred_at") @db.Timestamptz(3)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  device Device? @relation(fields: [deviceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([userId, occurredAt])
+  @@map("security_event")
+}
+
 // The firm's one master passcode (ADR-106), kept only as its slow hash (ARCHITECTURE §7.5). A
 // change is a new version, never an edit: the highest version is the current one. The hash is
 // kept out of the audit log, and only the API may read it (the guard migrations, ADR-281).
@@ -1133,8 +1242,28 @@ model MasterPasscode {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   devices Device[]
+  tries   MasterPasscodeTries?
 
   @@map("master_passcode")
+}
+
+// Wrong tries at one version of the master passcode (ARCHITECTURE §6, Abuse; ADR-438): a record
+// of its own, since a version is never edited. One row a version, written at its first wrong
+// try. A new version has none, so changing the passcode opens the lock. Only the API reads it.
+model MasterPasscodeTries {
+  id          String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  version     Int       @unique
+  // Wrong tries in a row since the last right one. At the policy's count the passcode is locked
+  // until the firm changes it.
+  failedTries Int       @default(0) @map("failed_tries")
+  // The passcode is refused until then: the wait wrong tries put on it.
+  lockedUntil DateTime? @map("locked_until") @db.Timestamptz(3)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  masterPasscode MasterPasscode @relation(fields: [version], references: [version], onDelete: Restrict, onUpdate: Restrict)
+
+  @@map("master_passcode_tries")
 }
 
 // In service, or marked in the back office as lost or retired (ARCHITECTURE §7.4).
@@ -1149,24 +1278,28 @@ enum DeviceStatus {
 // A phone, enrolled once with its device key; no project, no monitor (ADR-095, 240). What it may
 // make comes from the assignment it holds.
 model Device {
-  id                    String       @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  id                          String       @id @default(dbgenerated("uuidv7()")) @db.Uuid
   // What the dispatch board calls it, e.g. P1-COL-1.
-  name                  String
+  name                        String
   // The public half of the key pair made in the phone's secure hardware (ARCHITECTURE §7.4): one
   // key, one phone.
-  publicKey             String       @unique @map("public_key")
-  status                DeviceStatus @default(ACTIVE)
+  publicKey                   String       @unique @map("public_key")
+  status                      DeviceStatus @default(ACTIVE)
   // Which version of the master passcode's check the phone holds; a change reaches it at its
   // next sync (ARCHITECTURE §7.5).
-  masterPasscodeVersion Int          @map("master_passcode_version")
-  enrolledAt            DateTime     @default(now()) @map("enrolled_at") @db.Timestamptz(3)
+  masterPasscodeVersion       Int          @map("master_passcode_version")
+  enrolledAt                  DateTime     @default(now()) @map("enrolled_at") @db.Timestamptz(3)
   // Its removal time: what it made after this arrives flagged, never refused (ADR-134). Set
   // exactly when it's lost or retired (a check in the guard migrations).
-  outOfServiceAt        DateTime?    @map("out_of_service_at") @db.Timestamptz(3)
+  outOfServiceAt              DateTime?    @map("out_of_service_at") @db.Timestamptz(3)
   // When its key was revoked: once a lost or retired phone has synced, been confirmed and wiped
   // (ARCHITECTURE §7.4; C47). Only a phone out of service has one (a check in the guard
   // migration); refusing the key is the API's (Phase 2).
-  keyRevokedAt          DateTime?    @map("key_revoked_at") @db.Timestamptz(3)
+  keyRevokedAt                DateTime?    @map("key_revoked_at") @db.Timestamptz(3)
+  // When the server made the last challenge this phone proved itself with (ARCHITECTURE §7.4;
+  // AC-10-45; ADR-437, 440): a challenge is good once, so only one made after this is taken.
+  // Written by the phone's own proof alone, and only ever later (the guard migration).
+  lastAnsweredChallengeMadeAt DateTime?    @map("last_answered_challenge_made_at") @db.Timestamptz(3)
 
   masterPasscode     MasterPasscode      @relation(fields: [masterPasscodeVersion], references: [version], onDelete: Restrict, onUpdate: Restrict)
   numberBlocks       NumberBlock[]
@@ -1180,6 +1313,7 @@ model Device {
   incidents          Incident[]
   dropOffLogs        DropOffLog[]
   quarantinedRecords QuarantinedRecord[]
+  securityEvents     SecurityEvent[]
   auditRecords       AuditRecord[]
 
   @@map("device")

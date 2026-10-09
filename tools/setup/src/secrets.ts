@@ -34,6 +34,33 @@ export class ScramVerifier {
   }
 }
 
+// The release's list of known breached passwords (packages/domain/breached-passwords.txt; BACKLOG
+// C35; ADR-403): whole passwords in lower case, one a line. The installer runs before anything is
+// built, so it reads the file itself, as it does the policy values; the rule is the domain's
+// (packages/domain/src/passwords.ts): a passcode is on the list when all of it, whatever its
+// capitals, is an entry. Nothing is asked of any outside service.
+export class BreachedList {
+  private readonly entries: ReadonlySet<string>;
+
+  constructor(text: string) {
+    this.entries = new Set(
+      text
+        .split('\n')
+        .map((line) => line.replace(/\r$/, ''))
+        .filter((line) => line !== '')
+        .map((line) => line.normalize('NFC').toLowerCase()),
+    );
+  }
+
+  get size(): number {
+    return this.entries.size;
+  }
+
+  has(passcode: string): boolean {
+    return this.entries.has(passcode.normalize('NFC').toLowerCase());
+  }
+}
+
 // The master passcode's slow hash: Argon2id at OWASP's first recommended setting (19 MiB, 2 passes,
 // 1 lane), written in the PHC string format that any Argon2 library reads.
 export class PasscodeHasher {
@@ -45,8 +72,9 @@ export class PasscodeHasher {
   private static readonly format =
     /^\$argon2id\$v=19\$m=(\d+),t=(\d+),p=(\d+)\$([A-Za-z0-9+/]+)\$([A-Za-z0-9+/]+)$/;
 
-  // Why a passcode is refused, or undefined when it's acceptable.
-  problem(passcode: string): string | undefined {
+  // Why a passcode is refused, or undefined when it's acceptable. With the release's list, a known
+  // breached password is refused too (AC-10-24).
+  problem(passcode: string, breached?: BreachedList): string | undefined {
     // NIST SP 800-63B counts each Unicode code point as one character.
     const length = Array.from(passcode).length;
     if (length < PasscodeHasher.minimumLength) {
@@ -54,6 +82,9 @@ export class PasscodeHasher {
     }
     if (length > PasscodeHasher.maximumLength) {
       return `It can have at most ${String(PasscodeHasher.maximumLength)} characters.`;
+    }
+    if (breached?.has(passcode) === true) {
+      return 'That is on a list of passwords known from breaches. Choose another.';
     }
     return undefined;
   }

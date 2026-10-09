@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 import { refusedBy } from './support/database.ts';
 import { eachTestRolledBack } from './support/lifecycle.ts';
+import { deviceKeyLike } from './support/device-keys.ts';
 
 const tested = eachTestRolledBack();
 
@@ -26,7 +27,7 @@ describe('a phone', () => {
   it('AC-02-15 is enrolled once: in service, with no project and no monitor', async () => {
     const { db } = tested;
     await asTheApi();
-    expect(await db.one(enrol, ['P1-TWR-TDSR', 'test-public-key-kim-nguyen', 1])).toMatchObject({
+    expect(await db.one(enrol, ['P1-TWR-TDSR', deviceKeyLike('kim-nguyen'), 1])).toMatchObject({
       status: 'ACTIVE',
       out_of_service_at: null,
     });
@@ -38,6 +39,7 @@ describe('a phone', () => {
       'enrolled_at',
       'id',
       'key_revoked_at',
+      'last_answered_challenge_made_at',
       'master_passcode_version',
       'name',
       'out_of_service_at',
@@ -50,19 +52,22 @@ describe('a phone', () => {
     const { db } = tested;
     await asTheApi();
     expect(
-      (await db.refused(enrol, ['P1-COL-1 (a copy)', 'test-public-key-ana-brooks', 1])).code,
+      (await db.refused(enrol, ['P1-COL-1 (a copy)', deviceKeyLike('ana-brooks'), 1])).code,
     ).toBe(refusedBy.unique);
   });
 
   it('AC-02-17 holds a version of the master passcode that exists', async () => {
     const { db, world } = tested;
     await asTheApi();
-    expect((await db.refused(enrol, ['P1-UR-1', 'test-public-key-jo-kim', 7])).code).toBe(
+    expect((await db.refused(enrol, ['P1-UR-1', deviceKeyLike('jo-kim'), 7])).code).toBe(
       refusedBy.foreignKey,
     );
     expect(
-      (await db.refused(`INSERT INTO "device" ("name", "public_key") VALUES ('P1-UR-1', 'k')`))
-        .code,
+      (
+        await db.refused(`INSERT INTO "device" ("name", "public_key") VALUES ('P1-UR-1', $1)`, [
+          deviceKeyLike('jo-kim'),
+        ])
+      ).code,
     ).toBe(refusedBy.notNull);
     // The firm changes the passcode; the phone gets the new check at its next sync.
     await db.run(`INSERT INTO "master_passcode" ("version", "hash") VALUES (2, $1)`, [aHash]);

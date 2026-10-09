@@ -360,6 +360,8 @@ model ReconciliationRun {
   decisions    ReconciliationDecision[]
   flags        Flag[]
   transactions Transaction[]
+  // The jobs it finished (jobs.prisma).
+  jobs         ReconciliationJob[]
 
   // What a flag points at, so it is one of its own project's runs.
   @@unique([projectId, id])

@@ -159,6 +159,35 @@ describe('a later change to a certification', () => {
       message: 'Not saved: certification 730416 is revoked from a date with a reason.',
     });
   });
+
+  it('AC-03-55 only an admin revokes: a manager/analyst whatever they hold, a monitor, a read-only viewer, an archived admin and nobody are refused', () => {
+    const changes = new CertificationChanges('730416');
+    const person = (role: string, archived = false) => ({ name: 'Luis Ortega', role, archived });
+    expect(changes.revoker({ name: 'Dana Reyes', role: 'ADMIN', archived: false })).toBeNull();
+    for (const refused of [
+      person('MANAGER_ANALYST'),
+      person('MONITOR'),
+      person('READ_ONLY_VIEWER'),
+      person('SYSTEM'),
+      person('ADMIN', true),
+    ]) {
+      expect(changes.revoker(refused)).toEqual({
+        code: 'NOT_PERMITTED',
+        message:
+          'Luis Ortega may not revoke certification 730416: it takes an admin. Nothing was changed.',
+      });
+    }
+    expect(changes.revoker(null)?.message).toBe(
+      'Somebody the firm has no record of may not revoke certification 730416: it takes an admin. Nothing was changed.',
+    );
+  });
+
+  it('a measuring mistake is corrected on a box the certification has', () => {
+    expect(new CertificationChanges('730417').noBox(3)).toEqual({
+      code: 'NO_SUCH_BOX',
+      message: 'Not saved: certification 730417 has no box 3 to correct.',
+    });
+  });
 });
 
 describe('merging two spellings of a sub', () => {

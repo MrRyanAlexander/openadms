@@ -8,7 +8,7 @@ import { z } from 'zod';
 
 const id = z.uuid();
 // A number as the database keeps it: nought or more, to that many decimal places.
-const places = (count: number): z.ZodNumber =>
+export const places = (count: number): z.ZodNumber =>
   z
     .number()
     .nonnegative()

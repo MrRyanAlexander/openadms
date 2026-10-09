@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import { eachTestRolledBack } from './support/lifecycle.ts';
 import { listTables } from './support/lists.ts';
+import { notDeviceKeyChecks, notMasterPasscodeChecks } from './support/master-passcode-actor.ts';
 import {
   citizenViews,
   fieldEventSeen,
@@ -76,6 +77,13 @@ const domains: Record<string, string> = {
   incident: 'RECORDS',
   drop_off_log: 'RECORDS',
   master_passcode: 'SECURITY',
+  // Sign-in's records (ADR-397…399): what sign-in keeps of a person, a session and a security
+  // event are the security reviewer's to read.
+  user_credential: 'SECURITY',
+  session: 'SECURITY',
+  security_event: 'SECURITY',
+  // Wrong tries at a version of the master passcode (ADR-438).
+  master_passcode_tries: 'SECURITY',
   field_event: 'RECORDS',
   // An itemised unit rate event's lines and the tickets a load carries: the field event's own
   // domain (ADR-325).
@@ -95,6 +103,9 @@ const domains: Record<string, string> = {
   flag: 'OPERATIONS',
   reconciliation_run: 'OPERATIONS',
   reconciliation_decision: 'OPERATIONS',
+  // The job queue (ADR-418): how the work went, like a run.
+  reconciliation_job: 'OPERATIONS',
+  reconciliation_job_ticket: 'OPERATIONS',
   transaction: 'BILLING',
   invoice_lock: 'BILLING',
   // People's marks (ADR-363): a lock, its batch and a person's void say what is billed; a QC mark
@@ -110,7 +121,12 @@ const domains: Record<string, string> = {
 };
 
 // The columns an audit trigger names so the capture leaves them out of the audit log (ADR-281).
-const keptOut: Record<string, string[]> = { master_passcode: ['hash'] };
+const keptOut: Record<string, string[]> = {
+  master_passcode: ['hash'],
+  // A password's hash, an authenticator's secret and a refresh token's hash (ADR-397, 398).
+  user_credential: ['password_hash', 'two_step_secret'],
+  session: ['refresh_token_hash'],
+};
 
 const on = (table: string): string => (table === 'user' ? 'public."user"' : `public.${table}`);
 const capture = (table: string, domain: string): string =>
@@ -151,11 +167,28 @@ const triggers = [
   `CREATE TRIGGER ticket_void_refuse_edit_once_lifted BEFORE UPDATE ON public.ticket_void FOR EACH ROW WHEN ((old.lifted_at IS NOT NULL)) EXECUTE FUNCTION refuse_edit()`,
   // An unvoid, once written, is history (ADR-366).
   `CREATE TRIGGER ticket_unvoid_refuse_edit BEFORE UPDATE ON public.ticket_unvoid FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
+  // Whose sign-in record or session it is never changes; a session once revoked is history; a
+  // security event is never edited (ADR-397…399).
+  `CREATE TRIGGER user_credential_refuse_person_edit BEFORE UPDATE OF id, user_id, created_at ON public.user_credential FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
+  `CREATE TRIGGER session_refuse_person_edit BEFORE UPDATE OF id, user_id, created_at ON public.session FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
+  `CREATE TRIGGER session_refuse_edit_once_revoked BEFORE UPDATE ON public.session FOR EACH ROW WHEN ((old.revoked_at IS NOT NULL)) EXECUTE FUNCTION refuse_edit()`,
+  `CREATE TRIGGER security_event_refuse_edit BEFORE UPDATE ON public.security_event FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
+  // Which version a record of wrong tries is of never changes (ADR-438).
+  `CREATE TRIGGER master_passcode_tries_refuse_version_edit BEFORE UPDATE OF id, version, created_at ON public.master_passcode_tries FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
+  // What a job was asked never changes; once finished or set aside it is history; a job's
+  // ticket is never edited (ADR-418).
+  `CREATE TRIGGER reconciliation_job_refuse_asked_edit BEFORE UPDATE OF id, project_id, trigger, requested_by_id, queued_at ON public.reconciliation_job FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
+  `CREATE TRIGGER reconciliation_job_refuse_edit_once_ended BEFORE UPDATE ON public.reconciliation_job FOR EACH ROW WHEN (((old.finished_at IS NOT NULL) OR (old.set_aside_at IS NOT NULL))) EXECUTE FUNCTION refuse_edit()`,
+  `CREATE TRIGGER reconciliation_job_ticket_refuse_edit BEFORE UPDATE ON public.reconciliation_job_ticket FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
   // A container has its primary box, asked when the piece of work that wrote it ends (ADR-321).
   `CREATE CONSTRAINT TRIGGER certification_has_primary_box AFTER INSERT OR UPDATE OF kind ON public.certification DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION certification_has_primary_box()`,
   `CREATE CONSTRAINT TRIGGER certification_box_keeps_primary AFTER UPDATE OF certification_id, "position" ON public.certification_box DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION certification_has_primary_box()`,
   // The system actor's row (ADR-276).
   `CREATE TRIGGER user_system_actor BEFORE INSERT OR UPDATE ON public."user" FOR EACH ROW EXECUTE FUNCTION user_system_actor_guard()`,
+  // Which challenge a phone last answered: its own proof's alone, only ever later (ADR-440).
+  `CREATE TRIGGER device_answered_challenge BEFORE INSERT OR UPDATE ON public.device FOR EACH ROW EXECUTE FUNCTION device_answered_challenge_guard()`,
+  // The firm's last admin stays (ADR-415).
+  `CREATE TRIGGER user_last_admin BEFORE UPDATE OF role, archived_at ON public."user" FOR EACH ROW EXECUTE FUNCTION user_last_admin_guard()`,
   // Only a release writes a list value's key (ADR-302).
   ...listTables.map(
     (table) =>
@@ -991,6 +1024,96 @@ describe('the guards in the catalog', () => {
         definition:
           "CHECK ((((btrim(ticket_number) <> ''::text) AND ((note IS NULL) OR (btrim(note) <> ''::text)) AND (unvoided_by_id <> '00000000-0000-7000-8000-000000000001'::uuid)) IS TRUE))",
       },
+      // Sign-in's records (ADR-397…399): only ever a hash, never the system actor's, a session
+      // that ends after it began.
+      {
+        name: 'user_credential_password_hash_check',
+        definition: "CHECK ((password_hash ~~ '$argon2id$%'::text))",
+      },
+      {
+        name: 'user_credential_two_step_secret_check',
+        definition: "CHECK ((btrim(two_step_secret) <> ''::text))",
+      },
+      {
+        name: 'user_credential_system_actor_check',
+        definition: "CHECK ((user_id <> '00000000-0000-7000-8000-000000000001'::uuid))",
+      },
+      // A count of wrong tries is never below nought (ADR-409).
+      {
+        name: 'user_credential_failed_sign_ins_check',
+        definition: 'CHECK ((failed_sign_ins >= 0))',
+      },
+      // Two-step sign-in (ADR-412): a secret only as the API sealed it, and the step of the last
+      // code taken with it.
+      {
+        name: 'user_credential_two_step_sealed_check',
+        definition:
+          "CHECK ((two_step_secret ~ '^v1\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$'::text))",
+      },
+      {
+        name: 'user_credential_two_step_last_step_check',
+        definition: 'CHECK ((two_step_last_step >= 0))',
+      },
+      {
+        name: 'user_credential_two_step_together_check',
+        definition:
+          'CHECK ((((two_step_last_step IS NULL) OR (two_step_secret IS NOT NULL)) IS TRUE))',
+      },
+      {
+        name: 'session_refresh_token_hash_check',
+        definition: "CHECK ((refresh_token_hash ~ '^[0-9a-f]{64}$'::text))",
+      },
+      {
+        name: 'session_times_check',
+        definition:
+          'CHECK ((((expires_at > created_at) AND ((revoked_at IS NULL) OR (revoked_at >= created_at))) IS TRUE))',
+      },
+      {
+        name: 'session_system_actor_check',
+        definition: "CHECK ((user_id <> '00000000-0000-7000-8000-000000000001'::uuid))",
+      },
+      {
+        name: 'security_event_request_id_check',
+        definition: "CHECK ((btrim(request_id) <> ''::text))",
+      },
+      {
+        name: 'reconciliation_job_attempts_check',
+        definition: 'CHECK ((attempts >= 0))',
+      },
+      {
+        name: 'reconciliation_job_ended_check',
+        definition:
+          "CHECK (((((finished_at IS NULL) OR (reconciliation_run_id IS NOT NULL)) AND ((finished_at IS NULL) OR (set_aside_at IS NULL)) AND ((set_aside_at IS NULL) OR (last_error IS NOT NULL)) AND ((last_error IS NULL) OR (btrim(last_error) <> ''::text))) IS TRUE))",
+      },
+      {
+        name: 'reconciliation_job_ticket_number_check',
+        definition: "CHECK ((btrim(ticket_number) <> ''::text))",
+      },
+      // The master passcode's actor is one id, never a person, and no record names it; a
+      // count of wrong tries at the passcode is never below nought (ADR-438, 439).
+      {
+        name: 'user_master_passcode_actor_check',
+        definition:
+          "CHECK ((((role = 'MASTER_PASSCODE'::user_role) = (id = '00000000-0000-7000-8000-000000000002'::uuid)) AND ((role <> 'MASTER_PASSCODE'::user_role) OR ((monitor_number IS NULL) AND (contractor_id IS NULL) AND (employer_id IS NULL) AND (employer_number IS NULL) AND (email IS NULL) AND (phone IS NULL) AND (viewer_kind IS NULL) AND (sees_private_citizens IS NULL) AND (archived_at IS NULL)))))",
+      },
+      {
+        name: 'master_passcode_tries_failed_tries_check',
+        definition: 'CHECK ((failed_tries >= 0))',
+      },
+      ...notMasterPasscodeChecks,
+      // The device key's actor is one id, never a person, and no record names it; a device
+      // key is kept as a P-256 public key is written (ADR-440).
+      {
+        name: 'user_device_key_actor_check',
+        definition:
+          "CHECK ((((role = 'DEVICE_KEY'::user_role) = (id = '00000000-0000-7000-8000-000000000003'::uuid)) AND ((role <> 'DEVICE_KEY'::user_role) OR ((monitor_number IS NULL) AND (contractor_id IS NULL) AND (employer_id IS NULL) AND (employer_number IS NULL) AND (email IS NULL) AND (phone IS NULL) AND (viewer_kind IS NULL) AND (sees_private_citizens IS NULL) AND (archived_at IS NULL)))))",
+      },
+      {
+        name: 'device_public_key_check',
+        definition:
+          "CHECK ((public_key ~ '^MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE[A-Za-z0-9+/]{86}==$'::text))",
+      },
+      ...notDeviceKeyChecks,
       ...listChecks,
     ];
     expect(rows).toEqual(checks.sort((a, b) => (a.name < b.name ? -1 : 1)));
@@ -1070,6 +1193,13 @@ describe('the guards in the catalog', () => {
         name: 'ticket_void_voided_once',
         definition:
           'EXCLUDE USING btree (project_id WITH =, workflow WITH =, ticket_number WITH =) WHERE ((lifted_at IS NULL))',
+      },
+      // One email address per person who signs in at the back office or the portal (AC-02-83;
+      // ADR-415).
+      {
+        name: 'user_sign_in_email_once',
+        definition:
+          "EXCLUDE USING btree (lower(btrim(email)) WITH =) WHERE (((role = ANY (ARRAY['ADMIN'::user_role, 'MANAGER_ANALYST'::user_role, 'READ_ONLY_VIEWER'::user_role])) AND (archived_at IS NULL) AND (email IS NOT NULL)))",
       },
     ]);
   });

@@ -490,6 +490,23 @@ ADR-106 (master passcode) and ADR-120 (changing monitors, username). **The word 
   without the area code**, so a worker who forgets it is told "your ID, and your own phone number",
   and an admin can sign in as them.
 
+> ⚠️ **ADR-441, 442 (2026-10-09; agent defaults, this note awaits approval, building didn't
+> wait): creating a monitor takes the phone and the passcode together.** The request comes from
+> an enrolled phone that has proved itself with its device key (§7.4) and carries the master
+> passcode; the passcode typed anywhere else creates nobody. Nobody types the Monitor ID: the
+> system issues it and the phone shows it. The record says it was done under the master passcode,
+> on that phone. A phone taken out of service creates nobody. What NIST SP 800-63B and ASVS ask of
+> a monitor's sign-in, and where the phone-number password departs from them (the accepted risk of
+> ADR-105 and §7.2), is ADR-441.
+
+> ⚠️ **ADR-415 (2026-10-07; the server command is the user's decision, ADR-413 (2), 414 (2); this
+> note awaits approval, building didn't wait):** the installer seeds nobody who can sign in, so
+> **the firm's first admin is made on its own server by `pnpm installer:admin`**, which also lets
+> an admin back in who has no other admin to ask (a login locked by wrong tries, a forgotten
+> password where the firm has no mail, a lost authenticator). It never makes a second admin. A
+> person signs in with their email address, so no two back-office or outside users share one;
+> and the database itself keeps the firm's last admin from being archived or made anything else.
+
 ### 7.1 Setting up a phone (online only)
 
 > ⚠️ **What a phone's lists carry, today (ADR-207, 213, 223, 227, 240, 243; this note awaits
@@ -590,6 +607,14 @@ So the protection can't rest on the password. It rests on these:
   its records, flagging what it made after its removal (§7.2 point 4, ADR-134), then retires its
   number block (ADR-065) and has it wiped. Once wiped, its device key is revoked and the server
   refuses it.
+
+> ⚠️ **ADR-436, 437, 440 (2026-10-09; agent defaults, this note awaits approval, building didn't
+> wait): how a phone proves itself.** The key is ECDSA P-256. Before a sync the phone asks for a
+> challenge by its id, signs it, and is given a token good for fifteen minutes that its calls
+> carry as `Authorization: Bearer`; a challenge is good for two minutes and once. Nobody need be
+> signed in on the phone, so what the proof writes is recorded as done by **"Device key"**, an
+> actor that is not a person, on that phone. A phone out of service still proves itself; one
+> whose key is revoked is refused at once, whatever token it holds.
 
 ### 7.5 The master passcode
 

@@ -4,10 +4,16 @@
 // Before it saves, setup asks packages/domain's SiteFacts: Haul-outs leave here can be ticked only
 // on a TDSR/DMS site, and a marked site's type can't change away from it. A site states its
 // type's built-in key again, which is how the database holds the same rule.
-import type { DisposalSite, DisposalSiteTippingFee, Prisma } from '@open-adms/db';
-import { type BuiltInKey, SiteFacts, type SiteSetting } from '@open-adms/domain';
+import type {
+  DisposalSite,
+  DisposalSiteTippingFee,
+  Prisma,
+  SiteAreaSource,
+  SiteAreaVersion,
+} from '@open-adms/db';
+import { type BuiltInKey, MapShapes, SiteFacts, type SiteSetting } from '@open-adms/domain';
 
-import { day, type Outcome, Refused, SetupService } from './setup-service.ts';
+import { day, type Outcome, QueueingService, Refused } from './setup-service.ts';
 
 // The four site facts: every one stated, none has a default (ADR-215).
 export interface SiteFactSettings {
@@ -38,15 +44,31 @@ export type SiteChanges = Partial<
     readonly shortCode: string | null;
     readonly siteTypeId: string;
     readonly permitNumber: string | null;
+    // The site's GPS corrected: WGS84, exact decimals.
+    readonly latitude: string;
+    readonly longitude: string;
+    // Calendar days in the project's time zone; the close date may be emptied.
+    readonly activationDate: string;
+    readonly closeDate: string | null;
   }
 >;
 
-export class SiteSetup extends SetupService {
+// A site's own shape, as drawn on the map or as a file gave it: GeoJSON, a geometry, a Feature
+// or a FeatureCollection.
+export interface NewSiteShape {
+  readonly source: SiteAreaSource;
+  readonly shape: unknown;
+}
+
+// A site added or changed is checked by the worker's next run (its permit; where its tickets'
+// debris went, their area and their mileage): the job is queued in the same piece of work,
+// naming the un-invoiced tickets with a field event at the site (ADR-090, 420; AC-06-03).
+export class SiteSetup extends QueueingService {
   site(person: string, input: NewSite): Promise<Outcome<DisposalSite>> {
-    return this.write(person, async (tx) => {
+    return this.setup(person, async (tx) => {
       const type = await SiteSetup.typeOf(tx, input.siteTypeId);
       SiteSetup.checked({ ...type, name: input.name, haulOutsLeaveHere: input.haulOutsLeaveHere });
-      return tx.disposalSite.create({
+      const site = await tx.disposalSite.create({
         data: {
           projectId: input.projectId,
           name: input.name,
@@ -64,12 +86,16 @@ export class SiteSetup extends SetupService {
           closeDate: input.closeDate === undefined ? null : day(input.closeDate),
         },
       });
+      // No ticket is at a new site yet: the job is for its own flag, a permit outstanding.
+      await this.setupChanged(tx, person, site.projectId, { siteId: site.id }, true);
+      return site;
     });
   }
 
-  // A change to a site the project holds, audited with the value before.
+  // A change to a site the project holds, audited with the value before. A close date before
+  // the activation date is the database's to refuse: the call throws, and nothing is saved.
   change(person: string, siteId: string, changes: SiteChanges): Promise<Outcome<DisposalSite>> {
-    return this.write(person, async (tx) => {
+    return this.setup(person, async (tx) => {
       const site = await tx.disposalSite.findUniqueOrThrow({ where: { id: siteId } });
       const before: SiteSetting = {
         ...(await SiteSetup.typeOf(tx, site.siteTypeId)),
@@ -85,10 +111,51 @@ export class SiteSetup extends SetupService {
         },
         before,
       );
-      return tx.disposalSite.update({
+      const { activationDate, closeDate, ...others } = changes;
+      const changed = await tx.disposalSite.update({
         where: { id: siteId },
-        data: { ...changes, siteTypeKey: type.siteTypeKey },
+        data: {
+          ...others,
+          ...(activationDate === undefined ? {} : { activationDate: day(activationDate) }),
+          ...(closeDate === undefined
+            ? {}
+            : { closeDate: closeDate === null ? null : day(closeDate) }),
+          siteTypeKey: type.siteTypeKey,
+        },
       });
+      await this.setupChanged(tx, person, site.projectId, { siteId }, true);
+      return changed;
+    });
+  }
+
+  // The site's own shape, as its next version: from then on the site is checked against the
+  // shape in place of the project's circle, and an earlier shape stays as it was (ADR-142, 144;
+  // AC-01-56, AC-06-47). What isn't a shape isn't saved. The un-invoiced tickets with a field
+  // event at the site are queued.
+  shape(person: string, siteId: string, input: NewSiteShape): Promise<Outcome<SiteAreaVersion>> {
+    return this.setup(person, async (tx) => {
+      const site = await tx.disposalSite.findUniqueOrThrow({ where: { id: siteId } });
+      const shape = new MapShapes(input.shape).shape();
+      if (shape.read === null) {
+        throw new Refused({ code: 'SITE_SHAPE_NOT_READ', message: `Not saved: ${shape.problem}` });
+      }
+      const last = await tx.siteAreaVersion.aggregate({
+        where: { siteId },
+        _max: { version: true },
+      });
+      const version = await tx.siteAreaVersion.create({
+        data: {
+          siteId,
+          version: (last._max.version ?? 0) + 1,
+          geometry: shape.read.geometry satisfies Prisma.InputJsonObject,
+          ...shape.read.box,
+          source: input.source,
+          createdById: person,
+          effectiveFrom: this.clock.now(),
+        },
+      });
+      await this.setupChanged(tx, person, site.projectId, { siteId });
+      return version;
     });
   }
 
@@ -99,11 +166,13 @@ export class SiteSetup extends SetupService {
     siteId: string,
     payItemId: string,
   ): Promise<Outcome<DisposalSiteTippingFee>> {
-    return this.write(person, async (tx) => {
+    return this.setup(person, async (tx) => {
       const site = await tx.disposalSite.findUniqueOrThrow({ where: { id: siteId } });
-      return tx.disposalSiteTippingFee.create({
+      const link = await tx.disposalSiteTippingFee.create({
         data: { projectId: site.projectId, siteId, payItemId },
       });
+      await this.setupChanged(tx, person, site.projectId, { siteId });
+      return link;
     });
   }
 

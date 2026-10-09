@@ -1,5 +1,5 @@
 // The policy values (invariant 16; ADR-142, 164, 203, 303): the numbers a new project's settings
-// start from. A threshold is policy, never a literal: none is written in this package. Each comes
+// start from, and the server's own limits (ADR-389). A threshold is policy, never a literal: none is written in this package. Each comes
 // from the environment the caller hands over, under the name below. The release's own
 // values, the built-in defaults, are the env file beside this package (policy.env); the firm then
 // changes a project's own settings, audited.
@@ -25,13 +25,92 @@ export const policyNames = {
   // The same for a certifying phone's cert numbers (ADR-181), and for ROE numbers (ADR-323).
   certNumberBlockSize: 'CERT_NUMBER_BLOCK_SIZE',
   roeNumberBlockSize: 'ROE_NUMBER_BLOCK_SIZE',
+  // The largest body the API reads from one request, in bytes (ARCHITECTURE §6, Input; ADR-389).
+  requestBodyLimitBytes: 'REQUEST_BODY_LIMIT_BYTES',
+  // How long one statement of a service's database login may run, in milliseconds, before the
+  // database stops it (ARCHITECTURE §5.7; ADR-394). The installer sets it on each login.
+  statementTimeoutMs: 'STATEMENT_TIMEOUT_MS',
+  // The most connections a service's pool opens to the database (ARCHITECTURE §5.7; ADR-419).
+  // Never under two: a run holds its project's lock on one and writes on another.
+  databasePoolConnections: 'DATABASE_POOL_CONNECTIONS',
+  // The shortest and the longest password a back-office or outside user may set, in characters
+  // (ARCHITECTURE §6, Passwords; NIST SP 800-63B-4 §3.1.1.2; ADR-402).
+  passwordMinimumLength: 'PASSWORD_MINIMUM_LENGTH',
+  passwordMaximumLength: 'PASSWORD_MAXIMUM_LENGTH',
+  // How long a password reset sent by email stays good, in minutes (ADR-404).
+  passwordResetMinutes: 'PASSWORD_RESET_MINUTES',
+  // How long a back-office access token is good for, in minutes; how long a session lasts with
+  // nothing asked of it, in minutes; and how long it lasts at the very most, in hours
+  // (ARCHITECTURE §6, Back-office sessions; NIST SP 800-63B-4 §2.2.3; ADR-408).
+  accessTokenMinutes: 'ACCESS_TOKEN_MINUTES',
+  sessionInactivityMinutes: 'SESSION_INACTIVITY_MINUTES',
+  sessionOverallHours: 'SESSION_OVERALL_HOURS',
+  // Wrong tries in a row at one login before a wait is put on it, and before it is locked; the
+  // first wait, in seconds, and the longest, in minutes (ARCHITECTURE §6, Abuse; NIST SP
+  // 800-63B-4 §3.2.2; ADR-409).
+  signInTriesBeforeWait: 'SIGN_IN_TRIES_BEFORE_WAIT',
+  signInTriesBeforeLock: 'SIGN_IN_TRIES_BEFORE_LOCK',
+  signInFirstWaitSeconds: 'SIGN_IN_FIRST_WAIT_SECONDS',
+  signInLongestWaitMinutes: 'SIGN_IN_LONGEST_WAIT_MINUTES',
+  // Two-step sign-in (ARCHITECTURE §6; NIST SP 800-63B-4 §3.1.4.2; ASVS 6.5.5; ADR-412): how many
+  // thirty-second steps before and after the server's own an authenticator's code is still taken
+  // in, for a phone's clock that runs a little off and the time it takes to type; and how long a
+  // person has to finish setting an authenticator up, in minutes.
+  twoStepCodeStepsEitherSide: 'TWO_STEP_CODE_STEPS_EITHER_SIDE',
+  twoStepSetupMinutes: 'TWO_STEP_SETUP_MINUTES',
+  // A phone's proof of itself (ARCHITECTURE §7.4; ADR-437): how long the challenge the server
+  // makes for a phone may still be signed and sent back, in seconds.
+  phoneChallengeSeconds: 'PHONE_CHALLENGE_SECONDS',
+  // And how long the token a proof gives the phone is good for, in minutes (NIST SP 800-63B-4
+  // §5.1; ADR-440): the calls of one sync carry it, and a phone proves itself again for another.
+  phoneTokenMinutes: 'PHONE_TOKEN_MINUTES',
+  // Rate limits (ARCHITECTURE §6, Abuse; ASVS 2.4.1; ADR-416): how long the stretch is that
+  // requests are counted over, in seconds; how many one address and one signed-in person may send
+  // in it; and how many callers' counts the server keeps at once.
+  rateLimitWindowSeconds: 'RATE_LIMIT_WINDOW_SECONDS',
+  rateLimitRequestsPerAddress: 'RATE_LIMIT_REQUESTS_PER_ADDRESS',
+  rateLimitRequestsPerAccount: 'RATE_LIMIT_REQUESTS_PER_ACCOUNT',
+  rateLimitCountsKept: 'RATE_LIMIT_COUNTS_KEPT',
+  // Tries at sign-in from one address (ASVS 6.1.1, 6.3.1; ADR-416): how long the stretch is, in
+  // minutes; how many refused tries one address may make in it, whoever's login it tries, and
+  // how many at one login; how many resets by email one address may ask for, and how many may be
+  // asked for one login.
+  signInAddressWindowMinutes: 'SIGN_IN_ADDRESS_WINDOW_MINUTES',
+  signInWrongTriesPerAddress: 'SIGN_IN_WRONG_TRIES_PER_ADDRESS',
+  signInWrongTriesPerAddressAtLogin: 'SIGN_IN_WRONG_TRIES_PER_ADDRESS_AT_LOGIN',
+  passwordResetAsksPerAddress: 'PASSWORD_RESET_ASKS_PER_ADDRESS',
+  passwordResetAsksPerLogin: 'PASSWORD_RESET_ASKS_PER_LOGIN',
+  // The worker's own (ARCHITECTURE §13; ADR-418, 419), read by the worker's process alone: how
+  // many runs may take a job up before it is set aside; the longest a run may hold its project's
+  // lock, in minutes; how often the worker looks for waiting jobs, in seconds; and how long a map
+  // server has to answer one question, in seconds.
+  jobTriesBeforeSetAside: 'JOB_TRIES_BEFORE_SET_ASIDE',
+  reconciliationRunLongestMinutes: 'RECONCILIATION_RUN_LONGEST_MINUTES',
+  jobQueuePollSeconds: 'JOB_QUEUE_POLL_SECONDS',
+  mapServerAnswerSeconds: 'MAP_SERVER_ANSWER_SECONDS',
+  // The most tickets one job names, and the most a run takes up at once (ADR-420), read by both
+  // services: the API cuts a change that touches more into jobs of that size, and the worker
+  // takes up waiting jobs, the oldest first, until their tickets come to it.
+  jobTicketsAtMost: 'JOB_TICKETS_AT_MOST',
 } as const;
 
 export type PolicyName = (typeof policyNames)[keyof typeof policyNames];
 
 // What each value may be: a whole number in the range the database's own checks hold a project's
 // setting to. A load call is 0 to 100; a size is at least one; a crew day is 1 to 24 hours; a block
-// is at least one number.
+// is at least one number, and a size limit at least one byte. A statement's time limit is at least
+// one millisecond (nought would switch it off) and at most what Postgres takes. A password's
+// shortest length is never under the eight characters the standard allows beside a second step,
+// nor over the 64 it says must be permitted; its longest never under those 64. A reset by email
+// is good for a day at most, the standard's limit. A session lasts a day at most and an hour at
+// most with nothing asked of it (the standard's limits where a second step is required), and its
+// access token never as long as that hour. A login is locked after a hundred wrong tries in a row
+// at the very most, the standard's limit. An authenticator's code is taken one step either side
+// of the server's own at the most (the standard has its clock value change at least every two
+// minutes), and nought takes the server's own step alone. A rate limit counts over an hour at the
+// most, a limit on tries over a day at the most, and each allows at least one; the server keeps
+// at least a thousand callers' counts and at most ten million. A job names at least one ticket
+// and at most a hundred thousand.
 const ranges: Record<PolicyName, { least: number; most: number }> = {
   [policyNames.loadCallLowLimit]: { least: 0, most: 100 },
   [policyNames.loadCallHighLimit]: { least: 0, most: 100 },
@@ -41,6 +120,37 @@ const ranges: Record<PolicyName, { least: number; most: number }> = {
   [policyNames.ticketNumberBlockSize]: { least: 1, most: Number.MAX_SAFE_INTEGER },
   [policyNames.certNumberBlockSize]: { least: 1, most: Number.MAX_SAFE_INTEGER },
   [policyNames.roeNumberBlockSize]: { least: 1, most: Number.MAX_SAFE_INTEGER },
+  [policyNames.requestBodyLimitBytes]: { least: 1, most: Number.MAX_SAFE_INTEGER },
+  [policyNames.statementTimeoutMs]: { least: 1, most: 2147483647 },
+  [policyNames.databasePoolConnections]: { least: 2, most: 1000 },
+  [policyNames.passwordMinimumLength]: { least: 8, most: 64 },
+  [policyNames.passwordMaximumLength]: { least: 64, most: 1024 },
+  [policyNames.passwordResetMinutes]: { least: 1, most: 1440 },
+  [policyNames.accessTokenMinutes]: { least: 1, most: 15 },
+  [policyNames.sessionInactivityMinutes]: { least: 2, most: 60 },
+  [policyNames.sessionOverallHours]: { least: 1, most: 24 },
+  [policyNames.signInTriesBeforeWait]: { least: 1, most: 99 },
+  [policyNames.signInTriesBeforeLock]: { least: 2, most: 100 },
+  [policyNames.signInFirstWaitSeconds]: { least: 1, most: 3600 },
+  [policyNames.signInLongestWaitMinutes]: { least: 1, most: 1440 },
+  [policyNames.twoStepCodeStepsEitherSide]: { least: 0, most: 1 },
+  [policyNames.twoStepSetupMinutes]: { least: 1, most: 60 },
+  [policyNames.phoneChallengeSeconds]: { least: 10, most: 600 },
+  [policyNames.phoneTokenMinutes]: { least: 1, most: 60 },
+  [policyNames.rateLimitWindowSeconds]: { least: 1, most: 3600 },
+  [policyNames.rateLimitRequestsPerAddress]: { least: 1, most: Number.MAX_SAFE_INTEGER },
+  [policyNames.rateLimitRequestsPerAccount]: { least: 1, most: Number.MAX_SAFE_INTEGER },
+  [policyNames.rateLimitCountsKept]: { least: 1000, most: 10000000 },
+  [policyNames.signInAddressWindowMinutes]: { least: 1, most: 1440 },
+  [policyNames.signInWrongTriesPerAddress]: { least: 1, most: Number.MAX_SAFE_INTEGER },
+  [policyNames.signInWrongTriesPerAddressAtLogin]: { least: 1, most: 98 },
+  [policyNames.passwordResetAsksPerAddress]: { least: 1, most: Number.MAX_SAFE_INTEGER },
+  [policyNames.passwordResetAsksPerLogin]: { least: 1, most: Number.MAX_SAFE_INTEGER },
+  [policyNames.jobTriesBeforeSetAside]: { least: 1, most: 100 },
+  [policyNames.reconciliationRunLongestMinutes]: { least: 1, most: 1440 },
+  [policyNames.jobQueuePollSeconds]: { least: 1, most: 3600 },
+  [policyNames.mapServerAnswerSeconds]: { least: 1, most: 600 },
+  [policyNames.jobTicketsAtMost]: { least: 1, most: 100000 },
 };
 
 export class Policy {
@@ -52,6 +162,37 @@ export class Policy {
   readonly ticketNumberBlockSize: number;
   readonly certNumberBlockSize: number;
   readonly roeNumberBlockSize: number;
+  readonly requestBodyLimitBytes: number;
+  readonly statementTimeoutMs: number;
+  readonly databasePoolConnections: number;
+  readonly passwordMinimumLength: number;
+  readonly passwordMaximumLength: number;
+  readonly passwordResetMinutes: number;
+  readonly accessTokenMinutes: number;
+  readonly sessionInactivityMinutes: number;
+  readonly sessionOverallHours: number;
+  readonly signInTriesBeforeWait: number;
+  readonly signInTriesBeforeLock: number;
+  readonly signInFirstWaitSeconds: number;
+  readonly signInLongestWaitMinutes: number;
+  readonly twoStepCodeStepsEitherSide: number;
+  readonly twoStepSetupMinutes: number;
+  readonly phoneChallengeSeconds: number;
+  readonly phoneTokenMinutes: number;
+  readonly rateLimitWindowSeconds: number;
+  readonly rateLimitRequestsPerAddress: number;
+  readonly rateLimitRequestsPerAccount: number;
+  readonly rateLimitCountsKept: number;
+  readonly signInAddressWindowMinutes: number;
+  readonly signInWrongTriesPerAddress: number;
+  readonly signInWrongTriesPerAddressAtLogin: number;
+  readonly passwordResetAsksPerAddress: number;
+  readonly passwordResetAsksPerLogin: number;
+  readonly jobTriesBeforeSetAside: number;
+  readonly reconciliationRunLongestMinutes: number;
+  readonly jobQueuePollSeconds: number;
+  readonly mapServerAnswerSeconds: number;
+  readonly jobTicketsAtMost: number;
 
   private constructor(values: Readonly<Record<string, string | undefined>>) {
     this.loadCallLowLimit = Policy.read(values, policyNames.loadCallLowLimit);
@@ -62,6 +203,62 @@ export class Policy {
     this.ticketNumberBlockSize = Policy.read(values, policyNames.ticketNumberBlockSize);
     this.certNumberBlockSize = Policy.read(values, policyNames.certNumberBlockSize);
     this.roeNumberBlockSize = Policy.read(values, policyNames.roeNumberBlockSize);
+    this.requestBodyLimitBytes = Policy.read(values, policyNames.requestBodyLimitBytes);
+    this.statementTimeoutMs = Policy.read(values, policyNames.statementTimeoutMs);
+    this.databasePoolConnections = Policy.read(values, policyNames.databasePoolConnections);
+    this.passwordMinimumLength = Policy.read(values, policyNames.passwordMinimumLength);
+    this.passwordMaximumLength = Policy.read(values, policyNames.passwordMaximumLength);
+    this.passwordResetMinutes = Policy.read(values, policyNames.passwordResetMinutes);
+    this.accessTokenMinutes = Policy.read(values, policyNames.accessTokenMinutes);
+    this.sessionInactivityMinutes = Policy.read(values, policyNames.sessionInactivityMinutes);
+    this.sessionOverallHours = Policy.read(values, policyNames.sessionOverallHours);
+    this.signInTriesBeforeWait = Policy.read(values, policyNames.signInTriesBeforeWait);
+    this.signInTriesBeforeLock = Policy.read(values, policyNames.signInTriesBeforeLock);
+    this.signInFirstWaitSeconds = Policy.read(values, policyNames.signInFirstWaitSeconds);
+    this.signInLongestWaitMinutes = Policy.read(values, policyNames.signInLongestWaitMinutes);
+    this.twoStepCodeStepsEitherSide = Policy.read(values, policyNames.twoStepCodeStepsEitherSide);
+    this.twoStepSetupMinutes = Policy.read(values, policyNames.twoStepSetupMinutes);
+    this.phoneChallengeSeconds = Policy.read(values, policyNames.phoneChallengeSeconds);
+    this.phoneTokenMinutes = Policy.read(values, policyNames.phoneTokenMinutes);
+    this.rateLimitWindowSeconds = Policy.read(values, policyNames.rateLimitWindowSeconds);
+    this.rateLimitRequestsPerAddress = Policy.read(values, policyNames.rateLimitRequestsPerAddress);
+    this.rateLimitRequestsPerAccount = Policy.read(values, policyNames.rateLimitRequestsPerAccount);
+    this.rateLimitCountsKept = Policy.read(values, policyNames.rateLimitCountsKept);
+    this.signInAddressWindowMinutes = Policy.read(values, policyNames.signInAddressWindowMinutes);
+    this.signInWrongTriesPerAddress = Policy.read(values, policyNames.signInWrongTriesPerAddress);
+    this.signInWrongTriesPerAddressAtLogin = Policy.read(
+      values,
+      policyNames.signInWrongTriesPerAddressAtLogin,
+    );
+    this.passwordResetAsksPerAddress = Policy.read(values, policyNames.passwordResetAsksPerAddress);
+    this.passwordResetAsksPerLogin = Policy.read(values, policyNames.passwordResetAsksPerLogin);
+    this.jobTriesBeforeSetAside = Policy.read(values, policyNames.jobTriesBeforeSetAside);
+    this.reconciliationRunLongestMinutes = Policy.read(
+      values,
+      policyNames.reconciliationRunLongestMinutes,
+    );
+    this.jobQueuePollSeconds = Policy.read(values, policyNames.jobQueuePollSeconds);
+    this.mapServerAnswerSeconds = Policy.read(values, policyNames.mapServerAnswerSeconds);
+    this.jobTicketsAtMost = Policy.read(values, policyNames.jobTicketsAtMost);
+    // Three pairs hold only together: an access token that outlasted the session's quiet time would
+    // keep a session nobody uses alive; a lock that came no later than the first wait would
+    // leave no wait at all; and one address allowed as many wrong tries at a login as put a wait
+    // on it could, by itself, keep that login waiting.
+    if (this.accessTokenMinutes >= this.sessionInactivityMinutes) {
+      throw new Error(
+        `The policy value ${policyNames.accessTokenMinutes} must be under ${policyNames.sessionInactivityMinutes}.`,
+      );
+    }
+    if (this.signInTriesBeforeWait >= this.signInTriesBeforeLock) {
+      throw new Error(
+        `The policy value ${policyNames.signInTriesBeforeWait} must be under ${policyNames.signInTriesBeforeLock}.`,
+      );
+    }
+    if (this.signInWrongTriesPerAddressAtLogin >= this.signInTriesBeforeWait) {
+      throw new Error(
+        `The policy value ${policyNames.signInWrongTriesPerAddressAtLogin} must be under ${policyNames.signInTriesBeforeWait}.`,
+      );
+    }
   }
 
   // From an environment: an env file's values, or a process's. A value that is missing or isn't a

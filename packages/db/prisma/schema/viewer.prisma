@@ -1,0 +1,66 @@
+// What the read-only login reads that is no table's own row (ARCHITECTURE §5.5; ADR-336, 361,
+// 435): the views that run with the owner's rights and hold the viewer's questions themselves,
+// since row-level security can't tell columns apart. Each is made and granted by a guard
+// migration, never by Prisma: declared here so a viewer's read is typed and no SQL is written by
+// hand, Prisma Migrate leaves a view alone (`migrate diff` stays empty), and nothing can be
+// written through one. A view has no key of its own to Prisma; each row's `id` is its table's.
+// Only `ViewerDatabase.$viewed` reads them: to every other login they are refused.
+
+// A line's rate and amount: for a client user, an auditor, and the contractor user of the
+// line's own prime; never a sub's (the user, 2026-10-06, ADR-361).
+view ViewerTransactionMoney {
+  id        String  @unique @db.Uuid
+  projectId String  @map("project_id") @db.Uuid
+  rate      Decimal @db.Decimal(14, 4)
+  amount    Decimal @db.Decimal(14, 2)
+
+  @@map("viewer_transaction_money")
+}
+
+// An ROE's owner: for a client user or an auditor the firm lets see private citizens by name
+// (ADR-336).
+view ViewerRoeCitizen {
+  id        String  @unique @db.Uuid
+  projectId String  @map("project_id") @db.Uuid
+  ownerName String? @map("owner_name")
+
+  @@map("viewer_roe_citizen")
+}
+
+// The three names of setup a ticket is read with, for every viewer given the project, a
+// contractor user included (ADR-361): a pay item's code and description, a disposal site's
+// name, and the name of a debris type on the project's forms (its id is the form's entry's).
+view ViewerPayItemName {
+  id          String @unique @db.Uuid
+  projectId   String @map("project_id") @db.Uuid
+  code        String
+  description String
+
+  @@map("viewer_pay_item_name")
+}
+
+view ViewerDisposalSiteName {
+  id        String @unique @db.Uuid
+  projectId String @map("project_id") @db.Uuid
+  name      String
+
+  @@map("viewer_disposal_site_name")
+}
+
+view ViewerDebrisTypeName {
+  id        String @unique @db.Uuid
+  projectId String @map("project_id") @db.Uuid
+  name      String
+
+  @@map("viewer_debris_type_name")
+}
+
+// Who recorded a field event: the monitor's name and Monitor ID and nothing else of a person,
+// for a client user or an auditor (ADR-324).
+view ViewerFieldEventMonitor {
+  id            String  @unique @db.Uuid
+  name          String
+  monitorNumber String? @map("monitor_number")
+
+  @@map("viewer_field_event_monitor")
+}

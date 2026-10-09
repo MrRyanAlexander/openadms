@@ -2,7 +2,7 @@
 name: adms-certifications
 description: Open ADMS certifications, in today's rules. Read before touching any certification code. Covers why a certification certifies a container or a crew and never a vehicle (a crew is its certification), why both share one base, the exact capacity math (whole inches, a primary box plus add/subtract boxes with optional ÷2, a two-length hoist, a round bottom, a radius corner, rounded to hundredths each step, ÷46,656, then a whole CY half up), why the cert number IS the placard and badge number (system-issued from the project's series in phone blocks, or pre-printed; unique per project), how it reaches a field event, the lifecycle (tag expiry, revoke, replace, never copied, a truck keyed in by hand; never ends on its own), attestation and QC, five photos, and the real paper form. Use when working on certifications, placards, badges, cert numbers, containers, crews or capacity.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-250; the driver shown from the certification, ADR-289; helpers picked, ADR-294; the capacity math built, ADR-320; the records and the service built, ADR-321; never copied, ADR-328…330) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-250; the driver shown from the certification, ADR-289; helpers picked, ADR-294; the capacity math built, ADR-320; the records and the service built, ADR-321; never copied, ADR-328…330; its changes behind requests, ADR-433) -->
 
 > **This page states today's rules** (last changed by ADR-294, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
@@ -162,6 +162,13 @@ load **unbilled and flagged** until one exists (ADR-154).
 read; **the certification's capacity bills**, and a typed capacity that differs is flagged ("capacity
 typed 60, certified 65") (ADR-154).
 
+**A number the phone's list doesn't hold** (ADR-421). A badge carries only the number; the phone
+learns the capacity, the prime and the subs from the certifications in its lists. **User, 2026-10-08:** "when a cert is hand keyed the phone should warn, request refresh if avail, fallback to hand keyeed still". So where
+the number scanned or typed at New isn't in the phone's list: the phone **warns**, **asks to
+refresh its lists if it has a connection**, and otherwise the monitor **keys the truck in by
+hand**, as above. Nothing is refused. When the certification exists on the server, the field
+events that named its number are linked to it and their tickets queued (ADR-420).
+
 ## 3A.6 Lifecycle
 
 1. **Certifying happens where there is signal**, on a phone whose **assignment** includes certifying
@@ -221,7 +228,10 @@ or deleted) and **the service** `Certifications` in `apps/api/src/certification/
 monitor from their phone, the capacity worked out and never typed; correct a box; revoke), with `packages/domain`'s `CertificationSubs` (a typed sub matched to a known
 contractor ignoring case and spacing, or made; a name already placed elsewhere on the project
 saved as a separate contractor with a warning), `CertificationChanges` and `ContractorMerge`.
-"Replaced on" is the new certification's certified time, as a day in the project's time zone.
+"Replaced on" is the new certification's certified time, as a day in the project's time zone. **Behind requests
+(ADR-433):** a measuring mistake corrected (takes *correct*), signatures on file (takes *QC*) and a
+revocation (an admin's alone); a certification is made, and a modified truck certified again, on a
+phone only, so both arrive with its sync (Phase 2, task 2.6.2).
 
 ---
 

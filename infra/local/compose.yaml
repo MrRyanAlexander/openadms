@@ -12,7 +12,8 @@
 # downloaded and checked against its pinned SHA-256 by `pnpm local:up` into infra/local/.cache/maps/
 # (git-ignored) and mounted read-only (REQ-022, ADR-282). Each builds its own data from it on a
 # first run, and again when the extract changes. Neither publishes a port: both are reached through
-# Caddy, over HTTPS.
+# Caddy, over HTTPS. The API is the seventh service and the worker the eighth, each in its own
+# profile (below).
 name: open-adms-local
 
 x-hardening: &hardening
@@ -159,9 +160,132 @@ services:
       # The import (a first run, or a new extract) comes before the first answer.
       start_period: 1800s
 
+  api:
+    <<: *hardening
+    # The API (ARCHITECTURE §4, §6; ADR-384, 385). Node alone, pinned like every image: the built
+    # code and its dependencies are mounted read-only from this checkout, each folder by name, so no
+    # env file but its own reaches the container. Started by `pnpm local:up` once `pnpm installer`
+    # has written apps/api/.env (the profile), after building apps/api. No port is published: Caddy
+    # is the only way in, over HTTPS.
+    profiles: ['api']
+    image: node:24.21.0-alpine3.23@sha256:9ec4a2e289874ed0d722e1772ec2de45d2801541db8612f3638b26f128c69ac2
+    user: '1000:1000'
+    cap_drop:
+      - ALL
+    read_only: true
+    working_dir: /srv/open-adms
+    command: ['node', 'apps/api/dist/main.js']
+    environment:
+      NODE_ENV: production
+      ADMS_ENV_FILE: /run/secrets/api_env
+      ADMS_API_HOST: 0.0.0.0
+      ADMS_API_PORT: '3000'
+      # The installer wrote the logins as this machine reaches Postgres; in here it is a service.
+      ADMS_DATABASE_ADDRESS: postgres:5432
+      # The same for the mail catcher, where the installation sends mail through it (ADR-405).
+      ADMS_SMTP_ADDRESS: mail:1025
+      # The exact origins whose pages may read an answer (ADR-098, 391): the stack's own page
+      # today. Each web app's origin joins the list when it gets its hostname.
+      ADMS_CORS_ORIGINS: https://adms.localhost
+      # The one proxy whose word is taken for a caller's address (ADR-416): Caddy, at the address
+      # the stack's network gives it below. Rate limits count by that address.
+      ADMS_TRUSTED_PROXIES: 172.30.213.2
+    secrets:
+      - api_env
+    volumes:
+      - ../../node_modules:/srv/open-adms/node_modules:ro
+      - ../../apps/api/package.json:/srv/open-adms/apps/api/package.json:ro
+      - ../../apps/api/node_modules:/srv/open-adms/apps/api/node_modules:ro
+      - ../../apps/api/dist:/srv/open-adms/apps/api/dist:ro
+      - ../../packages/contracts/package.json:/srv/open-adms/packages/contracts/package.json:ro
+      - ../../packages/contracts/node_modules:/srv/open-adms/packages/contracts/node_modules:ro
+      - ../../packages/contracts/dist:/srv/open-adms/packages/contracts/dist:ro
+      - ../../packages/db/package.json:/srv/open-adms/packages/db/package.json:ro
+      - ../../packages/db/node_modules:/srv/open-adms/packages/db/node_modules:ro
+      - ../../packages/db/dist:/srv/open-adms/packages/db/dist:ro
+      - ../../packages/domain/package.json:/srv/open-adms/packages/domain/package.json:ro
+      - ../../packages/domain/node_modules:/srv/open-adms/packages/domain/node_modules:ro
+      - ../../packages/domain/dist:/srv/open-adms/packages/domain/dist:ro
+      - ../../packages/domain/policy.env:/srv/open-adms/packages/domain/policy.env:ro
+      - ../../packages/domain/breached-passwords.txt:/srv/open-adms/packages/domain/breached-passwords.txt:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  worker:
+    <<: *hardening
+    # The worker (ARCHITECTURE §4, §13; ADR-419), as the API above: Node alone, the built code and
+    # its dependencies mounted read-only, no env file but its own. Started by `pnpm local:up` once
+    # `pnpm installer` has written apps/worker/.env (the profile), after building apps/worker. It
+    # publishes no port and no proxy leads to it: its health answer listens on its own loopback,
+    # for the check below and for `pnpm installer:check`.
+    profiles: ['worker']
+    image: node:24.21.0-alpine3.23@sha256:9ec4a2e289874ed0d722e1772ec2de45d2801541db8612f3638b26f128c69ac2
+    user: '1000:1000'
+    cap_drop:
+      - ALL
+    read_only: true
+    working_dir: /srv/open-adms
+    command: ['node', 'apps/worker/dist/main.js']
+    environment:
+      NODE_ENV: production
+      ADMS_ENV_FILE: /run/secrets/worker_env
+      ADMS_WORKER_HOST: 127.0.0.1
+      ADMS_WORKER_PORT: '3001'
+      # The installer wrote the login as this machine reaches Postgres; in here it is a service.
+      ADMS_DATABASE_ADDRESS: postgres:5432
+      # The map servers are asked by their own names, over HTTPS, through Caddy: in here Caddy is
+      # at the address the stack's network gives it, and its root certificate is mounted below.
+      ADMS_MAP_SERVERS_ADDRESS: 172.30.213.2:443
+      ADMS_MAP_CA_FILE: /run/adms/caddy-root.crt
+      # The extract both map servers were built from: the stack's own word (`pnpm local:up`).
+      ADMS_MAP_EXTRACT_SHA256: ${ADMS_MAP_SHA256:?run pnpm local:up}
+    secrets:
+      - worker_env
+    volumes:
+      - ../../node_modules:/srv/open-adms/node_modules:ro
+      - ../../apps/worker/package.json:/srv/open-adms/apps/worker/package.json:ro
+      - ../../apps/worker/node_modules:/srv/open-adms/apps/worker/node_modules:ro
+      - ../../apps/worker/dist:/srv/open-adms/apps/worker/dist:ro
+      - ../../packages/db/package.json:/srv/open-adms/packages/db/package.json:ro
+      - ../../packages/db/node_modules:/srv/open-adms/packages/db/node_modules:ro
+      - ../../packages/db/dist:/srv/open-adms/packages/db/dist:ro
+      - ../../packages/domain/package.json:/srv/open-adms/packages/domain/package.json:ro
+      - ../../packages/domain/node_modules:/srv/open-adms/packages/domain/node_modules:ro
+      - ../../packages/domain/dist:/srv/open-adms/packages/domain/dist:ro
+      - ../../packages/domain/policy.env:/srv/open-adms/packages/domain/policy.env:ro
+      - ./.generated/caddy-root.crt:/run/adms/caddy-root.crt:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3001/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
   caddy:
     <<: *hardening
     image: caddy:2.11.4-alpine@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b
+    # A fixed address, so that the API can name the proxy it believes (ADMS_TRUSTED_PROXIES).
+    networks:
+      default:
+        ipv4_address: 172.30.213.2
     ports:
       - '127.0.0.1:${ADMS_HTTPS_PORT:-443}:443'
       - '127.0.0.1:${ADMS_HTTP_PORT:-80}:80'
@@ -182,9 +306,25 @@ services:
       retries: 20
       start_period: 10s
 
+# The stack's own network, its addresses fixed so that Caddy's can be named (ADR-416): Caddy
+# takes .2, and every other service is handed one from the upper half, never Caddy's.
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.30.213.0/24
+          ip_range: 172.30.213.128/25
+
 secrets:
   postgres_password:
     environment: POSTGRES_PASSWORD
+  # The API's own settings, the installer's file, read by the process itself (never an env_file:
+  # that would put each value in the container's description).
+  api_env:
+    file: ../../apps/api/.env
+  # The worker's, the same way.
+  worker_env:
+    file: ../../apps/worker/.env
 
 configs:
   s3_identities:

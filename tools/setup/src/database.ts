@@ -15,6 +15,18 @@ export const loginRoles = ['adms_owner', 'adms_api', 'adms_worker', 'adms_readon
 // The system actor's fixed id, the same in every installation (packages/db/src/system-actor.ts,
 // which the seed writes from; the installer doesn't load the Prisma client to read it).
 const systemActorId = '00000000-0000-7000-8000-000000000001';
+
+// The three users the seed makes that are no person, each with a fixed id and a role of its
+// own: the system actor the worker writes as, the actor an act under the master passcode is
+// written as (packages/db/src/master-passcode-actor.ts; ADR-438), and the actor a phone's own
+// act is written as (packages/db/src/device-key-actor.ts; ADR-440).
+export const seededActors = {
+  system: { id: systemActorId, role: 'SYSTEM' },
+  masterPasscode: { id: '00000000-0000-7000-8000-000000000002', role: 'MASTER_PASSCODE' },
+  deviceKey: { id: '00000000-0000-7000-8000-000000000003', role: 'DEVICE_KEY' },
+} as const;
+
+export type SeededActor = (typeof seededActors)[keyof typeof seededActors];
 export type LoginRole = (typeof loginRoles)[number];
 
 // Every runtime login is limited to logging in: no superuser, no creating databases or roles, no
@@ -67,6 +79,22 @@ export class Database {
     }
   }
 
+  // How long a statement of this login may run, in milliseconds, as the login itself finds it on
+  // signing in (ADR-394): nought means no limit.
+  static async statementTimeout(
+    server: Server,
+    role: LoginRole,
+    password: string,
+    name: string,
+  ): Promise<number> {
+    return Database.asLogin(server, role, password, name, async (client) => {
+      const result = await client.query<{ ms: number }>(
+        `SELECT setting::int AS ms FROM pg_settings WHERE name = 'statement_timeout'`,
+      );
+      return result.rows[0]?.ms ?? 0;
+    });
+  }
+
   // Every table the guard migrations don't cover yet, as "table: what it misses" (ADR-271). Asked
   // as the owner, who runs the migrations; an empty list means every table is guarded.
   static async guardGaps(
@@ -83,31 +111,32 @@ export class Database {
     });
   }
 
-  // What's wrong with the system actor (ADR-273, 276), or undefined when it's the seed's own row,
-  // the only SYSTEM user, never changed since it was made, and its guard is in place. Asked as the
-  // owner, like guardGaps.
-  static async systemActorProblem(
+  // What's wrong with one of the seed's two actors (ADR-273, 276, 438), or undefined when it's
+  // the seed's own row, the only user of its role, never changed since it was made, and the
+  // guard on both is in place. Asked as the owner, like guardGaps.
+  static async seededActorProblem(
     server: Server,
     role: LoginRole,
     password: string,
     name: string,
+    seeded: SeededActor,
   ): Promise<string | undefined> {
     return Database.asLogin(server, role, password, name, async (client) => {
       const found = await client.query<{ id: string; role: string; archived: boolean }>(
         `SELECT "id"::text AS id, "role"::text AS role, "archived_at" IS NOT NULL AS archived
-         FROM "user" WHERE "role" = 'SYSTEM' OR "id" = $1`,
-        [systemActorId],
+         FROM "user" WHERE "role"::text = $2 OR "id" = $1`,
+        [seeded.id, seeded.role],
       );
       const [actor, ...others] = found.rows;
       if (actor === undefined) return 'missing: run `pnpm installer`';
-      if (others.length > 0 || actor.id !== systemActorId || actor.role !== 'SYSTEM') {
-        return 'role SYSTEM is not on the system actor alone';
+      if (others.length > 0 || actor.id !== seeded.id || actor.role !== seeded.role) {
+        return `role ${seeded.role} is not on it alone`;
       }
       if (actor.archived) return 'archived';
       const changed = await client.query(
         `SELECT 1 FROM "audit_record"
          WHERE "table_name" = 'user' AND "record_id" = $1 AND "operation" <> 'INSERT'`,
-        [systemActorId],
+        [seeded.id],
       );
       if (changed.rowCount !== 0)
         return 'changed since the seed made it; its audit records say who';
@@ -175,6 +204,52 @@ export class Database {
   async createRole(role: LoginRole, password: string): Promise<void> {
     const verifier = this.client.escapeLiteral(new ScramVerifier().make(password));
     await this.client.query(`CREATE ROLE ${this.identifier(role)} ${limits} PASSWORD ${verifier}`);
+  }
+
+  // The statement timeout kept on a login, as written (milliseconds when the installer wrote it),
+  // or undefined when it has none.
+  async statementTimeout(role: LoginRole): Promise<string | undefined> {
+    const result = await this.client.query<{ setting: string }>(
+      `SELECT unnest(s.setconfig) AS setting FROM pg_db_role_setting s
+       JOIN pg_roles r ON r.oid = s.setrole
+       WHERE s.setdatabase = 0 AND r.rolname = $1`,
+      [role],
+    );
+    const name = 'statement_timeout=';
+    return result.rows.find(({ setting }) => setting.startsWith(name))?.setting.slice(name.length);
+  }
+
+  // The databases in which a login has a statement timeout of its own, which would stand in
+  // front of the one kept on the login.
+  async statementTimeoutDatabases(role: LoginRole): Promise<string[]> {
+    const result = await this.client.query<{ name: string }>(
+      `SELECT d.datname AS name FROM pg_db_role_setting s
+       JOIN pg_roles r ON r.oid = s.setrole
+       JOIN pg_database d ON d.oid = s.setdatabase
+       WHERE r.rolname = $1
+         AND EXISTS (SELECT 1 FROM unnest(s.setconfig) AS c WHERE c LIKE 'statement_timeout=%')
+       ORDER BY d.datname`,
+      [role],
+    );
+    return result.rows.map(({ name }) => name);
+  }
+
+  // Takes a login's statement timeout off: the one kept on the login, or its own in one database.
+  async clearStatementTimeout(role: LoginRole, inDatabase?: string): Promise<void> {
+    const where = inDatabase === undefined ? '' : ` IN DATABASE ${this.identifier(inDatabase)}`;
+    await this.client.query(`ALTER ROLE ${this.identifier(role)}${where} RESET statement_timeout`);
+  }
+
+  // Kept on the login, so every connection it opens from now on is under it, whatever the
+  // service asks for (ARCHITECTURE §5.7; ADR-394). A whole number of milliseconds, checked here
+  // too since a setting's value can't be handed over as a parameter.
+  async setStatementTimeout(role: LoginRole, milliseconds: number): Promise<void> {
+    if (!Number.isSafeInteger(milliseconds) || milliseconds < 1) {
+      throw new Error(`A statement timeout is a whole number of milliseconds, 1 or more.`);
+    }
+    await this.client.query(
+      `ALTER ROLE ${this.identifier(role)} SET statement_timeout = ${String(milliseconds)}`,
+    );
   }
 
   // A database's owner, or undefined when it doesn't exist.

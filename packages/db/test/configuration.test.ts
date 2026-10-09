@@ -2,6 +2,9 @@
 // (ARCHITECTURE §16; ADR-276; BACKLOG carry-forward C9). The logins' own attributes and the schema's
 // rights are in grants.test.ts. What waits for the cloud (TLS, connection logging, pgAudit, the
 // server's own hardening) is listed in ADR-276.
+import { readFileSync } from 'node:fs';
+import { parseEnv } from 'node:util';
+
 import { describe, expect, it } from 'vitest';
 
 import { eachTestRolledBack } from './support/lifecycle.ts';
@@ -9,6 +12,9 @@ import { eachTestRolledBack } from './support/lifecycle.ts';
 const tested = eachTestRolledBack();
 
 const logins = ['adms_api', 'adms_owner', 'adms_readonly', 'adms_worker'];
+
+// The release's policy values (packages/domain/policy.env; ADR-303): no secret is in that file.
+const policy = parseEnv(readFileSync(new URL('../../domain/policy.env', import.meta.url), 'utf8'));
 
 describe("the database's configuration (CIS PostgreSQL Benchmark)", () => {
   it('passwords are stored as SCRAM-SHA-256 verifiers, never MD5 or plain text', async () => {
@@ -63,6 +69,35 @@ describe("the database's configuration (CIS PostgreSQL Benchmark)", () => {
       { who: 'adms_worker', connect: true, temp: false, create: false },
       { who: 'public', connect: false, temp: false, create: false },
     ]);
+  });
+
+  it('AC-10-42 each service login is under a statement timeout, the policy value the installer set; the owner, who runs the migrations, has none', async () => {
+    // Read from what the server keeps on each login, which every connection it opens starts
+    // with: these tests reach a login with SET ROLE, which does not take a login's settings on.
+    // An installation whose service states its own value (ADR-395) is held by `pnpm
+    // installer:check`; this one is as the release ships it.
+    const { db } = tested;
+    await db.administer();
+    const kept = await db.rows<{ login: string; settings: string[] | null }>(
+      `SELECT r.rolname AS login, s.setconfig AS settings FROM pg_roles r
+       LEFT JOIN pg_db_role_setting s ON s.setrole = r.oid AND s.setdatabase = 0
+       WHERE r.rolname LIKE 'adms%' ORDER BY r.rolname`,
+    );
+    const timeout = [`statement_timeout=${String(policy['STATEMENT_TIMEOUT_MS'])}`];
+    expect(policy['STATEMENT_TIMEOUT_MS']).toMatch(/^[1-9]\d*$/);
+    expect(kept).toEqual([
+      { login: 'adms_api', settings: timeout },
+      { login: 'adms_owner', settings: null },
+      { login: 'adms_readonly', settings: timeout },
+      { login: 'adms_worker', settings: timeout },
+    ]);
+    // Nothing kept for a login in one database only stands in front of it.
+    expect(
+      await db.rows(
+        `SELECT 1 FROM pg_db_role_setting s JOIN pg_roles r ON r.oid = s.setrole
+         WHERE r.rolname LIKE 'adms%' AND s.setdatabase <> 0`,
+      ),
+    ).toEqual([]);
   });
 
   it('row-level security is on for the server', async () => {

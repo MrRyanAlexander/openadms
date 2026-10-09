@@ -13,6 +13,7 @@ import { made, scanned } from '../device.ts';
 import { uuidv7, uuidv7Time } from '../ids.ts';
 import { phoneLists } from '../phone-lists.ts';
 import type { Story } from '../runner.ts';
+import { assigned } from './board.ts';
 import { p1TimeZone as timeZone, setUpP1, setUpP1Sites } from './p1.ts';
 
 const at = (time: string): string => `2026-10-12T${time}:00-04:00`;
@@ -31,8 +32,12 @@ export const ticket101001: Story = {
       'Dana Reyes sets up Bayline County, Hurricane Delphine and P1, its prime and contract, its TDSR, Ana Brooks, Kim Nguyen, their two phones and their assignments',
     );
     // The first user is written with itself as the actor (ADR-270 (4)).
+    // The two phones are enrolled as real ones are: under the master passcode, each with a key
+    // of its own (ADR-439, 440).
+    const collectionPhone = await story.enrolled('P1-COL-1');
+    const towerPhone = await story.enrolled('P1-TWR-TDSR');
     const dana = uuidv7(clock.now());
-    const setup = await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
+    const entered = await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
       await tx.user.create({ data: { id: dana, name: 'Dana Reyes', role: 'ADMIN' } });
       const p1 = await setUpP1(tx, story.policy);
       const ana = await tx.user.create({
@@ -41,44 +46,34 @@ export const ticket101001: Story = {
       const kim = await tx.user.create({
         data: { name: 'Kim Nguyen', role: 'MONITOR', monitorNumber: 'M004128' },
       });
-      const collectionPhone = await tx.device.create({
-        data: { name: 'P1-COL-1', publicKey: 'story-P1-COL-1', masterPasscodeVersion: 1 },
-      });
-      const towerPhone = await tx.device.create({
-        data: { name: 'P1-TWR-TDSR', publicKey: 'story-P1-TWR-TDSR', masterPasscodeVersion: 1 },
-      });
       const { tdsr } = await setUpP1Sites(tx, p1.project);
-      const monday = { workDate: new Date('2026-10-12'), projectId: p1.project, madeById: dana };
-      const collections = await tx.assignment.create({
-        data: {
-          ...monday,
-          personId: ana.id,
-          fieldEventKinds: ['COLLECTION'],
-          deviceId: collectionPhone.id,
-          origin: 'PLANNED',
-        },
-      });
-      const tower = await tx.assignment.create({
-        data: {
-          ...monday,
-          personId: kim.id,
-          fieldEventKinds: ['DISPOSAL'],
-          siteId: tdsr,
-          deviceId: towerPhone.id,
-          origin: 'PLANNED',
-        },
-      });
       return {
         p1: p1.project,
         ana: ana.id,
         kim: kim.id,
         collectionPhone,
         towerPhone,
-        collections: collections.id,
-        tower: tower.id,
         tdsr,
       };
     });
+    // Monday's board, written by Dana: Ana on collections, Kim at the Marsh Road tower.
+    const monday = { workDate: '2026-10-12', projectId: entered.p1 } as const;
+    const setup = {
+      ...entered,
+      collections: await assigned(api, clock, dana, {
+        ...monday,
+        personId: entered.ana,
+        fieldEventKinds: ['COLLECTION'],
+        deviceId: entered.collectionPhone.id,
+      }),
+      tower: await assigned(api, clock, dana, {
+        ...monday,
+        personId: entered.kim,
+        fieldEventKinds: ['DISPOSAL'],
+        siteId: entered.tdsr,
+        deviceId: entered.towerPhone.id,
+      }),
+    };
     // At the yard, online, Ana's phone takes her assignment and its first block of load numbers:
     // the collection makes the ticket's number (ADR-065, 209).
     const block = await new NumberAllocator(api, clock, story.policy).topUp(
@@ -234,19 +229,24 @@ export const ticket101001: Story = {
         ['INSERT', 'Ana Brooks', 'DEVICE', 'P1-COL-1'],
       ],
     );
-    // The seed's rows come first, every one as the system actor: itself, the master passcode, then
-    // what the firm's lists start with (ADR-302; told value by value in packages/db's tests).
+    // The seed's rows come first, every one as the system actor: itself, the master passcode's own
+    // actor (ADR-438), the device key's (ADR-440), the master passcode, then what the firm's lists
+    // start with (ADR-302; told value by value in packages/db's tests).
     const afterSeed = audit.findIndex((record) => record.source !== 'SYSTEM');
     const seeded = audit.slice(0, afterSeed).map((record) => record.tableName);
     story.check(
-      'the audit log opens with the seed: the system actor, the master passcode, the 94 values the firm’s 15 seeded lists start with',
-      [seeded.slice(0, 2), seeded.length - 2, new Set(seeded.slice(2)).size],
-      [['user', 'master_passcode'], 94, 15],
+      'the audit log opens with the seed: the system actor, the master passcode’s actor, the device key’s actor, the master passcode, the 94 values the firm’s 15 seeded lists start with',
+      [seeded.slice(0, 4), seeded.length - 4, new Set(seeded.slice(4)).size],
+      [['user', 'user', 'user', 'master_passcode'], 94, 15],
     );
     story.check(
-      'and then holds exactly Dana’s twenty-four setup rows (the client, the declaration event, P1, its five number series and its five kinds of unit rate work, Coastline, its place as P1’s prime and its contract among them), the block Ana’s phone took (the series moved on, the block cut) and the two syncs',
+      'and then holds exactly the two phones’ enrolments under the master passcode (each the phone and the security event of the passcode’s use), Dana’s twenty-two setup rows (the client, the declaration event, P1, its five number series and its five kinds of unit rate work, Coastline, its place as P1’s prime and its contract among them), the block Ana’s phone took (the series moved on, the block cut) and the two syncs',
       audit.slice(afterSeed).map((record) => [record.tableName, record.source]),
       [
+        ['device', 'DEVICE'],
+        ['security_event', 'DEVICE'],
+        ['device', 'DEVICE'],
+        ['security_event', 'DEVICE'],
         ['user', 'BACK_OFFICE'],
         ['client', 'BACK_OFFICE'],
         ['declaration_event', 'BACK_OFFICE'],
@@ -266,8 +266,6 @@ export const ticket101001: Story = {
         ['contract', 'BACK_OFFICE'],
         ['user', 'BACK_OFFICE'],
         ['user', 'BACK_OFFICE'],
-        ['device', 'BACK_OFFICE'],
-        ['device', 'BACK_OFFICE'],
         ['disposal_site', 'BACK_OFFICE'],
         ['disposal_site', 'BACK_OFFICE'],
         ['assignment', 'BACK_OFFICE'],

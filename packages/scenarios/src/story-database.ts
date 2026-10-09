@@ -15,7 +15,13 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { parseEnv } from 'node:util';
 
-import { openDatabase, Seed, type Database } from '@open-adms/db';
+import {
+  openDatabase,
+  openViewerDatabase,
+  Seed,
+  type Database,
+  type ViewerDatabase,
+} from '@open-adms/db';
 import pg from 'pg';
 
 const root = new URL('../../../', import.meta.url);
@@ -28,6 +34,7 @@ const logins = ['adms_api', 'adms_worker', 'adms_readonly'] as const;
 // Every story's firm has the same made-up master passcode, `heron-marsh-delphine`; this is its
 // slow hash, made once by the installer's own hasher (Argon2id), as the installer hands the seed
 // the real one. Not a secret: no installation uses it.
+export const storyMasterPasscode = 'heron-marsh-delphine';
 const storyMasterPasscodeHash =
   '$argon2id$v=19$m=19456,t=2,p=1$rLnL+hWkLjJHDKTBWGSsdw$tYeMf5WEtzZTIdv2JQR18zDWwcllaJjVO71qautLsGY';
 
@@ -150,6 +157,16 @@ export class StoryDatabase {
     });
   }
 
+  // The API's second way in, on this database: the read-only login, for what a read-only
+  // viewer reads, from the API's own env file (ADR-434, 435). It offers `$viewed` alone, and
+  // sees what the story's services have committed.
+  openViewer(): ViewerDatabase {
+    return openViewerDatabase({
+      url: this.url(new URL('apps/api/.env', root), 'READONLY_DATABASE_URL'),
+      maxConnections: 2,
+    });
+  }
+
   async drop(): Promise<void> {
     if (this.dropped) return;
     this.dropped = true;
@@ -169,12 +186,12 @@ export class StoryDatabase {
   }
 
   // The URL in an env file, pointed at this database. Never printed.
-  private url(envFile: URL): string {
+  private url(envFile: URL, key = 'DATABASE_URL'): string {
     const path = fileURLToPath(envFile);
     if (!existsSync(path))
       throw new Error(`${needs} (${path.replace(fileURLToPath(root), '')} is missing)`);
-    const written = parseEnv(readFileSync(path, 'utf8'))['DATABASE_URL'];
-    if (written === undefined) throw new Error(`${needs} (no DATABASE_URL in its env file)`);
+    const written = parseEnv(readFileSync(path, 'utf8'))[key];
+    if (written === undefined) throw new Error(`${needs} (no ${key} in its env file)`);
     const url = new URL(written);
     url.pathname = `/${this.name}`;
     return url.toString();

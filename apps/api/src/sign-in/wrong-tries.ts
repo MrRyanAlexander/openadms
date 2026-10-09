@@ -1,0 +1,98 @@
+// Wrong tries at a person's login, kept on their own sign-in record (ARCHITECTURE §6, Abuse;
+// AC-10-18, 19; T-16; ADR-401, 409). The rule is the domain's (SignInTries); this writes what it
+// says. The count and the wait are in the database, so they outlast a restart and are shared by
+// every API process. Each wrong try at a real login is a security event, and so is the lock;
+// while a login waits or is locked nothing more is written, so wrong tries can't grow the
+// database past the lock itself.
+//
+// Nobody is signed in when a try fails, and every write states a person. The write is stated as
+// the person whose login was tried: the row is theirs, and the event says the try failed, never
+// that they made it (ADR-409).
+import type { Database } from '@open-adms/db';
+import type { SignInTries, WrongTry } from '@open-adms/domain';
+
+import type { Clock } from '../setup/setup-service.ts';
+import type { Mail } from './mail.ts';
+
+export interface Tried {
+  readonly failedSignIns: number;
+  readonly lockedUntil: Date | null;
+}
+
+export interface TriedPerson {
+  readonly id: string;
+  readonly name: string;
+  readonly email: string | null;
+}
+
+export interface WrongTriesParts {
+  readonly rules: SignInTries;
+  readonly clock: Clock;
+  readonly mail: Mail;
+  // The request the work now running is for, if any.
+  readonly requestNow: () => string | undefined;
+}
+
+export class WrongTries {
+  private readonly db: Database;
+  private readonly parts: WrongTriesParts;
+
+  constructor(db: Database, parts: WrongTriesParts) {
+    this.db = db;
+    this.parts = parts;
+  }
+
+  // Whether the login may not be tried now: the right password is refused too.
+  closed(kept: Tried): boolean {
+    return this.parts.rules.closed(kept.failedSignIns, kept.lockedUntil, this.parts.clock.now());
+  }
+
+  // One more wrong try at the person's login: counted, and a wait or the lock put on it.
+  async wrong(person: TriedPerson): Promise<WrongTry> {
+    const now = this.parts.clock.now();
+    const requestId = this.parts.requestNow();
+    const cost = await this.db.$write({ actorId: person.id, source: 'BACK_OFFICE' }, async (tx) => {
+      const { failedSignIns } = await tx.userCredential.update({
+        where: { userId: person.id },
+        data: { failedSignIns: { increment: 1 } },
+        select: { failedSignIns: true },
+      });
+      const after = this.parts.rules.after(failedSignIns, now);
+      if (after.kind === 'WAIT') {
+        await tx.userCredential.update({
+          where: { userId: person.id },
+          data: { lockedUntil: after.until },
+        });
+      }
+      const event = { userId: person.id, occurredAt: now, ...(requestId ? { requestId } : {}) };
+      await tx.securityEvent.create({ data: { ...event, kind: 'SIGN_IN_FAILED' } });
+      if (after.kind === 'LOCKED') {
+        await tx.securityEvent.create({ data: { ...event, kind: 'LOCKOUT' } });
+      }
+      return after;
+    });
+    if (cost.kind === 'LOCKED') await this.tellLocked(person);
+    return cost;
+  }
+
+  // The person is told their login is locked, where the firm has mail: a sign-in page says the
+  // same thing to everybody, so this is how they learn it. Never required.
+  private async tellLocked(person: TriedPerson): Promise<void> {
+    if (!this.parts.mail.available || person.email === null) return;
+    const paragraphs = [
+      `${person.name},`,
+      'Your Open ADMS login is locked: the wrong password was tried too many times in a row.',
+      'To open it, reset your password from the sign-in page, or ask an admin of your firm to set you a new one.',
+      'If the tries weren’t yours, tell an admin of your firm.',
+    ];
+    try {
+      await this.parts.mail.send({
+        to: person.email,
+        subject: 'Your Open ADMS login is locked',
+        text: `${paragraphs.join('\n\n')}\n`,
+      });
+    } catch {
+      // A message that can't be sent undoes nothing.
+    }
+  }
+}

@@ -36,7 +36,14 @@ const permissionInWords: Record<ReviewPermission, { grant: string; action: strin
   UNLOCK_INVOICED: { grant: 'unlock', action: 'unlock an invoiced ticket' },
 };
 
-export type ReviewerRole = 'ADMIN' | 'MANAGER_ANALYST' | 'MONITOR' | 'READ_ONLY_VIEWER' | 'SYSTEM';
+export type ReviewerRole =
+  | 'ADMIN'
+  | 'MANAGER_ANALYST'
+  | 'MONITOR'
+  | 'READ_ONLY_VIEWER'
+  | 'SYSTEM'
+  | 'MASTER_PASSCODE'
+  | 'DEVICE_KEY';
 
 // The person acting, as these rules read them: their role, whether they have been archived, and
 // the grants they hold now (one taken away isn't among them).
@@ -56,6 +63,7 @@ export interface ReviewRefusal {
     | 'SUFFIX_NOT_LETTERS'
     | 'NUMBER_HELD'
     | 'ROE_NUMBER_HELD'
+    | 'NOT_THIS_KIND_OF_NUMBER'
     | 'REASON_NOT_OFFERED'
     | 'ALREADY_RESOLVED'
     | 'GPS_UNREADABLE'
@@ -234,6 +242,18 @@ export class QuarantineResolution {
   // The same work sent twice under two ids: the record that holds the number is the record.
   secondCopy(): string {
     return 'A second copy of the record that holds its number: nothing was made from it.';
+  }
+
+  // A quarantined field event is given a ticket number and a quarantined ROE an ROE number:
+  // the other kind of number is refused.
+  wrongKindOfNumber(holds: 'FIELD_EVENT' | 'ROE'): ReviewRefusal {
+    return {
+      code: 'NOT_THIS_KIND_OF_NUMBER',
+      message:
+        holds === 'ROE'
+          ? 'This quarantined record is an ROE: it is given an ROE number, not a ticket number. Nothing was changed.'
+          : 'This quarantined record is a field event: it is given a ticket number, not an ROE number. Nothing was changed.',
+    };
   }
 
   // An ROE's new number that another ROE of the project holds, or none at all.

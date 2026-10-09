@@ -36,8 +36,11 @@ const shortest = 12;
 export const configFile = /(\.ya?ml|\.json|\.toml|\.ini|\.conf|\.properties|(^|\/)\.env[^/]*)$/i;
 const passwordLike =
   /^\s*["']?([A-Za-z0-9_.-]*(?:PASSWORD|PASSWD|SECRET|SECRET_KEY|ACCESS_KEY|TOKEN|API_KEY|PRIVATE_KEY))["']?\s*[:=]\s*(.*)$/i;
-// Not a literal: empty, a reference (${VAR}, <placeholder>), or a YAML block that follows.
-const notLiteral = /^(["']{2}|null|~|\$\{.*\}|<[^>]*>|[|>][-+]?)?,?$/;
+// Not a literal: empty, a reference (${VAR}, <placeholder>), a YAML block that follows, or the
+// opening of an object or a list on a line of its own (a JSON schema's property named
+// "password", as the generated OpenAPI description has: ADR-405). What such an opening holds is
+// read on the lines after it, each by this same rule.
+const notLiteral = /^(["']{2}|null|~|\$\{.*\}|<[^>]*>|[|>][-+]?|[{[])?,?$/;
 
 // The setting's name when a config line gives a password-like setting a literal value.
 export function passwordLikeSetting(line: string): string | undefined {

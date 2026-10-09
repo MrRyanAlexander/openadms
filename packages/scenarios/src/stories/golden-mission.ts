@@ -56,6 +56,7 @@ import {
   saved,
   setUpP1Pricing,
 } from './p1-office.ts';
+import { assigned } from './board.ts';
 import { p1TimeZone as timeZone } from './p1.ts';
 
 const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-04:00`;
@@ -187,9 +188,9 @@ export const goldenMission: Story = {
       'Friday: Dana sets up P2, the PPDR project, under the same client and declaration event: Coastline its prime, its contract, a load form with Vegetative, an ROE form and a survey form, VEG-HAUL-CY at $9.00, Marsh Road TDSR entered again, and two phones',
     );
     const projects = new ProjectSetup(api, clock, story.policy);
-    const contractors = new ContractorSetup(api, clock);
+    const contractors = new ContractorSetup(api, clock, story.policy);
     const forms = new FormSetup(api, clock);
-    const payItems = new PayItemSetup(api, clock);
+    const payItems = new PayItemSetup(api, clock, story.policy);
     const first = await api.project.findUniqueOrThrow({ where: { id: p1 } });
     const p2 = (
       await saved(
@@ -269,7 +270,7 @@ export const goldenMission: Story = {
     );
     const p2Tdsr = (
       await saved(
-        new SiteSetup(api, clock).site(dana, {
+        new SiteSetup(api, clock, story.policy).site(dana, {
           projectId: p2,
           name: 'Marsh Road TDSR',
           siteTypeId: (await api.siteType.findUniqueOrThrow({ where: { key: 'TDSR' } })).id,
@@ -284,21 +285,11 @@ export const goldenMission: Story = {
         }),
       )
     ).id;
-    const p2Devices = await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
-      const enrolled: Record<string, string> = {};
-      for (const name of ['P2-COL-1', 'P2-TWR-TDSR']) {
-        const phone = await tx.device.create({
-          data: {
-            name,
-            publicKey: `story-key-${name.toLowerCase()}`,
-            masterPasscodeVersion: 1,
-            enrolledAt: clock.now(),
-          },
-        });
-        enrolled[name] = phone.id;
-      }
-      return enrolled;
-    });
+    // P2's two phones, enrolled under the master passcode, each with a key of its own.
+    const p2Devices: Record<string, string> = {};
+    for (const name of ['P2-COL-1', 'P2-TWR-TDSR']) {
+      p2Devices[name] = (await story.enrolled(name)).id;
+    }
     const p2Phone = (name: string): string => {
       const id = p2Devices[name];
       if (id === undefined) throw new Error(`No phone ${name}`);
@@ -314,7 +305,7 @@ export const goldenMission: Story = {
     const feature = async (name: string): Promise<string> =>
       (await api.vehicleFeature.findFirstOrThrow({ where: { name } })).id;
     await saved(
-      new Certifications(api, clock).certify({
+      new Certifications(api, clock, story.policy).certify({
         id: uuidv7(clock.now()),
         projectId: p2,
         kind: 'CONTAINER',
@@ -446,11 +437,11 @@ export const goldenMission: Story = {
       settings,
       new Mileages(new MapServers(localMapServers())),
     );
-    const corrections = new Corrections(api, clock);
-    const acceptances = new Acceptances(api, clock);
-    const voids = new Voids(api, clock);
-    const qc = new QcMarks(api, clock);
-    const locks = new InvoiceLocks(api, clock);
+    const corrections = new Corrections(api, clock, story.policy);
+    const acceptances = new Acceptances(api, clock, story.policy);
+    const voids = new Voids(api, clock, story.policy);
+    const qc = new QcMarks(api, clock, story.policy);
+    const locks = new InvoiceLocks(api, clock, story.policy);
 
     // The ledger of a project as it stands: every line with its ticket (and property or pile),
     // its #, its pay item, quantity × rate = amount.
@@ -603,29 +594,23 @@ export const goldenMission: Story = {
       on('12', '06:35'),
       'Monday at the yard: Luis has written P2’s board too. Ana Brooks signs in on P2-COL-1, which takes a block of P2’s loads and of its ROE numbers, and Kim Nguyen on P2-TWR-TDSR: a second assignment and phone each, one project per phone',
     );
-    const p2Board = await api.$write({ actorId: luis, source: 'BACK_OFFICE' }, async (tx) => {
-      const assigned = async (phone: string, personId: string, more: object) =>
-        (
-          await tx.assignment.create({
-            data: {
-              workDate: new Date('2026-10-12'),
-              projectId: p2,
-              madeById: luis,
-              personId,
-              deviceId: p2Phone(phone),
-              origin: 'PLANNED',
-              ...more,
-            },
-          })
-        ).id;
-      return {
-        ana: await assigned('P2-COL-1', ana, {
-          fieldEventKinds: ['COLLECTION'],
-          formDocumentTypes: ['ROE', 'SURVEY'],
-        }),
-        kim: await assigned('P2-TWR-TDSR', kim, { fieldEventKinds: ['DISPOSAL'], siteId: p2Tdsr }),
-      };
-    });
+    const p2Monday = { workDate: '2026-10-12', projectId: p2 } as const;
+    const p2Board = {
+      ana: await assigned(api, clock, luis, {
+        ...p2Monday,
+        personId: ana,
+        deviceId: p2Phone('P2-COL-1'),
+        fieldEventKinds: ['COLLECTION'],
+        formDocumentTypes: ['ROE', 'SURVEY'],
+      }),
+      kim: await assigned(api, clock, luis, {
+        ...p2Monday,
+        personId: kim,
+        deviceId: p2Phone('P2-TWR-TDSR'),
+        fieldEventKinds: ['DISPOSAL'],
+        siteId: p2Tdsr,
+      }),
+    };
     const allocator = new NumberAllocator(api, clock, story.policy);
     for (const series of ['LOAD', 'ROE'] as const satisfies readonly NumberSeries[]) {
       await saved(
@@ -1378,13 +1363,12 @@ export const goldenMission: Story = {
       on('21', '09:00'),
       'A week later Dana changes Coastline’s rate on VEG-HAUL-CY-15 from $7.50 to $7.75; the worker runs',
     );
-    const rateTo = (rate: string) =>
-      api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
-        const standing = await tx.payItemRate.findFirstOrThrow({
-          where: { payItem: { projectId: p1, code: 'VEG-HAUL-CY-15' }, primeId: coastline },
-        });
-        await tx.payItemRate.update({ where: { id: standing.id }, data: { rate } });
+    const rateTo = async (rate: string) => {
+      const veg15 = await api.payItem.findFirstOrThrow({
+        where: { projectId: p1, code: 'VEG-HAUL-CY-15' },
       });
+      return saved(payItems.rate(dana, veg15.id, coastline, rate));
+    };
     await rateTo('7.75');
     const rated = await reconciliation.run({ projectId: p1, trigger: 'SETUP_CHANGE' });
     const passedBy = (

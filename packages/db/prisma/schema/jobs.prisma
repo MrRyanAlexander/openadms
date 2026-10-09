@@ -1,0 +1,53 @@
+// Jobs: the work a change asks the worker for (ARCHITECTURE §13, "Jobs, not requests"; ADR-418).
+// A sync, a correction, a void or a setup change never reconciles while its caller waits: it
+// adds a job, in its own piece of work, naming its project and the tickets it touched, and the
+// worker's run works those tickets and no other (the user, ADR-360). The API adds a job and its
+// tickets and changes neither; the worker writes only how the job went; nothing is deleted.
+
+// One ask for reconciliation: its project, what asked for it and who, and how it went. It is
+// waiting while it is neither finished nor set aside; once either, it never changes again.
+model ReconciliationJob {
+  id            String                @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  projectId     String                @map("project_id") @db.Uuid
+  trigger       ReconciliationTrigger
+  // The person who asked, where a person did; none on a job a sync queued.
+  requestedById String?               @map("requested_by_id") @db.Uuid
+  queuedAt      DateTime              @default(now()) @map("queued_at") @db.Timestamptz(3)
+
+  // How it went, the worker's to write. The runs that took it up.
+  attempts            Int       @default(0)
+  // When a run had worked its tickets, and that run: one of its own project's.
+  finishedAt          DateTime? @map("finished_at") @db.Timestamptz(3)
+  reconciliationRunId String?   @map("reconciliation_run_id") @db.Uuid
+  // Why its last try failed whole.
+  lastError           String?   @map("last_error")
+  // When it had failed too often to be taken up again: kept, for whoever runs the installation.
+  setAsideAt          DateTime? @map("set_aside_at") @db.Timestamptz(3)
+
+  project           Project                   @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  requestedBy       User?                     @relation("ReconciliationJobRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  reconciliationRun ReconciliationRun?        @relation(fields: [projectId, reconciliationRunId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  tickets           ReconciliationJobTicket[]
+
+  // What a job's ticket points at, so it is one of its own project's jobs.
+  @@unique([projectId, id])
+  // A project's waiting jobs, as a run reads them.
+  @@index([projectId, finishedAt, setAsideAt])
+  @@map("reconciliation_job")
+}
+
+// A ticket a job names, as the worker groups one: its project's workflow and bare number. Once a
+// job; never edited.
+model ReconciliationJobTicket {
+  id                  String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  projectId           String   @map("project_id") @db.Uuid
+  reconciliationJobId String   @map("reconciliation_job_id") @db.Uuid
+  workflow            Workflow
+  ticketNumber        String   @map("ticket_number")
+
+  project           Project           @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  reconciliationJob ReconciliationJob @relation(fields: [projectId, reconciliationJobId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([reconciliationJobId, workflow, ticketNumber])
+  @@map("reconciliation_job_ticket")
+}

@@ -14,8 +14,8 @@
 //
 // The unlock is a grant of its own. It is kept on the lock's own row (who, when, a note if one
 // was written), audited, and never refused for the project's state: people are trusted not to
-// unlock without good reason. It answers the run that works the ticket again, as the setup now
-// stands. Locking again is a new row.
+// unlock without good reason. It queues the job that works the ticket again, as the setup now
+// stands, in its own piece of work. Locking again is a new row.
 import type { InvoiceBatch, InvoiceLock } from '@open-adms/db';
 import { BatchName, InvoiceLocking } from '@open-adms/domain';
 
@@ -105,10 +105,10 @@ export class InvoiceLocks extends ReviewService {
           unlockNote: written === '' ? null : written,
         },
       });
-      const reprocess = await ReviewService.reprocess(tx, person, marked.projectId, [
-        marked.ticket,
-      ]);
-      return { record, reprocess: { ...reprocess, trigger: 'REPROCESS' as const } };
+      // An unlock corrects nothing: only the ticket itself is worked again, as the setup now
+      // stands.
+      const asked = await ReviewService.asked(tx, person, marked.projectId, [marked.ticket]);
+      return { record, reprocess: await this.queued(tx, { ...asked, trigger: 'REPROCESS' }) };
     });
   }
 

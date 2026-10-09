@@ -10,7 +10,9 @@
 // a captured field corrected in place, a renumber, a quarantined record resolved, a photograph
 // and a white goods line taken off and put back, an ROE's scope, a record created in the back
 // office, a certification's box. Each answers the run to ask the worker for; the story asks it,
-// and reads what the worker concluded.
+// and reads what the worker concluded. Last, a sub typed twice at certification is merged
+// (AC-01-21; ADR-426): the merge queues the tickets of the certifications it moved, on P1 and
+// on P2, and the worker's runs put the contractor kept on their lines.
 //
 // Not here: voiding the phantom, unvoiding and accepting a flag (the story `p1-voided`); QC, the
 // lock and a batch (the story `p1-invoiced`): where this story needs a lock it writes it as the
@@ -46,10 +48,12 @@ import {
   loadP1Map,
   p1FieldDaysHeld,
   P1Syncs,
+  QueueRuns,
   primaryBox,
   saved,
   setUpP1Pricing,
 } from './p1-office.ts';
+import { assigned } from './board.ts';
 import { p1TimeZone as timeZone, startSeries } from './p1.ts';
 
 const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-04:00`;
@@ -123,7 +127,11 @@ export const p1Reviewed: Story = {
 
     story.at(
       on('09', '09:00'),
-      'Friday: Luis Ortega sets up P2, the PPDR project: Coastline its prime, a load form with Vegetative and C&D, an ROE form, VEG-HAUL-CY at $9.00, Marsh Road TDSR entered again',
+      'Friday: Dana grants Luis Ortega Setup, and he sets up P2, the PPDR project: Coastline its prime, a load form with Vegetative and C&D, an ROE form, VEG-HAUL-CY at $9.00, Marsh Road TDSR entered again',
+    );
+    // A setup service asks whether its caller holds Setup, inside its own piece of work (ADR-424).
+    await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, (tx) =>
+      tx.userPermission.create({ data: { userId: luis, permission: 'SETUP' } }),
     );
     const p2 = await api.$write({ actorId: luis, source: 'BACK_OFFICE' }, async (tx) => {
       const first = await tx.project.findUniqueOrThrow({ where: { id: p1 } });
@@ -145,9 +153,9 @@ export const p1Reviewed: Story = {
       await startSeries(tx, project.id, { LOAD: 102001, CERTIFICATION: 730416 });
       return project.id;
     });
-    const contractors = new ContractorSetup(api, clock);
+    const contractors = new ContractorSetup(api, clock, story.policy);
     const forms = new FormSetup(api, clock);
-    const payItems = new PayItemSetup(api, clock);
+    const payItems = new PayItemSetup(api, clock, story.policy);
     await saved(contractors.addPrime(luis, p2, coastline));
     await saved(
       contractors.contract(luis, {
@@ -208,7 +216,7 @@ export const p1Reviewed: Story = {
     );
     const p2Tdsr = (
       await saved(
-        new SiteSetup(api, clock).site(luis, {
+        new SiteSetup(api, clock, story.policy).site(luis, {
           projectId: p2,
           name: 'Marsh Road TDSR',
           siteTypeId: (await api.siteType.findUniqueOrThrow({ where: { key: 'TDSR' } })).id,
@@ -233,7 +241,7 @@ export const p1Reviewed: Story = {
     const feature = async (name: string): Promise<string> =>
       (await api.vehicleFeature.findFirstOrThrow({ where: { name } })).id;
     await saved(
-      new Certifications(api, clock).certify({
+      new Certifications(api, clock, story.policy).certify({
         id: uuidv7(clock.now()),
         projectId: p2,
         kind: 'CONTAINER',
@@ -268,9 +276,9 @@ export const p1Reviewed: Story = {
       settings,
       new Mileages(new MapServers(localMapServers())),
     );
-    const corrections = new Corrections(api, clock);
-    const quarantine = new QuarantineReview(api, clock);
-    const backOffice = new BackOfficeRecords(api, clock);
+    const corrections = new Corrections(api, clock, story.policy);
+    const quarantine = new QuarantineReview(api, clock, story.policy);
+    const backOffice = new BackOfficeRecords(api, clock, story.policy);
 
     const names = new Map<string | null, string>([
       [dana, 'Dana'],
@@ -362,9 +370,12 @@ export const p1Reviewed: Story = {
     const last: { run: RunOutcome } = {
       run: { ran: false, reason: 'RUN_UNDER_WAY', message: 'No run yet.' },
     };
+    // Nobody asks the worker: the action queued its job, and the worker takes it up.
+    const queue = new QueueRuns(story, reconciliation);
     const reviewed = async <T>(attempt: Promise<Outcome<Reviewed<T>>>): Promise<Reviewed<T>> => {
       const done = await saved(attempt);
-      last.run = await reconciliation.run(done.reprocess);
+      // An action that left no ticket to work queued no job, and no run follows it.
+      if (done.reprocess.jobs.length > 0) last.run = await queue.next(done.reprocess.projectId);
       return done;
     };
     const refusal = async <T>(attempt: Promise<Outcome<T>>): Promise<string> => {
@@ -401,6 +412,8 @@ export const p1Reviewed: Story = {
     await phones.arrive(wednesdayMorning);
     story.at(on('14', '07:20'), 'The worker runs');
     const before = await reconciliation.run(sync);
+    // What setup queued before the field days (each certification's own flags) is settled.
+    await queue.settle(p1);
     story.check(
       'P1 before any review: 101003 in review for its 96% call, 101006 waiting for the disposal typed as 101060, and 19 lines',
       [of(before, '101003', '101006', '101060'), (await lines(p1)).length],
@@ -446,12 +459,99 @@ export const p1Reviewed: Story = {
     });
 
     story.at(
+      on('14', '07:55'),
+      'Luis saves 101001’s load call as 70%, and the job queue can’t be written just then',
+    );
+    // The API's own client, with a job queue that fails: every other write goes through.
+    const queueAway = new Proxy(api, {
+      get(target, property) {
+        if (property !== '$write') return Reflect.get(target, property) as unknown;
+        const write: typeof api.$write = (actor, work) =>
+          target.$write(actor, (tx) =>
+            work(
+              new Proxy(tx, {
+                get(inWork, model) {
+                  if (model !== 'reconciliationJob') return Reflect.get(inWork, model) as unknown;
+                  return { create: () => Promise.reject(new Error('The job queue is away.')) };
+                },
+              }),
+            ),
+          );
+        return write;
+      },
+    });
+    const jobsOf101001 = () =>
+      api.reconciliationJob.findMany({
+        where: {
+          projectId: p1,
+          tickets: { some: { workflow: 'LOAD', ticketNumber: '101001' } },
+          trigger: 'CORRECTION',
+        },
+        include: { tickets: true },
+        orderBy: { id: 'asc' },
+      });
+    const undone = await new Corrections(queueAway, clock, story.policy)
+      .fieldEvent(luis, dis101001.id, { loadCall: 70 }, 'Tower photo shows 70%')
+      .then(
+        () => 'saved',
+        (error: unknown) => (error instanceof Error ? error.message : String(error)),
+      );
+    const refusedFix = await refusal(
+      corrections.fieldEvent(luis, dis101001.id, {
+        loadCall: 70,
+        end: { latitude: 'north', longitude: '-81.6600000' },
+      }),
+    );
+    story.check(
+      'AC-10-50 the correction and its job are one piece of work: when the job can’t be written the correction is undone with it (the call is still 80%, and the audit log holds nothing of Luis’s on the field event), and a correction that is refused queues no job',
+      [
+        undone,
+        (await eventOf('101001', 'DISPOSAL')).loadCall,
+        await changesTo(dis101001.id),
+        refusedFix.startsWith('GPS_NOT_A_FIX') || refusedFix.includes('can’t be a fix'),
+        (await jobsOf101001()).length,
+      ],
+      ['The job queue is away.', 80, [], true, 0],
+    );
+
+    story.at(
       on('14', '08:00'),
-      'Luis corrects 101001’s load call from 80% to 70%; the worker runs',
+      'Luis corrects 101001’s load call from 80% to 70%; the worker takes its job up',
     );
     const eventsBefore = await fieldEvents();
     const corrected = await reviewed(
       corrections.fieldEvent(luis, dis101001.id, { loadCall: 70 }, 'Tower photo shows 70%'),
+    );
+    const [job101001] = await jobsOf101001();
+    story.check(
+      'AC-10-50, AC-10-51 the same correction, saved: its job was queued with it, in Luis’s own piece of work (the audit log holds the job under Luis from the back office with the correction’s note), naming 101001; nobody asked the worker, whose run finished the job',
+      [
+        (await jobsOf101001()).length,
+        corrected.reprocess.jobs.length === 1 && corrected.reprocess.jobs[0] === job101001?.id,
+        [job101001?.trigger, names.get(job101001?.requestedById ?? null)],
+        job101001?.tickets.map((ticket) => ticket.ticketNumber),
+        (
+          await api.auditRecord.findMany({
+            where: { tableName: 'reconciliation_job', recordId: job101001?.id ?? '' },
+            orderBy: { id: 'asc' },
+          })
+        ).map((record) =>
+          [names.get(record.actorId), record.source, record.operation, record.reason].join(' · '),
+        ),
+        last.run.ran && job101001?.reconciliationRunId === last.run.runId,
+      ],
+      [
+        1,
+        true,
+        ['CORRECTION', 'Luis'],
+        ['101001'],
+        [
+          'Luis · BACK_OFFICE · INSERT · Tower photo shows 70%',
+          'system · SYSTEM · UPDATE · ',
+          'system · SYSTEM · UPDATE · ',
+        ],
+        true,
+      ],
     );
     story.check(
       'AC-08-10 the field event is changed in place, the audit log keeps 80 → 70 under Luis from the back office with his note, and the ticket reprocesses: the same completed load, now 45.5 CY, and one line, 45.5 × $7.50 = $341.25, the $390.00 row copied to the audit log first',
@@ -604,11 +704,25 @@ export const p1Reviewed: Story = {
       [[], 0, []],
     );
     story.check(
-      'AC-08-24, AC-08-07 Luis changed one thing, the disposal’s number: every other record of the pairing (the completed load, its collection row, the line) was written by the system actor in the worker’s own run, which names Luis only as who asked',
+      'AC-08-24, AC-08-07, AC-10-51 Luis changed one thing, the disposal’s number, and with it queued one job naming the two numbers: every other record of the pairing (the completed load, its collection row, the line) was written by the system actor in the worker’s own run, which names Luis only as who asked',
       [
         await api.auditRecord.count({
-          where: { actorId: luis, id: { gt: lastAudited } },
+          where: {
+            actorId: luis,
+            id: { gt: lastAudited },
+            tableName: { notIn: ['reconciliation_job', 'reconciliation_job_ticket'] },
+          },
         }),
+        (
+          await api.auditRecord.findMany({
+            where: {
+              actorId: luis,
+              id: { gt: lastAudited },
+              tableName: { in: ['reconciliation_job', 'reconciliation_job_ticket'] },
+            },
+            orderBy: { id: 'asc' },
+          })
+        ).map((record) => `${record.tableName} ${record.operation}`),
         (await completedLoads()) - loadsWritten,
         (
           await api.auditRecord.findMany({
@@ -624,7 +738,17 @@ export const p1Reviewed: Story = {
             )
           : [],
       ],
-      [1, 1, true, ['CORRECTION', 'Luis']],
+      [
+        1,
+        [
+          'reconciliation_job INSERT',
+          'reconciliation_job_ticket INSERT',
+          'reconciliation_job_ticket INSERT',
+        ],
+        1,
+        true,
+        ['CORRECTION', 'Luis'],
+      ],
     );
 
     story.at(
@@ -1080,6 +1204,35 @@ export const p1Reviewed: Story = {
         ],
       ],
     );
+    story.at(
+      on('15', '09:30'),
+      'The curb photographs put 101035’s loading at 15:30 to 16:00, after the truck had dumped 101030: Luis corrects its times; the worker takes the job up',
+    );
+    const eightyMinutesOn = (time: Date): Date => new Date(time.getTime() + 80 * 60_000);
+    const retimed = await reviewed(
+      corrections.fieldEvent(luis, col101031.id, {
+        startedAt: eightyMinutesOn(col101031.startedAt),
+        endedAt: eightyMinutesOn(col101031.endedAt),
+      }),
+    );
+    story.check(
+      'AC-10-54 the correction’s job names 101030 too, the ticket that read 101035 as it stood before the change: afterwards nothing says the two were neighbours, and only the change knew. In the one run the overlap is cleared on both, and 101030 is COMPLETED',
+      [
+        retimed.reprocess.tickets,
+        retimed.reprocess.neighbours,
+        of(last.run, '101030', '101035'),
+        await flagsOn('101030'),
+      ],
+      [
+        [{ workflow: 'LOAD', ticketNumber: '101035' }],
+        [{ workflow: 'LOAD', ticketNumber: '101030' }],
+        ['101030 · COMPLETED', '101035 · PENDING'],
+        [
+          'Ticket 101030: loading 14:10–14:40 overlaps ticket 101031 on truck 730415. Flagged for review. (cleared)',
+          'Ticket 101030: loading 14:10–14:40 overlaps ticket 101035 on truck 730415. Flagged for review. (cleared)',
+        ],
+      ],
+    );
 
     // ------------------------------------------------------------------------------------------
     story.at(
@@ -1088,38 +1241,27 @@ export const p1Reviewed: Story = {
     );
     const lee = (await api.user.findFirstOrThrow({ where: { name: 'Lee Morgan' } })).id;
     const kim = (await api.user.findFirstOrThrow({ where: { name: 'Kim Nguyen' } })).id;
-    const p2Phones = await api.$write({ actorId: luis, source: 'BACK_OFFICE' }, async (tx) => {
-      const assigned = async (
-        name: string,
-        personId: string,
-        more: { fieldEventKinds: ('COLLECTION' | 'DISPOSAL')[]; siteId?: string },
-      ) => {
-        const phone = await tx.device.create({
-          data: {
-            name,
-            publicKey: `story-key-${name.toLowerCase()}`,
-            masterPasscodeVersion: 1,
-            enrolledAt: new Date(on('13', '17:00')),
-          },
-        });
-        const assignment = await tx.assignment.create({
-          data: {
-            workDate: new Date('2026-10-14'),
-            projectId: p2,
-            madeById: luis,
-            personId,
-            deviceId: phone.id,
-            origin: 'PLANNED',
-            ...more,
-          },
-        });
-        return { monitorId: personId, deviceId: phone.id, assignmentId: assignment.id };
-      };
-      return {
-        lee: await assigned('P2-COL-1', lee, { fieldEventKinds: ['COLLECTION'] }),
-        kim: await assigned('P2-TWR-TDSR', kim, { fieldEventKinds: ['DISPOSAL'], siteId: p2Tdsr }),
-      };
-    });
+    // The phone was enrolled on Tuesday evening, under the master passcode; its assignment is
+    // the board's.
+    const p2Assigned = async (
+      name: string,
+      personId: string,
+      more: { fieldEventKinds: ('COLLECTION' | 'DISPOSAL')[]; siteId?: string },
+    ) => {
+      const phone = await story.enrolled(name, new Date(on('13', '17:00')));
+      const assignmentId = await assigned(api, clock, luis, {
+        workDate: '2026-10-14',
+        projectId: p2,
+        personId,
+        deviceId: phone.id,
+        ...more,
+      });
+      return { monitorId: personId, deviceId: phone.id, assignmentId };
+    };
+    const p2Phones = {
+      lee: await p2Assigned('P2-COL-1', lee, { fieldEventKinds: ['COLLECTION'] }),
+      kim: await p2Assigned('P2-TWR-TDSR', kim, { fieldEventKinds: ['DISPOSAL'], siteId: p2Tdsr }),
+    };
     const roe = async (roeNumber: string, address: string, ownerName: string, at: string) => {
       const madeAt = new Date(on('14', at));
       const id = uuidv7(madeAt);
@@ -1317,14 +1459,14 @@ export const p1Reviewed: Story = {
       ],
     );
     story.at(on('15', '11:20'), 'Dana unlocks 101001 (Luis holds no unlock); the worker runs');
-    const unlocked = await saved(
-      new InvoiceLocks(api, clock).unlock(
+    await saved(
+      new InvoiceLocks(api, clock, story.policy).unlock(
         dana,
         { completedLoadId: load101001?.id ?? '' },
         'Capacity corrected',
       ),
     );
-    await reconciliation.run(unlocked.reprocess);
+    await queue.next(p1);
     story.check(
       'AC-09-16 unlocked first, the unlock audited under Dana, it reprocesses at the new capacity: 62 × 70% = 43.4 CY, $325.50',
       [
@@ -1340,6 +1482,104 @@ export const p1Reviewed: Story = {
         await linesOf('101001'),
       ],
       [[['Dana', true]], [[62, '43.4']], ['101001 #1 VEG-HAUL-CY-15 43.4 × $7.50 = $325.50']],
+    );
+
+    // ------------------------------------------------------------------------------------------
+    story.at(
+      on('15', '11:40'),
+      'A second Rivera truck, 730421, is certified on P1 with its sub typed as its subcontract names it, "Rivera Trucking LLC". Luis merges the first spelling, "Rivera Trucking", into it',
+    );
+    await saved(
+      new Certifications(api, clock, story.policy).certify({
+        id: uuidv7(clock.now()),
+        projectId: p1,
+        kind: 'CONTAINER',
+        certNumber: '730421',
+        primeId: coastline,
+        firstTierSub: 'Rivera Trucking LLC',
+        vehicleTypeId: (
+          await api.vehicleType.findFirstOrThrow({ where: { name: 'Self-Loading Truck' } })
+        ).id,
+        boxes: [primaryBox(240, 90, 60)],
+        certifiedById: sam,
+        certifiedAt: clock.now(),
+        deviceUtcOffsetMinutes: utcOffsetMinutes(timeZone, clock.now()),
+      }),
+    );
+    await queue.settle(p1);
+    const rivera = async (name: string): Promise<string> =>
+      (await api.contractor.findFirstOrThrow({ where: { name } })).id;
+    const firstSpelling = await rivera('Rivera Trucking');
+    const keptSpelling = await rivera('Rivera Trucking LLC');
+    // Every line that names an operating sub, by its ticket: whose work the ledger says it was.
+    const subsOn = async (projectId: string): Promise<string[]> =>
+      [
+        ...new Set(
+          (
+            await api.transaction.findMany({
+              where: { projectId, operatingSubId: { not: null } },
+              include: { operatingSub: true, completedLoad: true },
+            })
+          ).map(
+            (line) => `${line.completedLoad?.ticketNumber ?? ''} ${line.operatingSub?.name ?? ''}`,
+          ),
+        ),
+      ].sort();
+    const subsBefore = [await subsOn(p1), await subsOn(p2)];
+    const billed = async (): Promise<string[]> =>
+      [...(await lines(p1)), ...(await lines(p2))].map((each) => each.line);
+    const billedBefore = await billed();
+    const merging = await contractors.merge(luis, firstSpelling, keptSpelling);
+    if (!merging.saved) throw new Error(`Refused: ${merging.refusal.message}`);
+    const mergeJobs = [await queue.waiting(p1), await queue.waiting(p2)];
+    story.check(
+      'AC-01-21, AC-10-51 the merge queues its own jobs in its own piece of work, one for each project: the tickets not locked as invoiced whose field events carry a certification it moved, Rivera’s 730416 on P1 and on P2, and no other; each job is Luis’s, a setup change; "Rivera Trucking" is archived, pointing at the record kept, and no line has moved yet',
+      [
+        [merging.record.mergedIntoId === keptSpelling, merging.record.archivedAt !== null],
+        merging.queued?.jobs.length,
+        { tickets: merging.queued?.tickets, lockedAsInvoiced: merging.queued?.lockedAsInvoiced },
+        mergeJobs.map((jobs) =>
+          jobs.map((job) => [job.trigger, names.get(job.requestedById), job.tickets]),
+        ),
+        [await subsOn(p1), await subsOn(p2)].join() === subsBefore.join(),
+      ],
+      [
+        [true, true],
+        2,
+        { tickets: 8, lockedAsInvoiced: 0 },
+        [
+          [['SETUP_CHANGE', 'Luis', ['101002', '101004', '101006', '101020', '101021', '101029']]],
+          [['SETUP_CHANGE', 'Luis', ['102001', '102005']]],
+        ],
+        true,
+      ],
+    );
+    await queue.next(p1);
+    await queue.next(p2);
+    story.check(
+      'the worker takes the jobs up: every line of Rivera’s truck now records the contractor that was kept as its operating sub, on both projects; none names the archived spelling, and each amount is as it was',
+      [
+        subsBefore,
+        [await subsOn(p1), await subsOn(p2)],
+        (await billed()).join() === billedBefore.join(),
+        await api.transaction.count({ where: { operatingSubId: firstSpelling } }),
+      ],
+      [
+        [
+          ['101002', '101004', '101006', '101020', '101021', '101029'].map(
+            (ticket) => `${ticket} Rivera Trucking`,
+          ),
+          ['102001 Rivera Trucking', '102005 Rivera Trucking'],
+        ],
+        [
+          ['101002', '101004', '101006', '101020', '101021', '101029'].map(
+            (ticket) => `${ticket} Rivera Trucking LLC`,
+          ),
+          ['102001 Rivera Trucking LLC', '102005 Rivera Trucking LLC'],
+        ],
+        true,
+        0,
+      ],
     );
 
     // ------------------------------------------------------------------------------------------

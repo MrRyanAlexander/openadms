@@ -13,6 +13,8 @@ describe('a password-like setting with a literal value', () => {
     ['aws_access_key: AKIAEXAMPLEEXAMPLE01', 'aws_access_key'],
     ['  "api_token": "abc123",', 'api_token'],
     ['smtp_password = "correct horse"', 'smtp_password'],
+    ['  "password": { "default": "correct horse" },', 'password'],
+    ['  "token": ["abc123"],', 'token'],
   ])('is found: %s', (line, key) => {
     expect(passwordLikeSetting(line)).toBe(key);
   });
@@ -27,6 +29,9 @@ describe('a password-like setting with a literal value', () => {
     'password: <your password>',
     'token: null',
     'private_key: |',
+    // A schema's property, as apps/api/openapi.json names one: what it holds is on later lines.
+    '                  "password": {',
+    '  password: [',
   ])('is not a literal: %s', (line) => {
     expect(passwordLikeSetting(line)).toBeUndefined();
   });

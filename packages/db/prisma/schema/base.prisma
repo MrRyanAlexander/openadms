@@ -19,4 +19,6 @@ generator client {
   output              = "../../src/generated/prisma"
   moduleFormat        = "esm"
   importFileExtension = "ts"
+  // A view is declared, never made, by Prisma: `viewer.prisma` (ADR-435).
+  previewFeatures     = ["views"]
 }

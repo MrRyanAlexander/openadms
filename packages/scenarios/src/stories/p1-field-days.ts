@@ -27,6 +27,7 @@ import {
   PayItemSetup,
   ProjectSetup,
   SiteSetup,
+  type NewAssignment,
 } from '@open-adms/api';
 import type { FieldEventKind, FormDocumentType, NumberSeries } from '@open-adms/db';
 
@@ -44,6 +45,7 @@ import {
 import { uuidv7, uuidv7Time } from '../ids.ts';
 import { phoneLists } from '../phone-lists.ts';
 import type { Story } from '../runner.ts';
+import { assigned } from './board.ts';
 import { p1TimeZone as timeZone, setUpP1, setUpP1Sites } from './p1.ts';
 
 const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-04:00`;
@@ -97,10 +99,25 @@ export const p1FieldDays: Story = {
       monday('05:30'),
       'Dana Reyes has set up P1: its three sites, its forms and debris types, its field tags, its unit rate pay items, its people and its six phones',
     );
+    // Enrolled by now, on the story's clock, before any work they record: each under the master
+    // passcode, with a key of its own (ADR-439, 440).
+    const enrolledPhones: Record<string, string> = {};
+    for (const name of [
+      'P1-COL-1',
+      'P1-TWR-TDSR',
+      'P1-TWR-LF',
+      'P1-HO-TDSR',
+      'P1-TWR-CCL',
+      'P1-UR-1',
+    ]) {
+      enrolledPhones[name] = (await story.enrolled(name)).id;
+    }
     const dana = uuidv7(clock.now());
     const office = await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
       await tx.user.create({ data: { id: dana, name: 'Dana Reyes', role: 'ADMIN' } });
       const luis = await tx.user.create({ data: { name: 'Luis Ortega', role: 'MANAGER_ANALYST' } });
+      // Luis writes each day's board: Dana grants him *dispatch* (ADR-428, 429).
+      await tx.userPermission.create({ data: { userId: luis.id, permission: 'DISPATCH' } });
       const p1 = await setUpP1(tx, story.policy);
       const { tdsr, landfill } = await setUpP1Sites(tx, p1.project);
       const monitors: Record<string, string> = {};
@@ -115,26 +132,6 @@ export const p1FieldDays: Story = {
         const monitor = await tx.user.create({ data: { name, role: 'MONITOR', monitorNumber } });
         monitors[name] = monitor.id;
       }
-      const phones: Record<string, string> = {};
-      for (const name of [
-        'P1-COL-1',
-        'P1-TWR-TDSR',
-        'P1-TWR-LF',
-        'P1-HO-TDSR',
-        'P1-TWR-CCL',
-        'P1-UR-1',
-      ]) {
-        const phone = await tx.device.create({
-          // Enrolled by now, on the story's clock: before any work it records.
-          data: {
-            name,
-            publicKey: `story-key-${name.toLowerCase()}`,
-            masterPasscodeVersion: 1,
-            enrolledAt: clock.now(),
-          },
-        });
-        phones[name] = phone.id;
-      }
       // The firm's own sub-type of an incident (golden mission §2).
       const damage = await tx.incidentType.findFirstOrThrow({ where: { name: 'Property damage' } });
       await tx.incidentSubType.create({
@@ -147,7 +144,7 @@ export const p1FieldDays: Story = {
         tdsr,
         landfill,
         monitors,
-        phones,
+        phones: enrolledPhones,
       };
     });
     const { luis, p1, coastline, tdsr, landfill } = office;
@@ -162,11 +159,11 @@ export const p1FieldDays: Story = {
       return id;
     };
 
-    const sites = new SiteSetup(api, clock);
+    const sites = new SiteSetup(api, clock, story.policy);
     const forms = new FormSetup(api, clock);
     const lists = new ListSetup(api, clock);
     const projects = new ProjectSetup(api, clock, story.policy);
-    const payItems = new PayItemSetup(api, clock);
+    const payItems = new PayItemSetup(api, clock, story.policy);
     const allocator = new NumberAllocator(api, clock, story.policy);
 
     const finalDisposal = await api.siteType.findUniqueOrThrow({
@@ -319,7 +316,7 @@ export const p1FieldDays: Story = {
       readonly monitor: string;
       readonly phone: string;
       readonly kinds: readonly FieldEventKind[];
-      readonly forms?: readonly FormDocumentType[];
+      readonly forms?: NewAssignment['formDocumentTypes'];
       readonly siteId?: string;
       readonly unitRate?: boolean;
       readonly tuesdayOnly?: boolean;
@@ -355,39 +352,23 @@ export const p1FieldDays: Story = {
         unitRate: true,
       },
     ];
-    const board = (workDate: string, people: readonly Planned[]) =>
-      api.$write({ actorId: luis, source: 'BACK_OFFICE' }, async (tx) => {
-        const assignments: Record<string, string> = {};
-        for (const planned of people) {
-          const assignment = await tx.assignment.create({
-            data: {
-              workDate: new Date(workDate),
-              projectId: p1,
-              madeById: luis,
-              personId: person(planned.monitor),
-              fieldEventKinds: [...planned.kinds],
-              formDocumentTypes: [...(planned.forms ?? [])],
-              siteId: planned.siteId ?? null,
-              deviceId: device(planned.phone),
-              origin: 'PLANNED',
-            },
-          });
-          assignments[planned.phone] = assignment.id;
-          if (planned.unitRate !== true) continue;
-          for (const payItem of unitRateWork) {
-            if (payItem.kindOfWorkId === null) continue;
-            await tx.assignmentPayItem.create({
-              data: {
-                assignmentId: assignment.id,
-                projectId: p1,
-                payItemId: payItem.id,
-                kindOfWorkId: payItem.kindOfWorkId,
-              },
-            });
-          }
-        }
-        return assignments;
-      });
+    const board = async (workDate: string, people: readonly Planned[]) => {
+      const assignments: Record<string, string> = {};
+      for (const planned of people) {
+        assignments[planned.phone] = await assigned(api, clock, luis, {
+          workDate,
+          projectId: p1,
+          personId: person(planned.monitor),
+          fieldEventKinds: [...planned.kinds],
+          formDocumentTypes: [...(planned.forms ?? [])],
+          siteId: planned.siteId ?? null,
+          deviceId: device(planned.phone),
+          // Each named with its own kind of work by the service (C42).
+          payItemIds: planned.unitRate === true ? unitRateWork.map(({ id }) => id) : [],
+        });
+      }
+      return assignments;
+    };
     const boards = {
       monday: await board(
         '2026-10-12',

@@ -9,7 +9,7 @@
 // status never seen) throws: a mileage is never a straight line because a server didn't answer.
 import { readFileSync } from 'node:fs';
 import { request } from 'node:https';
-import type { LookupFunction } from 'node:net';
+import { isIP, type LookupFunction } from 'node:net';
 
 import type { GpsPoint, MapData } from '@open-adms/domain';
 
@@ -25,6 +25,10 @@ export interface MapServerSettings {
   readonly mapDataSha256: string;
   // How long one question may take.
   readonly timeoutMs: number;
+  // Where both servers are when it isn't where their names say: the proxy's own address and
+  // port, as the worker's container reaches it inside the local stack. The name asked for, and
+  // the certificate checked, stay the server's own.
+  readonly at?: { readonly host: string; readonly port: number };
 }
 
 interface Answer {
@@ -48,11 +52,17 @@ const byDistanceAsACarDrives = {
 // the ends. Anything else it refuses is a fault.
 const noRouteCodes = [171, 442];
 
+// Answers every name with one address.
+const always =
+  (address: string): LookupFunction =>
+  (_hostname, options, callback) => {
+    const family = isIP(address) === 6 ? 6 : 4;
+    if (options.all === true) callback(null, [{ address, family }]);
+    else callback(null, address, family);
+  };
+
 // A name under .localhost is this machine (RFC 6761); not every resolver knows.
-const loopback: LookupFunction = (_hostname, options, callback) => {
-  if (options.all === true) callback(null, [{ address: '127.0.0.1', family: 4 }]);
-  else callback(null, '127.0.0.1', 4);
-};
+const loopback = always('127.0.0.1');
 
 export class MapServers {
   private readonly settings: MapServerSettings;
@@ -66,6 +76,9 @@ export class MapServers {
     }
     if (!/^[0-9a-f]{64}$/.test(settings.mapDataSha256)) {
       throw new Error("The map data's SHA-256 is 64 lowercase hex characters.");
+    }
+    if (settings.at !== undefined && isIP(settings.at.host) === 0) {
+      throw new Error('Where the map servers are is an IP address and a port.');
     }
     this.settings = settings;
     this.ca = settings.caFile === null ? undefined : readFileSync(settings.caFile);
@@ -137,6 +150,7 @@ export class MapServers {
 
   private ask(server: string, path: string, json?: unknown): Promise<Answer> {
     const url = new URL(path, server);
+    const { at } = this.settings;
     const payload = json === undefined ? undefined : JSON.stringify(json);
     return new Promise((resolve, reject) => {
       const req = request(
@@ -146,7 +160,11 @@ export class MapServers {
           headers: payload === undefined ? {} : { 'content-type': 'application/json' },
           ca: this.ca,
           timeout: this.settings.timeoutMs,
-          ...(url.hostname.endsWith('.localhost') ? { lookup: loopback } : {}),
+          ...(at !== undefined
+            ? { lookup: always(at.host), port: at.port }
+            : url.hostname.endsWith('.localhost')
+              ? { lookup: loopback }
+              : {}),
         },
         (res) => {
           let text = '';

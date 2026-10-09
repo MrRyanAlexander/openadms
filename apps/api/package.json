@@ -7,9 +7,16 @@
   "type": "module",
   "exports": "./dist/index.js",
   "dependencies": {
+    "@nestjs/common": "12.1.2",
+    "@nestjs/core": "12.1.2",
+    "@nestjs/platform-fastify": "12.1.2",
     "@open-adms/contracts": "workspace:*",
     "@open-adms/db": "workspace:*",
-    "@open-adms/domain": "workspace:*"
+    "@open-adms/domain": "workspace:*",
+    "fastify": "5.12.5",
+    "nodemailer": "10.0.13",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.2"
   },
   "devDependencies": {
     "@types/node": "24.13.6"

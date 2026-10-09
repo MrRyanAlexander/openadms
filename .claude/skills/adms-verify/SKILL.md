@@ -3,9 +3,9 @@ name: adms-verify
 description: Run the Open ADMS verification chain and report real observed output. Covers loading Node 24 through fnm, the frozen pnpm install, typecheck, the Vitest run with its expected counts, lint and format, the licence report, the clean-copy check after a dependency change, where tests live and how a workspace joins the run, and which ARCHITECTURE §15 layers are still to come. Use after any code or config edit, before closing out any code task, or whenever asked to verify, test, typecheck, or confirm the build is green.
 ---
 
-<!-- skill-status: current (rewritten for the rebuild's chain 2026-09-29, ADR-259; cut to today's expected output 2026-10-06, ADR-375: the count history is in DECISIONS.md's scratchpad) -->
+<!-- skill-status: current (rewritten for the rebuild's chain 2026-09-29, ADR-259; cut to today's expected output 2026-10-06, ADR-375: the count history is in DECISIONS.md's scratchpad; the API's tests and container, 2026-10-07, ADR-385; the boundary's tests and `pnpm openapi`, ADR-387…392; the statement timeout, ADR-394…396; sign-in's records, ADR-397…399; passwords, ADR-402…406; sessions, ADR-407…411; two-step sign-in, ADR-412; permissions and people, the sixteenth story, the API's files one at a time, ADR-415; the job queue's tests, ADR-418; the worker's process, its container and the seventeenth story, ADR-419; what queues work, the stories on the queue, ADR-420; the setup services' story checks, ADR-423; setup's endpoints, part 1, ADR-424; part 2, ADR-425; part 3, ADR-426; part 4, the firm's people, ADR-427; phones and the master passcode, ADR-428; a day's assignments, ADR-429; review's marks, ADR-430; corrections and which field a schema refused, ADR-431; ROEs, forms, quarantine and back-office records, ADR-432; a certification's changes, ADR-433; the viewer's path, part 1, ADR-434; part 2, the declared views and the eighteenth story, ADR-435; the master passcode's actor and enrolment, ADR-439; the device key's actor, a phone's proof and the phones the stories enrol, ADR-440) -->
 
-> **This page states today's chain** (expected output as seen 2026-10-06, ADR-375). The rule never changes: **report real
+> **This page states today's chain** (expected output as seen 2026-10-07, ADR-420). The rule never changes: **report real
 > observed output, never "should pass".** The layers still to come are listed at the end of Part 1.
 
 # PART 1 — THE CHAIN
@@ -22,19 +22,22 @@ pnpm typecheck                   # pnpm generate (the Prisma client), then tsc -
 pnpm test                        # tsc --build, then vitest run: one run, real counts
 pnpm lint                        # ESLint (type-aware) + Prettier check
 pnpm licences                    # every installed package's licence against ADR-171
+pnpm openapi                     # after a changed endpoint: writes apps/api/openapi.json (§1.3b)
+pnpm local:accounts --show       # the dev stack's accounts, to sign in by hand; without --show it writes them (ADR-412)
+pnpm installer:admin             # on a firm's server: its first admin, or an admin's way back in (asks; ADR-415). Never run it against `adms` to try it: what it writes can't be deleted (its proof is the story `first-admin`)
 pnpm scenarios                   # every story, each on its own database (§1.4)
 pnpm security                    # audit, secrets scan, env files, grant tests (§1.5)
 ```
 
-| Command | What it proves | Expected today (seen 2026-10-06) |
+| Command | What it proves | Expected today (seen 2026-10-07) |
 |---|---|---|
 | `pnpm install --frozen-lockfile` | The lockfile matches every `package.json`; no version younger than 7 days; no install script ran (none is allowed); no git or tarball sub-dependency (ADR-255) | `✓ Lockfile passes supply-chain policies`, exit 0; with everything already installed, `Already up to date`, exit 0 |
 | `pnpm typecheck` | Generates the Prisma client (`pnpm generate`, into the git-ignored `packages/db/src/generated/`; also run first by `test` and `lint`, ADR-273), then strict TypeScript across every workspace **and its tests**, through project references (ADR-256) | `✔ Generated Prisma Client (7.10.0)`, then exit 0 with no output after `tsc --build` |
-| `pnpm test` | Typechecks, then Vitest runs every project in `vitest.config.js` (ADR-259); the database tests and the map servers' tests need the local stack up and the installation at head (§1.3, §1.3a) | **`Test Files 80 passed (80)`, `Tests 1753 passed (1753)`** (seen 2026-10-06). By project: `packages/domain` 575 in 29 files and `packages/contracts` 17 in 4 (neither needs a database); `packages/db` 921 in 36 files; `packages/scenarios` 125 in 4 (the flag catalogue against `spec/FLAGS.md`, 78 flags; the harness; every story once); `apps/worker` 13 in 1 and `infra/local` 17 in 2 (the map servers: **need `pnpm local:up`**); `tools/security` 76 in 2 (the scan's rules 19, the guard hook 57); `tools/setup` 9 |
+| `pnpm test` | Typechecks, then Vitest runs every project in `vitest.config.js` (ADR-259); the database tests and the map servers' tests need the local stack up and the installation at head (§1.3, §1.3a) | **`Test Files 130 passed (130)`, `Tests 2436 passed (2436)`** (seen 2026-10-09, ADR-442: `apps/api` gained `phone-monitors.test.ts`, 7; before it 129 and 2429, ADR-440, when `apps/api` had 396 in 28 with `phone-proof.test.ts`, 13, which needs nothing, and `enrolment.test.ts`, 8, and `phone-proofs.test.ts`, 9, which need the stack and the installation; `packages/db` 1004 in 42 with `master-passcode-actor.test.ts`, 13, and `device-key-actor.test.ts`, 13; `packages/domain` 726; the counts that follow are 2026-10-08's but for those). By project: `packages/domain` 726 in 38 files and `packages/contracts` 28 in 6 (neither needs a database); `apps/api` 366 in 25, its files one at a time (the settings 43, the database's refusals 4, the error filter 7, the boundary 24, the passwords 19, the session tokens 16 and the one-time codes 13 need nothing; the door 15, the request id 2, setting a password 15, the sessions 22, two-step sign-in 15, permissions and people 20 with a page of people, a person changed, a role and out of the archive 13, setup's endpoints 14 with its forms, pay items and rules 19 and its sites, map, merge and standing 11, the phones and the master passcode 9, a day's assignments 12, review's marks 14 (two of them need nothing), corrections 14 (one needs nothing), an ROE, the forms, quarantine and back-office records 12 (one needs nothing), a certification's changes 8 (one needs nothing), a read-only viewer's path 10 (two need nothing), and the rate limits 15 (five of them need nothing) **need `pnpm local:up` after `pnpm installer`**, §1.3b); `packages/db` 991 in 41 files; `packages/scenarios` 128 in 4 (the flag catalogue against `spec/FLAGS.md`, 78 flags; the harness; every story once); `apps/worker` 30 in 3 (the map servers 13: **need `pnpm local:up`**; the process 14, which needs nothing, three of them starting the built `apps/worker/dist/main.js`; its container 3: **needs `pnpm local:up` after `pnpm installer`**, §1.3c) and `infra/local` 22 in 3 (the map servers: **need `pnpm local:up`**; the dev stack's accounts, 5, whose writing needs the installation too, ADR-412); `tools/security` 80 in 2 (the scan's rules 23, the guard hook 57); `tools/setup` 15 in 3 |
 | `pnpm lint` | ESLint's type-checked rules (floating promises, `any`, unsafe access…) on all code and tests; Prettier formatting (ADR-257) | `All matched files use Prettier code style!`, exit 0 |
-| `pnpm licences` | No licence refused or undecided (ADR-258, 260) | `358 packages: 358 allowed, 0 refused, 0 undecided.` (since `geographiclib-geodesic`, ADR-346) The package count moves with dependencies; **0 refused, 0 undecided** doesn't |
-| `pnpm scenarios` | Every story passes on its own database, which is dropped afterwards (ADR-275; needs the local stack and the installation) | per story `passed: N checks, N passed, 0 failed` (`ticket-101001`: 16; `dispatch-monday`: 18; `setup`: 52, ADR-316, 323; `certification`: 25, ADR-321, 323, 330; `numbering`: 16, ADR-323, 371; `p1-field-days`: 35, ADR-332; `sync`: 47 and `p1-any-order`: 4, ADR-338; `p1-reconciled`: 39, ADR-352, `p1-priced`: 28, ADR-359, 360, `p1-reviewed`: 30, ADR-364, `p1-voided`: 27, ADR-365, `p1-invoiced`: 26, ADR-367, `golden-mission`: 27, ADR-368, and `p1-left-out`: 25, ADR-369, all seven of which ask the map servers), then `Stories: 15 passed, 0 failed.`, exit 0 |
-| `pnpm security` | The dependency audit, the secrets scan, the env files and the grant tests, with real counts; never prints a secret (§1.5; needs the registry, the local stack and the installation) | `✓ 0 open advisories` (3 accepted by id), secretlint `0 found`, the installation's own secrets `0 found`, a password-like setting `0 found`, env files `✓ every one ignored by git and untracked`, the grant tests `36 files, 921 tests: 921 passed, 0 failed`, ending **`Security checks: 7 passed, 0 failed.`**, exit 0 (seen 2026-10-06). `source-map-js` is forced to 1.2.2 by an override (ADR-356, 372); its `minimumReleaseAgeExclude` entry is deleted from 2026-10-07 14:08 UTC. Any ✗ is a finding, never accepted to get green |
+| `pnpm licences` | No licence refused or undecided (ADR-258, 260) | `421 packages: 421 allowed, 0 refused, 0 undecided.` (since `nodemailer`, ADR-405) The package count moves with dependencies; **0 refused, 0 undecided** doesn't |
+| `pnpm scenarios` | Every story passes on its own database, which is dropped afterwards (ADR-275; needs the local stack and the installation) | per story `passed: N checks, N passed, 0 failed` (`ticket-101001`: 16; `dispatch-monday`: 18; `setup`: 52, ADR-316, 323; `certification`: 25, ADR-321, 323, 330; `numbering`: 16, ADR-323, 371; `p1-field-days`: 35, ADR-332; `sync`: 49, ADR-338, 440, and `p1-any-order`: 4, ADR-338; `p1-reconciled`: 39, ADR-352, `p1-priced`: 28, ADR-359, 360, `p1-reviewed`: 35, ADR-364, 420, 426, `p1-voided`: 28, ADR-365, 420, `p1-invoiced`: 26, ADR-367, `golden-mission`: 27, ADR-368, and `p1-left-out`: 31, ADR-369, 420, 423, all seven of which ask the map servers; `first-admin`: 32, ADR-415; `p1-queued`: 14, ADR-419, 420, which asks the map servers too; `p1-viewed`: 15, ADR-435, which asks them as well), then `Stories: 18 passed, 0 failed.`, exit 0 |
+| `pnpm security` | The dependency audit, the secrets scan, the env files and the grant tests, with real counts; never prints a secret (§1.5; needs the registry, the local stack and the installation) | `✓ 0 open advisories` (3 accepted by id), secretlint `0 found`, the installation's own secrets `0 found`, a password-like setting `0 found`, env files `✓ every one ignored by git and untracked`, the grant tests `42 files, 1004 tests: 1004 passed, 0 failed`, ending **`Security checks: 7 passed, 0 failed.`**, exit 0 (seen 2026-10-07). `source-map-js` is forced to 1.2.2 by an override (ADR-356, 372); nothing is let past the seven-day rule (ADR-385). Any ✗ is a finding, never accepted to get green |
 
 **The local stack** (ADR-263; Docker running). Run it after a change to `infra/local`, and before any
 work that needs the database or the object store:
@@ -53,8 +56,8 @@ pnpm local:down     # containers and network removed; data volumes kept
 
 | Command | What it proves | Expected today (2026-10-01, ADR-282) |
 |---|---|---|
-| `pnpm local:up` | Postgres, object store, mail catcher, the routing server (Valhalla), the address server (Nominatim) and Caddy healthy; the map extract matches its pinned hash; HTTPS verified against Caddy's own root | `Keeping the map extract delaware-260101.osm.pbf (SHA-256 matches its pin).`, six `Healthy` lines, then `https://adms.localhost/health → 200 ok`, `https://routing.adms.localhost/status → 200 {"version":"3.9.0",…` and `https://addresses.adms.localhost/status → 200 OK`. A resume takes about 12 s; **a first run about two minutes** (it downloads the 20 MB extract, builds the road tiles and imports the addresses) |
-| `pnpm local:down` | Nothing left running | 6 containers and the network `Removed`; `docker ps -a --filter label=com.docker.compose.project=open-adms-local` empty |
+| `pnpm local:up` | Postgres, object store, mail catcher, the routing server (Valhalla), the address server (Nominatim) and Caddy healthy; the map extract matches its pinned hash; HTTPS verified against Caddy's own root | `Keeping the map extract delaware-260101.osm.pbf (SHA-256 matches its pin).`, six `Healthy` lines, then `https://adms.localhost/health → 200 ok`, `https://routing.adms.localhost/status → 200 {"version":"3.9.0",…` and `https://addresses.adms.localhost/status → 200 OK`; then, once the installer has run, the API is built, its container made afresh and `https://api.adms.localhost/health → 200 {"status":"ok"}` (ADR-385, §1.3b), and the same for the worker: `the worker’s health answer → 200 {"status":"ok","jobsWaiting":0,"jobsSetAside":0}` (ADR-419, §1.3c). A resume takes about 12 s; **a first run about two minutes** (it downloads the 20 MB extract, builds the road tiles and imports the addresses) |
+| `pnpm local:down` | Nothing left running | 8 containers (6 before the installer has run) and the network `Removed`; `docker ps -a --filter label=com.docker.compose.project=open-adms-local` empty |
 | `pnpm local:wipe` | The next `up` is a first run | volumes, `.env` and `.generated/` removed; the downloaded map extract in `.cache/maps/` is kept (public data) |
 
 **Docker's disk.** On this machine Docker Desktop's disk is 8 GB and the stack leaves under 1 GB
@@ -85,8 +88,8 @@ pnpm installer:teardown   # asks for the word `teardown` (or --yes); the next ru
 
 | Command | What it proves | Expected today (2026-10-01) |
 |---|---|---|
-| `pnpm installer` (first run) | Secrets made once into owner-only env files; four logins from SCRAM verifiers; database `adms` open only to them; the master passcode's slow hash handed to the seed in memory and kept in the database alone, never in a file (ADR-281) | `+ wrote` ×3, `+ created login` ×4, `+ created database adms` and `adms_shadow`, `✓ … opens adms with its own password` ×4, `All migrations have been successfully applied.`, `+ created the system actor, Open ADMS (system)`, `+ kept the master passcode's slow hash in the database, version 1`, `+ wrote 94 values to the firm's lists (…)` (ADR-302), `Installed for …`; `packages/db/.env` holds only `DATABASE_URL` |
-| `pnpm installer` (rerun) | Resume without new secrets; migrations at head (eighty today; `packages/db/prisma/migrations/` is the list); the seed re-checks the system actor and stops if it was changed (ADR-273); the install stops if `guard_gaps()` lists an unguarded table; a migration whose SQL is still only comments is refused, not applied | 20 `✓` lines, ending `✓ migrations at head (Database schema is up to date!)`, `✓ every table is guarded` (ADR-271), `✓ the master passcode's slow hash is kept in the database alone (Argon2id, version 1)` (ADR-281) and `✓ the system actor is the seed's, alone, unchanged and guarded` (ADR-276); one confirm; `No pending migrations to apply.`; `✓ the system actor exists, Open ADMS (system)`; `✓ the master passcode's slow hash is kept, version 1`; `✓ the firm's lists are as the firm keeps them, each built-in value in place` (ADR-302); `shasum` of the three env files unchanged |
+| `pnpm installer` (first run) | Secrets made once into owner-only env files; four logins from SCRAM verifiers; database `adms` open only to them; the master passcode's slow hash handed to the seed in memory and kept in the database alone, never in a file (ADR-281) | `+ wrote` ×3, `+ created login` ×4, `+ created database adms` and `adms_shadow`, `✓ adms_owner, which runs the migrations, is under no statement timeout`, `+ set: a statement of … is stopped after 30000 ms (STATEMENT_TIMEOUT_MS)` ×3 (ADR-394, 396), `✓ … opens adms with its own password` ×4, `All migrations have been successfully applied.`, `+ created the system actor, Open ADMS (system)`, `+ kept the master passcode's slow hash in the database, version 1`, `+ wrote 94 values to the firm's lists (…)` (ADR-302), `Installed for …`; `packages/db/.env` holds only `DATABASE_URL` |
+| `pnpm installer` (rerun) | Resume without new secrets; migrations at head (ninety-three today; `packages/db/prisma/migrations/` is the list); the seed re-checks the system actor and stops if it was changed (ADR-273); the install stops if `guard_gaps()` lists an unguarded table; a migration whose SQL is still only comments is refused, not applied | 25 `✓` lines (`✓ adms_owner, which runs the migrations, is under no statement timeout`, ADR-396, and three `✓ a statement of adms_api / adms_worker / adms_readonly is stopped after 30000 ms (STATEMENT_TIMEOUT_MS)`, each read signed in as that login, ADR-394; a login with another value or none is `✗` there and `+ set:` on the resume; an owner's timeout or one kept for a login in one database is `- took off …` on the resume), ending `✓ migrations at head (Database schema is up to date!)`, `✓ every table is guarded` (ADR-271), `✓ the master passcode's slow hash is kept in the database alone (Argon2id, version 1)` (ADR-281) and `✓ the system actor is the seed's, alone, unchanged and guarded` (ADR-276); one confirm; `No pending migrations to apply.`; `✓ the system actor exists, Open ADMS (system)`; `✓ the master passcode's actor exists, Master passcode` (`+ created the master passcode's actor, Master passcode` on the first rerun after ADR-439's migrations); `✓ the device key's actor exists, Device key` (`+ created …` on the first rerun after ADR-440's); `✓ the master passcode's slow hash is kept, version 1`; `✓ the firm's lists are as the firm keeps them, each built-in value in place` (ADR-302); `shasum` of the three env files unchanged |
 | `pnpm installer` (the database lost) | The logins and the database come back with the secrets it has; the master passcode, kept only in the database, is asked for again (ADR-281) | `The database holds no master passcode (it went with the database). Set it again:`, then `+ kept the master passcode's slow hash in the database, version 1`; with no answer it stops, exit 1; env files unchanged |
 | `pnpm installer:teardown` | The next run is a first run | `adms`, `adms_shadow` and four logins dropped, three env files and the record removed |
 
@@ -105,7 +108,7 @@ finding, not noise.
 
 A new or changed dependency (a pin, a lockfile change, a new `allowBuilds` entry) is proven from a
 clean copy, so nothing already on disk hides a missing piece. Copy the repo into the scratchpad
-without `node_modules`, `dist`, `.git`, `development/`, `spec/`, `agent_store/` and `.claude/`, then run the whole chain there and paste its output. Every dependency needs its ADR
+without `node_modules`, `dist`, `.git`, `development/`, `spec/`, `agent_store/` and `.claude/`, then run the whole chain there and paste its output. **Three test files fail in such a copy by its own making** (seen 2026-10-07, ADR-405): `guard-hook.test.ts` (35 tests; the hook is in `.claude/`) and the two that read `spec/FLAGS.md` (`derived-records.test.ts`, `flag-catalogue.test.ts`); anything else failing is a finding. The copy holds the env files: remove it when the run is read. Every dependency needs its ADR
 first (exact version, licence, maintenance, at least 7 days old; `BACKLOG.md` Milestone 0.2).
 
 ## 1.2 Where tests live, and how a workspace joins the run
@@ -173,7 +176,7 @@ form, and criterion); the closed sets are checked against `packages/domain`'s li
 with `db.viewer(id)`** and issues another viewer with `viewerLike` and `given`;
 `test/support/viewers.ts` names every table a viewer sees, how, the columns hidden and the columns that name a private citizen (`citizen`, shown only by `viewer_<table>_citizen`, ADR-336), and the
 tables no viewer reads, for the exact policy, view and grant lists: **a new table goes in one
-list or the other**. **What a contractor user sees** (ADR-361): `contractor-users.test.ts`, AC-02-78…82; a table of which a contractor user sees its own rows is `projectOrOwn(question, hidden)` in `viewers.ts`, its question worded as the catalog words it, and **a rerun of `guard_viewer` on such a table repeats its `own`** (the exact policy list fails otherwise); a line's rate and amount are read from `viewer_transaction_money`, so a test that orders a viewer's lines orders by `quantity`. Pay items, their rates and a crew day's steps (ADR-309):
+list or the other**. **What a contractor user sees** (ADR-361): `contractor-users.test.ts`, AC-02-78…82; **Sign-in's records** (ADR-397…399): `sign-in.test.ts`, AC-10-10, 11 and the database's half of 19; the three tables have their own guards, so each is listed by hand in `grants.test.ts` (the API alone), `catalog.test.ts` (`domains`, `keptOut` for a secret column, the `refuse_edit` triggers, the checks) and `unseenTables` in `viewers.ts`; a later table of sign-in joins the same four lists; a made-up token's hash is `sha256(…)` in the test, never a literal. **The job queue** (ADR-418): `reconciliation-jobs.test.ts` (the two tables' own guards, tried as each login; a test writes a job with `jobLike`, `ticketLike` and `queued`, and finishes one as the worker under a run made by `runOn`; a job once finished or set aside can't be updated, so a test that needs another writes another) and `job-queue.test.ts` (AC-10-50: as the API's own login through `ReconciliationJobs`, undone; `p1In` in `support/service.ts` writes its project); the tables are listed by hand in `grants.test.ts`, `catalog.test.ts` (`domains`, the three `refuse_edit` triggers, the checks), `unseenTables` in `viewers.ts`, and `field-events.test.ts`'s list of tables named for a ticket. a table of which a contractor user sees its own rows is `projectOrOwn(question, hidden)` in `viewers.ts`, its question worded as the catalog words it, and **a rerun of `guard_viewer` on such a table repeats its `own`** (the exact policy list fails otherwise); a line's rate and amount are read from `viewer_transaction_money`, so a test that orders a viewer's lines orders by `quantity`. Pay items, their rates and a crew day's steps (ADR-309):
 `pay-items.test.ts`, section E by scenario ID (AC-01-41 moved there); the example world's P1 has six
 of the golden mission's pay items with Coastline's rates (`world.payItems`, `world.rates`); **a test
 that enters a pay item uses `payItemLike(world, …)`** with `insertOf`, since no capture setting has
@@ -185,8 +188,8 @@ rolled back); gaps are normal.
 logins**, with the URL in `apps/api/.env` or `apps/worker/.env` read in the test process (never
 printed), through `openDatabase` and `$write`. What a login writes can't be deleted, so each test's
 work is undone by throwing out of `$write` (`test/support/service.ts`, `undone`); a committed
-`$write` may only read. After a run the database holds only the seed: 1 user, 1 master passcode
-version, the 94 values the firm's lists start with, 96 audit records (ADR-302).
+`$write` may only read. After a run the database holds only the seed: 3 users (the system actor, the master passcode's actor and the device key's, ADR-439, 440), 1 master passcode
+version, the 94 values the firm's lists start with, 98 audit records (ADR-302).
 
 - Only this project: `./node_modules/.bin/vitest run --project @open-adms/db`.
 - **Trying a guard migration before it is applied:** make the copy, apply the stub's SQL to it as
@@ -234,6 +237,149 @@ version, the 94 values the firm's lists start with, 96 audit records (ADR-302).
   blocks an agent from reading or printing an env file, so compare `shasum`s and load one in a
   subshell, as this page already says.
 
+## 1.3b The API's tests (ADR-385)
+
+`apps/api/test`, by scenario ID of `spec/acceptance/10-api-and-sync.md`. `settings.test.ts`,
+`error-filter.test.ts` and `boundary.test.ts` need no stack (the last two run the real process in
+memory, with one more controller of the test's own, started through `test/support/process.ts`;
+two of the first start the built `apps/api/dist/main.js`). `request-id.test.ts` runs the process
+in memory too but opens `adms` as the API's own login, and undoes its write by failing out of it.
+**After a change to an endpoint in `packages/contracts`, `pnpm openapi`** (it writes
+`apps/api/openapi.json`; `boundary.test.ts` fails on a stale file, and on a route the contracts
+don't list). A test's own endpoint is made with `endpoint()` from schemas the contracts export:
+`apps/api` has no Zod of its own (ADR-387).
+`door.test.ts` asks the API's own container through Caddy over HTTPS and reads its log with
+`docker compose logs`: it **needs `pnpm local:up` after `pnpm installer`**, and fails saying so.
+**The container runs what was built when it started: after any change to `apps/api`, `pnpm
+local:up` again** (it builds, makes the container afresh and prints `https://api.adms.localhost/health
+→ 200 {"status":"ok"}`). Until the installer has run, `local:up` says `The API waits for pnpm
+installer` and starts the six. By hand:
+
+```bash
+curl --cacert infra/local/.generated/caddy-root.crt https://api.adms.localhost/health   # → {"status":"ok"}
+curl -sI http://api.adms.localhost/health                                               # → 308 to https
+```
+
+`passwords.test.ts` (ADR-402…405) needs no stack: the hash, the release's breached list, the
+reset code, the mail settings and what the two reset endpoints refuse before anything is read.
+`password-set.test.ts` writes: it opens `adms` as the API's login and **runs each test in one
+piece of work that is undone** (`test/support/database.ts`, `undone`; the services are handed a
+database whose `$write` and `$read` run inside it; a Prisma piece of work ends after five
+seconds, so a test stays short), hands the process its own database, mail and clock
+(`ProcessParts`), and sends one message through the stack's mail catcher, read back at
+`https://mail.adms.localhost/api/v1/…` and deleted. **A loosening of the password rules, the
+hash, the reset code or `Passwords` is tried on these files and on
+`packages/domain/test/passwords.test.ts`** (change the source, run the file, put it back). The
+secrets scan reads `apps/api/openapi.json` and every test: a made-up login URL is put together
+in `support/process.ts`, never written whole.
+
+`session-tokens.test.ts` (ADR-408) needs no stack: the access token, the refresh token, the
+CSRF value, the cookies, and what an endpoint that asks for a session refuses on sight; **it
+holds the list of endpoints nobody need be signed in for**, so a new `ANYBODY` endpoint is
+added there on purpose. `sessions.test.ts` (ADR-408…411) writes, as `password-set.test.ts`
+does: its `Served` starts the process on the test's own piece of work with a `TestClock` and
+keeps a browser's side (cookies and the CSRF value, by hand); `test/support/sign-in.ts` puts
+sign-in's services together for a test that calls one directly. **Every endpoint a test defines
+states its `access`.** An audit record's id is a BigInt: never `JSON.stringify` one whole.
+**A loosening of sessions, wrong tries, the cookies, admission or the hasher is tried on those
+two files, `passwords.test.ts`, `password-set.test.ts`, `boundary.test.ts` and
+`packages/domain/test/sign-in-tries.test.ts`**: fifty-seven took about ten minutes as a script
+that swaps one string, runs the files and puts the source back (format first, or the strings
+don't match; a loosening that isn't found in the source proves nothing: count it as not
+tried). **To copy `adms` for a guard's loosening, stop the API's container first** (`docker
+stop open-adms-local-api-1`: it holds a connection), and `pnpm local:up` again afterwards.
+
+`enrolment.test.ts` (ADR-439) is a phone enrolled under the master passcode: a real enrolment, the key, wrong tries, the wait, the lock and its opening, the log. **The installation's own master passcode is unknown to a test: each test adds a version of its own inside its undone piece of work** (`passcodeSet`) and enrols under that with a software key. An address's fifth wrong try is answered 429, so a test that makes more moves `served.from`; the lock is reached with `installationPolicy({ SIGN_IN_TRIES_BEFORE_LOCK: '7' })`. A key another phone holds is the database's refusal: a test's last request. **Never send a real or a wrong enrolment to the container** (`door.test.ts` sends one its schema refuses): a phone can't be deleted, and a wrong try counts against the installation's own passcode. A loosening of `Enrolment` or its controller is tried on it (it imports the source; thirteen took under two minutes as a script that swaps one string, **reading vitest's stderr with its stdout**); one of the guard on `packages/db`'s `master-passcode-actor.test.ts`, `catalog.test.ts` and `grants.test.ts` on a copy. **A new table that names a user** joins `packages/db/test/support/master-passcode-actor.ts`, with its check in its guard. **A new `ANYBODY` endpoint** joins `session-tokens.test.ts`'s list.
+
+`phone-proofs.test.ts` (ADR-440) is a phone's proof of itself: a challenge asked for and answered, the token, a recorded answer sent again, every proof that isn't one, a phone out of service and one whose key is revoked, the log. **A test's phone is `test/support/phones.ts`'s**: `enrolledPhone(served, tx, name)` enrols by the API's own request with a software key under a passcode version of the test's own, `answered` and `proven` ask for a challenge and sign it, and `served.ask(…, { bearer })` sends a token; **no test writes a phone by hand** (the database refuses a key that isn't shaped as one). **It holds the exact list of the endpoints open to a proven phone** (`access: 'PROVEN_PHONE'`): a new one is added there on purpose. `phone-proof.test.ts` needs nothing: the key, the challenge, the token, and two answers to one challenge at once (a database of the test's own making whose write matches no row). `door.test.ts` asks the container for a challenge and sends it a proof for a phone nobody enrolled: neither writes anything. A loosening of `PhoneProofs`, `PhoneTokens` or `Admission`'s phone access is tried on those two files (fourteen took about two minutes); **the early refusal of a revoked key and the rule asked before the write are each doubled by the write's own condition**, so loosening one alone changes nothing: loosen both. One of the guard on `packages/db`'s `device-key-actor.test.ts`, `catalog.test.ts`, `devices.test.ts` and `master-passcode-actor.test.ts`, each on its own copy (twelve took about seven minutes, one at a time). **A database test writes a device key with `deviceKeyLike(name)`** (`test/support/device-keys.ts`). **A story enrols a phone with `story.enrolled(name, at?)`** and proves one with `story.proofs`: never `tx.device.create`.
+
+`limits.test.ts` (ADR-416): rate limits. **A test's requests come from `served.from`**
+(`support/served.ts`): four wrong tries at one login from one address and the fifth is answered
+429 before the login is touched, so a test that makes more moves `served.from`; a test that
+needs other numbers hands `worldOn` (or `Served.on`) a policy from `installationPolicy({ … })`.
+A new policy value (the newest: `PHONE_TOKEN_MINUTES`, ADR-440) is added to `policy.env`, the three whole maps in `packages/domain/test/`
+(they have no Node types to read the file with), `project-settings.test.ts`'s list of names and
+`packages/scenarios/test/policy.test.ts`.
+
+`people.test.ts` (ADR-415) writes, as `sessions.test.ts` does: permissions on every request
+and the firm's people, by scenario ID. **Every `SIGNED_IN` endpoint a test defines names its
+`roles`**; `support/served.ts` has two endpoints of the tests' own that take a permission
+(`/test/granted-voids`, `/test/unlocks`). **It holds the exact lists** of the endpoints that are
+an admin's alone and of those that take a permission: a new one is added there on purpose.
+**The project's files run one at a time** (`vitest.config.js`): the database keeps two who sign
+in from one email address, and every test's world has Dana's, so a second file's world would
+wait for the first's to be undone. **The database keeps the firm's last admin**: a test that
+archives Dana, or makes her anything else, first gives the firm another admin; a refusal by the
+database ends the test's piece of work, so it is a test's last step. **What needs a firm with
+no admin can't be tested on the installation's database** (a developer may have run `pnpm
+local:accounts`): it is the story `first-admin`, which drives `ServerAdmin` and `AdminCommand`
+with typed answers. **A loosening of the door or of `People` is tried on `people.test.ts`**
+(it imports the source); **one of `packages/domain/src/people.ts` on that package's
+`people.test.ts`** (the API reads the domain's built code); **one of the server command on
+its story** (`tsc --build`, then `node packages/scenarios/src/cli.ts first-admin`). A script
+that swaps one string and reads the run must count `Failed Tests`, not the word "failed" in
+lower case (seen 2026-10-07: a run read that way called every caught loosening slipped).
+
+`people-changes.test.ts` (ADR-427) is a page of people, a person changed, a role changed and out of the archive; it starts from `test/support/setup.ts` and hands `worldOn` an `Outbox` where it reads the mail. **The contracts' `endpoints` list is in path order** (two methods of one path together): `packages/contracts/test/endpoints.test.ts` fails otherwise. A loosening of `People` is tried on it and on `people.test.ts`.
+
+`phones.test.ts` (ADR-428) is the firm's phones and its master passcode; **it holds the exact list of the endpoints that take `DISPATCH`** (a new one is added there on purpose). A test that moves the clock sets `served.clock.at` **before** it signs in: an access token is good for five minutes. The installation's own master passcode is unknown to a test: it reads the version in force and changes it inside its undone piece of work. A loosening of `Phones` or `MasterPasscode` is tried on it (it imports the source); one of `packages/domain/src/phones.ts` or `DispatchRights` on that package's `phones.test.ts`.
+
+`assignments.test.ts` (ADR-429) is a day's assignments: written, changed, withdrawn, the board read; it starts from `test/support/setup.ts` (`p1Priced`) and enters a site, three pay items and three phones of its own (`p1Dispatched`). **A new endpoint that takes `DISPATCH` joins `phones.test.ts`'s exact list, and one open to the whole back office `people.test.ts`'s.** **A test's piece of work has no savepoint:** a refusal thrown after a write leaves the row behind in the test, so a service asks everything before it writes (and a test may count rows after a refusal to hold it to that). A loosening of `Assignments` is tried on it (it imports the source); one of `packages/domain/src/assignments.ts` on that package's `assignments.test.ts`; one of an endpoint's definition needs `./node_modules/.bin/tsc --build` first. **If `door.test.ts` or `pnpm local:up` meets `read ECONNRESET`** while Caddy answers inside its container, Docker Desktop's port forward is stuck: `pnpm local:down`, then `up` (seen twice, 2026-10-08). **A story writes a planned assignment with `assigned` (`packages/scenarios/src/stories/board.ts`)**, never by hand.
+
+`review-marks.test.ts` (ADR-430) is review's marks through their eight endpoints: a void, an unvoid, a flag's acceptance, a QC status, an invoice batch, a lock, its batch, an unlock. **The API's login writes no flag, status or completed load**, so a test's tickets are field events still PENDING, made through `BackOfficeRecords` as Dana (`p1WithTickets`): it reaches a void and its unvoid, a QC status on a unit rate ticket, a batch, and every refusal; accepting a flag and locking a completed ticket are the stories' (`p1-voided`, `p1-invoiced`). **`people.test.ts` holds the list of every permission an endpoint takes.** A loosening of the controller, `review-answered.ts` or a review service is tried on it (it imports the source); one of an endpoint's definition needs `./node_modules/.bin/tsc --build` first, and again once the source is back.
+
+`corrections.test.ts` (ADR-431) is corrections to a ticket's own records through their six endpoints: a field event's details, its number, an item line, a carried ticket, a photograph's two marks, a scale receipt. Its tickets are made as `review-marks.test.ts`'s are (the helpers both share are `test/support/review.ts`). **A refusal by one of the database's checks ends a test's piece of work, so it is that test's last request.** A schema's refusal is asserted by its words (`notTaken` in the file): the boundary now answers which field was refused, for every endpoint.
+
+`review-records.test.ts` (ADR-432) is an ROE, its scope, a survey, an incident and a drop-off log corrected, a quarantined record resolved and a field event created in the back office, through their eight endpoints. An ROE and a form are written by the test as the back office's (`source: 'BACK_OFFICE'`); **a quarantined record is made by `Intake` on the test's own piece of work** (a phone and an assignment written first, then the same number sent twice). `notTaken`, `audited` and `newId` are `test/support/review.ts`'s. **Two tickets of one truck at overlapping times are neighbours and are queued together**: a test that wants one ticket queued gives it another day. A body with a field the request doesn't take and nothing else stated is told both things: state one real field beside it. A loosening of the controller, `review-answered.ts`, `QuarantineReview`, `BackOfficeRecords` or `database-refusal.ts` is tried on it (it imports the source).
+
+`certifications.test.ts` (ADR-433) is a certification's measuring mistake, its signatures on file and its revocation, through their three endpoints. Its certification is made by `Certifications.certify` as Kim on the test's own piece of work (`certified`: P1 with Coastline as a prime, AC-03-51's boxes, 36 CY where the truck holds 32, and a crew), after two field events have scanned its number, so both are linked and queued. **A new admin-only endpoint joins `people.test.ts`'s exact list; one that takes *QC* `review-marks.test.ts`'s, *correct* `corrections.test.ts`'s.** A loosening of the controller, `Certifications` or `Corrections.certification` is tried on it (it imports the source); one of `CertificationChanges` on `packages/domain/test/certifications.test.ts`; one of an endpoint's definition needs `./node_modules/.bin/tsc --build` first, and again once the source is back.
+
+`viewer-reads.test.ts` (ADR-434) is a read-only viewer's path: who may ask, that each read states the signed-in viewer, the projects' answer, and every request that isn't a GET refused to a viewer. **The read-only login sees nothing a test hasn't committed**, so `Served` hands the process `ViewedWithin` (`test/support/database.ts`), which keeps who was stated (`served.viewerStated`) and reads as the API's login, shown every row: **a test here never proves which rows a viewer is shown** (that is `packages/db`'s `viewers.test.ts`, `row-level-security.test.ts`, `contractor-users.test.ts`, and a story). One test opens the real read-only login on `adms` and calls each read of `ViewerReads` with a made-up viewer: a column the login isn't granted fails there, so **a new read joins that test**. **It holds the exact lists** of the endpoints open to `viewerOnly` and of what a viewer may send that isn't a GET. `packages/db/test/viewer.test.ts` proves the shared place as the read-only login itself (`openViewerOnOneConnection` in `support/service.ts`); it writes nothing. A loosening of `viewer.ts`, `ViewerReads` or its controller is tried on those two files (they import the source). **A viewer's tickets, one ticket and ROEs (ADR-435):** the owner's views (`viewer_transaction_money`, `viewer_roe_citizen`, the three name views, `viewer_field_event_monitor`) are declared in `packages/db/prisma/schema/viewer.prisma` and refused to the API's own login, so **no test here reads one ticket whole**: the file holds the door, the schemas, a page of tickets and the 404 for a ticket nobody is shown (that one before any view is read, and a test's last request). **What each viewer is answered is the story `p1-viewed`** (`pnpm scenarios p1-viewed`, about fifteen seconds once built; it needs the map servers), which reads through `ViewerReads` as the read-only login on its own database (`story.viewed`): a loosening of a read is tried there (`./node_modules/.bin/tsc --build` first, and again once the source is back). After declaring a view, `./node_modules/.bin/prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema --exit-code` in `packages/db` must still answer `No difference detected.`, and `viewer.test.ts` holds each declaration to its view's columns. A `pg` deprecation warning printed by some API tests and stories comes from inside Prisma's adapter (seen 2026-10-08): not a failure.
+
+`setup-endpoints.test.ts` (ADR-424) writes, as `people.test.ts` does: setup's requests by scenario ID, each tried as nobody, a manager/analyst without Setup and a read-only viewer; **it holds the exact list of the endpoints that take `SETUP`** (a new one is added there on purpose). **`setup-pricing-endpoints.test.ts` (ADR-425)** is forms, pay items, "Pays when" and rules; **`setup-sites-endpoints.test.ts` (ADR-426)** is sites, the map, the merge and the setup as it stands (it holds who may ask the setup check and the lookups); all three start from `test/support/setup.ts` (`ask`, `saved`, `told`, `plainly`, `notSaved`, `p1`, `p1Priced`), and a later part's file does too. **A merge's queueing is proven by the story `p1-reviewed`**, so a loosening of it is tried there (`tsc --build` first). **A refusal by the database ends the test's piece of work: it is the test's last request**, one refusal a test. `database-refusal.test.ts` needs no stack. **A loosening of a setup controller, `SetupService.setup`, the error filter or `database-refusal.ts` is tried on those three files** (they import the source); **one of an endpoint's definition or of `SetupRights` needs `./node_modules/.bin/tsc --build` first** (the API reads the contracts' and the domain's built code), and again once the source is back.
+
+`pnpm installer:check` (29 `✓`, the master passcode's actor among them since ADR-439 and the device key's since ADR-440) ends with `✓ apps/worker/.env names the map servers the worker asks`, `✓ the API answers over HTTPS at https://api.adms.localhost/health` and `✓ the worker answers its health check in the local stack`.
+`pnpm local:down` removes eight containers and the network (9 `Removed` lines). Only this project:
+`./node_modules/.bin/vitest run --project @open-adms/api`. **A loosening of the log, the error filter, the boundary, the headers or the CORS list is tried on
+`error-filter.test.ts` and `boundary.test.ts`** (change the source, run the file, put the source back
+from a copy kept in the scratchpad): it imports the source, so no build is needed.
+
+## 1.3c The worker's tests (ADR-419)
+
+`apps/worker/test`. `mileages.test.ts` asks the map servers (**needs `pnpm local:up`**).
+`process.test.ts` needs no stack: the settings (each missing or malformed key named, never
+shown), the policy and an installation's own values, the log, the health answer, and three tests
+that start the built `apps/worker/dist/main.js` with settings that are off. `container.test.ts`
+asks the worker's own container (its health answer from inside, no port published, its log, both
+map servers reached from in there): it **needs `pnpm local:up` after `pnpm installer`**, and
+fails saying so. **The container runs what was built when it started: after any change to
+`apps/worker`, `pnpm local:up` again.** Until the worker's env file names the map servers,
+`local:up` says `The worker waits for pnpm installer` (a rerun of the installer adds the keys to
+an older installation's file and changes no line that is there). By hand:
+
+```bash
+docker exec open-adms-local-worker-1 node -e "fetch('http://127.0.0.1:3001/health').then(async (r) => console.log(await r.text()))"
+docker logs open-adms-local-worker-1    # one JSON object a line, service: worker
+```
+
+**How the worker takes jobs up is proven by the story `p1-queued`** (`pnpm scenarios p1-queued`,
+about fifteen seconds once built; it needs the map servers): AC-10-52, 53, 54, the tries, a job
+set aside, the process's own pass. **A loosening of `WaitingJobs`, `Reconciliation.waitingJobs`
+or the job loop is tried on that story** (change the source, `./node_modules/.bin/tsc --build`,
+run the story, put the source back from a copy kept in the scratchpad, build again). The story
+adds a job as the API's login with `new ReconciliationJobs(tx).queue(…)`; **a run asked for with
+`Reconciliation.run` works the whole project**, a run the queue starts only the named tickets.
+**What queues work (ADR-420)** is proven by the stories that run from the queue: `p1-reviewed`
+(AC-10-50; the neighbours before a change), `p1-voided` (a void's neighbour; a void ticket on no
+setup change's job), `p1-invoiced` (a rate through its service; a locked ticket on no job),
+`p1-left-out` (a later certification; the neighbour read) and `p1-queued` (the cap on a run). A
+story takes the waiting jobs up with `QueueRuns` (`p1-office.ts`): `next(projectId)` is one run
+and stops the story where no job waits, `settle` works them all, `waiting` lists them. **Every
+service that queues is made with `(db, clock, story.policy)`.** A loosening of `WorkQueue`, of a
+service's queueing or of the domain's `TicketNeighbours` is tried on those stories; the rule
+itself on `packages/domain/test/neighbours.test.ts`.
+Only this project: `./node_modules/.bin/vitest run --project @open-adms/worker`.
+
 ## 1.4 The scenario harness (ADR-275)
 
 `packages/scenarios`: `pnpm scenarios [name…] [--keep]`, `pnpm scenarios list`, `pnpm scenarios
@@ -244,10 +390,10 @@ to look at; `clean` drops every leftover (only while no story runs; `installer:t
 `adms_owner` while one is left, C28). A story is a `Story` in `packages/scenarios/src/stories/`, listed
 in its `index.ts`; the runner's test runs every listed story in `pnpm test`, so a new story joins the
 chain by itself. A story's context carries `policy`, the release's policy values read from
-`packages/domain/policy.env` (`src/policy.ts`; held to 5, 95, 200, 31, 12, 1000, 100, 100 by `test/policy.test.ts`,
+`packages/domain/policy.env` (`src/policy.ts`; held to the release's values, the worker's five among them (5 tries, 10 minutes, 5 s, 30 s, 10 connections; ADR-419) and a job's size (200 tickets, ADR-420), by `test/policy.test.ts`,
 which needs no database), and `src/stories/p1.ts` sets up P1's client, declaration event and project
-for both of today's stories (ADR-303), its prime and its contract with them (ADR-305). After a run, `adms` still holds only the seed (1 user, 1 master passcode version,
-the lists' 94 values, 96 audit records). Every story's database is seeded with the same made-up master passcode's hash
+for both of today's stories (ADR-303), its prime and its contract with them (ADR-305). After a run, `adms` still holds only the seed (3 users, 1 master passcode version,
+the lists' 94 values, 98 audit records). Every story's database is seeded with the same made-up master passcode's hash
 (`story-database.ts`); today's stories: `numbering` (ADR-323: blocks cut, topped up, reclaimed and retired through `apps/api`'s `NumberAllocator`; control ranges), `ticket-101001`, `dispatch-monday` (ADR-281; its unit rate
 monitor's pay items, ADR-286) `certification` (ADR-321: P1's trucks and crews certified through `apps/api`'s `Certifications`) and `setup` (ADR-316: the example world's setup through `apps/api`'s
 setup services; the policy values are read by `apps/api/src/policy.ts`, which the harness
@@ -277,7 +423,7 @@ ARCHITECTURE §15's layers arrive with their milestones; each adds its command h
 |---|---|
 | ~~The **golden mission** as a story (REQ-017)~~ | ✅ in the chain since ADR-368: `pnpm scenarios golden-mission` (27 checks; its expected figures are `spec/golden/MISSION.md`'s and change only at the user's word) |
 | **Unit** tests of real rules (the capacity math is in, ADR-320; number blocks, ADR-323; volume and apportionment, ADR-343; the checks between field events, on the certification and on time, ADR-344; the checks on place, ADR-346; the checks on quantity, the pay item's settings, unit rate work and ROEs, ADR-347) | Phase 1 |
-| API, browser end-to-end, on device | Phases 2–4 |
+| API (begun: `apps/api/test`, ADR-385, §1.3b), browser end-to-end, on device | Phases 2–4 |
 
 ## 1.7 Definition of done
 

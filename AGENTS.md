@@ -85,7 +85,7 @@ the option that keeps the firm's choice open, record an ADR marked "agent defaul
 | `BACKLOG.md` | Milestone detail for the active phase | ✅ tick |
 | `DECISIONS.md` | Full ADR log + session log. Append-only, never renumber | ✅ append |
 | `DEVIATIONS.md` | Full code-vs-skill gap log | ✅ append |
-| `REQUIREMENTS.md` / `-LATER.md` | Phase 1 checklist / Phases 2–5 (gated) | ✅ tick |
+| `REQUIREMENTS.md` / `-LATER.md` | The active and finished phases' checklist (Phase 2 is active) / the gated phases, 3–5 | ✅ tick |
 | `ROADMAP.md` | The user's one-page roadmap, start to finish, in tables (ADR-280). Summarises the files above | ✅ update at close-out |
 
 ## Working loop

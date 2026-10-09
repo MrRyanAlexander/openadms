@@ -210,6 +210,18 @@ describe('a quarantined record’s resolution', () => {
     );
     expect(waiting.roeNumberHeld('').code).toBe('NUMBER_BLANK');
   });
+
+  it('a quarantined field event is given a ticket number and a quarantined ROE an ROE number: the other kind is refused in plain words', () => {
+    const waiting = new QuarantineResolution(null);
+    expect(waiting.wrongKindOfNumber('FIELD_EVENT')).toEqual({
+      code: 'NOT_THIS_KIND_OF_NUMBER',
+      message:
+        'This quarantined record is a field event: it is given a ticket number, not an ROE number. Nothing was changed.',
+    });
+    expect(waiting.wrongKindOfNumber('ROE').message).toBe(
+      'This quarantined record is an ROE: it is given an ROE number, not a ticket number. Nothing was changed.',
+    );
+  });
 });
 
 describe('who may accept a flag', () => {

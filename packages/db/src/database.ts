@@ -10,6 +10,8 @@ export interface Connection {
   readonly url: string;
   // The most connections the pool opens.
   readonly maxConnections?: number;
+  // The request the work now running is for, if any: stated on a write whose actor names none.
+  readonly requestNow?: () => string | undefined;
 }
 
 export function openDatabase(connection: Connection) {
@@ -17,7 +19,7 @@ export function openDatabase(connection: Connection) {
     connectionString: connection.url,
     ...(connection.maxConnections === undefined ? {} : { max: connection.maxConnections }),
   });
-  return statesTheActor(new PrismaClient({ adapter }));
+  return statesTheActor(new PrismaClient({ adapter }), connection.requestNow);
 }
 
 export type Database = ReturnType<typeof openDatabase>;

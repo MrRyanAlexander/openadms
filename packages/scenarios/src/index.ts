@@ -28,5 +28,6 @@ export {
   type StoryContext,
   type StoryResult,
 } from './runner.ts';
+export { SoftwareKey, type EnrolledPhone } from './software-key.ts';
 export { StoryDatabase } from './story-database.ts';
 export { stories } from './stories/index.ts';

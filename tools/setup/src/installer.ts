@@ -5,13 +5,22 @@
 // The master passcode's slow hash is kept in the database alone (ARCHITECTURE §7.5; ADR-281): the
 // installer makes it from what the firm types and hands it to the seed, never through a file.
 import { spawnSync } from 'node:child_process';
-import { rmSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { request } from 'node:https';
 import { join } from 'node:path';
 
-import { Database, loginRoles, type LoginRole, type Server } from './database.ts';
+import {
+  Database,
+  loginRoles,
+  seededActors,
+  type LoginRole,
+  type SeededActor,
+  type Server,
+} from './database.ts';
 import { EnvFile, InstallationState, MigrationFolder, type InstallationRecord } from './files.ts';
 import { Interview } from './interview.ts';
-import { PasscodeHasher, SecretMaker } from './secrets.ts';
+import { StatementTimeout, statementTimeoutName } from './policy.ts';
+import { BreachedList, PasscodeHasher, SecretMaker } from './secrets.ts';
 
 const databaseName = 'adms';
 const host = '127.0.0.1';
@@ -25,10 +34,23 @@ const databases: readonly { name: string; connect: readonly LoginRole[]; what: s
   },
   { name: 'adms_shadow', connect: [], what: "Prisma's shadow, only its owner connects" },
 ];
+// The logins a service runs as, each under a statement timeout (ADR-394). adms_owner has none:
+// it runs the migrations and the seed, never a service.
+const timed: readonly LoginRole[] = ['adms_api', 'adms_worker', 'adms_readonly'];
+const untimed = 'adms_owner, which runs the migrations, is under no statement timeout';
 const warning = 'Git-ignored. Never commit, print or share it.';
 // How the hash reaches the seed (its process's environment), and where an installation made before
 // the database kept it still has it (packages/db/.env, ADR-266).
 const passcodeKey = 'ADMS_MASTER_PASSCODE_HASH';
+// What the worker's settings name of the map servers (apps/worker/src/process/settings.ts).
+const workerMapKeys = [
+  'ADMS_ROUTING_URL',
+  'ADMS_ADDRESSES_URL',
+  'ADMS_MAP_CA_FILE',
+  'ADMS_MAP_EXTRACT_SHA256',
+];
+// The API is reached only through the local stack's proxy, over HTTPS (ADR-385).
+const apiHostname = 'api.adms.localhost';
 
 interface Login {
   role: LoginRole;
@@ -49,6 +71,8 @@ export class Installer {
   private readonly ownerEnv: EnvFile;
   private readonly apiEnv: EnvFile;
   private readonly workerEnv: EnvFile;
+  // The release's policy values: committed, no secret in it (ADR-303).
+  private readonly policyEnv: EnvFile;
   private readonly logins: Login[];
   private interview: Interview | undefined;
   // The master passcode's slow hash, in memory only, when this run has one to hand to the seed.
@@ -62,6 +86,7 @@ export class Installer {
     this.ownerEnv = new EnvFile(join(root, 'packages/db/.env'));
     this.apiEnv = new EnvFile(join(root, 'apps/api/.env'));
     this.workerEnv = new EnvFile(join(root, 'apps/worker/.env'));
+    this.policyEnv = new EnvFile(join(root, 'packages/domain/policy.env'));
     this.logins = [
       { role: 'adms_owner', file: this.ownerEnv, key: 'DATABASE_URL' },
       { role: 'adms_api', file: this.apiEnv, key: 'DATABASE_URL' },
@@ -99,6 +124,7 @@ export class Installer {
       }
       console.log('');
       await this.ensureRoles(database, record);
+      await this.ensureTimeouts(database);
       await this.ensureDatabase(database, record);
       await this.verifyLogins();
       this.migrate();
@@ -107,6 +133,9 @@ export class Installer {
       this.seed();
       await this.clearEarlierHash();
       this.state.save(record);
+      this.ensureWorkerSettings();
+      this.startApi();
+      this.startWorker();
       console.log(`\nInstalled for ${record.firm}. Rerun \`pnpm installer\` any time to re-check.`);
     } finally {
       await database.close();
@@ -204,9 +233,13 @@ export class Installer {
 
   private async askPasscode(interview: Interview): Promise<string> {
     const hasher = new PasscodeHasher();
+    // The release's list of known breached passwords: committed, no secret in it (ADR-403).
+    const breached = new BreachedList(
+      readFileSync(join(this.root, 'packages/domain/breached-passwords.txt'), 'utf8'),
+    );
     for (;;) {
       const passcode = await interview.askSecret('   Master passcode');
-      const problem = hasher.problem(passcode);
+      const problem = hasher.problem(passcode, breached);
       if (problem !== undefined) console.log(`   ${problem}`);
       else if ((await interview.askSecret('   Once more')) === passcode) return passcode;
       else console.log('   They differ. Again, please.');
@@ -240,8 +273,9 @@ export class Installer {
       ['ADMS_TOKEN_SIGNING_SECRET', maker.password()],
       ['SMTP_URL', answers.mail === 'mail catcher' ? `smtp://${host}:${smtpPort}` : ''],
     ]);
-    this.workerEnv.create(header('the worker, with its own login'), [
+    this.workerEnv.create(header('the worker, with its own login and the map servers it asks'), [
       ['DATABASE_URL', url('adms_worker')],
+      ...this.workerMapSettings(),
     ]);
     for (const file of [this.ownerEnv, this.apiEnv, this.workerEnv]) {
       console.log(`+ wrote ${this.relative(file.path)} (mode 0600)`);
@@ -306,6 +340,36 @@ export class Installer {
       }
     }
     record.steps.roles = new Date().toISOString();
+  }
+
+  // Each service login's statement timeout, from the policy value (ARCHITECTURE §5.7; ADR-394):
+  // set on a first run, and put back on a rerun when the login has another or none. It holds for
+  // the connections a login opens from now on; the API's container is started afresh below.
+  private async ensureTimeouts(database: Database): Promise<void> {
+    for (const login of this.logins) {
+      // One kept for a login in one database only would stand in front of the login's own.
+      for (const name of await database.statementTimeoutDatabases(login.role)) {
+        await database.clearStatementTimeout(login.role, name);
+        console.log(`- took off ${login.role}'s own statement timeout in database ${name}`);
+      }
+      if (!timed.includes(login.role)) {
+        if ((await database.statementTimeout(login.role)) !== undefined) {
+          await database.clearStatementTimeout(login.role);
+          console.log(`- took off ${login.role}'s statement timeout: it runs the migrations`);
+        } else {
+          console.log(`✓ ${untimed}`);
+        }
+        continue;
+      }
+      const milliseconds = this.timeoutFor(login);
+      const told = `a statement of ${login.role} is stopped after ${String(milliseconds)} ms (${statementTimeoutName})`;
+      if ((await database.statementTimeout(login.role)) === String(milliseconds)) {
+        console.log(`✓ ${told}`);
+      } else {
+        await database.setStatementTimeout(login.role, milliseconds);
+        console.log(`+ set: ${told}`);
+      }
+    }
   }
 
   private async ensureDatabase(database: Database, record: InstallationRecord): Promise<void> {
@@ -465,6 +529,13 @@ export class Installer {
         text: `${login.role} opens ${record.database.name} with its own password${problem === undefined ? '' : ` (${problem})`}`,
       });
     }
+    for (const login of this.logins) {
+      checks.push(
+        timed.includes(login.role)
+          ? await this.timeoutCheck(login)
+          : await this.noTimeoutCheck(database, login.role),
+      );
+    }
     const migrations = this.prisma(['migrate', 'status']);
     const summary = migrations.output.trim().split('\n').at(-1)?.trim() ?? '';
     checks.push({ ok: migrations.status === 0, text: `migrations at head (${summary})` });
@@ -479,17 +550,168 @@ export class Installer {
       text: `every table is guarded${gaps.length === 0 ? '' : ` (${gaps.join('; ')})`}`,
     });
     checks.push(await this.masterPasscodeCheck());
-    let actorProblem: string | undefined;
-    try {
-      actorProblem = await this.systemActorProblem();
-    } catch (error) {
-      actorProblem = error instanceof Error ? error.message : String(error);
+    for (const [seeded, called] of [
+      [seededActors.system, 'the system actor'],
+      [seededActors.masterPasscode, "the master passcode's actor"],
+      [seededActors.deviceKey, "the device key's actor"],
+    ] as const) {
+      let actorProblem: string | undefined;
+      try {
+        actorProblem = await this.seededActorProblem(seeded);
+      } catch (error) {
+        actorProblem = error instanceof Error ? error.message : String(error);
+      }
+      checks.push({
+        ok: actorProblem === undefined,
+        text: `${called} is the seed's, alone, unchanged and guarded${actorProblem === undefined ? '' : ` (${actorProblem})`}`,
+      });
     }
+    const stated = this.workerEnv.exists() ? this.workerEnv.read() : {};
+    const unnamed = workerMapKeys.filter((key) => !(key in stated));
     checks.push({
-      ok: actorProblem === undefined,
-      text: `the system actor is the seed's, alone, unchanged and guarded${actorProblem === undefined ? '' : ` (${actorProblem})`}`,
+      ok: unnamed.length === 0,
+      text: `apps/worker/.env names the map servers the worker asks${unnamed.length === 0 ? '' : ` (missing ${unnamed.join(', ')}: pnpm installer adds them)`}`,
+    });
+    const apiProblem = await this.apiProblem();
+    checks.push({
+      ok: apiProblem === undefined,
+      text: `the API answers over HTTPS at https://${apiHostname}/health${apiProblem === undefined ? '' : ` (${apiProblem})`}`,
+    });
+    checks.push({
+      ok: this.helper(['worker-health']).status === 0,
+      text: 'the worker answers its health check in the local stack',
     });
     return checks;
+  }
+
+  // What the worker is told of the map servers (ARCHITECTURE §3; ADR-349, 419): the local
+  // stack's own, each by its name over HTTPS, the stack's certificate authority, and the SHA-256
+  // of the extract the stack built them from. Nothing here is secret.
+  private workerMapSettings(): [string, string][] {
+    const port = this.stackEnv.exists() ? this.stackEnv.read()['ADMS_HTTPS_PORT'] : undefined;
+    const at = port === undefined || port === '443' ? '' : `:${port}`;
+    const sha256 = this.helper(['map-sha256']).stdout.trim();
+    if (!/^[0-9a-f]{64}$/.test(sha256)) {
+      throw new Error('The local stack did not say which map extract it has. Stopped.');
+    }
+    return [
+      ['ADMS_ROUTING_URL', `https://routing.adms.localhost${at}`],
+      ['ADMS_ADDRESSES_URL', `https://addresses.adms.localhost${at}`],
+      ['ADMS_MAP_CA_FILE', join(this.root, 'infra/local/.generated/caddy-root.crt')],
+      ['ADMS_MAP_EXTRACT_SHA256', sha256],
+    ];
+  }
+
+  // An installation made before the worker had a process has a worker's env file with its login
+  // alone: the map settings are added at its end, every line already there left as it was.
+  private ensureWorkerSettings(): void {
+    const name = this.relative(this.workerEnv.path);
+    const added = this.workerEnv.add(this.workerMapSettings());
+    if (added.length === 0) console.log(`✓ ${name} names the map servers the worker asks`);
+    else console.log(`+ added to ${name}: ${added.join(', ')}`);
+  }
+
+  // The worker's settings are this installer's too: the local stack builds it, starts its
+  // container afresh and asks its health answer (ADR-419).
+  private startWorker(): void {
+    console.log('\nStarting the worker in the local stack:');
+    const result = spawnSync(
+      process.execPath,
+      [join(this.root, 'infra/local/src/index.ts'), 'worker'],
+      { stdio: 'inherit' },
+    );
+    if (result.status !== 0) throw new Error('The worker did not start. Stopped.');
+  }
+
+  // Asks the local stack's helper (infra/local/src/index.ts) and takes its answer.
+  private helper(args: string[]): { status: number | null; stdout: string } {
+    const result = spawnSync(
+      process.execPath,
+      [join(this.root, 'infra/local/src/index.ts'), ...args],
+      { encoding: 'utf8' },
+    );
+    return { status: result.status, stdout: result.stdout };
+  }
+
+  // The API's settings are this installer's, so its container starts only now (ADR-385): the
+  // local stack builds it, starts it afresh and checks its health answer over HTTPS.
+  private startApi(): void {
+    console.log('\nStarting the API in the local stack:');
+    const result = spawnSync(
+      process.execPath,
+      [join(this.root, 'infra/local/src/index.ts'), 'api'],
+      { stdio: 'inherit' },
+    );
+    if (result.status !== 0) throw new Error('The API did not start. Stopped.');
+  }
+
+  // Asked as a caller would: through the proxy, the certificate checked against the stack's own.
+  private apiProblem(): Promise<string | undefined> {
+    const rootCert = join(this.root, 'infra/local/.generated/caddy-root.crt');
+    if (!existsSync(rootCert)) return Promise.resolve('start it with `pnpm local:up`');
+    const port = this.stackEnv.exists() ? this.stackEnv.read()['ADMS_HTTPS_PORT'] : undefined;
+    return new Promise((resolve) => {
+      const asked = request(
+        {
+          host,
+          port: Number(port ?? '443'),
+          path: '/health',
+          servername: apiHostname,
+          headers: { host: apiHostname },
+          ca: readFileSync(rootCert),
+        },
+        (answer) => {
+          answer.resume();
+          resolve(
+            answer.statusCode === 200
+              ? undefined
+              : `it answered ${String(answer.statusCode)}: start it with \`pnpm local:up\``,
+          );
+        },
+      );
+      asked.on('error', () => {
+        resolve('no answer: start it with `pnpm local:up`');
+      });
+      asked.end();
+    });
+  }
+
+  // Read from what the server keeps on the login, not from what it finds on signing in: a host's
+  // own default for every login is the host's, and is not this installation's to judge.
+  private async noTimeoutCheck(database: Database, role: LoginRole): Promise<Check> {
+    const kept =
+      (await database.statementTimeout(role)) !== undefined ||
+      (await database.statementTimeoutDatabases(role)).length > 0;
+    return {
+      ok: !kept,
+      text: `${untimed}${kept ? ' (it has one: `pnpm installer` takes it off)' : ''}`,
+    };
+  }
+
+  // Asked as the login itself: what it finds on signing in is what its service runs under.
+  private async timeoutCheck(login: Login): Promise<Check> {
+    let told = `a statement of ${login.role} is stopped after the policy value ${statementTimeoutName}`;
+    let problem: string | undefined;
+    try {
+      const milliseconds = this.timeoutFor(login);
+      told = `a statement of ${login.role} is stopped after ${String(milliseconds)} ms (${statementTimeoutName})`;
+      const url = new URL(login.file.read()[login.key] ?? 'postgresql://missing');
+      const found = await Database.statementTimeout(
+        { host: url.hostname, port: Number(url.port) },
+        login.role,
+        decodeURIComponent(url.password),
+        url.pathname.slice(1),
+      );
+      if (found !== milliseconds) {
+        problem = `${found === 0 ? 'it has no limit' : `it is ${String(found)} ms`}: \`pnpm installer\` sets it`;
+      }
+    } catch (error) {
+      problem = error instanceof Error ? error.message : String(error);
+    }
+    return {
+      ok: problem === undefined,
+      text: `${told}${problem === undefined ? '' : ` (${problem})`}`,
+    };
   }
 
   // The database keeps the master passcode's slow hash, and no file does (ADR-281).
@@ -565,6 +787,15 @@ export class Installer {
     return decodeURIComponent(new URL(url).password);
   }
 
+  // The login's statement timeout: its service's own value when its env file states one,
+  // otherwise the release's (ADR-395).
+  private timeoutFor(login: Login): number {
+    return new StatementTimeout(this.policyEnv.read()).for(
+      login.file.exists() ? login.file.read() : {},
+      this.relative(login.file.path),
+    );
+  }
+
   private logInProblem(login: Login): Promise<string | undefined> {
     const url = new URL(login.file.read()[login.key] ?? 'postgresql://missing');
     return Database.logInProblem(
@@ -587,13 +818,14 @@ export class Installer {
   }
 
   // Asked as adms_owner too (ADR-276).
-  private systemActorProblem(): Promise<string | undefined> {
+  private seededActorProblem(seeded: SeededActor): Promise<string | undefined> {
     const url = new URL(this.ownerEnv.read()['DATABASE_URL'] ?? 'postgresql://missing');
-    return Database.systemActorProblem(
+    return Database.seededActorProblem(
       { host: url.hostname, port: Number(url.port) },
       'adms_owner',
       decodeURIComponent(url.password),
       url.pathname.slice(1),
+      seeded,
     );
   }
 

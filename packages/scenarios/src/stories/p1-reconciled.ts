@@ -19,7 +19,7 @@
 // renumbering and correcting as a reviewer's actions, with their permissions and reasons
 // (1.8.x): where this story needs a corrected record it writes the correction as the API's login
 // may, to show what the worker does when the ticket comes back. The golden mission in full is 1.9.1.
-import { ProjectSetup } from '@open-adms/api';
+import { ProjectSetup, SiteSetup } from '@open-adms/api';
 import type { Database, Prisma } from '@open-adms/db';
 import type { MileageEnds } from '@open-adms/domain';
 import {
@@ -831,9 +831,7 @@ export const p1Reconciled: Story = {
         })
       ).mileage?.toFixed(4);
     const moveTheTdsr = (latitude: string) =>
-      api.$write({ actorId: dana, source: 'BACK_OFFICE' }, (tx) =>
-        tx.disposalSite.update({ where: { id: tdsr.id }, data: { latitude } }),
-      );
+      saved(new SiteSetup(api, clock, story.policy).change(dana, tdsr.id, { latitude }));
     await moveTheTdsr('39.09010000');
     asked = [];
     await reconciliation.run(setupChange);

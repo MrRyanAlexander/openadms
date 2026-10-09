@@ -90,12 +90,12 @@ export const setup: Story = {
   async run(story) {
     const { api, clock } = story;
     const projects = new ProjectSetup(api, clock, story.policy);
-    const contractors = new ContractorSetup(api, clock);
+    const contractors = new ContractorSetup(api, clock, story.policy);
     const lists = new ListSetup(api, clock);
     const forms = new FormSetup(api, clock);
-    const payItems = new PayItemSetup(api, clock);
-    const sites = new SiteSetup(api, clock);
-    const rules = new RuleSetup(api, clock);
+    const payItems = new PayItemSetup(api, clock, story.policy);
+    const sites = new SiteSetup(api, clock, story.policy);
+    const rules = new RuleSetup(api, clock, story.policy);
 
     // What was saved; a refusal here stops the story.
     const saved = async <T>(attempt: Promise<Outcome<T>>): Promise<T> => {
@@ -1167,13 +1167,14 @@ export const setup: Story = {
       ],
     );
     story.check(
-      'AC-01-79 steps 6 and 7: one audit record for each row written; the Landfill’s tick is an update; the four refusals left none',
+      'AC-01-79 steps 6 and 7: one audit record for each row written; the Landfill’s tick is an update; the four refusals left none. A site added or changed queued a job in the same piece of work, for the worker to check its permit (ADR-420)',
       await audited(),
       {
         'Dana: payable_type INSERT (BACK_OFFICE)': 2,
         'Dana: pay_item INSERT (BACK_OFFICE)': 15,
         'Dana: pay_item_rate INSERT (BACK_OFFICE)': 15,
         'Dana: disposal_site INSERT (BACK_OFFICE)': 3,
+        'Dana: reconciliation_job INSERT (BACK_OFFICE)': 4,
         'Dana: disposal_site UPDATE (BACK_OFFICE)': 1,
         'Dana: disposal_site_tipping_fee INSERT (BACK_OFFICE)': 1,
         'Dana: rule INSERT (BACK_OFFICE)': 1,
@@ -1806,7 +1807,7 @@ export const setup: Story = {
       ],
     );
     story.check(
-      'AC-01-79 P2: one audit record for each row Luis wrote, each his; the refused contract left none',
+      'AC-01-79 P2: one audit record for each row Luis wrote, each his, the job his site queued among them; the refused contract left none',
       await audited(),
       {
         'Luis: project INSERT (BACK_OFFICE)': 1,
@@ -1818,6 +1819,7 @@ export const setup: Story = {
         'Luis: pay_item INSERT (BACK_OFFICE)': 1,
         'Luis: pay_item_rate INSERT (BACK_OFFICE)': 1,
         'Luis: disposal_site INSERT (BACK_OFFICE)': 1,
+        'Luis: reconciliation_job INSERT (BACK_OFFICE)': 1,
         'Luis: rule INSERT (BACK_OFFICE)': 1,
         'Luis: rule_criterion INSERT (BACK_OFFICE)': 1,
         'Luis: rule_criterion_pick INSERT (BACK_OFFICE)': 1,

@@ -4,14 +4,28 @@
 // error does. The database is dropped afterwards unless the run keeps it for a person to look at.
 import { isDeepStrictEqual } from 'node:util';
 
-import { Intake } from '@open-adms/api';
-import type { Database } from '@open-adms/db';
-import type { Policy } from '@open-adms/domain';
+import {
+  DeviceKeys,
+  Enrolment,
+  Intake,
+  MasterPasscodeCheck,
+  NoMail,
+  PasswordHasher,
+  PhoneChallenges,
+  PhoneProofs,
+  PhoneTokens,
+} from '@open-adms/api';
+import type { Database, ViewerDatabase } from '@open-adms/db';
+import { MasterPasscodeTries, PhoneProofRules, type Policy } from '@open-adms/domain';
 
 import { projectTime, StoryClock } from './clock.ts';
 import { SimulatedDevice, type PhoneSetup } from './device.ts';
 import { builtInPolicy } from './policy.ts';
-import { StoryDatabase } from './story-database.ts';
+import { SoftwareKey, type EnrolledPhone } from './software-key.ts';
+import { StoryDatabase, storyMasterPasscode } from './story-database.ts';
+
+// The signing secret of a story's API: made up, the same for every story, used nowhere else.
+const storySigningSecret = 'made-up-signing-secret-for-the-stories-only';
 
 export interface Story {
   // Its name on the command line, e.g. ticket-101001.
@@ -29,6 +43,8 @@ export interface StoryContext {
   // The services' own clients, on the story's database.
   readonly api: Database;
   readonly worker: Database;
+  // The read-only login's way in, for a read-only viewer's reads: `$viewed` alone (ADR-434).
+  readonly viewed: ViewerDatabase;
   // The release's policy values, which a new project's settings start from (ADR-303).
   readonly policy: Policy;
   // Where phones sync to: the API's intake, with no endpoint in front of it until Phase 2
@@ -38,6 +54,13 @@ export interface StoryContext {
   // Moves the clock to a time (with its offset) and says what happens then.
   at(time: string, what: string): void;
   phone(setup: PhoneSetup): SimulatedDevice;
+  // Enrols a phone as a real one is (ARCHITECTURE §7.1, §7.4; ADR-439, 440): once, under the
+  // firm's master passcode, through the API's `Enrolment`, with a device key made in software.
+  // `at` is when it was enrolled, where that is not the story's clock now (a phone enrolled the
+  // evening before its work is told).
+  enrolled(name: string, at?: Date): Promise<EnrolledPhone>;
+  // A phone's proof of itself, as its sync begins: the API's `PhoneProofs`, on the story's clock.
+  readonly proofs: PhoneProofs;
   // Asserts an exact result; strict deep equality.
   check(what: string, actual: unknown, expected: unknown): void;
 }
@@ -72,7 +95,7 @@ export class Runner {
     let failed = 0;
     let error: string | undefined;
     let database: StoryDatabase | undefined;
-    const open: Database[] = [];
+    const open: Pick<Database, '$disconnect'>[] = [];
     try {
       database = await StoryDatabase.create();
       const migrations = database.migrate();
@@ -83,13 +106,18 @@ export class Runner {
       );
       const api = database.open('api');
       const worker = database.open('worker');
-      open.push(api, worker);
+      const viewed = database.openViewer();
+      open.push(api, worker, viewed);
       const clock = new StoryClock(story.start);
       const policy = builtInPolicy();
+      const hasher = new PasswordHasher(storySigningSecret);
+      const keys = new DeviceKeys();
+      const proofRules = new PhoneProofRules(policy);
       const context: StoryContext = {
         clock,
         api,
         worker,
+        viewed,
         policy,
         intake: new Intake(api, clock, policy),
         at(time, what) {
@@ -97,6 +125,31 @@ export class Runner {
           out(`  ${projectTime(story.timeZone, clock.now())}  ${what}`);
         },
         phone: (setup) => new SimulatedDevice(setup, clock),
+        async enrolled(name, at) {
+          const key = new SoftwareKey();
+          const enrolledAt = at === undefined ? clock : { now: () => at };
+          const outcome = await new Enrolment(api, {
+            passcode: new MasterPasscodeCheck(api, {
+              rules: new MasterPasscodeTries(policy),
+              hasher,
+              mail: new NoMail(),
+              clock: enrolledAt,
+              requestNow: () => undefined,
+            }),
+            keys,
+            clock: enrolledAt,
+          }).enrol({ name, passcode: storyMasterPasscode, publicKey: key.publicKey });
+          if (!outcome.enrolled) throw new Error(`${name} was not enrolled: ${outcome.why}.`);
+          return { id: outcome.deviceId, name, key };
+        },
+        proofs: new PhoneProofs(api, {
+          rules: proofRules,
+          challenges: new PhoneChallenges(storySigningSecret, proofRules),
+          keys,
+          tokens: new PhoneTokens(storySigningSecret, policy.phoneTokenMinutes),
+          clock,
+          challengeSeconds: policy.phoneChallengeSeconds,
+        }),
         check(what, actual, expected) {
           if (isDeepStrictEqual(actual, expected)) {
             passed += 1;

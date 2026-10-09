@@ -55,6 +55,24 @@ export class EnvFile {
     renameSync(next, this.path);
   }
 
+  // Adds the keys the file doesn't state yet, at its end, for a setting a later release needs.
+  // Every line already there is left exactly as it was, so no value is ever replaced; still its
+  // owner's only; written whole beside itself, then swapped in. Answers the keys it added.
+  add(values: [string, string][]): string[] {
+    const stated = this.read();
+    const missing = values.filter(([key]) => !(key in stated));
+    if (missing.length === 0) return [];
+    const text = readFileSync(this.path, 'utf8');
+    const next = `${this.path}.next`;
+    writeFileSync(
+      next,
+      `${text}${text.endsWith('\n') || text === '' ? '' : '\n'}${EnvFile.render([], missing)}`,
+      { mode: 0o600, flag: 'wx' },
+    );
+    renameSync(next, this.path);
+    return missing.map(([key]) => key);
+  }
+
   static render(header: string[], values: [string, string][]): string {
     const lines = header.map((line) => `# ${line}`);
     for (const [key, value] of values) {

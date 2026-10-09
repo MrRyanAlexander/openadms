@@ -6,6 +6,7 @@
     "tsBuildInfoFile": "dist/.tsbuildinfo",
     "types": ["node"],
     "erasableSyntaxOnly": true,
+    "experimentalDecorators": true,
     "allowImportingTsExtensions": true,
     "rewriteRelativeImportExtensions": true
   },

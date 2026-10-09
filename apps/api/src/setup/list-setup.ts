@@ -8,7 +8,7 @@ import { type Outcome, SetupService } from './setup-service.ts';
 export class ListSetup extends SetupService {
   // A debris type in the firm's library, named as its contracts name the work: Mulch.
   debrisType(person: string, name: string): Promise<Outcome<DebrisType>> {
-    return this.write(person, async (tx) => {
+    return this.setup(person, async (tx) => {
       const last = await tx.debrisType.aggregate({ _max: { position: true } });
       return tx.debrisType.create({ data: { name, position: (last._max.position ?? 0) + 1 } });
     });
@@ -16,7 +16,7 @@ export class ListSetup extends SetupService {
 
   // A payable type, the work a pay item prices: Stump fill.
   payableType(person: string, name: string): Promise<Outcome<PayableType>> {
-    return this.write(person, async (tx) => {
+    return this.setup(person, async (tx) => {
       const last = await tx.payableType.aggregate({ _max: { position: true } });
       return tx.payableType.create({ data: { name, position: (last._max.position ?? 0) + 1 } });
     });

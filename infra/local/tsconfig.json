@@ -9,5 +9,13 @@
     "allowImportingTsExtensions": true,
     "rewriteRelativeImportExtensions": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  "references": [
+    {
+      "path": "../../apps/api"
+    },
+    {
+      "path": "../../packages/db"
+    }
+  ]
 }

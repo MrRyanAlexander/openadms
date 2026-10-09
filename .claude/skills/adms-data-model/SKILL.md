@@ -2,7 +2,7 @@
 name: adms-data-model
 description: Open ADMS data model, in today's rules. Covers the records and how they link (Client → DeclarationEvent → Project, contractors and contracts, forms and debris types, pay items with a rate per prime, rules naming one contract, sites, certifications, users, devices and assignments, time-clock entries, FieldEvent and the CompletedLoad / CompletedHaulOut drawn from it, transactions, flags, AuditRecord), why reference data is editable, evidence correctable only by permission and the derived records and audit never by a person, which lists are fixed in code and which the firm extends (built-in keys plus the firm's own values), identifiers, uniqueness, coordinates and time, and which package and database role may write what. Use when touching the Prisma schema, adding or changing a model, a list, a relation or a constraint, or deciding where a write belongs. Field names are spec/DATA-MODEL.md's; what each setup record and field event holds is adms-ticket-workflows.
 ---
-<!-- skill-status: current (an unvoid's own record, ADR-366; a line and a carried ticket taken off by a mark, ADR-364; people's marks, ADR-363; what a contractor user sees of its own tickets, ADR-361; `Transaction` in full, ADR-358; the derived records, ADR-340; a photograph's archive mark and label, ADR-337; ADR-138, rewritten 2026-09-29, ADR-245; ADR-246; the Phase 0 models built, ADR-281; the pay item's first shape and `spec/DATA-MODEL.md` drafted, ADR-284, 286; the page approved, ADR-289; a pay item's unique code and description, ADR-301; the firm's lists built, ADR-302; the client, the declaration event and the project built, ADR-303; contractors on a project and contracts built, ADR-305; a contractor's contact details, ADR-306; forms, the debris types on them and the firm's own fields built, ADR-308; pay items in full, ADR-309; sites and the project map built, a site keeping several tipping fee pay items, ADR-311; rules built, ADR-313; people's permissions and viewers, ADR-315; certifications, ADR-321; what every field event records, ADR-324; what each kind records, ADR-325; scale receipts and photographs, ADR-326; ROEs and forms, ADR-327; whether a viewer sees private citizens by name, ADR-336) -->
+<!-- skill-status: current (what queues work, ADR-420; the job queue, ADR-418; one email address a person who signs in, the last admin, ADR-415; an unvoid's own record, ADR-366; a line and a carried ticket taken off by a mark, ADR-364; people's marks, ADR-363; what a contractor user sees of its own tickets, ADR-361; `Transaction` in full, ADR-358; the derived records, ADR-340; a photograph's archive mark and label, ADR-337; ADR-138, rewritten 2026-09-29, ADR-245; ADR-246; the Phase 0 models built, ADR-281; the pay item's first shape and `spec/DATA-MODEL.md` drafted, ADR-284, 286; the page approved, ADR-289; a pay item's unique code and description, ADR-301; the firm's lists built, ADR-302; the client, the declaration event and the project built, ADR-303; contractors on a project and contracts built, ADR-305; a contractor's contact details, ADR-306; forms, the debris types on them and the firm's own fields built, ADR-308; pay items in full, ADR-309; sites and the project map built, a site keeping several tipping fee pay items, ADR-311; rules built, ADR-313; people's permissions and viewers, ADR-315; certifications, ADR-321; what every field event records, ADR-324; what each kind records, ADR-325; scale receipts and photographs, ADR-326; ROEs and forms, ADR-327; whether a viewer sees private citizens by name, ADR-336) -->
 
 > **This page states today's rules** (last changed by ADR-363, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
@@ -316,6 +316,26 @@ their rows and the flags, no viewer a run or its decisions. The database does no
 of field event a completed record names: that is the grouping's (`packages/domain`, 1.5.3). A
 test writes them as the worker, with the helpers in `packages/db/test/derived-records.test.ts`.
 
+**Built (ADR-418, agent default): the job queue**, two tables of our own written through Prisma
+(`jobs.prisma`; no queue library). A **`ReconciliationJob`** is the work a change asks the worker
+for: its project, what asked for it (`trigger`), who (none on a sync's), when, and how it went
+(`attempts`, `finishedAt` with the run that worked it, `lastError`, `setAsideAt`); its
+**`ReconciliationJobTicket`** rows name the tickets as the worker groups one (workflow and bare
+number), each once, each its job's own project's. **A job is added only inside the piece of work
+of the change that asks for it**, through `packages/db`'s `new ReconciliationJobs(tx).queue(…)`,
+so neither exists without the other (AC-10-50). Its guards are its own: **the API adds a job and
+its tickets and changes neither; the worker writes only how a job went**; nobody deletes; no
+read-only login or viewer reads either; audited in operations. What was asked never changes, and
+a job once finished or set aside is history. A job is *waiting* while it is neither; the run
+works the tickets its project's waiting jobs name and no other (the user, ADR-360). A test writes
+them with the helpers in `packages/db/test/reconciliation-jobs.test.ts`; queueing through the
+class is `job-queue.test.ts`. **Who queues (ADR-420, agent default):** every service whose change
+moves a ticket, in its own piece of work, through `apps/api`'s `WorkQueue`: the tickets touched
+and their neighbours (`packages/domain`'s `TicketNeighbours`), never one locked as invoiced nor,
+among the neighbours and a setup change's tickets, a void one; cut into jobs of
+`JOB_TICKETS_AT_MOST`; a job with no ticket is for the records the run flags by themselves. **A
+new service that changes what a ticket is concluded from extends `QueueingService` and queues.**
+
 **`CompletedLoad` and `CompletedHaulOut`** are what the worker concludes from a ticket's events: the
 load's own number, its events (**unique links**, so one load can't bill twice, invariant 17), the
 zone and mileage attached (with the map version and the map data's date, ADR-110, 141), QC status,
@@ -372,7 +392,7 @@ example world doesn't hold are `test/support/priced-tickets.ts`'s.
   `AssignmentPayItem` rows, each a `PayItem` of its own project (ADR-286) and a unit rate one: the
   row repeats the pay item's kind of work, held by a three-column foreign key (C42, ADR-309); the forms it names are
   `formDocumentTypes`, held to ROE, survey, incident and drop-off log (ADR-308). `MasterPasscode`: a version and its slow hash, never edited, read only by
-  the API. A field event's `assignmentId` and `setupVersion` are captured columns, required on a phone's record and empty on one created in the back office (ADR-324).
+  the API. **Sign-in's records (ADR-397…399), each read by the API alone:** `UserCredential` (a person's password hash, authenticator secret and locked-until, apart from `User`), `Session` (the SHA-256 of the refresh token in force, final once revoked) and `SecurityEvent` (added, never edited; the database copies it into the audit log's security domain); a secret column is named on its audit trigger and never reaches the audit log. A field event's `assignmentId` and `setupVersion` are captured columns, required on a phone's record and empty on one created in the back office (ADR-324).
 
 ## 3.2 Fixed in code, or the firm's to extend
 
@@ -467,6 +487,10 @@ an ADR):
   one field event per project + workflow + bare number + split suffix + kind (ADR-062, 236);
   a cert number per project (ADR-045); unique event links on a completed record (invariant 17);
   a load call a whole number 0–100 (ADR-116); split fields both or neither;
+  one email address among the admins, manager/analysts and read-only viewers who aren't
+  archived, whatever its capitals, since it is what they sign in with (an exclusion; a monitor's
+  address is no key); the firm's last admin never archived or made another role (a trigger)
+  (ADR-415);
   foreign keys everywhere; closed sets as check constraints.
 - **Coordinates are exact decimals** (`Decimal(38, 8)`, WGS84), **never floats**; every distance is
   **geodesic**, in one TypeScript module in `packages/domain`, never Euclidean (ADR-005, 094;
@@ -588,6 +612,8 @@ What this page used to say, and why it changed. Never build from the left-hand s
   a line's rate and amount in `viewer_transaction` for every viewer of the line → its own tickets,
   told by the certification; the money in `viewer_transaction_money`, never for a sub's
   contractor user (the user, 2026-10-06; ADR-361).
+- "No queue record exists; what starts a run is Phase 2's job queue" → `ReconciliationJob` and
+  `ReconciliationJobTicket`, guarded tables of our own, no library (ADR-418).
 - "The unlock columns and the batch are task 1.8.2's"; `InvoiceLock` with no project, each target
   locked once for ever → the five mark records built, each with its project; one lock in force,
   the unlock on its row (ADR-363).
