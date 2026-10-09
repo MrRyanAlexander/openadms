@@ -30,6 +30,9 @@ gets tracked on a spreadsheet."
 1. **Enrol a phone once** (online, master passcode): it makes its **device key** in its secure
    hardware (iOS Secure Enclave / Android Keystore; never exportable, so a phone can't be copied or
    swapped) and joins the firm's phones. No project, no monitor (ADR-240; ARCHITECTURE §7.4).
+   **The key is ECDSA on P-256; the phone proves itself by signing the server's challenge with
+   SHA-256, the text to sign being the domain's `PhoneProofRules.signed`; the server is sent the
+   public half only** (ADR-437).
 2. **Create field monitors on a phone, online**: the master passcode → "Create monitor" → the
    username is the system **Monitor ID** (`M004127`); the password is, by the firm's practice, the
    monitor's phone number without the area code (ADR-105, 120).

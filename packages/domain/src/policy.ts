@@ -58,6 +58,9 @@ export const policyNames = {
   // person has to finish setting an authenticator up, in minutes.
   twoStepCodeStepsEitherSide: 'TWO_STEP_CODE_STEPS_EITHER_SIDE',
   twoStepSetupMinutes: 'TWO_STEP_SETUP_MINUTES',
+  // A phone's proof of itself (ARCHITECTURE §7.4; ADR-437): how long the challenge the server
+  // makes for a phone may still be signed and sent back, in seconds.
+  phoneChallengeSeconds: 'PHONE_CHALLENGE_SECONDS',
   // Rate limits (ARCHITECTURE §6, Abuse; ASVS 2.4.1; ADR-416): how long the stretch is that
   // requests are counted over, in seconds; how many one address and one signed-in person may send
   // in it; and how many callers' counts the server keeps at once.
@@ -129,6 +132,7 @@ const ranges: Record<PolicyName, { least: number; most: number }> = {
   [policyNames.signInLongestWaitMinutes]: { least: 1, most: 1440 },
   [policyNames.twoStepCodeStepsEitherSide]: { least: 0, most: 1 },
   [policyNames.twoStepSetupMinutes]: { least: 1, most: 60 },
+  [policyNames.phoneChallengeSeconds]: { least: 10, most: 600 },
   [policyNames.rateLimitWindowSeconds]: { least: 1, most: 3600 },
   [policyNames.rateLimitRequestsPerAddress]: { least: 1, most: Number.MAX_SAFE_INTEGER },
   [policyNames.rateLimitRequestsPerAccount]: { least: 1, most: Number.MAX_SAFE_INTEGER },
@@ -169,6 +173,7 @@ export class Policy {
   readonly signInLongestWaitMinutes: number;
   readonly twoStepCodeStepsEitherSide: number;
   readonly twoStepSetupMinutes: number;
+  readonly phoneChallengeSeconds: number;
   readonly rateLimitWindowSeconds: number;
   readonly rateLimitRequestsPerAddress: number;
   readonly rateLimitRequestsPerAccount: number;
@@ -208,6 +213,7 @@ export class Policy {
     this.signInLongestWaitMinutes = Policy.read(values, policyNames.signInLongestWaitMinutes);
     this.twoStepCodeStepsEitherSide = Policy.read(values, policyNames.twoStepCodeStepsEitherSide);
     this.twoStepSetupMinutes = Policy.read(values, policyNames.twoStepSetupMinutes);
+    this.phoneChallengeSeconds = Policy.read(values, policyNames.phoneChallengeSeconds);
     this.rateLimitWindowSeconds = Policy.read(values, policyNames.rateLimitWindowSeconds);
     this.rateLimitRequestsPerAddress = Policy.read(values, policyNames.rateLimitRequestsPerAddress);
     this.rateLimitRequestsPerAccount = Policy.read(values, policyNames.rateLimitRequestsPerAccount);

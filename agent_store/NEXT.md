@@ -89,7 +89,7 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-08, through ADR-435)
+### Where things stand (2026-10-09, through ADR-438)
 - **Phase 2 (API and sync) is open (ADR-376).** Its plan is `BACKLOG.md`'s eight milestones and 32
   tasks (ADR-377); tasks 2.0.1 (the opening and the plan), 2.1.1 (the threat model and the
   API's scenarios, ADR-379; docs), 2.1.2 (the API as a process, ADR-380…385), 2.1.3 (the
@@ -230,8 +230,9 @@ of `DECISIONS.md`.
   `installationPolicy({ … })`.
 - **Phase 1 is done:** all seven exit criteria met (ADR-371, 372); 693 of the 708 scenarios with a
   Phase 1 part proven whole, 15 in part. 48 scenario rows name Phase 2 (37 as "API (Phase 2)").
-- **The chain, seen whole on 2026-10-08 (ADR-435):** 123 test
-  files, 2,361 tests; lint clean; 421 licences allowed; eighteen stories (`p1-viewed` 15 checks); `pnpm security` 7 passed,
+- **Task 2.5.1 (enrolment and a phone's proof of itself) is in three parts (ADR-436), and part 1 is done (ADR-437):** the key's kind (ECDSA P-256, a SHA-256 signature over `PhoneProofRules.signed(challenge)`), `DeviceKeys` and `PhoneChallenges` in `apps/api/src/phone/` (the public key kept written one way; a challenge kept nowhere, the server's own, 256 random bits, good for `PHONE_CHALLENGE_SECONDS` and once), with their tests; **nothing is wired: no endpoint, no table.** What NIST SP 800-63B-4 and ASVS 5.0 ask is ADR-436. **ADR-438 is proposed, not built:** the master passcode's own actor, and wrong tries at it.
+- **The chain, seen whole on 2026-10-09 (ADR-437):** 125 test
+  files, 2,378 tests; lint clean; 421 licences allowed; eighteen stories (`p1-viewed` 15 checks); `pnpm security` 7 passed,
   0 failed; eighty-nine migrations; `installer:check` 27 `✓`. The expected output of each command is `adms-verify`'s.
 - **What exists:** `packages/db` (schema, guards, tests), `packages/domain` (every rule; one
   dependency, no database), `packages/contracts`, `packages/scenarios` (the harness and stories,
@@ -389,22 +390,25 @@ questions.
 **Phase 2 is open (ADR-376). Its plan is `BACKLOG.md`, "Active — Phase 2" (ADR-377): read its
 brief first. One task per response.**
 
-**Task 2.5.1: enrolment and a phone's proof of itself** *(Milestone 2.5's first; Milestone 2.4
-is done, ADR-435)*. BACKLOG's own words: the key's kind by ADR (what iOS's Secure Enclave and
-Android's Keystore both make and Node verifies without a dependency); the master passcode
-checked with back-off; the phone's public key kept; a server challenge signed on every later
-call (AC-02-18, AC-05-03). **Who the record names for an act under the master passcode** (C45,
-REQ-209) is decided here: the passcode isn't a person, and `$write` needs one. The harness's
-phone holds a software key; real secure hardware is Phase 3's. Read first: **ARCHITECTURE §7,
-§7.4, §7.5**, `adms-field-app`, `spec/THREAT-MODEL.md`'s rows on a phone, BACKLOG C45 and what
-C85, C86, C88, C90, C91 and C93 leave for 2.5.1 (an endpoint's recipe, its `access`, rate
-limits on tries at a secret), and `packages/db/test/devices.test.ts`. **The user's word
-(ADR-401): say what NIST SP 800-63B and ASVS ask of a device key and a shared passcode before
-building.** Cut it in parts by ADR first if it is more than one response. **Done when:** its
-scenarios pass at the API by ID, `pnpm openapi` is current, the chain is green with the new
-counts. **After a change to `apps/api` or `apps/worker`, `pnpm local:up` again; if the door's
-tests or `local:up` meet `ECONNRESET` or a container whose layer is gone, `pnpm local:down`
-and `up` once more** (seen 2026-10-08).
+**Task 2.5.1, part 2 of 3: the database's share and enrolment** *(ADR-436 (5); part 1 is done,
+ADR-437)*. **First read `SUMMARY.md` §4's "To hear before part 2" and the user's reply, if any,
+to ADR-438** (who the record names under the master passcode; the lock at fifty wrong tries): it
+is proposed, and built as written only if the user hasn't said otherwise. Then: the master
+passcode's own actor seeded and guarded (a role of its own; the API's alone to state, source
+`DEVICE`; never an author, a monitor or a login: the system actor's guards are the pattern,
+`20260930145257_guard_system_actor`), the record of wrong tries against the passcode's version,
+the security event kinds for a wrong try and the lock, each with its guards and tests (C88's
+recipe); `MasterPasscodeTries` in the domain (sign-in's numbers); the enrolment endpoint
+(`ANYBODY`, C86, C90, C93: `limits.mayTry` before, `wrongTry` after), which takes a name, the
+passcode and the public key (`DeviceKeys.kept`), answers the phone's id and the passcode's
+version, and writes `MASTER_PASSCODE_USE`; `door.test.ts` reads the log after an enrolment
+(AC-10-32). Scenarios: AC-10-22, AC-10-44, AC-02-18's first half. **Part 3:** the challenge asked
+for and answered, good once on the phone's record, a phone's token and `Admission`'s access for
+a proven phone, a revoked key refused, the harness's software-key phone, the stories enrolling
+through the service (AC-05-03, AC-10-45, 46). **Done when (the task):** its scenarios pass at the
+API by ID, `pnpm openapi` is current, the chain is green with the new counts. **After a change to
+`apps/api` or `apps/worker`, `pnpm local:up` again; if the door's tests or `local:up` meet
+`ECONNRESET` or a container whose layer is gone, `pnpm local:down` and `up` once more.**
 
 **Every command starts with** `eval "$(fnm env --shell zsh)"`. The checks are `adms-verify`'s; the
 database tests, the map servers' tests, the stories and `pnpm security` need `pnpm local:up` first,
