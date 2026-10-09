@@ -8,6 +8,7 @@ import {
   DeviceKeys,
   Enrolment,
   Intake,
+  MasterPasscodeCheck,
   NoMail,
   PasswordHasher,
   PhoneChallenges,
@@ -126,13 +127,17 @@ export class Runner {
         phone: (setup) => new SimulatedDevice(setup, clock),
         async enrolled(name, at) {
           const key = new SoftwareKey();
+          const enrolledAt = at === undefined ? clock : { now: () => at };
           const outcome = await new Enrolment(api, {
-            rules: new MasterPasscodeTries(policy),
-            hasher,
+            passcode: new MasterPasscodeCheck(api, {
+              rules: new MasterPasscodeTries(policy),
+              hasher,
+              mail: new NoMail(),
+              clock: enrolledAt,
+              requestNow: () => undefined,
+            }),
             keys,
-            mail: new NoMail(),
-            clock: at === undefined ? clock : { now: () => at },
-            requestNow: () => undefined,
+            clock: enrolledAt,
           }).enrol({ name, passcode: storyMasterPasscode, publicKey: key.publicKey });
           if (!outcome.enrolled) throw new Error(`${name} was not enrolled: ${outcome.why}.`);
           return { id: outcome.deviceId, name, key };

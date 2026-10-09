@@ -9390,6 +9390,85 @@
         }
       }
     },
+    "/phones/current/monitors": {
+      "post": {
+        "operationId": "createMonitorOnPhone",
+        "summary": "A field monitor is created on an enrolled phone, under the firm’s master passcode: their name, their password and, if the firm keeps one, their phone number. The answer is the Monitor ID the system issued, which is their username. Open to a phone in service that has proved itself, by its token. A passcode that isn’t taken is refused by one code; wrong tries count as they do when a phone is enrolled.",
+        "x-open-adms-access": "PROVEN_PHONE",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  },
+                  "phone": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40
+                  },
+                  "passcode": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  }
+                },
+                "required": ["name", "password", "passcode"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "userId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "monitorNumber": {
+                      "type": "string",
+                      "pattern": "^M\\d{6,}$"
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["userId", "monitorNumber", "name"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/phones/{deviceId}/removals": {
       "post": {
         "operationId": "removePhone",
@@ -19030,7 +19109,9 @@
               "REFUSED_BY_THE_DATABASE",
               "ENROLMENT_REFUSED",
               "DEVICE_KEY_REFUSED",
-              "PHONE_NOT_PROVEN"
+              "PHONE_NOT_PROVEN",
+              "MASTER_PASSCODE_REFUSED",
+              "PHONE_OUT_OF_SERVICE"
             ]
           },
           "requestId": {

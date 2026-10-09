@@ -206,7 +206,18 @@ export {
   type EnrolmentRefused,
   type PhoneToEnrol,
 } from './phone/enrolment.ts';
+export {
+  MasterPasscodeCheck,
+  type MasterPasscodeCheckParts,
+  type PasscodeRefused,
+} from './phone/master-passcode-check.ts';
 export { PhoneChallenges, type Challenged } from './phone/phone-challenges.ts';
+export {
+  PhoneMonitors,
+  type MonitorOutcome,
+  type MonitorToCreate,
+  type PhoneMonitorsParts,
+} from './phone/phone-monitors.ts';
 export {
   PhoneProofs,
   type Challenge,

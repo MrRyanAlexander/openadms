@@ -31,6 +31,7 @@ import {
   healthAnswerSchema,
   masterPasscodeAnswerSchema,
   phoneChallengeAnswerSchema,
+  monitorCreatedAnswerSchema,
   phoneEnrolledAnswerSchema,
   phoneProvenAnswerSchema,
   provenPhoneAnswerSchema,
@@ -1494,6 +1495,29 @@ export const provenPhoneEndpoint = endpoint({
   answer: provenPhoneAnswerSchema,
 });
 
+// A field monitor is created on a phone, online, under the firm's master passcode (ARCHITECTURE
+// §7.0, §7.5; AC-02-07; ADR-105, 120, 441, 442). The call is a proven phone's, and carries the
+// passcode: whoever holds it is not known, so the record names the master passcode itself, on
+// that phone. The database issues the Monitor ID, which is the monitor's username. Their
+// password is the firm's practice (ADR-105): no rule but that it isn't empty. A passcode that
+// isn't taken is refused by one code whatever the reason, and counts as a wrong try at
+// enrolment does. The limits here only bound what is read.
+export const createMonitorOnPhoneEndpoint = endpoint({
+  name: 'createMonitorOnPhone',
+  summary:
+    'A field monitor is created on an enrolled phone, under the firm’s master passcode: their name, their password and, if the firm keeps one, their phone number. The answer is the Monitor ID the system issued, which is their username. Open to a phone in service that has proved itself, by its token. A passcode that isn’t taken is refused by one code; wrong tries count as they do when a phone is enrolled.',
+  access: 'PROVEN_PHONE',
+  method: 'POST',
+  path: '/phones/current/monitors',
+  body: z.strictObject({
+    name: z.string().trim().min(1).max(200),
+    password: z.string().min(1).max(4096),
+    phone: z.string().trim().min(1).max(40).optional(),
+    passcode: z.string().min(1).max(4096),
+  }),
+  answer: monitorCreatedAnswerSchema,
+});
+
 export const removePhoneEndpoint = endpoint({
   name: 'removePhone',
   summary:
@@ -2297,6 +2321,7 @@ export const endpoints: readonly Endpoint[] = [
   challengePhoneEndpoint,
   provePhoneEndpoint,
   provenPhoneEndpoint,
+  createMonitorOnPhoneEndpoint,
   removePhoneEndpoint,
   changeMasterPasscodeEndpoint,
   listAssignmentsEndpoint,

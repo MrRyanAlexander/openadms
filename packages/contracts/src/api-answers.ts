@@ -95,6 +95,11 @@ export const errorCodes = [
   // answered, a signature the phone's key didn't make, a phone nobody enrolled, a key that is
   // revoked), or a call with no token of a proof, or one run out (AC-10-45, 46).
   'PHONE_NOT_PROVEN',
+  // An act under the master passcode on an enrolled phone (a monitor created, ADR-442). The
+  // passcode wasn't taken: one code whatever the reason, as at enrolment.
+  'MASTER_PASSCODE_REFUSED',
+  // The phone was taken out of service: it hands over its work and does nothing new.
+  'PHONE_OUT_OF_SERVICE',
 ] as const;
 
 export type ErrorCode = (typeof errorCodes)[number];
@@ -478,3 +483,13 @@ export const provenPhoneAnswerSchema = z.strictObject({
 });
 
 export type ProvenPhoneAnswer = z.infer<typeof provenPhoneAnswerSchema>;
+
+// A monitor was created on a phone (AC-02-07; ADR-442): the Monitor ID the database issued,
+// which is their username, their id and their name as kept. Never the password.
+export const monitorCreatedAnswerSchema = z.strictObject({
+  userId: z.uuid(),
+  monitorNumber: z.string().regex(/^M\d{6,}$/),
+  name: z.string(),
+});
+
+export type MonitorCreatedAnswer = z.infer<typeof monitorCreatedAnswerSchema>;

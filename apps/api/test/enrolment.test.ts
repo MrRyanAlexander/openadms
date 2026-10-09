@@ -318,7 +318,7 @@ describe('the master passcode entered wrong', () => {
           'MASTER_PASSCODE_LOCKOUT',
         ]);
         expect(outbox.sent.map(({ to, subject }) => [to, subject])).toEqual([
-          [danasEmail, 'Enrolling a phone with your firm’s master passcode is locked'],
+          [danasEmail, 'Your firm’s master passcode is locked'],
         ]);
         expect(outbox.sent[0]?.text).not.toContain(wrongPasscode);
         // A day later, the right passcode, from an address that has tried nothing.

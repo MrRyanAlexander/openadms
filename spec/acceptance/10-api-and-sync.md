@@ -171,7 +171,7 @@ them. One more, AC-06-36, is named by the plan though its row doesn't say "Phase
 | ID | Its Phase 2 part, in short | Task | Answers |
 |---|---|---|---|
 | AC-01-26 | A debris type *Hidden on phones* is left off a phone's lists | 2.5.3 | API3 |
-| AC-02-07 | A monitor created on a phone, online, under the master passcode | 2.5.2 (the actor stated: 2.5.1) | ASVS V6 |
+| AC-02-07 | A monitor created on a phone, online, under the master passcode | 2.5.2 (the actor stated: 2.5.1) **✅ part 1, ADR-442** | ASVS V6 |
 | AC-02-08 | An admin creates back-office and outside users; never a monitor there | 2.2.5 | ASVS V8 · API5 |
 | AC-02-12 | Permissions read on every request: a revoke bites at once | 2.2.5; each review call: 2.4.4 | ASVS V8 · API5 |
 | AC-02-13 | Nobody grants what they don't hold; the last admin stays | 2.2.5 | ASVS V8 · API5 |

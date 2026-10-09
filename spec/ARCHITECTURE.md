@@ -490,6 +490,15 @@ ADR-106 (master passcode) and ADR-120 (changing monitors, username). **The word 
   without the area code**, so a worker who forgets it is told "your ID, and your own phone number",
   and an admin can sign in as them.
 
+> ⚠️ **ADR-441, 442 (2026-10-09; agent defaults, this note awaits approval, building didn't
+> wait): creating a monitor takes the phone and the passcode together.** The request comes from
+> an enrolled phone that has proved itself with its device key (§7.4) and carries the master
+> passcode; the passcode typed anywhere else creates nobody. Nobody types the Monitor ID: the
+> system issues it and the phone shows it. The record says it was done under the master passcode,
+> on that phone. A phone taken out of service creates nobody. What NIST SP 800-63B and ASVS ask of
+> a monitor's sign-in, and where the phone-number password departs from them (the accepted risk of
+> ADR-105 and §7.2), is ADR-441.
+
 > ⚠️ **ADR-415 (2026-10-07; the server command is the user's decision, ADR-413 (2), 414 (2); this
 > note awaits approval, building didn't wait):** the installer seeds nobody who can sign in, so
 > **the firm's first admin is made on its own server by `pnpm installer:admin`**, which also lets

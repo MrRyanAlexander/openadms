@@ -38,6 +38,9 @@ import { People } from '../people/people.ts';
 import { DeviceKeys } from '../phone/device-keys.ts';
 import { apiEnrolment } from '../phone/enrolment.controller.ts';
 import { Enrolment } from '../phone/enrolment.ts';
+import { MasterPasscodeCheck } from '../phone/master-passcode-check.ts';
+import { apiPhoneMonitors } from '../phone/phone-monitors.controller.ts';
+import { PhoneMonitors } from '../phone/phone-monitors.ts';
 import { PhoneChallenges } from '../phone/phone-challenges.ts';
 import { apiPhoneProofs } from '../phone/phone-proofs.controller.ts';
 import { PhoneProofs } from '../phone/phone-proofs.ts';
@@ -256,6 +259,14 @@ export class ApiProcess {
       clock,
       challengeSeconds: policy.phoneChallengeSeconds,
     });
+    // The master passcode's one check, for every act under it (tasks 2.5.1, 2.5.2).
+    const passcodeCheck = new MasterPasscodeCheck(database, {
+      rules: new MasterPasscodeTries(policy),
+      hasher,
+      mail,
+      clock,
+      requestNow,
+    });
     const app = await NestFactory.create<NestFastifyApplication>(
       ProcessModule.around(
         module,
@@ -294,13 +305,16 @@ export class ApiProcess {
           // A phone enrolled under the master passcode (task 2.5.1): nobody is signed in.
           [
             apiEnrolment,
-            new Enrolment(database, {
-              rules: new MasterPasscodeTries(policy),
+            new Enrolment(database, { passcode: passcodeCheck, keys: new DeviceKeys(), clock }),
+          ],
+          // A monitor created on a proven phone under the master passcode (task 2.5.2).
+          [
+            apiPhoneMonitors,
+            new PhoneMonitors(database, {
+              passcode: passcodeCheck,
+              rules: new PasswordRules(policy, breached),
               hasher,
-              keys: new DeviceKeys(),
-              mail,
               clock,
-              requestNow,
             }),
           ],
           [apiPhoneProofs, phoneProofs],

@@ -15,12 +15,9 @@ import { apiLimits, Limits } from '../process/limits.ts';
 import { Refusal } from '../process/refusal.ts';
 import { Serves } from '../process/serves.ts';
 import { Enrolment } from './enrolment.ts';
+import { atThePasscode } from './master-passcode-check.ts';
 
 export const apiEnrolment = Symbol('the API’s enrolment of phones');
-
-// What the rate limits count an address's wrong tries at the master passcode under, as they
-// count them at a login: no email address, so no person's login can be the same.
-const atThePasscode = 'the master passcode';
 
 @Controller()
 export class EnrolmentController {
