@@ -599,6 +599,14 @@ So the protection can't rest on the password. It rests on these:
   number block (ADR-065) and has it wiped. Once wiped, its device key is revoked and the server
   refuses it.
 
+> ⚠️ **ADR-436, 437, 440 (2026-10-09; agent defaults, this note awaits approval, building didn't
+> wait): how a phone proves itself.** The key is ECDSA P-256. Before a sync the phone asks for a
+> challenge by its id, signs it, and is given a token good for fifteen minutes that its calls
+> carry as `Authorization: Bearer`; a challenge is good for two minutes and once. Nobody need be
+> signed in on the phone, so what the proof writes is recorded as done by **"Device key"**, an
+> actor that is not a person, on that phone. A phone out of service still proves itself; one
+> whose key is revoked is refused at once, whatever token it holds.
+
 ### 7.5 The master passcode
 
 ✅ **Decided** *(ADR-106, user 2026-09-25)*:

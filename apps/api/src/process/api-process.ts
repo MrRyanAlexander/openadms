@@ -10,6 +10,7 @@ import {
   MasterPasscodeRules,
   MasterPasscodeTries,
   PasswordRules,
+  PhoneProofRules,
   RateLimits,
   SignInTries,
   TwoStepRules,
@@ -37,6 +38,10 @@ import { People } from '../people/people.ts';
 import { DeviceKeys } from '../phone/device-keys.ts';
 import { apiEnrolment } from '../phone/enrolment.controller.ts';
 import { Enrolment } from '../phone/enrolment.ts';
+import { PhoneChallenges } from '../phone/phone-challenges.ts';
+import { apiPhoneProofs } from '../phone/phone-proofs.controller.ts';
+import { PhoneProofs } from '../phone/phone-proofs.ts';
+import { PhoneTokens } from '../phone/phone-tokens.ts';
 import { Acceptances } from '../review/acceptances.ts';
 import { BackOfficeRecords } from '../review/back-office-records.ts';
 import { apiCorrections } from '../review/corrections.controller.ts';
@@ -241,6 +246,16 @@ export class ApiProcess {
       limits,
     });
     const people = new People(database, { clock, sessions, mail });
+    // A phone's proof of itself (task 2.5.1): nobody is signed in.
+    const proofRules = new PhoneProofRules(policy);
+    const phoneProofs = new PhoneProofs(database, {
+      rules: proofRules,
+      challenges: new PhoneChallenges(settings.tokenSigningSecret, proofRules),
+      keys: new DeviceKeys(),
+      tokens: new PhoneTokens(settings.tokenSigningSecret, policy.phoneTokenMinutes),
+      clock,
+      challengeSeconds: policy.phoneChallengeSeconds,
+    });
     const app = await NestFactory.create<NestFastifyApplication>(
       ProcessModule.around(
         module,
@@ -288,6 +303,7 @@ export class ApiProcess {
               requestNow,
             }),
           ],
+          [apiPhoneProofs, phoneProofs],
           [
             apiMasterPasscode,
             new MasterPasscode(database, {
@@ -304,7 +320,7 @@ export class ApiProcess {
       { logger: new ProcessLog(server.log) },
     );
     app.useGlobalFilters(new ErrorFilter());
-    app.useGlobalInterceptors(new Boundary(new Admission(sessions, tokens, limits)));
+    app.useGlobalInterceptors(new Boundary(new Admission(sessions, tokens, limits, phoneProofs)));
     app.enableShutdownHooks();
     return new ApiProcess(app, routes, settings);
   }

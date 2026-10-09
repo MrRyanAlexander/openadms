@@ -214,12 +214,13 @@ describe('the firm’s people', () => {
   });
 });
 
-describe('the two users that are no person', () => {
-  it('ADR-438 the system actor and the master passcode’s actor, and nobody else', () => {
-    expect(actorsOnly).toEqual(['SYSTEM', 'MASTER_PASSCODE']);
-    expect([...roles, 'MASTER_PASSCODE'].filter((role) => actorOnly(role))).toEqual([
+describe('the three users that are no person', () => {
+  it('ADR-438, 440 the system actor, the master passcode’s actor and the device key’s, and nobody else', () => {
+    expect(actorsOnly).toEqual(['SYSTEM', 'MASTER_PASSCODE', 'DEVICE_KEY']);
+    expect([...roles, 'MASTER_PASSCODE', 'DEVICE_KEY'].filter((role) => actorOnly(role))).toEqual([
       'SYSTEM',
       'MASTER_PASSCODE',
+      'DEVICE_KEY',
     ]);
   });
 });

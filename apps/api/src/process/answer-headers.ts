@@ -56,7 +56,8 @@ export function answersWith(
       void reply
         .headers({
           'access-control-allow-methods': endpointMethods.join(', '),
-          'access-control-allow-headers': `content-type, ${csrfHeader}`,
+          // The field app's pages send a proven phone's token as Authorization (ADR-440).
+          'access-control-allow-headers': `content-type, ${csrfHeader}, authorization`,
         })
         .status(204)
         .send();

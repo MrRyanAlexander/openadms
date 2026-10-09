@@ -13,10 +13,16 @@
 // value in a header (NIST SP 800-63B-4 §5.1; ASVS 3.5.1). Another site's page can make a
 // browser send the cookies; it can't read the value, and can't set the header without the
 // browser first asking the CORS list.
+//
+// A phone that has proved itself sends its proof's token as `Authorization: Bearer`, never as a
+// cookie (ARCHITECTURE §6, Device sessions; AC-10-46; ADR-440): no browser sends that header by
+// itself, so such a call needs no CSRF value. The phone is read from the database for this
+// request too: a key revoked a moment ago refuses now, whatever the token says.
 import { csrfHeader, type Endpoint } from '@open-adms/contracts';
 import { Access } from '@open-adms/domain';
 import type { FastifyRequest } from 'fastify';
 
+import type { PhoneProofs, ProvenPhone } from '../phone/phone-proofs.ts';
 import type { Limits } from '../process/limits.ts';
 import { Refusal } from '../process/refusal.ts';
 import { accessCookie, cookiesOf, refreshCookie } from './session-cookies.ts';
@@ -29,6 +35,8 @@ export interface Admitted {
   readonly caller?: Caller;
   // The refresh token as it was sent, on an endpoint that works on it.
   readonly refreshToken?: string;
+  // The phone that proved itself, on an endpoint open to one.
+  readonly phone?: ProvenPhone;
 }
 
 const admitted = new WeakMap<object, Admitted>();
@@ -46,20 +54,43 @@ export function refreshTokenOf(request: object): string {
   return token;
 }
 
+// The proven phone a request is from. Only an endpoint whose access is `PROVEN_PHONE` has one.
+export function phoneOf(request: object): ProvenPhone {
+  const phone = admitted.get(request)?.phone;
+  if (phone === undefined) throw new Error('This endpoint has no proven phone.');
+  return phone;
+}
+
+const bearer = /^Bearer ([A-Za-z0-9._-]{1,400})$/;
+
 export class Admission {
   private readonly sessions: Sessions;
   private readonly tokens: SessionTokens;
   private readonly limits: Pick<Limits, 'asked'>;
+  private readonly phones: Pick<PhoneProofs, 'proven'>;
 
-  constructor(sessions: Sessions, tokens: SessionTokens, limits: Pick<Limits, 'asked'>) {
+  constructor(
+    sessions: Sessions,
+    tokens: SessionTokens,
+    limits: Pick<Limits, 'asked'>,
+    phones: Pick<PhoneProofs, 'proven'>,
+  ) {
     this.sessions = sessions;
     this.tokens = tokens;
     this.limits = limits;
+    this.phones = phones;
   }
 
   // Lets the request through, or refuses it with a plain code.
   async admit(endpoint: Endpoint, request: FastifyRequest): Promise<void> {
     if (endpoint.access === 'ANYBODY') return;
+    if (endpoint.access === 'PROVEN_PHONE') {
+      const sent = request.headers.authorization;
+      const phone = await this.phones.proven(bearer.exec(sent ?? '')?.[1]);
+      if (phone === undefined) throw new Refusal('PHONE_NOT_PROVEN', 401);
+      admitted.set(request, { phone });
+      return;
+    }
     const cookies = cookiesOf(request.headers.cookie);
     if (endpoint.access === 'REFRESH_TOKEN') {
       const refreshToken = cookies.get(refreshCookie);

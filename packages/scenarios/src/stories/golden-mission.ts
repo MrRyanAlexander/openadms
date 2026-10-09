@@ -285,21 +285,11 @@ export const goldenMission: Story = {
         }),
       )
     ).id;
-    const p2Devices = await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
-      const enrolled: Record<string, string> = {};
-      for (const name of ['P2-COL-1', 'P2-TWR-TDSR']) {
-        const phone = await tx.device.create({
-          data: {
-            name,
-            publicKey: `story-key-${name.toLowerCase()}`,
-            masterPasscodeVersion: 1,
-            enrolledAt: clock.now(),
-          },
-        });
-        enrolled[name] = phone.id;
-      }
-      return enrolled;
-    });
+    // P2's two phones, enrolled under the master passcode, each with a key of its own.
+    const p2Devices: Record<string, string> = {};
+    for (const name of ['P2-COL-1', 'P2-TWR-TDSR']) {
+      p2Devices[name] = (await story.enrolled(name)).id;
+    }
     const p2Phone = (name: string): string => {
       const id = p2Devices[name];
       if (id === undefined) throw new Error(`No phone ${name}`);

@@ -36,7 +36,8 @@ function operation(served: Endpoint): Json {
   return {
     operationId: served.name,
     summary: served.summary,
-    // Who may call it (ADR-408): anybody, a signed-in person, or the holder of a refresh token.
+    // Who may call it (ADR-408, 440): anybody, a signed-in person, the holder of a refresh
+    // token, or a phone that has proved itself.
     'x-open-adms-access': served.access,
     // Among the signed-in, the roles it is open to and the permission it takes (ADR-415).
     ...(served.roles === undefined ? {} : { 'x-open-adms-roles': served.roles }),

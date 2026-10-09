@@ -34,6 +34,7 @@ const logins = ['adms_api', 'adms_worker', 'adms_readonly'] as const;
 // Every story's firm has the same made-up master passcode, `heron-marsh-delphine`; this is its
 // slow hash, made once by the installer's own hasher (Argon2id), as the installer hands the seed
 // the real one. Not a secret: no installation uses it.
+export const storyMasterPasscode = 'heron-marsh-delphine';
 const storyMasterPasscodeHash =
   '$argon2id$v=19$m=19456,t=2,p=1$rLnL+hWkLjJHDKTBWGSsdw$tYeMf5WEtzZTIdv2JQR18zDWwcllaJjVO71qautLsGY';
 

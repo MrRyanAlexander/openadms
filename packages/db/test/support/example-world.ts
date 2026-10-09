@@ -53,6 +53,7 @@ import { createHash } from 'node:crypto';
 
 import { systemActorId } from '../../src/system-actor.ts';
 import type { GuardedDatabase } from './database.ts';
+import { deviceKeyLike } from './device-keys.ts';
 
 export interface Load {
   collection: string;
@@ -723,7 +724,7 @@ export class ExampleWorld {
     const auditor = await this.insert('user', viewerLike('Auditor', 'AUDITOR'));
     const device = await this.insert('device', {
       name: 'P1-COL-1',
-      public_key: 'test-public-key-ana-brooks',
+      public_key: deviceKeyLike('ana-brooks'),
       master_passcode_version: 1,
     });
     const client = await this.insert('client', {
@@ -967,7 +968,7 @@ export class ExampleWorld {
     const helper = await this.insert('user', { name: 'Lee Morgan', role: 'MONITOR' });
     const certifyingDevice = await this.insert('device', {
       name: 'P1-HO-TDSR',
-      public_key: 'test-public-key-sam-grant',
+      public_key: deviceKeyLike('sam-grant'),
       master_passcode_version: 1,
     });
     const certifying = (projectId: string, workDate: string): Promise<string> =>

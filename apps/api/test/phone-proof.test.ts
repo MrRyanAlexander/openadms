@@ -2,20 +2,28 @@
 // AC-10-44…46; T-02, T-11; ADR-437): NIST SP 800-63B-4 §3.1.6; ASVS 6.7.2, 11.2.3, 11.6.1. The
 // phone here holds a software key, as the harness's does; a key in real secure hardware is the
 // field app's (Phase 3). Nothing here needs the stack.
-import { createPrivateKey, ECDH, generateKeyPairSync, sign, type KeyObject } from 'node:crypto';
+import {
+  createHmac,
+  createPrivateKey,
+  ECDH,
+  generateKeyPairSync,
+  sign,
+  type KeyObject,
+} from 'node:crypto';
 
+import type { Database } from '@open-adms/db';
 import { PhoneProofRules } from '@open-adms/domain';
 import { describe, expect, it } from 'vitest';
 
 import { DeviceKeys } from '../src/phone/device-keys.ts';
 import { PhoneChallenges } from '../src/phone/phone-challenges.ts';
+import { PhoneProofs } from '../src/phone/phone-proofs.ts';
+import { PhoneTokens } from '../src/phone/phone-tokens.ts';
 
 const keys = new DeviceKeys();
 const rules = new PhoneProofRules({ phoneChallengeSeconds: 120 });
-const challenges = new PhoneChallenges(
-  'a signing secret of the test’s own, never a real one',
-  rules,
-);
+const signingSecret = 'a signing secret of the test’s own, never a real one';
+const challenges = new PhoneChallenges(signingSecret, rules);
 const collection = '0199c1f4-7a10-7c3e-9b1d-5e2f8a4c6d11';
 const tower = '0199c1f4-7a10-7c3e-9b1d-5e2f8a4c6d12';
 const now = new Date('2026-10-12T16:05:00.000Z');
@@ -160,5 +168,86 @@ describe('the challenge the server makes a phone', () => {
 
   it('is for one phone: another’s is read as the other’s', () => {
     expect(challenges.read(challenges.make(tower, now), now)?.deviceId).toBe(tower);
+  });
+});
+
+describe('the token a proof gives', () => {
+  const tokens = new PhoneTokens(signingSecret, 15);
+
+  it('AC-05-03 names its phone, runs out by itself, and is new each time', () => {
+    const token = tokens.make(collection, now);
+    expect(tokens.seconds).toBe(900);
+    expect(tokens.deviceOf(token, later(899))).toBe(collection);
+    expect(tokens.deviceOf(token, later(900))).toBeUndefined();
+    expect(tokens.make(collection, now)).not.toBe(token);
+    // 128 random bits, as base64url: twice what NIST SP 800-63B-4 §5.1 asks.
+    expect(token.split('.')[2]).toMatch(/^[A-Za-z0-9_-]{22}$/);
+  });
+
+  it('AC-10-46 is the server’s own, for that purpose alone: one changed, one another installation made, a challenge, and one signed with the challenge’s key are nobody’s', () => {
+    const token = tokens.make(collection, now);
+    const [device = '', expires = '', random = '', signature = ''] = token.split('.');
+    const elsewhere = new PhoneTokens('another installation’s secret', 15);
+    // What the token would be had it been signed with the key that signs challenges.
+    const challengeKey = createHmac('sha256', signingSecret)
+      .update('open-adms/phone-challenge/v1')
+      .digest();
+    const crossed = createHmac('sha256', challengeKey)
+      .update(`${device}\n${expires}\n${random}`)
+      .digest('base64url');
+    for (const never of [
+      elsewhere.make(collection, now),
+      challenges.make(collection, now),
+      `${tower}.${expires}.${random}.${signature}`,
+      `${device}.${String(Number(expires) + 1)}.${random}.${signature}`,
+      `${device}.${expires}.${random}.${crossed}`,
+      `${device}.${expires}.${random}`,
+      `${token}.more`,
+      '',
+      undefined,
+    ]) {
+      expect(tokens.deviceOf(never, now), String(never)).toBeUndefined();
+    }
+    expect(tokens.deviceOf(token, now)).toBe(collection);
+  });
+});
+
+describe('two answers to one challenge at once', () => {
+  it('AC-10-45 both read the phone before either wrote: the one whose write changes nothing proves nothing, and is given no token', async () => {
+    const phone = new SoftwarePhone();
+    const stated: unknown[] = [];
+    // The database as the second answer finds it: its read is the phone before the first
+    // answer's write, and its own write, made under the row's lock, matches no row.
+    const racing = {
+      $read: () =>
+        Promise.resolve({
+          publicKey: phone.publicKey,
+          keyRevokedAt: null,
+          lastAnsweredChallengeMadeAt: null,
+        }),
+      $write: (actor: unknown) => {
+        stated.push(actor);
+        return Promise.resolve({ count: 0 });
+      },
+    } as unknown as Database;
+    const proofs = new PhoneProofs(racing, {
+      rules,
+      challenges,
+      keys,
+      tokens: new PhoneTokens(signingSecret, 15),
+      clock: { now: () => now },
+      challengeSeconds: 120,
+    });
+    const { challenge } = proofs.challenge(collection);
+    const outcome = await proofs.prove(
+      collection,
+      challenge,
+      phone.signs(PhoneProofRules.signed(challenge)),
+    );
+    expect(outcome).toEqual({ proven: false, why: 'SPENT' });
+    // The write it tried was the phone's own, for that phone.
+    expect(stated).toEqual([
+      { actorId: '00000000-0000-7000-8000-000000000003', source: 'DEVICE', deviceId: collection },
+    ]);
   });
 });

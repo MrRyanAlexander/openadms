@@ -160,6 +160,7 @@ describe('a phone is enrolled', () => {
         enrolledAt: new Date('2026-10-12T13:50:00Z'),
         outOfServiceAt: null,
         keyRevokedAt: null,
+        lastAnsweredChallengeMadeAt: null,
       });
       // No project, no monitor; and the audit log names the master passcode's own actor.
       const written = { actorId: masterPasscodeActorId, source: 'DEVICE', deviceId };

@@ -42,6 +42,19 @@ export const numbering: Story = {
 
     // ------------------------------------------------------------------------------------------
     story.at(on('12', '05:30'), 'Dana Reyes has set up P1 and enrolled its phones');
+    // Each enrolled under the master passcode, with a key of its own (ADR-439, 440).
+    const phones: Record<string, string> = {};
+    for (const name of [
+      'P1-COL-1',
+      'P1-COL-2',
+      'P1-COL-3',
+      'P1-COL-4',
+      'P1-HO-TDSR',
+      'P1-UR-1',
+      'PARKS-UR-1',
+    ]) {
+      phones[name] = (await story.enrolled(name)).id;
+    }
     const dana = uuidv7(clock.now());
     const world = await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
       await tx.user.create({ data: { id: dana, name: 'Dana Reyes', role: 'ADMIN' } });
@@ -51,21 +64,6 @@ export const numbering: Story = {
         monitors[name] = (await tx.user.create({ data: { name, role: 'MONITOR' } })).id;
       }
       const p1 = await setUpP1(tx, story.policy);
-      const phones: Record<string, string> = {};
-      for (const name of [
-        'P1-COL-1',
-        'P1-COL-2',
-        'P1-COL-3',
-        'P1-COL-4',
-        'P1-HO-TDSR',
-        'P1-UR-1',
-        'PARKS-UR-1',
-      ]) {
-        const phone = await tx.device.create({
-          data: { name, publicKey: `story-key-${name.toLowerCase()}`, masterPasscodeVersion: 1 },
-        });
-        phones[name] = phone.id;
-      }
       return { luis: luis.id, monitors, phones, p1 };
     });
     const { luis, p1 } = world;

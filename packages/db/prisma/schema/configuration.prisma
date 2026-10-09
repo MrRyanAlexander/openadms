@@ -989,6 +989,11 @@ enum UserRole {
   // as, since whoever holds the passcode is not known (ADR-106, 438). Seeded by the installer;
   // only the API states it, and only for a phone (the guard migration).
   MASTER_PASSCODE
+  // Not a person and never a login: the one actor a phone's own act is written as, done on the
+  // strength of its device key with nobody signed in (a phone proving itself; ADR-440). Seeded
+  // by the installer; only the API states it, only for a phone, and always naming that phone
+  // (the guard migration).
+  DEVICE_KEY
 
   @@map("user_role")
 }
@@ -1273,24 +1278,28 @@ enum DeviceStatus {
 // A phone, enrolled once with its device key; no project, no monitor (ADR-095, 240). What it may
 // make comes from the assignment it holds.
 model Device {
-  id                    String       @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  id                          String       @id @default(dbgenerated("uuidv7()")) @db.Uuid
   // What the dispatch board calls it, e.g. P1-COL-1.
-  name                  String
+  name                        String
   // The public half of the key pair made in the phone's secure hardware (ARCHITECTURE §7.4): one
   // key, one phone.
-  publicKey             String       @unique @map("public_key")
-  status                DeviceStatus @default(ACTIVE)
+  publicKey                   String       @unique @map("public_key")
+  status                      DeviceStatus @default(ACTIVE)
   // Which version of the master passcode's check the phone holds; a change reaches it at its
   // next sync (ARCHITECTURE §7.5).
-  masterPasscodeVersion Int          @map("master_passcode_version")
-  enrolledAt            DateTime     @default(now()) @map("enrolled_at") @db.Timestamptz(3)
+  masterPasscodeVersion       Int          @map("master_passcode_version")
+  enrolledAt                  DateTime     @default(now()) @map("enrolled_at") @db.Timestamptz(3)
   // Its removal time: what it made after this arrives flagged, never refused (ADR-134). Set
   // exactly when it's lost or retired (a check in the guard migrations).
-  outOfServiceAt        DateTime?    @map("out_of_service_at") @db.Timestamptz(3)
+  outOfServiceAt              DateTime?    @map("out_of_service_at") @db.Timestamptz(3)
   // When its key was revoked: once a lost or retired phone has synced, been confirmed and wiped
   // (ARCHITECTURE §7.4; C47). Only a phone out of service has one (a check in the guard
   // migration); refusing the key is the API's (Phase 2).
-  keyRevokedAt          DateTime?    @map("key_revoked_at") @db.Timestamptz(3)
+  keyRevokedAt                DateTime?    @map("key_revoked_at") @db.Timestamptz(3)
+  // When the server made the last challenge this phone proved itself with (ARCHITECTURE §7.4;
+  // AC-10-45; ADR-437, 440): a challenge is good once, so only one made after this is taken.
+  // Written by the phone's own proof alone, and only ever later (the guard migration).
+  lastAnsweredChallengeMadeAt DateTime?    @map("last_answered_challenge_made_at") @db.Timestamptz(3)
 
   masterPasscode     MasterPasscode      @relation(fields: [masterPasscodeVersion], references: [version], onDelete: Restrict, onUpdate: Restrict)
   numberBlocks       NumberBlock[]

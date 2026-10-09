@@ -33,6 +33,7 @@ import { QuarantineReview } from '../src/review/quarantine-review.ts';
 import { Intake } from '../src/sync/intake.ts';
 import type { SentFieldEvent, SentRoe } from '../src/sync/sent.ts';
 import { installationSettings, openInstallation, type Tx } from './support/database.ts';
+import { enrolledPhone } from './support/phones.ts';
 import { shippedPolicy } from './support/process.ts';
 import {
   audited,
@@ -157,12 +158,8 @@ async function site(
 
 // Kim's phone at the Landfill tower on Wednesday, with her assignment: what a record made on a
 // phone names.
-async function kimsPhone(tx: Tx, projectId: string, who: People) {
-  const masterPasscodeVersion =
-    (await tx.masterPasscode.aggregate({ _max: { version: true } }))._max.version ?? 0;
-  const device = await tx.device.create({
-    data: { name: 'P1-TWR-LF', publicKey: `test-${randomUUID()}`, masterPasscodeVersion },
-  });
+async function kimsPhone(served: Served, tx: Tx, projectId: string, who: People) {
+  const device = await enrolledPhone(served, tx, 'P1-TWR-LF');
   const assignment = await tx.assignment.create({
     data: {
       personId: who.kim,
@@ -672,7 +669,7 @@ describe('a quarantined record resolved', () => {
   it('AC-08-25, 26 Kim’s second disposal scanned 101020 waits in quarantine; Luis renumbers it to 101021: it is a field event with the id its phone made and its photograph, written as Luis from the back office, both tickets queued; the quarantined record stays, marked resolved by him, when and how; resolved once; a manager/analyst needs renumber', async () => {
     await world(async (served, tx, who, within) => {
       const p = await p1WithTickets(served, tx, within, who);
-      const phone = await kimsPhone(tx, p.project.id, who);
+      const phone = await kimsPhone(served, tx, p.project.id, who);
       const intake = new Intake(within, served.clock, shippedPolicy);
       const first = await disposal(tx, p.project.id, who, phone, '101020', '2026-10-14T14:22:00Z');
       const second = await disposal(tx, p.project.id, who, phone, '101020', '2026-10-14T15:40:00Z');
@@ -819,7 +816,7 @@ describe('a quarantined record resolved', () => {
     await world(async (served, tx, who, within) => {
       const p = await p1WithTickets(served, tx, within, who);
       const held = await r0007(tx, p.project.id, who.dana);
-      const phone = await kimsPhone(tx, p.project.id, who);
+      const phone = await kimsPhone(served, tx, p.project.id, who);
       const waitingFor = await p.created('COLLECTION', '101032', {
         roeNumber: 'R-0009',
         ...thursday,

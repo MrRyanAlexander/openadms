@@ -1,6 +1,7 @@
-// Every column that names a user, but the audit record's actor (ADR-438, 439): none may name
-// the master passcode's actor, which is no person. The guard migration wrote one check for
-// each from the catalog; a later table that names a user adds its own, and joins this list.
+// Every column that names a user, but the audit record's actor (ADR-438, 439, 440): none may
+// name the master passcode's actor or the device key's, which are no person. The guard
+// migrations wrote one check of each kind for each from the catalog; a later table that names a
+// user adds its own two, and joins this list.
 export const columnsNamingAUser: readonly (readonly [table: string, column: string])[] = [
   ['assignment', 'made_by_id'],
   ['assignment', 'person_id'],
@@ -42,4 +43,9 @@ export const columnsNamingAUser: readonly (readonly [table: string, column: stri
 export const notMasterPasscodeChecks = columnsNamingAUser.map(([table, column]) => ({
   name: `${table}_${column}_not_master_passcode_check`,
   definition: `CHECK ((${column} IS DISTINCT FROM '00000000-0000-7000-8000-000000000002'::uuid))`,
+}));
+
+export const notDeviceKeyChecks = columnsNamingAUser.map(([table, column]) => ({
+  name: `${table}_${column}_not_device_key_check`,
+  definition: `CHECK ((${column} IS DISTINCT FROM '00000000-0000-7000-8000-000000000003'::uuid))`,
 }));

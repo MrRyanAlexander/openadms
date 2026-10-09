@@ -74,6 +74,8 @@ export const certification: Story = {
       saturday('08:00'),
       'The back office has set up P1 and P2 with their primes; Sam Grant is assigned to certify on P1 today, Lee Morgan with him',
     );
+    // Sam's phone, enrolled under the master passcode with a key of its own (ADR-439, 440).
+    const phone = await story.enrolled('P1-HO-TDSR');
     const dana = uuidv7(clock.now());
     const world = await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
       await tx.user.create({ data: { id: dana, name: 'Dana Reyes', role: 'ADMIN' } });
@@ -101,9 +103,6 @@ export const certification: Story = {
       });
       // P2's own series; its cert numbers are seeded at 880112.
       await startSeries(tx, p2.id, { LOAD: 102001, CERTIFICATION: 880112 });
-      const phone = await tx.device.create({
-        data: { name: 'P1-HO-TDSR', publicKey: 'story-key-p1-ho-tdsr', masterPasscodeVersion: 1 },
-      });
       return {
         luis: luis.id,
         sam: sam.id,

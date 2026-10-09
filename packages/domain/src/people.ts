@@ -42,10 +42,10 @@ export const backOfficeCreated = ['ADMIN', 'MANAGER_ANALYST', 'READ_ONLY_VIEWER'
 
 export type BackOfficeCreated = (typeof backOfficeCreated)[number];
 
-// The two users that are no person and never a login: the worker's own actor, and the actor an
-// act under the master passcode is written as (ADR-273, 438). Nobody reads, changes or signs in
-// as either.
-export const actorsOnly = ['SYSTEM', 'MASTER_PASSCODE'] as const;
+// The three users that are no person and never a login: the worker's own actor, the actor an
+// act under the master passcode is written as, and the actor a phone's own act is written as
+// (ADR-273, 438, 440). Nobody reads, changes or signs in as any of them.
+export const actorsOnly = ['SYSTEM', 'MASTER_PASSCODE', 'DEVICE_KEY'] as const;
 
 export type ActorOnly = (typeof actorsOnly)[number];
 

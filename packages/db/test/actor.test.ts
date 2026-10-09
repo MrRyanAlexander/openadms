@@ -14,6 +14,7 @@ import type { Prisma } from '../src/generated/prisma/client.ts';
 import { systemActor, systemActorId, systemActorName } from '../src/system-actor.ts';
 import { GuardedDatabase } from './support/database.ts';
 import { bayline, openService, p1, p1In, undone } from './support/service.ts';
+import { deviceKeyLike } from './support/device-keys.ts';
 
 let api: Database;
 let worker: Database;
@@ -145,7 +146,7 @@ describe('a write through $write is audited with its actor', () => {
         data: {
           id: phone,
           name: 'P1-COL-1',
-          publicKey: 'test-public-key-P1-COL-1',
+          publicKey: deviceKeyLike('P1-COL-1'),
           masterPasscodeVersion: 1,
         },
       });

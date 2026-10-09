@@ -89,7 +89,7 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-09, through ADR-439)
+### Where things stand (2026-10-09, through ADR-440)
 - **Phase 2 (API and sync) is open (ADR-376).** Its plan is `BACKLOG.md`'s eight milestones and 32
   tasks (ADR-377); tasks 2.0.1 (the opening and the plan), 2.1.1 (the threat model and the
   API's scenarios, ADR-379; docs), 2.1.2 (the API as a process, ADR-380…385), 2.1.3 (the
@@ -213,7 +213,7 @@ of `DECISIONS.md`.
   `@Serves`; `Boundary` reads its path, query and body by its schemas first** (BACKLOG C86 is the
   recipe for adding one); the CORS list is `ADMS_CORS_ORIGINS`; every answer carries the API's own
   headers; the API's database client states the request's id on every write; `pnpm openapi`
-  writes `apps/api/openapi.json`. `spec/acceptance/10-api-and-sync.md` (56 scenarios, 44 passing)
+  writes `apps/api/openapi.json`. `spec/acceptance/10-api-and-sync.md` (56 scenarios, 45 passing)
   and `spec/THREAT-MODEL.md` are both **approved by the user** (their marks, ADR-386, 393).
   Its 14 REQs are in `REQUIREMENTS.md`, two ticked (REQ-201, 208).
 - **A test of the API that must write** runs in one piece of work on the installation's database,
@@ -230,10 +230,10 @@ of `DECISIONS.md`.
   `installationPolicy({ … })`.
 - **Phase 1 is done:** all seven exit criteria met (ADR-371, 372); 693 of the 708 scenarios with a
   Phase 1 part proven whole, 15 in part. 48 scenario rows name Phase 2 (37 as "API (Phase 2)").
-- **Task 2.5.1 (enrolment and a phone's proof of itself) is in three parts (ADR-436), and part 1 is done (ADR-437):** the key's kind (ECDSA P-256, a SHA-256 signature over `PhoneProofRules.signed(challenge)`), `DeviceKeys` and `PhoneChallenges` in `apps/api/src/phone/` (the public key kept written one way; a challenge kept nowhere, the server's own, 256 random bits, good for `PHONE_CHALLENGE_SECONDS` and once), with their tests; What NIST SP 800-63B-4 and ASVS 5.0 ask is ADR-436. **Part 2 is done (ADR-439; ADR-438 built as proposed, the user having said nothing against it):** a phone enrols by `POST /phones/enrolments` (`ANYBODY`: a name, the master passcode, the public key; answered its id and the passcode's version), served by `apps/api/src/phone/`'s `Enrolment`; **every write under the master passcode is stated as the master passcode's own actor** (`underMasterPasscode(deviceId)` in `packages/db`; user `…0002`, role `MASTER_PASSCODE`, seeded; only the API states it, only with source `DEVICE`; no column that names a user may name it); wrong tries are counted on `master_passcode_tries` by sign-in's rule and numbers (the domain's `MasterPasscodeTries`), a wait from the fifth, a lock at the fiftieth until the passcode is changed; three security event kinds (`MASTER_PASSCODE_USE`, `_FAILED`, `_LOCKOUT`); the domain's `actorOnly` tells the two users that are no person. **The stories and the API's other tests still write a phone by hand.** What it leaves: BACKLOG C111.
-- **The chain, seen whole on 2026-10-09 (ADR-439):** 127 test
-  files, 2,402 tests; lint clean; 421 licences allowed; eighteen stories (`p1-viewed` 15 checks); `pnpm security` 7 passed,
-  0 failed; ninety-one migrations; `installer:check` 28 `✓`. The expected output of each command is `adms-verify`'s.
+- **Task 2.5.1 (enrolment and a phone's proof of itself) is in three parts (ADR-436), and part 1 is done (ADR-437):** the key's kind (ECDSA P-256, a SHA-256 signature over `PhoneProofRules.signed(challenge)`), `DeviceKeys` and `PhoneChallenges` in `apps/api/src/phone/` (the public key kept written one way; a challenge kept nowhere, the server's own, 256 random bits, good for `PHONE_CHALLENGE_SECONDS` and once), with their tests; What NIST SP 800-63B-4 and ASVS 5.0 ask is ADR-436. **Part 2 is done (ADR-439; ADR-438 built as proposed, the user having said nothing against it):** a phone enrols by `POST /phones/enrolments` (`ANYBODY`: a name, the master passcode, the public key; answered its id and the passcode's version), served by `apps/api/src/phone/`'s `Enrolment`; **every write under the master passcode is stated as the master passcode's own actor** (`underMasterPasscode(deviceId)` in `packages/db`; user `…0002`, role `MASTER_PASSCODE`, seeded; only the API states it, only with source `DEVICE`; no column that names a user may name it); wrong tries are counted on `master_passcode_tries` by sign-in's rule and numbers (the domain's `MasterPasscodeTries`), a wait from the fifth, a lock at the fiftieth until the passcode is changed; three security event kinds (`MASTER_PASSCODE_USE`, `_FAILED`, `_LOCKOUT`); the domain's `actorOnly` tells the two users that are no person. What it leaves: BACKLOG C111. **Part 3 is done (ADR-440), and with it task 2.5.1:** a phone asks for a challenge by its id (`POST /phones/:deviceId/challenges`, `ANYBODY`, made for any id, nothing kept) and answers it with its signature (`POST /phones/:deviceId/proofs`), served by `apps/api/src/phone/`'s `PhoneProofs`; **a challenge is good once on the phone's own record** (`Device.lastAnsweredChallengeMadeAt`, compared and written in one statement; the database lets only that phone's own proof write it, only later, never for a revoked key); **what a proof writes is stated as the device key's own actor** (`byDeviceKey(deviceId)` in `packages/db`; user `…0003`, role `DEVICE_KEY`, seeded; only the API, only source `DEVICE`, always naming the phone; no column that names a user may name it); a proof gives a token (`PhoneTokens`, the policy value `PHONE_TOKEN_MINUTES`, 15) sent as `Authorization: Bearer`; **an endpoint open to a proven phone says `access: 'PROVEN_PHONE'`** and reads its phone with `phoneOf(request)`; a phone out of service still proves itself, one whose key is revoked proves nothing and its token stops at once; a refused proof is 401 `PHONE_NOT_PROVEN` and writes nothing; `GET /phones/current` is the first call open to a proven phone; the database holds a device key to its shape. **No story and no test of the API writes a phone by hand:** a story enrols with `story.enrolled(name, at?)` and proves with `story.proofs`; an API test with `enrolledPhone(served, tx, name)` and `proven(served, phone)` (`apps/api/test/support/phones.ts`). What it leaves: BACKLOG C112.
+- **The chain, seen whole on 2026-10-09 (ADR-440):** 129 test
+  files, 2,429 tests; lint clean; 421 licences allowed; eighteen stories (`sync` 49 checks); `pnpm security` 7 passed,
+  0 failed; ninety-three migrations; `installer:check` 29 `✓`. The expected output of each command is `adms-verify`'s.
 - **What exists:** `packages/db` (schema, guards, tests), `packages/domain` (every rule; one
   dependency, no database), `packages/contracts`, `packages/scenarios` (the harness and stories,
   the golden mission among them), `apps/worker/src/` (`reconciliation/`, the run: group, check,
@@ -390,21 +390,21 @@ questions.
 **Phase 2 is open (ADR-376). Its plan is `BACKLOG.md`, "Active — Phase 2" (ADR-377): read its
 brief first. One task per response.**
 
-**Task 2.5.1, part 3 of 3: a phone proves itself** *(ADR-436 (5); parts 1 and 2 are done,
-ADR-437, 439)*. Read BACKLOG C110 and C111 first. The challenge asked for by phone id (`ANYBODY`,
-limited by address) and answered with the phone's signature (`PhoneChallenges`, `DeviceKeys.signedBy`,
-`PhoneProofRules`); **good once on the phone's own record** (a column for the made-at of the last
-challenge answered, compared and written under the row's lock; its migration and guard, C88's
-recipe); a proof gives a phone's short-lived token (63B §5.1) and `Admission` an access for a
-proven phone; a phone whose key is revoked (`keyRevokedAt`) is refused, one merely out of service
-is not; the harness's software-key phone, and **the stories and the API's tests enrolling through
-`Enrolment`** instead of writing a phone by hand (whether the database then holds a public key to
-base64 by a check). Scenarios: AC-05-03, AC-10-45, 46; AC-02-18 whole at the API. **Done when (the
-task):** its scenarios pass at the API by ID, `pnpm openapi` is current, the chain is green with
-the new counts. **The user may still overturn ADR-438's two choices or ADR-439's defaults
-(`SUMMARY.md` §4): read their reply first, if any.** **After a change to `apps/api` or
-`apps/worker`, `pnpm local:up` again; if the door's tests or `local:up` meet `ECONNRESET` or a
-container whose layer is gone, `pnpm local:down` and `up` once more.**
+**Task 2.5.2: monitors on phones** *(BACKLOG 2.5.2; read C112, C111, C90 and C88 first, and
+ARCHITECTURE §7.0, §7.2)*. A monitor created on a phone, online, under the master passcode (written
+with `underMasterPasscode(deviceId)`, the monitor named as who the record is about; a wrong passcode
+counts on the same `master_passcode_tries` row: lift `Enrolment.wrong` into a class of its own); a
+monitor signing in online on any enrolled phone, the phone taking their assignment with no passcode
+and no picking (AC-02-35); the same Monitor ID and password refused everywhere but a phone's calls
+(AC-02-39); **the device's session: a proven phone (`PROVEN_PHONE`, `phoneOf`) plus the signed-in
+monitor** (ARCHITECTURE §6, Device sessions). **Say what NIST SP 800-63B and ASVS ask of a monitor's
+sign-in first** (ADR-401; a monitor's password is exempt from the password rules, ADR-402 (5)), and
+cut the task in parts by ADR if it is large. **Done when (the task):** its scenarios pass at the API
+by ID, `pnpm openapi` is current, the chain is green with the new counts. **The user may still
+overturn ADR-440's defaults, ADR-438's two choices or ADR-439's (`SUMMARY.md` §4): read their reply
+first, if any.** **After a change to `apps/api` or `apps/worker`, `pnpm local:up` again; if the
+door's tests or `local:up` meet `ECONNRESET` or a container whose layer is gone, `pnpm local:down`
+and `up` once more.**
 
 **Every command starts with** `eval "$(fnm env --shell zsh)"`. The checks are `adms-verify`'s; the
 database tests, the map servers' tests, the stories and `pnpm security` need `pnpm local:up` first,

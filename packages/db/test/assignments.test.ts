@@ -15,6 +15,7 @@ import {
   siteLike,
 } from './support/example-world.ts';
 import { eachTestRolledBack } from './support/lifecycle.ts';
+import { deviceKeyLike } from './support/device-keys.ts';
 
 const tested = eachTestRolledBack();
 
@@ -150,7 +151,7 @@ describe('an assignment', () => {
     await asTheApi();
     const { id: second } = await db.one<{ id: string }>(
       `INSERT INTO "device" ("name", "public_key", "master_passcode_version")
-       VALUES ('P2-COL-1', 'test-public-key-P2-COL-1', 1) RETURNING "id"::text`,
+       VALUES ('P2-COL-1', '${deviceKeyLike('P2-COL-1')}', 1) RETURNING "id"::text`,
     );
     await assign({ project: world.p1 });
     await assign({ project: world.p2, device: second });

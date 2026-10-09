@@ -30,7 +30,10 @@ import {
   csrfAnswerSchema,
   healthAnswerSchema,
   masterPasscodeAnswerSchema,
+  phoneChallengeAnswerSchema,
   phoneEnrolledAnswerSchema,
+  phoneProvenAnswerSchema,
+  provenPhoneAnswerSchema,
   passwordSetAnswerSchema,
   peopleAnswerSchema,
   personAnswerSchema,
@@ -113,9 +116,11 @@ export type EndpointMethod = (typeof endpointMethods)[number];
 // Who may call an endpoint (ARCHITECTURE §6; AC-10-27; ADR-408), checked before anything it was
 // sent is read. `ANYBODY`: nobody need be signed in. `SIGNED_IN`: a back-office or outside user's
 // session, by its access token. `REFRESH_TOKEN`: the session's refresh token, for the calls that
-// keep a session going or end it. With either of the last two, a call that isn't a GET carries
-// the session's CSRF value.
-export const endpointAccess = ['ANYBODY', 'SIGNED_IN', 'REFRESH_TOKEN'] as const;
+// keep a session going or end it. With either of those two, a call that isn't a GET carries
+// the session's CSRF value. `PROVEN_PHONE`: an enrolled phone that has proved itself with its
+// device key, by the token its proof gave it, sent as `Authorization: Bearer` and never as a
+// cookie (ARCHITECTURE §6, Device sessions; ADR-440).
+export const endpointAccess = ['ANYBODY', 'SIGNED_IN', 'REFRESH_TOKEN', 'PROVEN_PHONE'] as const;
 
 export type EndpointAccess = (typeof endpointAccess)[number];
 
@@ -1439,6 +1444,56 @@ export const enrolPhoneEndpoint = endpoint({
   answer: phoneEnrolledAnswerSchema,
 });
 
+// A phone proves which phone it is before it syncs (ARCHITECTURE §7.4, §9 (1); AC-02-18,
+// AC-05-03, AC-10-45, 46; ADR-436, 437, 440). It asks for a challenge by its id, signs it with
+// the device key it made at enrolment (ECDSA P-256 with SHA-256, over the domain's label, a line
+// break and the challenge as sent; the signature as base64 DER), and sends both back. Nobody is
+// signed in for either call, and no monitor need be there. A challenge is the server's own, good
+// for the policy's two minutes and once: a recorded answer sent again proves nothing. The
+// server keeps nothing of a challenge it has made, and makes one for any id, so asking tells a
+// stranger nothing of which phones the firm has. A proof that isn't one is refused by one code.
+// A phone taken out of service still proves itself (its work is received and flagged, ADR-134);
+// one whose key is revoked does not. The limits here only bound what is read.
+const phoneNamed = z.strictObject({ deviceId: z.uuid() });
+
+export const challengePhoneEndpoint = endpoint({
+  name: 'challengePhone',
+  summary:
+    'Makes a challenge for a phone to sign with its device key. Nobody is signed in; one is made for any id, and the server keeps nothing of it. It may be sent back signed for the policy’s time, once.',
+  access: 'ANYBODY',
+  method: 'POST',
+  path: '/phones/:deviceId/challenges',
+  params: phoneNamed,
+  answer: phoneChallengeAnswerSchema,
+});
+
+export const provePhoneEndpoint = endpoint({
+  name: 'provePhone',
+  summary:
+    'A phone proves itself: it sends back the challenge it was made and its signature over it. The answer is a token for that phone, good for the policy’s minutes, which the calls of its sync carry as Authorization: Bearer. A challenge is good once. A proof that isn’t one is refused by one code, whatever the reason; a phone taken out of service still proves itself, one whose key is revoked does not.',
+  access: 'ANYBODY',
+  method: 'POST',
+  path: '/phones/:deviceId/proofs',
+  params: phoneNamed,
+  body: z.strictObject({
+    challenge: z.string().min(1).max(400),
+    signature: z.string().min(1).max(400),
+  }),
+  answer: phoneProvenAnswerSchema,
+});
+
+// The phone a token is of (ADR-440): the first call open to a proven phone, and how a phone
+// learns that it was taken out of service or that the master passcode has changed.
+export const provenPhoneEndpoint = endpoint({
+  name: 'provenPhone',
+  summary:
+    'The phone a proof’s token is of, as the server has it now: its name, whether it is in service, the version of the master passcode whose check it holds and the version in force. Open to a phone that has proved itself, by its token.',
+  access: 'PROVEN_PHONE',
+  method: 'GET',
+  path: '/phones/current',
+  answer: provenPhoneAnswerSchema,
+});
+
 export const removePhoneEndpoint = endpoint({
   name: 'removePhone',
   summary:
@@ -2239,6 +2294,9 @@ export const endpoints: readonly Endpoint[] = [
   siteQuantityLookupEndpoint,
   listPhonesEndpoint,
   enrolPhoneEndpoint,
+  challengePhoneEndpoint,
+  provePhoneEndpoint,
+  provenPhoneEndpoint,
   removePhoneEndpoint,
   changeMasterPasscodeEndpoint,
   listAssignmentsEndpoint,

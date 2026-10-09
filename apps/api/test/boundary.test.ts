@@ -284,7 +284,7 @@ describe('the boundary', () => {
         'access-control-allow-methods': 'GET, POST, PUT, PATCH',
         // The session's cookies may come with a listed origin's call, and its CSRF header.
         'access-control-allow-credentials': 'true',
-        'access-control-allow-headers': 'content-type, x-adms-csrf',
+        'access-control-allow-headers': 'content-type, x-adms-csrf, authorization',
       });
     });
 

@@ -196,3 +196,23 @@ export type {
 } from './sync/sent.ts';
 
 export const workspace = 'api';
+// A phone's enrolment and its proof of itself (task 2.5.1): the harness's phone enrols and
+// proves itself through these, as a real one does through their endpoints.
+export { DeviceKeys } from './phone/device-keys.ts';
+export {
+  Enrolment,
+  type EnrolmentOutcome,
+  type EnrolmentParts,
+  type EnrolmentRefused,
+  type PhoneToEnrol,
+} from './phone/enrolment.ts';
+export { PhoneChallenges, type Challenged } from './phone/phone-challenges.ts';
+export {
+  PhoneProofs,
+  type Challenge,
+  type PhoneProofParts,
+  type ProofOutcome,
+  type ProofRefused,
+  type ProvenPhone,
+} from './phone/phone-proofs.ts';
+export { PhoneTokens } from './phone/phone-tokens.ts';

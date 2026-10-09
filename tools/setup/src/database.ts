@@ -16,12 +16,14 @@ export const loginRoles = ['adms_owner', 'adms_api', 'adms_worker', 'adms_readon
 // which the seed writes from; the installer doesn't load the Prisma client to read it).
 const systemActorId = '00000000-0000-7000-8000-000000000001';
 
-// The two users the seed makes that are no person, each with a fixed id and a role of its own:
-// the system actor the worker writes as, and the actor an act under the master passcode is
-// written as (packages/db/src/master-passcode-actor.ts; ADR-438).
+// The three users the seed makes that are no person, each with a fixed id and a role of its
+// own: the system actor the worker writes as, the actor an act under the master passcode is
+// written as (packages/db/src/master-passcode-actor.ts; ADR-438), and the actor a phone's own
+// act is written as (packages/db/src/device-key-actor.ts; ADR-440).
 export const seededActors = {
   system: { id: systemActorId, role: 'SYSTEM' },
   masterPasscode: { id: '00000000-0000-7000-8000-000000000002', role: 'MASTER_PASSCODE' },
+  deviceKey: { id: '00000000-0000-7000-8000-000000000003', role: 'DEVICE_KEY' },
 } as const;
 
 export type SeededActor = (typeof seededActors)[keyof typeof seededActors];

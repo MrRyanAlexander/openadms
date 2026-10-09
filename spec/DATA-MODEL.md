@@ -157,7 +157,7 @@ primes; a sub belongs to one prime, at most two tiers, never shared (ADR-108).
 |---|---|---|
 | **id** | uuid | |
 | **name** | text | |
-| **role** | enum `UserRole` | `ADMIN` · `MANAGER_ANALYST` · `MONITOR` · `READ_ONLY_VIEWER` · `SYSTEM` (the worker's one actor, never a login, ADR-273) · `MASTER_PASSCODE` (the one actor an act under the master passcode is written as, never a person or a login; only the API states it, for a phone; no record names it, ADR-438, 439) |
+| **role** | enum `UserRole` | `ADMIN` · `MANAGER_ANALYST` · `MONITOR` · `READ_ONLY_VIEWER` · `SYSTEM` (the worker's one actor, never a login, ADR-273) · `MASTER_PASSCODE` (the one actor an act under the master passcode is written as, never a person or a login; only the API states it, for a phone; no record names it, ADR-438, 439) · `DEVICE_KEY` (the one actor a phone's own act is written as, done on the strength of its device key with nobody signed in; never a person or a login; only the API states it, for a phone, naming it; no record names it, ADR-440) |
 | monitorNumber | text, unique | The Monitor ID (`M004127`), issued by the database; every monitor has one (ADR-281); a person an admin creates in the back office is issued none (ADR-415) |
 | employerId | → `Contractor` | Who employs them when it isn't the firm |
 | employerNumber | text | That employer's own ID for them (`HS-0417`) |
@@ -336,7 +336,8 @@ neither table (ADR-361, *agent default*: ROEs and forms stay unseen unless the u
 | **masterPasscodeVersion** | int → `MasterPasscode.version` | The passcode version the phone holds |
 | **enrolledAt** | instant | |
 | outOfServiceAt | instant | Work made after it arrives flagged (ADR-134) |
-| keyRevokedAt | instant | **Built (ADR-315):** when its key was revoked, once a lost or retired phone is wiped; only on a phone out of service, never before its removal time (check). Refusing the key is the API's (Phase 2, C47) |
+| keyRevokedAt | instant | **Built (ADR-315):** when its key was revoked, once a lost or retired phone is wiped; only on a phone out of service, never before its removal time (check). Refusing the key is the API's, built (ADR-440): a phone with one proves nothing and its token stops at once; nothing sets it yet (2.6.5) |
+| lastAnsweredChallengeMadeAt | instant | **Built (ADR-440):** when the server made the last challenge this phone proved itself with; a challenge is good once, so only one made later is taken. Written by that phone's own proof alone (the device key's actor, for that phone), only ever later, never once the key is revoked (the guard) |
 
 #### `MasterPasscode`
 
@@ -1879,7 +1880,7 @@ A new value in any of them is a code change with an ADR (`spec/LISTS.md` Group 2
 | `Workflow` ✅ | `LOAD` · `HAUL_OUT` · `UNIT_RATE` | `FieldEvent`, `Project.workflows`, `Flag`, `TicketVoid`, `TicketUnvoid` |
 | `FieldEventKind` ✅ | `COLLECTION` · `DISPOSAL` · `HAUL_OUT_COLLECTION` · `HAUL_OUT_DISPOSAL` · `UNIT_RATE` | `FieldEvent`, `Assignment` |
 | `TicketStatus` ✅ | `PENDING` · `COMPLETED` · `MANUAL_REVIEW` · `VOID` | `FieldEvent`, `ReconciliationDecision` |
-| `UserRole` ✅ | `ADMIN` · `MANAGER_ANALYST` · `MONITOR` · `READ_ONLY_VIEWER` · `SYSTEM` · `MASTER_PASSCODE` (ADR-439) | `User` |
+| `UserRole` ✅ | `ADMIN` · `MANAGER_ANALYST` · `MONITOR` · `READ_ONLY_VIEWER` · `SYSTEM` · `MASTER_PASSCODE` (ADR-439) · `DEVICE_KEY` (ADR-440) | `User` |
 | `DeviceStatus` ✅ | `ACTIVE` · `LOST` · `RETIRED` | `Device` |
 | `SecurityEventKind` ✅ | `SIGN_IN` · `SIGN_IN_FAILED` · `LOCKOUT` · `TWO_STEP_SET_UP` · `TWO_STEP_CLEARED` (ADR-412) · `DEVICE_SETUP` · `DEVICE_SWITCH` · `MASTER_PASSCODE_USE` · `MASTER_PASSCODE_FAILED` · `MASTER_PASSCODE_LOCKOUT` (ADR-439) | `SecurityEvent` (ADR-399) |
 | `NumberSeries` ✅ | `LOAD` · `HAUL_OUT` · `UNIT_RATE` · `CERTIFICATION` · `ROE` (✅ ADR-323) | `ProjectNumberSeries`, `ControlRange`, `NumberBlock` |

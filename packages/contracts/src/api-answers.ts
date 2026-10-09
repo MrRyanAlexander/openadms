@@ -90,6 +90,11 @@ export const errorCodes = [
   // The passcode was right, and what the phone sent as its key isn't a public key of the kind
   // a phone makes (ADR-437).
   'DEVICE_KEY_REFUSED',
+  // A phone that hasn't proved itself (ADR-440). One code whatever the reason: a proof that
+  // isn't one (a challenge the server didn't make for that phone, one run out or already
+  // answered, a signature the phone's key didn't make, a phone nobody enrolled, a key that is
+  // revoked), or a call with no token of a proof, or one run out (AC-10-45, 46).
+  'PHONE_NOT_PROVEN',
 ] as const;
 
 export type ErrorCode = (typeof errorCodes)[number];
@@ -441,3 +446,35 @@ export const phoneEnrolledAnswerSchema = z.strictObject({
 });
 
 export type PhoneEnrolledAnswer = z.infer<typeof phoneEnrolledAnswerSchema>;
+
+// A challenge for a phone to sign (AC-05-03, AC-10-45; ADR-437, 440): the text exactly as the
+// phone signs it after the domain's label, and how long it may still be sent back.
+export const phoneChallengeAnswerSchema = z.strictObject({
+  challenge: z.string().min(1),
+  expiresInSeconds: z.number().int().min(1),
+});
+
+export type PhoneChallengeAnswer = z.infer<typeof phoneChallengeAnswerSchema>;
+
+// A phone proved itself (ADR-440): the token its sync's calls carry, as `Authorization: Bearer`,
+// and how long it is good for. It names the phone and nothing else.
+export const phoneProvenAnswerSchema = z.strictObject({
+  token: z.string().min(1),
+  expiresInSeconds: z.number().int().min(1),
+});
+
+export type PhoneProvenAnswer = z.infer<typeof phoneProvenAnswerSchema>;
+
+// The phone a token is of, as the server has it now: what the dispatch board calls it, whether
+// it is in service, and the version of the master passcode in force beside the one whose check
+// the phone holds. Never a key.
+export const provenPhoneAnswerSchema = z.strictObject({
+  deviceId: z.uuid(),
+  name: z.string(),
+  status: z.enum(['ACTIVE', 'LOST', 'RETIRED']),
+  outOfServiceAt: z.iso.datetime().nullable(),
+  masterPasscodeVersion: z.number().int().min(1),
+  masterPasscodeVersionInForce: z.number().int().min(1),
+});
+
+export type ProvenPhoneAnswer = z.infer<typeof provenPhoneAnswerSchema>;

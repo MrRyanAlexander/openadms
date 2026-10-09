@@ -3,13 +3,14 @@
 // `prisma db seed` (prisma.config.js). Safe to repeat: it creates what's missing, and stops when
 // what it finds isn't what it made. It never prints the connection URL or the passcode's hash.
 //
-// Today it holds the system actor, the master passcode's own actor, the master passcode's slow
-// hash and the firm's lists' starting values. The firm and the first admin join when their models do (spec/DATA-MODEL.md).
+// Today it holds the system actor, the master passcode's own actor, the device key's actor, the
+// master passcode's slow hash and the firm's lists' starting values. The firm and the first admin join when their models do (spec/DATA-MODEL.md).
 import { existsSync, readFileSync } from 'node:fs';
 import process from 'node:process';
 import { parseEnv } from 'node:util';
 
 import { openDatabase, type Database } from './database.ts';
+import { deviceKeyActorId, deviceKeyActorName } from './device-key-actor.ts';
 import { startingValues } from './list-seeds.ts';
 import { masterPasscodeActorId, masterPasscodeActorName } from './master-passcode-actor.ts';
 import { systemActor, systemActorId, systemActorName } from './system-actor.ts';
@@ -34,6 +35,7 @@ export class Seed {
     return [
       await this.ensureSystemActor(),
       await this.ensureMasterPasscodeActor(),
+      await this.ensureDeviceKeyActor(),
       await this.ensureMasterPasscode(),
       await this.ensureLists(),
     ];
@@ -84,6 +86,32 @@ export class Seed {
       );
     }
     return `✓ the master passcode's actor exists, ${masterPasscodeActorName}`;
+  }
+
+  // The actor a phone's own act is written as (ADR-440): made by the system actor, as the
+  // master passcode's is. Never a person: no Monitor ID, said outright.
+  private async ensureDeviceKeyActor(): Promise<string> {
+    const found = await this.db.user.findUnique({ where: { id: deviceKeyActorId } });
+    if (found === null) {
+      await this.db.$write(systemActor, (tx) =>
+        tx.user.create({
+          data: {
+            id: deviceKeyActorId,
+            name: deviceKeyActorName,
+            role: 'DEVICE_KEY',
+            monitorNumber: null,
+          },
+        }),
+      );
+      return `+ created the device key's actor, ${deviceKeyActorName}`;
+    }
+    if (found.role !== 'DEVICE_KEY' || found.name !== deviceKeyActorName) {
+      throw new Error(
+        `The device key's actor (user ${deviceKeyActorId}) has been changed: ` +
+          `${found.name}, ${found.role}. Its audit records say who changed it. Stopped.`,
+      );
+    }
+    return `✓ the device key's actor exists, ${deviceKeyActorName}`;
   }
 
   // The firm's one master passcode (ADR-106), kept in the database as its slow hash, version 1

@@ -11,6 +11,7 @@ import { refusedBy } from './support/database.ts';
 import { insertOf, projectLike } from './support/example-world.ts';
 import { eachTestRolledBack } from './support/lifecycle.ts';
 import { columnsNamingAUser } from './support/master-passcode-actor.ts';
+import { deviceKeyLike } from './support/device-keys.ts';
 
 const tested = eachTestRolledBack();
 
@@ -71,7 +72,7 @@ describe('an act under the master passcode is written as its own actor', () => {
     const { db } = tested;
     await db.as('adms_api');
     await db.actor(masterPasscodeActorId, 'DEVICE');
-    const { id: phone } = await db.one<{ id: string }>(enrol, ['P1-UR-1', 'test-public-key-new']);
+    const { id: phone } = await db.one<{ id: string }>(enrol, ['P1-UR-1', deviceKeyLike('new')]);
     await db.actor(masterPasscodeActorId, 'DEVICE', { deviceId: phone, requestId: 'req-enrol-1' });
     const { id: event } = await db.one<{ id: string }>(note, ['MASTER_PASSCODE_USE', phone]);
     expect(await auditedFor(phone)).toEqual([

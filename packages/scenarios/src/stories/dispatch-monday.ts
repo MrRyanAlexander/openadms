@@ -13,6 +13,7 @@
 // release's policy values; then the fourth (ADR-305): the prime added to the project, and its
 // contract.
 import { NumberAllocator, Phones } from '@open-adms/api';
+import { masterPasscodeActorId, masterPasscodeActorName } from '@open-adms/db';
 
 import { projectTime } from '../clock.ts';
 import { made, scanned } from '../device.ts';
@@ -227,17 +228,14 @@ export const dispatchMonday: Story = {
       at('05:50'),
       'Three phones are enrolled, once: each its own key, no project, no monitor',
     );
-    const phones = await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
-      const enrol = (name: string) =>
-        tx.device.create({
-          data: { name, publicKey: `story-${name}`, masterPasscodeVersion: 1 },
-        });
-      return {
-        collection: await enrol('P1-COL-1'),
-        tdsrTower: await enrol('P1-TWR-TDSR'),
-        landfillTower: await enrol('P1-TWR-LF'),
-      };
-    });
+    // Each under the master passcode, through the API's enrolment (ADR-439, 440).
+    const enrol = async (name: string) =>
+      api.device.findUniqueOrThrow({ where: { id: (await story.enrolled(name)).id } });
+    const phones = {
+      collection: await enrol('P1-COL-1'),
+      tdsrTower: await enrol('P1-TWR-TDSR'),
+      landfillTower: await enrol('P1-TWR-LF'),
+    };
     story.check(
       'each is in service and holds version 1 of the master passcode’s check',
       Object.values(phones).map((phone) => [
@@ -604,6 +602,7 @@ export const dispatchMonday: Story = {
       [people.kim, 'Kim Nguyen'],
       [people.tariq, 'Tariq Patel'],
       [people.jo, 'Jo Kim'],
+      [masterPasscodeActorId, masterPasscodeActorName],
       [phones.collection.id, 'P1-COL-1'],
       [phones.tdsrTower.id, 'P1-TWR-TDSR'],
       [phones.landfillTower.id, 'P1-TWR-LF'],
@@ -635,9 +634,10 @@ export const dispatchMonday: Story = {
         record.reason,
       ]),
       [
-        ['device', 'INSERT', 'Dana Reyes', 'BACK_OFFICE', '-', null],
-        ['device', 'INSERT', 'Dana Reyes', 'BACK_OFFICE', '-', null],
-        ['device', 'INSERT', 'Dana Reyes', 'BACK_OFFICE', '-', null],
+        // Whoever held the passcode is not known: the record names the passcode, on the phone.
+        ['device', 'INSERT', 'Master passcode', 'DEVICE', 'P1-COL-1', null],
+        ['device', 'INSERT', 'Master passcode', 'DEVICE', 'P1-TWR-TDSR', null],
+        ['device', 'INSERT', 'Master passcode', 'DEVICE', 'P1-TWR-LF', null],
         ['pay_item', 'INSERT', 'Dana Reyes', 'BACK_OFFICE', '-', null],
         ['pay_item_rate', 'INSERT', 'Dana Reyes', 'BACK_OFFICE', '-', null],
         ['pay_item', 'INSERT', 'Dana Reyes', 'BACK_OFFICE', '-', null],

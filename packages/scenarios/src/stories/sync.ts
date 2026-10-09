@@ -12,8 +12,9 @@
 //
 // It ends where this build does: every field event PENDING. Pairing, flags, zones, mileage and
 // money are the worker's (Milestones 1.5…1.7); what a reviewer does with a quarantined record is
-// 1.8.x's. Not here: the endpoint, the phone's proof of itself, the ledger's own tables, the
-// photograph's file (Phase 2); the phone's screens (Phase 3).
+// 1.8.x's. A sync begins with the phone's proof of itself, through the API's `PhoneProofs`
+// (task 2.5.1, ADR-440). Not here: the endpoints, the ledger's own tables, the photograph's
+// file (Phase 2); the phone's screens (Phase 3).
 import {
   Certifications,
   FormSetup,
@@ -43,6 +44,7 @@ import {
 } from '../device.ts';
 import { uuidv7 } from '../ids.ts';
 import { phoneLists } from '../phone-lists.ts';
+import type { EnrolledPhone } from '../software-key.ts';
 import type { Story } from '../runner.ts';
 import { assigned } from './board.ts';
 import { p1TimeZone as timeZone, setUpP1, setUpP1Sites, startSeries } from './p1.ts';
@@ -107,6 +109,24 @@ export const sync: Story = {
       saturday('08:00'),
       'Dana Reyes has set up P1 and P2, their people and their phones; Sam Grant certifies the trucks',
     );
+    // Each enrolled under the master passcode, with a key of its own (ADR-439, 440). The keys
+    // are kept: a phone proves itself with its own before it syncs.
+    const enrolled: Record<string, EnrolledPhone> = {};
+    for (const name of [
+      'P1-COL-1',
+      'P1-TWR-TDSR',
+      'P1-TWR-LF',
+      'P1-TWR-LF-2',
+      'P1-HO-TDSR',
+      'P1-UR-1',
+      'P2-COL-1',
+      'P2-TWR-TDSR',
+    ]) {
+      enrolled[name] = await story.enrolled(name);
+    }
+    const phones = Object.fromEntries(
+      Object.entries(enrolled).map(([name, phone]) => [name, phone.id]),
+    );
     const dana = uuidv7(clock.now());
     const office = await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
       await tx.user.create({ data: { id: dana, name: 'Dana Reyes', role: 'ADMIN' } });
@@ -169,22 +189,6 @@ export const sync: Story = {
       ] as const) {
         const monitor = await tx.user.create({ data: { name, role: 'MONITOR', monitorNumber } });
         monitors[name] = monitor.id;
-      }
-      const phones: Record<string, string> = {};
-      for (const name of [
-        'P1-COL-1',
-        'P1-TWR-TDSR',
-        'P1-TWR-LF',
-        'P1-TWR-LF-2',
-        'P1-HO-TDSR',
-        'P1-UR-1',
-        'P2-COL-1',
-        'P2-TWR-TDSR',
-      ]) {
-        const phone = await tx.device.create({
-          data: { name, publicKey: `story-key-${name.toLowerCase()}`, masterPasscodeVersion: 1 },
-        });
-        phones[name] = phone.id;
       }
       return {
         luis: luis.id,
@@ -545,6 +549,23 @@ export const sync: Story = {
     story.at(
       monday('12:05'),
       'The tower’s phone finds signal and syncs: its records first, its photograph after',
+    );
+    // A sync begins with the phone's proof of itself (ARCHITECTURE §9 (1)): it asks for a
+    // challenge, signs it with the key only it holds, and sends both back. What comes of the
+    // proof, and of the same signed answer sent a second time.
+    const provesItself = async (name: string): Promise<[boolean, string]> => {
+      const phone = enrolled[name];
+      if (phone === undefined) throw new Error(`No phone ${name}`);
+      const { challenge } = story.proofs.challenge(phone.id);
+      const signature = phone.key.signed(challenge);
+      const first = await story.proofs.prove(phone.id, challenge, signature);
+      const again = await story.proofs.prove(phone.id, challenge, signature);
+      return [first.proven, again.proven ? 'proven again' : again.why];
+    };
+    story.check(
+      'AC-05-03, AC-10-45 the sync begins with the phone’s proof: P1-TWR-TDSR signs the challenge the server has just made with the key it made at enrolment; the same signed answer sent again proves nothing',
+      await provesItself('P1-TWR-TDSR'),
+      [true, 'SPENT'],
     );
     const noon = kim.waitingRecords;
     const atNoon = await syncing(kim);
@@ -1705,6 +1726,11 @@ export const sync: Story = {
     story.at(
       wednesday('18:00'),
       'P1-TWR-LF turns up in Tariq’s truck and syncs, two days after Luis marked it lost',
+    );
+    story.check(
+      'AC-10-46, AC-02-60 marked lost two days ago, P1-TWR-LF still proves itself: its key stands until the phone is wiped',
+      await provesItself('P1-TWR-LF'),
+      [true, 'SPENT'],
     );
     const lostAnswers = await syncing(lost);
     const lostEvents = await api.fieldEvent.findMany({

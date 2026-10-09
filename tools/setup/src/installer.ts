@@ -553,6 +553,7 @@ export class Installer {
     for (const [seeded, called] of [
       [seededActors.system, 'the system actor'],
       [seededActors.masterPasscode, "the master passcode's actor"],
+      [seededActors.deviceKey, "the device key's actor"],
     ] as const) {
       let actorProblem: string | undefined;
       try {

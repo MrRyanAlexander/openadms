@@ -193,7 +193,7 @@ export class Served {
   async ask(
     method: 'GET' | 'POST' | 'PUT' | 'PATCH',
     url: string,
-    more: { cookies?: Cookies; csrf?: string; payload?: object } = {},
+    more: { cookies?: Cookies; csrf?: string; payload?: object; bearer?: string } = {},
   ): Promise<Answer> {
     if (this.api === undefined) throw new Error('The process is not started.');
     const cookie = Object.entries(more.cookies ?? {})
@@ -206,6 +206,8 @@ export class Served {
       headers: {
         ...(cookie === '' ? {} : { cookie }),
         ...(more.csrf === undefined ? {} : { 'x-adms-csrf': more.csrf }),
+        // A proven phone's token (ADR-440).
+        ...(more.bearer === undefined ? {} : { authorization: `Bearer ${more.bearer}` }),
       },
       ...(more.payload === undefined ? {} : { payload: more.payload }),
     });

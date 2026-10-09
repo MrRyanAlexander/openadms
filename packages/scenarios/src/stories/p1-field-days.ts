@@ -99,6 +99,19 @@ export const p1FieldDays: Story = {
       monday('05:30'),
       'Dana Reyes has set up P1: its three sites, its forms and debris types, its field tags, its unit rate pay items, its people and its six phones',
     );
+    // Enrolled by now, on the story's clock, before any work they record: each under the master
+    // passcode, with a key of its own (ADR-439, 440).
+    const enrolledPhones: Record<string, string> = {};
+    for (const name of [
+      'P1-COL-1',
+      'P1-TWR-TDSR',
+      'P1-TWR-LF',
+      'P1-HO-TDSR',
+      'P1-TWR-CCL',
+      'P1-UR-1',
+    ]) {
+      enrolledPhones[name] = (await story.enrolled(name)).id;
+    }
     const dana = uuidv7(clock.now());
     const office = await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
       await tx.user.create({ data: { id: dana, name: 'Dana Reyes', role: 'ADMIN' } });
@@ -119,26 +132,6 @@ export const p1FieldDays: Story = {
         const monitor = await tx.user.create({ data: { name, role: 'MONITOR', monitorNumber } });
         monitors[name] = monitor.id;
       }
-      const phones: Record<string, string> = {};
-      for (const name of [
-        'P1-COL-1',
-        'P1-TWR-TDSR',
-        'P1-TWR-LF',
-        'P1-HO-TDSR',
-        'P1-TWR-CCL',
-        'P1-UR-1',
-      ]) {
-        const phone = await tx.device.create({
-          // Enrolled by now, on the story's clock: before any work it records.
-          data: {
-            name,
-            publicKey: `story-key-${name.toLowerCase()}`,
-            masterPasscodeVersion: 1,
-            enrolledAt: clock.now(),
-          },
-        });
-        phones[name] = phone.id;
-      }
       // The firm's own sub-type of an incident (golden mission §2).
       const damage = await tx.incidentType.findFirstOrThrow({ where: { name: 'Property damage' } });
       await tx.incidentSubType.create({
@@ -151,7 +144,7 @@ export const p1FieldDays: Story = {
         tdsr,
         landfill,
         monitors,
-        phones,
+        phones: enrolledPhones,
       };
     });
     const { luis, p1, coastline, tdsr, landfill } = office;

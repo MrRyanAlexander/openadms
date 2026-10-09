@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import { eachTestRolledBack } from './support/lifecycle.ts';
 import { listTables } from './support/lists.ts';
-import { notMasterPasscodeChecks } from './support/master-passcode-actor.ts';
+import { notDeviceKeyChecks, notMasterPasscodeChecks } from './support/master-passcode-actor.ts';
 import {
   citizenViews,
   fieldEventSeen,
@@ -185,6 +185,8 @@ const triggers = [
   `CREATE CONSTRAINT TRIGGER certification_box_keeps_primary AFTER UPDATE OF certification_id, "position" ON public.certification_box DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION certification_has_primary_box()`,
   // The system actor's row (ADR-276).
   `CREATE TRIGGER user_system_actor BEFORE INSERT OR UPDATE ON public."user" FOR EACH ROW EXECUTE FUNCTION user_system_actor_guard()`,
+  // Which challenge a phone last answered: its own proof's alone, only ever later (ADR-440).
+  `CREATE TRIGGER device_answered_challenge BEFORE INSERT OR UPDATE ON public.device FOR EACH ROW EXECUTE FUNCTION device_answered_challenge_guard()`,
   // The firm's last admin stays (ADR-415).
   `CREATE TRIGGER user_last_admin BEFORE UPDATE OF role, archived_at ON public."user" FOR EACH ROW EXECUTE FUNCTION user_last_admin_guard()`,
   // Only a release writes a list value's key (ADR-302).
@@ -1099,6 +1101,19 @@ describe('the guards in the catalog', () => {
         definition: 'CHECK ((failed_tries >= 0))',
       },
       ...notMasterPasscodeChecks,
+      // The device key's actor is one id, never a person, and no record names it; a device
+      // key is kept as a P-256 public key is written (ADR-440).
+      {
+        name: 'user_device_key_actor_check',
+        definition:
+          "CHECK ((((role = 'DEVICE_KEY'::user_role) = (id = '00000000-0000-7000-8000-000000000003'::uuid)) AND ((role <> 'DEVICE_KEY'::user_role) OR ((monitor_number IS NULL) AND (contractor_id IS NULL) AND (employer_id IS NULL) AND (employer_number IS NULL) AND (email IS NULL) AND (phone IS NULL) AND (viewer_kind IS NULL) AND (sees_private_citizens IS NULL) AND (archived_at IS NULL)))))",
+      },
+      {
+        name: 'device_public_key_check',
+        definition:
+          "CHECK ((public_key ~ '^MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE[A-Za-z0-9+/]{86}==$'::text))",
+      },
+      ...notDeviceKeyChecks,
       ...listChecks,
     ];
     expect(rows).toEqual(checks.sort((a, b) => (a.name < b.name ? -1 : 1)));

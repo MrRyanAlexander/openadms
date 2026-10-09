@@ -12,7 +12,11 @@ import { dirname, join } from 'node:path';
 import { connect } from 'node:tls';
 import { fileURLToPath } from 'node:url';
 import { parseEnv } from 'node:util';
-import { errorAnswerSchema, healthAnswerSchema } from '@open-adms/contracts';
+import {
+  errorAnswerSchema,
+  healthAnswerSchema,
+  phoneChallengeAnswerSchema,
+} from '@open-adms/contracts';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 const repository = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
@@ -200,7 +204,9 @@ describe('what every answer carries, and which pages may read one, through the d
     expect(asked.headers['access-control-allow-methods']).toBe('GET, POST, PUT, PATCH');
     // Its page may send the session's cookies and the CSRF header with a call (ADR-408).
     expect(asked.headers['access-control-allow-credentials']).toBe('true');
-    expect(asked.headers['access-control-allow-headers']).toBe('content-type, x-adms-csrf');
+    expect(asked.headers['access-control-allow-headers']).toBe(
+      'content-type, x-adms-csrf, authorization',
+    );
   });
 
   it('AC-10-06: a page at an origin off the list is allowed nothing', async () => {
@@ -340,6 +346,27 @@ describe('what an error and the log say, through the door', () => {
     expect(enrolment.status).toBe(400);
     expect(errorAnswerSchema.parse(JSON.parse(enrolment.body)).code).toBe('BAD_REQUEST');
 
+    // A phone's proof through the door (ADR-440). A challenge is made for any id, and the server
+    // reads and keeps nothing for it; a proof for a phone nobody enrolled is refused and writes
+    // nothing, so neither leaves anything in the installation. The log names neither the
+    // challenge nor what was sent as its signature, and a token sent as a bearer is in no line.
+    const nobodys = '00000000-0000-7000-8000-00000000f00d';
+    const challenged = await ask(`/phones/${nobodys}/challenges`, { method: 'POST' });
+    expect(challenged.status).toBe(200);
+    const { challenge } = phoneChallengeAnswerSchema.parse(JSON.parse(challenged.body));
+    const proof = await ask(`/phones/${nobodys}/proofs`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ challenge, signature: `${sent}AAAA` }),
+    });
+    expect(proof.status).toBe(401);
+    expect(errorAnswerSchema.parse(JSON.parse(proof.body)).code).toBe('PHONE_NOT_PROVEN');
+    const unproven = await ask('/phones/current', {
+      headers: { authorization: `Bearer ${nobodys}.${sent}` },
+    });
+    expect(unproven.status).toBe(401);
+    expect(errorAnswerSchema.parse(JSON.parse(unproven.body)).code).toBe('PHONE_NOT_PROVEN');
+
     const log = compose(['logs', '--no-log-prefix', '--no-color', 'api']);
     const lines = log.trim().split('\n');
     expect(lines.length).toBeGreaterThan(3);
@@ -356,6 +383,12 @@ describe('what an error and the log say, through the door', () => {
         expect(line['requestId']).toMatch(/^[0-9a-f-]{36}$/);
       }
     }
+    expect(
+      parsed.some(
+        (line) => line['msg'] === 'A phone’s proof was refused.' && line['why'] === 'NO_PHONE',
+      ),
+    ).toBe(true);
+    expect(log).not.toContain(challenge);
     for (const never of [
       sent,
       'Bearer',

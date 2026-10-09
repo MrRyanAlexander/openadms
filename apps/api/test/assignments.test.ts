@@ -22,6 +22,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { Assignments } from '../src/dispatch/assignments.ts';
 import { installationSettings, openInstallation, type Tx } from './support/database.ts';
+import { enrolledPhone } from './support/phones.ts';
 import { danasEmail, long, longer, luissEmail, worldOn, type Served } from './support/served.ts';
 import {
   ask,
@@ -82,10 +83,8 @@ async function p1Dispatched(api: Served, tx: Tx) {
     ),
     vegHaul: await entered(priced.veg15()),
   };
-  const masterPasscodeVersion =
-    (await tx.masterPasscode.aggregate({ _max: { version: true } }))._max.version ?? 0;
-  const enrol = (name: string) =>
-    tx.device.create({ data: { name, publicKey: `test-${randomUUID()}`, masterPasscodeVersion } });
+  const enrol = async (name: string) =>
+    tx.device.findUniqueOrThrow({ where: { id: (await enrolledPhone(api, tx, name)).id } });
   const phones = {
     collection: await enrol('P1-COL-1'),
     tdsrTower: await enrol('P1-TWR-TDSR'),

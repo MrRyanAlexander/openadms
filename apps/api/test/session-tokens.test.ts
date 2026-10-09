@@ -166,6 +166,9 @@ describe('an endpoint that asks for a session, before anything is read', () => {
       'signIn',
       // A phone is enrolled under the master passcode, which is nobody's session (ADR-439).
       'enrolPhone',
+      // A phone asks for a challenge and answers it before anything is known of it (ADR-440).
+      'challengePhone',
+      'provePhone',
     ]);
     // A person who must first set their own password is served only what that takes (ADR-410).
     expect(

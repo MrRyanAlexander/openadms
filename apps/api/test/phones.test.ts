@@ -20,7 +20,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Phones } from '../src/dispatch/phones.ts';
 import { PasswordHasher } from '../src/sign-in/password-hasher.ts';
 import { installationSettings, openInstallation, type Tx } from './support/database.ts';
-import { danasEmail, long, longer, luissEmail, worldOn } from './support/served.ts';
+import { enrolledPhone } from './support/phones.ts';
+import { danasEmail, long, longer, luissEmail, worldOn, type Served } from './support/served.ts';
 import { ask, saved, told, viewerSignsIn } from './support/setup.ts';
 import { Outbox, signingSecret } from './support/sign-in.ts';
 
@@ -38,11 +39,11 @@ const world = worldOn(() => db);
 const inForce = async (tx: Tx): Promise<number> =>
   (await tx.masterPasscode.aggregate({ _max: { version: true } }))._max.version ?? 0;
 
-// The golden mission's three phones, enrolled once, each holding the passcode's check in force.
-async function enrolled(tx: Tx) {
-  const masterPasscodeVersion = await inForce(tx);
-  const enrol = (name: string) =>
-    tx.device.create({ data: { name, publicKey: `test-${randomUUID()}`, masterPasscodeVersion } });
+// The golden mission's three phones, each enrolled as a real one is: by the API's own request,
+// with a software key, under the passcode in force (the test's own version).
+async function enrolled(served: Served, tx: Tx) {
+  const enrol = async (name: string) =>
+    tx.device.findUniqueOrThrow({ where: { id: (await enrolledPhone(served, tx, name)).id } });
   return {
     collection: await enrol('P1-COL-1'),
     tdsrTower: await enrol('P1-TWR-TDSR'),
@@ -72,7 +73,7 @@ describe('who may ask', () => {
 
   it('AC-10-27 each is refused to nobody and to a read-only viewer; taking a phone out of service and changing the passcode to a manager/analyst without the grant, before anything sent is read; nothing is changed', async () => {
     await world(async (served, tx, who, within) => {
-      const phones = await enrolled(tx);
+      const phones = await enrolled(served, tx);
       const before = await inForce(tx);
       const ids = { deviceId: phones.landfillTower.id };
       const luis = await served.signedIn(luissEmail, longer);
@@ -117,7 +118,7 @@ describe('who may ask', () => {
 
   it('the service asks again inside its own piece of work (ADR-364): called as a manager/analyst without Dispatch, a read-only viewer, a monitor, an archived admin or nobody on record, it changes nothing and says who may', async () => {
     await world(async (served, tx, who, within) => {
-      const phones = await enrolled(tx);
+      const phones = await enrolled(served, tx);
       const service = new Phones(within, served.clock);
       const gone = await tx.user.create({ data: { name: 'Morgan Ellis', role: 'ADMIN' } });
       await tx.user.update({ where: { id: gone.id }, data: { archivedAt: new Date() } });
@@ -141,7 +142,7 @@ describe('who may ask', () => {
 describe('the firm’s phones', () => {
   it('AC-02-15 are read a page at a time, in the order they were enrolled: in service, with no project and no monitor, each holding the passcode’s check in force; never a key', async () => {
     await world(async (served, tx) => {
-      const phones = await enrolled(tx);
+      const phones = await enrolled(served, tx);
       const luis = await served.signedIn(luissEmail, longer);
       const first = await ask(served, luis, listPhonesEndpoint, { query: '?limit=2' });
       const page = saved(listPhonesEndpoint, first);
@@ -182,7 +183,7 @@ describe('the firm’s phones', () => {
 
   it('AC-02-59 P1-TWR-LF can’t be found on Monday evening: Luis, granted Dispatch, marks it lost at 6:10 pm and it is out of service from exactly that time, its record kept, audited with him as the actor and his note as the reason', async () => {
     await world(async (served, tx, who) => {
-      const phones = await enrolled(tx);
+      const phones = await enrolled(served, tx);
       await tx.userPermission.create({ data: { userId: who.luis, permission: 'DISPATCH' } });
       // 6:10 pm in Bayline County.
       served.clock.at = new Date('2026-10-12T22:10:00Z');
@@ -255,7 +256,7 @@ describe('the firm’s phones', () => {
 
   it('a phone handed in for good is retired, with no note; a phone the firm doesn’t have isn’t found; a way out of service nobody defined, a blank note and a field no schema names are refused by the schema', async () => {
     await world(async (served, tx) => {
-      const phones = await enrolled(tx);
+      const phones = await enrolled(served, tx);
       const dana = await served.signedIn(danasEmail, long);
       const ids = { deviceId: phones.collection.id };
       for (const payload of [
@@ -290,7 +291,7 @@ describe('the master passcode', () => {
   it('AC-02-21, AC-02-22, AC-02-23 Dana changes it, giving her own password again: a new version is kept as an Argon2id hash and the one before is still there; the audit log names her and holds no hash; each phone still says the version it holds until its next sync; every admin is told by mail, never the passcode', async () => {
     const outbox = new Outbox();
     await world(async (served, tx, who) => {
-      const phones = await enrolled(tx);
+      const phones = await enrolled(served, tx);
       const before = await inForce(tx);
       const dana = await served.signedIn(danasEmail, long);
       const answer = await ask(served, dana, changeMasterPasscodeEndpoint, change(long, passcode));

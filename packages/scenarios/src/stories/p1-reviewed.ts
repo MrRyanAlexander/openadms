@@ -1241,22 +1241,14 @@ export const p1Reviewed: Story = {
     );
     const lee = (await api.user.findFirstOrThrow({ where: { name: 'Lee Morgan' } })).id;
     const kim = (await api.user.findFirstOrThrow({ where: { name: 'Kim Nguyen' } })).id;
-    // The phone is enrolled by hand (enrolment is 2.5.1's); its assignment is the board's.
+    // The phone was enrolled on Tuesday evening, under the master passcode; its assignment is
+    // the board's.
     const p2Assigned = async (
       name: string,
       personId: string,
       more: { fieldEventKinds: ('COLLECTION' | 'DISPOSAL')[]; siteId?: string },
     ) => {
-      const phone = await api.$write({ actorId: luis, source: 'BACK_OFFICE' }, (tx) =>
-        tx.device.create({
-          data: {
-            name,
-            publicKey: `story-key-${name.toLowerCase()}`,
-            masterPasscodeVersion: 1,
-            enrolledAt: new Date(on('13', '17:00')),
-          },
-        }),
-      );
+      const phone = await story.enrolled(name, new Date(on('13', '17:00')));
       const assignmentId = await assigned(api, clock, luis, {
         workDate: '2026-10-14',
         projectId: p2,

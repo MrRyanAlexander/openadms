@@ -17,7 +17,12 @@ import {
   unarchivePersonEndpoint,
   type PersonAnswer,
 } from '@open-adms/contracts';
-import { masterPasscodeActorId, systemActorId, type Database } from '@open-adms/db';
+import {
+  deviceKeyActorId,
+  masterPasscodeActorId,
+  systemActorId,
+  type Database,
+} from '@open-adms/db';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { refusedAsTheLastAdmin } from '../src/people/people.ts';
@@ -99,13 +104,13 @@ describe('who may ask', () => {
 });
 
 describe('a page of the firm’s people', () => {
-  it('AC-02-72 Dana reads the firm’s people two at a time, in the order they were added, to the last page; never the system actor or the master passcode’s; Luis reads them too, without a monitor’s phone number', async () => {
+  it('AC-02-72 Dana reads the firm’s people two at a time, in the order they were added, to the last page; never the system actor, the master passcode’s or the device key’s; Luis reads them too, without a monitor’s phone number', async () => {
     await world(async (served, tx, who) => {
       const dana = await served.signedIn(danasEmail, long);
       const luis = await served.signedIn(luissEmail, longer);
       await tx.user.update({ where: { id: who.kim }, data: { phone: '555-0142' } });
       const inService = await tx.user.findMany({
-        where: { role: { notIn: ['SYSTEM', 'MASTER_PASSCODE'] }, archivedAt: null },
+        where: { role: { notIn: ['SYSTEM', 'MASTER_PASSCODE', 'DEVICE_KEY'] }, archivedAt: null },
         orderBy: { id: 'asc' },
       });
       expect(inService.length).toBeGreaterThanOrEqual(4);
@@ -127,6 +132,7 @@ describe('a page of the firm’s people', () => {
       expect(seen.map(({ id }) => id)).toEqual(inService.map(({ id }) => id));
       expect(seen.map(({ id }) => id)).not.toContain(systemActorId);
       expect(seen.map(({ id }) => id)).not.toContain(masterPasscodeActorId);
+      expect(seen.map(({ id }) => id)).not.toContain(deviceKeyActorId);
       // With no limit said, one page holds them all here; Dana sees Kim's phone, Luis doesn't.
       const whole = saved(listPeopleEndpoint, await page(served, dana));
       expect(whole.people).toEqual(seen);
