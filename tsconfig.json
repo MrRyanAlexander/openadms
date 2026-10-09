@@ -1,0 +1,62 @@
+{
+  "files": [],
+  "references": [
+    {
+      "path": "apps/api"
+    },
+    {
+      "path": "apps/worker"
+    },
+    {
+      "path": "apps/back-office"
+    },
+    {
+      "path": "apps/field"
+    },
+    {
+      "path": "packages/db"
+    },
+    {
+      "path": "packages/db/test"
+    },
+    {
+      "path": "packages/domain"
+    },
+    {
+      "path": "packages/contracts"
+    },
+    {
+      "path": "packages/domain/test"
+    },
+    {
+      "path": "packages/contracts/test"
+    },
+    {
+      "path": "packages/scenarios"
+    },
+    {
+      "path": "packages/scenarios/test"
+    },
+    {
+      "path": "infra/local"
+    },
+    {
+      "path": "infra/local/test"
+    },
+    {
+      "path": "tools/setup"
+    },
+    {
+      "path": "tools/setup/test"
+    },
+    {
+      "path": "tools/licences"
+    },
+    {
+      "path": "tools/security"
+    },
+    {
+      "path": "tools/security/test"
+    }
+  ]
+}

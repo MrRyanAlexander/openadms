@@ -1,0 +1,9 @@
+{
+  "name": "@open-adms/back-office",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Open ADMS back office web app (React + Vite, ARCHITECTURE §14).",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "exports": "./dist/index.js"
+}

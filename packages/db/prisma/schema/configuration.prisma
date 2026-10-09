@@ -1,0 +1,296 @@
+// Configuration: standing facts that may change, written by the API, audited, archived or
+// closed, never deleted (adms-data-model §3.1b).
+
+// One body of work for one client under one declaration event: the hub (adms-data-model §3.1a).
+model Project {
+  id       String @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  name     String
+  // IANA name, e.g. America/New_York: "which day" questions use it (ADR-100). A check in the guard
+  // migrations refuses anything else (ADR-281).
+  timeZone String @map("time_zone")
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  closedAt  DateTime? @map("closed_at") @db.Timestamptz(3)
+
+  disposalSites  DisposalSite[]
+  payItems       PayItem[]
+  assignments    Assignment[]
+  numberBlocks   NumberBlock[]
+  fieldEvents    FieldEvent[]
+  completedLoads CompletedLoad[]
+
+  @@map("project")
+}
+
+// A hauling company, prime or sub, or a monitoring firm or temp agency that employs monitors;
+// firm-wide (adms-data-model §3.1a; Q-97).
+model Contractor {
+  id   String @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  name String
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  // A contractor user sees only its own transactions (ADR-169).
+  users        User[]        @relation("ViewerContractor")
+  // The people it employs (Q-97).
+  employees    User[]        @relation("Employer")
+  transactions Transaction[]
+
+  @@map("contractor")
+}
+
+// Where debris legally goes, entered on each project that uses it, never shared (ADR-145).
+// PROVISIONAL: only what an assignment's site needs. Its site type, facts, permit, GPS, area and
+// dates are spec/DATA-MODEL.md's (adms-ticket-workflows §4.0).
+model DisposalSite {
+  id        String @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  projectId String @map("project_id") @db.Uuid
+  name      String
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  project     Project      @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  assignments Assignment[]
+
+  // So an assignment's site can only be one of its own project's (its relation's target).
+  @@unique([projectId, id])
+  @@map("disposal_site")
+}
+
+// A priced line of the contract as the firm sets it up: the only place a rate lives (ADR-206, 237).
+// PROVISIONAL: only what an assignment's unit rate pay items need (REQ-020; ADR-286). Its payable
+// type, unit, size band, capture settings and its rate for each prime are spec/DATA-MODEL.md §3's
+// and come with Phase 1. Two may share a code or a name (ADR-147), so neither is unique.
+model PayItem {
+  id        String @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  projectId String @map("project_id") @db.Uuid
+  // The firm's own string; setup suggests one from the convention (VEG-HAUL-CY-15), ADR-235.
+  code      String
+  name      String
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  project     Project             @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  assignments AssignmentPayItem[]
+
+  // So an assignment's pay items can only be its own project's (its relation's target).
+  @@unique([projectId, id])
+  @@map("pay_item")
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER_ANALYST
+  MONITOR
+  READ_ONLY_VIEWER
+  // Not a person and never a login: the one system actor the worker writes as, seeded by the
+  // installer (ADR-273).
+  SYSTEM
+
+  @@map("user_role")
+}
+
+// A person with a login; firm-wide, not project-scoped (ADR-050, 105, 169).
+model User {
+  id             String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  name           String
+  role           UserRole
+  // The Monitor ID (M004127), a business number, never a key (spec/CONVENTIONS.md §3). The system
+  // issues it (REQ-021): a person written without one gets the next from the database. Every
+  // monitor has one; the system actor never does (checks in the guard migrations, ADR-276, 281).
+  monitorNumber  String?  @unique @default(dbgenerated("next_monitor_number()")) @map("monitor_number")
+  // Set for a contractor's read-only viewer (ADR-169).
+  contractorId   String?  @map("contractor_id") @db.Uuid
+  // Who employs them, when it isn't the firm itself: a monitoring firm or temp agency, always a
+  // contractor record, never typed text; and the ID that employer gives them, if any (Q-97).
+  employerId     String?  @map("employer_id") @db.Uuid
+  employerNumber String?  @map("employer_number")
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  contractor      Contractor?   @relation("ViewerContractor", fields: [contractorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  employer        Contractor?   @relation("Employer", fields: [employerId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  assignments     Assignment[]  @relation("AssignmentPerson")
+  assignmentsMade Assignment[]  @relation("AssignmentMadeBy")
+  fieldEvents     FieldEvent[]
+  invoiceLocks    InvoiceLock[]
+  auditRecords    AuditRecord[]
+
+  @@map("user")
+}
+
+// The firm's one master passcode (ADR-106), kept only as its slow hash (ARCHITECTURE §7.5). A
+// change is a new version, never an edit: the highest version is the current one. The hash is
+// kept out of the audit log, and only the API may read it (the guard migrations, ADR-281).
+model MasterPasscode {
+  id      String @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  version Int    @unique
+  // Argon2id, as a PHC string.
+  hash    String
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  devices Device[]
+
+  @@map("master_passcode")
+}
+
+// In service, or marked in the back office as lost or retired (ARCHITECTURE §7.4).
+enum DeviceStatus {
+  ACTIVE
+  LOST
+  RETIRED
+
+  @@map("device_status")
+}
+
+// A phone, enrolled once with its device key; no project, no monitor (ADR-095, 240). What it may
+// make comes from the assignment it holds.
+model Device {
+  id                    String       @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  // What the dispatch board calls it, e.g. P1-COL-1.
+  name                  String
+  // The public half of the key pair made in the phone's secure hardware (ARCHITECTURE §7.4): one
+  // key, one phone.
+  publicKey             String       @unique @map("public_key")
+  status                DeviceStatus @default(ACTIVE)
+  // Which version of the master passcode's check the phone holds; a change reaches it at its
+  // next sync (ARCHITECTURE §7.5).
+  masterPasscodeVersion Int          @map("master_passcode_version")
+  enrolledAt            DateTime     @default(now()) @map("enrolled_at") @db.Timestamptz(3)
+  // Its removal time: what it made after this arrives flagged, never refused (ADR-134). Set
+  // exactly when it's lost or retired (a check in the guard migrations).
+  outOfServiceAt        DateTime?    @map("out_of_service_at") @db.Timestamptz(3)
+
+  masterPasscode MasterPasscode @relation(fields: [masterPasscodeVersion], references: [version], onDelete: Restrict, onUpdate: Restrict)
+  numberBlocks   NumberBlock[]
+  assignments    Assignment[]
+  fieldEvents    FieldEvent[]
+  auditRecords   AuditRecord[]
+
+  @@map("device")
+}
+
+// Which of a project's number series a block comes from: one per workflow (ADR-062), and the
+// project's cert numbers for a phone that certifies (ADR-151).
+enum NumberSeries {
+  LOAD
+  HAUL_OUT
+  UNIT_RATE
+  CERTIFICATION
+
+  @@map("number_series")
+}
+
+// Issued and in use; or ended: its unused rest reclaimed once the phone confirmed its last used
+// number, or the whole block retired because nobody can be sure what a lost phone used (ADR-065).
+enum NumberBlockStatus {
+  ISSUED
+  RECLAIMED
+  RETIRED
+
+  @@map("number_block_status")
+}
+
+// A run of a project's numbers issued to one phone, which gives them out in order, offline
+// (ADR-065, 151). The server is the only allocator. PROVISIONAL: the series themselves, the
+// control ranges and the allocator are Phase 1's (adms-ticket-workflows).
+model NumberBlock {
+  id             String            @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  deviceId       String            @map("device_id") @db.Uuid
+  projectId      String            @map("project_id") @db.Uuid
+  series         NumberSeries
+  firstNumber    Int               @map("first_number")
+  lastNumber     Int               @map("last_number")
+  // The last number the phone reported using, at a sync; none yet when empty.
+  lastUsedNumber Int?              @map("last_used_number")
+  status         NumberBlockStatus @default(ISSUED)
+
+  issuedAt DateTime  @default(now()) @map("issued_at") @db.Timestamptz(3)
+  // When it was reclaimed or retired.
+  endedAt  DateTime? @map("ended_at") @db.Timestamptz(3)
+
+  device  Device  @relation(fields: [deviceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([projectId, series, firstNumber])
+  @@index([deviceId])
+  @@map("number_block")
+}
+
+// Written on the dispatch board, or made on a phone with the master passcode when its monitor had
+// none: marked, never flagged (ADR-240).
+enum AssignmentOrigin {
+  PLANNED
+  UNPLANNED
+
+  @@map("assignment_origin")
+}
+
+// One person's work for a day: who works where, on what (ADR-240). A phone takes it at sign-in;
+// what the phone may make comes from it. It never expires and never stops work.
+// Its unit rate pay items are AssignmentPayItem's (ADR-286). PROVISIONAL: the forms it names join
+// with the form model (Phase 1).
+model Assignment {
+  // Made by the database for one written on the board; an unplanned one's comes from the phone,
+  // so the field events recorded under it before it syncs can name it.
+  id              String           @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  personId        String           @map("person_id") @db.Uuid
+  // The day, in the project's time zone.
+  workDate        DateTime         @map("work_date") @db.Date
+  projectId       String           @map("project_id") @db.Uuid
+  // Their work: the kinds of field event they may record, and whether they certify (ADR-151).
+  fieldEventKinds FieldEventKind[] @default([]) @map("field_event_kinds")
+  certifying      Boolean          @default(false)
+  // One site, where the work is at one: a tower, either haul-out end, a drop-off log. A curb
+  // collection has none (ADR-195).
+  siteId          String?          @map("site_id") @db.Uuid
+  // The phone: named on the board, or the one that took it. An unplanned one always has its phone.
+  deviceId        String?          @map("device_id") @db.Uuid
+  origin          AssignmentOrigin
+  // Who wrote it on the board. An unplanned one has no author: the master passcode isn't a person.
+  madeById        String?          @map("made_by_id") @db.Uuid
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  // Withdrawn from the board; never deleted.
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  person      User                @relation("AssignmentPerson", fields: [personId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  project     Project             @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  site        DisposalSite?       @relation(fields: [projectId, siteId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  device      Device?             @relation(fields: [deviceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  madeBy      User?               @relation("AssignmentMadeBy", fields: [madeById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  payItems    AssignmentPayItem[]
+  fieldEvents FieldEvent[]
+
+  // So its pay items can only be its own project's (their relation's target).
+  @@unique([projectId, id])
+  @@index([workDate, projectId])
+  @@index([personId, workDate])
+  @@map("assignment")
+}
+
+// One of the unit rate pay items a person does that day (ADR-127, 240; REQ-020): what the phone
+// offers them, by payable type, never a rate. Taken off the assignment by archiving, never deleted;
+// put back by clearing the archive.
+model AssignmentPayItem {
+  id           String @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  assignmentId String @map("assignment_id") @db.Uuid
+  // The assignment's own project, and the pay item's: both relations name it, so a pay item of
+  // another project can never be on the assignment.
+  projectId    String @map("project_id") @db.Uuid
+  payItemId    String @map("pay_item_id") @db.Uuid
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  assignment Assignment @relation(fields: [projectId, assignmentId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  payItem    PayItem    @relation(fields: [projectId, payItemId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([assignmentId, payItemId])
+  @@map("assignment_pay_item")
+}

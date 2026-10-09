@@ -1,0 +1,208 @@
+# Open ADMS local stack (ARCHITECTURE §4; BACKLOG 0.2.3; ADR-263, 264).
+# Run it through the helper, never by hand: `pnpm local:up`, `pnpm local:down`, `pnpm local:wipe`,
+# `pnpm local:status` (infra/local/src/index.ts). The helper generates `.env` beside this file
+# (git-ignored, mode 0600) with the dev passwords; nothing secret is written here.
+#
+# HTTPS only: Caddy is the one way in from the host (loopback only), with its internal CA, on
+# *.adms.localhost. Plain HTTP on port 80 is redirected to HTTPS. Postgres and the mail catcher's
+# SMTP port are published on 127.0.0.1 for local tools; nothing is published on other interfaces.
+# Every image is pinned by tag and digest (ADR-264, 282).
+#
+# The routing server (Valhalla) and the address server (Nominatim) read one OpenStreetMap extract,
+# downloaded and checked against its pinned SHA-256 by `pnpm local:up` into infra/local/.cache/maps/
+# (git-ignored) and mounted read-only (REQ-022, ADR-282). Each builds its own data from it on a
+# first run, and again when the extract changes. Neither publishes a port: both are reached through
+# Caddy, over HTTPS.
+name: open-adms-local
+
+x-hardening: &hardening
+  restart: unless-stopped
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  postgres:
+    <<: *hardening
+    image: postgres:18.6-trixie@sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets:
+      - postgres_password
+    ports:
+      - '127.0.0.1:${ADMS_PG_PORT:-55432}:5432'
+    volumes:
+      # Postgres 18 images keep data under /var/lib/postgresql/<major>/docker.
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      # Over TCP, so the entrypoint's temporary socket-only server during first init doesn't count.
+      test: ['CMD', 'pg_isready', '-h', '127.0.0.1', '-U', 'postgres', '-d', 'postgres']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  objectstore:
+    <<: *hardening
+    image: chrislusf/seaweedfs:4.47@sha256:ce9e796f1fe6f06968f4c04bdaf8f678dad9c8acdfef3d244133d71bfa6bf882
+    # One process: master, volume, filer and the S3 gateway. Only S3 is used, and only through
+    # Caddy (https://s3.adms.localhost); no port is published to the host.
+    command:
+      - mini
+      - -s3.config=/etc/seaweedfs/s3.json
+      - -master.telemetry=false
+      - -webdav=false
+      - -admin.ui=false
+      - -s3.port.iceberg=0
+      - -s3.port.lance=0
+      - -s3.allowDeleteBucketNotEmpty=false
+      # CORS by exact allow-list, never '*' (ARCHITECTURE §6). Widened when the web apps arrive.
+      - -s3.allowedOrigins=https://adms.localhost
+      - -filer.allowedOrigins=https://adms.localhost
+    configs:
+      - source: s3_identities
+        target: /etc/seaweedfs/s3.json
+        # Readable only by the image's `seaweed` user (the entrypoint drops root to it).
+        uid: '1000'
+        gid: '1000'
+        mode: 0400
+    volumes:
+      - objectstore_data:/data
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:8333/healthz']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  mail:
+    <<: *hardening
+    image: axllent/mailpit:v1.31.2@sha256:74d609a42ec279aa63c6b4622a6fa9b5408d1ad5b1d76a1c4be40a265ce0863d
+    user: '65534:65534'
+    cap_drop:
+      - ALL
+    environment:
+      MP_DISABLE_VERSION_CHECK: 'true'
+      MP_MAX_MESSAGES: '5000'
+    ports:
+      - '127.0.0.1:${ADMS_SMTP_PORT:-1025}:1025'
+    healthcheck:
+      test: ['CMD', '/mailpit', 'readyz']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  routing:
+    <<: *hardening
+    image: ghcr.io/valhalla/valhalla:3.9.0@sha256:511c095b8caf393dccceb8b519ec96b6f85a0166b2288ba014a8a748acc5a63c
+    # The image runs as root, which owns the data volume; it gets no capability and a read-only
+    # root filesystem. Valhalla's workers talk over sockets in /tmp.
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    command: ['bash', '/opt/open-adms/start.sh']
+    environment:
+      ADMS_MAP_NAME: ${ADMS_MAP_NAME:?run pnpm local:up}
+      ADMS_MAP_SHA256: ${ADMS_MAP_SHA256:?run pnpm local:up}
+    volumes:
+      - ./routing/start.sh:/opt/open-adms/start.sh:ro
+      - ${ADMS_MAP_FILE:?run pnpm local:up}:/maps/region.osm.pbf:ro
+      - routing_data:/data
+    healthcheck:
+      test: ['CMD', 'curl', '-fsS', '-o', '/dev/null', 'http://127.0.0.1:8002/status']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      # Building the road tiles (a first run, or a new extract) comes before the first answer.
+      start_period: 600s
+
+  addresses:
+    restart: unless-stopped
+    # No `no-new-privileges` here: the image's own start script changes user with sudo, for the
+    # Postgres it keeps inside this container (Nominatim's own database, apart from the evidence
+    # database). addresses/start.sh closes that Postgres to everything outside the container.
+    image: mediagis/nominatim:5.3.2-2026-06-23T09-03@sha256:7923a8e67197fc6d4f4ecb7c0e8bbedffeddcfdf4519596fe946e46a28f5a9f8
+    command: ['bash', '/opt/open-adms/start.sh']
+    environment:
+      ADMS_MAP_NAME: ${ADMS_MAP_NAME:?run pnpm local:up}
+      ADMS_MAP_SHA256: ${ADMS_MAP_SHA256:?run pnpm local:up}
+      PBF_PATH: /maps/region.osm.pbf
+      # A dated extract is never updated in place: a newer one is imported afresh.
+      FREEZE: 'true'
+      # Address lookup only (ARCHITECTURE §3: GPS to street number and name): no search index and
+      # no points of interest, so the import is small and quick (ADR-282).
+      REVERSE_ONLY: 'true'
+      IMPORT_STYLE: address
+      THREADS: '4'
+      GUNICORN_WORKERS: '2'
+      # The image's Postgres is tuned for a 32 GB server; these fit a laptop's container.
+      POSTGRES_SHARED_BUFFERS: 256MB
+      POSTGRES_MAINTENANCE_WORK_MEM: 512MB
+      POSTGRES_AUTOVACUUM_WORK_MEM: 128MB
+      POSTGRES_WORK_MEM: 32MB
+      POSTGRES_EFFECTIVE_CACHE_SIZE: 1GB
+      POSTGRES_MAX_WAL_SIZE: 128MB
+    shm_size: 512mb
+    volumes:
+      - ./addresses/start.sh:/opt/open-adms/start.sh:ro
+      - ${ADMS_MAP_FILE:?run pnpm local:up}:/maps/region.osm.pbf:ro
+      - addresses_data:/var/lib/postgresql/16/main
+    healthcheck:
+      test: ['CMD', 'curl', '-fsS', '-o', '/dev/null', 'http://127.0.0.1:8080/status']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      # The import (a first run, or a new extract) comes before the first answer.
+      start_period: 1800s
+
+  caddy:
+    <<: *hardening
+    image: caddy:2.11.4-alpine@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b
+    ports:
+      - '127.0.0.1:${ADMS_HTTPS_PORT:-443}:443'
+      - '127.0.0.1:${ADMS_HTTP_PORT:-80}:80'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Holds Caddy's internal CA; `pnpm local:up` copies its root certificate out for curl.
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      objectstore:
+        condition: service_healthy
+      mail:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:2019/config/']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+secrets:
+  postgres_password:
+    environment: POSTGRES_PASSWORD
+
+configs:
+  s3_identities:
+    content: |
+      {
+        "identities": [
+          {
+            "name": "open-adms-local",
+            "credentials": [{ "accessKey": "${S3_ACCESS_KEY:?run pnpm local:up}", "secretKey": "${S3_SECRET_KEY:?run pnpm local:up}" }],
+            "actions": ["Admin", "Read", "List", "Tagging", "Write"]
+          }
+        ]
+      }
+
+volumes:
+  postgres_data:
+  objectstore_data:
+  routing_data:
+  addresses_data:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,44 @@
+{
+  "name": "open-adms",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Open ADMS: offline-capable debris management and field reconciliation for disaster recovery.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "packageManager": "pnpm@11.27.1",
+  "engines": {
+    "node": ">=24.21.0 <25"
+  },
+  "scripts": {
+    "generate": "pnpm --filter @open-adms/db generate",
+    "typecheck": "pnpm generate && tsc --build",
+    "test": "pnpm generate && tsc --build && vitest run",
+    "lint": "pnpm generate && eslint --max-warnings 0 apps packages infra tools eslint.config.js vitest.config.js && prettier --check apps packages infra tools package.json pnpm-workspace.yaml tsconfig.json tsconfig.base.json eslint.config.js vitest.config.js",
+    "format": "prettier --write apps packages infra tools package.json pnpm-workspace.yaml tsconfig.json tsconfig.base.json eslint.config.js vitest.config.js",
+    "licences": "pnpm licenses list --json | node tools/licences/src/index.ts",
+    "security": "pnpm generate && tsc --build && node tools/security/src/index.ts",
+    "local:up": "node infra/local/src/index.ts up",
+    "local:down": "node infra/local/src/index.ts down",
+    "local:wipe": "node infra/local/src/index.ts wipe",
+    "local:status": "node infra/local/src/index.ts status",
+    "installer": "node tools/setup/src/index.ts install",
+    "installer:check": "node tools/setup/src/index.ts check",
+    "installer:teardown": "node tools/setup/src/index.ts teardown",
+    "scenarios": "pnpm generate && tsc --build && node packages/scenarios/src/cli.ts",
+    "clean": "tsc --build --clean"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.11.0",
+    "eslint-config-prettier": "10.1.8",
+    "prettier": "3.9.8",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.70.1",
+    "vite": "8.3.0",
+    "vitest": "5.0.1"
+  },
+  "prettier": {
+    "printWidth": 100,
+    "singleQuote": true
+  }
+}

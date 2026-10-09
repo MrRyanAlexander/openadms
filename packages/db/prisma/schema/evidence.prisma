@@ -1,0 +1,82 @@
+// Evidence: what monitors saw. Inserted by the API at sync; corrected in place by permission,
+// audited; voided, never deleted. The worker writes only the reconciliation columns
+// (adms-data-model §3.1b, §3.1c; ADR-236).
+
+enum Workflow {
+  LOAD
+  HAUL_OUT
+  UNIT_RATE
+
+  @@map("workflow")
+}
+
+// Displayed COL, DIS, HOC, HOD, URT; labels are never stored in a number (ADR-062, 236).
+enum FieldEventKind {
+  COLLECTION
+  DISPOSAL
+  HAUL_OUT_COLLECTION
+  HAUL_OUT_DISPOSAL
+  UNIT_RATE
+
+  @@map("field_event_kind")
+}
+
+enum TicketStatus {
+  PENDING
+  COMPLETED
+  MANUAL_REVIEW
+  VOID
+
+  @@map("ticket_status")
+}
+
+// What one monitor recorded under a ticket number: one model, five kinds (ADR-236).
+model FieldEvent {
+  // UUIDv7 made on the phone, so a retried sync is the same record (KD-56): no default here.
+  id           String         @id @db.Uuid
+  projectId    String         @map("project_id") @db.Uuid
+  workflow     Workflow
+  kind         FieldEventKind
+  // The bare number, as scanned or shown; text, never parsed for meaning (ADR-062).
+  ticketNumber String         @map("ticket_number")
+  // A, B… on a split load's collections; empty when not split, so the unique key below holds
+  // without NULLs (Postgres treats NULLs as distinct).
+  splitSuffix  String         @default("") @map("split_suffix")
+  monitorId    String         @map("monitor_id") @db.Uuid
+  deviceId     String         @map("device_id") @db.Uuid
+  // The assignment the phone held, and the numbered version of its lists the event was captured
+  // with, so a reviewer sees what the phone showed (ADR-240).
+  assignmentId String         @map("assignment_id") @db.Uuid
+  setupVersion Int            @map("setup_version")
+
+  // The device's clock, as a UTC instant plus its offset; and when the server received it (ADR-100).
+  startedAt              DateTime @map("started_at") @db.Timestamptz(3)
+  endedAt                DateTime @map("ended_at") @db.Timestamptz(3)
+  deviceUtcOffsetMinutes Int      @map("device_utc_offset_minutes")
+  receivedAt             DateTime @default(now()) @map("received_at") @db.Timestamptz(3)
+
+  // WGS84 where the event ended, exact decimals, never floats (invariant 15).
+  endLatitude  Decimal? @map("end_latitude") @db.Decimal(38, 8)
+  endLongitude Decimal? @map("end_longitude") @db.Decimal(38, 8)
+
+  // Kind-specific: a whole-number load call 0-100 (ADR-116). Its range and the kinds that may
+  // carry it are checks in the guard migrations (BACKLOG 0.3.2).
+  loadCall Int? @map("load_call")
+
+  // Reconciliation columns: the only ones the worker may write (ARCHITECTURE §5.1).
+  status       TicketStatus @default(PENDING)
+  reconciledAt DateTime?    @map("reconciled_at") @db.Timestamptz(3)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  monitor User    @relation(fields: [monitorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  device  Device  @relation(fields: [deviceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  completedLoadAsCollection CompletedLoad? @relation("CollectionEvent")
+  completedLoadAsDisposal   CompletedLoad? @relation("DisposalEvent")
+
+  // One field event per project + workflow + bare number + split suffix + kind (ARCHITECTURE §5.4).
+  @@unique([projectId, workflow, ticketNumber, splitSuffix, kind])
+  @@map("field_event")
+}

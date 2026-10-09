@@ -1,0 +1,57 @@
+// Audit: every change, with its actor. Written by database triggers only; never updated or
+// deleted by anyone (ARCHITECTURE §5.3; invariants 2, 3). The triggers, the required actor and
+// the refusals are the guard migrations (BACKLOG 0.3.2).
+
+enum AuditOperation {
+  INSERT
+  UPDATE
+  DELETE
+
+  @@map("audit_operation")
+}
+
+// Where the change came from (ARCHITECTURE §5.3).
+enum AuditSource {
+  DEVICE
+  BACK_OFFICE
+  SYSTEM
+
+  @@map("audit_source")
+}
+
+// So a billing reviewer isn't reading sign-in attempts (ARCHITECTURE §5.3).
+enum AuditDomain {
+  SECURITY
+  BILLING
+  OPERATIONS
+  RECORDS
+
+  @@map("audit_domain")
+}
+
+model AuditRecord {
+  // Numbered by the database, in the order written: the triggers insert, not Prisma.
+  id            BigInt         @id @default(autoincrement())
+  occurredAt    DateTime       @default(now()) @map("occurred_at") @db.Timestamptz(3)
+  tableName     String         @map("table_name")
+  recordId      String         @map("record_id")
+  operation     AuditOperation
+  // The whole row before and after; a removed transaction's full row is its priorValue.
+  priorValue    Json?          @map("prior_value")
+  newValue      Json?          @map("new_value")
+  changedFields String[]       @map("changed_fields")
+
+  // Who, on which device, from where, why, in which request.
+  actorId   String?     @map("actor_id") @db.Uuid
+  deviceId  String?     @map("device_id") @db.Uuid
+  source    AuditSource
+  reason    String?
+  requestId String?     @map("request_id")
+  domain    AuditDomain
+
+  actor  User?   @relation(fields: [actorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  device Device? @relation(fields: [deviceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([tableName, recordId])
+  @@map("audit_record")
+}

@@ -1,0 +1,22 @@
+{
+  "name": "@open-adms/db",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Open ADMS database: Prisma schema folder, migrations, hardening, seed data (ARCHITECTURE §5).",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "exports": "./dist/index.js",
+  "scripts": {
+    "generate": "prisma generate"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "7.10.0",
+    "@prisma/client": "7.10.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.6",
+    "@types/pg": "8.23.1",
+    "pg": "8.23.0",
+    "prisma": "7.10.0"
+  }
+}

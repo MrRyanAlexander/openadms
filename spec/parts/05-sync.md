@@ -1,0 +1,71 @@
+# Part 5 — Sync
+
+✅ **Approved**
+
+← [Part 4 — Capture](04-field-capture.md) · [Index](../INDEX.md) · Next: [Part 6 — Reconcile](06-reconciliation.md)
+
+> **Approved by the user 2026-09-29** (ADR-269), in today's rules (rewritten 2026-09-29, ADR-247). Sequence here; rules in the
+> skills, which win on disagreement. Protocol and security: `spec/ARCHITECTURE.md` §9.
+
+## What it does
+
+Moves the field events and records from the phones to the server, **without losing any and without
+admitting any twice**. Phones sync **whenever there's a connection** (ADR-240), in whatever order they
+find it, some carrying days of work; a phone needn't be handed in for its work to arrive.
+
+## Step by step
+
+1. **A phone connects**, whenever it has a data connection (ADR-099, 240). A phone can stay dark for
+   days; its work still arrives, whole.
+2. **It proves which phone it is** with its device key, made at enrolment (ARCHITECTURE §7.4), and
+   **reports its clock**; a big difference from the server's flags that sync's records (ADR-100).
+3. **Records first, photos second.** It sends its field events, ROEs, surveys, incidents, drop-off
+   logs and time-clock entries, including an **earlier monitor's** queue on a phone that changed
+   hands (ADR-095), and the **edit log** for a finished field event reopened before the shift ended,
+   written to `AuditRecord` under the monitor (ADR-240). Cancelled field events stay on the phone.
+   Photos follow, each upload **resumable**, each file's hash checked against the one taken at
+   capture (ADR-101).
+4. **The server stores each record once.** Every record carries an ID the phone made; a retried
+   upload is answered "already saved" and is **never** mistaken for a duplicate number (KD-56).
+5. **A duplicate?** A second field event of the **same kind on the same ticket** (project + workflow
+   + bare number + split suffix) from a *different* record is **quarantined in full**, with the reason
+   and the record that holds the number: never dropped, never merged, never saved as a field event.
+   It appears in the review queue ([Part 8](08-review-and-corrections.md); ADR-022, 236).
+6. **Nothing else is refused.** An expired tag, a date outside the active window, an odd time, work
+   from a phone taken out of service: all come in and are **flagged** at reconciliation (ADR-052,
+   134).
+7. **The phone is told the truth, record by record**: saved, already saved, or not saved
+   (quarantined). A quarantined record shows as **not saved**.
+8. **The phone receives** its assignment's lists, freshly numbered as a setup version (the certified
+   trucks and crews, sites and each site's lookup, ROEs, the roster and login list, control ranges),
+   its **number blocks topped up** (ticket numbers and, for certifying, cert numbers), and any new
+   master passcode check (ADR-065, 151, 227, 240). Any phone with a connection can refresh its lists
+   at any time (ADR-151).
+9. **Reconciliation is queued** for every ticket the new or changed records touch
+   ([Part 6](06-reconciliation.md)); the sync doesn't wait for it (ARCHITECTURE §13).
+
+## What to expect
+
+- **Arrival order means nothing.** Disposals land before their collections, and Monday's work can
+  arrive after Wednesday's. Order by field time, never by arrival (ADR-030).
+- **The load is bursty.** Quiet for hours, then thousands of field events and their photos in a short
+  window. Size for the spike.
+- **Unpartnered field events are normal** after a sync and never expire (ADR-053).
+
+## Rules it follows
+
+- Offline, arrival order → `adms-exceptions` Scenario C (ADR-030)
+- Duplicates quarantined, never dropped, never acknowledged as saved → `adms-exceptions` §4.3a
+  (ADR-021, 022)
+- Flag, never block → `adms-validation` (ADR-052); no ageing (ADR-053)
+- Identifiers made on the phone; one field event per kind per ticket → `adms-data-model` §3.4
+- The phone side of sync → `adms-field-app` §4A.0
+
+## Where it will live
+
+The sync endpoints and quarantine in `apps/api` (Phase 2, REQ-203), the payloads in
+`packages/contracts`, the phone's queue and "not saved" display in `apps/field` (Phase 3). Not built yet: Phase 0 has only a provisional database schema (ADR-268).
+
+## Open questions
+
+None (ADR-230).

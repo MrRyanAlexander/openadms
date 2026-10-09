@@ -1,0 +1,183 @@
+# Open ADMS — Master Requirements Checklist
+
+Tracks every requirement, phase by phase. Tick a REQ only when it is **observed** satisfied —
+code present *and* covered by a passing test.
+
+> **2026-09-25 — rebuild (ADR-093, ADR-103).** The code in `database/` is historical. The Phase 1
+> REQs below still describe the **behaviour** the product must have, but **every tick earned against
+> the historical code was cleared**: the rebuild re-earns each one. Where a REQ named a historical
+> file or tool, it is re-scoped to the rebuild's equivalent. **Phase 0 (Foundation) is now active**;
+> Phase 1 is the data core and engine, built on Phase 0. Phases 2–5 are in `REQUIREMENTS-LATER.md`.
+
+---
+## Phase 0 — Foundation and security ← **ACTIVE** *(ADR-093…103, `spec/ARCHITECTURE.md`)*
+
+> **2026-10-01 (ADR-287), at the user's word that Phase 0 be fully completed:** 17 REQs are
+> Phase 0's own, **16 ticked**. The one left is **REQ-002**, which waits on the user's first commit.
+> **Later that day (ADR-288): the user made the first commits, REQ-002 is ticked, and all 17 are met.**
+> Six REQs that only a later phase's work can finish were moved to that phase, ids and text kept;
+> what Phase 0 delivered for each is in the table at the end of this section.
+
+**Design and approval**
+- [x] **REQ-001** `spec/ARCHITECTURE.md` approved by the user, section by section; each approval recorded as an ADR, and open questions Q-90…Q-94 answered. ✅ *2026-10-01 (ADR-287): every section carries its approval (ADR-104, 139, 141, 143, 144); Q-90…Q-94 are all answered.*
+- [x] **REQ-002** Repository scaffolded to the approved layout (ARCHITECTURE §18); every dependency pinned and recorded in an ADR; lockfiles committed. ✅ *2026-10-01 (ADR-288): the user made the first commits (nine, `a94cdb6`…`b5329fe`, branch `phase0-foundation`, 185 files); `pnpm-lock.yaml` is in `fc40b2d`. The layout is §18's (ADR-255…266), every dependency is pinned with its ADR, the frozen install passes (ADR-287).*
+- [x] **REQ-005** Ordinary modelling is a Prisma multi-file schema; the only SQL is the reviewed hardening set (Q-92). *(ADR-094/097)* ✅ *2026-10-01 (ADR-287): nineteen migrations, four Prisma-generated and fifteen the hand-written guard set; no table, column, index or relation is written by hand anywhere (the only other SQL: the installer's logins and databases, `$write`'s actor settings, the story databases).*
+
+**Install and environments**
+- [x] **REQ-007** The installer resumes from what it already knows, re-verifies it, asks only to confirm and resume, never prints a secret or database password, and never rotates keys or token secrets on a resume; teardown makes the next run a first run. *(`FROM-BUILD-1.md` §12)* — ✅ **0.2.4 (ADR-266)**: `pnpm installer`, shown on a first run, a rerun, a resume after the database was lost, and teardown then run; the demo deploy extends it later.
+- [x] **REQ-008** Secrets are generated at setup, never committed, never logged; each service has its own database login. *(ADR-093)* — ✅ **0.2.4 (ADR-266)**: one owner-only, git-ignored env file per service with only its own logins; SCRAM verifiers sent, never passwords; no secret in any output (checked).
+
+**The database enforces the rules** *(ADR-097, ARCHITECTURE §5)*
+- [x] **REQ-009** Login roles with least-privilege grants per ARCHITECTURE §5.1; a test asserts every grant **and every refusal** (e.g. the API cannot insert a completed load). ✅ *Proven 2026-09-30 by `packages/db/test` (ADR-272).*
+- [x] **REQ-010** No runtime role can hard-delete an operational row, and the database refuses the delete regardless. ✅ *Proven 2026-09-30 by `packages/db/test` (ADR-272).*
+- [x] **REQ-011** Every insert and update on a tracked table is audited **by a database trigger** with actor, device, source, reason and request ID; a write with no actor set is refused. ✅ *Proven 2026-09-30 by `packages/db/test` (ADR-272); the services state it through `db.$write`, proven as their own logins (ADR-273).*
+- [x] **REQ-012** `AuditRecord` is insert-only through the trigger; any update or delete is refused for every role. ✅ *Proven 2026-09-30 by `packages/db/test` (ADR-272).*
+- [x] **REQ-013** Deleting a `Transaction` (regeneration, ADR-085) first copies the whole row into `AuditRecord`, and is refused while the ticket is locked as invoiced (ADR-090). ✅ *Proven 2026-09-30 by `packages/db/test` (ADR-272).*
+- [x] **REQ-014** Row-level security limits read-only viewers to their own projects' rows. *(ADR-050)* ✅ *Proven 2026-09-30 by `packages/db/test` (ADR-272).*
+
+**Proving it**
+- [x] **REQ-018** Security checks run with the tests: dependency audit, secrets scan, the grant tests. Results reported with real counts. ✅ 2026-09-30 (ADR-276): `pnpm security`.
+
+**Foundations the later phases stand on**
+- [x] **REQ-019** `Project` has an IANA time zone; every captured time is stored as a UTC instant plus the device's offset and the server's received time. *(ADR-100)* ✅ *Proven 2026-10-01 by `packages/db/test/time.test.ts` (ADR-281): the zone is checked to be an IANA name the server knows; no column is a time without its zone.*
+- [x] **REQ-020** Devices and assignments are modelled: a **device** record (enrolled once) with its public key, its number blocks (ADR-065), its status (active, lost, retired) and its master passcode verifier version; an **assignment** record (person, date, project, work: ticket types, unit rate pay items, certifying; one site where the work is at one; optional device; planned or unplanned, and who made it); every field event carries its assignment and the setup version of the phone's lists. *(ADR-095, ADR-240)* ✅ *Proven 2026-10-01 by `devices.test.ts`, `assignments.test.ts` and the story `dispatch-monday` (ADR-281; the assignment's unit rate pay items, a provisional `PayItem` and `AssignmentPayItem`, ADR-286).*
+- [x] **REQ-022** The local stack includes **Valhalla** (road mileage) and **Nominatim** (address lookup), each its own container with an OpenStreetMap extract of the project region; Nominatim's database stays separate from the evidence database. *(ADR-110/119)* ✅ *Proven 2026-10-01 by `infra/local/test` (ADR-282): both answer over HTTPS through Caddy from one pinned extract. The demo deploy's half is REQ-517's (ADR-287).*
+- [x] **REQ-023** The guard hook blocks every edit of a migration file and allows a write only into an empty `--create-only` stub; guard migrations are reviewed and covered by the database tests. *(ADR-113)* ✅ *Proven 2026-10-01 by `tools/security/test/guard-hook.test.ts` and `packages/db/test` (ADR-283).*
+- [x] **REQ-021** Every worker has a system-issued **Monitor ID** (e.g. `M004127`) and an optional employer-issued ID; employers are contractor records, never typed text. *(Q-97)* ✅ *Proven 2026-10-01 by `packages/db/test/monitor-id.test.ts` (ADR-281): the database issues it.*
+
+
+**Moved to the phase whose work finishes each** *(ADR-287; ids and text kept)*
+
+| REQ | Now in | What Phase 0 delivered for it |
+|---|---|---|
+| REQ-003 (the shared domain package holds every rule) | Phase 1, below | The package, depending on nothing, with its test wiring (ADR-261) |
+| REQ-015 (reconciliation of a group is one database transaction) | Phase 1, below | `db.$write`: one database transaction per call, the actor stated first (ADR-273) |
+| REQ-017 (the golden mission as the scenario harness's story) | Phase 1, below | The harness, `pnpm scenarios`, and two stories (ADR-275, 281) |
+| REQ-004 (a Zod schema for every API and sync payload) | Phase 2, `REQUIREMENTS-LATER.md` | The contracts package, depending on `domain` only (ADR-261) |
+| REQ-006 (every service over HTTPS, one command) | Phase 2, `REQUIREMENTS-LATER.md` | Met for the six services that exist: Postgres, object store, mail catcher, routing, addresses, Caddy (ADR-263, 282) |
+| REQ-016 (the server's idempotency ledger) | Phase 2, `REQUIREMENTS-LATER.md` | Every field event's id is made on the phone (ADR-268); the harness's phones keep it across a retry (ADR-275) |
+
+---
+## Phase 1 — Data core and reconciliation engine *(rebuilt on Phase 0)*
+
+**Carried from Phase 0** *(ADR-287)*
+- [ ] **REQ-003** One shared TypeScript **domain** package holds every rule that must give the same answer on the phone and the server (capacity math, load-call volume, apportionment and split shares, number blocks, time rules), as readable classes, with unit tests from the paper-form examples. *(ADR-094)* — the package and its test wiring exist (ADR-261).
+- [ ] **REQ-015** Reconciliation of a group is **one database transaction**; only one run per project at a time; a group that errors is flagged and skipped and never stops the run; re-running unchanged input changes nothing. *(KD-55, ARCHITECTURE §13)* — one `$write` per group (ADR-273, C20).
+- [ ] **REQ-017** A scenario harness runs a whole project story from a terminal (setup, devices, an offline shift, out-of-order sync, reconcile, price, correct, lock) and asserts the exact statuses, review queue, ledger and audit rows. The golden mission (VISION §8) is its first story. *(ADR-103)* — the harness and two stories exist (ADR-275, 281); open until the golden mission runs as a story (C30).
+
+> **Refreshed against `SUMMARY.md` on 2026-09-29 (ADR-247):** every REQ ID is kept (other docs cite
+> them); each text now states today's rule in today's words (field events, pay items, one contract
+> per rule); superseded REQs are struck through with the ADR that replaced them; REQ-115, 116, 124e,
+> 124f, 129b and 105q are new. The model: `adms-data-model`; the checks: `adms-validation`.
+>
+> **2026-10-01 (ADR-296):** REQ-111a and REQ-120j are new, for split haul-outs (ADR-295); REQ-126b
+> and REQ-131a now name haul-outs too. Phase 1 holds 98 REQs.
+
+**Schema & data model**
+- [ ] **REQ-101** Debris types are the firm's **extendable list** (seeded with the 12 USACE umbrella types), **added to each project's forms**, named as the contract names the work, each entry with *Reduced*, a reduction method and *Hidden on phones*; monitors pick, never type. *(ADR-074, 211, 214, KD-47)*
+- [ ] **REQ-102** `PayItem` is **the only place a rate lives**: code, name, payable type, description, Unit of Measure, size band, capture settings, and **a rate for each prime**; no debris type, no copy per prime, no fee label, no "requires weight". *(ADR-002, 206, 207, 213, 221, 223, 246)*
+- [ ] **REQ-103** Split fields (the suffix and the property's estimate) sit on a **collection event**, both-or-neither, enforced in the schema and the contracts package. *(ADR-006, 032, 055)*
+- [ ] **REQ-104** All coordinates `Decimal(38,8)` under WGS84. *(ADR-005)*
+- [ ] **REQ-105** `Project` is the hub: contracts, forms, pay items, sites, rules, certifications, ROEs, assignments, field events, completed records, transactions.
+- [ ] **REQ-105b** Org hierarchy `Client` → `DeclarationEvent` → `Project`; clients are reused across declaration events, not recreated. *(ADR-023, KD-16)*
+- [ ] **REQ-105c** `DeclarationEvent` carries a flexible reference (FEMA `DR-9001-FL`, state, local, or internal) with a reference type from the firm's list. *(ADR-023, 070)*
+- [ ] **REQ-105f** `Client` and `DeclarationEvent` are **shared, firm-wide, searchable records**, referenced by projects across clients, not nested under one another. *(ADR-026)*
+- [ ] **REQ-105d** A project's **program type** comes from the firm's list, and its "requires ROE" setting **drives ROE checks** (and ticks a new project's *Allow split loads*). *(ADR-024, 070, 137, 149, KD-17)*
+- [ ] **REQ-105e** Configuration records (clients, declaration events, contractors, contracts, forms, pay items, sites, rules, lists) have audited update and archive paths; nothing is deleted. *(ADR-025, KD-18)*
+- [ ] **REQ-105g** **Field events and records are correctable in place by permission** (any captured field, GPS and times included), every edit writing an `AuditRecord` with the prior value under the real person's ID; a monitor may reopen a finished field event until they end their shift (the phone's edit log, audited under them), never after. *(ADR-039, 051, 240, KD-25)*
+- [ ] **REQ-105h** QC Approved tickets can be **locked as invoiced** (a lock only, no invoice record), optionally in a named **invoice batch** (no amounts); editing needs an audited unlock. When a ticket is reprocessed its transactions are copied in full to `AuditRecord`, removed and regenerated; a void removes them. No reversal rows. *(ADR-057, 061, 085, 228, KD-26, KD-40, KD-52)*
+- [ ] **REQ-105l** Any ticket, **including a `COMPLETED` one**, can be corrected and reprocessed; the worker updates the existing completed load or haul-out in place and regenerates its transactions. *(ADR-086, KD-53)*
+- [ ] **REQ-112e** Crew time is an itemised unit rate ticket, items with hours to the quarter hour; hours → quantity set on the pay item; one ticket, one pay item, billing the **highest item's hours**, once. *(ADR-084, 087, 124, 126, KD-44, Q-81)*
+- [ ] **REQ-105j** `Project` has an **active window** (start and end dates, editable, audited), judged by a load's time (its collection's end); outside it is flagged "project not active", never rejected. *(ADR-052, 057, 161, KD-39)*
+- [ ] **REQ-105k** `Project` declares its **ticket-number source**: control-ticket ranges or generated. *(ADR-056, KD-41)*
+- [ ] **REQ-105i** Every field event, form and incident records its **creating source** (the phone, or a back-office person with a reason, or the system), its monitor, its **assignment** and the **setup version** of the phone's lists. Row data, never part of the ticket number. *(ADR-047, 156, 240, KD-37)*
+- [ ] **REQ-105m** **QC status** (QC Review → QC Approved / QC Issues / QC Void) is set by people only, on the **completed load or haul-out** (never a single field event), each unit rate ticket, form and certification; separate from the status, never rerunning anything; kept as **its own record** keyed to what it marks, like the invoice lock and a flag's acceptance, so the API never writes a derived row. *(ADR-107, 117, 121, 168, 245)*
+- [ ] **REQ-105o** A load call is a whole number 0–100; a 0 is accepted and flagged, billing nothing. *(ADR-116)*
+- [ ] **REQ-105p** A void is made by a person with a reason from the firm's list, or by a rule's *Void ticket* action naming the rule; both audited, both stop billing; a rule's void always wins. *(ADR-060, 118, 167, 173)*
+- [ ] **REQ-105n** Every disposal site requires a **permit**; a site without one is flagged outstanding, never blocked. *(ADR-111)*
+- [ ] **REQ-105q** A disposal site belongs to one project and has a **site type** from the firm's list, the fixed **site facts** (*Takes loads*, *Haul-outs leave here*, *Charges a tipping fee*, *Ineligible site*), the firm's labels, its GPS, its area (the project's circle or its own shape, dated), an activation and an optional close date, and the link to its tipping fee pay item. *Haul-outs leave here* can be set only on a site of the built-in TDSR/DMS type. *(ADR-136, 142, 144, 145, 173, 215, 222, 298)*
+- [ ] **REQ-105a** A project picks a **form** for each document type (load, haul-out, unit rate…) and the **kinds of unit rate work** it allows. *(ADR-041, 127, 211, KD-14)*
+- [ ] **REQ-106** A certification certifies a **container or a crew, never a vehicle**: a shared base with a container part (measured) or a crew part (no measurements); the driver's name and licence are recorded, not checked. A crew is its certification. *(ADR-009, 015, 153, 228)*
+- [ ] **REQ-106a** **Cert numbers are unique within the project** and are either system-issued (the project's series, 100-number blocks per certifying phone) or taken from pre-printed certification paper. The cert number *is* the placard and badge number; no second field exists. *(ADR-016, 045, 151, KD-10)*
+- [ ] **REQ-106d** Container capacity is computed exactly as on the paper form: whole inches, primary box plus boxes 1…N (add/subtract, optional ÷2, two-lengths hoist, radius corner, labelled by feature), round bottom with π = 3.14, **rounded to hundredths after each step**, ÷46,656, then to a whole CY (.5 up); no manual override; the boxes are stored. *(ADR-076, 078, 087, KD-46)*
+- [ ] **REQ-106f** Certification lifecycle: **tag** expiry, revocation from a date (with a reason) and replacement (a "replaces" link) flag later field events, judged at work time; a copy to another project gets a new number and a reference to the original; five photos; back-office QC (checked by, signatures on file); helper IDs flagged if unmatched. A certification never ends on its own. *(ADR-079, 080, 082, 152, 153, 179, KD-50)*
+- [ ] **REQ-106g** Each transaction records the **prime and the operating sub**. *(ADR-081, 108, KD-49)*
+- ~~**REQ-124a**~~ Withdrawn 2026-09-24 — no GPS accuracy check; the back office reviews and adjusts drift. *(ADR-083)*
+- [ ] **REQ-106e** A project may have **several primes**; each has its own subs in **tier 1 or 2** (never deeper), never shared between primes; subs are **created at certification** under the chosen prime, with known subs suggested and duplicates mergeable (audited). *(ADR-108, KD-48)*
+- [ ] **REQ-106b** Vehicle types and features are **extendable lists** seeded from the paper certification form, and the certification records what that form records (date and time, driver, tag, prime and sub, measured boxes, attestation). *(ADR-070, 073, 080, KD-11, KD-45)*
+- [ ] **REQ-106c** The firm's lists (program types, declaration reference types, vehicle types and features, crew types, kinds of unit rate work and their items, payable types, debris types, reduction methods, site types and labels, incident types and sub-types, reasons, time-clock activities; field tags per project) are admin-managed, extendable, archived never deleted; built-in values are acted on by their **fixed key**, never their name. *(ADR-070, 194, `spec/LISTS.md`)*
+- [ ] **REQ-107** Forms are **records, not a ticket's events**: ROE, pre-work and post-work survey (linked by ROE number), incident (type, then sub-type), citizen drop-off log; fixed fields plus the firm's added fields (stored answers, never read by the engine); each QC'd on its own. *(ADR-149, 150, 160, 184, 188, 236)*
+- [ ] **REQ-108** Archive only (`archivedAt` / `closedAt`); no hard-delete path on operational data. *(ADR-007)*
+- [ ] **REQ-115** One **`FieldEvent`** model with `kind` `COLLECTION` · `DISPOSAL` · `HAUL_OUT_COLLECTION` · `HAUL_OUT_DISPOSAL` · `UNIT_RATE`: shared columns (project, workflow, bare number, split suffix, monitor, device, assignment, setup version, certification, site, times, GPS) plus kind-specific columns checked by the kind; the database allows **one field event per project + workflow + bare number + split suffix + kind**. *(ADR-062, 236; `adms-data-model` §3.1c)*
+- [ ] **REQ-116** `CompletedLoad` and `CompletedHaulOut` are **conclusions** the worker draws from a ticket's current field events and setup, drawn again on every reprocess; statuses, flags, zone, mileage and transactions likewise. Event-driven, not event-sourced: no correction events. *(ADR-236, invariant 21)*
+
+**Ticket workflows**
+- [ ] **REQ-110** Workflow A: a collection event (makes the number) and a disposal event (takes the quantity: a load call, a scale weight, or a count of the tickets it carries) → the worker's `CompletedLoad`. *(ADR-013, 223, 236)*
+- [ ] **REQ-111** Workflow B: a haul-out collection event (makes the number; **the load call, always**) and a haul-out disposal event (a scale weight only where paid by weight) → the worker's `CompletedHaulOut`; a haul-out dumped at a TDSR is flagged and priced no further. *(ADR-013, 226, 227, 236)*
+- [ ] **REQ-111a** **Split haul-outs**, where the project allows split loads: N haul-out collection events, one per **pile** at the TDSR (`-A`, `-B`…; the first is `-A`, never bare), and one haul-out disposal event, grouped on the base number. Each pile's event has its own times, GPS, debris type and field tag and a **running load call** (how full the container is after that pile); no estimate is taken; the last call is the haul-out's. A bare haul-out collection beside suffixed ones, or a gap in the suffixes, is flagged. *(ADR-137, 295; `adms-ticket-workflows` §4.4a)*
+- [ ] **REQ-112** Workflow C: one unit rate field event is the ticket; no pairing; checked, priced and flagged like any other ticket. *(ADR-060, 236)*
+- [ ] **REQ-112a** **Itemised counts**: an item → count (or hours) breakdown on a unit rate event, so HHW, white goods and crew time can be captured; freon recovery separate from the appliance. *(ADR-040, KD-27)*
+- [ ] **REQ-112b** **The kinds of unit rate work** (Hangers, Leaners, Stumps built in, HHW, White Goods, Crew time; the firm adds its own) decide the capture screen; each unit rate pay item names its kind; a person's assignment lists the unit rate pay items they do. *(ADR-041, 127, 198, 240, KD-27)*
+- [ ] **REQ-112c** **Every capture setting ticked on a pay item is checked** at reconciliation ("Count is always 1", "Measurement required", "GPS required", photos required, "Decimals allowed"), never stored and ignored; a miss is flagged. *(KD-28, `adms-validation` §5.3a)*
+- [ ] **REQ-112d** The billing units are `CY` `TN` `EA` `LB` `HR` `CREW_DAY` `TBN`; capture shape and billing basis stay independent. *(ADR-040, `spec/CONVENTIONS.md` §4, KD-29)*
+- [ ] **REQ-112f** On unit rate work the monitor picks the **payable type** by name (each shown once) and measures; the phone **works out the pay item** from the size bands and prints it; the worker works it out again (the engine's bills); a measurement in no band is saved with no pay item, flagged; bands in one payable type can't overlap and a gap warns. White goods bill every item removed; freon as extra lines or its own ticket, per project; rules link items to pay items (*Item*, *Quantity from*); a pay item with no rate writes a $0 line. *(ADR-124, 126, 127, 128, 131, 132, 207, 213, 217)*
+- [ ] **REQ-112g** Every capture is **badge first, number last**: New scans the badge; Complete takes the details, picked by name (a load's debris type, a unit rate payable type), then the number, scanned or shown and re-entered by hand; every other start is start → list → sub-list → details (surveys and ROEs by work type, incidents by type then sub-type, "normal or split?" only where split loads are allowed). *(ADR-127, 129, 137, 207, 209)*
+- [ ] **REQ-113** Completed loads and haul-outs are written by the worker only; **unique links** to their field events prevent double billing. *(invariants 4, 17)*
+- [ ] **REQ-114** Ticket numbers are **bare numbers** (no project, type, device or date prefix) in a **per-project series per workflow** (load, haul-out, unit rate) from 100,001 to 9,999,999; type labels (`COL`…`CLT`…`CHO`) are display only. One generator, in the shared domain package. *(ADR-046, 062, 094, KD-43)*
+
+**Reconciliation engine**
+- [ ] **REQ-120** **A ticket's field events are grouped on project + workflow + bare number** (split suffix stripped); the event's kind is never used to find its partner. *(ADR-019, 062, KD-12, KD-13)*
+- [ ] **REQ-120a** The number is **made by the first field event** (the collection, the haul-out collection, the unit rate event: a control ticket scanned or a generated number shown) and **scanned, never regenerated**, at the second; either way it's re-entered by hand. *(ADR-021, 046, 209, KD-13)*
+- [ ] **REQ-120b** A second field event of one kind on one ticket is **quarantined at sync in full**: never dropped, never merged, never acknowledged to the phone as saved. *(ADR-022)*
+- [ ] **REQ-120b1** The group's shape is checked: on a split, a bare collection beside suffixed ones, or a gap in the suffixes, is flagged. *(ADR-033, 173; `adms-validation` §5.1)*
+- [ ] **REQ-120e** **Split chains group on the base ticket number**: N collection events (`-A`…) and one disposal event. The first is `-A`, never bare. *(ADR-032, 033, 173, KD-19)*
+- [ ] **REQ-120i** Per-property attribution on splits: the ROE and the estimate on each collection event; each property's share = its estimate ÷ Σ estimates, applied to the load's CY or tonnage, derived and summing exactly; rules run once per property. No divergence check. *(ADR-055, 064, 162, KD-22, KD-23)*
+- [ ] **REQ-120j** Per-pile attribution on split haul-outs: a pile's part is **what it added** (its running call less the call before it); its CY = capacity × its part ÷ 100; its share of a scale weight = its part ÷ the last call, to two decimals, the remainder given to one pile; derived, stored apart (one `CompletedHaulOutCollection` row per pile) and summing exactly to the haul-out's; rules run once per pile, and each transaction names the pile it prices. A call not higher than the one before it is flagged (`PILE_CALL_NOT_HIGHER`) and nothing bills until it's corrected; the load-call limits judge only the last call. *(ADR-295; `adms-validation` §5.5; `spec/FLAGS.md` §3.5; golden mission 201004)*
+- [ ] **REQ-120f** ~~Orphan detection is age-based in field time~~ — **withdrawn by ADR-053**: no grace period, no ageing. Unpartnered field events stay `PENDING` and never expire; only timing that can't be true is flagged. *(KD-20 closed)*
+- [ ] **REQ-120h** The worker tolerates **bursty, out-of-order** input: a day's volume at once, and old work arriving behind new. *(ADR-030)*
+- [ ] **REQ-120g** Phantom tickets are **voided**, not renumbered; a void needs a reason, keeps the record and its audit trail, and is undone only by an audited override. *(ADR-028, 051)*
+- [ ] **REQ-120c** A permitted back-office user can correct the ticket number, or **any other captured field**, on a quarantined or flagged record, audited under their own ID with the prior value kept, and the ticket reprocesses. *(ADR-020, 051; KD-31 resolved)*
+- [ ] **REQ-120d** Between a ticket's field events: the debris type (exact entry), the cert number (exactly, never fuzzy), the order in time, and a load's tower count against the tickets its collection lists. No zone agreement. *(ADR-010 → 019, 141, 192, 226, 243)*
+- [ ] **REQ-121** Statuses `PENDING | COMPLETED | MANUAL_REVIEW | VOID`: every problem is a flag with a plain message; `MANUAL_REVIEW` **still bills** where an amount can be computed; `VOID` (a person with a reason, or a rule's *Void ticket*) removes the lines, each copied to audit first. *(ADR-060, 085, 118, KD-42)*
+- [ ] **REQ-122** A certification is checked on each field event as it arrives and again on every reprocess; nothing is refused on the phone. *(ADR-048, 052)*
+- [ ] **REQ-122a** **Certification eligibility is judged at the time of the work**: an expired tag, a revocation or a replacement before the work time flags the ticket for a certification review, and it still bills; a driver's licence flags nothing; no certification with that number on the project → unbilled and flagged until one exists. *(ADR-048, 079, 153, 154, KD-35)*
+- [ ] **REQ-123** Geodesic site-area check: a disposal's (or either haul-out end's) end GPS inside its site's area: a circle (`DISPOSAL_SITE_PROXIMITY_M`, built-in 200 m, changed in the project's GIS settings) or the site's own shape. *(ADR-136, 142, 144)*
+- ~~**REQ-124**~~ Withdrawn 2026-09-26 — no collection route-drift check; collections cover long distances. *(ADR-136)*
+- [ ] **REQ-124b** Project map (boundary + zones): a collection's end GPS, or a unit rate event's GPS, outside the boundary is flagged; the worker attaches the zone it lies in and the map version used; in no zone → flagged; maps come in by upload (shapefile, GeoJSON, KML) or an Esri layer link, as dated versions; a new version reprocesses un-invoiced tickets. *(ADR-135, 141)*
+- [ ] **REQ-124c** Out-of-service phones: still received at sync; records made after the removal time flagged; then the number block retired and the phone wiped. *(ADR-134)*
+- [ ] **REQ-124d** "Allow split loads" project setting (ticked by default where the program type requires ROEs); only such projects offer "normal or split?". *(ADR-137)*
+- [ ] **REQ-124e** **Where debris went**, against the site's facts and dates: a load at a site not marked *Takes loads*, a haul-out leaving one not marked *Haul-outs leave here*, a load at an *Ineligible site* (still bills), a load or haul-out dumped at a site that *Charges a tipping fee* with no line for its tipping fee pay item (a missing rule), a disposal before the activation date or after a set close date: each flagged, never refused. *(ADR-173, 181, 205, 215, 222, 226)*
+- [ ] **REQ-124f** **One quantity, never both**: for each site, debris type and prime, the setup works out ahead what the site's phones ask for (a load call, a scale weight, or a count of the tickets a load carries) from the rules and the paying pay items, shows it on the site's page and sends it with the phone's lists; after sync a line whose pay item needs a quantity the load lacks is flagged. *(ADR-223, 227, 243)*
+- [ ] **REQ-125** The rule engine per `spec/RULES.md`: a rule per form naming one contract, runs only on tickets of its prime (a remove/void-only rule may leave it blank); criteria read only the ticket, each naming the field event it reads; actions *Add transaction #n*, *Remove transaction #n*, *Void ticket*. *(ADR-109, 118, 131, 239, 244)*
+- [ ] **REQ-125a** A rule belongs to a **form**, never to one field event. *(ADR-018, 211)*
+- [ ] **REQ-125b** **Every active rule of a ticket's form runs** on it; the builder offers only criteria the form's field events carry; the setup check lists invalid rules. No rule or setting can be stored and silently never run. *(ADR-229, KD-15; `adms-validation` §5.3a)*
+- [ ] **REQ-125c** What a phone may make comes from its **assignment**; work outside it is never refused, and the setup check lists gaps before the field day. *(ADR-052, 229, 240)*
+- [ ] **REQ-126** Server-side deterministic volume: certified capacity (REQ-106d) × load call %; a crew certification has no capacity. *(ADR-076)*
+- [ ] **REQ-126a** **`ScaleReceipt` model**: the external number captured verbatim (hand-transcribed, never scanned), optional gross/tare/net, referenced by N disposal events, consumed exactly once per project. Named so it is never confusable with a ticket number. *(ADR-034, 038, KD-24)*
+- [ ] **REQ-126d** **A scale receipt is conditional**: only where the contract asks, i.e. where the pay item the rules pay a load at is by weight; the tower then takes the weight **instead of** a load call (REQ-124f). *(ADR-036, 037, 223)*
+- [ ] **REQ-126e** A missing or zero net on a load whose paying pay item is by weight is flagged and that line bills nothing; elsewhere a receipt is optional evidence. *(ADR-036, 223)*
+- [ ] **REQ-126f** Load and haul-out **mileage** is the road distance of the shortest route on public roads (no truck size) from the collection's end GPS, snapped to the nearest road, to **the disposal site's own GPS**, from our own routing server, before pricing; no route → the straight line, flagged; stored with the map data's date; recomputed only when the collection's end GPS or the site's GPS changes. *(ADR-110, 163, 208; was REQ-509)*
+- [ ] **REQ-126b** **One scale weight shared by a tandem** is split **by certified capacity**, server-side and deterministic; observed and derived figures stored apart; the parts sum to the net exactly; **both tickets are flagged** and each is marked as a share, not weighed (`weightIsShare`); a haul-out's truck and trailer the same as a load's. *(ADR-035 → 175, 295)*
+- ~~**REQ-126c**~~ Withdrawn 2026-09-29 — tons-per-CY factors for a scale cross-check: there is no weight-vs-load-call check (ADR-165), and a contract's per-CY and per-ton prices are two pay items the firm's rules pick between (ADR-202).
+- [ ] **REQ-127** Pending tickets awaiting a field event remain `PENDING` and are looked at again on every run: never auto-failed, never expired. *(ADR-053)*
+- [ ] **REQ-128** One home per concern *(ADR-093/094)*: rules as classes in the shared domain package; database access only through the `db` package and the two server apps; geodesic math in one module (ADR-005).
+- [ ] **REQ-129** Unpartnered disposal events are **examined and listed as pending** in the run result: not flagged for waiting, never expired; the flags of the one event show with it. *(KD-06, ADR-053, 244)*
+- [ ] **REQ-129a** Every flag carries a **plain message** naming the ticket and the problem, never a guessed cause, and keeps its code and the inputs it was raised on. After setup nothing is rejected for eligibility: it is flagged. *(ADR-052, 166, KD-42)*
+- [ ] **REQ-129b** A reviewer may **accept** a flag with a reason (audited); it isn't raised again unless its facts change; when every flag is fixed or accepted the ticket is `COMPLETED`. *(ADR-166)*
+
+**Ledger & audit**
+- [ ] **REQ-130** `AuditRecord` is an append-only model. *(ADR-007; `Transaction` is regenerated, ADR-085, see REQ-105h)*
+- [ ] **REQ-131a** Pricing per ADR-109/118/239 (revised 2026-09-29, ADR-246): every passing rule of the ticket's prime runs; each *Add transaction* writes one transaction in its # slot; two creates of the same # and no-match are flagged; there are no fee kinds; a unit rate ticket carries one pay item, its quantity per ADR-126/128; splits per property, split haul-outs per pile. *(ADR-047/089 → 109, 118, 124, 239, 246, 295; KD-36, KD-38, KD-54)*
+- [ ] **REQ-131d** Pricing is **deterministic**: matching rules create transactions in # order (#1, then #2…), and reprocessing the same ticket under the same rules gives identical transactions every time, proven by a test that runs it twice. All passing rules are found, creates run in # order, then removes, then voids; criteria read only the ticket. *(ADR-130, ADR-131)*
+- [ ] **REQ-131c** The back office's rule builder stores rules as `spec/RULES.md` specifies (form, name, one contract, criteria with the §4a operators and a picked or typed value per §4, actions, Active, Is valid), BETWEEN inclusive with an overlap warning, mileage compared in tenths; a transaction takes the pay item's rate for the rule's contract's prime, and a pay item with no rate for that prime writes a $0 line, flagged. *(ADR-109, 118, 122, 123, 125, 212, 239)*
+- [ ] **REQ-131b** A rate or rule change regenerates the transactions of every affected ticket not locked as invoiced. *(ADR-090)*
+- [ ] **REQ-131** **Every reconciled ticket that bills writes its `Transaction` rows.** *(KD-01 — blocks phase exit)*
+- [ ] **REQ-132** **Every reconciliation outcome, all three workflows, success and flag, writes an `AuditRecord` reflecting the true resulting status.** *(KD-04, KD-05)*
+- [ ] **REQ-133** Every mutation is audited *(captured by database triggers, REQ-011; ADR-097)*.
+
+**Verification**
+- [ ] **REQ-140** The rebuild's typecheck is clean across every package.
+- [ ] **REQ-141** The rebuild's test suites are green, with real counts reported *(the historical code's tests don't count, ADR-093)*.
+- [ ] **REQ-142** Seed data exercising the pipeline, including deliberate failures, runs through the scenario harness (REQ-017).
+- [ ] **REQ-143** A seeded run produces `PENDING`, `COMPLETED` and `MANUAL_REVIEW` (and a person-made `VOID`), each with a matching ledger and audit trail (ADR-060).
+
