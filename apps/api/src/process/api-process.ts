@@ -10,6 +10,7 @@ import {
   MasterPasscodeRules,
   MasterPasscodeTries,
   PasswordRules,
+  PasscodeSessionRules,
   PhoneProofRules,
   RateLimits,
   SignInTries,
@@ -48,6 +49,8 @@ import { apiPhoneLists } from '../phone/phone-lists.controller.ts';
 import { PhoneLists } from '../phone/phone-lists.ts';
 import { apiPhoneLoginList } from '../phone/phone-login-list.controller.ts';
 import { PhoneLoginList } from '../phone/phone-login-list.ts';
+import { apiPasscodeSessions } from '../phone/passcode-sessions.controller.ts';
+import { PasscodeSessions } from '../phone/passcode-sessions.ts';
 import { apiPhoneMonitors } from '../phone/phone-monitors.controller.ts';
 import { PhoneMonitors } from '../phone/phone-monitors.ts';
 import { PhoneChallenges } from '../phone/phone-challenges.ts';
@@ -361,6 +364,17 @@ export class ApiProcess {
           ],
           [apiPhoneProofs, phoneProofs],
           [apiPhoneSignIns, phoneSignIns],
+          // A session opened on a proven phone under the master passcode (task 2.5.4, part 3).
+          [
+            apiPasscodeSessions,
+            new PasscodeSessions(database, {
+              passcode: passcodeCheck,
+              tokens,
+              rules: new PasscodeSessionRules(policy.monitorSessionHours),
+              assignments: new PhoneAssignments(database),
+              clock,
+            }),
+          ],
           // The lists a phone takes for its monitor's assignment (task 2.5.3).
           [
             apiPhoneLists,

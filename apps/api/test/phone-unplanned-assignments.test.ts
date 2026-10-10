@@ -707,4 +707,68 @@ describe('a site move and a monitor switch, reported', () => {
       expect(await written(tx, phone)).toEqual([2, 4]);
     });
   });
+
+  it('ADR-462 one monitor at a time: a switch saved ends the session of whoever was signed in on the phone before it, by the phone’s clock; it ends neither the session of the monitor switched to nor one opened since the switch, and a setup or a move ends none', async () => {
+    await world(async (served, tx) => {
+      const { phone, token, tariq, setUp } = await tariqAtTheLandfill(served, tx);
+      const password = '5550142';
+      const made = await served.ask('POST', '/phones/current/monitors', {
+        bearer: token,
+        payload: { name: 'Sam Grant', password, passcode },
+      });
+      expect(told(made)).toEqual([200, undefined]);
+      const sam = { ...monitorCreatedAnswerSchema.parse(made.body), password };
+      const on = (bearer: string, monitorSession: string) =>
+        served.ask('GET', '/phones/current/monitor', { bearer, monitorSession });
+      const stillOn = [200, undefined];
+      const signedOut = [401, 'NOT_SIGNED_IN'];
+      // Tariq signs in at 06:30. A setup and a move reported end nothing.
+      const tariqs = (await signedIn(served, token, tariq)).token;
+      expect((await answered(served, token, setUp())).said).toEqual(['SAVED', null]);
+      // Nor does the phone set up for Sam at 06:40, at the Landfill or moved: only a switch.
+      const forSam = setUp({ personId: sam.userId });
+      expect((await answered(served, token, forSam)).said).toEqual(['SAVED', null]);
+      expect(told(await on(token, tariqs))).toEqual(stillOn);
+      // A switch to Sam the phone says was made at 06:20, before Tariq signed in: his session
+      // came after it, and stands.
+      const early = setUp({
+        personId: sam.userId,
+        occasion: 'MONITOR_SWITCH',
+        madeAt: '2026-10-12T10:20:00.000Z',
+      });
+      expect((await answered(served, token, early)).said).toEqual(['SAVED', null]);
+      expect(told(await on(token, tariqs))).toEqual(stillOn);
+      // The phone passes to Sam at 13:00 with no connection, and reports it at 13:05.
+      served.clock.at = new Date('2026-10-12T17:05:00Z');
+      const afternoon = await proven(served, phone);
+      const switched = setUp({
+        personId: sam.userId,
+        occasion: 'MONITOR_SWITCH',
+        madeAt: '2026-10-12T17:00:00.000Z',
+      });
+      const { said, requestId } = await answered(served, afternoon, switched);
+      expect(said).toEqual(['SAVED', null]);
+      expect(told(await on(afternoon, tariqs))).toEqual(signedOut);
+      const written = [masterPasscodeActorId, 'DEVICE', phone.id];
+      expect(await audited(tx, requestId)).toEqual([
+        ['assignment', 'INSERT', ...written],
+        ['security_event', 'INSERT', ...written],
+        ['security_event', 'INSERT', ...written],
+        ['session', 'UPDATE', ...written],
+      ]);
+      // Sam signs in; a switch to Sam reported after that, made later still by the phone's
+      // clock, is Sam's own and ends nothing of his. Sent again, it writes nothing.
+      const sams = (await signedIn(served, afternoon, sam)).token;
+      const again = setUp({
+        personId: sam.userId,
+        occasion: 'MONITOR_SWITCH',
+        madeAt: '2026-10-12T17:30:00.000Z',
+      });
+      expect((await answered(served, afternoon, again)).said).toEqual(['SAVED', null]);
+      expect(told(await on(afternoon, sams))).toEqual(stillOn);
+      const repeated = await answered(served, afternoon, again);
+      expect(repeated.said).toEqual(['ALREADY_SAVED', null]);
+      expect(await audited(tx, repeated.requestId)).toEqual([]);
+    });
+  });
 });

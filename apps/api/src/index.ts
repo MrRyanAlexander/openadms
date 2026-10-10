@@ -222,6 +222,12 @@ export {
   type Addresses,
   type AddressServerSettings,
 } from './phone/address-server.ts';
+export {
+  PasscodeSessions,
+  type PasscodeSessionOutcome,
+  type PasscodeSessionToOpen,
+  type PasscodeSessionsParts,
+} from './phone/passcode-sessions.ts';
 export { PhoneChallenges, type Challenged } from './phone/phone-challenges.ts';
 export { PhoneLists, type PhoneListsHeld, type PhoneListsTaken } from './phone/phone-lists.ts';
 export { OfflineChecks, type OfflineCheck } from './phone/offline-checks.ts';

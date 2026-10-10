@@ -224,6 +224,11 @@ export {
   type UnplannedSecurityEvent,
 } from './assignments.ts';
 export {
+  PasscodeSessionRules,
+  masterPasscodeSessions,
+  type MasterPasscodeSessionKind,
+} from './passcode-sessions.ts';
+export {
   MasterPasscodeRules,
   PhoneRules,
   phoneRemovals,

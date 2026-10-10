@@ -1183,13 +1183,18 @@ model UserCredential {
 // this row; a monitor's session token on a phone, which never rotates. Revoked, the row is
 // history and never changes again. Only the API reads it; the hash is kept out of the audit log.
 model Session {
-  id               String  @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  userId           String  @map("user_id") @db.Uuid
-  refreshTokenHash String  @unique @map("refresh_token_hash")
+  id                    String                 @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId                String                 @map("user_id") @db.Uuid
+  refreshTokenHash      String                 @unique @map("refresh_token_hash")
   // The proven phone a monitor signed in on (ARCHITECTURE §6, Device sessions; §7.2; ADR-443):
   // a monitor's session always names one and never changes it, and no other session names one
   // (the guard migration), so a monitor's ID and password open nothing but a phone's calls.
-  deviceId         String? @map("device_id") @db.Uuid
+  deviceId              String?                @map("device_id") @db.Uuid
+  // Opened under the firm's master passcode, with a connection, and which way (ARCHITECTURE
+  // §7.2, §7.3; AC-02-42; ADR-456 (5)(d), 462): empty on a person's own sign-in. It is no
+  // authentication of the monitor it is for, so it is marked, written as the master passcode's
+  // actor on that phone (the guard migration), and never changes.
+  masterPasscodeSession MasterPasscodeSession? @map("master_passcode_session")
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
@@ -1201,6 +1206,17 @@ model Session {
   @@index([userId])
   @@index([deviceId])
   @@map("session")
+}
+
+// How a session on a phone was opened under the master passcode (ARCHITECTURE §7.2, §7.3;
+// ADR-095, 120, 462): as the phone's monitor, or the temporary session for a monitor picked from
+// the roster, which ends at the end of the project's day. One closed set, fixed in code (the
+// domain's `masterPasscodeSessions`).
+enum MasterPasscodeSession {
+  AS_MONITOR
+  TEMPORARY
+
+  @@map("master_passcode_session")
 }
 
 // What a security event says happened (ARCHITECTURE §6, Abuse; REQ-202b): one closed set, fixed

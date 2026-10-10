@@ -503,6 +503,24 @@ ADR-106 (master passcode) and ADR-120 (changing monitors, username). **The word 
 > a monitor who has their own assignment (the event alone), a session under the passcode and
 > the temporary session, every other use of the passcode a phone logged.
 
+> ⚠️ **ADR-462 (2026-10-10; ADR-456 (5)(d) built as proposed, the rest agent defaults; this
+> note awaits approval, building didn't wait): a session under the master passcode, with a
+> connection.** A supervisor types the master passcode on an enrolled phone in service and
+> either signs in as the phone's monitor (§7.2) or opens the temporary session for a monitor
+> picked from the roster (§7.3). The server checks the passcode itself (§7.5; a wrong try counts
+> as at enrolment) and opens a session for that monitor on that phone, **marked as opened under
+> the master passcode and which way**: it is never the monitor's own sign-in, the record names
+> **"Master passcode"** on that phone, and it is a use of the master passcode in the security
+> log. The database lets nobody write such a session any other way. It ends any other session
+> on the phone, and ends as a monitor's own does. **A temporary session ends at the end of the
+> project's day** (the project of the assignment the phone takes, in its time zone) **or after
+> a monitor's own twelve hours, whichever comes first**; as the phone's monitor it lasts the
+> twelve hours. **A monitor switch a phone reports signs out whoever was signed in on it
+> before the switch.** Neither NIST SP 800-63B nor ASVS provides for a session opened for
+> somebody by a secret that isn't theirs (ADR-456): the mark is what stands for it. Still to
+> build: what a phone being set up online picks from, every other use of the passcode a phone
+> logged, and the mark on a record made in a session as the phone's monitor (task 2.6.2).
+
 ### 7.0 Creating people
 
 ✅ **Decided** *(ADR-105, user 2026-09-25)*:

@@ -178,6 +178,9 @@ const triggers = [
   `CREATE TRIGGER session_refuse_edit_once_revoked BEFORE UPDATE ON public.session FOR EACH ROW WHEN ((old.revoked_at IS NOT NULL)) EXECUTE FUNCTION refuse_edit()`,
   // The phone a monitor's session names never changes (ADR-443).
   `CREATE TRIGGER session_refuse_device_edit BEFORE UPDATE OF device_id ON public.session FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
+  // How a session was opened, by a monitor's own sign-in or under the master passcode, never
+  // changes (ADR-462).
+  `CREATE TRIGGER session_refuse_master_passcode_session_edit BEFORE UPDATE OF master_passcode_session ON public.session FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
   `CREATE TRIGGER security_event_refuse_edit BEFORE UPDATE ON public.security_event FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
   // Which version a record of wrong tries is of never changes (ADR-438).
   `CREATE TRIGGER master_passcode_tries_refuse_version_edit BEFORE UPDATE OF id, version, created_at ON public.master_passcode_tries FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
@@ -1112,6 +1115,11 @@ describe('the guards in the catalog', () => {
       {
         name: 'session_system_actor_check',
         definition: "CHECK ((user_id <> '00000000-0000-7000-8000-000000000001'::uuid))",
+      },
+      // Only a session on a phone is opened under the master passcode (ADR-462).
+      {
+        name: 'session_master_passcode_session_check',
+        definition: 'CHECK (((master_passcode_session IS NULL) OR (device_id IS NOT NULL)))',
       },
       // A security event carries an offset only where a phone reported it (ADR-457).
       {

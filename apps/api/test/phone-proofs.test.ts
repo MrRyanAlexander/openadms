@@ -86,6 +86,7 @@ describe('who may ask', () => {
       'provenPhone',
       'createMonitorOnPhone',
       'signInOnPhone',
+      'openPasscodeSessionOnPhone',
       'reportUnplannedAssignment',
     ]);
     await world(async (served) => {

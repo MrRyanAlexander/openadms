@@ -23,7 +23,8 @@
 //   SHA-256. One monitor at a time on a phone: a sign-in ends any other on it.
 // - **Read on every request** (`onPhone`): an archived monitor, a password set anew (it ends their
 //   sessions), a sign-out, another monitor signed in on the phone, and a revoked key (the phone's
-//   own proof is read first) each stop it at once.
+//   own proof is read first) each stop it at once. A session opened under the master passcode
+//   (passcode-sessions.ts; ADR-462) is read the same way, and says that it is one.
 // - **Written as the monitor, from that phone**: the session, the reset count and the event;
 //   and their offline seed where they have none yet (offline-checks.ts; ADR-454), since a
 //   phone's login-list entry for them is made from it.
@@ -33,6 +34,7 @@
 import { randomBytes } from 'node:crypto';
 
 import type { Database, DeviceStatus } from '@open-adms/db';
+import type { MasterPasscodeSessionKind } from '@open-adms/domain';
 
 import type { Clock } from '../setup/setup-service.ts';
 import type { PasswordHasher } from '../sign-in/password-hasher.ts';
@@ -53,6 +55,9 @@ export interface MonitorOnPhone {
   readonly monitorNumber: string;
   readonly name: string;
   readonly expiresAt: Date;
+  // How the session was opened where it was opened under the master passcode
+  // (passcode-sessions.ts; ADR-462); null on the monitor's own sign-in.
+  readonly masterPasscodeSession: MasterPasscodeSessionKind | null;
 }
 
 export type PhoneSignInOutcome =
@@ -182,6 +187,7 @@ export class PhoneSignIns {
       monitorNumber: person.monitorNumber,
       name: person.name,
       expiresAt,
+      masterPasscodeSession: null,
       assignment: await assignments.taken(person.id, phone.deviceId, now),
     };
   }
@@ -201,6 +207,7 @@ export class PhoneSignIns {
           refreshTokenHash: true,
           expiresAt: true,
           revokedAt: true,
+          masterPasscodeSession: true,
           user: {
             select: { id: true, name: true, role: true, monitorNumber: true, archivedAt: true },
           },
@@ -221,6 +228,7 @@ export class PhoneSignIns {
       monitorNumber: user.monitorNumber,
       name: user.name,
       expiresAt: row.expiresAt,
+      masterPasscodeSession: row.masterPasscodeSession,
     };
   }
 

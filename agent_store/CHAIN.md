@@ -7,7 +7,7 @@
 > task's ADR and its session-log line in `DECISIONS.md`). No other file carries these counts.
 > **A count that differs from this page without a reason is a finding, not noise.**
 
-**Seen whole:** 2026-10-10, after ADR-458, on the user's Mac, the installation at head.
+**Seen whole:** 2026-10-10, after ADR-462, on the user's Mac, the installation at head.
 
 ## `pnpm ready`
 
@@ -15,19 +15,19 @@
 |---|---|
 | `pnpm local:up` | six `Healthy` services, then the API's and the worker's containers: `https://api.adms.localhost/health → 200 {"status":"ok"}` and `the worker’s health answer → 200 {"status":"ok","jobsWaiting":0,"jobsSetAside":0}` |
 | `pnpm installer:check` | **30 `✓`**, no `✗`, exit 0 |
-| Migrations at head | **101** (`packages/db/prisma/migrations/` is the list) |
+| Migrations at head | **103** (`packages/db/prisma/migrations/` is the list) |
 | `pnpm local:down` (close-out) | 8 containers and the network: 9 `Removed` lines |
 
 ## `pnpm test`
 
-**`Test Files 138 passed (138)`, `Tests 2532 passed (2532)`.**
+**`Test Files 140 passed (140)`, `Tests 2555 passed (2555)`.**
 
 | Project | Tests | Files | Needs |
 |---|---|---|---|
-| `packages/domain` | 748 | 39 | nothing |
+| `packages/domain` | 754 | 40 | nothing |
 | `packages/contracts` | 30 | 6 | nothing |
-| `apps/api` | 463 | 35 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
-| `packages/db` | 1021 | 43 | `pnpm ready` |
+| `apps/api` | 475 | 36 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
+| `packages/db` | 1026 | 43 | `pnpm ready` |
 | `packages/scenarios` | 113 | 4 | `pnpm ready` for `stories.test.ts` (the runner and a run's template, 5); the flag catalogue (78 flags), the harness and the policy need nothing. **The stories themselves are not here** (ADR-446) |
 | `apps/worker` | 30 | 3 | `pnpm ready` for the map servers (13) and its container (3); the process (14) needs nothing |
 | `infra/local` | 22 | 3 | `pnpm ready` |
@@ -42,7 +42,7 @@
 
 ## `pnpm scenarios`
 
-`This run’s template, adms_story_template_…: 101 migrations applied`, then **`Stories: 18 passed, 0
+`This run’s template, adms_story_template_…: 103 migrations applied`, then **`Stories: 18 passed, 0
 failed.`** Each story `passed: N checks, N passed, 0 failed`:
 
 | Story | Checks | | Story | Checks |
@@ -65,7 +65,7 @@ P1 $5,548.25 on 19 lines, P2 $324.00. `p1-reconciled` through `p1-left-out`, `p1
 
 `✓ 0 open advisories` (3 accepted by id); secretlint `0 found`; the installation's own secrets
 (8 values from 4 env files) `0 found`; a password-like setting `0 found`; env files `✓ every one
-ignored by git and untracked`; the grant tests **`43 files, 1021 tests: 1021 passed, 0 failed`**;
+ignored by git and untracked`; the grant tests **`43 files, 1026 tests: 1026 passed, 0 failed`**;
 ending **`Security checks: 7 passed, 0 failed.`**
 
 ## What the installation holds after a run

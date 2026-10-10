@@ -76,17 +76,24 @@ gets tracked on a spreadsheet."
 7. **The master passcode** (one per firm, set at install, changed only when the firm chooses; the
    server and each phone keep only a slow hash) can also **sign in as the phone's monitor**; that
    session and every record in it are marked. Every use is logged on the phone and synced as a
-   security event (ADR-106).
+   security event (ADR-106). **With a connection it is `POST /phones/current/passcode-sessions`
+   (ADR-462, agent defaults): the monitor's id from the phone's lists, `kind: 'AS_MONITOR'` and
+   the passcode, which the server checks itself. The answer is a sign-in's, with the session's
+   token and `masterPasscodeSession`; the server keeps the session marked, written as the
+   master passcode itself, and it lasts a monitor's own twelve hours.**
 8. **Switching monitors** needs **the master passcode first**; then the next monitor signs in with
    their own Monitor ID and password, so the server knows it's them. **Shortcut:** the master passcode
    opens a **temporary session** for a monitor picked from the roster, marked on every record and
-   ending at day end. An earlier monitor's unsynced work is **archived on the phone, still theirs,
+   ending at day end (**online, the same call with `kind: 'TEMPORARY'`: it ends at the end of
+   the project's day, by the project's time zone, or after twelve hours, whichever comes first;
+   ADR-462**). An earlier monitor's unsynced work is **archived on the phone, still theirs,
    hidden from the next monitor**, and synced in the background (ADR-095, 120). **A switch to a
    monitor who has no assignment makes a new unplanned assignment for them on the phone, reported
    as (5)'s is with `occasion: 'MONITOR_SWITCH'`** (ADR-458, agent defaults): the server records
    a phone switched and a use of the master passcode, naming the monitor switched to, at the
-   phone's own time. A switch to a monitor who has their own assignment makes none (its report:
-   task 2.5.4 part 4).
+   phone's own time. **A switch the server saves signs out whoever was signed in on that phone
+   before it, by the phone's clock, never the monitor switched to (ADR-462).** A switch to a
+   monitor who has their own assignment makes none (its report: task 2.5.4 part 5).
 9. **Moving site** is done on the phone, offline, with the master passcode, from the project's sites
    it holds, and is recorded; each record keeps the site it was made at (ADR-195). Switching and
    moving amend the phone's assignment. **A move makes a new unplanned assignment at the new

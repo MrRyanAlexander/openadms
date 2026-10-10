@@ -241,6 +241,8 @@ describe('a monitor signs in on a phone', () => {
         monitorNumber: lee.monitorNumber,
         name: 'Lee Morgan',
         expiresInSeconds: twelveHours,
+        // Her own sign-in: not a session under the master passcode (ADR-462).
+        masterPasscodeSession: null,
       });
     });
   });

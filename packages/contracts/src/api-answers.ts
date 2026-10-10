@@ -5,6 +5,7 @@ import {
   fieldEventKinds,
   incidentOffers,
   lookedUpAddressLongest,
+  masterPasscodeSessions,
   mileageSources,
   noAddressReasons,
   noAssignmentReasons,
@@ -108,6 +109,9 @@ export const errorCodes = [
   'MASTER_PASSCODE_REFUSED',
   // The phone was taken out of service: it hands over its work and does nothing new.
   'PHONE_OUT_OF_SERVICE',
+  // A session under the master passcode (ADR-462): the passcode was right, and the person it
+  // was to be opened for is no monitor in service.
+  'NOT_A_MONITOR',
 ] as const;
 
 export type ErrorCode = (typeof errorCodes)[number];
@@ -553,13 +557,25 @@ export const monitorSignedInAnswerSchema = z.strictObject({
 
 export type MonitorSignedInAnswer = z.infer<typeof monitorSignedInAnswerSchema>;
 
+// A session opened on a phone under the master passcode (ARCHITECTURE §7.2, §7.3; AC-02-42;
+// ADR-456 (5)(d), 462): what a monitor's own sign-in is answered, and which way it was opened,
+// as the phone's monitor or the temporary session. It is no sign-in of that monitor's: the
+// session is marked, and so is every record made in it.
+export const passcodeSessionOpenedAnswerSchema = monitorSignedInAnswerSchema.extend({
+  masterPasscodeSession: z.enum(masterPasscodeSessions),
+});
+
+export type PasscodeSessionOpenedAnswer = z.infer<typeof passcodeSessionOpenedAnswerSchema>;
+
 // The monitor signed in on a phone, as the server has them now, and how long their sign-in has
-// left. Never the token.
+// left. Never the token. `masterPasscodeSession`: how the session was opened where it was
+// opened under the master passcode (ADR-462), null on the monitor's own sign-in.
 export const phoneMonitorAnswerSchema = z.strictObject({
   userId: z.uuid(),
   monitorNumber: z.string().regex(/^M\d{6,}$/),
   name: z.string(),
   expiresInSeconds: z.number().int().min(0),
+  masterPasscodeSession: z.enum(masterPasscodeSessions).nullable(),
 });
 
 export type PhoneMonitorAnswer = z.infer<typeof phoneMonitorAnswerSchema>;

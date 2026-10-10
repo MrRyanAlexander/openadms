@@ -99,6 +99,10 @@ version, the 94 values the firm's lists start with, 98 audit records (ADR-302).
   answers first with another code. **Two refusals of one trigger are told apart by their words**
   in the test, or loosening one is hidden by the other. **An unplanned assignment** is written
   with `underThePasscode()` and the `unplanned` values of `assignments.test.ts`.
+- **A refusal another guard would also make is given its own case** (seen 2026-10-10, ADR-462):
+  the master passcode's actor stated from the back office is refused by a session's trigger
+  first, in that trigger's words; without that case, loosening the trigger's own check of the
+  source slipped.
 - A new table or guard adds its expectations to these tests in the same response: the grant, trigger
   and policy lists are exact, so an unexpected one fails.
 - **A bare copy fails one test by itself** (`configuration.test.ts`, "nobody but the logins may

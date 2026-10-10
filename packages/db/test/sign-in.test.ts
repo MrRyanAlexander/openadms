@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto';
 
 import { describe, expect, it } from 'vitest';
 
+import { masterPasscodeActorId } from '../src/master-passcode-actor.ts';
 import { systemActorId } from '../src/system-actor.ts';
 import { refusedBy } from './support/database.ts';
 import { eachTestRolledBack } from './support/lifecycle.ts';
@@ -408,6 +409,7 @@ describe('a session', () => {
       'device_id',
       'expires_at',
       'id',
+      'master_passcode_session',
       'refresh_token_hash',
       'revoked_at',
       'user_id',
@@ -473,6 +475,7 @@ describe('a session', () => {
           'device_id',
           'expires_at',
           'id',
+          'master_passcode_session',
           'refresh_token_hash',
           'revoked_at',
           'user_id',
@@ -674,6 +677,214 @@ describe('a monitor’s session on a phone (ADR-443)', () => {
     }
     await asAnaOnHerPhone();
     expect(await db.run(`UPDATE "session" SET "revoked_at" = now() WHERE "id" = $1`, [id])).toBe(1);
+  });
+});
+
+describe('a session opened under the master passcode (ADR-462)', () => {
+  const marked = `INSERT INTO "session" ("user_id", "refresh_token_hash", "expires_at", "device_id",
+      "master_passcode_session") VALUES ($1, $2, $3, $4, $5) RETURNING "id"::text`;
+  const ends = '2026-10-12T22:00:00Z';
+  const byThePasscode =
+    "A session under the master passcode is opened as the master passcode's actor, on that phone";
+  const byTheMonitor = "A monitor's session is opened by their own sign-in, on that phone";
+
+  // As the API writes an act under the master passcode: its own actor, for that phone.
+  async function underThePasscode(deviceId?: string): Promise<void> {
+    const { db, world } = tested;
+    await db.as('adms_api');
+    await db.actor(masterPasscodeActorId, 'DEVICE', { deviceId: deviceId ?? world.device });
+  }
+
+  it('AC-02-42 says which way it was opened, one of the two the release knows, and the audit log shows the master passcode opened it: never the monitor', async () => {
+    const { db, world } = tested;
+    expect(
+      await db.rows(`SELECT unnest(enum_range(NULL::master_passcode_session))::text AS kind`),
+    ).toEqual([{ kind: 'AS_MONITOR' }, { kind: 'TEMPORARY' }]);
+    await underThePasscode();
+    const ids: string[] = [];
+    for (const kind of ['AS_MONITOR', 'TEMPORARY']) {
+      const { id } = await db.one<{ id: string }>(marked, [
+        world.monitor,
+        sha256(kind),
+        ends,
+        world.device,
+        kind,
+      ]);
+      ids.push(id);
+      expect(
+        await db.one(
+          `SELECT "master_passcode_session"::text AS kind, "user_id"::text AS monitor,
+             "device_id"::text AS device FROM "session" WHERE "id" = $1`,
+          [id],
+        ),
+      ).toEqual({ kind, monitor: world.monitor, device: world.device });
+    }
+    expect(
+      (await db.refused(marked, [world.monitor, sha256('x'), ends, world.device, 'SUPERVISOR']))
+        .code,
+    ).toBe(refusedBy.badValue);
+    await db.as('adms_worker');
+    expect(
+      await db.rows(
+        `SELECT "operation"::text, "domain"::text, "actor_id"::text AS actor, "source"::text,
+           "device_id"::text AS device, "new_value" ->> 'master_passcode_session' AS kind
+         FROM "audit_record" WHERE "table_name" = 'session' AND "record_id" = ANY ($1)
+         ORDER BY "id"`,
+        [ids],
+      ),
+    ).toEqual(
+      ['AS_MONITOR', 'TEMPORARY'].map((kind) => ({
+        operation: 'INSERT',
+        domain: 'SECURITY',
+        actor: masterPasscodeActorId,
+        source: 'DEVICE',
+        device: world.device,
+        kind,
+      })),
+    );
+  });
+
+  it('is written as the master passcode’s actor for that phone and by nobody else: not the monitor, not an admin, not the passcode from the back office, with no phone or for another', async () => {
+    const { db, world } = tested;
+    await db.as('adms_api');
+    for (const [actorId, source, deviceId] of [
+      [world.monitor, 'DEVICE', world.device],
+      [world.admin, 'DEVICE', world.device],
+      [world.admin, 'BACK_OFFICE', ''],
+      [masterPasscodeActorId, 'BACK_OFFICE', world.device],
+      [masterPasscodeActorId, 'DEVICE', ''],
+      [masterPasscodeActorId, 'DEVICE', '00000000-0000-7000-8000-00000000abcd'],
+    ] as const) {
+      await db.actor(actorId, source, { deviceId });
+      const refusal = await db.refused(marked, [
+        world.monitor,
+        sha256(`${actorId}${source}${deviceId}`),
+        ends,
+        world.device,
+        'TEMPORARY',
+      ]);
+      expect([refusal.code, refusal.message], `${actorId} ${source} ${deviceId}`).toEqual([
+        refusedBy.grant,
+        byThePasscode,
+      ]);
+    }
+  });
+
+  it('ADR-456 (3)(d) nobody passes one off as the monitor’s own sign-in: the master passcode’s actor opens no unmarked session, and a monitor’s own sign-in opens no marked one', async () => {
+    const { db, world } = tested;
+    const onPhone = `INSERT INTO "session" ("user_id", "refresh_token_hash", "expires_at", "device_id")
+      VALUES ($1, $2, $3, $4) RETURNING "id"::text`;
+    await underThePasscode();
+    const unmarked = await db.refused(onPhone, [world.monitor, sha256('a'), ends, world.device]);
+    expect([unmarked.code, unmarked.message]).toEqual([refusedBy.grant, byTheMonitor]);
+    await db.actor(world.monitor, 'DEVICE', { deviceId: world.device });
+    const own = await db.refused(marked, [
+      world.monitor,
+      sha256('b'),
+      ends,
+      world.device,
+      'AS_MONITOR',
+    ]);
+    expect([own.code, own.message]).toEqual([refusedBy.grant, byThePasscode]);
+  });
+
+  it('is a session on a phone, for a monitor in service, on a phone in service: with no phone, for an admin, an archived monitor or a phone out of service it is refused', async () => {
+    const { db, world } = tested;
+    // With no phone: a back-office person's by the check, a monitor's by the phone's own rule.
+    await asTheApi();
+    const web = await db.refused(marked, [world.admin, sha256('a'), ends, null, 'TEMPORARY']);
+    expect(web.code).toBe(refusedBy.check);
+    expect(web.message).toContain('"session_master_passcode_session_check"');
+    const monitor = await db.refused(marked, [world.monitor, sha256('b'), ends, null, 'TEMPORARY']);
+    expect([monitor.code, monitor.message]).toEqual([
+      refusedBy.trigger,
+      'A monitor signs in on a phone only: their session names the phone',
+    ]);
+    await underThePasscode();
+    const admin = await db.refused(marked, [
+      world.admin,
+      sha256('c'),
+      ends,
+      world.device,
+      'TEMPORARY',
+    ]);
+    expect([admin.code, admin.message]).toEqual([
+      refusedBy.trigger,
+      'Only a monitor in service signs in on a phone',
+    ]);
+    await asTheApi();
+    await db.run(`UPDATE "user" SET "archived_at" = '2026-10-12T09:00:00Z' WHERE "id" = $1`, [
+      world.monitor,
+    ]);
+    await underThePasscode();
+    const archived = await db.refused(marked, [
+      world.monitor,
+      sha256('d'),
+      ends,
+      world.device,
+      'TEMPORARY',
+    ]);
+    expect([archived.code, archived.message]).toEqual([
+      refusedBy.trigger,
+      'Only a monitor in service signs in on a phone',
+    ]);
+    await asTheApi();
+    await db.run(`UPDATE "user" SET "archived_at" = NULL WHERE "id" = $1`, [world.monitor]);
+    await db.run(
+      `UPDATE "device" SET "status" = 'LOST', "out_of_service_at" = '2026-10-12T09:30:00Z'
+       WHERE "id" = $1`,
+      [world.device],
+    );
+    await underThePasscode();
+    const lost = await db.refused(marked, [
+      world.monitor,
+      sha256('e'),
+      ends,
+      world.device,
+      'TEMPORARY',
+    ]);
+    expect([lost.code, lost.message]).toEqual([
+      refusedBy.trigger,
+      'A phone out of service signs nobody in',
+    ]);
+  });
+
+  it('how a session was opened never changes: a marked one is never unmarked or made the other kind, and a monitor’s own is never marked; it ends when revoked, by the monitor too', async () => {
+    const { db, world } = tested;
+    await underThePasscode();
+    const { id } = await db.one<{ id: string }>(marked, [
+      world.monitor,
+      sha256(aToken),
+      ends,
+      world.device,
+      'TEMPORARY',
+    ]);
+    await db.actor(world.monitor, 'DEVICE', { deviceId: world.device });
+    const own = await db.one<{ id: string }>(
+      `INSERT INTO "session" ("user_id", "refresh_token_hash", "expires_at", "device_id")
+       VALUES ($1, $2, $3, $4) RETURNING "id"::text`,
+      [world.monitor, sha256('own'), ends, world.device],
+    );
+    await underThePasscode();
+    for (const [session, to] of [
+      [id, null],
+      [id, 'AS_MONITOR'],
+      [own.id, 'TEMPORARY'],
+    ] as const) {
+      const refusal = await db.refused(
+        `UPDATE "session" SET "master_passcode_session" = $2::master_passcode_session
+         WHERE "id" = $1`,
+        [session, to],
+      );
+      expect(refusal.code, `${session} ${String(to)}`).toBe(refusedBy.trigger);
+    }
+    // Signing out is the monitor's; one more session under the passcode ends the others.
+    await db.actor(world.monitor, 'DEVICE', { deviceId: world.device });
+    expect(await db.run(`UPDATE "session" SET "revoked_at" = now() WHERE "id" = $1`, [id])).toBe(1);
+    await underThePasscode();
+    expect(
+      await db.run(`UPDATE "session" SET "revoked_at" = now() WHERE "id" = $1`, [own.id]),
+    ).toBe(1);
   });
 });
 

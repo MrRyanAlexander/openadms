@@ -105,6 +105,7 @@ export class PhoneSignInsController {
       monitorNumber: monitor.monitorNumber,
       name: monitor.name,
       expiresInSeconds: this.signIns.secondsLeft(monitor.expiresAt),
+      masterPasscodeSession: monitor.masterPasscodeSession,
     });
   }
 }

@@ -9670,6 +9670,207 @@
         }
       }
     },
+    "/phones/current/passcode-sessions": {
+      "post": {
+        "operationId": "openPasscodeSessionOnPhone",
+        "summary": "A session is opened on an enrolled phone under the firm’s master passcode, for a monitor in service: as the phone’s monitor, or the temporary session for a monitor picked from the roster. The answer is what a monitor’s own sign-in is answered (the session’s token for the x-adms-monitor-session header, how long it lasts, the assignment the phone takes or why none) and which way it was opened. The session is marked as the master passcode’s and is no sign-in of the monitor’s. Neither lasts longer than a monitor’s own sign-in; the temporary one also ends at the end of the day of the project whose assignment the phone takes, by that project’s time zone. Any other session on the phone ends. Open to a phone in service that has proved itself, by its token. A passcode that isn’t taken is refused by one code; wrong tries count as they do when a phone is enrolled.",
+        "x-open-adms-access": "PROVEN_PHONE",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "personId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": ["AS_MONITOR", "TEMPORARY"]
+                  },
+                  "passcode": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  }
+                },
+                "required": ["personId", "kind", "passcode"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "token": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "userId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "monitorNumber": {
+                      "type": "string",
+                      "pattern": "^M\\d{6,}$"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "expiresInSeconds": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
+                    },
+                    "assignment": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "workDate": {
+                              "type": "string",
+                              "format": "date",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                            },
+                            "project": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "timeZone": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["id", "name", "timeZone"],
+                              "additionalProperties": false
+                            },
+                            "fieldEventKinds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "COLLECTION",
+                                  "DISPOSAL",
+                                  "HAUL_OUT_COLLECTION",
+                                  "HAUL_OUT_DISPOSAL",
+                                  "UNIT_RATE"
+                                ]
+                              }
+                            },
+                            "certifying": {
+                              "type": "boolean"
+                            },
+                            "formDocumentTypes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "enum": ["ROE", "SURVEY", "INCIDENT", "DROP_OFF_LOG"]
+                              }
+                            },
+                            "site": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string",
+                                      "format": "uuid",
+                                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                    },
+                                    "name": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": ["id", "name"],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "workDate",
+                            "project",
+                            "fieldEventKinds",
+                            "certifying",
+                            "formDocumentTypes",
+                            "site"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "noAssignment": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": ["NONE_THAT_DAY", "SEVERAL_THAT_DAY"]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "masterPasscodeSession": {
+                      "type": "string",
+                      "enum": ["AS_MONITOR", "TEMPORARY"]
+                    }
+                  },
+                  "required": [
+                    "token",
+                    "userId",
+                    "monitorNumber",
+                    "name",
+                    "expiresInSeconds",
+                    "assignment",
+                    "noAssignment",
+                    "masterPasscodeSession"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/phones/current/sign-outs": {
       "post": {
         "operationId": "signOutOnPhone",
@@ -9736,9 +9937,26 @@
                       "type": "integer",
                       "minimum": 0,
                       "maximum": 9007199254740991
+                    },
+                    "masterPasscodeSession": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": ["AS_MONITOR", "TEMPORARY"]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   },
-                  "required": ["userId", "monitorNumber", "name", "expiresInSeconds"],
+                  "required": [
+                    "userId",
+                    "monitorNumber",
+                    "name",
+                    "expiresInSeconds",
+                    "masterPasscodeSession"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -20635,7 +20853,8 @@
               "DEVICE_KEY_REFUSED",
               "PHONE_NOT_PROVEN",
               "MASTER_PASSCODE_REFUSED",
-              "PHONE_OUT_OF_SERVICE"
+              "PHONE_OUT_OF_SERVICE",
+              "NOT_A_MONITOR"
             ]
           },
           "requestId": {

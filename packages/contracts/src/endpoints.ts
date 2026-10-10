@@ -11,6 +11,7 @@ import {
   crewTimeConversions,
   fieldEventKinds,
   incidentOffers,
+  masterPasscodeSessions,
   measuredAs,
   numberSeries,
   permissions,
@@ -34,6 +35,7 @@ import {
   phoneChallengeAnswerSchema,
   monitorCreatedAnswerSchema,
   monitorSignedInAnswerSchema,
+  passcodeSessionOpenedAnswerSchema,
   phoneAddressLookupAnswerSchema,
   phoneListsAnswerSchema,
   phoneLoginListAnswerSchema,
@@ -1566,6 +1568,31 @@ export const signInOnPhoneEndpoint = endpoint({
   answer: monitorSignedInAnswerSchema,
 });
 
+// A session opened on a phone under the firm's master passcode, with a connection (ARCHITECTURE
+// §7.2, §7.3, §7.5; AC-02-42; ADR-095, 106, 120, 456 (5)(d), 462). The call is a proven phone's,
+// in service, and carries the passcode, checked by the one check every act under it shares: a
+// wrong one counts as at enrolment and is refused by the same one code. It is opened for a
+// monitor in service, named by their id as the phone's lists give it, one of two ways: as the
+// phone's monitor, in place of their own password; or the temporary session for a monitor
+// picked from the roster when a phone changes hands, which also ends with the project's day.
+// It is no sign-in of that monitor's: whoever holds the passcode is not known, so the session
+// is marked and the record names the master passcode itself, on that phone. Its token is sent
+// as a monitor's own is. The limits here only bound what is read.
+export const openPasscodeSessionOnPhoneEndpoint = endpoint({
+  name: 'openPasscodeSessionOnPhone',
+  summary:
+    'A session is opened on an enrolled phone under the firm’s master passcode, for a monitor in service: as the phone’s monitor, or the temporary session for a monitor picked from the roster. The answer is what a monitor’s own sign-in is answered (the session’s token for the x-adms-monitor-session header, how long it lasts, the assignment the phone takes or why none) and which way it was opened. The session is marked as the master passcode’s and is no sign-in of the monitor’s. Neither lasts longer than a monitor’s own sign-in; the temporary one also ends at the end of the day of the project whose assignment the phone takes, by that project’s time zone. Any other session on the phone ends. Open to a phone in service that has proved itself, by its token. A passcode that isn’t taken is refused by one code; wrong tries count as they do when a phone is enrolled.',
+  access: 'PROVEN_PHONE',
+  method: 'POST',
+  path: '/phones/current/passcode-sessions',
+  body: z.strictObject({
+    personId: z.uuid(),
+    kind: z.enum(masterPasscodeSessions),
+    passcode: z.string().min(1).max(4096),
+  }),
+  answer: passcodeSessionOpenedAnswerSchema,
+});
+
 export const signOutOnPhoneEndpoint = endpoint({
   name: 'signOutOnPhone',
   summary:
@@ -2475,6 +2502,7 @@ export const endpoints: readonly Endpoint[] = [
   provenPhoneEndpoint,
   createMonitorOnPhoneEndpoint,
   signInOnPhoneEndpoint,
+  openPasscodeSessionOnPhoneEndpoint,
   signOutOnPhoneEndpoint,
   phoneMonitorEndpoint,
   phoneListsEndpoint,

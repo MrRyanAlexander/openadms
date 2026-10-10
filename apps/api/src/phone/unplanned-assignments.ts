@@ -29,6 +29,11 @@
 //   it could take is a new one for them: `DEVICE_SWITCH`, naming the monitor switched to.
 //   Nothing the board planned is changed from a phone; the monitor's sign-in then takes the one
 //   made on the phone last (the domain's `takenAtSignIn`).
+// - **A switch saved ends the earlier monitor's session on that phone** (ARCHITECTURE §7.2, one
+//   monitor at a time; OWASP ASVS 5.0 7.4.1; ADR-462): every session on the phone that isn't the
+//   monitor's it was switched to and was opened before the switch, by the phone's clock. One
+//   opened since stands, and so does the next monitor's own: a report that arrives late ends
+//   nothing that came after it. A setup or a move ends none.
 import { underMasterPasscode, type Database, type Prisma } from '@open-adms/db';
 import {
   AssignmentRules,
@@ -180,6 +185,17 @@ export class UnplannedAssignments {
           ...(requestId ? { requestId } : {}),
         },
         select: { id: true },
+      });
+    }
+    if (reported.occasion === 'MONITOR_SWITCH') {
+      await tx.session.updateMany({
+        where: {
+          deviceId,
+          revokedAt: null,
+          userId: { not: reported.personId },
+          createdAt: { lt: reported.madeAt },
+        },
+        data: { revokedAt: this.parts.clock.now() },
       });
     }
     return { answer: 'SAVED', workDate };
