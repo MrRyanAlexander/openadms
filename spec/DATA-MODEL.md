@@ -1426,6 +1426,23 @@ The numbered lists a phone was sent, kept so a reviewer sees what the phone show
 | **content** | *open* | |
 | **builtAt** | instant | |
 
+**As built (ADR-453, task 2.5.3 part 3; agent defaults).** **A version numbers the project's
+setup as its phones are shown it**, whole for the project: the control ranges, the load and
+haul-out forms' debris types without those *Hidden on phones*, the field tags, the reasons for a
+typed number, the live sites, every unit rate pay item with its capture settings, the item
+names, the incident and survey lists, and every live site's quantity lookup. `content` is that,
+as sent (an object; the contracts' `setupShownSchema`). **Never a rate, a rule or a load's pay
+item, and not the certifications, the ROEs or a phone's blocks of numbers**: those are records
+with their own history, and a new one makes no version. A phone's lists are its assignment's
+part of the version, so a field event's `assignmentId` and `setupVersion` together say what its
+phone showed. **Made when a phone is first sent lists that differ from the newest version's**,
+written by the API as the device key's actor on that phone, and at no other time. `version` is
+1, 2, 3… per project with no gap and unique with `projectId`; the database refuses a number out
+of turn, a version whose content is the newest's, one made other than as a phone's write naming
+the phone, and any edit or delete; audited in the records domain. The worker and the read-only
+viewers read none. A field event's `setupVersion` is not held to it by a foreign key: it is
+what the phone said. `Sync.setupVersionSent` is task 2.6.2's.
+
 ---
 
 ## 5. Derived: the worker's conclusions

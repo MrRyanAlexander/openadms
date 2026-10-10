@@ -139,8 +139,12 @@ field tags, reasons, the unit rate pay items and the incident and survey lists (
 and (ADR-451, agent defaults) the certifications (never the driver), the sites by name and use,
 the ROEs by number, address and parcel with whether the pre-work survey is done (never the
 owner; only for a phone whose work names an ROE), the control ranges, the pay items' capture
-settings and the site's quantity lookup. Still to come: the setup version, the login list and
-the master passcode's check.
+settings and the site's quantity lookup; and (ADR-453, agent defaults) **the setup version**:
+the lists say which version of the project's setup they are (`setupVersion`, from 1). A version
+numbers what the project's phones are shown of its setup, never its certifications, ROEs or a
+phone's numbers; a new one is made only when a phone is first sent lists that differ; the back
+office can ask a site's quantity lookup as any version held it. Still to come: the login list
+and the master passcode's check.
 
 - **Never on a phone: rates, rules, or a load's pay items.** No phone knows which pay item a load is
   paid at: its mileage, so its pay item, is known only after sync (ADR-221, 223).

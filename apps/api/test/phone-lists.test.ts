@@ -17,13 +17,14 @@ import {
   monitorSignedInAnswerSchema,
   phoneListsAnswerSchema,
   phoneListsEndpoint,
+  setupShownSchema,
   siteQuantityLookupEndpoint,
   startNumberSeriesEndpoint,
   withdrawAssignmentEndpoint,
   writeAssignmentEndpoint,
   type PhoneListsAnswer,
 } from '@open-adms/contracts';
-import type { Database } from '@open-adms/db';
+import { deviceKeyActorId, type Database } from '@open-adms/db';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { Certifications } from '../src/certification/certifications.ts';
@@ -124,13 +125,13 @@ async function leeOnP1(served: Served, tx: Tx, more: object = {}) {
 }
 
 describe('the lists a phone takes', () => {
-  it('AC-02-37 (in part), AC-01-26, AC-07-91 Lee Morgan’s phone reads the lists of the assignment it took: the load form’s debris types without C&D, which is Hidden on phones; the field tags; the unit rate pay item the assignment names and not the project’s other; never a rate, a load’s pay item or its code; and reading them writes nothing', async () => {
+  it('AC-02-37 (in part), AC-01-26, AC-07-91 Lee Morgan’s phone reads the lists of the assignment it took: the load form’s debris types without C&D, which is Hidden on phones; the field tags; the unit rate pay item the assignment names and not the project’s other; never a rate, a load’s pay item or its code; they are the project’s setup version 1, made by this first read and by no read after it', async () => {
     // The exact list of what a monitor's phone may call: a new one is added here on purpose.
     expect(
       endpoints.filter(({ access }) => access === 'MONITOR_ON_PHONE').map(({ name }) => name),
     ).toEqual(['signOutOnPhone', 'phoneMonitor', 'phoneLists']);
     await world(async (served, tx) => {
-      const { priced, token, signIn, assigned, onLoadForm, tagged, entered } = await leeOnP1(
+      const { priced, phone, token, signIn, assigned, onLoadForm, tagged, entered } = await leeOnP1(
         served,
         tx,
       );
@@ -143,6 +144,8 @@ describe('the lists a phone takes', () => {
         priced.each('HNG-RMV-EA', 'Hanger removal', 'Hangers', '68.00'),
       );
       await entered(priced.each('LNR-RMV-EA', 'Leaner removal', 'Leaners', '95.00'));
+      // White goods have item names (Refrigerator…); Lee's day names no white goods.
+      await entered(priced.each('WG-RMV-EA', 'White good removed', 'White Goods', '45.00'));
       const assignment = await assigned({
         fieldEventKinds: ['COLLECTION', 'UNIT_RATE'],
         payItemIds: [hangers],
@@ -156,6 +159,7 @@ describe('the lists a phone takes', () => {
       // The assignment is the one the sign-in was answered, told the same way.
       expect([held.assignment, held.noAssignment]).toEqual([signedIn.assignment, null]);
       expect(held.lists).toEqual({
+        setupVersion: 1,
         blocks: [],
         controlRanges: [],
         debrisTypes: { LOAD: [{ id: vegetative.id, name: 'Vegetative' }], HAUL_OUT: [] },
@@ -183,7 +187,8 @@ describe('the lists a phone takes', () => {
             quantityFromCarriedTickets: false,
           },
         ],
-        itemNames: held.lists?.itemNames,
+        // Hangers have no item names, and no other kind of work's are sent.
+        itemNames: [],
         // The assignment makes no incident and no survey: their lists stay off the phone.
         incidentTypes: [],
         incidentOffers: [],
@@ -199,8 +204,11 @@ describe('the lists a phone takes', () => {
         '68.00',
         '95.00',
         '7.50',
+        '45.00',
         'VEG-HAUL-CY-15',
         'LNR-RMV-EA',
+        'WG-RMV-EA',
+        'Washer',
         'Leaner',
         'Hanger removal',
         'Coastline',
@@ -210,11 +218,33 @@ describe('the lists a phone takes', () => {
       }
       // No field of the answer is named for one either.
       expect(answer.text).not.toMatch(/"\w*(rate|rule|transaction|price|amount)\w*":/i);
-      // Reading is a read: no audit record carries the request.
-      expect(await tx.auditRecord.count({ where: { requestId: answer.requestId } })).toBe(0);
+      // The one thing the read wrote is the setup version these lists are (ADR-453): the
+      // project's first, made for this phone by the device key's actor, never by Lee.
+      expect(
+        (await tx.auditRecord.findMany({ where: { requestId: answer.requestId } })).map(
+          ({ tableName, operation, actorId, source, deviceId, domain }) => [
+            tableName,
+            operation,
+            actorId,
+            source,
+            deviceId,
+            domain,
+          ],
+        ),
+      ).toEqual([['setup_manifest', 'INSERT', deviceKeyActorId, 'DEVICE', phone.id, 'RECORDS']]);
+      // Asked again with nothing changed, the lists are the same version and nothing is written.
+      const again = await lists(served, token, signedIn.token);
+      expect(phoneListsAnswerSchema.parse(again.body).lists).toEqual(held.lists);
+      expect(await tx.auditRecord.count({ where: { requestId: again.requestId } })).toBe(0);
+      expect(
+        (await tx.setupManifest.findMany({ where: { projectId: priced.ids.projectId } })).map(
+          ({ version }) => version,
+        ),
+      ).toEqual([1]);
       // The log names ids and never the monitor or what the lists hold.
       const log = served.lines.join('\n');
       expect(log).toContain('A phone read its lists.');
+      expect(log).toContain('"setupVersion":1');
       for (const never of ['Lee Morgan', 'HNG-RMV-EA', signedIn.token, token]) {
         expect(log.includes(never), never).toBe(false);
       }
@@ -275,6 +305,8 @@ describe('the lists a phone takes', () => {
       const second = phoneListsAnswerSchema.parse(answer.body);
       const rivera = await tx.contractor.findFirstOrThrow({ where: { name: 'Rivera Trucking' } });
       // 240 × 90 × 60 = 1,296,000 cu in ÷ 46,656 = 27.78 → 28 CY.
+      // A new certification is a record, not a change to the setup: the version stands.
+      expect([first.lists?.setupVersion, second.lists?.setupVersion]).toEqual([1, 1]);
       expect(second.lists?.certifications).toEqual([
         {
           id: trailer.id,
@@ -325,7 +357,7 @@ describe('the lists a phone takes', () => {
     });
   });
 
-  it('AC-02-37 (in part), AC-07-91 a tower’s phone holds the project’s sites by name with what each is for, and its own site’s quantity lookup: at Cypress Creek Landfill, where Coastline’s Vegetative loads are paid per ton, the scale weight; no row for C&D, which is Hidden on phones; never the fee, the rule, the pay item or its rate; a phone at no site holds the sites and no lookup', async () => {
+  it('AC-02-37 (in part), AC-07-91 a tower’s phone holds the project’s sites by name with what each is for, and its own site’s quantity lookup: at Cypress Creek Landfill, where Coastline’s Vegetative loads are paid per ton, the scale weight; no row for C&D, which is Hidden on phones; never the fee, the rule, the pay item or its rate; a phone at no site holds the sites and no lookup; AC-05-48, REQ-124f once the rule is switched off the lists are setup version 2 and ask for the load call, and the back office reads the site’s lookup as each version’s phones held it', async () => {
     await world(async (served, tx) => {
       const { dana, priced, token, signIn, assigned, onLoadForm, entered } = await leeOnP1(
         served,
@@ -376,7 +408,7 @@ describe('the lists a phone takes', () => {
           rates: [{ primeId: priced.coastline, rate: '31.25' }],
         }),
       );
-      saved(
+      const byTheTon = saved(
         createRuleEndpoint,
         await ask(served, dana, createRuleEndpoint, {
           ids: priced.ids,
@@ -392,7 +424,7 @@ describe('the lists a phone takes', () => {
             actions: [{ kind: 'ADD_TRANSACTION', slot: 1, payItemId: perTon }],
           },
         }),
-      );
+      ).record;
       const tower = await assigned({ fieldEventKinds: ['DISPOSAL'], siteId: cypress.id });
       const session = (await signIn()).token;
       const answer = await lists(served, token, session);
@@ -455,9 +487,35 @@ describe('the lists a phone takes', () => {
       expect(answer.text).not.toMatch(
         /"\w*(rate|rule|transaction|price|amount|fee|permit|latitude|ineligible)\w*":/i,
       );
-      expect(await tx.auditRecord.count({ where: { requestId: answer.requestId } })).toBe(0);
+      // The version kept is what the project's phones are shown, whole, and holds none of it
+      // either: nor a certification, an ROE or a phone's numbers (ADR-453).
+      expect(held.lists?.setupVersion).toBe(1);
+      const versions = async () =>
+        (
+          await tx.setupManifest.findMany({
+            where: { projectId: priced.ids.projectId },
+            orderBy: { version: 'asc' },
+          })
+        ).map(({ version, content }) => ({ version, kept: JSON.stringify(content) }));
+      const [first] = await versions();
+      for (const never of [
+        '31.25',
+        'VEG-DISP-TN',
+        'per ton',
+        'by the ton',
+        'FDEP',
+        '39.09',
+        'C&D',
+      ]) {
+        expect(first?.kept.includes(never), never).toBe(false);
+      }
+      expect(first?.kept).not.toMatch(
+        /"\w*(rate|rule|transaction|price|amount|fee|permit|latitude|ineligible|cert|roe|block)\w*":/i,
+      );
+      expect(Object.keys(setupShownSchema.parse(JSON.parse(first?.kept ?? '')))).toHaveLength(12);
 
-      // The board moves Lee to the curb: the sites stay, the lookup goes.
+      // The board moves Lee to the curb: the sites stay, the lookup goes. The project's setup
+      // is as it was, so the version is too.
       await tx.assignment.update({
         where: { id: tower.id },
         data: { siteId: null, fieldEventKinds: ['COLLECTION'] },
@@ -467,7 +525,59 @@ describe('the lists a phone takes', () => {
         'Cypress Creek Landfill',
         'Marsh Road TDSR',
       ]);
-      expect(atTheCurb.lists?.quantityLookup).toEqual([]);
+      expect([atTheCurb.lists?.quantityLookup, atTheCurb.lists?.setupVersion]).toEqual([[], 1]);
+
+      // Dana switches the rule off: nothing pays Cypress Creek's loads by the ton, so its
+      // tower asks for the load call. Lee, back at the tower, is sent setup version 2.
+      await tx.rule.update({ where: { id: byTheTon.id }, data: { active: false } });
+      await tx.assignment.update({
+        where: { id: tower.id },
+        data: { siteId: cypress.id, fieldEventKinds: ['DISPOSAL'] },
+      });
+      const afterwards = await read(served, token, session);
+      const row = { form: 'LOAD', debrisTypeId: vegetative.id, primeId: priced.coastline };
+      expect([afterwards.lists?.setupVersion, afterwards.lists?.quantityLookup]).toEqual([
+        2,
+        [{ ...row, asks: 'LOAD_CALL' }],
+      ]);
+      expect((await versions()).map(({ version }) => version)).toEqual([1, 2]);
+      // A reviewer reading a disposal recorded under version 1 asks what the tower's phone
+      // asked from then: the weight, as kept, though the setup now says the load call.
+      const under = async (setupVersion: string) =>
+        ask(served, dana, siteQuantityLookupEndpoint, {
+          ids: { siteId: cypress.id },
+          query: `?setupVersion=${setupVersion}`,
+        });
+      expect(saved(siteQuantityLookupEndpoint, await under('1')).asks).toEqual([
+        { siteId: cypress.id, ...row, asks: 'SCALE_WEIGHT' },
+      ]);
+      expect(saved(siteQuantityLookupEndpoint, await under('2')).asks).toEqual([
+        { siteId: cypress.id, ...row, asks: 'LOAD_CALL' },
+      ]);
+      // Marsh Road's phones were shown its own rows under the same version.
+      expect(
+        saved(
+          siteQuantityLookupEndpoint,
+          await ask(served, dana, siteQuantityLookupEndpoint, {
+            ids: { siteId: marshRoad.id },
+            query: '?setupVersion=1',
+          }),
+        ).asks,
+      ).toEqual([{ siteId: marshRoad.id, ...row, asks: 'LOAD_CALL' }]);
+      // A version the project never had is not found; what is no version number is refused.
+      expect(told(await under('3'))).toEqual([404, 'NOT_FOUND']);
+      for (const not of ['0', '-1', 'two', '1.5', '']) {
+        expect(told(await under(not)), not).toEqual([400, 'BAD_REQUEST']);
+      }
+      // No phone asks the back office's question.
+      expect(
+        told(
+          await served.ask('GET', `/sites/${cypress.id}/quantity-lookup?setupVersion=1`, {
+            bearer: token,
+            monitorSession: session,
+          }),
+        ),
+      ).toEqual([401, 'NOT_SIGNED_IN']);
     });
   });
 
@@ -598,6 +708,9 @@ describe('the lists a phone takes', () => {
       expect(second.assignment?.id).toBe(assignment.id);
       expect(second.lists?.fieldTags).toEqual([{ id: mixed.id, name: 'Mixed' }]);
       expect([second.lists?.payItems, second.lists?.itemNames]).toEqual([[], []]);
+      // The field tag is a change to what P1's phones are shown: a new setup version. A pay
+      // item taken off one person's day is the board's, and by itself would have made none.
+      expect([first.lists?.setupVersion, second.lists?.setupVersion]).toEqual([1, 2]);
 
       saved(
         withdrawAssignmentEndpoint,

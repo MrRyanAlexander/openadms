@@ -81,7 +81,6 @@ export const ticket101001: Story = {
       monitorId: setup.ana,
       assignmentId: await taken(story, ana, setup.collectionPhone.id),
       projectId: setup.p1,
-      setupVersion: 1,
       lists: await story.lists.held({
         assignmentId: setup.collections,
         deviceId: setup.collectionPhone.id,
@@ -95,7 +94,7 @@ export const ticket101001: Story = {
       assignmentId: await taken(story, kim, setup.towerPhone.id),
       projectId: setup.p1,
       siteId: setup.tdsr,
-      setupVersion: 1,
+      lists: await story.lists.held({ assignmentId: setup.tower, deviceId: setup.towerPhone.id }),
       timeZone,
     });
 
@@ -234,7 +233,7 @@ export const ticket101001: Story = {
       [['user', 'user', 'user', 'master_passcode'], 94, 15],
     );
     story.check(
-      'and then holds exactly the two phones’ enrolments under the master passcode (each the phone and the security event of the passcode’s use), Dana’s twenty setup rows (the client, the declaration event, P1, its five number series and its five kinds of unit rate work, Coastline, its place as P1’s prime and its contract among them), the two monitors created on a phone under the master passcode (each the person, their sign-in record and the security event of the passcode’s use), the board’s two assignments, the block Ana’s phone took (the series moved on, the block cut), the two sign-ins (each a security event and a session) and the two syncs',
+      'and then holds exactly the two phones’ enrolments under the master passcode (each the phone and the security event of the passcode’s use), Dana’s twenty setup rows (the client, the declaration event, P1, its five number series and its five kinds of unit rate work, Coastline, its place as P1’s prime and its contract among them), the two monitors created on a phone under the master passcode (each the person, their sign-in record and the security event of the passcode’s use), the board’s two assignments, the block Ana’s phone took (the series moved on, the block cut), the two sign-ins (each a security event and a session), P1’s setup version 1, made when Ana’s phone was first sent its lists and by nothing Kim’s read after it (ADR-453), and the two syncs',
       audit.slice(afterSeed).map((record) => [record.tableName, record.source]),
       [
         ['device', 'DEVICE'],
@@ -272,6 +271,7 @@ export const ticket101001: Story = {
         ['number_block', 'DEVICE'],
         ['security_event', 'DEVICE'],
         ['session', 'DEVICE'],
+        ['setup_manifest', 'DEVICE'],
         ['security_event', 'DEVICE'],
         ['session', 'DEVICE'],
         ['field_event', 'DEVICE'],

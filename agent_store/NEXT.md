@@ -89,7 +89,7 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-09, through ADR-452)
+### Where things stand (2026-10-09, through ADR-453)
 - **Phase 2 (API and sync) is open (ADR-376): 20 of its 32 tasks are done** (`BACKLOG.md`,
   "Active — Phase 2", ticks each with its ADRs). Complete: Milestone 2.1 (the API as a process,
   the boundary, time limits and policy), 2.2 (sign-in: its records, passwords, sessions, two-step
@@ -97,8 +97,8 @@ of `DECISIONS.md`.
   queues work) and 2.4 (the services behind endpoints: setup, dispatch and phones, review and
   certifications, the read-only viewer's path). Of 2.5 (phones): 2.5.1 (enrolment and a phone's
   proof of itself, ADR-436…440) and 2.5.2 (monitors on phones: created, signed in, and the
-  assignment a phone takes, ADR-441…444) are done; **2.5.3 (the lists a phone takes) is cut in five (ADR-449) and its parts 1 and 2 are done
-  (ADR-450, 451)**; its part 3 is next. **The user approved ARCHITECTURE §7.2's notes on signing in
+  assignment a phone takes, ADR-441…444) are done; **2.5.3 (the lists a phone takes) is cut in five (ADR-449) and its parts 1 to 3 are done
+  (ADR-450, 451, 453)**; its part 4 is next. **The user approved ARCHITECTURE §7.2's notes on signing in
   online and taking the assignment (ADR-452).**
 - **Where each thing is written, so nothing is read twice:** a rule as it stands, with its ADR:
   `SUMMARY.md`, by topic (grep its `###` headings; never read it whole). What a finished task left
@@ -125,8 +125,8 @@ of `DECISIONS.md`.
   phone's token and `x-adms-monitor-session`, read with `monitorOf(request)`); the sign-in's own
   answer carries the assignment the phone takes, or `noAssignment`; **the phone reads its lists by
   `GET /phones/current/lists`** (`PhoneLists`, `apps/api/src/phone/phone-lists.ts`: the sign-in's rule
-  asked again, then that assignment's lists; everything but the setup version, the login list and the master
-  passcode's check). What is written under the
+  asked again, then that assignment's lists and the setup version they are, `SetupVersions`,
+  ADR-453; everything but the login list and the master passcode's check). What is written under the
   master passcode names its own actor (`underMasterPasscode`), a proof's the device key's
   (`byDeviceKey`). The code is `apps/api/src/phone/`. **No story and no test writes a phone or a
   monitor by hand:** a story uses `story.enrolled`, `story.proofs`, `story.monitor`,
@@ -148,7 +148,7 @@ of `DECISIONS.md`.
   `installationPolicy({ … })`.
 - **Phase 1 is done:** all seven exit criteria met (ADR-371, 372); 693 of the 708 scenarios with a
   Phase 1 part proven whole, 15 in part. 48 scenario rows name Phase 2 (37 as "API (Phase 2)").
-- **The chain** was seen whole on 2026-10-09 after ADR-451. Its counts
+- **The chain** was seen whole on 2026-10-09 after ADR-453. Its counts
   are `agent_store/CHAIN.md`'s; what each command proves is `adms-verify`'s. **Start with `pnpm
   ready`**; the stories run once, in `pnpm scenarios`; run `pnpm security` after `pnpm test`.
 - **What exists:** `packages/db` (schema, guards, tests), `packages/domain` (every rule; one
@@ -307,20 +307,21 @@ questions.
 **Phase 2 is open (ADR-376). Its plan is `BACKLOG.md`, "Active — Phase 2" (ADR-377): read its
 brief first. One task per response.**
 
-**Task 2.5.3, part 3 of 5: `SetupManifest` and the setup version** *(a schema change; BACKLOG
-2.5.3, C117's "Part 3" and C118; ADR-449 (4), 450, 451; read `spec/DATA-MODEL.md` §4.5,
-ARCHITECTURE §7.1's lists notes and §9, `adms-field-app` §4A.2a, `apps/api/src/phone/phone-lists.ts`,
-`schema-and-migrations.md` beside the `adms-verify` skill, and how a story's phone states
-`setupVersion: 1` by hand (`packages/scenarios/src/device.ts`) first)*. Decide and record: what a
-version numbers (the project's setup alone, or everything a phone is sent, which now moves with
-each new ROE and certification), when a new `SetupManifest` row is made (a read that writes, or
-each setup change) and which actor its record names; the lists' answer carries the version, every
-field event already records one, and the site's quantity lookup can be asked by setup version
-(REQ-124f's server half). The new table is guarded and its grants tested. Then part 4 (the login
-list and the master passcode's check: **read the user's reply to ADR-449 (5) first**; none in
-the files means it is built as proposed) and part 5 (the address lookup).
-**The user may still overturn ADR-451's and ADR-450's defaults, ADR-449 (5)'s proposals,
-ADR-442's, ADR-440's, ADR-438's two choices or ADR-439's (`SUMMARY.md` §4).**
+**Task 2.5.3, part 4 of 5: the login list and the master passcode's check** *(BACKLOG 2.5.3,
+C117's "Part 4", C119; ADR-449 (3), (5); **read the user's reply to ADR-449 (5) first, in
+`SUMMARY.md` §4 and `DECISIONS.md`: none in the files means it is built as proposed**; read
+ARCHITECTURE §7.1, §7.2 and §7.4, `adms-field-app` §4A, AC-02-41, `apps/api/src/phone/phone-lists.ts`,
+`master-passcode-check.ts`, how a password is kept (ADR-411, 412) and, for a new secret column,
+`schema-and-migrations.md` beside the `adms-verify` skill first)*. An offline seed kept when a
+monitor's password is set (sealed, out of the audit log); a phone's entry made from it under a
+salt of that phone's and monitor's own; who is on a phone's list; the master passcode's check
+made the same way with its version, `Device.masterPasscodeVersion` moved as the device key's
+actor; **the cost of Argon2id for every monitor of a project at each read measured before it is
+built**, and whether a phone says which setup version and list it already holds (the lists now
+carry `setupVersion`, ADR-453). A login list is no part of a setup version. Then part 5 (the
+address lookup).
+**The user may still overturn ADR-453's, ADR-451's and ADR-450's defaults, ADR-449 (5)'s
+proposals, ADR-442's, ADR-440's, ADR-438's two choices or ADR-439's (`SUMMARY.md` §4).**
 **Before the chain, `pnpm ready`** (the stack up, then `installer:check`): a `✗` at the migrations
 means one was made elsewhere, and `pnpm installer` applies it (seen 2026-10-09: 176 tests failed
 until it was). **After a change to `apps/api` or `apps/worker`, `pnpm local:up` again; if Docker

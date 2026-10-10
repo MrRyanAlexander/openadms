@@ -87,6 +87,9 @@ export interface PhonePayItem extends BandedPayItem {
 // The lists a phone holds for its assignment (adms-field-app §4A.2a), as far as the harness
 // captures from them. Never a rate, a rule, or a load's pay item.
 export interface PhoneLists {
+  // The project's setup version these lists are (ADR-453): what every record the phone makes
+  // carries.
+  readonly setupVersion: number;
   readonly blocks: readonly PhoneBlock[];
   // The entries on the project's load and haul-out forms, without those hidden on phones; each
   // id is the entry's.
@@ -106,19 +109,6 @@ export interface PhoneLists {
   readonly surveyWorkTypes: readonly Named[];
 }
 
-const noLists: PhoneLists = {
-  blocks: [],
-  debrisTypes: {},
-  fieldTags: [],
-  typedNumberReasons: [],
-  payItems: [],
-  itemNames: [],
-  incidentTypes: [],
-  incidentOffers: [],
-  contractors: [],
-  surveyWorkTypes: [],
-};
-
 export interface PhoneSetup {
   // The phone's name on the dispatch board, e.g. P1-COL-1.
   readonly name: string;
@@ -129,10 +119,9 @@ export interface PhoneSetup {
   readonly projectId: string;
   // The assignment's one site (a tower, a haul-out end); a curb collection's phone has none.
   readonly siteId?: string;
-  // The numbered version of the lists the phone holds for that assignment.
-  readonly setupVersion: number;
-  // The lists themselves; a phone given none picks nothing and makes no number.
-  readonly lists?: PhoneLists;
+  // The lists the phone took for that assignment, numbered as a setup version: read from the
+  // server, never stated by a story.
+  readonly lists: PhoneLists;
   // The phone's own time zone: the project's, unless the story says otherwise.
   readonly timeZone: string;
   // How far the phone's clock is off the story's, in minutes (0 when not given).
@@ -310,7 +299,7 @@ export class SimulatedDevice {
   }
 
   private get lists(): PhoneLists {
-    return this.current.lists ?? noLists;
+    return this.current.lists;
   }
 
   // The phone's clock: what it stamps on what its monitor records.
@@ -461,7 +450,7 @@ export class SimulatedDevice {
       source: 'DEVICE',
       deviceId: this.current.deviceId,
       assignmentId: this.current.assignmentId,
-      setupVersion: this.current.setupVersion,
+      setupVersion: this.lists.setupVersion,
       temporarySession: false,
       numberTyped: entry.from === 'TYPED',
       numberTypedReasonId:
@@ -684,7 +673,7 @@ export class SimulatedDevice {
       monitorId: this.current.monitorId,
       deviceId: this.current.deviceId,
       assignmentId: this.current.assignmentId,
-      setupVersion: this.current.setupVersion,
+      setupVersion: this.lists.setupVersion,
       madeAt,
       deviceUtcOffsetMinutes: utcOffsetMinutes(this.current.timeZone, madeAt),
       latitude: form.latitude ?? null,

@@ -1,7 +1,8 @@
 // The setup as it stands, asked for (spec/parts/01-setup.md, "The setup check" and "What each
 // site's phones will ask for"; ARCHITECTURE §6; AC-01-69…77; BACKLOG 2.4.2, C97; ADR-229, 423,
-// 426): the setup check's list and the sites' quantity lookup. Each reads the project's setup
-// and writes nothing; neither holds a rate. The door has asked that the caller is an admin or a
+// 426, 453): the setup check's list and the sites' quantity lookup, one site's also as its
+// phones held it under a setup version. Each reads the project's setup and writes nothing;
+// neither holds a rate. The door has asked that the caller is an admin or a
 // manager/analyst: they take no permission, so whoever reviews tickets may ask them too. A
 // read-only viewer's sight of them is task 2.4.5's.
 import {
@@ -9,9 +10,11 @@ import {
   setupCheckEndpoint,
   siteQuantityLookupEndpoint,
   type ParamsOf,
+  type QueryOf,
 } from '@open-adms/contracts';
-import { Controller, Inject, Param } from '@nestjs/common';
+import { Controller, Inject, Param, Query } from '@nestjs/common';
 
+import { Refusal } from '../process/refusal.ts';
 import { Serves } from '../process/serves.ts';
 import { SetupStanding } from './setup-standing.ts';
 
@@ -37,10 +40,17 @@ export class SetupStandingController {
     });
   }
 
+  // As the setup stands; or, asked with a setup version, as the site's phones held it then.
   @Serves(siteQuantityLookupEndpoint)
-  async siteQuantityLookup(@Param() params: ParamsOf<typeof siteQuantityLookupEndpoint>) {
-    return siteQuantityLookupEndpoint.answer.parse({
-      asks: await this.standing.quantityLookupAt(params.siteId),
-    });
+  async siteQuantityLookup(
+    @Param() params: ParamsOf<typeof siteQuantityLookupEndpoint>,
+    @Query() query: QueryOf<typeof siteQuantityLookupEndpoint>,
+  ) {
+    const asks =
+      query.setupVersion === undefined
+        ? await this.standing.quantityLookupAt(params.siteId)
+        : await this.standing.quantityLookupUnder(params.siteId, Number(query.setupVersion));
+    if (asks === null) throw new Refusal('NOT_FOUND', 404);
+    return siteQuantityLookupEndpoint.answer.parse({ asks });
   }
 }

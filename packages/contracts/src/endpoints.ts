@@ -1308,10 +1308,18 @@ export const quantityLookupEndpoint = endpoint({
 export const siteQuantityLookupEndpoint = endpoint({
   ...standing,
   name: 'siteQuantityLookup',
-  summary: 'What one site’s phones ask for: its rows of the project’s quantity lookup.',
+  summary:
+    'What one site’s phones ask for: its rows of the project’s quantity lookup, worked out from the setup as it stands; or, asked with a setup version, as its phones held them under that version, for the debris types phones are shown. No such version of its project: not found.',
   method: 'GET',
   path: '/sites/:siteId/quantity-lookup',
   params: siteId,
+  query: z.strictObject({
+    // A setup version of the site's project, as a field event records one: 1, 2, 3…
+    setupVersion: z
+      .string()
+      .regex(/^[1-9][0-9]{0,8}$/)
+      .optional(),
+  }),
   answer: quantityLookupAnswerSchema,
 });
 
@@ -1577,7 +1585,7 @@ export const phoneMonitorEndpoint = endpoint({
 export const phoneListsEndpoint = endpoint({
   name: 'phoneLists',
   summary:
-    'The lists a phone holds for its work, asked for at any time it has a connection: the assignment the phone takes now for the monitor signed in (the sign-in’s own rule, asked again) and that assignment’s lists, or neither with the reason. The lists are the blocks of numbers the phone holds, the forms’ debris types without those hidden on phones, the field tags, the reasons for a typed number, the unit rate pay items the assignment names, and what its incidents and surveys pick from. Never a rate, a rule, a transaction or a load’s pay item. Nothing is written. Open to a proven phone with its monitor’s session token.',
+    'The lists a phone holds for its work, asked for at any time it has a connection: the assignment the phone takes now for the monitor signed in (the sign-in’s own rule, asked again) and that assignment’s lists, or neither with the reason. The lists are the blocks of numbers the phone holds, the forms’ debris types without those hidden on phones, the field tags, the reasons for a typed number, the unit rate pay items the assignment names, what its incidents and surveys pick from, and the setup version they are, which every field event the phone makes records. Never a rate, a rule, a transaction or a load’s pay item. Nothing is written but a new setup version, made when what the project’s phones are shown differs from the newest one. Open to a proven phone with its monitor’s session token.',
   access: 'MONITOR_ON_PHONE',
   method: 'GET',
   path: '/phones/current/lists',

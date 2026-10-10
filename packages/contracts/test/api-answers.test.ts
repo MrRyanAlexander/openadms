@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import { z } from 'zod';
 
-import { errorAnswerSchema, healthAnswerSchema, phoneListsSchema } from '../src/index.ts';
+import {
+  errorAnswerSchema,
+  healthAnswerSchema,
+  phoneListsSchema,
+  setupShownSchema,
+} from '../src/index.ts';
 
 describe('what the API says about itself and about a refusal', () => {
   it('the health answer says ok and nothing else', () => {
@@ -55,6 +60,7 @@ describe('the lists a phone takes', () => {
     // The one code is a unit rate pay item's, which the phone prints (ADR-213, 301).
     expect(keys.filter((key) => /code/i.test(key))).toEqual(['code']);
     const whole = {
+      setupVersion: 1,
       blocks: [],
       controlRanges: [],
       debrisTypes: { LOAD: [], HAUL_OUT: [] },
@@ -77,6 +83,38 @@ describe('the lists a phone takes', () => {
     expect(phoneListsSchema.safeParse({ ...whole, fieldTags: [tag] }).success).toBe(true);
     expect(
       phoneListsSchema.safeParse({ ...whole, fieldTags: [{ ...tag, rate: '7.50' }] }).success,
+    ).toBe(false);
+  });
+
+  it('AC-07-91, ADR-453: a setup version, kept as a project’s phones were shown it, has no place for one either, nor for a certification, an ROE or a phone’s numbers; a phone’s lists say which version they are, from 1', () => {
+    const keys = keysOf(setupShownSchema);
+    expect(
+      keys.filter((key) =>
+        /rate|rule|transaction|price|amount|description|owner|driver|cert|roe|block/i.test(key),
+      ),
+    ).toEqual([]);
+    expect(keys.filter((key) => /prime|code/i.test(key))).toEqual(['code', 'primeId']);
+    const shown = {
+      controlRanges: [],
+      debrisTypes: { LOAD: [], HAUL_OUT: [] },
+      fieldTags: [],
+      typedNumberReasons: [],
+      sites: [],
+      payItems: [],
+      itemNames: [],
+      incidentTypes: [],
+      incidentOffers: [],
+      contractors: [],
+      surveyWorkTypes: [],
+      quantityLookup: [],
+    };
+    expect(setupShownSchema.safeParse(shown).success).toBe(true);
+    expect(setupShownSchema.safeParse({ ...shown, rules: [] }).success).toBe(false);
+    const lists = { ...shown, setupVersion: 1, blocks: [], certifications: [], roes: [] };
+    expect(phoneListsSchema.safeParse(lists).success).toBe(true);
+    expect(phoneListsSchema.safeParse({ ...lists, setupVersion: 0 }).success).toBe(false);
+    expect(
+      phoneListsSchema.safeParse({ ...shown, blocks: [], certifications: [], roes: [] }).success,
     ).toBe(false);
   });
 });

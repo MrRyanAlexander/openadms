@@ -387,7 +387,6 @@ export const sync: Story = {
         assignmentId,
         projectId: planned.projectId,
         ...(planned.siteId === undefined ? {} : { siteId: planned.siteId }),
-        setupVersion: 1,
         lists: await story.lists.held({ assignmentId, deviceId }),
         timeZone,
       };

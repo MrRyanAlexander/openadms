@@ -8892,7 +8892,7 @@
     "/sites/{siteId}/quantity-lookup": {
       "get": {
         "operationId": "siteQuantityLookup",
-        "summary": "What one site’s phones ask for: its rows of the project’s quantity lookup.",
+        "summary": "What one site’s phones ask for: its rows of the project’s quantity lookup, worked out from the setup as it stands; or, asked with a setup version, as its phones held them under that version, for the debris types phones are shown. No such version of its project: not found.",
         "x-open-adms-access": "SIGNED_IN",
         "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
         "parameters": [
@@ -8904,6 +8904,15 @@
               "type": "string",
               "format": "uuid",
               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "setupVersion",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]{0,8}$"
             }
           }
         ],
@@ -9751,7 +9760,7 @@
     "/phones/current/lists": {
       "get": {
         "operationId": "phoneLists",
-        "summary": "The lists a phone holds for its work, asked for at any time it has a connection: the assignment the phone takes now for the monitor signed in (the sign-in’s own rule, asked again) and that assignment’s lists, or neither with the reason. The lists are the blocks of numbers the phone holds, the forms’ debris types without those hidden on phones, the field tags, the reasons for a typed number, the unit rate pay items the assignment names, and what its incidents and surveys pick from. Never a rate, a rule, a transaction or a load’s pay item. Nothing is written. Open to a proven phone with its monitor’s session token.",
+        "summary": "The lists a phone holds for its work, asked for at any time it has a connection: the assignment the phone takes now for the monitor signed in (the sign-in’s own rule, asked again) and that assignment’s lists, or neither with the reason. The lists are the blocks of numbers the phone holds, the forms’ debris types without those hidden on phones, the field tags, the reasons for a typed number, the unit rate pay items the assignment names, what its incidents and surveys pick from, and the setup version they are, which every field event the phone makes records. Never a rate, a rule, a transaction or a load’s pay item. Nothing is written but a new setup version, made when what the project’s phones are shown differs from the newest one. Open to a proven phone with its monitor’s session token.",
         "x-open-adms-access": "MONITOR_ON_PHONE",
         "responses": {
           "200": {
@@ -9872,6 +9881,11 @@
                         {
                           "type": "object",
                           "properties": {
+                            "setupVersion": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 9007199254740991
+                            },
                             "blocks": {
                               "type": "array",
                               "items": {
@@ -10442,6 +10456,7 @@
                             }
                           },
                           "required": [
+                            "setupVersion",
                             "blocks",
                             "controlRanges",
                             "debrisTypes",

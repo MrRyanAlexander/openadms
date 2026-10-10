@@ -411,7 +411,6 @@ export const p1FieldDays: Story = {
         assignmentId,
         projectId: p1,
         ...(planned.siteId === undefined ? {} : { siteId: planned.siteId }),
-        setupVersion: 1,
         lists,
         timeZone,
       };

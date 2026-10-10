@@ -670,3 +670,23 @@ model QuarantinedRecord {
   @@unique([projectId, id])
   @@map("quarantined_record")
 }
+
+// A numbered version of a project's setup as its phones are shown it (ARCHITECTURE §7's note,
+// §9 (6); ADR-240, 453): the lists a phone picks from, whole for the project, so a reviewer sees
+// what a phone showed when a field event recorded that version. Made when a phone is first sent
+// lists that differ from the newest version's; numbered 1, 2, 3… per project by the database's
+// own rule; never changed and never deleted. Never a rate, a rule or a load's pay item: a phone
+// is shown none. Certifications and ROEs are records with their own history, and are in none.
+model SetupManifest {
+  id        String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  projectId String   @map("project_id") @db.Uuid
+  version   Int
+  // The setup as sent, for a person to read.
+  content   Json
+  builtAt   DateTime @default(now()) @map("built_at") @db.Timestamptz(3)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([projectId, version])
+  @@map("setup_manifest")
+}

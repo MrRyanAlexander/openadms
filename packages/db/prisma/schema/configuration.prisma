@@ -118,6 +118,8 @@ model Project {
   incidents                   Incident[]
   dropOffLogs                 DropOffLog[]
   quarantinedRecords          QuarantinedRecord[]
+  // The numbered versions of its setup as its phones were shown it (evidence.prisma).
+  setupManifests              SetupManifest[]
   completedLoads              CompletedLoad[]
   completedLoadCollections    CompletedLoadCollection[]
   completedHaulOuts           CompletedHaulOut[]

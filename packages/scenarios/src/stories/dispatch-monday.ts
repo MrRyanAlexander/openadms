@@ -460,7 +460,6 @@ export const dispatchMonday: Story = {
       monitorId: people.ana,
       assignmentId: board.collections,
       projectId: office.p1,
-      setupVersion: 1,
       lists: await story.lists.held({
         assignmentId: board.collections,
         deviceId: phones.collection.id,
@@ -474,7 +473,7 @@ export const dispatchMonday: Story = {
       assignmentId: board.tower,
       projectId: office.p1,
       siteId: office.tdsr,
-      setupVersion: 1,
+      lists: await story.lists.held({ assignmentId: board.tower, deviceId: phones.tdsrTower.id }),
       timeZone,
     });
     const blocks = await api.numberBlock.findMany({ include: { device: true } });

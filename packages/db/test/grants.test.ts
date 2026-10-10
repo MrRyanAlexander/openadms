@@ -128,6 +128,9 @@ const tableGrants: Record<string, Record<string, string>> = {
   // writes how a job went.
   reconciliation_job: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT UPDATE' },
   reconciliation_job_ticket: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },
+  // A setup version (ADR-453): the API adds one and reads it, and nobody changes one; the
+  // worker reads none.
+  setup_manifest: { adms_api: 'INSERT SELECT' },
   audit_record: { adms_api: 'SELECT', adms_worker: 'SELECT' },
   viewer_project: { adms_readonly: 'SELECT' },
   viewer_field_event: { adms_readonly: 'SELECT' },

@@ -19,13 +19,28 @@ import {
 } from '../src/device.ts';
 import { uuidv7, uuidv7Time } from '../src/ids.ts';
 
+// A phone that picks nothing and makes no number still holds lists: they say its setup version.
+const nothingToPick: PhoneLists = {
+  setupVersion: 4,
+  blocks: [],
+  debrisTypes: {},
+  fieldTags: [],
+  typedNumberReasons: [],
+  payItems: [],
+  itemNames: [],
+  incidentTypes: [],
+  incidentOffers: [],
+  contractors: [],
+  surveyWorkTypes: [],
+};
+
 const setup = {
   name: 'P1-COL-1',
   deviceId: '00000000-0000-7000-8000-00000000000a',
   monitorId: '00000000-0000-7000-8000-00000000000b',
   assignmentId: '00000000-0000-7000-8000-00000000000d',
   projectId: '00000000-0000-7000-8000-00000000000c',
-  setupVersion: 4,
+  lists: nothingToPick,
   timeZone: 'America/New_York',
 };
 
@@ -214,6 +229,7 @@ const payItem = (code: string, work: string, bandFrom: number | null, bandTo: nu
   kindOfWork: named(work),
 });
 const lists: PhoneLists = {
+  setupVersion: 4,
   blocks: [
     block('LOAD', 101001, 101003),
     block('LOAD', 105001, 106000),

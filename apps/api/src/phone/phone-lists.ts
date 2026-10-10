@@ -1,8 +1,10 @@
 // The lists a phone takes for its monitor's assignment (ARCHITECTURE §7.1's lists note, §9 (6);
 // adms-field-app §4A.2a; AC-01-26, AC-02-37, AC-03-09, AC-07-91; BACKLOG 2.5.3, C68, C103, C115;
-// ADR-207, 213, 223, 227, 240, 243, 449…451).
+// ADR-207, 213, 223, 227, 240, 243, 449…451, 453).
 //
-// - **Read, never written**, as the API's login, for one assignment and the phone that holds it.
+// - **Read as the API's login**, for one assignment and the phone that holds it. **One thing is
+//   written:** a new setup version, when what the project's phones are shown differs from the
+//   newest one (`SetupVersions`, ADR-453); the lists say which version they are.
 // - **Trimmed to the assignment:** the unit rate pay items it names now (one taken off the
 //   assignment is left out), the item names of their kinds of work, the incident and survey
 //   lists only where the assignment makes those forms, the ROEs only where its work names one,
@@ -13,8 +15,8 @@
 //   here, so none can be sent. A unit rate pay item carries its code, which the phone prints.
 // - **Which assignment** is the sign-in's own rule, asked again at each read (`taken`), so a
 //   phone that refreshes its lists learns of a board that changed.
-// - Parts 1 and 2 of task 2.5.3 (ADR-449): the setup version, the login list, the master
-//   passcode's check and the address lookup are the later parts'.
+// - Parts 1 to 3 of task 2.5.3 (ADR-449): the login list, the master passcode's check and the
+//   address lookup are the later parts'.
 import type { Database } from '@open-adms/db';
 import type {
   CertificationKind,
@@ -25,7 +27,7 @@ import type {
   QuantityAskName,
 } from '@open-adms/domain';
 
-import { SetupStanding } from '../setup/setup-standing.ts';
+import { SetupVersions } from '../setup/setup-versions.ts';
 import type { PhoneAssignment, PhoneAssignments } from './phone-assignments.ts';
 
 interface Named {
@@ -34,6 +36,9 @@ interface Named {
 }
 
 export interface PhoneListsHeld {
+  // The project's setup version these lists are its assignment's part of (ADR-453): what every
+  // field event the phone makes records.
+  readonly setupVersion: number;
   // The blocks of numbers this phone holds on the assignment's project.
   readonly blocks: readonly {
     readonly series: NumberSeriesName;
@@ -118,11 +123,13 @@ const written = (roeNumber: string | null): string => (roeNumber ?? '').trim();
 export class PhoneLists {
   private readonly db: Database;
   private readonly assignments: PhoneAssignments;
+  private readonly versions: SetupVersions;
   private readonly clock: { now(): Date };
 
   constructor(db: Database, parts: { assignments: PhoneAssignments; clock: { now(): Date } }) {
     this.db = db;
     this.assignments = parts.assignments;
+    this.versions = new SetupVersions(db);
     this.clock = parts.clock;
   }
 
@@ -137,49 +144,23 @@ export class PhoneLists {
     };
   }
 
-  // The lists of one assignment, for the phone that holds it.
+  // The lists of one assignment, for the phone that holds it: its part of what the project's
+  // phones are shown, the project's records beside it, and the setup version that is.
   async held(phone: {
     readonly assignmentId: string;
     readonly deviceId: string;
   }): Promise<PhoneListsHeld> {
-    return this.db.$read(async (tx) => {
+    const { projectId, shown, lists } = await this.db.$read(async (tx) => {
       const assignment = await tx.assignment.findUniqueOrThrow({
         where: { id: phone.assignmentId },
       });
       const { projectId } = assignment;
       const makes = (documentType: 'INCIDENT' | 'SURVEY' | 'ROE') =>
         assignment.formDocumentTypes.includes(documentType);
+      const shown = await SetupVersions.shownIn(tx, projectId);
       const blocks = await tx.numberBlock.findMany({
         where: { deviceId: phone.deviceId, projectId, status: 'ISSUED' },
         orderBy: [{ issuedAt: 'asc' }, { firstNumber: 'asc' }],
-      });
-      const controlRanges = await tx.controlRange.findMany({
-        where: { projectId, archivedAt: null },
-        orderBy: [{ series: 'asc' }, { firstNumber: 'asc' }],
-      });
-      const forms = await tx.form.findMany({
-        where: { projectId, documentType: { in: ['LOAD', 'HAUL_OUT'] } },
-      });
-      const entries = await tx.formDebrisType.findMany({
-        where: {
-          formId: { in: forms.map((form) => form.id) },
-          hiddenOnPhones: false,
-          archivedAt: null,
-        },
-        include: { debrisType: true },
-        orderBy: { createdAt: 'asc' },
-      });
-      const named = (documentType: 'LOAD' | 'HAUL_OUT') =>
-        entries
-          .filter((entry) => entry.documentType === documentType)
-          .map((entry) => ({ id: entry.id, name: entry.debrisType.name }));
-      const fieldTags = await tx.fieldTag.findMany({
-        where: { projectId, archivedAt: null },
-        orderBy: { position: 'asc' },
-      });
-      const reasons = await tx.reason.findMany({
-        where: { uses: { has: 'TYPED_NUMBER' }, archivedAt: null },
-        orderBy: { position: 'asc' },
       });
       // Every certification of the project: one never ends on its own, and a revoked or
       // replaced one is the server's to flag (ADR-079), never the phone's to refuse.
@@ -195,17 +176,6 @@ export class PhoneLists {
           secondTierSub: { select: { id: true, name: true } },
         },
         orderBy: { certNumber: 'asc' },
-      });
-      const sites = await tx.disposalSite.findMany({
-        where: { projectId, archivedAt: null },
-        select: {
-          id: true,
-          name: true,
-          takesLoads: true,
-          haulOutsLeaveHere: true,
-          siteType: { select: { id: true, name: true } },
-        },
-        orderBy: { name: 'asc' },
       });
       // An ROE is named by a collection, unit rate work, a survey and an incident, and made by
       // a phone that makes ROEs: no other phone is sent a property's address.
@@ -232,141 +202,65 @@ export class PhoneLists {
       // The unit rate pay items the assignment names now (C103).
       const assigned = await tx.assignmentPayItem.findMany({
         where: { assignmentId: assignment.id, archivedAt: null },
-        orderBy: { createdAt: 'asc' },
       });
-      const payItems = await tx.payItem.findMany({
-        where: { id: { in: assigned.map((one) => one.payItemId) } },
-        select: {
-          id: true,
-          code: true,
-          bandFrom: true,
-          bandTo: true,
-          archivedAt: true,
-          payableType: { select: { id: true, name: true } },
-          kindOfWork: { select: { id: true, name: true } },
-          countIsAlwaysOne: true,
-          gpsRequired: true,
-          measurementRequired: true,
-          decimalsAllowed: true,
-          photosRequired: true,
-          monitorMayMarkIneligible: true,
-          quantityFromCarriedTickets: true,
-        },
-        orderBy: { createdAt: 'asc' },
-      });
-      const itemNames = await tx.itemName.findMany({
-        where: {
-          kindOfWorkId: { in: [...new Set(assigned.map((one) => one.kindOfWorkId))] },
-          archivedAt: null,
-        },
-        orderBy: { position: 'asc' },
-      });
-      const incidentTypes = makes('INCIDENT')
-        ? await tx.incidentType.findMany({
-            where: { archivedAt: null },
-            include: { subTypes: { where: { archivedAt: null }, orderBy: { position: 'asc' } } },
-            orderBy: { position: 'asc' },
-          })
-        : [];
-      // What the project's incident form offers, and the contractors on the project to pick
-      // "the contractor involved" from (ADR-328): only for a phone that makes incidents.
-      const incidentForm = makes('INCIDENT')
-        ? await tx.form.findFirst({ where: { projectId, documentType: 'INCIDENT' } })
-        : null;
-      const incidentOffers = (incidentForm?.incidentOffers ?? []) as IncidentOffer[];
-      const placed = incidentOffers.includes('CONTRACTOR')
-        ? await tx.projectContractor.findMany({
-            where: { projectId, archivedAt: null },
-            include: { contractor: { select: { id: true, name: true } } },
-            orderBy: { createdAt: 'asc' },
-          })
-        : [];
-      const surveyWorkTypes = makes('SURVEY')
-        ? await tx.surveyWorkType.findMany({
-            where: { archivedAt: null },
-            orderBy: { position: 'asc' },
-          })
-        : [];
-      // What the assignment's one site's phones ask for, for the debris types this phone holds.
-      const carried = new Set(entries.map((entry) => entry.id));
-      const asks =
-        assignment.siteId === null
-          ? []
-          : await SetupStanding.quantityLookupIn(tx, { id: assignment.siteId, projectId });
+      const itsPayItems = new Set(assigned.map((one) => one.payItemId));
+      const itsKindsOfWork = new Set(assigned.map((one) => one.kindOfWorkId));
       return {
-        blocks: blocks.map(({ series, firstNumber, lastNumber, lastUsedNumber }) => ({
-          series,
-          firstNumber,
-          lastNumber,
-          lastUsedNumber,
-          status: 'ISSUED' as const,
-        })),
-        controlRanges: controlRanges.map(({ series, firstNumber, lastNumber }) => ({
-          series,
-          firstNumber,
-          lastNumber,
-        })),
-        debrisTypes: { LOAD: named('LOAD'), HAUL_OUT: named('HAUL_OUT') },
-        fieldTags: fieldTags.map(name),
-        typedNumberReasons: reasons.map(name),
-        certifications: certifications.map((certification) => ({
-          id: certification.id,
-          certNumber: certification.certNumber,
-          kind: certification.kind,
-          capacityCy: certification.capacityCy,
-          prime: name(certification.prime),
-          firstTierSub:
-            certification.firstTierSub === null ? null : name(certification.firstTierSub),
-          secondTierSub:
-            certification.secondTierSub === null ? null : name(certification.secondTierSub),
-        })),
-        sites: sites.map((site) => ({
-          ...name(site),
-          siteType: name(site.siteType),
-          takesLoads: site.takesLoads,
-          haulOutsLeaveHere: site.haulOutsLeaveHere,
-        })),
-        roes: roes.map((roe) => ({
-          id: roe.id,
-          roeNumber: roe.roeNumber,
-          address: roe.address,
-          parcelId: roe.parcelId,
-          preWorkSurveyDone: surveyed.has(written(roe.roeNumber)),
-        })),
-        payItems: payItems.flatMap((payItem) =>
-          payItem.kindOfWork === null
-            ? []
-            : [
-                {
-                  id: payItem.id,
-                  code: payItem.code,
-                  bandFrom: payItem.bandFrom?.toNumber() ?? null,
-                  bandTo: payItem.bandTo?.toNumber() ?? null,
-                  archived: payItem.archivedAt !== null,
-                  payableType: name(payItem.payableType),
-                  kindOfWork: name(payItem.kindOfWork),
-                  countIsAlwaysOne: payItem.countIsAlwaysOne,
-                  gpsRequired: payItem.gpsRequired,
-                  measurementRequired: payItem.measurementRequired,
-                  decimalsAllowed: payItem.decimalsAllowed,
-                  photosRequired: payItem.photosRequired,
-                  monitorMayMarkIneligible: payItem.monitorMayMarkIneligible,
-                  quantityFromCarriedTickets: payItem.quantityFromCarriedTickets,
-                },
-              ],
-        ),
-        itemNames: itemNames.map((item) => ({ ...name(item), kindOfWorkId: item.kindOfWorkId })),
-        incidentTypes: incidentTypes.map((type) => ({
-          ...name(type),
-          subTypes: type.subTypes.map(name),
-        })),
-        incidentOffers,
-        contractors: placed.map((place) => name(place.contractor)),
-        surveyWorkTypes: surveyWorkTypes.map(name),
-        quantityLookup: asks
-          .filter((ask) => carried.has(ask.debrisTypeId))
-          .map(({ form, debrisTypeId, primeId, asks }) => ({ form, debrisTypeId, primeId, asks })),
+        projectId,
+        shown,
+        lists: {
+          blocks: blocks.map(({ series, firstNumber, lastNumber, lastUsedNumber }) => ({
+            series,
+            firstNumber,
+            lastNumber,
+            lastUsedNumber,
+            status: 'ISSUED' as const,
+          })),
+          controlRanges: shown.controlRanges,
+          debrisTypes: shown.debrisTypes,
+          fieldTags: shown.fieldTags,
+          typedNumberReasons: shown.typedNumberReasons,
+          certifications: certifications.map((certification) => ({
+            id: certification.id,
+            certNumber: certification.certNumber,
+            kind: certification.kind,
+            capacityCy: certification.capacityCy,
+            prime: name(certification.prime),
+            firstTierSub:
+              certification.firstTierSub === null ? null : name(certification.firstTierSub),
+            secondTierSub:
+              certification.secondTierSub === null ? null : name(certification.secondTierSub),
+          })),
+          sites: shown.sites,
+          roes: roes.map((roe) => ({
+            id: roe.id,
+            roeNumber: roe.roeNumber,
+            address: roe.address,
+            parcelId: roe.parcelId,
+            preWorkSurveyDone: surveyed.has(written(roe.roeNumber)),
+          })),
+          payItems: shown.payItems.filter((payItem) => itsPayItems.has(payItem.id)),
+          itemNames: shown.itemNames.filter((item) => itsKindsOfWork.has(item.kindOfWorkId)),
+          // The incident and survey lists only where the assignment makes those forms.
+          incidentTypes: makes('INCIDENT') ? shown.incidentTypes : [],
+          incidentOffers: makes('INCIDENT') ? shown.incidentOffers : [],
+          contractors: makes('INCIDENT') ? shown.contractors : [],
+          surveyWorkTypes: makes('SURVEY') ? shown.surveyWorkTypes : [],
+          // What the assignment's one site's phones ask for; none for a phone at no site.
+          quantityLookup: shown.quantityLookup
+            .filter((ask) => ask.siteId === assignment.siteId)
+            .map(({ form, debrisTypeId, primeId, asks }) => ({
+              form,
+              debrisTypeId,
+              primeId,
+              asks,
+            })),
+        },
       };
     });
+    return {
+      setupVersion: await this.versions.numbered(projectId, shown, phone.deviceId),
+      ...lists,
+    };
   }
 }

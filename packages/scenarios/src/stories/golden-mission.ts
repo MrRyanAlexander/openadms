@@ -635,7 +635,6 @@ export const goldenMission: Story = {
       monitorId: ana,
       assignmentId: p2Board.ana,
       projectId: p2,
-      setupVersion: 1,
       lists: await story.lists.held({ assignmentId: p2Board.ana, deviceId: p2Phone('P2-COL-1') }),
       timeZone,
     });
@@ -646,7 +645,6 @@ export const goldenMission: Story = {
       assignmentId: p2Board.kim,
       projectId: p2,
       siteId: p2Tdsr,
-      setupVersion: 1,
       lists: await story.lists.held({
         assignmentId: p2Board.kim,
         deviceId: p2Phone('P2-TWR-TDSR'),

@@ -1,7 +1,7 @@
 // The lists a phone takes, asked for by the phone itself at any time it has a connection
 // (ARCHITECTURE §7.1's lists note, §9 (6); AC-02-37, AC-03-09, AC-07-91; BACKLOG 2.5.3, C114;
 // ADR-151, 449, 450). Open to a proven phone with its monitor's session token. The log says
-// which assignment's lists were read, or why none, by id and code.
+// which assignment's lists were read and which setup version they are, or why none, by id and code.
 import {
   phoneListsAnswerSchema,
   phoneListsEndpoint,
@@ -32,7 +32,9 @@ export class PhoneListsController {
       {
         deviceId: monitor.deviceId,
         userId: monitor.userId,
-        ...(taken.taken ? { assignmentId: taken.assignment.id } : { noAssignment: taken.why }),
+        ...(taken.taken
+          ? { assignmentId: taken.assignment.id, setupVersion: taken.lists.setupVersion }
+          : { noAssignment: taken.why }),
       },
       'A phone read its lists.',
     );

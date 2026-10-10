@@ -94,6 +94,9 @@ const domains: Record<string, string> = {
   photo: 'RECORDS',
   // A record waiting in quarantine: evidence beside the field event it couldn't become (ADR-338).
   quarantined_record: 'RECORDS',
+  // A numbered version of a project's setup as its phones were shown it: evidence beside the
+  // field events that record it (ADR-453).
+  setup_manifest: 'RECORDS',
   completed_load: 'BILLING',
   // The worker's other conclusions (ADR-340): a completed record and its collection rows are
   // what bills; a flag, a run and a run's decisions are how the work went.
@@ -182,6 +185,10 @@ const triggers = [
   `CREATE TRIGGER reconciliation_job_refuse_asked_edit BEFORE UPDATE OF id, project_id, trigger, requested_by_id, queued_at ON public.reconciliation_job FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
   `CREATE TRIGGER reconciliation_job_refuse_edit_once_ended BEFORE UPDATE ON public.reconciliation_job FOR EACH ROW WHEN (((old.finished_at IS NOT NULL) OR (old.set_aside_at IS NOT NULL))) EXECUTE FUNCTION refuse_edit()`,
   `CREATE TRIGGER reconciliation_job_ticket_refuse_edit BEFORE UPDATE ON public.reconciliation_job_ticket FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
+  // A setup version is never edited; it is made for a phone, numbered 1, 2, 3… per project,
+  // and only for a change (ADR-453).
+  `CREATE TRIGGER setup_manifest_refuse_edit BEFORE UPDATE ON public.setup_manifest FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
+  `CREATE TRIGGER setup_manifest_numbered BEFORE INSERT ON public.setup_manifest FOR EACH ROW EXECUTE FUNCTION setup_manifest_numbered_guard()`,
   // A container has its primary box, asked when the piece of work that wrote it ends (ADR-321).
   `CREATE CONSTRAINT TRIGGER certification_has_primary_box AFTER INSERT OR UPDATE OF kind ON public.certification DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION certification_has_primary_box()`,
   `CREATE CONSTRAINT TRIGGER certification_box_keeps_primary AFTER UPDATE OF certification_id, "position" ON public.certification_box DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION certification_has_primary_box()`,
@@ -1092,6 +1099,11 @@ describe('the guards in the catalog', () => {
       {
         name: 'reconciliation_job_ticket_number_check',
         definition: "CHECK ((btrim(ticket_number) <> ''::text))",
+      },
+      // What a setup version holds is an object (ADR-453).
+      {
+        name: 'setup_manifest_content_check',
+        definition: "CHECK ((jsonb_typeof(content) = 'object'::text))",
       },
       // The master passcode's actor is one id, never a person, and no record names it; a
       // count of wrong tries at the passcode is never below nought (ADR-438, 439).

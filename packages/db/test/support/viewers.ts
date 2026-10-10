@@ -231,5 +231,7 @@ export const unseenTables = [
   // The job queue is the API's and the worker's (ADR-418).
   'reconciliation_job',
   'reconciliation_job_ticket',
+  // A setup version is the back office's to read (ADR-453).
+  'setup_manifest',
   'audit_record',
 ];
