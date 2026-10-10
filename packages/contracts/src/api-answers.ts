@@ -3,8 +3,10 @@
 import {
   assignmentFormDocumentTypes,
   fieldEventKinds,
+  incidentOffers,
   mileageSources,
   noAssignmentReasons,
+  numberSeries,
   passwordProblemCodes,
   permissions,
   quantitySources,
@@ -542,3 +544,58 @@ export const phoneMonitorAnswerSchema = z.strictObject({
 });
 
 export type PhoneMonitorAnswer = z.infer<typeof phoneMonitorAnswerSchema>;
+
+// The lists a phone holds for its assignment (ARCHITECTURE §7.1's lists note; adms-field-app
+// §4A.2a; AC-01-26, AC-02-37, AC-07-91; ADR-207, 213, 223, 449, 450), as far as part 1 of task
+// 2.5.3 carries them: the blocks of numbers the phone holds on the project, the load and
+// haul-out forms' debris types without those hidden on phones, the field tags, the firm's
+// reasons for a typed number, the unit rate pay items the assignment names with the item names
+// of their kinds of work, and what its incidents and surveys pick from. **Never a rate, a rule,
+// a transaction or a load's pay item**: a monitor picks by name, and the only code here is a
+// unit rate pay item's, which the phone prints. Strict, so nothing more can be sent unnoticed.
+export const phoneListsSchema = z.strictObject({
+  blocks: z.array(
+    z.strictObject({
+      series: z.enum(numberSeries),
+      firstNumber: z.number().int(),
+      lastNumber: z.number().int(),
+      lastUsedNumber: z.number().int().nullable(),
+      status: z.literal('ISSUED'),
+    }),
+  ),
+  debrisTypes: z.strictObject({ LOAD: z.array(named), HAUL_OUT: z.array(named) }),
+  fieldTags: z.array(named),
+  typedNumberReasons: z.array(named),
+  payItems: z.array(
+    z.strictObject({
+      id: z.uuid(),
+      code: z.string(),
+      bandFrom: z.number().nullable(),
+      bandTo: z.number().nullable(),
+      archived: z.boolean(),
+      payableType: named,
+      kindOfWork: named,
+    }),
+  ),
+  itemNames: z.array(z.strictObject({ id: z.uuid(), name: z.string(), kindOfWorkId: z.uuid() })),
+  incidentTypes: z.array(
+    z.strictObject({ id: z.uuid(), name: z.string(), subTypes: z.array(named) }),
+  ),
+  incidentOffers: z.array(z.enum(incidentOffers)),
+  contractors: z.array(named),
+  surveyWorkTypes: z.array(named),
+});
+
+export type PhoneListsRecord = z.infer<typeof phoneListsSchema>;
+
+// What a phone is answered when it asks for its lists: the assignment it takes now for the
+// monitor signed in, by the sign-in's own rule, and that assignment's lists; or neither, with
+// why in `noAssignment`. A phone told there is none keeps what it holds: an assignment never
+// stops work (ADR-240).
+export const phoneListsAnswerSchema = z.strictObject({
+  assignment: phoneAssignmentSchema.nullable(),
+  noAssignment: z.enum(noAssignmentReasons).nullable(),
+  lists: phoneListsSchema.nullable(),
+});
+
+export type PhoneListsAnswer = z.infer<typeof phoneListsAnswerSchema>;

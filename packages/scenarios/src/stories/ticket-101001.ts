@@ -11,7 +11,6 @@ import { NumberAllocator } from '@open-adms/api';
 import { projectTime } from '../clock.ts';
 import { made, scanned } from '../device.ts';
 import { uuidv7, uuidv7Time } from '../ids.ts';
-import { phoneLists } from '../phone-lists.ts';
 import type { Story } from '../runner.ts';
 import { assigned, taken } from './board.ts';
 import { p1TimeZone as timeZone, setUpP1, setUpP1Sites } from './p1.ts';
@@ -83,7 +82,7 @@ export const ticket101001: Story = {
       assignmentId: await taken(story, ana, setup.collectionPhone.id),
       projectId: setup.p1,
       setupVersion: 1,
-      lists: await phoneLists(api, {
+      lists: await story.lists.held({
         assignmentId: setup.collections,
         deviceId: setup.collectionPhone.id,
       }),

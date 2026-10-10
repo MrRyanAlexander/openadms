@@ -40,6 +40,8 @@ import { apiEnrolment } from '../phone/enrolment.controller.ts';
 import { Enrolment } from '../phone/enrolment.ts';
 import { MasterPasscodeCheck } from '../phone/master-passcode-check.ts';
 import { PhoneAssignments } from '../phone/phone-assignments.ts';
+import { apiPhoneLists } from '../phone/phone-lists.controller.ts';
+import { PhoneLists } from '../phone/phone-lists.ts';
 import { apiPhoneMonitors } from '../phone/phone-monitors.controller.ts';
 import { PhoneMonitors } from '../phone/phone-monitors.ts';
 import { PhoneChallenges } from '../phone/phone-challenges.ts';
@@ -332,6 +334,11 @@ export class ApiProcess {
           ],
           [apiPhoneProofs, phoneProofs],
           [apiPhoneSignIns, phoneSignIns],
+          // The lists a phone takes for its monitor's assignment (task 2.5.3).
+          [
+            apiPhoneLists,
+            new PhoneLists(database, { assignments: new PhoneAssignments(database), clock }),
+          ],
           [
             apiMasterPasscode,
             new MasterPasscode(database, {

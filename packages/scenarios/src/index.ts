@@ -19,7 +19,6 @@ export {
 } from './device.ts';
 export { uuidv7, uuidv7Time } from './ids.ts';
 export { localMapServers } from './map-servers.ts';
-export { phoneLists } from './phone-lists.ts';
 export { builtInPolicy } from './policy.ts';
 export {
   Runner,

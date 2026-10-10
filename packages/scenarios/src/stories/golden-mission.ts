@@ -45,7 +45,6 @@ import { projectTime, utcOffsetMinutes } from '../clock.ts';
 import { chained, type Completed, made, scanned } from '../device.ts';
 import { uuidv7 } from '../ids.ts';
 import { localMapServers } from '../map-servers.ts';
-import { phoneLists } from '../phone-lists.ts';
 import type { Story } from '../runner.ts';
 import {
   certifyP1,
@@ -637,7 +636,7 @@ export const goldenMission: Story = {
       assignmentId: p2Board.ana,
       projectId: p2,
       setupVersion: 1,
-      lists: await phoneLists(api, { assignmentId: p2Board.ana, deviceId: p2Phone('P2-COL-1') }),
+      lists: await story.lists.held({ assignmentId: p2Board.ana, deviceId: p2Phone('P2-COL-1') }),
       timeZone,
     });
     const kimP2 = story.phone({
@@ -648,7 +647,10 @@ export const goldenMission: Story = {
       projectId: p2,
       siteId: p2Tdsr,
       setupVersion: 1,
-      lists: await phoneLists(api, { assignmentId: p2Board.kim, deviceId: p2Phone('P2-TWR-TDSR') }),
+      lists: await story.lists.held({
+        assignmentId: p2Board.kim,
+        deviceId: p2Phone('P2-TWR-TDSR'),
+      }),
       timeZone,
     });
     // R-0001…R-0006 are ROEs the mission doesn't tell: its two are R-0007 and R-0008.

@@ -521,6 +521,17 @@ ADR-106 (master passcode) and ADR-120 (changing monitors, username). **The word 
 > the load carries**, worked out ahead from the rules (ADR-227, 243); the login list; the **setup
 > version** every field event records (ADR-240). Rules and rates never go to a phone.
 
+> ⚠️ **ADR-449, 450 (2026-10-09; agent defaults, this note awaits approval, building didn't
+> wait): how a phone gets its lists.** A phone whose monitor is signed in asks for its lists
+> whenever it has a connection. The server works out again which assignment the phone takes
+> (§7.2's rule) and answers that assignment's lists; with no assignment that day it sends none
+> and the phone keeps what it holds. Built so far: the number blocks, debris types, field tags,
+> the unit rate pay items the assignment names and what its incidents and surveys pick from;
+> the rest of this note's lists, the setup version, the login list and the master passcode's
+> check follow. **A login list on a phone is outside what NIST SP 800-63B and ASVS provide
+> for** (ADR-449): anyone who reads a phone's list out can guess a seven-digit password, so the
+> protection is §7.2's five safeguards, as approved.
+
 ✅ **Decided** *(ADR-176, user 2026-09-27, Q-170)*: the setup manifest carries the project's **service
 codes and their settings** (photos, GPS, measurement and weight required; payable type) for **every
 ticket type** the phone is set up for, not only unit rate; the phone builds its options and required

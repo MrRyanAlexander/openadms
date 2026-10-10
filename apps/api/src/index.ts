@@ -217,6 +217,7 @@ export {
   type PhoneAssignment,
 } from './phone/phone-assignments.ts';
 export { PhoneChallenges, type Challenged } from './phone/phone-challenges.ts';
+export { PhoneLists, type PhoneListsHeld, type PhoneListsTaken } from './phone/phone-lists.ts';
 export {
   PhoneMonitors,
   type MonitorOutcome,

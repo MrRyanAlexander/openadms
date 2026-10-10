@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { errorAnswerSchema, healthAnswerSchema } from '../src/index.ts';
+import { z } from 'zod';
+
+import { errorAnswerSchema, healthAnswerSchema, phoneListsSchema } from '../src/index.ts';
 
 describe('what the API says about itself and about a refusal', () => {
   it('the health answer says ok and nothing else', () => {
@@ -22,5 +24,49 @@ describe('what the API says about itself and about a refusal', () => {
     expect(errorAnswerSchema.safeParse({ ...answer, message: { at: 'main' } }).success).toBe(false);
     expect(errorAnswerSchema.safeParse({ ...answer, stack: 'at main' }).success).toBe(false);
     expect(errorAnswerSchema.safeParse({ ...answer, code: 'Something broke' }).success).toBe(false);
+  });
+});
+
+// Every name a schema can send, however deep.
+function keysOf(schema: z.ZodType): string[] {
+  if (schema instanceof z.ZodObject) {
+    return Object.entries(schema.shape as Record<string, z.ZodType>).flatMap(([key, inner]) => [
+      key,
+      ...keysOf(inner),
+    ]);
+  }
+  if (schema instanceof z.ZodArray) return keysOf(schema.element as z.ZodType);
+  if (schema instanceof z.ZodNullable) return keysOf(schema.unwrap() as z.ZodType);
+  return [];
+}
+
+describe('the lists a phone takes', () => {
+  it('AC-07-91: the lists’ shape has no place for a rate, a rule, a transaction, a price or a description, and it is strict, so nothing more can be sent', () => {
+    const keys = keysOf(phoneListsSchema);
+    expect(keys.length).toBeGreaterThan(20);
+    expect(
+      keys.filter((key) => /rate|rule|transaction|price|amount|description|prime/i.test(key)),
+    ).toEqual([]);
+    // The one code is a unit rate pay item's, which the phone prints (ADR-213, 301).
+    expect(keys.filter((key) => /code/i.test(key))).toEqual(['code']);
+    const whole = {
+      blocks: [],
+      debrisTypes: { LOAD: [], HAUL_OUT: [] },
+      fieldTags: [],
+      typedNumberReasons: [],
+      payItems: [],
+      itemNames: [],
+      incidentTypes: [],
+      incidentOffers: [],
+      contractors: [],
+      surveyWorkTypes: [],
+    };
+    expect(phoneListsSchema.safeParse(whole).success).toBe(true);
+    expect(phoneListsSchema.safeParse({ ...whole, rules: [] }).success).toBe(false);
+    const tag = { id: '0199b6a0-0000-7000-8000-000000000001', name: 'Mixed' };
+    expect(phoneListsSchema.safeParse({ ...whole, fieldTags: [tag] }).success).toBe(true);
+    expect(
+      phoneListsSchema.safeParse({ ...whole, fieldTags: [{ ...tag, rate: '7.50' }] }).success,
+    ).toBe(false);
   });
 });

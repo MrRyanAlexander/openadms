@@ -43,7 +43,6 @@ import {
   typed,
 } from '../device.ts';
 import { uuidv7, uuidv7Time } from '../ids.ts';
-import { phoneLists } from '../phone-lists.ts';
 import type { Story, StoryMonitor } from '../runner.ts';
 import { assigned, taken } from './board.ts';
 import { p1TimeZone as timeZone, setUpP1, setUpP1Sites } from './p1.ts';
@@ -403,7 +402,7 @@ export const p1FieldDays: Story = {
       if (assignmentId !== boards[day][planned.phone]) {
         throw new Error(`${planned.phone} took another assignment than ${day}’s.`);
       }
-      const lists = await phoneLists(api, { assignmentId, deviceId });
+      const lists = await story.lists.held({ assignmentId, deviceId });
       held[planned.phone] = lists;
       return {
         name: planned.phone,

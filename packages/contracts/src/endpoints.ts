@@ -33,6 +33,7 @@ import {
   phoneChallengeAnswerSchema,
   monitorCreatedAnswerSchema,
   monitorSignedInAnswerSchema,
+  phoneListsAnswerSchema,
   phoneMonitorAnswerSchema,
   phoneEnrolledAnswerSchema,
   phoneProvenAnswerSchema,
@@ -1573,6 +1574,16 @@ export const phoneMonitorEndpoint = endpoint({
   answer: phoneMonitorAnswerSchema,
 });
 
+export const phoneListsEndpoint = endpoint({
+  name: 'phoneLists',
+  summary:
+    'The lists a phone holds for its work, asked for at any time it has a connection: the assignment the phone takes now for the monitor signed in (the sign-in’s own rule, asked again) and that assignment’s lists, or neither with the reason. The lists are the blocks of numbers the phone holds, the forms’ debris types without those hidden on phones, the field tags, the reasons for a typed number, the unit rate pay items the assignment names, and what its incidents and surveys pick from. Never a rate, a rule, a transaction or a load’s pay item. Nothing is written. Open to a proven phone with its monitor’s session token.',
+  access: 'MONITOR_ON_PHONE',
+  method: 'GET',
+  path: '/phones/current/lists',
+  answer: phoneListsAnswerSchema,
+});
+
 export const removePhoneEndpoint = endpoint({
   name: 'removePhone',
   summary:
@@ -2380,6 +2391,7 @@ export const endpoints: readonly Endpoint[] = [
   signInOnPhoneEndpoint,
   signOutOnPhoneEndpoint,
   phoneMonitorEndpoint,
+  phoneListsEndpoint,
   removePhoneEndpoint,
   changeMasterPasscodeEndpoint,
   listAssignmentsEndpoint,

@@ -19,7 +19,6 @@ import { masterPasscodeActorId, masterPasscodeActorName } from '@open-adms/db';
 import { projectTime } from '../clock.ts';
 import { made, scanned } from '../device.ts';
 import { uuidv7 } from '../ids.ts';
-import { phoneLists } from '../phone-lists.ts';
 import type { Story } from '../runner.ts';
 import { assigned } from './board.ts';
 import { p1TimeZone as timeZone, setUpP1, setUpP1Sites } from './p1.ts';
@@ -462,7 +461,7 @@ export const dispatchMonday: Story = {
       assignmentId: board.collections,
       projectId: office.p1,
       setupVersion: 1,
-      lists: await phoneLists(api, {
+      lists: await story.lists.held({
         assignmentId: board.collections,
         deviceId: phones.collection.id,
       }),

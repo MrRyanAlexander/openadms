@@ -12,6 +12,7 @@ import {
   NoMail,
   PasswordHasher,
   PhoneAssignments,
+  PhoneLists,
   PhoneChallenges,
   PhoneMonitors,
   PhoneProofs,
@@ -94,6 +95,8 @@ export interface StoryContext {
   signedIn(monitor: StoryMonitor, onPhone: string, at?: Date): Promise<AssignmentAtSignIn>;
   // A phone's proof of itself, as its sync begins: the API's `PhoneProofs`, on the story's clock.
   readonly proofs: PhoneProofs;
+  // The lists a phone takes for an assignment: the API's `PhoneLists` (task 2.5.3).
+  readonly lists: PhoneLists;
   // Asserts an exact result; strict deep equality.
   check(what: string, actual: unknown, expected: unknown): void;
 }
@@ -250,6 +253,7 @@ export class Runner {
           }
           return outcome.assignment;
         },
+        lists: new PhoneLists(api, { assignments: new PhoneAssignments(api), clock }),
         proofs: new PhoneProofs(api, {
           rules: proofRules,
           challenges: new PhoneChallenges(storySigningSecret, proofRules),

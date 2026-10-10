@@ -89,7 +89,7 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-09, through ADR-448)
+### Where things stand (2026-10-09, through ADR-450)
 - **Phase 2 (API and sync) is open (ADR-376): 20 of its 32 tasks are done** (`BACKLOG.md`,
   "Active — Phase 2", ticks each with its ADRs). Complete: Milestone 2.1 (the API as a process,
   the boundary, time limits and policy), 2.2 (sign-in: its records, passwords, sessions, two-step
@@ -97,7 +97,8 @@ of `DECISIONS.md`.
   queues work) and 2.4 (the services behind endpoints: setup, dispatch and phones, review and
   certifications, the read-only viewer's path). Of 2.5 (phones): 2.5.1 (enrolment and a phone's
   proof of itself, ADR-436…440) and 2.5.2 (monitors on phones: created, signed in, and the
-  assignment a phone takes, ADR-441…444) are done; 2.5.3 is next.
+  assignment a phone takes, ADR-441…444) are done; **2.5.3 (the lists a phone takes) is cut in five (ADR-449) and its part 1 is done
+  (ADR-450)**; its part 2 is next.
 - **Where each thing is written, so nothing is read twice:** a rule as it stands, with its ADR:
   `SUMMARY.md`, by topic (grep its `###` headings; never read it whole). What a finished task left
   for a later one: `BACKLOG.md`'s carry-forward register (C85…C116). How a layer's tests are
@@ -121,11 +122,13 @@ of `DECISIONS.md`.
   (`access: 'PROVEN_PHONE'`, read with `phoneOf(request)`); a monitor is created on it under the
   master passcode and signs in with Monitor ID and password (`access: 'MONITOR_ON_PHONE'`: the
   phone's token and `x-adms-monitor-session`, read with `monitorOf(request)`); the sign-in's own
-  answer carries the assignment the phone takes, or `noAssignment`. What is written under the
+  answer carries the assignment the phone takes, or `noAssignment`; **the phone reads its lists by
+  `GET /phones/current/lists`** (`PhoneLists`, `apps/api/src/phone/phone-lists.ts`: the sign-in's rule
+  asked again, then that assignment's lists; part 1's lists only). What is written under the
   master passcode names its own actor (`underMasterPasscode`), a proof's the device key's
   (`byDeviceKey`). The code is `apps/api/src/phone/`. **No story and no test writes a phone or a
   monitor by hand:** a story uses `story.enrolled`, `story.proofs`, `story.monitor`,
-  `story.signedIn` and `taken` (`stories/board.ts`); an API test `enrolledPhone`, `proven`
+  `story.signedIn`, `taken` (`stories/board.ts`) and `story.lists.held` for a phone's lists; an API test `enrolledPhone`, `proven`
   (`test/support/phones.ts`), `created` and `signedIn` (`phone-sign-ins.test.ts`).
 - **This machine's installation holds no person but the seed's three actors:** `pnpm
   local:accounts` and `pnpm installer:admin` have not been run for real here.
@@ -302,18 +305,21 @@ questions.
 **Phase 2 is open (ADR-376). Its plan is `BACKLOG.md`, "Active — Phase 2" (ADR-377): read its
 brief first. One task per response.**
 
-**Task 2.5.3: the lists a phone takes** *(BACKLOG 2.5.3; **it is large: cut it into parts with an
-ADR first, as 2.5.1 and 2.5.2 were**; read C115, C114, C103, C68, ARCHITECTURE §7.1's ⚠️ lists note
-and §8, DATA-MODEL §4.5 (`SetupManifest`), and `packages/scenarios/src/phone-lists.ts` first)*. A
-phone whose monitor is signed in (`MONITOR_ON_PHONE`) reads the lists of the assignment its
-sign-in was answered: the project's certifications, sites, ROEs, the number block or control
-ranges, the forms' debris types without those *Hidden on phones* (AC-01-26), field tags, the unit
-rate pay items the assignment names now, the site's quantity lookup, the login list (each entry a
-slow hash salted for that phone, AC-02-41), the master passcode's check and the setup version;
-**never a rate, a code on a load, a rule or a transaction** (AC-02-37, AC-07-91). The harness's
-`phone-lists.ts` gives way to the service. Say what NIST SP 800-63B-4 and ASVS 5.0 ask of a
-login list kept on a device before building it (ADR-401). **The user may still overturn ADR-444's
-defaults, ADR-443's, ADR-442's, ADR-440's, ADR-438's two choices or ADR-439's (`SUMMARY.md` §4).**
+**Task 2.5.3, part 2 of 5: the rest of the project's lists** *(BACKLOG 2.5.3 and C117; ADR-449
+(4) is the cut, ADR-450 what part 1 built; read `apps/api/src/phone/phone-lists.ts`,
+`apps/api/test/phone-lists.test.ts`, ARCHITECTURE §7.1's ⚠️ lists note, `adms-field-app` §4A.2a,
+`adms-certifications`, `packages/domain/src/quantity-lookup.ts` and `SetupStanding` first)*.
+`PhoneLists.held` and `phoneListsSchema` grow by: the project's certifications (number, kind,
+capacity, prime and subs; a new one is there at the next read, AC-03-09), its sites, its ROEs
+with those whose pre-work survey is done, its control ranges, a cert-number block for a phone
+that certifies, each unit rate pay item's capture settings, and the site's quantity lookup for
+a phone at a site; **never a rate, a load's pay item, a rule or a transaction** (AC-02-37,
+AC-07-91: the tests read every list for one). No private citizen's details beyond what a monitor
+needs to pick an ROE. Then part 3 (`SetupManifest` and the setup version, a schema change),
+part 4 (the login list and the master passcode's check: **read the user's reply to ADR-449 (5)
+first**; none in the files means it is built as proposed) and part 5 (the address lookup).
+**The user may still overturn ADR-450's defaults, ADR-449 (5)'s proposals, ADR-444's, ADR-443's,
+ADR-442's, ADR-440's, ADR-438's two choices or ADR-439's (`SUMMARY.md` §4).**
 **Before the chain, `pnpm ready`** (the stack up, then `installer:check`): a `✗` at the migrations
 means one was made elsewhere, and `pnpm installer` applies it (seen 2026-10-09: 176 tests failed
 until it was). **After a change to `apps/api` or `apps/worker`, `pnpm local:up` again; if Docker

@@ -43,7 +43,6 @@ import {
   type SimulatedDevice,
 } from '../device.ts';
 import { uuidv7 } from '../ids.ts';
-import { phoneLists } from '../phone-lists.ts';
 import type { EnrolledPhone } from '../software-key.ts';
 import type { Story, StoryMonitor } from '../runner.ts';
 import { assigned, taken } from './board.ts';
@@ -389,7 +388,7 @@ export const sync: Story = {
         projectId: planned.projectId,
         ...(planned.siteId === undefined ? {} : { siteId: planned.siteId }),
         setupVersion: 1,
-        lists: await phoneLists(api, { assignmentId, deviceId }),
+        lists: await story.lists.held({ assignmentId, deviceId }),
         timeZone,
       };
     };

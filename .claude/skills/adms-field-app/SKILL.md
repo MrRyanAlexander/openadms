@@ -2,7 +2,7 @@
 name: adms-field-app
 description: Open ADMS field app and phones, in today's rules. Covers enrolling a phone once, the day's assignment it takes at sign-in, setup by master passcode when there's no assignment (an unplanned assignment), offline sign-in from the login list and its safeguards, switching monitors and moving site, encryption, the time clock on the phone, syncing whenever there's signal, sync and turn in, an out-of-service phone (the Phase 0 part, ARCHITECTURE §7–§8); what a phone holds for its assignment (lists, the site's quantity lookup, never rates or rules); and the later-phase capture notes: offline as the only mode, advisory on-device checks, badge first and number last, every start list, the split chain, printing, scanning, GPS and photos. Use when touching enrolment, sign-in, the phone's lists, sync from the phone's side, or anything a monitor captures. The workflows themselves are adms-ticket-workflows.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-251; the Phase 0 device and assignment models built, ADR-281; split haul-outs, ADR-295; a badge's number the phone's list doesn't hold, ADR-421; enrolment through the API, ADR-439; the assignment taken at sign-in, ADR-444) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-251; the Phase 0 device and assignment models built, ADR-281; split haul-outs, ADR-295; a badge's number the phone's list doesn't hold, ADR-421; enrolment through the API, ADR-439; the assignment taken at sign-in, ADR-444; the lists read by the phone, ADR-450) -->
 
 > **This page states today's rules** (last changed by ADR-295, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
@@ -131,7 +131,11 @@ certifying); the **forms' debris types** (without those *Hidden on phones*) and 
 lists its start menus need (incident types and sub-types, survey work types, reasons); for unit rate
 work, **the unit rate pay items the assignment names**, with their settings, size bands, payable type
 and kind of work; for a phone at a site, **that site's quantity lookup**; the login list; the master
-passcode check; and the **setup version** every field event records.
+passcode check; and the **setup version** every field event records. **The phone asks for them by `GET
+/phones/current/lists` whenever it has a connection, its monitor signed in** (ADR-450, an agent
+default): the server answers the assignment the phone takes now and its lists, or says there is
+none, and then the phone keeps what it holds. Built so far: the number blocks, debris types,
+field tags, reasons, the unit rate pay items and the incident and survey lists (ADR-449's cut).
 
 - **Never on a phone: rates, rules, or a load's pay items.** No phone knows which pay item a load is
   paid at: its mileage, so its pay item, is known only after sync (ADR-221, 223).
