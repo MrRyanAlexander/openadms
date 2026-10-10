@@ -9924,6 +9924,36 @@
                                 "additionalProperties": false
                               }
                             },
+                            "controlRanges": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "series": {
+                                    "type": "string",
+                                    "enum": [
+                                      "LOAD",
+                                      "HAUL_OUT",
+                                      "UNIT_RATE",
+                                      "CERTIFICATION",
+                                      "ROE"
+                                    ]
+                                  },
+                                  "firstNumber": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "lastNumber": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": ["series", "firstNumber", "lastNumber"],
+                                "additionalProperties": false
+                              }
+                            },
                             "debrisTypes": {
                               "type": "object",
                               "properties": {
@@ -10003,6 +10033,185 @@
                                 "additionalProperties": false
                               }
                             },
+                            "certifications": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  "certNumber": {
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": ["CONTAINER", "CREW"]
+                                  },
+                                  "capacityCy": {
+                                    "anyOf": [
+                                      {
+                                        "type": "integer",
+                                        "minimum": -9007199254740991,
+                                        "maximum": 9007199254740991
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "prime": {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": ["id", "name"],
+                                    "additionalProperties": false
+                                  },
+                                  "firstTierSub": {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "id": {
+                                            "type": "string",
+                                            "format": "uuid",
+                                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                          },
+                                          "name": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": ["id", "name"],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "secondTierSub": {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "id": {
+                                            "type": "string",
+                                            "format": "uuid",
+                                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                          },
+                                          "name": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": ["id", "name"],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "certNumber",
+                                  "kind",
+                                  "capacityCy",
+                                  "prime",
+                                  "firstTierSub",
+                                  "secondTierSub"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "sites": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "siteType": {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": ["id", "name"],
+                                    "additionalProperties": false
+                                  },
+                                  "takesLoads": {
+                                    "type": "boolean"
+                                  },
+                                  "haulOutsLeaveHere": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "name",
+                                  "siteType",
+                                  "takesLoads",
+                                  "haulOutsLeaveHere"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "roes": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  "roeNumber": {
+                                    "type": "string"
+                                  },
+                                  "address": {
+                                    "type": ["string", "null"]
+                                  },
+                                  "parcelId": {
+                                    "type": ["string", "null"]
+                                  },
+                                  "preWorkSurveyDone": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "roeNumber",
+                                  "address",
+                                  "parcelId",
+                                  "preWorkSurveyDone"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
                             "payItems": {
                               "type": "array",
                               "items": {
@@ -10054,6 +10263,27 @@
                                     },
                                     "required": ["id", "name"],
                                     "additionalProperties": false
+                                  },
+                                  "countIsAlwaysOne": {
+                                    "type": "boolean"
+                                  },
+                                  "gpsRequired": {
+                                    "type": "boolean"
+                                  },
+                                  "measurementRequired": {
+                                    "type": "boolean"
+                                  },
+                                  "decimalsAllowed": {
+                                    "type": "boolean"
+                                  },
+                                  "photosRequired": {
+                                    "type": "boolean"
+                                  },
+                                  "monitorMayMarkIneligible": {
+                                    "type": "boolean"
+                                  },
+                                  "quantityFromCarriedTickets": {
+                                    "type": "boolean"
                                   }
                                 },
                                 "required": [
@@ -10063,7 +10293,14 @@
                                   "bandTo",
                                   "archived",
                                   "payableType",
-                                  "kindOfWork"
+                                  "kindOfWork",
+                                  "countIsAlwaysOne",
+                                  "gpsRequired",
+                                  "measurementRequired",
+                                  "decimalsAllowed",
+                                  "photosRequired",
+                                  "monitorMayMarkIneligible",
+                                  "quantityFromCarriedTickets"
                                 ],
                                 "additionalProperties": false
                               }
@@ -10169,19 +10406,57 @@
                                 "required": ["id", "name"],
                                 "additionalProperties": false
                               }
+                            },
+                            "quantityLookup": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "form": {
+                                    "type": "string",
+                                    "enum": ["LOAD", "HAUL_OUT"]
+                                  },
+                                  "debrisTypeId": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  "primeId": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  "asks": {
+                                    "type": "string",
+                                    "enum": [
+                                      "LOAD_CALL",
+                                      "SCALE_WEIGHT",
+                                      "CARRIED_COUNT",
+                                      "NOTHING_MORE"
+                                    ]
+                                  }
+                                },
+                                "required": ["form", "debrisTypeId", "primeId", "asks"],
+                                "additionalProperties": false
+                              }
                             }
                           },
                           "required": [
                             "blocks",
+                            "controlRanges",
                             "debrisTypes",
                             "fieldTags",
                             "typedNumberReasons",
+                            "certifications",
+                            "sites",
+                            "roes",
                             "payItems",
                             "itemNames",
                             "incidentTypes",
                             "incidentOffers",
                             "contractors",
-                            "surveyWorkTypes"
+                            "surveyWorkTypes",
+                            "quantityLookup"
                           ],
                           "additionalProperties": false
                         },

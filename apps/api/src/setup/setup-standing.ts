@@ -46,8 +46,16 @@ export class SetupStanding {
   quantityLookupAt(siteId: string): Promise<QuantityAsk[]> {
     return this.db.$read(async (tx) => {
       const site = await tx.disposalSite.findUniqueOrThrow({ where: { id: siteId } });
-      return new QuantityLookup(await SetupStanding.readIn(tx, site.projectId)).at(siteId);
+      return SetupStanding.quantityLookupIn(tx, site);
     });
+  }
+
+  // The same rows inside a piece of work that is already reading (a phone's lists).
+  static async quantityLookupIn(
+    tx: Prisma.TransactionClient,
+    site: { readonly id: string; readonly projectId: string },
+  ): Promise<QuantityAsk[]> {
+    return new QuantityLookup(await SetupStanding.readIn(tx, site.projectId)).at(site.id);
   }
 
   // A project nobody has isn't read as one with nothing set up: the call throws.

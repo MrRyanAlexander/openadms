@@ -9,13 +9,14 @@ import {
   numberSeries,
   passwordProblemCodes,
   permissions,
+  quantityAsks,
   quantitySources,
   workerStatuses,
   workflows,
 } from '@open-adms/domain';
 import { z } from 'zod';
 
-import { billingUnits } from './setup-answers.ts';
+import { billingUnits, dumpedForms } from './setup-answers.ts';
 
 // The health answer says that the process answers, and nothing else: no version, no setting, no
 // word on the database. Anybody may ask (acceptance file 10, point 17).
@@ -546,13 +547,18 @@ export const phoneMonitorAnswerSchema = z.strictObject({
 export type PhoneMonitorAnswer = z.infer<typeof phoneMonitorAnswerSchema>;
 
 // The lists a phone holds for its assignment (ARCHITECTURE §7.1's lists note; adms-field-app
-// §4A.2a; AC-01-26, AC-02-37, AC-07-91; ADR-207, 213, 223, 449, 450), as far as part 1 of task
-// 2.5.3 carries them: the blocks of numbers the phone holds on the project, the load and
-// haul-out forms' debris types without those hidden on phones, the field tags, the firm's
-// reasons for a typed number, the unit rate pay items the assignment names with the item names
-// of their kinds of work, and what its incidents and surveys pick from. **Never a rate, a rule,
-// a transaction or a load's pay item**: a monitor picks by name, and the only code here is a
-// unit rate pay item's, which the phone prints. Strict, so nothing more can be sent unnoticed.
+// §4A.2a; AC-01-26, AC-02-37, AC-03-09, AC-07-91; ADR-207, 213, 223, 227, 243, 449…451), as far
+// as parts 1 and 2 of task 2.5.3 carry them: the blocks of numbers the phone holds on the
+// project (a certifying phone's cert numbers among them) and the project's control ranges; the
+// load and haul-out forms' debris types without those hidden on phones, the field tags, the
+// firm's reasons for a typed number; the project's certifications (number, kind, capacity, prime
+// and subs by name: never the driver) and its sites; its ROEs, each with whether its pre-work
+// survey is done (number, address and parcel: never the owner); the unit rate pay items the
+// assignment names with their capture settings and the item names of their kinds of work; what
+// its incidents and surveys pick from; and, for a phone at a site, what that site's phones ask
+// for. **Never a rate, a rule, a transaction or a load's pay item**: a monitor picks by name,
+// and the only code here is a unit rate pay item's, which the phone prints. Strict, so nothing
+// more can be sent unnoticed.
 export const phoneListsSchema = z.strictObject({
   blocks: z.array(
     z.strictObject({
@@ -563,9 +569,46 @@ export const phoneListsSchema = z.strictObject({
       status: z.literal('ISSUED'),
     }),
   ),
+  controlRanges: z.array(
+    z.strictObject({
+      series: z.enum(numberSeries),
+      firstNumber: z.number().int(),
+      lastNumber: z.number().int(),
+    }),
+  ),
   debrisTypes: z.strictObject({ LOAD: z.array(named), HAUL_OUT: z.array(named) }),
   fieldTags: z.array(named),
   typedNumberReasons: z.array(named),
+  certifications: z.array(
+    z.strictObject({
+      id: z.uuid(),
+      certNumber: z.string(),
+      kind: z.enum(['CONTAINER', 'CREW']),
+      // A crew has none (invariant 10).
+      capacityCy: z.number().int().nullable(),
+      prime: named,
+      firstTierSub: named.nullable(),
+      secondTierSub: named.nullable(),
+    }),
+  ),
+  sites: z.array(
+    z.strictObject({
+      id: z.uuid(),
+      name: z.string(),
+      siteType: named,
+      takesLoads: z.boolean(),
+      haulOutsLeaveHere: z.boolean(),
+    }),
+  ),
+  roes: z.array(
+    z.strictObject({
+      id: z.uuid(),
+      roeNumber: z.string(),
+      address: z.string().nullable(),
+      parcelId: z.string().nullable(),
+      preWorkSurveyDone: z.boolean(),
+    }),
+  ),
   payItems: z.array(
     z.strictObject({
       id: z.uuid(),
@@ -575,6 +618,13 @@ export const phoneListsSchema = z.strictObject({
       archived: z.boolean(),
       payableType: named,
       kindOfWork: named,
+      countIsAlwaysOne: z.boolean(),
+      gpsRequired: z.boolean(),
+      measurementRequired: z.boolean(),
+      decimalsAllowed: z.boolean(),
+      photosRequired: z.boolean(),
+      monitorMayMarkIneligible: z.boolean(),
+      quantityFromCarriedTickets: z.boolean(),
     }),
   ),
   itemNames: z.array(z.strictObject({ id: z.uuid(), name: z.string(), kindOfWorkId: z.uuid() })),
@@ -584,6 +634,15 @@ export const phoneListsSchema = z.strictObject({
   incidentOffers: z.array(z.enum(incidentOffers)),
   contractors: z.array(named),
   surveyWorkTypes: z.array(named),
+  // For a phone at a site: a row for each debris type the phone holds and each prime.
+  quantityLookup: z.array(
+    z.strictObject({
+      form: z.enum(dumpedForms),
+      debrisTypeId: z.uuid(),
+      primeId: z.uuid(),
+      asks: z.enum(quantityAsks),
+    }),
+  ),
 });
 
 export type PhoneListsRecord = z.infer<typeof phoneListsSchema>;

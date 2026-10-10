@@ -521,14 +521,17 @@ ADR-106 (master passcode) and ADR-120 (changing monitors, username). **The word 
 > the load carries**, worked out ahead from the rules (ADR-227, 243); the login list; the **setup
 > version** every field event records (ADR-240). Rules and rates never go to a phone.
 
-> ⚠️ **ADR-449, 450 (2026-10-09; agent defaults, this note awaits approval, building didn't
+> ⚠️ **ADR-449, 450, 451 (2026-10-09; agent defaults, this note awaits approval, building didn't
 > wait): how a phone gets its lists.** A phone whose monitor is signed in asks for its lists
 > whenever it has a connection. The server works out again which assignment the phone takes
 > (§7.2's rule) and answers that assignment's lists; with no assignment that day it sends none
 > and the phone keeps what it holds. Built so far: the number blocks, debris types, field tags,
-> the unit rate pay items the assignment names and what its incidents and surveys pick from;
-> the rest of this note's lists, the setup version, the login list and the master passcode's
-> check follow. **A login list on a phone is outside what NIST SP 800-63B and ASVS provide
+> the unit rate pay items the assignment names with their capture settings, what its incidents
+> and surveys pick from, and (ADR-451) the project's certifications (number, kind, capacity,
+> prime and subs: never the driver), its sites by name and use, its ROEs by number, address and
+> parcel with whether the pre-work survey is done (never the owner; only for a phone whose work
+> names an ROE), the control ranges and the phone's own site's quantity lookup; the setup
+> version, the login list and the master passcode's check follow. **A login list on a phone is outside what NIST SP 800-63B and ASVS provide
 > for** (ADR-449): anyone who reads a phone's list out can guess a seven-digit password, so the
 > protection is §7.2's five safeguards, as approved.
 
@@ -593,7 +596,7 @@ So the protection can't rest on the password. It rests on these:
 5. **A screen-lock passcode on every phone** (the firm's device management) is strongly
    recommended, because it's what makes point 2 hold.
 
-> ⚠️ **ADR-441, 443 (2026-10-09; agent defaults, this note awaits approval, building didn't
+✅ **Approved:** **ADR-441, 443 (2026-10-09; agent defaults, this note awaits approval, building didn't
 > wait): signing in online.** With a connection, a monitor signs in on an enrolled phone that has
 > proved itself and is in service, with Monitor ID and password; the server answers with the
 > monitor's own session, which the phone's calls carry beside the phone's proof. It lasts twelve
@@ -604,7 +607,7 @@ So the protection can't rest on the password. It rests on these:
 > A phone taken out of service signs nobody in. The database itself lets a monitor's session be
 > opened on a phone only (point 1).
 >
-> ⚠️ **ADR-444 (2026-10-09; agent defaults, this note awaits approval, building didn't wait):
+✅ **Approved:** **ADR-444 (2026-10-09; agent defaults, this note awaits approval, building didn't wait):
 > the phone takes the assignment at that sign-in.** The sign-in's answer carries the monitor's
 > assignment for the day, the day being the project's own (its time zone): the one that names
 > this phone; with none naming it, the only one they have, whichever phone the board named.

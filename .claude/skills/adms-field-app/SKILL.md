@@ -135,7 +135,12 @@ passcode check; and the **setup version** every field event records. **The phone
 /phones/current/lists` whenever it has a connection, its monitor signed in** (ADR-450, an agent
 default): the server answers the assignment the phone takes now and its lists, or says there is
 none, and then the phone keeps what it holds. Built so far: the number blocks, debris types,
-field tags, reasons, the unit rate pay items and the incident and survey lists (ADR-449's cut).
+field tags, reasons, the unit rate pay items and the incident and survey lists (ADR-449's cut);
+and (ADR-451, agent defaults) the certifications (never the driver), the sites by name and use,
+the ROEs by number, address and parcel with whether the pre-work survey is done (never the
+owner; only for a phone whose work names an ROE), the control ranges, the pay items' capture
+settings and the site's quantity lookup. Still to come: the setup version, the login list and
+the master passcode's check.
 
 - **Never on a phone: rates, rules, or a load's pay items.** No phone knows which pay item a load is
   paid at: its mileage, so its pay item, is known only after sync (ADR-221, 223).

@@ -179,7 +179,7 @@ them. One more, AC-06-36, is named by the plan though its row doesn't say "Phase
 | AC-02-18 | Enrolment: online, the master passcode, the device key; each sync signs a challenge | 2.5.1 | ASVS V11 · API2 |
 | AC-02-23 | A changed master passcode reaches each phone at its next sync; each use a security event | 2.4.3 (the change), 2.6.2 (the new check sent), 2.5.4 (the uses) | ASVS V6, V16 |
 | AC-02-35 | A monitor signs in online and the phone takes their assignment | 2.5.2 **✅ part 3, ADR-444** | API2 |
-| AC-02-37 | What a phone's lists carry, and never carry | 2.5.3 **in part: part 1, ADR-450** | API3 |
+| AC-02-37 | What a phone's lists carry, and never carry | 2.5.3 **in part: parts 1 and 2, ADR-450, 451** | API3 |
 | AC-02-38 | An unplanned assignment arrives, marked | 2.5.4 | ASVS V16 |
 | AC-02-39 | A monitor's ID and password refused everywhere but a phone's calls | 2.2.3 (the web), 2.5.2 (a phone's calls) **✅ part 2, ADR-443** | ASVS V6 · API2 |
 | AC-02-41 | The login list: a slow hash per entry, salted for that phone | 2.5.3 | ASVS V11 · 800-63B passwords |
@@ -191,7 +191,7 @@ them. One more, AC-06-36, is named by the plan though its row doesn't say "Phase
 | AC-02-69 | The viewer stated on every read | 2.4.5 | ASVS V8 · API1 |
 | AC-02-72 | A manager/analyst never reads a monitor's phone number | 2.2.5 | ASVS V14 · API3 |
 | AC-02-74 | A read-only viewer's sign-in and their own projects' reads | 2.2.3, 2.2.4 (sign-in ✅ ADR-408, 412: `sessions.test.ts`, `two-step.test.ts`), 2.4.5 (the reads) | ASVS V8 · API1 |
-| AC-03-09 | A phone refreshes its lists at any time and picks up a new certification | 2.5.3 | — |
+| AC-03-09 | A phone refreshes its lists at any time and picks up a new certification | 2.5.3 **in part: the refresh, ADR-451**; 2.6.2 | — |
 | AC-03-55 | Only an admin revokes a certification | 2.4.4 ✅ (ADR-433: `apps/api/test/certifications.test.ts`) | ASVS V8 · API5 |
 | AC-04-24 | An address looked up for a phone's GPS, through the API | 2.5.3 | API7, API10 |
 | AC-04-77 | A photograph's file, kept and never overwritten | 2.6.4 | ASVS V5 |
@@ -214,7 +214,7 @@ them. One more, AC-06-36, is named by the plan though its row doesn't say "Phase
 | AC-06-02 | What a reviewer's action queues | 2.3.3 | ASVS V15 |
 | AC-06-03 | What a setup change queues: the un-invoiced tickets it touches | 2.3.3 | ASVS V15 |
 | AC-06-58 | The clock difference and its threshold as a policy value | 2.6.2 | ASVS V16 |
-| AC-07-91 | Nothing sent to a phone carries a rate, a load's code, a rule or a transaction | 2.5.3 **in part: part 1's lists, ADR-450** | API3 |
+| AC-07-91 | Nothing sent to a phone carries a rate, a load's code, a rule or a transaction | 2.5.3 **in part: parts 1 and 2's lists, ADR-450, 451** | API3 |
 | AC-08-05 | The refusal of a reviewer's action without its grant, at the request | 2.4.4 | ASVS V8 · API5 |
 | AC-08-06 | A monitor's reopen reprocesses the ticket; refused after the shift ends | 2.6.3 | ASVS V8 |
 | AC-09-18 | Unlocking is a grant of its own | 2.2.5, 2.4.4 | ASVS V8 · API5 |

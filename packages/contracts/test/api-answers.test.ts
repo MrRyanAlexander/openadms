@@ -45,21 +45,31 @@ describe('the lists a phone takes', () => {
     const keys = keysOf(phoneListsSchema);
     expect(keys.length).toBeGreaterThan(20);
     expect(
-      keys.filter((key) => /rate|rule|transaction|price|amount|description|prime/i.test(key)),
+      keys.filter((key) =>
+        /rate|rule|transaction|price|amount|description|owner|driver/i.test(key),
+      ),
     ).toEqual([]);
+    // A prime is named only as whose truck or crew a certification is, and as whose trucks a
+    // row of the site's lookup is for.
+    expect(keys.filter((key) => /prime/i.test(key))).toEqual(['prime', 'primeId']);
     // The one code is a unit rate pay item's, which the phone prints (ADR-213, 301).
     expect(keys.filter((key) => /code/i.test(key))).toEqual(['code']);
     const whole = {
       blocks: [],
+      controlRanges: [],
       debrisTypes: { LOAD: [], HAUL_OUT: [] },
       fieldTags: [],
       typedNumberReasons: [],
+      certifications: [],
+      sites: [],
+      roes: [],
       payItems: [],
       itemNames: [],
       incidentTypes: [],
       incidentOffers: [],
       contractors: [],
       surveyWorkTypes: [],
+      quantityLookup: [],
     };
     expect(phoneListsSchema.safeParse(whole).success).toBe(true);
     expect(phoneListsSchema.safeParse({ ...whole, rules: [] }).success).toBe(false);

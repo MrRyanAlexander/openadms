@@ -89,7 +89,7 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-09, through ADR-450)
+### Where things stand (2026-10-09, through ADR-452)
 - **Phase 2 (API and sync) is open (ADR-376): 20 of its 32 tasks are done** (`BACKLOG.md`,
   "Active — Phase 2", ticks each with its ADRs). Complete: Milestone 2.1 (the API as a process,
   the boundary, time limits and policy), 2.2 (sign-in: its records, passwords, sessions, two-step
@@ -97,11 +97,12 @@ of `DECISIONS.md`.
   queues work) and 2.4 (the services behind endpoints: setup, dispatch and phones, review and
   certifications, the read-only viewer's path). Of 2.5 (phones): 2.5.1 (enrolment and a phone's
   proof of itself, ADR-436…440) and 2.5.2 (monitors on phones: created, signed in, and the
-  assignment a phone takes, ADR-441…444) are done; **2.5.3 (the lists a phone takes) is cut in five (ADR-449) and its part 1 is done
-  (ADR-450)**; its part 2 is next.
+  assignment a phone takes, ADR-441…444) are done; **2.5.3 (the lists a phone takes) is cut in five (ADR-449) and its parts 1 and 2 are done
+  (ADR-450, 451)**; its part 3 is next. **The user approved ARCHITECTURE §7.2's notes on signing in
+  online and taking the assignment (ADR-452).**
 - **Where each thing is written, so nothing is read twice:** a rule as it stands, with its ADR:
   `SUMMARY.md`, by topic (grep its `###` headings; never read it whole). What a finished task left
-  for a later one: `BACKLOG.md`'s carry-forward register (C85…C116). How a layer's tests are
+  for a later one: `BACKLOG.md`'s carry-forward register (C85…C118). How a layer's tests are
   written and what a loosening is tried on: the page for that layer beside the `adms-verify`
   skill. Today's counts: `agent_store/CHAIN.md`. **The task-by-task record that stood here
   (2.0.1 to 2.5.2, every endpoint and service named) moved word for word to `DECISIONS.md`'s
@@ -124,7 +125,8 @@ of `DECISIONS.md`.
   phone's token and `x-adms-monitor-session`, read with `monitorOf(request)`); the sign-in's own
   answer carries the assignment the phone takes, or `noAssignment`; **the phone reads its lists by
   `GET /phones/current/lists`** (`PhoneLists`, `apps/api/src/phone/phone-lists.ts`: the sign-in's rule
-  asked again, then that assignment's lists; part 1's lists only). What is written under the
+  asked again, then that assignment's lists; everything but the setup version, the login list and the master
+  passcode's check). What is written under the
   master passcode names its own actor (`underMasterPasscode`), a proof's the device key's
   (`byDeviceKey`). The code is `apps/api/src/phone/`. **No story and no test writes a phone or a
   monitor by hand:** a story uses `story.enrolled`, `story.proofs`, `story.monitor`,
@@ -146,7 +148,7 @@ of `DECISIONS.md`.
   `installationPolicy({ … })`.
 - **Phase 1 is done:** all seven exit criteria met (ADR-371, 372); 693 of the 708 scenarios with a
   Phase 1 part proven whole, 15 in part. 48 scenario rows name Phase 2 (37 as "API (Phase 2)").
-- **The chain** was seen whole on 2026-10-09 after the housekeeping (ADR-445…448). Its counts
+- **The chain** was seen whole on 2026-10-09 after ADR-451. Its counts
   are `agent_store/CHAIN.md`'s; what each command proves is `adms-verify`'s. **Start with `pnpm
   ready`**; the stories run once, in `pnpm scenarios`; run `pnpm security` after `pnpm test`.
 - **What exists:** `packages/db` (schema, guards, tests), `packages/domain` (every rule; one
@@ -162,7 +164,7 @@ of `DECISIONS.md`.
 - **After a change to `apps/api` or `apps/worker`, `pnpm local:up` again** before the chain: each
   container runs what was built when it started, and `apps/api/test/door.test.ts` and
   `apps/worker/test/container.test.ts` ask those containers (BACKLOG C85, C95). Docker Desktop may be closed at the start of a session: `open -a Docker`, and
-  quit it at close-out if you opened it.
+  quit it at close-out if you opened it. **If it answers 500, `docker desktop restart`** (seen 2026-10-09: quitting it by `osascript` left its backend running).
 
 ### The model as it stands now (today's words; `SUMMARY.md` has each rule and its ADR)
 The firm's setup decides how things play out (ADR-197), and there are **two sides** (ADR-224): the
@@ -305,25 +307,24 @@ questions.
 **Phase 2 is open (ADR-376). Its plan is `BACKLOG.md`, "Active — Phase 2" (ADR-377): read its
 brief first. One task per response.**
 
-**Task 2.5.3, part 2 of 5: the rest of the project's lists** *(BACKLOG 2.5.3 and C117; ADR-449
-(4) is the cut, ADR-450 what part 1 built; read `apps/api/src/phone/phone-lists.ts`,
-`apps/api/test/phone-lists.test.ts`, ARCHITECTURE §7.1's ⚠️ lists note, `adms-field-app` §4A.2a,
-`adms-certifications`, `packages/domain/src/quantity-lookup.ts` and `SetupStanding` first)*.
-`PhoneLists.held` and `phoneListsSchema` grow by: the project's certifications (number, kind,
-capacity, prime and subs; a new one is there at the next read, AC-03-09), its sites, its ROEs
-with those whose pre-work survey is done, its control ranges, a cert-number block for a phone
-that certifies, each unit rate pay item's capture settings, and the site's quantity lookup for
-a phone at a site; **never a rate, a load's pay item, a rule or a transaction** (AC-02-37,
-AC-07-91: the tests read every list for one). No private citizen's details beyond what a monitor
-needs to pick an ROE. Then part 3 (`SetupManifest` and the setup version, a schema change),
-part 4 (the login list and the master passcode's check: **read the user's reply to ADR-449 (5)
-first**; none in the files means it is built as proposed) and part 5 (the address lookup).
-**The user may still overturn ADR-450's defaults, ADR-449 (5)'s proposals, ADR-444's, ADR-443's,
+**Task 2.5.3, part 3 of 5: `SetupManifest` and the setup version** *(a schema change; BACKLOG
+2.5.3, C117's "Part 3" and C118; ADR-449 (4), 450, 451; read `spec/DATA-MODEL.md` §4.5,
+ARCHITECTURE §7.1's lists notes and §9, `adms-field-app` §4A.2a, `apps/api/src/phone/phone-lists.ts`,
+`schema-and-migrations.md` beside the `adms-verify` skill, and how a story's phone states
+`setupVersion: 1` by hand (`packages/scenarios/src/device.ts`) first)*. Decide and record: what a
+version numbers (the project's setup alone, or everything a phone is sent, which now moves with
+each new ROE and certification), when a new `SetupManifest` row is made (a read that writes, or
+each setup change) and which actor its record names; the lists' answer carries the version, every
+field event already records one, and the site's quantity lookup can be asked by setup version
+(REQ-124f's server half). The new table is guarded and its grants tested. Then part 4 (the login
+list and the master passcode's check: **read the user's reply to ADR-449 (5) first**; none in
+the files means it is built as proposed) and part 5 (the address lookup).
+**The user may still overturn ADR-451's and ADR-450's defaults, ADR-449 (5)'s proposals,
 ADR-442's, ADR-440's, ADR-438's two choices or ADR-439's (`SUMMARY.md` §4).**
 **Before the chain, `pnpm ready`** (the stack up, then `installer:check`): a `✗` at the migrations
 means one was made elsewhere, and `pnpm installer` applies it (seen 2026-10-09: 176 tests failed
 until it was). **After a change to `apps/api` or `apps/worker`, `pnpm local:up` again; if Docker
-answers 500, quit and reopen it; if `local:up` meets `ECONNRESET` or a container whose layer is
+answers 500, `docker desktop restart`; if `local:up` meets `ECONNRESET` or a container whose layer is
 gone, `pnpm local:down` and `up` once more.** **On a Linux host (a cloud session), the containers run as uid
 1000:** after `pnpm installer` the two service env files, and after each `local:up` the copied
 Caddy root, must be readable by it (`chown 1000:1000`), or the API or worker fails to start
