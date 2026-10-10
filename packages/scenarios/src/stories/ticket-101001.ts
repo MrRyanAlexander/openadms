@@ -13,7 +13,7 @@ import { made, scanned } from '../device.ts';
 import { uuidv7, uuidv7Time } from '../ids.ts';
 import { phoneLists } from '../phone-lists.ts';
 import type { Story } from '../runner.ts';
-import { assigned } from './board.ts';
+import { assigned, taken } from './board.ts';
 import { p1TimeZone as timeZone, setUpP1, setUpP1Sites } from './p1.ts';
 
 const at = (time: string): string => `2026-10-12T${time}:00-04:00`;
@@ -40,35 +40,28 @@ export const ticket101001: Story = {
     const entered = await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
       await tx.user.create({ data: { id: dana, name: 'Dana Reyes', role: 'ADMIN' } });
       const p1 = await setUpP1(tx, story.policy);
-      const ana = await tx.user.create({
-        data: { name: 'Ana Brooks', role: 'MONITOR', monitorNumber: 'M004127' },
-      });
-      const kim = await tx.user.create({
-        data: { name: 'Kim Nguyen', role: 'MONITOR', monitorNumber: 'M004128' },
-      });
       const { tdsr } = await setUpP1Sites(tx, p1.project);
-      return {
-        p1: p1.project,
-        ana: ana.id,
-        kim: kim.id,
-        collectionPhone,
-        towerPhone,
-        tdsr,
-      };
+      return { p1: p1.project, collectionPhone, towerPhone, tdsr };
     });
+    // The two monitors are created as real ones are: on a phone, online, under the master
+    // passcode; the database issues each their Monitor ID (ADR-442).
+    const ana = await story.monitor('Ana Brooks', collectionPhone.id);
+    const kim = await story.monitor('Kim Nguyen', towerPhone.id);
     // Monday's board, written by Dana: Ana on collections, Kim at the Marsh Road tower.
     const monday = { workDate: '2026-10-12', projectId: entered.p1 } as const;
     const setup = {
       ...entered,
+      ana: ana.id,
+      kim: kim.id,
       collections: await assigned(api, clock, dana, {
         ...monday,
-        personId: entered.ana,
+        personId: ana.id,
         fieldEventKinds: ['COLLECTION'],
         deviceId: entered.collectionPhone.id,
       }),
       tower: await assigned(api, clock, dana, {
         ...monday,
-        personId: entered.kim,
+        personId: kim.id,
         fieldEventKinds: ['DISPOSAL'],
         siteId: entered.tdsr,
         deviceId: entered.towerPhone.id,
@@ -81,11 +74,13 @@ export const ticket101001: Story = {
       { projectId: setup.p1, series: 'LOAD', lastUsedNumber: null },
     );
     if (!block.saved) throw new Error(block.refusal.message);
+    // Each signs in with Monitor ID and password, and the phone takes their assignment for the
+    // day: nobody enters the master passcode and nobody picks a project (AC-02-35; ADR-444).
     const anaPhone = story.phone({
       name: 'P1-COL-1',
       deviceId: setup.collectionPhone.id,
       monitorId: setup.ana,
-      assignmentId: setup.collections,
+      assignmentId: await taken(story, ana, setup.collectionPhone.id),
       projectId: setup.p1,
       setupVersion: 1,
       lists: await phoneLists(api, {
@@ -98,7 +93,7 @@ export const ticket101001: Story = {
       name: 'P1-TWR-TDSR',
       deviceId: setup.towerPhone.id,
       monitorId: setup.kim,
-      assignmentId: setup.tower,
+      assignmentId: await taken(story, kim, setup.towerPhone.id),
       projectId: setup.p1,
       siteId: setup.tdsr,
       setupVersion: 1,
@@ -240,7 +235,7 @@ export const ticket101001: Story = {
       [['user', 'user', 'user', 'master_passcode'], 94, 15],
     );
     story.check(
-      'and then holds exactly the two phones’ enrolments under the master passcode (each the phone and the security event of the passcode’s use), Dana’s twenty-two setup rows (the client, the declaration event, P1, its five number series and its five kinds of unit rate work, Coastline, its place as P1’s prime and its contract among them), the block Ana’s phone took (the series moved on, the block cut) and the two syncs',
+      'and then holds exactly the two phones’ enrolments under the master passcode (each the phone and the security event of the passcode’s use), Dana’s twenty setup rows (the client, the declaration event, P1, its five number series and its five kinds of unit rate work, Coastline, its place as P1’s prime and its contract among them), the two monitors created on a phone under the master passcode (each the person, their sign-in record and the security event of the passcode’s use), the board’s two assignments, the block Ana’s phone took (the series moved on, the block cut), the two sign-ins (each a security event and a session) and the two syncs',
       audit.slice(afterSeed).map((record) => [record.tableName, record.source]),
       [
         ['device', 'DEVICE'],
@@ -264,14 +259,22 @@ export const ticket101001: Story = {
         ['contractor', 'BACK_OFFICE'],
         ['project_contractor', 'BACK_OFFICE'],
         ['contract', 'BACK_OFFICE'],
-        ['user', 'BACK_OFFICE'],
-        ['user', 'BACK_OFFICE'],
         ['disposal_site', 'BACK_OFFICE'],
         ['disposal_site', 'BACK_OFFICE'],
+        ['user', 'DEVICE'],
+        ['user_credential', 'DEVICE'],
+        ['security_event', 'DEVICE'],
+        ['user', 'DEVICE'],
+        ['user_credential', 'DEVICE'],
+        ['security_event', 'DEVICE'],
         ['assignment', 'BACK_OFFICE'],
         ['assignment', 'BACK_OFFICE'],
         ['project_number_series', 'DEVICE'],
         ['number_block', 'DEVICE'],
+        ['security_event', 'DEVICE'],
+        ['session', 'DEVICE'],
+        ['security_event', 'DEVICE'],
+        ['session', 'DEVICE'],
         ['field_event', 'DEVICE'],
         ['field_event', 'DEVICE'],
       ],

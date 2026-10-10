@@ -4,6 +4,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { acceptedAdvisories } from '../src/audit.ts';
+import { LastTestRun, type VitestReport } from '../src/grants.ts';
 import { configFile, EnvFilesCheck, passwordLikeSetting, secretsIn } from '../src/secrets.ts';
 
 describe('a password-like setting with a literal value', () => {
@@ -109,5 +110,94 @@ describe('an env file', () => {
         '  infra/local/.env: not ignored by git',
       ],
     });
+  });
+});
+
+// When `pnpm security` may report the database tests from the run `pnpm test` made (ADR-446).
+describe('an earlier run of the database tests', () => {
+  const folder = '/repo/packages/db/test/';
+  const began = Date.UTC(2026, 9, 9, 12, 0, 0);
+  const file = (name: string, statuses: string[] = ['passed', 'passed']) => ({
+    name,
+    // As Vitest reports a file: failed only where a test in it failed; a skipped test fails none.
+    status: statuses.includes('failed') ? 'failed' : 'passed',
+    assertionResults: statuses.map((status) => ({ status })),
+  });
+  const report = (more: Partial<VitestReport> = {}): VitestReport => ({
+    startTime: began,
+    testResults: [
+      file(`${folder}grants.test.ts`),
+      file(`${folder}audit.test.ts`, ['passed', 'passed', 'passed']),
+      file('/repo/packages/domain/test/money.test.ts', ['passed']),
+    ],
+    ...more,
+  });
+  const facts = {
+    now: began + 10 * 60_000,
+    files: [`${folder}audit.test.ts`, `${folder}grants.test.ts`],
+    lastChange: began - 1,
+  };
+  const reusable = (kept: VitestReport | undefined, more: Partial<typeof facts> = {}) =>
+    new LastTestRun(folder).reusable(kept, { ...facts, ...more });
+
+  it('is reported again when it held every file, each passed, and nothing has changed since it began', () => {
+    expect(reusable(report())).toEqual({ files: 2, tests: 5, passed: 5, failed: 0, notPassed: [] });
+  });
+
+  it('is not when there is none, or it says no start time', () => {
+    expect(reusable(undefined)).toBe('no report of an earlier run');
+    expect(reusable({ testResults: report().testResults })).toBe('the report says no start time');
+    expect(reusable(report({ startTime: Number.NaN }))).toBe('the report says no start time');
+    expect(reusable(report({ startTime: facts.now + 1 }))).toBe('the report is from the future');
+  });
+
+  it('is not once half an hour has passed', () => {
+    expect(reusable(report(), { now: began + 30 * 60_000 })).toEqual(expect.any(Object));
+    expect(reusable(report(), { now: began + 30 * 60_000 + 1 })).toBe(
+      'the last run began more than 30 minutes ago',
+    );
+  });
+
+  it('is not when a file changed at or after its start', () => {
+    expect(reusable(report(), { lastChange: began })).toBe(
+      'a file changed since the last run began',
+    );
+    expect(reusable(report(), { lastChange: Number.POSITIVE_INFINITY })).toBe(
+      'a file changed since the last run began',
+    );
+  });
+
+  it('is not when it left a test file out, held one that is gone, or none is on disk', () => {
+    expect(reusable(report(), { files: [...facts.files, `${folder}new.test.ts`] })).toBe(
+      'the last run did not hold every file',
+    );
+    expect(reusable(report(), { files: [`${folder}grants.test.ts`] })).toBe(
+      'the last run held a file that is gone',
+    );
+    expect(reusable(report(), { files: [] })).toBe('no test file found');
+  });
+
+  it.each(['failed', 'skipped', 'pending', 'todo'])(
+    'is not when one of its tests is %s',
+    (status) => {
+      const kept = report({
+        testResults: [
+          file(`${folder}grants.test.ts`, ['passed', status]),
+          file(`${folder}audit.test.ts`),
+        ],
+      });
+      expect(reusable(kept)).toBe('the last run did not pass every test');
+    },
+  );
+
+  it('is not when a file failed with no test in it, or held none', () => {
+    const stopped = { name: `${folder}grants.test.ts`, status: 'failed', assertionResults: [] };
+    expect(reusable(report({ testResults: [stopped, file(`${folder}audit.test.ts`)] }))).toBe(
+      'the last run did not pass every test',
+    );
+    const empty = (name: string) => ({ name: `${folder}${name}`, status: 'passed' });
+    expect(
+      reusable(report({ testResults: [empty('grants.test.ts'), empty('audit.test.ts')] })),
+    ).toBe('the last run did not pass every test');
   });
 });

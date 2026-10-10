@@ -39,6 +39,7 @@ import { DeviceKeys } from '../phone/device-keys.ts';
 import { apiEnrolment } from '../phone/enrolment.controller.ts';
 import { Enrolment } from '../phone/enrolment.ts';
 import { MasterPasscodeCheck } from '../phone/master-passcode-check.ts';
+import { PhoneAssignments } from '../phone/phone-assignments.ts';
 import { apiPhoneMonitors } from '../phone/phone-monitors.controller.ts';
 import { PhoneMonitors } from '../phone/phone-monitors.ts';
 import { PhoneChallenges } from '../phone/phone-challenges.ts';
@@ -266,6 +267,7 @@ export class ApiProcess {
       tokens,
       hasher,
       tries,
+      assignments: new PhoneAssignments(database),
       clock,
       hours: policy.monitorSessionHours,
       requestNow,

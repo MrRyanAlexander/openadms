@@ -45,8 +45,8 @@ import {
 import { uuidv7 } from '../ids.ts';
 import { phoneLists } from '../phone-lists.ts';
 import type { EnrolledPhone } from '../software-key.ts';
-import type { Story } from '../runner.ts';
-import { assigned } from './board.ts';
+import type { Story, StoryMonitor } from '../runner.ts';
+import { assigned, taken } from './board.ts';
 import { p1TimeZone as timeZone, setUpP1, setUpP1Sites, startSeries } from './p1.ts';
 
 const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-04:00`;
@@ -178,18 +178,6 @@ export const sync: Story = {
           activationDate: new Date('2026-10-12'),
         },
       });
-      const monitors: Record<string, string> = {};
-      for (const [name, monitorNumber] of [
-        ['Ana Brooks', 'M004127'],
-        ['Kim Nguyen', 'M004128'],
-        ['Tariq Patel', 'M004129'],
-        ['Jo Kim', 'M004130'],
-        ['Sam Grant', 'M004131'],
-        ['Lee Morgan', 'M004132'],
-      ] as const) {
-        const monitor = await tx.user.create({ data: { name, role: 'MONITOR', monitorNumber } });
-        monitors[name] = monitor.id;
-      }
       return {
         luis: luis.id,
         p1: p1.project,
@@ -198,21 +186,34 @@ export const sync: Story = {
         tdsr,
         landfill,
         p2Tdsr: p2Tdsr.id,
-        monitors,
         phones,
       };
     });
     const { luis, p1, p2, coastline, tdsr, landfill, p2Tdsr } = office;
-    const person = (name: string): string => {
-      const id = office.monitors[name];
-      if (id === undefined) throw new Error(`No monitor ${name}`);
-      return id;
-    };
     const device = (name: string): string => {
       const id = office.phones[name];
       if (id === undefined) throw new Error(`No phone ${name}`);
       return id;
     };
+    // The six monitors, created as real ones are: on a phone, online, under the master passcode;
+    // the database issues each their Monitor ID (ADR-442).
+    const monitors: Record<string, StoryMonitor> = {};
+    for (const name of [
+      'Ana Brooks',
+      'Kim Nguyen',
+      'Tariq Patel',
+      'Jo Kim',
+      'Sam Grant',
+      'Lee Morgan',
+    ]) {
+      monitors[name] = await story.monitor(name, device('P1-COL-1'));
+    }
+    const monitor = (name: string): StoryMonitor => {
+      const found = monitors[name];
+      if (found === undefined) throw new Error(`No monitor ${name}`);
+      return found;
+    };
+    const person = (name: string): string => monitor(name).id;
     const projectNames = new Map([
       [p1, 'P1'],
       [p2, 'P2'],
@@ -373,9 +374,13 @@ export const sync: Story = {
       }
       return assignments;
     };
-    const setupOf = async (planned: Planned, assignmentId: string | undefined) => {
-      if (assignmentId === undefined) throw new Error(`${planned.phone} has no assignment.`);
+    const setupOf = async (planned: Planned, expected: string | undefined) => {
       const deviceId = device(planned.phone);
+      // Monitor ID and password, online: the phone takes the day's assignment (ADR-444).
+      const assignmentId = await taken(story, monitor(planned.monitor), deviceId);
+      if (assignmentId !== expected) {
+        throw new Error(`${planned.phone} took another assignment than the one expected.`);
+      }
       return {
         name: planned.phone,
         deviceId,

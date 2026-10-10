@@ -26,8 +26,9 @@ export {
   type RunOptions,
   type Story,
   type StoryContext,
+  type StoryMonitor,
   type StoryResult,
 } from './runner.ts';
 export { SoftwareKey, type EnrolledPhone } from './software-key.ts';
-export { StoryDatabase } from './story-database.ts';
+export { StoryDatabase, StoryTemplate, type Standing } from './story-database.ts';
 export { stories } from './stories/index.ts';

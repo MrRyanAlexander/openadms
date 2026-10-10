@@ -1,8 +1,9 @@
 // A monitor signing in and out on a phone (ARCHITECTURE §6, Device sessions, Abuse; §7.2;
 // AC-02-39; AC-10-18, 19, 32; BACKLOG 2.5.2, C93, C113; ADR-416, 441, 443). The sign-in is open
 // to a phone that has proved itself; signing out and who is signed in, to that phone with its
-// monitor's session token. The log says that a sign-in worked or why it didn't, by code and id:
-// never the Monitor ID, the password or the token.
+// monitor's session token. A sign-in is answered the monitor's assignment for the day, or why
+// the phone took none (AC-02-35; ADR-444). The log says that a sign-in worked or why it didn't,
+// by code and id: never the Monitor ID, the password or the token.
 import {
   monitorSignedInAnswerSchema,
   phoneMonitorAnswerSchema,
@@ -63,8 +64,15 @@ export class PhoneSignInsController {
       throw new Refusal('SIGN_IN_REFUSED', 401);
     }
     this.limits.signedIn(request.ip, login);
+    const { assignment } = outcome;
     request.log.info(
-      { deviceId: phone.deviceId, userId: outcome.userId },
+      {
+        deviceId: phone.deviceId,
+        userId: outcome.userId,
+        ...(assignment.taken
+          ? { assignmentId: assignment.assignment.id }
+          : { noAssignment: assignment.why }),
+      },
       'A monitor signed in on a phone.',
     );
     return monitorSignedInAnswerSchema.parse({
@@ -73,6 +81,8 @@ export class PhoneSignInsController {
       monitorNumber: outcome.monitorNumber,
       name: outcome.name,
       expiresInSeconds: this.signIns.secondsLeft(outcome.expiresAt),
+      assignment: assignment.taken ? assignment.assignment : null,
+      noAssignment: assignment.taken ? null : assignment.why,
     });
   }
 

@@ -2,7 +2,7 @@
 name: adms-field-app
 description: Open ADMS field app and phones, in today's rules. Covers enrolling a phone once, the day's assignment it takes at sign-in, setup by master passcode when there's no assignment (an unplanned assignment), offline sign-in from the login list and its safeguards, switching monitors and moving site, encryption, the time clock on the phone, syncing whenever there's signal, sync and turn in, an out-of-service phone (the Phase 0 part, ARCHITECTURE §7–§8); what a phone holds for its assignment (lists, the site's quantity lookup, never rates or rules); and the later-phase capture notes: offline as the only mode, advisory on-device checks, badge first and number last, every start list, the split chain, printing, scanning, GPS and photos. Use when touching enrolment, sign-in, the phone's lists, sync from the phone's side, or anything a monitor captures. The workflows themselves are adms-ticket-workflows.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-251; the Phase 0 device and assignment models built, ADR-281; split haul-outs, ADR-295; a badge's number the phone's list doesn't hold, ADR-421; enrolment through the API, ADR-439) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-251; the Phase 0 device and assignment models built, ADR-281; split haul-outs, ADR-295; a badge's number the phone's list doesn't hold, ADR-421; enrolment through the API, ADR-439; the assignment taken at sign-in, ADR-444) -->
 
 > **This page states today's rules** (last changed by ADR-295, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
@@ -45,7 +45,11 @@ gets tracked on a spreadsheet."
    work is at one (a tower, either haul-out end, a drop-off log), optionally a phone (ADR-240).
 4. **Start of day**: the monitor signs in on **any enrolled phone** with Monitor ID + password.
    **Online, the phone receives their assignment** and its lists (§4A.2a) and number blocks. No
-   master passcode, no picking. **One assignment on a phone at a time, so one project**; a tower
+   master passcode, no picking. **The sign-in's own answer carries it** (`POST
+   /phones/current/sign-ins`, ADR-444, an agent default): theirs for the project's own day, the
+   one that names this phone, else the only one they have; where several are left (two projects
+   and a phone neither names) the phone takes none and says so, and with none that day the
+   monitor is signed in all the same and told there is none. **One assignment on a phone at a time, so one project**; a tower
    monitor working two projects carries two phones (ADR-145).
 5. **No assignment?** The master passcode opens **setup on the phone**: project, work, site, and the
    monitor from the login list; online, or offline on the project whose lists the phone already holds

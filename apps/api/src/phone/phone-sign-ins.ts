@@ -25,6 +25,9 @@
 //   sessions), a sign-out, another monitor signed in on the phone, and a revoked key (the phone's
 //   own proof is read first) each stop it at once.
 // - **Written as the monitor, from that phone**: the session, the reset count and the event.
+// - **The phone takes the monitor's assignment** (ADR-240, 444; AC-02-35): a sign-in is answered
+//   their assignment for the day, read by phone-assignments.ts, or why the phone took none. A
+//   monitor with none is signed in all the same (ADR-441 (6)(d)).
 import { randomBytes } from 'node:crypto';
 
 import type { Database, DeviceStatus } from '@open-adms/db';
@@ -33,6 +36,7 @@ import type { Clock } from '../setup/setup-service.ts';
 import type { PasswordHasher } from '../sign-in/password-hasher.ts';
 import type { SessionTokens } from '../sign-in/session-tokens.ts';
 import type { WrongTries } from '../sign-in/wrong-tries.ts';
+import type { AssignmentAtSignIn, PhoneAssignments } from './phone-assignments.ts';
 
 // Why a sign-in was refused: for the server's log only. A caller is never told which, but for a
 // phone taken out of service, which is told apart before the password is read.
@@ -49,7 +53,12 @@ export interface MonitorOnPhone {
 }
 
 export type PhoneSignInOutcome =
-  | ({ readonly signedIn: true; readonly token: string } & MonitorOnPhone)
+  | ({
+      readonly signedIn: true;
+      readonly token: string;
+      // The assignment the phone takes, or why it took none.
+      readonly assignment: AssignmentAtSignIn;
+    } & MonitorOnPhone)
   | { readonly signedIn: false; readonly why: PhoneSignInRefused | 'PHONE_OUT_OF_SERVICE' };
 
 // The phone the call came from, as its proof's token read it now.
@@ -62,6 +71,7 @@ export interface PhoneSignInsParts {
   readonly tokens: SessionTokens;
   readonly hasher: PasswordHasher;
   readonly tries: WrongTries;
+  readonly assignments: PhoneAssignments;
   readonly clock: Clock;
   // How long a monitor's sign-in lasts, in hours (`MONITOR_SESSION_HOURS`).
   readonly hours: number;
@@ -84,7 +94,7 @@ export class PhoneSignIns {
     monitorNumber: string,
     password: string,
   ): Promise<PhoneSignInOutcome> {
-    const { tokens, hasher, tries, clock, hours, requestNow } = this.parts;
+    const { tokens, hasher, tries, assignments, clock, hours, requestNow } = this.parts;
     // Before the password is read: a phone out of service never spends a monitor's count.
     if (phone.status !== 'ACTIVE') return { signedIn: false, why: 'PHONE_OUT_OF_SERVICE' };
     const person = await this.named(monitorNumber);
@@ -161,6 +171,7 @@ export class PhoneSignIns {
       monitorNumber: person.monitorNumber,
       name: person.name,
       expiresAt,
+      assignment: await assignments.taken(person.id, phone.deviceId, now),
     };
   }
 

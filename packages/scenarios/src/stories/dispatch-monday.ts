@@ -6,8 +6,9 @@
 // master passcode sets his phone up on the spot: an unplanned assignment, marked. Ana and Kim record ticket 101001 under their assignments; that evening
 // Tariq's phone can't be found and is marked lost. What it proves is the models: the time zone, the
 // Monitor ID, the device with its number block and passcode version, the assignment, and each
-// field event carrying its assignment and setup version. The screens, the sign-in and the sync
-// behind these rows are Phases 2 to 4; the number block is cut by the API's allocator (ADR-323).
+// field event carrying its assignment and setup version. Its monitors are created on a phone
+// and signed in through the API's services, and each phone is answered its monitor's assignment
+// (ADR-442, 443, 444). The screens and the sync behind these rows are Phases 2 to 4; the number block is cut by the API's allocator (ADR-323).
 // It opens with setup's first three steps
 // (ADR-303): the client, the declaration event and the project, whose settings start as the
 // release's policy values; then the fourth (ADR-305): the prime added to the project, and its
@@ -174,58 +175,6 @@ export const dispatchMonday: Story = {
 
     story.at(
       at('05:45'),
-      'The monitors: Ana Brooks, Kim Nguyen (a temp agency’s), Tariq Patel and Jo Kim',
-    );
-    // Their Monitor IDs are the example world's, written as given; a real installation's all come
-    // from the database, as Dana's and Luis's did.
-    const people = await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
-      const agency = await tx.contractor.create({
-        data: { name: 'Harbor Staffing', kind: 'MONITORING' },
-      });
-      const ana = await tx.user.create({
-        data: { name: 'Ana Brooks', role: 'MONITOR', monitorNumber: 'M004127' },
-      });
-      const kim = await tx.user.create({
-        data: {
-          name: 'Kim Nguyen',
-          role: 'MONITOR',
-          monitorNumber: 'M004128',
-          employerId: agency.id,
-          employerNumber: 'HS-0417',
-        },
-      });
-      const tariq = await tx.user.create({
-        data: { name: 'Tariq Patel', role: 'MONITOR', monitorNumber: 'M004129' },
-      });
-      const jo = await tx.user.create({
-        data: { name: 'Jo Kim', role: 'MONITOR', monitorNumber: 'M004130' },
-      });
-      return { ana: ana.id, kim: kim.id, tariq: tariq.id, jo: jo.id };
-    });
-    const employed = await api.user.findMany({
-      where: { role: 'MONITOR' },
-      include: { employer: true },
-      orderBy: { monitorNumber: 'asc' },
-    });
-    story.check(
-      'AC-01-20 each monitor: their Monitor ID, their employer (a contractor record of the monitoring kind) and its ID for them',
-      employed.map((person) => [
-        person.name,
-        person.monitorNumber,
-        person.employer?.name ?? null,
-        person.employer?.kind ?? null,
-        person.employerNumber,
-      ]),
-      [
-        ['Ana Brooks', 'M004127', null, null, null],
-        ['Kim Nguyen', 'M004128', 'Harbor Staffing', 'MONITORING', 'HS-0417'],
-        ['Tariq Patel', 'M004129', null, null, null],
-        ['Jo Kim', 'M004130', null, null, null],
-      ],
-    );
-
-    story.at(
-      at('05:50'),
       'Three phones are enrolled, once: each its own key, no project, no monitor',
     );
     // Each under the master passcode, through the API's enrolment (ADR-439, 440).
@@ -255,6 +204,62 @@ export const dispatchMonday: Story = {
       'the passcode itself is nowhere: the database keeps its slow hash, the audit log not even that',
       passcode.map((record) => [record.source, (record.newValue as { hash: string }).hash]),
       [['SYSTEM', '[kept out of the audit]']],
+    );
+
+    story.at(
+      at('05:50'),
+      'The monitors, each created on a phone under the master passcode: Ana Brooks, Kim Nguyen (a temp agency’s), Tariq Patel and Jo Kim',
+    );
+    // Created as real ones are (ADR-442): on an enrolled phone, online, under the master
+    // passcode, through the API; the database issues each the next Monitor ID, as it did Dana's
+    // and Luis's. A monitor's employer has no request yet (the people page, Phase 4): Dana's
+    // entry of Kim's is written as that page will send it.
+    const created = {
+      ana: await story.monitor('Ana Brooks', phones.collection.id),
+      kim: await story.monitor('Kim Nguyen', phones.collection.id),
+      tariq: await story.monitor('Tariq Patel', phones.collection.id),
+      jo: await story.monitor('Jo Kim', phones.collection.id),
+    };
+    const people = {
+      ana: created.ana.id,
+      kim: created.kim.id,
+      tariq: created.tariq.id,
+      jo: created.jo.id,
+    };
+    await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
+      const agency = await tx.contractor.create({
+        data: { name: 'Harbor Staffing', kind: 'MONITORING' },
+      });
+      await tx.user.update({
+        where: { id: people.kim },
+        data: { employerId: agency.id, employerNumber: 'HS-0417' },
+      });
+    });
+    const employed = await api.user.findMany({
+      where: { role: 'MONITOR' },
+      include: { employer: true },
+      orderBy: { monitorNumber: 'asc' },
+    });
+    story.check(
+      'AC-01-20, AC-02-07 each monitor: the Monitor ID the database issued them (nobody typed one), their employer (a contractor record of the monitoring kind) and its ID for them',
+      employed.map((person) => [
+        person.name,
+        person.monitorNumber,
+        person.employer?.name ?? null,
+        person.employer?.kind ?? null,
+        person.employerNumber,
+      ]),
+      [
+        ['Ana Brooks', 'M000003', null, null, null],
+        ['Kim Nguyen', 'M000004', 'Harbor Staffing', 'MONITORING', 'HS-0417'],
+        ['Tariq Patel', 'M000005', null, null, null],
+        ['Jo Kim', 'M000006', null, null, null],
+      ],
+    );
+    story.check(
+      'each story monitor reads the ID it was given',
+      Object.values(created).map((monitor) => monitor.monitorNumber),
+      ['M000003', 'M000004', 'M000005', 'M000006'],
     );
 
     story.at(
@@ -391,7 +396,56 @@ export const dispatchMonday: Story = {
 
     story.at(
       at('06:30'),
-      'At the yard, online, Ana’s phone takes her assignment and a block of load numbers',
+      'At the yard, online, each monitor signs in with Monitor ID and password; Ana’s phone takes her assignment and a block of load numbers',
+    );
+    // Nobody enters the master passcode and nobody picks a project (AC-02-35; ADR-444). Jo's
+    // assignment names no phone: she picks up the landfill tower's and it takes hers. Tariq has
+    // none: he is signed in all the same, and told there is none.
+    const answered = {
+      ana: await story.signedIn(created.ana, phones.collection.id),
+      kim: await story.signedIn(created.kim, phones.tdsrTower.id),
+      jo: await story.signedIn(created.jo, phones.landfillTower.id),
+      tariq: await story.signedIn(created.tariq, phones.landfillTower.id),
+    };
+    const p1Name = 'Bayline County ROW, Hurricane Delphine';
+    const told = (answer: (typeof answered)['ana']) =>
+      answer.taken
+        ? [
+            answer.assignment.id,
+            answer.assignment.project.name,
+            answer.assignment.workDate,
+            answer.assignment.fieldEventKinds,
+            answer.assignment.site?.name ?? null,
+          ]
+        : answer.why;
+    story.check(
+      'AC-02-35 each phone is answered its monitor’s assignment for Monday, with its project, work and site; Tariq’s is told there is none that day',
+      [told(answered.ana), told(answered.kim), told(answered.jo), told(answered.tariq)],
+      [
+        [board.collections, p1Name, '2026-10-12', ['COLLECTION'], null],
+        [board.tower, p1Name, '2026-10-12', ['DISPOSAL'], 'Marsh Road TDSR'],
+        [board.unitRate, p1Name, '2026-10-12', ['UNIT_RATE'], null],
+        'NONE_THAT_DAY',
+      ],
+    );
+    const sessions = await api.session.findMany({
+      where: { deviceId: { not: null } },
+      orderBy: { id: 'asc' },
+      include: { user: true, device: true },
+    });
+    story.check(
+      'one monitor at a time on a phone: Tariq’s sign-in on P1-TWR-LF signed Jo out of it',
+      sessions.map((session) => [
+        session.user.name,
+        session.device?.name,
+        session.revokedAt === null,
+      ]),
+      [
+        ['Ana Brooks', 'P1-COL-1', true],
+        ['Kim Nguyen', 'P1-TWR-TDSR', true],
+        ['Jo Kim', 'P1-TWR-LF', false],
+        ['Tariq Patel', 'P1-TWR-LF', true],
+      ],
     );
     const allocator = new NumberAllocator(api, clock, story.policy);
     const anaAtSync = { person: people.ana, deviceId: phones.collection.id };

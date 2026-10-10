@@ -592,6 +592,16 @@ So the protection can't rest on the password. It rests on these:
 > fiftieth until an admin sets the password anew (the phone's own screen keeps its 5 and 10).
 > A phone taken out of service signs nobody in. The database itself lets a monitor's session be
 > opened on a phone only (point 1).
+>
+> ⚠️ **ADR-444 (2026-10-09; agent defaults, this note awaits approval, building didn't wait):
+> the phone takes the assignment at that sign-in.** The sign-in's answer carries the monitor's
+> assignment for the day, the day being the project's own (its time zone): the one that names
+> this phone; with none naming it, the only one they have, whichever phone the board named.
+> Where several are left (two projects that day and a phone neither names), the phone takes none
+> and says so: nobody picks a project on a phone and the server never picks one for them; the
+> dispatcher names the phone, or the master passcode sets it up (§7.1). With none that day the
+> monitor is signed in all the same and told there is none. The phone is told the assignment's
+> project, day, work and site, never a rate or a code; its lists are their own read.
 
 ### 7.3 Switching monitors on a phone
 

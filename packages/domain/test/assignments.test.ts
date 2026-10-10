@@ -78,3 +78,78 @@ describe('an assignment changed or withdrawn on the board', () => {
     }
   });
 });
+
+describe('the assignment a phone takes when its monitor signs in', () => {
+  const bayline = 'America/New_York';
+  // Monday 12 October 2026, 06:30 in Bayline County.
+  const mondayMorning = new Date('2026-10-12T06:30:00-04:00');
+  const kims = { id: 'kims', workDate: '2026-10-12', timeZone: bayline, deviceId: 'P1-TWR-TDSR' };
+
+  it('AC-02-35 the monitor’s assignment for the day, on the phone the board named and on any other', () => {
+    expect(rules.takenAtSignIn(mondayMorning, 'P1-TWR-TDSR', [kims])).toEqual({
+      taken: true,
+      id: 'kims',
+    });
+    expect(rules.takenAtSignIn(mondayMorning, 'P1-COL-1', [kims])).toEqual({
+      taken: true,
+      id: 'kims',
+    });
+    expect(rules.takenAtSignIn(mondayMorning, 'P1-COL-1', [{ ...kims, deviceId: null }])).toEqual({
+      taken: true,
+      id: 'kims',
+    });
+  });
+
+  it('none that day: the phone takes none, and another day’s is not the day’s', () => {
+    const none = { taken: false, why: 'NONE_THAT_DAY' };
+    expect(rules.takenAtSignIn(mondayMorning, 'P1-TWR-TDSR', [])).toEqual(none);
+    for (const workDate of ['2026-10-11', '2026-10-13']) {
+      expect(rules.takenAtSignIn(mondayMorning, 'P1-TWR-TDSR', [{ ...kims, workDate }])).toEqual(
+        none,
+      );
+    }
+  });
+
+  it('the day is the project’s own: 23:30 on Monday in Bayline County is already Tuesday in UTC, and still Monday’s assignment', () => {
+    const lateMonday = new Date('2026-10-12T23:30:00-04:00');
+    expect(lateMonday.toISOString().slice(0, 10)).toBe('2026-10-13');
+    expect(rules.takenAtSignIn(lateMonday, 'P1-TWR-TDSR', [kims])).toEqual({
+      taken: true,
+      id: 'kims',
+    });
+    // One instant, two projects, two days: each assignment is read by its own project’s day.
+    const honolulu = { ...kims, id: 'west', timeZone: 'Pacific/Honolulu' };
+    const earlyTuesday = new Date('2026-10-13T00:30:00-04:00');
+    expect(rules.takenAtSignIn(earlyTuesday, 'P1-TWR-TDSR', [kims])).toEqual({
+      taken: false,
+      why: 'NONE_THAT_DAY',
+    });
+    expect(rules.takenAtSignIn(earlyTuesday, 'P1-TWR-TDSR', [kims, honolulu])).toEqual({
+      taken: true,
+      id: 'west',
+    });
+  });
+
+  it('AC-02-29, 36 two that day, on P1 and P2: each phone takes the one that names it; a phone neither names takes none, and no project is picked for her', () => {
+    const p1 = { id: 'p1', workDate: '2026-10-12', timeZone: bayline, deviceId: 'P1-COL-1' };
+    const p2 = { id: 'p2', workDate: '2026-10-12', timeZone: bayline, deviceId: 'P2-COL-1' };
+    expect(rules.takenAtSignIn(mondayMorning, 'P1-COL-1', [p1, p2])).toEqual({
+      taken: true,
+      id: 'p1',
+    });
+    expect(rules.takenAtSignIn(mondayMorning, 'P2-COL-1', [p1, p2])).toEqual({
+      taken: true,
+      id: 'p2',
+    });
+    const several = { taken: false, why: 'SEVERAL_THAT_DAY' };
+    expect(rules.takenAtSignIn(mondayMorning, 'P1-COL-2', [p1, p2])).toEqual(several);
+    // Two that name one phone: one assignment on a phone at a time, so neither is picked.
+    expect(
+      rules.takenAtSignIn(mondayMorning, 'P1-COL-1', [p1, { ...p2, deviceId: 'P1-COL-1' }]),
+    ).toEqual(several);
+    // The one that names this phone is taken though another names none.
+    expect(rules.takenAtSignIn(mondayMorning, 'P1-COL-1', [p1, { ...p2, deviceId: null }])).toEqual(
+      { taken: true, id: 'p1' },
+    );
+  });
+});

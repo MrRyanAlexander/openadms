@@ -1,15 +1,21 @@
 // A monitor signs in on a phone, online, against the database (ARCHITECTURE §6, Device sessions,
 // Abuse; §7.2; spec/acceptance/02-people-and-devices.md AC-02-39; spec/acceptance/10-api-and-
 // sync.md AC-10-18, 19, 32; BACKLOG 2.5.2, C90, C112, C113; ADR-105, 134, 409, 417, 440, 441,
-// 443). NIST SP 800-63B-4 §2.2.3, §3.2.2, §5.1; OWASP ASVS 5.0 V6, V7, V16. The real process,
+// 443); and the phone takes the monitor's assignment for the day (AC-02-29, 35, 36; C114;
+// ADR-240, 444). NIST SP 800-63B-4 §2.2.3, §3.2.2, §5.1; OWASP ASVS 5.0 V6, V7, V16. The real process,
 // in this test's own memory, on the installation's database as `adms_api`: it needs `pnpm
 // local:up` after `pnpm installer`, and fails saying so. Each test's work is undone
 // (support/database.ts).
 import {
+  createProjectEndpoint,
+  createSiteEndpoint,
   endpoints,
   monitorCreatedAnswerSchema,
   monitorSignedInAnswerSchema,
   phoneMonitorAnswerSchema,
+  withdrawAssignmentEndpoint,
+  writeAssignmentEndpoint,
+  type MonitorSignedInAnswer,
 } from '@open-adms/contracts';
 import type { Database } from '@open-adms/db';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -19,7 +25,7 @@ import { installationSettings, openInstallation, type Tx } from './support/datab
 import { enrolledPhone, passcode, proven, type TestPhone } from './support/phones.ts';
 import { notTaken } from './support/review.ts';
 import { danasEmail, long, worldOn, type Answer, type Served } from './support/served.ts';
-import { told } from './support/setup.ts';
+import { ask, p1, saved, told, type Browser } from './support/setup.ts';
 import { Outbox } from './support/sign-in.ts';
 
 let db: Database;
@@ -482,6 +488,192 @@ describe('the log', () => {
       ]) {
         expect(log.includes(secret), secret).toBe(false);
       }
+    });
+  });
+});
+
+describe('the phone takes the monitor’s assignment', () => {
+  const monday = '2026-10-12';
+  const tuesday = '2026-10-13';
+  // 6:30 am on Monday in Bayline County, at the staging area.
+  const mondayMorning = new Date('2026-10-12T10:30:00Z');
+  const noWork = {
+    fieldEventKinds: [],
+    certifying: false,
+    formDocumentTypes: [],
+    siteId: null,
+    deviceId: null,
+    payItemIds: [],
+  };
+
+  // What a sign-in that must work was answered. Its body is the Monitor ID and password alone:
+  // no master passcode, no project.
+  async function taking(
+    served: Served,
+    bearer: string,
+    monitor: Monitor,
+  ): Promise<MonitorSignedInAnswer> {
+    const answer = await signIn(served, bearer, {
+      monitorNumber: monitor.monitorNumber,
+      password: monitor.password,
+    });
+    expect(told(answer)).toEqual([200, undefined]);
+    return monitorSignedInAnswerSchema.parse(answer.body);
+  }
+
+  const written = async (served: Served, dana: Browser, projectId: string, payload: object) =>
+    saved(
+      writeAssignmentEndpoint,
+      await ask(served, dana, writeAssignmentEndpoint, {
+        ids: { projectId },
+        payload: { ...noWork, ...payload },
+      }),
+    ).record;
+
+  it('AC-02-35 Lee Morgan has Monday’s assignment at the Marsh Road tower: signing in on any enrolled phone with Monitor ID and password alone, the phone is answered it, with its project, day, work and site; Ana Brooks, with none, signs in and is told there is none; nothing is written for it', async () => {
+    await world(async (served, tx) => {
+      served.clock.at = mondayMorning;
+      const dana = await served.signedIn(danasEmail, long);
+      const { project } = await p1(served, dana, tx);
+      const tdsr = saved(
+        createSiteEndpoint,
+        await ask(served, dana, createSiteEndpoint, {
+          ids: { projectId: project.id },
+          payload: {
+            name: 'Marsh Road TDSR',
+            siteTypeId: (await tx.siteType.findUniqueOrThrow({ where: { key: 'TDSR' } })).id,
+            takesLoads: true,
+            haulOutsLeaveHere: true,
+            chargesTippingFee: false,
+            ineligibleSite: false,
+            permitNumber: null,
+            latitude: '39.09000000',
+            longitude: '-75.62000000',
+            activationDate: monday,
+          },
+        }),
+      ).record;
+      const { token, lee } = await leeOn(served, tx);
+      const tower = await enrolledPhone(served, tx, 'P1-TWR-TDSR');
+      const towerToken = await proven(served, tower);
+      const ana = await created(served, token, 'Ana Brooks', '5550143');
+      // The board names the tower's phone; Tuesday's is written too, and is not Monday's.
+      const mondays = await written(served, dana, project.id, {
+        personId: lee.userId,
+        workDate: monday,
+        fieldEventKinds: ['DISPOSAL'],
+        formDocumentTypes: ['DROP_OFF_LOG'],
+        siteId: tdsr.id,
+        deviceId: tower.id,
+      });
+      const tuesdays = await written(served, dana, project.id, {
+        personId: lee.userId,
+        workDate: tuesday,
+        fieldEventKinds: ['COLLECTION'],
+        certifying: true,
+      });
+      const assignment = {
+        id: mondays.id,
+        workDate: monday,
+        project: {
+          id: project.id,
+          name: 'Bayline County ROW, Hurricane Delphine',
+          timeZone: 'America/New_York',
+        },
+        fieldEventKinds: ['DISPOSAL'],
+        certifying: false,
+        formDocumentTypes: ['DROP_OFF_LOG'],
+        site: { id: tdsr.id, name: 'Marsh Road TDSR' },
+      };
+      // On the phone the board named, and on any other enrolled phone.
+      for (const bearer of [towerToken, token]) {
+        const answer = await signIn(served, bearer, {
+          monitorNumber: lee.monitorNumber,
+          password: lee.password,
+        });
+        expect(told(answer)).toEqual([200, undefined]);
+        const made = monitorSignedInAnswerSchema.parse(answer.body);
+        expect([made.assignment, made.noAssignment]).toEqual([assignment, null]);
+        // Never a rate, a code or a pay item; and taking it writes nothing of the assignment.
+        expect(answer.text).not.toMatch(/rate|payItem|code/i);
+        expect((await audited(tx, answer.requestId)).map(([table]) => table)).toEqual([
+          'security_event',
+          'session',
+        ]);
+      }
+      expect(await tx.assignment.findUniqueOrThrow({ where: { id: mondays.id } })).toMatchObject({
+        deviceId: tower.id,
+        archivedAt: null,
+      });
+      // Ana has none: signed in all the same (ADR-441 (6)(d)).
+      const anas = await taking(served, token, ana);
+      expect([anas.name, anas.assignment, anas.noAssignment, anas.expiresInSeconds]).toEqual([
+        'Ana Brooks',
+        null,
+        'NONE_THAT_DAY',
+        twelveHours,
+      ]);
+      expect(
+        told(await whoIsOn(served, token, anas.token)),
+        'Ana is signed in on the phone',
+      ).toEqual([200, undefined]);
+      // The day is the project's own: at 11:30 pm on Monday in Bayline County, Tuesday in UTC,
+      // it is still Monday's; half an hour past midnight there it is Tuesday's.
+      served.clock.at = new Date('2026-10-13T03:30:00Z');
+      expect((await taking(served, await proven(served, tower), lee)).assignment?.id).toBe(
+        mondays.id,
+      );
+      served.clock.at = new Date('2026-10-13T04:30:00Z');
+      const tuesdayToken = await proven(served, tower);
+      const onTuesday = await taking(served, tuesdayToken, lee);
+      expect(onTuesday.assignment).toMatchObject({
+        id: tuesdays.id,
+        workDate: tuesday,
+        fieldEventKinds: ['COLLECTION'],
+        certifying: true,
+        site: null,
+      });
+      // Withdrawn from the board: no longer the day's. Dana's Monday session has run out.
+      const danaOnTuesday = await served.signedIn(danasEmail, long);
+      saved(
+        withdrawAssignmentEndpoint,
+        await ask(served, danaOnTuesday, withdrawAssignmentEndpoint, {
+          ids: { assignmentId: tuesdays.id },
+        }),
+      );
+      const after = await taking(served, tuesdayToken, lee);
+      expect([after.assignment, after.noAssignment]).toEqual([null, 'NONE_THAT_DAY']);
+    });
+  });
+
+  it('AC-02-29, 36 Lee works P1 and P2 on Monday, a phone named on each: each phone takes the assignment that names it, so one project; a phone neither names takes none and is told there are several, and no project is picked for Lee', async () => {
+    await world(async (served, tx) => {
+      served.clock.at = mondayMorning;
+      const dana = await served.signedIn(danasEmail, long);
+      const first = await p1(served, dana, tx);
+      const p2 = saved(
+        createProjectEndpoint,
+        await ask(served, dana, createProjectEndpoint, {
+          payload: { ...first.payload, name: 'Bayline County PPDR, Hurricane Delphine' },
+        }),
+      ).record;
+      const { phone, token, lee } = await leeOn(served, tx);
+      const p2Phone = await enrolledPhone(served, tx, 'P2-COL-1');
+      const spare = await enrolledPhone(served, tx, 'P1-COL-2');
+      const work = { personId: lee.userId, workDate: monday, fieldEventKinds: ['COLLECTION'] };
+      const onP1 = await written(served, dana, first.project.id, { ...work, deviceId: phone.id });
+      const onP2 = await written(served, dana, p2.id, { ...work, deviceId: p2Phone.id });
+      const p1s = await taking(served, token, lee);
+      expect([p1s.assignment?.id, p1s.assignment?.project.id]).toEqual([onP1.id, first.project.id]);
+      const p2s = await taking(served, await proven(served, p2Phone), lee);
+      expect([p2s.assignment?.id, p2s.assignment?.project.name]).toEqual([
+        onP2.id,
+        'Bayline County PPDR, Hurricane Delphine',
+      ]);
+      const spares = await taking(served, await proven(served, spare), lee);
+      expect([spares.assignment, spares.noAssignment]).toEqual([null, 'SEVERAL_THAT_DAY']);
+      // Lee is signed in on all three at once, each with its own session (ADR-443 (5)).
+      expect(await tx.session.count({ where: { userId: lee.userId, revokedAt: null } })).toBe(3);
     });
   });
 });

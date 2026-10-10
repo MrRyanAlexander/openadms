@@ -1,0 +1,114 @@
+# The API's tests
+
+> Part of the `adms-verify` skill, moved here word for word on 2026-10-09 (ADR-445) so the
+> skill's own page stays short. **Read this page before you touch `apps/api`, an endpoint in `packages/contracts`, or a test of either.** Today's counts are
+> `agent_store/CHAIN.md`'s, never this page's.
+
+## 1.3b The API's tests (ADR-385)
+
+`apps/api/test`, by scenario ID of `spec/acceptance/10-api-and-sync.md`. `settings.test.ts`,
+`error-filter.test.ts` and `boundary.test.ts` need no stack (the last two run the real process in
+memory, with one more controller of the test's own, started through `test/support/process.ts`;
+two of the first start the built `apps/api/dist/main.js`). `request-id.test.ts` runs the process
+in memory too but opens `adms` as the API's own login, and undoes its write by failing out of it.
+**After a change to an endpoint in `packages/contracts`, `pnpm openapi`** (it writes
+`apps/api/openapi.json`; `boundary.test.ts` fails on a stale file, and on a route the contracts
+don't list). A test's own endpoint is made with `endpoint()` from schemas the contracts export:
+`apps/api` has no Zod of its own (ADR-387).
+`door.test.ts` asks the API's own container through Caddy over HTTPS and reads its log with
+`docker compose logs`: it **needs `pnpm local:up` after `pnpm installer`**, and fails saying so.
+**The container runs what was built when it started: after any change to `apps/api`, `pnpm
+local:up` again** (it builds, makes the container afresh and prints `https://api.adms.localhost/health
+→ 200 {"status":"ok"}`). Until the installer has run, `local:up` says `The API waits for pnpm
+installer` and starts the six. By hand:
+
+```bash
+curl --cacert infra/local/.generated/caddy-root.crt https://api.adms.localhost/health   # → {"status":"ok"}
+curl -sI http://api.adms.localhost/health                                               # → 308 to https
+```
+
+`passwords.test.ts` (ADR-402…405) needs no stack: the hash, the release's breached list, the
+reset code, the mail settings and what the two reset endpoints refuse before anything is read.
+`password-set.test.ts` writes: it opens `adms` as the API's login and **runs each test in one
+piece of work that is undone** (`test/support/database.ts`, `undone`; the services are handed a
+database whose `$write` and `$read` run inside it; a Prisma piece of work ends after five
+seconds, so a test stays short), hands the process its own database, mail and clock
+(`ProcessParts`), and sends one message through the stack's mail catcher, read back at
+`https://mail.adms.localhost/api/v1/…` and deleted. **A loosening of the password rules, the
+hash, the reset code or `Passwords` is tried on these files and on
+`packages/domain/test/passwords.test.ts`** (change the source, run the file, put it back). The
+secrets scan reads `apps/api/openapi.json` and every test: a made-up login URL is put together
+in `support/process.ts`, never written whole.
+
+`session-tokens.test.ts` (ADR-408) needs no stack: the access token, the refresh token, the
+CSRF value, the cookies, and what an endpoint that asks for a session refuses on sight; **it
+holds the list of endpoints nobody need be signed in for**, so a new `ANYBODY` endpoint is
+added there on purpose. `sessions.test.ts` (ADR-408…411) writes, as `password-set.test.ts`
+does: its `Served` starts the process on the test's own piece of work with a `TestClock` and
+keeps a browser's side (cookies and the CSRF value, by hand); `test/support/sign-in.ts` puts
+sign-in's services together for a test that calls one directly. **Every endpoint a test defines
+states its `access`.** An audit record's id is a BigInt: never `JSON.stringify` one whole.
+**A loosening of sessions, wrong tries, the cookies, admission or the hasher is tried on those
+two files, `passwords.test.ts`, `password-set.test.ts`, `boundary.test.ts` and
+`packages/domain/test/sign-in-tries.test.ts`**: fifty-seven took about ten minutes as a script
+that swaps one string, runs the files and puts the source back (format first, or the strings
+don't match; a loosening that isn't found in the source proves nothing: count it as not
+tried). **To copy `adms` for a guard's loosening, stop the API's container first** (`docker
+stop open-adms-local-api-1`: it holds a connection), and `pnpm local:up` again afterwards.
+
+`enrolment.test.ts` (ADR-439) is a phone enrolled under the master passcode: a real enrolment, the key, wrong tries, the wait, the lock and its opening, the log. **The installation's own master passcode is unknown to a test: each test adds a version of its own inside its undone piece of work** (`passcodeSet`) and enrols under that with a software key. An address's fifth wrong try is answered 429, so a test that makes more moves `served.from`; the lock is reached with `installationPolicy({ SIGN_IN_TRIES_BEFORE_LOCK: '7' })`. A key another phone holds is the database's refusal: a test's last request. **Never send a real or a wrong enrolment to the container** (`door.test.ts` sends one its schema refuses): a phone can't be deleted, and a wrong try counts against the installation's own passcode. A loosening of `Enrolment` or its controller is tried on it (it imports the source; thirteen took under two minutes as a script that swaps one string, **reading vitest's stderr with its stdout**); one of the guard on `packages/db`'s `master-passcode-actor.test.ts`, `catalog.test.ts` and `grants.test.ts` on a copy. **A new table that names a user** joins `packages/db/test/support/master-passcode-actor.ts`, with its check in its guard. **A new `ANYBODY` endpoint** joins `session-tokens.test.ts`'s list.
+
+`phone-proofs.test.ts` (ADR-440) is a phone's proof of itself: a challenge asked for and answered, the token, a recorded answer sent again, every proof that isn't one, a phone out of service and one whose key is revoked, the log. **A test's phone is `test/support/phones.ts`'s**: `enrolledPhone(served, tx, name)` enrols by the API's own request with a software key under a passcode version of the test's own, `answered` and `proven` ask for a challenge and sign it, and `served.ask(…, { bearer })` sends a token; **no test writes a phone by hand** (the database refuses a key that isn't shaped as one). **It holds the exact list of the endpoints open to a proven phone** (`access: 'PROVEN_PHONE'`): a new one is added there on purpose. `phone-proof.test.ts` needs nothing: the key, the challenge, the token, and two answers to one challenge at once (a database of the test's own making whose write matches no row). `door.test.ts` asks the container for a challenge and sends it a proof for a phone nobody enrolled: neither writes anything. A loosening of `PhoneProofs`, `PhoneTokens` or `Admission`'s phone access is tried on those two files (fourteen took about two minutes); **the early refusal of a revoked key and the rule asked before the write are each doubled by the write's own condition**, so loosening one alone changes nothing: loosen both. One of the guard on `packages/db`'s `device-key-actor.test.ts`, `catalog.test.ts`, `devices.test.ts` and `master-passcode-actor.test.ts`, each on its own copy (twelve took about seven minutes, one at a time). **A database test writes a device key with `deviceKeyLike(name)`** (`test/support/device-keys.ts`). **A story enrols a phone with `story.enrolled(name, at?)`** and proves one with `story.proofs`: never `tx.device.create`.
+
+`phone-sign-ins.test.ts` (ADR-443, 444) is a monitor's sign-in on a phone: who may sign in, the device's session (a row naming the phone, twelve hours, sent as `x-adms-monitor-session` beside the phone's token), what ends it, wrong tries, the per-person count, the log, **and the assignment the phone takes** (its project and board written through the endpoints as Dana; the day moved with `served.clock.at`, the phone proved again after it). The rule itself is `packages/domain/test/assignments.test.ts`'s (a loosening of `takenAtSignIn` is tried there; one of `PhoneAssignments` on this file, which imports the source). **A story creates a monitor with `story.monitor(name, onPhone)` and takes their assignment with `taken(story, monitor, phone)`** (`stories/board.ts`): never `tx.user.create` for a monitor; a monitor's sign-in writes a security event and a session, which a story's exact audit list holds. **The installation must be at head** (`pnpm installer` after a migration made elsewhere), or every signed-in API test answers 500. **A test's monitor is made the real way** (`created`: `POST /phones/current/monitors` under the test's passcode) and signed in with `signedIn`; a call open to `MONITOR_ON_PHONE` is `served.ask(…, { bearer, monitorSession })`. **It holds the exact list of the endpoints open to `MONITOR_ON_PHONE`**: a new one is added there on purpose. A phone answers only a challenge made after its last, so **a test that sets the clock earlier sets it before the phone is enrolled**, and one that moves it past fifteen minutes proves the phone again. A loosening of `PhoneSignIns`, its controller, `Admission`'s phone accesses, `WrongTries` or `Sessions` is tried on it, `sessions.test.ts` and `phone-proofs.test.ts` (eighteen took about forty minutes; an archived monitor's check and a phone's session at the back office are each doubled by construction). One of the session's guard on `packages/db`'s `sign-in.test.ts` and `catalog.test.ts`, each on its own copy. **On a Linux host** (a cloud session) the API's and the worker's containers run as uid 1000: the two service env files after `pnpm installer`, and the Caddy root `local:up` copies, must be readable by that user, or the API or the worker doesn't start (`ADMS_MAP_CA_FILE is malformed`).
+
+`limits.test.ts` (ADR-416): rate limits. **A test's requests come from `served.from`**
+(`support/served.ts`): four wrong tries at one login from one address and the fifth is answered
+429 before the login is touched, so a test that makes more moves `served.from`; a test that
+needs other numbers hands `worldOn` (or `Served.on`) a policy from `installationPolicy({ … })`.
+A new policy value (the newest: `PHONE_TOKEN_MINUTES`, ADR-440) is added to `policy.env`, the three whole maps in `packages/domain/test/`
+(they have no Node types to read the file with), `project-settings.test.ts`'s list of names and
+`packages/scenarios/test/policy.test.ts`.
+
+`people.test.ts` (ADR-415) writes, as `sessions.test.ts` does: permissions on every request
+and the firm's people, by scenario ID. **Every `SIGNED_IN` endpoint a test defines names its
+`roles`**; `support/served.ts` has two endpoints of the tests' own that take a permission
+(`/test/granted-voids`, `/test/unlocks`). **It holds the exact lists** of the endpoints that are
+an admin's alone and of those that take a permission: a new one is added there on purpose.
+**The project's files run one at a time** (`vitest.config.js`): the database keeps two who sign
+in from one email address, and every test's world has Dana's, so a second file's world would
+wait for the first's to be undone. **The database keeps the firm's last admin**: a test that
+archives Dana, or makes her anything else, first gives the firm another admin; a refusal by the
+database ends the test's piece of work, so it is a test's last step. **What needs a firm with
+no admin can't be tested on the installation's database** (a developer may have run `pnpm
+local:accounts`): it is the story `first-admin`, which drives `ServerAdmin` and `AdminCommand`
+with typed answers. **A loosening of the door or of `People` is tried on `people.test.ts`**
+(it imports the source); **one of `packages/domain/src/people.ts` on that package's
+`people.test.ts`** (the API reads the domain's built code); **one of the server command on
+its story** (`tsc --build`, then `node packages/scenarios/src/cli.ts first-admin`). A script
+that swaps one string and reads the run must count `Failed Tests`, not the word "failed" in
+lower case (seen 2026-10-07: a run read that way called every caught loosening slipped).
+
+`people-changes.test.ts` (ADR-427) is a page of people, a person changed, a role changed and out of the archive; it starts from `test/support/setup.ts` and hands `worldOn` an `Outbox` where it reads the mail. **The contracts' `endpoints` list is in path order** (two methods of one path together): `packages/contracts/test/endpoints.test.ts` fails otherwise. A loosening of `People` is tried on it and on `people.test.ts`.
+
+`phones.test.ts` (ADR-428) is the firm's phones and its master passcode; **it holds the exact list of the endpoints that take `DISPATCH`** (a new one is added there on purpose). A test that moves the clock sets `served.clock.at` **before** it signs in: an access token is good for five minutes. The installation's own master passcode is unknown to a test: it reads the version in force and changes it inside its undone piece of work. A loosening of `Phones` or `MasterPasscode` is tried on it (it imports the source); one of `packages/domain/src/phones.ts` or `DispatchRights` on that package's `phones.test.ts`.
+
+`assignments.test.ts` (ADR-429) is a day's assignments: written, changed, withdrawn, the board read; it starts from `test/support/setup.ts` (`p1Priced`) and enters a site, three pay items and three phones of its own (`p1Dispatched`). **A new endpoint that takes `DISPATCH` joins `phones.test.ts`'s exact list, and one open to the whole back office `people.test.ts`'s.** **A test's piece of work has no savepoint:** a refusal thrown after a write leaves the row behind in the test, so a service asks everything before it writes (and a test may count rows after a refusal to hold it to that). A loosening of `Assignments` is tried on it (it imports the source); one of `packages/domain/src/assignments.ts` on that package's `assignments.test.ts`; one of an endpoint's definition needs `./node_modules/.bin/tsc --build` first. **If `door.test.ts` or `pnpm local:up` meets `read ECONNRESET`** while Caddy answers inside its container, Docker Desktop's port forward is stuck: `pnpm local:down`, then `up` (seen twice, 2026-10-08). **A story writes a planned assignment with `assigned` (`packages/scenarios/src/stories/board.ts`)**, never by hand.
+
+`review-marks.test.ts` (ADR-430) is review's marks through their eight endpoints: a void, an unvoid, a flag's acceptance, a QC status, an invoice batch, a lock, its batch, an unlock. **The API's login writes no flag, status or completed load**, so a test's tickets are field events still PENDING, made through `BackOfficeRecords` as Dana (`p1WithTickets`): it reaches a void and its unvoid, a QC status on a unit rate ticket, a batch, and every refusal; accepting a flag and locking a completed ticket are the stories' (`p1-voided`, `p1-invoiced`). **`people.test.ts` holds the list of every permission an endpoint takes.** A loosening of the controller, `review-answered.ts` or a review service is tried on it (it imports the source); one of an endpoint's definition needs `./node_modules/.bin/tsc --build` first, and again once the source is back.
+
+`corrections.test.ts` (ADR-431) is corrections to a ticket's own records through their six endpoints: a field event's details, its number, an item line, a carried ticket, a photograph's two marks, a scale receipt. Its tickets are made as `review-marks.test.ts`'s are (the helpers both share are `test/support/review.ts`). **A refusal by one of the database's checks ends a test's piece of work, so it is that test's last request.** A schema's refusal is asserted by its words (`notTaken` in the file): the boundary now answers which field was refused, for every endpoint.
+
+`review-records.test.ts` (ADR-432) is an ROE, its scope, a survey, an incident and a drop-off log corrected, a quarantined record resolved and a field event created in the back office, through their eight endpoints. An ROE and a form are written by the test as the back office's (`source: 'BACK_OFFICE'`); **a quarantined record is made by `Intake` on the test's own piece of work** (a phone and an assignment written first, then the same number sent twice). `notTaken`, `audited` and `newId` are `test/support/review.ts`'s. **Two tickets of one truck at overlapping times are neighbours and are queued together**: a test that wants one ticket queued gives it another day. A body with a field the request doesn't take and nothing else stated is told both things: state one real field beside it. A loosening of the controller, `review-answered.ts`, `QuarantineReview`, `BackOfficeRecords` or `database-refusal.ts` is tried on it (it imports the source).
+
+`certifications.test.ts` (ADR-433) is a certification's measuring mistake, its signatures on file and its revocation, through their three endpoints. Its certification is made by `Certifications.certify` as Kim on the test's own piece of work (`certified`: P1 with Coastline as a prime, AC-03-51's boxes, 36 CY where the truck holds 32, and a crew), after two field events have scanned its number, so both are linked and queued. **A new admin-only endpoint joins `people.test.ts`'s exact list; one that takes *QC* `review-marks.test.ts`'s, *correct* `corrections.test.ts`'s.** A loosening of the controller, `Certifications` or `Corrections.certification` is tried on it (it imports the source); one of `CertificationChanges` on `packages/domain/test/certifications.test.ts`; one of an endpoint's definition needs `./node_modules/.bin/tsc --build` first, and again once the source is back.
+
+`viewer-reads.test.ts` (ADR-434) is a read-only viewer's path: who may ask, that each read states the signed-in viewer, the projects' answer, and every request that isn't a GET refused to a viewer. **The read-only login sees nothing a test hasn't committed**, so `Served` hands the process `ViewedWithin` (`test/support/database.ts`), which keeps who was stated (`served.viewerStated`) and reads as the API's login, shown every row: **a test here never proves which rows a viewer is shown** (that is `packages/db`'s `viewers.test.ts`, `row-level-security.test.ts`, `contractor-users.test.ts`, and a story). One test opens the real read-only login on `adms` and calls each read of `ViewerReads` with a made-up viewer: a column the login isn't granted fails there, so **a new read joins that test**. **It holds the exact lists** of the endpoints open to `viewerOnly` and of what a viewer may send that isn't a GET. `packages/db/test/viewer.test.ts` proves the shared place as the read-only login itself (`openViewerOnOneConnection` in `support/service.ts`); it writes nothing. A loosening of `viewer.ts`, `ViewerReads` or its controller is tried on those two files (they import the source). **A viewer's tickets, one ticket and ROEs (ADR-435):** the owner's views (`viewer_transaction_money`, `viewer_roe_citizen`, the three name views, `viewer_field_event_monitor`) are declared in `packages/db/prisma/schema/viewer.prisma` and refused to the API's own login, so **no test here reads one ticket whole**: the file holds the door, the schemas, a page of tickets and the 404 for a ticket nobody is shown (that one before any view is read, and a test's last request). **What each viewer is answered is the story `p1-viewed`** (`pnpm scenarios p1-viewed`, about fifteen seconds once built; it needs the map servers), which reads through `ViewerReads` as the read-only login on its own database (`story.viewed`): a loosening of a read is tried there (`./node_modules/.bin/tsc --build` first, and again once the source is back). After declaring a view, `./node_modules/.bin/prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema --exit-code` in `packages/db` must still answer `No difference detected.`, and `viewer.test.ts` holds each declaration to its view's columns. A `pg` deprecation warning printed by some API tests and stories comes from inside Prisma's adapter (seen 2026-10-08): not a failure.
+
+`setup-endpoints.test.ts` (ADR-424) writes, as `people.test.ts` does: setup's requests by scenario ID, each tried as nobody, a manager/analyst without Setup and a read-only viewer; **it holds the exact list of the endpoints that take `SETUP`** (a new one is added there on purpose). **`setup-pricing-endpoints.test.ts` (ADR-425)** is forms, pay items, "Pays when" and rules; **`setup-sites-endpoints.test.ts` (ADR-426)** is sites, the map, the merge and the setup as it stands (it holds who may ask the setup check and the lookups); all three start from `test/support/setup.ts` (`ask`, `saved`, `told`, `plainly`, `notSaved`, `p1`, `p1Priced`), and a later part's file does too. **A merge's queueing is proven by the story `p1-reviewed`**, so a loosening of it is tried there (`tsc --build` first). **A refusal by the database ends the test's piece of work: it is the test's last request**, one refusal a test. `database-refusal.test.ts` needs no stack. **A loosening of a setup controller, `SetupService.setup`, the error filter or `database-refusal.ts` is tried on those three files** (they import the source); **one of an endpoint's definition or of `SetupRights` needs `./node_modules/.bin/tsc --build` first** (the API reads the contracts' and the domain's built code), and again once the source is back.
+
+`pnpm installer:check` (29 `✓`, the master passcode's actor among them since ADR-439 and the device key's since ADR-440) ends with `✓ apps/worker/.env names the map servers the worker asks`, `✓ the API answers over HTTPS at https://api.adms.localhost/health` and `✓ the worker answers its health check in the local stack`.
+`pnpm local:down` removes eight containers and the network (9 `Removed` lines). Only this project:
+`./node_modules/.bin/vitest run --project @open-adms/api`. **A loosening of the log, the error filter, the boundary, the headers or the CORS list is tried on
+`error-filter.test.ts` and `boundary.test.ts`** (change the source, run the file, put the source back
+from a copy kept in the scratchpad): it imports the source, so no build is needed.

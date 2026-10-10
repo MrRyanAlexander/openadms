@@ -1,5 +1,7 @@
 // `pnpm scenarios`: runs the stories from a terminal (ARCHITECTURE §15; ADR-275).
 //   pnpm scenarios                 every story
+// A run of more than one story migrates and seeds once, into a template each story's database is
+// a copy of (ADR-447); the template is dropped when the run ends.
 //   pnpm scenarios <name> …        the stories named
 //   pnpm scenarios --keep …        keep each story's database to look at
 //   pnpm scenarios list            the stories
@@ -8,7 +10,7 @@
 import process from 'node:process';
 
 import { Runner } from './runner.ts';
-import { StoryDatabase } from './story-database.ts';
+import { StoryDatabase, StoryTemplate } from './story-database.ts';
 import { stories } from './stories/index.ts';
 
 async function main(args: readonly string[]): Promise<number> {
@@ -33,16 +35,27 @@ async function main(args: readonly string[]): Promise<number> {
   }
   const chosen =
     named.length === 0 ? stories : stories.filter((story) => named.includes(story.name));
-  const runner = new Runner(
-    (line) => {
-      console.log(line);
-    },
-    { keep },
-  );
+  const template = chosen.length > 1 ? await StoryTemplate.create() : undefined;
   let failed = 0;
-  for (const story of chosen) {
-    const result = await runner.run(story);
-    if (result.failed > 0 || result.error !== undefined) failed += 1;
+  try {
+    if (template !== undefined) {
+      console.log(
+        `This run’s template, ${template.name}: ${String(template.migrations)} migrations applied; ` +
+          `seed: ${template.seeded.join('; ')}`,
+      );
+    }
+    const runner = new Runner(
+      (line) => {
+        console.log(line);
+      },
+      { keep, ...(template === undefined ? {} : { template }) },
+    );
+    for (const story of chosen) {
+      const result = await runner.run(story);
+      if (result.failed > 0 || result.error !== undefined) failed += 1;
+    }
+  } finally {
+    await template?.drop();
   }
   console.log(`Stories: ${String(chosen.length - failed)} passed, ${String(failed)} failed.`);
   return failed === 0 ? 0 : 1;

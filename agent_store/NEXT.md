@@ -89,133 +89,46 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-09, through ADR-443)
-- **Phase 2 (API and sync) is open (ADR-376).** Its plan is `BACKLOG.md`'s eight milestones and 32
-  tasks (ADR-377); tasks 2.0.1 (the opening and the plan), 2.1.1 (the threat model and the
-  API's scenarios, ADR-379; docs), 2.1.2 (the API as a process, ADR-380…385), 2.1.3 (the
-  boundary, ADR-387…392) and **2.1.4 (time limits and policy, ADR-394…396)** are done:
-  Milestone 2.1 is complete. **Task 2.2.1 (sign-in's records, ADR-397…399) is done:** three
-  tables read by the API alone, each with its own guards: `user_credential` (a person's password
-  hash, authenticator secret and locked-until, apart from `user`), `session` (the SHA-256 of
-  the refresh token in force) and `security_event` (copied by the database into the audit
-  log's security domain). **Task 2.2.2 (passwords, ADR-402…406) is done:** the rules are
-  `packages/domain`'s (`PasswordRules`: NIST SP 800-63B-4 and ASVS 5.0; 15 to 128 characters as
-  policy values, never a composition rule or an age; a monitor's exempt, ADR-105); a password or
-  a master passcode that is on the release's own list of 46,483 known breached passwords
-  (`packages/domain/breached-passwords.txt`) is refused, with no outside service; a password is
-  kept only as an Argon2id hash (19 MiB, 2 passes, 1 lane); `Passwords` in `apps/api/src/sign-in/`
-  lets an admin set anybody's (**a service: its endpoint comes with 2.2.5**, when a session says
-  who calls) and a back-office or outside user reset theirs by email through two endpoints
-  (`POST /password-resets`, `/password-resets/completions`) with a signed code, good once for 60
-  minutes, that stores nothing; mail is `nodemailer` and never required. What it leaves: BACKLOG
-  C89. **Task 2.2.3 (sessions, ADR-407…411) is done:** an admin, a manager/analyst or a
-  read-only viewer signs in with their email address and password (`POST /sessions`) and gets
-  two `__Host-` cookies (`HttpOnly; Secure; SameSite=Strict`): an access token good for five
-  minutes and a refresh token that rotates and is good once (used twice, its session ends).
-  **Every endpoint says who may call it** (`access` in the contracts), asked by `Admission`
-  before the schemas read anything; a call that isn't a GET carries the session's CSRF value
-  in `x-adms-csrf`. A session ends after 30 quiet minutes and 12 hours at most. Wrong tries
-  are counted on `user_credential` (the domain's `SignInTries`): a wait from the 5th in a row,
-  a lock at the 50th (ADR-417, the user's decision; the 10th before) until the password is set anew; each a security event, written with the
-  person whose login was tried as its actor; a name nobody has writes nothing. A password an
-  admin set is changed by its owner first (`passwordChangeRequired`); a new password ends the
-  person's sessions; the password hash is keyed from `ADMS_TOKEN_SIGNING_SECRET`. A monitor
-  and the system actor are refused. What it leaves: BACKLOG C90. **Task 2.2.4 (two-step
-  sign-in, ADR-412) is done:** the second step is an authenticator app's code (RFC 6238, by
-  `node:crypto`); a person who has one gets a session only with it (`POST /sessions` takes
-  `code`; a right password without one answers `TWO_STEP_CODE_NEEDED`; a wrong or spent code
-  is a wrong try at the login); a code is good once (`user_credential.two_step_last_step`);
-  **an admin and a manager/analyst with none get a session that opens nothing but setting one
-  up** (`TWO_STEP_SETUP_REQUIRED`; an endpoint is open to them only where its definition says
-  `beforeTwoStepSetup`); a read-only viewer may choose one; a person sets it up by proving a
-  code (`POST /two-step/setups`, `/two-step/setups/confirmations`; nothing is kept before
-  that); the secret is kept sealed with a key drawn from the signing secret; an admin clears
-  another person's (`POST /people/:userId/two-step-clearings`: their sessions end, a
-  `TWO_STEP_CLEARED` security event). **The dev stack's accounts:** `pnpm local:accounts`
-  writes an admin, a manager/analyst and a viewer with known passwords and authenticator
-  secrets into this machine's installation (`--show` only shows them; it has not been run
-  for real here, so the installation holds no person but the system actor). What it leaves:
-  BACKLOG C91. **Task 2.2.5 (permissions on every request, and people, ADR-415) is done:**
-  every `SIGNED_IN` endpoint names its `roles` and may name one `permission`; `Admission` asks
-  them on each request from the database (`NOT_ALLOWED`), the rule the domain's (`Access`); an
-  admin creates back-office and outside users (`POST /people`), reads one (`GET
-  /people/:userId`, a monitor's phone number an admin's alone), gives and takes permissions and
-  a viewer's projects (`PUT …/permissions`, `…/viewer-projects`), sets a password
-  (`POST …/passwords`), ends sessions (`…/session-endings`) and archives (`…/archivings`); the
-  database keeps one email address a person who signs in and the firm's last admin; **`pnpm
-  installer:admin`** on the server makes the first admin and lets an admin back in (it has
-  not been run for real here: the installation still holds no person but the system actor).
-  What it leaves: BACKLOG C92. **Task 2.2.6 (rate limits, ADR-416) is done:** a caller over
-  a limit is answered 429 `LIMITED` with `Retry-After` (and `retryAfterSeconds` in the body);
-  every request is counted by address and, signed in, by person; refused tries at a secret by
-  address and by address at one login (four, under the login's own wait: the fifth from one
-  address never reaches the login); resets by email by who asks and who is asked for; nine
-  policy values; the counts in the API's own memory (gone at a restart, per process), never
-  the database; a caller's address taken from a proxy only where `ADMS_TRUSTED_PROXIES` lists
-  it (the local stack's Caddy is `172.30.213.2` on a network of fixed addresses); no address
-  logged or stored. **The user confirmed its defaults and put the lock at fifty wrong tries
-  (ADR-417).** What it leaves: BACKLOG C93. **Milestone 2.2 is complete.** **Task 2.3.1 (the job queue, ADR-418) is done:** two guarded tables of our own
-  written through Prisma, `reconciliation_job` and `reconciliation_job_ticket`, and no queue
-  library; a job names its project, what asked for it and who, and its tickets (workflow and
-  bare number); **it is added only inside the piece of work of the change that asks for it**,
-  by `new ReconciliationJobs(tx).queue(…)` in `packages/db`; the API adds a job and changes
-  nothing of it, the worker writes only how it went (`attempts`, `finishedAt` with its run,
-  `lastError`, `setAsideAt`), nobody deletes, no viewer reads; a job once finished or set aside
-  never changes. What it leaves: BACKLOG C94. **Task 2.3.2 (the worker as a process, ADR-419) is
-  done:** `apps/worker/src/main.ts`, the stack's eighth service (profile `worker`), looks at the
-  queue every five seconds and hands each project with a job waiting to
-  `Reconciliation.waitingJobs`: under the project's lock a try is counted on each waiting job,
-  the tickets they name are worked and no other, each once, and each job is finished in the
-  run's closing piece of work; a try that fails whole keeps its reason, and a job is set aside
-  after five (`JOB_TRIES_BEFORE_SET_ASIDE`). Its settings stop the start when off, named; its
-  log is JSON by ids; its health answer (`{"status":"ok","jobsWaiting":N,"jobsSetAside":N}`) is
-  on its own loopback, asked from inside the container. Five policy values more, the pool's
-  size for both services among them. `pnpm installer` writes the worker's map settings (it
-  added them to this machine's `apps/worker/.env`), starts the worker and checks it.
-  **Nothing queues a job yet** (2.3.3), **and `Reconciliation.run`, which the stories call,
-  still works every ticket of the project:** a job must name the neighbours a change can move
-  (voiding 101031 clears a flag on 101030), which is 2.3.3's first decision. What it leaves:
-  BACKLOG C95. **Task 2.3.3 (what queues work, ADR-420) is done: Milestone 2.3 is complete.**
-  Every change that moves a ticket queues its own job in its own piece of work, through
-  `WorkQueue` (`apps/api/src/jobs/`), and no caller asks the worker: the review services (a
-  correction, a renumber, a void, an unvoid, an acceptance, an unlock), the setup services (a
-  rule, a pay item, a rate by the new `PayItemSetup.rate`, "Pays when", a project's settings, a
-  control range, a map version, a site) and `Certifications` (one made later is linked to the
-  field events that scanned its number, and their tickets queued). **A job names the tickets
-  touched and their neighbours** (the domain's `TicketNeighbours`: an overlap on one truck, a
-  crew's day, one scale receipt, a carried ticket), asked before the change and after it;
-  never a ticket locked as invoiced, never a settled void; a change to a record that is no
-  ticket's (a site, a certification, a survey) queues a job that names none. The policy value
-  `JOB_TICKETS_AT_MOST` (200) cuts a change into jobs and caps what one run takes up. **Every
-  service that queues is made with `(db, clock, policy)`.** The stories `p1-reviewed`,
-  `p1-voided` and `p1-invoiced` run from the queue (`QueueRuns` in `p1-office.ts`); runs after
-  a sync are still asked for directly (2.6.2, 2.7.1). What it leaves: BACKLOG C96. **The user,
-  2026-10-08 (ADR-421):** a number at New that the phone's list of certifications doesn't hold:
-  the phone warns, asks to refresh if it has a connection, and otherwise the truck is keyed in
-  by hand (Phase 3, REQ-317); certifying is done where there is signal (ADR-151). **(ADR-422):** a
-  ticket locked as invoiced is on no job, and a saved setup change answers how many tickets
-  it queued and how many locked ones it left (`Outcome.queued`). **Task 2.4.1 (the services a
-  story still did by hand, ADR-423) is done:** `SetupStanding` (`apps/api/src/setup/`, made with
-  the database client alone) answers the setup check (`gaps`) and the sites' quantity lookup
-  (`quantityLookup`, `quantityLookupAt`) from one read-only reading of the project's setup,
-  kept nowhere; `PayItemSetup.change` (the unit, the crew-time conversion, the capture
-  settings), `ProjectSetup.changeWindow`, `SiteSetup.shape` (GeoJSON, the next version) and a
-  site's GPS on `SiteSetup.change` each queue the tickets they move; **no story writes a setup
-  change by hand any more.** What it leaves: BACKLOG C97. **Task 2.4.2 (setup's endpoints) is in four parts (ADR-424), and part 1 is done:** every setup endpoint takes the permission `SETUP` at the door, and every setup service asks again inside its own piece of work (`SetupService.setup`, the domain's `SetupRights`); a setting the domain refuses is answered `NOT_SAVED` with the rule's code (`reason`) and words; **what the database's own constraints refuse is answered plainly by the error filter, for every endpoint** (`process/database-refusal.ts`: 409 `ALREADY_HELD`, 422 `UNKNOWN_RECORD` and `REFUSED_BY_THE_DATABASE`, 404 `NOT_FOUND`), never as an internal error; eighteen requests serve the client, the declaration event, the project (its settings, window, close, number series, control ranges, field tags), contractors, primes, contracts and the two lists. **Part 2 is done (ADR-425):** nine requests more put `FormSetup`, `PayItemSetup` and `RuleSetup` behind the door (a form, a debris type on it, the firm's own fields; a pay item entered and changed, a prime's rate put as `"7.50"`, "Pays when" stated whole; a rule written and stated anew, a rule nobody has not found); **a pay item's code, description and band may now change** (never its payable type or kind of work), its rules renamed with it; AC-10-38 passes on its own case (a pay item entered with Coastline's rate twice: 409, told plainly); twenty-two more of the database's refusals have their own words. **Part 3 is done (ADR-426):** six requests more that take Setup put `SiteSetup` (a site entered and changed, its dates too; its own shape; its tipping fee pay item), the project's map and a contractor merge behind the door; **`ContractorSetup` is a queueing service, made with `(db, clock, policy)`, and a merge queues, per project, the tickets not locked as invoiced whose field events carry a certification it moved** (story `p1-reviewed`); the setup check and the two lookups are three `GET`s **open to every admin and manager/analyst, with or without Setup**; a map and a shape travel as GeoJSON in the body (a shapefile is 2.6.4's); nine more of the database's refusals have their own words. **Part 4 is done (ADR-427), and with it task 2.4.2:** four requests more on `People`: a page of the firm's people (`GET /people`, an admin or a manager/analyst; in service or archived, by role, 50 at a time and 200 at most, `next` for the page that follows), a person changed (`PATCH /people/:userId`: name, phone, email, a viewer's kind, contractor and sight of private citizens; the old sign-in address is told by mail where the firm has any, ASVS 6.3.7), a role changed **between admin and manager/analyst only** (`PUT /people/:userId/role`; a monitor who joins the back office is created there) and a person taken out of the archive (`POST /people/:userId/unarchivings`, with what they held and no session); the database's last-admin guard answering in a race is 409 `LAST_ADMIN`. What they leave: BACKLOG C98, C99, C100, C101. **Task 2.4.3 (dispatch and phones) is in two parts (ADR-428), and part 1 is done:** dispatch takes the permission `DISPATCH`, at the door and again in the service (the domain's `DispatchRights`); three requests serve the firm's phones a page at a time (`GET /phones`, any admin or manager/analyst), a phone taken out of service as lost or retired from the server's time at that moment (`POST /phones/:deviceId/removals`, with an optional note as the audit reason; once) and the master passcode changed (`POST /master-passcode/versions`, an admin's alone, giving their own password again; 8 to 128 characters, never a breached one or the one in force; a new version as an unkeyed Argon2id hash; every admin told by mail); the services are `apps/api/src/dispatch/`'s `Phones` and `MasterPasscode`; the stories `dispatch-monday` and `sync` grant Luis *dispatch* and mark the phone lost through `Phones`. What it leaves: BACKLOG C102. **Part 2 is done (ADR-429), and with it task 2.4.3:** `Assignments` (`apps/api/src/dispatch/`, beside `Phones` on a shared `DispatchService`) behind four requests: an assignment written for a person, a day and a project (`POST /projects/:projectId/assignments`: their work, a site or none, a phone or none, unit rate pay items; planned, saying who wrote it), changed (`PATCH /assignments/:assignmentId`: only what is stated of the work, site, phone and pay items; never its person, day or project), withdrawn (`POST …/withdrawals`, once) and the day's board read by project and day (`GET /projects/:projectId/assignments?workDate=`, any admin or manager/analyst, paged); **for a monitor or one of the back office, never a read-only viewer or somebody archived; never on a phone out of service; changed at any time while it stands and queueing nothing; one made on a phone under the master passcode is shown and left to the phone**; a site or a pay item of another project is the database's refusal in plain words; **no story writes a planned assignment by hand** (`stories/board.ts`, `assigned`), and Luis holds *dispatch* in every P1 story. What it leaves: BACKLOG C103. **Task 2.4.4 (certifications and review) is in four parts (ADR-430), and part 1 is done:** review's marks stand behind eight requests, each open to an admin and to a manager/analyst who holds that action's own permission now, asked at the door and again in the service: a ticket voided and unvoided (`POST /projects/:projectId/ticket-voids`, `…/ticket-unvoids`, *void*), a flag accepted (`POST /flags/:flagId/acceptances`, *accept flags*), a QC status set (`PUT /qc-marks`, *QC*), an invoice batch named, a ticket locked as invoiced and its batch set (`POST /projects/:projectId/invoice-batches`, `POST /invoice-locks`, `PUT /invoice-locks/batch`, *lock as invoiced*) and unlocked (`POST /invoice-unlocks`, *unlock*); the services (`Voids`, `Acceptances`, `QcMarks`, `InvoiceLocks`) are unchanged, served by `apps/api/src/review/review-marks.controller.ts`; the answer is the mark and how many tickets were queued; a rule's refusal is `NOT_SAVED` with its code and words, and the service's own "not permitted" is 403 with no words; **a test on the installation's database can't make a flag, a status or a completed load (the worker's), so accepting, locking, batching and unlocking a completed ticket are proven at the services by the stories and through the endpoints by 2.7.1.** What it leaves: BACKLOG C104. **Part 2 is done (ADR-431):** corrections to a ticket's own records stand behind six requests served by `apps/api/src/review/corrections.controller.ts` over the unchanged `Corrections`: a field event's captured details (`PATCH /field-events/:fieldEventId`), a line of its items (`PUT …/item-lines/:itemNameId`), a ticket it carries (`PUT …/carried-tickets`), a photograph removed, put back or labelled (`PATCH /photographs/:photoId`) and a scale receipt (`PATCH /scale-receipts/:scaleReceiptId`) take *correct*; its number (`PUT /field-events/:fieldEventId/number`) takes *renumber*; a schema says only what a value can be at all, and which kind of field event records which detail is the database's check, told plainly; the answer is the record as recorded and corrected, never the worker's conclusions; **a request its schema refuses is now told which field, on every endpoint** (400 `BAD_REQUEST` with a `message` from the contracts' `notTaken`: "Not taken: changes.loadCall in the body can’t be more than 100."; nothing a caller sent is said back; AC-10-37 passes). What it leaves: BACKLOG C105. **Part 3 is done (ADR-432):** eight requests more, served by `apps/api/src/review/review-records.controller.ts` over `Corrections`, `QuarantineReview` and `BackOfficeRecords`: an ROE (`PATCH /roes/:roeId`), a pick of its scope (`PUT /roes/:roeId/scope`), a survey, an incident and a drop-off log corrected (`PATCH /surveys/:surveyId`, `/incidents/:incidentId`, `/drop-off-logs/:dropOffLogId`) and a field event created in the back office (`POST /projects/:projectId/field-events`) take *correct*; a quarantined record given the number it should have had (`POST /quarantined-records/:quarantinedRecordId/renumberings`) or marked a second copy (`…/second-copies`) takes *renumber*; **no request corrects an ROE's number or a form's own answers, or creates a form: no service does yet**; a fix typed in the back office that can't be one is refused; a quarantined record's answer never holds what the phone sent. What it leaves: BACKLOG C106. **Part 4 is done (ADR-433), and with it task 2.4.4:** three requests more, served by `apps/api/src/certification/certifications.controller.ts`: a measuring mistake on a certification's box corrected (`PATCH /certifications/:certificationId/boxes/:position`, *correct*, with the reviewer's note; the capacity worked out again, never sent), its signatures on file marked (`PUT …/signatures-on-file`, *QC*) and a certification revoked (`POST …/revocations`, **an admin's alone: no permission opens it**, AC-03-55); `Certifications` asks each again inside its own piece of work; **no request makes a certification or replaces one: a phone does, and its sync brings it (2.6.2)**. What it leaves: BACKLOG C107. **Task 2.4.5 (the read-only viewer's path) is in two parts (ADR-434), and part 1 is done:** every read for a read-only viewer goes through one place, `ViewerDatabase.$viewed(viewerId, work)` (`packages/db/src/viewer.ts`): one read-only database transaction as `adms_readonly` that states `adms.viewer_id` first; the login's client is kept inside it, so no read is made as that login with no viewer stated. The API opens it from `READONLY_DATABASE_URL` and hands it to `ViewerReads` (`apps/api/src/viewer/`), which states the signed-in person's own id and **never filters by project or contractor itself: the database decides what a viewer is shown**. A viewer's reads are endpoints of their own under `/viewer/…`, each a GET open to `viewerOnly`; the first is `GET /viewer/projects` (id, name, time zone, when closed; paged). A viewer sends nothing that isn't a GET but their own password and authenticator (AC-10-31 passing). **A test of the API can't show which rows a viewer is shown**: the read-only login sees nothing a test hasn't committed, so the process is handed `ViewedWithin` (`apps/api/test/support/database.ts`), which keeps who was stated and reads as the API's login; that proof is part 2's story. What it leaves: BACKLOG C108. **Part 2 is done (ADR-435), and with it task 2.4.5 and Milestone 2.4:** three reads more on `ViewerReads`: a project's tickets of one workflow a page at a time (`GET /viewer/projects/:projectId/tickets?workflow=`), one ticket with its field events, its completed record and its lines (`…/tickets/:workflow/:ticketNumber`; **a ticket is asked for by project, workflow and bare number, and one the viewer isn't shown is 404, as one nobody has**), and a project's ROEs (`…/roes`); what the database doesn't show a viewer is `null` (a sub's money, who recorded, an owner, a contractor's name); **the owner's views are declared in `packages/db/prisma/schema/viewer.prisma`** (Prisma's `views` preview feature; `migrate diff` stays empty) and read typed; **what each viewer is answered is the story `p1-viewed`'s, as the read-only login on its own database (`story.viewed`)**; REQ-201 is ticked. What it leaves: BACKLOG C109. **The user's word (ADR-401):
-  sign-in follows NIST SP 800-63B and ASVS Level 2; when a direction in security is suggested,
-  say what the standard asks before building it** (ADR-400 was built first and withdrawn). **Each service login (`adms_api`, `adms_worker`, `adms_readonly`) is
-  under a statement timeout**, the policy value `STATEMENT_TIMEOUT_MS` (30,000 ms), set by
-  `pnpm installer` and read by `installer:check`; **an installation may state its own value for
-  any policy value** by the same name in a service's own env file or environment.
-  **The API runs**: NestJS 12.1.2 on Fastify 5.12.5, the local stack's seventh service, reached
-  only at `https://api.adms.localhost`; settings checked at the start, a structured log, one error
-  filter, `GET /health`. **Every endpoint is defined in `packages/contracts` and served through
-  `@Serves`; `Boundary` reads its path, query and body by its schemas first** (BACKLOG C86 is the
-  recipe for adding one); the CORS list is `ADMS_CORS_ORIGINS`; every answer carries the API's own
-  headers; the API's database client states the request's id on every write; `pnpm openapi`
-  writes `apps/api/openapi.json`. `spec/acceptance/10-api-and-sync.md` (56 scenarios, 45 passing)
-  and `spec/THREAT-MODEL.md` are both **approved by the user** (their marks, ADR-386, 393).
-  Its 14 REQs are in `REQUIREMENTS.md`, two ticked (REQ-201, 208).
+### Where things stand (2026-10-09, through ADR-448)
+- **Phase 2 (API and sync) is open (ADR-376): 20 of its 32 tasks are done** (`BACKLOG.md`,
+  "Active — Phase 2", ticks each with its ADRs). Complete: Milestone 2.1 (the API as a process,
+  the boundary, time limits and policy), 2.2 (sign-in: its records, passwords, sessions, two-step
+  sign-in, permissions and people, rate limits), 2.3 (the job queue, the worker as a process, what
+  queues work) and 2.4 (the services behind endpoints: setup, dispatch and phones, review and
+  certifications, the read-only viewer's path). Of 2.5 (phones): 2.5.1 (enrolment and a phone's
+  proof of itself, ADR-436…440) and 2.5.2 (monitors on phones: created, signed in, and the
+  assignment a phone takes, ADR-441…444) are done; 2.5.3 is next.
+- **Where each thing is written, so nothing is read twice:** a rule as it stands, with its ADR:
+  `SUMMARY.md`, by topic (grep its `###` headings; never read it whole). What a finished task left
+  for a later one: `BACKLOG.md`'s carry-forward register (C85…C116). How a layer's tests are
+  written and what a loosening is tried on: the page for that layer beside the `adms-verify`
+  skill. Today's counts: `agent_store/CHAIN.md`. **The task-by-task record that stood here
+  (2.0.1 to 2.5.2, every endpoint and service named) moved word for word to `DECISIONS.md`'s
+  scratchpad, "Moved 2026-10-09 (ADR-445)"**: grep it for a task's number when you need its detail.
+- **The user's word (ADR-401): sign-in follows NIST SP 800-63B and ASVS Level 2; when a direction
+  in security is suggested, say what the standard asks before building it** (ADR-400 was built
+  first and withdrawn).
+- **What runs.** The API (NestJS 12.1.2 on Fastify 5.12.5) is the local stack's seventh service,
+  reached only at `https://api.adms.localhost` through Caddy; the worker is the eighth, draining
+  the job queue. **Every endpoint is defined in `packages/contracts` and served through `@Serves`;
+  it says who may call it (`access`, `roles`, one `permission`), asked by `Admission` before the
+  schemas read anything** (BACKLOG C86 is the recipe for adding one; `pnpm openapi` after).
+  Each service login is under a statement timeout; an installation may state its own value for
+  any policy value. `spec/acceptance/10-api-and-sync.md` and `spec/THREAT-MODEL.md` are approved
+  by the user (ADR-386, 393). Phase 2's 14 REQs are in `REQUIREMENTS.md`, two ticked (REQ-201, 208).
+- **Phones today (what 2.5.3 builds on).** A phone enrols under the master passcode (`POST
+  /phones/enrolments`), proves itself by signing a challenge and gets a fifteen-minute token
+  (`access: 'PROVEN_PHONE'`, read with `phoneOf(request)`); a monitor is created on it under the
+  master passcode and signs in with Monitor ID and password (`access: 'MONITOR_ON_PHONE'`: the
+  phone's token and `x-adms-monitor-session`, read with `monitorOf(request)`); the sign-in's own
+  answer carries the assignment the phone takes, or `noAssignment`. What is written under the
+  master passcode names its own actor (`underMasterPasscode`), a proof's the device key's
+  (`byDeviceKey`). The code is `apps/api/src/phone/`. **No story and no test writes a phone or a
+  monitor by hand:** a story uses `story.enrolled`, `story.proofs`, `story.monitor`,
+  `story.signedIn` and `taken` (`stories/board.ts`); an API test `enrolledPhone`, `proven`
+  (`test/support/phones.ts`), `created` and `signedIn` (`phone-sign-ins.test.ts`).
+- **This machine's installation holds no person but the seed's three actors:** `pnpm
+  local:accounts` and `pnpm installer:admin` have not been run for real here.
 - **A test of the API that must write** runs in one piece of work on the installation's database,
   undone afterwards (`apps/api/test/support/database.ts`), and may hand the process its own
   database, mail and clock (ADR-405). **A test of a signed-in endpoint** uses
@@ -230,9 +143,9 @@ of `DECISIONS.md`.
   `installationPolicy({ … })`.
 - **Phase 1 is done:** all seven exit criteria met (ADR-371, 372); 693 of the 708 scenarios with a
   Phase 1 part proven whole, 15 in part. 48 scenario rows name Phase 2 (37 as "API (Phase 2)").
-- **Task 2.5.1 (enrolment and a phone's proof of itself) is in three parts (ADR-436), and part 1 is done (ADR-437):** the key's kind (ECDSA P-256, a SHA-256 signature over `PhoneProofRules.signed(challenge)`), `DeviceKeys` and `PhoneChallenges` in `apps/api/src/phone/` (the public key kept written one way; a challenge kept nowhere, the server's own, 256 random bits, good for `PHONE_CHALLENGE_SECONDS` and once), with their tests; What NIST SP 800-63B-4 and ASVS 5.0 ask is ADR-436. **Part 2 is done (ADR-439; ADR-438 built as proposed, the user having said nothing against it):** a phone enrols by `POST /phones/enrolments` (`ANYBODY`: a name, the master passcode, the public key; answered its id and the passcode's version), served by `apps/api/src/phone/`'s `Enrolment`; **every write under the master passcode is stated as the master passcode's own actor** (`underMasterPasscode(deviceId)` in `packages/db`; user `…0002`, role `MASTER_PASSCODE`, seeded; only the API states it, only with source `DEVICE`; no column that names a user may name it); wrong tries are counted on `master_passcode_tries` by sign-in's rule and numbers (the domain's `MasterPasscodeTries`), a wait from the fifth, a lock at the fiftieth until the passcode is changed; three security event kinds (`MASTER_PASSCODE_USE`, `_FAILED`, `_LOCKOUT`); the domain's `actorOnly` tells the two users that are no person. What it leaves: BACKLOG C111. **Part 3 is done (ADR-440), and with it task 2.5.1:** a phone asks for a challenge by its id (`POST /phones/:deviceId/challenges`, `ANYBODY`, made for any id, nothing kept) and answers it with its signature (`POST /phones/:deviceId/proofs`), served by `apps/api/src/phone/`'s `PhoneProofs`; **a challenge is good once on the phone's own record** (`Device.lastAnsweredChallengeMadeAt`, compared and written in one statement; the database lets only that phone's own proof write it, only later, never for a revoked key); **what a proof writes is stated as the device key's own actor** (`byDeviceKey(deviceId)` in `packages/db`; user `…0003`, role `DEVICE_KEY`, seeded; only the API, only source `DEVICE`, always naming the phone; no column that names a user may name it); a proof gives a token (`PhoneTokens`, the policy value `PHONE_TOKEN_MINUTES`, 15) sent as `Authorization: Bearer`; **an endpoint open to a proven phone says `access: 'PROVEN_PHONE'`** and reads its phone with `phoneOf(request)`; a phone out of service still proves itself, one whose key is revoked proves nothing and its token stops at once; a refused proof is 401 `PHONE_NOT_PROVEN` and writes nothing; `GET /phones/current` is the first call open to a proven phone; the database holds a device key to its shape. **No story and no test of the API writes a phone by hand:** a story enrols with `story.enrolled(name, at?)` and proves with `story.proofs`; an API test with `enrolledPhone(served, tx, name)` and `proven(served, phone)` (`apps/api/test/support/phones.ts`). What it leaves: BACKLOG C112.
-- **Task 2.5.2 (monitors on phones) is in three parts (ADR-441), and part 1 is done (ADR-442):** what NIST SP 800-63B-4 and ASVS 5.0 ask of a monitor's sign-in, and where the firm's practice departs, is ADR-441; a monitor is created by `POST /phones/current/monitors` (`PROVEN_PHONE`, a phone in service, the master passcode in the body; the database issues the Monitor ID), served by `apps/api/src/phone/`'s `PhoneMonitors`; **`MasterPasscodeCheck` is the one check of the passcode for every act under it** (`check`, then `used` inside the act's own piece of work), shared by `Enrolment`; no migration. What it leaves: BACKLOG C113. **Part 2 is done (ADR-443; ADR-441 (6) built as proposed, no reply being in the files):** a monitor signs in on a proven phone in service by `POST /phones/current/sign-ins` (Monitor ID and password; one refusal code, `SIGN_IN_REFUSED`; a phone out of service 409 before the password is read), served by `apps/api/src/phone/`'s `PhoneSignIns`; **the device's session is a row of `session` naming the phone** (`device_id`, two migrations: the column and its guard, so only a monitor's session names a phone and a monitor's must), good for `MONITOR_SESSION_HOURS` (12) from the sign-in and never ended by quiet; one monitor at a time on a phone; **its token is sent as `x-adms-monitor-session` beside the phone's `Authorization: Bearer`**; the access **`MONITOR_ON_PHONE`** reads both from the database on every request (`monitorOf(request)`), on `GET /phones/current/monitor` and `POST /phones/current/sign-outs`; wrong tries counted on the monitor's own record and written as the monitor from that phone (`WrongTries.wrong(person, on)`). A test signs a monitor in with `phone-sign-ins.test.ts`'s `created` and `signedIn` and sends `served.ask(…, { bearer, monitorSession })`. What it leaves: BACKLOG C114.
-- **The chain, seen whole on 2026-10-09 (ADR-443):** 131 test files, 2,452 tests (`packages/domain` 728, `packages/db` 1,008 in 42, `apps/api` 413 in 30 with `phone-sign-ins.test.ts`, 10); lint clean; 420 licences allowed on Linux (the user's Mac installs one Mac-only package more: 421); eighteen stories, every one passing (`sync` 49 checks, `golden-mission` 27); `pnpm security` 7 passed, 0 failed (the grant tests 1,008); ninety-five migrations; `installer:check` 29 `✓`. The expected output of each command is `adms-verify`'s.
+- **The chain** was seen whole on 2026-10-09 after the housekeeping (ADR-445…448). Its counts
+  are `agent_store/CHAIN.md`'s; what each command proves is `adms-verify`'s. **Start with `pnpm
+  ready`**; the stories run once, in `pnpm scenarios`; run `pnpm security` after `pnpm test`.
 - **What exists:** `packages/db` (schema, guards, tests), `packages/domain` (every rule; one
   dependency, no database), `packages/contracts`, `packages/scenarios` (the harness and stories,
   the golden mission among them), `apps/worker/src/` (`reconciliation/`, the run: group, check,
@@ -389,28 +302,31 @@ questions.
 **Phase 2 is open (ADR-376). Its plan is `BACKLOG.md`, "Active — Phase 2" (ADR-377): read its
 brief first. One task per response.**
 
-**Task 2.5.2, part 3 of 3: the phone takes the monitor's assignment** *(BACKLOG 2.5.2; ADR-441
-(5), 443; read ADR-443, C114, C113, C103 and ARCHITECTURE §7 (the ⚠️ ADR-240 note), §7.1's
-lists note first)*. A monitor signing in online on a proven phone is answered **their assignment
-for the project's own day** (the project's time zone; AC-02-35's part at the API: no passcode, no
-picking; one assignment, so one project, on a phone at a time); a monitor with none that day still
-signs in and is told there is none (ADR-441 (6)(d)); the lists themselves are 2.5.3's. Then **the
-stories make their monitors through `PhoneMonitors` and sign them in through `PhoneSignIns`**
-(the database issues Monitor IDs, so a story reads the ID it was given; `story.monitor(name)`
-beside `story.enrolled`), and no story writes a monitor by hand. **Done when:** AC-02-35 passes at
-the API by ID, `pnpm openapi` is current, the chain is green with the new counts, every story
-still passes with its numbers (the golden mission's among them). **The user may still overturn
-ADR-443's defaults, ADR-442's, ADR-440's, ADR-438's two choices or ADR-439's (`SUMMARY.md` §4).**
-**After a change to `apps/api` or `apps/worker`, `pnpm local:up` again; if Docker answers 500,
-quit and reopen it; if `local:up` meets `ECONNRESET` or a container whose layer is gone, `pnpm
-local:down` and `up` once more.** **On a Linux host (a cloud session), the containers run as uid
+**Task 2.5.3: the lists a phone takes** *(BACKLOG 2.5.3; **it is large: cut it into parts with an
+ADR first, as 2.5.1 and 2.5.2 were**; read C115, C114, C103, C68, ARCHITECTURE §7.1's ⚠️ lists note
+and §8, DATA-MODEL §4.5 (`SetupManifest`), and `packages/scenarios/src/phone-lists.ts` first)*. A
+phone whose monitor is signed in (`MONITOR_ON_PHONE`) reads the lists of the assignment its
+sign-in was answered: the project's certifications, sites, ROEs, the number block or control
+ranges, the forms' debris types without those *Hidden on phones* (AC-01-26), field tags, the unit
+rate pay items the assignment names now, the site's quantity lookup, the login list (each entry a
+slow hash salted for that phone, AC-02-41), the master passcode's check and the setup version;
+**never a rate, a code on a load, a rule or a transaction** (AC-02-37, AC-07-91). The harness's
+`phone-lists.ts` gives way to the service. Say what NIST SP 800-63B-4 and ASVS 5.0 ask of a
+login list kept on a device before building it (ADR-401). **The user may still overturn ADR-444's
+defaults, ADR-443's, ADR-442's, ADR-440's, ADR-438's two choices or ADR-439's (`SUMMARY.md` §4).**
+**Before the chain, `pnpm ready`** (the stack up, then `installer:check`): a `✗` at the migrations
+means one was made elsewhere, and `pnpm installer` applies it (seen 2026-10-09: 176 tests failed
+until it was). **After a change to `apps/api` or `apps/worker`, `pnpm local:up` again; if Docker
+answers 500, quit and reopen it; if `local:up` meets `ECONNRESET` or a container whose layer is
+gone, `pnpm local:down` and `up` once more.** **On a Linux host (a cloud session), the containers run as uid
 1000:** after `pnpm installer` the two service env files, and after each `local:up` the copied
 Caddy root, must be readable by it (`chown 1000:1000`), or the API or worker fails to start
 (seen 2026-10-09, ADR-443's session log).
 
-**Every command starts with** `eval "$(fnm env --shell zsh)"`. The checks are `adms-verify`'s; the
-database tests, the map servers' tests, the stories and `pnpm security` need `pnpm local:up` first,
-and the stack is stopped at close-out (ADR-277). Names and examples: `spec/CONVENTIONS.md`. Field
+**Every command starts with** `eval "$(fnm env --shell zsh)"`. The checks are `adms-verify`'s
+(read the page for the layer you touch, beside it; skip the others); the counts to compare with
+are `agent_store/CHAIN.md`'s; loosenings go in one list through its `loosen.mjs`. The stack is
+stopped at close-out (ADR-277). Names and examples: `spec/CONVENTIONS.md`. Field
 names: `spec/DATA-MODEL.md`. Flag wording: `spec/FLAGS.md`.
 
 **Keep this section short (ADR-375):** the session hook prints all of it into every session. It

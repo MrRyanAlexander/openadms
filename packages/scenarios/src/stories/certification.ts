@@ -27,7 +27,7 @@ import { NewProjectSettings } from '@open-adms/domain';
 import { utcOffsetMinutes } from '../clock.ts';
 import { uuidv7 } from '../ids.ts';
 import type { Story } from '../runner.ts';
-import { assigned } from './board.ts';
+import { assigned, taken } from './board.ts';
 import { p1TimeZone as timeZone, setUpP1, startSeries } from './p1.ts';
 
 const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-04:00`;
@@ -83,8 +83,6 @@ export const certification: Story = {
       // He merges two spellings of a sub later: a contractor's record is setup's, and its
       // service asks whether he holds Setup (ADR-424).
       await tx.userPermission.create({ data: { userId: luis.id, permission: 'SETUP' } });
-      const sam = await tx.user.create({ data: { name: 'Sam Grant', role: 'MONITOR' } });
-      const lee = await tx.user.create({ data: { name: 'Lee Morgan', role: 'MONITOR' } });
       const p1 = await setUpP1(tx, story.policy);
       const ppdr = await tx.programType.findFirstOrThrow({ where: { name: 'PPDR' } });
       const p2 = await tx.project.create({
@@ -105,15 +103,17 @@ export const certification: Story = {
       await startSeries(tx, p2.id, { LOAD: 102001, CERTIFICATION: 880112 });
       return {
         luis: luis.id,
-        sam: sam.id,
-        lee: lee.id,
         p1: p1.project,
         p2: p2.id,
         coastline: p1.prime,
         phone: phone.id,
       };
     });
-    const { luis, sam, lee, p1, p2, coastline } = world;
+    const { luis, p1, p2, coastline } = world;
+    // Created as real ones are: on the phone, online, under the master passcode (ADR-442).
+    const samGrant = await story.monitor('Sam Grant', world.phone);
+    const sam = samGrant.id;
+    const lee = (await story.monitor('Lee Morgan', world.phone)).id;
     // Saturday's board, written by Dana: Sam certifies on P1-HO-TDSR, Lee Morgan helps.
     const saturdays = { workDate: '2026-10-10', projectId: p1 } as const;
     const certifying = await assigned(api, clock, dana, {
@@ -123,6 +123,11 @@ export const certification: Story = {
       deviceId: world.phone,
     });
     await assigned(api, clock, dana, { ...saturdays, personId: lee });
+    // Sam signs in on it with Monitor ID and password, and the phone takes his assignment
+    // (ADR-444).
+    if ((await taken(story, samGrant, world.phone)) !== certifying) {
+      throw new Error('P1-HO-TDSR took another assignment than Sam’s.');
+    }
     const summit = (
       await saved(contractors.contractor(dana, { name: 'Summit Debris Services', kind: 'HAULER' }))
     ).id;
@@ -222,7 +227,7 @@ export const certification: Story = {
       orderBy: { id: 'asc' },
     });
     story.check(
-      'AC-03-59 the certification, its two boxes and its helper are each audited as Sam, from his phone; so is the job it queued in the same piece of work, for the worker to check its views (ADR-420)',
+      'AC-03-59 after his sign-in (a security event and his session), the certification, its two boxes and its helper are each audited as Sam, from his phone; so is the job it queued in the same piece of work, for the worker to check its views (ADR-420)',
       trailerAudit.map((record) => [
         record.tableName,
         record.operation,
@@ -230,6 +235,8 @@ export const certification: Story = {
         record.deviceId,
       ]),
       [
+        'security_event',
+        'session',
         'certification',
         'certification_box',
         'certification_box',

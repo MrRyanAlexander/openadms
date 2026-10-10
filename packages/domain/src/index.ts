@@ -204,9 +204,13 @@ export {
   AssignmentRules,
   assignableRoles,
   assignmentFormDocumentTypes,
+  noAssignmentReasons,
   type AssignmentFormDocumentType,
   type AssignmentRefusal,
   type AssignmentRefusalCode,
+  type AssignmentTaken,
+  type NoAssignmentReason,
+  type StandingAssignment,
 } from './assignments.ts';
 export {
   MasterPasscodeRules,

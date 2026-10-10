@@ -178,7 +178,7 @@ them. One more, AC-06-36, is named by the plan though its row doesn't say "Phase
 | AC-02-14 | An authenticator code: required, optional or none, by kind of user | 2.2.4 ✅ (ADR-412): `apps/api/test/two-step.test.ts`, `packages/domain/test/two-step.test.ts` | ASVS V6 · 800-63B authenticator codes |
 | AC-02-18 | Enrolment: online, the master passcode, the device key; each sync signs a challenge | 2.5.1 | ASVS V11 · API2 |
 | AC-02-23 | A changed master passcode reaches each phone at its next sync; each use a security event | 2.4.3 (the change), 2.6.2 (the new check sent), 2.5.4 (the uses) | ASVS V6, V16 |
-| AC-02-35 | A monitor signs in online and the phone takes their assignment | 2.5.2 | API2 |
+| AC-02-35 | A monitor signs in online and the phone takes their assignment | 2.5.2 **✅ part 3, ADR-444** | API2 |
 | AC-02-37 | What a phone's lists carry, and never carry | 2.5.3 | API3 |
 | AC-02-38 | An unplanned assignment arrives, marked | 2.5.4 | ASVS V16 |
 | AC-02-39 | A monitor's ID and password refused everywhere but a phone's calls | 2.2.3 (the web), 2.5.2 (a phone's calls) **✅ part 2, ADR-443** | ASVS V6 · API2 |

@@ -9472,7 +9472,7 @@
     "/phones/current/sign-ins": {
       "post": {
         "operationId": "signInOnPhone",
-        "summary": "A field monitor signs in on an enrolled phone, online, with their Monitor ID and password. The answer is their session’s token, which the phone’s calls carry in the x-adms-monitor-session header beside the phone’s own token, and how long it lasts. Open to a phone in service that has proved itself, by its token. Whatever is wrong is refused by one code; wrong tries in a row make the next wait longer, and at the policy’s count lock the login until an admin sets the password anew.",
+        "summary": "A field monitor signs in on an enrolled phone, online, with their Monitor ID and password. The answer is their session’s token, which the phone’s calls carry in the x-adms-monitor-session header beside the phone’s own token, how long it lasts, and the assignment the phone takes: theirs for the day, by its project’s own time zone, or none with the reason (none that day; several that day and nothing to say which is this phone’s). Nobody enters the master passcode and nobody picks a project. Open to a phone in service that has proved itself, by its token. Whatever is wrong is refused by one code; wrong tries in a row make the next wait longer, and at the policy’s count lock the login until an admin sets the password anew.",
         "x-open-adms-access": "PROVEN_PHONE",
         "requestBody": {
           "required": true,
@@ -9526,9 +9526,123 @@
                       "type": "integer",
                       "minimum": 1,
                       "maximum": 9007199254740991
+                    },
+                    "assignment": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "workDate": {
+                              "type": "string",
+                              "format": "date",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                            },
+                            "project": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "timeZone": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["id", "name", "timeZone"],
+                              "additionalProperties": false
+                            },
+                            "fieldEventKinds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "COLLECTION",
+                                  "DISPOSAL",
+                                  "HAUL_OUT_COLLECTION",
+                                  "HAUL_OUT_DISPOSAL",
+                                  "UNIT_RATE"
+                                ]
+                              }
+                            },
+                            "certifying": {
+                              "type": "boolean"
+                            },
+                            "formDocumentTypes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "enum": ["ROE", "SURVEY", "INCIDENT", "DROP_OFF_LOG"]
+                              }
+                            },
+                            "site": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string",
+                                      "format": "uuid",
+                                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                    },
+                                    "name": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": ["id", "name"],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "workDate",
+                            "project",
+                            "fieldEventKinds",
+                            "certifying",
+                            "formDocumentTypes",
+                            "site"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "noAssignment": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": ["NONE_THAT_DAY", "SEVERAL_THAT_DAY"]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   },
-                  "required": ["token", "userId", "monitorNumber", "name", "expiresInSeconds"],
+                  "required": [
+                    "token",
+                    "userId",
+                    "monitorNumber",
+                    "name",
+                    "expiresInSeconds",
+                    "assignment",
+                    "noAssignment"
+                  ],
                   "additionalProperties": false
                 }
               }

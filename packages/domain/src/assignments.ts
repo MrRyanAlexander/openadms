@@ -14,8 +14,15 @@
 // - **It is withdrawn once**, and a withdrawn one is changed no more. **One made on a phone under
 //   the master passcode (unplanned) is the phone's**: the board reads it and changes nothing of it.
 //
+// - **A phone takes one at sign-in** (ADR-240, 444): of the monitor's assignments that stand, those
+//   whose day is today in their own project's time zone. The one that names this phone; with
+//   none naming it, the only one there is, whichever phone the board named (a monitor signs in
+//   on any enrolled phone). Where that leaves several, the phone takes none and says so: nobody
+//   picks a project on a phone, and the server never picks one for them.
+//
 // Nothing here stops a second assignment for one person or one phone on a day (AC-02-29), judges
 // a date, or says an assignment has run out: it never expires and never stops work (ADR-240).
+import { ProjectClock } from './project-clock.ts';
 
 // The forms an assignment may name, as the database's check holds them.
 export const assignmentFormDocumentTypes = ['ROE', 'SURVEY', 'INCIDENT', 'DROP_OFF_LOG'] as const;
@@ -38,7 +45,43 @@ export interface AssignmentRefusal {
   readonly message: string;
 }
 
+// One of a person's assignments that stand, as a sign-in reads it.
+export interface StandingAssignment {
+  readonly id: string;
+  // The day, in the project's time zone: 2026-10-12.
+  readonly workDate: string;
+  // The project's time zone, an IANA name.
+  readonly timeZone: string;
+  // The phone the board named, if it named one.
+  readonly deviceId: string | null;
+}
+
+// Why a phone took no assignment at a sign-in.
+export const noAssignmentReasons = ['NONE_THAT_DAY', 'SEVERAL_THAT_DAY'] as const;
+
+export type NoAssignmentReason = (typeof noAssignmentReasons)[number];
+
+export type AssignmentTaken =
+  | { readonly taken: true; readonly id: string }
+  | { readonly taken: false; readonly why: NoAssignmentReason };
+
 export class AssignmentRules {
+  // Which of a monitor's standing assignments the phone they sign in on takes, now.
+  takenAtSignIn(
+    now: Date,
+    deviceId: string,
+    standing: readonly StandingAssignment[],
+  ): AssignmentTaken {
+    const today = standing.filter(
+      (assignment) => new ProjectClock(assignment.timeZone).day(now) === assignment.workDate,
+    );
+    const here = today.filter((assignment) => assignment.deviceId === deviceId);
+    const [only, ...others] = here.length > 0 ? here : today;
+    if (only === undefined) return { taken: false, why: 'NONE_THAT_DAY' };
+    if (others.length > 0) return { taken: false, why: 'SEVERAL_THAT_DAY' };
+    return { taken: true, id: only.id };
+  }
+
   // Why this person can't be given an assignment, or nothing.
   personRefusal(person: {
     readonly name: string;

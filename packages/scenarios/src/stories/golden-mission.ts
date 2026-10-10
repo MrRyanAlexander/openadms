@@ -56,7 +56,7 @@ import {
   saved,
   setUpP1Pricing,
 } from './p1-office.ts';
-import { assigned } from './board.ts';
+import { assigned, taken } from './board.ts';
 import { p1TimeZone as timeZone } from './p1.ts';
 
 const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-04:00`;
@@ -619,6 +619,16 @@ export const goldenMission: Story = {
           { projectId: p2, series, lastUsedNumber: null },
         ),
       );
+    }
+    // Each signs in on their second phone, which takes the assignment that names it: P2's, though
+    // each has P1's too that day (AC-02-29, 36; ADR-444).
+    for (const [name, phone, assignment] of [
+      ['Ana Brooks', 'P2-COL-1', p2Board.ana],
+      ['Kim Nguyen', 'P2-TWR-TDSR', p2Board.kim],
+    ] as const) {
+      if ((await taken(story, await story.monitor(name), p2Phone(phone))) !== assignment) {
+        throw new Error(`${phone} took another assignment than P2’s.`);
+      }
     }
     const anaP2 = story.phone({
       name: 'P2-COL-1',

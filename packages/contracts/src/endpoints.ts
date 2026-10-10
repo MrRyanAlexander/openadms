@@ -1542,7 +1542,7 @@ export const monitorSessionHeader = 'x-adms-monitor-session';
 export const signInOnPhoneEndpoint = endpoint({
   name: 'signInOnPhone',
   summary:
-    'A field monitor signs in on an enrolled phone, online, with their Monitor ID and password. The answer is their session’s token, which the phone’s calls carry in the x-adms-monitor-session header beside the phone’s own token, and how long it lasts. Open to a phone in service that has proved itself, by its token. Whatever is wrong is refused by one code; wrong tries in a row make the next wait longer, and at the policy’s count lock the login until an admin sets the password anew.',
+    'A field monitor signs in on an enrolled phone, online, with their Monitor ID and password. The answer is their session’s token, which the phone’s calls carry in the x-adms-monitor-session header beside the phone’s own token, how long it lasts, and the assignment the phone takes: theirs for the day, by its project’s own time zone, or none with the reason (none that day; several that day and nothing to say which is this phone’s). Nobody enters the master passcode and nobody picks a project. Open to a phone in service that has proved itself, by its token. Whatever is wrong is refused by one code; wrong tries in a row make the next wait longer, and at the policy’s count lock the login until an admin sets the password anew.',
   access: 'PROVEN_PHONE',
   method: 'POST',
   path: '/phones/current/sign-ins',

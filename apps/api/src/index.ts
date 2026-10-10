@@ -211,6 +211,11 @@ export {
   type MasterPasscodeCheckParts,
   type PasscodeRefused,
 } from './phone/master-passcode-check.ts';
+export {
+  PhoneAssignments,
+  type AssignmentAtSignIn,
+  type PhoneAssignment,
+} from './phone/phone-assignments.ts';
 export { PhoneChallenges, type Challenged } from './phone/phone-challenges.ts';
 export {
   PhoneMonitors,

@@ -4,6 +4,7 @@ import {
   assignmentFormDocumentTypes,
   fieldEventKinds,
   mileageSources,
+  noAssignmentReasons,
   passwordProblemCodes,
   permissions,
   quantitySources,
@@ -495,16 +496,38 @@ export const monitorCreatedAnswerSchema = z.strictObject({
 
 export type MonitorCreatedAnswer = z.infer<typeof monitorCreatedAnswerSchema>;
 
-// A monitor signed in on a phone (ARCHITECTURE §6, Device sessions; §7.2; AC-02-39; ADR-441,
-// 443): who, by their id, Monitor ID and name as kept, and how long the sign-in lasts. The token
-// is the phone's to keep in its secure storage and send, beside its own proof's token, in the
-// header the contracts name; the server keeps only its hash. Never the password.
+// The assignment a phone takes when its monitor signs in (ARCHITECTURE §7; AC-02-35, 36;
+// ADR-240, 444): its day (the project's own), its project with the time zone the phone shows
+// times in, the monitor's work (the kinds of field event, certifying, the forms that are no
+// ticket's) and the one site where the work is at one. Never a rate or a code: the lists an
+// assignment needs are their own read.
+export const phoneAssignmentSchema = z.strictObject({
+  id: z.uuid(),
+  workDate: z.iso.date(),
+  project: z.strictObject({ id: z.uuid(), name: z.string(), timeZone: z.string() }),
+  fieldEventKinds: z.array(z.enum(fieldEventKinds)),
+  certifying: z.boolean(),
+  formDocumentTypes: z.array(z.enum(assignmentFormDocumentTypes)),
+  site: named.nullable(),
+});
+
+export type PhoneAssignmentAnswer = z.infer<typeof phoneAssignmentSchema>;
+
+// A monitor signed in on a phone (ARCHITECTURE §6, Device sessions; §7.2; AC-02-35, 39; ADR-441,
+// 443, 444): who, by their id, Monitor ID and name as kept, and how long the sign-in lasts. The
+// token is the phone's to keep in its secure storage and send, beside its own proof's token, in
+// the header the contracts name; the server keeps only its hash. Never the password. **The
+// phone takes their assignment for the day**: `assignment`, or null with why in `noAssignment`
+// (none that day, or several with nothing to say which is this phone's); the monitor is signed
+// in either way.
 export const monitorSignedInAnswerSchema = z.strictObject({
   token: z.string().min(1),
   userId: z.uuid(),
   monitorNumber: z.string().regex(/^M\d{6,}$/),
   name: z.string(),
   expiresInSeconds: z.number().int().min(1),
+  assignment: phoneAssignmentSchema.nullable(),
+  noAssignment: z.enum(noAssignmentReasons).nullable(),
 });
 
 export type MonitorSignedInAnswer = z.infer<typeof monitorSignedInAnswerSchema>;

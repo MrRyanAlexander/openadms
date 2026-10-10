@@ -5,7 +5,8 @@
 //                      then, once `pnpm installer` has made the API's settings, build the API,
 //                      start its container afresh and check its health answer over HTTPS (ADR-385),
 //                      and the same for the worker, whose health answer is asked inside its own
-//                      container (ADR-419)
+//                      container (ADR-419); a container still running exactly what was just
+//                      built, under the settings it was started with, is kept as it is (ADR-448)
 //   pnpm local:down    stop and remove the containers and network; data volumes are kept
 //   pnpm local:wipe    down, plus the data volumes, the generated .env and the root certificate;
 //                      the downloaded map extract (public data, infra/local/.cache/) is kept
@@ -13,8 +14,8 @@
 // Node 24 runs this file as-is (type stripping), so it uses erasable TypeScript only.
 // It never prints a password or key (ARCHITECTURE §4).
 import { spawnSync } from 'node:child_process';
-import { randomBytes, randomInt } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash, randomBytes, randomInt } from 'node:crypto';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { request } from 'node:https';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -30,6 +31,30 @@ const withWorker = ['--profile', 'worker'];
 const withServices = [...withApi, ...withWorker];
 // What the worker's settings must name before it can start (apps/worker/src/process/settings.ts).
 const workerMapKeys = ['ADMS_ROUTING_URL', 'ADMS_ADDRESSES_URL'];
+// What each service's container runs, from this checkout (compose.yaml mounts the same): the
+// built code and the files read beside it. Its dependencies are the lockfile's.
+const runs = {
+  api: [
+    'apps/api/dist',
+    'packages/contracts/dist',
+    'packages/db/dist',
+    'packages/domain/dist',
+    'packages/domain/policy.env',
+    'packages/domain/breached-passwords.txt',
+    'pnpm-lock.yaml',
+    'infra/local/compose.yaml',
+  ],
+  worker: [
+    'apps/worker/dist',
+    'packages/db/dist',
+    'packages/domain/dist',
+    'packages/domain/policy.env',
+    'pnpm-lock.yaml',
+    'infra/local/compose.yaml',
+    'infra/local/.generated/caddy-root.crt',
+  ],
+} as const;
+type Service = keyof typeof runs;
 
 class DevSecrets {
   // Generated once, into a git-ignored file readable only by its owner.
@@ -60,6 +85,7 @@ class LocalStack {
   readonly repository: string;
   readonly apiEnvFile: string;
   readonly workerEnvFile: string;
+  private generatedClient = false;
 
   constructor(root: string) {
     this.root = root;
@@ -111,19 +137,9 @@ class LocalStack {
       return;
     }
     console.log('Building the API (pnpm generate, tsc --build apps/api) …');
-    this.build('pnpm', ['generate']);
+    this.generate();
     this.build(join(this.repository, 'node_modules', '.bin', 'tsc'), ['--build', 'apps/api']);
-    this.compose([
-      ...withApi,
-      'up',
-      '--detach',
-      '--wait',
-      '--wait-timeout',
-      '120',
-      '--force-recreate',
-      '--no-deps',
-      'api',
-    ]);
+    this.started('api', withApi, this.apiEnvFile);
     await this.checkPage('api.adms.localhost', '/health');
   }
 
@@ -141,19 +157,9 @@ class LocalStack {
       return;
     }
     console.log('Building the worker (pnpm generate, tsc --build apps/worker) …');
-    this.build('pnpm', ['generate']);
+    this.generate();
     this.build(join(this.repository, 'node_modules', '.bin', 'tsc'), ['--build', 'apps/worker']);
-    this.compose([
-      ...withWorker,
-      'up',
-      '--detach',
-      '--wait',
-      '--wait-timeout',
-      '120',
-      '--force-recreate',
-      '--no-deps',
-      'worker',
-    ]);
+    this.started('worker', withWorker, this.workerEnvFile);
     this.workerHealth();
   }
 
@@ -183,6 +189,86 @@ class LocalStack {
   // installer's to write into the worker's settings.
   mapSha256(): void {
     console.log(this.map.sha256);
+  }
+
+  // The Prisma client, made once for one `up`: the API's build and the worker's read the same.
+  private generate(): void {
+    if (this.generatedClient) return;
+    this.build('pnpm', ['generate']);
+    this.generatedClient = true;
+  }
+
+  // A service's container, running what was just built (ADR-448). A container loads its code
+  // when it starts, so one left from an earlier `up` is made afresh, unless it is the very
+  // container this helper last started, still running, and what it runs and its settings are
+  // byte for byte what they were then: that one is kept. Compose still makes it again by itself
+  // where the service's own definition changed.
+  private started(service: Service, profile: string[], envFile: string): void {
+    const now = this.fingerprint(service, envFile);
+    const record = join(this.generated, `${service}.started`);
+    const kept = existsSync(record) ? readFileSync(record, 'utf8') : '';
+    const running = this.container(service, profile);
+    const keep = running !== '' && kept === `${running} ${now}\n`;
+    const whose = service === 'api' ? 'API' : 'worker';
+    console.log(
+      keep
+        ? `Keeping the ${whose}’s container: it runs what was just built, under the same settings.`
+        : `Starting the ${whose}’s container afresh on what was just built.`,
+    );
+    rmSync(record, { force: true });
+    this.compose([
+      ...profile,
+      'up',
+      '--detach',
+      '--wait',
+      '--wait-timeout',
+      '120',
+      ...(keep ? [] : ['--force-recreate']),
+      '--no-deps',
+      service,
+    ]);
+    const after = this.container(service, profile);
+    if (after === '') return;
+    mkdirSync(this.generated, { recursive: true });
+    writeFileSync(record, `${after} ${now}\n`, { mode: 0o600 });
+  }
+
+  // The id of a service's container while it is running, or ''.
+  private container(service: Service, profile: string[]): string {
+    const found = spawnSync(
+      'docker',
+      [...this.composeArgs(), ...profile, 'ps', '--quiet', '--status', 'running', service],
+      { encoding: 'utf8', env: { ...process.env, ...this.map.environment() } },
+    );
+    return found.status === 0 ? found.stdout.trim() : '';
+  }
+
+  // One SHA-256 over every file a service's container runs and over its settings file. Only the
+  // hash leaves this function: nothing of a file's content is kept or printed.
+  private fingerprint(service: Service, envFile: string): string {
+    const hash = createHash('sha256');
+    const add = (path: string): void => {
+      hash.update(`${path}\0`);
+      hash.update(createHash('sha256').update(readFileSync(path)).digest());
+    };
+    const walk = (path: string): void => {
+      const entries = readdirSync(path, { withFileTypes: true }).sort((a, b) =>
+        a.name < b.name ? -1 : a.name > b.name ? 1 : 0,
+      );
+      for (const entry of entries) {
+        const inside = join(path, entry.name);
+        if (entry.isDirectory()) walk(inside);
+        else if (entry.isFile()) add(inside);
+      }
+    };
+    for (const relative of runs[service]) {
+      const path = join(this.repository, relative);
+      if (!existsSync(path)) hash.update(`${relative}\0missing\0`);
+      else if (relative.endsWith('/dist')) walk(path);
+      else add(path);
+    }
+    add(envFile);
+    return hash.digest('hex');
   }
 
   private build(command: string, args: string[]): void {

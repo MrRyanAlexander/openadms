@@ -1,10 +1,21 @@
 // Open ADMS test runner (ADR-259): one run from the root, one project per tested workspace.
 // A workspace joins this list when it gets its first test.
 // @ts-check
+import process from 'node:process';
+
 import { defineConfig } from 'vitest/config';
+
+// A run on the installation's own database keeps its report, for `pnpm security` to report the
+// database tests from where nothing has changed since (ADR-446; tools/security/src/grants.ts).
+// A run on a throw-away copy (ADMS_TEST_DATABASE) keeps none: it says nothing of `adms`.
+const reporters =
+  process.env['ADMS_TEST_DATABASE'] === undefined
+    ? ['default', ['json', { outputFile: '.cache/adms/test-run.json' }]]
+    : ['default'];
 
 export default defineConfig({
   test: {
+    reporters,
     projects: [
       'packages/domain',
       'packages/contracts',
