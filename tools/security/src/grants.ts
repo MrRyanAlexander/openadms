@@ -114,8 +114,14 @@ export class GrantTests {
     try {
       spawnSync(
         join(this.root, 'node_modules/.bin/vitest'),
-        ['run', '--project', '@open-adms/db', '--reporter=json', `--outputFile=${output}`],
-        { cwd: this.root, encoding: 'utf8', stdio: ['ignore', 'ignore', 'pipe'] },
+        ['run', '--project', '@open-adms/db'],
+        {
+          cwd: this.root,
+          encoding: 'utf8',
+          stdio: ['ignore', 'ignore', 'pipe'],
+          // The run's own configuration writes the report, where this says (vitest.config.js).
+          env: { ...process.env, ADMS_TEST_REPORT: output },
+        },
       );
       const report = this.read(output);
       if (report === undefined) {

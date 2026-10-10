@@ -8,9 +8,14 @@ import { defineConfig } from 'vitest/config';
 // A run on the installation's own database keeps its report, for `pnpm security` to report the
 // database tests from where nothing has changed since (ADR-446; tools/security/src/grants.ts).
 // A run on a throw-away copy (ADMS_TEST_DATABASE) keeps none: it says nothing of `adms`.
+// `pnpm security`'s own run of the grant tests names where its report goes (ADMS_TEST_REPORT;
+// ADR-460): a path given on the command line is not taken over the one written here.
 const reporters =
   process.env['ADMS_TEST_DATABASE'] === undefined
-    ? ['default', ['json', { outputFile: '.cache/adms/test-run.json' }]]
+    ? [
+        'default',
+        ['json', { outputFile: process.env['ADMS_TEST_REPORT'] ?? '.cache/adms/test-run.json' }],
+      ]
     : ['default'];
 
 export default defineConfig({

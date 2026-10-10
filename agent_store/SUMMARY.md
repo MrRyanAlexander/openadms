@@ -1,13 +1,13 @@
 # Open ADMS — Current decisions and gaps, at a glance
 
 **The present tense of the project on one page.** `DECISIONS.md` and `DEVIATIONS.md` are the full
-history, with 460 ADRs and 74 KDs, many superseded. This page says what is true **now** and which
+history, with 461 ADRs and 74 KDs, many superseded. This page says what is true **now** and which
 entries to cite. The reasons live in the ADRs and the skills.
 
 - **Keep it current:** when you add, amend or supersede an ADR, or open or close a KD, update this
   page **in the same response** (`adms-decisions`).
 - **If this page and a log entry disagree,** the newest ADR wins: fix this page and say so.
-- **Updated 2026-10-10, through ADR-460 / KD-74.** Phase 2 (API and sync) is open (ADR-376):
+- **Updated 2026-10-10, through ADR-461 / KD-74.** Phase 2 (API and sync) is open (ADR-376):
   21 of its 32 tasks are done, through **2.5.3 (the lists a phone takes, in five parts,
   ADR-449…451, 453, 454; its last, an address looked up for a phone's GPS, ADR-455)**; **2.5.4
   (what a phone reports besides field events) is cut in four and its parts 1 and 2 are done: an
@@ -1638,6 +1638,7 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   own table, the number never unique (ADR-328, 331), weights as written, pointed at by disposals.
 
 ### Agent tooling and terms
+- **Prisma's own agent skills are not installed here, and `prisma generate` runs with `--no-hints`** (2026-10-10, ADR-461): in a person's terminal it offered to fetch them (`.agents/`, `.claude/`, `.windsurf/` and `skills-lock.json` under `packages/db/`); they speak of `db push` and `migrate reset`, which this project never runs (ADR-113). If those paths appear again, they are not ours: say so, never commit them. [461]
 - **`pnpm security`'s own run of the grant tests names its report's file by `ADMS_TEST_REPORT`** (2026-10-10, ADR-460): `vitest.config.js` states the JSON report's file, which Vitest takes over a path on the command line, so from ADR-446 until this the check's own run (`--fresh`, or after any change) always answered `✗ no report`. Run `pnpm security --fresh` once after a change to `tools/security/src/grants.ts` or the run's reporters. [460]
 - Front door `spec/INDEX.md`; rules in skills; product questions in `spec/QUESTIONS.md`; the
   hooks enforce the no-git rule and the write boundaries. [042, 043, 044, 049, 059]

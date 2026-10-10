@@ -245,7 +245,9 @@ rebuild it with `./node_modules/.bin/tsc --build --force <workspace>`; never edi
   env file has changed since it began, its counts are reported and the tests are not run a second
   time (ADR-446); the line ends `(the run \`pnpm test\` made N min ago; nothing has changed
   since; …)`. Anything else and they are run here, the line ending `(run here: <why>)`.
-  `pnpm security --fresh` always runs them. A run on a throw-away copy (`ADMS_TEST_DATABASE`)
+  `pnpm security --fresh` always runs them (its own run's report goes where `ADMS_TEST_REPORT`
+  says, ADR-460: after a change to `grants.ts` or the run's reporters, run it with `--fresh`
+  once). A run on a throw-away copy (`ADMS_TEST_DATABASE`)
   keeps no report. The rule is `tools/security/src/grants.ts`'s, held by `checks.test.ts`.
 
 ## 1.5a Loosenings: one list, one command (ADR-445)
