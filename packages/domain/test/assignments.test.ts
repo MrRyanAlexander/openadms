@@ -83,7 +83,13 @@ describe('the assignment a phone takes when its monitor signs in', () => {
   const bayline = 'America/New_York';
   // Monday 12 October 2026, 06:30 in Bayline County.
   const mondayMorning = new Date('2026-10-12T06:30:00-04:00');
-  const kims = { id: 'kims', workDate: '2026-10-12', timeZone: bayline, deviceId: 'P1-TWR-TDSR' };
+  const kims = {
+    id: 'kims',
+    workDate: '2026-10-12',
+    timeZone: bayline,
+    deviceId: 'P1-TWR-TDSR',
+    madeAt: null,
+  };
 
   it('AC-02-35 the monitor’s assignment for the day, on the phone the board named and on any other', () => {
     expect(rules.takenAtSignIn(mondayMorning, 'P1-TWR-TDSR', [kims])).toEqual({
@@ -131,8 +137,9 @@ describe('the assignment a phone takes when its monitor signs in', () => {
   });
 
   it('AC-02-29, 36 two that day, on P1 and P2: each phone takes the one that names it; a phone neither names takes none, and no project is picked for her', () => {
-    const p1 = { id: 'p1', workDate: '2026-10-12', timeZone: bayline, deviceId: 'P1-COL-1' };
-    const p2 = { id: 'p2', workDate: '2026-10-12', timeZone: bayline, deviceId: 'P2-COL-1' };
+    const planned = { workDate: '2026-10-12', timeZone: bayline, madeAt: null };
+    const p1 = { ...planned, id: 'p1', deviceId: 'P1-COL-1' };
+    const p2 = { ...planned, id: 'p2', deviceId: 'P2-COL-1' };
     expect(rules.takenAtSignIn(mondayMorning, 'P1-COL-1', [p1, p2])).toEqual({
       taken: true,
       id: 'p1',
@@ -154,8 +161,56 @@ describe('the assignment a phone takes when its monitor signs in', () => {
   });
 });
 
+describe('several of a monitor’s assignments name the phone they sign in on', () => {
+  const bayline = 'America/New_York';
+  // Monday 12 October 2026, 14:30 in Bayline County.
+  const mondayAfternoon = new Date('2026-10-12T14:30:00-04:00');
+  const monday = { workDate: '2026-10-12', timeZone: bayline, deviceId: 'P1-TWR-TDSR' };
+  const at = (time: string) => new Date(`2026-10-12T${time}:00-04:00`);
+  // Kim's plan for the day, written on the board, naming the tower's phone.
+  const plan = { ...monday, id: 'plan', madeAt: null };
+  // The phone set up under the master passcode at 06:40, and moved to the Landfill at 13:10.
+  const setUp = { ...monday, id: 'set-up', madeAt: at('06:40') };
+  const moved = { ...monday, id: 'moved', madeAt: at('13:10') };
+  const takes = (standing: Parameters<typeof rules.takenAtSignIn>[2], on = 'P1-TWR-TDSR') =>
+    rules.takenAtSignIn(mondayAfternoon, on, standing);
+  const several = { taken: false, why: 'SEVERAL_THAT_DAY' };
+
+  it('AC-02-47 the phone takes the one made on it last: after a site move the new site’s, whatever order they are read in, and not the board’s plan', () => {
+    expect(takes([plan, moved])).toEqual({ taken: true, id: 'moved' });
+    expect(takes([setUp, moved])).toEqual({ taken: true, id: 'moved' });
+    expect(takes([moved, setUp])).toEqual({ taken: true, id: 'moved' });
+    expect(takes([moved, plan, setUp])).toEqual({ taken: true, id: 'moved' });
+    // One made on the phone and the plan that names it: what was set up there stands.
+    expect(takes([setUp, plan])).toEqual({ taken: true, id: 'set-up' });
+  });
+
+  it('two made on it at one instant, or none made on it at all: none is the last, so the phone takes none', () => {
+    expect(takes([setUp, { ...moved, madeAt: at('06:40') }])).toEqual(several);
+    expect(takes([plan, { ...plan, id: 'second plan' }])).toEqual(several);
+  });
+
+  it('only what names this phone is weighed: one made on another phone later is not this phone’s, and another day’s is not the day’s', () => {
+    const onAnother = { ...moved, id: 'on another', deviceId: 'P1-COL-1', madeAt: at('14:00') };
+    expect(takes([setUp, onAnother])).toEqual({ taken: true, id: 'set-up' });
+    expect(takes([setUp, moved, onAnother])).toEqual({ taken: true, id: 'moved' });
+    // On a phone neither names, two are still several: nobody picks for her.
+    expect(takes([setUp, onAnother], 'P1-COL-2')).toEqual(several);
+    const tuesdays = { ...moved, id: 'tuesday’s', workDate: '2026-10-13', madeAt: at('23:59') };
+    expect(takes([setUp, tuesdays])).toEqual({ taken: true, id: 'set-up' });
+  });
+});
+
 describe('an unplanned assignment a phone reports', () => {
   const bayline = 'America/New_York';
+
+  it('REQ-202b what it was made at says its security events: a phone set up, or a phone switched, and always a use of the master passcode', () => {
+    expect(rules.securityEventsOf('SETUP')).toEqual(['DEVICE_SETUP', 'MASTER_PASSCODE_USE']);
+    expect(rules.securityEventsOf('MONITOR_SWITCH')).toEqual([
+      'DEVICE_SWITCH',
+      'MASTER_PASSCODE_USE',
+    ]);
+  });
 
   it('AC-02-38 its day is the day its phone’s clock said, in the project’s own time zone', () => {
     // Set up at 06:40 on Monday in Bayline County.

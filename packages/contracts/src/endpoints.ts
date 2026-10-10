@@ -19,6 +19,7 @@ import {
   ruleActionKinds,
   ruleCriterionKeys,
   ruleOperators,
+  unplannedOccasions,
   workflows,
   type PermissionName,
 } from '@open-adms/domain';
@@ -1752,11 +1753,16 @@ export const withdrawAssignmentEndpoint = endpoint({
 // it and takes the phone's word, the phone having proved itself with its device key. The id is
 // the phone's own, so the same report sent again is answered "already saved" and kept once. The
 // day is the day the phone's clock said, in the project's time zone. Nobody need be signed in.
+// **A site move and a monitor switch are reported the same way** (AC-02-46, 47; ADR-456 (5),
+// 458): the phone moved to another of its project's sites is set up anew there, a new
+// unplanned assignment, and the earlier one stands; the phone passed to a monitor who has no
+// assignment it could take is a new one for them, made at a switch. The monitor's sign-in on
+// that phone then takes the one made on it last.
 // The limits here only bound what is read.
 export const reportUnplannedAssignmentEndpoint = endpoint({
   name: 'reportUnplannedAssignment',
   summary:
-    'A phone reports an unplanned assignment made on it under the firm’s master passcode, when its monitor had none: the project, the monitor, their work (the kinds of field event, certifying, the forms, the unit rate pay items), one site where the work is at one, and when it was made by the phone’s own clock, with the clock’s offset. The id is the phone’s own: the same report sent again is answered as already saved and kept once. It is kept as the phone reports it, marked unplanned on the dispatch board and never flagged, for a phone out of service too; its day is the day the phone’s clock said, in the project’s time zone. It is not saved only where something it names is no record of the kind it must be, or its id is another record’s. The passcode itself is never sent: the phone checked it. Each one saved is two security events at the phone’s own time: a phone set up, and a use of the master passcode. Open to a phone that has proved itself, by its token; nobody need be signed in.',
+    'A phone reports an unplanned assignment made on it under the firm’s master passcode, when its monitor had none: the project, the monitor, their work (the kinds of field event, certifying, the forms, the unit rate pay items), one site where the work is at one, and when it was made by the phone’s own clock, with the clock’s offset. The id is the phone’s own: the same report sent again is answered as already saved and kept once. It is kept as the phone reports it, marked unplanned on the dispatch board and never flagged, for a phone out of service too; its day is the day the phone’s clock said, in the project’s time zone. It is not saved only where something it names is no record of the kind it must be, or its id is another record’s. The passcode itself is never sent: the phone checked it. It says what it was made at: the phone set up (a phone moved to another of its project’s sites is set up anew there, and the earlier assignment stands with everything recorded under it), or the phone passed to another monitor, who had no assignment it could take. Each one saved is two security events at the phone’s own time: a phone set up or a phone switched, and a use of the master passcode. Where several of a monitor’s assignments for a day name one phone, their sign-in on it takes the one made on it last. Open to a phone that has proved itself, by its token; nobody need be signed in.',
   access: 'PROVEN_PHONE',
   method: 'POST',
   path: '/phones/current/unplanned-assignments',
@@ -1771,6 +1777,8 @@ export const reportUnplannedAssignmentEndpoint = endpoint({
     formDocumentTypes: assignedWork.formDocumentTypes,
     siteId: assignedWork.siteId,
     payItemIds: assignedWork.payItemIds,
+    // What it was made at: the phone set up, or passed to this monitor.
+    occasion: z.enum(unplannedOccasions),
     // The phone's clock when it was made, as a UTC instant, and how far that clock stood from
     // UTC, in minutes (ADR-100): UTC−12:00 to UTC+14:00.
     madeAt: z.iso.datetime(),

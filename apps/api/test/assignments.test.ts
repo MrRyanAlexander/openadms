@@ -692,6 +692,7 @@ describe('an assignment changed and withdrawn', () => {
           formDocumentTypes: [],
           siteId: p1.tdsr.id,
           payItemIds: [],
+          occasion: 'SETUP',
           madeAt: `${monday}T10:40:00.000Z`,
           deviceUtcOffsetMinutes: -240,
         },

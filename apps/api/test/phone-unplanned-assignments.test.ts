@@ -1,7 +1,8 @@
 // An unplanned assignment reported by the phone it was made on, against the database
 // (ARCHITECTURE §7's note, §7.5, §9 (3), (4), §10; spec/acceptance/02-people-and-devices.md
-// AC-02-38; spec/acceptance/05-sync.md AC-05-40; spec/acceptance/10-api-and-sync.md AC-10-19,
-// 27; BACKLOG 2.5.4, C46, C111, C115, C117; ADR-100, 240, 438, 456, 457; REQ-202b, 209). The
+// AC-02-38, 46, 47; spec/acceptance/05-sync.md AC-05-40; spec/acceptance/10-api-and-sync.md
+// AC-10-19, 27; BACKLOG 2.5.4, C46, C111, C115, C117, C122; ADR-100, 240, 438, 456, 457, 458;
+// REQ-202b, 209). A site move and a monitor switch are reported the same way (ADR-458). The
 // real process, in this test's own memory, on the installation's database as `adms_api`: it
 // needs `pnpm local:up` after `pnpm installer`, and fails saying so. Each test's work is undone
 // (support/database.ts).
@@ -112,12 +113,31 @@ async function tariqAtTheLandfill(served: Served, tx: Tx) {
     formDocumentTypes: [],
     siteId: landfill.id,
     payItemIds: [],
+    occasion: 'SETUP',
     madeAt: '2026-10-12T10:40:00.000Z',
     deviceUtcOffsetMinutes: offset,
     ...more,
   });
   return { dana, priced, site, landfill, hangers, vegHaul, phone, token, tariq, setUp };
 }
+
+type Monitor = Awaited<ReturnType<typeof tariqAtTheLandfill>>['tariq'];
+
+// The monitor signs in on the phone, online: what the sign-in answered.
+async function signedIn(served: Served, token: string, monitor: Monitor) {
+  const answer = await served.ask('POST', '/phones/current/sign-ins', {
+    bearer: token,
+    payload: { monitorNumber: monitor.monitorNumber, password: monitor.password },
+  });
+  expect(told(answer)).toEqual([200, undefined]);
+  return monitorSignedInAnswerSchema.parse(answer.body);
+}
+
+// The assignment the phone took at that sign-in and where it is, or why it took none.
+const tookAt = (answer: Awaited<ReturnType<typeof signedIn>>) => [
+  answer.assignment?.id ?? answer.noAssignment,
+  answer.assignment?.site?.name,
+];
 
 const kept = (tx: Tx, id: string) =>
   tx.assignment.findUnique({
@@ -202,8 +222,14 @@ describe('who may report one', () => {
       expect(told(asDana)).toEqual(notProven);
       const { madeAt, ...noTime } = setUp();
       expect(madeAt).toBe('2026-10-12T10:40:00.000Z');
+      const { occasion, ...noOccasion } = setUp();
+      expect(occasion).toBe('SETUP');
       for (const [payload, words] of [
         [noTime, 'madeAt'],
+        // What it was made at is said, and is one of the two a phone reports this way.
+        [noOccasion, 'occasion'],
+        [setUp({ occasion: 'SITE_MOVE' }), 'occasion'],
+        [setUp({ occasion: 'DEVICE_SWITCH' }), 'occasion'],
         // The phone's instant is a UTC instant; its offset travels beside it.
         [setUp({ madeAt: '2026-10-12T06:40:00-04:00' }), 'madeAt'],
         [setUp({ madeAt: '12-Oct-2026 06:40' }), 'madeAt'],
@@ -502,6 +528,183 @@ describe('an unplanned assignment arrives', () => {
         expect(await audited(tx, requestId), reason).toEqual([]);
       }
       expect(await written(tx, phone)).toEqual([0, 0]);
+    });
+  });
+});
+
+describe('a site move and a monitor switch, reported', () => {
+  it('AC-02-47 Tariq’s phone, set up at the Landfill at 06:40, is moved to Marsh Road TDSR under the master passcode at 13:10: a new unplanned assignment at the new site, a phone set up and a use of the passcode at the phone’s own time; the earlier one stands as it was; his sign-in on that phone takes the one made last, and the phone reads its lists for it', async () => {
+    await world(async (served, tx) => {
+      const { priced, site, landfill, phone, token, tariq, setUp } = await tariqAtTheLandfill(
+        served,
+        tx,
+      );
+      const tdsr = await site(priced.ids, 'Marsh Road TDSR');
+      const morning = setUp();
+      expect((await answered(served, token, morning)).said).toEqual(['SAVED', null]);
+      const first = await kept(tx, morning.id);
+      expect(tookAt(await signedIn(served, token, tariq))).toEqual([
+        morning.id,
+        'Bayline County Landfill',
+      ]);
+      // 13:15: the phone has signal at the TDSR, proves itself and reports the move of 13:10.
+      served.clock.at = new Date('2026-10-12T17:15:00Z');
+      const afternoon = await proven(served, phone);
+      const at = '2026-10-12T17:10:00.000Z';
+      const moved = setUp({ siteId: tdsr.id, madeAt: at });
+      const { said, requestId } = await answered(served, afternoon, moved);
+      expect(said).toEqual(['SAVED', null]);
+      const second = await kept(tx, moved.id);
+      expect([second?.personId, second?.siteId, second?.deviceId, second?.origin]).toEqual([
+        tariq.userId,
+        tdsr.id,
+        phone.id,
+        'UNPLANNED',
+      ]);
+      expect([second?.workDate, second?.madeAt, second?.receivedAt]).toEqual([
+        new Date(monday),
+        new Date(at),
+        new Date('2026-10-12T17:15:00Z'),
+      ]);
+      expect(await events(tx, requestId)).toEqual([
+        ['DEVICE_SETUP', tariq.userId, phone.id, at, offset],
+        ['MASTER_PASSCODE_USE', tariq.userId, phone.id, at, offset],
+      ]);
+      // Nothing of the morning's is changed: what was recorded under it keeps its site.
+      expect(await kept(tx, morning.id)).toEqual(first);
+      expect(first?.siteId).toBe(landfill.id);
+      expect(await written(tx, phone)).toEqual([2, 4]);
+      const tariqAgain = await signedIn(served, afternoon, tariq);
+      expect(tookAt(tariqAgain)).toEqual([moved.id, 'Marsh Road TDSR']);
+      const lists = await served.ask('GET', '/phones/current/lists', {
+        bearer: afternoon,
+        monitorSession: tariqAgain.token,
+      });
+      expect(told(lists)).toEqual([200, undefined]);
+      expect(phoneListsAnswerSchema.parse(lists.body).assignment?.id).toBe(moved.id);
+      // Moved back at 15:00 by the phone's clock, reported late: the last made is taken,
+      // whenever each arrived.
+      const back = setUp({ madeAt: '2026-10-12T19:00:00.000Z' });
+      expect((await answered(served, afternoon, back)).said).toEqual(['SAVED', null]);
+      expect(tookAt(await signedIn(served, afternoon, tariq))).toEqual([
+        back.id,
+        'Bayline County Landfill',
+      ]);
+    });
+  });
+
+  it('AC-02-47 nothing the dispatcher planned is changed from a phone: Dana’s assignment for Tariq names the phone and the Landfill; the phone is moved to Marsh Road TDSR, and his sign-in takes the one made on it, where until now it took none', async () => {
+    await world(async (served, tx) => {
+      const { dana, priced, site, landfill, phone, token, tariq, setUp } = await tariqAtTheLandfill(
+        served,
+        tx,
+      );
+      const tdsr = await site(priced.ids, 'Marsh Road TDSR');
+      const planned = saved(
+        writeAssignmentEndpoint,
+        await ask(served, dana, writeAssignmentEndpoint, {
+          ids: priced.ids,
+          payload: {
+            personId: tariq.userId,
+            workDate: monday,
+            fieldEventKinds: ['DISPOSAL'],
+            certifying: false,
+            formDocumentTypes: [],
+            siteId: landfill.id,
+            deviceId: phone.id,
+            payItemIds: [],
+          },
+        }),
+      ).record;
+      const plan = await kept(tx, planned.id);
+      expect(tookAt(await signedIn(served, token, tariq))).toEqual([
+        planned.id,
+        'Bayline County Landfill',
+      ]);
+      const moved = setUp({ siteId: tdsr.id, madeAt: '2026-10-12T17:10:00.000Z' });
+      expect((await answered(served, token, moved)).said).toEqual(['SAVED', null]);
+      expect(tookAt(await signedIn(served, token, tariq))).toEqual([moved.id, 'Marsh Road TDSR']);
+      expect(await kept(tx, planned.id)).toEqual(plan);
+      expect([plan?.origin, plan?.siteId, plan?.archivedAt]).toEqual([
+        'PLANNED',
+        landfill.id,
+        null,
+      ]);
+    });
+  });
+
+  it('AC-02-46 the phone passes from Tariq to Sam under the master passcode at 13:00, and Sam has no assignment: a new unplanned assignment for Sam, a phone switched and a use of the passcode naming Sam at the phone’s own time, written as the master passcode’s actor; Sam’s sign-in takes it, and Tariq’s stays his; no wrong try is counted and no name is logged', async () => {
+    await world(async (served, tx) => {
+      const { landfill, phone, token, tariq, setUp } = await tariqAtTheLandfill(served, tx);
+      const password = '5550142';
+      const made = await served.ask('POST', '/phones/current/monitors', {
+        bearer: token,
+        payload: { name: 'Sam Grant', password, passcode },
+      });
+      expect(told(made)).toEqual([200, undefined]);
+      const sam = { ...monitorCreatedAnswerSchema.parse(made.body), password };
+      const tariqs = setUp();
+      expect((await answered(served, token, tariqs)).said).toEqual(['SAVED', null]);
+      const first = await kept(tx, tariqs.id);
+      expect(tookAt(await signedIn(served, token, sam))).toEqual(['NONE_THAT_DAY', undefined]);
+      served.clock.at = new Date('2026-10-12T17:05:00Z');
+      const afternoon = await proven(served, phone);
+      served.lines.length = 0;
+      const at = '2026-10-12T17:00:00.000Z';
+      const sams = setUp({ personId: sam.userId, occasion: 'MONITOR_SWITCH', madeAt: at });
+      const { said, requestId } = await answered(served, afternoon, sams);
+      expect(said).toEqual(['SAVED', null]);
+      const second = await kept(tx, sams.id);
+      expect([second?.personId, second?.siteId, second?.deviceId, second?.origin]).toEqual([
+        sam.userId,
+        landfill.id,
+        phone.id,
+        'UNPLANNED',
+      ]);
+      expect([second?.madeById, second?.madeAt, second?.deviceUtcOffsetMinutes]).toEqual([
+        null,
+        new Date(at),
+        offset,
+      ]);
+      // REQ-202b: a device switch, about the monitor the phone was switched to.
+      expect(await events(tx, requestId)).toEqual([
+        ['DEVICE_SWITCH', sam.userId, phone.id, at, offset],
+        ['MASTER_PASSCODE_USE', sam.userId, phone.id, at, offset],
+      ]);
+      const byThePasscode = [masterPasscodeActorId, 'DEVICE', phone.id];
+      expect(await audited(tx, requestId)).toEqual([
+        ['assignment', 'INSERT', ...byThePasscode],
+        ['security_event', 'INSERT', ...byThePasscode],
+        ['security_event', 'INSERT', ...byThePasscode],
+      ]);
+      expect(await tx.masterPasscodeTries.count()).toBe(0);
+      const [line] = logged(
+        served,
+        'A phone reported an unplanned assignment made under the master passcode.',
+      );
+      expect(line).toMatchObject({
+        deviceId: phone.id,
+        assignmentId: sams.id,
+        occasion: 'MONITOR_SWITCH',
+        answer: 'SAVED',
+      });
+      const log = served.lines.join('\n');
+      for (const never of ['Sam', sam.monitorNumber, 'Tariq', 'Landfill', passcode]) {
+        expect(log, never).not.toContain(never);
+      }
+      // Each monitor's is their own: Sam's sign-in takes his, and Tariq's stands unchanged.
+      expect(tookAt(await signedIn(served, afternoon, sam))).toEqual([
+        sams.id,
+        'Bayline County Landfill',
+      ]);
+      expect(await kept(tx, tariqs.id)).toEqual(first);
+      expect(tookAt(await signedIn(served, afternoon, tariq))).toEqual([
+        tariqs.id,
+        'Bayline County Landfill',
+      ]);
+      // Sent again, it is kept once, its two events too.
+      expect((await answered(served, afternoon, sams)).said).toEqual(['ALREADY_SAVED', null]);
+      expect(await written(tx, phone)).toEqual([2, 4]);
     });
   });
 });

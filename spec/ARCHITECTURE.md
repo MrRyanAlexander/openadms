@@ -488,6 +488,21 @@ ADR-106 (master passcode) and ADR-120 (changing monitors, username). **The word 
 > device's word for what was done offline under a shared secret** (ADR-456): what stands
 > against it is the device key, the three times kept, and the clock difference kept at sync.
 
+> ⚠️ **ADR-458 (2026-10-10; agent defaults, this note awaits approval, building didn't wait):
+> a site move and a monitor switch, reported.** Moving a phone to another of its project's
+> sites (ADR-195) and passing it to a monitor who has no assignment
+> (§7.3) are each done on the phone under the master passcode, with or without a connection,
+> and each makes **a new unplanned assignment**, which the phone reports as it reports a first
+> setup, saying which it was made at: a setup, or a switch. A move is the phone set up again at
+> the new site; a switch is recorded as a phone switched, naming the monitor it was switched
+> to; each is also a use of the master passcode, at the phone's own time. **The earlier
+> assignment stands as it was**, with everything recorded under it, and nothing the dispatcher
+> planned is changed from a phone. **Where several of a monitor's assignments for a day name
+> the phone they sign in on, it takes the one made on it last** (by the phone's clock); with
+> none of them made on the phone it still takes none and says so. Still to build: a switch to
+> a monitor who has their own assignment (the event alone), a session under the passcode and
+> the temporary session, every other use of the passcode a phone logged.
+
 ### 7.0 Creating people
 
 ✅ **Decided** *(ADR-105, user 2026-09-25)*:

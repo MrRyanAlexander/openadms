@@ -89,7 +89,7 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-10, through ADR-457)
+### Where things stand (2026-10-10, through ADR-460)
 - **Phase 2 (API and sync) is open (ADR-376): 21 of its 32 tasks are done** (`BACKLOG.md`,
   "Active — Phase 2", ticks each with its ADRs). Complete: Milestone 2.1 (the API as a process,
   the boundary, time limits and policy), 2.2 (sign-in: its records, passwords, sessions, two-step
@@ -99,8 +99,9 @@ of `DECISIONS.md`.
   proof of itself, ADR-436…440), 2.5.2 (monitors on phones: created, signed in, and the
   assignment a phone takes, ADR-441…444) and **2.5.3 (the lists a phone takes, in five parts,
   ADR-449…451, 453…455; its last, an address looked up for a phone's GPS)** are done; **2.5.4
-  is cut in four (ADR-456) and its part 1 is done (ADR-457: an unplanned assignment arrives
-  from the phone it was made on); part 2 is next.** **The user approved ARCHITECTURE §7.2's notes on signing in
+  is cut in four (ADR-456) and its parts 1 and 2 are done (ADR-457: an unplanned assignment
+  arrives from the phone it was made on; ADR-458: a site move and a monitor switch reported
+  the same way, the sign-in taking the one made on the phone last); part 3 is next.** **The user approved ARCHITECTURE §7.2's notes on signing in
   online and taking the assignment (ADR-452).**
 - **Where each thing is written, so nothing is read twice:** a rule as it stands, with its ADR:
   `SUMMARY.md`, by topic (grep its `###` headings; never read it whole). What a finished task left
@@ -132,7 +133,7 @@ of `DECISIONS.md`.
   (`PhoneLoginList`, `OfflineChecks`, ADR-454: the phone says what it holds and is made only what it lacks). **It looks up a GPS point's address by `POST
   /phones/current/address-lookups`** (`AddressLookups`, `AddressServer`, ADR-455: the API alone
   asks the address server; a test hands the process its own through `ProcessParts.addresses`). **It reports an unplanned assignment by `POST
-  /phones/current/unplanned-assignments`** (`UnplannedAssignments`, ADR-457: `PROVEN_PHONE`, nobody signed in, no passcode sent; kept once and as reported, with the phone's instant, its offset and the server's received time). What is written under the
+  /phones/current/unplanned-assignments`** (`UnplannedAssignments`, ADR-457: `PROVEN_PHONE`, nobody signed in, no passcode sent; kept once and as reported, with the phone's instant, its offset and the server's received time; **a site move and a switch to a monitor with none are the same report, stating `occasion`**, ADR-458). What is written under the
   master passcode names its own actor (`underMasterPasscode`), a proof's the device key's
   (`byDeviceKey`). The code is `apps/api/src/phone/`. **No story and no test writes a phone or a
   monitor by hand:** a story uses `story.enrolled`, `story.proofs`, `story.monitor`,
@@ -154,7 +155,7 @@ of `DECISIONS.md`.
   `installationPolicy({ … })`.
 - **Phase 1 is done:** all seven exit criteria met (ADR-371, 372); 693 of the 708 scenarios with a
   Phase 1 part proven whole, 15 in part. 48 scenario rows name Phase 2 (37 as "API (Phase 2)").
-- **The chain** was seen whole on 2026-10-10 after ADR-457. Its counts
+- **The chain** was seen whole on 2026-10-10 after ADR-458. Its counts
   are `agent_store/CHAIN.md`'s; what each command proves is `adms-verify`'s. **Start with `pnpm
   ready`**; the stories run once, in `pnpm scenarios`; run `pnpm security` after `pnpm test`.
 - **What exists:** `packages/db` (schema, guards, tests), `packages/domain` (every rule; one
@@ -278,6 +279,14 @@ Update it at close-out when a task, milestone or phase closes.
   server's volume, rebuilt by the next `up`, removed while its container was stopped), with nothing
   lost. **Try loosened guards two at a time here, not four,** each copy made with `STRATEGY
   FILE_COPY` and followed by a `CHECKPOINT` after its drop (`adms-verify` §1.3).
+  **Seen 2026-10-10 (ADR-458's session):** after `pnpm test`, `pnpm scenarios` and two more runs
+  of the database tests, Docker's disk was full (7 MB free) and Postgres restarted in a loop
+  ("No space left on device" writing its write-ahead log, which stood at 608 MB and did not
+  shrink at a checkpoint). `pnpm security`'s own run of the grant tests then says `✗ no report`.
+  The routing server's volume was removed (49 MB) and Postgres recovered by itself, `adms`
+  intact (`installer:check`: every `✓`). **The next `pnpm local:up` rebuilds the routing tiles
+  and needs that space back: with under 50 MB free it will fail** until the user clears the
+  build cache (`docker builder prune`, about 0.9 GB, theirs to clear) or raises the disk limit.
 - **The repository has a history since 2026-10-01 (ADR-288):** nine commits by the user on branch
   `phase0-foundation` (`a94cdb6`…`b5329fe`), each a slice of that day's files in Phase 0's build
   order, so only the newest is a state that was built and tested whole; Phase 1's on
@@ -313,18 +322,21 @@ questions.
 **Phase 2 is open (ADR-376). Its plan is `BACKLOG.md`, "Active — Phase 2" (ADR-377): read its
 brief first. One task per response.**
 
-**Task 2.5.4, part 2 of 4: a monitor switch and a site move, reported by the phone** *(BACKLOG
-2.5.4 and its cut, C122, C46, C114, C115; ADR-456 (4), (5), 457; REQ-202b; AC-02-46, AC-05-06;
-read ARCHITECTURE §7's notes and §7.3, `adms-field-app` §4A.0 (8), (9), `UnplannedAssignments`
-and `AssignmentRules.takenAtSignIn` (`apps/api/src/phone/`, `packages/domain/src/assignments.ts`)
-and `api-tests.md` and `database-tests.md` beside the `adms-verify` skill first)*. **Read the
-user's reply to ADR-456 (5) first** (`SUMMARY.md` §4; none in the files means build as
-proposed and say so): a site move and a switch to a monitor with no assignment each a new
-unplanned assignment, a `DEVICE_SWITCH` security event at the phone's own time, and the
-sign-in's rule taking the assignment made on the phone last where several name it. Parts 3 and
-4 follow, one a response (ADR-456 (4)).
-**The user may still overturn ADR-457's, ADR-456 (5)'s proposals, ADR-455's, ADR-454's, ADR-453's, ADR-451's and ADR-450's defaults, ADR-449
+**Task 2.5.4, part 3 of 4: under the master passcode with a connection** *(BACKLOG 2.5.4 and
+its cut, C123, C122, C113, C114; ADR-456 (4), (5)(d), 457, 458; REQ-202b, 209; read
+ARCHITECTURE §7's notes, §7.2, §7.3 and §7.5, `adms-field-app` §4A.0 (7), (8),
+`MasterPasscodeCheck`, `PhoneSignIns` and ADR-443's guard on a monitor's session
+(`apps/api/src/phone/`), and `api-tests.md`, `schema-and-migrations.md` and `database-tests.md`
+beside the `adms-verify` skill first)*. **Read the user's reply to ADR-456 (5)(d) and to
+ADR-458's defaults first** (`SUMMARY.md` §4; none in the files means build as proposed and say
+so): a session as the phone's monitor opened by the passcode, checked by the server's own
+`MasterPasscodeCheck`, a row marked as the passcode's (a column and its guard); the temporary
+session ending at the end of the project's day; either ends any other session on the phone,
+and whether a switch a phone reports does too; what a phone being set up online picks from
+before anybody is signed in. Part 4 follows (ADR-456 (4)).
+**The user may still overturn ADR-458's other defaults (three were confirmed, ADR-459), ADR-457's, ADR-456 (5)'s proposals, ADR-455's, ADR-454's, ADR-453's, ADR-451's and ADR-450's defaults, ADR-449
 (5)'s proposals as built, ADR-442's, ADR-440's, ADR-438's two choices or ADR-439's (`SUMMARY.md` §4).**
+**Docker's disk was full at the end of the last session** (Tools and housekeeping, "Seen 2026-10-10"): if `pnpm ready` fails for space, stop and ask the user to free some; never work around it.
 **Before the chain, `pnpm ready`** (the stack up, then `installer:check`): a `✗` at the migrations
 or at a setting means one was made elsewhere, and `pnpm installer --yes` applies it (seen 2026-10-09: 176 tests failed
 until it was). **After a change to `apps/api` or `apps/worker`, `pnpm local:up` again; if Docker

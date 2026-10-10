@@ -18,13 +18,19 @@
 //   whose day is today in their own project's time zone. The one that names this phone; with
 //   none naming it, the only one there is, whichever phone the board named (a monitor signs in
 //   on any enrolled phone). Where that leaves several, the phone takes none and says so: nobody
-//   picks a project on a phone, and the server never picks one for them.
+//   picks a project on a phone, and the server never picks one for them. **But where several
+//   name this phone, it takes the one made on it last** (ADR-458): one made on a phone under the
+//   master passcode is what was last decided there, after the board's plan and after any made
+//   on it earlier that day (the phone moved to another site, or passed to this monitor).
 //
 // - **One made on a phone under the master passcode is received as the phone reports it**
 //   (ADR-240, 457; AC-02-38, AC-05-40): its day is the day its phone's clock said, in the
 //   project's time zone; it is for a monitor, the only people a phone's login list names,
 //   archived since or not (the work was done: nothing is refused over eligibility). Reported
 //   again by the phone that made it, it is already saved; an id another record holds is not.
+//   **It says what it was made at** (ADR-458): a phone set up (also at another of the project's
+//   sites: a site move is a setup anew, and the earlier assignment stands), or a phone passed
+//   to a monitor who had no assignment it could take. Each is a use of the master passcode.
 //
 // Nothing here stops a second assignment for one person or one phone on a day (AC-02-29), judges
 // a date, or says an assignment has run out: it never expires and never stops work (ADR-240).
@@ -58,9 +64,20 @@ export interface StandingAssignment {
   readonly workDate: string;
   // The project's time zone, an IANA name.
   readonly timeZone: string;
-  // The phone the board named, if it named one.
+  // The phone the board named, if it named one; an unplanned one's is the phone it was made on.
   readonly deviceId: string | null;
+  // An unplanned one only: when it was made, by its phone's clock.
+  readonly madeAt: Date | null;
 }
+
+// What an unplanned assignment was made at, as its phone reports it: the phone set up under
+// the master passcode (at a first site or, moved, at another), or passed to another monitor.
+export const unplannedOccasions = ['SETUP', 'MONITOR_SWITCH'] as const;
+
+export type UnplannedOccasion = (typeof unplannedOccasions)[number];
+
+// The security events one saved is: what was done, then what opened it.
+export type UnplannedSecurityEvent = 'DEVICE_SETUP' | 'DEVICE_SWITCH' | 'MASTER_PASSCODE_USE';
 
 // Why what a phone reported as an unplanned assignment can't be kept as one: something it
 // names is no record of the kind it must be, or its id is another record's. Never a judgement
@@ -97,8 +114,23 @@ export class AssignmentRules {
     const here = today.filter((assignment) => assignment.deviceId === deviceId);
     const [only, ...others] = here.length > 0 ? here : today;
     if (only === undefined) return { taken: false, why: 'NONE_THAT_DAY' };
-    if (others.length > 0) return { taken: false, why: 'SEVERAL_THAT_DAY' };
-    return { taken: true, id: only.id };
+    if (others.length === 0) return { taken: true, id: only.id };
+    // Several name this phone: the one made on it last, if one alone was.
+    const made = here.flatMap(({ id, madeAt }) => (madeAt === null ? [] : [{ id, madeAt }]));
+    const last = Math.max(...made.map(({ madeAt }) => madeAt.getTime()));
+    const [lastMade, ...asLate] = made.filter(({ madeAt }) => madeAt.getTime() === last);
+    if (lastMade === undefined || asLate.length > 0) {
+      return { taken: false, why: 'SEVERAL_THAT_DAY' };
+    }
+    return { taken: true, id: lastMade.id };
+  }
+
+  // The security events an unplanned assignment saved is, by what it was made at.
+  securityEventsOf(occasion: UnplannedOccasion): readonly UnplannedSecurityEvent[] {
+    return [
+      occasion === 'MONITOR_SWITCH' ? 'DEVICE_SWITCH' : 'DEVICE_SETUP',
+      'MASTER_PASSCODE_USE',
+    ];
   }
 
   // The day an unplanned assignment is for: the day its phone's clock said it was made, in the

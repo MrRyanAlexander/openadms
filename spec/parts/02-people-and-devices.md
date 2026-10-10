@@ -76,7 +76,10 @@ Decides who can do what, and on which phone:
 9. **Switching monitors** on a phone: the master passcode first, then the new monitor signs in with
    their own ID and password (same project). An earlier monitor's unsynced work stays theirs and
    syncs in the background (ADR-095, 120). **Moving site** works the same way and is recorded; each
-   record keeps the site it was made at (ADR-195).
+   record keeps the site it was made at (ADR-195). *(ADR-458, agent defaults, awaiting approval:
+   a move, and a switch to a monitor who has no assignment, each make a new unplanned assignment
+   on the phone, reported at its next connection; the earlier assignment stands as it was, and
+   the monitor's sign-in on that phone takes the one made on it last.)*
 10. **The time clock** (where the project has it on): anyone with an assignment clocks in, takes a
     break and clocks out **by hand**, with simple nudges ("You're not clocked in. Clock in now?");
     activity lines are pre-filled from the day's field events; a **manager approves the day**

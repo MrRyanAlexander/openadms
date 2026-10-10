@@ -2,7 +2,7 @@
 name: adms-field-app
 description: Open ADMS field app and phones, in today's rules. Covers enrolling a phone once, the day's assignment it takes at sign-in, setup by master passcode when there's no assignment (an unplanned assignment), offline sign-in from the login list and its safeguards, switching monitors and moving site, encryption, the time clock on the phone, syncing whenever there's signal, sync and turn in, an out-of-service phone (the Phase 0 part, ARCHITECTURE §7–§8); what a phone holds for its assignment (lists, the site's quantity lookup, never rates or rules); and the later-phase capture notes: offline as the only mode, advisory on-device checks, badge first and number last, every start list, the split chain, printing, scanning, GPS and photos. Use when touching enrolment, sign-in, the phone's lists, sync from the phone's side, or anything a monitor captures. The workflows themselves are adms-ticket-workflows.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-251; the Phase 0 device and assignment models built, ADR-281; split haul-outs, ADR-295; a badge's number the phone's list doesn't hold, ADR-421; enrolment through the API, ADR-439; the assignment taken at sign-in, ADR-444; the lists read by the phone, ADR-450; the login list, ADR-454; an unplanned assignment reported, ADR-457) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-251; the Phase 0 device and assignment models built, ADR-281; split haul-outs, ADR-295; a badge's number the phone's list doesn't hold, ADR-421; enrolment through the API, ADR-439; the assignment taken at sign-in, ADR-444; the lists read by the phone, ADR-450; the login list, ADR-454; an unplanned assignment reported, ADR-457; a site move and a monitor switch reported, ADR-458) -->
 
 > **This page states today's rules** (last changed by ADR-295, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
@@ -81,10 +81,19 @@ gets tracked on a spreadsheet."
    their own Monitor ID and password, so the server knows it's them. **Shortcut:** the master passcode
    opens a **temporary session** for a monitor picked from the roster, marked on every record and
    ending at day end. An earlier monitor's unsynced work is **archived on the phone, still theirs,
-   hidden from the next monitor**, and synced in the background (ADR-095, 120).
+   hidden from the next monitor**, and synced in the background (ADR-095, 120). **A switch to a
+   monitor who has no assignment makes a new unplanned assignment for them on the phone, reported
+   as (5)'s is with `occasion: 'MONITOR_SWITCH'`** (ADR-458, agent defaults): the server records
+   a phone switched and a use of the master passcode, naming the monitor switched to, at the
+   phone's own time. A switch to a monitor who has their own assignment makes none (its report:
+   task 2.5.4 part 4).
 9. **Moving site** is done on the phone, offline, with the master passcode, from the project's sites
    it holds, and is recorded; each record keeps the site it was made at (ADR-195). Switching and
-   moving amend the phone's assignment.
+   moving amend the phone's assignment. **A move makes a new unplanned assignment at the new
+   site, reported as (5)'s is with `occasion: 'SETUP'`; the earlier assignment stands as it was,
+   and nothing the dispatcher planned is changed from a phone. Where several of a monitor's
+   assignments for a day name the phone they sign in on, it takes the one made on it last**
+   (ADR-458, agent defaults).
 10. **Data on the phone** (ADR-096; ARCHITECTURE §8): an **encrypted database** whose random key is
     held this-device-only in the Keychain / Keystore, **never backed up** (excluded from iCloud and
     Google backups); the monitor's password gates *using the app*, not *decrypting the data*, so a

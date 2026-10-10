@@ -10836,7 +10836,7 @@
     "/phones/current/unplanned-assignments": {
       "post": {
         "operationId": "reportUnplannedAssignment",
-        "summary": "A phone reports an unplanned assignment made on it under the firm’s master passcode, when its monitor had none: the project, the monitor, their work (the kinds of field event, certifying, the forms, the unit rate pay items), one site where the work is at one, and when it was made by the phone’s own clock, with the clock’s offset. The id is the phone’s own: the same report sent again is answered as already saved and kept once. It is kept as the phone reports it, marked unplanned on the dispatch board and never flagged, for a phone out of service too; its day is the day the phone’s clock said, in the project’s time zone. It is not saved only where something it names is no record of the kind it must be, or its id is another record’s. The passcode itself is never sent: the phone checked it. Each one saved is two security events at the phone’s own time: a phone set up, and a use of the master passcode. Open to a phone that has proved itself, by its token; nobody need be signed in.",
+        "summary": "A phone reports an unplanned assignment made on it under the firm’s master passcode, when its monitor had none: the project, the monitor, their work (the kinds of field event, certifying, the forms, the unit rate pay items), one site where the work is at one, and when it was made by the phone’s own clock, with the clock’s offset. The id is the phone’s own: the same report sent again is answered as already saved and kept once. It is kept as the phone reports it, marked unplanned on the dispatch board and never flagged, for a phone out of service too; its day is the day the phone’s clock said, in the project’s time zone. It is not saved only where something it names is no record of the kind it must be, or its id is another record’s. The passcode itself is never sent: the phone checked it. It says what it was made at: the phone set up (a phone moved to another of its project’s sites is set up anew there, and the earlier assignment stands with everything recorded under it), or the phone passed to another monitor, who had no assignment it could take. Each one saved is two security events at the phone’s own time: a phone set up or a phone switched, and a use of the master passcode. Where several of a monitor’s assignments for a day name one phone, their sign-in on it takes the one made on it last. Open to a phone that has proved itself, by its token; nobody need be signed in.",
         "x-open-adms-access": "PROVEN_PHONE",
         "requestBody": {
           "required": true,
@@ -10906,6 +10906,10 @@
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     }
                   },
+                  "occasion": {
+                    "type": "string",
+                    "enum": ["SETUP", "MONITOR_SWITCH"]
+                  },
                   "madeAt": {
                     "type": "string",
                     "format": "date-time",
@@ -10926,6 +10930,7 @@
                   "formDocumentTypes",
                   "siteId",
                   "payItemIds",
+                  "occasion",
                   "madeAt",
                   "deviceUtcOffsetMinutes"
                 ],

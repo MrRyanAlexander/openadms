@@ -21,13 +21,21 @@
 // - **Three times**: the phone's instant, its clock's offset and when the server received it,
 //   on the assignment and on each security event (`occurredAt` is the phone's).
 // - **Two security events with each one saved**, at the phone's own time, naming the phone and
-//   the monitor: `DEVICE_SETUP` (what was done) and `MASTER_PASSCODE_USE` (what opened it).
+//   the monitor: what was done, and `MASTER_PASSCODE_USE` (what opened it).
+// - **A site move and a monitor switch arrive the same way** (ARCHITECTURE §7.3; adms-field-app
+//   §4A.0 (8), (9); AC-02-46, 47; ADR-456 (5), 458). A phone moved to another of its project's
+//   sites is set up anew there: a new unplanned assignment, `DEVICE_SETUP`, and the earlier one
+//   stands with everything recorded under it. A phone passed to a monitor who has no assignment
+//   it could take is a new one for them: `DEVICE_SWITCH`, naming the monitor switched to.
+//   Nothing the board planned is changed from a phone; the monitor's sign-in then takes the one
+//   made on the phone last (the domain's `takenAtSignIn`).
 import { underMasterPasscode, type Database, type Prisma } from '@open-adms/db';
 import {
   AssignmentRules,
   type AssignmentFormDocumentType,
   type FieldEventKindName,
   type UnplannedAssignmentRefusal,
+  type UnplannedOccasion,
 } from '@open-adms/domain';
 
 import { day, type Clock } from '../setup/setup-service.ts';
@@ -44,6 +52,8 @@ export interface ReportedUnplannedAssignment {
   readonly formDocumentTypes: readonly AssignmentFormDocumentType[];
   readonly siteId: string | null;
   readonly payItemIds: readonly string[];
+  // What it was made at: the phone set up, or passed to this monitor.
+  readonly occasion: UnplannedOccasion;
   // The phone's clock when it was made, and how far that clock stood from UTC, in minutes.
   readonly madeAt: Date;
   readonly deviceUtcOffsetMinutes: number;
@@ -159,7 +169,7 @@ export class UnplannedAssignments {
     }
     // What was done, and what opened it: each at the phone's own time, about the monitor.
     const requestId = this.parts.requestNow();
-    for (const kind of ['DEVICE_SETUP', 'MASTER_PASSCODE_USE'] as const) {
+    for (const kind of this.rules.securityEventsOf(reported.occasion)) {
       await tx.securityEvent.create({
         data: {
           kind,

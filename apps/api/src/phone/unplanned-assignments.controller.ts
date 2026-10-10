@@ -2,7 +2,8 @@
 // §9 (3), (4); AC-02-38, AC-05-40; BACKLOG 2.5.4, C46, C93; ADR-240, 438, 456, 457). Open to a
 // phone that has proved itself; nobody need be signed in, and no passcode is sent. The log says
 // which phone reported which assignment and what it was answered, by id and code: never a
-// monitor's name, a site or what the work is.
+// monitor's name, a site or what the work is. A site move and a monitor switch are reported
+// here too (ADR-458): the log says what the assignment was made at.
 import {
   reportUnplannedAssignmentEndpoint,
   unplannedAssignmentAnswerSchema,
@@ -41,6 +42,7 @@ export class UnplannedAssignmentsController {
       {
         deviceId: phone.deviceId,
         assignmentId: body.id,
+        occasion: body.occasion,
         answer: received.answer,
         ...(reason === null ? {} : { reason }),
         ...(received.answer === 'SAVED' ? { workDate: received.workDate } : {}),

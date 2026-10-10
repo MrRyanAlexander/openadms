@@ -49,7 +49,7 @@ export type SetUpOnPhone = Pick<ReportedUnplannedAssignment, 'projectId' | 'pers
   Partial<
     Pick<
       ReportedUnplannedAssignment,
-      'fieldEventKinds' | 'certifying' | 'formDocumentTypes' | 'siteId' | 'payItemIds'
+      'fieldEventKinds' | 'certifying' | 'formDocumentTypes' | 'siteId' | 'payItemIds' | 'occasion'
     >
   >;
 
@@ -74,6 +74,7 @@ export async function unplanned(
     formDocumentTypes: [],
     siteId: null,
     payItemIds: [],
+    occasion: 'SETUP',
     ...work,
     id,
     madeAt,

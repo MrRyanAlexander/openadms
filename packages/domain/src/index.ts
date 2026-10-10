@@ -212,6 +212,7 @@ export {
   assignmentFormDocumentTypes,
   noAssignmentReasons,
   unplannedAssignmentRefusals,
+  unplannedOccasions,
   type AssignmentFormDocumentType,
   type AssignmentRefusal,
   type AssignmentRefusalCode,
@@ -219,6 +220,8 @@ export {
   type NoAssignmentReason,
   type StandingAssignment,
   type UnplannedAssignmentRefusal,
+  type UnplannedOccasion,
+  type UnplannedSecurityEvent,
 } from './assignments.ts';
 export {
   MasterPasscodeRules,

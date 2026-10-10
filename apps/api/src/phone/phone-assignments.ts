@@ -5,7 +5,9 @@
 // - **Read, never written.** The board's assignments that stand for the monitor are read, and
 //   the domain's `AssignmentRules.takenAtSignIn` says which the phone takes: the day is each
 //   project's own (its time zone), the one that names this phone first, and none where several
-//   are left. Nobody enters the master passcode and nobody picks a project.
+//   are left. Nobody enters the master passcode and nobody picks a project. Where several name
+//   this phone, the one made on it last under the master passcode (ADR-458): after a site move
+//   or a switch the phone takes what was last set up on it.
 // - **None is an answer, not a refusal** (ADR-441 (6)(d)): the monitor is signed in all the
 //   same, and the phone is told why it took none.
 // - **What the phone is told of it**: the assignment's id, its day, its project (with its time
@@ -61,6 +63,7 @@ export class PhoneAssignments {
           id: true,
           workDate: true,
           deviceId: true,
+          madeAt: true,
           fieldEventKinds: true,
           certifying: true,
           formDocumentTypes: true,
@@ -81,6 +84,7 @@ export class PhoneAssignments {
         workDate: row.workDate,
         timeZone: row.project.timeZone,
         deviceId: row.deviceId,
+        madeAt: row.madeAt,
       })),
     );
     if (!taken.taken) return taken;
