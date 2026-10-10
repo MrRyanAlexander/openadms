@@ -34,6 +34,7 @@ import {
   monitorCreatedAnswerSchema,
   monitorSignedInAnswerSchema,
   phoneListsAnswerSchema,
+  phoneLoginListAnswerSchema,
   phoneMonitorAnswerSchema,
   phoneEnrolledAnswerSchema,
   phoneProvenAnswerSchema,
@@ -1592,6 +1593,22 @@ export const phoneListsEndpoint = endpoint({
   answer: phoneListsAnswerSchema,
 });
 
+export const phoneLoginListEndpoint = endpoint({
+  name: 'phoneLoginList',
+  summary:
+    'The login list and the master passcode’s check a phone holds for signing in with no connection, asked for at any time it has one. The phone says what it holds: the version of the master passcode whose check it has, and a mark for each monitor’s entry. The answer is the version in force, with its check where the phone holds another or none; and the login list of the project of the assignment the phone takes now for the monitor signed in: that monitor and every monitor in service with an assignment that stands on the project for its today or later, each with the mark of their entry, and the entry itself where the phone didn’t send that mark. An entry is a slow hash made for this phone alone, kept nowhere on the server; a password set anew makes its mark good no more. One call makes a bounded number of entries and says there are more. With no assignment there is no list and the phone keeps what it holds. Never a password or a hash the server checks a sign-in against. Nothing is written but which version of the master passcode’s check the phone was sent. Open to a proven phone with its monitor’s session token.',
+  access: 'MONITOR_ON_PHONE',
+  method: 'POST',
+  path: '/phones/current/login-list',
+  body: z.strictObject({
+    masterPasscodeVersion: z.number().int().min(1).nullable(),
+    entries: z
+      .array(z.strictObject({ monitorId: z.uuid(), mark: z.string().min(1).max(100) }))
+      .max(5000),
+  }),
+  answer: phoneLoginListAnswerSchema,
+});
+
 export const removePhoneEndpoint = endpoint({
   name: 'removePhone',
   summary:
@@ -2400,6 +2417,7 @@ export const endpoints: readonly Endpoint[] = [
   signOutOnPhoneEndpoint,
   phoneMonitorEndpoint,
   phoneListsEndpoint,
+  phoneLoginListEndpoint,
   removePhoneEndpoint,
   changeMasterPasscodeEndpoint,
   listAssignmentsEndpoint,

@@ -126,8 +126,9 @@ const domains: Record<string, string> = {
 // The columns an audit trigger names so the capture leaves them out of the audit log (ADR-281).
 const keptOut: Record<string, string[]> = {
   master_passcode: ['hash'],
-  // A password's hash, an authenticator's secret and a refresh token's hash (ADR-397, 398).
-  user_credential: ['password_hash', 'two_step_secret'],
+  // A password's hash, an authenticator's secret and a refresh token's hash (ADR-397, 398); a
+  // monitor's offline seed (ADR-454).
+  user_credential: ['password_hash', 'two_step_secret', 'offline_seed'],
   session: ['refresh_token_hash'],
 };
 
@@ -196,6 +197,10 @@ const triggers = [
   `CREATE TRIGGER user_system_actor BEFORE INSERT OR UPDATE ON public."user" FOR EACH ROW EXECUTE FUNCTION user_system_actor_guard()`,
   // Which challenge a phone last answered: its own proof's alone, only ever later (ADR-440).
   `CREATE TRIGGER device_answered_challenge BEFORE INSERT OR UPDATE ON public.device FOR EACH ROW EXECUTE FUNCTION device_answered_challenge_guard()`,
+  // Which version of the master passcode's check a phone holds: its own proven call's alone,
+  // never an earlier one; and a monitor's offline seed never outlives its password (ADR-454).
+  `CREATE TRIGGER device_master_passcode_version BEFORE UPDATE ON public.device FOR EACH ROW EXECUTE FUNCTION device_master_passcode_version_guard()`,
+  `CREATE TRIGGER user_credential_offline_seed BEFORE UPDATE ON public.user_credential FOR EACH ROW EXECUTE FUNCTION user_credential_offline_seed_guard()`,
   // A monitor's session names a phone in service, and only theirs does (ADR-443).
   `CREATE TRIGGER session_on_a_phone BEFORE INSERT ON public.session FOR EACH ROW EXECUTE FUNCTION session_on_a_phone_guard()`,
   // The firm's last admin stays (ADR-415).
@@ -1053,6 +1058,16 @@ describe('the guards in the catalog', () => {
       {
         name: 'user_credential_failed_sign_ins_check',
         definition: 'CHECK ((failed_sign_ins >= 0))',
+      },
+      // A monitor's offline seed (ADR-454): only as the API sealed it, and only beside a password.
+      {
+        name: 'user_credential_offline_seed_sealed_check',
+        definition:
+          "CHECK ((offline_seed ~ '^v1\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$'::text))",
+      },
+      {
+        name: 'user_credential_offline_seed_together_check',
+        definition: 'CHECK ((((offline_seed IS NULL) OR (password_hash IS NOT NULL)) IS TRUE))',
       },
       // Two-step sign-in (ADR-412): a secret only as the API sealed it, and the step of the last
       // code taken with it.

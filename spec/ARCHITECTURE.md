@@ -531,9 +531,23 @@ ADR-106 (master passcode) and ADR-120 (changing monitors, username). **The word 
 > prime and subs: never the driver), its sites by name and use, its ROEs by number, address and
 > parcel with whether the pre-work survey is done (never the owner; only for a phone whose work
 > names an ROE), the control ranges and the phone's own site's quantity lookup; the setup
-> version, the login list and the master passcode's check follow. **A login list on a phone is outside what NIST SP 800-63B and ASVS provide
+> version (ADR-453); and, by a call of their own, the login list and the master passcode's
+> check (ADR-454, below). **A login list on a phone is outside what NIST SP 800-63B and ASVS provide
 > for** (ADR-449): anyone who reads a phone's list out can guess a seven-digit password, so the
 > protection is §7.2's five safeguards, as approved.
+
+> ⚠️ **ADR-454 (2026-10-09; ADR-449 (5) built as proposed, the rest agent defaults; this note
+> awaits approval, building didn't wait): the login list and the master passcode's check.** A
+> phone whose monitor is signed in asks for them whenever it has a connection, saying what it
+> already holds. **On its list:** the monitors in service with an assignment that stands on its
+> project for today or later. **An entry** is a slow hash made for that phone alone from a seed
+> the server keeps sealed beside the monitor's password; the phone is told how to make the first
+> half from what is typed and holds the second, and nothing sent is what the server itself
+> checks a sign-in against. Each entry costs the server about a hundredth of a second, so it
+> makes only those the phone doesn't hold, a bounded number a call; a password set anew
+> replaces its entry at the phone's next read. **The master passcode's check** is made the same
+> way and sent with its version; the phone's record says which version it was sent (§7.5). The
+> server keeps no entry.
 
 ✅ **Decided** *(ADR-176, user 2026-09-27, Q-170)*: the setup manifest carries the project's **service
 codes and their settings** (photos, GPS, measurement and weight required; payable type) for **every

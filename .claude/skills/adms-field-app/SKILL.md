@@ -2,7 +2,7 @@
 name: adms-field-app
 description: Open ADMS field app and phones, in today's rules. Covers enrolling a phone once, the day's assignment it takes at sign-in, setup by master passcode when there's no assignment (an unplanned assignment), offline sign-in from the login list and its safeguards, switching monitors and moving site, encryption, the time clock on the phone, syncing whenever there's signal, sync and turn in, an out-of-service phone (the Phase 0 part, ARCHITECTURE §7–§8); what a phone holds for its assignment (lists, the site's quantity lookup, never rates or rules); and the later-phase capture notes: offline as the only mode, advisory on-device checks, badge first and number last, every start list, the split chain, printing, scanning, GPS and photos. Use when touching enrolment, sign-in, the phone's lists, sync from the phone's side, or anything a monitor captures. The workflows themselves are adms-ticket-workflows.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-251; the Phase 0 device and assignment models built, ADR-281; split haul-outs, ADR-295; a badge's number the phone's list doesn't hold, ADR-421; enrolment through the API, ADR-439; the assignment taken at sign-in, ADR-444; the lists read by the phone, ADR-450) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-251; the Phase 0 device and assignment models built, ADR-281; split haul-outs, ADR-295; a badge's number the phone's list doesn't hold, ADR-421; enrolment through the API, ADR-439; the assignment taken at sign-in, ADR-444; the lists read by the phone, ADR-450; the login list, ADR-454) -->
 
 > **This page states today's rules** (last changed by ADR-295, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
@@ -143,8 +143,13 @@ settings and the site's quantity lookup; and (ADR-453, agent defaults) **the set
 the lists say which version of the project's setup they are (`setupVersion`, from 1). A version
 numbers what the project's phones are shown of its setup, never its certifications, ROEs or a
 phone's numbers; a new one is made only when a phone is first sent lists that differ; the back
-office can ask a site's quantity lookup as any version held it. Still to come: the login list
-and the master passcode's check.
+office can ask a site's quantity lookup as any version held it. **The login list and the master
+passcode's check are their own call** (ADR-454; ADR-449 (5) as proposed, the rest agent
+defaults), `POST /phones/current/login-list`: the phone says what it holds (a mark for each
+entry, the passcode's version) and is made only what it lacks, a bounded number a call; on the
+list are the monitors in service with an assignment that stands on its project for today or
+later; an entry is a slow hash made for that phone from a seed the server keeps sealed, checked
+on the phone in two steps; the server keeps no entry.
 
 - **Never on a phone: rates, rules, or a load's pay items.** No phone knows which pay item a load is
   paid at: its mileage, so its pay item, is known only after sync (ADR-221, 223).

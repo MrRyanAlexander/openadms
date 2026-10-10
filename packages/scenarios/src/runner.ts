@@ -12,6 +12,7 @@ import {
   NoMail,
   PasswordHasher,
   PhoneAssignments,
+  OfflineChecks,
   PhoneLists,
   PhoneChallenges,
   PhoneMonitors,
@@ -159,6 +160,7 @@ export class Runner {
       const clock = new StoryClock(story.start);
       const policy = builtInPolicy();
       const hasher = new PasswordHasher(storySigningSecret);
+      const offline = new OfflineChecks(storySigningSecret);
       const keys = new DeviceKeys();
       const proofRules = new PhoneProofRules(policy);
       const passcodeAt = (at: { now: () => Date }) =>
@@ -174,12 +176,14 @@ export class Runner {
         passcode: passcodeAt(clock),
         rules: new PasswordRules(policy, BreachedPasswords.from('')),
         hasher,
+        offline,
         clock,
       });
       const signInsAt = (at: { now: () => Date }) =>
         new PhoneSignIns(api, {
           tokens: new SessionTokens(storySigningSecret, policy.accessTokenMinutes),
           hasher,
+          offline,
           tries: new WrongTries(api, {
             rules: new SignInTries(policy),
             clock: at,

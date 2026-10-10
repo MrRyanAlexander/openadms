@@ -1164,6 +1164,11 @@ model UserCredential {
   // Somebody else set this password and so knows it: its owner sets their own at their next
   // sign-in, and may do nothing else until then (ADR-410).
   passwordChangeRequired Boolean   @default(false) @map("password_change_required")
+  // A monitor's offline seed (ARCHITECTURE §7.2; ADR-449 (5), 454): what a phone's login-list
+  // entry for them is made from, since no phone can compute the keyed hash above. An Argon2id of
+  // the password under a salt of its own, sealed by the API with a key the database never
+  // holds; made when the password is set and never outliving it (the guard migration).
+  offlineSeed            String?   @map("offline_seed")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 

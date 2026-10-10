@@ -218,6 +218,12 @@ export {
 } from './phone/phone-assignments.ts';
 export { PhoneChallenges, type Challenged } from './phone/phone-challenges.ts';
 export { PhoneLists, type PhoneListsHeld, type PhoneListsTaken } from './phone/phone-lists.ts';
+export { OfflineChecks, type OfflineCheck } from './phone/offline-checks.ts';
+export {
+  PhoneLoginList,
+  type LoginListHeld,
+  type LoginListTaken,
+} from './phone/phone-login-list.ts';
 export {
   PhoneMonitors,
   type MonitorOutcome,

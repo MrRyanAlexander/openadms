@@ -697,3 +697,59 @@ export const phoneListsAnswerSchema = z.strictObject({
 });
 
 export type PhoneListsAnswer = z.infer<typeof phoneListsAnswerSchema>;
+
+// What a phone checks a password or the master passcode against with no connection
+// (ARCHITECTURE §7.2, §7.5; AC-02-41; ADR-139, 449, 454): two slow hashes, one made from the
+// other. `first` is how the phone makes the first from what is typed: Argon2id, version 19, of
+// the whole password in Unicode's composed form, with no key, under that salt (standard base64,
+// unpadded) and those settings (memory in kibibytes), `bytes` long. `check` is Argon2id of that
+// first hash's bytes under a salt made for this phone alone, as a PHC string. Never the first
+// hash itself, and never what the server checks a sign-in against.
+export const offlineCheckSchema = z.strictObject({
+  first: z.strictObject({
+    salt: z.string().regex(/^[A-Za-z0-9+/]+$/),
+    memory: z.number().int().min(1),
+    passes: z.number().int().min(1),
+    parallelism: z.number().int().min(1),
+    bytes: z.number().int().min(16),
+  }),
+  check: z.string().regex(/^\$argon2id\$v=19\$m=\d+,t=\d+,p=\d+\$[A-Za-z0-9+/]+\$[A-Za-z0-9+/]+$/),
+});
+
+export type OfflineCheckRecord = z.infer<typeof offlineCheckSchema>;
+
+// What a phone is answered when it asks for its login list (ARCHITECTURE §7.1, §7.2, §7.5;
+// adms-field-app §4A.0 (6), (7); AC-02-17, AC-02-41; ADR-105, 106, 449, 454). **The master
+// passcode's version in force**, with its check for a phone that said it holds another or none.
+// **The login list of the project of the assignment the phone takes now**: the monitor signed
+// in and every monitor in service with an assignment that stands on that project for its today
+// or later, by id, Monitor ID and name, each with the mark of the entry this phone should hold.
+// `check` is the entry, for a monitor whose mark the phone didn't send; null where the phone
+// holds it, and null with `more` true where this call made its share and the phone asks again
+// saying what it now holds. The phone drops the entry of anybody the list doesn't name. With no
+// assignment there is no list (`noAssignment` says why) and the phone keeps what it holds.
+// Never a password, a hash the server checks against, a phone number or a role.
+export const phoneLoginListAnswerSchema = z.strictObject({
+  masterPasscode: z.strictObject({
+    version: z.number().int().min(1),
+    check: offlineCheckSchema.nullable(),
+  }),
+  noAssignment: z.enum(noAssignmentReasons).nullable(),
+  loginList: z
+    .strictObject({
+      projectId: z.uuid(),
+      monitors: z.array(
+        z.strictObject({
+          monitorId: z.uuid(),
+          monitorNumber: z.string().regex(/^M\d{6,}$/),
+          name: z.string(),
+          mark: z.string().min(1),
+          check: offlineCheckSchema.nullable(),
+        }),
+      ),
+      more: z.boolean(),
+    })
+    .nullable(),
+});
+
+export type PhoneLoginListAnswer = z.infer<typeof phoneLoginListAnswerSchema>;

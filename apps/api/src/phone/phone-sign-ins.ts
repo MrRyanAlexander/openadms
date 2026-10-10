@@ -24,7 +24,9 @@
 // - **Read on every request** (`onPhone`): an archived monitor, a password set anew (it ends their
 //   sessions), a sign-out, another monitor signed in on the phone, and a revoked key (the phone's
 //   own proof is read first) each stop it at once.
-// - **Written as the monitor, from that phone**: the session, the reset count and the event.
+// - **Written as the monitor, from that phone**: the session, the reset count and the event;
+//   and their offline seed where they have none yet (offline-checks.ts; ADR-454), since a
+//   phone's login-list entry for them is made from it.
 // - **The phone takes the monitor's assignment** (ADR-240, 444; AC-02-35): a sign-in is answered
 //   their assignment for the day, read by phone-assignments.ts, or why the phone took none. A
 //   monitor with none is signed in all the same (ADR-441 (6)(d)).
@@ -36,6 +38,7 @@ import type { Clock } from '../setup/setup-service.ts';
 import type { PasswordHasher } from '../sign-in/password-hasher.ts';
 import type { SessionTokens } from '../sign-in/session-tokens.ts';
 import type { WrongTries } from '../sign-in/wrong-tries.ts';
+import type { OfflineChecks } from './offline-checks.ts';
 import type { AssignmentAtSignIn, PhoneAssignments } from './phone-assignments.ts';
 
 // Why a sign-in was refused: for the server's log only. A caller is never told which, but for a
@@ -70,6 +73,7 @@ export interface SigningInPhone {
 export interface PhoneSignInsParts {
   readonly tokens: SessionTokens;
   readonly hasher: PasswordHasher;
+  readonly offline: Pick<OfflineChecks, 'seedOf' | 'stale'>;
   readonly tries: WrongTries;
   readonly assignments: PhoneAssignments;
   readonly clock: Clock;
@@ -94,7 +98,7 @@ export class PhoneSignIns {
     monitorNumber: string,
     password: string,
   ): Promise<PhoneSignInOutcome> {
-    const { tokens, hasher, tries, assignments, clock, hours, requestNow } = this.parts;
+    const { tokens, hasher, offline, tries, assignments, clock, hours, requestNow } = this.parts;
     // Before the password is read: a phone out of service never spends a monitor's count.
     if (phone.status !== 'ACTIVE') return { signedIn: false, why: 'PHONE_OUT_OF_SERVICE' };
     const person = await this.named(monitorNumber);
@@ -118,6 +122,12 @@ export class PhoneSignIns {
     }
     // Made again where it has no key or was made under settings since raised.
     const passwordHash = hasher.stale(kept.passwordHash) ? await hasher.hash(password) : undefined;
+    // Their offline seed, where there is none yet, this process can't open it, or the hash is
+    // made again (a seed never outlives its hash): what a phone's login list is made from.
+    const offlineSeed =
+      passwordHash !== undefined || offline.stale(person.id, kept.offlineSeed)
+        ? await offline.seedOf(person.id, password)
+        : undefined;
     const now = clock.now();
     const expiresAt = new Date(now.getTime() + hours * 3_600_000);
     const made = tokens.newRefresh();
@@ -125,13 +135,14 @@ export class PhoneSignIns {
     const session = await this.db.$write(
       { actorId: person.id, source: 'DEVICE', deviceId: phone.deviceId },
       async (tx) => {
-        if (kept.failedSignIns > 0 || kept.lockedUntil !== null || passwordHash !== undefined) {
+        if (kept.failedSignIns > 0 || kept.lockedUntil !== null || offlineSeed !== undefined) {
           await tx.userCredential.update({
             where: { userId: person.id },
             data: {
               failedSignIns: 0,
               lockedUntil: null,
               ...(passwordHash === undefined ? {} : { passwordHash }),
+              ...(offlineSeed === undefined ? {} : { offlineSeed }),
             },
           });
         }
@@ -243,7 +254,12 @@ export class PhoneSignIns {
           email: true,
           monitorNumber: true,
           credential: {
-            select: { passwordHash: true, failedSignIns: true, lockedUntil: true },
+            select: {
+              passwordHash: true,
+              offlineSeed: true,
+              failedSignIns: true,
+              lockedUntil: true,
+            },
           },
         },
       }),

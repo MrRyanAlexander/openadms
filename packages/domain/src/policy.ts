@@ -67,6 +67,9 @@ export const policyNames = {
   // How long a monitor's sign-in on a phone lasts, in hours, whatever is asked of it; quiet
   // doesn't end it (ARCHITECTURE §6, Device sessions; NIST SP 800-63B-4 §2.2.3; ADR-443).
   monitorSessionHours: 'MONITOR_SESSION_HOURS',
+  // The most login-list entries the server makes for a phone in one call (ARCHITECTURE §7.2;
+  // ADR-454): each is a slow hash, so one call's work is bounded and the phone asks again.
+  loginListEntriesPerCall: 'LOGIN_LIST_ENTRIES_PER_CALL',
   // Rate limits (ARCHITECTURE §6, Abuse; ASVS 2.4.1; ADR-416): how long the stretch is that
   // requests are counted over, in seconds; how many one address and one signed-in person may send
   // in it; and how many callers' counts the server keeps at once.
@@ -141,6 +144,7 @@ const ranges: Record<PolicyName, { least: number; most: number }> = {
   [policyNames.phoneChallengeSeconds]: { least: 10, most: 600 },
   [policyNames.phoneTokenMinutes]: { least: 1, most: 60 },
   [policyNames.monitorSessionHours]: { least: 1, most: 24 },
+  [policyNames.loginListEntriesPerCall]: { least: 1, most: 500 },
   [policyNames.rateLimitWindowSeconds]: { least: 1, most: 3600 },
   [policyNames.rateLimitRequestsPerAddress]: { least: 1, most: Number.MAX_SAFE_INTEGER },
   [policyNames.rateLimitRequestsPerAccount]: { least: 1, most: Number.MAX_SAFE_INTEGER },
@@ -184,6 +188,7 @@ export class Policy {
   readonly phoneChallengeSeconds: number;
   readonly phoneTokenMinutes: number;
   readonly monitorSessionHours: number;
+  readonly loginListEntriesPerCall: number;
   readonly rateLimitWindowSeconds: number;
   readonly rateLimitRequestsPerAddress: number;
   readonly rateLimitRequestsPerAccount: number;
@@ -226,6 +231,7 @@ export class Policy {
     this.phoneChallengeSeconds = Policy.read(values, policyNames.phoneChallengeSeconds);
     this.phoneTokenMinutes = Policy.read(values, policyNames.phoneTokenMinutes);
     this.monitorSessionHours = Policy.read(values, policyNames.monitorSessionHours);
+    this.loginListEntriesPerCall = Policy.read(values, policyNames.loginListEntriesPerCall);
     this.rateLimitWindowSeconds = Policy.read(values, policyNames.rateLimitWindowSeconds);
     this.rateLimitRequestsPerAddress = Policy.read(values, policyNames.rateLimitRequestsPerAddress);
     this.rateLimitRequestsPerAccount = Policy.read(values, policyNames.rateLimitRequestsPerAccount);

@@ -10500,6 +10500,261 @@
         }
       }
     },
+    "/phones/current/login-list": {
+      "post": {
+        "operationId": "phoneLoginList",
+        "summary": "The login list and the master passcode’s check a phone holds for signing in with no connection, asked for at any time it has one. The phone says what it holds: the version of the master passcode whose check it has, and a mark for each monitor’s entry. The answer is the version in force, with its check where the phone holds another or none; and the login list of the project of the assignment the phone takes now for the monitor signed in: that monitor and every monitor in service with an assignment that stands on the project for its today or later, each with the mark of their entry, and the entry itself where the phone didn’t send that mark. An entry is a slow hash made for this phone alone, kept nowhere on the server; a password set anew makes its mark good no more. One call makes a bounded number of entries and says there are more. With no assignment there is no list and the phone keeps what it holds. Never a password or a hash the server checks a sign-in against. Nothing is written but which version of the master passcode’s check the phone was sent. Open to a proven phone with its monitor’s session token.",
+        "x-open-adms-access": "MONITOR_ON_PHONE",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "masterPasscodeVersion": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 9007199254740991
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "entries": {
+                    "maxItems": 5000,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "monitorId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "mark": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100
+                        }
+                      },
+                      "required": ["monitorId", "mark"],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": ["masterPasscodeVersion", "entries"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "masterPasscode": {
+                      "type": "object",
+                      "properties": {
+                        "version": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "check": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "first": {
+                                  "type": "object",
+                                  "properties": {
+                                    "salt": {
+                                      "type": "string",
+                                      "pattern": "^[A-Za-z0-9+/]+$"
+                                    },
+                                    "memory": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "passes": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "parallelism": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "bytes": {
+                                      "type": "integer",
+                                      "minimum": 16,
+                                      "maximum": 9007199254740991
+                                    }
+                                  },
+                                  "required": ["salt", "memory", "passes", "parallelism", "bytes"],
+                                  "additionalProperties": false
+                                },
+                                "check": {
+                                  "type": "string",
+                                  "pattern": "^\\$argon2id\\$v=19\\$m=\\d+,t=\\d+,p=\\d+\\$[A-Za-z0-9+/]+\\$[A-Za-z0-9+/]+$"
+                                }
+                              },
+                              "required": ["first", "check"],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": ["version", "check"],
+                      "additionalProperties": false
+                    },
+                    "noAssignment": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": ["NONE_THAT_DAY", "SEVERAL_THAT_DAY"]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "loginList": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "projectId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "monitors": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "monitorId": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  "monitorNumber": {
+                                    "type": "string",
+                                    "pattern": "^M\\d{6,}$"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "mark": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "check": {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "first": {
+                                            "type": "object",
+                                            "properties": {
+                                              "salt": {
+                                                "type": "string",
+                                                "pattern": "^[A-Za-z0-9+/]+$"
+                                              },
+                                              "memory": {
+                                                "type": "integer",
+                                                "minimum": 1,
+                                                "maximum": 9007199254740991
+                                              },
+                                              "passes": {
+                                                "type": "integer",
+                                                "minimum": 1,
+                                                "maximum": 9007199254740991
+                                              },
+                                              "parallelism": {
+                                                "type": "integer",
+                                                "minimum": 1,
+                                                "maximum": 9007199254740991
+                                              },
+                                              "bytes": {
+                                                "type": "integer",
+                                                "minimum": 16,
+                                                "maximum": 9007199254740991
+                                              }
+                                            },
+                                            "required": [
+                                              "salt",
+                                              "memory",
+                                              "passes",
+                                              "parallelism",
+                                              "bytes"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          "check": {
+                                            "type": "string",
+                                            "pattern": "^\\$argon2id\\$v=19\\$m=\\d+,t=\\d+,p=\\d+\\$[A-Za-z0-9+/]+\\$[A-Za-z0-9+/]+$"
+                                          }
+                                        },
+                                        "required": ["first", "check"],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": ["monitorId", "monitorNumber", "name", "mark", "check"],
+                                "additionalProperties": false
+                              }
+                            },
+                            "more": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": ["projectId", "monitors", "more"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["masterPasscode", "noAssignment", "loginList"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/phones/{deviceId}/removals": {
       "post": {
         "operationId": "removePhone",

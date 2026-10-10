@@ -39,9 +39,12 @@ import { DeviceKeys } from '../phone/device-keys.ts';
 import { apiEnrolment } from '../phone/enrolment.controller.ts';
 import { Enrolment } from '../phone/enrolment.ts';
 import { MasterPasscodeCheck } from '../phone/master-passcode-check.ts';
+import { OfflineChecks } from '../phone/offline-checks.ts';
 import { PhoneAssignments } from '../phone/phone-assignments.ts';
 import { apiPhoneLists } from '../phone/phone-lists.controller.ts';
 import { PhoneLists } from '../phone/phone-lists.ts';
+import { apiPhoneLoginList } from '../phone/phone-login-list.controller.ts';
+import { PhoneLoginList } from '../phone/phone-login-list.ts';
 import { apiPhoneMonitors } from '../phone/phone-monitors.controller.ts';
 import { PhoneMonitors } from '../phone/phone-monitors.ts';
 import { PhoneChallenges } from '../phone/phone-challenges.ts';
@@ -242,6 +245,8 @@ export class ApiProcess {
     });
     const twoStep = new TwoStep(database, { check, clock, mail, sessions, requestNow });
     const breached = shippedBreachedPasswords();
+    // What a phone's login-list entry for a monitor is made from (task 2.5.3, part 4).
+    const offline = new OfflineChecks(settings.tokenSigningSecret);
     const passwords = new Passwords(database, {
       rules: new PasswordRules(policy, breached),
       hasher,
@@ -252,6 +257,7 @@ export class ApiProcess {
       sessions,
       tries,
       limits,
+      offline,
     });
     const people = new People(database, { clock, sessions, mail });
     // A phone's proof of itself (task 2.5.1): nobody is signed in.
@@ -268,6 +274,7 @@ export class ApiProcess {
     const phoneSignIns = new PhoneSignIns(database, {
       tokens,
       hasher,
+      offline,
       tries,
       assignments: new PhoneAssignments(database),
       clock,
@@ -329,6 +336,7 @@ export class ApiProcess {
               passcode: passcodeCheck,
               rules: new PasswordRules(policy, breached),
               hasher,
+              offline,
               clock,
             }),
           ],
@@ -338,6 +346,16 @@ export class ApiProcess {
           [
             apiPhoneLists,
             new PhoneLists(database, { assignments: new PhoneAssignments(database), clock }),
+          ],
+          // The login list and the master passcode's check a phone takes (task 2.5.3, part 4).
+          [
+            apiPhoneLoginList,
+            new PhoneLoginList(database, {
+              assignments: new PhoneAssignments(database),
+              offline,
+              clock,
+              entriesPerCall: policy.loginListEntriesPerCall,
+            }),
           ],
           [
             apiMasterPasscode,

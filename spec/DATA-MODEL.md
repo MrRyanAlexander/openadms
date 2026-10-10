@@ -185,6 +185,7 @@ worker, which reads people, holds nothing on it, and no read-only viewer reads i
 | lockedUntil | instant | Sign-in refuses the person until then: the wait that wrong tries put on the login, which is over by itself (ADR-409) |
 | **failedSignIns** | whole number | Wrong tries in a row since the last sign-in that worked or the last password set; never below nought (check). At the policy's count (`SIGN_IN_TRIES_BEFORE_LOCK`) the login is locked until its password is set anew (task 2.2.3, ADR-409) |
 | **passwordChangeRequired** | bool | Somebody else set this password: its owner sets their own at their next sign-in, before anything else (task 2.2.3, ADR-410). False unless set |
+| offlineSeed | text | A monitor's **offline seed** (ADR-449 (5), 454; agent default): what a phone's login-list entry for them is made from, since no phone can compute the keyed hash above. Argon2id of the password under a salt of its own with no key, **only as the API sealed it** (AES-256-GCM, bound to this person, written `v1.…`; a check refuses anything else), and only beside a password (check). Made when a monitor's password is set and at an online sign-in where there is none; **never outlives its password** (a trigger refuses a password changed with the seed left as it was). Nobody but a monitor has one. **Kept out of the audit log** (task 2.5.3 part 4) |
 | **createdAt** | instant | |
 
 Audited in the security domain: a change of a secret column writes an audit record that names

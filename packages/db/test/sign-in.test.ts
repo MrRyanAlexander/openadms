@@ -16,6 +16,9 @@ const tested = eachTestRolledBack();
 const aHash = '$argon2id$v=19$m=19456,t=2,p=1$c2FsdA$aGFzaA';
 const anotherHash = `${aHash}Zm9v`;
 // Made up, like the hash: no authenticator holds it.
+// A monitor's offline seed as the API seals one (ADR-454). Made up; it opens to nothing.
+const aSeed = 'v1.dGVzdC1ub25jZS0y.dGVzdC1zZWFsZWQtc2VlZC1sZWU.dGVzdC10YWctbGVlLTEyMzQ1Ng';
+const anotherSeed = `${aSeed}Zm9v`;
 // As the API seals one (ADR-412): a version and three parts. Made up; it opens to nothing.
 const aSecret = 'v1.dGVzdC1ub25jZS0x.dGVzdC1zZWFsZWQtc2VjcmV0LWRhbmE.dGVzdC10YWctZGFuYS0xMjM0';
 const keptOut = '[kept out of the audit]';
@@ -64,6 +67,7 @@ describe('what sign-in keeps of a person', () => {
       'failed_sign_ins',
       'id',
       'locked_until',
+      'offline_seed',
       'password_change_required',
       'password_hash',
       'two_step_last_step',
@@ -131,6 +135,7 @@ describe('what sign-in keeps of a person', () => {
           'failed_sign_ins',
           'id',
           'locked_until',
+          'offline_seed',
           'password_change_required',
           'password_hash',
           'two_step_last_step',
@@ -203,6 +208,84 @@ describe('what sign-in keeps of a person', () => {
         `SELECT table_name FROM information_schema.view_column_usage
          WHERE table_schema = 'public'
            AND table_name IN ('user_credential', 'session', 'security_event')`,
+      ),
+    ).toEqual([]);
+  });
+
+  it('AC-02-41, AC-10-11 a monitor’s offline seed is only ever what the API sealed, kept only beside a password, and never outlives the password it was made from: a password set anew takes a new seed or none; the audit log says that it changed, never what from or to (ADR-454)', async () => {
+    const { db, world } = tested;
+    await asTheApi();
+    const { id } = await db.one<{ id: string }>(
+      `INSERT INTO "user_credential" ("user_id", "password_hash", "offline_seed")
+       VALUES ($1, $2, $3) RETURNING "id"::text`,
+      [world.monitor, aHash, aSeed],
+    );
+    const set = `UPDATE "user_credential" SET "password_hash" = $2, "offline_seed" = $3 WHERE "id" = $1`;
+    // The password set anew, the seed left as it was: refused, whichever way it is written.
+    for (const statement of [
+      `UPDATE "user_credential" SET "password_hash" = $2 WHERE "id" = $1`,
+      `UPDATE "user_credential" SET "password_hash" = $2, "offline_seed" = "offline_seed" WHERE "id" = $1`,
+    ]) {
+      const refusal = await db.refused(statement, [id, anotherHash]);
+      expect(refusal.code).toBe(refusedBy.trigger);
+      expect(refusal.message).toContain('An offline seed never outlives its password');
+    }
+    // Anything else of the record changes beside the seed, and a seed is made again for the
+    // same password (a sign-in under settings since raised).
+    await db.run(`UPDATE "user_credential" SET "failed_sign_ins" = 3 WHERE "id" = $1`, [id]);
+    await db.run(`UPDATE "user_credential" SET "offline_seed" = $2 WHERE "id" = $1`, [
+      id,
+      anotherSeed,
+    ]);
+    // Only as the API sealed it; and none without a password.
+    for (const [value, check] of [
+      ['5550142', 'user_credential_offline_seed_sealed_check'],
+      [aHash, 'user_credential_offline_seed_sealed_check'],
+      ['', 'user_credential_offline_seed_sealed_check'],
+      ['v2.a.b.c', 'user_credential_offline_seed_sealed_check'],
+    ] as const) {
+      const refusal = await db.refused(set, [id, anotherHash, value]);
+      expect(refusal.code, value).toBe(refusedBy.check);
+      expect(refusal.message).toContain(`"${check}"`);
+    }
+    const alone = await db.refused(set, [id, null, aSeed]);
+    expect(alone.code).toBe(refusedBy.check);
+    expect(alone.message).toContain('"user_credential_offline_seed_together_check"');
+    // A new password with a new seed, and one with none.
+    await db.run(set, [id, anotherHash, aSeed]);
+    await db.run(set, [id, aHash, null]);
+    await db.run(`UPDATE "user_credential" SET "password_hash" = $2 WHERE "id" = $1`, [
+      id,
+      anotherHash,
+    ]);
+    await db.as('adms_worker');
+    expect(
+      (await audited('user_credential', id, 'offline_seed')).map((record) => {
+        const {
+          changed_fields: changed,
+          prior,
+          new: now,
+        } = record as {
+          changed_fields: string[];
+          prior: unknown;
+          new: unknown;
+        };
+        return [changed.filter((field) => field === 'offline_seed'), prior, now];
+      }),
+    ).toEqual([
+      [['offline_seed'], null, keptOut],
+      [[], keptOut, keptOut],
+      [['offline_seed'], keptOut, keptOut],
+      [['offline_seed'], keptOut, keptOut],
+      [['offline_seed'], keptOut, keptOut],
+      [[], keptOut, keptOut],
+    ]);
+    await db.administer();
+    expect(
+      await db.rows(
+        `SELECT "id" FROM "audit_record"
+         WHERE "prior_value"::text LIKE ANY ($1) OR "new_value"::text LIKE ANY ($1)`,
+        [[`%${aSeed}%`, `%${anotherSeed}%`]],
       ),
     ).toEqual([]);
   });
