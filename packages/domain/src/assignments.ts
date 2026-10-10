@@ -20,6 +20,12 @@
 //   on any enrolled phone). Where that leaves several, the phone takes none and says so: nobody
 //   picks a project on a phone, and the server never picks one for them.
 //
+// - **One made on a phone under the master passcode is received as the phone reports it**
+//   (ADR-240, 457; AC-02-38, AC-05-40): its day is the day its phone's clock said, in the
+//   project's time zone; it is for a monitor, the only people a phone's login list names,
+//   archived since or not (the work was done: nothing is refused over eligibility). Reported
+//   again by the phone that made it, it is already saved; an id another record holds is not.
+//
 // Nothing here stops a second assignment for one person or one phone on a day (AC-02-29), judges
 // a date, or says an assignment has run out: it never expires and never stops work (ADR-240).
 import { ProjectClock } from './project-clock.ts';
@@ -56,6 +62,19 @@ export interface StandingAssignment {
   readonly deviceId: string | null;
 }
 
+// Why what a phone reported as an unplanned assignment can't be kept as one: something it
+// names is no record of the kind it must be, or its id is another record's. Never a judgement
+// of the work.
+export const unplannedAssignmentRefusals = [
+  'UNKNOWN_PROJECT',
+  'NOT_A_MONITOR',
+  'NOT_THE_PROJECTS_SITE',
+  'NOT_THE_PROJECTS_UNIT_RATE_PAY_ITEM',
+  'ID_ALREADY_HELD',
+] as const;
+
+export type UnplannedAssignmentRefusal = (typeof unplannedAssignmentRefusals)[number];
+
 // Why a phone took no assignment at a sign-in.
 export const noAssignmentReasons = ['NONE_THAT_DAY', 'SEVERAL_THAT_DAY'] as const;
 
@@ -80,6 +99,29 @@ export class AssignmentRules {
     if (only === undefined) return { taken: false, why: 'NONE_THAT_DAY' };
     if (others.length > 0) return { taken: false, why: 'SEVERAL_THAT_DAY' };
     return { taken: true, id: only.id };
+  }
+
+  // The day an unplanned assignment is for: the day its phone's clock said it was made, in the
+  // project's time zone. The device's clock is the recorded time (ADR-100).
+  unplannedDay(madeAt: Date, timeZone: string): string {
+    return new ProjectClock(timeZone).day(madeAt);
+  }
+
+  // Whether an unplanned assignment may be for them: a phone sets itself up for a monitor from
+  // its login list. One archived since is still who did the work.
+  mayHoldUnplanned(person: { readonly role: string } | null): boolean {
+    return person?.role === 'MONITOR';
+  }
+
+  // An id the server already holds, reported as an unplanned assignment by that phone: the same
+  // report sent again, or another record's id.
+  reportedAgain(
+    held: { readonly origin: string; readonly deviceId: string | null },
+    deviceId: string,
+  ): 'ALREADY_SAVED' | 'ID_ALREADY_HELD' {
+    return held.origin === 'UNPLANNED' && held.deviceId === deviceId
+      ? 'ALREADY_SAVED'
+      : 'ID_ALREADY_HELD';
   }
 
   // Why this person can't be given an assignment, or nothing.

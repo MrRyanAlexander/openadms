@@ -56,6 +56,8 @@ import { PhoneProofs } from '../phone/phone-proofs.ts';
 import { apiPhoneSignIns } from '../phone/phone-sign-ins.controller.ts';
 import { PhoneSignIns } from '../phone/phone-sign-ins.ts';
 import { PhoneTokens } from '../phone/phone-tokens.ts';
+import { apiUnplannedAssignments } from '../phone/unplanned-assignments.controller.ts';
+import { UnplannedAssignments } from '../phone/unplanned-assignments.ts';
 import { Acceptances } from '../review/acceptances.ts';
 import { BackOfficeRecords } from '../review/back-office-records.ts';
 import { apiCorrections } from '../review/corrections.controller.ts';
@@ -376,6 +378,8 @@ export class ApiProcess {
           ],
           // An address looked up for a phone's GPS (task 2.5.3, part 5).
           [apiAddressLookups, new AddressLookups(addresses)],
+          // What a phone reports besides field events (task 2.5.4): an unplanned assignment.
+          [apiUnplannedAssignments, new UnplannedAssignments(database, { clock, requestNow })],
           [
             apiMasterPasscode,
             new MasterPasscode(database, {

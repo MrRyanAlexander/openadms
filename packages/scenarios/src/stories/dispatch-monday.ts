@@ -20,7 +20,7 @@ import { projectTime } from '../clock.ts';
 import { made, scanned } from '../device.ts';
 import { uuidv7 } from '../ids.ts';
 import type { Story } from '../runner.ts';
-import { assigned } from './board.ts';
+import { assigned, unplanned as unplannedOn } from './board.ts';
 import { p1TimeZone as timeZone, setUpP1, setUpP1Sites } from './p1.ts';
 
 const at = (time: string): string => `2026-10-12T${time}:00-04:00`;
@@ -494,24 +494,14 @@ export const dispatchMonday: Story = {
       at('06:40'),
       'Tariq has no assignment: the master passcode sets P1-TWR-LF up for the Landfill tower',
     );
-    // Made on the phone, its id the phone's own; it reaches the server when the phone syncs.
-    const unplanned = uuidv7(clock.now());
-    await api.$write(
-      { actorId: people.tariq, source: 'DEVICE', deviceId: phones.landfillTower.id },
-      (tx) =>
-        tx.assignment.create({
-          data: {
-            id: unplanned,
-            personId: people.tariq,
-            workDate: monday,
-            projectId: office.p1,
-            fieldEventKinds: ['DISPOSAL', 'HAUL_OUT_DISPOSAL'],
-            siteId: office.landfill,
-            deviceId: phones.landfillTower.id,
-            origin: 'UNPLANNED',
-          },
-        }),
-    );
+    // Made on the phone, its id the phone's own; the phone reports it and the API's
+    // `UnplannedAssignments` receives it (ADR-457).
+    const unplanned = await unplannedOn(api, clock, phones.landfillTower.id, timeZone, {
+      projectId: office.p1,
+      personId: people.tariq,
+      fieldEventKinds: ['DISPOSAL', 'HAUL_OUT_DISPOSAL'],
+      siteId: office.landfill,
+    });
     const mondays = await api.assignment.findMany({
       where: { workDate: monday, projectId: office.p1 },
       include: { person: true, site: true, device: true, madeBy: true },
@@ -550,6 +540,31 @@ export const dispatchMonday: Story = {
           'UNPLANNED',
           null,
         ],
+      ],
+    );
+
+    const reported = await api.assignment.findUniqueOrThrow({ where: { id: unplanned } });
+    const setUps = await api.securityEvent.findMany({
+      where: { deviceId: phones.landfillTower.id, deviceUtcOffsetMinutes: { not: null } },
+      orderBy: { id: 'asc' },
+    });
+    story.check(
+      'AC-02-38 it keeps the phone’s own 06:40 and its clock’s offset, and is two security events at that time, about Tariq on P1-TWR-LF: a phone set up, and a use of the master passcode',
+      [
+        reported.madeAt === null ? null : projectTime(timeZone, reported.madeAt),
+        reported.deviceUtcOffsetMinutes,
+        ...setUps.map((event) => [
+          event.kind,
+          event.userId === people.tariq ? 'Tariq Patel' : event.userId,
+          projectTime(timeZone, event.occurredAt),
+          event.deviceUtcOffsetMinutes,
+        ]),
+      ],
+      [
+        'Mon 12 Oct 06:40',
+        -240,
+        ['DEVICE_SETUP', 'Tariq Patel', 'Mon 12 Oct 06:40', -240],
+        ['MASTER_PASSCODE_USE', 'Tariq Patel', 'Mon 12 Oct 06:40', -240],
       ],
     );
 
@@ -700,7 +715,8 @@ export const dispatchMonday: Story = {
         ['assignment_pay_item', 'INSERT', 'Luis Ortega', 'BACK_OFFICE', '-', null],
         ['assignment_pay_item', 'INSERT', 'Luis Ortega', 'BACK_OFFICE', '-', null],
         ['number_block', 'INSERT', 'Ana Brooks', 'DEVICE', 'P1-COL-1', null],
-        ['assignment', 'INSERT', 'Tariq Patel', 'DEVICE', 'P1-TWR-LF', null],
+        // Set up under the master passcode: never Tariq's own write (ADR-457).
+        ['assignment', 'INSERT', 'Master passcode', 'DEVICE', 'P1-TWR-LF', null],
         ['number_block', 'UPDATE', 'Ana Brooks', 'DEVICE', 'P1-COL-1', null],
         ['number_block', 'INSERT', 'Ana Brooks', 'DEVICE', 'P1-COL-1', null],
         [

@@ -229,6 +229,7 @@ API reads the table**; who is shown them on a screen is the back office's (Phase
 | deviceId | → `Device` | The phone, when it happened on one |
 | requestId | text | The API request it happened in; never blank (check) |
 | **occurredAt** | instant | When it happened (a phone's own time, for what a phone logged and synced) |
+| deviceUtcOffsetMinutes | int | **Only where a phone reported it (ADR-457):** its clock's offset, so only with `deviceId` (check). `createdAt` is then when the server received it |
 | **createdAt** | instant | When the server wrote it |
 
 **Who wrote it** is the audit record's actor, as for every write: an event with nobody stated is
@@ -387,8 +388,16 @@ only by the API; audited in the security domain; never deleted.
 | deviceId | → `Device` | Named on the board, or the phone that took it |
 | **origin** | enum `AssignmentOrigin` | `PLANNED` (with its author) or `UNPLANNED` (no author, always its phone) |
 | madeById | → `User` | The author of a planned one |
+| madeAt | instant | **An unplanned one only (ADR-457):** when it was made, by the phone's clock |
+| deviceUtcOffsetMinutes | int | An unplanned one only: that clock's offset, UTC−12:00 to UTC+14:00 (check) |
+| receivedAt | instant | An unplanned one only: when the server received it; never changes |
 | **createdAt** | instant | |
 | archivedAt | instant | Withdrawn by archiving; never expires |
+
+**An unplanned one is what its phone reported (built, ADR-457; agent defaults).** The database
+takes one only as the master passcode's actor, for a phone, naming that same phone; whether an
+assignment was planned never changes; one written on the board has none of the three times. Its
+`workDate` is the day its phone's clock said, in the project's time zone.
 
 #### `AssignmentPayItem`
 
@@ -1835,6 +1844,7 @@ Never relaxed to pass a test (ARCHITECTURE §5.4). ✅ = built today.
 | The rule | How |
 |---|---|
 | One field event per project + workflow + bare number + split suffix + kind | ✅ unique key |
+| An unplanned assignment is made only as the master passcode's actor, for a phone, naming that phone, with the phone's instant, its offset and the server's received time; a planned one has none of the three; whether one was planned, and when an unplanned one was received, never change; a security event carries an offset only with its phone (ADR-457) | ✅ checks and a trigger (`assignment_unplanned`) |
 | A kind fits its workflow; a load call is 0–100 and only on `DIS` and `HOC` | ✅ checks |
 | A completed record's disposal, a collection row's completed record and collection event, a flag's field event, certification, site, survey, pay item and run, and a field event's map version and worked-out pay item are each of its own project; a zone is one of the map version used, and comes with it; only a unit rate event has a worked-out pay item (ADR-340) | ✅ two-column foreign keys and checks |
 | A completed record's load call is 0–100 and nothing on it or its rows is below nought; a weight is a share only where there is a weight; a haul-out never takes its quantity from carried tickets; a share is nought to one; a mileage with its source, a road point whole and on the earth, the map data's date with its hash; a flag is on a ticket or a record, says something, keeps its facts as an object with a SHA-256, and is never cleared before it was raised; a run never finishes before it starts; one decision for a ticket in a run (ADR-340) | ✅ checks and a unique key |

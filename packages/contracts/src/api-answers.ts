@@ -13,6 +13,7 @@ import {
   permissions,
   quantityAsks,
   quantitySources,
+  unplannedAssignmentRefusals,
   workerStatuses,
   workflows,
 } from '@open-adms/domain';
@@ -500,6 +501,21 @@ export const monitorCreatedAnswerSchema = z.strictObject({
 });
 
 export type MonitorCreatedAnswer = z.infer<typeof monitorCreatedAnswerSchema>;
+
+// What a phone is answered for an unplanned assignment it reported (ARCHITECTURE §7's note, §9
+// (3), (4); AC-02-38, AC-05-40; ADR-240, 457): saved; already saved, where the phone that made
+// it sent it before (never kept twice); or not saved, with why: something it names is no
+// record of the kind it must be, or its id is another record's. Never a judgement of the work.
+export const unplannedAssignmentAnswers = ['SAVED', 'ALREADY_SAVED', 'NOT_SAVED'] as const;
+
+export const unplannedAssignmentAnswerSchema = z.strictObject({
+  assignmentId: z.uuid(),
+  answer: z.enum(unplannedAssignmentAnswers),
+  // Only with `NOT_SAVED`.
+  reason: z.enum(unplannedAssignmentRefusals).nullable(),
+});
+
+export type UnplannedAssignmentAnswer = z.infer<typeof unplannedAssignmentAnswerSchema>;
 
 // The assignment a phone takes when its monitor signs in (ARCHITECTURE §7; AC-02-35, 36;
 // ADR-240, 444): its day (the project's own), its project with the time zone the phone shows

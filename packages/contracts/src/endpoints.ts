@@ -37,6 +37,7 @@ import {
   phoneListsAnswerSchema,
   phoneLoginListAnswerSchema,
   phoneMonitorAnswerSchema,
+  unplannedAssignmentAnswerSchema,
   phoneEnrolledAnswerSchema,
   phoneProvenAnswerSchema,
   provenPhoneAnswerSchema,
@@ -1743,6 +1744,41 @@ export const withdrawAssignmentEndpoint = endpoint({
   answer: savedAnswer(assignmentRecordSchema),
 });
 
+// An unplanned assignment, reported by the phone it was made on (ARCHITECTURE §7's note, §7.5,
+// §9 (3), (4), §10; AC-02-38, AC-05-40; BACKLOG 2.5.4, C46; ADR-240, 438, 456, 457). A monitor
+// had no assignment, and whoever holds the master passcode set the phone up on the spot: a
+// project, their work, one site, and the monitor from the phone's login list, with or without
+// a connection. The phone checked the passcode against its own check; the server is not sent
+// it and takes the phone's word, the phone having proved itself with its device key. The id is
+// the phone's own, so the same report sent again is answered "already saved" and kept once. The
+// day is the day the phone's clock said, in the project's time zone. Nobody need be signed in.
+// The limits here only bound what is read.
+export const reportUnplannedAssignmentEndpoint = endpoint({
+  name: 'reportUnplannedAssignment',
+  summary:
+    'A phone reports an unplanned assignment made on it under the firm’s master passcode, when its monitor had none: the project, the monitor, their work (the kinds of field event, certifying, the forms, the unit rate pay items), one site where the work is at one, and when it was made by the phone’s own clock, with the clock’s offset. The id is the phone’s own: the same report sent again is answered as already saved and kept once. It is kept as the phone reports it, marked unplanned on the dispatch board and never flagged, for a phone out of service too; its day is the day the phone’s clock said, in the project’s time zone. It is not saved only where something it names is no record of the kind it must be, or its id is another record’s. The passcode itself is never sent: the phone checked it. Each one saved is two security events at the phone’s own time: a phone set up, and a use of the master passcode. Open to a phone that has proved itself, by its token; nobody need be signed in.',
+  access: 'PROVEN_PHONE',
+  method: 'POST',
+  path: '/phones/current/unplanned-assignments',
+  body: z.strictObject({
+    // Made on the phone, so that what it records under the assignment can name it at once.
+    id: z.uuid(),
+    projectId: z.uuid(),
+    // The monitor, picked from the phone's login list.
+    personId: z.uuid(),
+    fieldEventKinds: assignedWork.fieldEventKinds,
+    certifying: assignedWork.certifying,
+    formDocumentTypes: assignedWork.formDocumentTypes,
+    siteId: assignedWork.siteId,
+    payItemIds: assignedWork.payItemIds,
+    // The phone's clock when it was made, as a UTC instant, and how far that clock stood from
+    // UTC, in minutes (ADR-100): UTC−12:00 to UTC+14:00.
+    madeAt: z.iso.datetime(),
+    deviceUtcOffsetMinutes: z.number().int().min(-720).max(840),
+  }),
+  answer: unplannedAssignmentAnswerSchema,
+});
+
 // Review's marks (spec/parts/08-review-and-corrections.md steps 5…7; spec/parts/09, invoicing;
 // AC-02-12; AC-08-05; AC-09-18; AC-10-27, 28; BACKLOG 2.4.4, C78…C81, C92; ADR-050, 107, 166, 228,
 // 364…367, 430): a ticket voided and unvoided, a flag accepted, a QC status set, an invoice batch
@@ -2436,6 +2472,7 @@ export const endpoints: readonly Endpoint[] = [
   phoneListsEndpoint,
   phoneLoginListEndpoint,
   phoneAddressLookupEndpoint,
+  reportUnplannedAssignmentEndpoint,
   removePhoneEndpoint,
   changeMasterPasscodeEndpoint,
   listAssignmentsEndpoint,

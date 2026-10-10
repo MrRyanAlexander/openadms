@@ -190,6 +190,9 @@ const triggers = [
   // and only for a change (ADR-453).
   `CREATE TRIGGER setup_manifest_refuse_edit BEFORE UPDATE ON public.setup_manifest FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
   `CREATE TRIGGER setup_manifest_numbered BEFORE INSERT ON public.setup_manifest FOR EACH ROW EXECUTE FUNCTION setup_manifest_numbered_guard()`,
+  // An unplanned assignment is made as the master passcode's actor for the phone it names;
+  // whether one was planned never changes (ADR-457).
+  `CREATE TRIGGER assignment_unplanned BEFORE INSERT OR UPDATE ON public.assignment FOR EACH ROW EXECUTE FUNCTION assignment_unplanned_guard()`,
   // A container has its primary box, asked when the piece of work that wrote it ends (ADR-321).
   `CREATE CONSTRAINT TRIGGER certification_has_primary_box AFTER INSERT OR UPDATE OF kind ON public.certification DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION certification_has_primary_box()`,
   `CREATE CONSTRAINT TRIGGER certification_box_keeps_primary AFTER UPDATE OF certification_id, "position" ON public.certification_box DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION certification_has_primary_box()`,
@@ -259,6 +262,13 @@ describe('the guards in the catalog', () => {
        WHERE contype = 'c' AND connamespace = 'public'::regnamespace ORDER BY conname`,
     );
     const checks = [
+      // An offset is one a clock can have; only an unplanned assignment has a phone's times
+      // (ADR-457).
+      {
+        name: 'assignment_device_utc_offset_check',
+        definition:
+          "CHECK (((device_utc_offset_minutes >= '-720'::integer) AND (device_utc_offset_minutes <= 840)))",
+      },
       {
         name: 'assignment_form_document_types_check',
         definition:
@@ -268,6 +278,11 @@ describe('the guards in the catalog', () => {
         name: 'assignment_origin_check',
         definition:
           "CHECK ((((origin = 'PLANNED'::assignment_origin) AND (made_by_id IS NOT NULL)) OR ((origin = 'UNPLANNED'::assignment_origin) AND (made_by_id IS NULL) AND (device_id IS NOT NULL))))",
+      },
+      {
+        name: 'assignment_phone_times_check',
+        definition:
+          "CHECK ((num_nonnulls(made_at, device_utc_offset_minutes, received_at) =\nCASE origin\n    WHEN 'UNPLANNED'::assignment_origin THEN 3\n    ELSE 0\nEND))",
       },
       {
         name: 'assignment_system_actor_check',
@@ -1097,6 +1112,12 @@ describe('the guards in the catalog', () => {
       {
         name: 'session_system_actor_check',
         definition: "CHECK ((user_id <> '00000000-0000-7000-8000-000000000001'::uuid))",
+      },
+      // A security event carries an offset only where a phone reported it (ADR-457).
+      {
+        name: 'security_event_device_utc_offset_check',
+        definition:
+          "CHECK (((device_utc_offset_minutes IS NULL) OR ((device_id IS NOT NULL) AND ((device_utc_offset_minutes >= '-720'::integer) AND (device_utc_offset_minutes <= 840)))))",
       },
       {
         name: 'security_event_request_id_check',

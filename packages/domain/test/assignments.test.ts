@@ -153,3 +153,36 @@ describe('the assignment a phone takes when its monitor signs in', () => {
     );
   });
 });
+
+describe('an unplanned assignment a phone reports', () => {
+  const bayline = 'America/New_York';
+
+  it('AC-02-38 its day is the day its phone’s clock said, in the project’s own time zone', () => {
+    // Set up at 06:40 on Monday in Bayline County.
+    expect(rules.unplannedDay(new Date('2026-10-12T06:40:00-04:00'), bayline)).toBe('2026-10-12');
+    // Half past midnight on Tuesday there is still Monday in Honolulu.
+    const earlyTuesday = new Date('2026-10-13T00:30:00-04:00');
+    expect(rules.unplannedDay(earlyTuesday, bayline)).toBe('2026-10-13');
+    expect(rules.unplannedDay(earlyTuesday, 'Pacific/Honolulu')).toBe('2026-10-12');
+  });
+
+  it('AC-02-38 it is for a monitor, whom a phone’s login list names, and for nobody else', () => {
+    expect(rules.mayHoldUnplanned({ role: 'MONITOR' })).toBe(true);
+    for (const role of ['ADMIN', 'MANAGER_ANALYST', 'VIEWER', 'SYSTEM', 'MASTER_PASSCODE']) {
+      expect(rules.mayHoldUnplanned({ role }), role).toBe(false);
+    }
+    expect(rules.mayHoldUnplanned(null)).toBe(false);
+  });
+
+  it('AC-05-40 reported again by the phone that made it, it is already saved; an id that is another phone’s, or one written on the board, is held', () => {
+    const tariqs = { origin: 'UNPLANNED', deviceId: 'P1-TWR-LF' };
+    expect(rules.reportedAgain(tariqs, 'P1-TWR-LF')).toBe('ALREADY_SAVED');
+    expect(rules.reportedAgain(tariqs, 'P1-COL-1')).toBe('ID_ALREADY_HELD');
+    expect(rules.reportedAgain({ origin: 'PLANNED', deviceId: 'P1-TWR-LF' }, 'P1-TWR-LF')).toBe(
+      'ID_ALREADY_HELD',
+    );
+    expect(rules.reportedAgain({ origin: 'PLANNED', deviceId: null }, 'P1-TWR-LF')).toBe(
+      'ID_ALREADY_HELD',
+    );
+  });
+});

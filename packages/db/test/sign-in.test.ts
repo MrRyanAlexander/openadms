@@ -683,6 +683,7 @@ describe('a security event', () => {
     expect(await columnsOf('security_event')).toEqual([
       'created_at',
       'device_id',
+      'device_utc_offset_minutes',
       'id',
       'kind',
       'occurred_at',
@@ -769,6 +770,37 @@ describe('a security event', () => {
         ['MASTER_PASSCODE_USE', world.device, at],
       ),
     ).toBe(1);
+  });
+
+  it('REQ-019, REQ-202b one a phone reported keeps the phone’s own time with its clock’s offset, and when the server wrote it; an offset is only a phone’s, and one a clock can have', async () => {
+    const { db, world } = tested;
+    await asTheApi();
+    const reported = `INSERT INTO "security_event" ("kind", "user_id", "device_id", "occurred_at",
+        "device_utc_offset_minutes") VALUES ('DEVICE_SETUP', $1, $2, '2026-10-12T10:40:00Z', $3)
+      RETURNING "id"::text, "occurred_at"::text, "device_utc_offset_minutes" AS offset,
+        (abs(extract(epoch FROM "created_at" - transaction_timestamp())) < 1) AS written_now`;
+    expect(await db.one(reported, [world.monitor, world.device, -240])).toMatchObject({
+      occurred_at: '2026-10-12 10:40:00+00',
+      offset: -240,
+      written_now: true,
+    });
+    for (const [device, offset] of [
+      [null, -240],
+      [world.device, -721],
+      [world.device, 841],
+    ] as const) {
+      const refused = await db.refused(reported, [world.monitor, device, offset]);
+      expect([device, offset, refused.code]).toEqual([device, offset, refusedBy.check]);
+      expect(refused.message).toContain('"security_event_device_utc_offset_check"');
+    }
+    // One the server saw itself has none, on a phone or off it.
+    expect(
+      (await db.one<{ offset: number | null }>(reported, [world.monitor, null, null])).offset,
+    ).toBeNull();
+    expect(
+      (await db.one<{ offset: number | null }>(reported, [world.monitor, world.device, null]))
+        .offset,
+    ).toBeNull();
   });
 
   it('is written once: never edited, never deleted, by the API or by the owner', async () => {

@@ -82,7 +82,12 @@ describe('who may ask', () => {
     // The exact list of what is open to a proven phone: a new one is added here on purpose.
     expect(
       endpoints.filter(({ access }) => access === 'PROVEN_PHONE').map(({ name }) => name),
-    ).toEqual(['provenPhone', 'createMonitorOnPhone', 'signInOnPhone']);
+    ).toEqual([
+      'provenPhone',
+      'createMonitorOnPhone',
+      'signInOnPhone',
+      'reportUnplannedAssignment',
+    ]);
     await world(async (served) => {
       // Dana is signed in at the back office: her session is no phone's proof.
       const dana = await served.signedIn(danasEmail, long);

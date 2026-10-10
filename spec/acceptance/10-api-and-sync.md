@@ -180,7 +180,7 @@ them. One more, AC-06-36, is named by the plan though its row doesn't say "Phase
 | AC-02-23 | A changed master passcode reaches each phone at its next sync; each use a security event | 2.4.3 (the change), 2.6.2 (the new check sent), 2.5.4 (the uses) | ASVS V6, V16 |
 | AC-02-35 | A monitor signs in online and the phone takes their assignment | 2.5.2 **✅ part 3, ADR-444** | API2 |
 | AC-02-37 | What a phone's lists carry, and never carry | 2.5.3 **in part: parts 1 to 3, ADR-450, 451, 453 (all but the login list)** | API3 |
-| AC-02-38 | An unplanned assignment arrives, marked | 2.5.4 | ASVS V16 |
+| AC-02-38 | An unplanned assignment arrives, marked | 2.5.4 **✅ part 1, ADR-457** | ASVS V16 |
 | AC-02-39 | A monitor's ID and password refused everywhere but a phone's calls | 2.2.3 (the web), 2.5.2 (a phone's calls) **✅ part 2, ADR-443** | ASVS V6 · API2 |
 | AC-02-41 | The login list: a slow hash per entry, salted for that phone | 2.5.3 | ASVS V11 · 800-63B passwords |
 | AC-02-45 | A monitor's own reopen before the shift ends, as the edit log | 2.6.3 | ASVS V16 |
@@ -205,7 +205,7 @@ them. One more, AC-06-36, is named by the plan though its row doesn't say "Phase
 | AC-05-09 | A resumable upload, its fingerprint checked | 2.6.4 | ASVS V5 |
 | AC-05-16 | The idempotency ledger's own records | 2.6.2 | ASVS V2 |
 | AC-05-20 | A quarantined record answered "not saved", with the reason | 2.6.2 | — |
-| AC-05-40 | An unplanned assignment's own arrival | 2.5.4 | ASVS V16 |
+| AC-05-40 | An unplanned assignment's own arrival | 2.5.4 **✅ part 1, ADR-457** | ASVS V16 |
 | AC-05-45 | Each record its own answer | 2.6.2 | — |
 | AC-05-48 | Fresh lists, a setup version and any new passcode check at each sync | 2.5.3 **in part: the setup version, ADR-453**, 2.6.2 | API3 |
 | AC-05-51 | Every phone of a project at once: each record stored once, none lost | 2.7.2 | API4 |

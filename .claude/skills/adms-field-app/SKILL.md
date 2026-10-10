@@ -2,7 +2,7 @@
 name: adms-field-app
 description: Open ADMS field app and phones, in today's rules. Covers enrolling a phone once, the day's assignment it takes at sign-in, setup by master passcode when there's no assignment (an unplanned assignment), offline sign-in from the login list and its safeguards, switching monitors and moving site, encryption, the time clock on the phone, syncing whenever there's signal, sync and turn in, an out-of-service phone (the Phase 0 part, ARCHITECTURE §7–§8); what a phone holds for its assignment (lists, the site's quantity lookup, never rates or rules); and the later-phase capture notes: offline as the only mode, advisory on-device checks, badge first and number last, every start list, the split chain, printing, scanning, GPS and photos. Use when touching enrolment, sign-in, the phone's lists, sync from the phone's side, or anything a monitor captures. The workflows themselves are adms-ticket-workflows.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-251; the Phase 0 device and assignment models built, ADR-281; split haul-outs, ADR-295; a badge's number the phone's list doesn't hold, ADR-421; enrolment through the API, ADR-439; the assignment taken at sign-in, ADR-444; the lists read by the phone, ADR-450; the login list, ADR-454) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-251; the Phase 0 device and assignment models built, ADR-281; split haul-outs, ADR-295; a badge's number the phone's list doesn't hold, ADR-421; enrolment through the API, ADR-439; the assignment taken at sign-in, ADR-444; the lists read by the phone, ADR-450; the login list, ADR-454; an unplanned assignment reported, ADR-457) -->
 
 > **This page states today's rules** (last changed by ADR-295, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
@@ -54,7 +54,13 @@ gets tracked on a spreadsheet."
 5. **No assignment?** The master passcode opens **setup on the phone**: project, work, site, and the
    monitor from the login list; online, or offline on the project whose lists the phone already holds
    (a new project needs a connection). It's recorded as an **unplanned assignment**, marked, not
-   flagged, and appears on the board at sync (ADR-240).
+   flagged, and appears on the board at sync (ADR-240). **The phone reports it by `POST
+   /phones/current/unplanned-assignments` once it has proved itself, with nobody signed in and
+   no passcode sent** (ADR-457, agent defaults): the id the phone made, the project, the monitor,
+   their work, the site, and when it was made by the phone's clock with that clock's offset. The
+   server keeps it as reported (its day is the phone's clock's, in the project's time zone) and
+   answers saved, already saved, or not saved with why; the record names the master passcode
+   itself, on that phone, and is two security events at the phone's own time.
 6. **Offline sign-in** checks the phone's **login list**, a sign-in check for each monitor enabled on
    its project (ADR-105). The safeguards, because a phone-number password is easy to guess
    (ARCHITECTURE §7.2, ADR-139):

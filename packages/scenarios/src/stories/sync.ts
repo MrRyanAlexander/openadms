@@ -45,7 +45,7 @@ import {
 import { uuidv7 } from '../ids.ts';
 import type { EnrolledPhone } from '../software-key.ts';
 import type { Story, StoryMonitor } from '../runner.ts';
-import { assigned, taken } from './board.ts';
+import { assigned, taken, unplanned as unplannedOn } from './board.ts';
 import { p1TimeZone as timeZone, setUpP1, setUpP1Sites, startSeries } from './p1.ts';
 
 const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-04:00`;
@@ -457,25 +457,14 @@ export const sync: Story = {
     const kim = story.phone(await setupOf(kimPlan, mondays['P1-TWR-TDSR Kim Nguyen']));
     const jo = story.phone(await setupOf(joPlan, mondays['P1-UR-1 Jo Kim']));
     // Tariq has no assignment: his supervisor sets P1-TWR-LF up on the spot with the master
-    // passcode, an unplanned assignment made on the phone (ADR-240). Its own arrival at sync is
-    // Phase 2's; the harness writes it as the phone would send it.
-    const unplanned = uuidv7(clock.now());
-    await api.$write(
-      { actorId: person('Tariq Patel'), source: 'DEVICE', deviceId: device('P1-TWR-LF') },
-      (tx) =>
-        tx.assignment.create({
-          data: {
-            id: unplanned,
-            personId: person('Tariq Patel'),
-            workDate: new Date('2026-10-12'),
-            projectId: p1,
-            fieldEventKinds: ['DISPOSAL', 'HAUL_OUT_DISPOSAL'],
-            siteId: landfill,
-            deviceId: device('P1-TWR-LF'),
-            origin: 'UNPLANNED',
-          },
-        }),
-    );
+    // passcode, an unplanned assignment made on the phone (ADR-240), which the phone reports
+    // and the API's `UnplannedAssignments` receives (ADR-457).
+    const unplanned = await unplannedOn(api, clock, device('P1-TWR-LF'), timeZone, {
+      projectId: p1,
+      personId: person('Tariq Patel'),
+      fieldEventKinds: ['DISPOSAL', 'HAUL_OUT_DISPOSAL'],
+      siteId: landfill,
+    });
     const tariqPlan: Planned = {
       monitor: 'Tariq Patel',
       phone: 'P1-TWR-LF',

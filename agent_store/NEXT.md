@@ -89,7 +89,7 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-10, through ADR-455)
+### Where things stand (2026-10-10, through ADR-457)
 - **Phase 2 (API and sync) is open (ADR-376): 21 of its 32 tasks are done** (`BACKLOG.md`,
   "Active — Phase 2", ticks each with its ADRs). Complete: Milestone 2.1 (the API as a process,
   the boundary, time limits and policy), 2.2 (sign-in: its records, passwords, sessions, two-step
@@ -98,12 +98,13 @@ of `DECISIONS.md`.
   certifications, the read-only viewer's path). Of 2.5 (phones): 2.5.1 (enrolment and a phone's
   proof of itself, ADR-436…440), 2.5.2 (monitors on phones: created, signed in, and the
   assignment a phone takes, ADR-441…444) and **2.5.3 (the lists a phone takes, in five parts,
-  ADR-449…451, 453…455; its last, an address looked up for a phone's GPS)** are done; 2.5.4 is
-  next. **The user approved ARCHITECTURE §7.2's notes on signing in
+  ADR-449…451, 453…455; its last, an address looked up for a phone's GPS)** are done; **2.5.4
+  is cut in four (ADR-456) and its part 1 is done (ADR-457: an unplanned assignment arrives
+  from the phone it was made on); part 2 is next.** **The user approved ARCHITECTURE §7.2's notes on signing in
   online and taking the assignment (ADR-452).**
 - **Where each thing is written, so nothing is read twice:** a rule as it stands, with its ADR:
   `SUMMARY.md`, by topic (grep its `###` headings; never read it whole). What a finished task left
-  for a later one: `BACKLOG.md`'s carry-forward register (C85…C120). How a layer's tests are
+  for a later one: `BACKLOG.md`'s carry-forward register (C85…C122). How a layer's tests are
   written and what a loosening is tried on: the page for that layer beside the `adms-verify`
   skill. Today's counts: `agent_store/CHAIN.md`. **The task-by-task record that stood here
   (2.0.1 to 2.5.2, every endpoint and service named) moved word for word to `DECISIONS.md`'s
@@ -130,11 +131,12 @@ of `DECISIONS.md`.
   ADR-453), **and its login list and the master passcode's check by `POST /phones/current/login-list`**
   (`PhoneLoginList`, `OfflineChecks`, ADR-454: the phone says what it holds and is made only what it lacks). **It looks up a GPS point's address by `POST
   /phones/current/address-lookups`** (`AddressLookups`, `AddressServer`, ADR-455: the API alone
-  asks the address server; a test hands the process its own through `ProcessParts.addresses`). What is written under the
+  asks the address server; a test hands the process its own through `ProcessParts.addresses`). **It reports an unplanned assignment by `POST
+  /phones/current/unplanned-assignments`** (`UnplannedAssignments`, ADR-457: `PROVEN_PHONE`, nobody signed in, no passcode sent; kept once and as reported, with the phone's instant, its offset and the server's received time). What is written under the
   master passcode names its own actor (`underMasterPasscode`), a proof's the device key's
   (`byDeviceKey`). The code is `apps/api/src/phone/`. **No story and no test writes a phone or a
   monitor by hand:** a story uses `story.enrolled`, `story.proofs`, `story.monitor`,
-  `story.signedIn`, `taken` (`stories/board.ts`) and `story.lists.held` for a phone's lists; an API test `enrolledPhone`, `proven`
+  `story.signedIn`, `taken` and `unplanned` (`stories/board.ts`) and `story.lists.held` for a phone's lists; an API test `enrolledPhone`, `proven`
   (`test/support/phones.ts`), `created` and `signedIn` (`phone-sign-ins.test.ts`).
 - **This machine's installation holds no person but the seed's three actors:** `pnpm
   local:accounts` and `pnpm installer:admin` have not been run for real here.
@@ -152,7 +154,7 @@ of `DECISIONS.md`.
   `installationPolicy({ … })`.
 - **Phase 1 is done:** all seven exit criteria met (ADR-371, 372); 693 of the 708 scenarios with a
   Phase 1 part proven whole, 15 in part. 48 scenario rows name Phase 2 (37 as "API (Phase 2)").
-- **The chain** was seen whole on 2026-10-10 after ADR-455. Its counts
+- **The chain** was seen whole on 2026-10-10 after ADR-457. Its counts
   are `agent_store/CHAIN.md`'s; what each command proves is `adms-verify`'s. **Start with `pnpm
   ready`**; the stories run once, in `pnpm scenarios`; run `pnpm security` after `pnpm test`.
 - **What exists:** `packages/db` (schema, guards, tests), `packages/domain` (every rule; one
@@ -311,15 +313,17 @@ questions.
 **Phase 2 is open (ADR-376). Its plan is `BACKLOG.md`, "Active — Phase 2" (ADR-377): read its
 brief first. One task per response.**
 
-**Task 2.5.4: what a phone reports besides field events** *(BACKLOG 2.5.4, C46, C111, C112,
-C115, C119…C121; REQ-202b; AC-02-38, AC-05-40; read ARCHITECTURE §7.1…§7.5 and §9,
-`adms-field-app` §4A.0, how `MasterPasscodeCheck`, `underMasterPasscode` and `PhoneSignIns` work
-(`apps/api/src/phone/`) and `api-tests.md` beside the `adms-verify` skill first; say what NIST SP
-800-63B and ASVS ask before building, ADR-401)*. An unplanned assignment, a monitor switch, a
-site move, a temporary session and each use of the master passcode, each with the phone's
-instant, its offset and the server's received time, each use a security event. It is likely
-more than one response: cut it first, as 2.5.1…2.5.3 were, and say the cut in its ADR.
-**The user may still overturn ADR-455's, ADR-454's, ADR-453's, ADR-451's and ADR-450's defaults, ADR-449
+**Task 2.5.4, part 2 of 4: a monitor switch and a site move, reported by the phone** *(BACKLOG
+2.5.4 and its cut, C122, C46, C114, C115; ADR-456 (4), (5), 457; REQ-202b; AC-02-46, AC-05-06;
+read ARCHITECTURE §7's notes and §7.3, `adms-field-app` §4A.0 (8), (9), `UnplannedAssignments`
+and `AssignmentRules.takenAtSignIn` (`apps/api/src/phone/`, `packages/domain/src/assignments.ts`)
+and `api-tests.md` and `database-tests.md` beside the `adms-verify` skill first)*. **Read the
+user's reply to ADR-456 (5) first** (`SUMMARY.md` §4; none in the files means build as
+proposed and say so): a site move and a switch to a monitor with no assignment each a new
+unplanned assignment, a `DEVICE_SWITCH` security event at the phone's own time, and the
+sign-in's rule taking the assignment made on the phone last where several name it. Parts 3 and
+4 follow, one a response (ADR-456 (4)).
+**The user may still overturn ADR-457's, ADR-456 (5)'s proposals, ADR-455's, ADR-454's, ADR-453's, ADR-451's and ADR-450's defaults, ADR-449
 (5)'s proposals as built, ADR-442's, ADR-440's, ADR-438's two choices or ADR-439's (`SUMMARY.md` §4).**
 **Before the chain, `pnpm ready`** (the stack up, then `installer:check`): a `✗` at the migrations
 or at a setting means one was made elsewhere, and `pnpm installer --yes` applies it (seen 2026-10-09: 176 tests failed

@@ -252,3 +252,8 @@ export {
   type PhoneSignInsParts,
 } from './phone/phone-sign-ins.ts';
 export { PhoneTokens } from './phone/phone-tokens.ts';
+export {
+  UnplannedAssignments,
+  type ReportedUnplannedAssignment,
+  type UnplannedAssignmentReceived,
+} from './phone/unplanned-assignments.ts';

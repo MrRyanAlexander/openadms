@@ -1234,8 +1234,11 @@ model SecurityEvent {
   deviceId  String?           @map("device_id") @db.Uuid
   requestId String?           @map("request_id")
 
-  occurredAt DateTime @map("occurred_at") @db.Timestamptz(3)
-  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  occurredAt             DateTime @map("occurred_at") @db.Timestamptz(3)
+  // Only where a phone reported it (ADR-457; BACKLOG C46): `occurredAt` is then the phone's own
+  // clock, this its offset, and `createdAt` when the server received it (ADR-100).
+  deviceUtcOffsetMinutes Int?     @map("device_utc_offset_minutes")
+  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   user   User?   @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   device Device? @relation(fields: [deviceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
@@ -1441,25 +1444,30 @@ enum AssignmentOrigin {
 model Assignment {
   // Made by the database for one written on the board; an unplanned one's comes from the phone,
   // so the field events recorded under it before it syncs can name it.
-  id                String             @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  personId          String             @map("person_id") @db.Uuid
+  id                     String             @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  personId               String             @map("person_id") @db.Uuid
   // The day, in the project's time zone.
-  workDate          DateTime           @map("work_date") @db.Date
-  projectId         String             @map("project_id") @db.Uuid
+  workDate               DateTime           @map("work_date") @db.Date
+  projectId              String             @map("project_id") @db.Uuid
   // Their work: the kinds of field event they may record, and whether they certify (ADR-151).
-  fieldEventKinds   FieldEventKind[]   @default([]) @map("field_event_kinds")
-  certifying        Boolean            @default(false)
+  fieldEventKinds        FieldEventKind[]   @default([]) @map("field_event_kinds")
+  certifying             Boolean            @default(false)
   // The forms they may make that aren't a ticket's: ROEs, surveys, incidents, drop-off logs (C42;
   // a check in the guard migration holds it to those four, ADR-308).
-  formDocumentTypes FormDocumentType[] @default([]) @map("form_document_types")
+  formDocumentTypes      FormDocumentType[] @default([]) @map("form_document_types")
   // One site, where the work is at one: a tower, either haul-out end, a drop-off log. A curb
   // collection has none (ADR-195).
-  siteId            String?            @map("site_id") @db.Uuid
+  siteId                 String?            @map("site_id") @db.Uuid
   // The phone: named on the board, or the one that took it. An unplanned one always has its phone.
-  deviceId          String?            @map("device_id") @db.Uuid
-  origin            AssignmentOrigin
+  deviceId               String?            @map("device_id") @db.Uuid
+  origin                 AssignmentOrigin
   // Who wrote it on the board. An unplanned one has no author: the master passcode isn't a person.
-  madeById          String?            @map("made_by_id") @db.Uuid
+  madeById               String?            @map("made_by_id") @db.Uuid
+  // An unplanned one only (ADR-457; BACKLOG C46): when it was made by the phone's clock, as a UTC
+  // instant plus its offset, and when the server received it (ADR-100). A planned one has none.
+  madeAt                 DateTime?          @map("made_at") @db.Timestamptz(3)
+  deviceUtcOffsetMinutes Int?               @map("device_utc_offset_minutes")
+  receivedAt             DateTime?          @map("received_at") @db.Timestamptz(3)
 
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   // Withdrawn from the board; never deleted.

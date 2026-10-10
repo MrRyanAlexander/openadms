@@ -471,6 +471,23 @@ ADR-106 (master passcode) and ADR-120 (changing monitors, username). **The word 
 > §7.4 and §7.5 stand. Declined: per-person passkeys or biometrics (phones pass between monitors),
 > attestation, personal phones, per-supervisor keys (ADR-106 stands).
 
+> ⚠️ **ADR-456, 457 (2026-10-10; agent defaults, this note awaits approval, building didn't
+> wait): what a phone reports of an act under the master passcode.** An unplanned assignment
+> is made on the phone, with or without a connection, and the phone checks the passcode against
+> its own check. When it next has a connection the phone, having proved itself with its device
+> key (§7.4), **reports the assignment**; nobody need be signed in and the passcode is never
+> sent. The server takes the phone's word and keeps the assignment as reported: marked
+> unplanned, on the board, never flagged, for a monitor archived since and from a phone out of
+> service too. Its day is the day the phone's clock said, in the project's time zone. It keeps
+> **the phone's instant, that clock's offset and when the server received it** (§10), and is
+> recorded as done by **"Master passcode"** on that phone, about the monitor, with two security
+> events at the phone's own time: a phone set up, and a use of the master passcode (§7.5).
+> Reported twice, it is kept once. Still to build (ADR-456's cut): a monitor switch and a site
+> move reported; a session under the passcode and the temporary session; every other use of the
+> passcode a phone logged. **Neither NIST SP 800-63B nor ASVS provides for a server taking a
+> device's word for what was done offline under a shared secret** (ADR-456): what stands
+> against it is the device key, the three times kept, and the clock difference kept at sync.
+
 ### 7.0 Creating people
 
 ✅ **Decided** *(ADR-105, user 2026-09-25)*:

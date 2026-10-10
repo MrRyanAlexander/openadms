@@ -94,6 +94,11 @@ version, the 94 values the firm's lists start with, 98 audit records (ADR-302).
   prisma.story.config.js` (in `packages/db`), run the tests on it, and use it as the template for
   the loosened copies; drop it before `pnpm installer`. While any is running, don't run `pnpm lint`, `pnpm test` or
   `pnpm generate`, and don't connect to `adms` (a copy can't be made while anyone is).
+- **A trigger fires before a check** (seen 2026-10-10, ADR-457): where a guard's trigger asks who is
+  writing, a check's own refusal is asked under the actor the trigger lets through, or the trigger
+  answers first with another code. **Two refusals of one trigger are told apart by their words**
+  in the test, or loosening one is hidden by the other. **An unplanned assignment** is written
+  with `underThePasscode()` and the `unplanned` values of `assignments.test.ts`.
 - A new table or guard adds its expectations to these tests in the same response: the grant, trigger
   and policy lists are exact, so an unexpected one fails.
 - **A bare copy fails one test by itself** (`configuration.test.ts`, "nobody but the logins may
