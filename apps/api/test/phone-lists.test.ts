@@ -129,7 +129,13 @@ describe('the lists a phone takes', () => {
     // The exact list of what a monitor's phone may call: a new one is added here on purpose.
     expect(
       endpoints.filter(({ access }) => access === 'MONITOR_ON_PHONE').map(({ name }) => name),
-    ).toEqual(['signOutOnPhone', 'phoneMonitor', 'phoneLists', 'phoneLoginList']);
+    ).toEqual([
+      'signOutOnPhone',
+      'phoneMonitor',
+      'phoneLists',
+      'phoneLoginList',
+      'phoneAddressLookup',
+    ]);
     await world(async (served, tx) => {
       const { priced, phone, token, signIn, assigned, onLoadForm, tagged, entered } = await leeOnP1(
         served,

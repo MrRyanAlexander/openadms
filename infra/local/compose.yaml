@@ -190,6 +190,11 @@ services:
       # The one proxy whose word is taken for a caller's address (ADR-416): Caddy, at the address
       # the stack's network gives it below. Rate limits count by that address.
       ADMS_TRUSTED_PROXIES: 172.30.213.2
+      # The address server is asked by its own name, over HTTPS, through Caddy, for a phone's
+      # address lookup (ADR-455), as the worker asks it below: in here Caddy is at the address
+      # the stack's network gives it, and its root certificate is mounted below.
+      ADMS_MAP_SERVERS_ADDRESS: 172.30.213.2:443
+      ADMS_MAP_CA_FILE: /run/adms/caddy-root.crt
     secrets:
       - api_env
     volumes:
@@ -208,6 +213,7 @@ services:
       - ../../packages/domain/dist:/srv/open-adms/packages/domain/dist:ro
       - ../../packages/domain/policy.env:/srv/open-adms/packages/domain/policy.env:ro
       - ../../packages/domain/breached-passwords.txt:/srv/open-adms/packages/domain/breached-passwords.txt:ro
+      - ./.generated/caddy-root.crt:/run/adms/caddy-root.crt:ro
     depends_on:
       postgres:
         condition: service_healthy

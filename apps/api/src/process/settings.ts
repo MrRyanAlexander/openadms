@@ -3,7 +3,9 @@
 // file ADMS_ENV_FILE names), and checked. A missing or malformed one stops the start and names
 // its key, never its value. ADMS_CORS_ORIGINS may be left out: no page of another origin is then
 // let in. ADMS_SMTP_ADDRESS and ADMS_MAIL_FROM may be left out too (ADR-405), and so may
-// ADMS_TRUSTED_PROXIES: no proxy's word is then taken for a caller's address (ADR-416).
+// ADMS_TRUSTED_PROXIES: no proxy's word is then taken for a caller's address (ADR-416). The
+// address server is named as the worker's settings name it (ADR-455): ADMS_ADDRESSES_URL, with
+// ADMS_MAP_CA_FILE and ADMS_MAP_SERVERS_ADDRESS where the installation has them.
 import { existsSync, readFileSync } from 'node:fs';
 import { BlockList, isIP } from 'node:net';
 import { fileURLToPath } from 'node:url';
@@ -47,6 +49,13 @@ export class Settings {
   // them is believed about the address a request came from (its X-Forwarded-For). With none
   // listed, a caller's address is the one that connected (ADR-416).
   readonly trustedProxies: readonly string[];
+  // Our own address server, asked over HTTPS for a phone's address lookup (ADR-098, 455).
+  readonly addressesUrl: string;
+  // The certificate authority it is checked against, as a PEM file; none for the machine's own
+  // trust store.
+  readonly mapCaFile: string | null;
+  // Where it is when it isn't where its name says (the local stack's proxy, from inside it).
+  readonly mapServersAt: { readonly host: string; readonly port: number } | undefined;
 
   private constructor(values: {
     databaseUrl: string;
@@ -59,6 +68,9 @@ export class Settings {
     port: number;
     corsOrigins: readonly string[];
     trustedProxies: readonly string[];
+    addressesUrl: string;
+    mapCaFile: string | null;
+    mapServersAt: { host: string; port: number } | undefined;
   }) {
     this.databaseUrl = values.databaseUrl;
     this.readOnlyDatabaseUrl = values.readOnlyDatabaseUrl;
@@ -70,6 +82,9 @@ export class Settings {
     this.port = values.port;
     this.corsOrigins = values.corsOrigins;
     this.trustedProxies = values.trustedProxies;
+    this.addressesUrl = values.addressesUrl;
+    this.mapCaFile = values.mapCaFile;
+    this.mapServersAt = values.mapServersAt;
   }
 
   static read(environment: Environment): Settings {
@@ -125,6 +140,15 @@ export class Settings {
       proxies.every((proxy) => Settings.isProxy(proxy)),
     );
 
+    const mapServersAddress = environment['ADMS_MAP_SERVERS_ADDRESS'];
+    checked(
+      'ADMS_MAP_SERVERS_ADDRESS',
+      mapServersAddress,
+      (value) => Settings.isAddress(value) && isIP(value.split(':')[0] ?? '') !== 0,
+    );
+    const mapCaFile = environment['ADMS_MAP_CA_FILE'];
+    checked('ADMS_MAP_CA_FILE', mapCaFile, (value) => Settings.isCertificateFile(value));
+
     const values = {
       databaseUrl: database('DATABASE_URL'),
       readOnlyDatabaseUrl: database('READONLY_DATABASE_URL'),
@@ -147,6 +171,17 @@ export class Settings {
       ),
       corsOrigins: origins,
       trustedProxies: proxies,
+      addressesUrl: checked('ADMS_ADDRESSES_URL', required('ADMS_ADDRESSES_URL'), (value) =>
+        Settings.isHttpsUrl(value),
+      ),
+      mapCaFile: mapCaFile ?? null,
+      mapServersAt:
+        mapServersAddress === undefined
+          ? undefined
+          : {
+              host: mapServersAddress.split(':')[0] ?? '',
+              port: Number(mapServersAddress.split(':')[1]),
+            },
     };
     if (problems.length > 0) throw new SettingsProblem(problems);
     return new Settings(values);
@@ -166,6 +201,29 @@ export class Settings {
     return (
       url.username !== '' && url.password !== '' && url.hostname !== '' && url.pathname.length > 1
     );
+  }
+
+  // The address server is asked over HTTPS only (ADR-098): its address, with nothing after it.
+  private static isHttpsUrl(value: string): boolean {
+    if (!URL.canParse(value)) return false;
+    const url = new URL(value);
+    return (
+      url.protocol === 'https:' &&
+      url.username === '' &&
+      url.password === '' &&
+      url.pathname === '/' &&
+      url.search === '' &&
+      url.hash === ''
+    );
+  }
+
+  // A file that is there and holds a certificate.
+  private static isCertificateFile(value: string): boolean {
+    try {
+      return readFileSync(value, 'utf8').includes('-----BEGIN CERTIFICATE-----');
+    } catch {
+      return false;
+    }
   }
 
   // One address, plain: no name beside it, no second address, nothing a header could be made of.

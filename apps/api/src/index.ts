@@ -216,6 +216,12 @@ export {
   type AssignmentAtSignIn,
   type PhoneAssignment,
 } from './phone/phone-assignments.ts';
+export { AddressLookups, type AddressLookedUp } from './phone/address-lookups.ts';
+export {
+  AddressServer,
+  type Addresses,
+  type AddressServerSettings,
+} from './phone/address-server.ts';
 export { PhoneChallenges, type Challenged } from './phone/phone-challenges.ts';
 export { PhoneLists, type PhoneListsHeld, type PhoneListsTaken } from './phone/phone-lists.ts';
 export { OfflineChecks, type OfflineCheck } from './phone/offline-checks.ts';

@@ -49,6 +49,9 @@ const workerMapKeys = [
   'ADMS_MAP_CA_FILE',
   'ADMS_MAP_EXTRACT_SHA256',
 ];
+// What the API's settings name of them: the address server alone, for a phone's address lookup
+// (apps/api/src/process/settings.ts; ADR-455).
+const apiMapKeys = ['ADMS_ADDRESSES_URL', 'ADMS_MAP_CA_FILE'];
 // The API is reached only through the local stack's proxy, over HTTPS (ADR-385).
 const apiHostname = 'api.adms.localhost';
 
@@ -134,6 +137,7 @@ export class Installer {
       await this.clearEarlierHash();
       this.state.save(record);
       this.ensureWorkerSettings();
+      this.ensureApiSettings();
       this.startApi();
       this.startWorker();
       console.log(`\nInstalled for ${record.firm}. Rerun \`pnpm installer\` any time to re-check.`);
@@ -267,12 +271,16 @@ export class Installer {
       ['DATABASE_URL', url('adms_owner')],
     ]);
     const smtpPort = this.stackEnv.read()['ADMS_SMTP_PORT'] ?? '1025';
-    this.apiEnv.create(header('the API, with its own login and the read-only login'), [
-      ['DATABASE_URL', url('adms_api')],
-      ['READONLY_DATABASE_URL', url('adms_readonly')],
-      ['ADMS_TOKEN_SIGNING_SECRET', maker.password()],
-      ['SMTP_URL', answers.mail === 'mail catcher' ? `smtp://${host}:${smtpPort}` : ''],
-    ]);
+    this.apiEnv.create(
+      header('the API, with its own login, the read-only login and the address server it asks'),
+      [
+        ['DATABASE_URL', url('adms_api')],
+        ['READONLY_DATABASE_URL', url('adms_readonly')],
+        ['ADMS_TOKEN_SIGNING_SECRET', maker.password()],
+        ['SMTP_URL', answers.mail === 'mail catcher' ? `smtp://${host}:${smtpPort}` : ''],
+        ...this.apiMapSettings(),
+      ],
+    );
     this.workerEnv.create(header('the worker, with its own login and the map servers it asks'), [
       ['DATABASE_URL', url('adms_worker')],
       ...this.workerMapSettings(),
@@ -572,6 +580,12 @@ export class Installer {
       ok: unnamed.length === 0,
       text: `apps/worker/.env names the map servers the worker asks${unnamed.length === 0 ? '' : ` (missing ${unnamed.join(', ')}: pnpm installer adds them)`}`,
     });
+    const apiStated = this.apiEnv.exists() ? this.apiEnv.read() : {};
+    const apiUnnamed = apiMapKeys.filter((key) => !(key in apiStated));
+    checks.push({
+      ok: apiUnnamed.length === 0,
+      text: `apps/api/.env names the address server the API asks${apiUnnamed.length === 0 ? '' : ` (missing ${apiUnnamed.join(', ')}: pnpm installer adds them)`}`,
+    });
     const apiProblem = await this.apiProblem();
     checks.push({
       ok: apiProblem === undefined,
@@ -600,6 +614,21 @@ export class Installer {
       ['ADMS_MAP_CA_FILE', join(this.root, 'infra/local/.generated/caddy-root.crt')],
       ['ADMS_MAP_EXTRACT_SHA256', sha256],
     ];
+  }
+
+  // What the API is told of the address server, for a phone's address lookup (ARCHITECTURE §3;
+  // ADR-455): the worker's own two values, so both ask one server by one name.
+  private apiMapSettings(): [string, string][] {
+    return this.workerMapSettings().filter(([key]) => apiMapKeys.includes(key));
+  }
+
+  // An installation made before the API asked the address server has an API's env file without
+  // it: the two settings are added at its end, every line already there left as it was.
+  private ensureApiSettings(): void {
+    const name = this.relative(this.apiEnv.path);
+    const added = this.apiEnv.add(this.apiMapSettings());
+    if (added.length === 0) console.log(`✓ ${name} names the address server the API asks`);
+    else console.log(`+ added to ${name}: ${added.join(', ')}`);
   }
 
   // An installation made before the worker had a process has a worker's env file with its login

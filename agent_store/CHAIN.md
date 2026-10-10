@@ -7,26 +7,26 @@
 > task's ADR and its session-log line in `DECISIONS.md`). No other file carries these counts.
 > **A count that differs from this page without a reason is a finding, not noise.**
 
-**Seen whole:** 2026-10-09, after ADR-454, on the user's Mac, the installation at head.
+**Seen whole:** 2026-10-10, after ADR-455, on the user's Mac, the installation at head.
 
 ## `pnpm ready`
 
 | What | Today |
 |---|---|
 | `pnpm local:up` | six `Healthy` services, then the API's and the worker's containers: `https://api.adms.localhost/health → 200 {"status":"ok"}` and `the worker’s health answer → 200 {"status":"ok","jobsWaiting":0,"jobsSetAside":0}` |
-| `pnpm installer:check` | **29 `✓`**, no `✗`, exit 0 |
+| `pnpm installer:check` | **30 `✓`**, no `✗`, exit 0 |
 | Migrations at head | **99** (`packages/db/prisma/migrations/` is the list) |
 | `pnpm local:down` (close-out) | 8 containers and the network: 9 `Removed` lines |
 
 ## `pnpm test`
 
-**`Test Files 135 passed (135)`, `Tests 2485 passed (2485)`.**
+**`Test Files 137 passed (137)`, `Tests 2511 passed (2511)`.**
 
 | Project | Tests | Files | Needs |
 |---|---|---|---|
-| `packages/domain` | 734 | 38 | nothing |
+| `packages/domain` | 741 | 39 | nothing |
 | `packages/contracts` | 30 | 6 | nothing |
-| `apps/api` | 434 | 33 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
+| `apps/api` | 453 | 34 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
 | `packages/db` | 1017 | 43 | `pnpm ready` |
 | `packages/scenarios` | 113 | 4 | `pnpm ready` for `stories.test.ts` (the runner and a run's template, 5); the flag catalogue (78 flags), the harness and the policy need nothing. **The stories themselves are not here** (ADR-446) |
 | `apps/worker` | 30 | 3 | `pnpm ready` for the map servers (13) and its container (3); the process (14) needs nothing |

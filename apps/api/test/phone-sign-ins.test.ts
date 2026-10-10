@@ -136,6 +136,7 @@ describe('who may sign in on a phone', () => {
       ['phoneMonitor', undefined, undefined],
       ['phoneLists', undefined, undefined],
       ['phoneLoginList', undefined, undefined],
+      ['phoneAddressLookup', undefined, undefined],
     ]);
     await world(async (served, tx) => {
       const { token, lee } = await leeOn(served, tx);

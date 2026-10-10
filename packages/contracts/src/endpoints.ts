@@ -33,6 +33,7 @@ import {
   phoneChallengeAnswerSchema,
   monitorCreatedAnswerSchema,
   monitorSignedInAnswerSchema,
+  phoneAddressLookupAnswerSchema,
   phoneListsAnswerSchema,
   phoneLoginListAnswerSchema,
   phoneMonitorAnswerSchema,
@@ -1609,6 +1610,22 @@ export const phoneLoginListEndpoint = endpoint({
   answer: phoneLoginListAnswerSchema,
 });
 
+// A point on the earth, each part an exact decimal: no database stands behind a lookup to say
+// how far a coordinate may go, so the request does.
+const onTheEarth = (most: number) =>
+  coordinate.refine((value) => Math.abs(Number(value)) <= most, 'not on the earth');
+
+export const phoneAddressLookupEndpoint = endpoint({
+  name: 'phoneAddressLookup',
+  summary:
+    'The address of a GPS point, for a collection’s "Look up address": the street number and name our own address server finds there, or none with the reason (the map has no street there; the address server gave no answer in time). The monitor then types it, as with no connection. The phone asks the API and the API asks the address server, which no phone and no browser reaches. The point is sent in the body, never in the address of the request; neither the point nor the address is logged or kept. Nothing is written. Open to a proven phone with its monitor’s session token.',
+  access: 'MONITOR_ON_PHONE',
+  method: 'POST',
+  path: '/phones/current/address-lookups',
+  body: z.strictObject({ latitude: onTheEarth(90), longitude: onTheEarth(180) }),
+  answer: phoneAddressLookupAnswerSchema,
+});
+
 export const removePhoneEndpoint = endpoint({
   name: 'removePhone',
   summary:
@@ -2418,6 +2435,7 @@ export const endpoints: readonly Endpoint[] = [
   phoneMonitorEndpoint,
   phoneListsEndpoint,
   phoneLoginListEndpoint,
+  phoneAddressLookupEndpoint,
   removePhoneEndpoint,
   changeMasterPasscodeEndpoint,
   listAssignmentsEndpoint,

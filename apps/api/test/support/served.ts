@@ -16,7 +16,11 @@ import { Body, Controller, Module } from '@nestjs/common';
 import { expect } from 'vitest';
 
 import { ApiModule } from '../../src/process/api-module.ts';
-import { ApiProcess, type ProcessPolicy } from '../../src/process/api-process.ts';
+import {
+  ApiProcess,
+  type ProcessParts,
+  type ProcessPolicy,
+} from '../../src/process/api-process.ts';
 import { Serves } from '../../src/process/serves.ts';
 import type { Mail } from '../../src/sign-in/mail.ts';
 import { OneTimeCodes } from '../../src/sign-in/one-time-codes.ts';
@@ -166,6 +170,7 @@ export class Served {
     within: Database,
     mail: Mail = new NoServer(),
     policy: ProcessPolicy = shippedPolicy,
+    more: Pick<ProcessParts, 'addresses'> = {},
   ): Promise<Served> {
     const served = new Served();
     const viewed = new ViewedWithin(within);
@@ -180,6 +185,7 @@ export class Served {
         viewerDatabase: viewed.asTheProcessHoldsIt(),
         mail,
         clock: served.clock,
+        ...more,
       },
     );
     await ready(served.api);
@@ -300,12 +306,14 @@ export function worldOn(db: () => Database) {
     work: Work,
     mail: Mail = new NoServer(),
     policy: ProcessPolicy = shippedPolicy,
+    // Who a phone's address lookup asks, where a test has an address server of its own.
+    more: Pick<ProcessParts, 'addresses'> = {},
   ): Promise<void> => {
     const dana = randomUUID();
     return undone(db(), dana, async (within, tx) => {
       const who = await people(tx, dana);
       const { hasher, check } = signInOn(within, mail);
-      const served = await Served.on(within, mail, policy);
+      const served = await Served.on(within, mail, policy, more);
       for (const [userId, password, email, secret] of [
         [who.dana, long, danasEmail, danasSecret],
         [who.luis, longer, luissEmail, luissSecret],

@@ -193,7 +193,7 @@ them. One more, AC-06-36, is named by the plan though its row doesn't say "Phase
 | AC-02-74 | A read-only viewer's sign-in and their own projects' reads | 2.2.3, 2.2.4 (sign-in ✅ ADR-408, 412: `sessions.test.ts`, `two-step.test.ts`), 2.4.5 (the reads) | ASVS V8 · API1 |
 | AC-03-09 | A phone refreshes its lists at any time and picks up a new certification | 2.5.3 **in part: the refresh, ADR-451**; 2.6.2 | — |
 | AC-03-55 | Only an admin revokes a certification | 2.4.4 ✅ (ADR-433: `apps/api/test/certifications.test.ts`) | ASVS V8 · API5 |
-| AC-04-24 | An address looked up for a phone's GPS, through the API | 2.5.3 | API7, API10 |
+| AC-04-24 | An address looked up for a phone's GPS, through the API | 2.5.3 ✅ (ADR-455: `apps/api/test/phone-address-lookups.test.ts`, `packages/domain/test/addresses.test.ts`) | API7, API10 |
 | AC-04-77 | A photograph's file, kept and never overwritten | 2.6.4 | ASVS V5 |
 | AC-04-102 | Who may mark a photograph removed, and put it back | 2.4.4 (`Corrections`): ✅ an admin, or a manager/analyst who holds *correct* (2026-10-08, ADR-431; `apps/api/test/corrections.test.ts`) | ASVS V8 · API5 |
 | AC-04-103 | Who may label a photograph | 2.4.4 (`Corrections`): ✅ an admin, or a manager/analyst who holds *correct* (2026-10-08, ADR-431; `apps/api/test/corrections.test.ts`) | ASVS V8 · API5 |

@@ -31,6 +31,8 @@ const withWorker = ['--profile', 'worker'];
 const withServices = [...withApi, ...withWorker];
 // What the worker's settings must name before it can start (apps/worker/src/process/settings.ts).
 const workerMapKeys = ['ADMS_ROUTING_URL', 'ADMS_ADDRESSES_URL'];
+// And the API's, for a phone's address lookup (apps/api/src/process/settings.ts; ADR-455).
+const apiMapKeys = ['ADMS_ADDRESSES_URL'];
 // What each service's container runs, from this checkout (compose.yaml mounts the same): the
 // built code and the files read beside it. Its dependencies are the lockfile's.
 const runs = {
@@ -43,6 +45,7 @@ const runs = {
     'packages/domain/breached-passwords.txt',
     'pnpm-lock.yaml',
     'infra/local/compose.yaml',
+    'infra/local/.generated/caddy-root.crt',
   ],
   worker: [
     'apps/worker/dist',
@@ -134,6 +137,14 @@ class LocalStack {
   async api(): Promise<void> {
     if (!existsSync(this.apiEnvFile)) {
       console.log('The API waits for `pnpm installer`: it has no settings yet (apps/api/.env).');
+      return;
+    }
+    // An installation made before the API asked the address server: only the keys are read.
+    const keys = Object.keys(parseEnv(readFileSync(this.apiEnvFile, 'utf8')));
+    if (!apiMapKeys.every((key) => keys.includes(key))) {
+      console.log(
+        'The API waits for `pnpm installer`: its settings (apps/api/.env) don’t name the address server yet.',
+      );
       return;
     }
     console.log('Building the API (pnpm generate, tsc --build apps/api) …');

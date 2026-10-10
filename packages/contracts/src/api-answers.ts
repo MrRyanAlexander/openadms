@@ -4,7 +4,9 @@ import {
   assignmentFormDocumentTypes,
   fieldEventKinds,
   incidentOffers,
+  lookedUpAddressLongest,
   mileageSources,
+  noAddressReasons,
   noAssignmentReasons,
   numberSeries,
   passwordProblemCodes,
@@ -753,3 +755,17 @@ export const phoneLoginListAnswerSchema = z.strictObject({
 });
 
 export type PhoneLoginListAnswer = z.infer<typeof phoneLoginListAnswerSchema>;
+
+// What a phone is answered when it asks the address of a GPS point (ARCHITECTURE §3 "Road
+// distance and addresses"; adms-field-app §4A.4; AC-04-24; ADR-111, 119, 455): the street
+// number and name our own address server finds there, as the monitor would type it, or none
+// with the reason. `NO_STREET_THERE`: the map has no street at the point. `NOT_ANSWERED`: the
+// address server gave no answer in time, or none that could be read; the phone may ask again.
+// Either way the monitor types the street number and name. Never the point sent, a town, a
+// postcode or anything else the address server said.
+export const phoneAddressLookupAnswerSchema = z.strictObject({
+  address: z.string().min(1).max(lookedUpAddressLongest).nullable(),
+  noAddress: z.enum(noAddressReasons).nullable(),
+});
+
+export type PhoneAddressLookupAnswer = z.infer<typeof phoneAddressLookupAnswerSchema>;

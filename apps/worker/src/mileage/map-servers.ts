@@ -11,7 +11,7 @@ import { readFileSync } from 'node:fs';
 import { request } from 'node:https';
 import { isIP, type LookupFunction } from 'node:net';
 
-import type { GpsPoint, MapData } from '@open-adms/domain';
+import { lookedUpAddress, type GpsPoint, type MapData } from '@open-adms/domain';
 
 export interface MapServerSettings {
   // Each server's address: "https://routing.adms.localhost".
@@ -122,17 +122,15 @@ export class MapServers {
     return trip.summary.length;
   }
 
-  // A point's address, street number and name ("25 The Green"); none where the address server
-  // knows no street there.
+  // A point's address, street number and name ("25 The Green"), read by the domain's rule as the
+  // API reads a phone's lookup (ADR-455); none where the address server knows no street there.
   async addressOf(point: GpsPoint): Promise<string | null> {
     const { status, body } = await this.ask(
       this.settings.addresses,
       `/reverse?lat=${point.latitude}&lon=${point.longitude}&format=jsonv2&zoom=18`,
     );
     if (status !== 200) throw unknown('addresses', '/reverse', status);
-    const { address } = body as { address?: { house_number?: string; road?: string } };
-    if (address?.road === undefined) return null;
-    return [address.house_number, address.road].filter((part) => part !== undefined).join(' ');
+    return lookedUpAddress(body);
   }
 
   // The map extract the servers answer from: its date as the address server reports it, and

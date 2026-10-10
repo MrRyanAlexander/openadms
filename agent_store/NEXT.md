@@ -89,16 +89,17 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-09, through ADR-454)
-- **Phase 2 (API and sync) is open (ADR-376): 20 of its 32 tasks are done** (`BACKLOG.md`,
+### Where things stand (2026-10-10, through ADR-455)
+- **Phase 2 (API and sync) is open (ADR-376): 21 of its 32 tasks are done** (`BACKLOG.md`,
   "Active — Phase 2", ticks each with its ADRs). Complete: Milestone 2.1 (the API as a process,
   the boundary, time limits and policy), 2.2 (sign-in: its records, passwords, sessions, two-step
   sign-in, permissions and people, rate limits), 2.3 (the job queue, the worker as a process, what
   queues work) and 2.4 (the services behind endpoints: setup, dispatch and phones, review and
   certifications, the read-only viewer's path). Of 2.5 (phones): 2.5.1 (enrolment and a phone's
-  proof of itself, ADR-436…440) and 2.5.2 (monitors on phones: created, signed in, and the
-  assignment a phone takes, ADR-441…444) are done; **2.5.3 (the lists a phone takes) is cut in five (ADR-449) and its parts 1 to 4 are done
-  (ADR-450, 451, 453, 454)**; its part 5 is next. **The user approved ARCHITECTURE §7.2's notes on signing in
+  proof of itself, ADR-436…440), 2.5.2 (monitors on phones: created, signed in, and the
+  assignment a phone takes, ADR-441…444) and **2.5.3 (the lists a phone takes, in five parts,
+  ADR-449…451, 453…455; its last, an address looked up for a phone's GPS)** are done; 2.5.4 is
+  next. **The user approved ARCHITECTURE §7.2's notes on signing in
   online and taking the assignment (ADR-452).**
 - **Where each thing is written, so nothing is read twice:** a rule as it stands, with its ADR:
   `SUMMARY.md`, by topic (grep its `###` headings; never read it whole). What a finished task left
@@ -127,7 +128,9 @@ of `DECISIONS.md`.
   `GET /phones/current/lists`** (`PhoneLists`, `apps/api/src/phone/phone-lists.ts`: the sign-in's rule
   asked again, then that assignment's lists and the setup version they are, `SetupVersions`,
   ADR-453), **and its login list and the master passcode's check by `POST /phones/current/login-list`**
-  (`PhoneLoginList`, `OfflineChecks`, ADR-454: the phone says what it holds and is made only what it lacks). What is written under the
+  (`PhoneLoginList`, `OfflineChecks`, ADR-454: the phone says what it holds and is made only what it lacks). **It looks up a GPS point's address by `POST
+  /phones/current/address-lookups`** (`AddressLookups`, `AddressServer`, ADR-455: the API alone
+  asks the address server; a test hands the process its own through `ProcessParts.addresses`). What is written under the
   master passcode names its own actor (`underMasterPasscode`), a proof's the device key's
   (`byDeviceKey`). The code is `apps/api/src/phone/`. **No story and no test writes a phone or a
   monitor by hand:** a story uses `story.enrolled`, `story.proofs`, `story.monitor`,
@@ -149,7 +152,7 @@ of `DECISIONS.md`.
   `installationPolicy({ … })`.
 - **Phase 1 is done:** all seven exit criteria met (ADR-371, 372); 693 of the 708 scenarios with a
   Phase 1 part proven whole, 15 in part. 48 scenario rows name Phase 2 (37 as "API (Phase 2)").
-- **The chain** was seen whole on 2026-10-09 after ADR-454. Its counts
+- **The chain** was seen whole on 2026-10-10 after ADR-455. Its counts
   are `agent_store/CHAIN.md`'s; what each command proves is `adms-verify`'s. **Start with `pnpm
   ready`**; the stories run once, in `pnpm scenarios`; run `pnpm security` after `pnpm test`.
 - **What exists:** `packages/db` (schema, guards, tests), `packages/domain` (every rule; one
@@ -308,20 +311,18 @@ questions.
 **Phase 2 is open (ADR-376). Its plan is `BACKLOG.md`, "Active — Phase 2" (ADR-377): read its
 brief first. One task per response.**
 
-**Task 2.5.3, part 5 of 5: an address looked up for a phone's GPS** *(BACKLOG 2.5.3, C117's "Part
-5", C120; ADR-449 (4); read ARCHITECTURE §3 "Road distance and addresses" and §6, AC-04-24,
-ADR-111 and 119, `adms-field-app` §4A.4's collection address row, how the worker asks the map
-servers (`apps/worker/src`, `MAP_SERVER_ANSWER_SECONDS`) and `api-tests.md` beside the
-`adms-verify` skill first)*. A signed-in monitor's proven phone sends a GPS point and is answered
-the address our own address server finds, or none; the address server stays private to the API
-(AC-04-24: no phone and no browser reaches it); what is asked, bounded and logged (a point is where
-a private citizen lives); what the API's process needs to reach the server (a setting the
-installer writes, as the worker's). The endpoint joins the contracts' `endpoints` list and both
-exact lists of `MONITOR_ON_PHONE`. It closes task 2.5.3 (tick it; REQ-203's part). Then 2.5.4.
-**The user may still overturn ADR-454's, ADR-453's, ADR-451's and ADR-450's defaults, ADR-449
+**Task 2.5.4: what a phone reports besides field events** *(BACKLOG 2.5.4, C46, C111, C112,
+C115, C119…C121; REQ-202b; AC-02-38, AC-05-40; read ARCHITECTURE §7.1…§7.5 and §9,
+`adms-field-app` §4A.0, how `MasterPasscodeCheck`, `underMasterPasscode` and `PhoneSignIns` work
+(`apps/api/src/phone/`) and `api-tests.md` beside the `adms-verify` skill first; say what NIST SP
+800-63B and ASVS ask before building, ADR-401)*. An unplanned assignment, a monitor switch, a
+site move, a temporary session and each use of the master passcode, each with the phone's
+instant, its offset and the server's received time, each use a security event. It is likely
+more than one response: cut it first, as 2.5.1…2.5.3 were, and say the cut in its ADR.
+**The user may still overturn ADR-455's, ADR-454's, ADR-453's, ADR-451's and ADR-450's defaults, ADR-449
 (5)'s proposals as built, ADR-442's, ADR-440's, ADR-438's two choices or ADR-439's (`SUMMARY.md` §4).**
 **Before the chain, `pnpm ready`** (the stack up, then `installer:check`): a `✗` at the migrations
-means one was made elsewhere, and `pnpm installer` applies it (seen 2026-10-09: 176 tests failed
+or at a setting means one was made elsewhere, and `pnpm installer --yes` applies it (seen 2026-10-09: 176 tests failed
 until it was). **After a change to `apps/api` or `apps/worker`, `pnpm local:up` again; if Docker
 answers 500, `docker desktop restart`; if `local:up` meets `ECONNRESET` or a container whose layer is
 gone, `pnpm local:down` and `up` once more.** **On a Linux host (a cloud session), the containers run as uid

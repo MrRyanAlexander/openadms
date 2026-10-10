@@ -21,6 +21,7 @@ const good: Record<string, string> = {
   SMTP_URL: '',
   ADMS_API_HOST: '127.0.0.1',
   ADMS_API_PORT: '3000',
+  ADMS_ADDRESSES_URL: 'https://addresses.adms.localhost:8443',
 };
 const without = (key: string): Record<string, string> =>
   Object.fromEntries(Object.entries(good).filter(([name]) => name !== key));
@@ -112,6 +113,16 @@ describe('the settings the API starts with', () => {
     ['ADMS_CORS_ORIGINS', 'https://adms.localhost https://adms-9f3c.example'],
     ['ADMS_CORS_ORIGINS', 'null'],
     ['ADMS_CORS_ORIGINS', 'off-9f3c'],
+    // The address server: HTTPS only, its address and nothing after it (ADR-098, 455).
+    ['ADMS_ADDRESSES_URL', 'http://addresses-9f3c.adms.localhost'],
+    ['ADMS_ADDRESSES_URL', 'addresses-9f3c.adms.localhost'],
+    ['ADMS_ADDRESSES_URL', 'https://u:9f3c@addresses.adms.localhost'],
+    ['ADMS_ADDRESSES_URL', 'https://addresses.adms.localhost/reverse-9f3c'],
+    ['ADMS_ADDRESSES_URL', 'https://addresses.adms.localhost/?format=9f3c'],
+    ['ADMS_MAP_SERVERS_ADDRESS', 'caddy-9f3c:443'],
+    ['ADMS_MAP_SERVERS_ADDRESS', '172.30.213.2'],
+    ['ADMS_MAP_SERVERS_ADDRESS', '172.30.213.2:port-9f3c'],
+    ['ADMS_MAP_CA_FILE', '/no/such/file-9f3c.crt'],
   ])('AC-10-55: a malformed %s is named, and its value never said', (key, value) => {
     const problem = problemOf({ ...good, [key]: value });
     expect(problem.keys).toEqual([key]);
@@ -135,6 +146,31 @@ describe('the settings the API starts with', () => {
     ]);
     // Left out, no page of another origin is let in: there is no value that lets every one in.
     expect(Settings.from(good).corsOrigins).toEqual([]);
+  });
+
+  it('name the address server a phone’s lookup asks, with its certificate authority and where the stack’s proxy is, each only where stated (ADR-455)', () => {
+    const plain = Settings.from(good);
+    expect([plain.addressesUrl, plain.mapCaFile, plain.mapServersAt]).toEqual([
+      'https://addresses.adms.localhost:8443',
+      null,
+      undefined,
+    ]);
+    const folder = mkdtempSync(join(tmpdir(), 'adms-api-ca-'));
+    const ca = join(folder, 'root.crt');
+    writeFileSync(ca, '-----BEGIN CERTIFICATE-----\nmade up\n-----END CERTIFICATE-----\n');
+    const inStack = Settings.from({
+      ...good,
+      ADMS_MAP_CA_FILE: ca,
+      ADMS_MAP_SERVERS_ADDRESS: '172.30.213.2:443',
+    });
+    expect([inStack.mapCaFile, inStack.mapServersAt]).toEqual([
+      ca,
+      { host: '172.30.213.2', port: 443 },
+    ]);
+    // A file that holds no certificate is no certificate authority.
+    writeFileSync(ca, 'made up');
+    expect(problemOf({ ...good, ADMS_MAP_CA_FILE: ca }).keys).toEqual(['ADMS_MAP_CA_FILE']);
+    rmSync(folder, { recursive: true, force: true });
   });
 
   it('reach the database where the stack says it is, with the same login', () => {
@@ -203,6 +239,7 @@ describe('the API as a process, started with settings that are off', () => {
       'ADMS_TOKEN_SIGNING_SECRET=short-9f3c',
       'ADMS_API_HOST=127.0.0.1',
       'ADMS_API_PORT=3000',
+      'ADMS_ADDRESSES_URL=https://addresses.adms.localhost',
     ]);
     expect(started.status).toBe(1);
     expect(started.stdout).toBe('');

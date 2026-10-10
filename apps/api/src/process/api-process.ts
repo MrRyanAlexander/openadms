@@ -35,6 +35,9 @@ import { apiMasterPasscode, apiPhones } from '../dispatch/phones.controller.ts';
 import { Phones } from '../dispatch/phones.ts';
 import { apiPeople } from '../people/people.controller.ts';
 import { People } from '../people/people.ts';
+import { apiAddressLookups } from '../phone/address-lookups.controller.ts';
+import { AddressLookups } from '../phone/address-lookups.ts';
+import { AddressServer, type Addresses } from '../phone/address-server.ts';
 import { DeviceKeys } from '../phone/device-keys.ts';
 import { apiEnrolment } from '../phone/enrolment.controller.ts';
 import { Enrolment } from '../phone/enrolment.ts';
@@ -126,6 +129,9 @@ export type ProcessSettings = Pick<
   | 'smtpUrl'
   | 'smtpAddress'
   | 'mailFrom'
+  | 'addressesUrl'
+  | 'mapCaFile'
+  | 'mapServersAt'
 >;
 
 // The installation's policy, whole: the process reads its own values (the body limit, the pool,
@@ -134,13 +140,14 @@ export type ProcessPolicy = Policy;
 
 // What a test puts in place of the process's own: where the log goes instead of standard output,
 // the database (a test's own piece of work, undone afterwards), the read-only login's database
-// for a viewer's reads, the mail and the time.
+// for a viewer's reads, the mail, the time and who a phone's address lookup asks.
 export interface ProcessParts {
   readonly stream?: { write(line: string): void };
   readonly database?: Database;
   readonly viewerDatabase?: ViewerDatabase;
   readonly mail?: Mail;
   readonly clock?: Clock;
+  readonly addresses?: Addresses;
 }
 
 export interface Route {
@@ -221,6 +228,16 @@ export class ApiProcess {
     const limits = new Limits(new RateLimits(policy), clock);
     answersWith(server, settings.corsOrigins, (request) => limits.arrived(request.ip));
     const mail = more.mail ?? mailFor(settings);
+    // Our own address server, asked for a phone's address lookup and by nothing else here
+    // (task 2.5.3, part 5): no phone and no browser reaches it.
+    const addresses =
+      more.addresses ??
+      new AddressServer({
+        url: settings.addressesUrl,
+        caFile: settings.mapCaFile,
+        timeoutMs: policy.addressLookupAnswerSeconds * 1000,
+        at: settings.mapServersAt,
+      });
     const hasher = new PasswordHasher(settings.tokenSigningSecret);
     const tokens = new SessionTokens(settings.tokenSigningSecret, policy.accessTokenMinutes);
     const tries = new WrongTries(database, {
@@ -357,6 +374,8 @@ export class ApiProcess {
               entriesPerCall: policy.loginListEntriesPerCall,
             }),
           ],
+          // An address looked up for a phone's GPS (task 2.5.3, part 5).
+          [apiAddressLookups, new AddressLookups(addresses)],
           [
             apiMasterPasscode,
             new MasterPasscode(database, {

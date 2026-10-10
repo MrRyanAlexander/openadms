@@ -11,6 +11,7 @@ import { PhoneMonitorsController } from '../phone/phone-monitors.controller.ts';
 import { PhoneProofsController } from '../phone/phone-proofs.controller.ts';
 import { PhoneListsController } from '../phone/phone-lists.controller.ts';
 import { PhoneLoginListController } from '../phone/phone-login-list.controller.ts';
+import { AddressLookupsController } from '../phone/address-lookups.controller.ts';
 import { PhoneSignInsController } from '../phone/phone-sign-ins.controller.ts';
 import { CorrectionsController } from '../review/corrections.controller.ts';
 import { ReviewMarksController } from '../review/review-marks.controller.ts';
@@ -49,6 +50,7 @@ import { HealthController } from './health.controller.ts';
     PhoneSignInsController,
     PhoneListsController,
     PhoneLoginListController,
+    AddressLookupsController,
     AssignmentsController,
     ReviewMarksController,
     CorrectionsController,
