@@ -22,6 +22,7 @@ import {
   createSiteEndpoint,
   markSecondCopyEndpoint,
   renumberQuarantinedRecordEndpoint,
+  syncedFieldEventSchema,
   type Endpoint,
 } from '@open-adms/contracts';
 import type { Database } from '@open-adms/db';
@@ -197,6 +198,7 @@ const disposal = async (
   numberTypedReasonId: null,
   certNumber: '730415',
   certKeyedByHand: false,
+  typedCapacityCy: null,
   siteId: null,
   startedAt: new Date(startedAt),
   endedAt: new Date(new Date(startedAt).getTime() + 4 * 60_000),
@@ -1076,6 +1078,41 @@ describe('a record created in the back office', () => {
       expect(plainly(answer)).toBe(
         'Not saved: a collection and a disposal are a load’s, a haul-out collection and a haul-out disposal a haul-out’s, and a unit rate event unit rate work’s.',
       );
+    });
+  });
+});
+
+// The sync contract's own shape is what intake takes (task 2.6.1 part 1, ADR-466): a record
+// read by the contracts' schema, given the phone the server knows it came from, is saved.
+describe('a record as a phone sends it', () => {
+  it('AC-04-26, AC-10-36 Kim keys in 730415 and the capacity 60 read off the truck: sent as the sync contract says, with no phone named, it is read by the schema and saved with the 60 as her claim', async () => {
+    await world(async (served, tx, who, within) => {
+      const p = await p1WithTickets(served, tx, within, who);
+      const phone = await kimsPhone(served, tx, p.project.id, who);
+      const made = await disposal(tx, p.project.id, who, phone, '101026', '2026-10-14T14:22:00Z');
+      const { source, deviceId, ...recorded } = made;
+      expect([source, deviceId]).toEqual(['DEVICE', phone.deviceId]);
+      // As it travels: text, a time as a UTC instant.
+      const travelled: unknown = JSON.parse(
+        JSON.stringify({ ...recorded, certKeyedByHand: true, typedCapacityCy: 60 }),
+      );
+      const read = syncedFieldEventSchema.parse(travelled);
+      expect(read.startedAt).toEqual(made.startedAt);
+
+      const intake = new Intake(within, served.clock, shippedPolicy);
+      const answer = await intake.receive({
+        record: 'FIELD_EVENT',
+        fieldEvent: { ...read, source: 'DEVICE', deviceId: phone.deviceId },
+      });
+      expect(answer).toEqual({ answer: 'SAVED', id: made.id, notes: [] });
+      const saved = await tx.fieldEvent.findUniqueOrThrow({ where: { id: made.id } });
+      expect([saved.certKeyedByHand, saved.typedCapacityCy, saved.deviceId, saved.status]).toEqual([
+        true,
+        60,
+        phone.deviceId,
+        'PENDING',
+      ]);
+      expect(saved.startedAt).toEqual(made.startedAt);
     });
   });
 });

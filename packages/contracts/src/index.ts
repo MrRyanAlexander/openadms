@@ -336,6 +336,34 @@ export {
 } from './review-answers.ts';
 export { notTaken } from './not-taken.ts';
 export { fieldEventDetailsSchema, type FieldEventDetailsPayload } from './field-event-details.ts';
+export {
+  syncedDropOffLogSchema,
+  syncedFieldEventSchema,
+  syncedIncidentSchema,
+  syncedItemSchema,
+  syncedRecordKinds,
+  syncedRecordSchema,
+  syncedRoeSchema,
+  syncedScaleReceiptSchema,
+  syncedSurveySchema,
+  type ReceivedDropOffLog,
+  type ReceivedFieldEvent,
+  type ReceivedIncident,
+  type ReceivedItem,
+  type ReceivedRecord,
+  type ReceivedRoe,
+  type ReceivedScaleReceipt,
+  type ReceivedSurvey,
+  type SyncedDropOffLog,
+  type SyncedFieldEvent,
+  type SyncedIncident,
+  type SyncedItem,
+  type SyncedRecord,
+  type SyncedRecordKind,
+  type SyncedRoe,
+  type SyncedScaleReceipt,
+  type SyncedSurvey,
+} from './sync-records.ts';
 export { formAnswersSchema, type FormAnswers } from './form-answers.ts';
 export {
   formDefinitionFields,

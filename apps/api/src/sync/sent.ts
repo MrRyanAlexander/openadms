@@ -1,170 +1,78 @@
 // What a phone sends at a sync, record by record, and what each is answered (spec/parts/05-sync.md
 // steps 3–7; ARCHITECTURE §9 (3), (4); ADR-022, 236, 338). Every record carries the id its phone
 // made when the record began, its project, and who made it on which phone. These are the shapes
-// intake takes in Phase 1; the sync contract's shared schemas, with the endpoint in front of
-// them, are Phase 2's (REQ-203).
-import type { AddressSource, FieldEventKind, PhotoView, Workflow } from '@open-adms/db';
-import type { MeasuredAs, QuarantineReason } from '@open-adms/domain';
+// intake takes: the sync contract's own (task 2.6.1, ADR-466); the endpoint in front of them is
+// task 2.6.2's (REQ-203).
+import type {
+  ReceivedDropOffLog,
+  ReceivedFieldEvent,
+  ReceivedIncident,
+  ReceivedItem,
+  ReceivedRoe,
+  ReceivedScaleReceipt,
+  ReceivedSurvey,
+} from '@open-adms/contracts';
+import type { PhotoView } from '@open-adms/db';
+import type { QuarantineReason } from '@open-adms/domain';
 
-// A line of an itemised unit rate event: the item picked, and its count or its hours.
-export interface SentItem {
-  readonly itemNameId: string;
-  readonly quantity: number;
-}
-
-// A field event as the phone sends it.
-export interface SentFieldEvent {
-  readonly id: string;
-  readonly projectId: string;
-  readonly workflow: Workflow;
-  readonly kind: FieldEventKind;
-  readonly ticketNumber: string;
-  readonly splitSuffix: string;
-  readonly monitorId: string;
-  // Made on a phone: with the phone, the assignment it held and the version of its lists it
-  // captured with (ADR-240, 324).
+// What the server says of a record, never the phone (ADR-466): that a phone made it, and which
+// phone, the one that proved itself for the sync.
+interface FromAPhone {
   readonly source: 'DEVICE';
   readonly deviceId: string;
-  readonly assignmentId: string;
-  readonly setupVersion: number;
-  readonly temporarySession: boolean;
-  // Typed because the barcode wouldn't read, with the reason picked (ADR-111, 173).
-  readonly numberTyped: boolean;
-  readonly numberTypedReasonId: string | null;
-  // The cert number as scanned off the badge (ADR-017). Which certification it finds on the
-  // project is intake's to look up.
-  readonly certNumber: string;
-  readonly certKeyedByHand: boolean;
-  // The assignment's site, where the work is at one (ADR-195).
-  readonly siteId: string | null;
-  readonly startedAt: Date;
-  readonly endedAt: Date;
-  readonly deviceUtcOffsetMinutes: number;
-  // Whatever fix the phone had at each end (ADR-083).
-  readonly startLatitude?: string | null;
-  readonly startLongitude?: string | null;
-  readonly endLatitude: string | null;
-  readonly endLongitude: string | null;
-  readonly address: string | null;
-  readonly addressSource: AddressSource | null;
-  readonly notes: string | null;
-  // What its kind records (packages/domain's fieldEventDetails). The debris type is the entry on
-  // the project's form; the form is that entry's, which intake reads.
-  readonly formDebrisTypeId: string | null;
-  readonly fieldTagId: string | null;
-  // As picked or typed; the ROE it finds is intake's to look up.
-  readonly roeNumber: string | null;
-  readonly estimateCy: number | null;
-  readonly loadCall: number | null;
-  // The scale receipt recorded with it, by the id the phone made.
-  readonly scaleReceiptId: string | null;
-  readonly carriedCount: number | null;
-  readonly kindOfWorkId: string | null;
-  readonly payableTypeId: string | null;
-  // The phone's answer, what printed; none where no band fits (ADR-213).
-  readonly payItemId: string | null;
-  readonly unitCount: number | null;
-  readonly measurementInches: number | null;
-  readonly measuredAs: MeasuredAs | null;
-  readonly rootBallInches: number | null;
-  readonly rootBallHalfExposed: boolean | null;
-  readonly surveyNumber: string | null;
-  readonly markedIneligible: boolean | null;
-  readonly items: readonly SentItem[];
-  // The numbers of the tickets a load carries, as the loading monitor added them (ADR-192).
-  readonly carriedTickets: readonly string[];
 }
+
+// Each record is the contracts' own shape as the server reads it (`syncedRecordSchema`,
+// packages/contracts/src/sync-records.ts), with the phone it came from: no shape is written
+// twice (REQ-004).
+
+// A line of an itemised unit rate event: the item picked, and its count or its hours.
+export type SentItem = Readonly<ReceivedItem>;
+
+// A field event as the phone sends it.
+export type SentFieldEvent = Readonly<ReceivedFieldEvent> & FromAPhone;
 
 // The paper a final disposal site hands the tower, copied by hand (ADR-034): its own record,
 // sent before the disposal that points at it.
-export interface SentScaleReceipt {
-  readonly id: string;
-  readonly projectId: string;
-  readonly receiptNumber: string;
-  readonly siteId: string;
-  readonly grossWeightLb: number | null;
-  readonly tareWeightLb: number | null;
-  readonly netWeightLb: number | null;
-  readonly netWeightTons: number | null;
-  readonly enteredById: string;
-  readonly deviceId: string;
-  readonly enteredAt: Date;
-  readonly deviceUtcOffsetMinutes: number;
-}
+export type SentScaleReceipt = Readonly<ReceivedScaleReceipt> & Pick<FromAPhone, 'deviceId'>;
 
 // The firm's own fields as answered, with the version of the definition the phone showed
 // (ADR-278). A form with none of the firm's own fields sends neither.
-export interface SentAnswers {
-  readonly formDefinitionId?: string;
-  readonly answers?: Readonly<Record<string, unknown>>;
-}
+export type SentAnswers = Pick<SentForm, 'formDefinitionId' | 'answers'>;
 
 // What every form made on a phone records (ADR-327).
-export interface SentForm extends SentAnswers {
-  readonly id: string;
-  readonly projectId: string;
-  readonly source: 'DEVICE';
-  readonly monitorId: string;
-  readonly deviceId: string;
-  readonly assignmentId: string;
-  readonly setupVersion: number;
-  readonly madeAt: Date;
-  readonly deviceUtcOffsetMinutes: number;
-  readonly latitude: string | null;
-  readonly longitude: string | null;
-  readonly notes: string | null;
-}
+export type SentForm = Pick<
+  SentSurvey,
+  | 'id'
+  | 'projectId'
+  | 'source'
+  | 'monitorId'
+  | 'deviceId'
+  | 'assignmentId'
+  | 'setupVersion'
+  | 'madeAt'
+  | 'deviceUtcOffsetMinutes'
+  | 'latitude'
+  | 'longitude'
+  | 'notes'
+  | 'formDefinitionId'
+  | 'answers'
+>;
 
-export interface SentIncident extends SentForm {
-  readonly incidentTypeId: string;
-  readonly incidentSubTypeId: string | null;
-  readonly description: string | null;
-  readonly parties: string | null;
-  readonly address: string | null;
-  // What it names, where the project offers it (ADR-328): the contractor picked by name, the cert
-  // number and the ROE number as scanned, picked or typed. The certification and the ROE a
-  // number finds are intake's to look up.
-  readonly contractorId: string | null;
-  readonly certNumber: string | null;
-  readonly roeNumber: string | null;
-}
+// What it names, where the project offers it (ADR-328): the contractor picked by name, the cert
+// number and the ROE number as scanned, picked or typed. The certification and the ROE a number
+// finds are intake's to look up.
+export type SentIncident = Readonly<ReceivedIncident> & FromAPhone;
 
-export interface SentDropOffLog extends SentForm {
-  // The assignment's site (ADR-215).
-  readonly siteId: string;
-  readonly residentName: string | null;
-  readonly originAddress: string | null;
-}
+// A citizen's drop-off at the assignment's site (ADR-215).
+export type SentDropOffLog = Readonly<ReceivedDropOffLog> & FromAPhone;
 
 // A property's condition before work or after it (ADR-149, 150).
-export interface SentSurvey extends SentForm {
-  readonly workTypeId: string;
-  readonly surveyNumber: string | null;
-  // As picked or typed; the ROE it finds is intake's to look up.
-  readonly roeNumber: string | null;
-}
+export type SentSurvey = Readonly<ReceivedSurvey> & FromAPhone;
 
 // An ROE made on a phone: the next number of its ROE block, written R-0007, unless the paper ROE
 // has one, typed (ADR-149, 323).
-export interface SentRoe extends SentAnswers {
-  readonly id: string;
-  readonly projectId: string;
-  readonly roeNumber: string;
-  readonly parcelId: string | null;
-  readonly address: string | null;
-  readonly ownerName: string | null;
-  readonly signed: boolean;
-  // A calendar day, 2026-10-09.
-  readonly signedDate: string | null;
-  readonly latitude?: string | null;
-  readonly longitude?: string | null;
-  readonly source: 'DEVICE';
-  readonly madeById: string;
-  readonly deviceId: string;
-  readonly assignmentId: string;
-  readonly madeAt: Date;
-  readonly deviceUtcOffsetMinutes: number;
-}
+export type SentRoe = Readonly<ReceivedRoe> & FromAPhone;
 
 // What a photograph belongs to: a record its phone made, by that record's id.
 export type PhotoOwnerKind =

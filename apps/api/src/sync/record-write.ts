@@ -20,10 +20,11 @@ const day = (date: string): Date => new Date(`${date}T00:00:00Z`);
 const quoted = (half: unknown): string => (half === null ? 'none' : JSON.stringify(half));
 
 // A field event to write: as a phone sends it, or as the back office creates one, which names
-// who created it and the reason picked, and has no phone, assignment or list version (ADR-156).
+// who created it and the reason picked, and has no phone, assignment, list version or typed
+// capacity (ADR-156, 432).
 export type FieldEventToWrite = Omit<
   SentFieldEvent,
-  'source' | 'deviceId' | 'assignmentId' | 'setupVersion'
+  'source' | 'deviceId' | 'assignmentId' | 'setupVersion' | 'typedCapacityCy'
 > &
   (
     | {
@@ -31,6 +32,8 @@ export type FieldEventToWrite = Omit<
         readonly deviceId: string;
         readonly assignmentId: string;
         readonly setupVersion: number;
+        // The capacity read off a truck keyed in by hand: a phone's alone to say (ADR-154).
+        readonly typedCapacityCy: number | null;
       }
     | {
         readonly source: 'BACK_OFFICE';
@@ -121,6 +124,7 @@ export class RecordWrite {
         certNumber: event.certNumber,
         certificationId: certification?.id ?? null,
         certKeyedByHand: event.certKeyedByHand,
+        typedCapacityCy: event.source === 'DEVICE' ? event.typedCapacityCy : null,
         siteId: event.siteId,
         startedAt: event.startedAt,
         endedAt: event.endedAt,

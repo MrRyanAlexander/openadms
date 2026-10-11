@@ -459,6 +459,7 @@ export class SimulatedDevice {
           : null,
       certNumber: started.certNumber,
       certKeyedByHand: false,
+      typedCapacityCy: null,
       siteId: this.current.siteId ?? null,
       startedAt: started.startedAt,
       endedAt,
