@@ -4,6 +4,7 @@
 // intake takes: the sync contract's own (task 2.6.1, ADR-466); the endpoint in front of them is
 // task 2.6.2's (REQ-203).
 import type {
+  IntakeNote as NoteAnswered,
   ReceivedDropOffLog,
   ReceivedFieldEvent,
   ReceivedIncident,
@@ -11,9 +12,9 @@ import type {
   ReceivedRoe,
   ReceivedScaleReceipt,
   ReceivedSurvey,
+  RecordAnswer,
 } from '@open-adms/contracts';
 import type { PhotoView } from '@open-adms/db';
-import type { QuarantineReason } from '@open-adms/domain';
 
 // What the server says of a record, never the phone (ADR-466): that a phone made it, and which
 // phone, the one that proved itself for the sync.
@@ -110,22 +111,12 @@ export type SentRecord =
   | { readonly record: 'PHOTO'; readonly photo: SentPhoto };
 
 // Something intake did with a record it saved that the sender should know: nothing was refused
-// for it, and the flag is the worker's (ADR-052, 329).
-export interface IntakeNote {
-  readonly code: 'GPS_UNREADABLE' | 'ANSWERS_DO_NOT_FIT';
-  readonly message: string;
-}
+// for it, and the flag is the worker's (ADR-052, 329). The contract's own shape.
+export type IntakeNote = Readonly<NoteAnswered>;
 
-// Each record's own answer (ARCHITECTURE §9 (4)): saved, already saved, or not saved and kept in
-// quarantine, with the reason and the record that holds the number. A quarantined record is
-// never answered "saved", however often it is sent (ADR-022).
-export type SyncAnswer =
-  | { readonly answer: 'SAVED'; readonly id: string; readonly notes: readonly IntakeNote[] }
-  | { readonly answer: 'ALREADY_SAVED'; readonly id: string }
-  | {
-      readonly answer: 'QUARANTINED';
-      readonly id: string;
-      readonly reason: QuarantineReason;
-      readonly message: string;
-      readonly heldBy: string;
-    };
+// Each record's own answer (ARCHITECTURE §9 (4)), the contract's (`recordAnswerSchema`, ADR-467):
+// saved, already saved, or not saved and kept in quarantine, with the reason and the record that
+// holds the number. A quarantined record is never answered "saved", however often it is sent
+// (ADR-022). What intake never says is "not saved" for a record kept nowhere: one that isn't a
+// record, or that the database refuses, is answered by the endpoint in front of it (2.6.2).
+export type SyncAnswer = Exclude<RecordAnswer, { answer: 'NOT_SAVED' }>;

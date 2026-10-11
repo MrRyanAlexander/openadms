@@ -89,7 +89,7 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-11, through ADR-466)
+### Where things stand (2026-10-11, through ADR-468)
 - **Phase 2 (API and sync) is open (ADR-376): 22 of its 32 tasks are done** (`BACKLOG.md`,
   "Active — Phase 2", ticks each with its ADRs). Complete: Milestone 2.1 (the API as a process,
   the boundary, time limits and policy), 2.2 (sign-in: its records, passwords, sessions, two-step
@@ -103,8 +103,10 @@ of `DECISIONS.md`.
   of the master passcode a phone logged)** are done. **REQ-202b was read whole and is not
   ticked: the passcode's use to sync and turn a phone in is task 2.6.5's (ADR-464 (5)).**
   **Milestone 2.6 (sync) is under way: task 2.6.1, the sync contract, is cut in four (ADR-466)
-  and its part 1 is done** (the six records a phone sends, as schemas in
-  `packages/contracts/src/sync-records.ts`; `Intake`'s types are drawn from them; what it leaves: C127). **The user approved ARCHITECTURE §7.2's notes on signing in
+  and its parts 1 and 2 are done** (the six records a phone sends, `sync-records.ts`; one sync
+  whole and its answer, `sync.ts`, each record read on its own and answered `SAVED`,
+  `ALREADY_SAVED`, `QUARANTINED` or `NOT_SAVED`, ADR-467; what they leave: C127, C128). **The user decided that a record answered `NOT_SAVED`
+  is held on the server for a person, in a table of its own, built with 2.6.2 (ADR-468).** **The user approved ARCHITECTURE §7.2's notes on signing in
   online and taking the assignment (ADR-452).**
 - **Where each thing is written, so nothing is read twice:** a rule as it stands, with its ADR:
   `SUMMARY.md`, by topic (grep its `###` headings; never read it whole). What a finished task left
@@ -326,22 +328,20 @@ questions.
 **Phase 2 is open (ADR-376). Its plan is `BACKLOG.md`, "Active — Phase 2" (ADR-377): read its
 brief first. One task per response.**
 
-**Task 2.6.1, part 2 of 4: the whole sync payload and its answer** *(BACKLOG 2.6.1 and C127 first,
-then C69, C84 (9), C86, C122, C126; ADR-466 for the cut and part 1; REQ-004, 203; ARCHITECTURE §9,
-§10; `spec/acceptance/05-sync.md` and `10-api-and-sync.md`; `packages/contracts/src/sync-records.ts`,
-`apps/api/src/sync/sent.ts` and `Intake`; read `api-tests.md` beside the `adms-verify` skill
-first)*. As schemas in `packages/contracts`, **no endpoint yet** (2.6.2 puts one in front of
-`Intake`): what one sync carries, in this order, the phone's clock, the unplanned assignments made
-on the phone, the uses of the master passcode it logged, then its records and the last number it
-used of each series; and what it is answered: each record's own answer (`SAVED` with its notes,
-`ALREADY_SAVED`, `QUARANTINED`, and what a record is told that fails its schema, that the
-database refuses, or that was made under an assignment answered `NOT_SAVED`), the blocks it holds
-now. Each record is read on its own, so one bad record never refuses the rest (AC-05-45). Decide
-the batch's size limit. Then part 3 (a certification made on a phone) and part 4 (the suite any
-client must pass, run by the harness), one a response. REQ-004 is ticked only when OpenAPI covers
-every endpoint. Say what ASVS and the API Security Top 10 ask before building (ADR-401; ADR-466
-has the sync payload's).
-**The user may still overturn ADR-466's defaults, ADR-464's, ADR-463's, ADR-462's, ADR-458's other defaults (three were confirmed, ADR-459), ADR-457's, ADR-456 (5)'s proposals, ADR-455's, ADR-454's, ADR-453's, ADR-451's and ADR-450's defaults, ADR-449
+**Task 2.6.1, part 3 of 4: a certification made on a phone, as a synced record** *(BACKLOG 2.6.1,
+C128 and C127 first, then C62, C82, C107; ADR-466 for the cut, ADR-467 for the payload and its
+answer; `adms-certifications`; REQ-004, 203; ARCHITECTURE §9; `packages/contracts/src/sync-records.ts`
+and `sync.ts`, `apps/api/src/certifications/`; read `api-tests.md` beside the `adms-verify` skill
+first)*. As a schema in `packages/contracts`, **no endpoint yet**: a certification of a container
+or a crew as the certifying phone sends it, a seventh kind of `syncedRecordSchema`, shaped so
+that 2.6.2 hands it to `Certifications.certify` (never a second way in); its cert number from
+the phone's block or the pre-printed paper, never a capacity the phone worked out (AC-10-35);
+its photographs' records named, their files 2.6.4's. Decide what `certify`'s own refusals are
+answered (a fourth `NOT_SAVED` reason, or one of the three). Then part 4 (the suite any client
+must pass, run by the harness). REQ-004 is ticked only when OpenAPI covers every endpoint. Say
+what ASVS and the API Security Top 10 ask before building (ADR-401; ADR-466 and 467 have the
+sync payload's).
+**The user may still overturn ADR-467 (4)'s limits (its other defaults are settled, ADR-468), ADR-466's, ADR-464's, ADR-463's, ADR-462's, ADR-458's other defaults (three were confirmed, ADR-459), ADR-457's, ADR-456 (5)'s proposals, ADR-455's, ADR-454's, ADR-453's, ADR-451's and ADR-450's defaults, ADR-449
 (5)'s proposals as built, ADR-442's, ADR-440's, ADR-438's two choices or ADR-439's (`SUMMARY.md` §4).**
 **Docker's disk is 8 GB and was full once on 2026-10-10** (Tools and housekeeping; it has held since, 1.3 GB free after ADR-464's session): if `pnpm ready` fails for space, stop and ask the user to free some; never work around it.
 **Before the chain, `pnpm ready`** (the stack up, then `installer:check`): a `✗` at the migrations

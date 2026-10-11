@@ -334,7 +334,7 @@ export {
   type TicketUnvoidRecord,
   type TicketVoidRecord,
 } from './review-answers.ts';
-export { notTaken } from './not-taken.ts';
+export { notRead, notTaken } from './not-taken.ts';
 export { fieldEventDetailsSchema, type FieldEventDetailsPayload } from './field-event-details.ts';
 export {
   syncedDropOffLogSchema,
@@ -364,6 +364,34 @@ export {
   type SyncedScaleReceipt,
   type SyncedSurvey,
 } from './sync-records.ts';
+export {
+  intakeNoteCodes,
+  lastUsedSchema,
+  recordAnswerSchema,
+  recordRead,
+  seriesHeldSchema,
+  syncAnsweredSchema,
+  syncPasscodeUsesAtMost,
+  syncRecordsAtMost,
+  syncSentSchema,
+  syncSeriesAtMost,
+  syncUnplannedAssignmentsAtMost,
+  type IntakeNote,
+  type IntakeNoteCode,
+  type LastUsedReport,
+  type RecordAnswer,
+  type RecordRead,
+  type SeriesHeld,
+  type SyncAnswered,
+  type SyncReceived,
+  type SyncSent,
+} from './sync.ts';
+export {
+  passcodeUseReportSchema,
+  unplannedAssignmentReportSchema,
+  type PasscodeUseReport,
+  type UnplannedAssignmentReport,
+} from './phone-reports.ts';
 export { formAnswersSchema, type FormAnswers } from './form-answers.ts';
 export {
   formDefinitionFields,

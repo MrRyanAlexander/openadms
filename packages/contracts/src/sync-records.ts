@@ -26,11 +26,11 @@ import { z } from 'zod';
 import { places } from './field-event-details.ts';
 import { addressSources } from './review-answers.ts';
 
-const id = z.uuid();
+export const id = z.uuid();
 // The phone's clock, as a UTC instant.
-const instant = z.iso.datetime().transform((at) => new Date(at));
+export const instant = z.iso.datetime().transform((at) => new Date(at));
 // How far that clock stood from UTC, in minutes: UTC−12:00 to UTC+14:00.
-const offset = z.number().int().min(-720).max(840);
+export const offset = z.number().int().min(-720).max(840);
 // A number as scanned, picked or typed off a badge, a ticket or a paper: kept as sent, never
 // parsed and never trimmed.
 const numberAsSent = z.string().min(1).max(40);

@@ -123,9 +123,13 @@ export {
 export { IncidentOffers, incidentOffers, type IncidentOffer } from './incident-offers.ts';
 export {
   GpsFix,
+  NotSaved,
+  notSavedReasons,
   Quarantine,
   quarantineReasons,
   type FixReading,
+  type NotSavedNotice,
+  type NotSavedReason,
   type QuarantineNotice,
   type QuarantineReason,
   type ReadableFix,

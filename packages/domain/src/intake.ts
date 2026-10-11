@@ -1,8 +1,8 @@
 // What the server decides about a record as it arrives from a phone (spec/parts/05-sync.md;
 // spec/acceptance/05-sync.md; adms-exceptions §4.3a; ARCHITECTURE §9; ADR-022, 052, 236, 329 (5),
-// 338). Two things only, since sync refuses nothing over eligibility: whether a GPS fix can be
-// one, and what a record kept in quarantine is told. Everything else about a record is taken as
-// sent and judged later, by the worker.
+// 338, 467). Three things only, since sync refuses nothing over eligibility: whether a GPS fix
+// can be one, what a record kept in quarantine is told, and what one that could not be saved at
+// all is told. Everything else about a record is taken as sent and judged later, by the worker.
 import type { FieldEventKindName } from './field-event-details.ts';
 
 // A fix as a phone sends it: whatever it had for each half.
@@ -103,6 +103,52 @@ export class Quarantine implements QuarantineNotice {
     return new Quarantine(
       'DUPLICATE_ROE_NUMBER',
       `ROE ${roeNumber}: this project already has an ROE with that number. ${kept}`,
+    );
+  }
+}
+
+// Why a record a phone sent is not saved and is kept nowhere on the server (ADR-338 (11), 467):
+// it isn't a record at all, something it names is no record the server has, or the assignment
+// it was made under was itself not saved. It stays on its phone, for a person. Never a
+// judgement of the work: nothing is refused over eligibility (ADR-052).
+export const notSavedReasons = ['NOT_A_RECORD', 'NAMES_NO_RECORD', 'ASSIGNMENT_NOT_SAVED'] as const;
+export type NotSavedReason = (typeof notSavedReasons)[number];
+
+// What a phone is told of such a record.
+export interface NotSavedNotice {
+  readonly reason: NotSavedReason;
+  readonly message: string;
+}
+
+export class NotSaved implements NotSavedNotice {
+  readonly reason: NotSavedReason;
+  readonly message: string;
+
+  private constructor(reason: NotSavedReason, message: string) {
+    this.reason = reason;
+    this.message = message;
+  }
+
+  // What was sent fails its schema: `why` is the contract's own words for which field and how,
+  // never a value that was sent.
+  static notARecord(why: string): NotSaved {
+    return new NotSaved('NOT_A_RECORD', `Not saved: this record can’t be read: ${why}.`);
+  }
+
+  // Its project, its monitor, its assignment, or something picked that isn't its project's: the
+  // database's own constraints refuse it.
+  static namesNoRecord(): NotSaved {
+    return new NotSaved(
+      'NAMES_NO_RECORD',
+      'Not saved: this record names something the server doesn’t have: its project, its monitor, its assignment, or something picked from a list.',
+    );
+  }
+
+  // The unplanned assignment it was made under was answered "not saved" (ADR-457).
+  static assignmentNotSaved(): NotSaved {
+    return new NotSaved(
+      'ASSIGNMENT_NOT_SAVED',
+      'Not saved: the assignment this record was made under was not saved.',
     );
   }
 }

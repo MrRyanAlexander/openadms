@@ -5,14 +5,11 @@
 // this list (openapi.ts). An object a caller sends is strict: a field its schema doesn't name
 // refuses the whole request, and an endpoint whose schema would let one through can't be defined.
 import {
-  assignmentFormDocumentTypes,
   backOfficeCreated,
   backOfficeRolesChanged,
   crewTimeConversions,
   fieldEventKinds,
-  PasscodeLogRules,
   incidentOffers,
-  loggedPasscodeUses,
   masterPasscodeSessions,
   measuredAs,
   numberSeries,
@@ -22,7 +19,6 @@ import {
   ruleActionKinds,
   ruleCriterionKeys,
   ruleOperators,
-  unplannedOccasions,
   workflows,
   type PermissionName,
 } from '@open-adms/domain';
@@ -66,6 +62,12 @@ import {
 } from './api-answers.ts';
 import { places } from './field-event-details.ts';
 import { formDefinitionFields } from './form-definition.ts';
+import {
+  assignedWork,
+  once,
+  passcodeUseReportSchema,
+  unplannedAssignmentReportSchema,
+} from './phone-reports.ts';
 import {
   addressSources,
   carriedTicketRecordSchema,
@@ -668,7 +670,6 @@ const searched = z.strictObject({ search: z.string().trim().max(200).optional() 
 const projectId = z.strictObject({ projectId: z.uuid() });
 // A number of a series: the database says where a series may start and end.
 const seriesNumber = z.number().int().min(1).max(2_000_000_000);
-const once = (values: readonly string[]): boolean => new Set(values).size === values.length;
 const stated = (changes: object): boolean => Object.keys(changes).length > 0;
 
 // Step 1: search first; a client the firm has is picked, never created again (ADR-023).
@@ -1607,8 +1608,6 @@ export const openPasscodeSessionOnPhoneEndpoint = endpoint({
 // phone having proved itself with its device key, and counts no try: a wrong try on a phone
 // never moves the server's own count or its lock. The id is the phone's own, so the same
 // report sent again is answered "already saved" and kept once. Nobody need be signed in.
-const passcodeLog = new PasscodeLogRules();
-
 export const reportPasscodeUseEndpoint = endpoint({
   name: 'reportPasscodeUse',
   summary:
@@ -1616,23 +1615,7 @@ export const reportPasscodeUseEndpoint = endpoint({
   access: 'PROVEN_PHONE',
   method: 'POST',
   path: '/phones/current/passcode-uses',
-  body: z
-    .strictObject({
-      // Made on the phone when it logged the use.
-      id: z.uuid(),
-      // What the passcode was typed for.
-      use: z.enum(loggedPasscodeUses),
-      // The monitor it was for, from the phone's login list; null for a wrong try, and only
-      // for one.
-      personId: z.uuid().nullable(),
-      // The phone's clock when it was logged, as a UTC instant, and how far that clock stood
-      // from UTC, in minutes (ADR-100): UTC−12:00 to UTC+14:00.
-      loggedAt: z.iso.datetime(),
-      deviceUtcOffsetMinutes: z.number().int().min(-720).max(840),
-    })
-    .refine(({ use, personId }) => passcodeLog.namesAMonitor(use) === (personId !== null), {
-      path: ['personId'],
-    }),
+  body: passcodeUseReportSchema,
   answer: passcodeUseAnswerSchema,
 });
 
@@ -1740,22 +1723,6 @@ export const changeMasterPasscodeEndpoint = endpoint({
 // whole), its site and its phone may change while it stands. Nothing stops a second one for a
 // person or a phone on a day (AC-02-29). The board is read by the whole back office.
 const assignmentId = z.strictObject({ assignmentId: z.uuid() });
-const assignedWork = {
-  // The kinds of field event they may record; none on a certifier's or a helper's day.
-  fieldEventKinds: z.array(z.enum(fieldEventKinds)).max(fieldEventKinds.length).refine(once),
-  certifying: z.boolean(),
-  // The forms that are no ticket's (ADR-308).
-  formDocumentTypes: z
-    .array(z.enum(assignmentFormDocumentTypes))
-    .max(assignmentFormDocumentTypes.length)
-    .refine(once),
-  // One of the project's own sites, where the work is at one; null on a curb collection.
-  siteId: z.uuid().nullable(),
-  // The phone, where one is named; null where they sign in on whichever they pick up.
-  deviceId: z.uuid().nullable(),
-  // The project's unit rate pay items they do that day, each once.
-  payItemIds: z.array(z.uuid()).max(200).refine(once),
-};
 
 export const listAssignmentsEndpoint = endpoint({
   name: 'listAssignments',
@@ -1861,24 +1828,7 @@ export const reportUnplannedAssignmentEndpoint = endpoint({
   access: 'PROVEN_PHONE',
   method: 'POST',
   path: '/phones/current/unplanned-assignments',
-  body: z.strictObject({
-    // Made on the phone, so that what it records under the assignment can name it at once.
-    id: z.uuid(),
-    projectId: z.uuid(),
-    // The monitor, picked from the phone's login list.
-    personId: z.uuid(),
-    fieldEventKinds: assignedWork.fieldEventKinds,
-    certifying: assignedWork.certifying,
-    formDocumentTypes: assignedWork.formDocumentTypes,
-    siteId: assignedWork.siteId,
-    payItemIds: assignedWork.payItemIds,
-    // What it was made at: the phone set up, or passed to this monitor.
-    occasion: z.enum(unplannedOccasions),
-    // The phone's clock when it was made, as a UTC instant, and how far that clock stood from
-    // UTC, in minutes (ADR-100): UTC−12:00 to UTC+14:00.
-    madeAt: z.iso.datetime(),
-    deviceUtcOffsetMinutes: z.number().int().min(-720).max(840),
-  }),
+  body: unplannedAssignmentReportSchema,
   answer: unplannedAssignmentAnswerSchema,
 });
 
