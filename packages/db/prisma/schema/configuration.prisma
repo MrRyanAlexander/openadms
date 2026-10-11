@@ -1256,6 +1256,11 @@ model SecurityEvent {
   deviceUtcOffsetMinutes Int?     @map("device_utc_offset_minutes")
   createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
+  // Only on a use of the master passcode a phone reported that opened a session on it with no
+  // connection, and which way (ARCHITECTURE §7.2, §7.3; ADR-464): the server holds no session
+  // row for one, so the event itself says it. One opened with a connection says it on its row.
+  masterPasscodeSession MasterPasscodeSession? @map("master_passcode_session")
+
   user   User?   @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   device Device? @relation(fields: [deviceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
 

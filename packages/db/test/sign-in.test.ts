@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto';
 
 import { describe, expect, it } from 'vitest';
 
+import { deviceKeyActorId } from '../src/device-key-actor.ts';
 import { masterPasscodeActorId } from '../src/master-passcode-actor.ts';
 import { systemActorId } from '../src/system-actor.ts';
 import { refusedBy } from './support/database.ts';
@@ -897,6 +898,7 @@ describe('a security event', () => {
       'device_utc_offset_minutes',
       'id',
       'kind',
+      'master_passcode_session',
       'occurred_at',
       'request_id',
       'user_id',
@@ -985,7 +987,9 @@ describe('a security event', () => {
 
   it('REQ-019, REQ-202b one a phone reported keeps the phone’s own time with its clock’s offset, and when the server wrote it; an offset is only a phone’s, and one a clock can have', async () => {
     const { db, world } = tested;
-    await asTheApi();
+    // What a phone reported was done on it under the master passcode (ADR-464).
+    await db.as('adms_api');
+    await db.actor(masterPasscodeActorId, 'DEVICE', { deviceId: world.device });
     const reported = `INSERT INTO "security_event" ("kind", "user_id", "device_id", "occurred_at",
         "device_utc_offset_minutes") VALUES ('DEVICE_SETUP', $1, $2, '2026-10-12T10:40:00Z', $3)
       RETURNING "id"::text, "occurred_at"::text, "device_utc_offset_minutes" AS offset,
@@ -995,15 +999,14 @@ describe('a security event', () => {
       offset: -240,
       written_now: true,
     });
-    for (const [device, offset] of [
-      [null, -240],
-      [world.device, -721],
-      [world.device, 841],
-    ] as const) {
-      const refused = await db.refused(reported, [world.monitor, device, offset]);
-      expect([device, offset, refused.code]).toEqual([device, offset, refusedBy.check]);
+    for (const offset of [-721, 841]) {
+      const refused = await db.refused(reported, [world.monitor, world.device, offset]);
+      expect([offset, refused.code]).toEqual([offset, refusedBy.check]);
       expect(refused.message).toContain('"security_event_device_utc_offset_check"');
     }
+    // One with an offset and no phone is no phone's report: the guard on who writes one
+    // answers before the check does (ADR-464).
+    expect((await db.refused(reported, [world.monitor, null, -240])).code).toBe(refusedBy.grant);
     // One the server saw itself has none, on a phone or off it.
     expect(
       (await db.one<{ offset: number | null }>(reported, [world.monitor, null, null])).offset,
@@ -1012,6 +1015,75 @@ describe('a security event', () => {
       (await db.one<{ offset: number | null }>(reported, [world.monitor, world.device, null]))
         .offset,
     ).toBeNull();
+  });
+
+  it('REQ-202b, REQ-209 one a phone reported is written only as the master passcode’s actor, from a phone, naming that very phone: never by somebody signed in or the device key, and one the server saw itself is anybody’s to write', async () => {
+    const { db, world } = tested;
+    const reported = `INSERT INTO "security_event" ("kind", "user_id", "device_id", "occurred_at",
+        "device_utc_offset_minutes") VALUES ($1, $2, $3, '2026-10-12T17:00:00Z', $4)
+      RETURNING "id"::text`;
+    const sent = ['DEVICE_SWITCH', world.monitor, world.device, -240];
+    await db.as('adms_api');
+    for (const [who, source, more] of [
+      [world.admin, 'BACK_OFFICE', {}],
+      [world.monitor, 'DEVICE', { deviceId: world.device }],
+      [deviceKeyActorId, 'DEVICE', { deviceId: world.device }],
+      // The passcode's actor, but from another phone (it states no other source, ADR-438).
+      [masterPasscodeActorId, 'DEVICE', { deviceId: world.certifyingDevice }],
+    ] as const) {
+      await db.actor(who, source, more);
+      const refused = await db.refused(reported, sent);
+      expect([who, source, refused.code]).toEqual([who, source, refusedBy.grant]);
+      expect(refused.message).toContain('A security event a phone reported');
+      // The same event with no offset is one the server saw itself: not this guard's.
+      expect(await db.run(reported, ['DEVICE_SWITCH', world.monitor, world.device, null])).toBe(1);
+    }
+    await db.actor(masterPasscodeActorId, 'DEVICE', { deviceId: world.device });
+    expect(await db.run(reported, sent)).toBe(1);
+    // A wrong try a phone logged names nobody, and is the passcode's actor's too.
+    expect(await db.run(reported, ['MASTER_PASSCODE_FAILED', null, world.device, -240])).toBe(1);
+  });
+
+  it('AC-02-42, REQ-202b a use of the master passcode a phone reported may say which way a session was opened on it with no connection; no other event does: another kind, one about nobody, one the server saw itself', async () => {
+    const { db, world } = tested;
+    await db.as('adms_api');
+    await db.actor(masterPasscodeActorId, 'DEVICE', { deviceId: world.device });
+    const opened = `INSERT INTO "security_event" ("kind", "user_id", "device_id", "occurred_at",
+        "device_utc_offset_minutes", "master_passcode_session")
+      VALUES ($1, $2, $3, '2026-10-12T17:00:00Z', $4, $5::master_passcode_session)
+      RETURNING "master_passcode_session"::text AS opened`;
+    for (const way of ['AS_MONITOR', 'TEMPORARY']) {
+      expect(
+        await db.one(opened, ['MASTER_PASSCODE_USE', world.monitor, world.device, -240, way]),
+      ).toEqual({ opened: way });
+    }
+    expect(
+      (
+        await db.refused(opened, [
+          'MASTER_PASSCODE_USE',
+          world.monitor,
+          world.device,
+          -240,
+          'SUPERVISOR',
+        ])
+      ).code,
+    ).toBe(refusedBy.badValue);
+    for (const [kind, about, offset] of [
+      ['DEVICE_SWITCH', world.monitor, -240],
+      ['DEVICE_SETUP', world.monitor, -240],
+      ['MASTER_PASSCODE_FAILED', world.monitor, -240],
+      ['SIGN_IN', world.monitor, -240],
+      ['MASTER_PASSCODE_USE', null, -240],
+      ['MASTER_PASSCODE_USE', world.monitor, null],
+    ] as const) {
+      const refused = await db.refused(opened, [kind, about, world.device, offset, 'TEMPORARY']);
+      expect([kind, about, offset, refused.code]).toEqual([kind, about, offset, refusedBy.check]);
+      expect(refused.message).toContain('"security_event_master_passcode_session_check"');
+    }
+    // A use that opened none says nothing.
+    expect(
+      await db.one(opened, ['MASTER_PASSCODE_USE', world.monitor, world.device, -240, null]),
+    ).toEqual({ opened: null });
   });
 
   it('is written once: never edited, never deleted, by the API or by the owner', async () => {

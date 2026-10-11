@@ -52,6 +52,8 @@ import { apiPhoneLoginList } from '../phone/phone-login-list.controller.ts';
 import { PhoneLoginList } from '../phone/phone-login-list.ts';
 import { apiPasscodeSessions } from '../phone/passcode-sessions.controller.ts';
 import { PasscodeSessions } from '../phone/passcode-sessions.ts';
+import { apiPasscodeUses } from '../phone/passcode-uses.controller.ts';
+import { PasscodeUses } from '../phone/passcode-uses.ts';
 import { apiSetupChoices } from '../phone/setup-choices.controller.ts';
 import { SetupChoices } from '../phone/setup-choices.ts';
 import { apiPhoneMonitors } from '../phone/phone-monitors.controller.ts';
@@ -406,6 +408,8 @@ export class ApiProcess {
           [apiAddressLookups, new AddressLookups(addresses)],
           // What a phone reports besides field events (task 2.5.4): an unplanned assignment.
           [apiUnplannedAssignments, new UnplannedAssignments(database, { clock, requestNow })],
+          // And every other use of the master passcode it logged with no connection (part 5).
+          [apiPasscodeUses, new PasscodeUses(database, { clock, requestNow })],
           [
             apiMasterPasscode,
             new MasterPasscode(database, {

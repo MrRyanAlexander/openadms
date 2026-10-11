@@ -10,7 +10,9 @@ import {
   backOfficeRolesChanged,
   crewTimeConversions,
   fieldEventKinds,
+  PasscodeLogRules,
   incidentOffers,
+  loggedPasscodeUses,
   masterPasscodeSessions,
   measuredAs,
   numberSeries,
@@ -36,6 +38,7 @@ import {
   monitorCreatedAnswerSchema,
   monitorSignedInAnswerSchema,
   passcodeSessionOpenedAnswerSchema,
+  passcodeUseAnswerSchema,
   phoneAddressLookupAnswerSchema,
   phoneListsAnswerSchema,
   phoneSetupChoicesAnswerSchema,
@@ -1594,6 +1597,45 @@ export const openPasscodeSessionOnPhoneEndpoint = endpoint({
   answer: passcodeSessionOpenedAnswerSchema,
 });
 
+// A use of the firm's master passcode a phone logged with no connection, reported when it has
+// one (ARCHITECTURE §7's notes, §7.3, §7.5, §10; AC-02-23, 42, 46; BACKLOG 2.5.4, C122…C125;
+// ADR-106, 456 (3), (5)(e), 462, 464; REQ-202b). Only what no other report carries: a setup, a
+// site move and a switch to a monitor with no assignment arrive as an unplanned assignment.
+// Here: the phone passed to a monitor who has their own assignment; a session opened on the
+// phone as its monitor, or the temporary one; and the passcode typed wrong. The phone checked
+// the passcode against its own check; the server is not sent it, takes the phone's word, the
+// phone having proved itself with its device key, and counts no try: a wrong try on a phone
+// never moves the server's own count or its lock. The id is the phone's own, so the same
+// report sent again is answered "already saved" and kept once. Nobody need be signed in.
+const passcodeLog = new PasscodeLogRules();
+
+export const reportPasscodeUseEndpoint = endpoint({
+  name: 'reportPasscodeUse',
+  summary:
+    'A phone reports a use of the firm’s master passcode it logged with no connection: the phone passed to a monitor who has their own assignment, a session opened on it as the phone’s monitor or the temporary session for a monitor picked from the roster, or the passcode typed wrong. It says when by the phone’s own clock, with the clock’s offset, and for which monitor; a wrong try names nobody. The id is the phone’s own: the same report sent again is answered as already saved and kept once. It is kept as the phone reports it, for a monitor archived since and from a phone out of service too, and is not saved only where it names somebody who is no monitor or its id is another record’s. The passcode itself is never sent: the phone checked it, and a wrong try reported here does not count toward the lock on the server’s own check. Each one saved is a security event at the phone’s own time: a phone switched and a use of the master passcode; a use that says which way a session was opened; or a failed try. A switch or a session saved ends what anybody else had open on that phone before it, by the phone’s clock. A setup, a site move and a switch to a monitor who has no assignment are reported as an unplanned assignment instead. Open to a phone that has proved itself, by its token; nobody need be signed in.',
+  access: 'PROVEN_PHONE',
+  method: 'POST',
+  path: '/phones/current/passcode-uses',
+  body: z
+    .strictObject({
+      // Made on the phone when it logged the use.
+      id: z.uuid(),
+      // What the passcode was typed for.
+      use: z.enum(loggedPasscodeUses),
+      // The monitor it was for, from the phone's login list; null for a wrong try, and only
+      // for one.
+      personId: z.uuid().nullable(),
+      // The phone's clock when it was logged, as a UTC instant, and how far that clock stood
+      // from UTC, in minutes (ADR-100): UTC−12:00 to UTC+14:00.
+      loggedAt: z.iso.datetime(),
+      deviceUtcOffsetMinutes: z.number().int().min(-720).max(840),
+    })
+    .refine(({ use, personId }) => passcodeLog.namesAMonitor(use) === (personId !== null), {
+      path: ['personId'],
+    }),
+  answer: passcodeUseAnswerSchema,
+});
+
 export const signOutOnPhoneEndpoint = endpoint({
   name: 'signOutOnPhone',
   summary:
@@ -2529,6 +2571,7 @@ export const endpoints: readonly Endpoint[] = [
   createMonitorOnPhoneEndpoint,
   signInOnPhoneEndpoint,
   openPasscodeSessionOnPhoneEndpoint,
+  reportPasscodeUseEndpoint,
   signOutOnPhoneEndpoint,
   phoneMonitorEndpoint,
   phoneListsEndpoint,

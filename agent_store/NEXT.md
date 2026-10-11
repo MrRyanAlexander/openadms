@@ -89,25 +89,24 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-10, through ADR-463)
-- **Phase 2 (API and sync) is open (ADR-376): 21 of its 32 tasks are done** (`BACKLOG.md`,
+### Where things stand (2026-10-10, through ADR-465)
+- **Phase 2 (API and sync) is open (ADR-376): 22 of its 32 tasks are done** (`BACKLOG.md`,
   "Active — Phase 2", ticks each with its ADRs). Complete: Milestone 2.1 (the API as a process,
   the boundary, time limits and policy), 2.2 (sign-in: its records, passwords, sessions, two-step
   sign-in, permissions and people, rate limits), 2.3 (the job queue, the worker as a process, what
   queues work) and 2.4 (the services behind endpoints: setup, dispatch and phones, review and
-  certifications, the read-only viewer's path). Of 2.5 (phones): 2.5.1 (enrolment and a phone's
+  certifications, the read-only viewer's path). **Milestone 2.5 (phones) is complete too:** 2.5.1 (enrolment and a phone's
   proof of itself, ADR-436…440), 2.5.2 (monitors on phones: created, signed in, and the
   assignment a phone takes, ADR-441…444) and **2.5.3 (the lists a phone takes, in five parts,
-  ADR-449…451, 453…455; its last, an address looked up for a phone's GPS)** are done; **2.5.4
-  is cut in five (ADR-456, 462) and its parts 1 to 4 are done (ADR-457: an unplanned assignment
-  arrives from the phone it was made on; ADR-458: a site move and a monitor switch reported
-  the same way, the sign-in taking the one made on the phone last; ADR-462: a session opened
-  under the master passcode with a connection, marked; ADR-463: what a phone being set up
-  online picks from, read only with the passcode sent); part 5 is next.** **The user approved ARCHITECTURE §7.2's notes on signing in
+  ADR-449…451, 453…455; its last, an address looked up for a phone's GPS)** and **2.5.4 (what a phone
+  reports besides field events, in five parts, ADR-456…458, 462…464; its last, every other use
+  of the master passcode a phone logged)** are done. **REQ-202b was read whole and is not
+  ticked: the passcode's use to sync and turn a phone in is task 2.6.5's (ADR-464 (5)).**
+  **Milestone 2.6 (sync) is next.** **The user approved ARCHITECTURE §7.2's notes on signing in
   online and taking the assignment (ADR-452).**
 - **Where each thing is written, so nothing is read twice:** a rule as it stands, with its ADR:
   `SUMMARY.md`, by topic (grep its `###` headings; never read it whole). What a finished task left
-  for a later one: `BACKLOG.md`'s carry-forward register (C85…C122). How a layer's tests are
+  for a later one: `BACKLOG.md`'s carry-forward register (C85…C126). How a layer's tests are
   written and what a loosening is tried on: the page for that layer beside the `adms-verify`
   skill. Today's counts: `agent_store/CHAIN.md`. **The task-by-task record that stood here
   (2.0.1 to 2.5.2, every endpoint and service named) moved word for word to `DECISIONS.md`'s
@@ -123,6 +122,7 @@ of `DECISIONS.md`.
   Each service login is under a statement timeout; an installation may state its own value for
   any policy value. `spec/acceptance/10-api-and-sync.md` and `spec/THREAT-MODEL.md` are approved
   by the user (ADR-386, 393). Phase 2's 14 REQs are in `REQUIREMENTS.md`, two ticked (REQ-201, 208).
+- **`pnpm lint` runs ESLint under a 4 GB heap** (ADR-465): the whole-tree run had outgrown Node's default on this 8 GB Mac. If it stops with "heap out of memory" again, split it by workspace.
 - **Phones today (what 2.5.3 builds on).** A phone enrols under the master passcode (`POST
   /phones/enrolments`), proves itself by signing a challenge and gets a fifteen-minute token
   (`access: 'PROVEN_PHONE'`, read with `phoneOf(request)`); a monitor is created on it under the
@@ -135,11 +135,11 @@ of `DECISIONS.md`.
   (`PhoneLoginList`, `OfflineChecks`, ADR-454: the phone says what it holds and is made only what it lacks). **It looks up a GPS point's address by `POST
   /phones/current/address-lookups`** (`AddressLookups`, `AddressServer`, ADR-455: the API alone
   asks the address server; a test hands the process its own through `ProcessParts.addresses`). **It reports an unplanned assignment by `POST
-  /phones/current/unplanned-assignments`** (`UnplannedAssignments`, ADR-457: `PROVEN_PHONE`, nobody signed in, no passcode sent; kept once and as reported, with the phone's instant, its offset and the server's received time; **a site move and a switch to a monitor with none are the same report, stating `occasion`**, ADR-458; a switch saved ends the earlier monitor's session on that phone, ADR-462). **A session is opened under the master passcode by `POST /phones/current/passcode-sessions`** (`PasscodeSessions`, ADR-462: `PROVEN_PHONE`, the passcode sent and checked; the row marked `masterPasscodeSession`, read on every request by `PhoneSignIns.onPhone` as a monitor's own is, so `monitorOf(request).masterPasscodeSession` says which). **What a phone being set up under the passcode picks from is read by `POST /phones/current/setup-choices`** (`SetupChoices`, ADR-463: `PROVEN_PHONE`, the passcode in the body; open projects, monitors in service, one open project's live sites and unit rate pay items in service; each read one `MASTER_PASSCODE_USE`). What is written under the
+  /phones/current/unplanned-assignments`** (`UnplannedAssignments`, ADR-457: `PROVEN_PHONE`, nobody signed in, no passcode sent; kept once and as reported, with the phone's instant, its offset and the server's received time; **a site move and a switch to a monitor with none are the same report, stating `occasion`**, ADR-458; a switch saved ends the earlier monitor's session on that phone, ADR-462). **A session is opened under the master passcode by `POST /phones/current/passcode-sessions`** (`PasscodeSessions`, ADR-462: `PROVEN_PHONE`, the passcode sent and checked; the row marked `masterPasscodeSession`, read on every request by `PhoneSignIns.onPhone` as a monitor's own is, so `monitorOf(request).masterPasscodeSession` says which). **What a phone being set up under the passcode picks from is read by `POST /phones/current/setup-choices`** (`SetupChoices`, ADR-463: `PROVEN_PHONE`, the passcode in the body; open projects, monitors in service, one open project's live sites and unit rate pay items in service; each read one `MASTER_PASSCODE_USE`). **Every other use of the passcode a phone logged with no connection is reported by `POST /phones/current/passcode-uses`** (`PasscodeUses`, ADR-464: `PROVEN_PHONE`, no passcode sent; a switch to a monitor with their own assignment, a session opened offline, a wrong try, which moves no count on the server; the first event takes the phone's id; the database lets only the passcode's actor write a security event a phone reported). What is written under the
   master passcode names its own actor (`underMasterPasscode`), a proof's the device key's
   (`byDeviceKey`). The code is `apps/api/src/phone/`. **No story and no test writes a phone or a
   monitor by hand:** a story uses `story.enrolled`, `story.proofs`, `story.monitor`,
-  `story.signedIn`, `taken` and `unplanned` (`stories/board.ts`) and `story.lists.held` for a phone's lists; an API test `enrolledPhone`, `proven`
+  `story.signedIn`, `taken`, `unplanned` and `loggedUse` (`stories/board.ts`), `story.underPasscode` for a read or a session with a connection, and `story.lists.held` for a phone's lists; an API test `enrolledPhone`, `proven`
   (`test/support/phones.ts`), `created` and `signedIn` (`phone-sign-ins.test.ts`).
 - **This machine's installation holds no person but the seed's three actors:** `pnpm
   local:accounts` and `pnpm installer:admin` have not been run for real here.
@@ -157,7 +157,7 @@ of `DECISIONS.md`.
   `installationPolicy({ … })`.
 - **Phase 1 is done:** all seven exit criteria met (ADR-371, 372); 693 of the 708 scenarios with a
   Phase 1 part proven whole, 15 in part. 48 scenario rows name Phase 2 (37 as "API (Phase 2)").
-- **The chain** was seen whole on 2026-10-10 after ADR-463. Its counts
+- **The chain** was seen whole on 2026-10-10 after ADR-464 and 465. Its counts
   are `agent_store/CHAIN.md`'s; what each command proves is `adms-verify`'s. **Start with `pnpm
   ready`**; the stories run once, in `pnpm scenarios`; run `pnpm security` after `pnpm test`.
 - **What exists:** `packages/db` (schema, guards, tests), `packages/domain` (every rule; one
@@ -324,23 +324,22 @@ questions.
 **Phase 2 is open (ADR-376). Its plan is `BACKLOG.md`, "Active — Phase 2" (ADR-377): read its
 brief first. One task per response.**
 
-**Task 2.5.4, part 5 of 5: every other use of the master passcode a phone logged, and the
-task's close** *(BACKLOG 2.5.4 and its cut, C125, C124, C123, C122; ADR-456 (4), (5)(e), 462,
-463; REQ-202b, 209; AC-02-23, 38, 42, 46; read ARCHITECTURE §7's notes, §7.3 and §7.5,
-`adms-field-app` §4A.0 (7), (8), `UnplannedAssignments` and `MasterPasscodeCheck`
-(`apps/api/src/phone/`), and `api-tests.md` beside the `adms-verify` skill first)*. **Read the
-user's reply to ADR-463's and ADR-462's defaults first** (`SUMMARY.md` §4; none in the files
-means build as recorded and say so). What a phone logged under the passcode that no call
-reports yet: a switch to a monitor who has their own assignment (the event alone, with an id
-of the phone's), a session opened with no connection (which kind, for whom), and wrong tries
-there, which don't count toward the server's lock (ADR-456 (5)(e)); each with the phone's
-instant, its offset and the server's received time, kept once. Then **REQ-202b read whole**
-(tick it only if every use is seen as a security event) and **the story** (a setup, a move, a
-switch and a session under the passcode, with their events). Say what ASVS asks of a log a
-device reports before building (ADR-401).
-**The user may still overturn ADR-463's defaults, ADR-462's defaults, ADR-458's other defaults (three were confirmed, ADR-459), ADR-457's, ADR-456 (5)'s proposals, ADR-455's, ADR-454's, ADR-453's, ADR-451's and ADR-450's defaults, ADR-449
+**Task 2.6.1: the sync contract** *(BACKLOG 2.6.1 and Milestone 2.6's brief; C84, C86, C122,
+C126; REQ-004, 203; ARCHITECTURE §9, §10, §11; `spec/acceptance/05-sync.md` and
+`10-api-and-sync.md`; `Intake` (`apps/api/src/`), the story `sync`; read `api-tests.md` beside
+the `adms-verify` skill first)*. Every payload a phone syncs and every answer it is given, as
+schemas in `packages/contracts`, with the test suite any client must pass (the harness now, the
+field app in Phase 3): schemas and that suite, **no endpoint yet** (2.6.2 puts one in front of
+`Intake`). The payload carries, in this order, the unplanned assignments made on the phone
+(`UnplannedAssignments.received`), the uses of the master passcode it logged
+(`PasscodeUses.received`), then its records; decide there what a phone is told of records made
+under an assignment answered `NOT_SAVED` (C122). REQ-004 is ticked only when OpenAPI covers
+every endpoint. **A task this size is cut first, one part a response** (as 2.5.3 and 2.5.4
+were): say the cut before building. Say what ASVS and the API Security Top 10 ask of a sync
+payload before building (ADR-401).
+**The user may still overturn ADR-464's defaults, ADR-463's, ADR-462's, ADR-458's other defaults (three were confirmed, ADR-459), ADR-457's, ADR-456 (5)'s proposals, ADR-455's, ADR-454's, ADR-453's, ADR-451's and ADR-450's defaults, ADR-449
 (5)'s proposals as built, ADR-442's, ADR-440's, ADR-438's two choices or ADR-439's (`SUMMARY.md` §4).**
-**Docker's disk is 8 GB and was full once on 2026-10-10** (Tools and housekeeping; it held through ADR-462's session): if `pnpm ready` fails for space, stop and ask the user to free some; never work around it.
+**Docker's disk is 8 GB and was full once on 2026-10-10** (Tools and housekeeping; it has held since, 1.3 GB free after ADR-464's session): if `pnpm ready` fails for space, stop and ask the user to free some; never work around it.
 **Before the chain, `pnpm ready`** (the stack up, then `installer:check`): a `✗` at the migrations
 or at a setting means one was made elsewhere, and `pnpm installer --yes` applies it (seen 2026-10-09: 176 tests failed
 until it was). **After a change to `apps/api` or `apps/worker`, `pnpm local:up` again; if Docker

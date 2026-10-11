@@ -182,6 +182,9 @@ const triggers = [
   // changes (ADR-462).
   `CREATE TRIGGER session_refuse_master_passcode_session_edit BEFORE UPDATE OF master_passcode_session ON public.session FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
   `CREATE TRIGGER security_event_refuse_edit BEFORE UPDATE ON public.security_event FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
+  // A security event a phone reported is written as the master passcode's actor for the phone
+  // it names (ADR-464).
+  `CREATE TRIGGER security_event_a_phone_reported BEFORE INSERT ON public.security_event FOR EACH ROW EXECUTE FUNCTION security_event_a_phone_reported_guard()`,
   // Which version a record of wrong tries is of never changes (ADR-438).
   `CREATE TRIGGER master_passcode_tries_refuse_version_edit BEFORE UPDATE OF id, version, created_at ON public.master_passcode_tries FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
   // What a job was asked never changes; once finished or set aside it is history; a job's
@@ -1126,6 +1129,13 @@ describe('the guards in the catalog', () => {
         name: 'security_event_device_utc_offset_check',
         definition:
           "CHECK (((device_utc_offset_minutes IS NULL) OR ((device_id IS NOT NULL) AND ((device_utc_offset_minutes >= '-720'::integer) AND (device_utc_offset_minutes <= 840)))))",
+      },
+      // Only a use of the master passcode a phone reported, for a monitor, says which way a
+      // session was opened (ADR-464).
+      {
+        name: 'security_event_master_passcode_session_check',
+        definition:
+          "CHECK (((master_passcode_session IS NULL) OR ((kind = 'MASTER_PASSCODE_USE'::security_event_kind) AND (user_id IS NOT NULL) AND (device_utc_offset_minutes IS NOT NULL))))",
       },
       {
         name: 'security_event_request_id_check',

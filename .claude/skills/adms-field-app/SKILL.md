@@ -2,7 +2,7 @@
 name: adms-field-app
 description: Open ADMS field app and phones, in today's rules. Covers enrolling a phone once, the day's assignment it takes at sign-in, setup by master passcode when there's no assignment (an unplanned assignment), offline sign-in from the login list and its safeguards, switching monitors and moving site, encryption, the time clock on the phone, syncing whenever there's signal, sync and turn in, an out-of-service phone (the Phase 0 part, ARCHITECTURE §7–§8); what a phone holds for its assignment (lists, the site's quantity lookup, never rates or rules); and the later-phase capture notes: offline as the only mode, advisory on-device checks, badge first and number last, every start list, the split chain, printing, scanning, GPS and photos. Use when touching enrolment, sign-in, the phone's lists, sync from the phone's side, or anything a monitor captures. The workflows themselves are adms-ticket-workflows.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-251; the Phase 0 device and assignment models built, ADR-281; split haul-outs, ADR-295; a badge's number the phone's list doesn't hold, ADR-421; enrolment through the API, ADR-439; the assignment taken at sign-in, ADR-444; the lists read by the phone, ADR-450; the login list, ADR-454; an unplanned assignment reported, ADR-457; a site move and a monitor switch reported, ADR-458) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-251; the Phase 0 device and assignment models built, ADR-281; split haul-outs, ADR-295; a badge's number the phone's list doesn't hold, ADR-421; enrolment through the API, ADR-439; the assignment taken at sign-in, ADR-444; the lists read by the phone, ADR-450; the login list, ADR-454; an unplanned assignment reported, ADR-457; a site move and a monitor switch reported, ADR-458; every other use of the master passcode a phone logged, ADR-464) -->
 
 > **This page states today's rules** (last changed by ADR-295, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
@@ -85,7 +85,16 @@ gets tracked on a spreadsheet."
    (ADR-462, agent defaults): the monitor's id from the phone's lists, `kind: 'AS_MONITOR'` and
    the passcode, which the server checks itself. The answer is a sign-in's, with the session's
    token and `masterPasscodeSession`; the server keeps the session marked, written as the
-   master passcode itself, and it lasts a monitor's own twelve hours.**
+   master passcode itself, and it lasts a monitor's own twelve hours.** **What the phone logged
+   with no connection it reports by `POST /phones/current/passcode-uses` (ADR-464, agent
+   defaults), once it has proved itself, with nobody signed in and no passcode sent: an id the
+   phone made, `use` (`MONITOR_SWITCH`, `SESSION_AS_MONITOR`, `TEMPORARY_SESSION`,
+   `WRONG_TRY`), the monitor it was for (nobody, for a wrong try), and when by the phone's
+   clock with its offset. A session opened offline is a use of the passcode that says which
+   way, never a sign-in, and the server opens none for it. A wrong try typed on a phone is
+   kept in the security log and never counts toward the server's lock. Each is kept once and
+   answered saved, already saved, or not saved with why. A setup, a move and a switch that
+   made an assignment are (5)'s report, never this one.**
 8. **Switching monitors** needs **the master passcode first**; then the next monitor signs in with
    their own Monitor ID and password, so the server knows it's them. **Shortcut:** the master passcode
    opens a **temporary session** for a monitor picked from the roster, marked on every record and
@@ -98,7 +107,9 @@ gets tracked on a spreadsheet."
    a phone switched and a use of the master passcode, naming the monitor switched to, at the
    phone's own time. **A switch the server saves signs out whoever was signed in on that phone
    before it, by the phone's clock, never the monitor switched to (ADR-462).** A switch to a
-   monitor who has their own assignment makes none (its report: task 2.5.4 part 5).
+   monitor who has their own assignment makes none: **the phone reports it as (7)'s
+   `MONITOR_SWITCH`, a phone switched and a use of the passcode naming them, and their own
+   sign-in takes their assignment (ADR-464)**.
 9. **Moving site** is done on the phone, offline, with the master passcode, from the project's sites
    it holds, and is recorded; each record keeps the site it was made at (ADR-195). Switching and
    moving amend the phone's assignment. **A move makes a new unplanned assignment at the new

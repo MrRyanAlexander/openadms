@@ -10,6 +10,7 @@ import {
   Intake,
   MasterPasscodeCheck,
   NoMail,
+  PasscodeSessions,
   PasswordHasher,
   PhoneAssignments,
   OfflineChecks,
@@ -20,16 +21,20 @@ import {
   PhoneSignIns,
   PhoneTokens,
   SessionTokens,
+  SetupChoices,
   WrongTries,
   type AssignmentAtSignIn,
+  type SetupChoicesRead,
 } from '@open-adms/api';
 import type { Database, ViewerDatabase } from '@open-adms/db';
 import {
   BreachedPasswords,
   MasterPasscodeTries,
+  PasscodeSessionRules,
   PasswordRules,
   PhoneProofRules,
   SignInTries,
+  type MasterPasscodeSessionKind,
   type Policy,
 } from '@open-adms/domain';
 
@@ -94,6 +99,18 @@ export interface StoryContext {
   // took none. A refused sign-in stops the story. `at` is when they sign in, where that is not
   // the story's clock now (field days told again on a clock of their own).
   signedIn(monitor: StoryMonitor, onPhone: string, at?: Date): Promise<AssignmentAtSignIn>;
+  // Whoever holds the firm's master passcode, on that enrolled phone with a connection, now by
+  // the story's clock: what a setup picks from, read through the API's `SetupChoices`
+  // (ADR-463), and a session opened for a monitor through its `PasscodeSessions` (ADR-462).
+  // No story states the passcode; a refusal stops the story.
+  readonly underPasscode: {
+    choices(onPhone: string, projectId: string | null): Promise<SetupChoicesRead>;
+    session(
+      monitor: StoryMonitor,
+      onPhone: string,
+      kind: MasterPasscodeSessionKind,
+    ): Promise<{ readonly sessionId: string; readonly expiresAt: Date }>;
+  };
   // A phone's proof of itself, as its sync begins: the API's `PhoneProofs`, on the story's clock.
   readonly proofs: PhoneProofs;
   // The lists a phone takes for an assignment: the API's `PhoneLists` (task 2.5.3).
@@ -256,6 +273,40 @@ export class Runner {
             throw new Error(`${monitor.name} was not signed in: ${outcome.why}.`);
           }
           return outcome.assignment;
+        },
+        underPasscode: {
+          async choices(onPhone, projectId) {
+            const outcome = await new SetupChoices(api, {
+              passcode: passcodeAt(clock),
+              clock,
+              // The contracts' number (`setupChoicesMonitorsAtMost`, ADR-463).
+              monitorsAtMost: 1000,
+            }).read(await phoneNow(onPhone), {
+              passcode: storyMasterPasscode,
+              projectId,
+              monitorsAfter: null,
+            });
+            if (!outcome.read)
+              throw new Error(`The setup’s choices were not read: ${outcome.why}.`);
+            return outcome;
+          },
+          async session(monitor, onPhone, kind) {
+            const outcome = await new PasscodeSessions(api, {
+              passcode: passcodeAt(clock),
+              tokens: new SessionTokens(storySigningSecret, policy.accessTokenMinutes),
+              rules: new PasscodeSessionRules(policy.monitorSessionHours),
+              assignments: new PhoneAssignments(api),
+              clock,
+            }).open(await phoneNow(onPhone), {
+              personId: monitor.id,
+              kind,
+              passcode: storyMasterPasscode,
+            });
+            if (!outcome.opened) {
+              throw new Error(`No session was opened for ${monitor.name}: ${outcome.why}.`);
+            }
+            return { sessionId: outcome.sessionId, expiresAt: outcome.expiresAt };
+          },
         },
         lists: new PhoneLists(api, { assignments: new PhoneAssignments(api), clock }),
         proofs: new PhoneProofs(api, {

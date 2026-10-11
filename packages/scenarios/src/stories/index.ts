@@ -1,6 +1,7 @@
 // Every story, in the order `pnpm scenarios` runs them: the golden mission (ADR-368), then what
 // it leaves out (ADR-369), then the firm's first admin (ADR-415), then the worker's queue
-// (ADR-419), then what each read-only viewer reads (ADR-435).
+// (ADR-419), then what each read-only viewer reads (ADR-435), then one
+// phone's day under the master passcode (ADR-464).
 import type { Story } from '../runner.ts';
 import { certification } from './certification.ts';
 import { dispatchMonday } from './dispatch-monday.ts';
@@ -20,6 +21,7 @@ import { p1Voided } from './p1-voided.ts';
 import { setup } from './setup.ts';
 import { sync } from './sync.ts';
 import { ticket101001 } from './ticket-101001.ts';
+import { underThePasscode } from './under-the-passcode.ts';
 
 export const stories: readonly Story[] = [
   ticket101001,
@@ -40,4 +42,5 @@ export const stories: readonly Story[] = [
   firstAdmin,
   p1Queued,
   p1Viewed,
+  underThePasscode,
 ];

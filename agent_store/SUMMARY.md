@@ -1,14 +1,14 @@
 # Open ADMS — Current decisions and gaps, at a glance
 
 **The present tense of the project on one page.** `DECISIONS.md` and `DEVIATIONS.md` are the full
-history, with 463 ADRs and 74 KDs, many superseded. This page says what is true **now** and which
+history, with 465 ADRs and 74 KDs, many superseded. This page says what is true **now** and which
 entries to cite. The reasons live in the ADRs and the skills.
 
 - **Keep it current:** when you add, amend or supersede an ADR, or open or close a KD, update this
   page **in the same response** (`adms-decisions`).
 - **If this page and a log entry disagree,** the newest ADR wins: fix this page and say so.
-- **Updated 2026-10-10, through ADR-463 / KD-74.** Phase 2 (API and sync) is open (ADR-376):
-  21 of its 32 tasks are done, through **2.5.3 (the lists a phone takes, in five parts,
+- **Updated 2026-10-10, through ADR-465 / KD-74.** Phase 2 (API and sync) is open (ADR-376):
+  22 of its 32 tasks are done: **task 2.5.4 (what a phone reports besides field events) closed with its fifth part, every other use of the master passcode a phone logged (ADR-464); REQ-202b stays open for the turn-in's use (2.6.5); `pnpm lint` states its heap (ADR-465).** Before it, **2.5.3 (the lists a phone takes, in five parts,
   ADR-449…451, 453, 454; its last, an address looked up for a phone's GPS, ADR-455)**; **2.5.4
   (what a phone reports besides field events) is cut in five (ADR-462) and its parts 1 to 4 are
   done (part 4, what a phone being set up online picks from, read only with the master passcode
@@ -993,6 +993,27 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   actor with the read. A phone out of service is refused before the passcode is touched. What
   ASVS and the API Security Top 10 ask of it is in the ADR. Code:
   `apps/api/src/phone/setup-choices.ts`. [463]
+- **Every other use of the master passcode a phone logged, reported** (ADR-464; ADR-456 (5)(e)
+  built as proposed, the rest agent defaults). `POST /phones/current/passcode-uses`, a proven
+  phone, nobody signed in, **no passcode sent** (the phone checked it; the server takes the
+  phone's word). Body: `id` (the phone's own), `use`, `personId` (null for a wrong try, and
+  only for one), `loggedAt` (a UTC instant), `deviceUtcOffsetMinutes`. Four uses
+  (`loggedPasscodeUses`, the domain's `PasscodeLogRules`): **`MONITOR_SWITCH`**, the phone
+  passed to a monitor who has their own assignment: `DEVICE_SWITCH` and `MASTER_PASSCODE_USE`
+  naming them, no assignment made; **`SESSION_AS_MONITOR`**, **`TEMPORARY_SESSION`**, a
+  session opened on the phone with no connection: one `MASTER_PASSCODE_USE` saying which way
+  in `SecurityEvent.masterPasscodeSession`, never a sign-in, no session row;
+  **`WRONG_TRY`**: `MASTER_PASSCODE_FAILED` about nobody, **moving no count and no lock on
+  the server**. Each at the phone's own time with its offset; the first event of a use takes
+  the phone's id, so a report sent again is `ALREADY_SAVED`. `NOT_SAVED` only for
+  `NOT_A_MONITOR` or `ID_ALREADY_HELD`; kept for a monitor archived since and from a phone
+  out of service. A switch or a session saved ends what anybody else had open on that phone
+  before it, by the phone's clock. **The database lets a security event a phone reported (one
+  with an offset) be written only as the master passcode's actor, from a phone, naming that
+  phone** (`security_event_a_phone_reported`). A setup, a move and a switch to a monitor
+  with no assignment stay the unplanned assignment's report. **REQ-202b is not whole:** the
+  passcode's use to sync and turn a phone in is task 2.6.5's. The story is
+  `under-the-passcode`. Left for later: BACKLOG C126. [464]
 
 ### Time and photos — ARCHITECTURE §10–§11
 - **Each project has a time zone**; tickets and time-clock entries use it. **The database checks it's an IANA name** (an area and a location, or `UTC`, known to the server's time zone data; never an abbreviation or an offset), and no column anywhere is a time without its zone; a field event's own times and offset are never checked, only flagged later [281]. Offline, the **device
@@ -1670,6 +1691,7 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   own table, the number never unique (ADR-328, 331), weights as written, pointed at by disposals.
 
 ### Agent tooling and terms
+- **`pnpm lint` runs ESLint with a 4 GB heap** (2026-10-10, ADR-465): the type-aware run over the whole tree had outgrown Node's default (2,240 MB on the 8 GB Mac; the run peaks near 3 GB) and stopped with "heap out of memory". Nothing else about the lint changed. If it outgrows this, split the run by workspace. [465]
 - **Prisma's own agent skills are not installed here, and `prisma generate` runs with `--no-hints`** (2026-10-10, ADR-461): in a person's terminal it offered to fetch them (`.agents/`, `.claude/`, `.windsurf/` and `skills-lock.json` under `packages/db/`); they speak of `db push` and `migrate reset`, which this project never runs (ADR-113). If those paths appear again, they are not ours: say so, never commit them. [461]
 - **`pnpm security`'s own run of the grant tests names its report's file by `ADMS_TEST_REPORT`** (2026-10-10, ADR-460): `vitest.config.js` states the JSON report's file, which Vitest takes over a path on the command line, so from ADR-446 until this the check's own run (`--fresh`, or after any change) always answered `✗ no report`. Run `pnpm security --fresh` once after a change to `tools/security/src/grants.ts` or the run's reporters. [460]
 - Front door `spec/INDEX.md`; rules in skills; product questions in `spec/QUESTIONS.md`; the
@@ -1981,6 +2003,7 @@ its scenario.
 - **Proposed for task 2.5.4's parts 2 to 4, yours to overturn (ADR-456 (5)); (a), (b) and (c) are now built as proposed (ADR-458), (d) too (ADR-462), (e) not yet:** (a) **moving a phone to another site is recorded as a new unplanned assignment** at the new site; the earlier one stands with everything recorded under it, and nothing the dispatcher planned is edited from a phone; (b) **a switch to a monitor who has no assignment is a new unplanned assignment for them**, with a security event naming who the phone was switched to; (c) **where a monitor has several assignments on a day that name the phone they sign in on, the phone takes the one made on it last** (today it takes none); (d) **a session opened under the master passcode is marked as the passcode's**, and a temporary one ends at the end of the project's day; (e) a wrong try at the passcode on a phone with no connection doesn't count toward the server's lock. **Also said there:** nothing yet says what a phone does after wrong tries at the passcode offline (the standard's limit is ten); the field app proposes it in Phase 3.
 - **Agent defaults of 2.5.4 part 1 to confirm or overturn (ADR-457):** (a) **a phone reports an unplanned assignment with no passcode sent and nobody signed in**: the phone checked the passcode, and the server takes the phone's word because it proved itself with its device key; (b) **it is kept as reported, also for a monitor archived since, a closed project and a phone taken out of service**, and is not saved only where it names a project, monitor, site or unit rate pay item that isn't one; (c) **it is for a monitor only**, never somebody of the back office (the board assigns them); (d) **its day is the day the phone's clock said**, in the project's time zone, whenever it arrives; (e) **reported again it is kept once, and the first report stands** whatever the second says; (f) **it is two security events**, "a phone set up" and "a use of the master passcode", each at the phone's own time; (g) the record names "Master passcode" on that phone, never the monitor; (h) an offset is UTC−12:00 to UTC+14:00.
 - **Agent defaults of 2.5.4 part 3 to confirm or overturn (ADR-462):** (a) **the phone says which way a session under the passcode was opened** (as the phone's monitor, or temporary), and the server doesn't hold it against the board; (b) **a temporary session ends at the end of the project's day or after twelve hours, whichever comes first**, and with no assignment for the phone to take, after the twelve hours; (c) it is one security event, "a use of the master passcode", never "a sign-in"; (d) somebody who is no monitor in service is refused in plain words after the passcode was taken; (e) **a monitor switch a phone reports signs out whoever was signed in on that phone before it** (by the phone's clock), never the monitor it was switched to; (f) task 2.5.4 is five parts. **Its proposal for part 4 is now built as proposed (ADR-463):** what a phone being set up online picks from is read only with the master passcode sent, not on the phone's proof alone.
+- **Agent defaults of 2.5.4 part 5 to confirm or overturn (ADR-464):** (a) **a wrong try at the master passcode typed on a phone with no connection is kept in the security log but never counts toward locking the passcode on the server** (ADR-456 (5)(e), now built); (b) **a switch or a session a phone reports signs out whoever else was signed in on that phone before it**, by the phone's clock; (c) a wrong try names nobody, whatever it was typed for; (d) the phone doesn't say which version of the passcode it checked against (its record says which it holds); (e) a reported use is kept once by the id the phone gave it; (f) **REQ-202b stays open until the passcode's use at turn-in is built (2.6.5)**. Also: `pnpm lint` now runs with a 4 GB heap (ADR-465).
 - **Agent defaults of 2.5.4 part 4 to confirm or overturn (ADR-463):** (a) **a supervisor setting a phone up online is shown every open project and every monitor in service**, whichever project a monitor last worked; (b) **an "open" project is one that isn't closed**, whether or not its active window has begun; (c) **only sites and unit rate pay items in service are shown to pick from** (a phone already working keeps an archived pay item its assignment names); (d) a project closed in the meantime is answered no lists and no refusal, and the phone is shown the open ones again; (e) **each read is its own "use of the master passcode" in the security log**, so a setup that reads the projects and then one project's lists is two; (f) a phone taken out of service is refused the read; (g) the monitors come a thousand a call.
 - **Agent defaults of 2.5.4 part 2 (ADR-458): (b), (c) and (e) confirmed by the user on 2026-10-10 (ADR-459: "Yes on the ones you asked about"); (a), (d) and (f) still to confirm or overturn:** (a) **a site move and a switch are reported by the same call as a setup**, which says which it was made at (a setup, or a switch); (b) **a site move is recorded as the phone set up again at the new site**, with no kind of security event of its own ("a phone set up" and "a use of the master passcode"); (c) **a switch is "a phone switched" and "a use of the master passcode", naming the monitor the phone was switched to**; who held it before is not recorded on the event; (d) **the server doesn't ask that a move keeps the project or the work**: it is kept as the phone reports it; (e) **for the rest of that day, what was set up on a phone under the passcode stands over the board's plan for that phone**: a dispatcher who wants otherwise has the phone set up again; (f) where two planned assignments name one phone, or two were made on it at the same instant, the phone still takes none and says there are several.
 - **Agent defaults of 2.5.3 part 5 to confirm or overturn (ADR-455):** (a) a lookup is a POST with the point in its body, and needs no assignment; (b) the answer is the street number and name alone, never a town or a postcode; (c) where the address server gives no answer the phone is told so with a 200, never refused; (d) the address server has five seconds (`ADDRESS_LOOKUP_ANSWER_SECONDS`), an installation may state another; (e) neither the point nor the address is logged, and nothing is kept; (f) the API's process does not start without `ADMS_ADDRESSES_URL`, as the worker's; (g) no limit of its own per phone until 2.6.5.

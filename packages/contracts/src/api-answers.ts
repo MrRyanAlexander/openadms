@@ -5,6 +5,7 @@ import {
   fieldEventKinds,
   incidentOffers,
   lookedUpAddressLongest,
+  loggedPasscodeUseRefusals,
   masterPasscodeSessions,
   mileageSources,
   noAddressReasons,
@@ -520,6 +521,19 @@ export const unplannedAssignmentAnswerSchema = z.strictObject({
 });
 
 export type UnplannedAssignmentAnswer = z.infer<typeof unplannedAssignmentAnswerSchema>;
+
+// What a phone is answered for a use of the master passcode it logged with no connection and
+// reported (ARCHITECTURE §7.5; AC-02-23; ADR-106, 464): saved; already saved, where the phone
+// that logged it sent it before (never kept twice); or not saved, with why: it names somebody
+// who is no monitor, or its id is another record's. Never a judgement of what was done.
+export const passcodeUseAnswerSchema = z.strictObject({
+  useId: z.uuid(),
+  answer: z.enum(unplannedAssignmentAnswers),
+  // Only with `NOT_SAVED`.
+  reason: z.enum(loggedPasscodeUseRefusals).nullable(),
+});
+
+export type PasscodeUseAnswer = z.infer<typeof passcodeUseAnswerSchema>;
 
 // The assignment a phone takes when its monitor signs in (ARCHITECTURE §7; AC-02-35, 36;
 // ADR-240, 444): its day (the project's own), its project with the time zone the phone shows

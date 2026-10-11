@@ -87,6 +87,7 @@ describe('who may ask', () => {
       'createMonitorOnPhone',
       'signInOnPhone',
       'openPasscodeSessionOnPhone',
+      'reportPasscodeUse',
       'phoneSetupChoices',
       'reportUnplannedAssignment',
     ]);

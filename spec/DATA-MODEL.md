@@ -231,7 +231,10 @@ API reads the table**; who is shown them on a screen is the back office's (Phase
 | requestId | text | The API request it happened in; never blank (check) |
 | **occurredAt** | instant | When it happened (a phone's own time, for what a phone logged and synced) |
 | deviceUtcOffsetMinutes | int | **Only where a phone reported it (ADR-457):** its clock's offset, so only with `deviceId` (check). `createdAt` is then when the server received it |
+| masterPasscodeSession | enum `MasterPasscodeSession` | **Only on a `MASTER_PASSCODE_USE` a phone reported, for a monitor (ADR-464; check):** which way a session was opened on the phone with no connection, `AS_MONITOR` or `TEMPORARY`. One opened with a connection says it on its `Session` row |
 | **createdAt** | instant | When the server wrote it |
+
+**One a phone reported** (it carries an offset) is what was done on that phone under the master passcode: the database lets it be written only as the master passcode's actor, from a phone, naming that phone (trigger, ADR-464). The first event of a use a phone logged takes the id the phone gave it, so the same report sent again is kept once.
 
 **Who wrote it** is the audit record's actor, as for every write: an event with nobody stated is
 refused. **Who that is when nobody is signed in yet** (a wrong try, a use of the master

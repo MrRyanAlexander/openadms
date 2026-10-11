@@ -9871,6 +9871,109 @@
         }
       }
     },
+    "/phones/current/passcode-uses": {
+      "post": {
+        "operationId": "reportPasscodeUse",
+        "summary": "A phone reports a use of the firm’s master passcode it logged with no connection: the phone passed to a monitor who has their own assignment, a session opened on it as the phone’s monitor or the temporary session for a monitor picked from the roster, or the passcode typed wrong. It says when by the phone’s own clock, with the clock’s offset, and for which monitor; a wrong try names nobody. The id is the phone’s own: the same report sent again is answered as already saved and kept once. It is kept as the phone reports it, for a monitor archived since and from a phone out of service too, and is not saved only where it names somebody who is no monitor or its id is another record’s. The passcode itself is never sent: the phone checked it, and a wrong try reported here does not count toward the lock on the server’s own check. Each one saved is a security event at the phone’s own time: a phone switched and a use of the master passcode; a use that says which way a session was opened; or a failed try. A switch or a session saved ends what anybody else had open on that phone before it, by the phone’s clock. A setup, a site move and a switch to a monitor who has no assignment are reported as an unplanned assignment instead. Open to a phone that has proved itself, by its token; nobody need be signed in.",
+        "x-open-adms-access": "PROVEN_PHONE",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "use": {
+                    "type": "string",
+                    "enum": [
+                      "MONITOR_SWITCH",
+                      "SESSION_AS_MONITOR",
+                      "TEMPORARY_SESSION",
+                      "WRONG_TRY"
+                    ]
+                  },
+                  "personId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "loggedAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                  },
+                  "deviceUtcOffsetMinutes": {
+                    "type": "integer",
+                    "minimum": -720,
+                    "maximum": 840
+                  }
+                },
+                "required": ["id", "use", "personId", "loggedAt", "deviceUtcOffsetMinutes"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "useId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "answer": {
+                      "type": "string",
+                      "enum": ["SAVED", "ALREADY_SAVED", "NOT_SAVED"]
+                    },
+                    "reason": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": ["NOT_A_MONITOR", "ID_ALREADY_HELD"]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["useId", "answer", "reason"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/phones/current/sign-outs": {
       "post": {
         "operationId": "signOutOnPhone",

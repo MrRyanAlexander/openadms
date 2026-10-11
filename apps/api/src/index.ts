@@ -229,6 +229,12 @@ export {
   type PasscodeSessionsParts,
 } from './phone/passcode-sessions.ts';
 export {
+  PasscodeUses,
+  type PasscodeUseReceived,
+  type PasscodeUsesParts,
+  type ReportedPasscodeUse,
+} from './phone/passcode-uses.ts';
+export {
   SetupChoices,
   type SetupChoicesAsked,
   type SetupChoicesOutcome,

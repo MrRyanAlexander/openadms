@@ -1,13 +1,16 @@
 // The dispatch board, written as the back office writes it: through the API's `Assignments`
 // (BACKLOG C97, C102; ADR-429). No story writes an assignment by hand: one made on a phone
 // under the master passcode (unplanned) is received as the phone reports it, through the API's
-// `UnplannedAssignments` (`unplanned`; ADR-457). A phone takes its monitor's assignment by
-// signing them in (`taken`; ADR-444).
+// `UnplannedAssignments` (`unplanned`; ADR-457), and every other use of the passcode a phone
+// logged through its `PasscodeUses` (`loggedUse`; ADR-464). A phone takes its monitor's
+// assignment by signing them in (`taken`; ADR-444).
 import {
   Assignments,
+  PasscodeUses,
   UnplannedAssignments,
   type Clock,
   type NewAssignment,
+  type ReportedPasscodeUse,
   type ReportedUnplannedAssignment,
 } from '@open-adms/api';
 import type { Database } from '@open-adms/db';
@@ -55,15 +58,16 @@ export type SetUpOnPhone = Pick<ReportedUnplannedAssignment, 'projectId' | 'pers
 
 // The phone is set up under the master passcode, now by the story's clock, and reports it: the
 // unplanned assignment's id, which the phone made (AC-02-38, AC-05-40; ADR-457). A report that
-// isn't saved stops the story.
+// isn't saved stops the story. `madeAt`: when it was set up, where the phone had no connection
+// then and reports it only now.
 export async function unplanned(
   api: Database,
   clock: Clock,
   deviceId: string,
   timeZone: string,
   work: SetUpOnPhone,
+  madeAt: Date = clock.now(),
 ): Promise<string> {
-  const madeAt = clock.now();
   const id = uuidv7(madeAt);
   const received = await new UnplannedAssignments(api, {
     clock,
@@ -84,4 +88,27 @@ export async function unplanned(
     throw new Error(`The unplanned assignment was answered ${JSON.stringify(received)}.`);
   }
   return id;
+}
+
+// The phone reports, now by the story's clock, a use of the master passcode it logged with no
+// connection at `loggedAt`: a switch to a monitor who has their own assignment, a session
+// opened on it, or a wrong try (AC-02-23; ADR-464). The id the phone gave it, and what the
+// server answered.
+export async function loggedUse(
+  api: Database,
+  clock: Clock,
+  deviceId: string,
+  timeZone: string,
+  logged: Pick<ReportedPasscodeUse, 'use' | 'personId' | 'loggedAt'> & { readonly id?: string },
+): Promise<{ readonly id: string; readonly answer: string }> {
+  const id = logged.id ?? uuidv7(logged.loggedAt);
+  const received = await new PasscodeUses(api, { clock, requestNow: () => undefined }).received(
+    deviceId,
+    {
+      ...logged,
+      id,
+      deviceUtcOffsetMinutes: utcOffsetMinutes(timeZone, logged.loggedAt),
+    },
+  );
+  return { id, answer: received.answer };
 }

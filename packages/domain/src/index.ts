@@ -229,6 +229,14 @@ export {
   type MasterPasscodeSessionKind,
 } from './passcode-sessions.ts';
 export {
+  PasscodeLogRules,
+  loggedPasscodeUseRefusals,
+  loggedPasscodeUses,
+  type LoggedPasscodeUse,
+  type LoggedPasscodeUseRefusal,
+  type LoggedSecurityEvent,
+} from './passcode-uses.ts';
+export {
   MasterPasscodeRules,
   PhoneRules,
   phoneRemovals,

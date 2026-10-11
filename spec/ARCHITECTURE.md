@@ -454,7 +454,7 @@ every edit of a migration file and allows a write only while the file is still P
 ADR-106 (master passcode) and ADR-120 (changing monitors, username). **The word is "setup"**, never "provisioning" or "provisioned"
 (ADR-095). Setup is the root of trust for everything a device does.
 
-> ⚠️ **ADR-240 (2026-09-29, at the user's word; this note awaits approval, building doesn't wait):
+✅ **Approved** **ADR-240 (2026-09-29, at the user's word; this note awaits approval, building doesn't wait):
 > enrol once, dispatch daily.** What below is "setting up a phone" splits in two:
 > 1. **Enrolment, once per phone** (online, master passcode): the device key of §7.4 is made and the
 >    phone joins the firm's phones. No project, no monitor.
@@ -471,7 +471,7 @@ ADR-106 (master passcode) and ADR-120 (changing monitors, username). **The word 
 > §7.4 and §7.5 stand. Declined: per-person passkeys or biometrics (phones pass between monitors),
 > attestation, personal phones, per-supervisor keys (ADR-106 stands).
 
-> ⚠️ **ADR-456, 457 (2026-10-10; agent defaults, this note awaits approval, building didn't
+✅ **Approved** **ADR-456, 457 (2026-10-10; agent defaults, this note awaits approval, building didn't
 > wait): what a phone reports of an act under the master passcode.** An unplanned assignment
 > is made on the phone, with or without a connection, and the phone checks the passcode against
 > its own check. When it next has a connection the phone, having proved itself with its device
@@ -488,7 +488,7 @@ ADR-106 (master passcode) and ADR-120 (changing monitors, username). **The word 
 > device's word for what was done offline under a shared secret** (ADR-456): what stands
 > against it is the device key, the three times kept, and the clock difference kept at sync.
 
-> ⚠️ **ADR-458 (2026-10-10; agent defaults, this note awaits approval, building didn't wait):
+✅ **Approved** **ADR-458 (2026-10-10; agent defaults, this note awaits approval, building didn't wait):
 > a site move and a monitor switch, reported.** Moving a phone to another of its project's
 > sites (ADR-195) and passing it to a monitor who has no assignment
 > (§7.3) are each done on the phone under the master passcode, with or without a connection,
@@ -503,7 +503,7 @@ ADR-106 (master passcode) and ADR-120 (changing monitors, username). **The word 
 > a monitor who has their own assignment (the event alone), a session under the passcode and
 > the temporary session, every other use of the passcode a phone logged.
 
-> ⚠️ **ADR-462 (2026-10-10; ADR-456 (5)(d) built as proposed, the rest agent defaults; this
+✅ **Approved** **ADR-462 (2026-10-10; ADR-456 (5)(d) built as proposed, the rest agent defaults; this
 > note awaits approval, building didn't wait): a session under the master passcode, with a
 > connection.** A supervisor types the master passcode on an enrolled phone in service and
 > either signs in as the phone's monitor (§7.2) or opens the temporary session for a monitor
@@ -521,7 +521,7 @@ ADR-106 (master passcode) and ADR-120 (changing monitors, username). **The word 
 > build: what a phone being set up online picks from, every other use of the passcode a phone
 > logged, and the mark on a record made in a session as the phone's monitor (task 2.6.2).
 
-> ⚠️ **ADR-463 (2026-10-10; ADR-462's proposal built as made, the rest agent defaults; this
+✅ **Approved** **ADR-463 (2026-10-10; ADR-462's proposal built as made, the rest agent defaults; this
 > note awaits approval, building didn't wait): what a phone being set up online picks from.**
 > With a connection and nobody signed in, the supervisor types the master passcode (§7.1 step
 > 1) and the phone, having proved itself, **sends it with its request**: the server checks it
@@ -532,6 +532,24 @@ ADR-106 (master passcode) and ADR-120 (changing monitors, username). **The word 
 > key until it is revoked. Each read is a use of the master passcode in the security log,
 > naming the phone. A phone out of service reads nothing. The setup itself is still made on
 > the phone and reported as an unplanned assignment (ADR-457).
+
+✅ **Approved** **ADR-464 (2026-10-10; ADR-456 (5)(e) built as proposed, the rest agent defaults; this
+> note awaits approval, building didn't wait): every other use of the master passcode a phone
+> logged.** What a phone did under the passcode with no connection, and no assignment came of
+> it, the phone logs and **reports when it next has a connection**, having proved itself;
+> nobody need be signed in and the passcode is never sent. Three things: **the phone passed to
+> a monitor who has their own assignment** (§7.3: recorded as a phone switched and a use of the
+> passcode, naming them; no assignment is made); **a session opened on the phone**, as its
+> monitor or the temporary one (a use of the passcode that says which way and for whom, never
+> a sign-in; the server opens no session for it); and **the passcode typed wrong** (a failed
+> try, about nobody). Each is kept once, by the id the phone gave it, at the phone's own time
+> with its clock's offset (§10), and recorded as done by **"Master passcode"** on that phone;
+> the database lets nobody else write what a phone reported. **A wrong try typed on a phone
+> never counts toward the lock on the server's own check** (§7.5), which guards only what the
+> server is sent. A switch or a session reported signs out whoever else was signed in on that
+> phone before it. Still to build: the passcode's use to sync and turn a phone in (§7.5, task
+> 2.6.5), and what a phone does after ten wrong tries with no connection (the field app,
+> Phase 3).
 
 ### 7.0 Creating people
 
@@ -552,7 +570,7 @@ ADR-106 (master passcode) and ADR-120 (changing monitors, username). **The word 
   without the area code**, so a worker who forgets it is told "your ID, and your own phone number",
   and an admin can sign in as them.
 
-> ⚠️ **ADR-441, 442 (2026-10-09; agent defaults, this note awaits approval, building didn't
+✅ **Approved** **ADR-441, 442 (2026-10-09; agent defaults, this note awaits approval, building didn't
 > wait): creating a monitor takes the phone and the passcode together.** The request comes from
 > an enrolled phone that has proved itself with its device key (§7.4) and carries the master
 > passcode; the passcode typed anywhere else creates nobody. Nobody types the Monitor ID: the
@@ -561,7 +579,7 @@ ADR-106 (master passcode) and ADR-120 (changing monitors, username). **The word 
 > a monitor's sign-in, and where the phone-number password departs from them (the accepted risk of
 > ADR-105 and §7.2), is ADR-441.
 
-> ⚠️ **ADR-415 (2026-10-07; the server command is the user's decision, ADR-413 (2), 414 (2); this
+✅ **Approved** **ADR-415 (2026-10-07; the server command is the user's decision, ADR-413 (2), 414 (2); this
 > note awaits approval, building didn't wait):** the installer seeds nobody who can sign in, so
 > **the firm's first admin is made on its own server by `pnpm installer:admin`**, which also lets
 > an admin back in who has no other admin to ask (a login locked by wrong tries, a forgotten
@@ -571,7 +589,7 @@ ADR-106 (master passcode) and ADR-120 (changing monitors, username). **The word 
 
 ### 7.1 Setting up a phone (online only)
 
-> ⚠️ **What a phone's lists carry, today (ADR-207, 213, 223, 227, 240, 243; this note awaits
+✅ **Approved** **What a phone's lists carry, today (ADR-207, 213, 223, 227, 240, 243; this note awaits
 > approval, building doesn't wait).** The two "Decided" paragraphs below (ADR-176, ADR-182) are
 > **superseded**: loads don't start from a pay item and a load's phone holds **no pay items**
 > (ADR-207, 223). For the phone's current **assignment** (or unplanned assignment), its lists carry:
@@ -583,7 +601,7 @@ ADR-106 (master passcode) and ADR-120 (changing monitors, username). **The word 
 > the load carries**, worked out ahead from the rules (ADR-227, 243); the login list; the **setup
 > version** every field event records (ADR-240). Rules and rates never go to a phone.
 
-> ⚠️ **ADR-449, 450, 451 (2026-10-09; agent defaults, this note awaits approval, building didn't
+✅ **Approved** **ADR-449, 450, 451 (2026-10-09; agent defaults, this note awaits approval, building didn't
 > wait): how a phone gets its lists.** A phone whose monitor is signed in asks for its lists
 > whenever it has a connection. The server works out again which assignment the phone takes
 > (§7.2's rule) and answers that assignment's lists; with no assignment that day it sends none
@@ -719,7 +737,7 @@ So the protection can't rest on the password. It rests on these:
   number block (ADR-065) and has it wiped. Once wiped, its device key is revoked and the server
   refuses it.
 
-> ⚠️ **ADR-436, 437, 440 (2026-10-09; agent defaults, this note awaits approval, building didn't
+✅ **Approved** **ADR-436, 437, 440 (2026-10-09; agent defaults, this note awaits approval, building didn't
 > wait): how a phone proves itself.** The key is ECDSA P-256. Before a sync the phone asks for a
 > challenge by its id, signs it, and is given a token good for fifteen minutes that its calls
 > carry as `Authorization: Bearer`; a challenge is good for two minutes and once. Nobody need be
