@@ -409,6 +409,7 @@ export class Intake {
             id: photo.id,
             projectId: photo.projectId,
             fieldEventId: owner('FIELD_EVENT'),
+            certificationId: owner('CERTIFICATION'),
             scaleReceiptId: owner('SCALE_RECEIPT'),
             roeId: owner('ROE'),
             surveyId: owner('SURVEY'),

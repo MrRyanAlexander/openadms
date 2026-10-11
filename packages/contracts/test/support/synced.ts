@@ -1,6 +1,6 @@
 // The example world's records as a phone sends them, for the contract's own tests (ADR-466, 467):
 // one of each kind, from Monday on P1.
-import type { SyncedFieldEvent, SyncedRecord } from '../../src/index.ts';
+import type { SyncedCertification, SyncedFieldEvent, SyncedRecord } from '../../src/index.ts';
 
 export const made = (last: string): string => `019a0000-0000-7000-8000-${last.padStart(12, '0')}`;
 export const p1 = made('p1'.replace('p', 'a'));
@@ -9,6 +9,10 @@ export const kim = made('b2');
 export const assignment = made('c1');
 export const vegetative = made('d1');
 export const landfill = made('e1');
+export const sam = made('b3');
+export const lee = made('b4');
+export const coastline = made('a2');
+export const dogBox = made('f4');
 
 // Ana's collection on 101001 at 14 Oak St, as her phone sends it.
 export const collection: SyncedFieldEvent = {
@@ -85,6 +89,93 @@ export const form = {
   notes: null,
 };
 
+const unmeasured = {
+  length: null,
+  secondLength: null,
+  width: null,
+  height: null,
+  diameter: null,
+  radius: null,
+  run: null,
+  corners: null,
+};
+
+// Sam's certification of Rivera's self-loader as 730416, Lee helping (`spec/CONVENTIONS.md` §6):
+// the primary box and a dog box, a triangle, subtracted. They work out to 48 CY, which the phone
+// never sends.
+export const certification: SyncedCertification = {
+  id: made('8'),
+  projectId: p1,
+  certNumber: '730416',
+  kind: 'CONTAINER',
+  primeId: coastline,
+  firstTierSub: 'Rivera Trucking',
+  secondTierSub: null,
+  vehicleTypeId: made('f5'),
+  vehicleTypeOther: null,
+  crewTypeId: null,
+  boxes: [
+    {
+      ...unmeasured,
+      featureId: null,
+      featureOther: null,
+      shape: 'RECTANGLE',
+      sign: 'ADD',
+      length: 264,
+      width: 92,
+      height: 96,
+    },
+    {
+      ...unmeasured,
+      featureId: dogBox,
+      featureOther: null,
+      shape: 'TRIANGLE',
+      sign: 'SUBTRACT',
+      length: 36,
+      width: 92,
+      height: 48,
+    },
+  ],
+  driverName: 'Marco Rivera',
+  driverPhone: null,
+  driverLicenceNumber: 'R160-542-80-112-0',
+  driverLicenceState: 'FL',
+  driverLicenceExpiry: '2028-03-31',
+  tagNumber: 'RVT 4821',
+  tagState: 'FL',
+  tagExpiry: '2027-03-31',
+  certifiedAt: '2026-10-10T13:40:00.000Z',
+  deviceUtcOffsetMinutes: -240,
+  certifiedById: sam,
+  assignmentId: assignment,
+  helperIds: [lee],
+  clientRepresentativeName: null,
+  contractorRepresentativeName: null,
+  replaces: null,
+  notes: null,
+};
+
+// Coastline's bucket truck crew as 730417: nothing measured.
+export const crew: SyncedCertification = {
+  ...certification,
+  id: made('9'),
+  certNumber: '730417',
+  kind: 'CREW',
+  firstTierSub: null,
+  vehicleTypeId: null,
+  vehicleTypeOther: 'Bucket',
+  crewTypeId: made('f6'),
+  boxes: [],
+  driverName: null,
+  driverLicenceNumber: null,
+  driverLicenceState: null,
+  driverLicenceExpiry: null,
+  tagNumber: null,
+  tagState: null,
+  tagExpiry: null,
+  helperIds: [],
+};
+
 // One of each kind, as a phone sends them.
 export const records: SyncedRecord[] = [
   { record: 'FIELD_EVENT', fieldEvent: collection },
@@ -158,4 +249,5 @@ export const records: SyncedRecord[] = [
       deviceUtcOffsetMinutes: -240,
     },
   },
+  { record: 'CERTIFICATION', certification },
 ];

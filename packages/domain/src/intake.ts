@@ -108,10 +108,16 @@ export class Quarantine implements QuarantineNotice {
 }
 
 // Why a record a phone sent is not saved and is kept nowhere on the server (ADR-338 (11), 467):
-// it isn't a record at all, something it names is no record the server has, or the assignment
-// it was made under was itself not saved. It stays on its phone, for a person. Never a
-// judgement of the work: nothing is refused over eligibility (ADR-052).
-export const notSavedReasons = ['NOT_A_RECORD', 'NAMES_NO_RECORD', 'ASSIGNMENT_NOT_SAVED'] as const;
+// it isn't a record at all, something it names is no record the server has, the assignment it
+// was made under was itself not saved, or it is a certification its own rules refuse (ADR-469).
+// It stays on its phone, for a person. Never a judgement of the work: nothing is refused over
+// eligibility (ADR-052).
+export const notSavedReasons = [
+  'NOT_A_RECORD',
+  'NAMES_NO_RECORD',
+  'ASSIGNMENT_NOT_SAVED',
+  'CERTIFICATION_REFUSED',
+] as const;
 export type NotSavedReason = (typeof notSavedReasons)[number];
 
 // What a phone is told of such a record.
@@ -119,6 +125,8 @@ export interface NotSavedNotice {
   readonly reason: NotSavedReason;
   readonly message: string;
 }
+
+const notSavedLead = 'Not saved: ';
 
 export class NotSaved implements NotSavedNotice {
   readonly reason: NotSavedReason;
@@ -149,6 +157,23 @@ export class NotSaved implements NotSavedNotice {
     return new NotSaved(
       'ASSIGNMENT_NOT_SAVED',
       'Not saved: the assignment this record was made under was not saved.',
+    );
+  }
+
+  // A certification its own rules refuse (ADR-469): measurements that give no capacity, a
+  // replacement that doesn't say why, a sub typed into both tiers. `why` is the rule's own
+  // words, as the certifying phone's copy of it says them.
+  static certificationRefused(why: string): NotSaved {
+    const said = why.startsWith(notSavedLead) ? why.slice(notSavedLead.length) : why;
+    return new NotSaved('CERTIFICATION_REFUSED', `${notSavedLead}${said}`);
+  }
+
+  // A certification whose number another certification of its project already has: a cert
+  // number is one certification's (ADR-045). Never the other certification's own details.
+  static certNumberHeld(certNumber: string): NotSaved {
+    return new NotSaved(
+      'CERTIFICATION_REFUSED',
+      `${notSavedLead}this project already has a certification ${certNumber}.`,
     );
   }
 }

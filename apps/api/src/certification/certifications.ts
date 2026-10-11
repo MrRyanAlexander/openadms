@@ -37,6 +37,7 @@ import {
 } from '@open-adms/domain';
 
 import type { WorkQueued } from '../jobs/work-queue.ts';
+import type { SentCertification } from '../sync/sent.ts';
 import { ReviewService } from '../review/review-service.ts';
 import { SubPlaces } from '../setup/contractor-setup.ts';
 import { day, type Outcome, Refused, type Warn } from '../setup/setup-service.ts';
@@ -102,7 +103,35 @@ export interface NewCertification {
   readonly notes?: string;
 }
 
+// A record with what was sent as `null` left out.
+type Stated<T> = {
+  [K in keyof T as null extends T[K] ? never : K]: T[K];
+} & {
+  [K in keyof T as null extends T[K] ? K : never]?: NonNullable<T[K]>;
+};
+
+function stated<T extends object>(sent: T): Stated<T> {
+  return Object.fromEntries(
+    Object.entries(sent).filter(([, value]) => value !== null),
+  ) as Stated<T>;
+}
+
 export class Certifications extends ReviewService {
+  // A certification as a phone's sync sends it (the contract's own shape, `syncedRecordSchema`'s
+  // seventh kind, ADR-469), from the phone that proved itself: handed to `certify` whole, never
+  // a second way in. What the phone left empty is left out.
+  received(sent: SentCertification): Promise<Outcome<Certification>> {
+    const { boxes, helperIds, replaces, ...rest } = sent;
+    return this.certify({
+      ...stated(rest),
+      boxes: boxes.map((box) => stated(box)),
+      helperIds,
+      ...(replaces === null
+        ? {}
+        : { replaces: { certificationId: replaces.replacedId, reason: replaces.reason } }),
+    });
+  }
+
   certify(input: NewCertification): Promise<Outcome<Certification>> {
     const actor: Actor =
       input.deviceId === undefined

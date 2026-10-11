@@ -21,15 +21,20 @@ import {
   endpoints,
   markSignaturesOnFileEndpoint,
   revokeCertificationEndpoint,
+  syncedRecordSchema,
   type Endpoint,
+  type SyncedCertification,
 } from '@open-adms/contracts';
 import type { Database } from '@open-adms/db';
+import { NotSaved } from '@open-adms/domain';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { Certifications } from '../src/certification/certifications.ts';
+import { Intake } from '../src/sync/intake.ts';
 import { Corrections } from '../src/review/corrections.ts';
 import { installationSettings, openInstallation, type Tx } from './support/database.ts';
 import { shippedPolicy } from './support/process.ts';
+import { enrolledPhone } from './support/phones.ts';
 import { audited, jobsFor, luisHolds, notTaken, p1WithTickets } from './support/review.ts';
 import { danasEmail, long, worldOn, type People, type Served } from './support/served.ts';
 import {
@@ -460,6 +465,202 @@ describe('a certification revoked', () => {
       ]);
       // Nothing is blocked: the field events that scanned it stand as they were.
       expect(await tx.fieldEvent.count({ where: { certificationId: c.trailer.id } })).toBe(2);
+    });
+  });
+});
+
+// The sync contract's own shape is what `certify` takes (task 2.6.1 part 3, ADR-469): a
+// certification read by the contracts' schema, given the phone the server knows it came from.
+describe('a certification as a phone sends it', () => {
+  it('AC-10-35, AC-03-34 Kim certifies Rivera’s self-loader as 730416 on a phone: sent as the sync contract says, with no capacity and no phone named, it is read by the schema and made by certify, 48 CY worked out; a photograph names it; one its rules refuse is told their words and nothing is written', async () => {
+    await world(async (served, tx, who, within) => {
+      const c = await certified(served, tx, within, who);
+      const phone = await enrolledPhone(served, tx, 'P1-HO-TDSR');
+      const assignment = await tx.assignment.create({
+        data: {
+          personId: who.kim,
+          workDate: new Date('2026-10-10'),
+          projectId: c.project.id,
+          certifying: true,
+          origin: 'PLANNED',
+          madeById: who.dana,
+        },
+      });
+      const unmeasured = {
+        secondLength: null,
+        diameter: null,
+        radius: null,
+        run: null,
+        corners: null,
+      };
+      const sent: SyncedCertification = {
+        id: randomUUID(),
+        projectId: c.project.id,
+        certNumber: '730416',
+        kind: 'CONTAINER',
+        primeId: c.coastline,
+        firstTierSub: 'Rivera Trucking',
+        secondTierSub: null,
+        vehicleTypeId: null,
+        vehicleTypeOther: 'Self-loader',
+        crewTypeId: null,
+        boxes: [
+          {
+            ...unmeasured,
+            featureId: null,
+            featureOther: null,
+            shape: 'RECTANGLE',
+            sign: 'ADD',
+            length: 264,
+            width: 92,
+            height: 96,
+          },
+          {
+            ...unmeasured,
+            featureId: null,
+            featureOther: 'Dog box',
+            shape: 'TRIANGLE',
+            sign: 'SUBTRACT',
+            length: 36,
+            width: 92,
+            height: 48,
+          },
+        ],
+        driverName: 'Marco Rivera',
+        driverPhone: null,
+        driverLicenceNumber: 'R160-542-80-112-0',
+        driverLicenceState: 'FL',
+        driverLicenceExpiry: '2028-03-31',
+        // The tag wasn't read: left empty, and left out of what certify is handed.
+        tagNumber: null,
+        tagState: null,
+        tagExpiry: null,
+        certifiedAt: '2026-10-10T13:40:00.000Z',
+        deviceUtcOffsetMinutes: -240,
+        certifiedById: who.kim,
+        assignmentId: assignment.id,
+        helperIds: [],
+        clientRepresentativeName: null,
+        contractorRepresentativeName: null,
+        replaces: null,
+        notes: null,
+      };
+      // As it travels: text, a time as a UTC instant.
+      const read = (certification: SyncedCertification) => {
+        const record = syncedRecordSchema.parse(
+          JSON.parse(JSON.stringify({ record: 'CERTIFICATION', certification })),
+        );
+        if (record.record !== 'CERTIFICATION') throw new Error('Not a certification.');
+        return { ...record.certification, deviceId: phone.id };
+      };
+      const certifications = new Certifications(within, served.clock, shippedPolicy);
+      const before = await changed(tx);
+
+      // What its own rules refuse is told their words, and nothing is written: a modified
+      // truck that doesn't say why, and a crew with a box.
+      const refusals = [];
+      for (const more of [
+        { replaces: { replacedId: c.trailer.id, reason: ' ' } },
+        { kind: 'CREW' as const, vehicleTypeOther: 'Bucket' },
+      ]) {
+        const outcome = await certifications.received(read({ ...sent, ...more }));
+        if (outcome.saved) throw new Error('Saved.');
+        const { reason, message } = NotSaved.certificationRefused(outcome.refusal.message);
+        refusals.push({ reason, message });
+      }
+      expect(refusals).toEqual([
+        {
+          reason: 'CERTIFICATION_REFUSED',
+          message:
+            'Not saved: certification 730416 replaces another, so it says why (sideboards added, bed rebuilt…).',
+        },
+        {
+          reason: 'CERTIFICATION_REFUSED',
+          message: 'Not saved: A crew is not measured: it has no boxes and no capacity.',
+        },
+      ]);
+      expect(await changed(tx)).toBe(before);
+
+      const outcome = await certifications.received(read(sent));
+      if (!outcome.saved) throw new Error(outcome.refusal.message);
+      const made = await tx.certification.findUniqueOrThrow({
+        where: { id: sent.id },
+        include: { firstTierSub: true },
+      });
+      expect([
+        made.certNumber,
+        made.capacityCy,
+        made.deviceId,
+        made.assignmentId,
+        made.certifiedById,
+        made.firstTierSub?.name,
+        made.vehicleTypeOther,
+        made.driverLicenceExpiry,
+        made.tagExpiry,
+        made.signaturesOnFile,
+        made.replacesId,
+      ]).toEqual([
+        '730416',
+        48,
+        phone.id,
+        assignment.id,
+        who.kim,
+        'Rivera Trucking',
+        'Self-loader',
+        new Date('2028-03-31'),
+        null,
+        false,
+        null,
+      ]);
+      expect(made.certifiedAt).toEqual(new Date('2026-10-10T13:40:00Z'));
+      expect(
+        (
+          await tx.certificationBox.findMany({
+            where: { certificationId: sent.id },
+            orderBy: { position: 'asc' },
+          })
+        ).map((box) => [box.position, box.shape, box.sign, box.featureOther, box.secondLength]),
+      ).toEqual([
+        [0, 'RECTANGLE', 'ADD', null, null],
+        [1, 'TRIANGLE', 'SUBTRACT', 'Dog box', null],
+      ]);
+      const [written] = await tx.auditRecord.findMany({
+        where: { tableName: 'certification', recordId: sent.id },
+      });
+      expect([written?.operation, written?.actorId, written?.source, written?.deviceId]).toEqual([
+        'INSERT',
+        who.kim,
+        'DEVICE',
+        phone.id,
+      ]);
+
+      // Its left side, as a photograph's record: it names the certification and its view.
+      const photoId = randomUUID();
+      const answer = await new Intake(within, served.clock, shippedPolicy).receive({
+        record: 'PHOTO',
+        photo: {
+          id: photoId,
+          projectId: c.project.id,
+          owner: { kind: 'CERTIFICATION', id: sent.id },
+          view: 'LEFT',
+          takenById: who.kim,
+          deviceId: phone.id,
+          capturedAt: new Date('2026-10-10T13:42:00Z'),
+          deviceUtcOffsetMinutes: -240,
+          latitude: null,
+          longitude: null,
+          originalSha256: 'a'.repeat(64),
+          uploadedSha256: 'a'.repeat(64),
+          objectKey: `photographs/P1-HO-TDSR/${photoId}`,
+        },
+      });
+      expect(answer).toEqual({ answer: 'SAVED', id: photoId, notes: [] });
+      const photo = await tx.photo.findUniqueOrThrow({ where: { id: photoId } });
+      expect([photo.certificationId, photo.view, photo.fieldEventId]).toEqual([
+        sent.id,
+        'LEFT',
+        null,
+      ]);
     });
   });
 });

@@ -337,6 +337,10 @@ export {
 export { notRead, notTaken } from './not-taken.ts';
 export { fieldEventDetailsSchema, type FieldEventDetailsPayload } from './field-event-details.ts';
 export {
+  certificationBoxesAtMost,
+  certificationHelpersAtMost,
+  syncedCertificationBoxSchema,
+  syncedCertificationSchema,
   syncedDropOffLogSchema,
   syncedFieldEventSchema,
   syncedIncidentSchema,
@@ -346,6 +350,7 @@ export {
   syncedRoeSchema,
   syncedScaleReceiptSchema,
   syncedSurveySchema,
+  type ReceivedCertification,
   type ReceivedDropOffLog,
   type ReceivedFieldEvent,
   type ReceivedIncident,
@@ -354,6 +359,7 @@ export {
   type ReceivedRoe,
   type ReceivedScaleReceipt,
   type ReceivedSurvey,
+  type SyncedCertification,
   type SyncedDropOffLog,
   type SyncedFieldEvent,
   type SyncedIncident,

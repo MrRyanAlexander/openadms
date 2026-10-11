@@ -1,9 +1,9 @@
 // The records a phone sends at a sync, one schema a kind (ARCHITECTURE §9 (2), (3), §10;
 // spec/parts/05-sync.md steps 3…6; spec/acceptance/05-sync.md; AC-10-35, 36; T-12; BACKLOG 2.6.1,
 // C69, C84 (9); ADR-022, 052, 100, 236, 329, 338, 466; REQ-004, 203): a field event with its item
-// lines and the tickets it carries, a scale receipt, an incident, a drop-off log, a survey and an
-// ROE made on a phone. Each carries the id its phone made when the record began, its project and
-// the monitor who made it.
+// lines and the tickets it carries, a scale receipt, an incident, a drop-off log, a survey, an
+// ROE made on a phone, and a certification of a container or a crew (ADR-469). Each carries the
+// id its phone made when the record began, its project and the monitor who made it.
 //
 // **A schema says what a record can be at all, and nothing about whether the work was right**
 // (ADR-052): a type, a length, a range the database itself holds. A debris type, a load call or
@@ -14,13 +14,22 @@
 //
 // **Never here** (AC-10-35): a status, a zone, a mileage, a flag, a pay item worked out, a rate,
 // an amount, a certified capacity or a completed load. A capacity typed for a truck keyed in by
-// hand is the monitor's claim and never bills (ADR-154). **Nor which phone a record is from, or
+// hand is the monitor's claim and never bills (ADR-154); a certification sends its measured
+// boxes, and the server works the capacity out (ADR-076). **Nor which phone a record is from, or
 // that a phone made it:** the phone has proved itself, and the server says both (ADR-466).
 //
 // A time is sent as a UTC instant, with how far the phone's clock stood from UTC beside it
-// (ADR-100), and is read as a `Date`. A photograph's record comes with its upload (2.6.4), a
-// certification with part 3 of this task.
-import { FieldEventDetails, fieldEventKinds, measuredAs, workflows } from '@open-adms/domain';
+// (ADR-100), and is read as a `Date`. A photograph's record comes with its upload (2.6.4): a
+// certification's five are photographs like any other's, each naming its certification.
+import {
+  boxShapes,
+  boxSigns,
+  type CertificationKind,
+  FieldEventDetails,
+  fieldEventKinds,
+  measuredAs,
+  workflows,
+} from '@open-adms/domain';
 import { z } from 'zod';
 
 import { places } from './field-event-details.ts';
@@ -42,6 +51,14 @@ const fixHalf = z.string().max(40).nullable();
 // The version of its lists the phone captured with.
 const setupVersion = z.number().int().min(1).max(2_000_000_000);
 const pounds = places(2).max(9_999_999_999.99);
+// A name, a number or a state as written on a certification sheet.
+const written = z.string().max(200);
+// A whole number of inches, 1 or more (adms-certifications §3A.3).
+export const inches = z.number().int().min(1).max(9999);
+// How many radius corners.
+export const cornerCount = z.number().int().min(1).max(99);
+// A calendar day: 2026-10-09.
+const calendarDay = z.iso.date();
 
 // The firm's own fields as answered, with the version of the definition the phone showed
 // (ADR-278): both left out where the form has none. An answer is text, a number, yes or no, a
@@ -207,8 +224,7 @@ export const syncedRoeSchema = z.strictObject({
   address: words.nullable(),
   ownerName: words.nullable(),
   signed: z.boolean(),
-  // A calendar day: 2026-10-09.
-  signedDate: z.iso.date().nullable(),
+  signedDate: calendarDay.nullable(),
   latitude: fixHalf.optional(),
   longitude: fixHalf.optional(),
   madeById: id,
@@ -218,8 +234,114 @@ export const syncedRoeSchema = z.strictObject({
   ...answered,
 });
 
+// One measured box of a container, as the sheet has it: the first sent is the primary, the main
+// interior; each after it is a feature, picked from the firm's list or typed, that adds or
+// subtracts. A shape sends its own measurements and `null` for the rest; which those are, and
+// what they work out to, is the domain's `Capacity`, asked by the server.
+export const syncedCertificationBoxSchema = z.strictObject({
+  featureId: id.nullable(),
+  featureOther: written.nullable(),
+  shape: z.enum(boxShapes),
+  sign: z.enum(boxSigns),
+  length: inches.nullable(),
+  // A hoist's or a dog house's second length.
+  secondLength: inches.nullable(),
+  width: inches.nullable(),
+  height: inches.nullable(),
+  diameter: inches.nullable(),
+  radius: inches.nullable(),
+  run: inches.nullable(),
+  corners: cornerCount.nullable(),
+});
+
+const certificationKinds = ['CONTAINER', 'CREW'] as const satisfies readonly CertificationKind[];
+
+// As many boxes as a sheet could hold, and as many helpers as a crew of monitors.
+export const certificationBoxesAtMost = 100;
+export const certificationHelpersAtMost = 20;
+
+// A certification of a container or a crew, as the certifying phone sends it (adms-certifications
+// §3A; spec/parts/03-certification.md; ADR-015, 045, 076, 108, 294, 469): what
+// `Certifications.certify` takes, and the only way one is made. **Never its capacity**: the
+// phone sends the boxes it measured and the server works the capacity out by the same rule
+// (AC-10-35). Never its QC status, whether signatures are on file, or a revocation: those are
+// the back office's. Its number is the next of the phone's block of the project's series, or
+// the pre-printed paper's as typed (ADR-045, 323). The prime is picked; a sub is typed by name
+// into tier 1 or tier 2, and who that is, is the server's to work out (ADR-108).
+export const syncedCertificationSchema = z
+  .strictObject({
+    id,
+    projectId: id,
+    // Cert = placard = badge: one number, as written, never parsed (invariant 9).
+    certNumber: numberAsSent.regex(/\S/),
+    kind: z.enum(certificationKinds),
+    primeId: id,
+    firstTierSub: written.nullable(),
+    secondTierSub: written.nullable(),
+    // Picked from the firm's list, or typed where nothing on it fits (ADR-070).
+    vehicleTypeId: id.nullable(),
+    vehicleTypeOther: written.nullable(),
+    crewTypeId: id.nullable(),
+    // A container's, the primary first; none on a crew (invariant 10).
+    boxes: z.array(syncedCertificationBoxSchema).max(certificationBoxesAtMost).readonly(),
+    // The driver: recorded, never checked (ADR-153).
+    driverName: written.nullable(),
+    driverPhone: written.nullable(),
+    driverLicenceNumber: written.nullable(),
+    driverLicenceState: written.nullable(),
+    driverLicenceExpiry: calendarDay.nullable(),
+    // The tag (plate); an expired one flags later tickets, never this record (ADR-079).
+    tagNumber: written.nullable(),
+    tagState: written.nullable(),
+    tagExpiry: calendarDay.nullable(),
+    certifiedAt: instant,
+    deviceUtcOffsetMinutes: offset,
+    // The monitor who made and measured it, and the assignment the phone held (ADR-240).
+    certifiedById: id,
+    assignmentId: id,
+    // Whoever helped measure, picked from the people assigned with the monitor (ADR-294).
+    helperIds: z
+      .array(id)
+      .max(certificationHelpersAtMost)
+      .refine((helpers) => new Set(helpers).size === helpers.length, {
+        message: 'A helper is picked once.',
+      })
+      .readonly(),
+    // Names only (ADR-080).
+    clientRepresentativeName: written.nullable(),
+    contractorRepresentativeName: written.nullable(),
+    // A modified truck certified again: the certification this one replaces, from the phone's
+    // lists, and why (ADR-082).
+    replaces: z.strictObject({ replacedId: id, reason: words }).nullable(),
+    notes: words.nullable(),
+  })
+  // What the database itself holds a certification to, said before it is tried: what was
+  // certified is picked or typed, never both; a crew type is a crew's; the primary box is the
+  // interior itself, and every box after it is a feature, picked or typed.
+  .superRefine((certification, context) => {
+    const refuse = (message: string, ...path: (string | number)[]): void => {
+      context.addIssue({ code: 'custom', message, path });
+    };
+    if (certification.vehicleTypeId !== null && certification.vehicleTypeOther !== null) {
+      refuse('A vehicle type is picked or typed, never both.', 'vehicleTypeOther');
+    }
+    if (certification.kind === 'CONTAINER' && certification.crewTypeId !== null) {
+      refuse('A container has no crew type.', 'crewTypeId');
+    }
+    certification.boxes.forEach((box, position) => {
+      const features = (box.featureId === null ? 0 : 1) + (box.featureOther === null ? 0 : 1);
+      if (position === 0 && features !== 0) {
+        refuse('The primary box is the main interior: it has no feature.', 'boxes', 0);
+      } else if (position > 0 && features !== 1) {
+        refuse('A box after the primary is a feature, picked or typed.', 'boxes', position);
+      }
+    });
+  });
+
 // The kinds of record a phone sends at a sync, in no order: arrival order means nothing
-// (ADR-030), except that a scale receipt is sent before the disposals that point at it.
+// (ADR-030), except that a scale receipt is sent before the disposals that point at it. A
+// certification may arrive after field events that scanned its number: they are linked to it
+// then (ADR-420).
 export const syncedRecordKinds = [
   'FIELD_EVENT',
   'SCALE_RECEIPT',
@@ -227,6 +349,7 @@ export const syncedRecordKinds = [
   'DROP_OFF_LOG',
   'SURVEY',
   'ROE',
+  'CERTIFICATION',
 ] as const;
 
 // One record, named by its kind.
@@ -237,6 +360,7 @@ export const syncedRecordSchema = z.discriminatedUnion('record', [
   z.strictObject({ record: z.literal('DROP_OFF_LOG'), dropOffLog: syncedDropOffLogSchema }),
   z.strictObject({ record: z.literal('SURVEY'), survey: syncedSurveySchema }),
   z.strictObject({ record: z.literal('ROE'), roe: syncedRoeSchema }),
+  z.strictObject({ record: z.literal('CERTIFICATION'), certification: syncedCertificationSchema }),
 ]);
 
 // `Synced…` is a record as a phone sends it (a time as text); `Received…` as the server reads
@@ -248,6 +372,7 @@ export type SyncedIncident = z.input<typeof syncedIncidentSchema>;
 export type SyncedDropOffLog = z.input<typeof syncedDropOffLogSchema>;
 export type SyncedSurvey = z.input<typeof syncedSurveySchema>;
 export type SyncedRoe = z.input<typeof syncedRoeSchema>;
+export type SyncedCertification = z.input<typeof syncedCertificationSchema>;
 export type SyncedRecord = z.input<typeof syncedRecordSchema>;
 export type SyncedRecordKind = (typeof syncedRecordKinds)[number];
 export type ReceivedItem = z.output<typeof syncedItemSchema>;
@@ -257,4 +382,5 @@ export type ReceivedIncident = z.output<typeof syncedIncidentSchema>;
 export type ReceivedDropOffLog = z.output<typeof syncedDropOffLogSchema>;
 export type ReceivedSurvey = z.output<typeof syncedSurveySchema>;
 export type ReceivedRoe = z.output<typeof syncedRoeSchema>;
+export type ReceivedCertification = z.output<typeof syncedCertificationSchema>;
 export type ReceivedRecord = z.output<typeof syncedRecordSchema>;

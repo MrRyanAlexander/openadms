@@ -1,11 +1,14 @@
 // The records a phone sends at a sync, at the contracts package (spec/acceptance/05-sync.md
 // AC-05-11, 14, 36…39; spec/acceptance/10-api-and-sync.md AC-10-35, 36; AC-04-26, 37, 46;
-// T-12; BACKLOG 2.6.1 part 1; ADR-052, 329, 466; REQ-004): what each kind of record can be at
-// all, and that nothing else is refused.
+// T-12; BACKLOG 2.6.1 parts 1 and 3; ADR-052, 329, 466, 469; REQ-004): what each kind of record
+// can be at all, and that nothing else is refused.
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import {
+  certificationBoxesAtMost,
+  certificationHelpersAtMost,
+  syncedCertificationSchema,
   syncedDropOffLogSchema,
   syncedFieldEventSchema,
   syncedIncidentSchema,
@@ -14,9 +17,10 @@ import {
   syncedRoeSchema,
   syncedScaleReceiptSchema,
   syncedSurveySchema,
+  type SyncedCertification,
   type SyncedFieldEvent,
 } from '../src/index.ts';
-import { collection, disposal, made, records } from './support/synced.ts';
+import { certification, collection, crew, disposal, lee, made, records } from './support/synced.ts';
 
 const refusals = (schema: z.ZodType, payload: unknown): string[] => {
   const result = schema.safeParse(payload);
@@ -97,11 +101,139 @@ describe('the records a phone sends', () => {
       [syncedDropOffLogSchema, records[3]?.record === 'DROP_OFF_LOG' && records[3].dropOffLog],
       [syncedSurveySchema, records[4]?.record === 'SURVEY' && records[4].survey],
       [syncedRoeSchema, records[5]?.record === 'ROE' && records[5].roe],
+      [syncedCertificationSchema, certification],
     ] as const) {
       expect(refusals(schema, sent)).toEqual([]);
       expect(refusals(schema, { ...sent, deviceId: made('97') })).toEqual([
         ': Unrecognized key: "deviceId"',
       ]);
+    }
+  });
+
+  it('AC-10-35, AC-03-01, 02 a certification made on a phone is a record of its own kind: its measured boxes and never a capacity, its number as written, nothing the back office marks', () => {
+    const refused = (more: Record<string, unknown>, from = certification): string[] =>
+      refusals(syncedCertificationSchema, { ...from, ...more });
+    expect(refused({})).toEqual([]);
+    expect(refused({}, crew)).toEqual([]);
+    const read = syncedRecordSchema.parse({ record: 'CERTIFICATION', certification });
+    if (read.record !== 'CERTIFICATION') throw new Error('Not a certification.');
+    expect(read.certification.certifiedAt).toEqual(new Date('2026-10-10T13:40:00Z'));
+    expect(read.certification.boxes).toHaveLength(2);
+    // Nobody sends a capacity, a QC status, signatures on file, a revocation, who the subs
+    // are, or the phone: each is refused, never dropped.
+    for (const forged of [
+      { capacityCy: 65 },
+      { qcStatus: 'QC_APPROVED' },
+      { signaturesOnFile: true },
+      { revokedFrom: '2026-10-14' },
+      { firstTierSubId: made('a3') },
+      { receivedAt: '2026-10-10T14:00:00.000Z' },
+      { deviceId: made('97') },
+      { source: 'BACK_OFFICE' },
+    ]) {
+      const [name] = Object.keys(forged);
+      expect(refused(forged), name).toEqual([`: Unrecognized key: "${String(name)}"`]);
+    }
+    const [primary, feature] = certification.boxes;
+    if (primary === undefined || feature === undefined) throw new Error('No boxes.');
+    expect(refused({ boxes: [{ ...primary, cubicInches: '2331648.00' }] })).toEqual([
+      'boxes.0: Unrecognized key: "cubicInches"',
+    ]);
+    // The number is one number, as written: typed off a pre-printed sheet it need not be the
+    // series' (ADR-045), and it is never trimmed; blank is no number.
+    expect(
+      syncedCertificationSchema.parse({ ...certification, certNumber: ' 88120' }).certNumber,
+    ).toBe(' 88120');
+    for (const certNumber of ['', '   ', '7'.repeat(41), 730416]) {
+      expect(refused({ certNumber }), JSON.stringify(certNumber)).not.toEqual([]);
+    }
+    // A sub is typed by name; a modified truck names the certification it replaces, and why.
+    expect(
+      refused({ firstTierSub: 'Rivera Trucking', secondTierSub: 'Tidewater Hauling' }),
+    ).toEqual([]);
+    expect(refused({ replaces: { replacedId: made('8a'), reason: 'Sideboards added' } })).toEqual(
+      [],
+    );
+    expect(refused({ replaces: { replacedId: '730416', reason: 'Sideboards added' } })).toEqual([
+      'replaces.replacedId: Invalid UUID',
+    ]);
+    expect(refused({ replaces: { replacedId: made('8a') } })).toHaveLength(1);
+  });
+
+  it('AC-03-26, 36 what a certification can be at all: whole inches, a feature on every box but the primary, a vehicle type picked or typed, a crew type on a crew, a helper once, every list with an end', () => {
+    const refused = (
+      more: Partial<Record<keyof SyncedCertification, unknown>>,
+      from = certification,
+    ) => refusals(syncedCertificationSchema, { ...from, ...more });
+    const [primary, feature] = certification.boxes;
+    if (primary === undefined || feature === undefined) throw new Error('No boxes.');
+    // Whether the boxes give a capacity is the domain's rule, asked by the server: a crew with
+    // a box, a container with none and a radius corner that adds are all read here.
+    expect(refused({ boxes: [primary] }, crew)).toEqual([]);
+    expect(refused({ boxes: [] })).toEqual([]);
+    expect(
+      refused({
+        boxes: [
+          primary,
+          { ...feature, shape: 'RADIUS_CORNER', sign: 'ADD', radius: 12, run: 60, corners: 2 },
+        ],
+      }),
+    ).toEqual([]);
+    expect(refused({ boxes: [{ ...primary, length: 264.5 }] })).toEqual([
+      'boxes.0.length: Invalid input: expected int, received number',
+    ]);
+    expect(refused({ boxes: [{ ...primary, width: 0 }] })).toEqual([
+      'boxes.0.width: Too small: expected number to be >=1',
+    ]);
+    expect(refused({ boxes: [{ ...primary, height: 10_000 }] })).toHaveLength(1);
+    expect(refused({ boxes: [{ ...primary, shape: 'CYLINDER' }] })).toHaveLength(1);
+    expect(refused({ boxes: [{ ...primary, sign: 'MULTIPLY' }] })).toHaveLength(1);
+    expect(refused({ boxes: [primary, { ...feature, corners: 100 }] })).toHaveLength(1);
+    expect(refused({ boxes: [{ ...primary, featureOther: 'Interior' }] })).toEqual([
+      'boxes.0: The primary box is the main interior: it has no feature.',
+    ]);
+    expect(refused({ boxes: [primary, { ...feature, featureId: null }] })).toEqual([
+      'boxes.1: A box after the primary is a feature, picked or typed.',
+    ]);
+    expect(refused({ boxes: [primary, { ...feature, featureOther: 'Dog box' }] })).toEqual([
+      'boxes.1: A box after the primary is a feature, picked or typed.',
+    ]);
+    expect(
+      refused({ boxes: [primary, { ...feature, featureId: null, featureOther: 'Dog box' }] }),
+    ).toEqual([]);
+    expect(refused({ vehicleTypeOther: 'Self-loader' })).toEqual([
+      'vehicleTypeOther: A vehicle type is picked or typed, never both.',
+    ]);
+    expect(refused({ crewTypeId: made('f6') })).toEqual([
+      'crewTypeId: A container has no crew type.',
+    ]);
+    expect(refused({ helperIds: [lee, lee] })).toEqual(['helperIds: A helper is picked once.']);
+    expect(refused({ helperIds: ['Lee Morgan'] })).toHaveLength(1);
+    const many = <T>(count: number, each: (at: number) => T): T[] =>
+      Array.from({ length: count }, (_, at) => each(at));
+    expect(
+      refused({ boxes: [primary, ...many(certificationBoxesAtMost - 1, () => feature)] }),
+    ).toEqual([]);
+    expect(
+      refused({ boxes: [primary, ...many(certificationBoxesAtMost, () => feature)] }),
+    ).toHaveLength(1);
+    expect(
+      refused({ helperIds: many(certificationHelpersAtMost + 1, (at) => made(`c${String(at)}`)) }),
+    ).toHaveLength(1);
+    for (const value of [
+      { kind: 'VEHICLE' },
+      { primeId: 'Coastline Haulers LLC' },
+      { certifiedById: 'M004131' },
+      { assignmentId: null },
+      { firstTierSub: 'x'.repeat(201) },
+      { driverName: 'x'.repeat(201) },
+      { tagExpiry: '31 March 2027' },
+      { driverLicenceExpiry: '2028-03-31T00:00:00Z' },
+      { certifiedAt: '2026-10-10T09:40:00-04:00' },
+      { deviceUtcOffsetMinutes: 841 },
+      { notes: 'x'.repeat(2001) },
+    ] satisfies Partial<Record<keyof SyncedCertification, unknown>>[]) {
+      expect(refused(value), JSON.stringify(value)).not.toEqual([]);
     }
   });
 

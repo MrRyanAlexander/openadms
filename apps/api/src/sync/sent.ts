@@ -5,6 +5,7 @@
 // task 2.6.2's (REQ-203).
 import type {
   IntakeNote as NoteAnswered,
+  ReceivedCertification,
   ReceivedDropOffLog,
   ReceivedFieldEvent,
   ReceivedIncident,
@@ -75,14 +76,25 @@ export type SentSurvey = Readonly<ReceivedSurvey> & FromAPhone;
 // has one, typed (ADR-149, 323).
 export type SentRoe = Readonly<ReceivedRoe> & FromAPhone;
 
+// A certification of a container or a crew, as the certifying phone sends it (ADR-469): never
+// intake's to write. It is handed to `Certifications.received`, the one way one is made.
+export type SentCertification = Readonly<ReceivedCertification> & Pick<FromAPhone, 'deviceId'>;
+
 // What a photograph belongs to: a record its phone made, by that record's id.
 export type PhotoOwnerKind =
-  'FIELD_EVENT' | 'SCALE_RECEIPT' | 'ROE' | 'SURVEY' | 'INCIDENT' | 'DROP_OFF_LOG';
+  | 'FIELD_EVENT'
+  | 'SCALE_RECEIPT'
+  | 'ROE'
+  | 'SURVEY'
+  | 'INCIDENT'
+  | 'DROP_OFF_LOG'
+  | 'CERTIFICATION';
 
 // A photograph's record: sent after the records, the file after that (ADR-101; ARCHITECTURE §9
 // (2), §11). The fingerprint is taken at capture. Where the file is kept and the fingerprint of
 // what was uploaded are the upload's to say (Phase 2); until it exists the phone's record states
-// them. A certification's photographs arrive with its certification (ADR-321).
+// them. A certification's five are photographs like any other's: each names its certification
+// and says which view it is (ADR-179, 469).
 export interface SentPhoto {
   readonly id: string;
   readonly projectId: string;

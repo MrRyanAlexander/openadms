@@ -16,7 +16,8 @@
 // **Each thing sent gets its own answer, in the order sent.** A record is saved, already saved,
 // kept in quarantine (not saved, with the reason and the record that holds the number), or not
 // saved and kept nowhere on the server: it isn't a record, it names something the server
-// doesn't have, or its assignment was not saved. Never an error for the whole sync, and never
+// doesn't have, its assignment was not saved, or it is a certification its own rules refuse
+// (ADR-469). Never an error for the whole sync, and never
 // "saved" for what wasn't stored (REQ-308c). Nothing here refuses work over eligibility
 // (ADR-052), and no answer carries a status, a flag or money: those are the worker's.
 import {

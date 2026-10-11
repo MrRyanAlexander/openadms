@@ -89,6 +89,7 @@ import {
   ticketUnvoidRecordSchema,
   ticketVoidRecordSchema,
 } from './review-answers.ts';
+import { cornerCount, inches } from './sync-records.ts';
 import {
   billingUnits,
   clientRecordSchema,
@@ -2387,8 +2388,6 @@ export const createFieldEventEndpoint = endpoint({
 // certification is made, and a modified truck certified again, on a phone, so both arrive with
 // its sync (BACKLOG 2.6.2); its QC status is `setQcStatus`'s.
 const certificationId = z.strictObject({ certificationId: z.uuid() });
-// A whole number of inches, 1 or more (adms-certifications §3A.3).
-const inches = z.number().int().min(1).max(9999);
 
 export const correctCertificationBoxEndpoint = endpoint({
   name: 'correctCertificationBox',
@@ -2414,8 +2413,7 @@ export const correctCertificationBoxEndpoint = endpoint({
         diameter: inches,
         radius: inches,
         run: inches,
-        // How many radius corners.
-        corners: z.number().int().min(1).max(99),
+        corners: cornerCount,
       })
       .partial()
       .refine(stated),
