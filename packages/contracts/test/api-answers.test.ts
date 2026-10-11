@@ -6,6 +6,8 @@ import {
   errorAnswerSchema,
   healthAnswerSchema,
   phoneListsSchema,
+  phoneSetupChoicesAnswerSchema,
+  setupChoicesMonitorsAtMost,
   setupShownSchema,
 } from '../src/index.ts';
 
@@ -116,5 +118,38 @@ describe('the lists a phone takes', () => {
     expect(
       phoneListsSchema.safeParse({ ...shown, blocks: [], certifications: [], roes: [] }).success,
     ).toBe(false);
+  });
+
+  it('AC-07-91, ADR-463: what a phone being set up picks from has no place for a rate, a rule, a price or a description, nor for a password, a phone number, a role or an email address; it is strict, and its monitors are a bounded number', () => {
+    const keys = keysOf(phoneSetupChoicesAnswerSchema);
+    expect(
+      keys.filter((key) =>
+        /rate|rule|transaction|price|amount|description|owner|driver|password|phone|role|email|prime/i.test(
+          key,
+        ),
+      ),
+    ).toEqual([]);
+    // The one code is a unit rate pay item's, which the phone prints (ADR-213, 301).
+    expect(keys.filter((key) => /code/i.test(key))).toEqual(['code']);
+    const id = '00000000-0000-7000-8000-00000000000a';
+    const monitor = { monitorId: id, monitorNumber: 'M004127', name: 'Kim Nguyen' };
+    const whole = {
+      projects: [
+        { id, name: 'Bayline County ROW, Hurricane Delphine', timeZone: 'America/New_York' },
+      ],
+      project: { id, sites: [], payItems: [] },
+      monitors: [monitor],
+      moreMonitorsAfter: null,
+    };
+    const taken = (answer: object) => phoneSetupChoicesAnswerSchema.safeParse(answer).success;
+    expect(taken(whole)).toBe(true);
+    expect(taken({ ...whole, project: null, moreMonitorsAfter: id })).toBe(true);
+    expect(taken({ ...whole, rules: [] })).toBe(false);
+    expect(taken({ ...whole, monitors: [{ ...monitor, phoneNumber: '5550177' }] })).toBe(false);
+    expect(taken({ ...whole, project: { id, sites: [], payItems: [], rates: [] } })).toBe(false);
+    expect(taken({ ...whole, monitors: [{ ...monitor, monitorNumber: '4127' }] })).toBe(false);
+    const full = Array.from({ length: setupChoicesMonitorsAtMost }, () => monitor);
+    expect(taken({ ...whole, monitors: full })).toBe(true);
+    expect(taken({ ...whole, monitors: [...full, monitor] })).toBe(false);
   });
 });

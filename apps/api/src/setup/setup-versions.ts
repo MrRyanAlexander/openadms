@@ -98,6 +98,85 @@ export class SetupVersions {
     this.db = db;
   }
 
+  // The project's live sites, as a phone is shown one: its name, its type and what it is for.
+  static async sitesShownIn(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+  ): Promise<SetupShown['sites']> {
+    const sites = await tx.disposalSite.findMany({
+      where: { projectId, archivedAt: null },
+      select: {
+        id: true,
+        name: true,
+        takesLoads: true,
+        haulOutsLeaveHere: true,
+        siteType: { select: { id: true, name: true } },
+      },
+      orderBy: { name: 'asc' },
+    });
+    return sites.map((site) => ({
+      ...name(site),
+      siteType: name(site.siteType),
+      takesLoads: site.takesLoads,
+      haulOutsLeaveHere: site.haulOutsLeaveHere,
+    }));
+  }
+
+  // The project's unit rate pay items, as a phone is shown one: its code and capture settings,
+  // never a rate. Every one, or only those in service.
+  static async payItemsShownIn(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    only?: 'IN_SERVICE',
+  ): Promise<SetupShown['payItems']> {
+    const payItems = await tx.payItem.findMany({
+      where: {
+        projectId,
+        kindOfWorkId: { not: null },
+        ...(only === undefined ? {} : { archivedAt: null }),
+      },
+      select: {
+        id: true,
+        code: true,
+        bandFrom: true,
+        bandTo: true,
+        archivedAt: true,
+        payableType: { select: { id: true, name: true } },
+        kindOfWork: { select: { id: true, name: true } },
+        countIsAlwaysOne: true,
+        gpsRequired: true,
+        measurementRequired: true,
+        decimalsAllowed: true,
+        photosRequired: true,
+        monitorMayMarkIneligible: true,
+        quantityFromCarriedTickets: true,
+      },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
+    return payItems.flatMap((payItem) =>
+      payItem.kindOfWork === null
+        ? []
+        : [
+            {
+              id: payItem.id,
+              code: payItem.code,
+              bandFrom: payItem.bandFrom?.toNumber() ?? null,
+              bandTo: payItem.bandTo?.toNumber() ?? null,
+              archived: payItem.archivedAt !== null,
+              payableType: name(payItem.payableType),
+              kindOfWork: name(payItem.kindOfWork),
+              countIsAlwaysOne: payItem.countIsAlwaysOne,
+              gpsRequired: payItem.gpsRequired,
+              measurementRequired: payItem.measurementRequired,
+              decimalsAllowed: payItem.decimalsAllowed,
+              photosRequired: payItem.photosRequired,
+              monitorMayMarkIneligible: payItem.monitorMayMarkIneligible,
+              quantityFromCarriedTickets: payItem.quantityFromCarriedTickets,
+            },
+          ],
+    );
+  }
+
   // What the project's phones are shown now, inside a piece of work that is already reading.
   // One query at a time: a piece of work has one connection.
   static async shownIn(tx: Prisma.TransactionClient, projectId: string): Promise<SetupShown> {
@@ -129,43 +208,10 @@ export class SetupVersions {
       where: { uses: { has: 'TYPED_NUMBER' }, archivedAt: null },
       orderBy: { position: 'asc' },
     });
-    const sites = await tx.disposalSite.findMany({
-      where: { projectId, archivedAt: null },
-      select: {
-        id: true,
-        name: true,
-        takesLoads: true,
-        haulOutsLeaveHere: true,
-        siteType: { select: { id: true, name: true } },
-      },
-      orderBy: { name: 'asc' },
-    });
-    // The project's unit rate pay items, an archived one too: an assignment may still name it.
-    const payItems = await tx.payItem.findMany({
-      where: { projectId, kindOfWorkId: { not: null } },
-      select: {
-        id: true,
-        code: true,
-        bandFrom: true,
-        bandTo: true,
-        archivedAt: true,
-        payableType: { select: { id: true, name: true } },
-        kindOfWork: { select: { id: true, name: true } },
-        countIsAlwaysOne: true,
-        gpsRequired: true,
-        measurementRequired: true,
-        decimalsAllowed: true,
-        photosRequired: true,
-        monitorMayMarkIneligible: true,
-        quantityFromCarriedTickets: true,
-      },
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-    });
-    const kindsOfWork = [
-      ...new Set(
-        payItems.flatMap(({ kindOfWork }) => (kindOfWork === null ? [] : [kindOfWork.id])),
-      ),
-    ];
+    const sites = await SetupVersions.sitesShownIn(tx, projectId);
+    // An archived one too: an assignment may still name it.
+    const payItems = await SetupVersions.payItemsShownIn(tx, projectId);
+    const kindsOfWork = [...new Set(payItems.map(({ kindOfWork }) => kindOfWork.id))];
     const itemNames = await tx.itemName.findMany({
       where: { kindOfWorkId: { in: kindsOfWork }, archivedAt: null },
       orderBy: { position: 'asc' },
@@ -205,34 +251,8 @@ export class SetupVersions {
       debrisTypes: { LOAD: named('LOAD'), HAUL_OUT: named('HAUL_OUT') },
       fieldTags: fieldTags.map(name),
       typedNumberReasons: reasons.map(name),
-      sites: sites.map((site) => ({
-        ...name(site),
-        siteType: name(site.siteType),
-        takesLoads: site.takesLoads,
-        haulOutsLeaveHere: site.haulOutsLeaveHere,
-      })),
-      payItems: payItems.flatMap((payItem) =>
-        payItem.kindOfWork === null
-          ? []
-          : [
-              {
-                id: payItem.id,
-                code: payItem.code,
-                bandFrom: payItem.bandFrom?.toNumber() ?? null,
-                bandTo: payItem.bandTo?.toNumber() ?? null,
-                archived: payItem.archivedAt !== null,
-                payableType: name(payItem.payableType),
-                kindOfWork: name(payItem.kindOfWork),
-                countIsAlwaysOne: payItem.countIsAlwaysOne,
-                gpsRequired: payItem.gpsRequired,
-                measurementRequired: payItem.measurementRequired,
-                decimalsAllowed: payItem.decimalsAllowed,
-                photosRequired: payItem.photosRequired,
-                monitorMayMarkIneligible: payItem.monitorMayMarkIneligible,
-                quantityFromCarriedTickets: payItem.quantityFromCarriedTickets,
-              },
-            ],
-      ),
+      sites,
+      payItems,
       itemNames: itemNames.map((item) => ({ ...name(item), kindOfWorkId: item.kindOfWorkId })),
       incidentTypes: incidentTypes.map((type) => ({
         ...name(type),

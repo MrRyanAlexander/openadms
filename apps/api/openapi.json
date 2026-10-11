@@ -11051,6 +11051,295 @@
         }
       }
     },
+    "/phones/current/setup-choices": {
+      "post": {
+        "operationId": "phoneSetupChoices",
+        "summary": "What a phone being set up under the firm’s master passcode picks from, with a connection and nobody signed in: the firm’s open projects; the monitors in service by name and Monitor ID, a thousand a call at most (the answer says where to ask on from); and, where an open project is named, that project’s live sites and its unit rate pay items in service, as a phone’s lists show them. A project that is closed or is none is answered no lists. Never a rate, a rule or a load’s pay item; never a password or a phone number. Nothing is written but the use of the passcode, a security event naming the phone. Open to a phone in service that has proved itself, by its token. A passcode that isn’t taken is refused by one code; wrong tries count as they do when a phone is enrolled.",
+        "x-open-adms-access": "PROVEN_PHONE",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "passcode": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  },
+                  "projectId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "monitorsAfter": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": ["passcode", "projectId", "monitorsAfter"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "projects": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "timeZone": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["id", "name", "timeZone"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "project": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "sites": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "siteType": {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": ["id", "name"],
+                                    "additionalProperties": false
+                                  },
+                                  "takesLoads": {
+                                    "type": "boolean"
+                                  },
+                                  "haulOutsLeaveHere": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "name",
+                                  "siteType",
+                                  "takesLoads",
+                                  "haulOutsLeaveHere"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "payItems": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  "code": {
+                                    "type": "string"
+                                  },
+                                  "bandFrom": {
+                                    "type": ["number", "null"]
+                                  },
+                                  "bandTo": {
+                                    "type": ["number", "null"]
+                                  },
+                                  "archived": {
+                                    "type": "boolean"
+                                  },
+                                  "payableType": {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": ["id", "name"],
+                                    "additionalProperties": false
+                                  },
+                                  "kindOfWork": {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": ["id", "name"],
+                                    "additionalProperties": false
+                                  },
+                                  "countIsAlwaysOne": {
+                                    "type": "boolean"
+                                  },
+                                  "gpsRequired": {
+                                    "type": "boolean"
+                                  },
+                                  "measurementRequired": {
+                                    "type": "boolean"
+                                  },
+                                  "decimalsAllowed": {
+                                    "type": "boolean"
+                                  },
+                                  "photosRequired": {
+                                    "type": "boolean"
+                                  },
+                                  "monitorMayMarkIneligible": {
+                                    "type": "boolean"
+                                  },
+                                  "quantityFromCarriedTickets": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "code",
+                                  "bandFrom",
+                                  "bandTo",
+                                  "archived",
+                                  "payableType",
+                                  "kindOfWork",
+                                  "countIsAlwaysOne",
+                                  "gpsRequired",
+                                  "measurementRequired",
+                                  "decimalsAllowed",
+                                  "photosRequired",
+                                  "monitorMayMarkIneligible",
+                                  "quantityFromCarriedTickets"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": ["id", "sites", "payItems"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "monitors": {
+                      "maxItems": 1000,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "monitorId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "monitorNumber": {
+                            "type": "string",
+                            "pattern": "^M\\d{6,}$"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["monitorId", "monitorNumber", "name"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "moreMonitorsAfter": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["projects", "project", "monitors", "moreMonitorsAfter"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/phones/current/unplanned-assignments": {
       "post": {
         "operationId": "reportUnplannedAssignment",

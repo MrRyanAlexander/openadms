@@ -788,6 +788,36 @@ export const phoneLoginListAnswerSchema = z.strictObject({
 
 export type PhoneLoginListAnswer = z.infer<typeof phoneLoginListAnswerSchema>;
 
+// What a phone being set up under the master passcode picks from, with a connection and
+// nobody signed in (ARCHITECTURE §7.1 steps 1, 2; adms-field-app §4A.0 (5); AC-02-38; ADR-240,
+// 462 (4)(f), 463). **The firm's open projects**, each with the time zone the phone shows times
+// in. **The monitors in service**, by id, Monitor ID and name, in the order they were created,
+// a bounded number a call: `moreMonitorsAfter` is the last one's id where there are more, and
+// the phone asks again stating it. **`project`**, where the phone named an open one: its live
+// sites and its unit rate pay items in service, each as the phone's lists show one. Null where
+// it named none, or one that is closed or no project (the phone picks again from `projects`).
+// **Never a rate, a rule or a load's pay item; never a password, a phone number or a role.**
+// The work itself (kinds of field event, certifying, forms) is picked from lists every phone
+// has.
+export const setupChoicesMonitorsAtMost = 1000;
+
+export const phoneSetupChoicesAnswerSchema = z.strictObject({
+  projects: z.array(z.strictObject({ id: z.uuid(), name: z.string(), timeZone: z.string() })),
+  project: z.strictObject({ id: z.uuid(), sites, payItems }).nullable(),
+  monitors: z
+    .array(
+      z.strictObject({
+        monitorId: z.uuid(),
+        monitorNumber: z.string().regex(/^M\d{6,}$/),
+        name: z.string(),
+      }),
+    )
+    .max(setupChoicesMonitorsAtMost),
+  moreMonitorsAfter: z.uuid().nullable(),
+});
+
+export type PhoneSetupChoicesAnswer = z.infer<typeof phoneSetupChoicesAnswerSchema>;
+
 // What a phone is answered when it asks the address of a GPS point (ARCHITECTURE §3 "Road
 // distance and addresses"; adms-field-app §4A.4; AC-04-24; ADR-111, 119, 455): the street
 // number and name our own address server finds there, as the monitor would type it, or none

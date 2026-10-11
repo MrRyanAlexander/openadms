@@ -5,6 +5,7 @@
 // proxy's (Caddy locally), the only way in.
 import 'reflect-metadata';
 
+import { setupChoicesMonitorsAtMost } from '@open-adms/contracts';
 import type { Database, ViewerDatabase } from '@open-adms/db';
 import {
   MasterPasscodeRules,
@@ -51,6 +52,8 @@ import { apiPhoneLoginList } from '../phone/phone-login-list.controller.ts';
 import { PhoneLoginList } from '../phone/phone-login-list.ts';
 import { apiPasscodeSessions } from '../phone/passcode-sessions.controller.ts';
 import { PasscodeSessions } from '../phone/passcode-sessions.ts';
+import { apiSetupChoices } from '../phone/setup-choices.controller.ts';
+import { SetupChoices } from '../phone/setup-choices.ts';
 import { apiPhoneMonitors } from '../phone/phone-monitors.controller.ts';
 import { PhoneMonitors } from '../phone/phone-monitors.ts';
 import { PhoneChallenges } from '../phone/phone-challenges.ts';
@@ -373,6 +376,15 @@ export class ApiProcess {
               rules: new PasscodeSessionRules(policy.monitorSessionHours),
               assignments: new PhoneAssignments(database),
               clock,
+            }),
+          ],
+          // What a phone being set up under the master passcode picks from (task 2.5.4, part 4).
+          [
+            apiSetupChoices,
+            new SetupChoices(database, {
+              passcode: passcodeCheck,
+              clock,
+              monitorsAtMost: setupChoicesMonitorsAtMost,
             }),
           ],
           // The lists a phone takes for its monitor's assignment (task 2.5.3).

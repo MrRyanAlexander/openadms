@@ -60,7 +60,12 @@ gets tracked on a spreadsheet."
    their work, the site, and when it was made by the phone's clock with that clock's offset. The
    server keeps it as reported (its day is the phone's clock's, in the project's time zone) and
    answers saved, already saved, or not saved with why; the record names the master passcode
-   itself, on that phone, and is two security events at the phone's own time.
+   itself, on that phone, and is two security events at the phone's own time. **Online, what
+   the supervisor picks from is read by `POST /phones/current/setup-choices`** (ADR-463, agent
+   defaults): the passcode typed, sent in the body with `projectId` (null until a project is
+   picked) and `monitorsAfter`; answered the open projects, the monitors in service (asked on
+   from `moreMonitorsAfter` while it isn't null) and the picked project's live sites and unit
+   rate pay items in service. Never a rate. Each read is a use of the master passcode.
 6. **Offline sign-in** checks the phone's **login list**, a sign-in check for each monitor enabled on
    its project (ADR-105). The safeguards, because a phone-number password is easy to guess
    (ARCHITECTURE §7.2, ADR-139):

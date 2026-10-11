@@ -228,6 +228,13 @@ export {
   type PasscodeSessionToOpen,
   type PasscodeSessionsParts,
 } from './phone/passcode-sessions.ts';
+export {
+  SetupChoices,
+  type SetupChoicesAsked,
+  type SetupChoicesOutcome,
+  type SetupChoicesParts,
+  type SetupChoicesRead,
+} from './phone/setup-choices.ts';
 export { PhoneChallenges, type Challenged } from './phone/phone-challenges.ts';
 export { PhoneLists, type PhoneListsHeld, type PhoneListsTaken } from './phone/phone-lists.ts';
 export { OfflineChecks, type OfflineCheck } from './phone/offline-checks.ts';

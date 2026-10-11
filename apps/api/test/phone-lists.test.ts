@@ -740,6 +740,22 @@ describe('the lists a phone takes', () => {
     });
   });
 
+  it('a unit rate pay item archived while an assignment still names it stays in that phone’s lists, marked archived (ADR-453): the work goes on and the server judges it; a phone being set up is no longer shown it (ADR-463)', async () => {
+    await world(async (served, tx) => {
+      const { priced, token, signIn, assigned, entered } = await leeOnP1(served, tx);
+      const hangers = await entered(
+        priced.each('HNG-RMV-EA', 'Hanger removal', 'Hangers', '68.00'),
+      );
+      await assigned({ fieldEventKinds: ['UNIT_RATE'], payItemIds: [hangers] });
+      const session = (await signIn()).token;
+      await tx.payItem.update({ where: { id: hangers }, data: { archivedAt: mondayMorning } });
+      const held = await read(served, token, session);
+      expect(held.lists?.payItems.map(({ code, archived }) => [code, archived])).toEqual([
+        ['HNG-RMV-EA', true],
+      ]);
+    });
+  });
+
   it('AC-02-39 the lists are a signed-in monitor’s on a proven phone, nobody else’s: not a phone with nobody signed in, not a session with no proven phone, not another phone with that session, not the back office', async () => {
     await world(async (served, tx) => {
       const { dana, token, signIn } = await leeOnP1(served, tx);

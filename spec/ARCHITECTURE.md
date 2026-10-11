@@ -521,6 +521,18 @@ ADR-106 (master passcode) and ADR-120 (changing monitors, username). **The word 
 > build: what a phone being set up online picks from, every other use of the passcode a phone
 > logged, and the mark on a record made in a session as the phone's monitor (task 2.6.2).
 
+> ⚠️ **ADR-463 (2026-10-10; ADR-462's proposal built as made, the rest agent defaults; this
+> note awaits approval, building didn't wait): what a phone being set up online picks from.**
+> With a connection and nobody signed in, the supervisor types the master passcode (§7.1 step
+> 1) and the phone, having proved itself, **sends it with its request**: the server checks it
+> (§7.5; a wrong try counts as at enrolment) and answers the firm's open projects, its monitors
+> in service by name and Monitor ID, and, once a project is picked, that project's live sites
+> and its unit rate pay items in service, as a phone's lists show them. Never a rate, a rule, a
+> password or a phone number. A phone's proof alone reads none of it: a lost phone keeps its
+> key until it is revoked. Each read is a use of the master passcode in the security log,
+> naming the phone. A phone out of service reads nothing. The setup itself is still made on
+> the phone and reported as an unplanned assignment (ADR-457).
+
 ### 7.0 Creating people
 
 ✅ **Decided** *(ADR-105, user 2026-09-25)*:

@@ -38,6 +38,7 @@ import {
   passcodeSessionOpenedAnswerSchema,
   phoneAddressLookupAnswerSchema,
   phoneListsAnswerSchema,
+  phoneSetupChoicesAnswerSchema,
   phoneLoginListAnswerSchema,
   phoneMonitorAnswerSchema,
   unplannedAssignmentAnswerSchema,
@@ -1772,6 +1773,31 @@ export const withdrawAssignmentEndpoint = endpoint({
   answer: savedAnswer(assignmentRecordSchema),
 });
 
+// What a phone being set up under the firm's master passcode picks from, with a connection
+// (ARCHITECTURE §7.1 steps 1, 2; §7.5; adms-field-app §4A.0 (5); AC-02-38; ADR-106, 240, 462
+// (4)(f), 463). OWASP ASVS 5.0 8.2.1, 8.2.2, 14.2.1, 14.2.6, 16.3.1; API Security Top 10 (2023)
+// API1…API5. Nobody is signed in yet, so the call is a proven phone's, in service, **and
+// carries the passcode**, checked by the one check every act under it shares: a phone's proof
+// alone (a lost phone keeps its key until it is revoked) would list the firm's projects and
+// monitors. A read, but a POST: the passcode is in the body, never in a path or a query. Each
+// read is a use of the passcode in the security log. The limits here only bound what is read.
+export const phoneSetupChoicesEndpoint = endpoint({
+  name: 'phoneSetupChoices',
+  summary:
+    'What a phone being set up under the firm’s master passcode picks from, with a connection and nobody signed in: the firm’s open projects; the monitors in service by name and Monitor ID, a thousand a call at most (the answer says where to ask on from); and, where an open project is named, that project’s live sites and its unit rate pay items in service, as a phone’s lists show them. A project that is closed or is none is answered no lists. Never a rate, a rule or a load’s pay item; never a password or a phone number. Nothing is written but the use of the passcode, a security event naming the phone. Open to a phone in service that has proved itself, by its token. A passcode that isn’t taken is refused by one code; wrong tries count as they do when a phone is enrolled.',
+  access: 'PROVEN_PHONE',
+  method: 'POST',
+  path: '/phones/current/setup-choices',
+  body: z.strictObject({
+    passcode: z.string().min(1).max(4096),
+    // The project picked, for its sites and unit rate pay items; null before one is.
+    projectId: z.uuid().nullable(),
+    // The last monitor of the answer before: its `moreMonitorsAfter`. Null for the first.
+    monitorsAfter: z.uuid().nullable(),
+  }),
+  answer: phoneSetupChoicesAnswerSchema,
+});
+
 // An unplanned assignment, reported by the phone it was made on (ARCHITECTURE §7's note, §7.5,
 // §9 (3), (4), §10; AC-02-38, AC-05-40; BACKLOG 2.5.4, C46; ADR-240, 438, 456, 457). A monitor
 // had no assignment, and whoever holds the master passcode set the phone up on the spot: a
@@ -2508,6 +2534,7 @@ export const endpoints: readonly Endpoint[] = [
   phoneListsEndpoint,
   phoneLoginListEndpoint,
   phoneAddressLookupEndpoint,
+  phoneSetupChoicesEndpoint,
   reportUnplannedAssignmentEndpoint,
   removePhoneEndpoint,
   changeMasterPasscodeEndpoint,
