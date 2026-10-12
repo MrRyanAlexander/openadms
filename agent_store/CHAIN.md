@@ -7,7 +7,7 @@
 > task's ADR and its session-log line in `DECISIONS.md`). No other file carries these counts.
 > **A count that differs from this page without a reason is a finding, not noise.**
 
-**Seen whole:** 2026-10-11, after ADR-469, on the user's Mac, the installation at head.
+**Seen whole:** 2026-10-11, after ADR-470, on the user's Mac, the installation at head.
 
 ## `pnpm ready`
 
@@ -20,15 +20,15 @@
 
 ## `pnpm test`
 
-**`Test Files 145 passed (145)`, `Tests 2601 passed (2601)`.**
+**`Test Files 147 passed (147)`, `Tests 2627 passed (2627)`.**
 
 | Project | Tests | Files | Needs |
 |---|---|---|---|
 | `packages/domain` | 761 | 41 | nothing |
-| `packages/contracts` | 47 | 8 | nothing |
+| `packages/contracts` | 61 | 9 | nothing |
 | `apps/api` | 495 | 38 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
 | `packages/db` | 1028 | 43 | `pnpm ready` |
-| `packages/scenarios` | 113 | 4 | `pnpm ready` for `stories.test.ts` (the runner and a run's template, 5); the flag catalogue (78 flags), the harness and the policy need nothing. **The stories themselves are not here** (ADR-446) |
+| `packages/scenarios` | 125 | 5 | `pnpm ready` for `stories.test.ts` (the runner and a run's template, 5); the flag catalogue (78 flags), the harness, the phone held to the sync contract's suite (12) and the policy need nothing. **The stories themselves are not here** (ADR-446) |
 | `apps/worker` | 30 | 3 | `pnpm ready` for the map servers (13) and its container (3); the process (14) needs nothing |
 | `infra/local` | 22 | 3 | `pnpm ready` |
 | `tools/security` | 90 | 2 | nothing (the scan's and the grant tests' rules 33, the guard hook 57) |
@@ -50,7 +50,7 @@ failed.`** Each story `passed: N checks, N passed, 0 failed`:
 | `ticket-101001` | 16 | | `p1-priced` | 28 |
 | `dispatch-monday` | 22 | | `p1-reviewed` | 35 |
 | `setup` | 52 | | `p1-voided` | 28 |
-| `certification` | 25 | | `p1-invoiced` | 26 |
+| `certification` | 28 | | `p1-invoiced` | 26 |
 | `numbering` | 16 | | `golden-mission` | 27 |
 | `p1-field-days` | 35 | | `p1-left-out` | 31 |
 | `sync` | 49 | | `first-admin` | 32 |

@@ -20,7 +20,15 @@ import {
   type SyncedCertification,
   type SyncedFieldEvent,
 } from '../src/index.ts';
-import { certification, collection, crew, disposal, lee, made, records } from './support/synced.ts';
+import {
+  certification,
+  collection,
+  crew,
+  disposal,
+  lee,
+  made,
+  records,
+} from '../src/sync-examples.ts';
 
 const refusals = (schema: z.ZodType, payload: unknown): string[] => {
   const result = schema.safeParse(payload);

@@ -23,7 +23,7 @@ import type { Reconciliation, RunOutcome } from '@open-adms/worker';
 import { createHash } from 'node:crypto';
 
 import { StoryClock, utcOffsetMinutes } from '../clock.ts';
-import { SimulatedDevice, type PhoneRecord } from '../device.ts';
+import { heldId, SimulatedDevice, type PhoneRecord } from '../device.ts';
 import { uuidv7 } from '../ids.ts';
 import type { StoryContext } from '../runner.ts';
 import { p1FieldDays } from './p1-field-days.ts';
@@ -145,7 +145,8 @@ export async function p1FieldDaysHeld(story: StoryContext): Promise<P1Office> {
     intake: {
       receive: (sent: PhoneRecord) => {
         held.push({ sent, syncedAt: fieldClock.now() });
-        return Promise.resolve({ answer: 'SAVED', id: '', notes: [] });
+        // Answered under its own id: the phone takes no other answer for one (ADR-470).
+        return Promise.resolve({ answer: 'SAVED', id: heldId(sent), notes: [] });
       },
       topUp: story.intake.topUp.bind(story.intake),
     } as unknown as typeof story.intake,

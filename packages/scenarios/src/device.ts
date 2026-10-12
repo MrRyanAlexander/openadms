@@ -1,8 +1,14 @@
 // A simulated phone (ARCHITECTURE §7–§10, §15): enrolled, holding the assignment its monitor took at
 // sign-in (so one project) and the numbered version of its lists, and offline. What its monitor records stays on it, in the order recorded, until it finds signal
-// and syncs; then each record goes to the server in that order, and leaves the phone once
-// received. It stamps times from its own clock (the story's, plus any error the story gives it) and
-// makes each record's id itself (ids.ts).
+// and syncs. It stamps times from its own clock (the story's, plus any error the story gives it)
+// and makes each record's id itself (ids.ts).
+//
+// **It is a client of the sync contract** (packages/contracts; BACKLOG 2.6.1 part 4; ADR-470): it
+// sends `SyncSent`, its records as JSON and never which phone it is, reads what comes back with
+// `syncAnswerRead`, and passes the suite any client must (`test/sync-client.test.ts`). Only
+// "saved" and "already saved" take a record off it for good; a quarantined record and one not
+// saved leave its queue and are kept, shown as not saved. A photograph's record still goes by
+// hand, after the records, until its upload is built (2.6.4).
 //
 // It captures as a phone does (adms-field-app §4A.4–§4A.6; BACKLOG 1.3.7): New scans the badge and
 // the field event waits; Complete takes the details, picked by name from its lists, then the
@@ -14,6 +20,7 @@ import { createHash } from 'node:crypto';
 
 import type {
   PhotoOwnerKind,
+  SentCertification,
   SentDropOffLog,
   SentFieldEvent,
   SentForm,
@@ -26,9 +33,28 @@ import type {
   SentSurvey,
   SyncAnswer,
 } from '@open-adms/api';
+import {
+  stored,
+  syncAnswerRead,
+  syncedRecordAssignment,
+  syncedRecordId,
+  syncPasscodeUsesAtMost,
+  syncRecordsAtMost,
+  syncUnplannedAssignmentsAtMost,
+  recordRead,
+  type RecordAnswer,
+  type ShownNotSaved,
+  type SyncClientHolds,
+  type SyncedRecord,
+  type SyncSent,
+} from '@open-adms/contracts';
 import type { AddressSource, FieldEventKind, NumberSeries, Workflow } from '@open-adms/db';
 import {
   type BandedPayItem,
+  type BoxShape,
+  type BoxSign,
+  Capacity,
+  type CertificationKind,
   FieldEventDetails,
   type HeldBlock,
   type IncidentOffer,
@@ -41,6 +67,7 @@ import {
 
 import { utcOffsetMinutes, type StoryClock } from './clock.ts';
 import { uuidv7 } from './ids.ts';
+import { type CertificationsReceived, SyncStandIn } from './sync-stand-in.ts';
 
 // What a phone sends at a sync is the API's to say (apps/api, src/sync/sent.ts): the harness's
 // phone sends exactly those records, under the names its stories know them by.
@@ -52,19 +79,67 @@ export type RecordedDropOffLog = SentDropOffLog;
 export type RecordedSurvey = SentSurvey;
 export type RecordedRoe = SentRoe;
 export type RecordedPhoto = SentPhoto;
+export type RecordedCertification = SentCertification;
 export type PhoneRecord = SentRecord;
+// Everything a phone holds to send: intake's records, and a certification, which is never
+// intake's (ADR-469).
+export type HeldRecord =
+  PhoneRecord | { readonly record: 'CERTIFICATION'; readonly certification: RecordedCertification };
 
 // What receives a phone's records at sync, and answers each: the API's intake (apps/api,
-// src/sync/intake.ts), with no endpoint in front of it until Phase 2.
+// src/sync/intake.ts). The sync endpoint in front of it is task 2.6.2's; until then
+// `sync-stand-in.ts` stands there.
 export interface SyncIntake {
   receive(record: PhoneRecord): Promise<SyncAnswer>;
 }
 
-// A record the phone sent and what it was told: saved, already saved, or not saved (ARCHITECTURE
-// §9 (4)).
+// A record the phone sent and what it was told: saved, already saved, quarantined or not saved
+// (ARCHITECTURE §9 (4); ADR-467).
 export interface Answered {
-  readonly sent: PhoneRecord;
-  readonly answer: SyncAnswer;
+  readonly sent: HeldRecord;
+  readonly answer: RecordAnswer;
+}
+
+// What it reports besides its records (the contract's `SyncSent`).
+type Reports = Pick<SyncSent, 'unplannedAssignments' | 'passcodeUses' | 'lastUsed'>;
+
+// A record as it goes on the wire: JSON, a time as a UTC instant, and never that a phone made
+// it or which (ADR-466): the phone proved that.
+function onTheWire(held: Exclude<HeldRecord, { record: 'PHOTO' }>): SyncedRecord {
+  const said = (record: object): object =>
+    Object.fromEntries(
+      Object.entries(record).filter(([name]) => name !== 'source' && name !== 'deviceId'),
+    );
+  const wire = (): object => {
+    switch (held.record) {
+      case 'FIELD_EVENT':
+        return { record: held.record, fieldEvent: said(held.fieldEvent) };
+      case 'SCALE_RECEIPT':
+        return { record: held.record, scaleReceipt: said(held.scaleReceipt) };
+      case 'INCIDENT':
+        return { record: held.record, incident: said(held.incident) };
+      case 'DROP_OFF_LOG':
+        return { record: held.record, dropOffLog: said(held.dropOffLog) };
+      case 'SURVEY':
+        return { record: held.record, survey: said(held.survey) };
+      case 'ROE':
+        return { record: held.record, roe: said(held.roe) };
+      case 'CERTIFICATION':
+        return { record: held.record, certification: said(held.certification) };
+    }
+  };
+  return JSON.parse(JSON.stringify(wire())) as SyncedRecord;
+}
+
+// A record it holds, as intake takes it: a certification is never intake's (ADR-469).
+export function forIntake(held: HeldRecord): PhoneRecord {
+  if (held.record === 'CERTIFICATION') throw new Error('A certification is never intake’s.');
+  return held;
+}
+
+// The id its phone made for a record it holds, whatever its kind.
+export function heldId(held: HeldRecord): string {
+  return held.record === 'PHOTO' ? held.photo.id : syncedRecordId(onTheWire(held));
 }
 
 export interface Named {
@@ -254,6 +329,52 @@ export interface NewRoe {
   readonly signedDate?: string;
 }
 
+// One measured box, as the sheet has it: a shape's own measurements, whole inches; the first is
+// the primary, each after it a feature, picked (by the id the firm's list holds) or typed.
+export interface NewBox {
+  readonly shape: BoxShape;
+  readonly sign: BoxSign;
+  readonly featureId?: string;
+  readonly featureOther?: string;
+  readonly length?: number | null;
+  readonly secondLength?: number | null;
+  readonly width?: number | null;
+  readonly height?: number | null;
+  readonly diameter?: number | null;
+  readonly radius?: number | null;
+  readonly run?: number | null;
+  readonly corners?: number | null;
+}
+
+// A certification made on the phone (adms-certifications §3A). The prime, the vehicle type, a
+// feature and the crew type are picked on screens the harness doesn't have (Phase 3): a story
+// states the id each list holds.
+export interface NewCertification {
+  readonly kind: CertificationKind;
+  // The pre-printed sheet's number, typed; without one the next of the phone's block (ADR-045).
+  readonly paperNumber?: string;
+  readonly primeId: string;
+  readonly firstTierSub?: string;
+  readonly secondTierSub?: string;
+  readonly vehicleTypeId?: string;
+  readonly vehicleTypeOther?: string;
+  readonly crewTypeId?: string;
+  readonly boxes: readonly NewBox[];
+  readonly driverName?: string;
+  readonly driverPhone?: string;
+  readonly driverLicenceNumber?: string;
+  readonly driverLicenceState?: string;
+  readonly driverLicenceExpiry?: string;
+  readonly tagNumber?: string;
+  readonly tagState?: string;
+  readonly tagExpiry?: string;
+  readonly helperIds?: readonly string[];
+  readonly clientRepresentativeName?: string;
+  readonly contractorRepresentativeName?: string;
+  readonly replaces?: { readonly replacedId: string; readonly reason: string };
+  readonly notes?: string;
+}
+
 // A photograph taken with a record the phone made: of what, and where if the phone had a fix.
 export interface NewPhoto {
   readonly of: { readonly kind: PhotoOwnerKind; readonly id: string };
@@ -272,7 +393,13 @@ export class SimulatedDevice {
   private readonly clock: StoryClock;
   private readonly started = new Map<string, StartedEvent>();
   private readonly dropped: StartedEvent[] = [];
-  private readonly outbox: PhoneRecord[] = [];
+  private readonly outbox: HeldRecord[] = [];
+  // What it reports besides its records, still to be answered; and the sync it sent last.
+  private reports: Reports = { unplannedAssignments: [], passcodeUses: [], lastUsed: [] };
+  private last: { readonly sync: SyncSent; readonly held: readonly HeldRecord[] } | undefined;
+  // What it shows as not saved, and the reports among them, which it keeps.
+  private readonly shown: ShownNotSaved[] = [];
+  private readonly keptReports: string[] = [];
   // The last number the phone gave out of each series: its own count, kept across sign-ins.
   private readonly lastUsed = new Map<NumberSeries, number>();
   // The number each finished field event got, for the next of its split chain.
@@ -564,6 +691,70 @@ export class SimulatedDevice {
     return made;
   }
 
+  // A certification of a container or a crew (adms-certifications §3A; ADR-469): the boxes as
+  // measured, each measurement its shape doesn't hold left empty. The phone works the capacity
+  // out with the server's own rule (packages/domain's `Capacity`) to show it, and never sends
+  // it: what it shows is answered beside the record. Measurements that give no capacity are not
+  // a certification, here as on the server.
+  certify(certification: NewCertification): {
+    readonly record: RecordedCertification;
+    readonly capacityCy: number | null;
+  } {
+    const boxes = certification.boxes.map((box) => ({
+      featureId: box.featureId ?? null,
+      featureOther: box.featureOther ?? null,
+      shape: box.shape,
+      sign: box.sign,
+      length: box.length ?? null,
+      secondLength: box.secondLength ?? null,
+      width: box.width ?? null,
+      height: box.height ?? null,
+      diameter: box.diameter ?? null,
+      radius: box.radius ?? null,
+      run: box.run ?? null,
+      corners: box.corners ?? null,
+    }));
+    const reading = new Capacity(
+      certification.kind,
+      boxes.map((box, position) => ({ ...box, position })),
+    ).work();
+    if (reading.refusal !== null) throw new Error(`${this.name}: ${reading.refusal.message}`);
+    const certifiedAt = this.now();
+    const record: RecordedCertification = {
+      id: uuidv7(certifiedAt),
+      projectId: this.current.projectId,
+      certNumber: certification.paperNumber ?? this.takeCertNumber(),
+      kind: certification.kind,
+      primeId: certification.primeId,
+      firstTierSub: certification.firstTierSub ?? null,
+      secondTierSub: certification.secondTierSub ?? null,
+      vehicleTypeId: certification.vehicleTypeId ?? null,
+      vehicleTypeOther: certification.vehicleTypeOther ?? null,
+      crewTypeId: certification.crewTypeId ?? null,
+      boxes,
+      driverName: certification.driverName ?? null,
+      driverPhone: certification.driverPhone ?? null,
+      driverLicenceNumber: certification.driverLicenceNumber ?? null,
+      driverLicenceState: certification.driverLicenceState ?? null,
+      driverLicenceExpiry: certification.driverLicenceExpiry ?? null,
+      tagNumber: certification.tagNumber ?? null,
+      tagState: certification.tagState ?? null,
+      tagExpiry: certification.tagExpiry ?? null,
+      certifiedAt,
+      deviceUtcOffsetMinutes: utcOffsetMinutes(this.current.timeZone, certifiedAt),
+      certifiedById: this.current.monitorId,
+      deviceId: this.current.deviceId,
+      assignmentId: this.current.assignmentId,
+      helperIds: [...(certification.helperIds ?? [])],
+      clientRepresentativeName: certification.clientRepresentativeName ?? null,
+      contractorRepresentativeName: certification.contractorRepresentativeName ?? null,
+      replaces: certification.replaces ?? null,
+      notes: certification.notes ?? null,
+    };
+    this.outbox.push({ record: 'CERTIFICATION', certification: record });
+    return { record, capacityCy: reading.capacityCy };
+  }
+
   // An ROE: the next number of the phone's ROE block, unless the paper has its own (ADR-149).
   roe(roe: NewRoe): RecordedRoe {
     const madeAt = this.now();
@@ -600,25 +791,130 @@ export class SimulatedDevice {
   }
 
   // Every record still on the phone, in the order recorded.
-  get waitingRecords(): readonly PhoneRecord[] {
+  get waitingRecords(): readonly HeldRecord[] {
     return [...this.outbox];
   }
 
-  // The phone finds signal: its records go first and its photographs after (ARCHITECTURE §9
-  // (2)), each in the order recorded. Each leaves the queue once it is answered, whatever the
-  // answer, and the phone keeps what it was told. One that gets no answer stays, with the rest
-  // after it. How many were sent.
-  async sync(intake: SyncIntake): Promise<number> {
-    const photographs = this.outbox.filter((entry) => entry.record === 'PHOTO');
-    const records = this.outbox.filter((entry) => entry.record !== 'PHOTO');
-    this.outbox.splice(0, this.outbox.length, ...records, ...photographs);
+  // The harness's own: what the phone holds that no story told, as the contract's suite hands
+  // it over (`SyncClientHolds`): records as they go on the wire, and the reports a sync carries.
+  // A story's phone holds no report: until the endpoint (2.6.2) an unplanned assignment and a
+  // use go by their own services (`stories/board.ts`) and its numbers by `Intake.topUp`.
+  hold(more: SyncClientHolds): void {
+    for (const record of more.records) {
+      const read = recordRead(record);
+      if (!read.read) throw new Error(`${this.name}: ${read.notice.message}`);
+      this.outbox.push(SyncStandIn.fromPhone(this.current.deviceId, read.record));
+    }
+    this.reports = {
+      unplannedAssignments: [...this.reports.unplannedAssignments, ...more.unplannedAssignments],
+      passcodeUses: [...this.reports.passcodeUses, ...more.passcodeUses],
+      lastUsed: [...more.lastUsed],
+    };
+  }
+
+  // The next sync, as the contract has it (`SyncSent`; ADR-467): the phone's clock, the reports
+  // it holds, its records, the last number it used of each series it reports. No more than the
+  // contract's limits a sync; a scale receipt goes ahead of the disposal that points at it, and
+  // no record ahead of an unplanned assignment that has to wait for the next sync.
+  sends(): SyncSent {
+    const clockAt = this.now();
+    const unplannedAssignments = this.reports.unplannedAssignments.slice(
+      0,
+      syncUnplannedAssignmentsAtMost,
+    );
+    const waits = new Set(
+      this.reports.unplannedAssignments.slice(syncUnplannedAssignmentsAtMost).map(({ id }) => id),
+    );
+    const ordered: { readonly held: HeldRecord; readonly wire: SyncedRecord }[] = [];
+    for (const held of this.outbox) {
+      if (held.record === 'PHOTO') continue;
+      const wire = onTheWire(held);
+      const pointsAtIt =
+        wire.record === 'SCALE_RECEIPT'
+          ? ordered.findIndex(
+              (each) =>
+                each.wire.record === 'FIELD_EVENT' &&
+                each.wire.fieldEvent.scaleReceiptId === wire.scaleReceipt.id,
+            )
+          : -1;
+      if (pointsAtIt >= 0) ordered.splice(pointsAtIt, 0, { held, wire });
+      else ordered.push({ held, wire });
+    }
+    const going = ordered
+      .filter(({ wire }) => !waits.has(syncedRecordAssignment(wire) ?? ''))
+      .slice(0, syncRecordsAtMost);
+    const sync: SyncSent = {
+      clockAt: clockAt.toISOString(),
+      deviceUtcOffsetMinutes: utcOffsetMinutes(this.current.timeZone, clockAt),
+      unplannedAssignments,
+      passcodeUses: this.reports.passcodeUses.slice(0, syncPasscodeUsesAtMost),
+      records: going.map(({ wire }) => wire),
+      lastUsed: this.reports.lastUsed,
+    };
+    this.last = { sync, held: going.map(({ held }) => held) };
+    return sync;
+  }
+
+  // What came back for the sync it sent last, off the wire; `undefined` where nothing came. Read
+  // by the contract's own rule (`syncAnswerRead`): what is no answer to what was sent marks
+  // nothing, and everything stays. Otherwise each thing answered leaves the queue; one the
+  // server did not store is kept and shown as not saved (AC-05-20, 46). Whether it was an
+  // answer.
+  answered(answer: unknown): boolean {
+    const last = this.last;
+    if (last === undefined) throw new Error(`${this.name} was answered before it sent anything.`);
+    this.last = undefined;
+    const read = answer === undefined ? null : syncAnswerRead(last.sync, answer);
+    if (read === null) return false;
+    const reported = [
+      ...read.unplannedAssignments.map((each) => ({ id: each.assignmentId, ...each })),
+      ...read.passcodeUses.map((each) => ({ id: each.useId, ...each })),
+    ];
+    const gone = new Set(reported.map(({ id }) => id));
+    this.reports = {
+      unplannedAssignments: this.reports.unplannedAssignments.filter(({ id }) => !gone.has(id)),
+      passcodeUses: this.reports.passcodeUses.filter(({ id }) => !gone.has(id)),
+      lastUsed: this.reports.lastUsed,
+    };
+    for (const each of reported) {
+      if (stored(each)) continue;
+      this.keptReports.push(each.id);
+      this.shown.push({ id: each.id, reason: each.reason ?? each.answer, message: null });
+    }
+    last.held.forEach((sent, place) => {
+      const each = read.records[place];
+      if (each === undefined) return;
+      this.outbox.splice(this.outbox.indexOf(sent), 1);
+      this.told.push({ sent, answer: each });
+      if ('reason' in each) {
+        this.shown.push({ id: heldId(sent), reason: each.reason, message: each.message });
+      }
+    });
+    return true;
+  }
+
+  // The phone finds signal: its records go first, a sync of the contract's at a time, and its
+  // photographs after (ARCHITECTURE §9 (2)), each in the order recorded. A sync that gets no
+  // answer leaves everything it carried on the phone, to go again under the same ids. How many
+  // records and photographs were answered. `certifications` is where a certification goes
+  // (never intake's, ADR-469): a certifying phone's story names it.
+  async sync(intake: SyncIntake, certifications?: CertificationsReceived): Promise<number> {
+    const server = new SyncStandIn(intake, certifications);
     let sent = 0;
-    while (this.outbox.length > 0) {
-      const [next] = this.outbox;
-      if (next === undefined) break;
-      const answer = await intake.receive(next);
-      this.told.push({ sent: next, answer });
-      this.outbox.shift();
+    while (this.outbox.some((held) => held.record !== 'PHOTO')) {
+      const sync = this.sends();
+      if (sync.records.length === 0) break;
+      const wire: unknown = JSON.parse(JSON.stringify(sync));
+      if (!this.answered(await server.answered(this.current.deviceId, wire))) {
+        throw new Error(`${this.name}: what came back is no answer to the sync it sent.`);
+      }
+      sent += sync.records.length;
+    }
+    for (const held of [...this.outbox]) {
+      if (held.record !== 'PHOTO') continue;
+      const answer = await intake.receive(held);
+      this.told.push({ sent: held, answer });
+      this.outbox.splice(this.outbox.indexOf(held), 1);
       sent += 1;
     }
     return sent;
@@ -629,10 +925,26 @@ export class SimulatedDevice {
     return [...this.told];
   }
 
-  // What it shows its monitor as not saved: each record the server kept in quarantine, with the
-  // reason. Never swallowed (ADR-022; REQ-308c).
+  // What it shows its monitor as not saved: each record the server kept in quarantine or could
+  // not save, with the reason. Never swallowed (ADR-022, 468; REQ-308c).
   get notSaved(): readonly Answered[] {
-    return this.told.filter((one) => one.answer.answer === 'QUARANTINED');
+    return this.told.filter((one) => !stored(one.answer));
+  }
+
+  // The same, with the reports not saved beside the records, as the contract's suite reads it;
+  // and the id of everything it holds that the server has not said it stored.
+  get shownNotSaved(): readonly ShownNotSaved[] {
+    return [...this.shown];
+  }
+
+  get holds(): readonly string[] {
+    return [
+      ...this.reports.unplannedAssignments.map(({ id }) => id),
+      ...this.reports.passcodeUses.map(({ id }) => id),
+      ...this.outbox.map(heldId),
+      ...this.keptReports,
+      ...this.notSaved.map((one) => heldId(one.sent)),
+    ];
   }
 
   private startedEvent(id: string): StartedEvent {

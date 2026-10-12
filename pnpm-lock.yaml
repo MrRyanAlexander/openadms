@@ -147,6 +147,9 @@ importers:
       '@open-adms/api':
         specifier: workspace:*
         version: link:../../apps/api
+      '@open-adms/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       '@open-adms/db':
         specifier: workspace:*
         version: link:../db

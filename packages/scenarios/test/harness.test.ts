@@ -2,12 +2,15 @@
 // ids a phone makes, and a phone that keeps what it records until it syncs. And how that phone
 // captures (BACKLOG 1.3.7; spec/acceptance/04-field-capture.md AC-04-10, 11, 17, 59, 70, 91, 92):
 // badge first, the details picked by name, the number last and entered again.
+import { createHash } from 'node:crypto';
+
 import type { SyncAnswer } from '@open-adms/api';
 import { describe, expect, it } from 'vitest';
 
 import { projectTime, StoryClock, utcOffsetMinutes } from '../src/clock.ts';
 import {
   chained,
+  heldId,
   made,
   scanned,
   SimulatedDevice,
@@ -76,8 +79,12 @@ class Received implements SyncIntake {
 
   receive(sent: PhoneRecord): Promise<SyncAnswer> {
     if (this.records.length >= this.refuseAfter) return Promise.reject(new Error('no signal'));
-    this.records.push(sent);
     const id = idOf(sent);
+    // The same id sent again is the same record (KD-56).
+    if (this.records.some((one) => idOf(one) === id) && !this.quarantines.has(id)) {
+      return Promise.resolve({ answer: 'ALREADY_SAVED', id });
+    }
+    this.records.push(sent);
     return Promise.resolve(
       this.quarantines.has(id)
         ? {
@@ -181,7 +188,7 @@ describe('a simulated phone', () => {
     });
   });
 
-  it('keeps what wasn’t received, in order, when the signal drops mid-sync', async () => {
+  it('keeps everything a sync carried when the signal drops before its answer, and sends it again under the same ids', async () => {
     const clock = new StoryClock('2026-10-12T08:15:00-04:00');
     const phone = new SimulatedDevice(setup, clock);
     for (const number of ['101001', '101002', '101003']) {
@@ -190,9 +197,21 @@ describe('a simulated phone', () => {
     const intake = new Received();
     intake.refuseAfter = 1;
     await expect(phone.sync(intake)).rejects.toThrow('no signal');
-    expect(phone.waiting.map((event) => event.ticketNumber)).toEqual(['101002', '101003']);
+    // The server has the first; the phone heard nothing, so it lets go of none.
+    expect(intake.events.map((event) => event.ticketNumber)).toEqual(['101001']);
+    expect(phone.waiting.map((event) => event.ticketNumber)).toEqual([
+      '101001',
+      '101002',
+      '101003',
+    ]);
     intake.refuseAfter = Infinity;
-    expect(await phone.sync(intake)).toBe(2);
+    expect(await phone.sync(intake)).toBe(3);
+    expect(phone.answers.map((told) => told.answer.answer)).toEqual([
+      'ALREADY_SAVED',
+      'SAVED',
+      'SAVED',
+    ]);
+    expect(phone.waiting).toEqual([]);
     expect(intake.events.map((event) => event.ticketNumber)).toEqual([
       '101001',
       '101002',
@@ -210,7 +229,13 @@ describe('a simulated phone', () => {
 
 // The lists a phone holds, by made-up ids: P1's debris types, field tags and unit rate pay items
 // (spec/golden/MISSION.md §1), a block of each series, and no rate anywhere.
-const named = (name: string) => ({ id: `id:${name}`, name });
+// A made-up id for a name, shaped as the ids a phone's lists hold: the contract a phone syncs by
+// reads a pick only as a UUID.
+const listId = (name: string): string => {
+  const hex = createHash('sha256').update(name).digest('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-7${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+};
+const named = (name: string) => ({ id: listId(name), name });
 const block = (series: PhoneLists['blocks'][number]['series'], first: number, last: number) =>
   ({
     series,
@@ -220,7 +245,7 @@ const block = (series: PhoneLists['blocks'][number]['series'], first: number, la
     status: 'ISSUED',
   }) as const;
 const payItem = (code: string, work: string, bandFrom: number | null, bandTo: number | null) => ({
-  id: `id:${code}`,
+  id: listId(code),
   code,
   bandFrom,
   bandTo,
@@ -253,8 +278,8 @@ const lists: PhoneLists = {
     payItem('WG-RMV-EA', 'White Goods', null, null),
   ],
   itemNames: [
-    { ...named('Washer'), kindOfWorkId: 'id:White Goods' },
-    { ...named('Dryer'), kindOfWorkId: 'id:White Goods' },
+    { ...named('Washer'), kindOfWorkId: listId('White Goods') },
+    { ...named('Dryer'), kindOfWorkId: listId('White Goods') },
   ],
   incidentTypes: [{ ...named('Property damage'), subTypes: [named('Mailbox struck')] }],
   // P1's incident form: the contractor involved and a cert number, no ROE number.
@@ -379,7 +404,7 @@ describe('a simulated phone captures badge first, number last', () => {
     expect([event.ticketNumber, event.numberTyped, event.numberTypedReasonId]).toEqual([
       '101060',
       true,
-      'id:Barcode damaged',
+      listId('Barcode damaged'),
     ]);
     expect(() =>
       phone.complete(phone.begin('LOAD', 'DISPOSAL', '730416'), {
@@ -400,7 +425,7 @@ describe('a simulated phone captures badge first, number last', () => {
       }),
     );
     expect([event.formDebrisTypeId, event.payItemId, event.address, event.carriedTickets]).toEqual([
-      'id:C&D',
+      listId('C&D'),
       null,
       '14 Heron St',
       ['301004'],
@@ -438,7 +463,13 @@ describe('a simulated phone captures badge first, number last', () => {
       leaner.payItemId,
       leaner.measurementInches,
       leaner.measuredAs,
-    ]).toEqual(['id:Leaners', 'id:Leaners', 'id:LNR-RMV-EA-24', 56.5, 'CIRCUMFERENCE']);
+    ]).toEqual([
+      listId('Leaners'),
+      listId('Leaners'),
+      listId('LNR-RMV-EA-24'),
+      56.5,
+      'CIRCUMFERENCE',
+    ]);
     const stump = (inches: number) =>
       ticket({
         number: made,
@@ -447,8 +478,8 @@ describe('a simulated phone captures badge first, number last', () => {
         measurement: { inches, measuredAs: 'DIAMETER' },
       }).payItemId;
     expect([stump(30), stump(40), stump(20)]).toEqual([
-      'id:STP-RMV-EA-36',
-      'id:STP-RMV-EA-48',
+      listId('STP-RMV-EA-36'),
+      listId('STP-RMV-EA-48'),
       null,
     ]);
     const whiteGoods = ticket({
@@ -460,11 +491,11 @@ describe('a simulated phone captures badge first, number last', () => {
       ],
     });
     expect([whiteGoods.payItemId, whiteGoods.unitCount, whiteGoods.items]).toEqual([
-      'id:WG-RMV-EA',
+      listId('WG-RMV-EA'),
       null,
       [
-        { itemNameId: 'id:Washer', quantity: 2 },
-        { itemNameId: 'id:Dryer', quantity: 1 },
+        { itemNameId: listId('Washer'), quantity: 2 },
+        { itemNameId: listId('Dryer'), quantity: 1 },
       ],
     ]);
   });
@@ -511,8 +542,8 @@ describe('a simulated phone captures badge first, number last', () => {
     expect(
       [first, second].map((event) => [event.ticketNumber, event.splitSuffix, event.fieldTagId]),
     ).toEqual([
-      ['201001', 'A', 'id:Zone 1 pile'],
-      ['201001', 'B', 'id:Zone 2 pile'],
+      ['201001', 'A', listId('Zone 1 pile')],
+      ['201001', 'B', listId('Zone 2 pile')],
     ]);
     expect(phone.nextNumber('HAUL_OUT')).toBe(201002);
   });
@@ -572,14 +603,14 @@ describe('a simulated phone captures badge first, number last', () => {
       scaleReceipt: { id: disposal.scaleReceiptId, receiptNumber: 'CCL-51207', siteId: tdsr },
     });
     expect([incident.incidentTypeId, incident.incidentSubTypeId, log.siteId]).toEqual([
-      'id:Property damage',
-      'id:Mailbox struck',
+      listId('Property damage'),
+      listId('Mailbox struck'),
       tdsr,
     ]);
     expect(uuidv7Time(incident.id)).toEqual(incident.madeAt);
     // AC-04-99: what the incident names, the contractor picked by name, the cert number as given.
     expect([incident.contractorId, incident.certNumber, incident.roeNumber]).toEqual([
-      'id:Coastline Haulers LLC',
+      listId('Coastline Haulers LLC'),
       '730416',
       null,
     ]);
@@ -662,7 +693,7 @@ describe('a simulated phone captures badge first, number last', () => {
     ]);
     // The quarantined record left the queue (it was answered), and is shown as not saved.
     expect(phone.waitingRecords).toEqual([]);
-    expect(phone.notSaved.map((told) => idOf(told.sent))).toEqual([second.id]);
+    expect(phone.notSaved.map((told) => heldId(told.sent))).toEqual([second.id]);
   });
 
   it('AC-05-10 a tandem’s second disposal points at the receipt recorded with the first: one receipt, sent once', () => {
@@ -703,7 +734,7 @@ describe('a simulated phone captures badge first, number last', () => {
       roeNumber: 'R-0007',
     });
     expect([survey.workTypeId, survey.surveyNumber, survey.roeNumber]).toEqual([
-      'id:Pre-work',
+      listId('Pre-work'),
       'APN 14-0321-007',
       'R-0007',
     ]);

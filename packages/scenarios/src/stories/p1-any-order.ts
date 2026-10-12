@@ -11,7 +11,7 @@ import type { SyncAnswer } from '@open-adms/api';
 import type { FieldEventKind } from '@open-adms/db';
 
 import { projectTime } from '../clock.ts';
-import type { PhoneRecord } from '../device.ts';
+import { heldId, type PhoneRecord } from '../device.ts';
 import type { Story } from '../runner.ts';
 import { p1FieldDays } from './p1-field-days.ts';
 import { p1TimeZone as timeZone } from './p1.ts';
@@ -40,7 +40,8 @@ export const p1AnyOrder: Story = {
     const holding = {
       receive: (sent: PhoneRecord): Promise<SyncAnswer> => {
         held.push(sent);
-        return Promise.resolve({ answer: 'SAVED', id: '', notes: [] });
+        // Answered under its own id: the phone takes no other answer for one (ADR-470).
+        return Promise.resolve({ answer: 'SAVED', id: heldId(sent), notes: [] });
       },
       topUp: story.intake.topUp.bind(story.intake),
     };

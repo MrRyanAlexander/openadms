@@ -393,6 +393,22 @@ export {
   type SyncSent,
 } from './sync.ts';
 export {
+  stored,
+  storedAnswers,
+  syncAnswerRead,
+  syncedRecordAssignment,
+  syncedRecordId,
+} from './sync-client.ts';
+export {
+  syncClientSuite,
+  type ShownNotSaved,
+  type SyncClient,
+  type SyncClientCheck,
+  type SyncClientHolds,
+  type SyncClientMaker,
+} from './sync-client-suite.ts';
+export * as syncExamples from './sync-examples.ts';
+export {
   passcodeUseReportSchema,
   unplannedAssignmentReportSchema,
   type PasscodeUseReport,

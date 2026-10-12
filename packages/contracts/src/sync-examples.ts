@@ -1,6 +1,9 @@
-// The example world's records as a phone sends them, for the contract's own tests (ADR-466, 467):
-// one of each kind, from Monday on P1.
-import type { SyncedCertification, SyncedFieldEvent, SyncedRecord } from '../../src/index.ts';
+// The example world's records as a phone sends them (ADR-466, 467, 470): one of each kind, from
+// Monday on P1, and the two reports a sync carries. The contract's own tests send them, and so
+// does the suite any client must pass (`sync-client-suite.ts`), which is why they are here and
+// not beside the tests.
+import type { SyncedCertification, SyncedFieldEvent, SyncedRecord } from './sync-records.ts';
+import type { SyncSent } from './sync.ts';
 
 export const made = (last: string): string => `019a0000-0000-7000-8000-${last.padStart(12, '0')}`;
 export const p1 = made('p1'.replace('p', 'a'));
@@ -251,3 +254,27 @@ export const records: SyncedRecord[] = [
   },
   { record: 'CERTIFICATION', certification },
 ];
+
+// Tariq had no assignment on Monday: the tower's phone was set up for him under the passcode.
+export const unplanned: SyncSent['unplannedAssignments'][number] = {
+  id: made('c2'),
+  projectId: p1,
+  personId: made('b3'),
+  fieldEventKinds: ['DISPOSAL'],
+  certifying: false,
+  formDocumentTypes: [],
+  siteId: landfill,
+  payItemIds: [],
+  occasion: 'SETUP',
+  madeAt: '2026-10-12T11:50:00.000Z',
+  deviceUtcOffsetMinutes: -240,
+};
+
+// The phone passed to Kim, who has her own assignment, with no connection.
+export const switched: SyncSent['passcodeUses'][number] = {
+  id: made('c3'),
+  use: 'MONITOR_SWITCH',
+  personId: kim,
+  loggedAt: '2026-10-12T16:02:00.000Z',
+  deviceUtcOffsetMinutes: -240,
+};

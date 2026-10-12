@@ -89,8 +89,8 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-11, through ADR-469)
-- **Phase 2 (API and sync) is open (ADR-376): 22 of its 32 tasks are done** (`BACKLOG.md`,
+### Where things stand (2026-10-11, through ADR-470)
+- **Phase 2 (API and sync) is open (ADR-376): 23 of its 32 tasks are done** (`BACKLOG.md`,
   "Active — Phase 2", ticks each with its ADRs). Complete: Milestone 2.1 (the API as a process,
   the boundary, time limits and policy), 2.2 (sign-in: its records, passwords, sessions, two-step
   sign-in, permissions and people, rate limits), 2.3 (the job queue, the worker as a process, what
@@ -102,11 +102,11 @@ of `DECISIONS.md`.
   reports besides field events, in five parts, ADR-456…458, 462…464; its last, every other use
   of the master passcode a phone logged)** are done. **REQ-202b was read whole and is not
   ticked: the passcode's use to sync and turn a phone in is task 2.6.5's (ADR-464 (5)).**
-  **Milestone 2.6 (sync) is under way: task 2.6.1, the sync contract, is cut in four (ADR-466)
-  and its parts 1 to 3 are done** (the six records a phone sends, `sync-records.ts`; one sync
-  whole and its answer, `sync.ts`, each record read on its own and answered `SAVED`,
-  `ALREADY_SAVED`, `QUARANTINED` or `NOT_SAVED`, ADR-467; a certification made on a phone, the
-  seventh kind, handed to `Certifications.received`, ADR-469; what they leave: C127, C128, C129). **The user decided that a record answered `NOT_SAVED`
+  **Milestone 2.6 (sync) is under way: task 2.6.1, the sync contract, is done in four parts**
+  (the records a phone sends, `sync-records.ts`, ADR-466; one sync whole and its answer,
+  `sync.ts`, ADR-467; a certification made on a phone, ADR-469; **the suite any client must
+  pass, `syncClientSuite`, and `syncAnswerRead`, with the harness's phone a client of the
+  contract, ADR-470**; what they leave: C127…C130). **The user decided that a record answered `NOT_SAVED`
   is held on the server for a person, in a table of its own, built with 2.6.2 (ADR-468).** **The user approved ARCHITECTURE §7.2's notes on signing in
   online and taking the assignment (ADR-452).**
 - **Where each thing is written, so nothing is read twice:** a rule as it stands, with its ADR:
@@ -329,19 +329,16 @@ questions.
 **Phase 2 is open (ADR-376). Its plan is `BACKLOG.md`, "Active — Phase 2" (ADR-377): read its
 brief first. One task per response.**
 
-**Task 2.6.1, part 4 of 4: the suite any client must pass** *(BACKLOG 2.6.1, C129, C128 and
-C127 first; ADR-466, 467, 468, 469; REQ-004, 203; ARCHITECTURE §9; `packages/contracts/src/sync.ts`
-and `sync-records.ts`, `packages/contracts/test/support/synced.ts`, `packages/scenarios/src/device.ts`;
-read `api-tests.md` beside the `adms-verify` skill first)*. **No endpoint yet.** The tests any
-client of the sync contract must pass, run by the harness now and by the field app in Phase 3: a
-client sends `SyncSent` and reads `SyncAnswered`; every part is sent, empty where there is
-nothing; the answers are as many as what was sent and in its order; a phone keeps what was
-answered `QUARANTINED` or `NOT_SAVED`; the harness's phones send what `syncedRecordSchema` reads
-(their records as JSON, without `source` and `deviceId`; a certification through the contract's
-shape, no capacity sent). It closes 2.6.1; then 2.6.2 (the endpoint, `Sync`, `SyncedRecord` and
-the table that holds what couldn't be saved, ADR-468). REQ-004 is ticked only when OpenAPI covers
-every endpoint.
-**The user may still overturn ADR-469's defaults, ADR-467 (4)'s limits (its other defaults are settled, ADR-468), ADR-466's, ADR-464's, ADR-463's, ADR-462's, ADR-458's other defaults (three were confirmed, ADR-459), ADR-457's, ADR-456 (5)'s proposals, ADR-455's, ADR-454's, ADR-453's, ADR-451's and ADR-450's defaults, ADR-449
+**Task 2.6.2: records, the sync endpoint** *(BACKLOG 2.6.2; its carry-forward first: C130, C129,
+C128, C127, C126, C122, C69, C64, C53, C70; ADR-466…470; REQ-016, 203; ARCHITECTURE §9, §10;
+`spec/DATA-MODEL.md` §4.5; `packages/contracts/src/sync.ts`, `sync-client.ts`,
+`apps/api/src/sync/`, `packages/scenarios/src/sync-stand-in.ts`; read `schema-and-migrations.md`,
+`database-tests.md` and `api-tests.md` beside the `adms-verify` skill first)*. It is large: **cut
+it in parts by an ADR before building, one part a response** (the schema with its guards and
+tests: `Sync`, `SyncedRecord` and the table that holds what couldn't be saved, ADR-468; then the
+service and the endpoint; then the harness's phones through it in place of `SyncStandIn`, their
+reports and numbers in the sync). Say what the standards ask first (ADR-401).
+**The user may still overturn ADR-470's defaults, ADR-469's, ADR-467 (4)'s limits (its other defaults are settled, ADR-468), ADR-466's, ADR-464's, ADR-463's, ADR-462's, ADR-458's other defaults (three were confirmed, ADR-459), ADR-457's, ADR-456 (5)'s proposals, ADR-455's, ADR-454's, ADR-453's, ADR-451's and ADR-450's defaults, ADR-449
 (5)'s proposals as built, ADR-442's, ADR-440's, ADR-438's two choices or ADR-439's (`SUMMARY.md` §4).**
 **Docker's disk is 8 GB and was full once on 2026-10-10** (Tools and housekeeping; it has held since, 1.3 GB free after ADR-464's session): if `pnpm ready` fails for space, stop and ask the user to free some; never work around it.
 **Before the chain, `pnpm ready`** (the stack up, then `installer:check`): a `✗` at the migrations

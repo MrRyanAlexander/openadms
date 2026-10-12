@@ -182,6 +182,7 @@ export type {
   IntakeNote,
   PhotoOwnerKind,
   SentAnswers,
+  SentCertification,
   SentDropOffLog,
   SentFieldEvent,
   SentForm,

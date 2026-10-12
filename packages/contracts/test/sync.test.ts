@@ -24,36 +24,12 @@ import {
   assignment,
   collection,
   disposal,
-  kim,
-  landfill,
   made,
   p1,
   records,
-} from './support/synced.ts';
-
-// Tariq had no assignment on Monday: the tower's phone was set up for him under the passcode.
-const unplanned = {
-  id: made('c2'),
-  projectId: p1,
-  personId: made('b3'),
-  fieldEventKinds: ['DISPOSAL' as const],
-  certifying: false,
-  formDocumentTypes: [],
-  siteId: landfill,
-  payItemIds: [],
-  occasion: 'SETUP' as const,
-  madeAt: '2026-10-12T11:50:00.000Z',
-  deviceUtcOffsetMinutes: -240,
-};
-
-// The phone passed to Kim, who has her own assignment, with no connection.
-const switched = {
-  id: made('c3'),
-  use: 'MONITOR_SWITCH' as const,
-  personId: kim,
-  loggedAt: '2026-10-12T16:02:00.000Z',
-  deviceUtcOffsetMinutes: -240,
-};
+  switched,
+  unplanned,
+} from '../src/sync-examples.ts';
 
 // The tower's phone at 17:30 on Monday.
 const sync: SyncSent = {

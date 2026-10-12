@@ -250,21 +250,31 @@ export const certification: Story = {
       saturday('09:40'),
       'Rivera’s self-loader, 730416: Sam picks Coastline and types "Rivera Trucking" into tier 1',
     );
-    const selfLoader = made({
-      certNumber: '730416',
+    // Through his phone, as a sync carries it (ADR-469, 470): the boxes as measured, and never
+    // a capacity. The phone works one out to show him, by the rule the server uses.
+    const samsPhone = story.phone({
+      name: 'P1-HO-TDSR',
+      deviceId: world.phone,
+      monitorId: sam,
+      assignmentId: certifying,
+      projectId: p1,
+      lists: await story.lists.held({ assignmentId: certifying, deviceId: world.phone }),
+      timeZone,
+    });
+    const selfLoaderSheet = {
       firstTierSub: 'Rivera Trucking',
       vehicleTypeId: await picked('vehicleType', 'Self-Loading Truck'),
       boxes: [
         primary(264, 92, 96),
         {
-          shape: 'TRIANGLE',
-          sign: 'SUBTRACT',
+          shape: 'TRIANGLE' as const,
+          sign: 'SUBTRACT' as const,
           length: 36,
           width: 92,
           height: 48,
           featureId: dogBox,
         },
-      ],
+      ] satisfies BoxInput[],
       driverName: 'Marco Rivera',
       driverLicenceNumber: 'R160-542-80-112-0',
       driverLicenceState: 'FL',
@@ -272,8 +282,36 @@ export const certification: Story = {
       tagNumber: 'RVT 4821',
       tagState: 'FL',
       tagExpiry: '2027-03-31',
+    };
+    const selfLoader = samsPhone.certify({
+      kind: 'CONTAINER',
+      paperNumber: '730416',
+      primeId: coastline,
+      ...selfLoaderSheet,
     });
-    const loader = await saved(certifications.certify(selfLoader));
+    const onTheWire = JSON.stringify(samsPhone.sends());
+    story.check(
+      'AC-10-35, AC-03-30 what Sam’s phone sends for 730416 is its two boxes as measured: no capacity, though the phone shows him 48 CY, and never which phone it is from',
+      [
+        selfLoader.capacityCy,
+        /capacity/i.test(onTheWire),
+        onTheWire.includes(world.phone),
+        samsPhone.sends().records.map((sent) => sent.record),
+      ],
+      [48, false, false, ['CERTIFICATION']],
+    );
+    story.check(
+      'the phone syncs it: one record, answered "saved"',
+      [
+        await samsPhone.sync(story.intake, certifications),
+        samsPhone.answers.map((one) => one.answer),
+        samsPhone.waitingRecords,
+      ],
+      [1, [{ answer: 'SAVED', id: selfLoader.record.id, notes: [] }], []],
+    );
+    const loader = await api.certification.findUniqueOrThrow({
+      where: { id: selfLoader.record.id },
+    });
     story.check(
       'AC-03-11 Rivera is on P1 from that moment, a tier 1 sub under Coastline',
       await placesOn(p1),
@@ -299,17 +337,22 @@ export const certification: Story = {
       ['730417', 'Bucket Truck'],
       ['730418', 'Skid Steer'],
     ] as const) {
-      await saved(
-        certifications.certify(
-          made({
-            certNumber,
-            kind: 'CREW',
-            crewTypeId: await picked('crewType', crewType),
-            boxes: [],
-          }),
-        ),
-      );
+      samsPhone.certify({
+        kind: 'CREW',
+        paperNumber: certNumber,
+        primeId: coastline,
+        crewTypeId: await picked('crewType', crewType),
+        boxes: [],
+      });
     }
+    story.check(
+      'the two crews go in one sync from Sam’s phone, nothing measured, each answered "saved"',
+      [
+        await samsPhone.sync(story.intake, certifications),
+        samsPhone.answers.slice(1).map((one) => one.answer.answer),
+      ],
+      [2, ['SAVED', 'SAVED']],
+    );
     await saved(
       certifications.certify(
         made({
@@ -522,7 +565,7 @@ export const certification: Story = {
       await refused(
         certifications.certify(
           made({
-            ...selfLoader,
+            ...selfLoaderSheet,
             certNumber: '730420',
             replaces: { certificationId: loader.id, reason: ' ' },
           }),
@@ -533,9 +576,9 @@ export const certification: Story = {
     const replacement = await saved(
       certifications.certify(
         made({
-          ...selfLoader,
+          ...selfLoaderSheet,
           certNumber: '730420',
-          boxes: [...selfLoader.boxes, { ...primary(264, 92, 12), featureId: sideboards }],
+          boxes: [...selfLoaderSheet.boxes, { ...primary(264, 92, 12), featureId: sideboards }],
           replaces: { certificationId: loader.id, reason: 'sideboards added' },
         }),
       ),

@@ -3,6 +3,8 @@
 export { projectTime, StoryClock, utcOffsetMinutes } from './clock.ts';
 export {
   chained,
+  forIntake,
+  heldId,
   made,
   scanned,
   SimulatedDevice,
@@ -10,6 +12,8 @@ export {
   type Answered,
   type Completed,
   type Completion,
+  type HeldRecord,
+  type NewCertification,
   type NumberEntry,
   type PhoneLists,
   type PhoneRecord,
@@ -18,6 +22,7 @@ export {
   type SyncIntake,
 } from './device.ts';
 export { uuidv7, uuidv7Time } from './ids.ts';
+export { SyncStandIn, type CertificationsReceived } from './sync-stand-in.ts';
 export { localMapServers } from './map-servers.ts';
 export { builtInPolicy } from './policy.ts';
 export {
