@@ -303,7 +303,7 @@ export const certification: Story = {
     story.check(
       'the phone syncs it: one record, answered "saved"',
       [
-        await samsPhone.sync(story.intake, certifications),
+        await samsPhone.sync(story.server),
         samsPhone.answers.map((one) => one.answer),
         samsPhone.waitingRecords,
       ],
@@ -348,7 +348,7 @@ export const certification: Story = {
     story.check(
       'the two crews go in one sync from Sam’s phone, nothing measured, each answered "saved"',
       [
-        await samsPhone.sync(story.intake, certifications),
+        await samsPhone.sync(story.server),
         samsPhone.answers.slice(1).map((one) => one.answer.answer),
       ],
       [2, ['SAVED', 'SAVED']],

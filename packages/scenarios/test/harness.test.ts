@@ -5,11 +5,18 @@
 import { createHash } from 'node:crypto';
 
 import type { SyncAnswer } from '@open-adms/api';
+import {
+  recordRead,
+  type RecordAnswer,
+  type SyncAnswered,
+  type SyncReceived,
+} from '@open-adms/contracts';
 import { describe, expect, it } from 'vitest';
 
 import { projectTime, StoryClock, utcOffsetMinutes } from '../src/clock.ts';
 import {
   chained,
+  fromPhone,
   heldId,
   made,
   scanned,
@@ -17,8 +24,8 @@ import {
   typed,
   type PhoneLists,
   type PhoneRecord,
+  type PhoneServer,
   type RecordedEvent,
-  type SyncIntake,
 } from '../src/device.ts';
 import { uuidv7, uuidv7Time } from '../src/ids.ts';
 
@@ -67,7 +74,9 @@ function idOf(sent: PhoneRecord): string {
   }
 }
 
-class Received implements SyncIntake {
+// A server in memory, in the place of the API's `Sync`: it reads one sync as `Sync` does (each
+// record by the contract's own rule, given the phone that synced) and keeps what it is sent.
+class Received implements PhoneServer {
   readonly records: PhoneRecord[] = [];
   refuseAfter = Infinity;
   // The ids the server keeps in quarantine instead of saving.
@@ -96,6 +105,33 @@ class Received implements SyncIntake {
           }
         : { answer: 'SAVED', id, notes: [] },
     );
+  }
+
+  async received(deviceId: string, sent: SyncReceived): Promise<{ answered: SyncAnswered }> {
+    const records: RecordAnswer[] = [];
+    for (const one of sent.records) {
+      const read = recordRead(one);
+      if (!read.read) throw new Error(read.notice.message);
+      const record = fromPhone(deviceId, read.record);
+      if (record.record === 'CERTIFICATION') throw new Error('No certification is sent here.');
+      records.push(await this.receive(record));
+    }
+    return {
+      answered: {
+        unplannedAssignments: [],
+        passcodeUses: [],
+        records,
+        // No report is taken: the phone holds what it held.
+        numbers: sent.lastUsed.map(({ projectId, series }) => ({
+          projectId,
+          series,
+          toppedUp: false,
+          blocks: [],
+        })),
+        masterPasscode: { version: 1, check: null },
+        setupVersion: null,
+      },
+    };
   }
 }
 

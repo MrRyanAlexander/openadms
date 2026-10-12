@@ -35,6 +35,7 @@ import type { PhoneRecord } from '../device.ts';
 import { uuidv7 } from '../ids.ts';
 import { localMapServers } from '../map-servers.ts';
 import type { Story } from '../runner.ts';
+import { sentAlone } from './board.ts';
 import {
   certifyP1,
   loadP1Map,
@@ -143,7 +144,7 @@ export const p1Viewed: Story = {
       new Mileages(new MapServers(localMapServers())),
     );
     const sync = { projectId: p1, trigger: 'SYNC' } as const;
-    const phones = new P1Syncs(story, held);
+    const phones = new P1Syncs(story, office);
     const [mondayEvening, tuesdayEvening, wednesdayMorning] = phones.times;
     if (
       mondayEvening === undefined ||
@@ -205,7 +206,7 @@ export const p1Viewed: Story = {
           ...more,
         },
       };
-      const answer = await story.intake.receive(record);
+      const answer = await sentAlone(story, timeZone, record);
       if (answer.answer !== 'SAVED') throw new Error(`Not saved: ${answer.answer}`);
     };
     await send(heldEvent('COLLECTION'), '09:30', '09:50', {

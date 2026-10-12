@@ -1,5 +1,5 @@
-// The seventh story (BACKLOG 1.4.2; ADR-338): three days of phones syncing through the API's
-// intake (spec/parts/05-sync.md; spec/acceptance/05-sync.md, by scenario ID; adms-exceptions
+// The seventh story (BACKLOG 1.4.2, 2.6.2 part 4; ADR-338, 472, 475): three days of phones
+// syncing through the API's own `Sync` and the intake behind it (spec/parts/05-sync.md; spec/acceptance/05-sync.md, by scenario ID; adms-exceptions
 // §4.3a, Scenarios A, C and D). Every record is received, in whatever order it comes, and stored
 // once; a second field event of one kind on one ticket is kept whole in quarantine and never
 // answered "saved"; a retry of the same record is the same record; nothing else is refused.
@@ -13,8 +13,9 @@
 // It ends where this build does: every field event PENDING. Pairing, flags, zones, mileage and
 // money are the worker's (Milestones 1.5…1.7); what a reviewer does with a quarantined record is
 // 1.8.x's. A sync begins with the phone's proof of itself, through the API's `PhoneProofs`
-// (task 2.5.1, ADR-440). Not here: the endpoints, the ledger's own tables, the photograph's
-// file (Phase 2); the phone's screens (Phase 3).
+// (task 2.5.1, ADR-440). Not here: the endpoint over HTTP (the API's own tests), what a sync
+// can't save (the story `held-for-review`), the photograph's file (task 2.6.4); the phone's
+// screens (Phase 3).
 import {
   Certifications,
   FormSetup,
@@ -47,7 +48,7 @@ import {
 import { uuidv7 } from '../ids.ts';
 import type { EnrolledPhone } from '../software-key.ts';
 import type { Story, StoryMonitor } from '../runner.ts';
-import { assigned, taken, unplanned as unplannedOn } from './board.ts';
+import { assigned, firstBlocks, sentAlone, taken, unplanned as unplannedOn } from './board.ts';
 import { p1TimeZone as timeZone, setUpP1, setUpP1Sites, startSeries } from './p1.ts';
 
 const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-04:00`;
@@ -69,12 +70,12 @@ const told = (answers: readonly RecordAnswer[]): string[] => answers.map((one) =
 export const sync: Story = {
   name: 'sync',
   title:
-    'Three days of phones syncing through intake: every record received and stored once, a duplicate kept whole in quarantine, nothing else refused',
+    'Three days of phones syncing: every record received and stored once, a duplicate kept whole in quarantine, nothing else refused',
   timeZone,
   start: saturday('08:00'),
 
   async run(story) {
-    const { api, clock, intake } = story;
+    const { api, clock } = story;
     const saved = async <T>(attempt: Promise<Outcome<T>>): Promise<T> => {
       const outcome = await attempt;
       if (!outcome.saved) throw new Error(`Refused: ${outcome.refusal.message}`);
@@ -373,14 +374,12 @@ export const sync: Story = {
         timeZone,
       };
     };
-    const block = async (phone: string, monitor: string, projectId: string, series: NumberSeries) =>
-      intake.topUp({ person: person(monitor), deviceId: device(phone) }, [
-        { projectId, series, lastUsedNumber: null },
-      ]);
+    const block = (phone: string, projectId: string, series: NumberSeries) =>
+      firstBlocks(story, device(phone), timeZone, projectId, [series]);
     // The answers a phone was given at its latest sync, in the order sent.
     const sent = new Map<SimulatedDevice, number>();
     const syncing = async (phone: SimulatedDevice): Promise<RecordAnswer[]> => {
-      await phone.sync(intake);
+      await phone.sync(story.server);
       const from = sent.get(phone) ?? 0;
       sent.set(phone, phone.answers.length);
       return phone.answers.slice(from).map((one) => one.answer);
@@ -429,8 +428,8 @@ export const sync: Story = {
       kinds: ['COLLECTION'],
     };
     const mondays = await board('2026-10-12', [...mondayPlan, samOnAnasPhone]);
-    await block('P1-COL-1', 'Ana Brooks', p1, 'LOAD');
-    await block('P1-UR-1', 'Jo Kim', p1, 'UNIT_RATE');
+    await block('P1-COL-1', p1, 'LOAD');
+    await block('P1-UR-1', p1, 'UNIT_RATE');
     const [anaPlan, kimPlan, joPlan] = mondayPlan;
     if (anaPlan === undefined || kimPlan === undefined || joPlan === undefined) {
       throw new Error('Monday’s board is short.');
@@ -441,7 +440,7 @@ export const sync: Story = {
     // Tariq has no assignment: his supervisor sets P1-TWR-LF up on the spot with the master
     // passcode, an unplanned assignment made on the phone (ADR-240), which the phone reports
     // and the API's `UnplannedAssignments` receives (ADR-457).
-    const unplanned = await unplannedOn(api, clock, device('P1-TWR-LF'), timeZone, {
+    const unplanned = await unplannedOn(story, device('P1-TWR-LF'), timeZone, {
       projectId: p1,
       personId: person('Tariq Patel'),
       fieldEventKinds: ['DISPOSAL', 'HAUL_OUT_DISPOSAL'],
@@ -645,7 +644,7 @@ export const sync: Story = {
       'The connection dropped before the answers came back: the phone sends the same three records again',
     );
     const again: RecordAnswer[] = [];
-    for (const record of noon) again.push(await intake.receive(forIntake(record)));
+    for (const record of noon) again.push(await sentAlone(story, timeZone, record));
     story.check(
       'AC-05-12, AC-05-15 a retry is the same record: the 10:22 disposal is answered "already saved", never taken for a duplicate; the 11:40 one is still one quarantined record and still not "saved"',
       [
@@ -742,7 +741,7 @@ export const sync: Story = {
     // Jo's twenty-five. The connection drops after the twelfth: the server has twelve, the phone
     // heard nothing and sends all twenty-five again.
     const jos = jo.waitingRecords;
-    for (const record of jos.slice(0, 12)) await intake.receive(forIntake(record));
+    for (const record of jos.slice(0, 12)) await sentAlone(story, timeZone, record);
     const josAnswers = await syncing(jo);
     const count = (answers: readonly RecordAnswer[], answer: RecordAnswer['answer']): number =>
       answers.filter((one) => one.answer === answer).length;
@@ -826,10 +825,7 @@ export const sync: Story = {
         ['101022 COL', '730415', 'P1’s 730415'],
       ],
     );
-    const blocks = await intake.topUp(
-      { person: person('Sam Grant'), deviceId: device('P1-COL-1') },
-      [{ projectId: p1, series: 'LOAD', lastUsedNumber: ana.lastUsedNumber('LOAD') }],
-    );
+    const blocks = await allocator.held(device('P1-COL-1'), { projectId: p1, series: 'LOAD' });
     const unused = (held: typeof blocks): number =>
       held.reduce(
         (sum, each) =>
@@ -903,7 +899,7 @@ export const sync: Story = {
       },
     ];
     const tuesdays = await board('2026-10-13', tuesdayPlan);
-    await block('P1-HO-TDSR', 'Sam Grant', p1, 'HAUL_OUT');
+    await block('P1-HO-TDSR', p1, 'HAUL_OUT');
     const [anaTue, kimTue, tariqTue, samTue, joTue] = tuesdayPlan;
     if (
       anaTue === undefined ||
@@ -1141,7 +1137,9 @@ export const sync: Story = {
       syncing(jo),
       // The records that reached the server broken, each on its own connection.
       Promise.all(
-        brokenRecords.map((fieldEvent) => intake.receive({ record: 'FIELD_EVENT', fieldEvent })),
+        brokenRecords.map((fieldEvent) =>
+          sentAlone(story, timeZone, { record: 'FIELD_EVENT', fieldEvent }),
+        ),
       ),
     ]);
     const everyAnswer = burst.flat();
@@ -1376,8 +1374,8 @@ export const sync: Story = {
     };
     const answered = another('40 Birch Ln', { answers: { 'police-report': 'BC-2026-1187' } });
     const blank = another('14 Heron St', { answers: {}, latitude: '39.13850000' });
-    const fits = await intake.receive({ record: 'INCIDENT', incident: answered });
-    const doesNot = await intake.receive({ record: 'INCIDENT', incident: blank });
+    const fits = await sentAlone(story, timeZone, { record: 'INCIDENT', incident: answered });
+    const doesNot = await sentAlone(story, timeZone, { record: 'INCIDENT', incident: blank });
     const incidents = await api.incident.findMany({
       where: { id: { in: [answered.id, blank.id] } },
       orderBy: { madeAt: 'asc' },
@@ -1435,8 +1433,8 @@ export const sync: Story = {
       },
     ];
     const wednesdays = await board('2026-10-14', wednesdayPlan);
-    await block('P2-COL-1', 'Lee Morgan', p2, 'LOAD');
-    await block('P2-COL-1', 'Lee Morgan', p2, 'ROE');
+    await block('P2-COL-1', p2, 'LOAD');
+    await block('P2-COL-1', p2, 'ROE');
     const [leePlan, kimP2Plan] = wednesdayPlan;
     if (leePlan === undefined || kimP2Plan === undefined)
       throw new Error('Wednesday’s board is short.');
@@ -1666,7 +1664,7 @@ export const sync: Story = {
       ...tariq.answers.flatMap((one) => (one.sent.record === 'SCALE_RECEIPT' ? [one.sent] : [])),
     ];
     const secondTime: RecordAnswer[] = [];
-    for (const record of sentTwice) secondTime.push(await intake.receive(record));
+    for (const record of sentTwice) secondTime.push(await sentAlone(story, timeZone, record));
     story.check(
       'AC-05-14 an incident, a drop-off log, an ROE made on a phone, a survey and three scale receipts, each sent a second time, are each one record still; the quarantined ROE is still one quarantined record',
       [

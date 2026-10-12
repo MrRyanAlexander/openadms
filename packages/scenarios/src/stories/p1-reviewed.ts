@@ -53,7 +53,7 @@ import {
   saved,
   setUpP1Pricing,
 } from './p1-office.ts';
-import { assigned } from './board.ts';
+import { assigned, sentAlone } from './board.ts';
 import { p1TimeZone as timeZone, startSeries } from './p1.ts';
 
 const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-04:00`;
@@ -388,7 +388,7 @@ export const p1Reviewed: Story = {
     };
 
     // ------------------------------------------------------------------------------------------
-    const phones = new P1Syncs(story, held);
+    const phones = new P1Syncs(story, office);
     const [mondayEvening, tuesdayEvening, wednesdayMorning] = phones.times;
     if (
       mondayEvening === undefined ||
@@ -911,7 +911,7 @@ export const p1Reviewed: Story = {
     };
     const send = async (fieldEvent: Sent): Promise<string> => {
       const record: PhoneRecord = { record: 'FIELD_EVENT', fieldEvent };
-      return (await story.intake.receive(record)).answer;
+      return (await sentAlone(story, timeZone, record)).answer;
     };
     // The curb's and the towers' records to copy: Ana's 101001 (the dump trailer 730415, from
     // Heron St to Marsh Road TDSR) and 101002 (Rivera's self-loader 730416, C&D, to the Landfill).
@@ -947,7 +947,7 @@ export const p1Reviewed: Story = {
     const sentTwice = await send(twice);
     const bedFile = `P1-TWR-TDSR/${twice.endedAt.toISOString()}/empty-bed`;
     const bedPrint = createHash('sha256').update(bedFile).digest('hex');
-    await story.intake.receive({
+    await sentAlone(story, timeZone, {
       record: 'PHOTO',
       photo: {
         id: uuidv7(twice.endedAt),
@@ -984,6 +984,8 @@ export const p1Reviewed: Story = {
     );
     story.at(on('14', '18:45'), 'The worker runs on P1');
     const evening = await reconciliation.run(sync);
+    // The jobs those syncs queued, a record each, are taken up now and write nothing more.
+    await queue.settle(p1);
     story.check(
       'Wednesday’s tickets before review: the second disposal scanned 101020 is in quarantine, not saved; each flag is the catalogue’s, word for word',
       [
@@ -1269,7 +1271,7 @@ export const p1Reviewed: Story = {
     const roe = async (roeNumber: string, address: string, ownerName: string, at: string) => {
       const madeAt = new Date(on('14', at));
       const id = uuidv7(madeAt);
-      await story.intake.receive({
+      await sentAlone(story, timeZone, {
         record: 'ROE',
         roe: {
           id,
@@ -1339,6 +1341,8 @@ export const p1Reviewed: Story = {
     await send(made(tower, '10:10', '10:20', { ...p2Tower, ticketNumber: '102001', loadCall: 75 }));
     story.at(on('15', '10:10'), 'The worker runs on P2');
     const p2Run = await reconciliation.run({ projectId: p2, trigger: 'SYNC' });
+    // The jobs those syncs queued, a record each, are taken up now and write nothing more.
+    await queue.settle(p2);
     story.check(
       'P2 before review: 102005 and the split’s second property are outside R-0008’s scope, and the split has no -B',
       told(p2Run),

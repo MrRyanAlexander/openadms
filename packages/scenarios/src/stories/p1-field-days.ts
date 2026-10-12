@@ -22,14 +22,13 @@ import {
   FormSetup,
   ListSetup,
   type NewPayItem,
-  NumberAllocator,
   type Outcome,
   PayItemSetup,
   ProjectSetup,
   SiteSetup,
   type NewAssignment,
 } from '@open-adms/api';
-import type { FieldEventKind, FormDocumentType, NumberSeries } from '@open-adms/db';
+import type { FieldEventKind, FormDocumentType } from '@open-adms/db';
 
 import { projectTime } from '../clock.ts';
 import {
@@ -44,7 +43,7 @@ import {
 } from '../device.ts';
 import { uuidv7, uuidv7Time } from '../ids.ts';
 import type { Story, StoryMonitor } from '../runner.ts';
-import { assigned, taken } from './board.ts';
+import { assigned, firstBlocks, taken } from './board.ts';
 import { p1TimeZone as timeZone, setUpP1, setUpP1Sites } from './p1.ts';
 
 const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-04:00`;
@@ -164,7 +163,6 @@ export const p1FieldDays: Story = {
     const lists = new ListSetup(api, clock);
     const projects = new ProjectSetup(api, clock, story.policy);
     const payItems = new PayItemSetup(api, clock, story.policy);
-    const allocator = new NumberAllocator(api, clock, story.policy);
 
     const finalDisposal = await api.siteType.findUniqueOrThrow({
       where: { key: 'FINAL_DISPOSAL' },
@@ -382,17 +380,9 @@ export const p1FieldDays: Story = {
       monday('06:30'),
       'At the yard, online: each phone that makes numbers takes a block; each monitor signs in and the phone takes their assignment and its lists',
     );
-    const blockFor = async (phone: string, monitor: string, series: NumberSeries) => {
-      await saved(
-        allocator.topUp(
-          { person: person(monitor), deviceId: device(phone) },
-          { projectId: p1, series, lastUsedNumber: null },
-        ),
-      );
-    };
-    await blockFor('P1-COL-1', 'Ana Brooks', 'LOAD');
-    await blockFor('P1-HO-TDSR', 'Sam Grant', 'HAUL_OUT');
-    await blockFor('P1-UR-1', 'Jo Kim', 'UNIT_RATE');
+    await firstBlocks(story, device('P1-COL-1'), timeZone, p1, ['LOAD']);
+    await firstBlocks(story, device('P1-HO-TDSR'), timeZone, p1, ['HAUL_OUT']);
+    await firstBlocks(story, device('P1-UR-1'), timeZone, p1, ['UNIT_RATE']);
 
     const held: Record<string, PhoneLists> = {};
     const signedIn = async (day: 'monday' | 'tuesday', planned: Planned) => {
@@ -701,7 +691,7 @@ export const p1FieldDays: Story = {
       );
     };
     story.at(monday('18:30'), 'Back at the yard the phones find signal. The tower’s syncs first');
-    story.check('Kim’s phone sends its two disposals', await kim.sync(story.intake), 2);
+    story.check('Kim’s phone sends its two disposals', await kim.sync(story.server), 2);
     story.check(
       'AC-04-42 each disposal is saved as it is and waits, PENDING, though no collection has reached the server',
       await onServer(),
@@ -709,7 +699,7 @@ export const p1FieldDays: Story = {
     );
     story.check(
       'then Tariq’s, Jo’s and Ana’s: one, three and four',
-      [await tariq.sync(story.intake), await jo.sync(story.intake), await ana.sync(story.intake)],
+      [await tariq.sync(story.server), await jo.sync(story.server), await ana.sync(story.server)],
       [1, 3, 4],
     );
     story.check(
@@ -979,11 +969,11 @@ export const p1FieldDays: Story = {
     story.check(
       'Ana’s two, Tariq’s one, Sam’s four, Lee’s receipt and disposal, Jo’s four tickets and her incident',
       [
-        await ana.sync(story.intake),
-        await tariq.sync(story.intake),
-        await sam.sync(story.intake),
-        await lee.sync(story.intake),
-        await jo.sync(story.intake),
+        await ana.sync(story.server),
+        await tariq.sync(story.server),
+        await sam.sync(story.server),
+        await lee.sync(story.server),
+        await jo.sync(story.server),
       ],
       [2, 1, 4, 2, 5],
     );
@@ -995,7 +985,7 @@ export const p1FieldDays: Story = {
     story.at(on('14', '07:10'), 'Wednesday: P1-TWR-TDSR is charged and syncs Tuesday’s work');
     story.check(
       'its three disposals and the drop-off log, in the order recorded',
-      [kim.waitingRecords.map((sent) => sent.record), await kim.sync(story.intake)],
+      [kim.waitingRecords.map((sent) => sent.record), await kim.sync(story.server)],
       [['FIELD_EVENT', 'FIELD_EVENT', 'FIELD_EVENT', 'DROP_OFF_LOG'], 4],
     );
 

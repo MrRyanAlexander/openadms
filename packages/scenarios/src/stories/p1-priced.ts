@@ -25,6 +25,7 @@ import type { PhoneRecord } from '../device.ts';
 import { uuidv7 } from '../ids.ts';
 import { localMapServers } from '../map-servers.ts';
 import type { Story } from '../runner.ts';
+import { sentAlone } from './board.ts';
 import {
   certifyP1,
   loadP1Map,
@@ -211,7 +212,7 @@ export const p1Priced: Story = {
     const audited = (tableName: string): Promise<number> =>
       api.auditRecord.count({ where: { tableName } });
 
-    const phones = new P1Syncs(story, held);
+    const phones = new P1Syncs(story, office);
     const [mondayEvening, tuesdayEvening, wednesdayMorning] = phones.times;
     if (
       mondayEvening === undefined ||
@@ -674,7 +675,7 @@ export const p1Priced: Story = {
           ...more,
         },
       };
-      const answer = await story.intake.receive(record);
+      const answer = await sentAlone(story, timeZone, record);
       if (answer.answer !== 'SAVED') throw new Error(`Not saved: ${answer.answer}`);
     };
     const collected = heldEvent('101001', 'COLLECTION');

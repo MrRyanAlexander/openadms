@@ -39,9 +39,13 @@ service that queues is made with `(db, clock, story.policy)`.** A loosening of `
 service's queueing or of the domain's `TicketNeighbours` is tried on those stories; the rule
 itself on `packages/domain/test/neighbours.test.ts`.
 **The clock's difference at a sync (ADR-473)** is proven by `p1-queued`'s last step: Ana's phone
-syncs through the API's own `Sync`, built in the story as `api-process.ts` builds it, and the
-queued runs flag `DEVICE_CLOCK_OFF`. A loosening of `project-read.ts`'s read of `synced_record`
-or of the limit handed to `TicketChecks` is tried on that story (five took about four minutes).
+syncs through the story's own server (`story.server`, the API's `Sync` as `api-process.ts`
+builds it; ADR-475), and the queued runs flag `DEVICE_CLOCK_OFF`. A loosening of
+`project-read.ts`'s read of `synced_record` or of the limit handed to `TicketChecks` is tried
+on that story (five took about four minutes). **Every story's phone syncs through `Sync` since
+ADR-475, so every field event a sync brought queued a job of its own** (trigger `SYNC`, nobody
+asking): a story whose queue is the worker's calls `queue.settle` after a sync, where it says
+the worker runs, or the next `queue.next` takes those jobs up with a person's.
 **The run of a number that is none raises only `NOT_A_TICKET_NUMBER`**: the limit handed to it
 can't be seen to matter. **A new field of `WorkSettings` is stated by every story that builds
 a `Reconciliation`** (nine today), and a worker's policy value joins `process.test.ts`.

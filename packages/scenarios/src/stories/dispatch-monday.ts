@@ -8,19 +8,26 @@
 // Monitor ID, the device with its number block and passcode version, the assignment, and each
 // field event carrying its assignment and setup version. Its monitors are created on a phone
 // and signed in through the API's services, and each phone is answered its monitor's assignment
-// (ADR-442, 443, 444). The screens and the sync behind these rows are Phases 2 to 4; the number block is cut by the API's allocator (ADR-323).
+// (ADR-442, 443, 444). The screens behind these rows are Phases 3 and 4; each phone syncs
+// through the API's own `Sync` (ADR-475), which cuts the number block by the API's allocator
+// (ADR-323).
 // It opens with setup's first three steps
 // (ADR-303): the client, the declaration event and the project, whose settings start as the
 // release's policy values; then the fourth (ADR-305): the prime added to the project, and its
 // contract.
 import { NumberAllocator, Phones } from '@open-adms/api';
-import { masterPasscodeActorId, masterPasscodeActorName } from '@open-adms/db';
+import {
+  deviceKeyActorId,
+  deviceKeyActorName,
+  masterPasscodeActorId,
+  masterPasscodeActorName,
+} from '@open-adms/db';
 
 import { projectTime } from '../clock.ts';
 import { made, scanned } from '../device.ts';
 import { uuidv7 } from '../ids.ts';
 import type { Story } from '../runner.ts';
-import { assigned, unplanned as unplannedOn } from './board.ts';
+import { assigned, firstBlocks, unplanned as unplannedOn } from './board.ts';
 import { p1TimeZone as timeZone, setUpP1, setUpP1Sites } from './p1.ts';
 
 const at = (time: string): string => `2026-10-12T${time}:00-04:00`;
@@ -446,14 +453,7 @@ export const dispatchMonday: Story = {
         ['Tariq Patel', 'P1-TWR-LF', true],
       ],
     );
-    const allocator = new NumberAllocator(api, clock, story.policy);
-    const anaAtSync = { person: people.ana, deviceId: phones.collection.id };
-    const firstBlock = await allocator.topUp(anaAtSync, {
-      projectId: office.p1,
-      series: 'LOAD',
-      lastUsedNumber: null,
-    });
-    if (!firstBlock.saved) throw new Error(firstBlock.refusal.message);
+    await firstBlocks(story, phones.collection.id, timeZone, office.p1, ['LOAD']);
     const anaPhone = story.phone({
       name: 'P1-COL-1',
       deviceId: phones.collection.id,
@@ -496,7 +496,7 @@ export const dispatchMonday: Story = {
     );
     // Made on the phone, its id the phone's own; the phone reports it and the API's
     // `UnplannedAssignments` receives it (ADR-457).
-    const unplanned = await unplannedOn(api, clock, phones.landfillTower.id, timeZone, {
+    const unplanned = await unplannedOn(story, phones.landfillTower.id, timeZone, {
       projectId: office.p1,
       personId: people.tariq,
       fieldEventKinds: ['DISPOSAL', 'HAUL_OUT_DISPOSAL'],
@@ -592,15 +592,9 @@ export const dispatchMonday: Story = {
     story.at(at('17:30'), 'Both phones sync at the yard; Ana’s reports the last number it used');
     story.check(
       'each sends its one field event',
-      [await kimPhone.sync(story.intake), await anaPhone.sync(story.intake)],
+      [await kimPhone.sync(story.server), await anaPhone.sync(story.server)],
       [1, 1],
     );
-    const toppedUp = await allocator.topUp(anaAtSync, {
-      projectId: office.p1,
-      series: 'LOAD',
-      lastUsedNumber: anaPhone.lastUsedNumber('LOAD'),
-    });
-    if (!toppedUp.saved) throw new Error(toppedUp.refusal.message);
     const events = await api.fieldEvent.findMany({
       include: { assignment: { include: { person: true, site: true } }, project: true },
       orderBy: { endedAt: 'asc' },
@@ -634,12 +628,12 @@ export const dispatchMonday: Story = {
     );
     story.check(
       'the block knows its last used number; the rest stay the phone’s, topped up by the one it used',
-      toppedUp.record.map((block) => [
-        block.firstNumber,
-        block.lastNumber,
-        block.lastUsedNumber,
-        block.status,
-      ]),
+      (
+        await new NumberAllocator(api, clock, story.policy).held(phones.collection.id, {
+          projectId: office.p1,
+          series: 'LOAD',
+        })
+      ).map((block) => [block.firstNumber, block.lastNumber, block.lastUsedNumber, block.status]),
       [
         [101001, 102000, 101001, 'ISSUED'],
         [102001, 102001, null, 'ISSUED'],
@@ -670,6 +664,7 @@ export const dispatchMonday: Story = {
       [people.tariq, 'Tariq Patel'],
       [people.jo, 'Jo Kim'],
       [masterPasscodeActorId, masterPasscodeActorName],
+      [deviceKeyActorId, deviceKeyActorName],
       [phones.collection.id, 'P1-COL-1'],
       [phones.tdsrTower.id, 'P1-TWR-TDSR'],
       [phones.landfillTower.id, 'P1-TWR-LF'],
@@ -714,11 +709,13 @@ export const dispatchMonday: Story = {
         ['assignment', 'INSERT', 'Luis Ortega', 'BACK_OFFICE', '-', null],
         ['assignment_pay_item', 'INSERT', 'Luis Ortega', 'BACK_OFFICE', '-', null],
         ['assignment_pay_item', 'INSERT', 'Luis Ortega', 'BACK_OFFICE', '-', null],
-        ['number_block', 'INSERT', 'Ana Brooks', 'DEVICE', 'P1-COL-1', null],
+        // A top-up is the phone's own act at its sync: whoever is signed in on it did not ask
+        // for it (ADR-472).
+        ['number_block', 'INSERT', 'Device key', 'DEVICE', 'P1-COL-1', null],
         // Set up under the master passcode: never Tariq's own write (ADR-457).
         ['assignment', 'INSERT', 'Master passcode', 'DEVICE', 'P1-TWR-LF', null],
-        ['number_block', 'UPDATE', 'Ana Brooks', 'DEVICE', 'P1-COL-1', null],
-        ['number_block', 'INSERT', 'Ana Brooks', 'DEVICE', 'P1-COL-1', null],
+        ['number_block', 'UPDATE', 'Device key', 'DEVICE', 'P1-COL-1', null],
+        ['number_block', 'INSERT', 'Device key', 'DEVICE', 'P1-COL-1', null],
         [
           'device',
           'UPDATE',

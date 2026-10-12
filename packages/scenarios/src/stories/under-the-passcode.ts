@@ -82,7 +82,7 @@ export const underThePasscode: Story = {
     );
 
     story.at(at('06:40'), 'The phone is set up for Tariq at the Landfill’s tower, and reports it');
-    const atTheLandfill = await unplanned(api, clock, phone.id, timeZone, {
+    const atTheLandfill = await unplanned(story, phone.id, timeZone, {
       projectId: office.p1,
       personId: tariq.id,
       fieldEventKinds: ['DISPOSAL', 'HAUL_OUT_DISPOSAL'],
@@ -114,8 +114,7 @@ export const underThePasscode: Story = {
     const { challenge } = story.proofs.challenge(phone.id);
     const proof = await story.proofs.prove(phone.id, challenge, phone.key.signed(challenge));
     const atTheTdsr = await unplanned(
-      api,
-      clock,
+      story,
       phone.id,
       timeZone,
       {
@@ -132,7 +131,7 @@ export const underThePasscode: Story = {
       { use: 'TEMPORARY_SESSION', personId: tariq.id, loggedAt: when('15:30') },
     ] as const;
     const reports: { id: string; answer: string }[] = [];
-    for (const one of logged) reports.push(await loggedUse(api, clock, phone.id, timeZone, one));
+    for (const one of logged) reports.push(await loggedUse(story, phone.id, timeZone, one));
     story.check(
       'AC-02-23 the phone proved itself with its device key, and each use it logged is saved: no passcode is sent, and nobody need be signed in',
       [proof.proven, ...reports.map(({ answer }) => answer)],
@@ -252,7 +251,7 @@ export const underThePasscode: Story = {
     for (const [nth, one] of logged.entries()) {
       const id = reports[nth]?.id;
       if (id === undefined) throw new Error('A report has no id.');
-      again.push((await loggedUse(api, clock, phone.id, timeZone, { ...one, id })).answer);
+      again.push((await loggedUse(story, phone.id, timeZone, { ...one, id })).answer);
     }
     const afterwards = (await securityLog()).filter(([time]) => time !== '16:12');
     story.check(

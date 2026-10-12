@@ -4,6 +4,7 @@ export { projectTime, StoryClock, utcOffsetMinutes } from './clock.ts';
 export {
   chained,
   forIntake,
+  fromPhone,
   heldId,
   made,
   scanned,
@@ -17,12 +18,11 @@ export {
   type NumberEntry,
   type PhoneLists,
   type PhoneRecord,
+  type PhoneServer,
   type PhoneSetup,
   type RecordedEvent,
-  type SyncIntake,
 } from './device.ts';
 export { uuidv7, uuidv7Time } from './ids.ts';
-export { SyncStandIn, type CertificationsReceived } from './sync-stand-in.ts';
 export { localMapServers } from './map-servers.ts';
 export { builtInPolicy } from './policy.ts';
 export {

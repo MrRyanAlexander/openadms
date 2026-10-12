@@ -26,7 +26,6 @@ import {
   Corrections,
   FormSetup,
   InvoiceLocks,
-  NumberAllocator,
   PayItemSetup,
   ProjectSetup,
   QcMarks,
@@ -36,7 +35,7 @@ import {
   type QcMarked,
   type Reviewed,
 } from '@open-adms/api';
-import { systemActorId, type FieldEventKind, type NumberSeries } from '@open-adms/db';
+import { systemActorId, type FieldEventKind } from '@open-adms/db';
 import { MapServers, Mileages, Reconciliation, type RunOutcome } from '@open-adms/worker';
 
 import { createHash } from 'node:crypto';
@@ -55,7 +54,7 @@ import {
   saved,
   setUpP1Pricing,
 } from './p1-office.ts';
-import { assigned, taken } from './board.ts';
+import { assigned, firstBlocks, taken } from './board.ts';
 import { p1TimeZone as timeZone } from './p1.ts';
 
 const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-04:00`;
@@ -140,7 +139,7 @@ export const goldenMission: Story = {
   async run(story) {
     const { api, worker, clock } = story;
     const office = await p1FieldDaysHeld(story);
-    const { held, dana, luis, sam, p1, coastline, samPhone } = office;
+    const { dana, luis, sam, p1, coastline, samPhone } = office;
     const done = (completed: Completed) => {
       if (!completed.saved) throw new Error(`Not saved: ${completed.reason}`);
       return completed.event;
@@ -614,15 +613,7 @@ export const goldenMission: Story = {
         siteId: p2Tdsr,
       }),
     };
-    const allocator = new NumberAllocator(api, clock, story.policy);
-    for (const series of ['LOAD', 'ROE'] as const satisfies readonly NumberSeries[]) {
-      await saved(
-        allocator.topUp(
-          { person: ana, deviceId: p2Phone('P2-COL-1') },
-          { projectId: p2, series, lastUsedNumber: null },
-        ),
-      );
-    }
+    await firstBlocks(story, p2Phone('P2-COL-1'), timeZone, p2, ['LOAD', 'ROE']);
     // Each signs in on their second phone, which takes the assignment that names it: P2's, though
     // each has P1's too that day (AC-02-29, 36; ADR-444).
     for (const [name, phone, assignment] of [
@@ -753,7 +744,7 @@ export const goldenMission: Story = {
     );
 
     // ------------------------------------------------------------------------------------------
-    const phones = new P1Syncs(story, held);
+    const phones = new P1Syncs(story, office);
     const [mondayEvening, tuesdayEvening, wednesdayMorning] = phones.times;
     if (
       mondayEvening === undefined ||
@@ -768,7 +759,7 @@ export const goldenMission: Story = {
     );
     await phones.arrive(mondayEvening);
     await phones.crewPhotographs(mondayEvening);
-    const p2Sent = [await anaP2.sync(story.intake), await kimP2.sync(story.intake)];
+    const p2Sent = [await anaP2.sync(story.server), await kimP2.sync(story.server)];
     const monday = await reconciliation.run(sync(p1));
     const mondayP2 = await reconciliation.run(sync(p2));
     story.check(

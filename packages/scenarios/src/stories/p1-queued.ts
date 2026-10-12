@@ -14,24 +14,14 @@
 // `p1-invoiced` show each change queueing its own. The last steps are the cap on a run's size
 // and the process's own pass over the queue.
 //
-// The last step of all is a phone's sync through the API's own `Sync` (task 2.6.2 part 3;
-// ADR-473; AC-05-04, AC-06-58): the server keeps how far the phone's clock stood from its own,
-// each record queues its own job, and the run flags the field events of a sync whose phone was
-// more than the policy's minutes off. Every other phone here still syncs through the story's
-// own intake (part 4 moves them), so no other ticket has a sync to read.
+// Every phone here syncs through the API's own `Sync` (task 2.6.2 part 4; ADR-475), so each
+// field event a sync brought queued its own job. The last step of all is a phone whose clock
+// is off (ADR-473; AC-05-04, AC-06-58): the server keeps how far the phone's clock stood from
+// its own, and the run flags the field events of a sync whose phone was more than the policy's
+// minutes off; Monday's and Tuesday's phones stood with the server's clock, and none of their
+// tickets is flagged.
 //
 // Not here: the worker's container (the local stack's; `apps/worker/test`).
-import {
-  Certifications,
-  Intake,
-  NumberAllocator,
-  OfflineChecks,
-  PasscodeUses,
-  PhoneAssignments,
-  PhoneLoginList,
-  Sync,
-  UnplannedAssignments,
-} from '@open-adms/api';
 import { syncAnswerRead, syncSentSchema, type SyncSent } from '@open-adms/contracts';
 import { ReconciliationJobs, systemActorId, type ReconciliationTrigger } from '@open-adms/db';
 import {
@@ -177,7 +167,7 @@ export const p1Queued: Story = {
       outcome.run.tickets.map((ticket) => `${ticket.ticketNumber} ${ticket.status}`);
 
     // ------------------------------------------------------------------------------------------
-    const phones = new P1Syncs(story, held);
+    const phones = new P1Syncs(story, office);
     for (const syncedAt of phones.times) {
       story.at(syncedAt.toISOString(), 'The phones find signal');
       await phones.arrive(syncedAt);
@@ -185,19 +175,24 @@ export const p1Queued: Story = {
     story.at(on('14', '07:20'), 'Wednesday: a run works every ticket of P1, as a story’s run does');
     const whole = await reconciliation.run({ projectId: p1, trigger: 'SYNC' });
     if (!whole.ran) throw new Error(whole.message);
-    // What the office's setup queued by itself, before any field event existed (task 2.3.3).
+    // What the office's setup queued by itself, before any field event existed (task 2.3.3),
+    // and what each phone's sync queued as it stored a field event (task 2.6.2).
     const queue = new QueueRuns(story, reconciliation);
-    const fromSetup = await queue.waiting(p1);
+    const waiting = await queue.waiting(p1);
+    const fromSetup = waiting.filter((job) => job.tickets.length === 0);
+    const fromSyncs = waiting.filter((job) => job.tickets.length > 0);
     const settling = await queue.settle(p1);
     story.check(
-      'AC-10-51 setup had queued its own jobs as it was saved, before any ticket existed: each names no ticket and asks only for the records the run flags by themselves (a certification’s views, a site’s permit); one run takes them all up and works no ticket',
+      'AC-10-51 setup had queued its own jobs as it was saved, before any ticket existed: each names no ticket and asks only for the records the run flags by themselves (a certification’s views, a site’s permit); and each of the 25 field events a sync brought queued its own as it was stored, naming its ticket and that ticket’s neighbours, with nobody waiting for the run; one run takes them all up',
       [
         fromSetup.length > 0,
-        fromSetup.every((job) => job.tickets.length === 0),
         [...new Set(fromSetup.map((job) => job.trigger))].sort(),
+        fromSyncs.length,
+        [...new Set(fromSyncs.map((job) => job.trigger))],
+        fromSyncs.every((job) => job.requestedById === null),
         settling,
       ],
-      [true, true, ['SETUP_CHANGE', 'SYNC'], 1],
+      [true, ['SETUP_CHANGE', 'SYNC'], 25, ['SYNC'], true, 1],
     );
     story.check(
       'With no job waiting, the worker finds nothing to take up for P1: no run is recorded',
@@ -483,21 +478,7 @@ export const p1Queued: Story = {
       on('14', '13:05'),
       'Ana’s phone finds signal three times, through the sync endpoint’s own service: its clock 2 h 14 m ahead of the server’s, then 5 m 59 s behind, then 6 m behind',
     );
-    const requestNow = (): undefined => undefined;
-    const sync = new Sync(api, {
-      intake: new Intake(api, clock, story.policy),
-      certifications: new Certifications(api, clock, story.policy),
-      unplanned: new UnplannedAssignments(api, { clock, requestNow }),
-      uses: new PasscodeUses(api, { clock, requestNow }),
-      numbers: new NumberAllocator(api, clock, story.policy),
-      loginList: new PhoneLoginList(api, {
-        assignments: new PhoneAssignments(api),
-        offline: new OfflineChecks('a signing secret made up for this story'),
-        clock,
-        entriesPerCall: story.policy.loginListEntriesPerCall,
-      }),
-      clock,
-    });
+    const syncsBefore = await api.sync.count();
     // Monday's first collection as her phone sent it, made again that morning under a new
     // number and an id of the phone's own.
     const anas = held.flatMap(({ sent }) =>
@@ -534,7 +515,7 @@ export const p1Queued: Story = {
         lastUsed: [],
         holds: { masterPasscodeVersion: passcode.version, listsProjectId: p1 },
       };
-      const { answered } = await sync.received(
+      const { answered } = await story.server.received(
         anas.fieldEvent.deviceId,
         syncSentSchema.parse(sent),
       );
@@ -546,15 +527,17 @@ export const p1Queued: Story = {
         read.setupVersion?.version,
       ]);
     }
-    const syncs = await api.sync.findMany({ orderBy: { id: 'asc' } });
+    const earlier = await api.sync.findMany({ orderBy: { id: 'asc' }, take: syncsBefore });
+    const syncs = await api.sync.findMany({ orderBy: { id: 'asc' }, skip: syncsBefore });
     story.check(
-      'AC-05-04 every record of each sync is received whatever its phone’s clock said; each sync is kept with the difference, the phone’s clock less the server’s in whole seconds, and with the setup version it brought: P1’s setup as phones are shown it now, a version made by the first of these syncs since Dana priced P1 after the phone took its lists, and the phone learns its lists are of an older one; no check of the master passcode is brought to a phone that holds the one in force',
+      'AC-05-04 every record of each sync is received whatever its phone’s clock said; each sync is kept with the difference, the phone’s clock less the server’s in whole seconds, and with the setup version it brought: P1’s setup as phones are shown it now, version 2, made by Monday evening’s first sync since Dana priced P1 after the phones took their lists, so the phone learns its lists are of an older one; no check of the master passcode is brought to a phone that holds the one in force. Every sync before these stood with the server’s clock',
       [
         brought,
         syncs.map((each) => Number(each.clockDifferenceSeconds)),
         syncs.map((each) => each.setupVersionSent),
         wire.fieldEvent.setupVersion,
         (await api.setupManifest.findMany({ where: { projectId: p1 } })).length,
+        [...new Set(earlier.map((each) => Number(each.clockDifferenceSeconds)))],
       ],
       [
         [
@@ -566,6 +549,7 @@ export const p1Queued: Story = {
         [2, 2, 2],
         1,
         2,
+        [0],
       ],
     );
     let syncRuns = 0;
@@ -579,7 +563,7 @@ export const p1Queued: Story = {
       orderBy: { ticketNumber: 'asc' },
     });
     story.check(
-      'AC-05-04, AC-06-58 each record queued its own job, and the run flags the field events of a sync whose phone’s clock stood more than the policy’s whole minutes from the server’s (DEVICE_CLOCK_OFF_LIMIT_MINUTES), ahead or behind: 2 h 14 m and 6 m are flagged, 5 m 59 s is not; no ticket of Monday or Tuesday is, since no sync of the endpoint’s brought them',
+      'AC-05-04, AC-06-58 each record queued its own job, and the run flags the field events of a sync whose phone’s clock stood more than the policy’s whole minutes from the server’s (DEVICE_CLOCK_OFF_LIMIT_MINUTES), ahead or behind: 2 h 14 m and 6 m are flagged, 5 m 59 s is not; no ticket of Monday or Tuesday is, since each phone’s clock stood with the server’s at its sync',
       [
         syncRuns > 0,
         story.policy.deviceClockOffLimitMinutes,

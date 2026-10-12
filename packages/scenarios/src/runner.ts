@@ -5,23 +5,29 @@
 import { isDeepStrictEqual } from 'node:util';
 
 import {
+  Certifications,
   DeviceKeys,
   Enrolment,
   Intake,
   MasterPasscodeCheck,
   NoMail,
+  NumberAllocator,
   PasscodeSessions,
+  PasscodeUses,
   PasswordHasher,
   PhoneAssignments,
   OfflineChecks,
   PhoneLists,
   PhoneChallenges,
+  PhoneLoginList,
   PhoneMonitors,
   PhoneProofs,
   PhoneSignIns,
   PhoneTokens,
   SessionTokens,
   SetupChoices,
+  Sync,
+  UnplannedAssignments,
   WrongTries,
   type AssignmentAtSignIn,
   type SetupChoicesRead,
@@ -39,7 +45,7 @@ import {
 } from '@open-adms/domain';
 
 import { projectTime, StoryClock } from './clock.ts';
-import { SimulatedDevice, type PhoneSetup } from './device.ts';
+import { SimulatedDevice, type PhoneServer, type PhoneSetup } from './device.ts';
 import { builtInPolicy } from './policy.ts';
 import { SoftwareKey, type EnrolledPhone } from './software-key.ts';
 import { StoryDatabase, storyMasterPasscode, type StoryTemplate } from './story-database.ts';
@@ -77,10 +83,14 @@ export interface StoryContext {
   readonly viewed: ViewerDatabase;
   // The release's policy values, which a new project's settings start from (ADR-303).
   readonly policy: Policy;
-  // Where phones sync to: the API's intake, with no endpoint in front of it until Phase 2
-  // (ADR-338). It takes each record a phone sends and answers it; `topUp` is the sync's last
-  // step, the phone's number blocks made full again.
-  readonly intake: Intake;
+  // Where phones sync to (BACKLOG 2.6.2 part 4; ADR-475): the API's own `Sync`, built as its
+  // process builds it (apps/api, src/process/api-process.ts), on the story's database and
+  // clock. A phone's sync is read by the contract and answered whole: its reports, its
+  // records, its numbers, and what a sync brings besides. A photograph's record goes to the
+  // intake behind it until its upload is built (2.6.4).
+  readonly server: PhoneServer;
+  // The same, on another clock: for field days told again on a clock of their own.
+  serverOn(clock: { now: () => Date }): PhoneServer;
   // Moves the clock to a time (with its offset) and says what happens then.
   at(time: string, what: string): void;
   phone(setup: PhoneSetup): SimulatedDevice;
@@ -218,13 +228,36 @@ export class Runner {
         deviceId,
         status: (await api.device.findUniqueOrThrow({ where: { id: deviceId } })).status,
       });
+      // The API's `Sync`, as `api-process.ts` builds it.
+      const serverOn = (at: { now: () => Date }): PhoneServer => {
+        const taking = new Intake(api, at, policy);
+        const sync = new Sync(api, {
+          intake: taking,
+          certifications: new Certifications(api, at, policy),
+          unplanned: new UnplannedAssignments(api, { clock: at, requestNow: () => undefined }),
+          uses: new PasscodeUses(api, { clock: at, requestNow: () => undefined }),
+          numbers: new NumberAllocator(api, at, policy),
+          loginList: new PhoneLoginList(api, {
+            assignments: new PhoneAssignments(api),
+            offline,
+            clock: at,
+            entriesPerCall: policy.loginListEntriesPerCall,
+          }),
+          clock: at,
+        });
+        return {
+          received: (deviceId, sent) => sync.received(deviceId, sent),
+          receive: (record) => taking.receive(record),
+        };
+      };
       const context: StoryContext = {
         clock,
         api,
         worker,
         viewed,
         policy,
-        intake: new Intake(api, clock, policy),
+        server: serverOn(clock),
+        serverOn,
         at(time, what) {
           clock.set(time);
           out(`  ${projectTime(story.timeZone, clock.now())}  ${what}`);
