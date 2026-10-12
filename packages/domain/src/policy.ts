@@ -73,6 +73,9 @@ export const policyNames = {
   // How long our address server has to answer a phone's address lookup, in seconds (ARCHITECTURE
   // §3; ADR-455): a monitor waits on it, so it is far shorter than the worker's own.
   addressLookupAnswerSeconds: 'ADDRESS_LOOKUP_ANSWER_SECONDS',
+  // How long the object store has to answer one question of the API's, a file put or read
+  // whole, in seconds (ARCHITECTURE §11; ADR-480).
+  mediaStoreAnswerSeconds: 'MEDIA_STORE_ANSWER_SECONDS',
   // Rate limits (ARCHITECTURE §6, Abuse; ASVS 2.4.1; ADR-416): how long the stretch is that
   // requests are counted over, in seconds; how many one address and one signed-in person may send
   // in it; and how many callers' counts the server keeps at once.
@@ -153,6 +156,7 @@ const ranges: Record<PolicyName, { least: number; most: number }> = {
   [policyNames.monitorSessionHours]: { least: 1, most: 24 },
   [policyNames.loginListEntriesPerCall]: { least: 1, most: 500 },
   [policyNames.addressLookupAnswerSeconds]: { least: 1, most: 60 },
+  [policyNames.mediaStoreAnswerSeconds]: { least: 1, most: 600 },
   [policyNames.rateLimitWindowSeconds]: { least: 1, most: 3600 },
   [policyNames.rateLimitRequestsPerAddress]: { least: 1, most: Number.MAX_SAFE_INTEGER },
   [policyNames.rateLimitRequestsPerAccount]: { least: 1, most: Number.MAX_SAFE_INTEGER },
@@ -199,6 +203,7 @@ export class Policy {
   readonly monitorSessionHours: number;
   readonly loginListEntriesPerCall: number;
   readonly addressLookupAnswerSeconds: number;
+  readonly mediaStoreAnswerSeconds: number;
   readonly rateLimitWindowSeconds: number;
   readonly rateLimitRequestsPerAddress: number;
   readonly rateLimitRequestsPerAccount: number;
@@ -244,6 +249,7 @@ export class Policy {
     this.monitorSessionHours = Policy.read(values, policyNames.monitorSessionHours);
     this.loginListEntriesPerCall = Policy.read(values, policyNames.loginListEntriesPerCall);
     this.addressLookupAnswerSeconds = Policy.read(values, policyNames.addressLookupAnswerSeconds);
+    this.mediaStoreAnswerSeconds = Policy.read(values, policyNames.mediaStoreAnswerSeconds);
     this.rateLimitWindowSeconds = Policy.read(values, policyNames.rateLimitWindowSeconds);
     this.rateLimitRequestsPerAddress = Policy.read(values, policyNames.rateLimitRequestsPerAddress);
     this.rateLimitRequestsPerAccount = Policy.read(values, policyNames.rateLimitRequestsPerAccount);

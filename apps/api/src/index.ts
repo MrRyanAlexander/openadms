@@ -18,7 +18,7 @@ export {
 } from './certification/certifications.ts';
 export { NumberAllocator, type LastUsed, type PhoneAtSync } from './numbering/number-allocator.ts';
 export { builtInPolicy, installationPolicy } from './policy.ts';
-export { Settings, SettingsProblem } from './process/settings.ts';
+export { Settings, SettingsProblem, type MediaSettings } from './process/settings.ts';
 export {
   ContractorSetup,
   SubPlaces,
@@ -224,6 +224,13 @@ export {
   type Addresses,
   type AddressServerSettings,
 } from './phone/address-server.ts';
+export {
+  MediaStore,
+  MediaStoreProblem,
+  type KeptFile,
+  type Media,
+  type MediaStoreSettings,
+} from './media/media-store.ts';
 export {
   PasscodeSessions,
   type PasscodeSessionOutcome,

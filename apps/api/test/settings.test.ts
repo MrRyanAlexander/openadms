@@ -22,6 +22,11 @@ const good: Record<string, string> = {
   ADMS_API_HOST: '127.0.0.1',
   ADMS_API_PORT: '3000',
   ADMS_ADDRESSES_URL: 'https://addresses.adms.localhost:8443',
+  ADMS_MEDIA_URL: 'https://s3.adms.localhost:8443',
+  ADMS_MEDIA_BUCKET: 'adms-media',
+  ADMS_MEDIA_REGION: 'us-east-1',
+  ADMS_MEDIA_ACCESS_KEY: ['MADE', 'UP', 'FOR', 'THIS', 'TEST'].join(''),
+  ADMS_MEDIA_SECRET_KEY: `${word}-at-the-store`,
 };
 const without = (key: string): Record<string, string> =>
   Object.fromEntries(Object.entries(good).filter(([name]) => name !== key));
@@ -123,6 +128,28 @@ describe('the settings the API starts with', () => {
     ['ADMS_MAP_SERVERS_ADDRESS', '172.30.213.2'],
     ['ADMS_MAP_SERVERS_ADDRESS', '172.30.213.2:port-9f3c'],
     ['ADMS_MAP_CA_FILE', '/no/such/file-9f3c.crt'],
+    // The object store: HTTPS only, its address and nothing after it; one bucket, named as a
+    // store names one; an identity of two halves a store could have issued (ADR-480).
+    ['ADMS_MEDIA_URL', 'http://s3-9f3c.adms.localhost'],
+    ['ADMS_MEDIA_URL', 's3-9f3c.adms.localhost'],
+    ['ADMS_MEDIA_URL', 'https://u:9f3c@s3.adms.localhost'],
+    ['ADMS_MEDIA_URL', 'https://s3.adms.localhost/adms-media-9f3c'],
+    ['ADMS_MEDIA_BUCKET', 'Adms-Media-9f3c'],
+    ['ADMS_MEDIA_BUCKET', 'm9'],
+    ['ADMS_MEDIA_BUCKET', 'adms..media-9f3c'],
+    ['ADMS_MEDIA_BUCKET', 'adms-media-9f3c/photographs'],
+    ['ADMS_MEDIA_BUCKET', '-adms-media-9f3c'],
+    ['ADMS_MEDIA_REGION', 'US-EAST-9f3c'],
+    ['ADMS_MEDIA_REGION', 'us east 9f3c'],
+    ['ADMS_MEDIA_ACCESS_KEY', '9f'],
+    ['ADMS_MEDIA_ACCESS_KEY', 'made up 9f3c'],
+    ['ADMS_MEDIA_SECRET_KEY', 'short-9f3c'],
+    ['ADMS_MEDIA_SECRET_KEY', 'made up for this test 9f3c'],
+    ['ADMS_MEDIA_SECRET_KEY', "made-up-for-this-test'9f3c"],
+    ['ADMS_MEDIA_SECRET_KEY', 'made-up-9f3c'.repeat(22)],
+    ['ADMS_MEDIA_ADDRESS', 'caddy-9f3c:443'],
+    ['ADMS_MEDIA_ADDRESS', '172.30.213.2'],
+    ['ADMS_MEDIA_CA_FILE', '/no/such/file-9f3c.crt'],
   ])('AC-10-55: a malformed %s is named, and its value never said', (key, value) => {
     const problem = problemOf({ ...good, [key]: value });
     expect(problem.keys).toEqual([key]);
@@ -171,6 +198,38 @@ describe('the settings the API starts with', () => {
     writeFileSync(ca, 'made up');
     expect(problemOf({ ...good, ADMS_MAP_CA_FILE: ca }).keys).toEqual(['ADMS_MAP_CA_FILE']);
     rmSync(folder, { recursive: true, force: true });
+  });
+
+  it('name the object store the API keeps files in, its one bucket and the API’s identity there, with its certificate authority and where the stack’s proxy is only where stated (ADR-480)', () => {
+    expect(Settings.from(good).media).toEqual({
+      url: 'https://s3.adms.localhost:8443',
+      bucket: 'adms-media',
+      region: 'us-east-1',
+      accessKey: good['ADMS_MEDIA_ACCESS_KEY'],
+      secretKey: good['ADMS_MEDIA_SECRET_KEY'],
+      caFile: null,
+      at: undefined,
+    });
+    const folder = mkdtempSync(join(tmpdir(), 'adms-api-ca-'));
+    const ca = join(folder, 'root.crt');
+    writeFileSync(ca, '-----BEGIN CERTIFICATE-----\nmade up\n-----END CERTIFICATE-----\n');
+    const inStack = Settings.from({
+      ...good,
+      ADMS_MEDIA_CA_FILE: ca,
+      ADMS_MEDIA_ADDRESS: '172.30.213.2:443',
+    }).media;
+    expect([inStack.caFile, inStack.at]).toEqual([ca, { host: '172.30.213.2', port: 443 }]);
+    rmSync(folder, { recursive: true, force: true });
+    // Each of the five is needed, and a missing one is named.
+    for (const key of [
+      'ADMS_MEDIA_URL',
+      'ADMS_MEDIA_BUCKET',
+      'ADMS_MEDIA_REGION',
+      'ADMS_MEDIA_ACCESS_KEY',
+      'ADMS_MEDIA_SECRET_KEY',
+    ]) {
+      expect(problemOf(without(key)).message).toBe(`The API did not start: ${key} is missing.`);
+    }
   });
 
   it('reach the database where the stack says it is, with the same login', () => {
@@ -240,6 +299,9 @@ describe('the API as a process, started with settings that are off', () => {
       'ADMS_API_HOST=127.0.0.1',
       'ADMS_API_PORT=3000',
       'ADMS_ADDRESSES_URL=https://addresses.adms.localhost',
+      ...Object.entries(good)
+        .filter(([key]) => key.startsWith('ADMS_MEDIA_'))
+        .map(([key, value]) => `${key}=${value}`),
     ]);
     expect(started.status).toBe(1);
     expect(started.stdout).toBe('');

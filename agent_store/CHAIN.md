@@ -7,26 +7,26 @@
 > task's ADR and its session-log line in `DECISIONS.md`). No other file carries these counts.
 > **A count that differs from this page without a reason is a finding, not noise.**
 
-**Seen whole:** 2026-10-12, after ADR-477, on the user's Mac, the installation at head.
+**Seen whole:** 2026-10-12, after ADR-480, on the user's Mac, the installation at head.
 
 ## `pnpm ready`
 
 | What | Today |
 |---|---|
-| `pnpm local:up` | six `Healthy` services, then the API's and the worker's containers: `https://api.adms.localhost/health → 200 {"status":"ok"}` and `the worker’s health answer → 200 {"status":"ok","jobsWaiting":0,"jobsSetAside":0}` |
-| `pnpm installer:check` | **30 `✓`**, no `✗`, exit 0 |
+| `pnpm local:up` | six `Healthy` services, `Keeping the object store’s bucket adms-media (it keeps every version).` (ADR-480), then the API's and the worker's containers: `https://api.adms.localhost/health → 200 {"status":"ok"}` and `the worker’s health answer → 200 {"status":"ok","jobsWaiting":0,"jobsSetAside":0}` |
+| `pnpm installer:check` | **31 `✓`**, no `✗`, exit 0 |
 | Migrations at head | **108** (`packages/db/prisma/migrations/` is the list) |
 | `pnpm local:down` (close-out) | 8 containers and the network: 9 `Removed` lines |
 
 ## `pnpm test`
 
-**`Test Files 149 passed (149)`, `Tests 2665 passed (2665)`.**
+**`Test Files 150 passed (150)`, `Tests 2702 passed (2702)`.**
 
 | Project | Tests | Files | Needs |
 |---|---|---|---|
-| `packages/domain` | 764 | 41 | nothing |
+| `packages/domain` | 766 | 41 | nothing |
 | `packages/contracts` | 62 | 9 | nothing |
-| `apps/api` | 506 | 39 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
+| `apps/api` | 541 | 40 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
 | `packages/db` | 1051 | 44 | `pnpm ready` |
 | `packages/scenarios` | 125 | 5 | `pnpm ready` for `stories.test.ts` (the runner and a run's template, 5); the flag catalogue (78 flags), the harness, the phone held to the sync contract's suite and to what it sends and takes in at a sync (12) and the policy need nothing. **The stories themselves are not here** (ADR-446) |
 | `apps/worker` | 30 | 3 | `pnpm ready` for the map servers (13) and its container (3); the process (14) needs nothing |
@@ -37,8 +37,8 @@
 ## `pnpm lint`, `pnpm licences`
 
 - Lint: `All matched files use Prettier code style!`, exit 0 (ESLint under a 4 GB heap, ADR-465).
-- Licences: **`421 packages: 421 allowed, 0 refused, 0 undecided.`** on the Mac; `420` on Linux
-  (the lockfile's Mac-only packages aren't installed there).
+- Licences: **`446 packages: 446 allowed, 0 refused, 0 undecided.`** on the Mac; one fewer on
+  Linux (the lockfile's Mac-only packages aren't installed there; not seen there since ADR-479).
 
 ## `pnpm scenarios`
 
@@ -65,7 +65,7 @@ P1 $5,548.25 on 19 lines, P2 $324.00. `p1-reconciled` through `p1-left-out`, `p1
 ## `pnpm security`
 
 `✓ 0 open advisories` (3 accepted by id); secretlint `0 found`; the installation's own secrets
-(8 values from 4 env files) `0 found`; a password-like setting `0 found`; env files `✓ every one
+(10 values from 4 env files) `0 found`; a password-like setting `0 found`; env files `✓ every one
 ignored by git and untracked`; the grant tests **`44 files, 1051 tests: 1051 passed, 0 failed`**;
 ending **`Security checks: 7 passed, 0 failed.`**
 

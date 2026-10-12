@@ -89,7 +89,7 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-12, through ADR-477)
+### Where things stand (2026-10-12, through ADR-480)
 - **Phase 2 (API and sync) is open (ADR-376): 25 of its 32 tasks are closed (2.6.3, the edit log, withdrawn at the user's word, ADR-477)** (`BACKLOG.md`,
   "Active — Phase 2", ticks each with its ADRs). Complete: Milestone 2.1 (the API as a process,
   the boundary, time limits and policy), 2.2 (sign-in: its records, passwords, sessions, two-step
@@ -106,12 +106,12 @@ of `DECISIONS.md`.
   (the records a phone sends, `sync-records.ts`, ADR-466; one sync whole and its answer,
   `sync.ts`, ADR-467; a certification made on a phone, ADR-469; **the suite any client must
   pass, `syncClientSuite`, and `syncAnswerRead`, with the harness's phone a client of the
-  contract, ADR-470**; what they leave: C127…C130). **Task 2.6.2 (the endpoint) is done in four parts (ADR-471…473, 475): the tables `sync`, `synced_record` and `held_record`; `POST /phones/current/syncs` and `Sync` (`apps/api/src/sync/sync.ts`); what a sync brings besides its answers and the worker's `DEVICE_CLOCK_OFF`; and every story's phone syncing through `Sync` (`story.server`; the stand-in is gone; what it leaves: C134).** **The user's hard rule (ADR-477): once a monitor submits a record on the phone it is sealed for them, synced or not; only the back office changes it. There is no reopen and no edit log; task 2.6.3 is withdrawn (what it leaves: C135).** **The user decided that a record answered `NOT_SAVED`
+  contract, ADR-470**; what they leave: C127…C130). **Task 2.6.2 (the endpoint) is done in four parts (ADR-471…473, 475): the tables `sync`, `synced_record` and `held_record`; `POST /phones/current/syncs` and `Sync` (`apps/api/src/sync/sync.ts`); what a sync brings besides its answers and the worker's `DEVICE_CLOCK_OFF`; and every story's phone syncing through `Sync` (`story.server`; the stand-in is gone; what it leaves: C134).** **The user's hard rule (ADR-477): once a monitor submits a record on the phone it is sealed for them, synced or not; only the back office changes it. There is no reopen and no edit log; task 2.6.3 is withdrawn (what it leaves: C135).** **Task 2.6.4 (photographs) is cut in five (ADR-478) and its part 1 is done (ADR-479, 480): the object store's client (`@aws-sdk/client-s3`), the bucket `adms-media` made by `pnpm local:up`, the API's own identity at the store (put and get, nothing else), `Settings.media` and `MediaStore` (`apps/api/src/media/media-store.ts`: `keep`, `sizeOf`, `read`; nothing calls it yet; what it leaves: C136).** **The user decided that a record answered `NOT_SAVED`
   is held on the server for a person, in a table of its own, built with 2.6.2 (ADR-468).** **The user approved ARCHITECTURE §7.2's notes on signing in
   online and taking the assignment (ADR-452).**
 - **Where each thing is written, so nothing is read twice:** a rule as it stands, with its ADR:
   `SUMMARY.md`, by topic (grep its `###` headings; never read it whole). What a finished task left
-  for a later one: `BACKLOG.md`'s carry-forward register (C85…C134). How a layer's tests are
+  for a later one: `BACKLOG.md`'s carry-forward register (C85…C136). How a layer's tests are
   written and what a loosening is tried on: the page for that layer beside the `adms-verify`
   skill. Today's counts: `agent_store/CHAIN.md`. **The task-by-task record that stood here
   (2.0.1 to 2.5.2, every endpoint and service named) moved word for word to `DECISIONS.md`'s
@@ -329,18 +329,22 @@ questions.
 **Phase 2 is open (ADR-376). Its plan is `BACKLOG.md`, "Active — Phase 2" (ADR-377): read its
 brief first. One task per response.**
 
-**Task 2.6.4: photographs** *(BACKLOG 2.6.4; its carry-forward first: **C135**, then what C129,
-C134 and C82, C65, C24 leave for 2.6.4; ADR-101, 157, 179, 263, 345, 466…472, 475, 477;
-AC-05-09, AC-04-77; read `api-tests.md`, `schema-and-migrations.md` and `database-tests.md`
-beside the `adms-verify` skill first)*. Who makes a photograph's place in storage; a resumable
-upload after the records; the fingerprint checked against the one taken at capture; type and
-size checked, stored outside the web root, never executed; the API's store identity without
-bucket-delete; a certification sent with its five photographs. The store's client needs an ADR
-first. `PhoneServer.receive`, `SentPhoto` and the phone's by-hand photograph loop go with it
-(C134). **Nothing a phone sends may change a record the server already has (ADR-477).** Cut it
-in parts in its first response if it is more than one, as 2.6.1 and 2.6.2 were. **A story's
-phone reaches the server only through `story.server`** (`stories/board.ts`).
-**The user may still overturn ADR-475's defaults (the harness only), ADR-473 (2) and (4)'s (the rest were confirmed, ADR-474), ADR-472's defaults, ADR-471's defaults, ADR-470's defaults, ADR-469's, ADR-467 (4)'s limits (its other defaults are settled, ADR-468), ADR-466's, ADR-464's, ADR-463's, ADR-462's, ADR-458's other defaults (three were confirmed, ADR-459), ADR-457's, ADR-456 (5)'s proposals, ADR-455's, ADR-454's, ADR-453's, ADR-451's and ADR-450's defaults, ADR-449
+**Task 2.6.4, part 2 of 5: a photograph's record in the sync contract** *(BACKLOG 2.6.4, whose
+parts are ADR-478's; its carry-forward first: **C136**, then C135 and what C127, C129, C130,
+C134 and C82, C65 leave for 2.6.4; ADR-101, 157, 179, 326, 338, 345, 466…472, 475, 477…480;
+AC-05-05, AC-04-77; read `api-tests.md`, `schema-and-migrations.md` and `database-tests.md`
+beside the `adms-verify` skill first)*. `syncedPhotoSchema` joins `syncSentSchema`, sent after
+the records. **The server makes a photograph's place in storage; the phone never names one**:
+decide the place's form in this part's ADR (it must pass `MediaStore`'s own form: lower-case
+segments). The two fingerprints are the phone's word, written once. A photograph that arrives
+before its owner is saved, or while its owner is held. A certification sent with its five, so
+`CERTIFICATION_PHOTO_MISSING` stops standing on every story's certifications. `SentPhoto`,
+`PhoneServer.receive`, the phone's by-hand photograph loop and `P1Syncs.crewPhotographs` go
+(C134). **Nothing a phone sends may change a record the server already has (ADR-477).** No
+file is sent in this part: the media endpoint is part 3, the stories' files part 4, the map's
+files part 5. **A story's phone reaches the server only through `story.server`**
+(`stories/board.ts`).
+**The user may still overturn ADR-478's cut and ADR-480's defaults, ADR-475's defaults (the harness only), ADR-473 (2) and (4)'s (the rest were confirmed, ADR-474), ADR-472's defaults, ADR-471's defaults, ADR-470's defaults, ADR-469's, ADR-467 (4)'s limits (its other defaults are settled, ADR-468), ADR-466's, ADR-464's, ADR-463's, ADR-462's, ADR-458's other defaults (three were confirmed, ADR-459), ADR-457's, ADR-456 (5)'s proposals, ADR-455's, ADR-454's, ADR-453's, ADR-451's and ADR-450's defaults, ADR-449
 (5)'s proposals as built, ADR-442's, ADR-440's, ADR-438's two choices or ADR-439's (`SUMMARY.md` §4).**
 **Docker's disk is 8 GB and was full once on 2026-10-10** (Tools and housekeeping; it has held since, 1.3 GB free after ADR-464's session): if `pnpm ready` fails for space, stop and ask the user to free some; never work around it.
 **Before the chain, `pnpm ready`** (the stack up, then `installer:check`): a `✗` at the migrations

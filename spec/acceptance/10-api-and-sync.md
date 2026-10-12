@@ -141,7 +141,7 @@ states one that nothing records: they are listed under "Left to the task that bu
 |---|---|---|---|---|---|
 | AC-10-47 | **Given** every endpoint, **then** only the media endpoint takes a file, and it checks each file's type and size before it is stored | ARCHITECTURE §6 (Uploads), §11 · REQ-203 | ASVS V5 · API4 | API (2.6.4) |  |
 | AC-10-48 | **Given** a stored photograph, **then** it is kept outside anything the web server serves as a page, and is never run: asked for, it comes back as the bytes that were stored | ARCHITECTURE §6 (Uploads) | ASVS V5 | API (2.6.4) |  |
-| AC-10-49 | **Given** a photograph already stored, **then** it is one object that is never overwritten or deleted, and the identity the API uses at the store can't delete a bucket | ADR-101, 263; ARCHITECTURE §11; BACKLOG C24 | ASVS V5, V13 | API (2.6.4) |  |
+| AC-10-49 | **Given** a photograph already stored, **then** it is one object that is never overwritten or deleted, and the identity the API uses at the store can't delete a bucket | ADR-101, 263; ARCHITECTURE §11; BACKLOG C24 | ASVS V5, V13 | API (2.6.4) | in part, 2.6.4 part 1 (2026-10-12, ADR-480): the store and the API's identity at it. A file is kept only where nothing is kept yet, so a second under its key changes nothing; the identity can delete no object and no bucket, make no bucket, list nothing and change no bucket's settings; the bucket keeps every version (`apps/api/test/media-store.test.ts`; the API's own container, `door.test.ts`). A photograph's own file through the media endpoint: part 3 |
 
 ## K. Jobs and the worker's process
 

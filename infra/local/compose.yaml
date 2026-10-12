@@ -195,6 +195,10 @@ services:
       # the stack's network gives it, and its root certificate is mounted below.
       ADMS_MAP_SERVERS_ADDRESS: 172.30.213.2:443
       ADMS_MAP_CA_FILE: /run/adms/caddy-root.crt
+      # The object store the API keeps files in is asked the same way (ADR-480): by its own
+      # name, over HTTPS, through Caddy, under the API's own identity there.
+      ADMS_MEDIA_ADDRESS: 172.30.213.2:443
+      ADMS_MEDIA_CA_FILE: /run/adms/caddy-root.crt
     secrets:
       - api_env
     volumes:
@@ -333,6 +337,11 @@ secrets:
     file: ../../apps/worker/.env
 
 configs:
+  # Who the object store knows (ADR-263, 480). `open-adms-local` is the stack's own
+  # administrator: `pnpm local:up` makes the media bucket through the store's own shell, and a
+  # test tidies up as it. `open-adms-api` is the identity the API uses: it may put and get an
+  # object in the media bucket and nothing else. It can delete no object and no bucket, make no
+  # bucket, list nothing and change no bucket's settings (apps/api/test/media-store.test.ts).
   s3_identities:
     content: |
       {
@@ -341,6 +350,17 @@ configs:
             "name": "open-adms-local",
             "credentials": [{ "accessKey": "${S3_ACCESS_KEY:?run pnpm local:up}", "secretKey": "${S3_SECRET_KEY:?run pnpm local:up}" }],
             "actions": ["Admin", "Read", "List", "Tagging", "Write"]
+          },
+          {
+            "name": "open-adms-api",
+            "credentials": [{ "accessKey": "${S3_API_ACCESS_KEY:?run pnpm local:up}", "secretKey": "${S3_API_SECRET_KEY:?run pnpm local:up}" }],
+            "policyNames": ["open-adms-media-write-once"]
+          }
+        ],
+        "policies": [
+          {
+            "name": "open-adms-media-write-once",
+            "content": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":[\"s3:PutObject\",\"s3:GetObject\"],\"Resource\":[\"arn:aws:s3:::${ADMS_MEDIA_BUCKET:?run pnpm local:up}/*\"]}]}"
           }
         ]
       }
