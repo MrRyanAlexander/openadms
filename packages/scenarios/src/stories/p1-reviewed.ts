@@ -269,7 +269,11 @@ export const p1Reviewed: Story = {
     );
 
     // ------------------------------------------------------------------------------------------
-    const settings = { crewItemHoursLimit: story.policy.crewDayHours, longestRunMs: 600_000 };
+    const settings = {
+      crewItemHoursLimit: story.policy.crewDayHours,
+      deviceClockOffLimitMinutes: story.policy.deviceClockOffLimitMinutes,
+      longestRunMs: 600_000,
+    };
     const reconciliation = new Reconciliation(
       worker,
       clock,

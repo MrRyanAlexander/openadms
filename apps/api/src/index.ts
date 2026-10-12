@@ -178,6 +178,7 @@ export {
   type PhonesPage,
 } from './dispatch/phones.ts';
 export { Intake } from './sync/intake.ts';
+export { Sync, type Synced, type SyncParts } from './sync/sync.ts';
 export type {
   IntakeNote,
   PhotoOwnerKind,

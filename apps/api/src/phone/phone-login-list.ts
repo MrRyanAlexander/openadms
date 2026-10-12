@@ -81,7 +81,7 @@ export class PhoneLoginList {
   ): Promise<LoginListTaken> {
     const { assignments, offline, clock, entriesPerCall } = this.parts;
     const now = clock.now();
-    const masterPasscode = await this.passcode(monitor.deviceId, held.masterPasscodeVersion);
+    const masterPasscode = await this.passcodeBrought(monitor.deviceId, held.masterPasscodeVersion);
     const taken = await assignments.taken(monitor.userId, monitor.deviceId, now);
     if (!taken.taken) {
       return { masterPasscode, noAssignment: taken.why, loginList: null, made: 0, withoutSeed: 0 };
@@ -162,7 +162,8 @@ export class PhoneLoginList {
   }
 
   // The passcode's version in force, with its check for a phone that doesn't hold that one.
-  private async passcode(
+  // A sync brings it too, with nobody signed in (ADR-473).
+  async passcodeBrought(
     deviceId: string,
     heldVersion: number | null,
   ): Promise<LoginListTaken['masterPasscode']> {

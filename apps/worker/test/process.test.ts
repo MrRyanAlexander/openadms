@@ -155,7 +155,8 @@ describe('the policy the worker runs with (ADR-395, 419)', () => {
       shipped.jobQueuePollSeconds,
       shipped.mapServerAnswerSeconds,
       shipped.databasePoolConnections,
-    ]).toEqual([5, 10, 5, 30, 10]);
+      shipped.deviceClockOffLimitMinutes,
+    ]).toEqual([5, 10, 5, 30, 10, 5]);
   });
 
   it('takes the installation’s own value under the same name, held to the same range', () => {
@@ -176,11 +177,17 @@ describe('the policy the worker runs with (ADR-395, 419)', () => {
         RECONCILIATION_RUN_LONGEST_MINUTES: 'long-9f3c',
         JOB_QUEUE_POLL_SECONDS: '3601',
         MAP_SERVER_ANSWER_SECONDS: '0',
+        // A day at the most.
+        DEVICE_CLOCK_OFF_LIMIT_MINUTES: '1441',
         // A run holds its lock on one connection and writes on another.
         DATABASE_POOL_CONNECTIONS: '1',
       }),
     ).toBe(
-      'The worker did not start: DATABASE_POOL_CONNECTIONS is malformed; JOB_TRIES_BEFORE_SET_ASIDE is malformed; RECONCILIATION_RUN_LONGEST_MINUTES is malformed; JOB_QUEUE_POLL_SECONDS is malformed; MAP_SERVER_ANSWER_SECONDS is malformed.',
+      'The worker did not start: DATABASE_POOL_CONNECTIONS is malformed; JOB_TRIES_BEFORE_SET_ASIDE is malformed; RECONCILIATION_RUN_LONGEST_MINUTES is malformed; JOB_QUEUE_POLL_SECONDS is malformed; MAP_SERVER_ANSWER_SECONDS is malformed; DEVICE_CLOCK_OFF_LIMIT_MINUTES is malformed.',
+    );
+    expect(installationPolicy({ ...good, DEVICE_CLOCK_OFF_LIMIT_MINUTES: '15' })).toHaveProperty(
+      'deviceClockOffLimitMinutes',
+      15,
     );
   });
 });

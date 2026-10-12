@@ -97,6 +97,9 @@ export const policyNames = {
   reconciliationRunLongestMinutes: 'RECONCILIATION_RUN_LONGEST_MINUTES',
   jobQueuePollSeconds: 'JOB_QUEUE_POLL_SECONDS',
   mapServerAnswerSeconds: 'MAP_SERVER_ANSWER_SECONDS',
+  // A phone's clock further than this from the server's at a sync, in whole minutes, flags that
+  // sync's field events (ADR-100, 473): the worker's.
+  deviceClockOffLimitMinutes: 'DEVICE_CLOCK_OFF_LIMIT_MINUTES',
   // The most tickets one job names, and the most a run takes up at once (ADR-420), read by both
   // services: the API cuts a change that touches more into jobs of that size, and the worker
   // takes up waiting jobs, the oldest first, until their tickets come to it.
@@ -119,7 +122,8 @@ export type PolicyName = (typeof policyNames)[keyof typeof policyNames];
 // minutes), and nought takes the server's own step alone. A rate limit counts over an hour at the
 // most, a limit on tries over a day at the most, and each allows at least one; the server keeps
 // at least a thousand callers' counts and at most ten million. A job names at least one ticket
-// and at most a hundred thousand.
+// and at most a hundred thousand. A phone's clock may stand a minute off at the least before
+// its sync is flagged, and a day at the most.
 const ranges: Record<PolicyName, { least: number; most: number }> = {
   [policyNames.loadCallLowLimit]: { least: 0, most: 100 },
   [policyNames.loadCallHighLimit]: { least: 0, most: 100 },
@@ -162,6 +166,7 @@ const ranges: Record<PolicyName, { least: number; most: number }> = {
   [policyNames.reconciliationRunLongestMinutes]: { least: 1, most: 1440 },
   [policyNames.jobQueuePollSeconds]: { least: 1, most: 3600 },
   [policyNames.mapServerAnswerSeconds]: { least: 1, most: 600 },
+  [policyNames.deviceClockOffLimitMinutes]: { least: 1, most: 1440 },
   [policyNames.jobTicketsAtMost]: { least: 1, most: 100000 },
 };
 
@@ -207,6 +212,7 @@ export class Policy {
   readonly reconciliationRunLongestMinutes: number;
   readonly jobQueuePollSeconds: number;
   readonly mapServerAnswerSeconds: number;
+  readonly deviceClockOffLimitMinutes: number;
   readonly jobTicketsAtMost: number;
 
   private constructor(values: Readonly<Record<string, string | undefined>>) {
@@ -257,6 +263,7 @@ export class Policy {
     );
     this.jobQueuePollSeconds = Policy.read(values, policyNames.jobQueuePollSeconds);
     this.mapServerAnswerSeconds = Policy.read(values, policyNames.mapServerAnswerSeconds);
+    this.deviceClockOffLimitMinutes = Policy.read(values, policyNames.deviceClockOffLimitMinutes);
     this.jobTicketsAtMost = Policy.read(values, policyNames.jobTicketsAtMost);
     // Three pairs hold only together: an access token that outlasted the session's quiet time would
     // keep a session nobody uses alive; a lock that came no later than the first wait would

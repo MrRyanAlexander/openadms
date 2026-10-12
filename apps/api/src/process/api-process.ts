@@ -324,6 +324,13 @@ export class ApiProcess {
     const unplanned = new UnplannedAssignments(database, { clock, requestNow });
     const passcodeUses = new PasscodeUses(database, { clock, requestNow });
     const certifications = new Certifications(database, clock, policy);
+    // The login list's service also makes the passcode's check a sync brings (ADR-473).
+    const loginList = new PhoneLoginList(database, {
+      assignments: new PhoneAssignments(database),
+      offline,
+      clock,
+      entriesPerCall: policy.loginListEntriesPerCall,
+    });
     const app = await NestFactory.create<NestFastifyApplication>(
       ProcessModule.around(
         module,
@@ -403,15 +410,7 @@ export class ApiProcess {
             new PhoneLists(database, { assignments: new PhoneAssignments(database), clock }),
           ],
           // The login list and the master passcode's check a phone takes (task 2.5.3, part 4).
-          [
-            apiPhoneLoginList,
-            new PhoneLoginList(database, {
-              assignments: new PhoneAssignments(database),
-              offline,
-              clock,
-              entriesPerCall: policy.loginListEntriesPerCall,
-            }),
-          ],
+          [apiPhoneLoginList, loginList],
           // An address looked up for a phone's GPS (task 2.5.3, part 5).
           [apiAddressLookups, new AddressLookups(addresses)],
           // What a phone reports besides field events (task 2.5.4): an unplanned assignment.
@@ -427,6 +426,7 @@ export class ApiProcess {
               unplanned,
               uses: passcodeUses,
               numbers: new NumberAllocator(database, clock, policy),
+              loginList,
               clock,
             }),
           ],

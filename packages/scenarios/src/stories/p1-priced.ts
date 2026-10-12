@@ -128,7 +128,11 @@ export const p1Priced: Story = {
     });
 
     // ------------------------------------------------------------------------------------------
-    const settings = { crewItemHoursLimit: story.policy.crewDayHours, longestRunMs: 600_000 };
+    const settings = {
+      crewItemHoursLimit: story.policy.crewDayHours,
+      deviceClockOffLimitMinutes: story.policy.deviceClockOffLimitMinutes,
+      longestRunMs: 600_000,
+    };
     const mileages = new Mileages(new MapServers(localMapServers()));
     const reconciliation = new Reconciliation(worker, clock, settings, mileages);
     const sync = { projectId: p1, trigger: 'SYNC' } as const;

@@ -1,12 +1,14 @@
 // A phone's sync, whole, against the database (ARCHITECTURE §9 (1), (3), (4), (6), (7), §10;
 // spec/acceptance/05-sync.md AC-05-03, 04, 15, 16, 20, 45, 47; spec/acceptance/10-api-and-sync.md
-// AC-10-35, 46, 51; spec/DATA-MODEL.md §4.5; BACKLOG 2.6.2, C64, C69, C122, C126…C131; ADR-022,
-// 052, 065, 100, 420, 466…472; KD-56; REQ-016, 203, 308c). The real process, in this test's own
+// AC-10-35, 46, 51; AC-02-23, AC-05-48; spec/DATA-MODEL.md §4.5; BACKLOG 2.6.2, C64, C69, C122,
+// C126…C132; ADR-022, 052, 065, 100, 420, 453, 454, 466…473; KD-56; REQ-016, 203, 308c). The real process, in this test's own
 // memory, on the installation's database as `adms_api`: it needs `pnpm local:up` after `pnpm
 // installer`, and fails saying so. Each test's work is undone (support/database.ts).
 import { randomUUID } from 'node:crypto';
 
 import {
+  addFieldTagEndpoint,
+  changeMasterPasscodeEndpoint,
   endpoints,
   syncAnswerRead,
   syncAnsweredSchema,
@@ -22,12 +24,16 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { Certifications } from '../src/certification/certifications.ts';
 import { NumberAllocator } from '../src/numbering/number-allocator.ts';
+import { OfflineChecks } from '../src/phone/offline-checks.ts';
 import { PasscodeUses } from '../src/phone/passcode-uses.ts';
+import { PhoneAssignments } from '../src/phone/phone-assignments.ts';
+import { PhoneLoginList } from '../src/phone/phone-login-list.ts';
 import { UnplannedAssignments } from '../src/phone/unplanned-assignments.ts';
 import { Intake } from '../src/sync/intake.ts';
 import { sentFingerprint, Sync } from '../src/sync/sync.ts';
 import { installationSettings, openInstallation, type Tx } from './support/database.ts';
-import { enrolledPhone, proven } from './support/phones.ts';
+import { opens } from './support/offline-check.ts';
+import { enrolledPhone, passcode, proven } from './support/phones.ts';
 import { shippedPolicy } from './support/process.ts';
 import { notTaken } from './support/review.ts';
 import {
@@ -38,7 +44,8 @@ import {
   type People,
   type Served,
 } from './support/served.ts';
-import { p1Priced, told } from './support/setup.ts';
+import { ask, p1Priced, saved, told } from './support/setup.ts';
+import { signingSecret } from './support/sign-in.ts';
 
 let db: Database;
 
@@ -104,6 +111,8 @@ async function kimOnP1(served: Served, tx: Tx, who: People) {
     passcodeUses: [],
     records: [],
     lastUsed: [],
+    // It holds the check of the passcode it was enrolled under, and no lists.
+    holds: { masterPasscodeVersion: phone.masterPasscodeVersion, listsProjectId: null },
     ...more,
   });
   return { dana, priced, projectId, phone, token, assignment, event, disposal, sync };
@@ -204,6 +213,11 @@ describe('a sync is kept with both clocks', () => {
         [],
         [],
         [],
+      ]);
+      // It holds the passcode's check in force and no lists: nothing more is brought.
+      expect([answered.masterPasscode, answered.setupVersion]).toEqual([
+        { version: p.phone.masterPasscodeVersion, check: null },
+        null,
       ]);
 
       const [sync, ...others] = await syncsOf(tx, p.phone.id);
@@ -591,6 +605,12 @@ describe('what could not be saved is held for a person', () => {
         unplanned: new UnplannedAssignments(each, { clock, requestNow }),
         uses: new PasscodeUses(each, { clock, requestNow }),
         numbers: new NumberAllocator(each, clock, shippedPolicy),
+        loginList: new PhoneLoginList(each, {
+          assignments: new PhoneAssignments(each),
+          offline: new OfflineChecks(signingSecret),
+          clock,
+          entriesPerCall: shippedPolicy.loginListEntriesPerCall,
+        }),
         clock,
       });
       // A project nobody set up, a site that is no site of P1's, and a real load between them.
@@ -773,6 +793,159 @@ describe('the numbers a phone holds', () => {
           0,
         ),
       ).toBe(1000);
+    });
+  });
+});
+
+describe('what a sync brings besides its answers', () => {
+  it('AC-02-23, AC-05-48 a phone that holds no check of the master passcode is brought the one in force at its sync, with nobody signed in; once Dana changes the passcode its next sync brings the new version’s, and the version its record holds moves then, as the device key’s actor on that phone; a phone that holds it is brought no check and nothing but the sync is written', async () => {
+    await world(async (served, tx, who) => {
+      const p = await kimOnP1(served, tx, who);
+      const enrolledUnder = p.phone.masterPasscodeVersion;
+      const holding = (masterPasscodeVersion: number | null) =>
+        p.sync({ holds: { masterPasscodeVersion, listsProjectId: null } });
+      const versionHeld = async () =>
+        (await tx.device.findUniqueOrThrow({ where: { id: p.phone.id } })).masterPasscodeVersion;
+
+      const first = await synced(served, p.token, holding(null));
+      expect(first.masterPasscode.version).toBe(enrolledUnder);
+      expect([
+        await opens(passcode, first.masterPasscode.check),
+        await opens('osprey-landing-march', first.masterPasscode.check),
+      ]).toEqual([true, false]);
+      // Not the server's own hash: a check of this phone's, made from it.
+      const inForce = await tx.masterPasscode.findUniqueOrThrow({
+        where: { version: enrolledUnder },
+      });
+      expect(JSON.stringify(first)).not.toContain(inForce.hash.split('$').at(-1) ?? 'none');
+
+      const changedTo = 'cordgrass-jetty-heron';
+      saved(
+        changeMasterPasscodeEndpoint,
+        await ask(served, p.dana, changeMasterPasscodeEndpoint, {
+          payload: { currentPassword: long, passcode: changedTo },
+        }),
+      );
+      // Until the phone syncs, its record holds the version it was enrolled under.
+      expect(await versionHeld()).toBe(enrolledUnder);
+      const second = await synced(served, p.token, holding(enrolledUnder));
+      expect(second.masterPasscode.version).toBe(enrolledUnder + 1);
+      expect([
+        await opens(changedTo, second.masterPasscode.check),
+        await opens(passcode, second.masterPasscode.check),
+      ]).toEqual([true, false]);
+      expect(await versionHeld()).toBe(enrolledUnder + 1);
+      const audited = await tx.auditRecord.findMany({
+        where: { requestId: second.requestId },
+        orderBy: { id: 'asc' },
+      });
+      expect(
+        audited.map(({ tableName, operation, actorId, deviceId, source, changedFields }) => [
+          tableName,
+          operation,
+          actorId,
+          deviceId,
+          source,
+          operation === 'UPDATE' ? changedFields : [],
+        ]),
+      ).toEqual([
+        ['sync', 'INSERT', deviceKeyActorId, p.phone.id, 'DEVICE', []],
+        ['device', 'UPDATE', deviceKeyActorId, p.phone.id, 'DEVICE', ['master_passcode_version']],
+      ]);
+
+      const third = await synced(served, p.token, holding(enrolledUnder + 1));
+      expect(third.masterPasscode).toEqual({ version: enrolledUnder + 1, check: null });
+      expect(
+        (await tx.auditRecord.findMany({ where: { requestId: third.requestId } })).map(
+          ({ tableName }) => tableName,
+        ),
+      ).toEqual(['sync']);
+      // The log says the version and whether a check went: never the check.
+      const logged = served.lines.filter((line) => line.includes('A phone synced.'));
+      expect(
+        logged.map((line) => /"masterPasscodeCheckSent":(true|false)/.exec(line)?.[1]),
+      ).toEqual(['true', 'true', 'false']);
+      expect(logged.join('\n')).not.toContain('argon2id');
+    });
+  });
+
+  it('AC-05-48, ADR-453 a phone that says whose lists it holds is brought that project’s setup version, as its phones are shown it now, and the sync’s own row says which was sent, written once; after Dana adds a field tag the next sync brings the next version; a phone that holds no lists, or names a project the server doesn’t have, is brought none, and nothing is refused; never the lists themselves', async () => {
+    await world(async (served, tx, who) => {
+      const p = await kimOnP1(served, tx, who);
+      const holding = (listsProjectId: string | null) =>
+        p.sync({
+          holds: { masterPasscodeVersion: p.phone.masterPasscodeVersion, listsProjectId },
+        });
+      const versions = async () =>
+        (
+          await tx.setupManifest.findMany({
+            where: { projectId: p.projectId },
+            orderBy: { version: 'asc' },
+          })
+        ).map(({ version }) => version);
+      expect(await versions()).toEqual([]);
+
+      const first = await synced(served, p.token, holding(p.projectId));
+      expect(first.setupVersion).toEqual({ projectId: p.projectId, version: 1 });
+      expect(await versions()).toEqual([1]);
+      // The version is made and the sync's row says it was sent, each the phone's own act.
+      const audited = await tx.auditRecord.findMany({
+        where: { requestId: first.requestId },
+        orderBy: { id: 'asc' },
+      });
+      expect(
+        audited.map(({ tableName, operation, actorId, deviceId, changedFields }) => [
+          tableName,
+          operation,
+          actorId,
+          deviceId,
+          operation === 'UPDATE' ? changedFields : [],
+        ]),
+      ).toEqual([
+        ['sync', 'INSERT', deviceKeyActorId, p.phone.id, []],
+        ['setup_manifest', 'INSERT', deviceKeyActorId, p.phone.id, []],
+        ['sync', 'UPDATE', deviceKeyActorId, p.phone.id, ['setup_version_sent']],
+      ]);
+      // A number, never the lists: no site, pay item or debris type is named.
+      const text = JSON.stringify(first);
+      for (const never of ['sites', 'payItems', 'debrisTypes', 'certifications', 'roes']) {
+        expect(text, never).not.toContain(never);
+      }
+
+      // Nothing moved: the same version, and no new one is made.
+      const again = await synced(served, p.token, holding(p.projectId));
+      expect(again.setupVersion).toEqual({ projectId: p.projectId, version: 1 });
+      saved(
+        addFieldTagEndpoint,
+        await ask(served, p.dana, addFieldTagEndpoint, {
+          ids: p.priced.ids,
+          payload: { name: 'Mixed' },
+        }),
+      );
+      const moved = await synced(served, p.token, holding(p.projectId));
+      expect(moved.setupVersion).toEqual({ projectId: p.projectId, version: 2 });
+      expect(await versions()).toEqual([1, 2]);
+
+      // No lists held, and a project nobody set up: none is brought, and nothing is refused.
+      const none = await synced(served, p.token, holding(null));
+      const elsewhere = await synced(served, p.token, holding(randomUUID()));
+      expect([none.setupVersion, elsewhere.setupVersion]).toEqual([null, null]);
+      expect((await syncsOf(tx, p.phone.id)).map((sync) => sync.setupVersionSent)).toEqual([
+        1,
+        1,
+        2,
+        null,
+        null,
+      ]);
+      expect(await versions()).toEqual([1, 2]);
+      const logged = served.lines.filter((line) => line.includes('A phone synced.'));
+      expect(logged.map((line) => /"setupVersionSent":(\d+|null)/.exec(line)?.[1])).toEqual([
+        '1',
+        '1',
+        '2',
+        'null',
+        'null',
+      ]);
     });
   });
 });

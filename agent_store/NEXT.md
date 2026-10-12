@@ -89,7 +89,7 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-11, through ADR-472)
+### Where things stand (2026-10-11, through ADR-473)
 - **Phase 2 (API and sync) is open (ADR-376): 23 of its 32 tasks are done** (`BACKLOG.md`,
   "Active — Phase 2", ticks each with its ADRs). Complete: Milestone 2.1 (the API as a process,
   the boundary, time limits and policy), 2.2 (sign-in: its records, passwords, sessions, two-step
@@ -107,15 +107,17 @@ of `DECISIONS.md`.
   `sync.ts`, ADR-467; a certification made on a phone, ADR-469; **the suite any client must
   pass, `syncClientSuite`, and `syncAnswerRead`, with the harness's phone a client of the
   contract, ADR-470**; what they leave: C127…C130). **Task 2.6.2 (the endpoint) is cut in four
-  (ADR-471) and two parts are done: the tables `sync`, `synced_record` and `held_record` with
-  their own guards, and the service and its endpoint (ADR-472: `POST /phones/current/syncs`,
-  `Sync` in `apps/api/src/sync/sync.ts`; what it leaves: C132). The stories' phones still sync
-  through the stand-in (part 4).** **The user decided that a record answered `NOT_SAVED`
+  (ADR-471) and three parts are done: the tables `sync`, `synced_record` and `held_record` with
+  their own guards; the service and its endpoint (ADR-472: `POST /phones/current/syncs`,
+  `Sync` in `apps/api/src/sync/sync.ts`); and what a sync brings besides its answers (the
+  master passcode's check and a setup version number, never the lists) with the worker reading
+  the clock's difference for `DEVICE_CLOCK_OFF` (ADR-473; what it leaves: C133). The stories'
+  phones still sync through the stand-in (part 4), all but the last step of `p1-queued`.** **The user decided that a record answered `NOT_SAVED`
   is held on the server for a person, in a table of its own, built with 2.6.2 (ADR-468).** **The user approved ARCHITECTURE §7.2's notes on signing in
   online and taking the assignment (ADR-452).**
 - **Where each thing is written, so nothing is read twice:** a rule as it stands, with its ADR:
   `SUMMARY.md`, by topic (grep its `###` headings; never read it whole). What a finished task left
-  for a later one: `BACKLOG.md`'s carry-forward register (C85…C131). How a layer's tests are
+  for a later one: `BACKLOG.md`'s carry-forward register (C85…C133). How a layer's tests are
   written and what a loosening is tried on: the page for that layer beside the `adms-verify`
   skill. Today's counts: `agent_store/CHAIN.md`. **The task-by-task record that stood here
   (2.0.1 to 2.5.2, every endpoint and service named) moved word for word to `DECISIONS.md`'s
@@ -333,20 +335,23 @@ questions.
 **Phase 2 is open (ADR-376). Its plan is `BACKLOG.md`, "Active — Phase 2" (ADR-377): read its
 brief first. One task per response.**
 
-**Task 2.6.2, part 3 of 4: what the answer carries besides the answers, and the worker reading
-the clock's difference** *(BACKLOG 2.6.2; its carry-forward first: **C132**, then C131's part 3,
-C70, C53; ADR-453, 454, 467, 471, 472; AC-05-04, 48, AC-06-58, AC-02-23; REQ-203;
-ARCHITECTURE §9 (6), §10; `spec/FLAGS.md` `DEVICE_CLOCK_OFF`; `apps/api/src/sync/sync.ts`,
-`apps/api/src/phone/phone-lists.ts` and `phone-login-list.ts` for what a phone is sent today;
-`apps/worker/src/reconciliation/` (`project-read.ts`, `ticket-work.ts`) for the flag; read
-`api-tests.md` and `worker-tests.md` beside the `adms-verify` skill first)*. Decide what a sync's
-answer carries (fresh lists, a new passcode check, or only that they changed and the phone reads
-them by the endpoints it has: nobody need be signed in for a sync, and the lists are an
-assignment's) and write `Sync.setupVersionSent` once where a version was sent; the worker reads a
-field event's sync through `synced_record` and hands `clockOffAtSyncMinutes` and the limit, a new
-policy value, to `TicketChecks`. A migration only if the decision needs one. Part 4 (the
-harness's phones through `Sync`) follows. Say what the standards ask first (ADR-401).
-**The user may still overturn ADR-472's defaults, ADR-471's defaults, ADR-470's defaults, ADR-469's, ADR-467 (4)'s limits (its other defaults are settled, ADR-468), ADR-466's, ADR-464's, ADR-463's, ADR-462's, ADR-458's other defaults (three were confirmed, ADR-459), ADR-457's, ADR-456 (5)'s proposals, ADR-455's, ADR-454's, ADR-453's, ADR-451's and ADR-450's defaults, ADR-449
+**Task 2.6.2, part 4 of 4: the harness's phones through `Sync`** *(BACKLOG 2.6.2; its
+carry-forward first: **C133**, then C132's part 4 and C130; ADR-470, 472, 473; AC-05-04, 15, 16,
+45, AC-06-58; REQ-203; `packages/scenarios/src/sync-stand-in.ts`, `device.ts` (`sends`,
+`answered`), `stories/p1-office.ts` (`P1Syncs`, `QueueRuns`), `stories/sync.ts`; the last step
+of `stories/p1-queued.ts` builds `Sync` as a story must; read `api-tests.md` and
+`worker-tests.md` beside the `adms-verify` skill first)*. `Sync` takes the place of
+`SyncStandIn`: a story's phone syncs through `new Sync(api, { … })` as
+`apps/api/src/process/api-process.ts` builds it, its reports and numbers with its records.
+**Every story's exact audit lists and job counts move then** (a record a sync brings writes a
+`sync`, a `synced_record` and a job of its own, trigger `SYNC`; a sync that names its project
+writes `setup_version_sent` and may make a setup version), and the stories that call
+`Reconciliation.run` after a sync find those jobs waiting. A story's phone states the version
+of the master passcode it holds, or the story's signing secret makes it a check. Tell as
+stories of their own: a database's refusal answered `NAMES_NO_RECORD` and held; two phones
+racing for one cert number. The golden mission's figures must not move (they change only at
+the user's word). This closes 2.6.2; 2.6.3 (edits) follows.
+**The user may still overturn ADR-473's defaults, ADR-472's defaults, ADR-471's defaults, ADR-470's defaults, ADR-469's, ADR-467 (4)'s limits (its other defaults are settled, ADR-468), ADR-466's, ADR-464's, ADR-463's, ADR-462's, ADR-458's other defaults (three were confirmed, ADR-459), ADR-457's, ADR-456 (5)'s proposals, ADR-455's, ADR-454's, ADR-453's, ADR-451's and ADR-450's defaults, ADR-449
 (5)'s proposals as built, ADR-442's, ADR-440's, ADR-438's two choices or ADR-439's (`SUMMARY.md` §4).**
 **Docker's disk is 8 GB and was full once on 2026-10-10** (Tools and housekeeping; it has held since, 1.3 GB free after ADR-464's session): if `pnpm ready` fails for space, stop and ask the user to free some; never work around it.
 **Before the chain, `pnpm ready`** (the stack up, then `installer:check`): a `✗` at the migrations

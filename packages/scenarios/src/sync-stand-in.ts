@@ -76,7 +76,15 @@ export class SyncStandIn {
         records.push({ answer: 'NOT_SAVED', id: read.id, reason, message });
       }
     }
-    return { unplannedAssignments: [], passcodeUses: [], records, numbers: [] };
+    // Nothing is brought besides: the check and the setup version are the endpoint's (ADR-473).
+    return {
+      unplannedAssignments: [],
+      passcodeUses: [],
+      records,
+      numbers: [],
+      masterPasscode: { version: sync.holds.masterPasscodeVersion ?? 1, check: null },
+      setupVersion: null,
+    };
   }
 
   private async received(record: Exclude<HeldRecord, { record: 'PHOTO' }>): Promise<RecordAnswer> {

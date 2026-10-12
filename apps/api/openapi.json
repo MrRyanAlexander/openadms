@@ -11806,6 +11806,37 @@
                       "required": ["projectId", "series", "lastUsedNumber"],
                       "additionalProperties": false
                     }
+                  },
+                  "holds": {
+                    "type": "object",
+                    "properties": {
+                      "masterPasscodeVersion": {
+                        "anyOf": [
+                          {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 9007199254740991
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "listsProjectId": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": ["masterPasscodeVersion", "listsProjectId"],
+                    "additionalProperties": false
                   }
                 },
                 "required": [
@@ -11814,7 +11845,8 @@
                   "unplannedAssignments",
                   "passcodeUses",
                   "records",
-                  "lastUsed"
+                  "lastUsed",
+                  "holds"
                 ],
                 "additionalProperties": false
               }
@@ -12067,9 +12099,101 @@
                         "required": ["projectId", "series", "toppedUp", "blocks"],
                         "additionalProperties": false
                       }
+                    },
+                    "masterPasscode": {
+                      "type": "object",
+                      "properties": {
+                        "version": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "check": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "first": {
+                                  "type": "object",
+                                  "properties": {
+                                    "salt": {
+                                      "type": "string",
+                                      "pattern": "^[A-Za-z0-9+/]+$"
+                                    },
+                                    "memory": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "passes": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "parallelism": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "bytes": {
+                                      "type": "integer",
+                                      "minimum": 16,
+                                      "maximum": 9007199254740991
+                                    }
+                                  },
+                                  "required": ["salt", "memory", "passes", "parallelism", "bytes"],
+                                  "additionalProperties": false
+                                },
+                                "check": {
+                                  "type": "string",
+                                  "pattern": "^\\$argon2id\\$v=19\\$m=\\d+,t=\\d+,p=\\d+\\$[A-Za-z0-9+/]+\\$[A-Za-z0-9+/]+$"
+                                }
+                              },
+                              "required": ["first", "check"],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": ["version", "check"],
+                      "additionalProperties": false
+                    },
+                    "setupVersion": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "projectId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "version": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": ["projectId", "version"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   },
-                  "required": ["unplannedAssignments", "passcodeUses", "records", "numbers"],
+                  "required": [
+                    "unplannedAssignments",
+                    "passcodeUses",
+                    "records",
+                    "numbers",
+                    "masterPasscode",
+                    "setupVersion"
+                  ],
                   "additionalProperties": false
                 }
               }

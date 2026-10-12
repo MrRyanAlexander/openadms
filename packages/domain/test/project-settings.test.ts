@@ -50,6 +50,7 @@ const shipped = {
   RECONCILIATION_RUN_LONGEST_MINUTES: '10',
   JOB_QUEUE_POLL_SECONDS: '5',
   MAP_SERVER_ANSWER_SECONDS: '30',
+  DEVICE_CLOCK_OFF_LIMIT_MINUTES: '5',
   JOB_TICKETS_AT_MOST: '200',
 };
 
@@ -153,6 +154,7 @@ describe('the policy values', () => {
       reconciliationRunLongestMinutes: 'RECONCILIATION_RUN_LONGEST_MINUTES',
       jobQueuePollSeconds: 'JOB_QUEUE_POLL_SECONDS',
       mapServerAnswerSeconds: 'MAP_SERVER_ANSWER_SECONDS',
+      deviceClockOffLimitMinutes: 'DEVICE_CLOCK_OFF_LIMIT_MINUTES',
       jobTicketsAtMost: 'JOB_TICKETS_AT_MOST',
     });
     expect(Object.keys(shipped).sort()).toEqual(Object.values(policyNames).sort());

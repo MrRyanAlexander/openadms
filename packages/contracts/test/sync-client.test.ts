@@ -82,6 +82,7 @@ const phone =
             .filter((record) => !later.has(syncedRecordAssignment(record) ?? ''))
             .slice(0, all ? undefined : syncRecordsAtMost),
           lastUsed: [...holds.lastUsed],
+          holds: { masterPasscodeVersion: null, listsProjectId: null },
         };
         last = sync;
         if (fault === 'LEAVES_OUT_AN_EMPTY_PART' && sync.passcodeUses.length === 0) {
@@ -206,6 +207,7 @@ describe('what a client reads of what it was answered', () => {
     passcodeUses: [switched],
     records: [{ record: 'FIELD_EVENT', fieldEvent: collection }, second],
     lastUsed: [{ projectId: collection.projectId, series: 'LOAD', lastUsedNumber: 101006 }],
+    holds: { masterPasscodeVersion: 3, listsProjectId: collection.projectId },
   };
   const answered: SyncAnswered = {
     unplannedAssignments: [],
@@ -221,6 +223,8 @@ describe('what a client reads of what it was answered', () => {
       },
     ],
     numbers: [{ projectId: collection.projectId, series: 'LOAD', toppedUp: true, blocks: [] }],
+    masterPasscode: { version: 3, check: null },
+    setupVersion: { projectId: collection.projectId, version: 4 },
   };
 
   it('AC-05-45 an answer for each thing sent, each in its place and under its id, is the answer; a record the server couldn’t read may be answered under no id', () => {
@@ -233,9 +237,11 @@ describe('what a client reads of what it was answered', () => {
       ],
     };
     expect(syncAnswerRead(sent, unread)).toEqual(unread);
+    // A phone that holds no lists, or whose project the server doesn't have, is brought none.
+    expect(syncAnswerRead(sent, { ...answered, setupVersion: null })).not.toBeNull();
   });
 
-  it('REQ-308c anything else is no answer: one short, one too many, another order, another id, "saved" under no id, a series not reported, a shape the contract doesn’t have, nothing', () => {
+  it('REQ-308c anything else is no answer: one short, one too many, another order, another id, "saved" under no id, a series not reported, another project’s setup version, a shape the contract doesn’t have, nothing', () => {
     const [first, last] = answered.records;
     const not = (answer: unknown): boolean => syncAnswerRead(sent, answer) === null;
     expect(not({ ...answered, records: [first] })).toBe(true);
@@ -249,6 +255,9 @@ describe('what a client reads of what it was answered', () => {
     ).toBe(true);
     expect(not({ ...answered, numbers: [] })).toBe(true);
     expect(not({ ...answered, numbers: [{ ...answered.numbers[0], series: 'ROE' }] })).toBe(true);
+    expect(not({ ...answered, setupVersion: { projectId: made('98'), version: 4 } })).toBe(true);
+    const { masterPasscode, ...withoutPasscode } = answered;
+    expect([masterPasscode.version, not(withoutPasscode)]).toEqual([3, true]);
     expect(not({ ...answered, status: 'COMPLETED' })).toBe(true);
     expect(not({ ...answered, records: [first, { answer: 'OK', id: disposal.id }] })).toBe(true);
     for (const nothing of [undefined, null, 'OK', 200, []]) expect(not(nothing)).toBe(true);

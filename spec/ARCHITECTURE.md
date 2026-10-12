@@ -826,6 +826,9 @@ So the protection can't rest on the password. It rests on these:
    is the one for the phone's current assignment, as listed in the §7.1 note (debris types, field
    tags, its unit rate pay items, its site's quantity lookup), with a new setup version whenever
    any of it changed.*
+   ⚠️ *ADR-473 (agent default, the user may overturn): the sync's own call brings the new master
+   passcode check and the setup version's number, with nobody signed in; the lists and the login
+   list are read by the signed-in monitor's phone in the same connection, by their own endpoints.*
 7. **The server queues reconciliation** for what arrived (§13). The sync doesn't wait for it.
 8. The device records its **ticket edit log** for anything reopened before sync (ADR-072), and the
    server writes those edits to the audit log under the monitor's ID.

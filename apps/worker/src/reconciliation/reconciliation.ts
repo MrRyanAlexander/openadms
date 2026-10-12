@@ -549,7 +549,7 @@ export class Reconciliation {
       activeFrom: snapshot.project.activeFrom,
       activeTo: snapshot.project.activeTo,
       certifications: snapshot.certifications,
-      deviceClockOffLimitMinutes: null,
+      deviceClockOffLimitMinutes: this.settings.deviceClockOffLimitMinutes,
       allowSplitLoads: snapshot.project.allowSplitLoads,
       controlRanges: snapshot.controlRanges,
     });

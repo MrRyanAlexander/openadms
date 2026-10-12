@@ -38,4 +38,11 @@ and stops the story where no job waits, `settle` works them all, `waiting` lists
 service that queues is made with `(db, clock, story.policy)`.** A loosening of `WorkQueue`, of a
 service's queueing or of the domain's `TicketNeighbours` is tried on those stories; the rule
 itself on `packages/domain/test/neighbours.test.ts`.
+**The clock's difference at a sync (ADR-473)** is proven by `p1-queued`'s last step: Ana's phone
+syncs through the API's own `Sync`, built in the story as `api-process.ts` builds it, and the
+queued runs flag `DEVICE_CLOCK_OFF`. A loosening of `project-read.ts`'s read of `synced_record`
+or of the limit handed to `TicketChecks` is tried on that story (five took about four minutes).
+**The run of a number that is none raises only `NOT_A_TICKET_NUMBER`**: the limit handed to it
+can't be seen to matter. **A new field of `WorkSettings` is stated by every story that builds
+a `Reconciliation`** (nine today), and a worker's policy value joins `process.test.ts`.
 Only this project: `./node_modules/.bin/vitest run --project @open-adms/worker`.

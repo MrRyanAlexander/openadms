@@ -7,7 +7,7 @@
 > task's ADR and its session-log line in `DECISIONS.md`). No other file carries these counts.
 > **A count that differs from this page without a reason is a finding, not noise.**
 
-**Seen whole:** 2026-10-11, after ADR-472, on the user's Mac, the installation at head.
+**Seen whole:** 2026-10-11, after ADR-473, on the user's Mac, the installation at head.
 
 ## `pnpm ready`
 
@@ -20,13 +20,13 @@
 
 ## `pnpm test`
 
-**`Test Files 149 passed (149)`, `Tests 2660 passed (2660)`.**
+**`Test Files 149 passed (149)`, `Tests 2664 passed (2664)`.**
 
 | Project | Tests | Files | Needs |
 |---|---|---|---|
-| `packages/domain` | 762 | 41 | nothing |
+| `packages/domain` | 764 | 41 | nothing |
 | `packages/contracts` | 62 | 9 | nothing |
-| `apps/api` | 503 | 39 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
+| `apps/api` | 505 | 39 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
 | `packages/db` | 1051 | 44 | `pnpm ready` |
 | `packages/scenarios` | 125 | 5 | `pnpm ready` for `stories.test.ts` (the runner and a run's template, 5); the flag catalogue (78 flags), the harness, the phone held to the sync contract's suite (12) and the policy need nothing. **The stories themselves are not here** (ADR-446) |
 | `apps/worker` | 30 | 3 | `pnpm ready` for the map servers (13) and its container (3); the process (14) needs nothing |
@@ -54,7 +54,7 @@ failed.`** Each story `passed: N checks, N passed, 0 failed`:
 | `numbering` | 16 | | `golden-mission` | 27 |
 | `p1-field-days` | 35 | | `p1-left-out` | 31 |
 | `sync` | 49 | | `first-admin` | 32 |
-| `p1-any-order` | 4 | | `p1-queued` | 14 |
+| `p1-any-order` | 4 | | `p1-queued` | 16 |
 | `p1-reconciled` | 39 | | `p1-viewed` | 15 |
 | `under-the-passcode` | 9 | | | |
 
@@ -66,7 +66,7 @@ P1 $5,548.25 on 19 lines, P2 $324.00. `p1-reconciled` through `p1-left-out`, `p1
 
 `✓ 0 open advisories` (3 accepted by id); secretlint `0 found`; the installation's own secrets
 (8 values from 4 env files) `0 found`; a password-like setting `0 found`; env files `✓ every one
-ignored by git and untracked`; the grant tests **`43 files, 1028 tests: 1028 passed, 0 failed`**;
+ignored by git and untracked`; the grant tests **`44 files, 1051 tests: 1051 passed, 0 failed`**;
 ending **`Security checks: 7 passed, 0 failed.`**
 
 ## What the installation holds after a run

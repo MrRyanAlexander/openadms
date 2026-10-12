@@ -1,8 +1,8 @@
 // One sync from a phone, whole (ARCHITECTURE §9 (1), (3), (4), (6), (7), §10;
 // spec/parts/05-sync.md steps 2…8; spec/acceptance/05-sync.md AC-05-03, 04, 15, 16, 20, 45, 47;
 // spec/acceptance/10-api-and-sync.md AC-10-35, 46, 51; spec/DATA-MODEL.md §4.5; BACKLOG 2.6.2,
-// C64, C69, C122, C126…C131; ADR-022, 052, 065, 100, 420, 457, 464, 466…472; KD-56; REQ-016,
-// 203, 308c). OWASP ASVS 5.0 V2, V16; API Security Top 10 API1, API3, API4.
+// C64, C69, C122, C126…C132; ADR-022, 052, 065, 100, 420, 453, 454, 457, 464, 466…473; KD-56;
+// REQ-016, 203, 308c). OWASP ASVS 5.0 V2, V16; API Security Top 10 API1, API3, API4.
 //
 // - **The phone is the one that proved itself.** Nothing sent says which phone it is: every
 //   record read is given `source: 'DEVICE'` and that phone's id here.
@@ -30,6 +30,12 @@
 // - **The numbers:** for each series reported, the phone is topped up to a full block and
 //   answered the blocks it holds now; where the report can't be taken (no such series, none
 //   left), `toppedUp: false` and the blocks it held before (ADR-065, 467 (8)).
+// - **What a sync brings besides** (§9 (6); AC-02-23, AC-05-48; ADR-473), last, and only what
+//   needs nobody signed in: the master passcode's version in force, with its check where the
+//   phone says it holds another (`PhoneLoginList.passcodeBrought`, the login list's own); and
+//   the setup version of the project whose lists the phone says it holds, as that project's
+//   phones are shown it now (`SetupVersions`), written once on the sync's own row. A number,
+//   never the lists: those are an assignment's, read by a signed-in monitor's phone.
 import { createHash } from 'node:crypto';
 
 import {
@@ -56,9 +62,11 @@ import { NotSaved, type NotSavedNotice } from '@open-adms/domain';
 import type { Certifications } from '../certification/certifications.ts';
 import type { NumberAllocator } from '../numbering/number-allocator.ts';
 import type { PasscodeUses } from '../phone/passcode-uses.ts';
+import type { PhoneLoginList } from '../phone/phone-login-list.ts';
 import type { UnplannedAssignments } from '../phone/unplanned-assignments.ts';
 import { databaseRefusalOf } from '../process/database-refusal.ts';
 import type { Clock } from '../setup/setup-service.ts';
+import { SetupVersions } from '../setup/setup-versions.ts';
 import type { Intake } from './intake.ts';
 import type { Brought } from './ledger.ts';
 import { NamesNothing } from './record-write.ts';
@@ -70,6 +78,8 @@ export interface SyncParts {
   readonly unplanned: UnplannedAssignments;
   readonly uses: PasscodeUses;
   readonly numbers: NumberAllocator;
+  // Whose `passcodeBrought` makes the master passcode's check for a phone.
+  readonly loginList: PhoneLoginList;
   readonly clock: Clock;
 }
 
@@ -78,6 +88,8 @@ export interface Synced {
   readonly syncId: string;
   // The phone's clock less the server's, in whole seconds.
   readonly clockDifferenceSeconds: number;
+  // The setup version it sent, where it sent one.
+  readonly setupVersionSent: number | null;
   readonly answered: SyncAnswered;
 }
 
@@ -134,10 +146,12 @@ const blocksOf = (held: readonly NumberBlock[]): SeriesHeld['blocks'] =>
 export class Sync {
   private readonly db: Database;
   private readonly parts: SyncParts;
+  private readonly versions: SetupVersions;
 
   constructor(db: Database, parts: SyncParts) {
     this.db = db;
     this.parts = parts;
+    this.versions = new SetupVersions(db);
   }
 
   // One sync from the phone that proved itself.
@@ -191,11 +205,54 @@ export class Sync {
     const numbers: SeriesHeld[] = [];
     for (const report of sent.lastUsed) numbers.push(await this.toppedUp(deviceId, report));
 
+    const masterPasscode = await this.parts.loginList.passcodeBrought(
+      deviceId,
+      sent.holds.masterPasscodeVersion,
+    );
+    const setupVersion = await this.setupVersion(deviceId, brought, sent.holds.listsProjectId);
+
     return {
       syncId: brought.syncId,
       clockDifferenceSeconds,
-      answered: { unplannedAssignments, passcodeUses, records, numbers },
+      setupVersionSent: setupVersion?.version ?? null,
+      answered: {
+        unplannedAssignments,
+        passcodeUses,
+        records,
+        numbers,
+        masterPasscode,
+        setupVersion,
+      },
     };
+  }
+
+  // The setup version of the project whose lists the phone holds, as that project's phones are
+  // shown it now: a new one where the setup moved since the newest (ADR-453). Written once on
+  // the sync's own row, as the device key's actor on that phone. None for a phone that holds
+  // no lists, or for a project the server doesn't have: that refuses nothing.
+  private async setupVersion(
+    deviceId: string,
+    brought: Brought,
+    projectId: string | null,
+  ): Promise<SyncAnswered['setupVersion']> {
+    if (projectId === null) return null;
+    const shown = await this.db.$read(async (tx) => {
+      const project = await tx.project.findUnique({
+        where: { id: projectId },
+        select: { id: true },
+      });
+      return project === null ? null : SetupVersions.shownIn(tx, projectId);
+    });
+    if (shown === null) return null;
+    const version = await this.versions.numbered(projectId, shown, deviceId);
+    await this.db.$write(byDeviceKey(deviceId), (tx) =>
+      tx.sync.update({
+        where: { id: brought.syncId },
+        data: { setupVersionSent: version },
+        select: { id: true },
+      }),
+    );
+    return { projectId, version };
   }
 
   // Whatever stood in one record's place: its own answer.

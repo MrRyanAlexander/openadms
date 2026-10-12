@@ -1386,6 +1386,11 @@ worker reads it** (the difference, for `DEVICE_CLOCK_OFF`); no read-only viewer 
 **Written since ADR-472 (task 2.6.2 part 2)** by `Sync` (`apps/api`), first in every call of
 `POST /phones/current/syncs`, as the device key's actor on the phone that proved itself; the
 difference is rounded to the nearest second. A call sent again is a sync of its own.
+**`setupVersionSent` since ADR-473 (task 2.6.2 part 3):** written once by `Sync`, as the device
+key's actor, where the phone said whose lists it holds and the answer told it that project's
+setup version: the number, not the lists ("when the answer carried lists", above, is read so).
+The worker reads `clockDifferenceSeconds` through `SyncedRecord` for each phone-made field
+event and flags past the policy value `DEVICE_CLOCK_OFF_LIMIT_MINUTES`.
 
 #### `SyncedRecord`
 

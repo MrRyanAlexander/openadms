@@ -5,8 +5,6 @@
 // the API's. The real process, in this test's own memory, on the installation's database as
 // `adms_api`: it needs `pnpm local:up` after `pnpm installer`, and fails saying so. Each test's
 // work is undone (support/database.ts).
-import { argon2, timingSafeEqual } from 'node:crypto';
-
 import {
   changeMasterPasscodeEndpoint,
   createProjectEndpoint,
@@ -20,7 +18,6 @@ import {
   withdrawAssignmentEndpoint,
   writeAssignmentEndpoint,
   archivePersonEndpoint,
-  type OfflineCheckRecord,
   type PhoneLoginListAnswer,
 } from '@open-adms/contracts';
 import { deviceKeyActorId, type Database } from '@open-adms/db';
@@ -28,6 +25,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { installationPolicy } from '../src/policy.ts';
 import { installationSettings, openInstallation, type Tx } from './support/database.ts';
+import { opens } from './support/offline-check.ts';
 import { enrolledPhone, passcode, proven, type TestPhone } from './support/phones.ts';
 import { danasEmail, long, worldOn, type Answer, type Served } from './support/served.ts';
 import { ask, p1Priced, saved, told, type Browser } from './support/setup.ts';
@@ -83,46 +81,6 @@ const holding = (answer: PhoneLoginListAnswer): Held => ({
   masterPasscodeVersion: answer.masterPasscode.version,
   entries: (answer.loginList?.monitors ?? []).map(({ monitorId, mark }) => ({ monitorId, mark })),
 });
-
-// A phone's own work, with no connection: the first slow hash of what was typed, then the
-// second of that, held against the check it was sent.
-const slow = (message: Buffer, salt: string, memory: number, passes: number, lanes: number) =>
-  new Promise<Buffer>((resolve, reject) => {
-    argon2(
-      'argon2id',
-      {
-        message,
-        nonce: Buffer.from(salt, 'base64'),
-        memory,
-        passes,
-        parallelism: lanes,
-        tagLength: 32,
-      },
-      (error, tag) => {
-        if (error === null) resolve(tag);
-        else reject(error);
-      },
-    );
-  });
-
-async function opens(typed: string, sent: OfflineCheckRecord | null | undefined): Promise<boolean> {
-  if (sent == null) throw new Error('The phone was sent no check.');
-  const { first } = sent;
-  expect(first.bytes).toBe(32);
-  const one = await slow(
-    Buffer.from(typed.normalize('NFC')),
-    first.salt,
-    first.memory,
-    first.passes,
-    first.parallelism,
-  );
-  const parts = /^\$argon2id\$v=19\$m=(\d+),t=(\d+),p=(\d+)\$([^$]+)\$([^$]+)$/.exec(sent.check);
-  if (parts === null) throw new Error('The check is no PHC string.');
-  const [, memory, passes, lanes, salt, tag] = parts;
-  const two = await slow(one, salt ?? '', Number(memory), Number(passes), Number(lanes));
-  const kept = Buffer.from(tag ?? '', 'base64');
-  return two.length === kept.length && timingSafeEqual(two, kept);
-}
 
 // P1 as Dana prices it, a phone, and Lee Morgan created on it and signed in, with an assignment
 // on P1 for Monday.

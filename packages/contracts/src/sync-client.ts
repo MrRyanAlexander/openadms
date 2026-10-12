@@ -76,7 +76,7 @@ const inPlace = <S, A>(
 export function syncAnswerRead(sent: SyncSent, answered: unknown): SyncAnswered | null {
   const read = syncAnsweredSchema.safeParse(answered);
   if (!read.success) return null;
-  const { unplannedAssignments, passcodeUses, records, numbers } = read.data;
+  const { unplannedAssignments, passcodeUses, records, numbers, setupVersion } = read.data;
   const fits =
     inPlace(
       sent.unplannedAssignments,
@@ -93,6 +93,8 @@ export function syncAnswerRead(sent: SyncSent, answered: unknown): SyncAnswered 
       sent.lastUsed,
       numbers,
       (one, a) => a.projectId === one.projectId && a.series === one.series,
-    );
+    ) &&
+    // A setup version is the one of the project the phone said, never another's.
+    (setupVersion === null || setupVersion.projectId === sent.holds.listsProjectId);
   return fits ? read.data : null;
 }

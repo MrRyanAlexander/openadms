@@ -1,13 +1,14 @@
 // One sync, whole: what a phone sends and what it is answered (ARCHITECTURE §9, §10;
 // spec/parts/05-sync.md steps 2…8; spec/acceptance/05-sync.md AC-05-03, 04, 15, 20, 45…47;
 // AC-10-35, 36; T-12; BACKLOG 2.6.1, C69, C84 (9), C86, C122, C126, C127; ADR-022, 052, 065, 100,
-// 338, 457, 464, 466, 467; REQ-004, 203). The endpoint that takes it is `syncPhoneEndpoint`
-// (endpoints.ts; ADR-472).
+// 338, 453, 454, 457, 464, 466, 467, 473; REQ-004, 203). The endpoint that takes it is
+// `syncPhoneEndpoint` (endpoints.ts; ADR-472).
 //
 // **A sync is read in this order, and each thing after what it may name:** the phone's clock;
 // the unplanned assignments made on the phone; the uses of the master passcode it logged; its
-// records; the last number it used of each series. A record names its assignment, so an
-// unplanned assignment goes ahead of the records made under it.
+// records; the last number it used of each series; what it holds that a sync may bring anew. A
+// record names its assignment, so an unplanned assignment goes ahead of the records made under
+// it.
 //
 // **Each record is read on its own** (AC-05-45): the payload takes whatever stands in a record's
 // place, and `recordRead` reads it with `syncedRecordSchema`. One that isn't a record gets its
@@ -21,6 +22,13 @@
 // server exactly as sent, for a person, and its words say so (ADR-468, 472). Never an error
 // for the whole sync, and never "saved" for what wasn't stored (REQ-308c). Nothing here refuses work over eligibility
 // (ADR-052), and no answer carries a status, a flag or money: those are the worker's.
+//
+// **Besides the answers, a sync brings what needs nobody signed in** (§9 (6); ADR-473): the
+// master passcode's version in force, with its check where the phone holds another, and the
+// setup version of the project whose lists the phone holds, as that project's phones are shown
+// it now. The lists themselves and the login list are an assignment's, read by the endpoints a
+// signed-in monitor's phone has (`phoneListsEndpoint`, `phoneLoginListEndpoint`): a sync says
+// only that they moved.
 import {
   NotSaved,
   notSavedReasons,
@@ -30,7 +38,11 @@ import {
 } from '@open-adms/domain';
 import { z } from 'zod';
 
-import { passcodeUseAnswerSchema, unplannedAssignmentAnswerSchema } from './api-answers.ts';
+import {
+  offlineCheckSchema,
+  passcodeUseAnswerSchema,
+  unplannedAssignmentAnswerSchema,
+} from './api-answers.ts';
 import { notRead } from './not-taken.ts';
 import { passcodeUseReportSchema, unplannedAssignmentReportSchema } from './phone-reports.ts';
 import {
@@ -60,6 +72,16 @@ export const lastUsedSchema = z.strictObject({
   lastUsedNumber: seriesNumber.nullable(),
 });
 
+const versionNumber = z.number().int().min(1);
+
+// What a phone holds that a sync may bring anew (ADR-473): the version of the master passcode
+// whose check it holds, none on a phone just enrolled; and the project whose lists it holds,
+// none on a phone that holds no lists.
+export const syncHoldsSchema = z.strictObject({
+  masterPasscodeVersion: versionNumber.nullable(),
+  listsProjectId: id.nullable(),
+});
+
 const eachSeriesOnce = (reports: readonly z.infer<typeof lastUsedSchema>[]): boolean =>
   new Set(reports.map(({ projectId, series }) => `${projectId} ${series}`)).size === reports.length;
 
@@ -76,6 +98,7 @@ export const syncSentSchema = z.strictObject({
   // Each read on its own, by `recordRead`.
   records: z.array(z.unknown()).max(syncRecordsAtMost),
   lastUsed: z.array(lastUsedSchema).max(syncSeriesAtMost).refine(eachSeriesOnce),
+  holds: syncHoldsSchema,
 });
 
 // One record as the server read it, or what its phone is told of one that isn't a record, with
@@ -174,12 +197,32 @@ export const seriesHeldSchema = z.strictObject({
   ),
 });
 
-// What a phone is answered: one answer for each thing it sent, in the order it sent them.
+// The master passcode's version in force, with its check for a phone that said it holds
+// another or none (ARCHITECTURE §7.5, §9 (6); AC-02-23; ADR-454, 473): what the login list's
+// own answer carries.
+export const passcodeBroughtSchema = z.strictObject({
+  version: versionNumber,
+  check: offlineCheckSchema.nullable(),
+});
+
+// The setup version of the project whose lists the phone holds, as that project's phones are
+// shown it now (ADR-453, 473): a phone that holds lists of another version reads its lists
+// again. A number, never the lists.
+export const setupVersionBroughtSchema = z.strictObject({
+  projectId: id,
+  version: versionNumber,
+});
+
+// What a phone is answered: one answer for each thing it sent, in the order it sent them, then
+// what the sync brings besides. `setupVersion` is null for a phone that holds no lists, or
+// whose project the server doesn't have.
 export const syncAnsweredSchema = z.strictObject({
   unplannedAssignments: z.array(unplannedAssignmentAnswerSchema),
   passcodeUses: z.array(passcodeUseAnswerSchema),
   records: z.array(recordAnswerSchema),
   numbers: z.array(seriesHeldSchema),
+  masterPasscode: passcodeBroughtSchema,
+  setupVersion: setupVersionBroughtSchema.nullable(),
 });
 
 export type LastUsedReport = z.infer<typeof lastUsedSchema>;

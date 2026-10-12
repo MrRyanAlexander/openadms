@@ -64,6 +64,9 @@ export interface MileageStands {
 export interface WorkSettings {
   // One crew item's hours in a day over this are flagged: the policy value CREW_DAY_HOURS.
   readonly crewItemHoursLimit: number;
+  // A phone's clock further than this from the server's at a sync, in whole minutes, flags that
+  // sync's field events: the policy value DEVICE_CLOCK_OFF_LIMIT_MINUTES (ADR-473).
+  readonly deviceClockOffLimitMinutes: number;
 }
 
 export interface CollectionWorked {
@@ -155,8 +158,7 @@ export class TicketWork {
       activeFrom: project.activeFrom,
       activeTo: project.activeTo,
       certifications: snapshot.certifications,
-      // The difference at a sync is kept with the sync's own record, Phase 2's (ADR-344).
-      deviceClockOffLimitMinutes: null,
+      deviceClockOffLimitMinutes: settings.deviceClockOffLimitMinutes,
       allowSplitLoads: project.allowSplitLoads,
       controlRanges: snapshot.controlRanges,
     });

@@ -160,6 +160,9 @@ function answerTo(
       toppedUp: true,
       blocks: [],
     })),
+    // Nothing brought besides: the check it holds is the one in force, and no setup version.
+    masterPasscode: { version: sync.holds.masterPasscodeVersion ?? 1, check: null },
+    setupVersion: null,
   };
 }
 

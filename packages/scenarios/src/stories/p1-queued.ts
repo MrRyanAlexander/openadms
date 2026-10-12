@@ -14,8 +14,25 @@
 // `p1-invoiced` show each change queueing its own. The last steps are the cap on a run's size
 // and the process's own pass over the queue.
 //
-// Not here: a sync's own job (2.6.2), and the worker's container (the local stack's;
-// `apps/worker/test`).
+// The last step of all is a phone's sync through the API's own `Sync` (task 2.6.2 part 3;
+// ADR-473; AC-05-04, AC-06-58): the server keeps how far the phone's clock stood from its own,
+// each record queues its own job, and the run flags the field events of a sync whose phone was
+// more than the policy's minutes off. Every other phone here still syncs through the story's
+// own intake (part 4 moves them), so no other ticket has a sync to read.
+//
+// Not here: the worker's container (the local stack's; `apps/worker/test`).
+import {
+  Certifications,
+  Intake,
+  NumberAllocator,
+  OfflineChecks,
+  PasscodeUses,
+  PhoneAssignments,
+  PhoneLoginList,
+  Sync,
+  UnplannedAssignments,
+} from '@open-adms/api';
+import { syncAnswerRead, syncSentSchema, type SyncSent } from '@open-adms/contracts';
 import { ReconciliationJobs, systemActorId, type ReconciliationTrigger } from '@open-adms/db';
 import {
   JobLoop,
@@ -28,6 +45,8 @@ import {
   type JobsOutcome,
 } from '@open-adms/worker';
 
+import { onTheWire } from '../device.ts';
+import { uuidv7 } from '../ids.ts';
 import { localMapServers } from '../map-servers.ts';
 import type { Story } from '../runner.ts';
 import {
@@ -65,7 +84,11 @@ export const p1Queued: Story = {
 
     const tries = story.policy.jobTriesBeforeSetAside;
     const atMost = story.policy.jobTicketsAtMost;
-    const settings = { crewItemHoursLimit: story.policy.crewDayHours, longestRunMs: 600_000 };
+    const settings = {
+      crewItemHoursLimit: story.policy.crewDayHours,
+      deviceClockOffLimitMinutes: story.policy.deviceClockOffLimitMinutes,
+      longestRunMs: 600_000,
+    };
     const mileages = new Mileages(new MapServers(localMapServers()));
     const reconciliation = new Reconciliation(worker, clock, settings, mileages);
 
@@ -452,6 +475,123 @@ export const p1Queued: Story = {
         [['worker', 'A run worked its project’s waiting jobs.', p1, [last]]],
         { jobsWaiting: 0, jobsSetAside: 2 },
         false,
+      ],
+    );
+
+    // ------------------------------------------------------------------------------------------
+    story.at(
+      on('14', '13:05'),
+      'Ana’s phone finds signal three times, through the sync endpoint’s own service: its clock 2 h 14 m ahead of the server’s, then 5 m 59 s behind, then 6 m behind',
+    );
+    const requestNow = (): undefined => undefined;
+    const sync = new Sync(api, {
+      intake: new Intake(api, clock, story.policy),
+      certifications: new Certifications(api, clock, story.policy),
+      unplanned: new UnplannedAssignments(api, { clock, requestNow }),
+      uses: new PasscodeUses(api, { clock, requestNow }),
+      numbers: new NumberAllocator(api, clock, story.policy),
+      loginList: new PhoneLoginList(api, {
+        assignments: new PhoneAssignments(api),
+        offline: new OfflineChecks('a signing secret made up for this story'),
+        clock,
+        entriesPerCall: story.policy.loginListEntriesPerCall,
+      }),
+      clock,
+    });
+    // Monday's first collection as her phone sent it, made again that morning under a new
+    // number and an id of the phone's own.
+    const anas = held.flatMap(({ sent }) =>
+      sent.record === 'FIELD_EVENT' && sent.fieldEvent.ticketNumber === '101001' ? [sent] : [],
+    )[0];
+    if (anas === undefined) throw new Error('Ticket 101001 has no collection to make again.');
+    const wire = onTheWire(anas);
+    if (wire.record !== 'FIELD_EVENT') throw new Error('Not a field event.');
+    const passcode = await api.masterPasscode.findFirstOrThrow({ orderBy: { version: 'desc' } });
+    const clockOffSeconds = [
+      ['101090', '09', 8040],
+      ['101091', '10', -359],
+      ['101092', '11', -360],
+    ] as const;
+    const brought: unknown[] = [];
+    for (const [ticketNumber, hour, seconds] of clockOffSeconds) {
+      const sent: SyncSent = {
+        clockAt: new Date(clock.now().getTime() + seconds * 1_000).toISOString(),
+        deviceUtcOffsetMinutes: -240,
+        unplannedAssignments: [],
+        passcodeUses: [],
+        records: [
+          {
+            record: 'FIELD_EVENT',
+            fieldEvent: {
+              ...wire.fieldEvent,
+              id: uuidv7(clock.now()),
+              ticketNumber,
+              startedAt: new Date(on('14', `${hour}:00`)).toISOString(),
+              endedAt: new Date(on('14', `${hour}:20`)).toISOString(),
+            },
+          },
+        ],
+        lastUsed: [],
+        holds: { masterPasscodeVersion: passcode.version, listsProjectId: p1 },
+      };
+      const { answered } = await sync.received(
+        anas.fieldEvent.deviceId,
+        syncSentSchema.parse(sent),
+      );
+      const read = syncAnswerRead(sent, JSON.parse(JSON.stringify(answered)));
+      if (read === null) throw new Error('What came back is no answer to the sync sent.');
+      brought.push([
+        read.records.map((each) => each.answer),
+        read.masterPasscode.check,
+        read.setupVersion?.version,
+      ]);
+    }
+    const syncs = await api.sync.findMany({ orderBy: { id: 'asc' } });
+    story.check(
+      'AC-05-04 every record of each sync is received whatever its phone’s clock said; each sync is kept with the difference, the phone’s clock less the server’s in whole seconds, and with the setup version it brought: P1’s setup as phones are shown it now, a version made by the first of these syncs since Dana priced P1 after the phone took its lists, and the phone learns its lists are of an older one; no check of the master passcode is brought to a phone that holds the one in force',
+      [
+        brought,
+        syncs.map((each) => Number(each.clockDifferenceSeconds)),
+        syncs.map((each) => each.setupVersionSent),
+        wire.fieldEvent.setupVersion,
+        (await api.setupManifest.findMany({ where: { projectId: p1 } })).length,
+      ],
+      [
+        [
+          [['SAVED'], null, 2],
+          [['SAVED'], null, 2],
+          [['SAVED'], null, 2],
+        ],
+        [8040, -359, -360],
+        [2, 2, 2],
+        1,
+        2,
+      ],
+    );
+    let syncRuns = 0;
+    for (;;) {
+      const outcome = await reconciliation.waitingJobs(p1, tries, atMost);
+      if (!outcome.worked) break;
+      syncRuns += 1;
+    }
+    const clockFlags = await api.flag.findMany({
+      where: { code: 'DEVICE_CLOCK_OFF' },
+      orderBy: { ticketNumber: 'asc' },
+    });
+    story.check(
+      'AC-05-04, AC-06-58 each record queued its own job, and the run flags the field events of a sync whose phone’s clock stood more than the policy’s whole minutes from the server’s (DEVICE_CLOCK_OFF_LIMIT_MINUTES), ahead or behind: 2 h 14 m and 6 m are flagged, 5 m 59 s is not; no ticket of Monday or Tuesday is, since no sync of the endpoint’s brought them',
+      [
+        syncRuns > 0,
+        story.policy.deviceClockOffLimitMinutes,
+        clockFlags.map((flag) => [flag.message, flag.fieldEventId !== null, flag.clearedAt]),
+      ],
+      [
+        true,
+        5,
+        [
+          ['Ticket 101090: device clock was 2 h 14 m off at sync. Flagged for review.', true, null],
+          ['Ticket 101092: device clock was 6 m off at sync. Flagged for review.', true, null],
+        ],
       ],
     );
   },

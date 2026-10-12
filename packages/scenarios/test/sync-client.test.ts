@@ -165,6 +165,8 @@ describe('what stands where the sync endpoint will', () => {
           },
         ],
         numbers: [],
+        masterPasscode: { version: 1, check: null },
+        setupVersion: null,
       },
       [`730416 from ${deviceId}`],
     ]);

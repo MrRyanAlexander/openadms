@@ -1,8 +1,10 @@
 // A phone's sync (ARCHITECTURE §9, §10; AC-05-03, 04, 16, 45; AC-10-46, 51; BACKLOG 2.6.2, C86,
 // C128…C131; ADR-466…472). Open to a phone that has proved itself; nobody need be signed in.
-// The log says which phone synced, the sync's id, how far its clock stood from the server's and
-// how many of each thing got which answer: never a record, an id a record was sent under, what
-// one that couldn't be read was told, or anything a record names (OWASP ASVS 5.0 16.2.5).
+// The log says which phone synced, the sync's id, how far its clock stood from the server's,
+// how many of each thing got which answer, the master passcode's version and whether its check
+// was sent, and the setup version sent: never a record, an id a record was sent under, what
+// one that couldn't be read was told, anything a record names, or a check (OWASP ASVS 5.0
+// 16.2.5).
 import {
   syncAnsweredSchema,
   syncPhoneEndpoint,
@@ -39,7 +41,7 @@ export class SyncController {
     @Req() request: FastifyRequest,
   ): Promise<SyncAnswered> {
     const phone = phoneOf(request);
-    const { syncId, clockDifferenceSeconds, answered } = await this.sync.received(
+    const { syncId, clockDifferenceSeconds, setupVersionSent, answered } = await this.sync.received(
       phone.deviceId,
       body,
     );
@@ -53,6 +55,9 @@ export class SyncController {
         records: counted(answered.records),
         seriesToppedUp: answered.numbers.filter(({ toppedUp }) => toppedUp).length,
         seriesNotToppedUp: answered.numbers.filter(({ toppedUp }) => !toppedUp).length,
+        masterPasscodeVersion: answered.masterPasscode.version,
+        masterPasscodeCheckSent: answered.masterPasscode.check !== null,
+        setupVersionSent,
       },
       'A phone synced.',
     );

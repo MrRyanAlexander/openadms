@@ -105,7 +105,7 @@ type Reports = Pick<SyncSent, 'unplannedAssignments' | 'passcodeUses' | 'lastUse
 
 // A record as it goes on the wire: JSON, a time as a UTC instant, and never that a phone made
 // it or which (ADR-466): the phone proved that.
-function onTheWire(held: Exclude<HeldRecord, { record: 'PHOTO' }>): SyncedRecord {
+export function onTheWire(held: Exclude<HeldRecord, { record: 'PHOTO' }>): SyncedRecord {
   const said = (record: object): object =>
     Object.fromEntries(
       Object.entries(record).filter(([name]) => name !== 'source' && name !== 'deviceId'),
@@ -850,6 +850,9 @@ export class SimulatedDevice {
       passcodeUses: this.reports.passcodeUses.slice(0, syncPasscodeUsesAtMost),
       records: going.map(({ wire }) => wire),
       lastUsed: this.reports.lastUsed,
+      // The lists of the project it is set up on; no check of the master passcode (the harness
+      // sets a phone up by hand).
+      holds: { masterPasscodeVersion: null, listsProjectId: this.current.projectId },
     };
     this.last = { sync, held: going.map(({ held }) => held) };
     return sync;

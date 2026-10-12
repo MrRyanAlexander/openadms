@@ -37,6 +37,7 @@ const reconciliation = new Reconciliation(
   { now: () => new Date() },
   {
     crewItemHoursLimit: policy.crewDayHours,
+    deviceClockOffLimitMinutes: policy.deviceClockOffLimitMinutes,
     longestRunMs: policy.reconciliationRunLongestMinutes * 60_000,
   },
   new Mileages(

@@ -40,6 +40,7 @@ const sync: SyncSent = {
   passcodeUses: [switched],
   records,
   lastUsed: [{ projectId: p1, series: 'LOAD', lastUsedNumber: 101006 }],
+  holds: { masterPasscodeVersion: 3, listsProjectId: p1 },
 };
 
 const refusals = (schema: z.ZodType, payload: unknown): string[] => {
@@ -51,7 +52,7 @@ const refusals = (schema: z.ZodType, payload: unknown): string[] => {
 const taken = (payload: unknown): boolean => syncSentSchema.safeParse(payload).success;
 
 describe('what a phone sends at a sync', () => {
-  it('AC-05-03, AC-10-36 the phone’s clock, its unplanned assignments, the passcode’s uses it logged, its records and the last number it used of each series: one schema, in that order', () => {
+  it('AC-05-03, AC-10-36 the phone’s clock, its unplanned assignments, the passcode’s uses it logged, its records, the last number it used of each series and what it holds that a sync may bring anew: one schema, in that order', () => {
     expect(refusals(syncSentSchema, sync)).toEqual([]);
     expect(Object.keys(syncSentSchema.shape)).toEqual([
       'clockAt',
@@ -60,6 +61,7 @@ describe('what a phone sends at a sync', () => {
       'passcodeUses',
       'records',
       'lastUsed',
+      'holds',
     ]);
     const read = syncSentSchema.parse(sync);
     expect(read.clockAt).toEqual(new Date('2026-10-12T21:30:00Z'));
@@ -71,6 +73,22 @@ describe('what a phone sends at a sync', () => {
     for (const part of Object.keys(sync)) {
       const rest = Object.fromEntries(Object.entries(sync).filter(([name]) => name !== part));
       expect(taken(rest), part).toBe(false);
+    }
+    // What it holds: the version of the passcode's check, none on a phone just enrolled, and
+    // the project whose lists it holds, none on a phone with no lists. Never the lists, a
+    // check, or the version it thinks the setup is.
+    expect(taken({ ...sync, holds: { masterPasscodeVersion: null, listsProjectId: null } })).toBe(
+      true,
+    );
+    for (const holds of [
+      {},
+      { masterPasscodeVersion: 3 },
+      { masterPasscodeVersion: 0, listsProjectId: p1 },
+      { masterPasscodeVersion: 3, listsProjectId: 'P1' },
+      { masterPasscodeVersion: 3, listsProjectId: p1, setupVersion: 4 },
+      { masterPasscodeVersion: 3, listsProjectId: p1, check: 'x' },
+    ]) {
+      expect(taken({ ...sync, holds }), JSON.stringify(holds)).toBe(false);
     }
     // The clock is an instant with its offset beside it, as every time a phone sends is.
     expect(taken({ ...sync, clockAt: '2026-10-12T17:30:00-04:00' })).toBe(false);
@@ -236,6 +254,11 @@ describe('each record of a sync, read on its own', () => {
 });
 
 describe('what a phone is answered', () => {
+  // A check as the login list's answer carries one: made up, in the shape a phone reads.
+  const passcodeCheck = {
+    first: { salt: 'c2FsdHNhbHRzYWx0c2FsdA', memory: 19456, passes: 2, parallelism: 1, bytes: 32 },
+    check: '$argon2id$v=19$m=19456,t=2,p=1$c2FsdHNhbHRzYWx0c2FsdA$aGFzaGhhc2hoYXNoaGFzaA',
+  };
   const saved: RecordAnswer = { answer: 'SAVED', id: collection.id, notes: [] };
   const answered: SyncAnswered = {
     unplannedAssignments: [{ assignmentId: unplanned.id, answer: 'SAVED', reason: null }],
@@ -287,10 +310,32 @@ describe('what a phone is answered', () => {
       },
       { projectId: p1, series: 'ROE', toppedUp: false, blocks: [] },
     ],
+    masterPasscode: { version: 4, check: passcodeCheck },
+    setupVersion: { projectId: p1, version: 7 },
   };
 
   it('AC-05-20, 45, 47 each thing sent has its own answer: a record saved with its notes, already saved, quarantined with the reason and the record that holds the number, or not saved; the blocks held now', () => {
     expect(refusals(syncAnsweredSchema, answered)).toEqual([]);
+    // Besides the answers (ADR-473): the passcode's version in force, with a check or none,
+    // and a setup version or none. Never left out, and never the lists.
+    expect(
+      refusals(syncAnsweredSchema, {
+        ...answered,
+        masterPasscode: { version: 4, check: null },
+        setupVersion: null,
+      }),
+    ).toEqual([]);
+    const not = (more: object): boolean =>
+      !syncAnsweredSchema.safeParse({ ...answered, ...more }).success;
+    expect([
+      not({ masterPasscode: null }),
+      not({ masterPasscode: { version: 4 } }),
+      not({ masterPasscode: { version: 4, check: 'osprey-landing-marsh' } }),
+      not({ setupVersion: { projectId: p1, version: 0 } }),
+      not({ setupVersion: 7 }),
+      not({ setupVersion: { projectId: p1, version: 7, lists: {} } }),
+      not({ lists: {} }),
+    ]).toEqual([true, true, true, true, true, true, true]);
     expect(answered.records.map((each) => each.answer)).toEqual([
       'SAVED',
       'SAVED',
@@ -349,23 +394,33 @@ describe('what a phone is answered', () => {
       'answer',
       'assignmentId',
       'blocks',
+      'bytes',
+      'check',
       'code',
+      'first',
       'firstNumber',
       'heldBy',
       'id',
       'lastNumber',
       'lastUsedNumber',
+      'masterPasscode',
+      'memory',
       'message',
       'notes',
       'numbers',
+      'parallelism',
       'passcodeUses',
+      'passes',
       'projectId',
       'reason',
       'records',
+      'salt',
       'series',
+      'setupVersion',
       'toppedUp',
       'unplannedAssignments',
       'useId',
+      'version',
     ]);
     expect(assignment).not.toBe(unplanned.id);
   });
