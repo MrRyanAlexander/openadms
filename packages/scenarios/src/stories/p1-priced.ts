@@ -225,7 +225,6 @@ export const p1Priced: Story = {
     // ------------------------------------------------------------------------------------------
     story.at(mondayEvening.toISOString(), 'Monday evening at the yard: the phones find signal');
     await phones.arrive(mondayEvening);
-    await phones.crewPhotographs(mondayEvening);
     story.at(on('12', '18:45'), 'The worker runs on P1');
     const monday = await reconciliation.run(sync);
     story.check(
@@ -298,7 +297,6 @@ export const p1Priced: Story = {
       'Tuesday evening: every phone but the Marsh Road tower’s finds signal',
     );
     await phones.arrive(tuesdayEvening);
-    await phones.crewPhotographs(tuesdayEvening);
     story.at(on('13', '18:45'), 'The worker runs');
     const tuesday = await reconciliation.run(sync);
     story.check(

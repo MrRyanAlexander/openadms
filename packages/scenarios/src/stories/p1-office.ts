@@ -18,17 +18,24 @@ import {
   type NewCertification,
   type NewPayItem,
 } from '@open-adms/api';
-import { recordRead, type SyncAnswered, type SyncReceived } from '@open-adms/contracts';
+import { photoRead, recordRead, type SyncAnswered, type SyncReceived } from '@open-adms/contracts';
+import { certificationViews } from '@open-adms/domain';
 import type { Reconciliation, RunOutcome } from '@open-adms/worker';
 
 import { createHash } from 'node:crypto';
 
 import { StoryClock, utcOffsetMinutes } from '../clock.ts';
-import { fromPhone, heldId, SimulatedDevice, type PhoneRecord } from '../device.ts';
+import {
+  fromPhone,
+  heldId,
+  SimulatedDevice,
+  type PhoneRecord,
+  type RecordedPhoto,
+} from '../device.ts';
 import { uuidv7 } from '../ids.ts';
 import type { StoryContext } from '../runner.ts';
 import { p1FieldDays } from './p1-field-days.ts';
-import { assigned } from './board.ts';
+import { assigned, synced } from './board.ts';
 import { p1TimeZone as timeZone } from './p1.ts';
 import { p1Boundary, p1Zones } from './setup.ts';
 
@@ -158,7 +165,9 @@ export async function p1FieldDaysHeld(story: StoryContext): Promise<P1Office> {
     clock: fieldClock,
     server: {
       received: (deviceId, sent) => {
-        if (sent.records.length === 0) return atTheYard.received(deviceId, sent);
+        if (sent.records.length === 0 && sent.photos.length === 0) {
+          return atTheYard.received(deviceId, sent);
+        }
         const syncedAt = fieldClock.now();
         syncs.push({ deviceId, sent, syncedAt });
         const records: SyncAnswered['records'] = sent.records.map((one) => {
@@ -179,6 +188,11 @@ export async function p1FieldDaysHeld(story: StoryContext): Promise<P1Office> {
             unplannedAssignments: [],
             passcodeUses: [],
             records,
+            photos: sent.photos.map((one) => {
+              const read = photoRead(one);
+              if (!read.read) throw new Error(`A phone held what is no photograph's record.`);
+              return { answer: 'SAVED', id: read.photo.id, notes: [] };
+            }),
             numbers: sent.lastUsed.map(({ projectId, series }) => ({
               projectId,
               series,
@@ -189,10 +203,6 @@ export async function p1FieldDaysHeld(story: StoryContext): Promise<P1Office> {
             setupVersion: null,
           },
         });
-      },
-      receive: (sent: PhoneRecord) => {
-        held.push({ sent, syncedAt: fieldClock.now() });
-        return Promise.resolve({ answer: 'SAVED', id: heldId(sent), notes: [] });
       },
     },
     at: (time) => {
@@ -242,7 +252,9 @@ export async function loadP1Map(story: StoryContext, office: P1Office): Promise<
 }
 
 // A certification on Saturday 10 October, at a time of that day, as Sam Grant makes one on
-// P1-HO-TDSR with Lee Morgan helping. Coastline's unless told.
+// P1-HO-TDSR with Lee Morgan helping. Coastline's unless told. Its five photographs, one a
+// view, are taken with it and reach the server after it, through the API's own `Sync`
+// (ADR-179, 481).
 export type P1Certify = (
   time: string,
   more: Partial<NewCertification> & Pick<NewCertification, 'certNumber' | 'boxes'>,
@@ -265,7 +277,7 @@ export async function certifyP1(story: StoryContext, office: P1Office): Promise<
     (await api.vehicleFeature.findFirstOrThrow({ where: { name } })).id;
   const certify: P1Certify = async (time, more) => {
     clock.set(on('10', time));
-    await saved(
+    const made = await saved(
       certifications.certify({
         projectId: p1,
         kind: 'CONTAINER',
@@ -280,6 +292,7 @@ export async function certifyP1(story: StoryContext, office: P1Office): Promise<
         deviceUtcOffsetMinutes: utcOffsetMinutes(timeZone, clock.now()),
       }),
     );
+    await photographed(story, { deviceId: samPhone, takenById: sam }, made);
   };
   await certify('09:10', {
     certNumber: '730415',
@@ -338,6 +351,40 @@ export async function certifyP1(story: StoryContext, office: P1Office): Promise<
   return certify;
 }
 
+// A certification's five photographs, one a view, taken as it was certified and sent after it
+// by the phone that took them, through the API's own `Sync` (ADR-179, 481). One not saved stops
+// the story.
+export async function photographed(
+  story: StoryContext,
+  by: { readonly deviceId: string; readonly takenById: string },
+  certification: { readonly id: string; readonly projectId: string; readonly certNumber: string },
+): Promise<void> {
+  const takenAt = story.clock.now();
+  const fingerprint = (view: string, as: string): string =>
+    createHash('sha256')
+      .update(`${certification.projectId} ${certification.certNumber} ${view} as ${as}`)
+      .digest('hex');
+  const { photos } = await synced(story, by.deviceId, timeZone, {
+    photos: certificationViews.map((view) => ({
+      id: uuidv7(takenAt),
+      projectId: certification.projectId,
+      owner: { kind: 'CERTIFICATION', id: certification.id },
+      view,
+      takenById: by.takenById,
+      capturedAt: takenAt.toISOString(),
+      deviceUtcOffsetMinutes: utcOffsetMinutes(timeZone, takenAt),
+      latitude: null,
+      longitude: null,
+      originalSha256: fingerprint(view, 'taken'),
+      uploadedSha256: fingerprint(view, 'uploaded'),
+      depthFile: false,
+    })),
+  });
+  for (const answer of photos) {
+    if (answer.answer !== 'SAVED') throw new Error(`Not saved: ${answer.answer}`);
+  }
+}
+
 // The phones' syncs, in the order the story `p1-field-days` has them: Monday evening, Tuesday
 // evening, and the Marsh Road tower's on Wednesday.
 export class P1Syncs {
@@ -366,7 +413,7 @@ export class P1Syncs {
         ...sent,
         clockAt: this.story.clock.now(),
       });
-      for (const answer of answered.records) {
+      for (const answer of [...answered.records, ...answered.photos]) {
         if (answer.answer !== 'SAVED') throw new Error(`Not saved: ${answer.answer}`);
       }
       records += answered.records.length;
@@ -374,38 +421,32 @@ export class P1Syncs {
     return records;
   }
 
-  // Jo's crew photograph with each unit rate ticket (golden mission §2), taken as the ticket
-  // was completed and sent after that sync's records. The story `p1-field-days` takes none,
-  // so each photograph's record is made here as her phone would have sent it.
-  async crewPhotographs(syncedAt: Date): Promise<number> {
+  // The photographs' records the syncs sent at that time carried, each now in a sync of its own
+  // from its phone, after its record has arrived: a phone on a thin connection. How many; one
+  // not saved stops the story.
+  async photosArrive(syncedAt: Date): Promise<number> {
     let sent = 0;
-    for (const { sent: record, syncedAt: at } of this.held) {
+    for (const { deviceId, sent: held, syncedAt: at } of this.syncs) {
       if (at.getTime() !== syncedAt.getTime()) continue;
-      if (record.record !== 'FIELD_EVENT' || record.fieldEvent.kind !== 'UNIT_RATE') continue;
-      const event = record.fieldEvent;
-      const file = `P1-UR-1/${event.endedAt.toISOString()}/crew`;
-      const fingerprint = createHash('sha256').update(file).digest('hex');
-      const answer = await this.story.server.receive({
-        record: 'PHOTO',
-        photo: {
-          id: uuidv7(event.endedAt),
-          projectId: event.projectId,
-          owner: { kind: 'FIELD_EVENT', id: event.id },
-          takenById: event.monitorId,
-          deviceId: event.deviceId,
-          capturedAt: event.endedAt,
-          deviceUtcOffsetMinutes: event.deviceUtcOffsetMinutes,
-          latitude: null,
-          longitude: null,
-          originalSha256: fingerprint,
-          uploadedSha256: fingerprint,
-          objectKey: `photographs/${file}`,
-        },
-      });
-      if (answer.answer !== 'SAVED') throw new Error(`Not saved: ${answer.answer}`);
-      sent += 1;
+      for (const photo of held.photos) {
+        const { photos } = await synced(this.story, deviceId, timeZone, {
+          photos: [JSON.parse(JSON.stringify(photo)) as RecordedPhoto],
+        });
+        for (const answer of photos) {
+          if (answer.answer !== 'SAVED') throw new Error(`Not saved: ${answer.answer}`);
+        }
+        sent += photos.length;
+      }
     }
     return sent;
+  }
+
+  // How many photographs' records the syncs sent at that time carried, after their records:
+  // Jo's crew photograph with each unit rate ticket (golden mission §2).
+  photosAt(syncedAt: Date): number {
+    return this.syncs
+      .filter(({ syncedAt: at }) => at.getTime() === syncedAt.getTime())
+      .reduce((count, { sent }) => count + sent.photos.length, 0);
   }
 }
 

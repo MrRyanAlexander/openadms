@@ -2,7 +2,14 @@
 // Monday on P1, and the two reports a sync carries. The contract's own tests send them, and so
 // does the suite any client must pass (`sync-client-suite.ts`), which is why they are here and
 // not beside the tests.
-import type { SyncedCertification, SyncedFieldEvent, SyncedRecord } from './sync-records.ts';
+import { certificationViews } from '@open-adms/domain';
+
+import type {
+  SyncedCertification,
+  SyncedFieldEvent,
+  SyncedPhoto,
+  SyncedRecord,
+} from './sync-records.ts';
 import type { SyncSent } from './sync.ts';
 
 export const made = (last: string): string => `019a0000-0000-7000-8000-${last.padStart(12, '0')}`;
@@ -178,6 +185,50 @@ export const crew: SyncedCertification = {
   tagExpiry: null,
   helperIds: [],
 };
+
+// A fingerprint as a phone takes one: of the example's own words, for a file the examples don't
+// hold.
+const fingerprint = (of: string): string => {
+  const padded = of.padEnd(32, '.');
+  let hex = '';
+  for (let place = 0; place < 32; place += 1) {
+    hex += (padded.charCodeAt(place) % 256).toString(16).padStart(2, '0');
+  }
+  return hex;
+};
+
+// The photograph Ana took of the pile at 14 Oak St with her collection; never where its file is
+// kept, which the server makes (ADR-481).
+export const pilePhoto: SyncedPhoto = {
+  id: made('20'),
+  projectId: p1,
+  owner: { kind: 'FIELD_EVENT', id: collection.id },
+  view: null,
+  takenById: ana,
+  capturedAt: '2026-10-12T13:38:00.000Z',
+  deviceUtcOffsetMinutes: -240,
+  latitude: '39.15650000',
+  longitude: '-75.52330000',
+  originalSha256: fingerprint('14 Oak St pile, as taken'),
+  uploadedSha256: fingerprint('14 Oak St pile, as uploaded'),
+  depthFile: false,
+};
+
+// Sam's five of 730416, one a view, taken as it was certified (ADR-179).
+export const certificationPhotos: SyncedPhoto[] = certificationViews.map((view, place) => ({
+  id: made(`2${String(place + 1)}`),
+  projectId: p1,
+  owner: { kind: 'CERTIFICATION', id: certification.id },
+  view,
+  takenById: sam,
+  capturedAt: `2026-10-10T13:3${String(place)}:00.000Z`,
+  deviceUtcOffsetMinutes: -240,
+  latitude: null,
+  longitude: null,
+  originalSha256: fingerprint(`730416 ${view}, as taken`),
+  uploadedSha256: fingerprint(`730416 ${view}, as uploaded`),
+  depthFile: view === 'INTERIOR_OR_BACK',
+}));
 
 // One of each kind, as a phone sends them.
 export const records: SyncedRecord[] = [

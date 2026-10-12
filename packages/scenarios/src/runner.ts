@@ -247,7 +247,6 @@ export class Runner {
         });
         return {
           received: (deviceId, sent) => sync.received(deviceId, sent),
-          receive: (record) => taking.receive(record),
         };
       };
       const context: StoryContext = {

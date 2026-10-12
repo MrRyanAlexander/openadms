@@ -53,7 +53,7 @@ import {
   saved,
   setUpP1Pricing,
 } from './p1-office.ts';
-import { assigned, sentAlone } from './board.ts';
+import { assigned, photoSentAlone, sentAlone } from './board.ts';
 import { p1TimeZone as timeZone, startSeries } from './p1.ts';
 
 const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-04:00`;
@@ -403,11 +403,9 @@ export const p1Reviewed: Story = {
       'Monday evening: the phones find signal; the worker runs',
     );
     await phones.arrive(mondayEvening);
-    await phones.crewPhotographs(mondayEvening);
     await reconciliation.run(sync);
     story.at(tuesdayEvening.toISOString(), 'Tuesday evening: the same');
     await phones.arrive(tuesdayEvening);
-    await phones.crewPhotographs(tuesdayEvening);
     await reconciliation.run(sync);
     story.at(
       wednesdayMorning.toISOString(),
@@ -946,24 +944,21 @@ export const p1Reviewed: Story = {
     const twice = made(tower, '11:40', '11:48', { ...first, loadCall: 75 });
     const sentTwice = await send(twice);
     const bedFile = `P1-TWR-TDSR/${twice.endedAt.toISOString()}/empty-bed`;
-    const bedPrint = createHash('sha256').update(bedFile).digest('hex');
-    await sentAlone(story, timeZone, {
-      record: 'PHOTO',
-      photo: {
-        id: uuidv7(twice.endedAt),
-        projectId: p1,
-        owner: { kind: 'FIELD_EVENT', id: twice.id },
-        takenById: twice.monitorId,
-        deviceId: twice.deviceId,
-        capturedAt: twice.endedAt,
-        deviceUtcOffsetMinutes: twice.deviceUtcOffsetMinutes,
-        latitude: null,
-        longitude: null,
-        originalSha256: bedPrint,
-        uploadedSha256: bedPrint,
-        objectKey: `photographs/${bedFile}`,
-      },
+    const bedPhoto = await photoSentAlone(story, timeZone, twice.deviceId, {
+      id: uuidv7(twice.endedAt),
+      projectId: p1,
+      owner: { kind: 'FIELD_EVENT', id: twice.id },
+      view: null,
+      takenById: twice.monitorId,
+      capturedAt: twice.endedAt.toISOString(),
+      deviceUtcOffsetMinutes: twice.deviceUtcOffsetMinutes,
+      latitude: null,
+      longitude: null,
+      originalSha256: createHash('sha256').update(`${bedFile} as taken`).digest('hex'),
+      uploadedSha256: createHash('sha256').update(`${bedFile} as uploaded`).digest('hex'),
+      depthFile: false,
     });
+    if (bedPhoto.answer !== 'SAVED') throw new Error(`Not saved: ${JSON.stringify(bedPhoto)}`);
     // 101029: collected, and dumped at the Landfill, where the tower's phone had failed.
     await send(made(curbCd, '12:30', '12:50', { ticketNumber: '101029' }));
     // Scenario B: one pile, two numbers, the same loading times; the truck dumps under 101030.
@@ -1093,9 +1088,10 @@ export const p1Reviewed: Story = {
       [
         dis101021.id === twice.id,
         [dis101021.source, dis101021.loadCall, dis101021.startedAt.toISOString()],
-        (await api.photo.findMany({ where: { objectKey: `photographs/${bedFile}` } })).map(
-          (photo) => [photo.fieldEventId === twice.id, photo.quarantinedRecordId],
-        ),
+        (await api.photo.findMany({ where: { id: bedPhoto.id } })).map((photo) => [
+          photo.fieldEventId === twice.id,
+          photo.quarantinedRecordId,
+        ]),
         of(last.run, '101020', '101021'),
         await linesOf('101021'),
         (await api.auditRecord.count({

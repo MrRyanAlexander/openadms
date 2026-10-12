@@ -1,8 +1,8 @@
 // A phone's sync (ARCHITECTURE §9, §10; AC-05-03, 04, 16, 45; AC-10-46, 51; BACKLOG 2.6.2, C86,
-// C128…C131; ADR-466…472). Open to a phone that has proved itself; nobody need be signed in.
+// C128…C131; ADR-466…472, 481). Open to a phone that has proved itself; nobody need be signed in.
 // The log says which phone synced, the sync's id, how far its clock stood from the server's,
 // how many of each thing got which answer, the master passcode's version and whether its check
-// was sent, and the setup version sent: never a record, an id a record was sent under, what
+// was sent, and the setup version sent: never a record or a photograph's, an id one was sent under, what
 // one that couldn't be read was told, anything a record names, or a check (OWASP ASVS 5.0
 // 16.2.5).
 import {
@@ -53,6 +53,7 @@ export class SyncController {
         unplannedAssignments: counted(answered.unplannedAssignments),
         passcodeUses: counted(answered.passcodeUses),
         records: counted(answered.records),
+        photos: counted(answered.photos),
         seriesToppedUp: answered.numbers.filter(({ toppedUp }) => toppedUp).length,
         seriesNotToppedUp: answered.numbers.filter(({ toppedUp }) => !toppedUp).length,
         masterPasscodeVersion: answered.masterPasscode.version,

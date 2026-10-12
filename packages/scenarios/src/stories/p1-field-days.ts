@@ -89,7 +89,15 @@ export const p1FieldDays: Story = {
     };
     const done = (completed: Completed): RecordedEvent => {
       if (!completed.saved) throw new Error(`Not saved: ${completed.reason}`);
-      return completed.event;
+      // Jo's crew photograph with each unit rate ticket (golden mission §2), taken as she
+      // completes it; it goes in her sync, after the ticket (ADR-481).
+      const { event } = completed;
+      if (event.kind === 'UNIT_RATE') {
+        Object.values(phones)
+          .find((each) => each.setup.deviceId === event.deviceId)
+          ?.photograph({ of: { kind: 'FIELD_EVENT', id: event.id } });
+      }
+      return event;
     };
 
     // ------------------------------------------------------------------------------------------
@@ -698,9 +706,9 @@ export const p1FieldDays: Story = {
       ['101001 DISPOSAL PENDING', '101003 DISPOSAL PENDING'],
     );
     story.check(
-      'then Tariq’s, Jo’s and Ana’s: one, three and four',
+      'then Tariq’s, Jo’s and Ana’s: one, three and four; Jo’s three tickets with her crew photograph of each after them (golden mission §2)',
       [await tariq.sync(story.server), await jo.sync(story.server), await ana.sync(story.server)],
-      [1, 3, 4],
+      [1, 6, 4],
     );
     story.check(
       'Monday’s ten field events are on the server, each PENDING; 101004 has only its collection: a preload',
@@ -967,7 +975,7 @@ export const p1FieldDays: Story = {
       'At the yard five phones sync. P1-TWR-TDSR’s battery is flat: its day stays on it',
     );
     story.check(
-      'Ana’s two, Tariq’s one, Sam’s four, Lee’s receipt and disposal, Jo’s four tickets and her incident',
+      'Ana’s two, Tariq’s one, Sam’s four, Lee’s receipt and disposal, Jo’s four tickets and her incident, with her crew photograph of each ticket after them',
       [
         await ana.sync(story.server),
         await tariq.sync(story.server),
@@ -975,7 +983,7 @@ export const p1FieldDays: Story = {
         await lee.sync(story.server),
         await jo.sync(story.server),
       ],
-      [2, 1, 4, 2, 5],
+      [2, 1, 4, 2, 9],
     );
     story.check(
       'Tuesday night: 101004, 101005 and 101006 wait with their collection alone, PENDING; nothing is flagged or refused for it',

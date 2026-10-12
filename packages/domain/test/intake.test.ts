@@ -112,12 +112,14 @@ describe('what a phone is told of a record that could not be saved at all', () =
       'NAMES_NO_RECORD',
       'ASSIGNMENT_NOT_SAVED',
       'CERTIFICATION_REFUSED',
+      'OWNER_NOT_SAVED',
     ]);
     const told = [
       NotSaved.notARecord('fieldEvent.loadCall in this record can’t be more than 100'),
       NotSaved.namesNoRecord(),
       NotSaved.assignmentNotSaved(),
       NotSaved.certificationRefused('A crew is not measured: it has no boxes and no capacity.'),
+      NotSaved.ownerNotSaved(),
     ];
     expect(told.map((notice) => notice.reason)).toEqual([...notSavedReasons]);
     expect(told.map((notice) => notice.message)).toEqual([
@@ -125,6 +127,7 @@ describe('what a phone is told of a record that could not be saved at all', () =
       'Not saved: this record names something the server doesn’t have: its project, its monitor, its assignment, or something picked from a list.',
       'Not saved: the assignment this record was made under was not saved.',
       'Not saved: A crew is not measured: it has no boxes and no capacity.',
+      'Not saved: the record this photograph belongs to isn’t saved on the server.',
     ]);
     // A certification its own rules refuse is told the rule's words, once; one whose number
     // is held, the number and nothing of the certification that holds it (ADR-469).
@@ -158,6 +161,7 @@ describe('what a phone is told of a record that could not be saved at all', () =
       NotSaved.assignmentNotSaved(),
       NotSaved.certNumberHeld('730415'),
       replaced,
+      NotSaved.ownerNotSaved(),
     ]) {
       expect(notice.message).not.toMatch(/held on the server/i);
       const held = NotSaved.heldForReview(notice);

@@ -183,7 +183,7 @@ export const p1Queued: Story = {
     const fromSyncs = waiting.filter((job) => job.tickets.length > 0);
     const settling = await queue.settle(p1);
     story.check(
-      'AC-10-51 setup had queued its own jobs as it was saved, before any ticket existed: each names no ticket and asks only for the records the run flags by themselves (a certification’s views, a site’s permit); and each of the 25 field events a sync brought queued its own as it was stored, naming its ticket and that ticket’s neighbours, with nobody waiting for the run; one run takes them all up',
+      'AC-10-51 setup had queued its own jobs as it was saved, before any ticket existed: each names no ticket and asks only for the records the run flags by themselves (a certification’s views, each of its photographs’ too; a site’s permit); and each of the 25 field events a sync brought queued its own as it was stored, naming its ticket and that ticket’s neighbours, and each of Jo’s seven crew photographs its ticket again, with nobody waiting for the run; one run takes them all up',
       [
         fromSetup.length > 0,
         [...new Set(fromSetup.map((job) => job.trigger))].sort(),
@@ -192,7 +192,7 @@ export const p1Queued: Story = {
         fromSyncs.every((job) => job.requestedById === null),
         settling,
       ],
-      [true, ['SETUP_CHANGE', 'SYNC'], 25, ['SYNC'], true, 1],
+      [true, ['SETUP_CHANGE', 'SYNC'], 32, ['SYNC'], true, 1],
     );
     story.check(
       'With no job waiting, the worker finds nothing to take up for P1: no run is recorded',
@@ -512,6 +512,7 @@ export const p1Queued: Story = {
             },
           },
         ],
+        photos: [],
         lastUsed: [],
         holds: { masterPasscodeVersion: passcode.version, listsProjectId: p1 },
       };

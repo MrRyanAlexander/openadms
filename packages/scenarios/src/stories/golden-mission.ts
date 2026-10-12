@@ -12,9 +12,8 @@
 // `apps/api`'s review services, as Luis Ortega by his grants, each followed by the run it asks
 // the worker for.
 //
-// A certification's five photographs are written here as Sam Grant's phone would send them: no
-// service takes them yet (the phone's certifying screen is Phase 3's, the file Phase 2's), and
-// without them every certification stands flagged for its missing views.
+// A certification's five photographs reach the server after it, sent by Sam Grant's phone through
+// the API's own `Sync` (`photographed`, ADR-481); their files are the media endpoint's.
 //
 // Not here: what each viewer sees (the database's own tests, AC-02-66, 78…82); the client
 // package, which Dana zips by hand from the exports (Phase 4); 201002 and 201003, the flag
@@ -38,8 +37,6 @@ import {
 import { systemActorId, type FieldEventKind } from '@open-adms/db';
 import { MapServers, Mileages, Reconciliation, type RunOutcome } from '@open-adms/worker';
 
-import { createHash } from 'node:crypto';
-
 import { projectTime, utcOffsetMinutes } from '../clock.ts';
 import { chained, type Completed, made, scanned } from '../device.ts';
 import { uuidv7 } from '../ids.ts';
@@ -47,6 +44,7 @@ import { localMapServers } from '../map-servers.ts';
 import type { Story } from '../runner.ts';
 import {
   certifyP1,
+  photographed,
   loadP1Map,
   p1FieldDaysHeld,
   P1Syncs,
@@ -77,9 +75,6 @@ const of = (outcome: RunOutcome, ...ticketNumbers: string[]): string[] =>
 
 const dollars = (cents: number): string =>
   `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-// The five views of a certification's photographs (`adms-certifications`).
-const views = ['OPERATOR_WITH_PLACARD', 'INTERIOR_OR_BACK', 'RIGHT', 'LEFT', 'FRONT'] as const;
 
 const unticked = {
   kindOfWorkId: null,
@@ -302,7 +297,7 @@ export const goldenMission: Story = {
     clock.set(on('10', '11:30'));
     const feature = async (name: string): Promise<string> =>
       (await api.vehicleFeature.findFirstOrThrow({ where: { name } })).id;
-    await saved(
+    const p2Loader = await saved(
       new Certifications(api, clock, story.policy).certify({
         id: uuidv7(clock.now()),
         projectId: p2,
@@ -329,31 +324,9 @@ export const goldenMission: Story = {
         deviceUtcOffsetMinutes: utcOffsetMinutes(timeZone, clock.now()),
       }),
     );
+    await photographed(story, { deviceId: samPhone, takenById: sam }, p2Loader);
     const certified = await api.certification.findMany({
       orderBy: [{ projectId: 'asc' }, { certNumber: 'asc' }],
-    });
-    await api.$write({ actorId: sam, source: 'DEVICE', deviceId: samPhone }, async (tx) => {
-      for (const certification of certified) {
-        for (const view of views) {
-          const file = `P1-HO-TDSR/${certification.projectId}/${certification.certNumber}/${view}`;
-          const fingerprint = createHash('sha256').update(file).digest('hex');
-          await tx.photo.create({
-            data: {
-              id: uuidv7(certification.certifiedAt),
-              projectId: certification.projectId,
-              certificationId: certification.id,
-              view,
-              capturedAt: certification.certifiedAt,
-              deviceUtcOffsetMinutes: certification.deviceUtcOffsetMinutes,
-              receivedAt: clock.now(),
-              originalSha256: fingerprint,
-              uploadedSha256: fingerprint,
-              objectKey: `photographs/${file}`,
-              deviceId: samPhone,
-            },
-          });
-        }
-      }
     });
     const projectName = new Map([
       [p1, 'P1'],
@@ -758,7 +731,6 @@ export const goldenMission: Story = {
       'Monday evening at the yard: every phone finds signal and syncs; the worker runs on each project',
     );
     await phones.arrive(mondayEvening);
-    await phones.crewPhotographs(mondayEvening);
     const p2Sent = [await anaP2.sync(story.server), await kimP2.sync(story.server)];
     const monday = await reconciliation.run(sync(p1));
     const mondayP2 = await reconciliation.run(sync(p2));
@@ -867,7 +839,6 @@ export const goldenMission: Story = {
       'Tuesday evening: the phones sync, all but the Marsh Road tower’s, whose battery is flat; the worker runs',
     );
     await phones.arrive(tuesdayEvening);
-    await phones.crewPhotographs(tuesdayEvening);
     const tuesday = await reconciliation.run(sync(p1));
     story.check(
       'AC-05-52, AC-06-103, AC-06-154 Tuesday night: the collections 101004, 101005 and 101006 wait alone, PENDING and not flagged (an unpartnered field event never expires); the haul-out 201001 and the split haul-out 201004 are COMPLETED; the under-size stump 301005 is in review with no pay item; 17 lines, $4,879.00',

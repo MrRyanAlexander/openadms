@@ -11775,6 +11775,11 @@
                     "type": "array",
                     "items": {}
                   },
+                  "photos": {
+                    "maxItems": 200,
+                    "type": "array",
+                    "items": {}
+                  },
                   "lastUsed": {
                     "maxItems": 20,
                     "type": "array",
@@ -11845,6 +11850,7 @@
                   "unplannedAssignments",
                   "passcodeUses",
                   "records",
+                  "photos",
                   "lastUsed",
                   "holds"
                 ],
@@ -12033,7 +12039,100 @@
                                   "NOT_A_RECORD",
                                   "NAMES_NO_RECORD",
                                   "ASSIGNMENT_NOT_SAVED",
-                                  "CERTIFICATION_REFUSED"
+                                  "CERTIFICATION_REFUSED",
+                                  "OWNER_NOT_SAVED"
+                                ]
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "required": ["answer", "id", "reason", "message"],
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    },
+                    "photos": {
+                      "type": "array",
+                      "items": {
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "answer": {
+                                "type": "string",
+                                "const": "SAVED"
+                              },
+                              "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "notes": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "code": {
+                                      "type": "string",
+                                      "enum": ["GPS_UNREADABLE", "ANSWERS_DO_NOT_FIT"]
+                                    },
+                                    "message": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": ["code", "message"],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": ["answer", "id", "notes"],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "answer": {
+                                "type": "string",
+                                "const": "ALREADY_SAVED"
+                              },
+                              "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              }
+                            },
+                            "required": ["answer", "id"],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "answer": {
+                                "type": "string",
+                                "const": "NOT_SAVED"
+                              },
+                              "id": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "reason": {
+                                "type": "string",
+                                "enum": [
+                                  "NOT_A_RECORD",
+                                  "NAMES_NO_RECORD",
+                                  "ASSIGNMENT_NOT_SAVED",
+                                  "CERTIFICATION_REFUSED",
+                                  "OWNER_NOT_SAVED"
                                 ]
                               },
                               "message": {
@@ -12190,6 +12289,7 @@
                     "unplannedAssignments",
                     "passcodeUses",
                     "records",
+                    "photos",
                     "numbers",
                     "masterPasscode",
                     "setupVersion"

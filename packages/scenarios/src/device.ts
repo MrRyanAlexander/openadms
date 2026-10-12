@@ -7,8 +7,10 @@
 // sends `SyncSent`, its records as JSON and never which phone it is, reads what comes back with
 // `syncAnswerRead`, and passes the suite any client must (`test/sync-client.test.ts`). Only
 // "saved" and "already saved" take a record off it for good; a quarantined record and one not
-// saved leave its queue and are kept, shown as not saved. A photograph's record still goes by
-// hand, after the records, until its upload is built (2.6.4).
+// saved leave its queue and are kept, shown as not saved. Its photographs' records go in its
+// syncs too, after the records, each in the sync that carries its record or a later one, and
+// never with where the file is kept, which the server makes (ADR-481). The files themselves are
+// the media endpoint's (2.6.4, part 3).
 //
 // **Its sync goes to the API's own `Sync`** (apps/api, src/sync/sync.ts; BACKLOG 2.6.2 part 4;
 // ADR-475): read off the wire by the contract as the endpoint's boundary reads it, with the
@@ -26,19 +28,16 @@
 import { createHash } from 'node:crypto';
 
 import type {
-  PhotoOwnerKind,
   SentCertification,
   SentDropOffLog,
   SentFieldEvent,
   SentForm,
   SentIncident,
   SentItem,
-  SentPhoto,
   SentRecord,
   SentRoe,
   SentScaleReceipt,
   SentSurvey,
-  SyncAnswer,
 } from '@open-adms/api';
 import {
   stored,
@@ -46,15 +45,20 @@ import {
   syncedRecordAssignment,
   syncedRecordId,
   syncPasscodeUsesAtMost,
+  syncPhotosAtMost,
   syncRecordsAtMost,
   syncSentSchema,
   syncUnplannedAssignmentsAtMost,
+  photoRead,
   recordRead,
+  type PhotoAnswer,
+  type PhotoOwnerKind,
   type ReceivedRecord,
   type RecordAnswer,
   type ShownNotSaved,
   type SyncAnswered,
   type SyncClientHolds,
+  type SyncedPhoto,
   type SyncedRecord,
   type SyncReceived,
   type SyncSent,
@@ -65,6 +69,8 @@ import {
   type BoxShape,
   type BoxSign,
   Capacity,
+  certificationViews,
+  type CertificationView,
   type CertificationKind,
   FieldEventDetails,
   type HeldBlock,
@@ -88,28 +94,31 @@ export type RecordedIncident = SentIncident;
 export type RecordedDropOffLog = SentDropOffLog;
 export type RecordedSurvey = SentSurvey;
 export type RecordedRoe = SentRoe;
-export type RecordedPhoto = SentPhoto;
+// A photograph's record as it goes on the wire: the contract's own shape, a time as text.
+export type RecordedPhoto = SyncedPhoto;
 export type RecordedCertification = SentCertification;
 export type PhoneRecord = SentRecord;
 // Everything a phone holds to send: intake's records, and a certification, which is never
 // intake's (ADR-469).
 export type HeldRecord =
   PhoneRecord | { readonly record: 'CERTIFICATION'; readonly certification: RecordedCertification };
-
-// Where a phone's sync goes. `received` is the API's `Sync` (apps/api, src/sync/sync.ts): one
-// sync as the endpoint's boundary read it, from the phone that proved itself. `receive` is the
-// API's intake, where a photograph's record still goes by hand until its upload is built
-// (2.6.4).
-export interface PhoneServer {
-  received(deviceId: string, sent: SyncReceived): Promise<{ readonly answered: SyncAnswered }>;
-  receive(record: PhoneRecord): Promise<SyncAnswer>;
+// A photograph's record it holds, named as the stories know it.
+export interface HeldPhoto {
+  readonly record: 'PHOTO';
+  readonly photo: RecordedPhoto;
 }
 
-// A record the phone sent and what it was told: saved, already saved, quarantined or not saved
-// (ARCHITECTURE §9 (4); ADR-467).
+// Where a phone's sync goes: the API's `Sync` (apps/api, src/sync/sync.ts), one sync as the
+// endpoint's boundary read it, from the phone that proved itself.
+export interface PhoneServer {
+  received(deviceId: string, sent: SyncReceived): Promise<{ readonly answered: SyncAnswered }>;
+}
+
+// A record or a photograph the phone sent and what it was told: saved, already saved,
+// quarantined or not saved (ARCHITECTURE §9 (4); ADR-467, 481).
 export interface Answered {
-  readonly sent: HeldRecord;
-  readonly answer: RecordAnswer;
+  readonly sent: HeldRecord | HeldPhoto;
+  readonly answer: RecordAnswer | PhotoAnswer;
 }
 
 // What it reports besides its records (the contract's `SyncSent`).
@@ -117,7 +126,7 @@ type Reports = Pick<SyncSent, 'unplannedAssignments' | 'passcodeUses' | 'lastUse
 
 // A record as it goes on the wire: JSON, a time as a UTC instant, and never that a phone made
 // it or which (ADR-466): the phone proved that.
-export function onTheWire(held: Exclude<HeldRecord, { record: 'PHOTO' }>): SyncedRecord {
+export function onTheWire(held: HeldRecord): SyncedRecord {
   const said = (record: object): object =>
     Object.fromEntries(
       Object.entries(record).filter(([name]) => name !== 'source' && name !== 'deviceId'),
@@ -145,10 +154,7 @@ export function onTheWire(held: Exclude<HeldRecord, { record: 'PHOTO' }>): Synce
 
 // A record as the server read it, as the phone that made it holds it: that a phone made it, and
 // which (the harness's records carry both; the wire carries neither, ADR-466).
-export function fromPhone(
-  deviceId: string,
-  read: ReceivedRecord,
-): Exclude<HeldRecord, { record: 'PHOTO' }> {
+export function fromPhone(deviceId: string, read: ReceivedRecord): HeldRecord {
   const phone = { source: 'DEVICE', deviceId } as const;
   switch (read.record) {
     case 'FIELD_EVENT':
@@ -174,8 +180,8 @@ export function forIntake(held: HeldRecord): PhoneRecord {
   return held;
 }
 
-// The id its phone made for a record it holds, whatever its kind.
-export function heldId(held: HeldRecord): string {
+// The id its phone made for a record or a photograph it holds, whatever its kind.
+export function heldId(held: HeldRecord | HeldPhoto): string {
   return held.record === 'PHOTO' ? held.photo.id : syncedRecordId(onTheWire(held));
 }
 
@@ -415,11 +421,14 @@ export interface NewCertification {
   readonly notes?: string;
 }
 
-// A photograph taken with a record the phone made: of what, and where if the phone had a fix.
+// A photograph taken with a record the phone made: of what, which of a certification's views,
+// where if the phone had a fix, and whether a depth file goes beside it.
 export interface NewPhoto {
   readonly of: { readonly kind: PhotoOwnerKind; readonly id: string };
+  readonly view?: CertificationView;
   readonly latitude?: string;
   readonly longitude?: string;
+  readonly depthFile?: boolean;
 }
 
 const seriesOf: Record<Workflow, NumberSeries> = {
@@ -434,9 +443,17 @@ export class SimulatedDevice {
   private readonly started = new Map<string, StartedEvent>();
   private readonly dropped: StartedEvent[] = [];
   private readonly outbox: HeldRecord[] = [];
+  // Its photographs' records still to send, in the order taken.
+  private readonly photoOutbox: RecordedPhoto[] = [];
   // What it reports besides its records, still to be answered; and the sync it sent last.
   private reports: Reports = { unplannedAssignments: [], passcodeUses: [], lastUsed: [] };
-  private last: { readonly sync: SyncSent; readonly held: readonly HeldRecord[] } | undefined;
+  private last:
+    | {
+        readonly sync: SyncSent;
+        readonly held: readonly HeldRecord[];
+        readonly photos: readonly RecordedPhoto[];
+      }
+    | undefined;
   // What it shows as not saved, and the reports among them, which it keeps.
   private readonly shown: ShownNotSaved[] = [];
   private readonly keptReports: string[] = [];
@@ -735,29 +752,29 @@ export class SimulatedDevice {
     return made;
   }
 
-  // A photograph taken with a record: its fingerprint is taken now, at capture (ADR-101). The
-  // file's upload is Phase 2's, so the harness's phone states where the file would be kept and
-  // the same fingerprint for what was uploaded.
+  // A photograph taken with a record: its fingerprint is taken now, at capture, and the
+  // fingerprint of the file it will upload when it shrinks it (ADR-101). Where the file is kept
+  // is the server's to make; the file itself goes by the media endpoint (2.6.4, part 3).
   photograph(photo: NewPhoto): RecordedPhoto {
     const capturedAt = this.now();
     this.photographs += 1;
     const file = `${this.name}/${capturedAt.toISOString()}/${String(this.photographs)}`;
-    const fingerprint = createHash('sha256').update(file).digest('hex');
+    const fingerprint = (of: string): string => createHash('sha256').update(of).digest('hex');
     const made: RecordedPhoto = {
       id: uuidv7(capturedAt),
       projectId: this.current.projectId,
       owner: photo.of,
+      view: photo.view ?? null,
       takenById: this.current.monitorId,
-      deviceId: this.current.deviceId,
-      capturedAt,
+      capturedAt: capturedAt.toISOString(),
       deviceUtcOffsetMinutes: utcOffsetMinutes(this.current.timeZone, capturedAt),
       latitude: photo.latitude ?? null,
       longitude: photo.longitude ?? null,
-      originalSha256: fingerprint,
-      uploadedSha256: fingerprint,
-      objectKey: `photographs/${file}`,
+      originalSha256: fingerprint(`${file} as taken`),
+      uploadedSha256: fingerprint(`${file} as uploaded`),
+      depthFile: photo.depthFile ?? false,
     };
-    this.outbox.push({ record: 'PHOTO', photo: made });
+    this.photoOutbox.push(made);
     return made;
   }
 
@@ -765,7 +782,8 @@ export class SimulatedDevice {
   // measured, each measurement its shape doesn't hold left empty. The phone works the capacity
   // out with the server's own rule (packages/domain's `Capacity`) to show it, and never sends
   // it: what it shows is answered beside the record. Measurements that give no capacity are not
-  // a certification, here as on the server.
+  // a certification, here as on the server. Its five photographs are taken with it, and go
+  // after it (ADR-179, 481).
   certify(certification: NewCertification): {
     readonly record: RecordedCertification;
     readonly capacityCy: number | null;
@@ -822,6 +840,10 @@ export class SimulatedDevice {
       notes: certification.notes ?? null,
     };
     this.outbox.push({ record: 'CERTIFICATION', certification: record });
+    // Its five photographs, one a view, taken as it is certified (ADR-179; AC-04-77).
+    for (const view of certificationViews) {
+      this.photograph({ of: { kind: 'CERTIFICATION', id: record.id }, view });
+    }
     return { record, capacityCy: reading.capacityCy };
   }
 
@@ -865,6 +887,11 @@ export class SimulatedDevice {
     return [...this.outbox];
   }
 
+  // Its photographs' records still to send.
+  get waitingPhotos(): readonly RecordedPhoto[] {
+    return [...this.photoOutbox];
+  }
+
   // The harness's own: what the phone holds that no story told, as the contract's suite hands
   // it over (`SyncClientHolds`): records as they go on the wire, and the reports a sync carries.
   // A story's phone holds no report: one its story tells is sent in a sync of its own
@@ -874,6 +901,11 @@ export class SimulatedDevice {
       const read = recordRead(record);
       if (!read.read) throw new Error(`${this.name}: ${read.notice.message}`);
       this.outbox.push(fromPhone(this.current.deviceId, read.record));
+    }
+    for (const photo of more.photos) {
+      const read = photoRead(photo);
+      if (!read.read) throw new Error(`${this.name}: ${read.notice.message}`);
+      this.photoOutbox.push(photo);
     }
     this.reports = {
       unplannedAssignments: [...this.reports.unplannedAssignments, ...more.unplannedAssignments],
@@ -896,10 +928,11 @@ export class SimulatedDevice {
     }));
   }
 
-  // The next sync, as the contract has it (`SyncSent`; ADR-467): the phone's clock, the reports
-  // it holds, its records, the last number it used of each series it reports. No more than the
-  // contract's limits a sync; a scale receipt goes ahead of the disposal that points at it, and
-  // no record ahead of an unplanned assignment that has to wait for the next sync.
+  // The next sync, as the contract has it (`SyncSent`; ADR-467, 481): the phone's clock, the
+  // reports it holds, its records, its photographs' records, the last number it used of each
+  // series it reports. No more than the contract's limits a sync; a scale receipt goes ahead of
+  // the disposal that points at it, no record ahead of an unplanned assignment that has to wait
+  // for the next sync, and no photograph ahead of the sync that carries its record.
   sends(): SyncSent {
     const clockAt = this.now();
     const unplannedAssignments = this.reports.unplannedAssignments.slice(
@@ -911,7 +944,6 @@ export class SimulatedDevice {
     );
     const ordered: { readonly held: HeldRecord; readonly wire: SyncedRecord }[] = [];
     for (const held of this.outbox) {
-      if (held.record === 'PHOTO') continue;
       const wire = onTheWire(held);
       const pointsAtIt =
         wire.record === 'SCALE_RECEIPT'
@@ -927,12 +959,18 @@ export class SimulatedDevice {
     const going = ordered
       .filter(({ wire }) => !waits.has(syncedRecordAssignment(wire) ?? ''))
       .slice(0, syncRecordsAtMost);
+    const goingIds = new Set(going.map(({ held }) => heldId(held)));
+    const staying = new Set(this.outbox.map(heldId).filter((id) => !goingIds.has(id)));
+    const photos = this.photoOutbox
+      .filter(({ owner }) => !staying.has(owner.id))
+      .slice(0, syncPhotosAtMost);
     const sync: SyncSent = {
       clockAt: clockAt.toISOString(),
       deviceUtcOffsetMinutes: utcOffsetMinutes(this.current.timeZone, clockAt),
       unplannedAssignments,
       passcodeUses: this.reports.passcodeUses.slice(0, syncPasscodeUsesAtMost),
       records: going.map(({ wire }) => wire),
+      photos: photos.map((photo) => ({ ...photo })),
       lastUsed: this.numbersReported(),
       // The check of the master passcode it holds, and the project its lists are of.
       holds: {
@@ -940,7 +978,7 @@ export class SimulatedDevice {
         listsProjectId: this.current.projectId,
       },
     };
-    this.last = { sync, held: going.map(({ held }) => held) };
+    this.last = { sync, held: going.map(({ held }) => held), photos };
     return sync;
   }
 
@@ -979,6 +1017,15 @@ export class SimulatedDevice {
         this.shown.push({ id: heldId(sent), reason: each.reason, message: each.message });
       }
     });
+    last.photos.forEach((photo, place) => {
+      const each = read.photos[place];
+      if (each === undefined) return;
+      this.photoOutbox.splice(this.photoOutbox.indexOf(photo), 1);
+      this.told.push({ sent: { record: 'PHOTO', photo }, answer: each });
+      if ('reason' in each) {
+        this.shown.push({ id: photo.id, reason: each.reason, message: each.message });
+      }
+    });
     // What the sync brought besides: of each series topped up, the blocks it holds now (where
     // a report wasn't taken it holds what it held); the master passcode's version, with its
     // check where it held another; the setup version its project's phones are shown now.
@@ -994,30 +1041,23 @@ export class SimulatedDevice {
     return true;
   }
 
-  // The phone finds signal: its records go first, a sync of the contract's at a time, and its
-  // photographs after (ARCHITECTURE §9 (2)), each in the order recorded. Each sync goes as JSON
-  // and is read by the contract as the endpoint's boundary reads it, with the phone's id as
-  // its proof would say it; what comes back is read off the wire too. A sync that gets no
-  // answer leaves everything it carried on the phone, to go again under the same ids. How many
-  // records and photographs were answered.
+  // The phone finds signal: a sync of the contract's at a time, its records first and its
+  // photographs' records after them (ARCHITECTURE §9 (2)), each in the order recorded, until it
+  // holds none. Each sync goes as JSON and is read by the contract as the endpoint's boundary
+  // reads it, with the phone's id as its proof would say it; what comes back is read off the
+  // wire too. A sync that gets no answer leaves everything it carried on the phone, to go again
+  // under the same ids. How many records and photographs were answered.
   async sync(server: PhoneServer): Promise<number> {
     let sent = 0;
-    while (this.outbox.some((held) => held.record !== 'PHOTO')) {
+    while (this.outbox.length > 0 || this.photoOutbox.length > 0) {
       const sync = this.sends();
-      if (sync.records.length === 0) break;
+      if (sync.records.length === 0 && sync.photos.length === 0) break;
       const wire: unknown = JSON.parse(JSON.stringify(sync));
       const { answered } = await server.received(this.current.deviceId, syncSentSchema.parse(wire));
       if (!this.answered(JSON.parse(JSON.stringify(answered)))) {
         throw new Error(`${this.name}: what came back is no answer to the sync it sent.`);
       }
-      sent += sync.records.length;
-    }
-    for (const held of [...this.outbox]) {
-      if (held.record !== 'PHOTO') continue;
-      const answer = await server.receive(held);
-      this.told.push({ sent: held, answer });
-      this.outbox.splice(this.outbox.indexOf(held), 1);
-      sent += 1;
+      sent += sync.records.length + sync.photos.length;
     }
     return sent;
   }
@@ -1044,6 +1084,7 @@ export class SimulatedDevice {
       ...this.reports.unplannedAssignments.map(({ id }) => id),
       ...this.reports.passcodeUses.map(({ id }) => id),
       ...this.outbox.map(heldId),
+      ...this.photoOutbox.map(({ id }) => id),
       ...this.keptReports,
       ...this.notSaved.map((one) => heldId(one.sent)),
     ];

@@ -748,7 +748,7 @@ model SyncedRecord {
   @@map("synced_record")
 }
 
-// Why a record a phone sent was not saved (ADR-467, 469): the domain's `notSavedReasons`.
+// Why a record a phone sent was not saved (ADR-467, 469, 481): the domain's `notSavedReasons`.
 enum NotSavedReason {
   // What was sent fails the contract's schema.
   NOT_A_RECORD
@@ -758,6 +758,8 @@ enum NotSavedReason {
   ASSIGNMENT_NOT_SAVED
   // A certification its own rules refuse, or whose number its project already has.
   CERTIFICATION_REFUSED
+  // A photograph whose record the server has not saved (ADR-481).
+  OWNER_NOT_SAVED
 
   @@map("not_saved_reason")
 }

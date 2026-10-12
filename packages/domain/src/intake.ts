@@ -108,8 +108,9 @@ export class Quarantine implements QuarantineNotice {
 }
 
 // Why a record a phone sent is not saved (ADR-467): it isn't a record at all, something it
-// names is no record the server has, the assignment it was made under was itself not saved, or
-// it is a certification its own rules refuse (ADR-469). The server holds it exactly as sent for
+// names is no record the server has, the assignment it was made under was itself not saved, it
+// is a certification its own rules refuse (ADR-469), or it is a photograph whose record the
+// server doesn't have saved (ADR-481). The server holds it exactly as sent for
 // a person (ADR-468, 471, 472), and it stays on its phone too. Never a judgement of the work:
 // nothing is refused over eligibility (ADR-052).
 export const notSavedReasons = [
@@ -117,6 +118,7 @@ export const notSavedReasons = [
   'NAMES_NO_RECORD',
   'ASSIGNMENT_NOT_SAVED',
   'CERTIFICATION_REFUSED',
+  'OWNER_NOT_SAVED',
 ] as const;
 export type NotSavedReason = (typeof notSavedReasons)[number];
 
@@ -184,6 +186,16 @@ export class NotSaved implements NotSavedNotice {
     return new NotSaved(
       'CERTIFICATION_REFUSED',
       `${notSavedLead}the certification this one replaces has already been replaced.`,
+    );
+  }
+
+  // A photograph whose record the server has not saved: held, kept in quarantine elsewhere,
+  // not yet sent, or not of the kind the photograph says (ADR-481). Sent again once its record
+  // is saved, it is saved with it.
+  static ownerNotSaved(): NotSaved {
+    return new NotSaved(
+      'OWNER_NOT_SAVED',
+      `${notSavedLead}the record this photograph belongs to isn’t saved on the server.`,
     );
   }
 

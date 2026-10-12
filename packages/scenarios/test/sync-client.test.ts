@@ -78,6 +78,7 @@ describe('the harness’s phone, syncing through the API’s own service', () =>
     unplannedAssignments: [],
     passcodeUses: [],
     records: syncExamples.records.filter((record) => record.record === 'FIELD_EVENT'),
+    photos: [],
     lastUsed: [],
   };
   // A server in memory that answers every record "saved" and keeps each sync it was sent, as
@@ -96,6 +97,7 @@ describe('the harness’s phone, syncing through the API’s own service', () =>
               id: (one as { fieldEvent: { id: string } }).fieldEvent.id,
               notes: [],
             })),
+            photos: [],
             numbers: [],
             masterPasscode: { version: 1, check: null },
             setupVersion: null,
@@ -103,7 +105,6 @@ describe('the harness’s phone, syncing through the API’s own service', () =>
           },
         });
       },
-      receive: () => Promise.reject(new Error('No photograph is sent here.')),
     };
     return { made, syncs };
   };

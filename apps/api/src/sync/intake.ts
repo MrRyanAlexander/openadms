@@ -32,8 +32,10 @@ import { type LastUsed, NumberAllocator, type PhoneAtSync } from '../numbering/n
 import type { Clock } from '../setup/setup-service.ts';
 import { type Brought, ledgerRow } from './ledger.ts';
 import { gpsNote, RecordWrite } from './record-write.ts';
+import { photoPlaces } from '../media/photo-places.ts';
 import type {
   IntakeNote,
+  PhotoTaken,
   SentDropOffLog,
   SentFieldEvent,
   SentForm,
@@ -120,9 +122,6 @@ export class Intake {
         return this.survey(sent.survey, receivedAt, brought);
       case 'ROE':
         return this.roe(sent, sent.roe, receivedAt, brought);
-      // A photograph's record is not the sync contract's yet (task 2.6.4): no ledger row.
-      case 'PHOTO':
-        return this.photo(sent.photo, receivedAt);
     }
   }
 
@@ -491,10 +490,21 @@ export class Intake {
     );
   }
 
-  // A photograph's record, with the fingerprint taken at capture (ADR-101). It belongs to the
-  // record its phone made it for; while that record waits in quarantine, to the quarantined
-  // record and nothing else (ADR-292 (5)). Intake writes neither of the back office's marks.
-  private photo(photo: SentPhoto, receivedAt: Date): Promise<SyncAnswer> {
+  // A photograph's record, sent after the records (ARCHITECTURE §9 (2); ADR-101, 481), with the
+  // fingerprint taken at capture and the one of the file its phone will upload, each as the
+  // phone said it, written once. It belongs to the record its phone made it for; while that
+  // record waits in quarantine, to the quarantined record and nothing else (ADR-292 (5)).
+  // **Where its files are kept is made here**, from its own id and its project's, never sent
+  // (`photoPlaces`). Its file is uploaded after, on its own (task 2.6.4, part 3): `uploadedAt`
+  // stays empty until then. Intake writes neither of the back office's marks.
+  //
+  // A record the server doesn't have saved (held for a person, not yet sent, or not of the
+  // kind the photograph says) is no record it can belong to: nothing is tried, and `Sync`
+  // holds the photograph for a person (ADR-481). Sent again once its record is saved, it is
+  // saved. Saved, it queues what reads it: a field event's ticket (a pay item may require a
+  // photograph), or a certification's views, which the run checks by themselves.
+  async photo(photo: SentPhoto, brought?: Brought): Promise<PhotoTaken> {
+    const receivedAt = this.clock.now();
     const fix = new GpsFix(photo).read();
     const notes: IntakeNote[] = [];
     if (fix.unreadable !== null) notes.push(gpsNote('', fix.unreadable));
@@ -506,14 +516,22 @@ export class Intake {
         deviceId: photo.deviceId,
         ...(note === undefined ? {} : { reason: note.message }),
       },
-      async (tx): Promise<SyncAnswer> => {
+      async (tx): Promise<PhotoTaken> => {
         const saved = await tx.photo.findUnique({ where: { id: photo.id } });
         if (saved !== null) return { answer: 'ALREADY_SAVED', id: photo.id };
         const quarantined = await tx.quarantinedRecord.findUnique({
           where: { id: photo.owner.id },
         });
+        const ownerEvent =
+          quarantined === null && photo.owner.kind === 'FIELD_EVENT'
+            ? await tx.fieldEvent.findUnique({ where: { id: photo.owner.id } })
+            : null;
+        if (quarantined === null && ownerEvent === null) {
+          if (!(await Intake.ownerSaved(tx, photo.owner))) return { answer: 'OWNER_NOT_SAVED' };
+        }
         const owner = (kind: SentPhoto['owner']['kind']): string | null =>
           quarantined === null && photo.owner.kind === kind ? photo.owner.id : null;
+        const places = photoPlaces(photo.projectId, photo.id, photo.depthFile);
         await tx.photo.create({
           data: {
             id: photo.id,
@@ -526,7 +544,7 @@ export class Intake {
             incidentId: owner('INCIDENT'),
             dropOffLogId: owner('DROP_OFF_LOG'),
             quarantinedRecordId: quarantined?.id ?? null,
-            view: photo.view ?? null,
+            view: photo.view,
             capturedAt: photo.capturedAt,
             deviceUtcOffsetMinutes: photo.deviceUtcOffsetMinutes,
             receivedAt,
@@ -534,14 +552,53 @@ export class Intake {
             longitude: fix.fix?.longitude ?? null,
             originalSha256: photo.originalSha256,
             uploadedSha256: photo.uploadedSha256,
-            objectKey: photo.objectKey,
-            depthObjectKey: photo.depthObjectKey ?? null,
+            objectKey: places.objectKey,
+            depthObjectKey: places.depthObjectKey,
             deviceId: photo.deviceId,
           },
         });
+        await ledgerRow(tx, brought, {
+          recordId: photo.id,
+          recordKind: 'PHOTO',
+          deviceId: photo.deviceId,
+          answer: 'SAVED',
+        });
+        if (ownerEvent !== null) {
+          await this.queued(tx, brought, {
+            projectId: photo.projectId,
+            tickets: [{ workflow: ownerEvent.workflow, ticketNumber: ownerEvent.ticketNumber }],
+          });
+        } else if (quarantined === null && photo.owner.kind === 'CERTIFICATION') {
+          await this.queued(tx, brought, {
+            projectId: photo.projectId,
+            tickets: [],
+            projectRecords: true,
+          });
+        }
         return { answer: 'SAVED', id: photo.id, notes };
       },
     );
+  }
+
+  // Whether the record a photograph names is saved, as the kind it says.
+  private static async ownerSaved(tx: Tx, owner: SentPhoto['owner']): Promise<boolean> {
+    const where = { where: { id: owner.id }, select: { id: true } } as const;
+    switch (owner.kind) {
+      case 'FIELD_EVENT':
+        return (await tx.fieldEvent.findUnique(where)) !== null;
+      case 'SCALE_RECEIPT':
+        return (await tx.scaleReceipt.findUnique(where)) !== null;
+      case 'ROE':
+        return (await tx.roe.findUnique(where)) !== null;
+      case 'SURVEY':
+        return (await tx.survey.findUnique(where)) !== null;
+      case 'INCIDENT':
+        return (await tx.incident.findUnique(where)) !== null;
+      case 'DROP_OFF_LOG':
+        return (await tx.dropOffLog.findUnique(where)) !== null;
+      case 'CERTIFICATION':
+        return (await tx.certification.findUnique(where)) !== null;
+    }
   }
 
   // A record already waiting in quarantine under this id: sent again, it is the same quarantined

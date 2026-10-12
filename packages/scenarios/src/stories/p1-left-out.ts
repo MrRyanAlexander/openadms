@@ -315,7 +315,7 @@ export const p1LeftOut: Story = {
       if (answer.answer !== 'SAVED') throw new Error(`Not saved: ${answer.answer}`);
       if (sent.record === 'FIELD_EVENT') arrived.push(sent.fieldEvent.ticketNumber);
     }
-    for (const time of phones.times) await phones.crewPhotographs(time);
+    for (const time of phones.times) await phones.photosArrive(time);
     story.check(
       'every record is saved; the first field event to arrive is Tuesday’s last, the last Monday’s first',
       [arrived.length, arrived.at(0), arrived.at(-1)],

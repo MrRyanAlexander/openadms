@@ -1,17 +1,20 @@
 // One sync, whole: what a phone sends and what it is answered (ARCHITECTURE §9, §10;
 // spec/parts/05-sync.md steps 2…8; spec/acceptance/05-sync.md AC-05-03, 04, 15, 20, 45…47;
 // AC-10-35, 36; T-12; BACKLOG 2.6.1, C69, C84 (9), C86, C122, C126, C127; ADR-022, 052, 065, 100,
-// 338, 453, 454, 457, 464, 466, 467, 473; REQ-004, 203). The endpoint that takes it is
+// 338, 453, 454, 457, 464, 466, 467, 473, 481; REQ-004, 203). The endpoint that takes it is
 // `syncPhoneEndpoint` (endpoints.ts; ADR-472).
 //
 // **A sync is read in this order, and each thing after what it may name:** the phone's clock;
 // the unplanned assignments made on the phone; the uses of the master passcode it logged; its
-// records; the last number it used of each series; what it holds that a sync may bring anew. A
-// record names its assignment, so an unplanned assignment goes ahead of the records made under
-// it.
+// records; its photographs' records; the last number it used of each series; what it holds that
+// a sync may bring anew. A record names its assignment, so an unplanned assignment goes ahead of
+// the records made under it; a photograph names its record, so it goes in the same sync as that
+// record or a later one (ARCHITECTURE §9 (2); ADR-481). A photograph's file is never in a sync:
+// it is uploaded on its own, after (task 2.6.4, part 3).
 //
 // **Each record is read on its own** (AC-05-45): the payload takes whatever stands in a record's
-// place, and `recordRead` reads it with `syncedRecordSchema`. One that isn't a record gets its
+// place, and `recordRead` reads it with `syncedRecordSchema` (a photograph's, `photoRead` with
+// `syncedPhotoSchema`). One that isn't a record gets its
 // own answer, "not saved", and never refuses the others. What bounds an unread record is the
 // request's own size (the boundary's limit) and how many a sync carries.
 //
@@ -49,8 +52,11 @@ import {
   id,
   instant,
   offset,
+  syncedPhotoSchema,
   syncedRecordSchema,
+  type ReceivedPhoto,
   type ReceivedRecord,
+  type SyncedPhoto,
   type SyncedRecord,
 } from './sync-records.ts';
 
@@ -58,6 +64,8 @@ import {
 // the next call (AC-10-41). The records' count keeps a full sync of ordinary records well inside
 // the request's one mebibyte.
 export const syncRecordsAtMost = 200;
+// A photograph's record is a fraction of a field event's: as many fit beside the records.
+export const syncPhotosAtMost = 200;
 export const syncUnplannedAssignmentsAtMost = 20;
 export const syncPasscodeUsesAtMost = 100;
 export const syncSeriesAtMost = 20;
@@ -97,6 +105,8 @@ export const syncSentSchema = z.strictObject({
   passcodeUses: z.array(passcodeUseReportSchema).max(syncPasscodeUsesAtMost),
   // Each read on its own, by `recordRead`.
   records: z.array(z.unknown()).max(syncRecordsAtMost),
+  // Each read on its own, by `photoRead`, after the records.
+  photos: z.array(z.unknown()).max(syncPhotosAtMost),
   lastUsed: z.array(lastUsedSchema).max(syncSeriesAtMost).refine(eachSeriesOnce),
   holds: syncHoldsSchema,
 });
@@ -150,6 +160,32 @@ export function recordRead(sent: unknown): RecordRead {
   return { read: false, id: recordNames(sent).id, notice: NotSaved.notARecord(why) };
 }
 
+// What stood in a photograph's place, read (ADR-481).
+export type PhotoRead =
+  | { readonly read: true; readonly photo: ReceivedPhoto }
+  | { readonly read: false; readonly id: string | null; readonly notice: NotSavedNotice };
+
+// What a thing sent in a photograph's place names, where that much can be read: its own id, its
+// project and who took it. Read loosely, as `recordNames` reads a record.
+export function photoNames(sent: unknown): RecordNames {
+  if (typeof sent !== 'object' || sent === null || Array.isArray(sent)) {
+    return { id: null, projectId: null, monitorId: null };
+  }
+  return {
+    id: idIn(sent, 'id'),
+    projectId: idIn(sent, 'projectId'),
+    monitorId: idIn(sent, 'takenById'),
+  };
+}
+
+// Reads whatever stood in one photograph's place.
+export function photoRead(sent: unknown): PhotoRead {
+  const read = syncedPhotoSchema.safeParse(sent);
+  if (read.success) return { read: true, photo: read.data };
+  const why = notRead(syncedPhotoSchema, sent) ?? 'this record isn’t taken as it stands';
+  return { read: false, id: photoNames(sent).id, notice: NotSaved.notARecord(why) };
+}
+
 // Something the server did with a record it saved that the sender should know: nothing was
 // refused for it, and the flag is the worker's (ADR-052, 329).
 export const intakeNoteCodes = ['GPS_UNREADABLE', 'ANSWERS_DO_NOT_FIT'] as const;
@@ -162,9 +198,21 @@ const intakeNoteSchema = z.strictObject({
 // One record's own answer (ARCHITECTURE §9 (4)). A quarantined record is never answered "saved",
 // however often it is sent (ADR-022); one not saved at all has an id only where one could be
 // read.
+const savedSchema = z.strictObject({
+  answer: z.literal('SAVED'),
+  id,
+  notes: z.array(intakeNoteSchema),
+});
+const alreadySavedSchema = z.strictObject({ answer: z.literal('ALREADY_SAVED'), id });
+const notSavedSchema = z.strictObject({
+  answer: z.literal('NOT_SAVED'),
+  id: id.nullable(),
+  reason: z.enum(notSavedReasons),
+  message: z.string(),
+});
 export const recordAnswerSchema = z.discriminatedUnion('answer', [
-  z.strictObject({ answer: z.literal('SAVED'), id, notes: z.array(intakeNoteSchema) }),
-  z.strictObject({ answer: z.literal('ALREADY_SAVED'), id }),
+  savedSchema,
+  alreadySavedSchema,
   z.strictObject({
     answer: z.literal('QUARANTINED'),
     id,
@@ -173,12 +221,15 @@ export const recordAnswerSchema = z.discriminatedUnion('answer', [
     // The record that holds the number.
     heldBy: id,
   }),
-  z.strictObject({
-    answer: z.literal('NOT_SAVED'),
-    id: id.nullable(),
-    reason: z.enum(notSavedReasons),
-    message: z.string(),
-  }),
+  notSavedSchema,
+]);
+
+// One photograph's record's own answer: saved, already saved, or not saved and held. Never
+// quarantined: a photograph holds no number (ADR-481). Where its file is kept is never said.
+export const photoAnswerSchema = z.discriminatedUnion('answer', [
+  savedSchema,
+  alreadySavedSchema,
+  notSavedSchema,
 ]);
 
 // The blocks a phone holds of one series after a sync, in the order it gives them out
@@ -220,6 +271,7 @@ export const syncAnsweredSchema = z.strictObject({
   unplannedAssignments: z.array(unplannedAssignmentAnswerSchema),
   passcodeUses: z.array(passcodeUseAnswerSchema),
   records: z.array(recordAnswerSchema),
+  photos: z.array(photoAnswerSchema),
   numbers: z.array(seriesHeldSchema),
   masterPasscode: passcodeBroughtSchema,
   setupVersion: setupVersionBroughtSchema.nullable(),
@@ -228,12 +280,14 @@ export const syncAnsweredSchema = z.strictObject({
 export type LastUsedReport = z.infer<typeof lastUsedSchema>;
 // A sync as a phone sends it (each record as its own schema reads it), and as the server reads
 // it (each record still to be read).
-export type SyncSent = Omit<z.input<typeof syncSentSchema>, 'records'> & {
+export type SyncSent = Omit<z.input<typeof syncSentSchema>, 'records' | 'photos'> & {
   records: SyncedRecord[];
+  photos: SyncedPhoto[];
 };
 export type SyncReceived = z.output<typeof syncSentSchema>;
 export type IntakeNoteCode = (typeof intakeNoteCodes)[number];
 export type IntakeNote = z.infer<typeof intakeNoteSchema>;
 export type RecordAnswer = z.infer<typeof recordAnswerSchema>;
+export type PhotoAnswer = z.infer<typeof photoAnswerSchema>;
 export type SeriesHeld = z.infer<typeof seriesHeldSchema>;
 export type SyncAnswered = z.infer<typeof syncAnsweredSchema>;

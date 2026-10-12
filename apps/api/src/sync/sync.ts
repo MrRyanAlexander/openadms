@@ -11,7 +11,8 @@
 //   One row a call, a retry too: it is the record that the phone connected.
 // - **Read in the payload's order, each thing after what it may name:** the unplanned
 //   assignments (`UnplannedAssignments.received`), the uses of the master passcode
-//   (`PasscodeUses.received`), the records, the numbers. Each is its own piece of work, so one
+//   (`PasscodeUses.received`), the records, the photographs' records, the numbers. Each is its
+//   own piece of work, so one
 //   refusal undoes nothing else, and each gets its own answer in the order sent (AC-05-45).
 // - **A record is stored once.** The idempotency ledger is asked first: an id it holds as
 //   saved is answered "already saved" and nothing is tried. Otherwise the record goes to
@@ -21,8 +22,9 @@
 // - **What could not be saved is held for a person, exactly as sent** (ADR-468, 471): what
 //   isn't a record, what names something the server doesn't have (the database's own
 //   constraints refuse it: never an internal error, and never the database's words), what was
-//   made under an unplanned assignment this sync answered "not saved" (not tried), and a
-//   certification its own rules refuse or whose number its project already has. The phone is
+//   made under an unplanned assignment this sync answered "not saved" (not tried), a
+//   certification its own rules refuse or whose number its project already has, and a
+//   photograph whose record the server doesn't have saved (not tried; ADR-481). The phone is
 //   answered `NOT_SAVED` with the reason and plain words that say it is held; never "saved".
 //   The same thing sent again by the same phone is the same held record: nothing is added.
 //   A report answered `NOT_SAVED` is not held (ADR-468 speaks of records).
@@ -39,13 +41,17 @@
 import { createHash } from 'node:crypto';
 
 import {
+  photoNames,
+  photoRead,
   recordNames,
   recordRead,
+  type PhotoAnswer,
   syncedRecordAssignment,
   syncedRecordId,
   type ReceivedCertification,
   type ReceivedRecord,
   type RecordAnswer,
+  type RecordNames,
   type SeriesHeld,
   type SyncAnswered,
   type SyncReceived,
@@ -202,6 +208,10 @@ export class Sync {
       records.push(await this.record(deviceId, brought, one, notSavedAssignments));
     }
 
+    // After the records: a photograph names the record it belongs to (§9 (2)).
+    const photos: PhotoAnswer[] = [];
+    for (const one of sent.photos) photos.push(await this.photo(deviceId, brought, one));
+
     const numbers: SeriesHeld[] = [];
     for (const report of sent.lastUsed) numbers.push(await this.toppedUp(deviceId, report));
 
@@ -219,6 +229,7 @@ export class Sync {
         unplannedAssignments,
         passcodeUses,
         records,
+        photos,
         numbers,
         masterPasscode,
         setupVersion,
@@ -289,6 +300,35 @@ export class Sync {
       // Anything else is the server's own failure, and stays one.
       if (notice === null) throw error;
       return this.held(deviceId, brought, sent, notice);
+    }
+  }
+
+  // Whatever stood in one photograph's place: its own answer (ADR-481). A retry is known from
+  // the ledger. Where its files are kept is made by intake as it is saved; a photograph whose
+  // record isn't saved is held, never tried.
+  private async photo(deviceId: string, brought: Brought, sent: unknown): Promise<PhotoAnswer> {
+    const names = photoNames(sent);
+    const read = photoRead(sent);
+    if (!read.read) return this.held(deviceId, brought, sent, read.notice, names);
+    const { id } = read.photo;
+    const before = await this.db.$read((tx) =>
+      tx.syncedRecord.findUnique({ where: { recordId: id } }),
+    );
+    if (before?.answer === 'SAVED' && before.recordKind === 'PHOTO') {
+      return { answer: 'ALREADY_SAVED', id };
+    }
+    try {
+      const taken = await this.parts.intake.photo({ ...read.photo, deviceId }, brought);
+      if (taken.answer === 'OWNER_NOT_SAVED') {
+        return await this.held(deviceId, brought, sent, NotSaved.ownerNotSaved(), names);
+      }
+      return taken;
+    } catch (error) {
+      // What it names that the server doesn't have (its project, who took it, a record of
+      // another project): the database's own constraints. Anything else stays an error.
+      const refusal = databaseRefusalOf(error);
+      if (refusal === undefined || refusal.code === 'ALREADY_HELD') throw error;
+      return this.held(deviceId, brought, sent, NotSaved.namesNoRecord(), names);
     }
   }
 
@@ -365,8 +405,8 @@ export class Sync {
     brought: Brought,
     sent: unknown,
     notice: NotSavedNotice,
-  ): Promise<RecordAnswer> {
-    const names = recordNames(sent);
+    names: RecordNames = recordNames(sent),
+  ): Promise<Extract<RecordAnswer, { answer: 'NOT_SAVED' }>> {
     const told = NotSaved.heldForReview(notice);
     const sentSha256 = sentFingerprint(sent);
     const where = { deviceId_sentSha256: { deviceId, sentSha256 } };

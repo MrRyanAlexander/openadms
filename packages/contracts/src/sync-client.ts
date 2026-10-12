@@ -76,7 +76,7 @@ const inPlace = <S, A>(
 export function syncAnswerRead(sent: SyncSent, answered: unknown): SyncAnswered | null {
   const read = syncAnsweredSchema.safeParse(answered);
   if (!read.success) return null;
-  const { unplannedAssignments, passcodeUses, records, numbers, setupVersion } = read.data;
+  const { unplannedAssignments, passcodeUses, records, photos, numbers, setupVersion } = read.data;
   const fits =
     inPlace(
       sent.unplannedAssignments,
@@ -88,6 +88,11 @@ export function syncAnswerRead(sent: SyncSent, answered: unknown): SyncAnswered 
       sent.records,
       records,
       (one, a) => a.id === syncedRecordId(one) || (a.id === null && a.answer === 'NOT_SAVED'),
+    ) &&
+    inPlace(
+      sent.photos,
+      photos,
+      (one, a) => a.id === one.id || (a.id === null && a.answer === 'NOT_SAVED'),
     ) &&
     inPlace(
       sent.lastUsed,

@@ -19,6 +19,7 @@ import {
 import {
   syncAnswerRead,
   syncSentSchema,
+  type PhotoAnswer,
   type RecordAnswer,
   type SyncAnswered,
   type SyncSent,
@@ -26,7 +27,7 @@ import {
 import type { Database, NumberSeries } from '@open-adms/db';
 
 import { utcOffsetMinutes } from '../clock.ts';
-import { onTheWire, type HeldRecord } from '../device.ts';
+import { onTheWire, type HeldRecord, type RecordedPhoto } from '../device.ts';
 import { uuidv7 } from '../ids.ts';
 import type { StoryContext, StoryMonitor } from '../runner.ts';
 
@@ -68,7 +69,7 @@ export async function synced(
   deviceId: string,
   timeZone: string,
   carries: Partial<
-    Pick<SyncSent, 'unplannedAssignments' | 'passcodeUses' | 'records' | 'lastUsed'>
+    Pick<SyncSent, 'unplannedAssignments' | 'passcodeUses' | 'records' | 'photos' | 'lastUsed'>
   >,
 ): Promise<SyncAnswered> {
   const now = story.clock.now();
@@ -82,6 +83,7 @@ export async function synced(
     unplannedAssignments: [],
     passcodeUses: [],
     records: [],
+    photos: [],
     lastUsed: [],
     ...carries,
     holds: { masterPasscodeVersion: inForce.version, listsProjectId: null },
@@ -110,22 +112,33 @@ export async function firstBlocks(
   return numbers;
 }
 
-// One record a phone sends by itself, in a sync of its own: its answer. A photograph's record
-// still goes to the intake behind the sync by hand (2.6.4).
+// One record a phone sends by itself, in a sync of its own: its answer.
 export async function sentAlone(
   story: StoryContext,
   timeZone: string,
   record: HeldRecord,
 ): Promise<RecordAnswer> {
-  if (record.record === 'PHOTO') return story.server.receive(record);
   const wire = onTheWire(record);
   const [answer] = (await synced(story, phoneOf(record), timeZone, { records: [wire] })).records;
   if (answer === undefined) throw new Error('The record was not answered.');
   return answer;
 }
 
+// One photograph's record a phone sends by itself, in a sync of its own, after its record's:
+// its answer (ADR-481).
+export async function photoSentAlone(
+  story: StoryContext,
+  timeZone: string,
+  deviceId: string,
+  photo: RecordedPhoto,
+): Promise<PhotoAnswer> {
+  const [answer] = (await synced(story, deviceId, timeZone, { photos: [photo] })).photos;
+  if (answer === undefined) throw new Error('The photograph was not answered.');
+  return answer;
+}
+
 // The phone that made a record, as the harness's own records say it.
-function phoneOf(record: Exclude<HeldRecord, { record: 'PHOTO' }>): string {
+function phoneOf(record: HeldRecord): string {
   switch (record.record) {
     case 'FIELD_EVENT':
       return record.fieldEvent.deviceId;

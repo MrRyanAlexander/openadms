@@ -158,11 +158,9 @@ export const p1Viewed: Story = {
       'Monday evening: the phones find signal; the worker runs',
     );
     await phones.arrive(mondayEvening);
-    await phones.crewPhotographs(mondayEvening);
     await reconciliation.run(sync);
     story.at(tuesdayEvening.toISOString(), 'Tuesday evening: the same');
     await phones.arrive(tuesdayEvening);
-    await phones.crewPhotographs(tuesdayEvening);
     await reconciliation.run(sync);
     story.at(
       wednesdayMorning.toISOString(),

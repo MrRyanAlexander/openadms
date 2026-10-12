@@ -1322,10 +1322,10 @@ item requires is a flag.
 | view | enum `PhotoView` | A certification's five: `OPERATOR_WITH_PLACARD` · `INTERIOR_OR_BACK` · `RIGHT` · `LEFT` · `FRONT` (ADR-179) |
 | **capturedAt** | instant | With its offset |
 | latitude, longitude | decimal(38,8) | |
-| **originalSha256** | text | Taken at capture |
-| **uploadedSha256** | text | |
-| **objectKey** | text | |
-| depthObjectKey | text | |
+| **originalSha256** | text | Taken at capture; the phone's word |
+| **uploadedSha256** | text | Of the file the phone uploads; the phone's word, sent with the record (ADR-481) |
+| **objectKey** | text | Where the file is kept: **made by the server**, never sent by a phone: `projects/<project>/photos/<photograph>` (ADR-481) |
+| depthObjectKey | text | The depth file's place, beside it with `.depth` after it, where the phone said one comes (ADR-481) |
 | deviceId | → `Device` | |
 | uploadedAt | instant | |
 | archivedAt | instant | The back office removed it from the record (ADR-329 (9), 337): a mark only, cleared to put it back. Nothing is deleted; who and when is the audit record |
@@ -1434,7 +1434,7 @@ defaults). Inert: never a field event, never paired, never billed, never read by
 | sentMonitorId | uuid | The monitor it named, as sent: not a relation |
 | **payload** | JSONB | What stood in the record's place, exactly as sent: any JSON value |
 | **sentSha256** | text | The SHA-256 of what was sent |
-| **reason** | enum `NotSavedReason` | `NOT_A_RECORD` · `NAMES_NO_RECORD` · `ASSIGNMENT_NOT_SAVED` · `CERTIFICATION_REFUSED` (the domain's `notSavedReasons`) |
+| **reason** | enum `NotSavedReason` | `NOT_A_RECORD` · `NAMES_NO_RECORD` · `ASSIGNMENT_NOT_SAVED` · `CERTIFICATION_REFUSED` · `OWNER_NOT_SAVED` (a photograph whose record the server doesn't have saved, ADR-481) (the domain's `notSavedReasons`) |
 | **message** | text | What the phone was told |
 | **receivedAt** | instant | |
 | resolvedById | → `User` | |

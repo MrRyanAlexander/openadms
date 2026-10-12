@@ -181,7 +181,7 @@ export { Intake } from './sync/intake.ts';
 export { Sync, type Synced, type SyncParts } from './sync/sync.ts';
 export type {
   IntakeNote,
-  PhotoOwnerKind,
+  PhotoTaken,
   SentAnswers,
   SentCertification,
   SentDropOffLog,

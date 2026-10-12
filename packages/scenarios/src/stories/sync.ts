@@ -48,7 +48,14 @@ import {
 import { uuidv7 } from '../ids.ts';
 import type { EnrolledPhone } from '../software-key.ts';
 import type { Story, StoryMonitor } from '../runner.ts';
-import { assigned, firstBlocks, sentAlone, taken, unplanned as unplannedOn } from './board.ts';
+import {
+  assigned,
+  firstBlocks,
+  photoSentAlone,
+  sentAlone,
+  taken,
+  unplanned as unplannedOn,
+} from './board.ts';
 import { p1TimeZone as timeZone, setUpP1, setUpP1Sites, startSeries } from './p1.ts';
 
 const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-04:00`;
@@ -541,6 +548,7 @@ export const sync: Story = {
       [true, 'SPENT'],
     );
     const noon = kim.waitingRecords;
+    const noonPhotos = kim.waitingPhotos;
     const atNoon = await syncing(kim);
     story.check(
       'AC-05-45, AC-05-17, AC-05-20 each record gets its own answer: the 10:22 disposal saved, the 11:40 one not saved (quarantined, with the reason), and its photograph’s record saved all the same',
@@ -645,6 +653,9 @@ export const sync: Story = {
     );
     const again: RecordAnswer[] = [];
     for (const record of noon) again.push(await sentAlone(story, timeZone, record));
+    for (const photo of noonPhotos) {
+      again.push(await photoSentAlone(story, timeZone, kim.setup.deviceId, photo));
+    }
     story.check(
       'AC-05-12, AC-05-15 a retry is the same record: the 10:22 disposal is answered "already saved", never taken for a duplicate; the 11:40 one is still one quarantined record and still not "saved"',
       [

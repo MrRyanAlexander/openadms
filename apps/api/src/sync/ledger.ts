@@ -16,7 +16,8 @@ export interface Brought {
 export interface Stored {
   // The id its phone made for the record.
   readonly recordId: string;
-  readonly recordKind: SyncedRecordKind;
+  // A photograph's record is `PHOTO` (ADR-481).
+  readonly recordKind: SyncedRecordKind | 'PHOTO';
   readonly deviceId: string;
   // As a record of its kind, or in quarantine.
   readonly answer: SyncAnswer;

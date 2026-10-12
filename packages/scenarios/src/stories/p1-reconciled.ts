@@ -267,7 +267,6 @@ export const p1Reconciled: Story = {
     const phones = new P1Syncs(story, office);
     const syncs = phones.times;
     const arrive = (syncedAt: Date): Promise<number> => phones.arrive(syncedAt);
-    const crewPhotographs = (syncedAt: Date): Promise<number> => phones.crewPhotographs(syncedAt);
     const [mondayEvening, tuesdayEvening, wednesdayMorning] = syncs;
     if (
       mondayEvening === undefined ||
@@ -289,7 +288,7 @@ export const p1Reconciled: Story = {
     );
     story.check(
       'Monday’s ten field events arrive, and Jo’s three crew photographs after them',
-      [await arrive(mondayEvening), await crewPhotographs(mondayEvening)],
+      [await arrive(mondayEvening), phones.photosAt(mondayEvening)],
       [10, 3],
     );
     story.check(
@@ -438,21 +437,12 @@ export const p1Reconciled: Story = {
       return counted;
     };
     story.check(
-      'the run also checked what is no ticket: each of the five certifications is flagged for each of the five views it has no photograph of (the harness’s phone takes none); every site has its permit; no ticket’s status is touched by these',
+      'C82, AC-04-77 the run also checked what is no ticket: each of the five certifications has the five photographs Sam’s phone sent after it, one of each view, so none is flagged; every site has its permit; no ticket’s status is touched by these',
       [
         await flagsOnRecords(),
-        (
-          await api.flag.findMany({
-            where: { code: 'CERTIFICATION_PHOTO_MISSING' },
-            orderBy: { id: 'asc' },
-            take: 1,
-          })
-        ).map((flag) => flag.message),
+        await api.photo.count({ where: { certificationId: { not: null }, view: { not: null } } }),
       ],
-      [
-        { CERTIFICATION_PHOTO_MISSING: 25 },
-        ['Certification 730415: no operator with placard photo.'],
-      ],
+      [{}, 25],
     );
     const loadOf101001 = await api.completedLoad.findFirstOrThrow({
       where: { ticketNumber: '101001' },
@@ -533,7 +523,7 @@ export const p1Reconciled: Story = {
     );
     story.check(
       'Tuesday’s records arrive: twelve field events, the scale receipt and the incident; and Jo’s four crew photographs',
-      [await arrive(tuesdayEvening), await crewPhotographs(tuesdayEvening)],
+      [await arrive(tuesdayEvening), phones.photosAt(tuesdayEvening)],
       [14, 4],
     );
     story.at(

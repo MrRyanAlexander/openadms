@@ -19,17 +19,20 @@
 import { stored, syncedRecordAssignment, syncedRecordId } from './sync-client.ts';
 import {
   assignment,
+  certificationPhotos,
   collection,
   disposal,
   landfill,
   made,
   p1,
+  pilePhoto,
   records as oneOfEach,
   switched,
   unplanned,
 } from './sync-examples.ts';
-import type { SyncedRecord } from './sync-records.ts';
+import type { SyncedPhoto, SyncedRecord } from './sync-records.ts';
 import {
+  photoRead,
   recordRead,
   syncPasscodeUsesAtMost,
   syncRecordsAtMost,
@@ -46,6 +49,8 @@ export interface SyncClientHolds {
   readonly unplannedAssignments: SyncSent['unplannedAssignments'];
   readonly passcodeUses: SyncSent['passcodeUses'];
   readonly records: readonly SyncedRecord[];
+  // Its photographs' records, each of a record above or of one the server already has.
+  readonly photos: readonly SyncedPhoto[];
   readonly lastUsed: SyncSent['lastUsed'];
 }
 
@@ -64,8 +69,8 @@ export interface SyncClient {
   // What came back for the sync it sent last, as it came off the wire; `undefined` where
   // nothing came back (no signal, an error).
   answered(answer: unknown): void | Promise<void>;
-  // The id of every record, unplanned assignment and use of the passcode it holds that the
-  // server has not said it stored.
+  // The id of every record, photograph, unplanned assignment and use of the passcode it holds
+  // that the server has not said it stored.
   holds(): readonly string[];
   // What it shows as not saved.
   notSaved(): readonly ShownNotSaved[];
@@ -82,6 +87,7 @@ const nothing: SyncClientHolds = {
   unplannedAssignments: [],
   passcodeUses: [],
   records: [],
+  photos: [],
   lastUsed: [],
 };
 
@@ -130,6 +136,13 @@ function onTheWire(sent: unknown): SyncSent {
       each.read ? '' : `It sent a record the contract doesn’t read. ${each.notice.message}`,
     );
   }
+  for (const photo of read.data.photos) {
+    const each = photoRead(photo);
+    held(
+      each.read,
+      each.read ? '' : `It sent a photograph the contract doesn’t read. ${each.notice.message}`,
+    );
+  }
   return wire as SyncSent;
 }
 
@@ -154,6 +167,7 @@ function answerTo(
       const id = syncedRecordId(record);
       return how(id, record) ?? { answer: 'SAVED', id, notes: [] };
     }),
+    photos: sync.photos.map(({ id }) => ({ answer: 'SAVED', id, notes: [] })),
     numbers: sync.lastUsed.map(({ projectId, series }) => ({
       projectId,
       series,
@@ -183,20 +197,25 @@ export const syncClientSuite: readonly SyncClientCheck[] = [
       const client = await make(nothing);
       const sync = onTheWire(client.sends());
       held(
-        [sync.unplannedAssignments, sync.passcodeUses, sync.records, sync.lastUsed].every(
-          (part) => part.length === 0,
-        ),
+        [
+          sync.unplannedAssignments,
+          sync.passcodeUses,
+          sync.records,
+          sync.photos,
+          sync.lastUsed,
+        ].every((part) => part.length === 0),
         'It holds nothing, and sent something.',
       );
     },
   },
   {
-    name: 'each record is sent once, as recorded, under the id its phone made, as its own schema reads it: one of each kind, the reports and the last numbers used beside them, and never which phone it is from (AC-10-35; ADR-466, 469)',
+    name: 'each record is sent once, as recorded, under the id its phone made, as its own schema reads it: one of each kind, the photographs of two of them, the reports and the last numbers used beside them, and never which phone it is from nor where a file is kept (AC-10-35; ADR-466, 469, 481)',
     async run(make) {
       const holds = {
         unplannedAssignments: [unplanned],
         passcodeUses: [switched],
         records: oneOfEach,
+        photos: [pilePhoto, ...certificationPhotos],
         lastUsed: [
           { projectId: p1, series: 'LOAD', lastUsedNumber: 101006 },
           { projectId: p1, series: 'ROE', lastUsedNumber: null },
@@ -216,6 +235,19 @@ export const syncClientSuite: readonly SyncClientCheck[] = [
             record,
           ),
           `Record ${id} (${record.record}) was not sent as it was recorded.`,
+        );
+      }
+      held(
+        sorted(sync.photos.map(({ id }) => id)) === sorted(holds.photos.map(({ id }) => id)),
+        'The photographs it sent are not the ones it holds, each once.',
+      );
+      for (const photo of holds.photos) {
+        held(
+          same(
+            sync.photos.find((each) => each.id === photo.id),
+            photo,
+          ),
+          `Photograph ${photo.id} was not sent as it was taken.`,
         );
       }
       held(

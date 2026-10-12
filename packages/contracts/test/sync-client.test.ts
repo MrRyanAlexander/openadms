@@ -22,7 +22,15 @@ import {
   type SyncedRecord,
   type SyncSent,
 } from '../src/index.ts';
-import { assignment, collection, disposal, made, records, switched } from '../src/sync-examples.ts';
+import {
+  assignment,
+  collection,
+  disposal,
+  made,
+  pilePhoto,
+  records,
+  switched,
+} from '../src/sync-examples.ts';
 
 // One way a client may fail the contract.
 const faults = [
@@ -48,6 +56,7 @@ const phone =
     let unplanned = [...holds.unplannedAssignments];
     let uses = [...holds.passcodeUses];
     let waiting = [...holds.records];
+    let photos = [...holds.photos];
     const kept: string[] = [];
     const shown: ShownNotSaved[] = [];
     let last: SyncSent | undefined;
@@ -81,6 +90,7 @@ const phone =
           records: ordered
             .filter((record) => !later.has(syncedRecordAssignment(record) ?? ''))
             .slice(0, all ? undefined : syncRecordsAtMost),
+          photos: [...photos],
           lastUsed: [...holds.lastUsed],
           holds: { masterPasscodeVersion: null, listsProjectId: null },
         };
@@ -138,11 +148,18 @@ const phone =
             notStored(id, each.reason, each.message);
           }
         });
+        sent.photos.forEach((photo, place) => {
+          const each = read.photos[place];
+          if (each === undefined) return;
+          photos = photos.filter((one) => one.id !== photo.id);
+          if ('reason' in each) notStored(photo.id, each.reason, each.message);
+        });
       },
       holds: () => [
         ...unplanned.map((each) => each.id),
         ...uses.map((each) => each.id),
         ...waiting.map(syncedRecordId),
+        ...photos.map(({ id }) => id),
         ...kept,
       ],
       notSaved: () => shown,
@@ -206,6 +223,7 @@ describe('what a client reads of what it was answered', () => {
     unplannedAssignments: [],
     passcodeUses: [switched],
     records: [{ record: 'FIELD_EVENT', fieldEvent: collection }, second],
+    photos: [pilePhoto],
     lastUsed: [{ projectId: collection.projectId, series: 'LOAD', lastUsedNumber: 101006 }],
     holds: { masterPasscodeVersion: 3, listsProjectId: collection.projectId },
   };
@@ -222,6 +240,7 @@ describe('what a client reads of what it was answered', () => {
         heldBy: made('99'),
       },
     ],
+    photos: [{ answer: 'SAVED', id: pilePhoto.id, notes: [] }],
     numbers: [{ projectId: collection.projectId, series: 'LOAD', toppedUp: true, blocks: [] }],
     masterPasscode: { version: 3, check: null },
     setupVersion: { projectId: collection.projectId, version: 4 },
@@ -249,6 +268,17 @@ describe('what a client reads of what it was answered', () => {
     expect(not({ ...answered, records: [last, first] })).toBe(true);
     expect(not({ ...answered, records: [first, { ...last, id: made('98') }] })).toBe(true);
     expect(not({ ...answered, records: [{ ...first, id: null }, last] })).toBe(true);
+    // A photograph's record is answered in its own part, in its place, under its id.
+    expect(not({ ...answered, photos: [] })).toBe(true);
+    expect(not({ ...answered, photos: [{ answer: 'SAVED', id: made('98'), notes: [] }] })).toBe(
+      true,
+    );
+    expect(
+      not({
+        ...answered,
+        photos: [{ ...answered.photos[0], answer: 'QUARANTINED', reason: 'X', heldBy: made('1') }],
+      }),
+    ).toBe(true);
     expect(not({ ...answered, passcodeUses: [] })).toBe(true);
     expect(
       not({ ...answered, passcodeUses: [{ useId: made('98'), answer: 'SAVED', reason: null }] }),

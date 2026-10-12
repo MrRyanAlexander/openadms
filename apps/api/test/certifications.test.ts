@@ -634,33 +634,33 @@ describe('a certification as a phone sends it', () => {
         phone.id,
       ]);
 
-      // Its left side, as a photograph's record: it names the certification and its view.
+      // Its left side, as a photograph's record: it names the certification and its view, and
+      // the server makes where its file is kept (ADR-481).
       const photoId = randomUUID();
-      const answer = await new Intake(within, served.clock, shippedPolicy).receive({
-        record: 'PHOTO',
-        photo: {
-          id: photoId,
-          projectId: c.project.id,
-          owner: { kind: 'CERTIFICATION', id: sent.id },
-          view: 'LEFT',
-          takenById: who.kim,
-          deviceId: phone.id,
-          capturedAt: new Date('2026-10-10T13:42:00Z'),
-          deviceUtcOffsetMinutes: -240,
-          latitude: null,
-          longitude: null,
-          originalSha256: 'a'.repeat(64),
-          uploadedSha256: 'a'.repeat(64),
-          objectKey: `photographs/P1-HO-TDSR/${photoId}`,
-        },
+      const answer = await new Intake(within, served.clock, shippedPolicy).photo({
+        id: photoId,
+        projectId: c.project.id,
+        owner: { kind: 'CERTIFICATION', id: sent.id },
+        view: 'LEFT',
+        takenById: who.kim,
+        deviceId: phone.id,
+        capturedAt: new Date('2026-10-10T13:42:00Z'),
+        deviceUtcOffsetMinutes: -240,
+        latitude: null,
+        longitude: null,
+        originalSha256: 'a'.repeat(64),
+        uploadedSha256: 'a'.repeat(64),
+        depthFile: false,
       });
       expect(answer).toEqual({ answer: 'SAVED', id: photoId, notes: [] });
       const photo = await tx.photo.findUniqueOrThrow({ where: { id: photoId } });
-      expect([photo.certificationId, photo.view, photo.fieldEventId]).toEqual([
-        sent.id,
-        'LEFT',
-        null,
-      ]);
+      expect([
+        photo.certificationId,
+        photo.view,
+        photo.fieldEventId,
+        photo.objectKey,
+        photo.depthObjectKey,
+      ]).toEqual([sent.id, 'LEFT', null, `projects/${c.project.id}/photos/${photoId}`, null]);
     });
   });
 });

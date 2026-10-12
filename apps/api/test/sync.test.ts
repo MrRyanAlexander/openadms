@@ -1,7 +1,7 @@
 // A phone's sync, whole, against the database (ARCHITECTURE §9 (1), (3), (4), (6), (7), §10;
 // spec/acceptance/05-sync.md AC-05-03, 04, 15, 16, 20, 45, 47; spec/acceptance/10-api-and-sync.md
 // AC-10-35, 46, 51; AC-02-23, AC-05-48; spec/DATA-MODEL.md §4.5; BACKLOG 2.6.2, C64, C69, C122,
-// C126…C132; ADR-022, 052, 065, 100, 420, 453, 454, 466…473; KD-56; REQ-016, 203, 308c). The real process, in this test's own
+// C126…C132, C136; ADR-022, 052, 065, 100, 420, 453, 454, 466…473, 481; KD-56; REQ-016, 203, 308c). The real process, in this test's own
 // memory, on the installation's database as `adms_api`: it needs `pnpm local:up` after `pnpm
 // installer`, and fails saying so. Each test's work is undone (support/database.ts).
 import { randomUUID } from 'node:crypto';
@@ -17,6 +17,7 @@ import {
   syncSentSchema,
   type SyncedCertification,
   type SyncedFieldEvent,
+  type SyncedPhoto,
   type SyncSent,
 } from '@open-adms/contracts';
 import { deviceKeyActorId, type Actor, type Database } from '@open-adms/db';
@@ -29,6 +30,7 @@ import { PasscodeUses } from '../src/phone/passcode-uses.ts';
 import { PhoneAssignments } from '../src/phone/phone-assignments.ts';
 import { PhoneLoginList } from '../src/phone/phone-login-list.ts';
 import { UnplannedAssignments } from '../src/phone/unplanned-assignments.ts';
+import { isMediaKey } from '../src/media/media-store.ts';
 import { Intake } from '../src/sync/intake.ts';
 import { sentFingerprint, Sync } from '../src/sync/sync.ts';
 import { installationSettings, openInstallation, type Tx } from './support/database.ts';
@@ -110,6 +112,7 @@ async function kimOnP1(served: Served, tx: Tx, who: People) {
     unplannedAssignments: [],
     passcodeUses: [],
     records: [],
+    photos: [],
     lastUsed: [],
     // It holds the check of the passcode it was enrolled under, and no lists.
     holds: { masterPasscodeVersion: phone.masterPasscodeVersion, listsProjectId: null },
@@ -766,6 +769,269 @@ describe('a certification made on a phone', () => {
       // The driver's licence number is in no log (ASVS V16).
       const licence = certification.driverLicenceNumber;
       if (licence !== null) expect(served.lines.join('\n')).not.toContain(licence);
+    });
+  });
+});
+
+// A photograph Kim's phone took of one of its records, under an id of the phone's own.
+const photoOf = (
+  p: { readonly projectId: string },
+  who: People,
+  owner: SyncedPhoto['owner'],
+  more: Partial<SyncedPhoto> = {},
+): SyncedPhoto => ({
+  ...syncExamples.pilePhoto,
+  id: randomUUID(),
+  projectId: p.projectId,
+  owner,
+  takenById: who.kim,
+  ...more,
+});
+
+describe('a photograph’s record', () => {
+  it('AC-05-05, ADR-481 Kim’s collection and its photograph in one sync, the photograph after: the server makes where its file is kept and the phone names none; both fingerprints are as the phone said them; it joins the ledger and queues its ticket; sent again changed it is already saved and nothing moves', async () => {
+    await world(async (served, tx, who) => {
+      const p = await kimOnP1(served, tx, who);
+      const collection = p.event({ ticketNumber: '101030' });
+      const photo = photoOf(p, who, { kind: 'FIELD_EVENT', id: collection.id });
+      const first = await synced(
+        served,
+        p.token,
+        p.sync({ records: [{ record: 'FIELD_EVENT', fieldEvent: collection }], photos: [photo] }),
+      );
+      expect([first.records, first.photos]).toEqual([
+        [{ answer: 'SAVED', id: collection.id, notes: [] }],
+        [{ answer: 'SAVED', id: photo.id, notes: [] }],
+      ]);
+      // Where its file is kept is never in the answer.
+      expect(JSON.stringify(first)).not.toContain('projects/');
+      const stored = () => tx.photo.findUniqueOrThrow({ where: { id: photo.id } });
+      const kept = await stored();
+      expect([
+        kept.fieldEventId,
+        kept.view,
+        kept.deviceId,
+        kept.capturedAt,
+        kept.originalSha256,
+        kept.uploadedSha256,
+        kept.objectKey,
+        kept.depthObjectKey,
+        kept.uploadedAt,
+        kept.receivedAt,
+      ]).toEqual([
+        collection.id,
+        null,
+        p.phone.id,
+        new Date(photo.capturedAt),
+        photo.originalSha256,
+        photo.uploadedSha256,
+        `projects/${p.projectId}/photos/${photo.id}`,
+        null,
+        null,
+        mondayAfternoon,
+      ]);
+      expect(isMediaKey(kept.objectKey)).toBe(true);
+      const [sync] = await syncsOf(tx, p.phone.id);
+      expect(await ledgerOf(tx, p.phone.id)).toEqual(
+        [
+          [collection.id, 'FIELD_EVENT', sync?.id, 'SAVED'],
+          [photo.id, 'PHOTO', sync?.id, 'SAVED'],
+        ].sort(([a = ''], [b = '']) => a.localeCompare(b)),
+      );
+      const [written] = await tx.auditRecord.findMany({
+        where: { tableName: 'photo', recordId: photo.id },
+      });
+      expect([written?.actorId, written?.source, written?.deviceId]).toEqual([
+        who.kim,
+        'DEVICE',
+        p.phone.id,
+      ]);
+      // Its ticket again: a pay item may require a photograph.
+      expect(await jobsOf(tx, p.projectId)).toEqual([
+        [null, 'LOAD 101030'],
+        [null, 'LOAD 101030'],
+      ]);
+      const logged = served.lines.filter((line) => line.includes('A phone synced.')).join('\n');
+      expect(logged).toContain('"photos":{"SAVED":1}');
+      expect(logged).not.toContain(photo.id);
+
+      // Sent again with other fingerprints: what the server has stands (ADR-477).
+      const audited = await tx.auditRecord.count({ where: { tableName: 'photo' } });
+      const again = await synced(
+        served,
+        p.token,
+        p.sync({
+          photos: [{ ...photo, originalSha256: 'b'.repeat(64), uploadedSha256: 'c'.repeat(64) }],
+        }),
+      );
+      expect(again.photos).toEqual([{ answer: 'ALREADY_SAVED', id: photo.id }]);
+      expect(await stored()).toEqual(kept);
+      expect(await tx.auditRecord.count({ where: { tableName: 'photo' } })).toBe(audited);
+      expect(await jobsOf(tx, p.projectId)).toHaveLength(2);
+    });
+  });
+
+  it('ADR-481, C129 a photograph whose record the server doesn’t have saved is not tried: its record held in the same sync, or never sent, it is answered “not saved”, told why and held; sent again once its record is saved, it is saved; one of a record kept in quarantine belongs to the quarantined record', async () => {
+    await world(async (served, tx, who) => {
+      const p = await kimOnP1(served, tx, who);
+      // A disposal whose load call can't be one: held for a person.
+      const wrong = p.disposal({ ticketNumber: '101031', loadCall: 150 });
+      const ofWrong = photoOf(p, who, { kind: 'FIELD_EVENT', id: wrong.id });
+      const later = p.event({ ticketNumber: '101032' });
+      const ofLater = photoOf(p, who, { kind: 'FIELD_EVENT', id: later.id });
+      const ownerNotSaved = {
+        answer: 'NOT_SAVED',
+        reason: 'OWNER_NOT_SAVED',
+        message: `Not saved: the record this photograph belongs to isn’t saved on the server.${held}`,
+      };
+      const first = await synced(
+        served,
+        p.token,
+        p.sync({
+          records: [{ record: 'FIELD_EVENT', fieldEvent: wrong }],
+          photos: [ofWrong, ofLater],
+        }),
+      );
+      expect(first.records.map(({ answer }) => answer)).toEqual(['NOT_SAVED']);
+      expect(first.photos).toEqual([
+        { ...ownerNotSaved, id: ofWrong.id },
+        { ...ownerNotSaved, id: ofLater.id },
+      ]);
+      expect(await tx.photo.count({ where: { projectId: p.projectId } })).toBe(0);
+      expect(
+        (await heldOf(tx, p.phone.id)).map((one) => [
+          one.sentId,
+          one.projectId,
+          one.sentMonitorId,
+          one.reason,
+        ]),
+      ).toEqual([
+        [wrong.id, p.projectId, who.kim, 'NOT_A_RECORD'],
+        [ofWrong.id, p.projectId, who.kim, 'OWNER_NOT_SAVED'],
+        [ofLater.id, p.projectId, who.kim, 'OWNER_NOT_SAVED'],
+      ]);
+
+      // Its record arrives; the photograph sent again is saved, and the held one stays for a
+      // person to close.
+      const second = await synced(
+        served,
+        p.token,
+        p.sync({ records: [{ record: 'FIELD_EVENT', fieldEvent: later }], photos: [ofLater] }),
+      );
+      expect(second.photos).toEqual([{ answer: 'SAVED', id: ofLater.id, notes: [] }]);
+      expect(await tx.heldRecord.count({ where: { deviceId: p.phone.id } })).toBe(3);
+
+      // A second collection on 101032 waits in quarantine; its photograph is the quarantined
+      // record's, and nothing else's.
+      const second101032 = p.event({ ticketNumber: '101032' });
+      const ofSecond = photoOf(p, who, { kind: 'FIELD_EVENT', id: second101032.id });
+      const third = await synced(
+        served,
+        p.token,
+        p.sync({
+          records: [{ record: 'FIELD_EVENT', fieldEvent: second101032 }],
+          photos: [ofSecond],
+        }),
+      );
+      expect([third.records[0]?.answer, third.photos]).toEqual([
+        'QUARANTINED',
+        [{ answer: 'SAVED', id: ofSecond.id, notes: [] }],
+      ]);
+      const kept = await tx.photo.findUniqueOrThrow({ where: { id: ofSecond.id } });
+      expect([kept.quarantinedRecordId, kept.fieldEventId]).toEqual([second101032.id, null]);
+
+      // A photograph of a record of another kind than it says, and one with a view that is no
+      // certification's: neither is tried.
+      const asRoe = photoOf(p, who, { kind: 'ROE', id: later.id });
+      const withView = photoOf(p, who, { kind: 'FIELD_EVENT', id: later.id }, { view: 'LEFT' });
+      const withPlace = {
+        ...photoOf(p, who, { kind: 'FIELD_EVENT', id: later.id }),
+        objectKey: 'x',
+      };
+      const fourth = await synced(
+        served,
+        p.token,
+        p.sync({ photos: [asRoe, withView, withPlace] }),
+      );
+      expect(
+        fourth.photos.map((one) => [one.id, 'reason' in one ? one.reason : one.answer]),
+      ).toEqual([
+        [asRoe.id, 'OWNER_NOT_SAVED'],
+        [withView.id, 'NOT_A_RECORD'],
+        [withPlace.id, 'NOT_A_RECORD'],
+      ]);
+      expect(fourth.photos.slice(1).map((one) => ('message' in one ? one.message : ''))).toEqual([
+        `Not saved: this record can’t be read: view in this record isn’t taken as it stands.${held}`,
+        `Not saved: this record can’t be read: this record has a field this request doesn’t take.${held}`,
+      ]);
+    });
+  });
+
+  it('C82, AC-04-77, ADR-179 Kim certifies 730416 and sends its five photographs after it in the same sync: each names its view, one with a depth file beside it; each is in the ledger, and the run is asked to look at the certifications again', async () => {
+    await world(async (served, tx, who) => {
+      const p = await kimOnP1(served, tx, who);
+      const certification: SyncedCertification = {
+        ...syncExamples.certification,
+        id: randomUUID(),
+        projectId: p.projectId,
+        primeId: p.priced.coastline,
+        vehicleTypeId: null,
+        vehicleTypeOther: 'Self-loader',
+        certifiedById: who.kim,
+        assignmentId: p.assignment.id,
+        helperIds: [],
+        boxes: syncExamples.certification.boxes.map((box, position) => ({
+          ...box,
+          featureId: null,
+          featureOther: position === 0 ? null : 'Dog box',
+        })),
+      };
+      const five = syncExamples.certificationPhotos.map((photo) =>
+        photoOf(
+          p,
+          who,
+          { kind: 'CERTIFICATION', id: certification.id },
+          {
+            view: photo.view,
+            depthFile: photo.depthFile,
+          },
+        ),
+      );
+      const answered = await synced(
+        served,
+        p.token,
+        p.sync({ records: [{ record: 'CERTIFICATION', certification }], photos: five }),
+      );
+      expect(answered.photos).toEqual(five.map(({ id }) => ({ answer: 'SAVED', id, notes: [] })));
+      const kept = await tx.photo.findMany({
+        where: { certificationId: certification.id },
+        orderBy: { id: 'asc' },
+      });
+      expect(kept.map((photo) => [photo.view, photo.objectKey, photo.depthObjectKey])).toEqual(
+        [...five]
+          .sort((a, b) => a.id.localeCompare(b.id))
+          .map((photo) => [
+            photo.view,
+            `projects/${p.projectId}/photos/${photo.id}`,
+            photo.depthFile ? `projects/${p.projectId}/photos/${photo.id}.depth` : null,
+          ]),
+      );
+      for (const photo of kept) {
+        expect(isMediaKey(photo.objectKey)).toBe(true);
+        if (photo.depthObjectKey !== null) expect(isMediaKey(photo.depthObjectKey)).toBe(true);
+      }
+      expect((await ledgerOf(tx, p.phone.id)).filter(([, kind]) => kind === 'PHOTO')).toHaveLength(
+        5,
+      );
+      // The certification's own job, then one a photograph: the run checks its views by themselves.
+      expect(await jobsOf(tx, p.projectId)).toEqual([
+        [null],
+        [null],
+        [null],
+        [null],
+        [null],
+        [null],
+      ]);
     });
   });
 });

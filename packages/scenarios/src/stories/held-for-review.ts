@@ -165,16 +165,30 @@ export const heldForReview: Story = {
       ]),
     );
     const sentAtOnce = await Promise.all(sheets.map(({ phone }) => phone.sync(story.server)));
-    const told = sheets.map(({ phone }) => phone.answers.map((one) => one.answer)).flat();
+    const told = sheets
+      .map(({ phone }) =>
+        phone.answers.filter((one) => one.sent.record === 'CERTIFICATION').map((one) => one.answer),
+      )
+      .flat();
+    const photosTold = sheets
+      .map(({ phone }) => phone.answers.filter((one) => one.sent.record === 'PHOTO'))
+      .flat();
     const savedOnes = told.filter((one) => one.answer === 'SAVED');
     const notSavedOnes = told.filter((one) => one.answer === 'NOT_SAVED');
     const onServer = await api.certification.findMany({ where: { projectId: p1 } });
     story.check(
-      'AC-05-45 each phone’s sync is answered, one record each: one certification is saved and the other is not, never both and never neither',
-      [sentAtOnce, told.map((one) => one.answer).sort()],
+      'AC-05-45 each phone’s sync is answered, one certification and its five photographs each: one certification is saved and the other is not, never both and never neither; the photographs of the one not saved are not saved either, since their record isn’t (ADR-481)',
       [
-        [1, 1],
+        sentAtOnce,
+        told.map((one) => one.answer).sort(),
+        photosTold
+          .map(({ answer }) => `${answer.answer} ${'reason' in answer ? answer.reason : ''}`)
+          .sort(),
+      ],
+      [
+        [6, 6],
         ['NOT_SAVED', 'SAVED'],
+        [...Array<string>(5).fill('NOT_SAVED OWNER_NOT_SAVED'), ...Array<string>(5).fill('SAVED ')],
       ],
     );
     const [notSaved] = notSavedOnes;
@@ -189,20 +203,28 @@ export const heldForReview: Story = {
       ],
     );
     story.check(
-      'P1 has one certification 730416, the one answered "saved"; the idempotency ledger holds that one alone, a row written with it',
+      'P1 has one certification 730416, the one answered "saved", with its five photographs; the idempotency ledger holds those six alone, a row written with each',
       [
         onServer.map((each) => each.certNumber),
         onServer.map((each) => each.id).join() === savedOnes.map((one) => one.id).join(),
-        (await ledger()).map(([recordId, ...rest]) => [
-          recordId === savedOnes[0]?.id,
-          ...rest.slice(0, 2),
-        ]),
+        (await ledger())
+          .map(([recordId, ...rest]) => [recordId === savedOnes[0]?.id, ...rest.slice(0, 2)])
+          .sort((left, right) => String(left[1]).localeCompare(String(right[1]))),
+        await api.photo.count({ where: { certificationId: savedOnes[0]?.id ?? '' } }),
       ],
-      [['730416'], true, [[true, 'CERTIFICATION', 'SAVED']]],
+      [
+        ['730416'],
+        true,
+        [
+          [true, 'CERTIFICATION', 'SAVED'],
+          ...Array.from({ length: 5 }, () => [false, 'PHOTO', 'SAVED']),
+        ],
+        5,
+      ],
     );
     const loser = sheets.find(({ record }) => record.id === notSaved?.id);
     story.check(
-      'ADR-468, 471 the other is held for a person, exactly as its phone sent it: under the id its phone made, with its project, its phone, the monitor who certified, the reason and the words its phone was told; nobody has resolved it',
+      'ADR-468, 471, 481 the other is held for a person, exactly as its phone sent it: under the id its phone made, with its project, its phone, the monitor who certified, the reason and the words its phone was told; and so is each of its five photographs, whose record isn’t saved; nobody has resolved any',
       await heldRecords(),
       [
         {
@@ -215,6 +237,22 @@ export const heldForReview: Story = {
           payload: JSON.parse(JSON.stringify(wires.get(notSaved?.id ?? ''))) as unknown,
           resolved: false,
         },
+        ...(loser?.phone.answers ?? []).flatMap(({ sent }) =>
+          sent.record === 'PHOTO'
+            ? [
+                {
+                  phone: loser?.phone.name ?? null,
+                  sentId: sent.photo.id,
+                  project: 'P1',
+                  monitor: named(loser?.record.certifiedById ?? null),
+                  reason: 'OWNER_NOT_SAVED',
+                  message: `Not saved: the record this photograph belongs to isn’t saved on the server. ${held}`,
+                  payload: JSON.parse(JSON.stringify(sent.photo)) as unknown,
+                  resolved: false,
+                },
+              ]
+            : [],
+        ),
       ],
     );
     story.check(
@@ -229,7 +267,7 @@ export const heldForReview: Story = {
         .sort((left, right) => Number(left[0]) - Number(right[0])),
       [
         [false, 0, 0, 0],
-        [true, 1, 1, 0],
+        [true, 6, 6, 0],
       ],
     );
 
@@ -281,7 +319,13 @@ export const heldForReview: Story = {
         formDebrisTypeId: nowhere,
       },
     } as const;
-    anasPhone.hold({ unplannedAssignments: [], passcodeUses: [], records: [bad], lastUsed: [] });
+    anasPhone.hold({
+      unplannedAssignments: [],
+      passcodeUses: [],
+      records: [bad],
+      photos: [],
+      lastUsed: [],
+    });
 
     story.at(monday('17:30'), 'Ana’s phone finds signal at the yard and syncs both');
     const before = (await heldRecords()).length;
@@ -322,7 +366,7 @@ export const heldForReview: Story = {
       ],
       [[['101001', 'PENDING']], [[true, 'SAVED', 'P1-COL-1']], ['101001']],
     );
-    const [, kept] = await heldRecords();
+    const kept = (await heldRecords()).at(-1);
     story.check(
       'ADR-468, 472 101002 is held for a person, exactly as sent, with what could be read of it: the id its phone made, P1, Ana, her phone',
       [(await heldRecords()).length - before, kept],
@@ -369,10 +413,7 @@ export const heldForReview: Story = {
         source,
         payload,
       ]),
-      [
-        ['INSERT', 'Device key', 'DEVICE', '[kept out of the audit]'],
-        ['INSERT', 'Device key', 'DEVICE', '[kept out of the audit]'],
-      ],
+      Array(7).fill(['INSERT', 'Device key', 'DEVICE', '[kept out of the audit]']),
     );
   },
 };

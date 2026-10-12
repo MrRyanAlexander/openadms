@@ -69,8 +69,6 @@ export const p1AnyOrder: Story = {
           return sent.survey.madeAt.getTime();
         case 'ROE':
           return sent.roe.madeAt.getTime();
-        case 'PHOTO':
-          return sent.photo.capturedAt.getTime();
       }
     };
     const backwards = [

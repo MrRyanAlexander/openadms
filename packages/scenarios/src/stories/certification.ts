@@ -301,13 +301,39 @@ export const certification: Story = {
       [48, false, false, ['CERTIFICATION']],
     );
     story.check(
-      'the phone syncs it: one record, answered "saved"',
+      'C82, AC-04-77 the phone syncs it with the five photographs Sam took of it, in one sync and after it: each answered "saved", and the phone holds nothing more',
       [
         await samsPhone.sync(story.server),
-        samsPhone.answers.map((one) => one.answer),
+        samsPhone.answers.map((one) => `${one.sent.record} ${one.answer.answer}`),
+        samsPhone.answers[0]?.answer,
         samsPhone.waitingRecords,
+        samsPhone.waitingPhotos,
       ],
-      [1, [{ answer: 'SAVED', id: selfLoader.record.id, notes: [] }], []],
+      [
+        6,
+        ['CERTIFICATION SAVED', ...Array<string>(5).fill('PHOTO SAVED')],
+        { answer: 'SAVED', id: selfLoader.record.id, notes: [] },
+        [],
+        [],
+      ],
+    );
+    const fivePhotos = await api.photo.findMany({
+      where: { certificationId: selfLoader.record.id },
+      orderBy: { view: 'asc' },
+    });
+    story.check(
+      'ADR-179, 481 its five photographs are one of each view, each where the server put it, under P1 and its own id: no phone named a place',
+      fivePhotos.map(
+        (photo) =>
+          `${String(photo.view)} ${photo.objectKey === `projects/${photo.projectId}/photos/${photo.id}` ? 'its place' : photo.objectKey}`,
+      ),
+      [
+        'OPERATOR_WITH_PLACARD its place',
+        'INTERIOR_OR_BACK its place',
+        'RIGHT its place',
+        'LEFT its place',
+        'FRONT its place',
+      ],
     );
     const loader = await api.certification.findUniqueOrThrow({
       where: { id: selfLoader.record.id },
@@ -346,12 +372,15 @@ export const certification: Story = {
       });
     }
     story.check(
-      'the two crews go in one sync from Sam’s phone, nothing measured, each answered "saved"',
+      'the two crews go in one sync from Sam’s phone, nothing measured, with their five photographs each after them; each answered "saved"',
       [
         await samsPhone.sync(story.server),
-        samsPhone.answers.slice(1).map((one) => one.answer.answer),
+        samsPhone.answers.slice(6).map((one) => `${one.sent.record} ${one.answer.answer}`),
       ],
-      [2, ['SAVED', 'SAVED']],
+      [
+        12,
+        [...Array<string>(2).fill('CERTIFICATION SAVED'), ...Array<string>(10).fill('PHOTO SAVED')],
+      ],
     );
     await saved(
       certifications.certify(
