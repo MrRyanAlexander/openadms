@@ -1,6 +1,6 @@
 ---
 name: adms-exceptions
-description: Open ADMS failure cases and how people resolve them, in today's rules. Covers the special cases around a ticket's field events, why nothing can be validated in the field, duplicate field events quarantined at sync and resolved by a person, four worked scenarios (a barcode scanned twice at the tower, a phantom collection, sync in any order, a legitimate split load), renumber versus void versus accept, corrections in place by permission (a monitor's own reopen until the shift ends, the back office after), reprocessing completed tickets, back-office-created records, an out-of-service phone, and the other duplicate and orphan shapes. Use when handling duplicates, quarantine, unpartnered field events, preloads, corrections, voids, renumbering or split chains. Flags and their wording live in adms-validation; pricing in adms-ledger-audit.
+description: Open ADMS failure cases and how people resolve them, in today's rules. Covers the special cases around a ticket's field events, why nothing can be validated in the field, duplicate field events quarantined at sync and resolved by a person, four worked scenarios (a barcode scanned twice at the tower, a phantom collection, sync in any order, a legitimate split load), renumber versus void versus accept, corrections in place by permission (never by the monitor once submitted on the phone; the back office after), reprocessing completed tickets, back-office-created records, an out-of-service phone, and the other duplicate and orphan shapes. Use when handling duplicates, quarantine, unpartnered field events, preloads, corrections, voids, renumbering or split chains. Flags and their wording live in adms-validation; pricing in adms-ledger-audit.
 ---
 <!-- skill-status: current (a change to a locked ticket refused by the review services, ADR-367; how void and unvoid are built, ADR-365; an unvoid's own record, ADR-366; ADR-138, rewritten 2026-09-29, ADR-248; an ROE's duplicate number quarantined, ADR-338) -->
 
@@ -248,12 +248,15 @@ the database itself, for ever** (ADR-097).
 every reader must walk the chain to find the truth. Editing in place keeps one row per real thing
 and puts history in a log built for it.
 
-**Who may change a field event, and when** (ADR-051, 240):
-- **The monitor**, on the phone, **until they end their shift**: a finished field event can be
-  reopened (agent default, ADR-240). An edit to one already sent travels as the phone's **edit
-  log**, is written to `AuditRecord` under the monitor, and reprocesses the ticket.
-- **After the shift, only permitted people** in the back office (those granted correct, renumber,
-  void, accept). The monitor never edits again.
+**Who may change a field event, and when** (ADR-051, 477):
+- **The monitor, only until they submit it.** One opened and not yet submitted is theirs to adjust,
+  for days where the work takes days. **Once submitted on the phone it is sealed for them**: no
+  reopen and no edit, synced or not, even to undo their own mistake. There is no edit log.
+  **User, 2026-10-12:** "Once she submitted the ticket on her phone the record is sealed and she
+  cannot edit it again. That must be a hard rule." The same holds for an incident, a
+  certification and every other record a monitor makes.
+- **After that, only permitted people** in the back office (those granted correct, renumber,
+  void, accept), once the server has what the phone sent.
 - **A ticket locked as invoiced is unlocked first** (audited), then corrected (ADR-057). **Built
   (ADR-367):** the review services refuse a correction, a renumber, a void or an acceptance on a
   locked ticket in plain words and save nothing; a certification, an ROE or a scale receipt that
@@ -350,7 +353,8 @@ What this page used to say, and why it changed. Never build from the left-hand s
   → 053); jobs, not an interval (ARCHITECTURE §13).
 - Every phone syncing at the end of the day at the office → whenever there's signal (ADR-030 → 240);
   "a monitor never edits a submitted ticket" → reopenable until the shift ends, then only permitted
-  people (ADR-072 → 240).
+  people (ADR-072 → 240) → **never once submitted on the phone, synced or not** (ADR-477, the
+  user, 2026-10-12).
 - A split's "suffixed collection with no unsuffixed sibling" flagged as ambiguous, members sharing a
   zone, splits only where the program type requires ROEs, "`roeId` / estimate don't exist yet"
   (KD-22, KD-23) → the first is `-A`; each property keeps its own zone; "Allow split loads" per

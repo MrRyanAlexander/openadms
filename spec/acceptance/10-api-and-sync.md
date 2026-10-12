@@ -183,7 +183,7 @@ them. One more, AC-06-36, is named by the plan though its row doesn't say "Phase
 | AC-02-38 | An unplanned assignment arrives, marked | 2.5.4 **✅ part 1, ADR-457** | ASVS V16 |
 | AC-02-39 | A monitor's ID and password refused everywhere but a phone's calls | 2.2.3 (the web), 2.5.2 (a phone's calls) **✅ part 2, ADR-443** | ASVS V6 · API2 |
 | AC-02-41 | The login list: a slow hash per entry, salted for that phone | 2.5.3 | ASVS V11 · 800-63B passwords |
-| AC-02-45 | A monitor's own reopen before the shift ends, as the edit log | 2.6.3 | ASVS V16 |
+| AC-02-45 | A record its monitor submitted is sealed for them: the server takes no second version of it | 2.6.2 **✅ ADR-477** (2.6.3, the edit log, withdrawn at the user's word) | ASVS V8 |
 | AC-02-56 | A phone that was dark for a day syncs and all of it is received | 2.6.2; told by the story: 2.7.1 | — |
 | AC-02-58 | Sync and turn in: every record confirmed, numbers returned, then the wipe | 2.6.5 | ASVS V14 |
 | AC-02-60 | A phone taken out of service is received; what it made after is flagged | 2.6.5 | API2 |
@@ -201,7 +201,7 @@ them. One more, AC-06-36, is named by the plan though its row doesn't say "Phase
 | AC-05-03 | A sync begins with the phone's proof and its clock | 2.5.1, 2.6.2 | ASVS V11 · API2 |
 | AC-05-04 | The clock difference kept with the sync | 2.6.2 | ASVS V16 |
 | AC-05-05 | Records first, photographs after | 2.6.2, 2.6.4 | API4 |
-| AC-05-08 | The edit log written to the audit log under the monitor | 2.6.3 | ASVS V16 |
+| AC-05-08 | A submitted record sent again changed is answered "already saved" and changes nothing | 2.6.2 **✅ ADR-477** | ASVS V8 |
 | AC-05-09 | A resumable upload, its fingerprint checked | 2.6.4 | ASVS V5 |
 | AC-05-16 | The idempotency ledger's own records | 2.6.2 | ASVS V2 |
 | AC-05-20 | A quarantined record answered "not saved", with the reason | 2.6.2 | — |
@@ -216,7 +216,7 @@ them. One more, AC-06-36, is named by the plan though its row doesn't say "Phase
 | AC-06-58 | The clock difference and its threshold as a policy value | 2.6.2 | ASVS V16 |
 | AC-07-91 | Nothing sent to a phone carries a rate, a load's code, a rule or a transaction | 2.5.3 **in part: parts 1 and 2's lists, ADR-450, 451** | API3 |
 | AC-08-05 | The refusal of a reviewer's action without its grant, at the request | 2.4.4 | ASVS V8 · API5 |
-| AC-08-06 | A monitor's reopen reprocesses the ticket; refused after the shift ends | 2.6.3 | ASVS V8 |
+| AC-08-06 | A monitor never edits what they submitted; only the back office corrects it | 2.6.2 **✅ ADR-477** | ASVS V8 |
 | AC-09-18 | Unlocking is a grant of its own | 2.2.5, 2.4.4 | ASVS V8 · API5 |
 | *AC-06-36* | *A certification made after a field event scanned its number is linked to it again and its tickets queued (BACKLOG C83)* | *2.3.3* | — |
 

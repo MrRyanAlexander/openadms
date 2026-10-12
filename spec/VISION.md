@@ -69,7 +69,7 @@ installation, open source (AGPL-3.0). *(ADR-050, 063, 099, 171)*
    count of the tickets a load carries), then **the number last**, scanned or shown and
    re-entered by hand, and a printed receipt. A haul-out takes its call at the TDSR; unit rate work is
    one event, the monitor picking the work by name and measuring. Forms (ROE, surveys, incidents,
-   drop-off logs) are records, not events. A finished event is reopenable until the shift ends.
+   drop-off logs) are records, not events. Once a monitor submits an event it is sealed for them; only the back office corrects it (ADR-477).
    *(ADR-207, 209, 213, 223, 227, 236, 240, 243)*
 5. **Sync** whenever there's signal, in any order. Every event is received; the only rejection is a
    duplicate number, quarantined in full for a person. *(ADR-022, 030, 240)*

@@ -41,7 +41,7 @@ one line saying what kind of record it is (§1) and what it is for, then one tab
 | 1 | Conventions every model follows | |
 | 2 | Shared, firm-wide records | `Client` · `DeclarationEvent` · `Contractor` · `ProjectContractor` · `User` · `UserCredential` · `Session` · `SecurityEvent` · `UserPermission` · `ViewerProject` · `Device` · `MasterPasscode` · `MasterPasscodeTries` · `Assignment` · `AssignmentPayItem` · the firm's lists |
 | 3 | A project and its setup | `Project` · `ProjectKindOfWork` · `Contract` · `Form` · `FormDebrisType` · `FormDefinition` · `PayItem` · `PayItemCrewDayStep` · `PayItemRate` · `Rule` · `RuleCriterion` · `RuleCriterionPick` · `RuleAction` · `RuleActionItem` · `DisposalSite` · `DisposalSiteLabel` · `SiteAreaVersion` · `MapVersion` · `Zone` · `ProjectNumberSeries` · `ControlRange` · `NumberBlock` · `Certification` · `CertificationBox` · `CertificationHelper` · `Roe` · `RoeScopeItem` · `ClockEntry` · `ClockActivityLine` · `ApprovedDay` |
-| 4 | Evidence: what monitors saw | `FieldEvent` · `FieldEventItem` · `CarriedTicket` · `ScaleReceipt` · `Survey` · `Incident` · `DropOffLog` · `Photo` · `Sync` · `SyncedRecord` · `QuarantinedRecord` · `FieldEventEdit` · `SetupManifest` |
+| 4 | Evidence: what monitors saw | `FieldEvent` · `FieldEventItem` · `CarriedTicket` · `ScaleReceipt` · `Survey` · `Incident` · `DropOffLog` · `Photo` · `Sync` · `SyncedRecord` · `QuarantinedRecord` · `SetupManifest` |
 | 5 | Derived: the worker's conclusions | `CompletedLoad` · `CompletedLoadCollection` · `CompletedHaulOut` · `CompletedHaulOutCollection` · `Transaction` · `Flag` · `ReconciliationRun` · `ReconciliationDecision` · the job queue: `ReconciliationJob` · `ReconciliationJobTicket` |
 | 6 | Marks: what people set | `QcMark` · `InvoiceLock` · `InvoiceBatch` · `FlagAcceptance` · `TicketVoid` · `TicketUnvoid` · `ApprovedDay` |
 | 7 | Audit | `AuditRecord` |
@@ -1504,8 +1504,9 @@ payload; a scale receipt sent with it is saved as its own record. *Agent default
 
 #### `FieldEventEdit`
 
-A phone's edit log for an event reopened before the shift ended; the audit capture writes the
-change under the monitor. Its fields are Phase 2's.
+**Withdrawn 2026-10-12 at the user's word (ADR-477): never built.** A record a monitor submitted
+is sealed for them, so no phone sends an edit and there is no edit log; the back office's
+corrections are the audit log's (ADR-051).
 
 #### `SetupManifest`
 

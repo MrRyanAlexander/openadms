@@ -817,8 +817,11 @@ So the protection can't rest on the password. It rests on these:
 4. **Each record gets its own answer:** saved, already saved, or quarantined (with the reason).
    The device marks each one accordingly, and a quarantined record shows as **not saved**.
    ⚠️ *ADR-240: the device syncs **whenever it has a connection**, not only at the end of the day;
-   a finished field event stays reopenable until the monitor ends the shift (agent default), and an
-   edit to one already sent travels by step 8.*
+   ~~a finished field event stays reopenable until the monitor ends the shift (agent default), and an
+   edit to one already sent travels by step 8.~~*
+   ⚠️ *ADR-477 (the user, 2026-10-12): once a monitor submits a record on the phone it is sealed
+   for them, synced or not; only the back office changes it. A record sent again is answered
+   "already saved" as it was stored.*
 5. **Photos upload resumably.** An interrupted upload continues from where it stopped. The server
    checks each file's hash against the one the device recorded (§11).
 6. **The device gets a fresh manifest** (certs, sites, ROEs, roster, control ranges), its number
@@ -830,8 +833,10 @@ So the protection can't rest on the password. It rests on these:
    passcode check and the setup version's number, with nobody signed in; the lists and the login
    list are read by the signed-in monitor's phone in the same connection, by their own endpoints.*
 7. **The server queues reconciliation** for what arrived (§13). The sync doesn't wait for it.
-8. The device records its **ticket edit log** for anything reopened before sync (ADR-072), and the
-   server writes those edits to the audit log under the monitor's ID.
+8. ~~The device records its **ticket edit log** for anything reopened before sync (ADR-072), and the
+   server writes those edits to the audit log under the monitor's ID.~~
+   ⚠️ *ADR-477 (the user, 2026-10-12): withdrawn. Nothing a monitor submitted is reopened, so
+   there is no edit log.*
 
 The sync contract (every payload and every answer) is written once as shared Zod schemas, with a
 test suite that any client, including the scenario harness, must pass.

@@ -233,7 +233,7 @@ estimate the monitor gives **the load call so far**; the last is the haul-out's.
 | **Photos** from the camera only, never the gallery; fingerprinted (SHA-256) at capture; shrunk natively keeping location, time and depth data; **at most 8 per ticket**; "required" is a pay item setting; a certification takes **five** set views | ADR-101, 157, 179 |
 | **GPS**: the phone sends whatever fix it has and never judges its accuracy; the back office adjusts drift | ADR-083 |
 | **Times** are the phone's clock, shown in the project's time zone; the server checks they make sense | ADR-100 |
-| **A finished field event is reopenable until the monitor ends the shift**; an edit to one already sent travels as the edit log (field, prior, new, time), audited under the monitor; never after the shift | ADR-240 |
+| **A record the monitor submitted is sealed for them**: no reopen and no edit, synced or not, even to undo a mistake; the back office corrects it once the server has it. One not yet submitted stays open and theirs to adjust, for days where the work takes days, kept across sign-outs | ADR-477 |
 | **A sync rejection** (a quarantined duplicate) shows the monitor **"not saved"**, never swallowed | ADR-022 |
 | **Certifying**: pick the prime, type the sub into tier 1 or 2 (the phone suggests known subs of that prime); the five photos; the capacity computed, never typed | ADR-108, 179, `adms-certifications` |
 | A load **turned away** at the tower gets nothing | ADR-155 |
@@ -314,7 +314,8 @@ What this page used to say, and why it changed. Never build from the left-hand s
   for a certification; no accuracy check (ADR-083, 157, 179).
 - "Capacity is never typed" → a truck keyed in by hand bills the certification's capacity (Q-98 →
   ADR-154). "No eligibility marking by the monitor" → allowed where the pay item says (ADR-210).
-- "Reopenable until it syncs" → until the monitor ends the shift (ADR-072 → 240). A stale phone's
+- "Reopenable until it syncs" → until the monitor ends the shift (ADR-072 → 240) → **never once
+  submitted; there is no edit log** (ADR-477, the user, 2026-10-12). A stale phone's
   "24-hour re-check" → dropped: phones sync whenever there's signal (ADR-240).
 - The split button only where the program type requires ROEs → "Allow split loads" per project; the
   first collection `-A` (ADR-024 → 137, 173).

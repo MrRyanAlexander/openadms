@@ -17,8 +17,8 @@ conclusions again. People never force a pairing and never write a completed load
 The back office sees **everything** about a ticket, laid out to review, fix and QC many quickly
 (ADR-224).
 
-**Who:** an admin, or a manager/analyst with permission. **A monitor never edits a field event after
-their shift ends** (ADR-240).
+**Who:** an admin, or a manager/analyst with permission. **A monitor never edits a record after
+submitting it on the phone** (ADR-477).
 
 ## One review queue (ADR-228)
 

@@ -289,6 +289,37 @@ describe('a sync is kept with both clocks', () => {
 });
 
 describe('a record is stored once', () => {
+  it('AC-02-45, AC-05-08, AC-08-06, T-05 a record its monitor submitted is sealed: sent again under its id with its load call changed, it is answered “already saved”, and the server keeps what it stored; nothing is written and nothing queued', async () => {
+    await world(async (served, tx, who) => {
+      const p = await kimOnP1(served, tx, who);
+      const disposal = p.disposal({ ticketNumber: '101020' });
+      await synced(
+        served,
+        p.token,
+        p.sync({ records: [{ record: 'FIELD_EVENT', fieldEvent: disposal }] }),
+      );
+      const stored = () => tx.fieldEvent.findUniqueOrThrow({ where: { id: disposal.id } });
+      const audited = () =>
+        tx.auditRecord.count({ where: { tableName: 'field_event', recordId: disposal.id } });
+      const before = { event: await stored(), audited: await audited() };
+      const jobs = await jobsOf(tx, p.projectId);
+      expect(before.event.loadCall).toBe(85);
+
+      // The phone was tampered with after the monitor submitted it: 85% is now 95%.
+      const again = await synced(
+        served,
+        p.token,
+        p.sync({ records: [{ record: 'FIELD_EVENT', fieldEvent: { ...disposal, loadCall: 95 } }] }),
+      );
+      expect(again.records).toEqual([{ answer: 'ALREADY_SAVED', id: disposal.id }]);
+      expect(await stored()).toEqual(before.event);
+      expect(await audited()).toBe(before.audited);
+      expect(await jobsOf(tx, p.projectId)).toEqual(jobs);
+      expect(await tx.heldRecord.count({ where: { deviceId: p.phone.id } })).toBe(0);
+      expect(await tx.quarantinedRecord.count({ where: { projectId: p.projectId } })).toBe(0);
+    });
+  });
+
   it('AC-05-15, 16, 20, 45, REQ-016 a sync sent again is answered “already saved” from the ledger and stores nothing twice; a second disposal on the ticket is kept in quarantine and never answered “saved”, however often it is sent; neither stops the record sent with it', async () => {
     await world(async (served, tx, who) => {
       const p = await kimOnP1(served, tx, who);

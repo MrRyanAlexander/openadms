@@ -250,6 +250,5 @@ or a monitor's work (ADR-230).
 
 **Not in Phase 1** (their rules are recorded): the capture screens and their order, "normal or
 split?", the stale-list prompt, the phone's own duplicate check, cancelling, printing and scanning
-(Phase 3, `adms-field-app` §4A.2–§4A.6); looking an address up, the photograph's file and the
-phone's edit log for a reopened field event (Phase 2); the review of photographs inside a ticket
+(Phase 3, `adms-field-app` §4A.2–§4A.6); looking an address up and the photograph's file (Phase 2); the review of photographs inside a ticket
 (Phase 4).

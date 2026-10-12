@@ -47,7 +47,7 @@ second field event of one kind on one ticket, and that is kept whole, in quarant
 | AC-05-05 | **When** a phone syncs, **then** its records go first and its photographs after: field events, ROEs, surveys, incidents and drop-off logs are small, and a slow photograph never holds up the records behind it | ADR-101; ARCHITECTURE §9 (2); Part 5 step 3 · REQ-203 | API (Phase 2) |  |
 | AC-05-06 | **Given** `P1-COL-1` passed from Ana to Sam on Monday afternoon with Ana's morning collections still unsent, **when** it next syncs, **then** Ana's records arrive with Sam's and each is its own monitor's: Ana's are written as Ana, from that phone | ADR-095, 120; ARCHITECTURE §7.3; AC-02-46 | story (1.4.2: two monitors' records from one phone); the hidden queue on the phone: field app (Phase 3) | story `sync` (2026-10-04, ADR-338) |
 | AC-05-07 | **Given** Ana started a field event by mistake and cancelled it, **then** it is not among what her phone sends: a cancelled field event stays on the phone and took no number | ADR-056, 332; AC-04-95 | built: harness tests (1.3.7, ADR-332); field app (Phase 3) | story `sync` (2026-10-04, ADR-338) |
-| AC-05-08 | **Given** Ana finished her collection on `101001`, synced it, and reopened it before she ended her shift, **then** the change travels as the phone's edit log and is written to the audit log under Ana. After her shift ends she can change nothing | ADR-240 (agent default); ARCHITECTURE §9 (8); AC-02-45 | API (Phase 2); field app (Phase 3) |  |
+| AC-05-08 | **Given** Ana submitted her disposal on `101020` at 85% and it synced, **when** her phone sends that record again with the load call changed to 95%, **then** it is answered "already saved" and the server keeps 85%: nothing is written, audited or queued. There is no edit log: a phone never changes a record the server has *(rewritten 2026-10-12 at the user's word, ADR-477; was the edit log)* | ADR-472, 477 (user); AC-02-45 | API (Phase 2); field app (Phase 3) | ✅ API (ADR-477): `apps/api/test/sync.test.ts` |
 | AC-05-09 | **Given** a photograph taken with Ana's collection, **when** its file is uploaded after the records, **then** an interrupted upload continues from where it stopped, and the server checks the file's fingerprint against the one the phone took at capture | ADR-101; ARCHITECTURE §9 (5), §11 · REQ-203 | the photograph's record, with its fingerprints, written by intake: story (1.4.2); the upload and its check: API (Phase 2) | story `sync` (2026-10-04, ADR-338) |
 | AC-05-10 | **Given** a tandem's two disposals at Bayline County Landfill share scale receipt `BCL-88241`, **when** the tower's phone syncs, **then** the receipt is one record, written before the disposals that point at it; the second disposal finds it already there under the same phone-made id and points at it too | ADR-326; `adms-scale-receipts`; BACKLOG C65 | story (1.4.2) | story `sync` (2026-10-04, ADR-338) |
 
@@ -190,7 +190,7 @@ or a monitor's work (ADR-230).
 | # | What isn't settled | Decided with |
 |---|---|---|
 | 1 | How Phase 1's intake knows a retry without Phase 2's ledger tables: by the phone-made id already being a field event, a form, a scale receipt or a quarantined record of the same kind (the likely default), and whether `Sync` and `SyncedRecord` wait for Phase 2 whole | 1.4.2 |
-| 2 | What a retry is answered when the record sent the second time **differs** from the one saved under that id (a change to a finished field event travels by the edit log, which is Phase 2's) | 1.4.2 |
+| 2 | What a retry is answered when the record sent the second time **differs** from the one saved under that id. **Settled (ADR-472, 477): "already saved", and the server keeps what it stored; there is no edit log** | 1.4.2; 2.6.2 ✅ |
 | 3 | The words of a quarantined record's reason (`reason` is open on `spec/DATA-MODEL.md`), and of its resolution | 1.4.2; the resolution: 1.8.x |
 | 4 | Which of two records holds the number when both arrive in one sync, or the later-made one arrives first: the first received holds it (the likely default; the reviewer's renumber puts either right), or the earlier by field time | 1.4.2 |
 | 5 | Whether a record is a duplicate when the field event holding its number is on a **voided** ticket | 1.4.2; 1.8.x |
@@ -219,7 +219,7 @@ citizens' names; a photograph's archive mark and label), so intake takes forms i
 shape; **C67 (f)** is point 10 above; **C67 (g)** is 1.5.5's and 1.5.7's.
 
 **Not in Phase 1** (their rules are recorded): the sync endpoints, the phone's proof of itself, the
-`Sync` and `SyncedRecord` tables, the edit log (`FieldEventEdit`), the photograph's upload, the
+`Sync` and `SyncedRecord` tables, the photograph's upload, the
 manifest (`SetupManifest`) and the shared sync contract with its test suite (Phase 2, REQ-203);
 the phone's queue, its "not saved" display, sync and turn in, and the wipe (Phase 3); the review
 queue's screen (Phase 4); time-clock entries (Phases 3–4, with the clock's tables).

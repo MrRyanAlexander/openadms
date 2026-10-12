@@ -30,8 +30,10 @@ sync (ADR-224). The phone never refuses honest work; every problem is flagged la
    **re-entered by hand** to confirm. A number typed because a barcode won't read is flagged and
    needs a reason (ADR-111, 209). Then **the receipt prints**, on every project (ADR-102, 115).
 
-A field event started by mistake can be **cancelled**; it stays on the phone, unsynced (ADR-056). A
-finished one can be **reopened until the monitor ends the shift** (ADR-240). **The site comes from the
+A field event started by mistake can be **cancelled**; it stays on the phone, unsynced (ADR-056). **Once
+submitted it is sealed for the monitor**: no reopen and no edit, even to undo a mistake; the back
+office corrects it. Until then it stays open and theirs to adjust, for days where the work takes
+days (ADR-477). **The site comes from the
 assignment**, never picked (ADR-195, 240).
 
 ## Workflow A — a load (`COL` → `DIS`)
