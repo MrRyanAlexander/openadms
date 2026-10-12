@@ -89,7 +89,7 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-11, through ADR-470)
+### Where things stand (2026-10-11, through ADR-471)
 - **Phase 2 (API and sync) is open (ADR-376): 23 of its 32 tasks are done** (`BACKLOG.md`,
   "Active — Phase 2", ticks each with its ADRs). Complete: Milestone 2.1 (the API as a process,
   the boundary, time limits and policy), 2.2 (sign-in: its records, passwords, sessions, two-step
@@ -106,12 +106,14 @@ of `DECISIONS.md`.
   (the records a phone sends, `sync-records.ts`, ADR-466; one sync whole and its answer,
   `sync.ts`, ADR-467; a certification made on a phone, ADR-469; **the suite any client must
   pass, `syncClientSuite`, and `syncAnswerRead`, with the harness's phone a client of the
-  contract, ADR-470**; what they leave: C127…C130). **The user decided that a record answered `NOT_SAVED`
+  contract, ADR-470**; what they leave: C127…C130). **Task 2.6.2 (the endpoint) is cut in four
+  (ADR-471) and its first part is done: the tables `sync`, `synced_record` and `held_record` with
+  their own guards; nothing writes them yet (C131).** **The user decided that a record answered `NOT_SAVED`
   is held on the server for a person, in a table of its own, built with 2.6.2 (ADR-468).** **The user approved ARCHITECTURE §7.2's notes on signing in
   online and taking the assignment (ADR-452).**
 - **Where each thing is written, so nothing is read twice:** a rule as it stands, with its ADR:
   `SUMMARY.md`, by topic (grep its `###` headings; never read it whole). What a finished task left
-  for a later one: `BACKLOG.md`'s carry-forward register (C85…C126). How a layer's tests are
+  for a later one: `BACKLOG.md`'s carry-forward register (C85…C131). How a layer's tests are
   written and what a loosening is tried on: the page for that layer beside the `adms-verify`
   skill. Today's counts: `agent_store/CHAIN.md`. **The task-by-task record that stood here
   (2.0.1 to 2.5.2, every endpoint and service named) moved word for word to `DECISIONS.md`'s
@@ -329,16 +331,19 @@ questions.
 **Phase 2 is open (ADR-376). Its plan is `BACKLOG.md`, "Active — Phase 2" (ADR-377): read its
 brief first. One task per response.**
 
-**Task 2.6.2: records, the sync endpoint** *(BACKLOG 2.6.2; its carry-forward first: C130, C129,
-C128, C127, C126, C122, C69, C64, C53, C70; ADR-466…470; REQ-016, 203; ARCHITECTURE §9, §10;
-`spec/DATA-MODEL.md` §4.5; `packages/contracts/src/sync.ts`, `sync-client.ts`,
-`apps/api/src/sync/`, `packages/scenarios/src/sync-stand-in.ts`; read `schema-and-migrations.md`,
-`database-tests.md` and `api-tests.md` beside the `adms-verify` skill first)*. It is large: **cut
-it in parts by an ADR before building, one part a response** (the schema with its guards and
-tests: `Sync`, `SyncedRecord` and the table that holds what couldn't be saved, ADR-468; then the
-service and the endpoint; then the harness's phones through it in place of `SyncStandIn`, their
-reports and numbers in the sync). Say what the standards ask first (ADR-401).
-**The user may still overturn ADR-470's defaults, ADR-469's, ADR-467 (4)'s limits (its other defaults are settled, ADR-468), ADR-466's, ADR-464's, ADR-463's, ADR-462's, ADR-458's other defaults (three were confirmed, ADR-459), ADR-457's, ADR-456 (5)'s proposals, ADR-455's, ADR-454's, ADR-453's, ADR-451's and ADR-450's defaults, ADR-449
+**Task 2.6.2, part 2 of 4: the sync service and its endpoint** *(BACKLOG 2.6.2; its
+carry-forward first: **C131**, then C128, C129, C127, C126, C122, C69, C64; ADR-466…471; REQ-016,
+203; ARCHITECTURE §9, §10; `spec/DATA-MODEL.md` §4.5; `packages/contracts/src/sync.ts`,
+`apps/api/src/sync/`, `apps/api/src/phone/` for a proven phone's endpoint (C86 is the recipe);
+read `api-tests.md` beside the `adms-verify` skill first)*. A proven phone sends `syncSentSchema`
+and is answered `syncAnsweredSchema`: a `Sync` written first with the clock's difference; the
+reports, then each record in its own piece of work through `Intake` or `Certifications.received`;
+the ledger (`SyncedRecord`) answering a retry; what the database refuses answered `NOT_SAVED` and
+written as a `HeldRecord`; the numbers topped up; reconciliation queued, never waited for. **No
+migration is expected: part 1 built the tables (ADR-471).** Parts 3 (what the answer carries
+besides the answers; the worker reading the clock's difference) and 4 (the harness's phones
+through it) follow, one a response. Say what the standards ask first (ADR-401).
+**The user may still overturn ADR-471's defaults, ADR-470's defaults, ADR-469's, ADR-467 (4)'s limits (its other defaults are settled, ADR-468), ADR-466's, ADR-464's, ADR-463's, ADR-462's, ADR-458's other defaults (three were confirmed, ADR-459), ADR-457's, ADR-456 (5)'s proposals, ADR-455's, ADR-454's, ADR-453's, ADR-451's and ADR-450's defaults, ADR-449
 (5)'s proposals as built, ADR-442's, ADR-440's, ADR-438's two choices or ADR-439's (`SUMMARY.md` §4).**
 **Docker's disk is 8 GB and was full once on 2026-10-10** (Tools and housekeeping; it has held since, 1.3 GB free after ADR-464's session): if `pnpm ready` fails for space, stop and ask the user to free some; never work around it.
 **Before the chain, `pnpm ready`** (the stack up, then `installer:check`): a `✗` at the migrations

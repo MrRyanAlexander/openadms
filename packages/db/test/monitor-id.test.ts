@@ -26,12 +26,12 @@ async function create(name: string, role: string): Promise<string> {
 }
 
 describe('a Monitor ID', () => {
-  it('AC-02-01 is issued by the database: "M" and six digits, the next of one series', async () => {
+  it('AC-02-01 is issued by the database: "M" and six digits, more once the series passes 999,999, the next of one series', async () => {
     await asTheApi();
     const kim = await create('Kim Nguyen', 'MONITOR');
     const tariq = await create('Tariq Patel', 'MONITOR');
-    expect(kim).toMatch(/^M\d{6}$/);
-    expect(tariq).toMatch(/^M\d{6}$/);
+    expect(kim).toMatch(/^M\d{6,}$/);
+    expect(tariq).toMatch(/^M\d{6,}$/);
     expect(number(tariq)).toBe(number(kim) + 1);
   });
 
@@ -46,7 +46,7 @@ describe('a Monitor ID', () => {
       'Ana Brooks',
       'Coastline Haulers LLC viewer',
     ]);
-    for (const person of issued) expect(person.monitor_number).toMatch(/^M\d{6}$/);
+    for (const person of issued) expect(person.monitor_number).toMatch(/^M\d{6,}$/);
   });
 
   it('AC-02-02 may be left off anyone but a monitor, when the writer says so', async () => {

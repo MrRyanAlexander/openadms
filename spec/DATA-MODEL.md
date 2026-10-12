@@ -1373,6 +1373,17 @@ One connection from a phone.
 | **clockDifferenceSeconds** | int | |
 | setupVersionSent | int | |
 
+**As built (ADR-471, task 2.6.2 part 1; agent defaults).** Table `sync`. `startedAt` is the
+server's clock when the sync began; `deviceClockAt` is the phone's as it sent the sync, with
+`deviceUtcOffsetMinutes` beside it (UTC−12:00 to UTC+14:00), as every time a phone reports has.
+**`clockDifferenceSeconds` is the phone's clock less the server's, in whole seconds**: above
+nought when the phone's is ahead. The database holds it to the two instants (within one second,
+however the fraction was rounded), and it is kept wide (a phone may report any instant).
+**Nothing of a sync is changed after it is written**, but `setupVersionSent`, written once
+(from 1) when the answer carried lists. Written only for a phone, stated by name, and naming
+that phone; never deleted; audited in the records domain. The API adds and reads one; **the
+worker reads it** (the difference, for `DEVICE_CLOCK_OFF`); no read-only viewer does.
+
 #### `SyncedRecord`
 
 The idempotency ledger: a retry is answered "already saved" from here and never quarantined (KD-56).
@@ -1383,6 +1394,54 @@ The idempotency ledger: a retry is answered "already saved" from here and never 
 | **recordKind** | *open* | |
 | **syncId** | → `Sync` | |
 | **answer** | enum `SyncAnswer` | `SAVED` · `QUARANTINED` |
+
+**As built (ADR-471, task 2.6.2 part 1; agent defaults).** Table `synced_record`; **the key's
+column is `id`** (the phone-made id; the audit log names every row by a column of that name),
+`recordId` in code. One row for each record the server **stored**: as a record of its kind
+(`SAVED`) or in quarantine (`QUARANTINED`). **A record the server could not save is not in the
+ledger: it is a `HeldRecord`** (below), so `SyncAnswer` stays these two (ADR-468 (3)'s last
+sentence, amended). `recordKind` is the contract's word for the kind (`FIELD_EVENT`,
+`SCALE_RECEIPT`, `ROE`, `CERTIFICATION`…), so a later kind needs no migration. A row also names
+its phone (`deviceId`), held to its sync's by a two-column foreign key. **Written once, for the
+phone it names; never changed, never deleted**; audited in the records domain. The API adds and
+reads it; the worker reads it, to find the sync that brought a record; no read-only viewer does.
+
+#### `HeldRecord`
+
+A record a phone sent that the server could not save, **held exactly as sent for a person**
+(the user's decision, ADR-468; built by ADR-471, task 2.6.2 part 1; its fields are agent
+defaults). Inert: never a field event, never paired, never billed, never read by the worker.
+
+| Field | Type | Notes |
+|---|---|---|
+| **id** | uuid | Its own: what was sent may carry no id |
+| **deviceId** | → `Device` | The phone, known for certain from its proof |
+| **syncId** | → `Sync` | The sync that brought it, that phone's own |
+| sentId | uuid | The record's phone-made id, where one could be read |
+| projectId | uuid | The project it named, **as sent: not a relation**, it may name nothing |
+| sentMonitorId | uuid | The monitor it named, as sent: not a relation |
+| **payload** | JSONB | What stood in the record's place, exactly as sent: any JSON value |
+| **sentSha256** | text | The SHA-256 of what was sent |
+| **reason** | enum `NotSavedReason` | `NOT_A_RECORD` · `NAMES_NO_RECORD` · `ASSIGNMENT_NOT_SAVED` · `CERTIFICATION_REFUSED` (the domain's `notSavedReasons`) |
+| **message** | text | What the phone was told |
+| **receivedAt** | instant | |
+| resolvedById | → `User` | |
+| resolvedAt | instant | |
+| resolution | *open* | |
+
+Table `held_record`. **The same thing sent again by the same phone is the same held record**
+(one row for a phone and a fingerprint), so a phone that keeps sending what can't be saved
+adds nothing; the same record sent with anything changed is another thing sent, and is held
+too. **What was sent is never changed, by anyone, and never deleted**; only the resolution is
+written later (who, when and what, all three or none), **by a person**: never the system actor,
+the master passcode's or the device key's. Written only for the phone it names, when that phone
+syncs. Audited in the records domain, **the audit log saying that one was made and never
+holding a second copy of what was sent**. The API alone adds, reads and resolves one; the
+worker holds no right on it. **Viewers:** as a quarantined record's (ADR-336, 468 (5)): a
+client user and an auditor see that a record naming their project is held, why and how it was
+resolved (`viewer_held_record`); what was sent only by `viewer_held_record_citizen`, to a viewer
+the firm lets see private citizens; one that names no project of theirs is seen by none; a
+contractor user sees none. Who resolves one and how is the review queue's (Phase 4).
 
 #### `QuarantinedRecord`
 

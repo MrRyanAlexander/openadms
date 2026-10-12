@@ -7,7 +7,7 @@
 > task's ADR and its session-log line in `DECISIONS.md`). No other file carries these counts.
 > **A count that differs from this page without a reason is a finding, not noise.**
 
-**Seen whole:** 2026-10-11, after ADR-470, on the user's Mac, the installation at head.
+**Seen whole:** 2026-10-11, after ADR-471, on the user's Mac, the installation at head.
 
 ## `pnpm ready`
 
@@ -15,19 +15,19 @@
 |---|---|
 | `pnpm local:up` | six `Healthy` services, then the API's and the worker's containers: `https://api.adms.localhost/health → 200 {"status":"ok"}` and `the worker’s health answer → 200 {"status":"ok","jobsWaiting":0,"jobsSetAside":0}` |
 | `pnpm installer:check` | **30 `✓`**, no `✗`, exit 0 |
-| Migrations at head | **105** (`packages/db/prisma/migrations/` is the list) |
+| Migrations at head | **108** (`packages/db/prisma/migrations/` is the list) |
 | `pnpm local:down` (close-out) | 8 containers and the network: 9 `Removed` lines |
 
 ## `pnpm test`
 
-**`Test Files 147 passed (147)`, `Tests 2627 passed (2627)`.**
+**`Test Files 148 passed (148)`, `Tests 2650 passed (2650)`.**
 
 | Project | Tests | Files | Needs |
 |---|---|---|---|
 | `packages/domain` | 761 | 41 | nothing |
 | `packages/contracts` | 61 | 9 | nothing |
 | `apps/api` | 495 | 38 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
-| `packages/db` | 1028 | 43 | `pnpm ready` |
+| `packages/db` | 1051 | 44 | `pnpm ready` |
 | `packages/scenarios` | 125 | 5 | `pnpm ready` for `stories.test.ts` (the runner and a run's template, 5); the flag catalogue (78 flags), the harness, the phone held to the sync contract's suite (12) and the policy need nothing. **The stories themselves are not here** (ADR-446) |
 | `apps/worker` | 30 | 3 | `pnpm ready` for the map servers (13) and its container (3); the process (14) needs nothing |
 | `infra/local` | 22 | 3 | `pnpm ready` |
@@ -42,7 +42,7 @@
 
 ## `pnpm scenarios`
 
-`This run’s template, adms_story_template_…: 105 migrations applied`, then **`Stories: 19 passed, 0
+`This run’s template, adms_story_template_…: 108 migrations applied`, then **`Stories: 19 passed, 0
 failed.`** Each story `passed: N checks, N passed, 0 failed`:
 
 | Story | Checks | | Story | Checks |

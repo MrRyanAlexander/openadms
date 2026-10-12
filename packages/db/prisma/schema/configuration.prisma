@@ -1072,6 +1072,7 @@ model User {
   dropOffLogsCreated          DropOffLog[]          @relation("DropOffLogCreatedBy")
   quarantinedRecords          QuarantinedRecord[]   @relation("QuarantinedRecordMonitor")
   quarantinedRecordsResolved  QuarantinedRecord[]   @relation("QuarantinedRecordResolvedBy")
+  heldRecordsResolved         HeldRecord[]          @relation("HeldRecordResolvedBy")
   // The marks a person set (marks.prisma).
   qcMarksSet                  QcMark[]
   invoiceBatchesCreated       InvoiceBatch[]
@@ -1351,6 +1352,7 @@ model Device {
   incidents          Incident[]
   dropOffLogs        DropOffLog[]
   quarantinedRecords QuarantinedRecord[]
+  syncs              Sync[]
   securityEvents     SecurityEvent[]
   auditRecords       AuditRecord[]
   sessions           Session[]

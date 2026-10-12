@@ -135,6 +135,9 @@ export const viewerSights: Record<string, Sight> = {
   // That a record of their project waits in quarantine, why and what holds its number; the
   // record as sent may name a private citizen, an ROE's owner (ADR-338).
   quarantined_record: project([], ['payload']),
+  // That a record of their project could not be saved and is held for a person, and why; what
+  // was sent may name a private citizen (ADR-468 (5), 471).
+  held_record: project([], ['payload']),
   // What the worker concluded for their project: its completed loads and haul-outs, each with
   // its collection rows, and its flags (ADR-340).
   // A contractor user: a completed record with its disposal event, a property's or a pile's row
@@ -233,5 +236,8 @@ export const unseenTables = [
   'reconciliation_job_ticket',
   // A setup version is the back office's to read (ADR-453).
   'setup_manifest',
+  // A sync and the idempotency ledger are the API's and the worker's (ADR-471).
+  'sync',
+  'synced_record',
   'audit_record',
 ];

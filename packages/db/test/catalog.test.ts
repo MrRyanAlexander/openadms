@@ -97,6 +97,11 @@ const domains: Record<string, string> = {
   // A numbered version of a project's setup as its phones were shown it: evidence beside the
   // field events that record it (ADR-453).
   setup_manifest: 'RECORDS',
+  // A sync, the idempotency ledger and a record held for a person: how the evidence arrived
+  // (ADR-471).
+  sync: 'RECORDS',
+  synced_record: 'RECORDS',
+  held_record: 'RECORDS',
   completed_load: 'BILLING',
   // The worker's other conclusions (ADR-340): a completed record and its collection rows are
   // what bills; a flag, a run and a run's decisions are how the work went.
@@ -130,6 +135,9 @@ const keptOut: Record<string, string[]> = {
   // monitor's offline seed (ADR-454).
   user_credential: ['password_hash', 'two_step_secret', 'offline_seed'],
   session: ['refresh_token_hash'],
+  // What a phone sent is kept in the held record's own row, which nobody changes: the audit
+  // log says that one was made, and never holds a second copy (ADR-471).
+  held_record: ['payload'],
 };
 
 const on = (table: string): string => (table === 'user' ? 'public."user"' : `public.${table}`);
@@ -196,6 +204,16 @@ const triggers = [
   // and only for a change (ADR-453).
   `CREATE TRIGGER setup_manifest_refuse_edit BEFORE UPDATE ON public.setup_manifest FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
   `CREATE TRIGGER setup_manifest_numbered BEFORE INSERT ON public.setup_manifest FOR EACH ROW EXECUTE FUNCTION setup_manifest_numbered_guard()`,
+  // A sync is changed only by its setup version, written once; a ledger row never; what a
+  // phone sent, held for a person, is written once; each is written for the phone it names
+  // (ADR-471).
+  `CREATE TRIGGER sync_refuse_reported_edit BEFORE UPDATE OF id, device_id, started_at, device_clock_at, device_utc_offset_minutes, clock_difference_seconds ON public.sync FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
+  `CREATE TRIGGER sync_refuse_edit_once_answered BEFORE UPDATE ON public.sync FOR EACH ROW WHEN ((old.setup_version_sent IS NOT NULL)) EXECUTE FUNCTION refuse_edit()`,
+  `CREATE TRIGGER synced_record_refuse_edit BEFORE UPDATE ON public.synced_record FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
+  `CREATE TRIGGER held_record_refuse_sent_edit BEFORE UPDATE OF id, device_id, sync_id, sent_id, project_id, sent_monitor_id, payload, sent_sha256, reason, message, received_at ON public.held_record FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
+  `CREATE TRIGGER sync_from_its_phone BEFORE INSERT OR UPDATE ON public.sync FOR EACH ROW EXECUTE FUNCTION sync_from_its_phone_guard()`,
+  `CREATE TRIGGER synced_record_from_its_phone BEFORE INSERT ON public.synced_record FOR EACH ROW EXECUTE FUNCTION sync_from_its_phone_guard()`,
+  `CREATE TRIGGER held_record_from_its_phone BEFORE INSERT ON public.held_record FOR EACH ROW EXECUTE FUNCTION sync_from_its_phone_guard()`,
   // An unplanned assignment is made as the master passcode's actor for the phone it names;
   // whether one was planned never changes (ADR-457).
   `CREATE TRIGGER assignment_unplanned BEFORE INSERT OR UPDATE ON public.assignment FOR EACH ROW EXECUTE FUNCTION assignment_unplanned_guard()`,
@@ -1159,6 +1177,43 @@ describe('the guards in the catalog', () => {
         name: 'setup_manifest_content_check',
         definition: "CHECK ((jsonb_typeof(content) = 'object'::text))",
       },
+      // A sync's offset is one a clock can stand at, its difference is what its two clocks
+      // give, and a setup version counts from 1; a ledger row's kind is a word of the
+      // contract's; a held record's fingerprint is a SHA-256, what its phone was told is words,
+      // and its resolution is who, when and what, by a person (ADR-471).
+      {
+        name: 'sync_clock_difference_check',
+        definition:
+          'CHECK ((abs((EXTRACT(epoch FROM (device_clock_at - started_at)) - (clock_difference_seconds)::numeric)) < (1)::numeric))',
+      },
+      {
+        name: 'sync_device_utc_offset_check',
+        definition:
+          "CHECK (((device_utc_offset_minutes >= '-720'::integer) AND (device_utc_offset_minutes <= 840)))",
+      },
+      { name: 'sync_setup_version_sent_check', definition: 'CHECK ((setup_version_sent >= 1))' },
+      {
+        name: 'synced_record_record_kind_check',
+        definition: "CHECK ((record_kind ~ '^[A-Z]+(_[A-Z]+)*$'::text))",
+      },
+      {
+        name: 'held_record_message_check',
+        definition: "CHECK ((btrim(message) <> ''::text))",
+      },
+      {
+        name: 'held_record_resolution_check',
+        definition:
+          "CHECK ((((num_nonnulls(resolved_by_id, resolved_at, resolution) = ANY (ARRAY[0, 3])) AND ((resolution IS NULL) OR (btrim(resolution) <> ''::text))) IS TRUE))",
+      },
+      {
+        name: 'held_record_resolved_by_check',
+        definition:
+          "CHECK ((resolved_by_id IS DISTINCT FROM '00000000-0000-7000-8000-000000000001'::uuid))",
+      },
+      {
+        name: 'held_record_sent_sha256_check',
+        definition: "CHECK ((sent_sha256 ~ '^[0-9a-f]{64}$'::text))",
+      },
       // The master passcode's actor is one id, never a person, and no record names it; a
       // count of wrong tries at the passcode is never below nought (ADR-438, 439).
       {
@@ -1372,6 +1427,12 @@ describe('the guards in the catalog', () => {
           'FROM drop_off_log',
           question,
         ],
+      },
+      // What a phone sent that could not be saved may name one too (ADR-471).
+      {
+        name: 'viewer_held_record_citizen',
+        owner: 'adms_owner',
+        definition: ['SELECT id,', 'project_id,', 'payload', 'FROM held_record', question],
       },
       // The record as a phone sent it may name one: an ROE's owner (ADR-338).
       {

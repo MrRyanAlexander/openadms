@@ -690,3 +690,112 @@ model SetupManifest {
   @@unique([projectId, version])
   @@map("setup_manifest")
 }
+
+// One sync from a phone: the server's own record that the phone connected, when, and how far its
+// clock stood from the server's (ARCHITECTURE §9 (1), §10; ADR-100, 467, 471). Written when the
+// sync begins, for the phone that proved itself, and never changed after, but for the setup
+// version its answer carried, written once. The records it brought name it; the worker reads
+// the difference to flag their tickets. Never deleted.
+model Sync {
+  id        String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  deviceId  String   @map("device_id") @db.Uuid
+  // The server's clock when the sync began.
+  startedAt DateTime @default(now()) @map("started_at") @db.Timestamptz(3)
+
+  // The phone's clock as it sent the sync, a UTC instant, and how far that clock stood from UTC.
+  deviceClockAt          DateTime @map("device_clock_at") @db.Timestamptz(3)
+  deviceUtcOffsetMinutes Int      @map("device_utc_offset_minutes")
+  // The phone's clock less the server's, in whole seconds: above nought when the phone's is
+  // ahead. A phone may report any instant, so it is kept wide.
+  clockDifferenceSeconds BigInt   @map("clock_difference_seconds")
+  // The setup version the phone was sent in this sync's answer, where it was sent one.
+  setupVersionSent       Int?     @map("setup_version_sent")
+
+  device        Device         @relation(fields: [deviceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  syncedRecords SyncedRecord[]
+  heldRecords   HeldRecord[]
+
+  // What a synced or a held record points at, so the phone it states is its sync's.
+  @@unique([id, deviceId])
+  @@map("sync")
+}
+
+// What the server answered a record it stored (ARCHITECTURE §9 (4); AC-05-16). A record it could
+// not store is a held record, and is not in this ledger (ADR-468, 471).
+enum SyncAnswer {
+  SAVED
+  QUARANTINED
+
+  @@map("sync_answer")
+}
+
+// The idempotency ledger (ARCHITECTURE §9 (3); KD-56; ADR-471): one row for each record the
+// server stored, as a record of its kind or in quarantine, keyed on the id its phone made, with
+// the sync that brought it and the answer it was given. A retry is known from here and never
+// taken for a duplicate ticket number. Written once, never changed, never deleted.
+model SyncedRecord {
+  // The id the phone made for the record: no default here. The column is `id`, as every
+  // table's key is: the audit log names a row by it.
+  recordId   String     @id @map("id") @db.Uuid
+  // The contract's word for the kind of record (`FIELD_EVENT`, `ROE`…).
+  recordKind String     @map("record_kind")
+  syncId     String     @map("sync_id") @db.Uuid
+  deviceId   String     @map("device_id") @db.Uuid
+  answer     SyncAnswer
+
+  sync Sync @relation(fields: [syncId, deviceId], references: [id, deviceId], onDelete: Restrict, onUpdate: Restrict)
+
+  @@map("synced_record")
+}
+
+// Why a record a phone sent was not saved (ADR-467, 469): the domain's `notSavedReasons`.
+enum NotSavedReason {
+  // What was sent fails the contract's schema.
+  NOT_A_RECORD
+  // The database's own constraints refuse what it names.
+  NAMES_NO_RECORD
+  // The unplanned assignment it was made under was not saved.
+  ASSIGNMENT_NOT_SAVED
+  // A certification its own rules refuse, or whose number its project already has.
+  CERTIFICATION_REFUSED
+
+  @@map("not_saved_reason")
+}
+
+// A record a phone sent that the server could not save, held exactly as sent for a person
+// (ADR-468, 471). Inert: never a field event, never paired, never billed, never read by the
+// worker. The phone is known for certain, from its proof; the project and the monitor are only
+// what the record said, and may name nothing, so neither is a relation. The same thing sent
+// again by the same phone is the same held record. What was sent is never changed and never
+// deleted; only its resolution is written later, by a person.
+model HeldRecord {
+  id       String @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  deviceId String @map("device_id") @db.Uuid
+  syncId   String @map("sync_id") @db.Uuid
+
+  // As sent, where that much could be read: the record's own id, its project and its monitor.
+  sentId        String? @map("sent_id") @db.Uuid
+  projectId     String? @map("project_id") @db.Uuid
+  sentMonitorId String? @map("sent_monitor_id") @db.Uuid
+
+  // What stood in the record's place, exactly as sent: any JSON value.
+  payload    Json
+  // The SHA-256 of what was sent, so a retry is the same held record.
+  sentSha256 String         @map("sent_sha256")
+  reason     NotSavedReason
+  // What the phone was told.
+  message    String
+  // When the server received it (ADR-100).
+  receivedAt DateTime       @default(now()) @map("received_at") @db.Timestamptz(3)
+
+  // Who resolved it, when, and what they did: all three or none.
+  resolvedById String?   @map("resolved_by_id") @db.Uuid
+  resolvedAt   DateTime? @map("resolved_at") @db.Timestamptz(3)
+  resolution   String?
+
+  sync       Sync  @relation(fields: [syncId, deviceId], references: [id, deviceId], onDelete: Restrict, onUpdate: Restrict)
+  resolvedBy User? @relation("HeldRecordResolvedBy", fields: [resolvedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([deviceId, sentSha256])
+  @@map("held_record")
+}
