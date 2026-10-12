@@ -1383,6 +1383,9 @@ however the fraction was rounded), and it is kept wide (a phone may report any i
 (from 1) when the answer carried lists. Written only for a phone, stated by name, and naming
 that phone; never deleted; audited in the records domain. The API adds and reads one; **the
 worker reads it** (the difference, for `DEVICE_CLOCK_OFF`); no read-only viewer does.
+**Written since ADR-472 (task 2.6.2 part 2)** by `Sync` (`apps/api`), first in every call of
+`POST /phones/current/syncs`, as the device key's actor on the phone that proved itself; the
+difference is rounded to the nearest second. A call sent again is a sync of its own.
 
 #### `SyncedRecord`
 
@@ -1405,6 +1408,10 @@ sentence, amended). `recordKind` is the contract's word for the kind (`FIELD_EVE
 its phone (`deviceId`), held to its sync's by a two-column foreign key. **Written once, for the
 phone it names; never changed, never deleted**; audited in the records domain. The API adds and
 reads it; the worker reads it, to find the sync that brought a record; no read-only viewer does.
+**Written since ADR-472** in the piece of work that stores the record, as the monitor from the
+phone (`ledgerRow`): a retry is answered "already saved" from it where it holds the id as `SAVED`
+under the same kind. A record stored with no sync named (before the ledger, or by a story's own
+intake) has no row. A photograph's record has none yet (task 2.6.4).
 
 #### `HeldRecord`
 
@@ -1442,6 +1449,13 @@ client user and an auditor see that a record naming their project is held, why a
 resolved (`viewer_held_record`); what was sent only by `viewer_held_record_citizen`, to a viewer
 the firm lets see private citizens; one that names no project of theirs is seen by none; a
 contractor user sees none. Who resolves one and how is the review queue's (Phase 4).
+**Written since ADR-472** by `Sync` alone, as the device key's actor on the syncing phone.
+**`sentSha256` is the SHA-256, in hex, of what was sent as canonical JSON in UTF-8** (object
+keys sorted at every depth, no white space), so the order of a record's fields doesn't matter.
+`sentId`, `projectId` and `sentMonitorId` are read loosely, each only where it is an id (the
+monitor from `monitorId`, `enteredById`, `madeById` or `certifiedById`). `message` is the
+domain's words with "Held on the server for review." A held record whose record is later sent
+again and saved stays as it is, for a person. *Agent defaults.*
 
 #### `QuarantinedRecord`
 

@@ -37,6 +37,7 @@ import {
 } from '@open-adms/domain';
 
 import type { WorkQueued } from '../jobs/work-queue.ts';
+import { type Brought, ledgerRow } from '../sync/ledger.ts';
 import type { SentCertification } from '../sync/sent.ts';
 import { ReviewService } from '../review/review-service.ts';
 import { SubPlaces } from '../setup/contractor-setup.ts';
@@ -120,19 +121,24 @@ export class Certifications extends ReviewService {
   // A certification as a phone's sync sends it (the contract's own shape, `syncedRecordSchema`'s
   // seventh kind, ADR-469), from the phone that proved itself: handed to `certify` whole, never
   // a second way in. What the phone left empty is left out.
-  received(sent: SentCertification): Promise<Outcome<Certification>> {
+  // `brought` is the sync that brought it, where one did: its row in the idempotency ledger is
+  // then written in the piece of work that makes the certification (ADR-471, 472).
+  received(sent: SentCertification, brought?: Brought): Promise<Outcome<Certification>> {
     const { boxes, helperIds, replaces, ...rest } = sent;
-    return this.certify({
-      ...stated(rest),
-      boxes: boxes.map((box) => stated(box)),
-      helperIds,
-      ...(replaces === null
-        ? {}
-        : { replaces: { certificationId: replaces.replacedId, reason: replaces.reason } }),
-    });
+    return this.certify(
+      {
+        ...stated(rest),
+        boxes: boxes.map((box) => stated(box)),
+        helperIds,
+        ...(replaces === null
+          ? {}
+          : { replaces: { certificationId: replaces.replacedId, reason: replaces.reason } }),
+      },
+      brought,
+    );
   }
 
-  certify(input: NewCertification): Promise<Outcome<Certification>> {
+  certify(input: NewCertification, brought?: Brought): Promise<Outcome<Certification>> {
     const actor: Actor =
       input.deviceId === undefined
         ? { actorId: input.certifiedById, source: 'BACK_OFFICE' }
@@ -232,6 +238,14 @@ export class Certifications extends ReviewService {
         // job that names none.
         true,
       );
+      if (input.deviceId !== undefined) {
+        await ledgerRow(tx, brought, {
+          recordId: certification.id,
+          recordKind: 'CERTIFICATION',
+          deviceId: input.deviceId,
+          answer: 'SAVED',
+        });
+      }
       return certification;
     });
   }

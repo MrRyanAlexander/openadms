@@ -30,6 +30,7 @@ import { SiteSetupController } from '../setup/site-setup.controller.ts';
 import { PasswordResetsController } from '../sign-in/password-resets.controller.ts';
 import { SessionsController } from '../sign-in/sessions.controller.ts';
 import { TwoStepController } from '../sign-in/two-step.controller.ts';
+import { SyncController } from '../sync/sync.controller.ts';
 import { ViewerReadsController } from '../viewer/viewer-reads.controller.ts';
 import { HealthController } from './health.controller.ts';
 
@@ -59,6 +60,7 @@ import { HealthController } from './health.controller.ts';
     AddressLookupsController,
     SetupChoicesController,
     UnplannedAssignmentsController,
+    SyncController,
     AssignmentsController,
     ReviewMarksController,
     CorrectionsController,

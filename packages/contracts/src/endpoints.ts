@@ -90,6 +90,7 @@ import {
   ticketVoidRecordSchema,
 } from './review-answers.ts';
 import { cornerCount, inches } from './sync-records.ts';
+import { syncAnsweredSchema, syncSentSchema } from './sync.ts';
 import {
   billingUnits,
   clientRecordSchema,
@@ -1833,6 +1834,22 @@ export const reportUnplannedAssignmentEndpoint = endpoint({
   answer: unplannedAssignmentAnswerSchema,
 });
 
+// One sync, whole (ARCHITECTURE §9, §10; spec/parts/05-sync.md steps 2…8; AC-05-03, 04, 15, 16,
+// 20, 45…47; AC-10-35, 46, 51; BACKLOG 2.6.2, C64, C69, C126…C131; ADR-022, 052, 065, 100, 466…472;
+// REQ-016, 203). The phone has proved itself; it never says which phone it is. The body and the
+// answer are `sync.ts`'s. Nothing is refused over eligibility, and nothing is reconciled while
+// the phone waits.
+export const syncPhoneEndpoint = endpoint({
+  name: 'syncPhone',
+  summary:
+    'A phone syncs: it sends its clock, the unplanned assignments made on it, the uses of the master passcode it logged, its records (field events, scale receipts, incidents, drop-off logs, surveys, ROEs and certifications, each under the id the phone made for it, 200 at most) and the last number it used of each series. The server keeps the sync with both clocks and their difference, then reads each thing in that order and gives each its own answer, in the order sent. A record is saved; already saved, where it was sent before (never stored twice, and never taken for a duplicate ticket number); kept in quarantine, not saved, where another record holds its number, with the reason and the record that holds it; or not saved, where it can’t be read, names something the server doesn’t have, was made under an assignment that was not saved, or is a certification its own rules refuse: what was sent is then held on the server exactly as sent, for a person, and the answer says so. One record never stops the others. Nothing is refused over eligibility, and no answer carries a status, a flag or money: reconciliation is queued for what arrived and never waited for. For each series reported the answer lists the blocks of numbers the phone holds now, topped up to a full block where the project has such a series. A phone with more than one sync’s worth sends another. Open to a phone that has proved itself, by its token; nobody need be signed in.',
+  access: 'PROVEN_PHONE',
+  method: 'POST',
+  path: '/phones/current/syncs',
+  body: syncSentSchema,
+  answer: syncAnsweredSchema,
+});
+
 // Review's marks (spec/parts/08-review-and-corrections.md steps 5…7; spec/parts/09, invoicing;
 // AC-02-12; AC-08-05; AC-09-18; AC-10-27, 28; BACKLOG 2.4.4, C78…C81, C92; ADR-050, 107, 166, 228,
 // 364…367, 430): a ticket voided and unvoided, a flag accepted, a QC status set, an invoice batch
@@ -2527,6 +2544,7 @@ export const endpoints: readonly Endpoint[] = [
   phoneAddressLookupEndpoint,
   phoneSetupChoicesEndpoint,
   reportUnplannedAssignmentEndpoint,
+  syncPhoneEndpoint,
   removePhoneEndpoint,
   changeMasterPasscodeEndpoint,
   listAssignmentsEndpoint,

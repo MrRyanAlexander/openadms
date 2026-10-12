@@ -8,6 +8,7 @@ import { z } from 'zod';
 import {
   lastUsedSchema,
   recordAnswerSchema,
+  recordNames,
   recordRead,
   syncAnsweredSchema,
   syncPasscodeUsesAtMost,
@@ -169,6 +170,31 @@ describe('each record of a sync, read on its own', () => {
       null,
       'read',
     ]);
+  });
+
+  it('ADR-468, 472 what a thing sent in a record’s place names is read loosely, each on its own: its id, its project and its monitor, or nothing', () => {
+    expect(
+      recordNames({ record: 'FIELD_EVENT', fieldEvent: { ...disposal, loadCall: 140 } }),
+    ).toEqual({ id: disposal.id, projectId: disposal.projectId, monitorId: disposal.monitorId });
+    // Whatever the kind calls its monitor; a project that is no id is not read.
+    expect(
+      recordNames({ record: 'ROE', roe: { id: made('9'), projectId: 'P1', madeById: made('8') } }),
+    ).toEqual({ id: made('9'), projectId: null, monitorId: made('8') });
+    expect(recordNames({ record: 'COMPLETED_LOAD', load: { id: made('9') } })).toEqual({
+      id: made('9'),
+      projectId: null,
+      monitorId: null,
+    });
+    for (const sent of [
+      'not a record',
+      null,
+      7,
+      [],
+      {},
+      { record: 'ROE', roe: { id: 'R-0007' } },
+    ]) {
+      expect(recordNames(sent)).toEqual({ id: null, projectId: null, monitorId: null });
+    }
   });
 
   it('AC-10-37, C127 a record that isn’t one is told which field and how, in the contract’s own words: never a value that was sent, nor the name of a field nobody named', () => {

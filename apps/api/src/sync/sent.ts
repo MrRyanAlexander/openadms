@@ -2,7 +2,7 @@
 // steps 3–7; ARCHITECTURE §9 (3), (4); ADR-022, 236, 338). Every record carries the id its phone
 // made when the record began, its project, and who made it on which phone. These are the shapes
 // intake takes: the sync contract's own (task 2.6.1, ADR-466); the endpoint in front of them is
-// task 2.6.2's (REQ-203).
+// `Sync`'s (sync.ts; REQ-203).
 import type {
   IntakeNote as NoteAnswered,
   ReceivedCertification,
@@ -129,6 +129,7 @@ export type IntakeNote = Readonly<NoteAnswered>;
 // Each record's own answer (ARCHITECTURE §9 (4)), the contract's (`recordAnswerSchema`, ADR-467):
 // saved, already saved, or not saved and kept in quarantine, with the reason and the record that
 // holds the number. A quarantined record is never answered "saved", however often it is sent
-// (ADR-022). What intake never says is "not saved" for a record kept nowhere: one that isn't a
-// record, or that the database refuses, is answered by the endpoint in front of it (2.6.2).
+// (ADR-022). What intake never says is "not saved" for a record it kept nowhere: one that isn't
+// a record, or that the database refuses, is answered by `Sync` in front of it, and held for a
+// person (ADR-468, 472).
 export type SyncAnswer = Exclude<RecordAnswer, { answer: 'NOT_SAVED' }>;

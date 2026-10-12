@@ -59,6 +59,11 @@ export function gpsNote(end: 'start' | 'end' | '', sent: SentFix): IntakeNote {
   };
 }
 
+// Thrown where a record names something the server doesn't have and no constraint of the
+// database's says so first: nothing is saved, and `Sync` answers it as it does the database's
+// own refusal (ADR-467 (5), 472).
+export class NamesNothing extends Error {}
+
 // Writes inside the caller's piece of work, with the time the server received the record.
 export class RecordWrite {
   private readonly tx: Tx;
@@ -237,7 +242,9 @@ export class RecordWrite {
       where: { id: sent.formDefinitionId },
     });
     if (definition === null) {
-      throw new Error(`No form definition ${sent.formDefinitionId}: the record was not saved.`);
+      throw new NamesNothing(
+        `No form definition ${sent.formDefinitionId}: the record was not saved.`,
+      );
     }
     const fields = formDefinitionFields.safeParse(definition.fields);
     if (!fields.success || !formAnswersSchema(fields.data).safeParse(answers).success) {

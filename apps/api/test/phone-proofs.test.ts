@@ -90,6 +90,7 @@ describe('who may ask', () => {
       'reportPasscodeUse',
       'phoneSetupChoices',
       'reportUnplannedAssignment',
+      'syncPhone',
     ]);
     await world(async (served) => {
       // Dana is signed in at the back office: her session is no phone's proof.

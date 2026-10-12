@@ -89,7 +89,7 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-11, through ADR-471)
+### Where things stand (2026-10-11, through ADR-472)
 - **Phase 2 (API and sync) is open (ADR-376): 23 of its 32 tasks are done** (`BACKLOG.md`,
   "Active — Phase 2", ticks each with its ADRs). Complete: Milestone 2.1 (the API as a process,
   the boundary, time limits and policy), 2.2 (sign-in: its records, passwords, sessions, two-step
@@ -107,8 +107,10 @@ of `DECISIONS.md`.
   `sync.ts`, ADR-467; a certification made on a phone, ADR-469; **the suite any client must
   pass, `syncClientSuite`, and `syncAnswerRead`, with the harness's phone a client of the
   contract, ADR-470**; what they leave: C127…C130). **Task 2.6.2 (the endpoint) is cut in four
-  (ADR-471) and its first part is done: the tables `sync`, `synced_record` and `held_record` with
-  their own guards; nothing writes them yet (C131).** **The user decided that a record answered `NOT_SAVED`
+  (ADR-471) and two parts are done: the tables `sync`, `synced_record` and `held_record` with
+  their own guards, and the service and its endpoint (ADR-472: `POST /phones/current/syncs`,
+  `Sync` in `apps/api/src/sync/sync.ts`; what it leaves: C132). The stories' phones still sync
+  through the stand-in (part 4).** **The user decided that a record answered `NOT_SAVED`
   is held on the server for a person, in a table of its own, built with 2.6.2 (ADR-468).** **The user approved ARCHITECTURE §7.2's notes on signing in
   online and taking the assignment (ADR-452).**
 - **Where each thing is written, so nothing is read twice:** a rule as it stands, with its ADR:
@@ -128,7 +130,7 @@ of `DECISIONS.md`.
   schemas read anything** (BACKLOG C86 is the recipe for adding one; `pnpm openapi` after).
   Each service login is under a statement timeout; an installation may state its own value for
   any policy value. `spec/acceptance/10-api-and-sync.md` and `spec/THREAT-MODEL.md` are approved
-  by the user (ADR-386, 393). Phase 2's 14 REQs are in `REQUIREMENTS.md`, two ticked (REQ-201, 208).
+  by the user (ADR-386, 393). Phase 2's 14 REQs are in `REQUIREMENTS.md`, three ticked (REQ-016, 201, 208).
 - **`pnpm lint` runs ESLint under a 4 GB heap** (ADR-465): the whole-tree run had outgrown Node's default on this 8 GB Mac. If it stops with "heap out of memory" again, split it by workspace.
 - **Phones today (what 2.5.3 builds on).** A phone enrols under the master passcode (`POST
   /phones/enrolments`), proves itself by signing a challenge and gets a fifteen-minute token
@@ -331,19 +333,20 @@ questions.
 **Phase 2 is open (ADR-376). Its plan is `BACKLOG.md`, "Active — Phase 2" (ADR-377): read its
 brief first. One task per response.**
 
-**Task 2.6.2, part 2 of 4: the sync service and its endpoint** *(BACKLOG 2.6.2; its
-carry-forward first: **C131**, then C128, C129, C127, C126, C122, C69, C64; ADR-466…471; REQ-016,
-203; ARCHITECTURE §9, §10; `spec/DATA-MODEL.md` §4.5; `packages/contracts/src/sync.ts`,
-`apps/api/src/sync/`, `apps/api/src/phone/` for a proven phone's endpoint (C86 is the recipe);
-read `api-tests.md` beside the `adms-verify` skill first)*. A proven phone sends `syncSentSchema`
-and is answered `syncAnsweredSchema`: a `Sync` written first with the clock's difference; the
-reports, then each record in its own piece of work through `Intake` or `Certifications.received`;
-the ledger (`SyncedRecord`) answering a retry; what the database refuses answered `NOT_SAVED` and
-written as a `HeldRecord`; the numbers topped up; reconciliation queued, never waited for. **No
-migration is expected: part 1 built the tables (ADR-471).** Parts 3 (what the answer carries
-besides the answers; the worker reading the clock's difference) and 4 (the harness's phones
-through it) follow, one a response. Say what the standards ask first (ADR-401).
-**The user may still overturn ADR-471's defaults, ADR-470's defaults, ADR-469's, ADR-467 (4)'s limits (its other defaults are settled, ADR-468), ADR-466's, ADR-464's, ADR-463's, ADR-462's, ADR-458's other defaults (three were confirmed, ADR-459), ADR-457's, ADR-456 (5)'s proposals, ADR-455's, ADR-454's, ADR-453's, ADR-451's and ADR-450's defaults, ADR-449
+**Task 2.6.2, part 3 of 4: what the answer carries besides the answers, and the worker reading
+the clock's difference** *(BACKLOG 2.6.2; its carry-forward first: **C132**, then C131's part 3,
+C70, C53; ADR-453, 454, 467, 471, 472; AC-05-04, 48, AC-06-58, AC-02-23; REQ-203;
+ARCHITECTURE §9 (6), §10; `spec/FLAGS.md` `DEVICE_CLOCK_OFF`; `apps/api/src/sync/sync.ts`,
+`apps/api/src/phone/phone-lists.ts` and `phone-login-list.ts` for what a phone is sent today;
+`apps/worker/src/reconciliation/` (`project-read.ts`, `ticket-work.ts`) for the flag; read
+`api-tests.md` and `worker-tests.md` beside the `adms-verify` skill first)*. Decide what a sync's
+answer carries (fresh lists, a new passcode check, or only that they changed and the phone reads
+them by the endpoints it has: nobody need be signed in for a sync, and the lists are an
+assignment's) and write `Sync.setupVersionSent` once where a version was sent; the worker reads a
+field event's sync through `synced_record` and hands `clockOffAtSyncMinutes` and the limit, a new
+policy value, to `TicketChecks`. A migration only if the decision needs one. Part 4 (the
+harness's phones through `Sync`) follows. Say what the standards ask first (ADR-401).
+**The user may still overturn ADR-472's defaults, ADR-471's defaults, ADR-470's defaults, ADR-469's, ADR-467 (4)'s limits (its other defaults are settled, ADR-468), ADR-466's, ADR-464's, ADR-463's, ADR-462's, ADR-458's other defaults (three were confirmed, ADR-459), ADR-457's, ADR-456 (5)'s proposals, ADR-455's, ADR-454's, ADR-453's, ADR-451's and ADR-450's defaults, ADR-449
 (5)'s proposals as built, ADR-442's, ADR-440's, ADR-438's two choices or ADR-439's (`SUMMARY.md` §4).**
 **Docker's disk is 8 GB and was full once on 2026-10-10** (Tools and housekeeping; it has held since, 1.3 GB free after ADR-464's session): if `pnpm ready` fails for space, stop and ask the user to free some; never work around it.
 **Before the chain, `pnpm ready`** (the stack up, then `installer:check`): a `✗` at the migrations

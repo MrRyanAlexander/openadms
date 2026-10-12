@@ -7,7 +7,7 @@
 > task's ADR and its session-log line in `DECISIONS.md`). No other file carries these counts.
 > **A count that differs from this page without a reason is a finding, not noise.**
 
-**Seen whole:** 2026-10-11, after ADR-471, on the user's Mac, the installation at head.
+**Seen whole:** 2026-10-11, after ADR-472, on the user's Mac, the installation at head.
 
 ## `pnpm ready`
 
@@ -20,13 +20,13 @@
 
 ## `pnpm test`
 
-**`Test Files 148 passed (148)`, `Tests 2650 passed (2650)`.**
+**`Test Files 149 passed (149)`, `Tests 2660 passed (2660)`.**
 
 | Project | Tests | Files | Needs |
 |---|---|---|---|
-| `packages/domain` | 761 | 41 | nothing |
-| `packages/contracts` | 61 | 9 | nothing |
-| `apps/api` | 495 | 38 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
+| `packages/domain` | 762 | 41 | nothing |
+| `packages/contracts` | 62 | 9 | nothing |
+| `apps/api` | 503 | 39 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
 | `packages/db` | 1051 | 44 | `pnpm ready` |
 | `packages/scenarios` | 125 | 5 | `pnpm ready` for `stories.test.ts` (the runner and a run's template, 5); the flag catalogue (78 flags), the harness, the phone held to the sync contract's suite (12) and the policy need nothing. **The stories themselves are not here** (ADR-446) |
 | `apps/worker` | 30 | 3 | `pnpm ready` for the map servers (13) and its container (3); the process (14) needs nothing |

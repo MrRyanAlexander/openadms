@@ -3,11 +3,12 @@
 // 308c): what any client reads of what it was answered, and what an answer lets it do. The
 // harness's phones use it now and the field app in Phase 3; the suite that holds a client to it
 // is `sync-client-suite.ts`.
-import type { SyncedRecord } from './sync-records.ts';
+import type { ReceivedRecord, SyncedRecord } from './sync-records.ts';
 import { syncAnsweredSchema, type SyncAnswered, type SyncSent } from './sync.ts';
 
-// The id its phone made for a record, whatever its kind.
-export function syncedRecordId(record: SyncedRecord): string {
+// The id its phone made for a record, whatever its kind: as a phone sends it, or as the server
+// read it.
+export function syncedRecordId(record: SyncedRecord | ReceivedRecord): string {
   switch (record.record) {
     case 'FIELD_EVENT':
       return record.fieldEvent.id;
@@ -28,7 +29,7 @@ export function syncedRecordId(record: SyncedRecord): string {
 
 // The assignment a record was made under; a scale receipt names none. An unplanned assignment
 // goes no later than the records made under it (ADR-457).
-export function syncedRecordAssignment(record: SyncedRecord): string | null {
+export function syncedRecordAssignment(record: SyncedRecord | ReceivedRecord): string | null {
   switch (record.record) {
     case 'FIELD_EVENT':
       return record.fieldEvent.assignmentId;

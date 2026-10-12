@@ -1,8 +1,8 @@
 // What the server decides about a record as it arrives from a phone (spec/parts/05-sync.md;
 // spec/acceptance/05-sync.md; adms-exceptions §4.3a; ARCHITECTURE §9; ADR-022, 052, 236, 329 (5),
-// 338, 467). Three things only, since sync refuses nothing over eligibility: whether a GPS fix
-// can be one, what a record kept in quarantine is told, and what one that could not be saved at
-// all is told. Everything else about a record is taken as sent and judged later, by the worker.
+// 338, 467, 468, 472). Three things only, since sync refuses nothing over eligibility: whether a
+// GPS fix can be one, what a record kept in quarantine is told, and what one that could not be
+// saved is told. Everything else about a record is taken as sent and judged later, by the worker.
 import type { FieldEventKindName } from './field-event-details.ts';
 
 // A fix as a phone sends it: whatever it had for each half.
@@ -107,11 +107,11 @@ export class Quarantine implements QuarantineNotice {
   }
 }
 
-// Why a record a phone sent is not saved and is kept nowhere on the server (ADR-338 (11), 467):
-// it isn't a record at all, something it names is no record the server has, the assignment it
-// was made under was itself not saved, or it is a certification its own rules refuse (ADR-469).
-// It stays on its phone, for a person. Never a judgement of the work: nothing is refused over
-// eligibility (ADR-052).
+// Why a record a phone sent is not saved (ADR-467): it isn't a record at all, something it
+// names is no record the server has, the assignment it was made under was itself not saved, or
+// it is a certification its own rules refuse (ADR-469). The server holds it exactly as sent for
+// a person (ADR-468, 471, 472), and it stays on its phone too. Never a judgement of the work:
+// nothing is refused over eligibility (ADR-052).
 export const notSavedReasons = [
   'NOT_A_RECORD',
   'NAMES_NO_RECORD',
@@ -127,6 +127,7 @@ export interface NotSavedNotice {
 }
 
 const notSavedLead = 'Not saved: ';
+const heldForReview = 'Held on the server for review.';
 
 export class NotSaved implements NotSavedNotice {
   readonly reason: NotSavedReason;
@@ -175,5 +176,20 @@ export class NotSaved implements NotSavedNotice {
       'CERTIFICATION_REFUSED',
       `${notSavedLead}this project already has a certification ${certNumber}.`,
     );
+  }
+
+  // A certification that replaces one another certification has already replaced: a
+  // certification is replaced once (ADR-082, 469 (5)).
+  static replacedAlready(): NotSaved {
+    return new NotSaved(
+      'CERTIFICATION_REFUSED',
+      `${notSavedLead}the certification this one replaces has already been replaced.`,
+    );
+  }
+
+  // The same notice once the server holds what was sent for a person (ADR-468, 472): its words
+  // say so, and only then. Still never "saved".
+  static heldForReview(notice: NotSavedNotice): NotSavedNotice {
+    return { reason: notice.reason, message: `${notice.message} ${heldForReview}` };
   }
 }

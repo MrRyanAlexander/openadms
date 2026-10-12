@@ -1,7 +1,7 @@
 // Intake: what the server does with each record a phone sends, on arrival (spec/parts/05-sync.md
 // steps 3–8; spec/acceptance/05-sync.md; ARCHITECTURE §9, §10; adms-exceptions §4.3a; ADR-022,
-// 030, 052, 236, 240, 292, 329, 338; KD-56). A plain service: the sync endpoint, the phone's
-// proof of itself and the idempotency ledger's own tables are Phase 2's.
+// 030, 052, 236, 240, 292, 329, 338, 420, 471, 472; KD-56). A plain service: the sync endpoint in
+// front of it is `Sync` (sync.ts).
 //
 // Every record is received, in whatever order it comes, and written as the monitor who made it,
 // from the phone that made it, so the database audits it with them as its actor. Each is stored
@@ -16,13 +16,21 @@
 // number finds (the certification, the ROE) and keeps the server's received time.
 //
 // A record the database's own constraints refuse (a pick that isn't the project's, a detail on a
-// kind that doesn't record it) isn't caught here: the call throws, nothing is saved, and the
-// record stays on the phone. The sync contract answers those, in Phase 2.
+// kind that doesn't record it) isn't caught here: the call throws and nothing is saved. `Sync`
+// answers it "not saved" and holds it for a person (ADR-468, 472).
+//
+// **A record a sync brought** (`brought`) **is stored with two things more, in its own piece of
+// work:** its row in the idempotency ledger, and the reconciliation its arrival asks for,
+// queued and never waited for (ARCHITECTURE §9 (7); AC-10-51): a field event's ticket and its
+// neighbours, the tickets an ROE's number was waiting on, a survey's own flags. A record kept
+// in quarantine is in the ledger and queues nothing: the worker never reads it.
 import type { Database, NumberBlock, Prisma } from '@open-adms/db';
 import { GpsFix, type Policy, Quarantine, type QuarantineNotice } from '@open-adms/domain';
 
+import { WorkQueue, type WorkAsked } from '../jobs/work-queue.ts';
 import { type LastUsed, NumberAllocator, type PhoneAtSync } from '../numbering/number-allocator.ts';
 import type { Clock } from '../setup/setup-service.ts';
+import { type Brought, ledgerRow } from './ledger.ts';
 import { gpsNote, RecordWrite } from './record-write.ts';
 import type {
   IntakeNote,
@@ -56,19 +64,22 @@ export class Intake {
   private readonly db: Database;
   private readonly clock: Clock;
   private readonly allocator: NumberAllocator;
+  private readonly ticketsAJob: number;
 
   constructor(db: Database, clock: Clock, policy: Policy) {
     this.db = db;
     this.clock = clock;
     this.allocator = new NumberAllocator(db, clock, policy);
+    this.ticketsAJob = policy.jobTicketsAtMost;
   }
 
   // One record, one answer. The received time is the server's clock, never the phone's.
-  async receive(sent: SentRecord): Promise<SyncAnswer> {
+  // `brought` is the sync that brought it, where one did.
+  async receive(sent: SentRecord, brought?: Brought): Promise<SyncAnswer> {
     const receivedAt = this.clock.now();
     for (let attempt = 1; ; attempt += 1) {
       try {
-        return await this.take(sent, receivedAt);
+        return await this.take(sent, receivedAt, brought);
       } catch (error) {
         if (attempt === attempts || !isUniqueViolation(error)) throw error;
       }
@@ -95,23 +106,35 @@ export class Intake {
     return held;
   }
 
-  private take(sent: SentRecord, receivedAt: Date): Promise<SyncAnswer> {
+  private take(sent: SentRecord, receivedAt: Date, brought?: Brought): Promise<SyncAnswer> {
     switch (sent.record) {
       case 'FIELD_EVENT':
-        return this.fieldEvent(sent, sent.fieldEvent, receivedAt);
+        return this.fieldEvent(sent, sent.fieldEvent, receivedAt, brought);
       case 'SCALE_RECEIPT':
-        return this.scaleReceipt(sent.scaleReceipt, receivedAt);
+        return this.scaleReceipt(sent.scaleReceipt, receivedAt, brought);
       case 'INCIDENT':
-        return this.incident(sent.incident, receivedAt);
+        return this.incident(sent.incident, receivedAt, brought);
       case 'DROP_OFF_LOG':
-        return this.dropOffLog(sent.dropOffLog, receivedAt);
+        return this.dropOffLog(sent.dropOffLog, receivedAt, brought);
       case 'SURVEY':
-        return this.survey(sent.survey, receivedAt);
+        return this.survey(sent.survey, receivedAt, brought);
       case 'ROE':
-        return this.roe(sent, sent.roe, receivedAt);
+        return this.roe(sent, sent.roe, receivedAt, brought);
+      // A photograph's record is not the sync contract's yet (task 2.6.4): no ledger row.
       case 'PHOTO':
         return this.photo(sent.photo, receivedAt);
     }
+  }
+
+  // The reconciliation a stored record asks for, queued in its own piece of work: no person
+  // asked, and nobody waits for the run (ADR-418, 420).
+  private async queued(
+    tx: Tx,
+    brought: Brought | undefined,
+    asked: Omit<WorkAsked, 'trigger'>,
+  ): Promise<void> {
+    if (brought === undefined) return;
+    await new WorkQueue(tx, this.ticketsAJob).queue({ ...asked, trigger: 'SYNC' });
   }
 
   // A field event with its item lines and the tickets it carries, in one piece of work; or, when
@@ -120,6 +143,7 @@ export class Intake {
     sent: SentRecord,
     event: SentFieldEvent,
     receivedAt: Date,
+    brought?: Brought,
   ): Promise<SyncAnswer> {
     const notice = Quarantine.duplicateFieldEvent(
       event.kind,
@@ -159,10 +183,33 @@ export class Intake {
               receivedAt,
             },
           });
+          await ledgerRow(tx, brought, {
+            recordId: event.id,
+            recordKind: 'FIELD_EVENT',
+            deviceId: event.deviceId,
+            answer: 'QUARANTINED',
+          });
           return Intake.notSaved(event.id, notice, holder.id);
         }
 
         const notes = await new RecordWrite(tx, receivedAt).fieldEvent(event);
+        await ledgerRow(tx, brought, {
+          recordId: event.id,
+          recordKind: 'FIELD_EVENT',
+          deviceId: event.deviceId,
+          answer: 'SAVED',
+        });
+        // Its ticket, and the tickets whose conclusions read it as the records now stand: its
+        // partner is the same ticket; an overlap on one truck, a shared scale receipt and a
+        // load that carries it are its neighbours.
+        if (brought !== undefined) {
+          const ticket = { workflow: event.workflow, ticketNumber: event.ticketNumber };
+          await this.queued(tx, brought, {
+            projectId: event.projectId,
+            tickets: [ticket],
+            others: await new WorkQueue(tx, this.ticketsAJob).neighbours(event.projectId, [ticket]),
+          });
+        }
         return { answer: 'SAVED', id: event.id, notes };
       },
     );
@@ -171,7 +218,11 @@ export class Intake {
   // A scale receipt is its own record, sent before the disposals that point at it; a tandem's
   // second disposal finds it there under the same id (ADR-034, 326). Its number is never unique
   // and never quarantines anything (ADR-331).
-  private scaleReceipt(receipt: SentScaleReceipt, receivedAt: Date): Promise<SyncAnswer> {
+  private scaleReceipt(
+    receipt: SentScaleReceipt,
+    receivedAt: Date,
+    brought?: Brought,
+  ): Promise<SyncAnswer> {
     return this.db.$write(
       { actorId: receipt.enteredById, source: 'DEVICE', deviceId: receipt.deviceId },
       async (tx): Promise<SyncAnswer> => {
@@ -194,13 +245,24 @@ export class Intake {
             receivedAt,
           },
         });
+        // Nothing points at it yet (it is sent ahead of its disposals), so it queues nothing.
+        await ledgerRow(tx, brought, {
+          recordId: receipt.id,
+          recordKind: 'SCALE_RECEIPT',
+          deviceId: receipt.deviceId,
+          answer: 'SAVED',
+        });
         return { answer: 'SAVED', id: receipt.id, notes: [] };
       },
     );
   }
 
-  private incident(incident: SentIncident, receivedAt: Date): Promise<SyncAnswer> {
-    return this.form(incident, async (tx, shared, notes) => {
+  private incident(
+    incident: SentIncident,
+    receivedAt: Date,
+    brought?: Brought,
+  ): Promise<SyncAnswer> {
+    return this.form(incident, 'INCIDENT', brought, async (tx, shared, notes) => {
       const saved = await tx.incident.findUnique({ where: { id: incident.id } });
       if (saved !== null) return false;
       const certification =
@@ -238,8 +300,12 @@ export class Intake {
     });
   }
 
-  private dropOffLog(log: SentDropOffLog, receivedAt: Date): Promise<SyncAnswer> {
-    return this.form(log, async (tx, shared, notes) => {
+  private dropOffLog(
+    log: SentDropOffLog,
+    receivedAt: Date,
+    brought?: Brought,
+  ): Promise<SyncAnswer> {
+    return this.form(log, 'DROP_OFF_LOG', brought, async (tx, shared, notes) => {
       const saved = await tx.dropOffLog.findUnique({ where: { id: log.id } });
       if (saved !== null) return false;
       await tx.dropOffLog.create({
@@ -256,8 +322,8 @@ export class Intake {
     });
   }
 
-  private survey(survey: SentSurvey, receivedAt: Date): Promise<SyncAnswer> {
-    return this.form(survey, async (tx, shared, notes) => {
+  private survey(survey: SentSurvey, receivedAt: Date, brought?: Brought): Promise<SyncAnswer> {
+    return this.form(survey, 'SURVEY', brought, async (tx, shared, notes) => {
       const saved = await tx.survey.findUnique({ where: { id: survey.id } });
       if (saved !== null) return false;
       await tx.survey.create({
@@ -280,6 +346,8 @@ export class Intake {
   // couldn't be one is kept in the audit record's reason, as sent.
   private form(
     form: SentForm,
+    kind: 'INCIDENT' | 'DROP_OFF_LOG' | 'SURVEY',
+    brought: Brought | undefined,
     save: (
       tx: Tx,
       shared: {
@@ -329,9 +397,22 @@ export class Intake {
           },
           notes,
         );
-        return saved
-          ? { answer: 'SAVED', id: form.id, notes }
-          : { answer: 'ALREADY_SAVED', id: form.id };
+        if (!saved) return { answer: 'ALREADY_SAVED', id: form.id };
+        await ledgerRow(tx, brought, {
+          recordId: form.id,
+          recordKind: kind,
+          deviceId: form.deviceId,
+          answer: 'SAVED',
+        });
+        // A survey's flags sit on the survey, on no ticket: the run checks them by themselves.
+        if (kind === 'SURVEY') {
+          await this.queued(tx, brought, {
+            projectId: form.projectId,
+            tickets: [],
+            projectRecords: true,
+          });
+        }
+        return { answer: 'SAVED', id: form.id, notes };
       },
     );
   }
@@ -339,7 +420,12 @@ export class Intake {
   // An ROE made on a phone. Its number is held once on its project: one whose number another ROE
   // has is kept whole in quarantine, as a field event is. Saved, it is what every record that
   // arrived before it with its number was waiting for: each now points at it (ADR-149, 292).
-  private roe(sent: SentRecord, roe: SentRoe, receivedAt: Date): Promise<SyncAnswer> {
+  private roe(
+    sent: SentRecord,
+    roe: SentRoe,
+    receivedAt: Date,
+    brought?: Brought,
+  ): Promise<SyncAnswer> {
     const notice = Quarantine.duplicateRoeNumber(roe.roeNumber);
     const fix = new GpsFix({ latitude: roe.latitude, longitude: roe.longitude }).read();
     const notes: IntakeNote[] = [];
@@ -373,9 +459,33 @@ export class Intake {
               receivedAt,
             },
           });
+          await ledgerRow(tx, brought, {
+            recordId: roe.id,
+            recordKind: 'ROE',
+            deviceId: roe.deviceId,
+            answer: 'QUARANTINED',
+          });
           return Intake.notSaved(roe.id, notice, holder.id);
         }
         await new RecordWrite(tx, receivedAt).roe(roe, fix.fix, notes);
+        await ledgerRow(tx, brought, {
+          recordId: roe.id,
+          recordKind: 'ROE',
+          deviceId: roe.deviceId,
+          answer: 'SAVED',
+        });
+        // The tickets whose field events were waiting for this number point at it now, and
+        // so may a survey, whose flags are no ticket's.
+        if (brought !== undefined) {
+          await this.queued(tx, brought, {
+            projectId: roe.projectId,
+            tickets: [],
+            others: await new WorkQueue(tx, this.ticketsAJob).ticketsWith(roe.projectId, {
+              roeId: roe.id,
+            }),
+            projectRecords: true,
+          });
+        }
         return { answer: 'SAVED', id: roe.id, notes };
       },
     );

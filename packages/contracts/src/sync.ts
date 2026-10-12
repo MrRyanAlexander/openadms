@@ -1,7 +1,8 @@
 // One sync, whole: what a phone sends and what it is answered (ARCHITECTURE §9, §10;
 // spec/parts/05-sync.md steps 2…8; spec/acceptance/05-sync.md AC-05-03, 04, 15, 20, 45…47;
 // AC-10-35, 36; T-12; BACKLOG 2.6.1, C69, C84 (9), C86, C122, C126, C127; ADR-022, 052, 065, 100,
-// 338, 457, 464, 466, 467; REQ-004, 203). The endpoint in front of it is task 2.6.2's.
+// 338, 457, 464, 466, 467; REQ-004, 203). The endpoint that takes it is `syncPhoneEndpoint`
+// (endpoints.ts; ADR-472).
 //
 // **A sync is read in this order, and each thing after what it may name:** the phone's clock;
 // the unplanned assignments made on the phone; the uses of the master passcode it logged; its
@@ -15,10 +16,10 @@
 //
 // **Each thing sent gets its own answer, in the order sent.** A record is saved, already saved,
 // kept in quarantine (not saved, with the reason and the record that holds the number), or not
-// saved and kept nowhere on the server: it isn't a record, it names something the server
-// doesn't have, its assignment was not saved, or it is a certification its own rules refuse
-// (ADR-469). Never an error for the whole sync, and never
-// "saved" for what wasn't stored (REQ-308c). Nothing here refuses work over eligibility
+// saved: it isn't a record, it names something the server doesn't have, its assignment was not
+// saved, or it is a certification its own rules refuse (ADR-469). One not saved is held on the
+// server exactly as sent, for a person, and its words say so (ADR-468, 472). Never an error
+// for the whole sync, and never "saved" for what wasn't stored (REQ-308c). Nothing here refuses work over eligibility
 // (ADR-052), and no answer carries a status, a flag or money: those are the worker's.
 import {
   NotSaved,
@@ -83,15 +84,39 @@ export type RecordRead =
   | { readonly read: true; readonly record: ReceivedRecord }
   | { readonly read: false; readonly id: string | null; readonly notice: NotSavedNotice };
 
-const identified = z.looseObject({ id });
+// What a thing sent in a record's place names, where that much can be read: the id its phone
+// made for it, its project, and the monitor who made it (a scale receipt's `enteredById`, an
+// ROE's `madeById`, a certification's `certifiedById`). Read loosely, each on its own, from a
+// record that may be no record: what is found is only what was sent, and may name nothing the
+// server has (ADR-468, 471).
+export interface RecordNames {
+  readonly id: string | null;
+  readonly projectId: string | null;
+  readonly monitorId: string | null;
+}
 
-function idOf(sent: unknown): string | null {
-  if (typeof sent !== 'object' || sent === null) return null;
-  for (const part of Object.values(sent)) {
-    const read = identified.safeParse(part);
-    if (read.success) return read.data.id;
+const monitorFields = ['monitorId', 'enteredById', 'madeById', 'certifiedById'] as const;
+
+const idIn = (part: object, field: string): string | null => {
+  const read = id.safeParse((part as Record<string, unknown>)[field]);
+  return read.success ? read.data : null;
+};
+
+export function recordNames(sent: unknown): RecordNames {
+  const none = { id: null, projectId: null, monitorId: null };
+  if (typeof sent !== 'object' || sent === null) return none;
+  for (const part of Object.values(sent) as unknown[]) {
+    if (typeof part !== 'object' || part === null) continue;
+    const named = idIn(part, 'id');
+    if (named === null) continue;
+    return {
+      id: named,
+      projectId: idIn(part, 'projectId'),
+      monitorId:
+        monitorFields.map((field) => idIn(part, field)).find((found) => found !== null) ?? null,
+    };
   }
-  return null;
+  return none;
 }
 
 // Reads whatever stood in one record's place.
@@ -99,7 +124,7 @@ export function recordRead(sent: unknown): RecordRead {
   const read = syncedRecordSchema.safeParse(sent);
   if (read.success) return { read: true, record: read.data };
   const why = notRead(syncedRecordSchema, sent) ?? 'this record isn’t taken as it stands';
-  return { read: false, id: idOf(sent), notice: NotSaved.notARecord(why) };
+  return { read: false, id: recordNames(sent).id, notice: NotSaved.notARecord(why) };
 }
 
 // Something the server did with a record it saved that the sender should know: nothing was

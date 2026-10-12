@@ -145,4 +145,27 @@ describe('what a phone is told of a record that could not be saved at all', () =
       expect(message).not.toMatch(/eligib|flag|quarantine/i);
     }
   });
+
+  it('ADR-468, 472 once the server holds what was sent, its words say so, and only then: the reason stands, and it is still never “saved”', () => {
+    const replaced = NotSaved.replacedAlready();
+    expect([replaced.reason, replaced.message]).toEqual([
+      'CERTIFICATION_REFUSED',
+      'Not saved: the certification this one replaces has already been replaced.',
+    ]);
+    for (const notice of [
+      NotSaved.notARecord('fieldEvent.loadCall in this record can’t be more than 100'),
+      NotSaved.namesNoRecord(),
+      NotSaved.assignmentNotSaved(),
+      NotSaved.certNumberHeld('730415'),
+      replaced,
+    ]) {
+      expect(notice.message).not.toMatch(/held on the server/i);
+      const held = NotSaved.heldForReview(notice);
+      expect(held).toEqual({
+        reason: notice.reason,
+        message: `${notice.message} Held on the server for review.`,
+      });
+      expect(held.message.startsWith('Not saved: ')).toBe(true);
+    }
+  });
 });

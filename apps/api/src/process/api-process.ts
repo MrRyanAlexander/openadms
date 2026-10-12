@@ -35,6 +35,7 @@ import { Assignments } from '../dispatch/assignments.ts';
 import { MasterPasscode } from '../dispatch/master-passcode.ts';
 import { apiMasterPasscode, apiPhones } from '../dispatch/phones.controller.ts';
 import { Phones } from '../dispatch/phones.ts';
+import { NumberAllocator } from '../numbering/number-allocator.ts';
 import { apiPeople } from '../people/people.controller.ts';
 import { People } from '../people/people.ts';
 import { apiAddressLookups } from '../phone/address-lookups.controller.ts';
@@ -112,6 +113,9 @@ import { TwoStepSecrets } from '../sign-in/two-step-secrets.ts';
 import { apiTwoStep } from '../sign-in/two-step.controller.ts';
 import { TwoStep, TwoStepCheck } from '../sign-in/two-step.ts';
 import { WrongTries } from '../sign-in/wrong-tries.ts';
+import { Intake } from '../sync/intake.ts';
+import { apiSync } from '../sync/sync.controller.ts';
+import { Sync } from '../sync/sync.ts';
 import { apiViewerReads } from '../viewer/viewer-reads.controller.ts';
 import { ViewerReads } from '../viewer/viewer-reads.ts';
 import { answersWith } from './answer-headers.ts';
@@ -316,6 +320,10 @@ export class ApiProcess {
       clock,
       requestNow,
     });
+    // What a phone reports besides its records (task 2.5.4), by its own endpoints and in a sync.
+    const unplanned = new UnplannedAssignments(database, { clock, requestNow });
+    const passcodeUses = new PasscodeUses(database, { clock, requestNow });
+    const certifications = new Certifications(database, clock, policy);
     const app = await NestFactory.create<NestFastifyApplication>(
       ProcessModule.around(
         module,
@@ -350,7 +358,7 @@ export class ApiProcess {
           [apiQuarantineReview, new QuarantineReview(database, clock, policy)],
           [apiBackOfficeRecords, new BackOfficeRecords(database, clock, policy)],
           // A certification's changes (task 2.4.4, part 4): only an admin revokes.
-          [apiCertifications, new Certifications(database, clock, policy)],
+          [apiCertifications, certifications],
           // A phone enrolled under the master passcode (task 2.5.1): nobody is signed in.
           [
             apiEnrolment,
@@ -407,9 +415,21 @@ export class ApiProcess {
           // An address looked up for a phone's GPS (task 2.5.3, part 5).
           [apiAddressLookups, new AddressLookups(addresses)],
           // What a phone reports besides field events (task 2.5.4): an unplanned assignment.
-          [apiUnplannedAssignments, new UnplannedAssignments(database, { clock, requestNow })],
+          [apiUnplannedAssignments, unplanned],
           // And every other use of the master passcode it logged with no connection (part 5).
-          [apiPasscodeUses, new PasscodeUses(database, { clock, requestNow })],
+          [apiPasscodeUses, passcodeUses],
+          // A phone's sync, whole (task 2.6.2): its reports, its records, its numbers.
+          [
+            apiSync,
+            new Sync(database, {
+              intake: new Intake(database, clock, policy),
+              certifications,
+              unplanned,
+              uses: passcodeUses,
+              numbers: new NumberAllocator(database, clock, policy),
+              clock,
+            }),
+          ],
           [
             apiMasterPasscode,
             new MasterPasscode(database, {
