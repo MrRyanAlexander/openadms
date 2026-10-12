@@ -34,6 +34,7 @@ import { projectTime } from '../clock.ts';
 import { uuidv7 } from '../ids.ts';
 import { localMapServers } from '../map-servers.ts';
 import type { Story } from '../runner.ts';
+import { sentAlone } from './board.ts';
 import {
   certifyP1,
   loadP1Map,
@@ -141,7 +142,11 @@ export const p1Reconciled: Story = {
         return mileages.between(ends, standing);
       },
     };
-    const settings = { crewItemHoursLimit: story.policy.crewDayHours, longestRunMs: 600_000 };
+    const settings = {
+      crewItemHoursLimit: story.policy.crewDayHours,
+      deviceClockOffLimitMinutes: story.policy.deviceClockOffLimitMinutes,
+      longestRunMs: 600_000,
+    };
     const reconciliation = new Reconciliation(worker, clock, settings, step);
     const sync = { projectId: p1, trigger: 'SYNC' } as const;
 
@@ -259,7 +264,7 @@ export const p1Reconciled: Story = {
         typeof item === 'bigint' ? item.toString() : item,
       );
 
-    const phones = new P1Syncs(story, held);
+    const phones = new P1Syncs(story, office);
     const syncs = phones.times;
     const arrive = (syncedAt: Date): Promise<number> => phones.arrive(syncedAt);
     const crewPhotographs = (syncedAt: Date): Promise<number> => phones.crewPhotographs(syncedAt);
@@ -636,7 +641,7 @@ export const p1Reconciled: Story = {
         each.sent.fieldEvent.ticketNumber === '101005',
     )?.sent;
     if (again?.record !== 'FIELD_EVENT') throw new Error('No disposal on 101005 was held.');
-    const duplicate = await story.intake.receive({
+    const duplicate = await sentAlone(story, timeZone, {
       ...again,
       fieldEvent: { ...again.fieldEvent, id: uuidv7(clock.now()) },
     });
@@ -996,7 +1001,7 @@ export const p1Reconciled: Story = {
         each.sent.fieldEvent.ticketNumber === '101006',
     )?.sent;
     if (collection?.record !== 'FIELD_EVENT') throw new Error('No collection on 101006 was held.');
-    await story.intake.receive({
+    await sentAlone(story, timeZone, {
       ...collection,
       fieldEvent: {
         ...collection.fieldEvent,

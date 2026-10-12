@@ -1,5 +1,11 @@
 // The domain rules shared by phone and server; depends on nothing (ARCHITECTURE §18).
 // The rules arrive task by task in Phase 1 (BACKLOG, "Active — Phase 1").
+export {
+  lookedUpAddress,
+  lookedUpAddressLongest,
+  noAddressReasons,
+  type NoAddressReason,
+} from './addresses.ts';
 export { builtInKeys, type BuiltInKey, type ListWithBuiltInValues } from './built-in-keys.ts';
 export {
   Capacity,
@@ -117,9 +123,13 @@ export {
 export { IncidentOffers, incidentOffers, type IncidentOffer } from './incident-offers.ts';
 export {
   GpsFix,
+  NotSaved,
+  notSavedReasons,
   Quarantine,
   quarantineReasons,
   type FixReading,
+  type NotSavedNotice,
+  type NotSavedReason,
   type QuarantineNotice,
   type QuarantineReason,
   type ReadableFix,
@@ -204,10 +214,32 @@ export {
   AssignmentRules,
   assignableRoles,
   assignmentFormDocumentTypes,
+  noAssignmentReasons,
+  unplannedAssignmentRefusals,
+  unplannedOccasions,
   type AssignmentFormDocumentType,
   type AssignmentRefusal,
   type AssignmentRefusalCode,
+  type AssignmentTaken,
+  type NoAssignmentReason,
+  type StandingAssignment,
+  type UnplannedAssignmentRefusal,
+  type UnplannedOccasion,
+  type UnplannedSecurityEvent,
 } from './assignments.ts';
+export {
+  PasscodeSessionRules,
+  masterPasscodeSessions,
+  type MasterPasscodeSessionKind,
+} from './passcode-sessions.ts';
+export {
+  PasscodeLogRules,
+  loggedPasscodeUseRefusals,
+  loggedPasscodeUses,
+  type LoggedPasscodeUse,
+  type LoggedPasscodeUseRefusal,
+  type LoggedSecurityEvent,
+} from './passcode-uses.ts';
 export {
   MasterPasscodeRules,
   PhoneRules,

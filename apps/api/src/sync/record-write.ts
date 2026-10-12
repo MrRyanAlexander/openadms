@@ -20,10 +20,11 @@ const day = (date: string): Date => new Date(`${date}T00:00:00Z`);
 const quoted = (half: unknown): string => (half === null ? 'none' : JSON.stringify(half));
 
 // A field event to write: as a phone sends it, or as the back office creates one, which names
-// who created it and the reason picked, and has no phone, assignment or list version (ADR-156).
+// who created it and the reason picked, and has no phone, assignment, list version or typed
+// capacity (ADR-156, 432).
 export type FieldEventToWrite = Omit<
   SentFieldEvent,
-  'source' | 'deviceId' | 'assignmentId' | 'setupVersion'
+  'source' | 'deviceId' | 'assignmentId' | 'setupVersion' | 'typedCapacityCy'
 > &
   (
     | {
@@ -31,6 +32,8 @@ export type FieldEventToWrite = Omit<
         readonly deviceId: string;
         readonly assignmentId: string;
         readonly setupVersion: number;
+        // The capacity read off a truck keyed in by hand: a phone's alone to say (ADR-154).
+        readonly typedCapacityCy: number | null;
       }
     | {
         readonly source: 'BACK_OFFICE';
@@ -55,6 +58,11 @@ export function gpsNote(end: 'start' | 'end' | '', sent: SentFix): IntakeNote {
     message: `GPS unreadable${end === '' ? '' : ` at the ${end}`}: latitude ${quoted(sent.latitude)}, longitude ${quoted(sent.longitude)} as sent. Kept without that fix.`,
   };
 }
+
+// Thrown where a record names something the server doesn't have and no constraint of the
+// database's says so first: nothing is saved, and `Sync` answers it as it does the database's
+// own refusal (ADR-467 (5), 472).
+export class NamesNothing extends Error {}
 
 // Writes inside the caller's piece of work, with the time the server received the record.
 export class RecordWrite {
@@ -121,6 +129,7 @@ export class RecordWrite {
         certNumber: event.certNumber,
         certificationId: certification?.id ?? null,
         certKeyedByHand: event.certKeyedByHand,
+        typedCapacityCy: event.source === 'DEVICE' ? event.typedCapacityCy : null,
         siteId: event.siteId,
         startedAt: event.startedAt,
         endedAt: event.endedAt,
@@ -233,7 +242,9 @@ export class RecordWrite {
       where: { id: sent.formDefinitionId },
     });
     if (definition === null) {
-      throw new Error(`No form definition ${sent.formDefinitionId}: the record was not saved.`);
+      throw new NamesNothing(
+        `No form definition ${sent.formDefinitionId}: the record was not saved.`,
+      );
     }
     const fields = formDefinitionFields.safeParse(definition.fields);
     if (!fields.success || !formAnswersSchema(fields.data).safeParse(answers).success) {

@@ -22,6 +22,10 @@ export const madeUpSettings: ProcessSettings = {
   smtpUrl: '',
   smtpAddress: undefined,
   mailFrom: 'open-adms@adms.localhost',
+  // Named and never asked, unless a test hands the process an address server of its own.
+  addressesUrl: 'https://addresses.adms.localhost',
+  mapCaFile: null,
+  mapServersAt: undefined,
 };
 
 export const shippedPolicy = builtInPolicy();

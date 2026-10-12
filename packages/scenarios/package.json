@@ -8,6 +8,7 @@
   "exports": "./dist/index.js",
   "dependencies": {
     "@open-adms/api": "workspace:*",
+    "@open-adms/contracts": "workspace:*",
     "@open-adms/db": "workspace:*",
     "@open-adms/domain": "workspace:*",
     "@open-adms/worker": "workspace:*",

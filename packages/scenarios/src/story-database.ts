@@ -5,6 +5,11 @@
 // from the same migrations (prisma.story.config.js) and seeded by the same seed, so every story
 // starts at the migrations' head with only the system actor and the master passcode in it.
 //
+// A run of several stories migrates and seeds once (ADR-447): a template made the same way, which
+// each story's database is then a copy of, and which is dropped when the run ends. Postgres copies
+// what is in a database and never its access list, so each copy is locked down and checked as a
+// database made from nothing is.
+//
 // Like the installer, it speaks to the local stack's server administrator to create and drop, with
 // the password from infra/local/.env; everything a story writes goes through @open-adms/db as the
 // services' own logins, their URLs read from their env files. No password or URL is ever printed.
@@ -40,6 +45,49 @@ const storyMasterPasscodeHash =
 
 export type Service = 'api' | 'worker';
 
+// How a story's database stands, read from inside it as the server's administrator: for the proof
+// that a copy of a template is what a database migrated and seeded by itself is.
+export interface Standing {
+  readonly owner: string;
+  readonly migrations: number;
+  readonly unguarded: readonly string[];
+  readonly mayConnect: readonly string[];
+  readonly users: number;
+}
+
+// A run's template (ADR-447): a story's database migrated and seeded once, which nothing connects
+// to afterwards, so each story's own database can be copied from it.
+export class StoryTemplate {
+  readonly name: string;
+  readonly migrations: number;
+  readonly seeded: readonly string[];
+  private readonly database: StoryDatabase;
+
+  private constructor(database: StoryDatabase, migrations: number, seeded: readonly string[]) {
+    this.database = database;
+    this.name = database.name;
+    this.migrations = migrations;
+    this.seeded = seeded;
+  }
+
+  // The caller drops it (drop()), whatever happens.
+  static async create(): Promise<StoryTemplate> {
+    const database = await StoryDatabase.create(undefined, 'template_');
+    try {
+      const migrations = database.migrate();
+      const seeded = await database.seed();
+      return new StoryTemplate(database, migrations, seeded);
+    } catch (error) {
+      await database.drop();
+      throw error;
+    }
+  }
+
+  drop(): Promise<void> {
+    return this.database.drop();
+  }
+}
+
 export class StoryDatabase {
   readonly name: string;
   private readonly admin: pg.Client;
@@ -50,16 +98,21 @@ export class StoryDatabase {
     this.admin = admin;
   }
 
-  // A new, empty database, locked down. The caller drops it (drop()), whatever happens.
-  static async create(): Promise<StoryDatabase> {
+  // A new database, locked down: empty, or a copy of a run's template (migrated and seeded
+  // already). The caller drops it (drop()), whatever happens. A copy is made file by file: the
+  // other way writes the whole of it to the write-ahead log, which the local stack's small disk
+  // has no room for eighteen times over (ADR-313).
+  static async create(from?: StoryTemplate, kind = ''): Promise<StoryDatabase> {
     const admin = await StoryDatabase.administer();
     const stamp = new Date().toISOString().replace(/\D/g, '').slice(0, 14);
-    const name = `adms_story_${stamp}_${randomBytes(3).toString('hex')}`;
+    const name = `adms_story_${kind}${stamp}_${randomBytes(3).toString('hex')}`;
     const made = new StoryDatabase(name, admin);
     const database = admin.escapeIdentifier(name);
     try {
       await admin.query(
-        `CREATE DATABASE ${database} OWNER adms_owner TEMPLATE template0 ENCODING 'UTF8'`,
+        from === undefined
+          ? `CREATE DATABASE ${database} OWNER adms_owner TEMPLATE template0 ENCODING 'UTF8'`
+          : `CREATE DATABASE ${database} OWNER adms_owner TEMPLATE ${admin.escapeIdentifier(from.name)} STRATEGY FILE_COPY`,
       );
       await admin.query(`REVOKE ALL ON DATABASE ${database} FROM PUBLIC`);
       await admin.query(
@@ -110,6 +163,42 @@ export class StoryDatabase {
       [this.name],
     );
     return result.rows[0]?.allowed === true;
+  }
+
+  // How this database stands, read from inside it (see Standing).
+  async standing(): Promise<Standing> {
+    const inside = await StoryDatabase.administer(this.name);
+    try {
+      const one = async <Row extends object>(sql: string, values: unknown[] = []) =>
+        (await inside.query<Row>(sql, values)).rows;
+      const [owned] = await one<{ owner: string }>(
+        `SELECT pg_get_userbyid(datdba) AS owner FROM pg_database WHERE datname = $1`,
+        [this.name],
+      );
+      const [applied] = await one<{ count: string }>(
+        `SELECT count(*) AS count FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL`,
+      );
+      const gaps = await one<{ table_name: string }>(`SELECT table_name FROM guard_gaps()`);
+      const may = await one<{ rolname: string }>(
+        `SELECT rolname FROM pg_roles
+         WHERE rolname IN ('adms_owner', 'adms_api', 'adms_worker', 'adms_readonly')
+           AND NOT rolsuper AND has_database_privilege(rolname, $1, 'CONNECT') ORDER BY rolname`,
+        [this.name],
+      );
+      const [people] = await one<{ count: string }>(`SELECT count(*) AS count FROM "user"`);
+      return {
+        owner: owned?.owner ?? '',
+        migrations: Number(applied?.count ?? '0'),
+        unguarded: gaps.map((gap) => gap.table_name),
+        mayConnect: [
+          ...((await this.publicCanConnect()) ? ['PUBLIC'] : []),
+          ...may.map((role) => role.rolname),
+        ],
+        users: Number(people?.count ?? '0'),
+      };
+    } finally {
+      await inside.end();
+    }
   }
 
   // Every migration, as adms_owner, through Prisma (prisma migrate deploy); how many were applied.
@@ -197,7 +286,7 @@ export class StoryDatabase {
     return url.toString();
   }
 
-  private static async administer(): Promise<pg.Client> {
+  private static async administer(database = 'postgres'): Promise<pg.Client> {
     const stackEnv = new URL('infra/local/.env', root);
     if (!existsSync(stackEnv)) throw new Error(`${needs} (infra/local/.env is missing)`);
     const env = parseEnv(readFileSync(stackEnv, 'utf8'));
@@ -208,7 +297,7 @@ export class StoryDatabase {
       port: Number(env['ADMS_PG_PORT'] ?? '55432'),
       user: 'postgres',
       password,
-      database: 'postgres',
+      database,
       connectionTimeoutMillis: 5000,
     });
     try {

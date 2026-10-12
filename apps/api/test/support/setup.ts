@@ -102,8 +102,8 @@ export async function p1Through(api: Served, dana: Browser, tx: Tx, more: object
   return { client, declarationEvent, payload, lists };
 }
 
-export async function p1(api: Served, dana: Browser, tx: Tx) {
-  const entered = await p1Through(api, dana, tx);
+export async function p1(api: Served, dana: Browser, tx: Tx, more: object = {}) {
+  const entered = await p1Through(api, dana, tx, more);
   const answer = await ask(api, dana, createProjectEndpoint, { payload: entered.payload });
   return { ...entered, answer, project: saved(createProjectEndpoint, answer).record };
 }
@@ -141,8 +141,8 @@ export const unticked = {
 
 // P1 with Coastline as its prime, Coastline's contract and the three forms that take rules, all
 // through the endpoints; and what the firm's lists hold, picked by name (never typed).
-export async function p1Priced(api: Served, dana: Browser, tx: Tx) {
-  const { project } = await p1(api, dana, tx);
+export async function p1Priced(api: Served, dana: Browser, tx: Tx, more: object = {}) {
+  const { project } = await p1(api, dana, tx, more);
   const ids = { projectId: project.id };
   const contractor = async (name: string) =>
     saved(

@@ -454,7 +454,7 @@ every edit of a migration file and allows a write only while the file is still P
 ADR-106 (master passcode) and ADR-120 (changing monitors, username). **The word is "setup"**, never "provisioning" or "provisioned"
 (ADR-095). Setup is the root of trust for everything a device does.
 
-> ⚠️ **ADR-240 (2026-09-29, at the user's word; this note awaits approval, building doesn't wait):
+✅ **Approved** **ADR-240 (2026-09-29, at the user's word; this note awaits approval, building doesn't wait):
 > enrol once, dispatch daily.** What below is "setting up a phone" splits in two:
 > 1. **Enrolment, once per phone** (online, master passcode): the device key of §7.4 is made and the
 >    phone joins the firm's phones. No project, no monitor.
@@ -470,6 +470,86 @@ ADR-106 (master passcode) and ADR-120 (changing monitors, username). **The word 
 > **setup version**, and every field event records its assignment and that version. §7.2's safeguards,
 > §7.4 and §7.5 stand. Declined: per-person passkeys or biometrics (phones pass between monitors),
 > attestation, personal phones, per-supervisor keys (ADR-106 stands).
+
+✅ **Approved** **ADR-456, 457 (2026-10-10; agent defaults, this note awaits approval, building didn't
+> wait): what a phone reports of an act under the master passcode.** An unplanned assignment
+> is made on the phone, with or without a connection, and the phone checks the passcode against
+> its own check. When it next has a connection the phone, having proved itself with its device
+> key (§7.4), **reports the assignment**; nobody need be signed in and the passcode is never
+> sent. The server takes the phone's word and keeps the assignment as reported: marked
+> unplanned, on the board, never flagged, for a monitor archived since and from a phone out of
+> service too. Its day is the day the phone's clock said, in the project's time zone. It keeps
+> **the phone's instant, that clock's offset and when the server received it** (§10), and is
+> recorded as done by **"Master passcode"** on that phone, about the monitor, with two security
+> events at the phone's own time: a phone set up, and a use of the master passcode (§7.5).
+> Reported twice, it is kept once. Still to build (ADR-456's cut): a monitor switch and a site
+> move reported; a session under the passcode and the temporary session; every other use of the
+> passcode a phone logged. **Neither NIST SP 800-63B nor ASVS provides for a server taking a
+> device's word for what was done offline under a shared secret** (ADR-456): what stands
+> against it is the device key, the three times kept, and the clock difference kept at sync.
+
+✅ **Approved** **ADR-458 (2026-10-10; agent defaults, this note awaits approval, building didn't wait):
+> a site move and a monitor switch, reported.** Moving a phone to another of its project's
+> sites (ADR-195) and passing it to a monitor who has no assignment
+> (§7.3) are each done on the phone under the master passcode, with or without a connection,
+> and each makes **a new unplanned assignment**, which the phone reports as it reports a first
+> setup, saying which it was made at: a setup, or a switch. A move is the phone set up again at
+> the new site; a switch is recorded as a phone switched, naming the monitor it was switched
+> to; each is also a use of the master passcode, at the phone's own time. **The earlier
+> assignment stands as it was**, with everything recorded under it, and nothing the dispatcher
+> planned is changed from a phone. **Where several of a monitor's assignments for a day name
+> the phone they sign in on, it takes the one made on it last** (by the phone's clock); with
+> none of them made on the phone it still takes none and says so. Still to build: a switch to
+> a monitor who has their own assignment (the event alone), a session under the passcode and
+> the temporary session, every other use of the passcode a phone logged.
+
+✅ **Approved** **ADR-462 (2026-10-10; ADR-456 (5)(d) built as proposed, the rest agent defaults; this
+> note awaits approval, building didn't wait): a session under the master passcode, with a
+> connection.** A supervisor types the master passcode on an enrolled phone in service and
+> either signs in as the phone's monitor (§7.2) or opens the temporary session for a monitor
+> picked from the roster (§7.3). The server checks the passcode itself (§7.5; a wrong try counts
+> as at enrolment) and opens a session for that monitor on that phone, **marked as opened under
+> the master passcode and which way**: it is never the monitor's own sign-in, the record names
+> **"Master passcode"** on that phone, and it is a use of the master passcode in the security
+> log. The database lets nobody write such a session any other way. It ends any other session
+> on the phone, and ends as a monitor's own does. **A temporary session ends at the end of the
+> project's day** (the project of the assignment the phone takes, in its time zone) **or after
+> a monitor's own twelve hours, whichever comes first**; as the phone's monitor it lasts the
+> twelve hours. **A monitor switch a phone reports signs out whoever was signed in on it
+> before the switch.** Neither NIST SP 800-63B nor ASVS provides for a session opened for
+> somebody by a secret that isn't theirs (ADR-456): the mark is what stands for it. Still to
+> build: what a phone being set up online picks from, every other use of the passcode a phone
+> logged, and the mark on a record made in a session as the phone's monitor (task 2.6.2).
+
+✅ **Approved** **ADR-463 (2026-10-10; ADR-462's proposal built as made, the rest agent defaults; this
+> note awaits approval, building didn't wait): what a phone being set up online picks from.**
+> With a connection and nobody signed in, the supervisor types the master passcode (§7.1 step
+> 1) and the phone, having proved itself, **sends it with its request**: the server checks it
+> (§7.5; a wrong try counts as at enrolment) and answers the firm's open projects, its monitors
+> in service by name and Monitor ID, and, once a project is picked, that project's live sites
+> and its unit rate pay items in service, as a phone's lists show them. Never a rate, a rule, a
+> password or a phone number. A phone's proof alone reads none of it: a lost phone keeps its
+> key until it is revoked. Each read is a use of the master passcode in the security log,
+> naming the phone. A phone out of service reads nothing. The setup itself is still made on
+> the phone and reported as an unplanned assignment (ADR-457).
+
+✅ **Approved** **ADR-464 (2026-10-10; ADR-456 (5)(e) built as proposed, the rest agent defaults; this
+> note awaits approval, building didn't wait): every other use of the master passcode a phone
+> logged.** What a phone did under the passcode with no connection, and no assignment came of
+> it, the phone logs and **reports when it next has a connection**, having proved itself;
+> nobody need be signed in and the passcode is never sent. Three things: **the phone passed to
+> a monitor who has their own assignment** (§7.3: recorded as a phone switched and a use of the
+> passcode, naming them; no assignment is made); **a session opened on the phone**, as its
+> monitor or the temporary one (a use of the passcode that says which way and for whom, never
+> a sign-in; the server opens no session for it); and **the passcode typed wrong** (a failed
+> try, about nobody). Each is kept once, by the id the phone gave it, at the phone's own time
+> with its clock's offset (§10), and recorded as done by **"Master passcode"** on that phone;
+> the database lets nobody else write what a phone reported. **A wrong try typed on a phone
+> never counts toward the lock on the server's own check** (§7.5), which guards only what the
+> server is sent. A switch or a session reported signs out whoever else was signed in on that
+> phone before it. Still to build: the passcode's use to sync and turn a phone in (§7.5, task
+> 2.6.5), and what a phone does after ten wrong tries with no connection (the field app,
+> Phase 3).
 
 ### 7.0 Creating people
 
@@ -490,7 +570,7 @@ ADR-106 (master passcode) and ADR-120 (changing monitors, username). **The word 
   without the area code**, so a worker who forgets it is told "your ID, and your own phone number",
   and an admin can sign in as them.
 
-> ⚠️ **ADR-441, 442 (2026-10-09; agent defaults, this note awaits approval, building didn't
+✅ **Approved** **ADR-441, 442 (2026-10-09; agent defaults, this note awaits approval, building didn't
 > wait): creating a monitor takes the phone and the passcode together.** The request comes from
 > an enrolled phone that has proved itself with its device key (§7.4) and carries the master
 > passcode; the passcode typed anywhere else creates nobody. Nobody types the Monitor ID: the
@@ -499,7 +579,7 @@ ADR-106 (master passcode) and ADR-120 (changing monitors, username). **The word 
 > a monitor's sign-in, and where the phone-number password departs from them (the accepted risk of
 > ADR-105 and §7.2), is ADR-441.
 
-> ⚠️ **ADR-415 (2026-10-07; the server command is the user's decision, ADR-413 (2), 414 (2); this
+✅ **Approved** **ADR-415 (2026-10-07; the server command is the user's decision, ADR-413 (2), 414 (2); this
 > note awaits approval, building didn't wait):** the installer seeds nobody who can sign in, so
 > **the firm's first admin is made on its own server by `pnpm installer:admin`**, which also lets
 > an admin back in who has no other admin to ask (a login locked by wrong tries, a forgotten
@@ -509,7 +589,7 @@ ADR-106 (master passcode) and ADR-120 (changing monitors, username). **The word 
 
 ### 7.1 Setting up a phone (online only)
 
-> ⚠️ **What a phone's lists carry, today (ADR-207, 213, 223, 227, 240, 243; this note awaits
+✅ **Approved** **What a phone's lists carry, today (ADR-207, 213, 223, 227, 240, 243; this note awaits
 > approval, building doesn't wait).** The two "Decided" paragraphs below (ADR-176, ADR-182) are
 > **superseded**: loads don't start from a pay item and a load's phone holds **no pay items**
 > (ADR-207, 223). For the phone's current **assignment** (or unplanned assignment), its lists carry:
@@ -520,6 +600,34 @@ ADR-106 (master passcode) and ADR-120 (changing monitors, username). **The word 
 > quantity lookup**: per debris type and prime, **load call, scale weight or a count of the tickets
 > the load carries**, worked out ahead from the rules (ADR-227, 243); the login list; the **setup
 > version** every field event records (ADR-240). Rules and rates never go to a phone.
+
+✅ **Approved** **ADR-449, 450, 451 (2026-10-09; agent defaults, this note awaits approval, building didn't
+> wait): how a phone gets its lists.** A phone whose monitor is signed in asks for its lists
+> whenever it has a connection. The server works out again which assignment the phone takes
+> (§7.2's rule) and answers that assignment's lists; with no assignment that day it sends none
+> and the phone keeps what it holds. Built so far: the number blocks, debris types, field tags,
+> the unit rate pay items the assignment names with their capture settings, what its incidents
+> and surveys pick from, and (ADR-451) the project's certifications (number, kind, capacity,
+> prime and subs: never the driver), its sites by name and use, its ROEs by number, address and
+> parcel with whether the pre-work survey is done (never the owner; only for a phone whose work
+> names an ROE), the control ranges and the phone's own site's quantity lookup; the setup
+> version (ADR-453); and, by a call of their own, the login list and the master passcode's
+> check (ADR-454, below). **A login list on a phone is outside what NIST SP 800-63B and ASVS provide
+> for** (ADR-449): anyone who reads a phone's list out can guess a seven-digit password, so the
+> protection is §7.2's five safeguards, as approved.
+
+> ⚠️ **ADR-454 (2026-10-09; ADR-449 (5) built as proposed, the rest agent defaults; this note
+> awaits approval, building didn't wait): the login list and the master passcode's check.** A
+> phone whose monitor is signed in asks for them whenever it has a connection, saying what it
+> already holds. **On its list:** the monitors in service with an assignment that stands on its
+> project for today or later. **An entry** is a slow hash made for that phone alone from a seed
+> the server keeps sealed beside the monitor's password; the phone is told how to make the first
+> half from what is typed and holds the second, and nothing sent is what the server itself
+> checks a sign-in against. Each entry costs the server about a hundredth of a second, so it
+> makes only those the phone doesn't hold, a bounded number a call; a password set anew
+> replaces its entry at the phone's next read. **The master passcode's check** is made the same
+> way and sent with its version; the phone's record says which version it was sent (§7.5). The
+> server keeps no entry.
 
 ✅ **Decided** *(ADR-176, user 2026-09-27, Q-170)*: the setup manifest carries the project's **service
 codes and their settings** (photos, GPS, measurement and weight required; payable type) for **every
@@ -582,7 +690,7 @@ So the protection can't rest on the password. It rests on these:
 5. **A screen-lock passcode on every phone** (the firm's device management) is strongly
    recommended, because it's what makes point 2 hold.
 
-> ⚠️ **ADR-441, 443 (2026-10-09; agent defaults, this note awaits approval, building didn't
+✅ **Approved:** **ADR-441, 443 (2026-10-09; agent defaults, this note awaits approval, building didn't
 > wait): signing in online.** With a connection, a monitor signs in on an enrolled phone that has
 > proved itself and is in service, with Monitor ID and password; the server answers with the
 > monitor's own session, which the phone's calls carry beside the phone's proof. It lasts twelve
@@ -592,6 +700,16 @@ So the protection can't rest on the password. It rests on these:
 > fiftieth until an admin sets the password anew (the phone's own screen keeps its 5 and 10).
 > A phone taken out of service signs nobody in. The database itself lets a monitor's session be
 > opened on a phone only (point 1).
+>
+✅ **Approved:** **ADR-444 (2026-10-09; agent defaults, this note awaits approval, building didn't wait):
+> the phone takes the assignment at that sign-in.** The sign-in's answer carries the monitor's
+> assignment for the day, the day being the project's own (its time zone): the one that names
+> this phone; with none naming it, the only one they have, whichever phone the board named.
+> Where several are left (two projects that day and a phone neither names), the phone takes none
+> and says so: nobody picks a project on a phone and the server never picks one for them; the
+> dispatcher names the phone, or the master passcode sets it up (§7.1). With none that day the
+> monitor is signed in all the same and told there is none. The phone is told the assignment's
+> project, day, work and site, never a rate or a code; its lists are their own read.
 
 ### 7.3 Switching monitors on a phone
 
@@ -619,7 +737,7 @@ So the protection can't rest on the password. It rests on these:
   number block (ADR-065) and has it wiped. Once wiped, its device key is revoked and the server
   refuses it.
 
-> ⚠️ **ADR-436, 437, 440 (2026-10-09; agent defaults, this note awaits approval, building didn't
+✅ **Approved** **ADR-436, 437, 440 (2026-10-09; agent defaults, this note awaits approval, building didn't
 > wait): how a phone proves itself.** The key is ECDSA P-256. Before a sync the phone asks for a
 > challenge by its id, signs it, and is given a token good for fifteen minutes that its calls
 > carry as `Authorization: Bearer`; a challenge is good for two minutes and once. Nobody need be
@@ -699,8 +817,11 @@ So the protection can't rest on the password. It rests on these:
 4. **Each record gets its own answer:** saved, already saved, or quarantined (with the reason).
    The device marks each one accordingly, and a quarantined record shows as **not saved**.
    ⚠️ *ADR-240: the device syncs **whenever it has a connection**, not only at the end of the day;
-   a finished field event stays reopenable until the monitor ends the shift (agent default), and an
-   edit to one already sent travels by step 8.*
+   ~~a finished field event stays reopenable until the monitor ends the shift (agent default), and an
+   edit to one already sent travels by step 8.~~*
+   ⚠️ *ADR-477 (the user, 2026-10-12): once a monitor submits a record on the phone it is sealed
+   for them, synced or not; only the back office changes it. A record sent again is answered
+   "already saved" as it was stored.*
 5. **Photos upload resumably.** An interrupted upload continues from where it stopped. The server
    checks each file's hash against the one the device recorded (§11).
 6. **The device gets a fresh manifest** (certs, sites, ROEs, roster, control ranges), its number
@@ -708,9 +829,14 @@ So the protection can't rest on the password. It rests on these:
    is the one for the phone's current assignment, as listed in the §7.1 note (debris types, field
    tags, its unit rate pay items, its site's quantity lookup), with a new setup version whenever
    any of it changed.*
+   ⚠️ *ADR-473 (confirmed by the user, ADR-474): the sync's own call brings the new master
+   passcode check and the setup version's number, with nobody signed in; the lists and the login
+   list are read by the signed-in monitor's phone in the same connection, by their own endpoints.*
 7. **The server queues reconciliation** for what arrived (§13). The sync doesn't wait for it.
-8. The device records its **ticket edit log** for anything reopened before sync (ADR-072), and the
-   server writes those edits to the audit log under the monitor's ID.
+8. ~~The device records its **ticket edit log** for anything reopened before sync (ADR-072), and the
+   server writes those edits to the audit log under the monitor's ID.~~
+   ⚠️ *ADR-477 (the user, 2026-10-12): withdrawn. Nothing a monitor submitted is reopened, so
+   there is no edit log.*
 
 The sync contract (every payload and every answer) is written once as shared Zod schemas, with a
 test suite that any client, including the scenario harness, must pass.

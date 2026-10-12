@@ -27,7 +27,7 @@ import { NewProjectSettings } from '@open-adms/domain';
 import { utcOffsetMinutes } from '../clock.ts';
 import { uuidv7 } from '../ids.ts';
 import type { Story } from '../runner.ts';
-import { assigned } from './board.ts';
+import { assigned, taken } from './board.ts';
 import { p1TimeZone as timeZone, setUpP1, startSeries } from './p1.ts';
 
 const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-04:00`;
@@ -83,8 +83,6 @@ export const certification: Story = {
       // He merges two spellings of a sub later: a contractor's record is setup's, and its
       // service asks whether he holds Setup (ADR-424).
       await tx.userPermission.create({ data: { userId: luis.id, permission: 'SETUP' } });
-      const sam = await tx.user.create({ data: { name: 'Sam Grant', role: 'MONITOR' } });
-      const lee = await tx.user.create({ data: { name: 'Lee Morgan', role: 'MONITOR' } });
       const p1 = await setUpP1(tx, story.policy);
       const ppdr = await tx.programType.findFirstOrThrow({ where: { name: 'PPDR' } });
       const p2 = await tx.project.create({
@@ -105,15 +103,17 @@ export const certification: Story = {
       await startSeries(tx, p2.id, { LOAD: 102001, CERTIFICATION: 880112 });
       return {
         luis: luis.id,
-        sam: sam.id,
-        lee: lee.id,
         p1: p1.project,
         p2: p2.id,
         coastline: p1.prime,
         phone: phone.id,
       };
     });
-    const { luis, sam, lee, p1, p2, coastline } = world;
+    const { luis, p1, p2, coastline } = world;
+    // Created as real ones are: on the phone, online, under the master passcode (ADR-442).
+    const samGrant = await story.monitor('Sam Grant', world.phone);
+    const sam = samGrant.id;
+    const lee = (await story.monitor('Lee Morgan', world.phone)).id;
     // Saturday's board, written by Dana: Sam certifies on P1-HO-TDSR, Lee Morgan helps.
     const saturdays = { workDate: '2026-10-10', projectId: p1 } as const;
     const certifying = await assigned(api, clock, dana, {
@@ -123,6 +123,11 @@ export const certification: Story = {
       deviceId: world.phone,
     });
     await assigned(api, clock, dana, { ...saturdays, personId: lee });
+    // Sam signs in on it with Monitor ID and password, and the phone takes his assignment
+    // (ADR-444).
+    if ((await taken(story, samGrant, world.phone)) !== certifying) {
+      throw new Error('P1-HO-TDSR took another assignment than Sam’s.');
+    }
     const summit = (
       await saved(contractors.contractor(dana, { name: 'Summit Debris Services', kind: 'HAULER' }))
     ).id;
@@ -222,7 +227,7 @@ export const certification: Story = {
       orderBy: { id: 'asc' },
     });
     story.check(
-      'AC-03-59 the certification, its two boxes and its helper are each audited as Sam, from his phone; so is the job it queued in the same piece of work, for the worker to check its views (ADR-420)',
+      'AC-03-59 after his sign-in (a security event and his session), the certification, its two boxes and its helper are each audited as Sam, from his phone; so is the job it queued in the same piece of work, for the worker to check its views (ADR-420)',
       trailerAudit.map((record) => [
         record.tableName,
         record.operation,
@@ -230,6 +235,8 @@ export const certification: Story = {
         record.deviceId,
       ]),
       [
+        'security_event',
+        'session',
         'certification',
         'certification_box',
         'certification_box',
@@ -243,21 +250,31 @@ export const certification: Story = {
       saturday('09:40'),
       'Rivera’s self-loader, 730416: Sam picks Coastline and types "Rivera Trucking" into tier 1',
     );
-    const selfLoader = made({
-      certNumber: '730416',
+    // Through his phone, as a sync carries it (ADR-469, 470): the boxes as measured, and never
+    // a capacity. The phone works one out to show him, by the rule the server uses.
+    const samsPhone = story.phone({
+      name: 'P1-HO-TDSR',
+      deviceId: world.phone,
+      monitorId: sam,
+      assignmentId: certifying,
+      projectId: p1,
+      lists: await story.lists.held({ assignmentId: certifying, deviceId: world.phone }),
+      timeZone,
+    });
+    const selfLoaderSheet = {
       firstTierSub: 'Rivera Trucking',
       vehicleTypeId: await picked('vehicleType', 'Self-Loading Truck'),
       boxes: [
         primary(264, 92, 96),
         {
-          shape: 'TRIANGLE',
-          sign: 'SUBTRACT',
+          shape: 'TRIANGLE' as const,
+          sign: 'SUBTRACT' as const,
           length: 36,
           width: 92,
           height: 48,
           featureId: dogBox,
         },
-      ],
+      ] satisfies BoxInput[],
       driverName: 'Marco Rivera',
       driverLicenceNumber: 'R160-542-80-112-0',
       driverLicenceState: 'FL',
@@ -265,8 +282,36 @@ export const certification: Story = {
       tagNumber: 'RVT 4821',
       tagState: 'FL',
       tagExpiry: '2027-03-31',
+    };
+    const selfLoader = samsPhone.certify({
+      kind: 'CONTAINER',
+      paperNumber: '730416',
+      primeId: coastline,
+      ...selfLoaderSheet,
     });
-    const loader = await saved(certifications.certify(selfLoader));
+    const onTheWire = JSON.stringify(samsPhone.sends());
+    story.check(
+      'AC-10-35, AC-03-30 what Sam’s phone sends for 730416 is its two boxes as measured: no capacity, though the phone shows him 48 CY, and never which phone it is from',
+      [
+        selfLoader.capacityCy,
+        /capacity/i.test(onTheWire),
+        onTheWire.includes(world.phone),
+        samsPhone.sends().records.map((sent) => sent.record),
+      ],
+      [48, false, false, ['CERTIFICATION']],
+    );
+    story.check(
+      'the phone syncs it: one record, answered "saved"',
+      [
+        await samsPhone.sync(story.server),
+        samsPhone.answers.map((one) => one.answer),
+        samsPhone.waitingRecords,
+      ],
+      [1, [{ answer: 'SAVED', id: selfLoader.record.id, notes: [] }], []],
+    );
+    const loader = await api.certification.findUniqueOrThrow({
+      where: { id: selfLoader.record.id },
+    });
     story.check(
       'AC-03-11 Rivera is on P1 from that moment, a tier 1 sub under Coastline',
       await placesOn(p1),
@@ -292,17 +337,22 @@ export const certification: Story = {
       ['730417', 'Bucket Truck'],
       ['730418', 'Skid Steer'],
     ] as const) {
-      await saved(
-        certifications.certify(
-          made({
-            certNumber,
-            kind: 'CREW',
-            crewTypeId: await picked('crewType', crewType),
-            boxes: [],
-          }),
-        ),
-      );
+      samsPhone.certify({
+        kind: 'CREW',
+        paperNumber: certNumber,
+        primeId: coastline,
+        crewTypeId: await picked('crewType', crewType),
+        boxes: [],
+      });
     }
+    story.check(
+      'the two crews go in one sync from Sam’s phone, nothing measured, each answered "saved"',
+      [
+        await samsPhone.sync(story.server),
+        samsPhone.answers.slice(1).map((one) => one.answer.answer),
+      ],
+      [2, ['SAVED', 'SAVED']],
+    );
     await saved(
       certifications.certify(
         made({
@@ -515,7 +565,7 @@ export const certification: Story = {
       await refused(
         certifications.certify(
           made({
-            ...selfLoader,
+            ...selfLoaderSheet,
             certNumber: '730420',
             replaces: { certificationId: loader.id, reason: ' ' },
           }),
@@ -526,9 +576,9 @@ export const certification: Story = {
     const replacement = await saved(
       certifications.certify(
         made({
-          ...selfLoader,
+          ...selfLoaderSheet,
           certNumber: '730420',
-          boxes: [...selfLoader.boxes, { ...primary(264, 92, 12), featureId: sideboards }],
+          boxes: [...selfLoaderSheet.boxes, { ...primary(264, 92, 12), featureId: sideboards }],
           replaces: { certificationId: loader.id, reason: 'sideboards added' },
         }),
       ),

@@ -173,8 +173,9 @@ Around that:
 - **Every field event records** its monitor, phone, assignment and the **setup version** of the lists
   it was captured with (ADR-240); the device clock's time (ADR-100); whatever GPS fix the phone has
   (ADR-083); photos, at most 8 per ticket (ADR-157, 181).
-- **Reopenable until the monitor ends the shift** (agent default, ADR-240), then corrected only by
-  permitted people (ADR-051). A monitor's own cancellation stays on the phone, unsynced (ADR-056).
+- **Sealed for the monitor once submitted on the phone** (ADR-477, the user): never reopened or
+  edited by them, synced or not; corrected only by permitted people (ADR-051). Until submitted it
+  stays open and theirs to adjust, for days where the work takes days. A monitor's own cancellation stays on the phone, unsynced (ADR-056).
 - Screens and their order: `adms-field-app` §4A.5.
 
 ## 4.2 WORKFLOW A — Loads (`COL` → `DIS` → `CLT`)

@@ -6,21 +6,28 @@
 // master passcode sets his phone up on the spot: an unplanned assignment, marked. Ana and Kim record ticket 101001 under their assignments; that evening
 // Tariq's phone can't be found and is marked lost. What it proves is the models: the time zone, the
 // Monitor ID, the device with its number block and passcode version, the assignment, and each
-// field event carrying its assignment and setup version. The screens, the sign-in and the sync
-// behind these rows are Phases 2 to 4; the number block is cut by the API's allocator (ADR-323).
+// field event carrying its assignment and setup version. Its monitors are created on a phone
+// and signed in through the API's services, and each phone is answered its monitor's assignment
+// (ADR-442, 443, 444). The screens behind these rows are Phases 3 and 4; each phone syncs
+// through the API's own `Sync` (ADR-475), which cuts the number block by the API's allocator
+// (ADR-323).
 // It opens with setup's first three steps
 // (ADR-303): the client, the declaration event and the project, whose settings start as the
 // release's policy values; then the fourth (ADR-305): the prime added to the project, and its
 // contract.
 import { NumberAllocator, Phones } from '@open-adms/api';
-import { masterPasscodeActorId, masterPasscodeActorName } from '@open-adms/db';
+import {
+  deviceKeyActorId,
+  deviceKeyActorName,
+  masterPasscodeActorId,
+  masterPasscodeActorName,
+} from '@open-adms/db';
 
 import { projectTime } from '../clock.ts';
 import { made, scanned } from '../device.ts';
 import { uuidv7 } from '../ids.ts';
-import { phoneLists } from '../phone-lists.ts';
 import type { Story } from '../runner.ts';
-import { assigned } from './board.ts';
+import { assigned, firstBlocks, unplanned as unplannedOn } from './board.ts';
 import { p1TimeZone as timeZone, setUpP1, setUpP1Sites } from './p1.ts';
 
 const at = (time: string): string => `2026-10-12T${time}:00-04:00`;
@@ -174,58 +181,6 @@ export const dispatchMonday: Story = {
 
     story.at(
       at('05:45'),
-      'The monitors: Ana Brooks, Kim Nguyen (a temp agency’s), Tariq Patel and Jo Kim',
-    );
-    // Their Monitor IDs are the example world's, written as given; a real installation's all come
-    // from the database, as Dana's and Luis's did.
-    const people = await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
-      const agency = await tx.contractor.create({
-        data: { name: 'Harbor Staffing', kind: 'MONITORING' },
-      });
-      const ana = await tx.user.create({
-        data: { name: 'Ana Brooks', role: 'MONITOR', monitorNumber: 'M004127' },
-      });
-      const kim = await tx.user.create({
-        data: {
-          name: 'Kim Nguyen',
-          role: 'MONITOR',
-          monitorNumber: 'M004128',
-          employerId: agency.id,
-          employerNumber: 'HS-0417',
-        },
-      });
-      const tariq = await tx.user.create({
-        data: { name: 'Tariq Patel', role: 'MONITOR', monitorNumber: 'M004129' },
-      });
-      const jo = await tx.user.create({
-        data: { name: 'Jo Kim', role: 'MONITOR', monitorNumber: 'M004130' },
-      });
-      return { ana: ana.id, kim: kim.id, tariq: tariq.id, jo: jo.id };
-    });
-    const employed = await api.user.findMany({
-      where: { role: 'MONITOR' },
-      include: { employer: true },
-      orderBy: { monitorNumber: 'asc' },
-    });
-    story.check(
-      'AC-01-20 each monitor: their Monitor ID, their employer (a contractor record of the monitoring kind) and its ID for them',
-      employed.map((person) => [
-        person.name,
-        person.monitorNumber,
-        person.employer?.name ?? null,
-        person.employer?.kind ?? null,
-        person.employerNumber,
-      ]),
-      [
-        ['Ana Brooks', 'M004127', null, null, null],
-        ['Kim Nguyen', 'M004128', 'Harbor Staffing', 'MONITORING', 'HS-0417'],
-        ['Tariq Patel', 'M004129', null, null, null],
-        ['Jo Kim', 'M004130', null, null, null],
-      ],
-    );
-
-    story.at(
-      at('05:50'),
       'Three phones are enrolled, once: each its own key, no project, no monitor',
     );
     // Each under the master passcode, through the API's enrolment (ADR-439, 440).
@@ -255,6 +210,62 @@ export const dispatchMonday: Story = {
       'the passcode itself is nowhere: the database keeps its slow hash, the audit log not even that',
       passcode.map((record) => [record.source, (record.newValue as { hash: string }).hash]),
       [['SYSTEM', '[kept out of the audit]']],
+    );
+
+    story.at(
+      at('05:50'),
+      'The monitors, each created on a phone under the master passcode: Ana Brooks, Kim Nguyen (a temp agency’s), Tariq Patel and Jo Kim',
+    );
+    // Created as real ones are (ADR-442): on an enrolled phone, online, under the master
+    // passcode, through the API; the database issues each the next Monitor ID, as it did Dana's
+    // and Luis's. A monitor's employer has no request yet (the people page, Phase 4): Dana's
+    // entry of Kim's is written as that page will send it.
+    const created = {
+      ana: await story.monitor('Ana Brooks', phones.collection.id),
+      kim: await story.monitor('Kim Nguyen', phones.collection.id),
+      tariq: await story.monitor('Tariq Patel', phones.collection.id),
+      jo: await story.monitor('Jo Kim', phones.collection.id),
+    };
+    const people = {
+      ana: created.ana.id,
+      kim: created.kim.id,
+      tariq: created.tariq.id,
+      jo: created.jo.id,
+    };
+    await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
+      const agency = await tx.contractor.create({
+        data: { name: 'Harbor Staffing', kind: 'MONITORING' },
+      });
+      await tx.user.update({
+        where: { id: people.kim },
+        data: { employerId: agency.id, employerNumber: 'HS-0417' },
+      });
+    });
+    const employed = await api.user.findMany({
+      where: { role: 'MONITOR' },
+      include: { employer: true },
+      orderBy: { monitorNumber: 'asc' },
+    });
+    story.check(
+      'AC-01-20, AC-02-07 each monitor: the Monitor ID the database issued them (nobody typed one), their employer (a contractor record of the monitoring kind) and its ID for them',
+      employed.map((person) => [
+        person.name,
+        person.monitorNumber,
+        person.employer?.name ?? null,
+        person.employer?.kind ?? null,
+        person.employerNumber,
+      ]),
+      [
+        ['Ana Brooks', 'M000003', null, null, null],
+        ['Kim Nguyen', 'M000004', 'Harbor Staffing', 'MONITORING', 'HS-0417'],
+        ['Tariq Patel', 'M000005', null, null, null],
+        ['Jo Kim', 'M000006', null, null, null],
+      ],
+    );
+    story.check(
+      'each story monitor reads the ID it was given',
+      Object.values(created).map((monitor) => monitor.monitorNumber),
+      ['M000003', 'M000004', 'M000005', 'M000006'],
     );
 
     story.at(
@@ -391,24 +402,65 @@ export const dispatchMonday: Story = {
 
     story.at(
       at('06:30'),
-      'At the yard, online, Ana’s phone takes her assignment and a block of load numbers',
+      'At the yard, online, each monitor signs in with Monitor ID and password; Ana’s phone takes her assignment and a block of load numbers',
     );
-    const allocator = new NumberAllocator(api, clock, story.policy);
-    const anaAtSync = { person: people.ana, deviceId: phones.collection.id };
-    const firstBlock = await allocator.topUp(anaAtSync, {
-      projectId: office.p1,
-      series: 'LOAD',
-      lastUsedNumber: null,
+    // Nobody enters the master passcode and nobody picks a project (AC-02-35; ADR-444). Jo's
+    // assignment names no phone: she picks up the landfill tower's and it takes hers. Tariq has
+    // none: he is signed in all the same, and told there is none.
+    const answered = {
+      ana: await story.signedIn(created.ana, phones.collection.id),
+      kim: await story.signedIn(created.kim, phones.tdsrTower.id),
+      jo: await story.signedIn(created.jo, phones.landfillTower.id),
+      tariq: await story.signedIn(created.tariq, phones.landfillTower.id),
+    };
+    const p1Name = 'Bayline County ROW, Hurricane Delphine';
+    const told = (answer: (typeof answered)['ana']) =>
+      answer.taken
+        ? [
+            answer.assignment.id,
+            answer.assignment.project.name,
+            answer.assignment.workDate,
+            answer.assignment.fieldEventKinds,
+            answer.assignment.site?.name ?? null,
+          ]
+        : answer.why;
+    story.check(
+      'AC-02-35 each phone is answered its monitor’s assignment for Monday, with its project, work and site; Tariq’s is told there is none that day',
+      [told(answered.ana), told(answered.kim), told(answered.jo), told(answered.tariq)],
+      [
+        [board.collections, p1Name, '2026-10-12', ['COLLECTION'], null],
+        [board.tower, p1Name, '2026-10-12', ['DISPOSAL'], 'Marsh Road TDSR'],
+        [board.unitRate, p1Name, '2026-10-12', ['UNIT_RATE'], null],
+        'NONE_THAT_DAY',
+      ],
+    );
+    const sessions = await api.session.findMany({
+      where: { deviceId: { not: null } },
+      orderBy: { id: 'asc' },
+      include: { user: true, device: true },
     });
-    if (!firstBlock.saved) throw new Error(firstBlock.refusal.message);
+    story.check(
+      'one monitor at a time on a phone: Tariq’s sign-in on P1-TWR-LF signed Jo out of it',
+      sessions.map((session) => [
+        session.user.name,
+        session.device?.name,
+        session.revokedAt === null,
+      ]),
+      [
+        ['Ana Brooks', 'P1-COL-1', true],
+        ['Kim Nguyen', 'P1-TWR-TDSR', true],
+        ['Jo Kim', 'P1-TWR-LF', false],
+        ['Tariq Patel', 'P1-TWR-LF', true],
+      ],
+    );
+    await firstBlocks(story, phones.collection.id, timeZone, office.p1, ['LOAD']);
     const anaPhone = story.phone({
       name: 'P1-COL-1',
       deviceId: phones.collection.id,
       monitorId: people.ana,
       assignmentId: board.collections,
       projectId: office.p1,
-      setupVersion: 1,
-      lists: await phoneLists(api, {
+      lists: await story.lists.held({
         assignmentId: board.collections,
         deviceId: phones.collection.id,
       }),
@@ -421,7 +473,7 @@ export const dispatchMonday: Story = {
       assignmentId: board.tower,
       projectId: office.p1,
       siteId: office.tdsr,
-      setupVersion: 1,
+      lists: await story.lists.held({ assignmentId: board.tower, deviceId: phones.tdsrTower.id }),
       timeZone,
     });
     const blocks = await api.numberBlock.findMany({ include: { device: true } });
@@ -442,24 +494,14 @@ export const dispatchMonday: Story = {
       at('06:40'),
       'Tariq has no assignment: the master passcode sets P1-TWR-LF up for the Landfill tower',
     );
-    // Made on the phone, its id the phone's own; it reaches the server when the phone syncs.
-    const unplanned = uuidv7(clock.now());
-    await api.$write(
-      { actorId: people.tariq, source: 'DEVICE', deviceId: phones.landfillTower.id },
-      (tx) =>
-        tx.assignment.create({
-          data: {
-            id: unplanned,
-            personId: people.tariq,
-            workDate: monday,
-            projectId: office.p1,
-            fieldEventKinds: ['DISPOSAL', 'HAUL_OUT_DISPOSAL'],
-            siteId: office.landfill,
-            deviceId: phones.landfillTower.id,
-            origin: 'UNPLANNED',
-          },
-        }),
-    );
+    // Made on the phone, its id the phone's own; the phone reports it and the API's
+    // `UnplannedAssignments` receives it (ADR-457).
+    const unplanned = await unplannedOn(story, phones.landfillTower.id, timeZone, {
+      projectId: office.p1,
+      personId: people.tariq,
+      fieldEventKinds: ['DISPOSAL', 'HAUL_OUT_DISPOSAL'],
+      siteId: office.landfill,
+    });
     const mondays = await api.assignment.findMany({
       where: { workDate: monday, projectId: office.p1 },
       include: { person: true, site: true, device: true, madeBy: true },
@@ -501,6 +543,31 @@ export const dispatchMonday: Story = {
       ],
     );
 
+    const reported = await api.assignment.findUniqueOrThrow({ where: { id: unplanned } });
+    const setUps = await api.securityEvent.findMany({
+      where: { deviceId: phones.landfillTower.id, deviceUtcOffsetMinutes: { not: null } },
+      orderBy: { id: 'asc' },
+    });
+    story.check(
+      'AC-02-38 it keeps the phone’s own 06:40 and its clock’s offset, and is two security events at that time, about Tariq on P1-TWR-LF: a phone set up, and a use of the master passcode',
+      [
+        reported.madeAt === null ? null : projectTime(timeZone, reported.madeAt),
+        reported.deviceUtcOffsetMinutes,
+        ...setUps.map((event) => [
+          event.kind,
+          event.userId === people.tariq ? 'Tariq Patel' : event.userId,
+          projectTime(timeZone, event.occurredAt),
+          event.deviceUtcOffsetMinutes,
+        ]),
+      ],
+      [
+        'Mon 12 Oct 06:40',
+        -240,
+        ['DEVICE_SETUP', 'Tariq Patel', 'Mon 12 Oct 06:40', -240],
+        ['MASTER_PASSCODE_USE', 'Tariq Patel', 'Mon 12 Oct 06:40', -240],
+      ],
+    );
+
     story.at(at('08:15'), 'Ana scans the truck’s badge at 14 Heron St, offline');
     const collection = anaPhone.begin('LOAD', 'COLLECTION', '730415');
     story.at(
@@ -525,15 +592,9 @@ export const dispatchMonday: Story = {
     story.at(at('17:30'), 'Both phones sync at the yard; Ana’s reports the last number it used');
     story.check(
       'each sends its one field event',
-      [await kimPhone.sync(story.intake), await anaPhone.sync(story.intake)],
+      [await kimPhone.sync(story.server), await anaPhone.sync(story.server)],
       [1, 1],
     );
-    const toppedUp = await allocator.topUp(anaAtSync, {
-      projectId: office.p1,
-      series: 'LOAD',
-      lastUsedNumber: anaPhone.lastUsedNumber('LOAD'),
-    });
-    if (!toppedUp.saved) throw new Error(toppedUp.refusal.message);
     const events = await api.fieldEvent.findMany({
       include: { assignment: { include: { person: true, site: true } }, project: true },
       orderBy: { endedAt: 'asc' },
@@ -567,12 +628,12 @@ export const dispatchMonday: Story = {
     );
     story.check(
       'the block knows its last used number; the rest stay the phone’s, topped up by the one it used',
-      toppedUp.record.map((block) => [
-        block.firstNumber,
-        block.lastNumber,
-        block.lastUsedNumber,
-        block.status,
-      ]),
+      (
+        await new NumberAllocator(api, clock, story.policy).held(phones.collection.id, {
+          projectId: office.p1,
+          series: 'LOAD',
+        })
+      ).map((block) => [block.firstNumber, block.lastNumber, block.lastUsedNumber, block.status]),
       [
         [101001, 102000, 101001, 'ISSUED'],
         [102001, 102001, null, 'ISSUED'],
@@ -603,6 +664,7 @@ export const dispatchMonday: Story = {
       [people.tariq, 'Tariq Patel'],
       [people.jo, 'Jo Kim'],
       [masterPasscodeActorId, masterPasscodeActorName],
+      [deviceKeyActorId, deviceKeyActorName],
       [phones.collection.id, 'P1-COL-1'],
       [phones.tdsrTower.id, 'P1-TWR-TDSR'],
       [phones.landfillTower.id, 'P1-TWR-LF'],
@@ -647,10 +709,13 @@ export const dispatchMonday: Story = {
         ['assignment', 'INSERT', 'Luis Ortega', 'BACK_OFFICE', '-', null],
         ['assignment_pay_item', 'INSERT', 'Luis Ortega', 'BACK_OFFICE', '-', null],
         ['assignment_pay_item', 'INSERT', 'Luis Ortega', 'BACK_OFFICE', '-', null],
-        ['number_block', 'INSERT', 'Ana Brooks', 'DEVICE', 'P1-COL-1', null],
-        ['assignment', 'INSERT', 'Tariq Patel', 'DEVICE', 'P1-TWR-LF', null],
-        ['number_block', 'UPDATE', 'Ana Brooks', 'DEVICE', 'P1-COL-1', null],
-        ['number_block', 'INSERT', 'Ana Brooks', 'DEVICE', 'P1-COL-1', null],
+        // A top-up is the phone's own act at its sync: whoever is signed in on it did not ask
+        // for it (ADR-472).
+        ['number_block', 'INSERT', 'Device key', 'DEVICE', 'P1-COL-1', null],
+        // Set up under the master passcode: never Tariq's own write (ADR-457).
+        ['assignment', 'INSERT', 'Master passcode', 'DEVICE', 'P1-TWR-LF', null],
+        ['number_block', 'UPDATE', 'Device key', 'DEVICE', 'P1-COL-1', null],
+        ['number_block', 'INSERT', 'Device key', 'DEVICE', 'P1-COL-1', null],
         [
           'device',
           'UPDATE',

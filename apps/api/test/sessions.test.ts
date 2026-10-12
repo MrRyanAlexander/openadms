@@ -161,7 +161,7 @@ describe('signing in', () => {
 
   it('AC-02-39 a monitor’s ID and password open nothing here: refused as any wrong sign-in, with nothing written', async () => {
     await world(async (served, tx, { dana, kim, kimsId }, within) => {
-      expect(kimsId).toMatch(/^M\d{6}$/);
+      expect(kimsId).toMatch(/^M\d{6,}$/);
       await signInOn(within, new NoServer()).passwords.setByAdmin(dana, kim, '5550142');
       const before = await tx.auditRecord.count();
       for (const name of [kimsId, 'kim.nguyen@harbor.example', 'Kim Nguyen']) {

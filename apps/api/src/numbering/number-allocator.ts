@@ -80,6 +80,12 @@ export class NumberAllocator extends SetupService {
     );
   }
 
+  // The blocks a phone holds of one series now, in the order it gives them out: what a sync
+  // answers where a report wasn't taken (ADR-467 (8)).
+  held(deviceId: string, series: Pick<LastUsed, 'projectId' | 'series'>): Promise<NumberBlock[]> {
+    return this.db.$read((tx) => NumberAllocator.heldBy(tx, deviceId, series));
+  }
+
   // A phone reset for someone else: it has synced, so each last used number is the phone's own
   // word, and the unused rest of every block it holds is handed back (ADR-065). Never called for a
   // phone that hasn't reported: that one's blocks are retired.

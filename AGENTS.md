@@ -33,7 +33,7 @@ The system of record for a debris mission, from declaration to audit:
 | To… | Read |
 |---|---|
 | Understand the system, then find the part you're touching | **`spec/INDEX.md`**, the book: what it is, nine parts, a step-by-step page each |
-| Know what's decided **now**, and which ADRs to cite | **`agent_store/SUMMARY.md`**, one page |
+| Know what's decided **now**, and which ADRs to cite | **`agent_store/SUMMARY.md`**: its header, then the `###` topics you touch (grep them; never read it whole, ADR-445) |
 | Know the next task, where the product ends up, and the road there | `agent_store/NEXT.md` (the Handoff, then the Next Atomic Task) |
 | Know how a layer is built and secured (install, database, API, devices, sync, storage, tests) | **`spec/ARCHITECTURE.md`** |
 | Know the rules for a topic, and why | the skill (table below) |
@@ -82,6 +82,7 @@ the option that keeps the firm's choice open, record an ADR marked "agent defaul
 |---|---|---|
 | `SUMMARY.md` | Current rules by topic, superseded ADRs, open gaps. **Keep it current** | ✅ update |
 | `NEXT.md` | Active phase, exit criteria, next atomic task | ✅ tick |
+| `CHAIN.md` | The chain's counts today, the only place they are written (ADR-445) | ✅ replace |
 | `BACKLOG.md` | Milestone detail for the active phase | ✅ tick |
 | `DECISIONS.md` | Full ADR log + session log. Append-only, never renumber | ✅ append |
 | `DEVIATIONS.md` | Full code-vs-skill gap log | ✅ append |
@@ -90,15 +91,17 @@ the option that keeps the firm's choice open, record an ADR marked "agent defaul
 
 ## Working loop
 
-1. **ORIENT** — read `NEXT.md` and `SUMMARY.md`; load `adms-domain` on the first task; find your
-   part in `spec/INDEX.md`. No task given? `NEXT.md`'s Next Atomic Task is it.
+1. **ORIENT** — read `NEXT.md`, and `SUMMARY.md`'s header and the topics your task touches (never
+   the whole page); load `adms-domain` on the first task; find your part in `spec/INDEX.md`. No
+   task given? `NEXT.md`'s Next Atomic Task is it.
 2. **SCOPE** — does this belong to the active phase and a permitted directory? If not, say which
    phase it belongs to and ask. Never silently widen scope.
 3. **GROUND** — read the actual files before editing. Never infer a field name, enum value or
    model name from prose; the schema is the source of truth.
 4. **EXECUTE** — minimal edits. No adjacent refactors, no building ahead. Every dependency is
    pinned; a new one needs an ADR. Answer in the form asked for (chat text, a file, an artifact).
-5. **VERIFY** — load `adms-verify`. Report real observed output, never "should pass".
+5. **VERIFY** — load `adms-verify` (`pnpm ready` first; counts against `CHAIN.md`). Report real
+   observed output, never "should pass".
 6. **CLOSE** — load `adms-close-out`.
 
 ## Write boundaries

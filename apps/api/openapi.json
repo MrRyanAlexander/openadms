@@ -8892,7 +8892,7 @@
     "/sites/{siteId}/quantity-lookup": {
       "get": {
         "operationId": "siteQuantityLookup",
-        "summary": "What one site’s phones ask for: its rows of the project’s quantity lookup.",
+        "summary": "What one site’s phones ask for: its rows of the project’s quantity lookup, worked out from the setup as it stands; or, asked with a setup version, as its phones held them under that version, for the debris types phones are shown. No such version of its project: not found.",
         "x-open-adms-access": "SIGNED_IN",
         "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
         "parameters": [
@@ -8904,6 +8904,15 @@
               "type": "string",
               "format": "uuid",
               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "setupVersion",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]{0,8}$"
             }
           }
         ],
@@ -9472,7 +9481,7 @@
     "/phones/current/sign-ins": {
       "post": {
         "operationId": "signInOnPhone",
-        "summary": "A field monitor signs in on an enrolled phone, online, with their Monitor ID and password. The answer is their session’s token, which the phone’s calls carry in the x-adms-monitor-session header beside the phone’s own token, and how long it lasts. Open to a phone in service that has proved itself, by its token. Whatever is wrong is refused by one code; wrong tries in a row make the next wait longer, and at the policy’s count lock the login until an admin sets the password anew.",
+        "summary": "A field monitor signs in on an enrolled phone, online, with their Monitor ID and password. The answer is their session’s token, which the phone’s calls carry in the x-adms-monitor-session header beside the phone’s own token, how long it lasts, and the assignment the phone takes: theirs for the day, by its project’s own time zone, or none with the reason (none that day; several that day and nothing to say which is this phone’s). Nobody enters the master passcode and nobody picks a project. Open to a phone in service that has proved itself, by its token. Whatever is wrong is refused by one code; wrong tries in a row make the next wait longer, and at the policy’s count lock the login until an admin sets the password anew.",
         "x-open-adms-access": "PROVEN_PHONE",
         "requestBody": {
           "required": true,
@@ -9526,9 +9535,427 @@
                       "type": "integer",
                       "minimum": 1,
                       "maximum": 9007199254740991
+                    },
+                    "assignment": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "workDate": {
+                              "type": "string",
+                              "format": "date",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                            },
+                            "project": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "timeZone": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["id", "name", "timeZone"],
+                              "additionalProperties": false
+                            },
+                            "fieldEventKinds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "COLLECTION",
+                                  "DISPOSAL",
+                                  "HAUL_OUT_COLLECTION",
+                                  "HAUL_OUT_DISPOSAL",
+                                  "UNIT_RATE"
+                                ]
+                              }
+                            },
+                            "certifying": {
+                              "type": "boolean"
+                            },
+                            "formDocumentTypes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "enum": ["ROE", "SURVEY", "INCIDENT", "DROP_OFF_LOG"]
+                              }
+                            },
+                            "site": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string",
+                                      "format": "uuid",
+                                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                    },
+                                    "name": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": ["id", "name"],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "workDate",
+                            "project",
+                            "fieldEventKinds",
+                            "certifying",
+                            "formDocumentTypes",
+                            "site"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "noAssignment": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": ["NONE_THAT_DAY", "SEVERAL_THAT_DAY"]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   },
-                  "required": ["token", "userId", "monitorNumber", "name", "expiresInSeconds"],
+                  "required": [
+                    "token",
+                    "userId",
+                    "monitorNumber",
+                    "name",
+                    "expiresInSeconds",
+                    "assignment",
+                    "noAssignment"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/phones/current/passcode-sessions": {
+      "post": {
+        "operationId": "openPasscodeSessionOnPhone",
+        "summary": "A session is opened on an enrolled phone under the firm’s master passcode, for a monitor in service: as the phone’s monitor, or the temporary session for a monitor picked from the roster. The answer is what a monitor’s own sign-in is answered (the session’s token for the x-adms-monitor-session header, how long it lasts, the assignment the phone takes or why none) and which way it was opened. The session is marked as the master passcode’s and is no sign-in of the monitor’s. Neither lasts longer than a monitor’s own sign-in; the temporary one also ends at the end of the day of the project whose assignment the phone takes, by that project’s time zone. Any other session on the phone ends. Open to a phone in service that has proved itself, by its token. A passcode that isn’t taken is refused by one code; wrong tries count as they do when a phone is enrolled.",
+        "x-open-adms-access": "PROVEN_PHONE",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "personId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": ["AS_MONITOR", "TEMPORARY"]
+                  },
+                  "passcode": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  }
+                },
+                "required": ["personId", "kind", "passcode"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "token": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "userId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "monitorNumber": {
+                      "type": "string",
+                      "pattern": "^M\\d{6,}$"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "expiresInSeconds": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
+                    },
+                    "assignment": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "workDate": {
+                              "type": "string",
+                              "format": "date",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                            },
+                            "project": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "timeZone": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["id", "name", "timeZone"],
+                              "additionalProperties": false
+                            },
+                            "fieldEventKinds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "COLLECTION",
+                                  "DISPOSAL",
+                                  "HAUL_OUT_COLLECTION",
+                                  "HAUL_OUT_DISPOSAL",
+                                  "UNIT_RATE"
+                                ]
+                              }
+                            },
+                            "certifying": {
+                              "type": "boolean"
+                            },
+                            "formDocumentTypes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "enum": ["ROE", "SURVEY", "INCIDENT", "DROP_OFF_LOG"]
+                              }
+                            },
+                            "site": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string",
+                                      "format": "uuid",
+                                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                    },
+                                    "name": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": ["id", "name"],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "workDate",
+                            "project",
+                            "fieldEventKinds",
+                            "certifying",
+                            "formDocumentTypes",
+                            "site"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "noAssignment": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": ["NONE_THAT_DAY", "SEVERAL_THAT_DAY"]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "masterPasscodeSession": {
+                      "type": "string",
+                      "enum": ["AS_MONITOR", "TEMPORARY"]
+                    }
+                  },
+                  "required": [
+                    "token",
+                    "userId",
+                    "monitorNumber",
+                    "name",
+                    "expiresInSeconds",
+                    "assignment",
+                    "noAssignment",
+                    "masterPasscodeSession"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/phones/current/passcode-uses": {
+      "post": {
+        "operationId": "reportPasscodeUse",
+        "summary": "A phone reports a use of the firm’s master passcode it logged with no connection: the phone passed to a monitor who has their own assignment, a session opened on it as the phone’s monitor or the temporary session for a monitor picked from the roster, or the passcode typed wrong. It says when by the phone’s own clock, with the clock’s offset, and for which monitor; a wrong try names nobody. The id is the phone’s own: the same report sent again is answered as already saved and kept once. It is kept as the phone reports it, for a monitor archived since and from a phone out of service too, and is not saved only where it names somebody who is no monitor or its id is another record’s. The passcode itself is never sent: the phone checked it, and a wrong try reported here does not count toward the lock on the server’s own check. Each one saved is a security event at the phone’s own time: a phone switched and a use of the master passcode; a use that says which way a session was opened; or a failed try. A switch or a session saved ends what anybody else had open on that phone before it, by the phone’s clock. A setup, a site move and a switch to a monitor who has no assignment are reported as an unplanned assignment instead. Open to a phone that has proved itself, by its token; nobody need be signed in.",
+        "x-open-adms-access": "PROVEN_PHONE",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "use": {
+                    "type": "string",
+                    "enum": [
+                      "MONITOR_SWITCH",
+                      "SESSION_AS_MONITOR",
+                      "TEMPORARY_SESSION",
+                      "WRONG_TRY"
+                    ]
+                  },
+                  "personId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "loggedAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                  },
+                  "deviceUtcOffsetMinutes": {
+                    "type": "integer",
+                    "minimum": -720,
+                    "maximum": 840
+                  }
+                },
+                "required": ["id", "use", "personId", "loggedAt", "deviceUtcOffsetMinutes"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "useId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "answer": {
+                      "type": "string",
+                      "enum": ["SAVED", "ALREADY_SAVED", "NOT_SAVED"]
+                    },
+                    "reason": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": ["NOT_A_MONITOR", "ID_ALREADY_HELD"]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["useId", "answer", "reason"],
                   "additionalProperties": false
                 }
               }
@@ -9613,9 +10040,2160 @@
                       "type": "integer",
                       "minimum": 0,
                       "maximum": 9007199254740991
+                    },
+                    "masterPasscodeSession": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": ["AS_MONITOR", "TEMPORARY"]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   },
-                  "required": ["userId", "monitorNumber", "name", "expiresInSeconds"],
+                  "required": [
+                    "userId",
+                    "monitorNumber",
+                    "name",
+                    "expiresInSeconds",
+                    "masterPasscodeSession"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/phones/current/lists": {
+      "get": {
+        "operationId": "phoneLists",
+        "summary": "The lists a phone holds for its work, asked for at any time it has a connection: the assignment the phone takes now for the monitor signed in (the sign-in’s own rule, asked again) and that assignment’s lists, or neither with the reason. The lists are the blocks of numbers the phone holds, the forms’ debris types without those hidden on phones, the field tags, the reasons for a typed number, the unit rate pay items the assignment names, what its incidents and surveys pick from, and the setup version they are, which every field event the phone makes records. Never a rate, a rule, a transaction or a load’s pay item. Nothing is written but a new setup version, made when what the project’s phones are shown differs from the newest one. Open to a proven phone with its monitor’s session token.",
+        "x-open-adms-access": "MONITOR_ON_PHONE",
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "assignment": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "workDate": {
+                              "type": "string",
+                              "format": "date",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                            },
+                            "project": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "timeZone": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["id", "name", "timeZone"],
+                              "additionalProperties": false
+                            },
+                            "fieldEventKinds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "COLLECTION",
+                                  "DISPOSAL",
+                                  "HAUL_OUT_COLLECTION",
+                                  "HAUL_OUT_DISPOSAL",
+                                  "UNIT_RATE"
+                                ]
+                              }
+                            },
+                            "certifying": {
+                              "type": "boolean"
+                            },
+                            "formDocumentTypes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "enum": ["ROE", "SURVEY", "INCIDENT", "DROP_OFF_LOG"]
+                              }
+                            },
+                            "site": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string",
+                                      "format": "uuid",
+                                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                    },
+                                    "name": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": ["id", "name"],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "workDate",
+                            "project",
+                            "fieldEventKinds",
+                            "certifying",
+                            "formDocumentTypes",
+                            "site"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "noAssignment": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": ["NONE_THAT_DAY", "SEVERAL_THAT_DAY"]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "lists": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "setupVersion": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 9007199254740991
+                            },
+                            "blocks": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "series": {
+                                    "type": "string",
+                                    "enum": [
+                                      "LOAD",
+                                      "HAUL_OUT",
+                                      "UNIT_RATE",
+                                      "CERTIFICATION",
+                                      "ROE"
+                                    ]
+                                  },
+                                  "firstNumber": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "lastNumber": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "lastUsedNumber": {
+                                    "anyOf": [
+                                      {
+                                        "type": "integer",
+                                        "minimum": -9007199254740991,
+                                        "maximum": 9007199254740991
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "status": {
+                                    "type": "string",
+                                    "const": "ISSUED"
+                                  }
+                                },
+                                "required": [
+                                  "series",
+                                  "firstNumber",
+                                  "lastNumber",
+                                  "lastUsedNumber",
+                                  "status"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "controlRanges": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "series": {
+                                    "type": "string",
+                                    "enum": [
+                                      "LOAD",
+                                      "HAUL_OUT",
+                                      "UNIT_RATE",
+                                      "CERTIFICATION",
+                                      "ROE"
+                                    ]
+                                  },
+                                  "firstNumber": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "lastNumber": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": ["series", "firstNumber", "lastNumber"],
+                                "additionalProperties": false
+                              }
+                            },
+                            "debrisTypes": {
+                              "type": "object",
+                              "properties": {
+                                "LOAD": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": ["id", "name"],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "HAUL_OUT": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": ["id", "name"],
+                                    "additionalProperties": false
+                                  }
+                                }
+                              },
+                              "required": ["LOAD", "HAUL_OUT"],
+                              "additionalProperties": false
+                            },
+                            "fieldTags": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["id", "name"],
+                                "additionalProperties": false
+                              }
+                            },
+                            "typedNumberReasons": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["id", "name"],
+                                "additionalProperties": false
+                              }
+                            },
+                            "certifications": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  "certNumber": {
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": ["CONTAINER", "CREW"]
+                                  },
+                                  "capacityCy": {
+                                    "anyOf": [
+                                      {
+                                        "type": "integer",
+                                        "minimum": -9007199254740991,
+                                        "maximum": 9007199254740991
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "prime": {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": ["id", "name"],
+                                    "additionalProperties": false
+                                  },
+                                  "firstTierSub": {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "id": {
+                                            "type": "string",
+                                            "format": "uuid",
+                                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                          },
+                                          "name": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": ["id", "name"],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "secondTierSub": {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "id": {
+                                            "type": "string",
+                                            "format": "uuid",
+                                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                          },
+                                          "name": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": ["id", "name"],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "certNumber",
+                                  "kind",
+                                  "capacityCy",
+                                  "prime",
+                                  "firstTierSub",
+                                  "secondTierSub"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "sites": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "siteType": {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": ["id", "name"],
+                                    "additionalProperties": false
+                                  },
+                                  "takesLoads": {
+                                    "type": "boolean"
+                                  },
+                                  "haulOutsLeaveHere": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "name",
+                                  "siteType",
+                                  "takesLoads",
+                                  "haulOutsLeaveHere"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "roes": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  "roeNumber": {
+                                    "type": "string"
+                                  },
+                                  "address": {
+                                    "type": ["string", "null"]
+                                  },
+                                  "parcelId": {
+                                    "type": ["string", "null"]
+                                  },
+                                  "preWorkSurveyDone": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "roeNumber",
+                                  "address",
+                                  "parcelId",
+                                  "preWorkSurveyDone"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "payItems": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  "code": {
+                                    "type": "string"
+                                  },
+                                  "bandFrom": {
+                                    "type": ["number", "null"]
+                                  },
+                                  "bandTo": {
+                                    "type": ["number", "null"]
+                                  },
+                                  "archived": {
+                                    "type": "boolean"
+                                  },
+                                  "payableType": {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": ["id", "name"],
+                                    "additionalProperties": false
+                                  },
+                                  "kindOfWork": {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": ["id", "name"],
+                                    "additionalProperties": false
+                                  },
+                                  "countIsAlwaysOne": {
+                                    "type": "boolean"
+                                  },
+                                  "gpsRequired": {
+                                    "type": "boolean"
+                                  },
+                                  "measurementRequired": {
+                                    "type": "boolean"
+                                  },
+                                  "decimalsAllowed": {
+                                    "type": "boolean"
+                                  },
+                                  "photosRequired": {
+                                    "type": "boolean"
+                                  },
+                                  "monitorMayMarkIneligible": {
+                                    "type": "boolean"
+                                  },
+                                  "quantityFromCarriedTickets": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "code",
+                                  "bandFrom",
+                                  "bandTo",
+                                  "archived",
+                                  "payableType",
+                                  "kindOfWork",
+                                  "countIsAlwaysOne",
+                                  "gpsRequired",
+                                  "measurementRequired",
+                                  "decimalsAllowed",
+                                  "photosRequired",
+                                  "monitorMayMarkIneligible",
+                                  "quantityFromCarriedTickets"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "itemNames": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "kindOfWorkId": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  }
+                                },
+                                "required": ["id", "name", "kindOfWorkId"],
+                                "additionalProperties": false
+                              }
+                            },
+                            "incidentTypes": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "subTypes": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string",
+                                          "format": "uuid",
+                                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                        },
+                                        "name": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": ["id", "name"],
+                                      "additionalProperties": false
+                                    }
+                                  }
+                                },
+                                "required": ["id", "name", "subTypes"],
+                                "additionalProperties": false
+                              }
+                            },
+                            "incidentOffers": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "enum": ["CONTRACTOR", "CERT_NUMBER", "ROE_NUMBER"]
+                              }
+                            },
+                            "contractors": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["id", "name"],
+                                "additionalProperties": false
+                              }
+                            },
+                            "surveyWorkTypes": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["id", "name"],
+                                "additionalProperties": false
+                              }
+                            },
+                            "quantityLookup": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "form": {
+                                    "type": "string",
+                                    "enum": ["LOAD", "HAUL_OUT"]
+                                  },
+                                  "debrisTypeId": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  "primeId": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  "asks": {
+                                    "type": "string",
+                                    "enum": [
+                                      "LOAD_CALL",
+                                      "SCALE_WEIGHT",
+                                      "CARRIED_COUNT",
+                                      "NOTHING_MORE"
+                                    ]
+                                  }
+                                },
+                                "required": ["form", "debrisTypeId", "primeId", "asks"],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "setupVersion",
+                            "blocks",
+                            "controlRanges",
+                            "debrisTypes",
+                            "fieldTags",
+                            "typedNumberReasons",
+                            "certifications",
+                            "sites",
+                            "roes",
+                            "payItems",
+                            "itemNames",
+                            "incidentTypes",
+                            "incidentOffers",
+                            "contractors",
+                            "surveyWorkTypes",
+                            "quantityLookup"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["assignment", "noAssignment", "lists"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/phones/current/login-list": {
+      "post": {
+        "operationId": "phoneLoginList",
+        "summary": "The login list and the master passcode’s check a phone holds for signing in with no connection, asked for at any time it has one. The phone says what it holds: the version of the master passcode whose check it has, and a mark for each monitor’s entry. The answer is the version in force, with its check where the phone holds another or none; and the login list of the project of the assignment the phone takes now for the monitor signed in: that monitor and every monitor in service with an assignment that stands on the project for its today or later, each with the mark of their entry, and the entry itself where the phone didn’t send that mark. An entry is a slow hash made for this phone alone, kept nowhere on the server; a password set anew makes its mark good no more. One call makes a bounded number of entries and says there are more. With no assignment there is no list and the phone keeps what it holds. Never a password or a hash the server checks a sign-in against. Nothing is written but which version of the master passcode’s check the phone was sent. Open to a proven phone with its monitor’s session token.",
+        "x-open-adms-access": "MONITOR_ON_PHONE",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "masterPasscodeVersion": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 9007199254740991
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "entries": {
+                    "maxItems": 5000,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "monitorId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "mark": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100
+                        }
+                      },
+                      "required": ["monitorId", "mark"],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": ["masterPasscodeVersion", "entries"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "masterPasscode": {
+                      "type": "object",
+                      "properties": {
+                        "version": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "check": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "first": {
+                                  "type": "object",
+                                  "properties": {
+                                    "salt": {
+                                      "type": "string",
+                                      "pattern": "^[A-Za-z0-9+/]+$"
+                                    },
+                                    "memory": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "passes": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "parallelism": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "bytes": {
+                                      "type": "integer",
+                                      "minimum": 16,
+                                      "maximum": 9007199254740991
+                                    }
+                                  },
+                                  "required": ["salt", "memory", "passes", "parallelism", "bytes"],
+                                  "additionalProperties": false
+                                },
+                                "check": {
+                                  "type": "string",
+                                  "pattern": "^\\$argon2id\\$v=19\\$m=\\d+,t=\\d+,p=\\d+\\$[A-Za-z0-9+/]+\\$[A-Za-z0-9+/]+$"
+                                }
+                              },
+                              "required": ["first", "check"],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": ["version", "check"],
+                      "additionalProperties": false
+                    },
+                    "noAssignment": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": ["NONE_THAT_DAY", "SEVERAL_THAT_DAY"]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "loginList": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "projectId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "monitors": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "monitorId": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  "monitorNumber": {
+                                    "type": "string",
+                                    "pattern": "^M\\d{6,}$"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "mark": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "check": {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "first": {
+                                            "type": "object",
+                                            "properties": {
+                                              "salt": {
+                                                "type": "string",
+                                                "pattern": "^[A-Za-z0-9+/]+$"
+                                              },
+                                              "memory": {
+                                                "type": "integer",
+                                                "minimum": 1,
+                                                "maximum": 9007199254740991
+                                              },
+                                              "passes": {
+                                                "type": "integer",
+                                                "minimum": 1,
+                                                "maximum": 9007199254740991
+                                              },
+                                              "parallelism": {
+                                                "type": "integer",
+                                                "minimum": 1,
+                                                "maximum": 9007199254740991
+                                              },
+                                              "bytes": {
+                                                "type": "integer",
+                                                "minimum": 16,
+                                                "maximum": 9007199254740991
+                                              }
+                                            },
+                                            "required": [
+                                              "salt",
+                                              "memory",
+                                              "passes",
+                                              "parallelism",
+                                              "bytes"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          "check": {
+                                            "type": "string",
+                                            "pattern": "^\\$argon2id\\$v=19\\$m=\\d+,t=\\d+,p=\\d+\\$[A-Za-z0-9+/]+\\$[A-Za-z0-9+/]+$"
+                                          }
+                                        },
+                                        "required": ["first", "check"],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": ["monitorId", "monitorNumber", "name", "mark", "check"],
+                                "additionalProperties": false
+                              }
+                            },
+                            "more": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": ["projectId", "monitors", "more"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["masterPasscode", "noAssignment", "loginList"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/phones/current/address-lookups": {
+      "post": {
+        "operationId": "phoneAddressLookup",
+        "summary": "The address of a GPS point, for a collection’s \"Look up address\": the street number and name our own address server finds there, or none with the reason (the map has no street there; the address server gave no answer in time). The monitor then types it, as with no connection. The phone asks the API and the API asks the address server, which no phone and no browser reaches. The point is sent in the body, never in the address of the request; neither the point nor the address is logged or kept. Nothing is written. Open to a proven phone with its monitor’s session token.",
+        "x-open-adms-access": "MONITOR_ON_PHONE",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "latitude": {
+                    "type": "string",
+                    "pattern": "^-?\\d{1,3}(\\.\\d{1,8})?$"
+                  },
+                  "longitude": {
+                    "type": "string",
+                    "pattern": "^-?\\d{1,3}(\\.\\d{1,8})?$"
+                  }
+                },
+                "required": ["latitude", "longitude"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "address": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "noAddress": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": ["NO_STREET_THERE", "NOT_ANSWERED"]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["address", "noAddress"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/phones/current/setup-choices": {
+      "post": {
+        "operationId": "phoneSetupChoices",
+        "summary": "What a phone being set up under the firm’s master passcode picks from, with a connection and nobody signed in: the firm’s open projects; the monitors in service by name and Monitor ID, a thousand a call at most (the answer says where to ask on from); and, where an open project is named, that project’s live sites and its unit rate pay items in service, as a phone’s lists show them. A project that is closed or is none is answered no lists. Never a rate, a rule or a load’s pay item; never a password or a phone number. Nothing is written but the use of the passcode, a security event naming the phone. Open to a phone in service that has proved itself, by its token. A passcode that isn’t taken is refused by one code; wrong tries count as they do when a phone is enrolled.",
+        "x-open-adms-access": "PROVEN_PHONE",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "passcode": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  },
+                  "projectId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "monitorsAfter": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": ["passcode", "projectId", "monitorsAfter"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "projects": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "timeZone": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["id", "name", "timeZone"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "project": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "sites": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "siteType": {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": ["id", "name"],
+                                    "additionalProperties": false
+                                  },
+                                  "takesLoads": {
+                                    "type": "boolean"
+                                  },
+                                  "haulOutsLeaveHere": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "name",
+                                  "siteType",
+                                  "takesLoads",
+                                  "haulOutsLeaveHere"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "payItems": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  "code": {
+                                    "type": "string"
+                                  },
+                                  "bandFrom": {
+                                    "type": ["number", "null"]
+                                  },
+                                  "bandTo": {
+                                    "type": ["number", "null"]
+                                  },
+                                  "archived": {
+                                    "type": "boolean"
+                                  },
+                                  "payableType": {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": ["id", "name"],
+                                    "additionalProperties": false
+                                  },
+                                  "kindOfWork": {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": ["id", "name"],
+                                    "additionalProperties": false
+                                  },
+                                  "countIsAlwaysOne": {
+                                    "type": "boolean"
+                                  },
+                                  "gpsRequired": {
+                                    "type": "boolean"
+                                  },
+                                  "measurementRequired": {
+                                    "type": "boolean"
+                                  },
+                                  "decimalsAllowed": {
+                                    "type": "boolean"
+                                  },
+                                  "photosRequired": {
+                                    "type": "boolean"
+                                  },
+                                  "monitorMayMarkIneligible": {
+                                    "type": "boolean"
+                                  },
+                                  "quantityFromCarriedTickets": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "code",
+                                  "bandFrom",
+                                  "bandTo",
+                                  "archived",
+                                  "payableType",
+                                  "kindOfWork",
+                                  "countIsAlwaysOne",
+                                  "gpsRequired",
+                                  "measurementRequired",
+                                  "decimalsAllowed",
+                                  "photosRequired",
+                                  "monitorMayMarkIneligible",
+                                  "quantityFromCarriedTickets"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": ["id", "sites", "payItems"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "monitors": {
+                      "maxItems": 1000,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "monitorId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "monitorNumber": {
+                            "type": "string",
+                            "pattern": "^M\\d{6,}$"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["monitorId", "monitorNumber", "name"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "moreMonitorsAfter": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["projects", "project", "monitors", "moreMonitorsAfter"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/phones/current/unplanned-assignments": {
+      "post": {
+        "operationId": "reportUnplannedAssignment",
+        "summary": "A phone reports an unplanned assignment made on it under the firm’s master passcode, when its monitor had none: the project, the monitor, their work (the kinds of field event, certifying, the forms, the unit rate pay items), one site where the work is at one, and when it was made by the phone’s own clock, with the clock’s offset. The id is the phone’s own: the same report sent again is answered as already saved and kept once. It is kept as the phone reports it, marked unplanned on the dispatch board and never flagged, for a phone out of service too; its day is the day the phone’s clock said, in the project’s time zone. It is not saved only where something it names is no record of the kind it must be, or its id is another record’s. The passcode itself is never sent: the phone checked it. It says what it was made at: the phone set up (a phone moved to another of its project’s sites is set up anew there, and the earlier assignment stands with everything recorded under it), or the phone passed to another monitor, who had no assignment it could take. Each one saved is two security events at the phone’s own time: a phone set up or a phone switched, and a use of the master passcode. Where several of a monitor’s assignments for a day name one phone, their sign-in on it takes the one made on it last. Open to a phone that has proved itself, by its token; nobody need be signed in.",
+        "x-open-adms-access": "PROVEN_PHONE",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "projectId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "personId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "fieldEventKinds": {
+                    "maxItems": 5,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "COLLECTION",
+                        "DISPOSAL",
+                        "HAUL_OUT_COLLECTION",
+                        "HAUL_OUT_DISPOSAL",
+                        "UNIT_RATE"
+                      ]
+                    }
+                  },
+                  "certifying": {
+                    "type": "boolean"
+                  },
+                  "formDocumentTypes": {
+                    "maxItems": 4,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": ["ROE", "SURVEY", "INCIDENT", "DROP_OFF_LOG"]
+                    }
+                  },
+                  "siteId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "payItemIds": {
+                    "maxItems": 200,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    }
+                  },
+                  "occasion": {
+                    "type": "string",
+                    "enum": ["SETUP", "MONITOR_SWITCH"]
+                  },
+                  "madeAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                  },
+                  "deviceUtcOffsetMinutes": {
+                    "type": "integer",
+                    "minimum": -720,
+                    "maximum": 840
+                  }
+                },
+                "required": [
+                  "id",
+                  "projectId",
+                  "personId",
+                  "fieldEventKinds",
+                  "certifying",
+                  "formDocumentTypes",
+                  "siteId",
+                  "payItemIds",
+                  "occasion",
+                  "madeAt",
+                  "deviceUtcOffsetMinutes"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "assignmentId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "answer": {
+                      "type": "string",
+                      "enum": ["SAVED", "ALREADY_SAVED", "NOT_SAVED"]
+                    },
+                    "reason": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "UNKNOWN_PROJECT",
+                            "NOT_A_MONITOR",
+                            "NOT_THE_PROJECTS_SITE",
+                            "NOT_THE_PROJECTS_UNIT_RATE_PAY_ITEM",
+                            "ID_ALREADY_HELD"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["assignmentId", "answer", "reason"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/phones/current/syncs": {
+      "post": {
+        "operationId": "syncPhone",
+        "summary": "A phone syncs: it sends its clock, the unplanned assignments made on it, the uses of the master passcode it logged, its records (field events, scale receipts, incidents, drop-off logs, surveys, ROEs and certifications, each under the id the phone made for it, 200 at most) and the last number it used of each series. The server keeps the sync with both clocks and their difference, then reads each thing in that order and gives each its own answer, in the order sent. A record is saved; already saved, where it was sent before (never stored twice, and never taken for a duplicate ticket number); kept in quarantine, not saved, where another record holds its number, with the reason and the record that holds it; or not saved, where it can’t be read, names something the server doesn’t have, was made under an assignment that was not saved, or is a certification its own rules refuse: what was sent is then held on the server exactly as sent, for a person, and the answer says so. One record never stops the others. Nothing is refused over eligibility, and no answer carries a status, a flag or money: reconciliation is queued for what arrived and never waited for. For each series reported the answer lists the blocks of numbers the phone holds now, topped up to a full block where the project has such a series. A phone with more than one sync’s worth sends another. Open to a phone that has proved itself, by its token; nobody need be signed in.",
+        "x-open-adms-access": "PROVEN_PHONE",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "clockAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                  },
+                  "deviceUtcOffsetMinutes": {
+                    "type": "integer",
+                    "minimum": -720,
+                    "maximum": 840
+                  },
+                  "unplannedAssignments": {
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "projectId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "personId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "fieldEventKinds": {
+                          "maxItems": 5,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "COLLECTION",
+                              "DISPOSAL",
+                              "HAUL_OUT_COLLECTION",
+                              "HAUL_OUT_DISPOSAL",
+                              "UNIT_RATE"
+                            ]
+                          }
+                        },
+                        "certifying": {
+                          "type": "boolean"
+                        },
+                        "formDocumentTypes": {
+                          "maxItems": 4,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": ["ROE", "SURVEY", "INCIDENT", "DROP_OFF_LOG"]
+                          }
+                        },
+                        "siteId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "payItemIds": {
+                          "maxItems": 200,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          }
+                        },
+                        "occasion": {
+                          "type": "string",
+                          "enum": ["SETUP", "MONITOR_SWITCH"]
+                        },
+                        "madeAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        },
+                        "deviceUtcOffsetMinutes": {
+                          "type": "integer",
+                          "minimum": -720,
+                          "maximum": 840
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "projectId",
+                        "personId",
+                        "fieldEventKinds",
+                        "certifying",
+                        "formDocumentTypes",
+                        "siteId",
+                        "payItemIds",
+                        "occasion",
+                        "madeAt",
+                        "deviceUtcOffsetMinutes"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "passcodeUses": {
+                    "maxItems": 100,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "use": {
+                          "type": "string",
+                          "enum": [
+                            "MONITOR_SWITCH",
+                            "SESSION_AS_MONITOR",
+                            "TEMPORARY_SESSION",
+                            "WRONG_TRY"
+                          ]
+                        },
+                        "personId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "loggedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        },
+                        "deviceUtcOffsetMinutes": {
+                          "type": "integer",
+                          "minimum": -720,
+                          "maximum": 840
+                        }
+                      },
+                      "required": ["id", "use", "personId", "loggedAt", "deviceUtcOffsetMinutes"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "records": {
+                    "maxItems": 200,
+                    "type": "array",
+                    "items": {}
+                  },
+                  "lastUsed": {
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "projectId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "series": {
+                          "type": "string",
+                          "enum": ["LOAD", "HAUL_OUT", "UNIT_RATE", "CERTIFICATION", "ROE"]
+                        },
+                        "lastUsedNumber": {
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 2000000000
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": ["projectId", "series", "lastUsedNumber"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "holds": {
+                    "type": "object",
+                    "properties": {
+                      "masterPasscodeVersion": {
+                        "anyOf": [
+                          {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 9007199254740991
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "listsProjectId": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": ["masterPasscodeVersion", "listsProjectId"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "clockAt",
+                  "deviceUtcOffsetMinutes",
+                  "unplannedAssignments",
+                  "passcodeUses",
+                  "records",
+                  "lastUsed",
+                  "holds"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "unplannedAssignments": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "assignmentId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "answer": {
+                            "type": "string",
+                            "enum": ["SAVED", "ALREADY_SAVED", "NOT_SAVED"]
+                          },
+                          "reason": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "UNKNOWN_PROJECT",
+                                  "NOT_A_MONITOR",
+                                  "NOT_THE_PROJECTS_SITE",
+                                  "NOT_THE_PROJECTS_UNIT_RATE_PAY_ITEM",
+                                  "ID_ALREADY_HELD"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": ["assignmentId", "answer", "reason"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "passcodeUses": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "useId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "answer": {
+                            "type": "string",
+                            "enum": ["SAVED", "ALREADY_SAVED", "NOT_SAVED"]
+                          },
+                          "reason": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": ["NOT_A_MONITOR", "ID_ALREADY_HELD"]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": ["useId", "answer", "reason"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "records": {
+                      "type": "array",
+                      "items": {
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "answer": {
+                                "type": "string",
+                                "const": "SAVED"
+                              },
+                              "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "notes": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "code": {
+                                      "type": "string",
+                                      "enum": ["GPS_UNREADABLE", "ANSWERS_DO_NOT_FIT"]
+                                    },
+                                    "message": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": ["code", "message"],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": ["answer", "id", "notes"],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "answer": {
+                                "type": "string",
+                                "const": "ALREADY_SAVED"
+                              },
+                              "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              }
+                            },
+                            "required": ["answer", "id"],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "answer": {
+                                "type": "string",
+                                "const": "QUARANTINED"
+                              },
+                              "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "reason": {
+                                "type": "string",
+                                "enum": ["DUPLICATE_FIELD_EVENT", "DUPLICATE_ROE_NUMBER"]
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "heldBy": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              }
+                            },
+                            "required": ["answer", "id", "reason", "message", "heldBy"],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "answer": {
+                                "type": "string",
+                                "const": "NOT_SAVED"
+                              },
+                              "id": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "reason": {
+                                "type": "string",
+                                "enum": [
+                                  "NOT_A_RECORD",
+                                  "NAMES_NO_RECORD",
+                                  "ASSIGNMENT_NOT_SAVED",
+                                  "CERTIFICATION_REFUSED"
+                                ]
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "required": ["answer", "id", "reason", "message"],
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    },
+                    "numbers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "projectId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "series": {
+                            "type": "string",
+                            "enum": ["LOAD", "HAUL_OUT", "UNIT_RATE", "CERTIFICATION", "ROE"]
+                          },
+                          "toppedUp": {
+                            "type": "boolean"
+                          },
+                          "blocks": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "firstNumber": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 2000000000
+                                },
+                                "lastNumber": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 2000000000
+                                },
+                                "lastUsedNumber": {
+                                  "anyOf": [
+                                    {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 2000000000
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": ["firstNumber", "lastNumber", "lastUsedNumber"],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": ["projectId", "series", "toppedUp", "blocks"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "masterPasscode": {
+                      "type": "object",
+                      "properties": {
+                        "version": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "check": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "first": {
+                                  "type": "object",
+                                  "properties": {
+                                    "salt": {
+                                      "type": "string",
+                                      "pattern": "^[A-Za-z0-9+/]+$"
+                                    },
+                                    "memory": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "passes": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "parallelism": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "bytes": {
+                                      "type": "integer",
+                                      "minimum": 16,
+                                      "maximum": 9007199254740991
+                                    }
+                                  },
+                                  "required": ["salt", "memory", "passes", "parallelism", "bytes"],
+                                  "additionalProperties": false
+                                },
+                                "check": {
+                                  "type": "string",
+                                  "pattern": "^\\$argon2id\\$v=19\\$m=\\d+,t=\\d+,p=\\d+\\$[A-Za-z0-9+/]+\\$[A-Za-z0-9+/]+$"
+                                }
+                              },
+                              "required": ["first", "check"],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": ["version", "check"],
+                      "additionalProperties": false
+                    },
+                    "setupVersion": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "projectId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "version": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": ["projectId", "version"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "unplannedAssignments",
+                    "passcodeUses",
+                    "records",
+                    "numbers",
+                    "masterPasscode",
+                    "setupVersion"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -19276,7 +21854,8 @@
               "DEVICE_KEY_REFUSED",
               "PHONE_NOT_PROVEN",
               "MASTER_PASSCODE_REFUSED",
-              "PHONE_OUT_OF_SERVICE"
+              "PHONE_OUT_OF_SERVICE",
+              "NOT_A_MONITOR"
             ]
           },
           "requestId": {

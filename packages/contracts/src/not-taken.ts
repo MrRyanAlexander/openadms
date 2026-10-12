@@ -107,7 +107,11 @@ function refusals(part: Part, schema: z.ZodType | undefined, sent: unknown): str
         Object.keys(sent).length === 0);
     return none ? [] : [`this request takes nothing in ${where}`];
   }
-  const read = schema.safeParse(part === 'body' ? sent : (sent ?? {}));
+  return refused(where, schema, part === 'body' ? sent : (sent ?? {}));
+}
+
+function refused(where: string, schema: z.ZodType, sent: unknown): string[] {
+  const read = schema.safeParse(sent);
   if (read.success) return [];
   const names = named(schema);
   return read.error.issues.map((issue) => {
@@ -119,6 +123,11 @@ function refusals(part: Part, schema: z.ZodType | undefined, sent: unknown): str
   });
 }
 
+const atMost = (all: readonly string[]): string => {
+  const more = all.length - saidAtMost;
+  return `${all.slice(0, saidAtMost).join('; ')}${more > 0 ? `; and ${String(more)} more` : ''}`;
+};
+
 // The plain words for a request `taken` refused; undefined for one it takes.
 export function notTaken(served: Endpoint, sent: Sent): string | undefined {
   const all = [
@@ -128,7 +137,14 @@ export function notTaken(served: Endpoint, sent: Sent): string | undefined {
       ...refusals('body', served.body, sent.body),
     ]),
   ];
-  if (all.length === 0) return undefined;
-  const more = all.length - saidAtMost;
-  return `Not taken: ${all.slice(0, saidAtMost).join('; ')}${more > 0 ? `; and ${String(more)} more` : ''}.`;
+  return all.length === 0 ? undefined : `Not taken: ${atMost(all)}.`;
+}
+
+// Why one record of a sync isn't one, by the same rule (ADR-467): which field its schema
+// refused and how, never a value that was sent; undefined for a record the schema reads. A
+// refusal in the domain's own words (a detail on a kind that doesn't record it) is said as the
+// field alone, since those words may quote what was sent.
+export function notRead(schema: z.ZodType, sent: unknown): string | undefined {
+  const all = [...new Set(refused('this record', schema, sent))];
+  return all.length === 0 ? undefined : atMost(all);
 }

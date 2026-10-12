@@ -19,7 +19,8 @@
 // - **The password is the firm's practice** (ADR-105): exempt from the length, the breached
 //   list and the words (the domain's `PasswordRules`, ADR-402 (5)), never empty, and kept only
 //   as the same slow hash as anybody's. Whoever typed it knows it, and that is the practice:
-//   it is not marked to be changed.
+//   it is not marked to be changed. Their **offline seed** is kept beside it, sealed
+//   (offline-checks.ts; ADR-454): what a phone's login-list entry for them is made from.
 // - **A right use is a security event** (`MASTER_PASSCODE_USE`) naming the phone and the
 //   monitor, written with the monitor in the same piece of work.
 import { underMasterPasscode, type Database, type DeviceStatus } from '@open-adms/db';
@@ -28,6 +29,7 @@ import type { PasswordProblemCode, PasswordRules } from '@open-adms/domain';
 import type { Clock } from '../setup/setup-service.ts';
 import type { PasswordHasher } from '../sign-in/password-hasher.ts';
 import type { MasterPasscodeCheck, PasscodeRefused } from './master-passcode-check.ts';
+import type { OfflineChecks } from './offline-checks.ts';
 
 // Why no monitor was created. The passcode's four are for the server's log only: a caller is
 // never told which. The other two are told apart, the second only to somebody who holds the
@@ -68,6 +70,7 @@ export interface PhoneMonitorsParts {
   readonly passcode: MasterPasscodeCheck;
   readonly rules: PasswordRules;
   readonly hasher: PasswordHasher;
+  readonly offline: Pick<OfflineChecks, 'seedOf'>;
   readonly clock: Clock;
 }
 
@@ -81,7 +84,7 @@ export class PhoneMonitors {
   }
 
   async create(phone: CreatingPhone, monitor: MonitorToCreate): Promise<MonitorOutcome> {
-    const { passcode, rules, hasher, clock } = this.parts;
+    const { passcode, rules, hasher, offline, clock } = this.parts;
     // Before the passcode is touched: a phone out of service never spends its count.
     if (phone.status !== 'ACTIVE') return { created: false, why: 'PHONE_OUT_OF_SERVICE' };
     const now = clock.now();
@@ -107,7 +110,9 @@ export class PhoneMonitors {
         select: { id: true, name: true, monitorNumber: true },
       });
       if (made.monitorNumber === null) throw new Error('The database issued no Monitor ID.');
-      await tx.userCredential.create({ data: { userId: made.id, passwordHash } });
+      // Their offline seed is kept with the hash: a phone's login list can name them at once.
+      const offlineSeed = await offline.seedOf(made.id, monitor.password);
+      await tx.userCredential.create({ data: { userId: made.id, passwordHash, offlineSeed } });
       // A right passcode starts the count again, and its use is a security event.
       await passcode.used(tx, checked, now, { deviceId: phone.deviceId, userId: made.id });
       return {

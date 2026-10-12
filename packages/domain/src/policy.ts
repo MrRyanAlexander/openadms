@@ -67,6 +67,15 @@ export const policyNames = {
   // How long a monitor's sign-in on a phone lasts, in hours, whatever is asked of it; quiet
   // doesn't end it (ARCHITECTURE §6, Device sessions; NIST SP 800-63B-4 §2.2.3; ADR-443).
   monitorSessionHours: 'MONITOR_SESSION_HOURS',
+  // The most login-list entries the server makes for a phone in one call (ARCHITECTURE §7.2;
+  // ADR-454): each is a slow hash, so one call's work is bounded and the phone asks again.
+  loginListEntriesPerCall: 'LOGIN_LIST_ENTRIES_PER_CALL',
+  // How long our address server has to answer a phone's address lookup, in seconds (ARCHITECTURE
+  // §3; ADR-455): a monitor waits on it, so it is far shorter than the worker's own.
+  addressLookupAnswerSeconds: 'ADDRESS_LOOKUP_ANSWER_SECONDS',
+  // How long the object store has to answer one question of the API's, a file put or read
+  // whole, in seconds (ARCHITECTURE §11; ADR-480).
+  mediaStoreAnswerSeconds: 'MEDIA_STORE_ANSWER_SECONDS',
   // Rate limits (ARCHITECTURE §6, Abuse; ASVS 2.4.1; ADR-416): how long the stretch is that
   // requests are counted over, in seconds; how many one address and one signed-in person may send
   // in it; and how many callers' counts the server keeps at once.
@@ -91,6 +100,9 @@ export const policyNames = {
   reconciliationRunLongestMinutes: 'RECONCILIATION_RUN_LONGEST_MINUTES',
   jobQueuePollSeconds: 'JOB_QUEUE_POLL_SECONDS',
   mapServerAnswerSeconds: 'MAP_SERVER_ANSWER_SECONDS',
+  // A phone's clock further than this from the server's at a sync, in whole minutes, flags that
+  // sync's field events (ADR-100, 473): the worker's.
+  deviceClockOffLimitMinutes: 'DEVICE_CLOCK_OFF_LIMIT_MINUTES',
   // The most tickets one job names, and the most a run takes up at once (ADR-420), read by both
   // services: the API cuts a change that touches more into jobs of that size, and the worker
   // takes up waiting jobs, the oldest first, until their tickets come to it.
@@ -113,7 +125,8 @@ export type PolicyName = (typeof policyNames)[keyof typeof policyNames];
 // minutes), and nought takes the server's own step alone. A rate limit counts over an hour at the
 // most, a limit on tries over a day at the most, and each allows at least one; the server keeps
 // at least a thousand callers' counts and at most ten million. A job names at least one ticket
-// and at most a hundred thousand.
+// and at most a hundred thousand. A phone's clock may stand a minute off at the least before
+// its sync is flagged, and a day at the most.
 const ranges: Record<PolicyName, { least: number; most: number }> = {
   [policyNames.loadCallLowLimit]: { least: 0, most: 100 },
   [policyNames.loadCallHighLimit]: { least: 0, most: 100 },
@@ -141,6 +154,9 @@ const ranges: Record<PolicyName, { least: number; most: number }> = {
   [policyNames.phoneChallengeSeconds]: { least: 10, most: 600 },
   [policyNames.phoneTokenMinutes]: { least: 1, most: 60 },
   [policyNames.monitorSessionHours]: { least: 1, most: 24 },
+  [policyNames.loginListEntriesPerCall]: { least: 1, most: 500 },
+  [policyNames.addressLookupAnswerSeconds]: { least: 1, most: 60 },
+  [policyNames.mediaStoreAnswerSeconds]: { least: 1, most: 600 },
   [policyNames.rateLimitWindowSeconds]: { least: 1, most: 3600 },
   [policyNames.rateLimitRequestsPerAddress]: { least: 1, most: Number.MAX_SAFE_INTEGER },
   [policyNames.rateLimitRequestsPerAccount]: { least: 1, most: Number.MAX_SAFE_INTEGER },
@@ -154,6 +170,7 @@ const ranges: Record<PolicyName, { least: number; most: number }> = {
   [policyNames.reconciliationRunLongestMinutes]: { least: 1, most: 1440 },
   [policyNames.jobQueuePollSeconds]: { least: 1, most: 3600 },
   [policyNames.mapServerAnswerSeconds]: { least: 1, most: 600 },
+  [policyNames.deviceClockOffLimitMinutes]: { least: 1, most: 1440 },
   [policyNames.jobTicketsAtMost]: { least: 1, most: 100000 },
 };
 
@@ -184,6 +201,9 @@ export class Policy {
   readonly phoneChallengeSeconds: number;
   readonly phoneTokenMinutes: number;
   readonly monitorSessionHours: number;
+  readonly loginListEntriesPerCall: number;
+  readonly addressLookupAnswerSeconds: number;
+  readonly mediaStoreAnswerSeconds: number;
   readonly rateLimitWindowSeconds: number;
   readonly rateLimitRequestsPerAddress: number;
   readonly rateLimitRequestsPerAccount: number;
@@ -197,6 +217,7 @@ export class Policy {
   readonly reconciliationRunLongestMinutes: number;
   readonly jobQueuePollSeconds: number;
   readonly mapServerAnswerSeconds: number;
+  readonly deviceClockOffLimitMinutes: number;
   readonly jobTicketsAtMost: number;
 
   private constructor(values: Readonly<Record<string, string | undefined>>) {
@@ -226,6 +247,9 @@ export class Policy {
     this.phoneChallengeSeconds = Policy.read(values, policyNames.phoneChallengeSeconds);
     this.phoneTokenMinutes = Policy.read(values, policyNames.phoneTokenMinutes);
     this.monitorSessionHours = Policy.read(values, policyNames.monitorSessionHours);
+    this.loginListEntriesPerCall = Policy.read(values, policyNames.loginListEntriesPerCall);
+    this.addressLookupAnswerSeconds = Policy.read(values, policyNames.addressLookupAnswerSeconds);
+    this.mediaStoreAnswerSeconds = Policy.read(values, policyNames.mediaStoreAnswerSeconds);
     this.rateLimitWindowSeconds = Policy.read(values, policyNames.rateLimitWindowSeconds);
     this.rateLimitRequestsPerAddress = Policy.read(values, policyNames.rateLimitRequestsPerAddress);
     this.rateLimitRequestsPerAccount = Policy.read(values, policyNames.rateLimitRequestsPerAccount);
@@ -245,6 +269,7 @@ export class Policy {
     );
     this.jobQueuePollSeconds = Policy.read(values, policyNames.jobQueuePollSeconds);
     this.mapServerAnswerSeconds = Policy.read(values, policyNames.mapServerAnswerSeconds);
+    this.deviceClockOffLimitMinutes = Policy.read(values, policyNames.deviceClockOffLimitMinutes);
     this.jobTicketsAtMost = Policy.read(values, policyNames.jobTicketsAtMost);
     // Three pairs hold only together: an access token that outlasted the session's quiet time would
     // keep a session nobody uses alive; a lock that came no later than the first wait would

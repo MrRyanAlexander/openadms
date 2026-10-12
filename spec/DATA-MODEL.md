@@ -41,7 +41,7 @@ one line saying what kind of record it is (§1) and what it is for, then one tab
 | 1 | Conventions every model follows | |
 | 2 | Shared, firm-wide records | `Client` · `DeclarationEvent` · `Contractor` · `ProjectContractor` · `User` · `UserCredential` · `Session` · `SecurityEvent` · `UserPermission` · `ViewerProject` · `Device` · `MasterPasscode` · `MasterPasscodeTries` · `Assignment` · `AssignmentPayItem` · the firm's lists |
 | 3 | A project and its setup | `Project` · `ProjectKindOfWork` · `Contract` · `Form` · `FormDebrisType` · `FormDefinition` · `PayItem` · `PayItemCrewDayStep` · `PayItemRate` · `Rule` · `RuleCriterion` · `RuleCriterionPick` · `RuleAction` · `RuleActionItem` · `DisposalSite` · `DisposalSiteLabel` · `SiteAreaVersion` · `MapVersion` · `Zone` · `ProjectNumberSeries` · `ControlRange` · `NumberBlock` · `Certification` · `CertificationBox` · `CertificationHelper` · `Roe` · `RoeScopeItem` · `ClockEntry` · `ClockActivityLine` · `ApprovedDay` |
-| 4 | Evidence: what monitors saw | `FieldEvent` · `FieldEventItem` · `CarriedTicket` · `ScaleReceipt` · `Survey` · `Incident` · `DropOffLog` · `Photo` · `Sync` · `SyncedRecord` · `QuarantinedRecord` · `FieldEventEdit` · `SetupManifest` |
+| 4 | Evidence: what monitors saw | `FieldEvent` · `FieldEventItem` · `CarriedTicket` · `ScaleReceipt` · `Survey` · `Incident` · `DropOffLog` · `Photo` · `Sync` · `SyncedRecord` · `QuarantinedRecord` · `SetupManifest` |
 | 5 | Derived: the worker's conclusions | `CompletedLoad` · `CompletedLoadCollection` · `CompletedHaulOut` · `CompletedHaulOutCollection` · `Transaction` · `Flag` · `ReconciliationRun` · `ReconciliationDecision` · the job queue: `ReconciliationJob` · `ReconciliationJobTicket` |
 | 6 | Marks: what people set | `QcMark` · `InvoiceLock` · `InvoiceBatch` · `FlagAcceptance` · `TicketVoid` · `TicketUnvoid` · `ApprovedDay` |
 | 7 | Audit | `AuditRecord` |
@@ -185,6 +185,7 @@ worker, which reads people, holds nothing on it, and no read-only viewer reads i
 | lockedUntil | instant | Sign-in refuses the person until then: the wait that wrong tries put on the login, which is over by itself (ADR-409) |
 | **failedSignIns** | whole number | Wrong tries in a row since the last sign-in that worked or the last password set; never below nought (check). At the policy's count (`SIGN_IN_TRIES_BEFORE_LOCK`) the login is locked until its password is set anew (task 2.2.3, ADR-409) |
 | **passwordChangeRequired** | bool | Somebody else set this password: its owner sets their own at their next sign-in, before anything else (task 2.2.3, ADR-410). False unless set |
+| offlineSeed | text | A monitor's **offline seed** (ADR-449 (5), 454; agent default): what a phone's login-list entry for them is made from, since no phone can compute the keyed hash above. Argon2id of the password under a salt of its own with no key, **only as the API sealed it** (AES-256-GCM, bound to this person, written `v1.…`; a check refuses anything else), and only beside a password (check). Made when a monitor's password is set and at an online sign-in where there is none; **never outlives its password** (a trigger refuses a password changed with the seed left as it was). Nobody but a monitor has one. **Kept out of the audit log** (task 2.5.3 part 4) |
 | **createdAt** | instant | |
 
 Audited in the security domain: a change of a secret column writes an audit record that names
@@ -204,9 +205,10 @@ approval: task 2.5.2). **Only the API reads it.** A phone's own proof of itself 
 | **userId** | → `User` | Whose it is; never changes. Never the system actor (check) |
 | **refreshTokenHash** | text, unique | The SHA-256, as 64 lower-case hexadecimal digits, of the refresh token in force, and nothing else (check): the server never holds the token (AC-10-10). Rotating the token writes the new hash over the old. On a monitor's session on a phone, the hash of its session token, which never rotates (ADR-443). **Kept out of the audit log** |
 | deviceId | → `Device` | The phone a monitor signed in on (ADR-443). **A monitor's session always names one, and no other session does** (trigger): a monitor's ID and password open nothing but a phone (AC-02-39). Opened only for a monitor not archived, on a phone in service whose key stands, written as that monitor from that phone (trigger); never changes |
+| masterPasscodeSession | enum `MasterPasscodeSession` | `AS_MONITOR` · `TEMPORARY`: opened under the master passcode, with a connection, as the phone's monitor or as the temporary session (⚠️ ADR-462, an agent default awaiting approval). Empty on a person's own sign-in. **Only a session on a phone has it** (check). **A marked one is written only as the master passcode's actor for that phone, and that actor writes no unmarked one** (trigger); never changes |
 | **createdAt** | instant | When they signed in; never changes |
-| **expiresAt** | instant | After `createdAt` (check). The policy's quiet minutes after its last use (`SESSION_INACTIVITY_MINUTES`), moved on by each refresh, and never later than the policy's hours after `createdAt` (`SESSION_OVERALL_HOURS`) (task 2.2.3, ADR-408). On a phone: `MONITOR_SESSION_HOURS` after `createdAt`, never moved, and quiet doesn't end it (ADR-443) |
-| revokedAt | instant | Signed out, or ended by the server: its refresh token was presented a second time, or the person's password was set anew (ADR-408, 410); on a phone, also another monitor signed in on it (ADR-443). **Once set, the row never changes again** (trigger): no rotation, no second life |
+| **expiresAt** | instant | After `createdAt` (check). The policy's quiet minutes after its last use (`SESSION_INACTIVITY_MINUTES`), moved on by each refresh, and never later than the policy's hours after `createdAt` (`SESSION_OVERALL_HOURS`) (task 2.2.3, ADR-408). On a phone: `MONITOR_SESSION_HOURS` after `createdAt`, never moved, and quiet doesn't end it (ADR-443); a temporary session under the master passcode, the end of the project's day where that comes first (ADR-462) |
+| revokedAt | instant | Signed out, or ended by the server: its refresh token was presented a second time, or the person's password was set anew (ADR-408, 410); on a phone, also another monitor signed in on it (ADR-443), a session opened on it under the master passcode, or a monitor switch the phone reported (ADR-462). **Once set, the row never changes again** (trigger): no rotation, no second life |
 
 Audited in the security domain: the audit log shows a session opened, each rotation (that the
 hash changed, never a hash) and the revocation, each with its actor and request.
@@ -228,7 +230,11 @@ API reads the table**; who is shown them on a screen is the back office's (Phase
 | deviceId | → `Device` | The phone, when it happened on one |
 | requestId | text | The API request it happened in; never blank (check) |
 | **occurredAt** | instant | When it happened (a phone's own time, for what a phone logged and synced) |
+| deviceUtcOffsetMinutes | int | **Only where a phone reported it (ADR-457):** its clock's offset, so only with `deviceId` (check). `createdAt` is then when the server received it |
+| masterPasscodeSession | enum `MasterPasscodeSession` | **Only on a `MASTER_PASSCODE_USE` a phone reported, for a monitor (ADR-464; check):** which way a session was opened on the phone with no connection, `AS_MONITOR` or `TEMPORARY`. One opened with a connection says it on its `Session` row |
 | **createdAt** | instant | When the server wrote it |
+
+**One a phone reported** (it carries an offset) is what was done on that phone under the master passcode: the database lets it be written only as the master passcode's actor, from a phone, naming that phone (trigger, ADR-464). The first event of a use a phone logged takes the id the phone gave it, so the same report sent again is kept once.
 
 **Who wrote it** is the audit record's actor, as for every write: an event with nobody stated is
 refused. **Who that is when nobody is signed in yet** (a wrong try, a use of the master
@@ -386,8 +392,16 @@ only by the API; audited in the security domain; never deleted.
 | deviceId | → `Device` | Named on the board, or the phone that took it |
 | **origin** | enum `AssignmentOrigin` | `PLANNED` (with its author) or `UNPLANNED` (no author, always its phone) |
 | madeById | → `User` | The author of a planned one |
+| madeAt | instant | **An unplanned one only (ADR-457):** when it was made, by the phone's clock |
+| deviceUtcOffsetMinutes | int | An unplanned one only: that clock's offset, UTC−12:00 to UTC+14:00 (check) |
+| receivedAt | instant | An unplanned one only: when the server received it; never changes |
 | **createdAt** | instant | |
 | archivedAt | instant | Withdrawn by archiving; never expires |
+
+**An unplanned one is what its phone reported (built, ADR-457; agent defaults).** The database
+takes one only as the master passcode's actor, for a phone, naming that same phone; whether an
+assignment was planned never changes; one written on the board has none of the three times. Its
+`workDate` is the day its phone's clock said, in the project's time zone.
 
 #### `AssignmentPayItem`
 
@@ -1359,6 +1373,25 @@ One connection from a phone.
 | **clockDifferenceSeconds** | int | |
 | setupVersionSent | int | |
 
+**As built (ADR-471, task 2.6.2 part 1; agent defaults).** Table `sync`. `startedAt` is the
+server's clock when the sync began; `deviceClockAt` is the phone's as it sent the sync, with
+`deviceUtcOffsetMinutes` beside it (UTC−12:00 to UTC+14:00), as every time a phone reports has.
+**`clockDifferenceSeconds` is the phone's clock less the server's, in whole seconds**: above
+nought when the phone's is ahead. The database holds it to the two instants (within one second,
+however the fraction was rounded), and it is kept wide (a phone may report any instant).
+**Nothing of a sync is changed after it is written**, but `setupVersionSent`, written once
+(from 1) when the answer carried lists. Written only for a phone, stated by name, and naming
+that phone; never deleted; audited in the records domain. The API adds and reads one; **the
+worker reads it** (the difference, for `DEVICE_CLOCK_OFF`); no read-only viewer does.
+**Written since ADR-472 (task 2.6.2 part 2)** by `Sync` (`apps/api`), first in every call of
+`POST /phones/current/syncs`, as the device key's actor on the phone that proved itself; the
+difference is rounded to the nearest second. A call sent again is a sync of its own.
+**`setupVersionSent` since ADR-473 (task 2.6.2 part 3):** written once by `Sync`, as the device
+key's actor, where the phone said whose lists it holds and the answer told it that project's
+setup version: the number, not the lists ("when the answer carried lists", above, is read so).
+The worker reads `clockDifferenceSeconds` through `SyncedRecord` for each phone-made field
+event and flags past the policy value `DEVICE_CLOCK_OFF_LIMIT_MINUTES`.
+
 #### `SyncedRecord`
 
 The idempotency ledger: a retry is answered "already saved" from here and never quarantined (KD-56).
@@ -1369,6 +1402,65 @@ The idempotency ledger: a retry is answered "already saved" from here and never 
 | **recordKind** | *open* | |
 | **syncId** | → `Sync` | |
 | **answer** | enum `SyncAnswer` | `SAVED` · `QUARANTINED` |
+
+**As built (ADR-471, task 2.6.2 part 1; agent defaults).** Table `synced_record`; **the key's
+column is `id`** (the phone-made id; the audit log names every row by a column of that name),
+`recordId` in code. One row for each record the server **stored**: as a record of its kind
+(`SAVED`) or in quarantine (`QUARANTINED`). **A record the server could not save is not in the
+ledger: it is a `HeldRecord`** (below), so `SyncAnswer` stays these two (ADR-468 (3)'s last
+sentence, amended). `recordKind` is the contract's word for the kind (`FIELD_EVENT`,
+`SCALE_RECEIPT`, `ROE`, `CERTIFICATION`…), so a later kind needs no migration. A row also names
+its phone (`deviceId`), held to its sync's by a two-column foreign key. **Written once, for the
+phone it names; never changed, never deleted**; audited in the records domain. The API adds and
+reads it; the worker reads it, to find the sync that brought a record; no read-only viewer does.
+**Written since ADR-472** in the piece of work that stores the record, as the monitor from the
+phone (`ledgerRow`): a retry is answered "already saved" from it where it holds the id as `SAVED`
+under the same kind. A record stored with no sync named (before the ledger, or by a story's own
+intake) has no row. A photograph's record has none yet (task 2.6.4).
+
+#### `HeldRecord`
+
+A record a phone sent that the server could not save, **held exactly as sent for a person**
+(the user's decision, ADR-468; built by ADR-471, task 2.6.2 part 1; its fields are agent
+defaults). Inert: never a field event, never paired, never billed, never read by the worker.
+
+| Field | Type | Notes |
+|---|---|---|
+| **id** | uuid | Its own: what was sent may carry no id |
+| **deviceId** | → `Device` | The phone, known for certain from its proof |
+| **syncId** | → `Sync` | The sync that brought it, that phone's own |
+| sentId | uuid | The record's phone-made id, where one could be read |
+| projectId | uuid | The project it named, **as sent: not a relation**, it may name nothing |
+| sentMonitorId | uuid | The monitor it named, as sent: not a relation |
+| **payload** | JSONB | What stood in the record's place, exactly as sent: any JSON value |
+| **sentSha256** | text | The SHA-256 of what was sent |
+| **reason** | enum `NotSavedReason` | `NOT_A_RECORD` · `NAMES_NO_RECORD` · `ASSIGNMENT_NOT_SAVED` · `CERTIFICATION_REFUSED` (the domain's `notSavedReasons`) |
+| **message** | text | What the phone was told |
+| **receivedAt** | instant | |
+| resolvedById | → `User` | |
+| resolvedAt | instant | |
+| resolution | *open* | |
+
+Table `held_record`. **The same thing sent again by the same phone is the same held record**
+(one row for a phone and a fingerprint), so a phone that keeps sending what can't be saved
+adds nothing; the same record sent with anything changed is another thing sent, and is held
+too. **What was sent is never changed, by anyone, and never deleted**; only the resolution is
+written later (who, when and what, all three or none), **by a person**: never the system actor,
+the master passcode's or the device key's. Written only for the phone it names, when that phone
+syncs. Audited in the records domain, **the audit log saying that one was made and never
+holding a second copy of what was sent**. The API alone adds, reads and resolves one; the
+worker holds no right on it. **Viewers:** as a quarantined record's (ADR-336, 468 (5)): a
+client user and an auditor see that a record naming their project is held, why and how it was
+resolved (`viewer_held_record`); what was sent only by `viewer_held_record_citizen`, to a viewer
+the firm lets see private citizens; one that names no project of theirs is seen by none; a
+contractor user sees none. Who resolves one and how is the review queue's (Phase 4).
+**Written since ADR-472** by `Sync` alone, as the device key's actor on the syncing phone.
+**`sentSha256` is the SHA-256, in hex, of what was sent as canonical JSON in UTF-8** (object
+keys sorted at every depth, no white space), so the order of a record's fields doesn't matter.
+`sentId`, `projectId` and `sentMonitorId` are read loosely, each only where it is an id (the
+monitor from `monitorId`, `enteredById`, `madeById` or `certifiedById`). `message` is the
+domain's words with "Held on the server for review." A held record whose record is later sent
+again and saved stays as it is, for a person. *Agent defaults.*
 
 #### `QuarantinedRecord`
 
@@ -1412,8 +1504,9 @@ payload; a scale receipt sent with it is saved as its own record. *Agent default
 
 #### `FieldEventEdit`
 
-A phone's edit log for an event reopened before the shift ended; the audit capture writes the
-change under the monitor. Its fields are Phase 2's.
+**Withdrawn 2026-10-12 at the user's word (ADR-477): never built.** A record a monitor submitted
+is sealed for them, so no phone sends an edit and there is no edit log; the back office's
+corrections are the audit log's (ADR-051).
 
 #### `SetupManifest`
 
@@ -1425,6 +1518,23 @@ The numbered lists a phone was sent, kept so a reviewer sees what the phone show
 | **version** | int | |
 | **content** | *open* | |
 | **builtAt** | instant | |
+
+**As built (ADR-453, task 2.5.3 part 3; agent defaults).** **A version numbers the project's
+setup as its phones are shown it**, whole for the project: the control ranges, the load and
+haul-out forms' debris types without those *Hidden on phones*, the field tags, the reasons for a
+typed number, the live sites, every unit rate pay item with its capture settings, the item
+names, the incident and survey lists, and every live site's quantity lookup. `content` is that,
+as sent (an object; the contracts' `setupShownSchema`). **Never a rate, a rule or a load's pay
+item, and not the certifications, the ROEs or a phone's blocks of numbers**: those are records
+with their own history, and a new one makes no version. A phone's lists are its assignment's
+part of the version, so a field event's `assignmentId` and `setupVersion` together say what its
+phone showed. **Made when a phone is first sent lists that differ from the newest version's**,
+written by the API as the device key's actor on that phone, and at no other time. `version` is
+1, 2, 3… per project with no gap and unique with `projectId`; the database refuses a number out
+of turn, a version whose content is the newest's, one made other than as a phone's write naming
+the phone, and any edit or delete; audited in the records domain. The worker and the read-only
+viewers read none. A field event's `setupVersion` is not held to it by a foreign key: it is
+what the phone said. `Sync.setupVersionSent` is task 2.6.2's.
 
 ---
 
@@ -1817,6 +1927,7 @@ Never relaxed to pass a test (ARCHITECTURE §5.4). ✅ = built today.
 | The rule | How |
 |---|---|
 | One field event per project + workflow + bare number + split suffix + kind | ✅ unique key |
+| An unplanned assignment is made only as the master passcode's actor, for a phone, naming that phone, with the phone's instant, its offset and the server's received time; a planned one has none of the three; whether one was planned, and when an unplanned one was received, never change; a security event carries an offset only with its phone (ADR-457) | ✅ checks and a trigger (`assignment_unplanned`) |
 | A kind fits its workflow; a load call is 0–100 and only on `DIS` and `HOC` | ✅ checks |
 | A completed record's disposal, a collection row's completed record and collection event, a flag's field event, certification, site, survey, pay item and run, and a field event's map version and worked-out pay item are each of its own project; a zone is one of the map version used, and comes with it; only a unit rate event has a worked-out pay item (ADR-340) | ✅ two-column foreign keys and checks |
 | A completed record's load call is 0–100 and nothing on it or its rows is below nought; a weight is a share only where there is a weight; a haul-out never takes its quantity from carried tickets; a share is nought to one; a mileage with its source, a road point whole and on the earth, the map data's date with its hash; a flag is on a ticket or a record, says something, keeps its facts as an object with a SHA-256, and is never cleared before it was raised; a run never finishes before it starts; one decision for a ticket in a run (ADR-340) | ✅ checks and a unique key |

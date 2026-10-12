@@ -49,7 +49,7 @@ import {
   saved,
   setUpP1Pricing,
 } from './p1-office.ts';
-import { assigned } from './board.ts';
+import { assigned, sentAlone } from './board.ts';
 import { p1TimeZone as timeZone } from './p1.ts';
 import { p1Boundary } from './setup.ts';
 
@@ -211,7 +211,11 @@ export const p1LeftOut: Story = {
       [28, 30, 40],
     );
 
-    const settings = { crewItemHoursLimit: story.policy.crewDayHours, longestRunMs: 600_000 };
+    const settings = {
+      crewItemHoursLimit: story.policy.crewDayHours,
+      deviceClockOffLimitMinutes: story.policy.deviceClockOffLimitMinutes,
+      longestRunMs: 600_000,
+    };
     const reconciliation = new Reconciliation(
       worker,
       clock,
@@ -293,7 +297,7 @@ export const p1LeftOut: Story = {
     };
 
     // ------------------------------------------------------------------------------------------
-    const phones = new P1Syncs(story, held);
+    const phones = new P1Syncs(story, office);
     const wednesdayMorning = phones.times.at(-1);
     if (wednesdayMorning === undefined) throw new Error('The field days never synced.');
     story.at(
@@ -307,7 +311,7 @@ export const p1LeftOut: Story = {
     });
     const arrived: string[] = [];
     for (const { sent } of newestFirst) {
-      const answer = await story.intake.receive(sent);
+      const answer = await sentAlone(story, timeZone, sent);
       if (answer.answer !== 'SAVED') throw new Error(`Not saved: ${answer.answer}`);
       if (sent.record === 'FIELD_EVENT') arrived.push(sent.fieldEvent.ticketNumber);
     }
@@ -399,7 +403,7 @@ export const p1LeftOut: Story = {
     };
     const send = async (fieldEvent: Sent): Promise<void> => {
       const record: PhoneRecord = { record: 'FIELD_EVENT', fieldEvent };
-      const answer = await story.intake.receive(record);
+      const answer = await sentAlone(story, timeZone, record);
       if (answer.answer !== 'SAVED') throw new Error(`Not saved: ${answer.answer}`);
     };
     const fromHeronSt = { address: null, addressSource: null };
@@ -963,7 +967,7 @@ export const p1LeftOut: Story = {
     if (heldReceipt?.record !== 'SCALE_RECEIPT') throw new Error('No scale receipt was held.');
     const weighedAt = new Date(on('15', '10:25'));
     const receiptId = uuidv7(weighedAt);
-    const receiptAnswer = await story.intake.receive({
+    const receiptAnswer = await sentAlone(story, timeZone, {
       record: 'SCALE_RECEIPT',
       scaleReceipt: {
         ...heldReceipt.scaleReceipt,

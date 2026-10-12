@@ -1,5 +1,5 @@
 // The security checks (ARCHITECTURE §15, §16; REQ-018; ADR-276), one command from the root:
-//   pnpm security
+//   pnpm security            (--fresh runs the grant tests again whatever `pnpm test` reported)
 // The dependency audit, the secrets scan, the env files and the grant tests, each with real counts;
 // exit 1 if any fails. It never prints a secret. The grant tests need the local stack and an
 // installation at head; the audit needs the registry.
@@ -20,7 +20,7 @@ const checks: (() => Outcome | Outcome[])[] = [
   () => new DependencyAudit(root).run(),
   () => new SecretsScan(repository).run(),
   () => new EnvFilesCheck(repository).run(),
-  () => new GrantTests(root).run(),
+  () => new GrantTests(repository, process.argv.includes('--fresh')).run(),
 ];
 
 console.log('Security checks (ARCHITECTURE §15, §16; REQ-018)');

@@ -50,8 +50,9 @@ export interface CheckedFieldEvent extends GroupedFieldEvent {
   readonly deviceUtcOffsetMinutes: number;
   // Its phone; none on a record created in the back office.
   readonly device: { readonly enrolledAt: Date; readonly outOfServiceAt: Date | null } | null;
-  // How far the phone's clock stood from the server's at the sync that brought it; none where
-  // nothing kept it (the sync's own record is Phase 2's).
+  // How far the phone's clock stood from the server's at the sync that brought it, in whole
+  // minutes, above nought when the phone's was ahead; none where no sync brought it (a record
+  // created in the back office).
   readonly clockOffAtSyncMinutes: number | null;
   // The tower's count on a load that carries tickets.
   readonly carriedCount: number | null;

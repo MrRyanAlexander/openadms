@@ -4,6 +4,8 @@
 // ADR-065, 106, 134, 240, 281; BACKLOG carry-forward C12).
 import { describe, expect, it } from 'vitest';
 
+import { deviceKeyActorId } from '../src/device-key-actor.ts';
+import { masterPasscodeActorId } from '../src/master-passcode-actor.ts';
 import { refusedBy } from './support/database.ts';
 import { eachTestRolledBack } from './support/lifecycle.ts';
 import { deviceKeyLike } from './support/device-keys.ts';
@@ -71,10 +73,37 @@ describe('a phone', () => {
     ).toBe(refusedBy.notNull);
     // The firm changes the passcode; the phone gets the new check at its next sync.
     await db.run(`INSERT INTO "master_passcode" ("version", "hash") VALUES (2, $1)`, [aHash]);
+    await db.run(`INSERT INTO "master_passcode" ("version", "hash") VALUES (3, $1)`, [aHash]);
+    const holds = `UPDATE "device" SET "master_passcode_version" = $2 WHERE "id" = $1`;
+    // Which version a phone holds is said only by that phone's own proven call (ADR-454): not
+    // by a person, not by the master passcode's actor, not by another phone's key.
+    const { id: another } = await db.one<{ id: string }>(enrol, [
+      'P1-UR-1',
+      deviceKeyLike('jo-kim'),
+      1,
+    ]);
+    const others = [
+      () => db.actor(world.admin, 'BACK_OFFICE'),
+      () => db.actor(masterPasscodeActorId, 'DEVICE', { deviceId: world.device }),
+      () => db.actor(deviceKeyActorId, 'DEVICE', { deviceId: another }),
+    ];
+    for (const [at, state] of others.entries()) {
+      await state();
+      const refusal = await db.refused(holds, [world.device, 2]);
+      expect(refusal.code, String(at)).toBe(refusedBy.grant);
+      expect(refusal.message).toContain("Only a phone's own proven call");
+    }
+    await db.actor(deviceKeyActorId, 'DEVICE', { deviceId: world.device });
+    expect(await db.run(holds, [world.device, 3])).toBe(1);
+    // Never back to an earlier version; the same one again changes nothing and is let be.
+    const back = await db.refused(holds, [world.device, 2]);
+    expect(back.code).toBe(refusedBy.trigger);
+    expect(back.message).toContain('never goes back to an earlier version');
+    expect(await db.run(holds, [world.device, 3])).toBe(1);
+    // Anybody may change the rest of the phone's record, the version left as it is.
+    await db.actor(world.admin, 'BACK_OFFICE');
     expect(
-      await db.run(`UPDATE "device" SET "master_passcode_version" = 2 WHERE "id" = $1`, [
-        world.device,
-      ]),
+      await db.run(`UPDATE "device" SET "name" = 'P1-TWR-FDS' WHERE "id" = $1`, [world.device]),
     ).toBe(1);
   });
 

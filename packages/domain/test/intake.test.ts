@@ -1,8 +1,8 @@
 // What the server decides about a record as it arrives (spec/acceptance/05-sync.md AC-05-20, 24,
-// 25, 39; ADR-022, 329 (5), 338). The fixes are the example world's: Marsh Road TDSR.
+// 25, 39, 45, 46; ADR-022, 329 (5), 338, 467). The fixes are the example world's: Marsh Road TDSR.
 import { describe, expect, it } from 'vitest';
 
-import { GpsFix, Quarantine, quarantineReasons } from '../src/index.ts';
+import { GpsFix, NotSaved, notSavedReasons, Quarantine, quarantineReasons } from '../src/index.ts';
 
 describe('a GPS fix as a phone sends it', () => {
   it('AC-05-39 a fix on the earth is kept as sent, exact decimals as text', () => {
@@ -102,5 +102,70 @@ describe('what a phone is told of a record kept in quarantine', () => {
 
   it('the reasons are a closed set of two', () => {
     expect(quarantineReasons).toEqual(['DUPLICATE_FIELD_EVENT', 'DUPLICATE_ROE_NUMBER']);
+  });
+});
+
+describe('what a phone is told of a record that could not be saved at all', () => {
+  it('AC-05-45, AC-05-46 not saved, with the reason, in plain words: never a judgement of the work, and never a value that was sent', () => {
+    expect(notSavedReasons).toEqual([
+      'NOT_A_RECORD',
+      'NAMES_NO_RECORD',
+      'ASSIGNMENT_NOT_SAVED',
+      'CERTIFICATION_REFUSED',
+    ]);
+    const told = [
+      NotSaved.notARecord('fieldEvent.loadCall in this record can’t be more than 100'),
+      NotSaved.namesNoRecord(),
+      NotSaved.assignmentNotSaved(),
+      NotSaved.certificationRefused('A crew is not measured: it has no boxes and no capacity.'),
+    ];
+    expect(told.map((notice) => notice.reason)).toEqual([...notSavedReasons]);
+    expect(told.map((notice) => notice.message)).toEqual([
+      'Not saved: this record can’t be read: fieldEvent.loadCall in this record can’t be more than 100.',
+      'Not saved: this record names something the server doesn’t have: its project, its monitor, its assignment, or something picked from a list.',
+      'Not saved: the assignment this record was made under was not saved.',
+      'Not saved: A crew is not measured: it has no boxes and no capacity.',
+    ]);
+    // A certification its own rules refuse is told the rule's words, once; one whose number
+    // is held, the number and nothing of the certification that holds it (ADR-469).
+    expect(
+      NotSaved.certificationRefused(
+        'Not saved: certification 730420 replaces another, so it says why (sideboards added, bed rebuilt…).',
+      ).message,
+    ).toBe(
+      'Not saved: certification 730420 replaces another, so it says why (sideboards added, bed rebuilt…).',
+    );
+    const held = NotSaved.certNumberHeld('730415');
+    expect([held.reason, held.message]).toEqual([
+      'CERTIFICATION_REFUSED',
+      'Not saved: this project already has a certification 730415.',
+    ]);
+    for (const { message } of told) {
+      expect(message.startsWith('Not saved: ')).toBe(true);
+      expect(message).not.toMatch(/eligib|flag|quarantine/i);
+    }
+  });
+
+  it('ADR-468, 472 once the server holds what was sent, its words say so, and only then: the reason stands, and it is still never “saved”', () => {
+    const replaced = NotSaved.replacedAlready();
+    expect([replaced.reason, replaced.message]).toEqual([
+      'CERTIFICATION_REFUSED',
+      'Not saved: the certification this one replaces has already been replaced.',
+    ]);
+    for (const notice of [
+      NotSaved.notARecord('fieldEvent.loadCall in this record can’t be more than 100'),
+      NotSaved.namesNoRecord(),
+      NotSaved.assignmentNotSaved(),
+      NotSaved.certNumberHeld('730415'),
+      replaced,
+    ]) {
+      expect(notice.message).not.toMatch(/held on the server/i);
+      const held = NotSaved.heldForReview(notice);
+      expect(held).toEqual({
+        reason: notice.reason,
+        message: `${notice.message} Held on the server for review.`,
+      });
+      expect(held.message.startsWith('Not saved: ')).toBe(true);
+    }
   });
 });

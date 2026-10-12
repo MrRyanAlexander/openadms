@@ -1,9 +1,13 @@
-// Every story passes, each on its own database, and the runner catches a wrong result (BACKLOG
-// 0.4.1; ADR-275). Needs the local stack and an installation, as the database tests do.
+// The runner catches a wrong result, and a story's database copied from a run's template is what
+// one migrated and seeded by itself is (BACKLOG 0.4.1; ADR-275, 447). Needs the local stack and
+// an installation, as the database tests do. The stories themselves run once, in `pnpm
+// scenarios` (ADR-446): this file no longer runs each of them again.
+import { readdirSync } from 'node:fs';
+
 import { describe, expect, it } from 'vitest';
 
 import { Runner, type Story } from '../src/runner.ts';
-import { StoryDatabase } from '../src/story-database.ts';
+import { StoryDatabase, StoryTemplate } from '../src/story-database.ts';
 import { stories } from '../src/stories/index.ts';
 
 // A story whose last check is wrong, and one that stops with an error.
@@ -30,27 +34,88 @@ const stops: Story = {
   },
 };
 
-async function run(story: Story) {
+async function run(story: Story, template?: StoryTemplate) {
   const lines: string[] = [];
-  const result = await new Runner((line) => lines.push(line)).run(story);
+  const result = await new Runner(
+    (line) => lines.push(line),
+    template === undefined ? {} : { template },
+  ).run(story);
   return { result, lines };
 }
+
+// A story that only looks at what its database starts with.
+const starts: Story = {
+  ...wrong,
+  name: 'starts',
+  async run(story) {
+    story.check('the seed’s three actors', await story.api.user.count(), 3);
+  },
+};
 
 async function left(name: string | undefined): Promise<boolean> {
   return name !== undefined && (await StoryDatabase.list()).includes(name);
 }
 
 describe('the stories', () => {
-  for (const story of stories) {
-    it(`${story.name} passes on its own database, dropped afterwards`, async () => {
-      const { result, lines } = await run(story);
-      expect(result.error, lines.join('\n')).toBeUndefined();
-      expect(result.failed, lines.join('\n')).toBe(0);
-      expect(result.passed).toBeGreaterThan(0);
-      expect(result.database).toMatch(/^adms_story_\d{14}_[0-9a-f]{6}$/);
-      expect(await left(result.database)).toBe(false);
-    }, 60_000);
-  }
+  it('each have a name of their own, which `pnpm scenarios` runs them by', () => {
+    const names = stories.map((story) => story.name);
+    expect(new Set(names).size).toBe(names.length);
+    expect(names.length).toBeGreaterThan(0);
+  });
+});
+
+describe('a run’s template', () => {
+  it('gives each story a copy that stands as a database migrated and seeded by itself: at head, every table guarded, adms_owner’s, open to the logins alone', async () => {
+    const head = readdirSync(new URL('../../db/prisma/migrations/', import.meta.url), {
+      withFileTypes: true,
+    }).filter((entry) => entry.isDirectory()).length;
+    const template = await StoryTemplate.create();
+    const made: StoryDatabase[] = [];
+    try {
+      expect(template.name).toMatch(/^adms_story_template_\d{14}_[0-9a-f]{6}$/);
+      expect(template.migrations).toBe(head);
+      const alone = await StoryDatabase.create();
+      made.push(alone);
+      alone.migrate();
+      await alone.seed();
+      const copy = await StoryDatabase.create(template);
+      made.push(copy);
+      const expected = {
+        owner: 'adms_owner',
+        migrations: head,
+        unguarded: [],
+        mayConnect: ['adms_api', 'adms_owner', 'adms_readonly', 'adms_worker'],
+        users: 3,
+      };
+      expect(await alone.standing()).toEqual(expected);
+      expect(await copy.standing()).toEqual(expected);
+    } finally {
+      for (const database of made) await database.drop();
+      await template.drop();
+    }
+    expect(await left(template.name)).toBe(false);
+  }, 120_000);
+
+  it('is what a story runs on when its runner is handed one, and the story’s copy is dropped', async () => {
+    const template = await StoryTemplate.create();
+    try {
+      const first = await run(starts, template);
+      const second = await run(starts, template);
+      for (const { result, lines } of [first, second]) {
+        expect([result.passed, result.failed, result.error], lines.join('\n')).toEqual([
+          1,
+          0,
+          undefined,
+        ]);
+        expect(lines[1]).toMatch(/a copy of this run’s template/);
+        expect(await left(result.database)).toBe(false);
+      }
+      expect(first.result.database).not.toBe(second.result.database);
+      expect(await left(template.name)).toBe(true);
+    } finally {
+      await template.drop();
+    }
+  }, 120_000);
 });
 
 describe('the runner', () => {

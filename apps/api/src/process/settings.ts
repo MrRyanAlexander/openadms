@@ -3,7 +3,13 @@
 // file ADMS_ENV_FILE names), and checked. A missing or malformed one stops the start and names
 // its key, never its value. ADMS_CORS_ORIGINS may be left out: no page of another origin is then
 // let in. ADMS_SMTP_ADDRESS and ADMS_MAIL_FROM may be left out too (ADR-405), and so may
-// ADMS_TRUSTED_PROXIES: no proxy's word is then taken for a caller's address (ADR-416).
+// ADMS_TRUSTED_PROXIES: no proxy's word is then taken for a caller's address (ADR-416). The
+// address server is named as the worker's settings name it (ADR-455): ADMS_ADDRESSES_URL, with
+// ADMS_MAP_CA_FILE and ADMS_MAP_SERVERS_ADDRESS where the installation has them. The object
+// store the API keeps files in is named by five more (ADR-480): ADMS_MEDIA_URL, ADMS_MEDIA_BUCKET,
+// ADMS_MEDIA_REGION and the API's own identity there, ADMS_MEDIA_ACCESS_KEY and
+// ADMS_MEDIA_SECRET_KEY; with ADMS_MEDIA_CA_FILE and ADMS_MEDIA_ADDRESS where the installation
+// has them.
 import { existsSync, readFileSync } from 'node:fs';
 import { BlockList, isIP } from 'node:net';
 import { fileURLToPath } from 'node:url';
@@ -21,6 +27,22 @@ export class SettingsProblem extends Error {
     this.name = 'SettingsProblem';
     this.keys = problems.map(({ key }) => key);
   }
+}
+
+// The object store the API keeps files in, and the API's own identity at it (ARCHITECTURE §11;
+// ADR-480). Any S3-compatible store: its address over HTTPS, one bucket, the region its
+// requests are signed for.
+export interface MediaSettings {
+  readonly url: string;
+  readonly bucket: string;
+  readonly region: string;
+  readonly accessKey: string;
+  readonly secretKey: string;
+  // The certificate authority the store is checked against, as a PEM file; none for the
+  // machine's own trust store.
+  readonly caFile: string | null;
+  // Where it is when it isn't where its name says (the local stack's proxy, from inside it).
+  readonly at: { readonly host: string; readonly port: number } | undefined;
 }
 
 export class Settings {
@@ -47,6 +69,15 @@ export class Settings {
   // them is believed about the address a request came from (its X-Forwarded-For). With none
   // listed, a caller's address is the one that connected (ADR-416).
   readonly trustedProxies: readonly string[];
+  // Our own address server, asked over HTTPS for a phone's address lookup (ADR-098, 455).
+  readonly addressesUrl: string;
+  // The certificate authority it is checked against, as a PEM file; none for the machine's own
+  // trust store.
+  readonly mapCaFile: string | null;
+  // Where it is when it isn't where its name says (the local stack's proxy, from inside it).
+  readonly mapServersAt: { readonly host: string; readonly port: number } | undefined;
+  // The object store, and the API's identity at it (ADR-480).
+  readonly media: MediaSettings;
 
   private constructor(values: {
     databaseUrl: string;
@@ -59,6 +90,10 @@ export class Settings {
     port: number;
     corsOrigins: readonly string[];
     trustedProxies: readonly string[];
+    addressesUrl: string;
+    mapCaFile: string | null;
+    mapServersAt: { host: string; port: number } | undefined;
+    media: MediaSettings;
   }) {
     this.databaseUrl = values.databaseUrl;
     this.readOnlyDatabaseUrl = values.readOnlyDatabaseUrl;
@@ -70,6 +105,10 @@ export class Settings {
     this.port = values.port;
     this.corsOrigins = values.corsOrigins;
     this.trustedProxies = values.trustedProxies;
+    this.addressesUrl = values.addressesUrl;
+    this.mapCaFile = values.mapCaFile;
+    this.mapServersAt = values.mapServersAt;
+    this.media = values.media;
   }
 
   static read(environment: Environment): Settings {
@@ -125,6 +164,24 @@ export class Settings {
       proxies.every((proxy) => Settings.isProxy(proxy)),
     );
 
+    const mapServersAddress = environment['ADMS_MAP_SERVERS_ADDRESS'];
+    checked(
+      'ADMS_MAP_SERVERS_ADDRESS',
+      mapServersAddress,
+      (value) => Settings.isAddress(value) && isIP(value.split(':')[0] ?? '') !== 0,
+    );
+    const mapCaFile = environment['ADMS_MAP_CA_FILE'];
+    checked('ADMS_MAP_CA_FILE', mapCaFile, (value) => Settings.isCertificateFile(value));
+
+    const mediaAddress = environment['ADMS_MEDIA_ADDRESS'];
+    checked(
+      'ADMS_MEDIA_ADDRESS',
+      mediaAddress,
+      (value) => Settings.isAddress(value) && isIP(value.split(':')[0] ?? '') !== 0,
+    );
+    const mediaCaFile = environment['ADMS_MEDIA_CA_FILE'];
+    checked('ADMS_MEDIA_CA_FILE', mediaCaFile, (value) => Settings.isCertificateFile(value));
+
     const values = {
       databaseUrl: database('DATABASE_URL'),
       readOnlyDatabaseUrl: database('READONLY_DATABASE_URL'),
@@ -147,6 +204,43 @@ export class Settings {
       ),
       corsOrigins: origins,
       trustedProxies: proxies,
+      addressesUrl: checked('ADMS_ADDRESSES_URL', required('ADMS_ADDRESSES_URL'), (value) =>
+        Settings.isHttpsUrl(value),
+      ),
+      mapCaFile: mapCaFile ?? null,
+      mapServersAt:
+        mapServersAddress === undefined
+          ? undefined
+          : {
+              host: mapServersAddress.split(':')[0] ?? '',
+              port: Number(mapServersAddress.split(':')[1]),
+            },
+      media: {
+        url: checked('ADMS_MEDIA_URL', required('ADMS_MEDIA_URL'), (value) =>
+          Settings.isHttpsUrl(value),
+        ),
+        bucket: checked('ADMS_MEDIA_BUCKET', required('ADMS_MEDIA_BUCKET'), (value) =>
+          Settings.isBucket(value),
+        ),
+        region: checked('ADMS_MEDIA_REGION', required('ADMS_MEDIA_REGION'), (value) =>
+          /^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/.test(value),
+        ),
+        accessKey: checked('ADMS_MEDIA_ACCESS_KEY', required('ADMS_MEDIA_ACCESS_KEY'), (value) =>
+          Settings.isStoreKey(value, 3),
+        ),
+        // Whatever the store issued; anything shorter than sixteen characters was not issued.
+        secretKey: checked('ADMS_MEDIA_SECRET_KEY', required('ADMS_MEDIA_SECRET_KEY'), (value) =>
+          Settings.isStoreKey(value, 16),
+        ),
+        caFile: mediaCaFile ?? null,
+        at:
+          mediaAddress === undefined
+            ? undefined
+            : {
+                host: mediaAddress.split(':')[0] ?? '',
+                port: Number(mediaAddress.split(':')[1]),
+              },
+      },
     };
     if (problems.length > 0) throw new SettingsProblem(problems);
     return new Settings(values);
@@ -166,6 +260,44 @@ export class Settings {
     return (
       url.username !== '' && url.password !== '' && url.hostname !== '' && url.pathname.length > 1
     );
+  }
+
+  // A bucket's name as every S3-compatible store takes one: 3 to 63 lower-case letters, digits,
+  // dots and hyphens, a letter or a digit at each end, never two dots together.
+  private static isBucket(value: string): boolean {
+    return /^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(value) && !value.includes('..');
+  }
+
+  // One half of an identity at the store: printable, no space, no quote, of a length a store
+  // issues.
+  private static isStoreKey(value: string, least: number): boolean {
+    return (
+      value.length >= least && value.length <= 256 && /^[\x21\x23-\x26\x28-\x7e]+$/.test(value)
+    );
+  }
+
+  // The address server and the object store are asked over HTTPS only (ADR-098): the server's
+  // address, with nothing after it.
+  private static isHttpsUrl(value: string): boolean {
+    if (!URL.canParse(value)) return false;
+    const url = new URL(value);
+    return (
+      url.protocol === 'https:' &&
+      url.username === '' &&
+      url.password === '' &&
+      url.pathname === '/' &&
+      url.search === '' &&
+      url.hash === ''
+    );
+  }
+
+  // A file that is there and holds a certificate.
+  private static isCertificateFile(value: string): boolean {
+    try {
+      return readFileSync(value, 'utf8').includes('-----BEGIN CERTIFICATE-----');
+    } catch {
+      return false;
+    }
   }
 
   // One address, plain: no name beside it, no second address, nothing a header could be made of.

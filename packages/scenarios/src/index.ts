@@ -3,6 +3,9 @@
 export { projectTime, StoryClock, utcOffsetMinutes } from './clock.ts';
 export {
   chained,
+  forIntake,
+  fromPhone,
+  heldId,
   made,
   scanned,
   SimulatedDevice,
@@ -10,24 +13,26 @@ export {
   type Answered,
   type Completed,
   type Completion,
+  type HeldRecord,
+  type NewCertification,
   type NumberEntry,
   type PhoneLists,
   type PhoneRecord,
+  type PhoneServer,
   type PhoneSetup,
   type RecordedEvent,
-  type SyncIntake,
 } from './device.ts';
 export { uuidv7, uuidv7Time } from './ids.ts';
 export { localMapServers } from './map-servers.ts';
-export { phoneLists } from './phone-lists.ts';
 export { builtInPolicy } from './policy.ts';
 export {
   Runner,
   type RunOptions,
   type Story,
   type StoryContext,
+  type StoryMonitor,
   type StoryResult,
 } from './runner.ts';
 export { SoftwareKey, type EnrolledPhone } from './software-key.ts';
-export { StoryDatabase } from './story-database.ts';
+export { StoryDatabase, StoryTemplate, type Standing } from './story-database.ts';
 export { stories } from './stories/index.ts';

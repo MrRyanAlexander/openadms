@@ -18,7 +18,7 @@ export {
 } from './certification/certifications.ts';
 export { NumberAllocator, type LastUsed, type PhoneAtSync } from './numbering/number-allocator.ts';
 export { builtInPolicy, installationPolicy } from './policy.ts';
-export { Settings, SettingsProblem } from './process/settings.ts';
+export { Settings, SettingsProblem, type MediaSettings } from './process/settings.ts';
 export {
   ContractorSetup,
   SubPlaces,
@@ -178,10 +178,12 @@ export {
   type PhonesPage,
 } from './dispatch/phones.ts';
 export { Intake } from './sync/intake.ts';
+export { Sync, type Synced, type SyncParts } from './sync/sync.ts';
 export type {
   IntakeNote,
   PhotoOwnerKind,
   SentAnswers,
+  SentCertification,
   SentDropOffLog,
   SentFieldEvent,
   SentForm,
@@ -211,7 +213,51 @@ export {
   type MasterPasscodeCheckParts,
   type PasscodeRefused,
 } from './phone/master-passcode-check.ts';
+export {
+  PhoneAssignments,
+  type AssignmentAtSignIn,
+  type PhoneAssignment,
+} from './phone/phone-assignments.ts';
+export { AddressLookups, type AddressLookedUp } from './phone/address-lookups.ts';
+export {
+  AddressServer,
+  type Addresses,
+  type AddressServerSettings,
+} from './phone/address-server.ts';
+export {
+  MediaStore,
+  MediaStoreProblem,
+  type KeptFile,
+  type Media,
+  type MediaStoreSettings,
+} from './media/media-store.ts';
+export {
+  PasscodeSessions,
+  type PasscodeSessionOutcome,
+  type PasscodeSessionToOpen,
+  type PasscodeSessionsParts,
+} from './phone/passcode-sessions.ts';
+export {
+  PasscodeUses,
+  type PasscodeUseReceived,
+  type PasscodeUsesParts,
+  type ReportedPasscodeUse,
+} from './phone/passcode-uses.ts';
+export {
+  SetupChoices,
+  type SetupChoicesAsked,
+  type SetupChoicesOutcome,
+  type SetupChoicesParts,
+  type SetupChoicesRead,
+} from './phone/setup-choices.ts';
 export { PhoneChallenges, type Challenged } from './phone/phone-challenges.ts';
+export { PhoneLists, type PhoneListsHeld, type PhoneListsTaken } from './phone/phone-lists.ts';
+export { OfflineChecks, type OfflineCheck } from './phone/offline-checks.ts';
+export {
+  PhoneLoginList,
+  type LoginListHeld,
+  type LoginListTaken,
+} from './phone/phone-login-list.ts';
 export {
   PhoneMonitors,
   type MonitorOutcome,
@@ -234,3 +280,8 @@ export {
   type PhoneSignInsParts,
 } from './phone/phone-sign-ins.ts';
 export { PhoneTokens } from './phone/phone-tokens.ts';
+export {
+  UnplannedAssignments,
+  type ReportedUnplannedAssignment,
+  type UnplannedAssignmentReceived,
+} from './phone/unplanned-assignments.ts';

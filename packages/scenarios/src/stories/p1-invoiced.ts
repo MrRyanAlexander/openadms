@@ -30,6 +30,7 @@ import type { PhoneRecord } from '../device.ts';
 import { uuidv7 } from '../ids.ts';
 import { localMapServers } from '../map-servers.ts';
 import type { Story } from '../runner.ts';
+import { sentAlone } from './board.ts';
 import {
   certifyP1,
   loadP1Map,
@@ -84,7 +85,11 @@ export const p1Invoiced: Story = {
     );
     await certifyP1(story, office);
 
-    const settings = { crewItemHoursLimit: story.policy.crewDayHours, longestRunMs: 600_000 };
+    const settings = {
+      crewItemHoursLimit: story.policy.crewDayHours,
+      deviceClockOffLimitMinutes: story.policy.deviceClockOffLimitMinutes,
+      longestRunMs: 600_000,
+    };
     const reconciliation = new Reconciliation(
       worker,
       clock,
@@ -309,7 +314,7 @@ export const p1Invoiced: Story = {
         .map((each) => each.line);
 
     // ------------------------------------------------------------------------------------------
-    const phones = new P1Syncs(story, held);
+    const phones = new P1Syncs(story, office);
     const [mondayEvening, tuesdayEvening, wednesdayMorning] = phones.times;
     if (
       mondayEvening === undefined ||
@@ -898,7 +903,7 @@ export const p1Invoiced: Story = {
     };
     const send = async (fieldEvent: Sent): Promise<string> => {
       const record: PhoneRecord = { record: 'FIELD_EVENT', fieldEvent };
-      return (await story.intake.receive(record)).answer;
+      return (await sentAlone(story, timeZone, record)).answer;
     };
 
     story.at(
@@ -912,6 +917,8 @@ export const p1Invoiced: Story = {
     await send(made(curb, '14:10', '14:40', { ...noAddress, ticketNumber: '101031' }));
     await send(made(tower, '15:05', '15:15', { ticketNumber: '101030', loadCall: 70 }));
     const evening = await reconciliation.run(sync);
+    // The jobs those syncs queued, a record each, are taken up now and write nothing more.
+    await queue.settle(p1);
     story.at(on('15', '08:00'), 'Thursday: Luis sets 101030 QC Approved and tries to lock it');
     const l101030 = await loadOf('101030');
     await saved(qc.set(luis, l101030, 'QC_APPROVED'));

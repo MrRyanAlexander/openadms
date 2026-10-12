@@ -3,16 +3,25 @@
 import {
   assignmentFormDocumentTypes,
   fieldEventKinds,
+  incidentOffers,
+  lookedUpAddressLongest,
+  loggedPasscodeUseRefusals,
+  masterPasscodeSessions,
   mileageSources,
+  noAddressReasons,
+  noAssignmentReasons,
+  numberSeries,
   passwordProblemCodes,
   permissions,
+  quantityAsks,
   quantitySources,
+  unplannedAssignmentRefusals,
   workerStatuses,
   workflows,
 } from '@open-adms/domain';
 import { z } from 'zod';
 
-import { billingUnits } from './setup-answers.ts';
+import { billingUnits, dumpedForms } from './setup-answers.ts';
 
 // The health answer says that the process answers, and nothing else: no version, no setting, no
 // word on the database. Anybody may ask (acceptance file 10, point 17).
@@ -101,6 +110,9 @@ export const errorCodes = [
   'MASTER_PASSCODE_REFUSED',
   // The phone was taken out of service: it hands over its work and does nothing new.
   'PHONE_OUT_OF_SERVICE',
+  // A session under the master passcode (ADR-462): the passcode was right, and the person it
+  // was to be opened for is no monitor in service.
+  'NOT_A_MONITOR',
 ] as const;
 
 export type ErrorCode = (typeof errorCodes)[number];
@@ -495,27 +507,341 @@ export const monitorCreatedAnswerSchema = z.strictObject({
 
 export type MonitorCreatedAnswer = z.infer<typeof monitorCreatedAnswerSchema>;
 
-// A monitor signed in on a phone (ARCHITECTURE §6, Device sessions; §7.2; AC-02-39; ADR-441,
-// 443): who, by their id, Monitor ID and name as kept, and how long the sign-in lasts. The token
-// is the phone's to keep in its secure storage and send, beside its own proof's token, in the
-// header the contracts name; the server keeps only its hash. Never the password.
+// What a phone is answered for an unplanned assignment it reported (ARCHITECTURE §7's note, §9
+// (3), (4); AC-02-38, AC-05-40; ADR-240, 457): saved; already saved, where the phone that made
+// it sent it before (never kept twice); or not saved, with why: something it names is no
+// record of the kind it must be, or its id is another record's. Never a judgement of the work.
+export const unplannedAssignmentAnswers = ['SAVED', 'ALREADY_SAVED', 'NOT_SAVED'] as const;
+
+export const unplannedAssignmentAnswerSchema = z.strictObject({
+  assignmentId: z.uuid(),
+  answer: z.enum(unplannedAssignmentAnswers),
+  // Only with `NOT_SAVED`.
+  reason: z.enum(unplannedAssignmentRefusals).nullable(),
+});
+
+export type UnplannedAssignmentAnswer = z.infer<typeof unplannedAssignmentAnswerSchema>;
+
+// What a phone is answered for a use of the master passcode it logged with no connection and
+// reported (ARCHITECTURE §7.5; AC-02-23; ADR-106, 464): saved; already saved, where the phone
+// that logged it sent it before (never kept twice); or not saved, with why: it names somebody
+// who is no monitor, or its id is another record's. Never a judgement of what was done.
+export const passcodeUseAnswerSchema = z.strictObject({
+  useId: z.uuid(),
+  answer: z.enum(unplannedAssignmentAnswers),
+  // Only with `NOT_SAVED`.
+  reason: z.enum(loggedPasscodeUseRefusals).nullable(),
+});
+
+export type PasscodeUseAnswer = z.infer<typeof passcodeUseAnswerSchema>;
+
+// The assignment a phone takes when its monitor signs in (ARCHITECTURE §7; AC-02-35, 36;
+// ADR-240, 444): its day (the project's own), its project with the time zone the phone shows
+// times in, the monitor's work (the kinds of field event, certifying, the forms that are no
+// ticket's) and the one site where the work is at one. Never a rate or a code: the lists an
+// assignment needs are their own read.
+export const phoneAssignmentSchema = z.strictObject({
+  id: z.uuid(),
+  workDate: z.iso.date(),
+  project: z.strictObject({ id: z.uuid(), name: z.string(), timeZone: z.string() }),
+  fieldEventKinds: z.array(z.enum(fieldEventKinds)),
+  certifying: z.boolean(),
+  formDocumentTypes: z.array(z.enum(assignmentFormDocumentTypes)),
+  site: named.nullable(),
+});
+
+export type PhoneAssignmentAnswer = z.infer<typeof phoneAssignmentSchema>;
+
+// A monitor signed in on a phone (ARCHITECTURE §6, Device sessions; §7.2; AC-02-35, 39; ADR-441,
+// 443, 444): who, by their id, Monitor ID and name as kept, and how long the sign-in lasts. The
+// token is the phone's to keep in its secure storage and send, beside its own proof's token, in
+// the header the contracts name; the server keeps only its hash. Never the password. **The
+// phone takes their assignment for the day**: `assignment`, or null with why in `noAssignment`
+// (none that day, or several with nothing to say which is this phone's); the monitor is signed
+// in either way.
 export const monitorSignedInAnswerSchema = z.strictObject({
   token: z.string().min(1),
   userId: z.uuid(),
   monitorNumber: z.string().regex(/^M\d{6,}$/),
   name: z.string(),
   expiresInSeconds: z.number().int().min(1),
+  assignment: phoneAssignmentSchema.nullable(),
+  noAssignment: z.enum(noAssignmentReasons).nullable(),
 });
 
 export type MonitorSignedInAnswer = z.infer<typeof monitorSignedInAnswerSchema>;
 
+// A session opened on a phone under the master passcode (ARCHITECTURE §7.2, §7.3; AC-02-42;
+// ADR-456 (5)(d), 462): what a monitor's own sign-in is answered, and which way it was opened,
+// as the phone's monitor or the temporary session. It is no sign-in of that monitor's: the
+// session is marked, and so is every record made in it.
+export const passcodeSessionOpenedAnswerSchema = monitorSignedInAnswerSchema.extend({
+  masterPasscodeSession: z.enum(masterPasscodeSessions),
+});
+
+export type PasscodeSessionOpenedAnswer = z.infer<typeof passcodeSessionOpenedAnswerSchema>;
+
 // The monitor signed in on a phone, as the server has them now, and how long their sign-in has
-// left. Never the token.
+// left. Never the token. `masterPasscodeSession`: how the session was opened where it was
+// opened under the master passcode (ADR-462), null on the monitor's own sign-in.
 export const phoneMonitorAnswerSchema = z.strictObject({
   userId: z.uuid(),
   monitorNumber: z.string().regex(/^M\d{6,}$/),
   name: z.string(),
   expiresInSeconds: z.number().int().min(0),
+  masterPasscodeSession: z.enum(masterPasscodeSessions).nullable(),
 });
 
 export type PhoneMonitorAnswer = z.infer<typeof phoneMonitorAnswerSchema>;
+
+// What a project's phones are shown of its setup (ARCHITECTURE §7.1's lists note, §9 (6);
+// adms-field-app §4A.2a; ADR-240, 453): the lists a monitor picks from, whole for the project.
+// **A numbered setup version is this, kept as sent** (`SetupManifest`), so a reviewer sees what
+// a phone showed when a field event recorded that version; a phone's own lists are its
+// assignment's part of it. The control ranges; the load and haul-out forms' debris types
+// without those hidden on phones, the field tags, the firm's reasons for a typed number; the
+// live sites; every unit rate pay item with its capture settings and the item names of their
+// kinds of work; what incidents and surveys pick from; and what each site's phones ask for.
+// **Never a rate, a rule, a transaction or a load's pay item.** Not the certifications, the
+// ROEs or a phone's blocks of numbers: those are records with their own history, and a new one
+// makes no new version.
+const controlRanges = z.array(
+  z.strictObject({
+    series: z.enum(numberSeries),
+    firstNumber: z.number().int(),
+    lastNumber: z.number().int(),
+  }),
+);
+const debrisTypes = z.strictObject({ LOAD: z.array(named), HAUL_OUT: z.array(named) });
+const sites = z.array(
+  z.strictObject({
+    id: z.uuid(),
+    name: z.string(),
+    siteType: named,
+    takesLoads: z.boolean(),
+    haulOutsLeaveHere: z.boolean(),
+  }),
+);
+const payItems = z.array(
+  z.strictObject({
+    id: z.uuid(),
+    code: z.string(),
+    bandFrom: z.number().nullable(),
+    bandTo: z.number().nullable(),
+    archived: z.boolean(),
+    payableType: named,
+    kindOfWork: named,
+    countIsAlwaysOne: z.boolean(),
+    gpsRequired: z.boolean(),
+    measurementRequired: z.boolean(),
+    decimalsAllowed: z.boolean(),
+    photosRequired: z.boolean(),
+    monitorMayMarkIneligible: z.boolean(),
+    quantityFromCarriedTickets: z.boolean(),
+  }),
+);
+const itemNames = z.array(
+  z.strictObject({ id: z.uuid(), name: z.string(), kindOfWorkId: z.uuid() }),
+);
+const incidentTypes = z.array(
+  z.strictObject({ id: z.uuid(), name: z.string(), subTypes: z.array(named) }),
+);
+const quantityAsk = {
+  form: z.enum(dumpedForms),
+  debrisTypeId: z.uuid(),
+  primeId: z.uuid(),
+  asks: z.enum(quantityAsks),
+};
+
+export const setupShownSchema = z.strictObject({
+  controlRanges,
+  debrisTypes,
+  fieldTags: z.array(named),
+  typedNumberReasons: z.array(named),
+  sites,
+  payItems,
+  itemNames,
+  incidentTypes,
+  incidentOffers: z.array(z.enum(incidentOffers)),
+  contractors: z.array(named),
+  surveyWorkTypes: z.array(named),
+  // A row for each live site, debris type a phone holds and prime.
+  quantityLookup: z.array(z.strictObject({ siteId: z.uuid(), ...quantityAsk })),
+});
+
+export type SetupShownRecord = z.infer<typeof setupShownSchema>;
+
+// The lists a phone holds for its assignment (ARCHITECTURE §7.1's lists note; adms-field-app
+// §4A.2a; AC-01-26, AC-02-37, AC-03-09, AC-07-91; ADR-207, 213, 223, 227, 243, 449…451, 453):
+// **the setup version they are, which every field event the phone makes records**; the blocks
+// of numbers the phone holds on the project (a certifying phone's cert numbers among them) and
+// the project's control ranges; the load and haul-out forms' debris types without those hidden
+// on phones, the field tags, the firm's reasons for a typed number; the project's
+// certifications (number, kind, capacity, prime and subs by name: never the driver) and its
+// sites; its ROEs, each with whether its pre-work survey is done (number, address and parcel:
+// never the owner); the unit rate pay items the assignment names with their capture settings
+// and the item names of their kinds of work; what its incidents and surveys pick from; and, for
+// a phone at a site, what that site's phones ask for. **Never a rate, a rule, a transaction or
+// a load's pay item**: a monitor picks by name, and the only code here is a unit rate pay
+// item's, which the phone prints. Strict, so nothing more can be sent unnoticed.
+export const phoneListsSchema = z.strictObject({
+  // The project's setup version these lists are its assignment's part of (ADR-453).
+  setupVersion: z.number().int().min(1),
+  blocks: z.array(
+    z.strictObject({
+      series: z.enum(numberSeries),
+      firstNumber: z.number().int(),
+      lastNumber: z.number().int(),
+      lastUsedNumber: z.number().int().nullable(),
+      status: z.literal('ISSUED'),
+    }),
+  ),
+  controlRanges,
+  debrisTypes,
+  fieldTags: z.array(named),
+  typedNumberReasons: z.array(named),
+  certifications: z.array(
+    z.strictObject({
+      id: z.uuid(),
+      certNumber: z.string(),
+      kind: z.enum(['CONTAINER', 'CREW']),
+      // A crew has none (invariant 10).
+      capacityCy: z.number().int().nullable(),
+      prime: named,
+      firstTierSub: named.nullable(),
+      secondTierSub: named.nullable(),
+    }),
+  ),
+  sites,
+  roes: z.array(
+    z.strictObject({
+      id: z.uuid(),
+      roeNumber: z.string(),
+      address: z.string().nullable(),
+      parcelId: z.string().nullable(),
+      preWorkSurveyDone: z.boolean(),
+    }),
+  ),
+  payItems,
+  itemNames,
+  incidentTypes,
+  incidentOffers: z.array(z.enum(incidentOffers)),
+  contractors: z.array(named),
+  surveyWorkTypes: z.array(named),
+  // For a phone at a site: a row for each debris type the phone holds and each prime.
+  quantityLookup: z.array(z.strictObject(quantityAsk)),
+});
+
+export type PhoneListsRecord = z.infer<typeof phoneListsSchema>;
+
+// What a phone is answered when it asks for its lists: the assignment it takes now for the
+// monitor signed in, by the sign-in's own rule, and that assignment's lists; or neither, with
+// why in `noAssignment`. A phone told there is none keeps what it holds: an assignment never
+// stops work (ADR-240).
+export const phoneListsAnswerSchema = z.strictObject({
+  assignment: phoneAssignmentSchema.nullable(),
+  noAssignment: z.enum(noAssignmentReasons).nullable(),
+  lists: phoneListsSchema.nullable(),
+});
+
+export type PhoneListsAnswer = z.infer<typeof phoneListsAnswerSchema>;
+
+// What a phone checks a password or the master passcode against with no connection
+// (ARCHITECTURE §7.2, §7.5; AC-02-41; ADR-139, 449, 454): two slow hashes, one made from the
+// other. `first` is how the phone makes the first from what is typed: Argon2id, version 19, of
+// the whole password in Unicode's composed form, with no key, under that salt (standard base64,
+// unpadded) and those settings (memory in kibibytes), `bytes` long. `check` is Argon2id of that
+// first hash's bytes under a salt made for this phone alone, as a PHC string. Never the first
+// hash itself, and never what the server checks a sign-in against.
+export const offlineCheckSchema = z.strictObject({
+  first: z.strictObject({
+    salt: z.string().regex(/^[A-Za-z0-9+/]+$/),
+    memory: z.number().int().min(1),
+    passes: z.number().int().min(1),
+    parallelism: z.number().int().min(1),
+    bytes: z.number().int().min(16),
+  }),
+  check: z.string().regex(/^\$argon2id\$v=19\$m=\d+,t=\d+,p=\d+\$[A-Za-z0-9+/]+\$[A-Za-z0-9+/]+$/),
+});
+
+export type OfflineCheckRecord = z.infer<typeof offlineCheckSchema>;
+
+// What a phone is answered when it asks for its login list (ARCHITECTURE §7.1, §7.2, §7.5;
+// adms-field-app §4A.0 (6), (7); AC-02-17, AC-02-41; ADR-105, 106, 449, 454). **The master
+// passcode's version in force**, with its check for a phone that said it holds another or none.
+// **The login list of the project of the assignment the phone takes now**: the monitor signed
+// in and every monitor in service with an assignment that stands on that project for its today
+// or later, by id, Monitor ID and name, each with the mark of the entry this phone should hold.
+// `check` is the entry, for a monitor whose mark the phone didn't send; null where the phone
+// holds it, and null with `more` true where this call made its share and the phone asks again
+// saying what it now holds. The phone drops the entry of anybody the list doesn't name. With no
+// assignment there is no list (`noAssignment` says why) and the phone keeps what it holds.
+// Never a password, a hash the server checks against, a phone number or a role.
+export const phoneLoginListAnswerSchema = z.strictObject({
+  masterPasscode: z.strictObject({
+    version: z.number().int().min(1),
+    check: offlineCheckSchema.nullable(),
+  }),
+  noAssignment: z.enum(noAssignmentReasons).nullable(),
+  loginList: z
+    .strictObject({
+      projectId: z.uuid(),
+      monitors: z.array(
+        z.strictObject({
+          monitorId: z.uuid(),
+          monitorNumber: z.string().regex(/^M\d{6,}$/),
+          name: z.string(),
+          mark: z.string().min(1),
+          check: offlineCheckSchema.nullable(),
+        }),
+      ),
+      more: z.boolean(),
+    })
+    .nullable(),
+});
+
+export type PhoneLoginListAnswer = z.infer<typeof phoneLoginListAnswerSchema>;
+
+// What a phone being set up under the master passcode picks from, with a connection and
+// nobody signed in (ARCHITECTURE §7.1 steps 1, 2; adms-field-app §4A.0 (5); AC-02-38; ADR-240,
+// 462 (4)(f), 463). **The firm's open projects**, each with the time zone the phone shows times
+// in. **The monitors in service**, by id, Monitor ID and name, in the order they were created,
+// a bounded number a call: `moreMonitorsAfter` is the last one's id where there are more, and
+// the phone asks again stating it. **`project`**, where the phone named an open one: its live
+// sites and its unit rate pay items in service, each as the phone's lists show one. Null where
+// it named none, or one that is closed or no project (the phone picks again from `projects`).
+// **Never a rate, a rule or a load's pay item; never a password, a phone number or a role.**
+// The work itself (kinds of field event, certifying, forms) is picked from lists every phone
+// has.
+export const setupChoicesMonitorsAtMost = 1000;
+
+export const phoneSetupChoicesAnswerSchema = z.strictObject({
+  projects: z.array(z.strictObject({ id: z.uuid(), name: z.string(), timeZone: z.string() })),
+  project: z.strictObject({ id: z.uuid(), sites, payItems }).nullable(),
+  monitors: z
+    .array(
+      z.strictObject({
+        monitorId: z.uuid(),
+        monitorNumber: z.string().regex(/^M\d{6,}$/),
+        name: z.string(),
+      }),
+    )
+    .max(setupChoicesMonitorsAtMost),
+  moreMonitorsAfter: z.uuid().nullable(),
+});
+
+export type PhoneSetupChoicesAnswer = z.infer<typeof phoneSetupChoicesAnswerSchema>;
+
+// What a phone is answered when it asks the address of a GPS point (ARCHITECTURE §3 "Road
+// distance and addresses"; adms-field-app §4A.4; AC-04-24; ADR-111, 119, 455): the street
+// number and name our own address server finds there, as the monitor would type it, or none
+// with the reason. `NO_STREET_THERE`: the map has no street at the point. `NOT_ANSWERED`: the
+// address server gave no answer in time, or none that could be read; the phone may ask again.
+// Either way the monitor types the street number and name. Never the point sent, a town, a
+// postcode or anything else the address server said.
+export const phoneAddressLookupAnswerSchema = z.strictObject({
+  address: z.string().min(1).max(lookedUpAddressLongest).nullable(),
+  noAddress: z.enum(noAddressReasons).nullable(),
+});
+
+export type PhoneAddressLookupAnswer = z.infer<typeof phoneAddressLookupAnswerSchema>;

@@ -22,14 +22,13 @@ import {
   FormSetup,
   ListSetup,
   type NewPayItem,
-  NumberAllocator,
   type Outcome,
   PayItemSetup,
   ProjectSetup,
   SiteSetup,
   type NewAssignment,
 } from '@open-adms/api';
-import type { FieldEventKind, FormDocumentType, NumberSeries } from '@open-adms/db';
+import type { FieldEventKind, FormDocumentType } from '@open-adms/db';
 
 import { projectTime } from '../clock.ts';
 import {
@@ -43,9 +42,8 @@ import {
   typed,
 } from '../device.ts';
 import { uuidv7, uuidv7Time } from '../ids.ts';
-import { phoneLists } from '../phone-lists.ts';
-import type { Story } from '../runner.ts';
-import { assigned } from './board.ts';
+import type { Story, StoryMonitor } from '../runner.ts';
+import { assigned, firstBlocks, taken } from './board.ts';
 import { p1TimeZone as timeZone, setUpP1, setUpP1Sites } from './p1.ts';
 
 const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-04:00`;
@@ -120,18 +118,6 @@ export const p1FieldDays: Story = {
       await tx.userPermission.create({ data: { userId: luis.id, permission: 'DISPATCH' } });
       const p1 = await setUpP1(tx, story.policy);
       const { tdsr, landfill } = await setUpP1Sites(tx, p1.project);
-      const monitors: Record<string, string> = {};
-      for (const [name, monitorNumber] of [
-        ['Ana Brooks', 'M004127'],
-        ['Kim Nguyen', 'M004128'],
-        ['Tariq Patel', 'M004129'],
-        ['Jo Kim', 'M004130'],
-        ['Sam Grant', 'M004131'],
-        ['Lee Morgan', 'M004132'],
-      ] as const) {
-        const monitor = await tx.user.create({ data: { name, role: 'MONITOR', monitorNumber } });
-        monitors[name] = monitor.id;
-      }
       // The firm's own sub-type of an incident (golden mission §2).
       const damage = await tx.incidentType.findFirstOrThrow({ where: { name: 'Property damage' } });
       await tx.incidentSubType.create({
@@ -143,28 +129,40 @@ export const p1FieldDays: Story = {
         coastline: p1.prime,
         tdsr,
         landfill,
-        monitors,
         phones: enrolledPhones,
       };
     });
     const { luis, p1, coastline, tdsr, landfill } = office;
-    const person = (name: string): string => {
-      const id = office.monitors[name];
-      if (id === undefined) throw new Error(`No monitor ${name}`);
-      return id;
-    };
     const device = (name: string): string => {
       const id = office.phones[name];
       if (id === undefined) throw new Error(`No phone ${name}`);
       return id;
     };
+    // The six monitors, created as real ones are: on a phone, online, under the master passcode;
+    // the database issues each their Monitor ID (ADR-442).
+    const monitors: Record<string, StoryMonitor> = {};
+    for (const name of [
+      'Ana Brooks',
+      'Kim Nguyen',
+      'Tariq Patel',
+      'Jo Kim',
+      'Sam Grant',
+      'Lee Morgan',
+    ]) {
+      monitors[name] = await story.monitor(name, device('P1-COL-1'));
+    }
+    const monitor = (name: string): StoryMonitor => {
+      const found = monitors[name];
+      if (found === undefined) throw new Error(`No monitor ${name}`);
+      return found;
+    };
+    const person = (name: string): string => monitor(name).id;
 
     const sites = new SiteSetup(api, clock, story.policy);
     const forms = new FormSetup(api, clock);
     const lists = new ListSetup(api, clock);
     const projects = new ProjectSetup(api, clock, story.policy);
     const payItems = new PayItemSetup(api, clock, story.policy);
-    const allocator = new NumberAllocator(api, clock, story.policy);
 
     const finalDisposal = await api.siteType.findUniqueOrThrow({
       where: { key: 'FINAL_DISPOSAL' },
@@ -382,25 +380,20 @@ export const p1FieldDays: Story = {
       monday('06:30'),
       'At the yard, online: each phone that makes numbers takes a block; each monitor signs in and the phone takes their assignment and its lists',
     );
-    const blockFor = async (phone: string, monitor: string, series: NumberSeries) => {
-      await saved(
-        allocator.topUp(
-          { person: person(monitor), deviceId: device(phone) },
-          { projectId: p1, series, lastUsedNumber: null },
-        ),
-      );
-    };
-    await blockFor('P1-COL-1', 'Ana Brooks', 'LOAD');
-    await blockFor('P1-HO-TDSR', 'Sam Grant', 'HAUL_OUT');
-    await blockFor('P1-UR-1', 'Jo Kim', 'UNIT_RATE');
+    await firstBlocks(story, device('P1-COL-1'), timeZone, p1, ['LOAD']);
+    await firstBlocks(story, device('P1-HO-TDSR'), timeZone, p1, ['HAUL_OUT']);
+    await firstBlocks(story, device('P1-UR-1'), timeZone, p1, ['UNIT_RATE']);
 
     const held: Record<string, PhoneLists> = {};
     const signedIn = async (day: 'monday' | 'tuesday', planned: Planned) => {
-      const assignmentId = boards[day][planned.phone];
-      if (assignmentId === undefined) throw new Error(`${planned.phone} has no assignment.`);
       const deviceId = device(planned.phone);
-      const taken = await phoneLists(api, { assignmentId, deviceId });
-      held[planned.phone] = taken;
+      // Monitor ID and password, online: the phone takes the day's assignment (ADR-444).
+      const assignmentId = await taken(story, monitor(planned.monitor), deviceId);
+      if (assignmentId !== boards[day][planned.phone]) {
+        throw new Error(`${planned.phone} took another assignment than ${day}’s.`);
+      }
+      const lists = await story.lists.held({ assignmentId, deviceId });
+      held[planned.phone] = lists;
       return {
         name: planned.phone,
         deviceId,
@@ -408,8 +401,7 @@ export const p1FieldDays: Story = {
         assignmentId,
         projectId: p1,
         ...(planned.siteId === undefined ? {} : { siteId: planned.siteId }),
-        setupVersion: 1,
-        lists: taken,
+        lists,
         timeZone,
       };
     };
@@ -699,7 +691,7 @@ export const p1FieldDays: Story = {
       );
     };
     story.at(monday('18:30'), 'Back at the yard the phones find signal. The tower’s syncs first');
-    story.check('Kim’s phone sends its two disposals', await kim.sync(story.intake), 2);
+    story.check('Kim’s phone sends its two disposals', await kim.sync(story.server), 2);
     story.check(
       'AC-04-42 each disposal is saved as it is and waits, PENDING, though no collection has reached the server',
       await onServer(),
@@ -707,7 +699,7 @@ export const p1FieldDays: Story = {
     );
     story.check(
       'then Tariq’s, Jo’s and Ana’s: one, three and four',
-      [await tariq.sync(story.intake), await jo.sync(story.intake), await ana.sync(story.intake)],
+      [await tariq.sync(story.server), await jo.sync(story.server), await ana.sync(story.server)],
       [1, 3, 4],
     );
     story.check(
@@ -977,11 +969,11 @@ export const p1FieldDays: Story = {
     story.check(
       'Ana’s two, Tariq’s one, Sam’s four, Lee’s receipt and disposal, Jo’s four tickets and her incident',
       [
-        await ana.sync(story.intake),
-        await tariq.sync(story.intake),
-        await sam.sync(story.intake),
-        await lee.sync(story.intake),
-        await jo.sync(story.intake),
+        await ana.sync(story.server),
+        await tariq.sync(story.server),
+        await sam.sync(story.server),
+        await lee.sync(story.server),
+        await jo.sync(story.server),
       ],
       [2, 1, 4, 2, 5],
     );
@@ -993,7 +985,7 @@ export const p1FieldDays: Story = {
     story.at(on('14', '07:10'), 'Wednesday: P1-TWR-TDSR is charged and syncs Tuesday’s work');
     story.check(
       'its three disposals and the drop-off log, in the order recorded',
-      [kim.waitingRecords.map((sent) => sent.record), await kim.sync(story.intake)],
+      [kim.waitingRecords.map((sent) => sent.record), await kim.sync(story.server)],
       [['FIELD_EVENT', 'FIELD_EVENT', 'FIELD_EVENT', 'DROP_OFF_LOG'], 4],
     );
 

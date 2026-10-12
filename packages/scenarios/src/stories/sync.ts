@@ -1,5 +1,5 @@
-// The seventh story (BACKLOG 1.4.2; ADR-338): three days of phones syncing through the API's
-// intake (spec/parts/05-sync.md; spec/acceptance/05-sync.md, by scenario ID; adms-exceptions
+// The seventh story (BACKLOG 1.4.2, 2.6.2 part 4; ADR-338, 472, 475): three days of phones
+// syncing through the API's own `Sync` and the intake behind it (spec/parts/05-sync.md; spec/acceptance/05-sync.md, by scenario ID; adms-exceptions
 // §4.3a, Scenarios A, C and D). Every record is received, in whatever order it comes, and stored
 // once; a second field event of one kind on one ticket is kept whole in quarantine and never
 // answered "saved"; a retry of the same record is the same record; nothing else is refused.
@@ -13,8 +13,9 @@
 // It ends where this build does: every field event PENDING. Pairing, flags, zones, mileage and
 // money are the worker's (Milestones 1.5…1.7); what a reviewer does with a quarantined record is
 // 1.8.x's. A sync begins with the phone's proof of itself, through the API's `PhoneProofs`
-// (task 2.5.1, ADR-440). Not here: the endpoints, the ledger's own tables, the photograph's
-// file (Phase 2); the phone's screens (Phase 3).
+// (task 2.5.1, ADR-440). Not here: the endpoint over HTTP (the API's own tests), what a sync
+// can't save (the story `held-for-review`), the photograph's file (task 2.6.4); the phone's
+// screens (Phase 3).
 import {
   Certifications,
   FormSetup,
@@ -25,9 +26,9 @@ import {
   PayItemSetup,
   Phones,
   ProjectSetup,
-  type SyncAnswer,
   type NewAssignment,
 } from '@open-adms/api';
+import type { RecordAnswer } from '@open-adms/contracts';
 import type { FieldEventKind, FormDocumentType, NumberSeries } from '@open-adms/db';
 import { NewProjectSettings } from '@open-adms/domain';
 
@@ -36,6 +37,8 @@ import {
   chained,
   type Completed,
   type Completion,
+  forIntake,
+  heldId,
   made,
   type PhoneRecord,
   type RecordedEvent,
@@ -43,10 +46,9 @@ import {
   type SimulatedDevice,
 } from '../device.ts';
 import { uuidv7 } from '../ids.ts';
-import { phoneLists } from '../phone-lists.ts';
 import type { EnrolledPhone } from '../software-key.ts';
-import type { Story } from '../runner.ts';
-import { assigned } from './board.ts';
+import type { Story, StoryMonitor } from '../runner.ts';
+import { assigned, firstBlocks, sentAlone, taken, unplanned as unplannedOn } from './board.ts';
 import { p1TimeZone as timeZone, setUpP1, setUpP1Sites, startSeries } from './p1.ts';
 
 const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-04:00`;
@@ -63,37 +65,17 @@ const short: Record<FieldEventKind, string> = {
   UNIT_RATE: 'URT',
 };
 
-// The id its phone made for a record, whatever its kind.
-function idOf(sent: PhoneRecord): string {
-  switch (sent.record) {
-    case 'FIELD_EVENT':
-      return sent.fieldEvent.id;
-    case 'SCALE_RECEIPT':
-      return sent.scaleReceipt.id;
-    case 'INCIDENT':
-      return sent.incident.id;
-    case 'DROP_OFF_LOG':
-      return sent.dropOffLog.id;
-    case 'SURVEY':
-      return sent.survey.id;
-    case 'ROE':
-      return sent.roe.id;
-    case 'PHOTO':
-      return sent.photo.id;
-  }
-}
-
-const told = (answers: readonly SyncAnswer[]): string[] => answers.map((one) => one.answer);
+const told = (answers: readonly RecordAnswer[]): string[] => answers.map((one) => one.answer);
 
 export const sync: Story = {
   name: 'sync',
   title:
-    'Three days of phones syncing through intake: every record received and stored once, a duplicate kept whole in quarantine, nothing else refused',
+    'Three days of phones syncing: every record received and stored once, a duplicate kept whole in quarantine, nothing else refused',
   timeZone,
   start: saturday('08:00'),
 
   async run(story) {
-    const { api, clock, intake } = story;
+    const { api, clock } = story;
     const saved = async <T>(attempt: Promise<Outcome<T>>): Promise<T> => {
       const outcome = await attempt;
       if (!outcome.saved) throw new Error(`Refused: ${outcome.refusal.message}`);
@@ -178,18 +160,6 @@ export const sync: Story = {
           activationDate: new Date('2026-10-12'),
         },
       });
-      const monitors: Record<string, string> = {};
-      for (const [name, monitorNumber] of [
-        ['Ana Brooks', 'M004127'],
-        ['Kim Nguyen', 'M004128'],
-        ['Tariq Patel', 'M004129'],
-        ['Jo Kim', 'M004130'],
-        ['Sam Grant', 'M004131'],
-        ['Lee Morgan', 'M004132'],
-      ] as const) {
-        const monitor = await tx.user.create({ data: { name, role: 'MONITOR', monitorNumber } });
-        monitors[name] = monitor.id;
-      }
       return {
         luis: luis.id,
         p1: p1.project,
@@ -198,21 +168,34 @@ export const sync: Story = {
         tdsr,
         landfill,
         p2Tdsr: p2Tdsr.id,
-        monitors,
         phones,
       };
     });
     const { luis, p1, p2, coastline, tdsr, landfill, p2Tdsr } = office;
-    const person = (name: string): string => {
-      const id = office.monitors[name];
-      if (id === undefined) throw new Error(`No monitor ${name}`);
-      return id;
-    };
     const device = (name: string): string => {
       const id = office.phones[name];
       if (id === undefined) throw new Error(`No phone ${name}`);
       return id;
     };
+    // The six monitors, created as real ones are: on a phone, online, under the master passcode;
+    // the database issues each their Monitor ID (ADR-442).
+    const monitors: Record<string, StoryMonitor> = {};
+    for (const name of [
+      'Ana Brooks',
+      'Kim Nguyen',
+      'Tariq Patel',
+      'Jo Kim',
+      'Sam Grant',
+      'Lee Morgan',
+    ]) {
+      monitors[name] = await story.monitor(name, device('P1-COL-1'));
+    }
+    const monitor = (name: string): StoryMonitor => {
+      const found = monitors[name];
+      if (found === undefined) throw new Error(`No monitor ${name}`);
+      return found;
+    };
+    const person = (name: string): string => monitor(name).id;
     const projectNames = new Map([
       [p1, 'P1'],
       [p2, 'P2'],
@@ -373,9 +356,13 @@ export const sync: Story = {
       }
       return assignments;
     };
-    const setupOf = async (planned: Planned, assignmentId: string | undefined) => {
-      if (assignmentId === undefined) throw new Error(`${planned.phone} has no assignment.`);
+    const setupOf = async (planned: Planned, expected: string | undefined) => {
       const deviceId = device(planned.phone);
+      // Monitor ID and password, online: the phone takes the day's assignment (ADR-444).
+      const assignmentId = await taken(story, monitor(planned.monitor), deviceId);
+      if (assignmentId !== expected) {
+        throw new Error(`${planned.phone} took another assignment than the one expected.`);
+      }
       return {
         name: planned.phone,
         deviceId,
@@ -383,19 +370,16 @@ export const sync: Story = {
         assignmentId,
         projectId: planned.projectId,
         ...(planned.siteId === undefined ? {} : { siteId: planned.siteId }),
-        setupVersion: 1,
-        lists: await phoneLists(api, { assignmentId, deviceId }),
+        lists: await story.lists.held({ assignmentId, deviceId }),
         timeZone,
       };
     };
-    const block = async (phone: string, monitor: string, projectId: string, series: NumberSeries) =>
-      intake.topUp({ person: person(monitor), deviceId: device(phone) }, [
-        { projectId, series, lastUsedNumber: null },
-      ]);
+    const block = (phone: string, projectId: string, series: NumberSeries) =>
+      firstBlocks(story, device(phone), timeZone, projectId, [series]);
     // The answers a phone was given at its latest sync, in the order sent.
     const sent = new Map<SimulatedDevice, number>();
-    const syncing = async (phone: SimulatedDevice): Promise<SyncAnswer[]> => {
-      await phone.sync(intake);
+    const syncing = async (phone: SimulatedDevice): Promise<RecordAnswer[]> => {
+      await phone.sync(story.server);
       const from = sent.get(phone) ?? 0;
       sent.set(phone, phone.answers.length);
       return phone.answers.slice(from).map((one) => one.answer);
@@ -444,8 +428,8 @@ export const sync: Story = {
       kinds: ['COLLECTION'],
     };
     const mondays = await board('2026-10-12', [...mondayPlan, samOnAnasPhone]);
-    await block('P1-COL-1', 'Ana Brooks', p1, 'LOAD');
-    await block('P1-UR-1', 'Jo Kim', p1, 'UNIT_RATE');
+    await block('P1-COL-1', p1, 'LOAD');
+    await block('P1-UR-1', p1, 'UNIT_RATE');
     const [anaPlan, kimPlan, joPlan] = mondayPlan;
     if (anaPlan === undefined || kimPlan === undefined || joPlan === undefined) {
       throw new Error('Monday’s board is short.');
@@ -454,25 +438,14 @@ export const sync: Story = {
     const kim = story.phone(await setupOf(kimPlan, mondays['P1-TWR-TDSR Kim Nguyen']));
     const jo = story.phone(await setupOf(joPlan, mondays['P1-UR-1 Jo Kim']));
     // Tariq has no assignment: his supervisor sets P1-TWR-LF up on the spot with the master
-    // passcode, an unplanned assignment made on the phone (ADR-240). Its own arrival at sync is
-    // Phase 2's; the harness writes it as the phone would send it.
-    const unplanned = uuidv7(clock.now());
-    await api.$write(
-      { actorId: person('Tariq Patel'), source: 'DEVICE', deviceId: device('P1-TWR-LF') },
-      (tx) =>
-        tx.assignment.create({
-          data: {
-            id: unplanned,
-            personId: person('Tariq Patel'),
-            workDate: new Date('2026-10-12'),
-            projectId: p1,
-            fieldEventKinds: ['DISPOSAL', 'HAUL_OUT_DISPOSAL'],
-            siteId: landfill,
-            deviceId: device('P1-TWR-LF'),
-            origin: 'UNPLANNED',
-          },
-        }),
-    );
+    // passcode, an unplanned assignment made on the phone (ADR-240), which the phone reports
+    // and the API's `UnplannedAssignments` receives (ADR-457).
+    const unplanned = await unplannedOn(story, device('P1-TWR-LF'), timeZone, {
+      projectId: p1,
+      personId: person('Tariq Patel'),
+      fieldEventKinds: ['DISPOSAL', 'HAUL_OUT_DISPOSAL'],
+      siteId: landfill,
+    });
     const tariqPlan: Planned = {
       monitor: 'Tariq Patel',
       phone: 'P1-TWR-LF',
@@ -587,7 +560,7 @@ export const sync: Story = {
     );
     story.check(
       'AC-05-20 Kim’s phone shows the 11:40 disposal as not saved; it is never swallowed',
-      kim.notSaved.map((one) => [idOf(one.sent), one.answer.answer]),
+      kim.notSaved.map((one) => [heldId(one.sent), one.answer.answer]),
       [[second.id, 'QUARANTINED']],
     );
     const quarantine = () => api.quarantinedRecord.findMany({ orderBy: { receivedAt: 'asc' } });
@@ -670,8 +643,8 @@ export const sync: Story = {
       monday('12:07'),
       'The connection dropped before the answers came back: the phone sends the same three records again',
     );
-    const again: SyncAnswer[] = [];
-    for (const record of noon) again.push(await intake.receive(record));
+    const again: RecordAnswer[] = [];
+    for (const record of noon) again.push(await sentAlone(story, timeZone, record));
     story.check(
       'AC-05-12, AC-05-15 a retry is the same record: the 10:22 disposal is answered "already saved", never taken for a duplicate; the 11:40 one is still one quarantined record and still not "saved"',
       [
@@ -768,9 +741,9 @@ export const sync: Story = {
     // Jo's twenty-five. The connection drops after the twelfth: the server has twelve, the phone
     // heard nothing and sends all twenty-five again.
     const jos = jo.waitingRecords;
-    for (const record of jos.slice(0, 12)) await intake.receive(record);
+    for (const record of jos.slice(0, 12)) await sentAlone(story, timeZone, record);
     const josAnswers = await syncing(jo);
-    const count = (answers: readonly SyncAnswer[], answer: SyncAnswer['answer']): number =>
+    const count = (answers: readonly RecordAnswer[], answer: RecordAnswer['answer']): number =>
       answers.filter((one) => one.answer === answer).length;
     story.check(
       'AC-05-13 a sync of 25 field events that dropped after the twelfth, sent again whole: twelve are "already saved", thirteen "saved", and the server holds 25',
@@ -786,7 +759,7 @@ export const sync: Story = {
       'AC-05-07 the field event Jo started by mistake and cancelled is not among what her phone sent: it is still on the phone, and the server never heard of it',
       [
         jo.cancelled.map((event) => event.id === mistake),
-        jos.map(idOf).includes(mistake),
+        jos.map(heldId).includes(mistake),
         await api.fieldEvent.findUnique({ where: { id: mistake } }),
       ],
       [[true], false, null],
@@ -796,7 +769,7 @@ export const sync: Story = {
       [
         (await api.fieldEvent.findMany({ where: { kind: 'UNIT_RATE' }, orderBy: { id: 'asc' } }))
           .map((event) => event.id)
-          .join() === [...jos.map(idOf)].sort().join(),
+          .join() === [...jos.map(heldId)].sort().join(),
         (await api.fieldEvent.findUnique({ where: { id: col101020 } }))?.ticketNumber,
       ],
       [true, '101020'],
@@ -852,10 +825,7 @@ export const sync: Story = {
         ['101022 COL', '730415', 'P1’s 730415'],
       ],
     );
-    const blocks = await intake.topUp(
-      { person: person('Sam Grant'), deviceId: device('P1-COL-1') },
-      [{ projectId: p1, series: 'LOAD', lastUsedNumber: ana.lastUsedNumber('LOAD') }],
-    );
+    const blocks = await allocator.held(device('P1-COL-1'), { projectId: p1, series: 'LOAD' });
     const unused = (held: typeof blocks): number =>
       held.reduce(
         (sum, each) =>
@@ -929,7 +899,7 @@ export const sync: Story = {
       },
     ];
     const tuesdays = await board('2026-10-13', tuesdayPlan);
-    await block('P1-HO-TDSR', 'Sam Grant', p1, 'HAUL_OUT');
+    await block('P1-HO-TDSR', p1, 'HAUL_OUT');
     const [anaTue, kimTue, tariqTue, samTue, joTue] = tuesdayPlan;
     if (
       anaTue === undefined ||
@@ -947,10 +917,10 @@ export const sync: Story = {
     const sam = story.phone(await setupOf(samTue, tuesdays['P1-HO-TDSR Sam Grant']));
 
     // What each Tuesday record should be answered, by its id, for the burst at the yard.
-    const expected = new Map<string, SyncAnswer['answer']>();
+    const expected = new Map<string, RecordAnswer['answer']>();
     const expecting = <T extends { readonly id: string }>(
       record: T,
-      answer: SyncAnswer['answer'] = 'SAVED',
+      answer: RecordAnswer['answer'] = 'SAVED',
     ): T => {
       expected.set(record.id, answer);
       return record;
@@ -961,7 +931,7 @@ export const sync: Story = {
       kind: FieldEventKind,
       badge: string | undefined,
       completion: Completion,
-      answer: SyncAnswer['answer'] = 'SAVED',
+      answer: RecordAnswer['answer'] = 'SAVED',
     ): RecordedEvent => {
       const id = phone.begin(workflow, kind, badge);
       clock.advance(10);
@@ -1167,7 +1137,9 @@ export const sync: Story = {
       syncing(jo),
       // The records that reached the server broken, each on its own connection.
       Promise.all(
-        brokenRecords.map((fieldEvent) => intake.receive({ record: 'FIELD_EVENT', fieldEvent })),
+        brokenRecords.map((fieldEvent) =>
+          sentAlone(story, timeZone, { record: 'FIELD_EVENT', fieldEvent }),
+        ),
       ),
     ]);
     const everyAnswer = burst.flat();
@@ -1176,7 +1148,7 @@ export const sync: Story = {
       'AC-05-51 the burst: every record of every phone is answered, each as it should be, none lost and none stored twice',
       [
         everyAnswer.length,
-        everyAnswer.filter((one) => expected.get(one.id) !== one.answer).map((one) => one.id),
+        everyAnswer.filter((one) => expected.get(one.id ?? '') !== one.answer).map((one) => one.id),
         count(everyAnswer, 'SAVED'),
         count(everyAnswer, 'QUARANTINED'),
         count(everyAnswer, 'ALREADY_SAVED'),
@@ -1343,7 +1315,7 @@ export const sync: Story = {
           await asKept(pastNinety.id),
         ),
         ana.answers
-          .filter((one) => [halfFix.id, pastNinety.id].includes(one.answer.id))
+          .filter((one) => [halfFix.id, pastNinety.id].includes(one.answer.id ?? ''))
           .map((one) => (one.answer.answer === 'SAVED' ? one.answer.notes : null)),
       ],
       [
@@ -1402,8 +1374,8 @@ export const sync: Story = {
     };
     const answered = another('40 Birch Ln', { answers: { 'police-report': 'BC-2026-1187' } });
     const blank = another('14 Heron St', { answers: {}, latitude: '39.13850000' });
-    const fits = await intake.receive({ record: 'INCIDENT', incident: answered });
-    const doesNot = await intake.receive({ record: 'INCIDENT', incident: blank });
+    const fits = await sentAlone(story, timeZone, { record: 'INCIDENT', incident: answered });
+    const doesNot = await sentAlone(story, timeZone, { record: 'INCIDENT', incident: blank });
     const incidents = await api.incident.findMany({
       where: { id: { in: [answered.id, blank.id] } },
       orderBy: { madeAt: 'asc' },
@@ -1461,8 +1433,8 @@ export const sync: Story = {
       },
     ];
     const wednesdays = await board('2026-10-14', wednesdayPlan);
-    await block('P2-COL-1', 'Lee Morgan', p2, 'LOAD');
-    await block('P2-COL-1', 'Lee Morgan', p2, 'ROE');
+    await block('P2-COL-1', p2, 'LOAD');
+    await block('P2-COL-1', p2, 'ROE');
     const [leePlan, kimP2Plan] = wednesdayPlan;
     if (leePlan === undefined || kimP2Plan === undefined)
       throw new Error('Wednesday’s board is short.');
@@ -1686,11 +1658,13 @@ export const sync: Story = {
       { record: 'DROP_OFF_LOG', dropOffLog: dropOff },
       { record: 'ROE', roe: r0007 },
       { record: 'SURVEY', survey },
-      ...leeRecords.filter((record) => record.record === 'ROE' && record.roe.id === paperRoe.id),
+      ...leeRecords
+        .filter((record) => record.record === 'ROE' && record.roe.id === paperRoe.id)
+        .map(forIntake),
       ...tariq.answers.flatMap((one) => (one.sent.record === 'SCALE_RECEIPT' ? [one.sent] : [])),
     ];
-    const secondTime: SyncAnswer[] = [];
-    for (const record of sentTwice) secondTime.push(await intake.receive(record));
+    const secondTime: RecordAnswer[] = [];
+    for (const record of sentTwice) secondTime.push(await sentAlone(story, timeZone, record));
     story.check(
       'AC-05-14 an incident, a drop-off log, an ROE made on a phone, a survey and three scale receipts, each sent a second time, are each one record still; the quarantined ROE is still one quarantined record',
       [

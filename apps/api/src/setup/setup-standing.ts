@@ -10,6 +10,7 @@
 // ones; the pay items and the rules are all of them, each saying whether it is archived. No
 // ticket is read, and nothing is kept: each answer is worked out from the setup as it is when
 // asked (AC-01-77).
+import { setupShownSchema } from '@open-adms/contracts';
 import { RuleRows, type Database, type Prisma } from '@open-adms/db';
 import {
   QuantityLookup,
@@ -46,7 +47,41 @@ export class SetupStanding {
   quantityLookupAt(siteId: string): Promise<QuantityAsk[]> {
     return this.db.$read(async (tx) => {
       const site = await tx.disposalSite.findUniqueOrThrow({ where: { id: siteId } });
-      return new QuantityLookup(await SetupStanding.readIn(tx, site.projectId)).at(siteId);
+      return SetupStanding.quantityLookupIn(tx, site);
+    });
+  }
+
+  // The same rows inside a piece of work that is already reading (a phone's lists).
+  static async quantityLookupIn(
+    tx: Prisma.TransactionClient,
+    site: { readonly id: string; readonly projectId: string },
+  ): Promise<QuantityAsk[]> {
+    return new QuantityLookup(await SetupStanding.readIn(tx, site.projectId)).at(site.id);
+  }
+
+  // Every site's rows, inside a piece of work that is already reading (a setup version).
+  static async quantityLookupOf(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+  ): Promise<QuantityAsk[]> {
+    return new QuantityLookup(await SetupStanding.readIn(tx, projectId)).entries();
+  }
+
+  // One site's rows as its phones held them under a setup version of its project (ADR-453): what
+  // a field event's version says its phone asked from, for the debris types phones are shown.
+  // Read from the version as kept, never worked out again; null where the project has no such
+  // version.
+  quantityLookupUnder(siteId: string, setupVersion: number): Promise<QuantityAsk[] | null> {
+    return this.db.$read(async (tx) => {
+      const site = await tx.disposalSite.findUniqueOrThrow({ where: { id: siteId } });
+      const kept = await tx.setupManifest.findUnique({
+        where: { projectId_version: { projectId: site.projectId, version: setupVersion } },
+        select: { content: true },
+      });
+      if (kept === null) return null;
+      return setupShownSchema
+        .parse(kept.content)
+        .quantityLookup.filter((ask) => ask.siteId === site.id);
     });
   }
 

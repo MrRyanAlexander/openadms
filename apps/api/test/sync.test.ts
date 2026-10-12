@@ -1,0 +1,982 @@
+// A phone's sync, whole, against the database (ARCHITECTURE §9 (1), (3), (4), (6), (7), §10;
+// spec/acceptance/05-sync.md AC-05-03, 04, 15, 16, 20, 45, 47; spec/acceptance/10-api-and-sync.md
+// AC-10-35, 46, 51; AC-02-23, AC-05-48; spec/DATA-MODEL.md §4.5; BACKLOG 2.6.2, C64, C69, C122,
+// C126…C132; ADR-022, 052, 065, 100, 420, 453, 454, 466…473; KD-56; REQ-016, 203, 308c). The real process, in this test's own
+// memory, on the installation's database as `adms_api`: it needs `pnpm local:up` after `pnpm
+// installer`, and fails saying so. Each test's work is undone (support/database.ts).
+import { randomUUID } from 'node:crypto';
+
+import {
+  addFieldTagEndpoint,
+  changeMasterPasscodeEndpoint,
+  endpoints,
+  syncAnswerRead,
+  syncAnsweredSchema,
+  syncExamples,
+  syncPhoneEndpoint,
+  syncSentSchema,
+  type SyncedCertification,
+  type SyncedFieldEvent,
+  type SyncSent,
+} from '@open-adms/contracts';
+import { deviceKeyActorId, type Actor, type Database } from '@open-adms/db';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
+import { Certifications } from '../src/certification/certifications.ts';
+import { NumberAllocator } from '../src/numbering/number-allocator.ts';
+import { OfflineChecks } from '../src/phone/offline-checks.ts';
+import { PasscodeUses } from '../src/phone/passcode-uses.ts';
+import { PhoneAssignments } from '../src/phone/phone-assignments.ts';
+import { PhoneLoginList } from '../src/phone/phone-login-list.ts';
+import { UnplannedAssignments } from '../src/phone/unplanned-assignments.ts';
+import { Intake } from '../src/sync/intake.ts';
+import { sentFingerprint, Sync } from '../src/sync/sync.ts';
+import { installationSettings, openInstallation, type Tx } from './support/database.ts';
+import { opens } from './support/offline-check.ts';
+import { enrolledPhone, passcode, proven } from './support/phones.ts';
+import { shippedPolicy } from './support/process.ts';
+import { notTaken } from './support/review.ts';
+import {
+  danasEmail,
+  long,
+  worldOn,
+  type Answer,
+  type People,
+  type Served,
+} from './support/served.ts';
+import { ask, p1Priced, saved, told } from './support/setup.ts';
+import { signingSecret } from './support/sign-in.ts';
+
+let db: Database;
+
+beforeAll(() => {
+  db = openInstallation(installationSettings());
+});
+afterAll(async () => {
+  await db.$disconnect();
+});
+
+const world = worldOn(() => db);
+
+// 1:05 pm on Monday in Bayline County: the phone finds signal.
+const mondayAfternoon = new Date('2026-10-12T17:05:00Z');
+const held = ' Held on the server for review.';
+
+// P1 as Dana prices it; the collection phone, enrolled and proven; Kim Nguyen's Monday on P1,
+// planned by Dana: loads at both ends, and certifying.
+async function kimOnP1(served: Served, tx: Tx, who: People) {
+  served.clock.at = mondayAfternoon;
+  const dana = await served.signedIn(danasEmail, long);
+  const priced = await p1Priced(served, dana, tx);
+  const projectId = priced.project.id;
+  const phone = await enrolledPhone(served, tx, 'P1-COL-1');
+  const token = await proven(served, phone);
+  const assignment = await tx.assignment.create({
+    data: {
+      personId: who.kim,
+      workDate: new Date('2026-10-12'),
+      projectId,
+      fieldEventKinds: ['COLLECTION', 'DISPOSAL'],
+      certifying: true,
+      origin: 'PLANNED',
+      madeById: who.dana,
+    },
+  });
+  // A field event as Kim's phone sends it, under an id of the phone's own.
+  const event = (more: Partial<SyncedFieldEvent> = {}): SyncedFieldEvent => ({
+    ...syncExamples.collection,
+    id: randomUUID(),
+    projectId,
+    monitorId: who.kim,
+    assignmentId: assignment.id,
+    setupVersion: 1,
+    formDebrisTypeId: null,
+    ...more,
+  });
+  const disposal = (more: Partial<SyncedFieldEvent> = {}): SyncedFieldEvent =>
+    event({
+      kind: 'DISPOSAL',
+      startedAt: '2026-10-12T14:22:00.000Z',
+      endedAt: '2026-10-12T14:26:00.000Z',
+      address: null,
+      addressSource: null,
+      loadCall: 85,
+      ...more,
+    });
+  // One sync as the phone sends it: every part, empty where there is nothing.
+  const sync = (more: Partial<SyncSent> = {}): SyncSent => ({
+    clockAt: served.clock.now().toISOString(),
+    deviceUtcOffsetMinutes: -240,
+    unplannedAssignments: [],
+    passcodeUses: [],
+    records: [],
+    lastUsed: [],
+    // It holds the check of the passcode it was enrolled under, and no lists.
+    holds: { masterPasscodeVersion: phone.masterPasscodeVersion, listsProjectId: null },
+    ...more,
+  });
+  return { dana, priced, projectId, phone, token, assignment, event, disposal, sync };
+}
+
+const send = (served: Served, bearer: string | undefined, payload: object): Promise<Answer> =>
+  served.ask('POST', syncPhoneEndpoint.path, {
+    payload,
+    ...(bearer === undefined ? {} : { bearer }),
+  });
+
+// A sync that must be answered: the answer as the client's own rule reads it.
+async function synced(served: Served, bearer: string, sent: SyncSent) {
+  const answer = await send(served, bearer, sent);
+  expect(told(answer)).toEqual([200, undefined]);
+  const read = syncAnswerRead(sent, answer.body);
+  if (read === null) throw new Error('What came back is no answer to the sync sent.');
+  return { ...read, requestId: answer.requestId };
+}
+
+const syncsOf = (tx: Tx, deviceId: string) =>
+  tx.sync.findMany({ where: { deviceId }, orderBy: { id: 'asc' } });
+
+const ledgerOf = async (tx: Tx, deviceId: string) =>
+  (await tx.syncedRecord.findMany({ where: { deviceId }, orderBy: { recordId: 'asc' } })).map(
+    ({ recordId, recordKind, syncId, answer }) => [recordId, recordKind, syncId, answer],
+  );
+
+// The jobs a project's syncs queued, oldest first: who asked (nobody) and the tickets named.
+const jobsOf = async (tx: Tx, projectId: string) =>
+  (
+    await tx.reconciliationJob.findMany({
+      where: { projectId, trigger: 'SYNC' },
+      orderBy: { id: 'asc' },
+      select: { requestedById: true, tickets: { select: { workflow: true, ticketNumber: true } } },
+    })
+  ).map(({ requestedById, tickets }) => [
+    requestedById,
+    ...tickets.map(({ workflow, ticketNumber }) => `${workflow} ${ticketNumber}`).sort(),
+  ]);
+
+const heldOf = (tx: Tx, deviceId: string) =>
+  tx.heldRecord.findMany({ where: { deviceId }, orderBy: { id: 'asc' } });
+
+describe('who may sync', () => {
+  it('AC-05-03, AC-10-46 a sync is a proven phone’s: nobody need be signed in, and a caller with no phone’s token sends nothing that is taken', async () => {
+    const { access, roles, permission, method, path } =
+      endpoints.find(({ name }) => name === 'syncPhone') ?? {};
+    expect([access, roles, permission, method, path]).toEqual([
+      'PROVEN_PHONE',
+      undefined,
+      undefined,
+      'POST',
+      '/phones/current/syncs',
+    ]);
+    await world(async (served, tx, who) => {
+      const p = await kimOnP1(served, tx, who);
+      const sent = p.sync({ records: [{ record: 'FIELD_EVENT', fieldEvent: p.event() }] });
+      const refused = [401, 'PHONE_NOT_PROVEN'];
+      expect(told(await send(served, undefined, sent))).toEqual(refused);
+      expect(told(await send(served, 'not-a-token', sent))).toEqual(refused);
+      const asDana = await served.ask('POST', syncPhoneEndpoint.path, {
+        payload: sent,
+        cookies: p.dana.cookies,
+        csrf: p.dana.csrf,
+      });
+      expect(told(asDana)).toEqual(refused);
+      // AC-10-35: a sync never says which phone it is from; one that does is no sync.
+      expect(notTaken(await send(served, p.token, { ...sent, deviceId: p.phone.id }))).toBe(
+        'Not taken: the body has a field this request doesn’t take.',
+      );
+      expect(await syncsOf(tx, p.phone.id)).toEqual([]);
+      expect(await tx.fieldEvent.count({ where: { projectId: p.projectId } })).toBe(0);
+    });
+  });
+});
+
+describe('a sync is kept with both clocks', () => {
+  it('AC-05-03, 04, 16, AC-10-51 a phone whose clock is 2 h 14 m ahead syncs a load’s two field events: the sync is written first with the difference, each record is saved with its row in the ledger, and its ticket is queued for reconciliation, which nobody waits for', async () => {
+    await world(async (served, tx, who) => {
+      const p = await kimOnP1(served, tx, who);
+      const collection = p.event();
+      const disposal = p.disposal();
+      const phonesClock = new Date(mondayAfternoon.getTime() + (2 * 60 + 14) * 60_000);
+      const sent = p.sync({
+        clockAt: phonesClock.toISOString(),
+        records: [
+          { record: 'FIELD_EVENT', fieldEvent: collection },
+          { record: 'FIELD_EVENT', fieldEvent: disposal },
+        ],
+      });
+      const answered = await synced(served, p.token, sent);
+      expect(answered.records).toEqual([
+        { answer: 'SAVED', id: collection.id, notes: [] },
+        { answer: 'SAVED', id: disposal.id, notes: [] },
+      ]);
+      expect([answered.unplannedAssignments, answered.passcodeUses, answered.numbers]).toEqual([
+        [],
+        [],
+        [],
+      ]);
+      // It holds the passcode's check in force and no lists: nothing more is brought.
+      expect([answered.masterPasscode, answered.setupVersion]).toEqual([
+        { version: p.phone.masterPasscodeVersion, check: null },
+        null,
+      ]);
+
+      const [sync, ...others] = await syncsOf(tx, p.phone.id);
+      if (sync === undefined) throw new Error('No sync was written.');
+      expect(others).toEqual([]);
+      expect([
+        sync.startedAt,
+        sync.deviceClockAt,
+        sync.deviceUtcOffsetMinutes,
+        sync.clockDifferenceSeconds,
+        sync.setupVersionSent,
+      ]).toEqual([mondayAfternoon, phonesClock, -240, 8040n, null]);
+      // The phone's own act: written as its device key's actor, on that phone.
+      const [written] = await tx.auditRecord.findMany({
+        where: { tableName: 'sync', recordId: sync.id },
+      });
+      expect([written?.operation, written?.actorId, written?.source, written?.deviceId]).toEqual([
+        'INSERT',
+        deviceKeyActorId,
+        'DEVICE',
+        p.phone.id,
+      ]);
+
+      // The server says which phone made them; each lands PENDING, concluded by nobody here.
+      const events = await tx.fieldEvent.findMany({
+        where: { projectId: p.projectId },
+        orderBy: { startedAt: 'asc' },
+      });
+      expect(
+        events.map((event) => [
+          event.id,
+          event.kind,
+          event.source,
+          event.deviceId,
+          event.monitorId,
+          event.status,
+          event.receivedAt,
+        ]),
+      ).toEqual([
+        [collection.id, 'COLLECTION', 'DEVICE', p.phone.id, who.kim, 'PENDING', mondayAfternoon],
+        [disposal.id, 'DISPOSAL', 'DEVICE', p.phone.id, who.kim, 'PENDING', mondayAfternoon],
+      ]);
+      expect(await ledgerOf(tx, p.phone.id)).toEqual(
+        [
+          [collection.id, 'FIELD_EVENT', sync.id, 'SAVED'],
+          [disposal.id, 'FIELD_EVENT', sync.id, 'SAVED'],
+        ].sort(([a = ''], [b = '']) => a.localeCompare(b)),
+      );
+      // A ledger row is the monitor's write, from the phone, as its record is.
+      const [row] = await tx.auditRecord.findMany({
+        where: { tableName: 'synced_record', recordId: disposal.id },
+      });
+      expect([row?.actorId, row?.source, row?.deviceId]).toEqual([who.kim, 'DEVICE', p.phone.id]);
+      // Each record queued its own ticket, in its own piece of work; no person asked.
+      expect(await jobsOf(tx, p.projectId)).toEqual([
+        [null, 'LOAD 101001'],
+        [null, 'LOAD 101001'],
+      ]);
+      expect(await tx.completedLoad.count({ where: { projectId: p.projectId } })).toBe(0);
+      // The log says which phone and how many of what: never a record or its id.
+      const logged = served.lines.filter((line) => line.includes('A phone synced.')).join('\n');
+      expect(logged).toContain(sync.id);
+      expect(logged).toContain('"clockDifferenceSeconds":8040');
+      expect(logged).toContain('"records":{"SAVED":2}');
+      expect(logged).not.toContain(collection.id);
+      expect(logged).not.toContain('101001');
+    });
+  });
+});
+
+describe('a record is stored once', () => {
+  it('AC-02-45, AC-05-08, AC-08-06, T-05 a record its monitor submitted is sealed: sent again under its id with its load call changed, it is answered “already saved”, and the server keeps what it stored; nothing is written and nothing queued', async () => {
+    await world(async (served, tx, who) => {
+      const p = await kimOnP1(served, tx, who);
+      const disposal = p.disposal({ ticketNumber: '101020' });
+      await synced(
+        served,
+        p.token,
+        p.sync({ records: [{ record: 'FIELD_EVENT', fieldEvent: disposal }] }),
+      );
+      const stored = () => tx.fieldEvent.findUniqueOrThrow({ where: { id: disposal.id } });
+      const audited = () =>
+        tx.auditRecord.count({ where: { tableName: 'field_event', recordId: disposal.id } });
+      const before = { event: await stored(), audited: await audited() };
+      const jobs = await jobsOf(tx, p.projectId);
+      expect(before.event.loadCall).toBe(85);
+
+      // The phone was tampered with after the monitor submitted it: 85% is now 95%.
+      const again = await synced(
+        served,
+        p.token,
+        p.sync({ records: [{ record: 'FIELD_EVENT', fieldEvent: { ...disposal, loadCall: 95 } }] }),
+      );
+      expect(again.records).toEqual([{ answer: 'ALREADY_SAVED', id: disposal.id }]);
+      expect(await stored()).toEqual(before.event);
+      expect(await audited()).toBe(before.audited);
+      expect(await jobsOf(tx, p.projectId)).toEqual(jobs);
+      expect(await tx.heldRecord.count({ where: { deviceId: p.phone.id } })).toBe(0);
+      expect(await tx.quarantinedRecord.count({ where: { projectId: p.projectId } })).toBe(0);
+    });
+  });
+
+  it('AC-05-15, 16, 20, 45, REQ-016 a sync sent again is answered “already saved” from the ledger and stores nothing twice; a second disposal on the ticket is kept in quarantine and never answered “saved”, however often it is sent; neither stops the record sent with it', async () => {
+    await world(async (served, tx, who) => {
+      const p = await kimOnP1(served, tx, who);
+      const collection = p.event({ ticketNumber: '101020' });
+      const disposal = p.disposal({ ticketNumber: '101020' });
+      const first = p.sync({
+        records: [
+          { record: 'FIELD_EVENT', fieldEvent: collection },
+          { record: 'FIELD_EVENT', fieldEvent: disposal },
+        ],
+      });
+      await synced(served, p.token, first);
+      const jobs = await jobsOf(tx, p.projectId);
+
+      // The answer was lost on the way: the phone sends the whole sync again.
+      const again = await synced(served, p.token, first);
+      expect(again.records).toEqual([
+        { answer: 'ALREADY_SAVED', id: collection.id },
+        { answer: 'ALREADY_SAVED', id: disposal.id },
+      ]);
+      expect(await tx.fieldEvent.count({ where: { projectId: p.projectId } })).toBe(2);
+      expect(await tx.quarantinedRecord.count({ where: { projectId: p.projectId } })).toBe(0);
+      expect(await jobsOf(tx, p.projectId)).toEqual(jobs);
+      const [firstSync, secondSync] = await syncsOf(tx, p.phone.id);
+      // Each call is a sync of its own; the ledger still names the one that brought each.
+      expect((await ledgerOf(tx, p.phone.id)).map(([, , syncId]) => syncId)).toEqual([
+        firstSync?.id,
+        firstSync?.id,
+      ]);
+      expect(secondSync?.id).not.toBe(firstSync?.id);
+
+      // AC-05-17: the tower scans 101020 a second time, a record with an id of its own.
+      const second = p.disposal({
+        ticketNumber: '101020',
+        startedAt: '2026-10-12T15:40:00.000Z',
+        endedAt: '2026-10-12T15:44:00.000Z',
+      });
+      const next = p.event({ ticketNumber: '101021' });
+      const more = p.sync({
+        records: [
+          { record: 'FIELD_EVENT', fieldEvent: second },
+          { record: 'FIELD_EVENT', fieldEvent: disposal },
+          { record: 'FIELD_EVENT', fieldEvent: next },
+        ],
+      });
+      const quarantined = {
+        answer: 'QUARANTINED',
+        id: second.id,
+        reason: 'DUPLICATE_FIELD_EVENT',
+        message:
+          'Ticket 101020: this ticket already has a disposal. Not saved: kept in quarantine for review.',
+        heldBy: disposal.id,
+      };
+      const expected = [
+        quarantined,
+        { answer: 'ALREADY_SAVED', id: disposal.id },
+        { answer: 'SAVED', id: next.id, notes: [] },
+      ];
+      expect((await synced(served, p.token, more)).records).toEqual(expected);
+      const [, , thirdSync] = await syncsOf(tx, p.phone.id);
+      const ledger = await ledgerOf(tx, p.phone.id);
+      expect(ledger.find(([id]) => id === second.id)).toEqual([
+        second.id,
+        'FIELD_EVENT',
+        thirdSync?.id,
+        'QUARANTINED',
+      ]);
+      // A quarantined record queues nothing: the worker never reads it. The collection of
+      // 101021 names 101020 too: one truck loading both at once, each reads the other.
+      expect(await jobsOf(tx, p.projectId)).toEqual([
+        ...jobs,
+        [null, 'LOAD 101020', 'LOAD 101021'],
+      ]);
+
+      // Sent again, it is the same quarantined record, still not saved, and nothing is added.
+      expect((await synced(served, p.token, more)).records).toEqual([
+        quarantined,
+        { answer: 'ALREADY_SAVED', id: disposal.id },
+        { answer: 'ALREADY_SAVED', id: next.id },
+      ]);
+      expect(await tx.quarantinedRecord.count({ where: { projectId: p.projectId } })).toBe(1);
+      expect(await ledgerOf(tx, p.phone.id)).toEqual(ledger);
+      expect(await heldOf(tx, p.phone.id)).toEqual([]);
+    });
+  });
+});
+
+describe('what could not be saved is held for a person', () => {
+  it('AC-05-45, AC-10-37, ADR-468 what stands in a record’s place and can’t be read is answered “not saved” with plain words, held exactly as sent, once however often it is sent, and never stops the record beside it', async () => {
+    await world(async (served, tx, who) => {
+      const p = await kimOnP1(served, tx, who);
+      const good = p.event({ ticketNumber: '101030' });
+      const overfull = p.disposal({ ticketNumber: '101030', loadCall: 140 });
+      const sent = {
+        ...p.sync(),
+        records: [
+          { record: 'FIELD_EVENT', fieldEvent: overfull },
+          'not a record',
+          null,
+          { record: 'FIELD_EVENT', fieldEvent: good },
+        ],
+      };
+      const answer = await send(served, p.token, sent);
+      expect(told(answer)).toEqual([200, undefined]);
+      const { records } = syncAnsweredSchema.parse(answer.body);
+      expect(records.map((record) => [record.answer, record.id])).toEqual([
+        ['NOT_SAVED', overfull.id],
+        ['NOT_SAVED', null],
+        ['NOT_SAVED', null],
+        ['SAVED', good.id],
+      ]);
+      const [unread] = records;
+      if (unread?.answer !== 'NOT_SAVED') throw new Error('Saved.');
+      expect([unread.reason, unread.message]).toEqual([
+        'NOT_A_RECORD',
+        `Not saved: this record can’t be read: fieldEvent.loadCall in this record can’t be more than 100.${held}`,
+      ]);
+      expect(unread.message).not.toContain('140');
+      expect(await tx.fieldEvent.count({ where: { projectId: p.projectId } })).toBe(1);
+
+      const [sync] = await syncsOf(tx, p.phone.id);
+      const kept = await heldOf(tx, p.phone.id);
+      expect(
+        kept.map((one) => [
+          one.syncId,
+          one.sentId,
+          one.projectId,
+          one.sentMonitorId,
+          one.payload,
+          one.sentSha256,
+          one.reason,
+          one.message.endsWith(held),
+          one.receivedAt,
+          one.resolvedById,
+        ]),
+      ).toEqual([
+        [
+          sync?.id,
+          overfull.id,
+          p.projectId,
+          who.kim,
+          { record: 'FIELD_EVENT', fieldEvent: overfull },
+          sentFingerprint({ record: 'FIELD_EVENT', fieldEvent: overfull }),
+          'NOT_A_RECORD',
+          true,
+          mondayAfternoon,
+          null,
+        ],
+        [
+          sync?.id,
+          null,
+          null,
+          null,
+          'not a record',
+          sentFingerprint('not a record'),
+          'NOT_A_RECORD',
+          true,
+          mondayAfternoon,
+          null,
+        ],
+        [
+          sync?.id,
+          null,
+          null,
+          null,
+          null,
+          sentFingerprint(null),
+          'NOT_A_RECORD',
+          true,
+          mondayAfternoon,
+          null,
+        ],
+      ]);
+      // Held as the phone's own act; the audit log says one was made and holds no second copy
+      // of what was sent.
+      const [made] = await tx.auditRecord.findMany({
+        where: { tableName: 'held_record', recordId: kept[0]?.id ?? '' },
+      });
+      expect([made?.operation, made?.actorId, made?.source, made?.deviceId]).toEqual([
+        'INSERT',
+        deviceKeyActorId,
+        'DEVICE',
+        p.phone.id,
+      ]);
+      expect((made?.newValue as { payload?: unknown }).payload).toBe('[kept out of the audit]');
+      // No ledger row for what wasn't stored, and nothing queued for it.
+      expect((await ledgerOf(tx, p.phone.id)).map(([id]) => id)).toEqual([good.id]);
+      // The log never repeats a record, or what one that couldn't be read was told.
+      const logged = served.lines.join('\n');
+      expect(logged).toContain('"records":{"NOT_SAVED":3,"SAVED":1}');
+      expect(logged).not.toContain('loadCall');
+      expect(logged).not.toContain(overfull.id);
+
+      // The phone keeps what was not saved and sends it again, its fields in another order:
+      // the same three held records, and nothing more.
+      const reordered = Object.fromEntries(Object.entries(overfull).reverse());
+      const again = await send(served, p.token, {
+        ...p.sync(),
+        records: [{ fieldEvent: reordered, record: 'FIELD_EVENT' }, 'not a record', null],
+      });
+      expect(
+        syncAnsweredSchema.parse(again.body).records.map((record) => [record.answer, record.id]),
+      ).toEqual([
+        ['NOT_SAVED', overfull.id],
+        ['NOT_SAVED', null],
+        ['NOT_SAVED', null],
+      ]);
+      expect((await heldOf(tx, p.phone.id)).map((one) => one.id)).toEqual(
+        kept.map((one) => one.id),
+      );
+      // Anything changed is another thing sent, and is held too.
+      await send(served, p.token, { ...p.sync(), records: ['not a record either'] });
+      expect(await tx.heldRecord.count({ where: { deviceId: p.phone.id } })).toBe(4);
+    });
+  });
+
+  it('C122, C126, C128 the phone’s reports go first, each through its own service: a record made under an unplanned assignment that was not saved is not tried, and is held; one made under an assignment the same sync saved is saved', async () => {
+    await world(async (served, tx, who) => {
+      const p = await kimOnP1(served, tx, who);
+      const setUp = {
+        ...syncExamples.unplanned,
+        id: randomUUID(),
+        projectId: p.projectId,
+        personId: who.kim,
+        siteId: null,
+      };
+      // A project the server doesn't have: the assignment made under it can't be kept.
+      const nowhere = { ...setUp, id: randomUUID(), projectId: randomUUID() };
+      const switched = { ...syncExamples.switched, id: randomUUID(), personId: who.kim };
+      const under = p.disposal({ ticketNumber: '101040', assignmentId: setUp.id });
+      const lost = p.disposal({ ticketNumber: '101041', assignmentId: nowhere.id });
+      const sent = p.sync({
+        unplannedAssignments: [nowhere, setUp],
+        passcodeUses: [switched],
+        records: [
+          { record: 'FIELD_EVENT', fieldEvent: lost },
+          { record: 'FIELD_EVENT', fieldEvent: under },
+        ],
+      });
+      const answered = await synced(served, p.token, sent);
+      expect(answered.unplannedAssignments).toEqual([
+        { assignmentId: nowhere.id, answer: 'NOT_SAVED', reason: 'UNKNOWN_PROJECT' },
+        { assignmentId: setUp.id, answer: 'SAVED', reason: null },
+      ]);
+      expect(answered.passcodeUses).toEqual([
+        { useId: switched.id, answer: 'SAVED', reason: null },
+      ]);
+      expect(answered.records).toEqual([
+        {
+          answer: 'NOT_SAVED',
+          id: lost.id,
+          reason: 'ASSIGNMENT_NOT_SAVED',
+          message: `Not saved: the assignment this record was made under was not saved.${held}`,
+        },
+        { answer: 'SAVED', id: under.id, notes: [] },
+      ]);
+      const made = await tx.assignment.findUniqueOrThrow({ where: { id: setUp.id } });
+      expect([made.origin, made.deviceId, made.personId]).toEqual([
+        'UNPLANNED',
+        p.phone.id,
+        who.kim,
+      ]);
+      expect(await tx.securityEvent.count({ where: { id: switched.id } })).toBe(1);
+      expect(
+        (await tx.fieldEvent.findMany({ where: { projectId: p.projectId } })).map(({ id }) => id),
+      ).toEqual([under.id]);
+      const [kept, ...others] = await heldOf(tx, p.phone.id);
+      expect(others).toEqual([]);
+      expect([kept?.sentId, kept?.projectId, kept?.sentMonitorId, kept?.reason]).toEqual([
+        lost.id,
+        p.projectId,
+        who.kim,
+        'ASSIGNMENT_NOT_SAVED',
+      ]);
+      // A report answered “not saved” is not held: only records are.
+      // Sent again, each is known: nothing is written twice.
+      const again = await synced(served, p.token, sent);
+      expect(again.unplannedAssignments.map(({ answer }) => answer)).toEqual([
+        'NOT_SAVED',
+        'ALREADY_SAVED',
+      ]);
+      expect(again.passcodeUses.map(({ answer }) => answer)).toEqual(['ALREADY_SAVED']);
+      expect(again.records.map(({ answer }) => answer)).toEqual(['NOT_SAVED', 'ALREADY_SAVED']);
+      expect(await tx.heldRecord.count({ where: { deviceId: p.phone.id } })).toBe(1);
+    });
+  });
+
+  it('C69, C128 a record that names something the server doesn’t have is refused by the database’s own constraints: it is answered “not saved” in plain words, never an error and never the database’s, and held; the record beside it is saved', async () => {
+    await world(async (served, tx, who, within) => {
+      const p = await kimOnP1(served, tx, who);
+      // In the process each record is its own piece of work, so the database's refusal undoes
+      // that record alone. A test's whole work is one piece: here each write stands behind a
+      // savepoint, which is what a piece of work of its own comes to.
+      const each = {
+        ...within,
+        $read: within.$read,
+        $write: async <T>(actor: Actor, work: (inner: Tx) => Promise<T>): Promise<T> => {
+          await tx.$executeRaw`SAVEPOINT one_piece_of_work`;
+          try {
+            const done = await within.$write(actor, work);
+            await tx.$executeRaw`RELEASE SAVEPOINT one_piece_of_work`;
+            return done;
+          } catch (error) {
+            await tx.$executeRaw`ROLLBACK TO SAVEPOINT one_piece_of_work`;
+            throw error;
+          }
+        },
+      } as unknown as Database;
+      const requestNow = (): undefined => undefined;
+      const { clock } = served;
+      const sync = new Sync(each, {
+        intake: new Intake(each, clock, shippedPolicy),
+        certifications: new Certifications(each, clock, shippedPolicy),
+        unplanned: new UnplannedAssignments(each, { clock, requestNow }),
+        uses: new PasscodeUses(each, { clock, requestNow }),
+        numbers: new NumberAllocator(each, clock, shippedPolicy),
+        loginList: new PhoneLoginList(each, {
+          assignments: new PhoneAssignments(each),
+          offline: new OfflineChecks(signingSecret),
+          clock,
+          entriesPerCall: shippedPolicy.loginListEntriesPerCall,
+        }),
+        clock,
+      });
+      // A project nobody set up, a site that is no site of P1's, and a real load between them.
+      const elsewhere = p.event({ ticketNumber: '101050', projectId: randomUUID() });
+      const good = p.event({ ticketNumber: '101051' });
+      const noSite = p.disposal({ ticketNumber: '101051', siteId: randomUUID() });
+      const sent = p.sync({
+        records: [
+          { record: 'FIELD_EVENT', fieldEvent: elsewhere },
+          { record: 'FIELD_EVENT', fieldEvent: good },
+          { record: 'FIELD_EVENT', fieldEvent: noSite },
+        ],
+      });
+      const { answered } = await sync.received(p.phone.id, syncSentSchema.parse(sent));
+      expect(syncAnswerRead(sent, answered)).not.toBeNull();
+      const message = `Not saved: this record names something the server doesn’t have: its project, its monitor, its assignment, or something picked from a list.${held}`;
+      expect(answered.records).toEqual([
+        { answer: 'NOT_SAVED', id: elsewhere.id, reason: 'NAMES_NO_RECORD', message },
+        { answer: 'SAVED', id: good.id, notes: [] },
+        { answer: 'NOT_SAVED', id: noSite.id, reason: 'NAMES_NO_RECORD', message },
+      ]);
+      expect(
+        (
+          await tx.fieldEvent.findMany({
+            where: { id: { in: [elsewhere.id, good.id, noSite.id] } },
+          })
+        ).map(({ id }) => id),
+      ).toEqual([good.id]);
+      expect((await ledgerOf(tx, p.phone.id)).map(([id]) => id)).toEqual([good.id]);
+      // The project is only what the record said: it names nothing, and is kept as sent.
+      expect(
+        (await heldOf(tx, p.phone.id)).map((one) => [one.sentId, one.projectId, one.reason]),
+      ).toEqual([
+        [elsewhere.id, elsewhere.projectId, 'NAMES_NO_RECORD'],
+        [noSite.id, p.projectId, 'NAMES_NO_RECORD'],
+      ]);
+    });
+  });
+});
+
+describe('a certification made on a phone', () => {
+  it('C129, ADR-469 Kim certifies Rivera’s self-loader as 730416: it is made by certify with its row in the ledger and its job; sent again it is already saved; another certification with its number, and a crew with a box, are not saved, told why, and held', async () => {
+    await world(async (served, tx, who) => {
+      const p = await kimOnP1(served, tx, who);
+      // The example world's 730416, with what this test's world has: its dog box typed.
+      const certification: SyncedCertification = {
+        ...syncExamples.certification,
+        id: randomUUID(),
+        projectId: p.projectId,
+        primeId: p.priced.coastline,
+        vehicleTypeId: null,
+        vehicleTypeOther: 'Self-loader',
+        certifiedById: who.kim,
+        assignmentId: p.assignment.id,
+        helperIds: [],
+        boxes: syncExamples.certification.boxes.map((box, position) => ({
+          ...box,
+          featureId: null,
+          featureOther: position === 0 ? null : 'Dog box',
+        })),
+      };
+      const first = await synced(
+        served,
+        p.token,
+        p.sync({ records: [{ record: 'CERTIFICATION', certification }] }),
+      );
+      expect(first.records).toEqual([{ answer: 'SAVED', id: certification.id, notes: [] }]);
+      const made = await tx.certification.findUniqueOrThrow({ where: { id: certification.id } });
+      expect([made.certNumber, made.deviceId, made.certifiedById, made.capacityCy]).toEqual([
+        '730416',
+        p.phone.id,
+        who.kim,
+        48,
+      ]);
+      const [sync] = await syncsOf(tx, p.phone.id);
+      expect(await ledgerOf(tx, p.phone.id)).toEqual([
+        [certification.id, 'CERTIFICATION', sync?.id, 'SAVED'],
+      ]);
+      // With no ticket on its number, a job that names none: its own flags are the run's.
+      expect(await jobsOf(tx, p.projectId)).toEqual([[null]]);
+
+      const copy = { ...certification, id: randomUUID() };
+      const crew = {
+        ...certification,
+        id: randomUUID(),
+        certNumber: '730417',
+        kind: 'CREW' as const,
+      };
+      const next = await synced(
+        served,
+        p.token,
+        p.sync({
+          records: [
+            { record: 'CERTIFICATION', certification },
+            { record: 'CERTIFICATION', certification: copy },
+            { record: 'CERTIFICATION', certification: crew },
+          ],
+        }),
+      );
+      expect(next.records).toEqual([
+        { answer: 'ALREADY_SAVED', id: certification.id },
+        {
+          answer: 'NOT_SAVED',
+          id: copy.id,
+          reason: 'CERTIFICATION_REFUSED',
+          message: `Not saved: this project already has a certification ${certification.certNumber}.${held}`,
+        },
+        {
+          answer: 'NOT_SAVED',
+          id: crew.id,
+          reason: 'CERTIFICATION_REFUSED',
+          message: `Not saved: A crew is not measured: it has no boxes and no capacity.${held}`,
+        },
+      ]);
+      expect(await tx.certification.count({ where: { projectId: p.projectId } })).toBe(1);
+      expect(
+        (await heldOf(tx, p.phone.id)).map((one) => [one.sentId, one.sentMonitorId, one.reason]),
+      ).toEqual([
+        [copy.id, who.kim, 'CERTIFICATION_REFUSED'],
+        [crew.id, who.kim, 'CERTIFICATION_REFUSED'],
+      ]);
+      // The driver's licence number is in no log (ASVS V16).
+      const licence = certification.driverLicenceNumber;
+      if (licence !== null) expect(served.lines.join('\n')).not.toContain(licence);
+    });
+  });
+});
+
+describe('the numbers a phone holds', () => {
+  it('AC-05-47, C64 a phone reports the last number it used of a series and is topped up to a full block; a series its project doesn’t have is not topped up, and stops nothing', async () => {
+    await world(async (served, tx, who) => {
+      const p = await kimOnP1(served, tx, who);
+      const load = { projectId: p.projectId, series: 'LOAD' as const };
+      const elsewhere = { projectId: randomUUID(), series: 'LOAD' as const };
+      const first = await synced(
+        served,
+        p.token,
+        p.sync({
+          lastUsed: [
+            { ...elsewhere, lastUsedNumber: null },
+            { ...load, lastUsedNumber: null },
+          ],
+        }),
+      );
+      const [none, held] = first.numbers;
+      expect(none).toEqual({ ...elsewhere, toppedUp: false, blocks: [] });
+      const [block, ...others] = held?.blocks ?? [];
+      if (block === undefined) throw new Error('No block was cut.');
+      expect(others).toEqual([]);
+      expect([
+        held?.toppedUp,
+        block.lastNumber - block.firstNumber + 1,
+        block.lastUsedNumber,
+      ]).toEqual([true, 1000, null]);
+      // A block is the phone's own: cut as its device key's actor, whoever is signed in.
+      const cut = await tx.numberBlock.findFirstOrThrow({ where: { deviceId: p.phone.id } });
+      const [written] = await tx.auditRecord.findMany({
+        where: { tableName: 'number_block', recordId: cut.id, operation: 'INSERT' },
+      });
+      expect([written?.actorId, written?.source, written?.deviceId]).toEqual([
+        deviceKeyActorId,
+        'DEVICE',
+        p.phone.id,
+      ]);
+
+      // Six numbers used: topped up to a thousand unused again, however few it used.
+      const lastUsedNumber = block.firstNumber + 5;
+      const next = await synced(
+        served,
+        p.token,
+        p.sync({ lastUsed: [{ ...load, lastUsedNumber }] }),
+      );
+      const [now] = next.numbers;
+      expect(now?.toppedUp).toBe(true);
+      expect(now?.blocks.map((each) => each.lastUsedNumber)).toEqual([lastUsedNumber, null]);
+      expect(
+        (now?.blocks ?? []).reduce(
+          (sum, each) =>
+            sum + each.lastNumber - Math.max(each.firstNumber - 1, each.lastUsedNumber ?? 0),
+          0,
+        ),
+      ).toBe(1000);
+    });
+  });
+});
+
+describe('what a sync brings besides its answers', () => {
+  it('AC-02-23, AC-05-48 a phone that holds no check of the master passcode is brought the one in force at its sync, with nobody signed in; once Dana changes the passcode its next sync brings the new version’s, and the version its record holds moves then, as the device key’s actor on that phone; a phone that holds it is brought no check and nothing but the sync is written', async () => {
+    await world(async (served, tx, who) => {
+      const p = await kimOnP1(served, tx, who);
+      const enrolledUnder = p.phone.masterPasscodeVersion;
+      const holding = (masterPasscodeVersion: number | null) =>
+        p.sync({ holds: { masterPasscodeVersion, listsProjectId: null } });
+      const versionHeld = async () =>
+        (await tx.device.findUniqueOrThrow({ where: { id: p.phone.id } })).masterPasscodeVersion;
+
+      const first = await synced(served, p.token, holding(null));
+      expect(first.masterPasscode.version).toBe(enrolledUnder);
+      expect([
+        await opens(passcode, first.masterPasscode.check),
+        await opens('osprey-landing-march', first.masterPasscode.check),
+      ]).toEqual([true, false]);
+      // Not the server's own hash: a check of this phone's, made from it.
+      const inForce = await tx.masterPasscode.findUniqueOrThrow({
+        where: { version: enrolledUnder },
+      });
+      expect(JSON.stringify(first)).not.toContain(inForce.hash.split('$').at(-1) ?? 'none');
+
+      const changedTo = 'cordgrass-jetty-heron';
+      saved(
+        changeMasterPasscodeEndpoint,
+        await ask(served, p.dana, changeMasterPasscodeEndpoint, {
+          payload: { currentPassword: long, passcode: changedTo },
+        }),
+      );
+      // Until the phone syncs, its record holds the version it was enrolled under.
+      expect(await versionHeld()).toBe(enrolledUnder);
+      const second = await synced(served, p.token, holding(enrolledUnder));
+      expect(second.masterPasscode.version).toBe(enrolledUnder + 1);
+      expect([
+        await opens(changedTo, second.masterPasscode.check),
+        await opens(passcode, second.masterPasscode.check),
+      ]).toEqual([true, false]);
+      expect(await versionHeld()).toBe(enrolledUnder + 1);
+      const audited = await tx.auditRecord.findMany({
+        where: { requestId: second.requestId },
+        orderBy: { id: 'asc' },
+      });
+      expect(
+        audited.map(({ tableName, operation, actorId, deviceId, source, changedFields }) => [
+          tableName,
+          operation,
+          actorId,
+          deviceId,
+          source,
+          operation === 'UPDATE' ? changedFields : [],
+        ]),
+      ).toEqual([
+        ['sync', 'INSERT', deviceKeyActorId, p.phone.id, 'DEVICE', []],
+        ['device', 'UPDATE', deviceKeyActorId, p.phone.id, 'DEVICE', ['master_passcode_version']],
+      ]);
+
+      const third = await synced(served, p.token, holding(enrolledUnder + 1));
+      expect(third.masterPasscode).toEqual({ version: enrolledUnder + 1, check: null });
+      expect(
+        (await tx.auditRecord.findMany({ where: { requestId: third.requestId } })).map(
+          ({ tableName }) => tableName,
+        ),
+      ).toEqual(['sync']);
+      // The log says the version and whether a check went: never the check.
+      const logged = served.lines.filter((line) => line.includes('A phone synced.'));
+      expect(
+        logged.map((line) => /"masterPasscodeCheckSent":(true|false)/.exec(line)?.[1]),
+      ).toEqual(['true', 'true', 'false']);
+      expect(logged.join('\n')).not.toContain('argon2id');
+    });
+  });
+
+  it('AC-05-48, ADR-453 a phone that says whose lists it holds is brought that project’s setup version, as its phones are shown it now, and the sync’s own row says which was sent, written once; after Dana adds a field tag the next sync brings the next version; a phone that holds no lists, or names a project the server doesn’t have, is brought none, and nothing is refused; never the lists themselves', async () => {
+    await world(async (served, tx, who) => {
+      const p = await kimOnP1(served, tx, who);
+      const holding = (listsProjectId: string | null) =>
+        p.sync({
+          holds: { masterPasscodeVersion: p.phone.masterPasscodeVersion, listsProjectId },
+        });
+      const versions = async () =>
+        (
+          await tx.setupManifest.findMany({
+            where: { projectId: p.projectId },
+            orderBy: { version: 'asc' },
+          })
+        ).map(({ version }) => version);
+      expect(await versions()).toEqual([]);
+
+      const first = await synced(served, p.token, holding(p.projectId));
+      expect(first.setupVersion).toEqual({ projectId: p.projectId, version: 1 });
+      expect(await versions()).toEqual([1]);
+      // The version is made and the sync's row says it was sent, each the phone's own act.
+      const audited = await tx.auditRecord.findMany({
+        where: { requestId: first.requestId },
+        orderBy: { id: 'asc' },
+      });
+      expect(
+        audited.map(({ tableName, operation, actorId, deviceId, changedFields }) => [
+          tableName,
+          operation,
+          actorId,
+          deviceId,
+          operation === 'UPDATE' ? changedFields : [],
+        ]),
+      ).toEqual([
+        ['sync', 'INSERT', deviceKeyActorId, p.phone.id, []],
+        ['setup_manifest', 'INSERT', deviceKeyActorId, p.phone.id, []],
+        ['sync', 'UPDATE', deviceKeyActorId, p.phone.id, ['setup_version_sent']],
+      ]);
+      // A number, never the lists: no site, pay item or debris type is named.
+      const text = JSON.stringify(first);
+      for (const never of ['sites', 'payItems', 'debrisTypes', 'certifications', 'roes']) {
+        expect(text, never).not.toContain(never);
+      }
+
+      // Nothing moved: the same version, and no new one is made.
+      const again = await synced(served, p.token, holding(p.projectId));
+      expect(again.setupVersion).toEqual({ projectId: p.projectId, version: 1 });
+      saved(
+        addFieldTagEndpoint,
+        await ask(served, p.dana, addFieldTagEndpoint, {
+          ids: p.priced.ids,
+          payload: { name: 'Mixed' },
+        }),
+      );
+      const moved = await synced(served, p.token, holding(p.projectId));
+      expect(moved.setupVersion).toEqual({ projectId: p.projectId, version: 2 });
+      expect(await versions()).toEqual([1, 2]);
+
+      // No lists held, and a project nobody set up: none is brought, and nothing is refused.
+      const none = await synced(served, p.token, holding(null));
+      const elsewhere = await synced(served, p.token, holding(randomUUID()));
+      expect([none.setupVersion, elsewhere.setupVersion]).toEqual([null, null]);
+      expect((await syncsOf(tx, p.phone.id)).map((sync) => sync.setupVersionSent)).toEqual([
+        1,
+        1,
+        2,
+        null,
+        null,
+      ]);
+      expect(await versions()).toEqual([1, 2]);
+      const logged = served.lines.filter((line) => line.includes('A phone synced.'));
+      expect(logged.map((line) => /"setupVersionSent":(\d+|null)/.exec(line)?.[1])).toEqual([
+        '1',
+        '1',
+        '2',
+        'null',
+        'null',
+      ]);
+    });
+  });
+});

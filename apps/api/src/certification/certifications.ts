@@ -37,6 +37,8 @@ import {
 } from '@open-adms/domain';
 
 import type { WorkQueued } from '../jobs/work-queue.ts';
+import { type Brought, ledgerRow } from '../sync/ledger.ts';
+import type { SentCertification } from '../sync/sent.ts';
 import { ReviewService } from '../review/review-service.ts';
 import { SubPlaces } from '../setup/contractor-setup.ts';
 import { day, type Outcome, Refused, type Warn } from '../setup/setup-service.ts';
@@ -102,8 +104,41 @@ export interface NewCertification {
   readonly notes?: string;
 }
 
+// A record with what was sent as `null` left out.
+type Stated<T> = {
+  [K in keyof T as null extends T[K] ? never : K]: T[K];
+} & {
+  [K in keyof T as null extends T[K] ? K : never]?: NonNullable<T[K]>;
+};
+
+function stated<T extends object>(sent: T): Stated<T> {
+  return Object.fromEntries(
+    Object.entries(sent).filter(([, value]) => value !== null),
+  ) as Stated<T>;
+}
+
 export class Certifications extends ReviewService {
-  certify(input: NewCertification): Promise<Outcome<Certification>> {
+  // A certification as a phone's sync sends it (the contract's own shape, `syncedRecordSchema`'s
+  // seventh kind, ADR-469), from the phone that proved itself: handed to `certify` whole, never
+  // a second way in. What the phone left empty is left out.
+  // `brought` is the sync that brought it, where one did: its row in the idempotency ledger is
+  // then written in the piece of work that makes the certification (ADR-471, 472).
+  received(sent: SentCertification, brought?: Brought): Promise<Outcome<Certification>> {
+    const { boxes, helperIds, replaces, ...rest } = sent;
+    return this.certify(
+      {
+        ...stated(rest),
+        boxes: boxes.map((box) => stated(box)),
+        helperIds,
+        ...(replaces === null
+          ? {}
+          : { replaces: { certificationId: replaces.replacedId, reason: replaces.reason } }),
+      },
+      brought,
+    );
+  }
+
+  certify(input: NewCertification, brought?: Brought): Promise<Outcome<Certification>> {
     const actor: Actor =
       input.deviceId === undefined
         ? { actorId: input.certifiedById, source: 'BACK_OFFICE' }
@@ -203,6 +238,14 @@ export class Certifications extends ReviewService {
         // job that names none.
         true,
       );
+      if (input.deviceId !== undefined) {
+        await ledgerRow(tx, brought, {
+          recordId: certification.id,
+          recordKind: 'CERTIFICATION',
+          deviceId: input.deviceId,
+          answer: 'SAVED',
+        });
+      }
       return certification;
     });
   }

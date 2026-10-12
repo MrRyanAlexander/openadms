@@ -14,6 +14,7 @@ export const columnsNamingAUser: readonly (readonly [table: string, column: stri
   ['field_event', 'monitor_id'],
   ['flag_acceptance', 'accepted_by_id'],
   ['form_definition', 'created_by_id'],
+  ['held_record', 'resolved_by_id'],
   ['incident', 'created_by_id'],
   ['incident', 'monitor_id'],
   ['invoice_batch', 'created_by_id'],

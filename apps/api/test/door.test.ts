@@ -246,6 +246,54 @@ describe('the API’s container and the database', () => {
   });
 });
 
+describe('the API’s container and the address server', () => {
+  it('AC-04-24: reaches it by its own name over HTTPS, at the proxy’s address inside the stack, and is answered an address', () => {
+    const script = [
+      "import { Settings } from './apps/api/dist/process/settings.js';",
+      "import { AddressServer } from './apps/api/dist/phone/address-server.js';",
+      'const settings = Settings.read(process.env);',
+      'const server = new AddressServer({',
+      '  url: settings.addressesUrl,',
+      '  caFile: settings.mapCaFile,',
+      '  timeoutMs: 10000,',
+      '  at: settings.mapServersAt,',
+      '});',
+      "const address = await server.addressOf({ latitude: '39.15650000', longitude: '-75.52330000' });",
+      'console.log(JSON.stringify({ address, at: settings.mapServersAt, ca: settings.mapCaFile }));',
+    ].join('\n');
+    const said = compose(['exec', '-T', 'api', 'node', '--input-type=module', '-e', script]);
+    expect(JSON.parse(said)).toEqual({
+      address: '25 The Green',
+      at: { host: '172.30.213.2', port: 443 },
+      ca: '/run/adms/caddy-root.crt',
+    });
+  });
+});
+
+describe('the API’s container and the object store', () => {
+  it('AC-10-49: reaches it by its own name over HTTPS, at the proxy’s address inside the stack, under the API’s own identity', () => {
+    // Nothing is written: asked how large a file nobody kept is, the store answers "none" only
+    // to an identity it knows and lets read; anyone else is refused, and that would throw.
+    const script = [
+      "import { Settings } from './apps/api/dist/process/settings.js';",
+      "import { MediaStore } from './apps/api/dist/media/media-store.js';",
+      'const { media } = Settings.read(process.env);',
+      'const store = new MediaStore({ ...media, timeoutMs: 10000 });',
+      "const size = await store.sizeOf('tests/door/nothing-is-kept-here');",
+      'console.log(JSON.stringify({ size, url: media.url, bucket: media.bucket, at: media.at, ca: media.caFile }));',
+      'store.close();',
+    ].join('\n');
+    const said = compose(['exec', '-T', 'api', 'node', '--input-type=module', '-e', script]);
+    expect(JSON.parse(said)).toEqual({
+      size: null,
+      url: expect.stringMatching(/^https:\/\/s3\.adms\.localhost(:\d+)?$/) as string,
+      bucket: 'adms-media',
+      at: { host: '172.30.213.2', port: 443 },
+      ca: '/run/adms/caddy-root.crt',
+    });
+  });
+});
+
 describe('what an error and the log say, through the door', () => {
   it('AC-10-33: a path nobody serves and a body that is not JSON get a plain code', async () => {
     const nowhere = await ask(`/nowhere?password=${sent}`);

@@ -49,6 +49,18 @@ const workerMapKeys = [
   'ADMS_MAP_CA_FILE',
   'ADMS_MAP_EXTRACT_SHA256',
 ];
+// What the API's settings name of them: the address server alone, for a phone's address lookup
+// (apps/api/src/process/settings.ts; ADR-455).
+const apiMapKeys = ['ADMS_ADDRESSES_URL', 'ADMS_MAP_CA_FILE'];
+// And of the object store it keeps files in, with the API's own identity there (ADR-480).
+const apiMediaKeys = [
+  'ADMS_MEDIA_URL',
+  'ADMS_MEDIA_BUCKET',
+  'ADMS_MEDIA_REGION',
+  'ADMS_MEDIA_ACCESS_KEY',
+  'ADMS_MEDIA_SECRET_KEY',
+  'ADMS_MEDIA_CA_FILE',
+];
 // The API is reached only through the local stack's proxy, over HTTPS (ADR-385).
 const apiHostname = 'api.adms.localhost';
 
@@ -134,6 +146,7 @@ export class Installer {
       await this.clearEarlierHash();
       this.state.save(record);
       this.ensureWorkerSettings();
+      this.ensureApiSettings();
       this.startApi();
       this.startWorker();
       console.log(`\nInstalled for ${record.firm}. Rerun \`pnpm installer\` any time to re-check.`);
@@ -267,12 +280,19 @@ export class Installer {
       ['DATABASE_URL', url('adms_owner')],
     ]);
     const smtpPort = this.stackEnv.read()['ADMS_SMTP_PORT'] ?? '1025';
-    this.apiEnv.create(header('the API, with its own login and the read-only login'), [
-      ['DATABASE_URL', url('adms_api')],
-      ['READONLY_DATABASE_URL', url('adms_readonly')],
-      ['ADMS_TOKEN_SIGNING_SECRET', maker.password()],
-      ['SMTP_URL', answers.mail === 'mail catcher' ? `smtp://${host}:${smtpPort}` : ''],
-    ]);
+    this.apiEnv.create(
+      header(
+        'the API, with its own login, the read-only login, the address server it asks and its identity at the object store',
+      ),
+      [
+        ['DATABASE_URL', url('adms_api')],
+        ['READONLY_DATABASE_URL', url('adms_readonly')],
+        ['ADMS_TOKEN_SIGNING_SECRET', maker.password()],
+        ['SMTP_URL', answers.mail === 'mail catcher' ? `smtp://${host}:${smtpPort}` : ''],
+        ...this.apiMapSettings(),
+        ...this.apiMediaSettings(),
+      ],
+    );
     this.workerEnv.create(header('the worker, with its own login and the map servers it asks'), [
       ['DATABASE_URL', url('adms_worker')],
       ...this.workerMapSettings(),
@@ -572,6 +592,17 @@ export class Installer {
       ok: unnamed.length === 0,
       text: `apps/worker/.env names the map servers the worker asks${unnamed.length === 0 ? '' : ` (missing ${unnamed.join(', ')}: pnpm installer adds them)`}`,
     });
+    const apiStated = this.apiEnv.exists() ? this.apiEnv.read() : {};
+    const apiUnnamed = apiMapKeys.filter((key) => !(key in apiStated));
+    checks.push({
+      ok: apiUnnamed.length === 0,
+      text: `apps/api/.env names the address server the API asks${apiUnnamed.length === 0 ? '' : ` (missing ${apiUnnamed.join(', ')}: pnpm installer adds them)`}`,
+    });
+    const mediaUnnamed = apiMediaKeys.filter((key) => !(key in apiStated));
+    checks.push({
+      ok: mediaUnnamed.length === 0,
+      text: `apps/api/.env names the object store the API keeps files in${mediaUnnamed.length === 0 ? '' : ` (missing ${mediaUnnamed.join(', ')}: pnpm installer adds them)`}`,
+    });
     const apiProblem = await this.apiProblem();
     checks.push({
       ok: apiProblem === undefined,
@@ -600,6 +631,56 @@ export class Installer {
       ['ADMS_MAP_CA_FILE', join(this.root, 'infra/local/.generated/caddy-root.crt')],
       ['ADMS_MAP_EXTRACT_SHA256', sha256],
     ];
+  }
+
+  // What the API is told of the address server, for a phone's address lookup (ARCHITECTURE §3;
+  // ADR-455): the worker's own two values, so both ask one server by one name.
+  private apiMapSettings(): [string, string][] {
+    return this.workerMapSettings().filter(([key]) => apiMapKeys.includes(key));
+  }
+
+  // What the API is told of the object store it keeps files in (ARCHITECTURE §11; ADR-480): the
+  // local stack's own, by its name over HTTPS, the stack's certificate authority, the one
+  // bucket, and the identity the stack made for the API there, which may put and get an object
+  // in that bucket and nothing else. The identity's two halves are read from the stack's own
+  // file and written into the API's; neither is ever printed.
+  private apiMediaSettings(): [string, string][] {
+    const stack = this.stackEnv.exists() ? this.stackEnv.read() : {};
+    const port = stack['ADMS_HTTPS_PORT'];
+    const at = port === undefined || port === '443' ? '' : `:${port}`;
+    const accessKey = stack['S3_API_ACCESS_KEY'];
+    const secretKey = stack['S3_API_SECRET_KEY'];
+    if (accessKey === undefined || secretKey === undefined) {
+      throw new Error(
+        'The local stack has no identity for the API at its object store yet: run `pnpm local:up`. Stopped.',
+      );
+    }
+    const bucket = this.helper(['media-bucket']).stdout.trim();
+    if (!/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(bucket)) {
+      throw new Error('The local stack did not say which bucket the API keeps files in. Stopped.');
+    }
+    return [
+      ['ADMS_MEDIA_URL', `https://s3.adms.localhost${at}`],
+      ['ADMS_MEDIA_BUCKET', bucket],
+      // The local store signs for any region; a firm's own store names its own.
+      ['ADMS_MEDIA_REGION', 'us-east-1'],
+      ['ADMS_MEDIA_ACCESS_KEY', accessKey],
+      ['ADMS_MEDIA_SECRET_KEY', secretKey],
+      ['ADMS_MEDIA_CA_FILE', join(this.root, 'infra/local/.generated/caddy-root.crt')],
+    ];
+  }
+
+  // An installation made before the API asked the address server, or before it kept files in
+  // the object store, has an API's env file without them: the settings are added at its end,
+  // every line already there left as it was.
+  private ensureApiSettings(): void {
+    const name = this.relative(this.apiEnv.path);
+    const added = this.apiEnv.add(this.apiMapSettings());
+    if (added.length === 0) console.log(`✓ ${name} names the address server the API asks`);
+    else console.log(`+ added to ${name}: ${added.join(', ')}`);
+    const media = this.apiEnv.add(this.apiMediaSettings());
+    if (media.length === 0) console.log(`✓ ${name} names the object store the API keeps files in`);
+    else console.log(`+ added to ${name}: ${media.join(', ')}`);
   }
 
   // An installation made before the worker had a process has a worker's env file with its login

@@ -25,7 +25,7 @@ Decides who can do what, and on which phone:
 |---|---|---|
 | **Admin** | Back-office login, two-step sign-in required | Everything, setup included |
 | **Manager / analyst** | Back-office login, two-step sign-in required | What they're granted: review, correct, renumber, void, accept flags, QC, lock as invoiced, unlock |
-| **Field monitor** | Monitor ID + password on an **enrolled phone**, online or offline from the phone's login list | Record field events for their assignment's **one** project; reopen a finished one until they end their shift; never edit after; never see a rate or a code |
+| **Field monitor** | Monitor ID + password on an **enrolled phone**, online or offline from the phone's login list | Record field events for their assignment's **one** project; adjust one until they submit it; never reopen or edit one they submitted (ADR-477); never see a rate or a code |
 | **Supervisor holding the master passcode** | The firm's one master passcode, on a phone | Enrol a phone; create monitors; set a phone up when its monitor has no assignment; sign in as its monitor; switch its monitor; move its site; sync and turn it in |
 | **Client user / contractor user / auditor** | Read-only web login issued by the firm, two-step optional | Clients and auditors: the whole project except personal phone and licence numbers. A contractor: only its own tickets and transactions (a prime with its subs'). Nobody's hours |
 
@@ -54,7 +54,10 @@ Decides who can do what, and on which phone:
 5. **Start of day.** The monitor signs in on any enrolled phone with their **Monitor ID** and
    password (the firm's practice: their phone number without the area code). Online, the server
    signs them in on that phone for the shift (twelve hours, one monitor at a time; ⚠️ ADR-443, an
-   agent default awaiting approval) and the phone receives **their assignment** and its project's lists (the certified trucks and crews, sites,
+   agent default awaiting approval) and the phone receives **their assignment** for the project's
+   own day (the one that names this phone, else the only one they have; where two projects are
+   left and nothing says which is this phone's, none, and the phone says so; ⚠️ ADR-444, an agent
+   default awaiting approval) and its project's lists (the certified trucks and crews, sites,
    ROEs, the roster and **login list**, number blocks or control ranges, the unit rate pay items and
    their settings for unit rate work, and **for a site, what it asks for**, ADR-227, 243). One
    assignment on a phone at a time, so **one project** (ADR-145). A disposal phone holds **no ticket
@@ -68,12 +71,16 @@ Decides who can do what, and on which phone:
    (ARCHITECTURE §7.2, ADR-139). The master passcode may open a **temporary session** for a roster
    monitor, marked on every record and ending at day end (ADR-120).
 8. **The monitor works** ([Part 4](04-field-capture.md)); the lists go stale and the phone warns,
-   never blocks. A finished field event can be **reopened until the monitor ends the shift**; a
-   later change travels as the phone's edit log, audited under the monitor (ADR-240).
+   never blocks. **Once the monitor submits a record it is sealed for them**: no reopen and no
+   edit, synced or not; only the back office changes it, once the server has it. One not yet
+   submitted stays open and theirs to adjust, for days where the work takes days (ADR-477).
 9. **Switching monitors** on a phone: the master passcode first, then the new monitor signs in with
    their own ID and password (same project). An earlier monitor's unsynced work stays theirs and
    syncs in the background (ADR-095, 120). **Moving site** works the same way and is recorded; each
-   record keeps the site it was made at (ADR-195).
+   record keeps the site it was made at (ADR-195). *(ADR-458, agent defaults, awaiting approval:
+   a move, and a switch to a monitor who has no assignment, each make a new unplanned assignment
+   on the phone, reported at its next connection; the earlier assignment stands as it was, and
+   the monitor's sign-in on that phone takes the one made on it last.)*
 10. **The time clock** (where the project has it on): anyone with an assignment clocks in, takes a
     break and clocks out **by hand**, with simple nudges ("You're not clocked in. Clock in now?");
     activity lines are pre-filled from the day's field events; a **manager approves the day**

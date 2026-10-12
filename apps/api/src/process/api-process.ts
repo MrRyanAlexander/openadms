@@ -5,11 +5,13 @@
 // proxy's (Caddy locally), the only way in.
 import 'reflect-metadata';
 
+import { setupChoicesMonitorsAtMost } from '@open-adms/contracts';
 import type { Database, ViewerDatabase } from '@open-adms/db';
 import {
   MasterPasscodeRules,
   MasterPasscodeTries,
   PasswordRules,
+  PasscodeSessionRules,
   PhoneProofRules,
   RateLimits,
   SignInTries,
@@ -33,12 +35,28 @@ import { Assignments } from '../dispatch/assignments.ts';
 import { MasterPasscode } from '../dispatch/master-passcode.ts';
 import { apiMasterPasscode, apiPhones } from '../dispatch/phones.controller.ts';
 import { Phones } from '../dispatch/phones.ts';
+import { NumberAllocator } from '../numbering/number-allocator.ts';
 import { apiPeople } from '../people/people.controller.ts';
 import { People } from '../people/people.ts';
+import { apiAddressLookups } from '../phone/address-lookups.controller.ts';
+import { AddressLookups } from '../phone/address-lookups.ts';
+import { AddressServer, type Addresses } from '../phone/address-server.ts';
 import { DeviceKeys } from '../phone/device-keys.ts';
 import { apiEnrolment } from '../phone/enrolment.controller.ts';
 import { Enrolment } from '../phone/enrolment.ts';
 import { MasterPasscodeCheck } from '../phone/master-passcode-check.ts';
+import { OfflineChecks } from '../phone/offline-checks.ts';
+import { PhoneAssignments } from '../phone/phone-assignments.ts';
+import { apiPhoneLists } from '../phone/phone-lists.controller.ts';
+import { PhoneLists } from '../phone/phone-lists.ts';
+import { apiPhoneLoginList } from '../phone/phone-login-list.controller.ts';
+import { PhoneLoginList } from '../phone/phone-login-list.ts';
+import { apiPasscodeSessions } from '../phone/passcode-sessions.controller.ts';
+import { PasscodeSessions } from '../phone/passcode-sessions.ts';
+import { apiPasscodeUses } from '../phone/passcode-uses.controller.ts';
+import { PasscodeUses } from '../phone/passcode-uses.ts';
+import { apiSetupChoices } from '../phone/setup-choices.controller.ts';
+import { SetupChoices } from '../phone/setup-choices.ts';
 import { apiPhoneMonitors } from '../phone/phone-monitors.controller.ts';
 import { PhoneMonitors } from '../phone/phone-monitors.ts';
 import { PhoneChallenges } from '../phone/phone-challenges.ts';
@@ -47,6 +65,8 @@ import { PhoneProofs } from '../phone/phone-proofs.ts';
 import { apiPhoneSignIns } from '../phone/phone-sign-ins.controller.ts';
 import { PhoneSignIns } from '../phone/phone-sign-ins.ts';
 import { PhoneTokens } from '../phone/phone-tokens.ts';
+import { apiUnplannedAssignments } from '../phone/unplanned-assignments.controller.ts';
+import { UnplannedAssignments } from '../phone/unplanned-assignments.ts';
 import { Acceptances } from '../review/acceptances.ts';
 import { BackOfficeRecords } from '../review/back-office-records.ts';
 import { apiCorrections } from '../review/corrections.controller.ts';
@@ -93,6 +113,9 @@ import { TwoStepSecrets } from '../sign-in/two-step-secrets.ts';
 import { apiTwoStep } from '../sign-in/two-step.controller.ts';
 import { TwoStep, TwoStepCheck } from '../sign-in/two-step.ts';
 import { WrongTries } from '../sign-in/wrong-tries.ts';
+import { Intake } from '../sync/intake.ts';
+import { apiSync } from '../sync/sync.controller.ts';
+import { Sync } from '../sync/sync.ts';
 import { apiViewerReads } from '../viewer/viewer-reads.controller.ts';
 import { ViewerReads } from '../viewer/viewer-reads.ts';
 import { answersWith } from './answer-headers.ts';
@@ -120,6 +143,9 @@ export type ProcessSettings = Pick<
   | 'smtpUrl'
   | 'smtpAddress'
   | 'mailFrom'
+  | 'addressesUrl'
+  | 'mapCaFile'
+  | 'mapServersAt'
 >;
 
 // The installation's policy, whole: the process reads its own values (the body limit, the pool,
@@ -128,13 +154,14 @@ export type ProcessPolicy = Policy;
 
 // What a test puts in place of the process's own: where the log goes instead of standard output,
 // the database (a test's own piece of work, undone afterwards), the read-only login's database
-// for a viewer's reads, the mail and the time.
+// for a viewer's reads, the mail, the time and who a phone's address lookup asks.
 export interface ProcessParts {
   readonly stream?: { write(line: string): void };
   readonly database?: Database;
   readonly viewerDatabase?: ViewerDatabase;
   readonly mail?: Mail;
   readonly clock?: Clock;
+  readonly addresses?: Addresses;
 }
 
 export interface Route {
@@ -215,6 +242,16 @@ export class ApiProcess {
     const limits = new Limits(new RateLimits(policy), clock);
     answersWith(server, settings.corsOrigins, (request) => limits.arrived(request.ip));
     const mail = more.mail ?? mailFor(settings);
+    // Our own address server, asked for a phone's address lookup and by nothing else here
+    // (task 2.5.3, part 5): no phone and no browser reaches it.
+    const addresses =
+      more.addresses ??
+      new AddressServer({
+        url: settings.addressesUrl,
+        caFile: settings.mapCaFile,
+        timeoutMs: policy.addressLookupAnswerSeconds * 1000,
+        at: settings.mapServersAt,
+      });
     const hasher = new PasswordHasher(settings.tokenSigningSecret);
     const tokens = new SessionTokens(settings.tokenSigningSecret, policy.accessTokenMinutes);
     const tries = new WrongTries(database, {
@@ -239,6 +276,8 @@ export class ApiProcess {
     });
     const twoStep = new TwoStep(database, { check, clock, mail, sessions, requestNow });
     const breached = shippedBreachedPasswords();
+    // What a phone's login-list entry for a monitor is made from (task 2.5.3, part 4).
+    const offline = new OfflineChecks(settings.tokenSigningSecret);
     const passwords = new Passwords(database, {
       rules: new PasswordRules(policy, breached),
       hasher,
@@ -249,6 +288,7 @@ export class ApiProcess {
       sessions,
       tries,
       limits,
+      offline,
     });
     const people = new People(database, { clock, sessions, mail });
     // A phone's proof of itself (task 2.5.1): nobody is signed in.
@@ -265,7 +305,9 @@ export class ApiProcess {
     const phoneSignIns = new PhoneSignIns(database, {
       tokens,
       hasher,
+      offline,
       tries,
+      assignments: new PhoneAssignments(database),
       clock,
       hours: policy.monitorSessionHours,
       requestNow,
@@ -277,6 +319,17 @@ export class ApiProcess {
       mail,
       clock,
       requestNow,
+    });
+    // What a phone reports besides its records (task 2.5.4), by its own endpoints and in a sync.
+    const unplanned = new UnplannedAssignments(database, { clock, requestNow });
+    const passcodeUses = new PasscodeUses(database, { clock, requestNow });
+    const certifications = new Certifications(database, clock, policy);
+    // The login list's service also makes the passcode's check a sync brings (ADR-473).
+    const loginList = new PhoneLoginList(database, {
+      assignments: new PhoneAssignments(database),
+      offline,
+      clock,
+      entriesPerCall: policy.loginListEntriesPerCall,
     });
     const app = await NestFactory.create<NestFastifyApplication>(
       ProcessModule.around(
@@ -312,7 +365,7 @@ export class ApiProcess {
           [apiQuarantineReview, new QuarantineReview(database, clock, policy)],
           [apiBackOfficeRecords, new BackOfficeRecords(database, clock, policy)],
           // A certification's changes (task 2.4.4, part 4): only an admin revokes.
-          [apiCertifications, new Certifications(database, clock, policy)],
+          [apiCertifications, certifications],
           // A phone enrolled under the master passcode (task 2.5.1): nobody is signed in.
           [
             apiEnrolment,
@@ -325,11 +378,58 @@ export class ApiProcess {
               passcode: passcodeCheck,
               rules: new PasswordRules(policy, breached),
               hasher,
+              offline,
               clock,
             }),
           ],
           [apiPhoneProofs, phoneProofs],
           [apiPhoneSignIns, phoneSignIns],
+          // A session opened on a proven phone under the master passcode (task 2.5.4, part 3).
+          [
+            apiPasscodeSessions,
+            new PasscodeSessions(database, {
+              passcode: passcodeCheck,
+              tokens,
+              rules: new PasscodeSessionRules(policy.monitorSessionHours),
+              assignments: new PhoneAssignments(database),
+              clock,
+            }),
+          ],
+          // What a phone being set up under the master passcode picks from (task 2.5.4, part 4).
+          [
+            apiSetupChoices,
+            new SetupChoices(database, {
+              passcode: passcodeCheck,
+              clock,
+              monitorsAtMost: setupChoicesMonitorsAtMost,
+            }),
+          ],
+          // The lists a phone takes for its monitor's assignment (task 2.5.3).
+          [
+            apiPhoneLists,
+            new PhoneLists(database, { assignments: new PhoneAssignments(database), clock }),
+          ],
+          // The login list and the master passcode's check a phone takes (task 2.5.3, part 4).
+          [apiPhoneLoginList, loginList],
+          // An address looked up for a phone's GPS (task 2.5.3, part 5).
+          [apiAddressLookups, new AddressLookups(addresses)],
+          // What a phone reports besides field events (task 2.5.4): an unplanned assignment.
+          [apiUnplannedAssignments, unplanned],
+          // And every other use of the master passcode it logged with no connection (part 5).
+          [apiPasscodeUses, passcodeUses],
+          // A phone's sync, whole (task 2.6.2): its reports, its records, its numbers.
+          [
+            apiSync,
+            new Sync(database, {
+              intake: new Intake(database, clock, policy),
+              certifications,
+              unplanned,
+              uses: passcodeUses,
+              numbers: new NumberAllocator(database, clock, policy),
+              loginList,
+              clock,
+            }),
+          ],
           [
             apiMasterPasscode,
             new MasterPasscode(database, {

@@ -35,6 +35,9 @@ const shipped = {
   PHONE_CHALLENGE_SECONDS: '120',
   PHONE_TOKEN_MINUTES: '15',
   MONITOR_SESSION_HOURS: '12',
+  LOGIN_LIST_ENTRIES_PER_CALL: '50',
+  ADDRESS_LOOKUP_ANSWER_SECONDS: '5',
+  MEDIA_STORE_ANSWER_SECONDS: '30',
   RATE_LIMIT_WINDOW_SECONDS: '60',
   RATE_LIMIT_REQUESTS_PER_ADDRESS: '3000',
   RATE_LIMIT_REQUESTS_PER_ACCOUNT: '600',
@@ -48,6 +51,7 @@ const shipped = {
   RECONCILIATION_RUN_LONGEST_MINUTES: '10',
   JOB_QUEUE_POLL_SECONDS: '5',
   MAP_SERVER_ANSWER_SECONDS: '30',
+  DEVICE_CLOCK_OFF_LIMIT_MINUTES: '5',
   JOB_TICKETS_AT_MOST: '200',
 };
 
@@ -136,6 +140,9 @@ describe('the policy values', () => {
       phoneChallengeSeconds: 'PHONE_CHALLENGE_SECONDS',
       phoneTokenMinutes: 'PHONE_TOKEN_MINUTES',
       monitorSessionHours: 'MONITOR_SESSION_HOURS',
+      loginListEntriesPerCall: 'LOGIN_LIST_ENTRIES_PER_CALL',
+      addressLookupAnswerSeconds: 'ADDRESS_LOOKUP_ANSWER_SECONDS',
+      mediaStoreAnswerSeconds: 'MEDIA_STORE_ANSWER_SECONDS',
       rateLimitWindowSeconds: 'RATE_LIMIT_WINDOW_SECONDS',
       rateLimitRequestsPerAddress: 'RATE_LIMIT_REQUESTS_PER_ADDRESS',
       rateLimitRequestsPerAccount: 'RATE_LIMIT_REQUESTS_PER_ACCOUNT',
@@ -149,6 +156,7 @@ describe('the policy values', () => {
       reconciliationRunLongestMinutes: 'RECONCILIATION_RUN_LONGEST_MINUTES',
       jobQueuePollSeconds: 'JOB_QUEUE_POLL_SECONDS',
       mapServerAnswerSeconds: 'MAP_SERVER_ANSWER_SECONDS',
+      deviceClockOffLimitMinutes: 'DEVICE_CLOCK_OFF_LIMIT_MINUTES',
       jobTicketsAtMost: 'JOB_TICKETS_AT_MOST',
     });
     expect(Object.keys(shipped).sort()).toEqual(Object.values(policyNames).sort());

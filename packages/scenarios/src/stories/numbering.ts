@@ -59,16 +59,17 @@ export const numbering: Story = {
     const world = await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
       await tx.user.create({ data: { id: dana, name: 'Dana Reyes', role: 'ADMIN' } });
       const luis = await tx.user.create({ data: { name: 'Luis Ortega', role: 'MANAGER_ANALYST' } });
-      const monitors: Record<string, string> = {};
-      for (const name of ['Ana Brooks', 'Jo Kim', 'Sam Grant', 'Tariq Patel']) {
-        monitors[name] = (await tx.user.create({ data: { name, role: 'MONITOR' } })).id;
-      }
       const p1 = await setUpP1(tx, story.policy);
-      return { luis: luis.id, monitors, phones, p1 };
+      return { luis: luis.id, phones, p1 };
     });
     const { luis, p1 } = world;
+    // Created as real ones are: on a phone, online, under the master passcode (ADR-442).
+    const monitors: Record<string, string> = {};
+    for (const name of ['Ana Brooks', 'Jo Kim', 'Sam Grant', 'Tariq Patel']) {
+      monitors[name] = (await story.monitor(name, phones['P1-COL-1'] ?? '')).id;
+    }
     const person = (name: string): string => {
-      const id = world.monitors[name];
+      const id = monitors[name];
       if (id === undefined) throw new Error(`No monitor ${name}`);
       return id;
     };
@@ -355,7 +356,7 @@ export const numbering: Story = {
     const names = new Map<string, string>([
       [dana, 'Dana Reyes'],
       [luis, 'Luis Ortega'],
-      ...Object.entries(world.monitors).map(([name, id]): [string, string] => [id, name]),
+      ...Object.entries(monitors).map(([name, id]): [string, string] => [id, name]),
       ...Object.entries(world.phones).map(([name, id]): [string, string] => [id, name]),
     ]);
     const who = (id: string | null): string => (id === null ? '-' : (names.get(id) ?? id));

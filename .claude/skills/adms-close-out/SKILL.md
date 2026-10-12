@@ -23,11 +23,19 @@ After the last verification run, and before the summary:
 ## 1. Update state first
 
 - `agent_store/NEXT.md` — tick the completed task; keep the Next Atomic Task pointer accurate.
+  Its "Where things stand" says where things stand in a few lines: a finished task's detail is
+  its ADR, its BACKLOG tick and the carry-forward register, never a new paragraph there.
 - `agent_store/BACKLOG.md` — tick the milestone sub-task if one was completed.
 - `agent_store/DECISIONS.md` — append an ADR if you made a judgment call (see `adms-decisions`).
 - `agent_store/DEVIATIONS.md` — append a KD if you found code disagreeing with a skill.
 - `agent_store/REQUIREMENTS.md` — tick any REQ now satisfied.
-- `agent_store/SUMMARY.md` — reflect any ADR added or superseded and any KD opened or closed.
+- `agent_store/SUMMARY.md` — reflect any ADR added or superseded and any KD opened or closed
+  (its topic and its header's "Updated" line; edit by topic, never read it whole).
+- `agent_store/CHAIN.md` — **the only place the chain's counts are written** (ADR-445): replace
+  the numbers that changed (tests by project, a story's checks, migrations, licences) with
+  today's. Never restate a count in `NEXT.md`, `SUMMARY.md` or a skill; never keep a "before it…".
+- **A new lesson about a layer's tests** (a helper, an exact list, what a loosening is tried on)
+  goes in that layer's page beside the `adms-verify` skill, not in the skill's own page.
 - `agent_store/BACKLOG.md` **carry-forward register** — anything your ADRs leave for later gets a
   line under the task that picks it up; strike through the items you did (ADR-274).
 - `agent_store/ROADMAP.md` — the user's one-page roadmap (ADR-280): when a task, milestone or phase

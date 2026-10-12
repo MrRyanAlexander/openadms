@@ -27,6 +27,7 @@ import type { PhoneRecord } from '../device.ts';
 import { uuidv7 } from '../ids.ts';
 import { localMapServers } from '../map-servers.ts';
 import type { Story } from '../runner.ts';
+import { sentAlone } from './board.ts';
 import {
   certifyP1,
   loadP1Map,
@@ -78,7 +79,11 @@ export const p1Voided: Story = {
     );
     await certifyP1(story, office);
 
-    const settings = { crewItemHoursLimit: story.policy.crewDayHours, longestRunMs: 600_000 };
+    const settings = {
+      crewItemHoursLimit: story.policy.crewDayHours,
+      deviceClockOffLimitMinutes: story.policy.deviceClockOffLimitMinutes,
+      longestRunMs: 600_000,
+    };
     const reconciliation = new Reconciliation(
       worker,
       clock,
@@ -209,7 +214,7 @@ export const p1Voided: Story = {
       });
 
     // ------------------------------------------------------------------------------------------
-    const phones = new P1Syncs(story, held);
+    const phones = new P1Syncs(story, office);
     const [mondayEvening, tuesdayEvening, wednesdayMorning] = phones.times;
     if (
       mondayEvening === undefined ||
@@ -579,7 +584,7 @@ export const p1Voided: Story = {
     };
     const send = async (fieldEvent: Sent): Promise<string> => {
       const record: PhoneRecord = { record: 'FIELD_EVENT', fieldEvent };
-      return (await story.intake.receive(record)).answer;
+      return (await sentAlone(story, timeZone, record)).answer;
     };
 
     story.at(
@@ -721,6 +726,8 @@ export const p1Voided: Story = {
     await send(made(tower, '16:30', '16:40', { ticketNumber: '101032', loadCall: 0 }));
     story.at(on('14', '18:45'), 'The worker runs');
     const evening = await reconciliation.run(sync);
+    // The jobs those syncs queued, a record each, are taken up now and write nothing more.
+    await queue.settle(p1);
     story.check(
       'Wednesday’s tickets before review; each flag is the catalogue’s, word for word. 101009 bills while it is in review',
       [of(evening, '101008', '101009', '10103'), await linesOf('101009')],

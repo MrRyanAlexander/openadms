@@ -32,6 +32,7 @@ import type { PasswordHasher } from './password-hasher.ts';
 import type { ResetCodes } from './reset-codes.ts';
 import type { Sessions } from './sessions.ts';
 import type { Limits } from '../process/limits.ts';
+import type { OfflineChecks } from '../phone/offline-checks.ts';
 import type { WrongTries } from './wrong-tries.ts';
 
 type Tx = Prisma.TransactionClient;
@@ -71,6 +72,8 @@ export interface PasswordParts {
   readonly tries: WrongTries;
   // A password set anew starts the count of what each address was refused at the login again.
   readonly limits: Pick<Limits, 'setAnew'>;
+  // A monitor's offline seed is made with their password (ADR-454).
+  readonly offline: Pick<OfflineChecks, 'seedOf'>;
 }
 
 // Who may reset their own password by email: a back-office or outside user. Never a monitor, and
@@ -242,11 +245,21 @@ export class Passwords {
     });
     if (problem !== undefined) return { set: false, code: problem.code, message: problem.message };
     const passwordHash = await this.parts.hasher.hash(password);
+    // A monitor's offline seed is made anew with the password, so no phone's login-list entry
+    // made from the old one is good at the next read; nobody else has one.
+    const offlineSeed =
+      person.role === 'MONITOR' ? await this.parts.offline.seedOf(person.id, password) : null;
     await tx.userCredential.upsert({
       where: { userId: person.id },
-      create: { userId: person.id, passwordHash, passwordChangeRequired: how.changeRequired },
+      create: {
+        userId: person.id,
+        passwordHash,
+        offlineSeed,
+        passwordChangeRequired: how.changeRequired,
+      },
       update: {
         passwordHash,
+        offlineSeed,
         passwordChangeRequired: how.changeRequired,
         failedSignIns: 0,
         lockedUntil: null,

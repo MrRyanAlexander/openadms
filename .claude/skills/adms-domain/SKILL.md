@@ -90,7 +90,7 @@ person can author a completed load or haul-out.
   field time. A ticket waiting for its other event is `PENDING` and **never expires** (ADR-030, 053).
 - **One event of each kind per ticket** (one collection per split property). A second one on the
   same number is a duplicate, quarantined at sync for a person (ADR-022).
-- **Events are corrected, never replaced.** A monitor never edits an event after their shift ends (ADR-240); a
+- **Events are corrected, never replaced.** A monitor never edits an event after submitting it on the phone (ADR-477); a
   permitted person corrects any field in place, the prior value kept in `AuditRecord` (ADR-051, 097).
   This is event-*driven*, not event-*sourced*: there are no "correction events", and the audit log
   keeps every prior value (ADR-236).
@@ -137,7 +137,7 @@ for an ADMS (e.g. "Gates Disaster Recovery") is the **firm**, not a client.
 |---|---|---|---|---|
 | **Admin** | the firm's back office | an admin | back office, two-step sign-in required | everything, setup included |
 | **Manager / analyst** | the firm's back office | an admin | back office, two-step required | what they're granted: review, correct, renumber, void, accept flags, QC, lock as invoiced |
-| **Field monitor** | the firm's (or a monitoring sub's) field staff; each has a system **Monitor ID** (`M004127`) | the master user, **on a phone, online** | Monitor ID + password on an **enrolled phone**, which takes their day's **assignment**; offline from its login list | make records on their assignment's one project; never edit after their shift ends; never see a rate or a code |
+| **Field monitor** | the firm's (or a monitoring sub's) field staff; each has a system **Monitor ID** (`M004127`) | the master user, **on a phone, online** | Monitor ID + password on an **enrolled phone**, which takes their day's **assignment**; offline from its login list | make records on their assignment's one project; never edit one after submitting it; never see a rate or a code |
 | **Read-only viewer** | a **client user**, a **contractor user** or an **auditor** | an admin | web, two-step optional | clients and auditors see their whole project except personal phone and licence numbers; a contractor sees only its own tickets and transactions (a prime, its subs' too) |
 
 The **master passcode** is not a user: whoever holds it (a supervisor) can enrol a phone, set one up
@@ -192,8 +192,8 @@ display labels only (ADR-046, 062). The life of one load:
 3. **Capture (offline): each monitor records a field event.** **New** → scan the badge (the
    certification says whose work it is) → the event waits while the truck loads → **Complete**: the details (a load's **debris type**; the
    tower's load call or weight) → **the number last**, scanned or shown, then re-entered by hand →
-   printed receipt. Reopenable until the monitor ends the shift; never edited by the monitor after
-   (ADR-209, 240). Each event records its assignment and the setup version the phone had.
+   printed receipt. **Sealed for the monitor once submitted**: never reopened or edited by them, synced or
+   not; until then open and theirs to adjust, for days if the work takes days (ADR-209, 477). Each event records its assignment and the setup version the phone had.
 4. **Sync (whenever there's signal, any order).** Every event is received, and each one queues reconciliation of
    its ticket. The only rejection is a duplicate
    number, quarantined in full for a person (ADR-022).
@@ -285,7 +285,7 @@ Breaking one is a defect whatever the tests say. Numbers are stable; other docs 
 4. **Completed loads and haul-outs are system-written only**, never by a person or a user-facing path.
 5. **Records are correctable by permission; the audit log is not.** Any captured field, GPS and times
    included, by a permitted person, in place, prior value kept, then reprocessed. A monitor never
-   edits a field event after their shift ends (ADR-240). A locked ticket is unlocked first (ADR-051, 057).
+   edits a field event after submitting it on the phone (ADR-477). A locked ticket is unlocked first (ADR-051, 057).
 6. **Pick-list values are picked, never typed**; the firm extends the lists it uses (`spec/LISTS.md`).
 7. **Rates live only on pay items**, one per prime; never on a ticket, never in code (ADR-206).
 8. **A certification certifies a container or a crew, never a vehicle.**
@@ -373,3 +373,6 @@ What this page used to say, and why it changed. Never build from the left-hand s
   assignment (ADR-241).
 - A pay item with a code, a name and a description → a code, unique on its project, and a
   description, both the firm's own (ADR-301, correcting ADR-147's reading of Q-139).
+- "Reopenable until the monitor ends the shift", the phone's edit log (ADR-072, 240 (6)) → **sealed for
+  the monitor once submitted on the phone**, synced or not; only the back office changes it; one not
+  yet submitted stays open and theirs to adjust (ADR-477, the user, 2026-10-12).

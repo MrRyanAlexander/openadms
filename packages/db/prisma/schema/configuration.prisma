@@ -118,6 +118,8 @@ model Project {
   incidents                   Incident[]
   dropOffLogs                 DropOffLog[]
   quarantinedRecords          QuarantinedRecord[]
+  // The numbered versions of its setup as its phones were shown it (evidence.prisma).
+  setupManifests              SetupManifest[]
   completedLoads              CompletedLoad[]
   completedLoadCollections    CompletedLoadCollection[]
   completedHaulOuts           CompletedHaulOut[]
@@ -1070,6 +1072,7 @@ model User {
   dropOffLogsCreated          DropOffLog[]          @relation("DropOffLogCreatedBy")
   quarantinedRecords          QuarantinedRecord[]   @relation("QuarantinedRecordMonitor")
   quarantinedRecordsResolved  QuarantinedRecord[]   @relation("QuarantinedRecordResolvedBy")
+  heldRecordsResolved         HeldRecord[]          @relation("HeldRecordResolvedBy")
   // The marks a person set (marks.prisma).
   qcMarksSet                  QcMark[]
   invoiceBatchesCreated       InvoiceBatch[]
@@ -1162,6 +1165,11 @@ model UserCredential {
   // Somebody else set this password and so knows it: its owner sets their own at their next
   // sign-in, and may do nothing else until then (ADR-410).
   passwordChangeRequired Boolean   @default(false) @map("password_change_required")
+  // A monitor's offline seed (ARCHITECTURE §7.2; ADR-449 (5), 454): what a phone's login-list
+  // entry for them is made from, since no phone can compute the keyed hash above. An Argon2id of
+  // the password under a salt of its own, sealed by the API with a key the database never
+  // holds; made when the password is set and never outliving it (the guard migration).
+  offlineSeed            String?   @map("offline_seed")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
@@ -1176,13 +1184,18 @@ model UserCredential {
 // this row; a monitor's session token on a phone, which never rotates. Revoked, the row is
 // history and never changes again. Only the API reads it; the hash is kept out of the audit log.
 model Session {
-  id               String  @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  userId           String  @map("user_id") @db.Uuid
-  refreshTokenHash String  @unique @map("refresh_token_hash")
+  id                    String                 @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId                String                 @map("user_id") @db.Uuid
+  refreshTokenHash      String                 @unique @map("refresh_token_hash")
   // The proven phone a monitor signed in on (ARCHITECTURE §6, Device sessions; §7.2; ADR-443):
   // a monitor's session always names one and never changes it, and no other session names one
   // (the guard migration), so a monitor's ID and password open nothing but a phone's calls.
-  deviceId         String? @map("device_id") @db.Uuid
+  deviceId              String?                @map("device_id") @db.Uuid
+  // Opened under the firm's master passcode, with a connection, and which way (ARCHITECTURE
+  // §7.2, §7.3; AC-02-42; ADR-456 (5)(d), 462): empty on a person's own sign-in. It is no
+  // authentication of the monitor it is for, so it is marked, written as the master passcode's
+  // actor on that phone (the guard migration), and never changes.
+  masterPasscodeSession MasterPasscodeSession? @map("master_passcode_session")
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
@@ -1194,6 +1207,17 @@ model Session {
   @@index([userId])
   @@index([deviceId])
   @@map("session")
+}
+
+// How a session on a phone was opened under the master passcode (ARCHITECTURE §7.2, §7.3;
+// ADR-095, 120, 462): as the phone's monitor, or the temporary session for a monitor picked from
+// the roster, which ends at the end of the project's day. One closed set, fixed in code (the
+// domain's `masterPasscodeSessions`).
+enum MasterPasscodeSession {
+  AS_MONITOR
+  TEMPORARY
+
+  @@map("master_passcode_session")
 }
 
 // What a security event says happened (ARCHITECTURE §6, Abuse; REQ-202b): one closed set, fixed
@@ -1227,8 +1251,16 @@ model SecurityEvent {
   deviceId  String?           @map("device_id") @db.Uuid
   requestId String?           @map("request_id")
 
-  occurredAt DateTime @map("occurred_at") @db.Timestamptz(3)
-  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  occurredAt             DateTime @map("occurred_at") @db.Timestamptz(3)
+  // Only where a phone reported it (ADR-457; BACKLOG C46): `occurredAt` is then the phone's own
+  // clock, this its offset, and `createdAt` when the server received it (ADR-100).
+  deviceUtcOffsetMinutes Int?     @map("device_utc_offset_minutes")
+  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  // Only on a use of the master passcode a phone reported that opened a session on it with no
+  // connection, and which way (ARCHITECTURE §7.2, §7.3; ADR-464): the server holds no session
+  // row for one, so the event itself says it. One opened with a connection says it on its row.
+  masterPasscodeSession MasterPasscodeSession? @map("master_passcode_session")
 
   user   User?   @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   device Device? @relation(fields: [deviceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
@@ -1320,6 +1352,7 @@ model Device {
   incidents          Incident[]
   dropOffLogs        DropOffLog[]
   quarantinedRecords QuarantinedRecord[]
+  syncs              Sync[]
   securityEvents     SecurityEvent[]
   auditRecords       AuditRecord[]
   sessions           Session[]
@@ -1434,25 +1467,30 @@ enum AssignmentOrigin {
 model Assignment {
   // Made by the database for one written on the board; an unplanned one's comes from the phone,
   // so the field events recorded under it before it syncs can name it.
-  id                String             @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  personId          String             @map("person_id") @db.Uuid
+  id                     String             @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  personId               String             @map("person_id") @db.Uuid
   // The day, in the project's time zone.
-  workDate          DateTime           @map("work_date") @db.Date
-  projectId         String             @map("project_id") @db.Uuid
+  workDate               DateTime           @map("work_date") @db.Date
+  projectId              String             @map("project_id") @db.Uuid
   // Their work: the kinds of field event they may record, and whether they certify (ADR-151).
-  fieldEventKinds   FieldEventKind[]   @default([]) @map("field_event_kinds")
-  certifying        Boolean            @default(false)
+  fieldEventKinds        FieldEventKind[]   @default([]) @map("field_event_kinds")
+  certifying             Boolean            @default(false)
   // The forms they may make that aren't a ticket's: ROEs, surveys, incidents, drop-off logs (C42;
   // a check in the guard migration holds it to those four, ADR-308).
-  formDocumentTypes FormDocumentType[] @default([]) @map("form_document_types")
+  formDocumentTypes      FormDocumentType[] @default([]) @map("form_document_types")
   // One site, where the work is at one: a tower, either haul-out end, a drop-off log. A curb
   // collection has none (ADR-195).
-  siteId            String?            @map("site_id") @db.Uuid
+  siteId                 String?            @map("site_id") @db.Uuid
   // The phone: named on the board, or the one that took it. An unplanned one always has its phone.
-  deviceId          String?            @map("device_id") @db.Uuid
-  origin            AssignmentOrigin
+  deviceId               String?            @map("device_id") @db.Uuid
+  origin                 AssignmentOrigin
   // Who wrote it on the board. An unplanned one has no author: the master passcode isn't a person.
-  madeById          String?            @map("made_by_id") @db.Uuid
+  madeById               String?            @map("made_by_id") @db.Uuid
+  // An unplanned one only (ADR-457; BACKLOG C46): when it was made by the phone's clock, as a UTC
+  // instant plus its offset, and when the server received it (ADR-100). A planned one has none.
+  madeAt                 DateTime?          @map("made_at") @db.Timestamptz(3)
+  deviceUtcOffsetMinutes Int?               @map("device_utc_offset_minutes")
+  receivedAt             DateTime?          @map("received_at") @db.Timestamptz(3)
 
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   // Withdrawn from the board; never deleted.

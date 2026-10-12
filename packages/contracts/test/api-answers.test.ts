@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
-import { errorAnswerSchema, healthAnswerSchema } from '../src/index.ts';
+import { z } from 'zod';
+
+import {
+  errorAnswerSchema,
+  healthAnswerSchema,
+  phoneListsSchema,
+  phoneSetupChoicesAnswerSchema,
+  setupChoicesMonitorsAtMost,
+  setupShownSchema,
+} from '../src/index.ts';
 
 describe('what the API says about itself and about a refusal', () => {
   it('the health answer says ok and nothing else', () => {
@@ -22,5 +31,125 @@ describe('what the API says about itself and about a refusal', () => {
     expect(errorAnswerSchema.safeParse({ ...answer, message: { at: 'main' } }).success).toBe(false);
     expect(errorAnswerSchema.safeParse({ ...answer, stack: 'at main' }).success).toBe(false);
     expect(errorAnswerSchema.safeParse({ ...answer, code: 'Something broke' }).success).toBe(false);
+  });
+});
+
+// Every name a schema can send, however deep.
+function keysOf(schema: z.ZodType): string[] {
+  if (schema instanceof z.ZodObject) {
+    return Object.entries(schema.shape as Record<string, z.ZodType>).flatMap(([key, inner]) => [
+      key,
+      ...keysOf(inner),
+    ]);
+  }
+  if (schema instanceof z.ZodArray) return keysOf(schema.element as z.ZodType);
+  if (schema instanceof z.ZodNullable) return keysOf(schema.unwrap() as z.ZodType);
+  return [];
+}
+
+describe('the lists a phone takes', () => {
+  it('AC-07-91: the lists’ shape has no place for a rate, a rule, a transaction, a price or a description, and it is strict, so nothing more can be sent', () => {
+    const keys = keysOf(phoneListsSchema);
+    expect(keys.length).toBeGreaterThan(20);
+    expect(
+      keys.filter((key) =>
+        /rate|rule|transaction|price|amount|description|owner|driver/i.test(key),
+      ),
+    ).toEqual([]);
+    // A prime is named only as whose truck or crew a certification is, and as whose trucks a
+    // row of the site's lookup is for.
+    expect(keys.filter((key) => /prime/i.test(key))).toEqual(['prime', 'primeId']);
+    // The one code is a unit rate pay item's, which the phone prints (ADR-213, 301).
+    expect(keys.filter((key) => /code/i.test(key))).toEqual(['code']);
+    const whole = {
+      setupVersion: 1,
+      blocks: [],
+      controlRanges: [],
+      debrisTypes: { LOAD: [], HAUL_OUT: [] },
+      fieldTags: [],
+      typedNumberReasons: [],
+      certifications: [],
+      sites: [],
+      roes: [],
+      payItems: [],
+      itemNames: [],
+      incidentTypes: [],
+      incidentOffers: [],
+      contractors: [],
+      surveyWorkTypes: [],
+      quantityLookup: [],
+    };
+    expect(phoneListsSchema.safeParse(whole).success).toBe(true);
+    expect(phoneListsSchema.safeParse({ ...whole, rules: [] }).success).toBe(false);
+    const tag = { id: '0199b6a0-0000-7000-8000-000000000001', name: 'Mixed' };
+    expect(phoneListsSchema.safeParse({ ...whole, fieldTags: [tag] }).success).toBe(true);
+    expect(
+      phoneListsSchema.safeParse({ ...whole, fieldTags: [{ ...tag, rate: '7.50' }] }).success,
+    ).toBe(false);
+  });
+
+  it('AC-07-91, ADR-453: a setup version, kept as a project’s phones were shown it, has no place for one either, nor for a certification, an ROE or a phone’s numbers; a phone’s lists say which version they are, from 1', () => {
+    const keys = keysOf(setupShownSchema);
+    expect(
+      keys.filter((key) =>
+        /rate|rule|transaction|price|amount|description|owner|driver|cert|roe|block/i.test(key),
+      ),
+    ).toEqual([]);
+    expect(keys.filter((key) => /prime|code/i.test(key))).toEqual(['code', 'primeId']);
+    const shown = {
+      controlRanges: [],
+      debrisTypes: { LOAD: [], HAUL_OUT: [] },
+      fieldTags: [],
+      typedNumberReasons: [],
+      sites: [],
+      payItems: [],
+      itemNames: [],
+      incidentTypes: [],
+      incidentOffers: [],
+      contractors: [],
+      surveyWorkTypes: [],
+      quantityLookup: [],
+    };
+    expect(setupShownSchema.safeParse(shown).success).toBe(true);
+    expect(setupShownSchema.safeParse({ ...shown, rules: [] }).success).toBe(false);
+    const lists = { ...shown, setupVersion: 1, blocks: [], certifications: [], roes: [] };
+    expect(phoneListsSchema.safeParse(lists).success).toBe(true);
+    expect(phoneListsSchema.safeParse({ ...lists, setupVersion: 0 }).success).toBe(false);
+    expect(
+      phoneListsSchema.safeParse({ ...shown, blocks: [], certifications: [], roes: [] }).success,
+    ).toBe(false);
+  });
+
+  it('AC-07-91, ADR-463: what a phone being set up picks from has no place for a rate, a rule, a price or a description, nor for a password, a phone number, a role or an email address; it is strict, and its monitors are a bounded number', () => {
+    const keys = keysOf(phoneSetupChoicesAnswerSchema);
+    expect(
+      keys.filter((key) =>
+        /rate|rule|transaction|price|amount|description|owner|driver|password|phone|role|email|prime/i.test(
+          key,
+        ),
+      ),
+    ).toEqual([]);
+    // The one code is a unit rate pay item's, which the phone prints (ADR-213, 301).
+    expect(keys.filter((key) => /code/i.test(key))).toEqual(['code']);
+    const id = '00000000-0000-7000-8000-00000000000a';
+    const monitor = { monitorId: id, monitorNumber: 'M004127', name: 'Kim Nguyen' };
+    const whole = {
+      projects: [
+        { id, name: 'Bayline County ROW, Hurricane Delphine', timeZone: 'America/New_York' },
+      ],
+      project: { id, sites: [], payItems: [] },
+      monitors: [monitor],
+      moreMonitorsAfter: null,
+    };
+    const taken = (answer: object) => phoneSetupChoicesAnswerSchema.safeParse(answer).success;
+    expect(taken(whole)).toBe(true);
+    expect(taken({ ...whole, project: null, moreMonitorsAfter: id })).toBe(true);
+    expect(taken({ ...whole, rules: [] })).toBe(false);
+    expect(taken({ ...whole, monitors: [{ ...monitor, phoneNumber: '5550177' }] })).toBe(false);
+    expect(taken({ ...whole, project: { id, sites: [], payItems: [], rates: [] } })).toBe(false);
+    expect(taken({ ...whole, monitors: [{ ...monitor, monitorNumber: '4127' }] })).toBe(false);
+    const full = Array.from({ length: setupChoicesMonitorsAtMost }, () => monitor);
+    expect(taken({ ...whole, monitors: full })).toBe(true);
+    expect(taken({ ...whole, monitors: [...full, monitor] })).toBe(false);
   });
 });

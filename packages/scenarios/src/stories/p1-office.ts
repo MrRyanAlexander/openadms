@@ -18,12 +18,13 @@ import {
   type NewCertification,
   type NewPayItem,
 } from '@open-adms/api';
+import { recordRead, type SyncAnswered, type SyncReceived } from '@open-adms/contracts';
 import type { Reconciliation, RunOutcome } from '@open-adms/worker';
 
 import { createHash } from 'node:crypto';
 
 import { StoryClock, utcOffsetMinutes } from '../clock.ts';
-import { SimulatedDevice, type PhoneRecord } from '../device.ts';
+import { fromPhone, heldId, SimulatedDevice, type PhoneRecord } from '../device.ts';
 import { uuidv7 } from '../ids.ts';
 import type { StoryContext } from '../runner.ts';
 import { p1FieldDays } from './p1-field-days.ts';
@@ -115,7 +116,17 @@ export interface HeldRecord {
   readonly syncedAt: Date;
 }
 
+// A sync a phone would have sent, whole, as the endpoint's boundary read it, with the time its
+// phone found signal.
+export interface HeldSync {
+  readonly deviceId: string;
+  readonly sent: SyncReceived;
+  readonly syncedAt: Date;
+}
+
 export interface P1Office {
+  // Each phone's syncs, held whole; and their records one by one, as their phones hold them.
+  readonly syncs: readonly HeldSync[];
   readonly held: readonly HeldRecord[];
   readonly dana: string;
   readonly luis: string;
@@ -132,23 +143,58 @@ export interface P1Office {
 }
 
 // The two field days, exactly as the story `p1-field-days` records them, on a clock of their
-// own, with every phone's sync held back: each record is kept with the time its phone found
-// signal, and that story's own checks aren't asked again. It sets P1 up as it goes (its sites,
-// forms, unit rate pay items, people, phones and dispatch board).
+// own, with every phone's sync held back: each sync that carries records is kept whole with
+// the time its phone found signal, and that story's own checks aren't asked again. It sets P1
+// up as it goes (its sites, forms, unit rate pay items, people, phones and dispatch board); a
+// sync that carries no record (a phone's first blocks, at the yard) reaches the server then.
 export async function p1FieldDaysHeld(story: StoryContext): Promise<P1Office> {
   const { api } = story;
+  const syncs: HeldSync[] = [];
   const held: HeldRecord[] = [];
   const fieldClock = new StoryClock(p1FieldDays.start);
+  const atTheYard = story.serverOn(fieldClock);
   await p1FieldDays.run({
     ...story,
     clock: fieldClock,
-    intake: {
+    server: {
+      received: (deviceId, sent) => {
+        if (sent.records.length === 0) return atTheYard.received(deviceId, sent);
+        const syncedAt = fieldClock.now();
+        syncs.push({ deviceId, sent, syncedAt });
+        const records: SyncAnswered['records'] = sent.records.map((one) => {
+          const read = recordRead(one);
+          if (!read.read) throw new Error(`A phone held what is no record: ${read.notice.reason}.`);
+          const record = fromPhone(deviceId, read.record);
+          if (record.record === 'CERTIFICATION') {
+            throw new Error('No phone certifies on these two days.');
+          }
+          held.push({ sent: record, syncedAt });
+          // Answered under its own id: the phone takes no other answer for one (ADR-470).
+          return { answer: 'SAVED', id: heldId(record), notes: [] };
+        });
+        // The phone hears "saved" and nothing more: its numbers are topped up when the sync
+        // reaches the server.
+        return Promise.resolve({
+          answered: {
+            unplannedAssignments: [],
+            passcodeUses: [],
+            records,
+            numbers: sent.lastUsed.map(({ projectId, series }) => ({
+              projectId,
+              series,
+              toppedUp: false,
+              blocks: [],
+            })),
+            masterPasscode: { version: sent.holds.masterPasscodeVersion ?? 1, check: null },
+            setupVersion: null,
+          },
+        });
+      },
       receive: (sent: PhoneRecord) => {
         held.push({ sent, syncedAt: fieldClock.now() });
-        return Promise.resolve({ answer: 'SAVED', id: '', notes: [] });
+        return Promise.resolve({ answer: 'SAVED', id: heldId(sent), notes: [] });
       },
-      topUp: story.intake.topUp.bind(story.intake),
-    } as unknown as typeof story.intake,
+    },
     at: (time) => {
       fieldClock.set(time);
     },
@@ -162,6 +208,7 @@ export async function p1FieldDaysHeld(story: StoryContext): Promise<P1Office> {
     (await api.disposalSite.findFirstOrThrow({ where: { name } })).id;
   const project = await api.project.findFirstOrThrow();
   return {
+    syncs,
     held,
     dana: await person('Dana Reyes'),
     luis: await person('Luis Ortega'),
@@ -296,24 +343,35 @@ export async function certifyP1(story: StoryContext, office: P1Office): Promise<
 export class P1Syncs {
   readonly times: readonly Date[];
   private readonly story: StoryContext;
+  private readonly syncs: readonly HeldSync[];
   private readonly held: readonly HeldRecord[];
 
-  constructor(story: StoryContext, held: readonly HeldRecord[]) {
+  constructor(story: StoryContext, office: Pick<P1Office, 'syncs' | 'held'>) {
     this.story = story;
-    this.held = held;
-    this.times = [...new Set(held.map((each) => each.syncedAt.getTime()))]
+    this.syncs = office.syncs;
+    this.held = office.held;
+    this.times = [...new Set(office.syncs.map((each) => each.syncedAt.getTime()))]
       .sort((left, right) => left - right)
       .map((time) => new Date(time));
   }
 
-  // A phone's records reach the server: the ones it sent at that sync in `p1-field-days`.
+  // The phones' syncs reach the server, each whole and through the API's own `Sync`: the ones
+  // sent at that time in `p1-field-days`, each phone's clock as it sends it now. How many
+  // records they carried; one that isn't saved stops the story.
   async arrive(syncedAt: Date): Promise<number> {
-    const arriving = this.held.filter((each) => each.syncedAt.getTime() === syncedAt.getTime());
-    for (const { sent } of arriving) {
-      const answer = await this.story.intake.receive(sent);
-      if (answer.answer !== 'SAVED') throw new Error(`Not saved: ${answer.answer}`);
+    let records = 0;
+    for (const { deviceId, sent, syncedAt: at } of this.syncs) {
+      if (at.getTime() !== syncedAt.getTime()) continue;
+      const { answered } = await this.story.server.received(deviceId, {
+        ...sent,
+        clockAt: this.story.clock.now(),
+      });
+      for (const answer of answered.records) {
+        if (answer.answer !== 'SAVED') throw new Error(`Not saved: ${answer.answer}`);
+      }
+      records += answered.records.length;
     }
-    return arriving.length;
+    return records;
   }
 
   // Jo's crew photograph with each unit rate ticket (golden mission §2), taken as the ticket
@@ -327,7 +385,7 @@ export class P1Syncs {
       const event = record.fieldEvent;
       const file = `P1-UR-1/${event.endedAt.toISOString()}/crew`;
       const fingerprint = createHash('sha256').update(file).digest('hex');
-      const answer = await this.story.intake.receive({
+      const answer = await this.story.server.receive({
         record: 'PHOTO',
         photo: {
           id: uuidv7(event.endedAt),

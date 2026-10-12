@@ -5,12 +5,12 @@
 // this list (openapi.ts). An object a caller sends is strict: a field its schema doesn't name
 // refuses the whole request, and an endpoint whose schema would let one through can't be defined.
 import {
-  assignmentFormDocumentTypes,
   backOfficeCreated,
   backOfficeRolesChanged,
   crewTimeConversions,
   fieldEventKinds,
   incidentOffers,
+  masterPasscodeSessions,
   measuredAs,
   numberSeries,
   permissions,
@@ -33,7 +33,14 @@ import {
   phoneChallengeAnswerSchema,
   monitorCreatedAnswerSchema,
   monitorSignedInAnswerSchema,
+  passcodeSessionOpenedAnswerSchema,
+  passcodeUseAnswerSchema,
+  phoneAddressLookupAnswerSchema,
+  phoneListsAnswerSchema,
+  phoneSetupChoicesAnswerSchema,
+  phoneLoginListAnswerSchema,
   phoneMonitorAnswerSchema,
+  unplannedAssignmentAnswerSchema,
   phoneEnrolledAnswerSchema,
   phoneProvenAnswerSchema,
   provenPhoneAnswerSchema,
@@ -56,6 +63,12 @@ import {
 import { places } from './field-event-details.ts';
 import { formDefinitionFields } from './form-definition.ts';
 import {
+  assignedWork,
+  once,
+  passcodeUseReportSchema,
+  unplannedAssignmentReportSchema,
+} from './phone-reports.ts';
+import {
   addressSources,
   carriedTicketRecordSchema,
   certificationRecordSchema,
@@ -76,6 +89,8 @@ import {
   ticketUnvoidRecordSchema,
   ticketVoidRecordSchema,
 } from './review-answers.ts';
+import { cornerCount, inches } from './sync-records.ts';
+import { syncAnsweredSchema, syncSentSchema } from './sync.ts';
 import {
   billingUnits,
   clientRecordSchema,
@@ -657,7 +672,6 @@ const searched = z.strictObject({ search: z.string().trim().max(200).optional() 
 const projectId = z.strictObject({ projectId: z.uuid() });
 // A number of a series: the database says where a series may start and end.
 const seriesNumber = z.number().int().min(1).max(2_000_000_000);
-const once = (values: readonly string[]): boolean => new Set(values).size === values.length;
 const stated = (changes: object): boolean => Object.keys(changes).length > 0;
 
 // Step 1: search first; a client the firm has is picked, never created again (ADR-023).
@@ -1307,10 +1321,18 @@ export const quantityLookupEndpoint = endpoint({
 export const siteQuantityLookupEndpoint = endpoint({
   ...standing,
   name: 'siteQuantityLookup',
-  summary: 'What one site’s phones ask for: its rows of the project’s quantity lookup.',
+  summary:
+    'What one site’s phones ask for: its rows of the project’s quantity lookup, worked out from the setup as it stands; or, asked with a setup version, as its phones held them under that version, for the debris types phones are shown. No such version of its project: not found.',
   method: 'GET',
   path: '/sites/:siteId/quantity-lookup',
   params: siteId,
+  query: z.strictObject({
+    // A setup version of the site's project, as a field event records one: 1, 2, 3…
+    setupVersion: z
+      .string()
+      .regex(/^[1-9][0-9]{0,8}$/)
+      .optional(),
+  }),
   answer: quantityLookupAnswerSchema,
 });
 
@@ -1542,7 +1564,7 @@ export const monitorSessionHeader = 'x-adms-monitor-session';
 export const signInOnPhoneEndpoint = endpoint({
   name: 'signInOnPhone',
   summary:
-    'A field monitor signs in on an enrolled phone, online, with their Monitor ID and password. The answer is their session’s token, which the phone’s calls carry in the x-adms-monitor-session header beside the phone’s own token, and how long it lasts. Open to a phone in service that has proved itself, by its token. Whatever is wrong is refused by one code; wrong tries in a row make the next wait longer, and at the policy’s count lock the login until an admin sets the password anew.',
+    'A field monitor signs in on an enrolled phone, online, with their Monitor ID and password. The answer is their session’s token, which the phone’s calls carry in the x-adms-monitor-session header beside the phone’s own token, how long it lasts, and the assignment the phone takes: theirs for the day, by its project’s own time zone, or none with the reason (none that day; several that day and nothing to say which is this phone’s). Nobody enters the master passcode and nobody picks a project. Open to a phone in service that has proved itself, by its token. Whatever is wrong is refused by one code; wrong tries in a row make the next wait longer, and at the policy’s count lock the login until an admin sets the password anew.',
   access: 'PROVEN_PHONE',
   method: 'POST',
   path: '/phones/current/sign-ins',
@@ -1551,6 +1573,52 @@ export const signInOnPhoneEndpoint = endpoint({
     password: z.string().min(1).max(4096),
   }),
   answer: monitorSignedInAnswerSchema,
+});
+
+// A session opened on a phone under the firm's master passcode, with a connection (ARCHITECTURE
+// §7.2, §7.3, §7.5; AC-02-42; ADR-095, 106, 120, 456 (5)(d), 462). The call is a proven phone's,
+// in service, and carries the passcode, checked by the one check every act under it shares: a
+// wrong one counts as at enrolment and is refused by the same one code. It is opened for a
+// monitor in service, named by their id as the phone's lists give it, one of two ways: as the
+// phone's monitor, in place of their own password; or the temporary session for a monitor
+// picked from the roster when a phone changes hands, which also ends with the project's day.
+// It is no sign-in of that monitor's: whoever holds the passcode is not known, so the session
+// is marked and the record names the master passcode itself, on that phone. Its token is sent
+// as a monitor's own is. The limits here only bound what is read.
+export const openPasscodeSessionOnPhoneEndpoint = endpoint({
+  name: 'openPasscodeSessionOnPhone',
+  summary:
+    'A session is opened on an enrolled phone under the firm’s master passcode, for a monitor in service: as the phone’s monitor, or the temporary session for a monitor picked from the roster. The answer is what a monitor’s own sign-in is answered (the session’s token for the x-adms-monitor-session header, how long it lasts, the assignment the phone takes or why none) and which way it was opened. The session is marked as the master passcode’s and is no sign-in of the monitor’s. Neither lasts longer than a monitor’s own sign-in; the temporary one also ends at the end of the day of the project whose assignment the phone takes, by that project’s time zone. Any other session on the phone ends. Open to a phone in service that has proved itself, by its token. A passcode that isn’t taken is refused by one code; wrong tries count as they do when a phone is enrolled.',
+  access: 'PROVEN_PHONE',
+  method: 'POST',
+  path: '/phones/current/passcode-sessions',
+  body: z.strictObject({
+    personId: z.uuid(),
+    kind: z.enum(masterPasscodeSessions),
+    passcode: z.string().min(1).max(4096),
+  }),
+  answer: passcodeSessionOpenedAnswerSchema,
+});
+
+// A use of the firm's master passcode a phone logged with no connection, reported when it has
+// one (ARCHITECTURE §7's notes, §7.3, §7.5, §10; AC-02-23, 42, 46; BACKLOG 2.5.4, C122…C125;
+// ADR-106, 456 (3), (5)(e), 462, 464; REQ-202b). Only what no other report carries: a setup, a
+// site move and a switch to a monitor with no assignment arrive as an unplanned assignment.
+// Here: the phone passed to a monitor who has their own assignment; a session opened on the
+// phone as its monitor, or the temporary one; and the passcode typed wrong. The phone checked
+// the passcode against its own check; the server is not sent it, takes the phone's word, the
+// phone having proved itself with its device key, and counts no try: a wrong try on a phone
+// never moves the server's own count or its lock. The id is the phone's own, so the same
+// report sent again is answered "already saved" and kept once. Nobody need be signed in.
+export const reportPasscodeUseEndpoint = endpoint({
+  name: 'reportPasscodeUse',
+  summary:
+    'A phone reports a use of the firm’s master passcode it logged with no connection: the phone passed to a monitor who has their own assignment, a session opened on it as the phone’s monitor or the temporary session for a monitor picked from the roster, or the passcode typed wrong. It says when by the phone’s own clock, with the clock’s offset, and for which monitor; a wrong try names nobody. The id is the phone’s own: the same report sent again is answered as already saved and kept once. It is kept as the phone reports it, for a monitor archived since and from a phone out of service too, and is not saved only where it names somebody who is no monitor or its id is another record’s. The passcode itself is never sent: the phone checked it, and a wrong try reported here does not count toward the lock on the server’s own check. Each one saved is a security event at the phone’s own time: a phone switched and a use of the master passcode; a use that says which way a session was opened; or a failed try. A switch or a session saved ends what anybody else had open on that phone before it, by the phone’s clock. A setup, a site move and a switch to a monitor who has no assignment are reported as an unplanned assignment instead. Open to a phone that has proved itself, by its token; nobody need be signed in.',
+  access: 'PROVEN_PHONE',
+  method: 'POST',
+  path: '/phones/current/passcode-uses',
+  body: passcodeUseReportSchema,
+  answer: passcodeUseAnswerSchema,
 });
 
 export const signOutOnPhoneEndpoint = endpoint({
@@ -1571,6 +1639,48 @@ export const phoneMonitorEndpoint = endpoint({
   method: 'GET',
   path: '/phones/current/monitor',
   answer: phoneMonitorAnswerSchema,
+});
+
+export const phoneListsEndpoint = endpoint({
+  name: 'phoneLists',
+  summary:
+    'The lists a phone holds for its work, asked for at any time it has a connection: the assignment the phone takes now for the monitor signed in (the sign-in’s own rule, asked again) and that assignment’s lists, or neither with the reason. The lists are the blocks of numbers the phone holds, the forms’ debris types without those hidden on phones, the field tags, the reasons for a typed number, the unit rate pay items the assignment names, what its incidents and surveys pick from, and the setup version they are, which every field event the phone makes records. Never a rate, a rule, a transaction or a load’s pay item. Nothing is written but a new setup version, made when what the project’s phones are shown differs from the newest one. Open to a proven phone with its monitor’s session token.',
+  access: 'MONITOR_ON_PHONE',
+  method: 'GET',
+  path: '/phones/current/lists',
+  answer: phoneListsAnswerSchema,
+});
+
+export const phoneLoginListEndpoint = endpoint({
+  name: 'phoneLoginList',
+  summary:
+    'The login list and the master passcode’s check a phone holds for signing in with no connection, asked for at any time it has one. The phone says what it holds: the version of the master passcode whose check it has, and a mark for each monitor’s entry. The answer is the version in force, with its check where the phone holds another or none; and the login list of the project of the assignment the phone takes now for the monitor signed in: that monitor and every monitor in service with an assignment that stands on the project for its today or later, each with the mark of their entry, and the entry itself where the phone didn’t send that mark. An entry is a slow hash made for this phone alone, kept nowhere on the server; a password set anew makes its mark good no more. One call makes a bounded number of entries and says there are more. With no assignment there is no list and the phone keeps what it holds. Never a password or a hash the server checks a sign-in against. Nothing is written but which version of the master passcode’s check the phone was sent. Open to a proven phone with its monitor’s session token.',
+  access: 'MONITOR_ON_PHONE',
+  method: 'POST',
+  path: '/phones/current/login-list',
+  body: z.strictObject({
+    masterPasscodeVersion: z.number().int().min(1).nullable(),
+    entries: z
+      .array(z.strictObject({ monitorId: z.uuid(), mark: z.string().min(1).max(100) }))
+      .max(5000),
+  }),
+  answer: phoneLoginListAnswerSchema,
+});
+
+// A point on the earth, each part an exact decimal: no database stands behind a lookup to say
+// how far a coordinate may go, so the request does.
+const onTheEarth = (most: number) =>
+  coordinate.refine((value) => Math.abs(Number(value)) <= most, 'not on the earth');
+
+export const phoneAddressLookupEndpoint = endpoint({
+  name: 'phoneAddressLookup',
+  summary:
+    'The address of a GPS point, for a collection’s "Look up address": the street number and name our own address server finds there, or none with the reason (the map has no street there; the address server gave no answer in time). The monitor then types it, as with no connection. The phone asks the API and the API asks the address server, which no phone and no browser reaches. The point is sent in the body, never in the address of the request; neither the point nor the address is logged or kept. Nothing is written. Open to a proven phone with its monitor’s session token.',
+  access: 'MONITOR_ON_PHONE',
+  method: 'POST',
+  path: '/phones/current/address-lookups',
+  body: z.strictObject({ latitude: onTheEarth(90), longitude: onTheEarth(180) }),
+  answer: phoneAddressLookupAnswerSchema,
 });
 
 export const removePhoneEndpoint = endpoint({
@@ -1615,22 +1725,6 @@ export const changeMasterPasscodeEndpoint = endpoint({
 // whole), its site and its phone may change while it stands. Nothing stops a second one for a
 // person or a phone on a day (AC-02-29). The board is read by the whole back office.
 const assignmentId = z.strictObject({ assignmentId: z.uuid() });
-const assignedWork = {
-  // The kinds of field event they may record; none on a certifier's or a helper's day.
-  fieldEventKinds: z.array(z.enum(fieldEventKinds)).max(fieldEventKinds.length).refine(once),
-  certifying: z.boolean(),
-  // The forms that are no ticket's (ADR-308).
-  formDocumentTypes: z
-    .array(z.enum(assignmentFormDocumentTypes))
-    .max(assignmentFormDocumentTypes.length)
-    .refine(once),
-  // One of the project's own sites, where the work is at one; null on a curb collection.
-  siteId: z.uuid().nullable(),
-  // The phone, where one is named; null where they sign in on whichever they pick up.
-  deviceId: z.uuid().nullable(),
-  // The project's unit rate pay items they do that day, each once.
-  payItemIds: z.array(z.uuid()).max(200).refine(once),
-};
 
 export const listAssignmentsEndpoint = endpoint({
   name: 'listAssignments',
@@ -1688,6 +1782,72 @@ export const withdrawAssignmentEndpoint = endpoint({
   path: '/assignments/:assignmentId/withdrawals',
   params: assignmentId,
   answer: savedAnswer(assignmentRecordSchema),
+});
+
+// What a phone being set up under the firm's master passcode picks from, with a connection
+// (ARCHITECTURE §7.1 steps 1, 2; §7.5; adms-field-app §4A.0 (5); AC-02-38; ADR-106, 240, 462
+// (4)(f), 463). OWASP ASVS 5.0 8.2.1, 8.2.2, 14.2.1, 14.2.6, 16.3.1; API Security Top 10 (2023)
+// API1…API5. Nobody is signed in yet, so the call is a proven phone's, in service, **and
+// carries the passcode**, checked by the one check every act under it shares: a phone's proof
+// alone (a lost phone keeps its key until it is revoked) would list the firm's projects and
+// monitors. A read, but a POST: the passcode is in the body, never in a path or a query. Each
+// read is a use of the passcode in the security log. The limits here only bound what is read.
+export const phoneSetupChoicesEndpoint = endpoint({
+  name: 'phoneSetupChoices',
+  summary:
+    'What a phone being set up under the firm’s master passcode picks from, with a connection and nobody signed in: the firm’s open projects; the monitors in service by name and Monitor ID, a thousand a call at most (the answer says where to ask on from); and, where an open project is named, that project’s live sites and its unit rate pay items in service, as a phone’s lists show them. A project that is closed or is none is answered no lists. Never a rate, a rule or a load’s pay item; never a password or a phone number. Nothing is written but the use of the passcode, a security event naming the phone. Open to a phone in service that has proved itself, by its token. A passcode that isn’t taken is refused by one code; wrong tries count as they do when a phone is enrolled.',
+  access: 'PROVEN_PHONE',
+  method: 'POST',
+  path: '/phones/current/setup-choices',
+  body: z.strictObject({
+    passcode: z.string().min(1).max(4096),
+    // The project picked, for its sites and unit rate pay items; null before one is.
+    projectId: z.uuid().nullable(),
+    // The last monitor of the answer before: its `moreMonitorsAfter`. Null for the first.
+    monitorsAfter: z.uuid().nullable(),
+  }),
+  answer: phoneSetupChoicesAnswerSchema,
+});
+
+// An unplanned assignment, reported by the phone it was made on (ARCHITECTURE §7's note, §7.5,
+// §9 (3), (4), §10; AC-02-38, AC-05-40; BACKLOG 2.5.4, C46; ADR-240, 438, 456, 457). A monitor
+// had no assignment, and whoever holds the master passcode set the phone up on the spot: a
+// project, their work, one site, and the monitor from the phone's login list, with or without
+// a connection. The phone checked the passcode against its own check; the server is not sent
+// it and takes the phone's word, the phone having proved itself with its device key. The id is
+// the phone's own, so the same report sent again is answered "already saved" and kept once. The
+// day is the day the phone's clock said, in the project's time zone. Nobody need be signed in.
+// **A site move and a monitor switch are reported the same way** (AC-02-46, 47; ADR-456 (5),
+// 458): the phone moved to another of its project's sites is set up anew there, a new
+// unplanned assignment, and the earlier one stands; the phone passed to a monitor who has no
+// assignment it could take is a new one for them, made at a switch. The monitor's sign-in on
+// that phone then takes the one made on it last.
+// The limits here only bound what is read.
+export const reportUnplannedAssignmentEndpoint = endpoint({
+  name: 'reportUnplannedAssignment',
+  summary:
+    'A phone reports an unplanned assignment made on it under the firm’s master passcode, when its monitor had none: the project, the monitor, their work (the kinds of field event, certifying, the forms, the unit rate pay items), one site where the work is at one, and when it was made by the phone’s own clock, with the clock’s offset. The id is the phone’s own: the same report sent again is answered as already saved and kept once. It is kept as the phone reports it, marked unplanned on the dispatch board and never flagged, for a phone out of service too; its day is the day the phone’s clock said, in the project’s time zone. It is not saved only where something it names is no record of the kind it must be, or its id is another record’s. The passcode itself is never sent: the phone checked it. It says what it was made at: the phone set up (a phone moved to another of its project’s sites is set up anew there, and the earlier assignment stands with everything recorded under it), or the phone passed to another monitor, who had no assignment it could take. Each one saved is two security events at the phone’s own time: a phone set up or a phone switched, and a use of the master passcode. Where several of a monitor’s assignments for a day name one phone, their sign-in on it takes the one made on it last. Open to a phone that has proved itself, by its token; nobody need be signed in.',
+  access: 'PROVEN_PHONE',
+  method: 'POST',
+  path: '/phones/current/unplanned-assignments',
+  body: unplannedAssignmentReportSchema,
+  answer: unplannedAssignmentAnswerSchema,
+});
+
+// One sync, whole (ARCHITECTURE §9, §10; spec/parts/05-sync.md steps 2…8; AC-05-03, 04, 15, 16,
+// 20, 45…47; AC-10-35, 46, 51; BACKLOG 2.6.2, C64, C69, C126…C131; ADR-022, 052, 065, 100, 466…472;
+// REQ-016, 203). The phone has proved itself; it never says which phone it is. The body and the
+// answer are `sync.ts`'s. Nothing is refused over eligibility, and nothing is reconciled while
+// the phone waits.
+export const syncPhoneEndpoint = endpoint({
+  name: 'syncPhone',
+  summary:
+    'A phone syncs: it sends its clock, the unplanned assignments made on it, the uses of the master passcode it logged, its records (field events, scale receipts, incidents, drop-off logs, surveys, ROEs and certifications, each under the id the phone made for it, 200 at most) and the last number it used of each series. The server keeps the sync with both clocks and their difference, then reads each thing in that order and gives each its own answer, in the order sent. A record is saved; already saved, where it was sent before (never stored twice, and never taken for a duplicate ticket number); kept in quarantine, not saved, where another record holds its number, with the reason and the record that holds it; or not saved, where it can’t be read, names something the server doesn’t have, was made under an assignment that was not saved, or is a certification its own rules refuse: what was sent is then held on the server exactly as sent, for a person, and the answer says so. One record never stops the others. Nothing is refused over eligibility, and no answer carries a status, a flag or money: reconciliation is queued for what arrived and never waited for. For each series reported the answer lists the blocks of numbers the phone holds now, topped up to a full block where the project has such a series. A phone with more than one sync’s worth sends another. Open to a phone that has proved itself, by its token; nobody need be signed in.',
+  access: 'PROVEN_PHONE',
+  method: 'POST',
+  path: '/phones/current/syncs',
+  body: syncSentSchema,
+  answer: syncAnsweredSchema,
 });
 
 // Review's marks (spec/parts/08-review-and-corrections.md steps 5…7; spec/parts/09, invoicing;
@@ -2245,8 +2405,6 @@ export const createFieldEventEndpoint = endpoint({
 // certification is made, and a modified truck certified again, on a phone, so both arrive with
 // its sync (BACKLOG 2.6.2); its QC status is `setQcStatus`'s.
 const certificationId = z.strictObject({ certificationId: z.uuid() });
-// A whole number of inches, 1 or more (adms-certifications §3A.3).
-const inches = z.number().int().min(1).max(9999);
 
 export const correctCertificationBoxEndpoint = endpoint({
   name: 'correctCertificationBox',
@@ -2272,8 +2430,7 @@ export const correctCertificationBoxEndpoint = endpoint({
         diameter: inches,
         radius: inches,
         run: inches,
-        // How many radius corners.
-        corners: z.number().int().min(1).max(99),
+        corners: cornerCount,
       })
       .partial()
       .refine(stated),
@@ -2378,8 +2535,16 @@ export const endpoints: readonly Endpoint[] = [
   provenPhoneEndpoint,
   createMonitorOnPhoneEndpoint,
   signInOnPhoneEndpoint,
+  openPasscodeSessionOnPhoneEndpoint,
+  reportPasscodeUseEndpoint,
   signOutOnPhoneEndpoint,
   phoneMonitorEndpoint,
+  phoneListsEndpoint,
+  phoneLoginListEndpoint,
+  phoneAddressLookupEndpoint,
+  phoneSetupChoicesEndpoint,
+  reportUnplannedAssignmentEndpoint,
+  syncPhoneEndpoint,
   removePhoneEndpoint,
   changeMasterPasscodeEndpoint,
   listAssignmentsEndpoint,

@@ -26,7 +26,6 @@ import {
   Corrections,
   FormSetup,
   InvoiceLocks,
-  NumberAllocator,
   PayItemSetup,
   ProjectSetup,
   QcMarks,
@@ -36,7 +35,7 @@ import {
   type QcMarked,
   type Reviewed,
 } from '@open-adms/api';
-import { systemActorId, type FieldEventKind, type NumberSeries } from '@open-adms/db';
+import { systemActorId, type FieldEventKind } from '@open-adms/db';
 import { MapServers, Mileages, Reconciliation, type RunOutcome } from '@open-adms/worker';
 
 import { createHash } from 'node:crypto';
@@ -45,7 +44,6 @@ import { projectTime, utcOffsetMinutes } from '../clock.ts';
 import { chained, type Completed, made, scanned } from '../device.ts';
 import { uuidv7 } from '../ids.ts';
 import { localMapServers } from '../map-servers.ts';
-import { phoneLists } from '../phone-lists.ts';
 import type { Story } from '../runner.ts';
 import {
   certifyP1,
@@ -56,7 +54,7 @@ import {
   saved,
   setUpP1Pricing,
 } from './p1-office.ts';
-import { assigned } from './board.ts';
+import { assigned, firstBlocks, taken } from './board.ts';
 import { p1TimeZone as timeZone } from './p1.ts';
 
 const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-04:00`;
@@ -141,7 +139,7 @@ export const goldenMission: Story = {
   async run(story) {
     const { api, worker, clock } = story;
     const office = await p1FieldDaysHeld(story);
-    const { held, dana, luis, sam, p1, coastline, samPhone } = office;
+    const { dana, luis, sam, p1, coastline, samPhone } = office;
     const done = (completed: Completed) => {
       if (!completed.saved) throw new Error(`Not saved: ${completed.reason}`);
       return completed.event;
@@ -430,7 +428,11 @@ export const goldenMission: Story = {
     );
 
     // ------------------------------------------------------------------------------------------
-    const settings = { crewItemHoursLimit: story.policy.crewDayHours, longestRunMs: 600_000 };
+    const settings = {
+      crewItemHoursLimit: story.policy.crewDayHours,
+      deviceClockOffLimitMinutes: story.policy.deviceClockOffLimitMinutes,
+      longestRunMs: 600_000,
+    };
     const reconciliation = new Reconciliation(
       worker,
       clock,
@@ -611,14 +613,16 @@ export const goldenMission: Story = {
         siteId: p2Tdsr,
       }),
     };
-    const allocator = new NumberAllocator(api, clock, story.policy);
-    for (const series of ['LOAD', 'ROE'] as const satisfies readonly NumberSeries[]) {
-      await saved(
-        allocator.topUp(
-          { person: ana, deviceId: p2Phone('P2-COL-1') },
-          { projectId: p2, series, lastUsedNumber: null },
-        ),
-      );
+    await firstBlocks(story, p2Phone('P2-COL-1'), timeZone, p2, ['LOAD', 'ROE']);
+    // Each signs in on their second phone, which takes the assignment that names it: P2's, though
+    // each has P1's too that day (AC-02-29, 36; ADR-444).
+    for (const [name, phone, assignment] of [
+      ['Ana Brooks', 'P2-COL-1', p2Board.ana],
+      ['Kim Nguyen', 'P2-TWR-TDSR', p2Board.kim],
+    ] as const) {
+      if ((await taken(story, await story.monitor(name), p2Phone(phone))) !== assignment) {
+        throw new Error(`${phone} took another assignment than P2’s.`);
+      }
     }
     const anaP2 = story.phone({
       name: 'P2-COL-1',
@@ -626,8 +630,7 @@ export const goldenMission: Story = {
       monitorId: ana,
       assignmentId: p2Board.ana,
       projectId: p2,
-      setupVersion: 1,
-      lists: await phoneLists(api, { assignmentId: p2Board.ana, deviceId: p2Phone('P2-COL-1') }),
+      lists: await story.lists.held({ assignmentId: p2Board.ana, deviceId: p2Phone('P2-COL-1') }),
       timeZone,
     });
     const kimP2 = story.phone({
@@ -637,8 +640,10 @@ export const goldenMission: Story = {
       assignmentId: p2Board.kim,
       projectId: p2,
       siteId: p2Tdsr,
-      setupVersion: 1,
-      lists: await phoneLists(api, { assignmentId: p2Board.kim, deviceId: p2Phone('P2-TWR-TDSR') }),
+      lists: await story.lists.held({
+        assignmentId: p2Board.kim,
+        deviceId: p2Phone('P2-TWR-TDSR'),
+      }),
       timeZone,
     });
     // R-0001…R-0006 are ROEs the mission doesn't tell: its two are R-0007 and R-0008.
@@ -739,7 +744,7 @@ export const goldenMission: Story = {
     );
 
     // ------------------------------------------------------------------------------------------
-    const phones = new P1Syncs(story, held);
+    const phones = new P1Syncs(story, office);
     const [mondayEvening, tuesdayEvening, wednesdayMorning] = phones.times;
     if (
       mondayEvening === undefined ||
@@ -754,7 +759,7 @@ export const goldenMission: Story = {
     );
     await phones.arrive(mondayEvening);
     await phones.crewPhotographs(mondayEvening);
-    const p2Sent = [await anaP2.sync(story.intake), await kimP2.sync(story.intake)];
+    const p2Sent = [await anaP2.sync(story.server), await kimP2.sync(story.server)];
     const monday = await reconciliation.run(sync(p1));
     const mondayP2 = await reconciliation.run(sync(p2));
     story.check(

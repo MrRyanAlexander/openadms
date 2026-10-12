@@ -682,6 +682,25 @@ export class ProjectRead {
         where: { id: { in: idsOf((row) => row.scaleReceiptId) } },
       }),
     );
+    // How far each phone's clock stood from the server's at the sync that brought its field
+    // event, in whole minutes with the seconds dropped: read through the idempotency ledger,
+    // whose row is under the id the phone made (ARCHITECTURE §10; ADR-100, 471…473). A record
+    // created in the back office, or one stored by no sync, has no difference and no flag.
+    const clockOff = new Map(
+      (
+        await db.syncedRecord.findMany({
+          where: {
+            recordId: { in: rows.flatMap((row) => (row.source === 'DEVICE' ? [row.id] : [])) },
+            recordKind: 'FIELD_EVENT',
+            answer: 'SAVED',
+          },
+          select: { recordId: true, sync: { select: { clockDifferenceSeconds: true } } },
+        })
+      ).map(({ recordId, sync }) => [
+        recordId,
+        Math.trunc(Number(sync.clockDifferenceSeconds) / 60) || 0,
+      ]),
+    );
 
     const certificationOf = new Map(certifications.map((each) => [each.certNumber, each]));
     const siteOf = byId(sites);
@@ -744,8 +763,7 @@ export class ProjectRead {
           device === undefined
             ? null
             : { enrolledAt: device.enrolledAt, outOfServiceAt: device.outOfServiceAt },
-        // The difference at the sync is kept with the sync's own record, Phase 2's (ADR-344).
-        clockOffAtSyncMinutes: null,
+        clockOffAtSyncMinutes: clockOff.get(row.id) ?? null,
         carriedCount: row.carriedCount,
         loadCall: row.loadCall,
         scaleReceiptId: row.scaleReceiptId,

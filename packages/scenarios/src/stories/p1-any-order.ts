@@ -7,13 +7,18 @@
 //
 // One thing can't arrive backwards: a scale receipt is sent before the disposal that points at
 // it (ADR-326), so each receipt goes first. That is the phone's own order, not the server's wish.
-import type { SyncAnswer } from '@open-adms/api';
+//
+// Each record arrives in a sync of its own, through the API's `Sync` (BACKLOG 2.6.2 part 4;
+// ADR-475): a phone on a thin connection, a record a call.
+import type { RecordAnswer } from '@open-adms/contracts';
 import type { FieldEventKind } from '@open-adms/db';
 
 import { projectTime } from '../clock.ts';
 import type { PhoneRecord } from '../device.ts';
 import type { Story } from '../runner.ts';
+import { sentAlone } from './board.ts';
 import { p1FieldDays } from './p1-field-days.ts';
+import { p1FieldDaysHeld } from './p1-office.ts';
 import { p1TimeZone as timeZone } from './p1.ts';
 
 const short: Record<FieldEventKind, string> = {
@@ -34,24 +39,9 @@ export const p1AnyOrder: Story = {
   async run(story) {
     const { api } = story;
     // The two days as `p1-field-days` tells them, with every phone's sync held back: each record
-    // a phone sends is kept here, unanswered by the server, and that story's own checks of what
-    // the server holds along the way aren't asked.
-    const held: PhoneRecord[] = [];
-    const holding = {
-      receive: (sent: PhoneRecord): Promise<SyncAnswer> => {
-        held.push(sent);
-        return Promise.resolve({ answer: 'SAVED', id: '', notes: [] });
-      },
-      topUp: story.intake.topUp.bind(story.intake),
-    };
-    await p1FieldDays.run({
-      ...story,
-      intake: holding as unknown as typeof story.intake,
-      at: (time) => {
-        story.clock.set(time);
-      },
-      check: () => undefined,
-    });
+    // a phone sends is kept, unanswered by the server, and that story's own checks of what the
+    // server holds along the way aren't asked.
+    const held: PhoneRecord[] = (await p1FieldDaysHeld(story)).held.map(({ sent }) => sent);
     story.at(
       '2026-10-14T07:30:00-04:00',
       'Wednesday: nothing has reached the server. Every record of both days arrives now, the newest first',
@@ -87,8 +77,8 @@ export const p1AnyOrder: Story = {
       ...held.filter((sent) => sent.record === 'SCALE_RECEIPT'),
       ...held.filter((sent) => sent.record !== 'SCALE_RECEIPT').sort((a, b) => when(b) - when(a)),
     ];
-    const answers: SyncAnswer[] = [];
-    for (const sent of backwards) answers.push(await story.intake.receive(sent));
+    const answers: RecordAnswer[] = [];
+    for (const sent of backwards) answers.push(await sentAlone(story, timeZone, sent));
     const firstFieldEvents = backwards.flatMap((sent) =>
       sent.record === 'FIELD_EVENT' ? [sent.fieldEvent] : [],
     );

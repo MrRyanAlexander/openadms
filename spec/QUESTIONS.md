@@ -554,7 +554,13 @@ data too. *(ADR-071)* No follow-up needed: a scan the device can't recognise is 
 > **User, 2026-09-24 (round 4):** Disposal doesn't issue ticket numbers and so we aren't trying to get a list of tickets to generate like we do on the collection side. We simply trust that the tickets should be valid and then try to reconcile. That can lead to some issues, but we cannot expect the disposal side to already need a truck list (which it does try to sync, but works even with old data), but the tickets would just be more info and that's not needed on disposal. Does that make sense or open more questions? Follow up if needed please.
 
 ### ✅ Q-67 — Can a monitor reopen a closed split chain before syncing?
-**Yes, until it syncs.** A ticket that isn't finished is still open anyway. A finished ticket that
+**No: once submitted on the phone it is sealed for the monitor, synced or not; one not yet submitted stays open and theirs to adjust, for days if need be.** *(ADR-477, 2026-10-12, replacing the answer below, ADR-072, and ADR-240's "until the shift ends")*
+
+> **User, 2026-10-12 (as a firm, speaking of its monitors):** Once she submitted the ticket on her phone the record is sealed and she cannot edit it again. That must be a hard rule. Ana is a field monitor. When she is doing work and she completes a ticket or an incident or a cert or something else, and presses submit on her device that item is to be locked for her to make changes. Even if she notices an error and needs to undo it, after she has submitted it she will not be able to make any changes. The backoffice can make changes one the server gets what she sent, but that's it.
+>
+> Now it you meant a case where she opened a ticket and started working on it. Say 101001 was opened on 10/2 and marked for stuff being done. Then it wasn't closed until 10/4 but Ana closed it. We don't want to flag that if it makes sense. We also wouldn't want to prevent Ana from making adjustments to it between 10/2 and 10/4 since she didn't submit it yet.
+
+*The earlier answer, superseded:* **Yes, until it syncs.** A ticket that isn't finished is still open anyway. A finished ticket that
 **has synced** can't be reopened on the device. A finished ticket **waiting to sync** can be
 reopened: the device holds it back from syncing while it's being edited. Agent's addition, to
 keep the audit trail whole: the device keeps a log of what changed and when, and sends it with

@@ -5,6 +5,8 @@
 // 240, 281, 286, 309; BACKLOG carry-forward C15, C42). A pay item itself: pay-items.test.ts.
 import { describe, expect, it } from 'vitest';
 
+import { deviceKeyActorId } from '../src/device-key-actor.ts';
+import { masterPasscodeActorId } from '../src/master-passcode-actor.ts';
 import { systemActorId } from '../src/system-actor.ts';
 import { refusedBy } from './support/database.ts';
 import {
@@ -34,6 +36,10 @@ interface Written {
   device?: string | null;
   origin?: string;
   madeBy?: string | null;
+  // The phone's times, which only an unplanned one has (ADR-457).
+  madeAt?: string | null;
+  offset?: number | null;
+  receivedAt?: string | null;
 }
 
 // An assignment for Tuesday 13 October 2026; Ana's, on P1, written by Dana, unless the test says.
@@ -41,8 +47,9 @@ function assignment(written: Written = {}): [string, unknown[]] {
   const { world } = tested;
   return [
     `INSERT INTO "assignment" ("person_id", "work_date", "project_id", "field_event_kinds",
-       "certifying", "site_id", "device_id", "origin", "made_by_id")
-     VALUES ($1, '2026-10-13', $2, $3, $4, $5, $6, $7, $8) RETURNING "id"::text`,
+       "certifying", "site_id", "device_id", "origin", "made_by_id", "made_at",
+       "device_utc_offset_minutes", "received_at")
+     VALUES ($1, '2026-10-13', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING "id"::text`,
     [
       written.person ?? world.monitor,
       written.project ?? world.p1,
@@ -52,8 +59,28 @@ function assignment(written: Written = {}): [string, unknown[]] {
       written.device === undefined ? world.device : written.device,
       written.origin ?? 'PLANNED',
       written.madeBy === undefined ? world.admin : written.madeBy,
+      written.madeAt ?? null,
+      written.offset ?? null,
+      written.receivedAt ?? null,
     ],
   ];
+}
+
+// As the phone reports one made under the master passcode: no author, its phone, its times.
+const unplanned = {
+  origin: 'UNPLANNED',
+  madeBy: null,
+  madeAt: '2026-10-13T10:40:00Z',
+  offset: -240,
+  receivedAt: '2026-10-13T16:05:00Z',
+} as const;
+
+const onThePhone = () => ({ deviceId: tested.world.device });
+
+async function underThePasscode(): Promise<void> {
+  const { db } = tested;
+  await db.as('adms_api');
+  await db.actor(masterPasscodeActorId, 'DEVICE', onThePhone());
 }
 
 async function assign(written: Written = {}): Promise<string> {
@@ -121,14 +148,139 @@ describe('an assignment', () => {
   it('AC-02-26 written on the board says who wrote it; an unplanned one has no author and always its phone', async () => {
     await asTheApi();
     expect(await refusedAssignment({ origin: 'PLANNED', madeBy: null })).toBe(refusedBy.check);
-    expect(await refusedAssignment({ origin: 'UNPLANNED' })).toBe(refusedBy.check);
-    expect(await refusedAssignment({ origin: 'UNPLANNED', madeBy: null, device: null })).toBe(
-      refusedBy.check,
-    );
     expect(await refusedAssignment({ origin: 'WALK_UP', madeBy: null })).toBe(refusedBy.badValue);
     // Made on the phone with the master passcode, its id from the phone, as a field event's is.
-    await assign({ origin: 'UNPLANNED', madeBy: null });
+    await underThePasscode();
+    const authored = await tested.db.refused(
+      ...assignment({ ...unplanned, madeBy: tested.world.admin }),
+    );
+    expect(authored.code).toBe(refusedBy.check);
+    expect(authored.message).toContain('"assignment_origin_check"');
+    await assign(unplanned);
+    // With no phone stated and none named, the check itself still asks for its phone.
+    await tested.db.actor(masterPasscodeActorId, 'DEVICE');
+    const noPhone = await tested.db.refused(...assignment({ ...unplanned, device: null }));
+    expect(noPhone.code).toBe(refusedBy.check);
+    expect(noPhone.message).toContain('"assignment_origin_check"');
+    await asTheApi();
     await assign({ origin: 'PLANNED' });
+  });
+
+  it('AC-02-38, REQ-019 an unplanned one says when it was made by its phone’s clock, with the clock’s offset, and when the server received it; one written on the board has none of the three; an offset is one a clock can have', async () => {
+    const { db } = tested;
+    await underThePasscode();
+    const id = await assign(unplanned);
+    expect(
+      await db.one(
+        `SELECT "made_at"::text, "device_utc_offset_minutes" AS offset, "received_at"::text
+         FROM "assignment" WHERE "id" = $1`,
+        [id],
+      ),
+    ).toEqual({
+      made_at: '2026-10-13 10:40:00+00',
+      offset: -240,
+      received_at: '2026-10-13 16:05:00+00',
+    });
+    for (const missing of ['madeAt', 'offset', 'receivedAt'] as const) {
+      const refused = await db.refused(...assignment({ ...unplanned, [missing]: null }));
+      expect([missing, refused.code]).toEqual([missing, refusedBy.check]);
+      expect(refused.message).toContain('"assignment_phone_times_check"');
+    }
+    for (const offset of [-721, 841]) {
+      const refused = await db.refused(...assignment({ ...unplanned, offset }));
+      expect([offset, refused.code]).toEqual([offset, refusedBy.check]);
+      expect(refused.message).toContain('"assignment_device_utc_offset_check"');
+    }
+    // UTC−12:00 and UTC+14:00 are clocks somebody has.
+    await assign({ ...unplanned, offset: -720 });
+    await assign({ ...unplanned, offset: 840 });
+    await asTheApi();
+    for (const stated of [
+      { madeAt: unplanned.madeAt },
+      { offset: -240 },
+      { receivedAt: unplanned.receivedAt },
+    ]) {
+      const refused = await db.refused(...assignment({ origin: 'PLANNED', ...stated }));
+      expect([Object.keys(stated), refused.code]).toEqual([Object.keys(stated), refusedBy.check]);
+      expect(refused.message).toContain('"assignment_phone_times_check"');
+    }
+  });
+
+  it('REQ-209 an unplanned one is made only as the master passcode’s actor, for a phone, and names that phone: never as a person, the device key’s actor or the back office, never for another phone, never by the worker', async () => {
+    const { db, world } = tested;
+    await db.as('adms_api');
+    const words = 'An unplanned assignment is made on a phone under the master passcode';
+    const other = await db.one<{ id: string }>(
+      `INSERT INTO "device" ("name", "public_key", "master_passcode_version")
+       VALUES ('P1-TWR-LF', $1, 1) RETURNING "id"::text`,
+      [deviceKeyLike('assignments.test.ts another phone')],
+    );
+    for (const [who, state] of [
+      ['the monitor on the phone', () => db.actor(world.monitor, 'DEVICE', onThePhone())],
+      ['an admin', () => db.actor(world.admin, 'BACK_OFFICE')],
+      ['an admin naming the phone', () => db.actor(world.admin, 'DEVICE', onThePhone())],
+      ['the device key', () => db.actor(deviceKeyActorId, 'DEVICE', onThePhone())],
+      ['the passcode with no phone', () => db.actor(masterPasscodeActorId, 'DEVICE')],
+      [
+        'the passcode from the back office',
+        () => db.actor(masterPasscodeActorId, 'BACK_OFFICE', onThePhone()),
+      ],
+      [
+        'the passcode on another phone',
+        () => db.actor(masterPasscodeActorId, 'DEVICE', { deviceId: other.id }),
+      ],
+    ] as const) {
+      await state();
+      const refused = await db.refused(...assignment(unplanned));
+      expect([who, refused.code]).toEqual([who, refusedBy.grant]);
+      expect(refused.message).toContain(words);
+    }
+    // The phone the passcode's actor states is the phone the assignment names.
+    await db.actor(masterPasscodeActorId, 'DEVICE', { deviceId: other.id });
+    await assign({ ...unplanned, device: other.id });
+    await db.as('adms_worker');
+    await db.actor(systemActorId, 'SYSTEM');
+    expect((await db.refused(...assignment(unplanned))).code).toBe(refusedBy.grant);
+  });
+
+  it('whether an assignment was written on the board or made on a phone never changes, nor when the server received an unplanned one', async () => {
+    const { db, world } = tested;
+    await underThePasscode();
+    const made = await assign(unplanned);
+    await asTheApi();
+    const planned = await assign({ origin: 'PLANNED' });
+    const toPlanned = await db.refused(
+      `UPDATE "assignment" SET "origin" = 'PLANNED', "made_by_id" = $2, "made_at" = NULL,
+         "device_utc_offset_minutes" = NULL, "received_at" = NULL WHERE "id" = $1`,
+      [made, world.admin],
+    );
+    expect(toPlanned.code).toBe(refusedBy.trigger);
+    expect(toPlanned.message).toContain('Whether an assignment was written on the board');
+    // A planned one can't be turned into one a phone made, by anybody.
+    for (const state of [
+      () => db.actor(world.admin, 'BACK_OFFICE'),
+      () => db.actor(masterPasscodeActorId, 'DEVICE', onThePhone()),
+    ]) {
+      await state();
+      const toUnplanned = await db.refused(
+        `UPDATE "assignment" SET "origin" = 'UNPLANNED', "made_by_id" = NULL, "made_at" = $2,
+           "device_utc_offset_minutes" = -240, "received_at" = $3 WHERE "id" = $1`,
+        [planned, unplanned.madeAt, unplanned.receivedAt],
+      );
+      expect(toUnplanned.code).toBe(refusedBy.trigger);
+      expect(toUnplanned.message).toContain('Whether an assignment was written on the board');
+    }
+    await asTheApi();
+    const received = await db.refused(
+      `UPDATE "assignment" SET "received_at" = '2026-10-13T12:00:00Z' WHERE "id" = $1`,
+      [made],
+    );
+    expect(received.code).toBe(refusedBy.trigger);
+    expect(received.message).toContain('When the server received an unplanned assignment');
+    // What isn't either still changes as before: withdrawn from the board's record.
+    expect(
+      await db.run(`UPDATE "assignment" SET "archived_at" = now() WHERE "id" = $1`, [planned]),
+    ).toBe(1);
   });
 
   it("AC-02-27 names only work a phone can record: the kinds are the field event's own", async () => {

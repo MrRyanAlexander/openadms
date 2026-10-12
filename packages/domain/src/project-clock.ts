@@ -43,6 +43,22 @@ export class ProjectClock {
     return `${year}-${month}-${day}`;
   }
 
+  // When the calendar day the instant falls on ends in the project's time zone: the first
+  // instant of the next day there. Found by halving, so a day of 23 or 25 hours (a clock
+  // change) ends where its own zone says it does.
+  dayEnds(instant: Date): Date {
+    const today = this.day(instant);
+    let still = instant.getTime();
+    // Further than any day is long.
+    let later = still + 27 * 3_600_000;
+    while (later - still > 1) {
+      const middle = Math.floor((still + later) / 2);
+      if (this.day(new Date(middle)) === today) still = middle;
+      else later = middle;
+    }
+    return new Date(later);
+  }
+
   // 21:40.
   time(instant: Date): string {
     const { hour = '', minute = '' } = this.parts(instant);

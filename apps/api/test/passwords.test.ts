@@ -184,6 +184,12 @@ describe('the firm’s mail', () => {
       SMTP_URL: '',
       ADMS_API_HOST: '127.0.0.1',
       ADMS_API_PORT: '3000',
+      ADMS_ADDRESSES_URL: 'https://addresses.adms.localhost',
+      ADMS_MEDIA_URL: 'https://s3.adms.localhost',
+      ADMS_MEDIA_BUCKET: 'adms-media',
+      ADMS_MEDIA_REGION: 'us-east-1',
+      ADMS_MEDIA_ACCESS_KEY: ['MADE', 'UP', 'FOR', 'THIS', 'TEST'].join(''),
+      ADMS_MEDIA_SECRET_KEY: 'made-up-for-this-test-only',
     };
     expect(Settings.from(good).mailFrom).toBe('open-adms@adms.localhost');
     expect(Settings.from(good).smtpAddress).toBeUndefined();

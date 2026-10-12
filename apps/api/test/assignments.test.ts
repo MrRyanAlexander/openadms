@@ -14,6 +14,7 @@ import {
   createSiteEndpoint,
   endpoints,
   listAssignmentsEndpoint,
+  reportUnplannedAssignmentEndpoint,
   withdrawAssignmentEndpoint,
   writeAssignmentEndpoint,
 } from '@open-adms/contracts';
@@ -22,7 +23,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { Assignments } from '../src/dispatch/assignments.ts';
 import { installationSettings, openInstallation, type Tx } from './support/database.ts';
-import { enrolledPhone } from './support/phones.ts';
+import { enrolledPhone, proven } from './support/phones.ts';
 import { danasEmail, long, longer, luissEmail, worldOn, type Served } from './support/served.ts';
 import {
   ask,
@@ -677,19 +678,26 @@ describe('an assignment changed and withdrawn', () => {
       const p1 = await p1Dispatched(served, tx);
       const luis = await luisDispatches(served, tx, who.luis);
       const tariq = await tx.user.create({ data: { name: 'Tariq Patel', role: 'MONITOR' } });
-      // As the phone sends it at its sync (2.5.x): its id is the phone's own.
-      const unplanned = await tx.assignment.create({
-        data: {
-          id: randomUUID(),
-          personId: tariq.id,
-          workDate: new Date(monday),
+      // As the phone reports it (ADR-457): its id is the phone's own, its day its clock's.
+      const tower = await enrolledPhone(served, tx, 'P1-TWR-LF');
+      const unplanned = { id: randomUUID() };
+      const reported = await served.ask('POST', reportUnplannedAssignmentEndpoint.path, {
+        bearer: await proven(served, tower),
+        payload: {
+          id: unplanned.id,
           projectId: p1.project.id,
+          personId: tariq.id,
           fieldEventKinds: ['DISPOSAL', 'HAUL_OUT_DISPOSAL'],
+          certifying: false,
+          formDocumentTypes: [],
           siteId: p1.tdsr.id,
-          deviceId: p1.phones.landfillTower.id,
-          origin: 'UNPLANNED',
+          payItemIds: [],
+          occasion: 'SETUP',
+          madeAt: `${monday}T10:40:00.000Z`,
+          deviceUtcOffsetMinutes: -240,
         },
       });
+      expect(saved(reportUnplannedAssignmentEndpoint, reported).answer).toBe('SAVED');
       const board = saved(
         listAssignmentsEndpoint,
         await ask(served, luis, listAssignmentsEndpoint, {

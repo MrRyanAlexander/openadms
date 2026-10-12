@@ -21,8 +21,9 @@ find it, some carrying days of work; a phone needn't be handed in for its work t
    **reports its clock**; a big difference from the server's flags that sync's records (ADR-100).
 3. **Records first, photos second.** It sends its field events, ROEs, surveys, incidents, drop-off
    logs and time-clock entries, including an **earlier monitor's** queue on a phone that changed
-   hands (ADR-095), and the **edit log** for a finished field event reopened before the shift ended,
-   written to `AuditRecord` under the monitor (ADR-240). Cancelled field events stay on the phone.
+   hands (ADR-095). **It never sends a change to a record it already sent**: what a monitor
+   submitted is sealed for them, and a record sent again is answered "already saved" as it was
+   stored (ADR-477). Cancelled field events stay on the phone.
    Photos follow, each upload **resumable**, each file's hash checked against the one taken at
    capture (ADR-101).
 4. **The server stores each record once.** Every record carries an ID the phone made; a retried
@@ -41,6 +42,9 @@ find it, some carrying days of work; a phone needn't be handed in for its work t
    its **number blocks topped up** (ticket numbers and, for certifying, cert numbers), and any new
    master passcode check (ADR-065, 151, 227, 240). Any phone with a connection can refresh its lists
    at any time (ADR-151).
+   ⚠️ *As built (ADR-473; confirmed by the user, ADR-474): the sync's own answer carries the blocks, the passcode
+   check and the setup version's number; the lists and the login list are read beside it by the
+   signed-in monitor's phone.*
 9. **Reconciliation is queued** for every ticket the new or changed records touch
    ([Part 6](06-reconciliation.md)); the sync doesn't wait for it (ARCHITECTURE §13).
 

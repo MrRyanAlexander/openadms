@@ -32,6 +32,7 @@ export type NewBackOfficeFieldEvent = Omit<
   | 'temporarySession'
   | 'numberTyped'
   | 'numberTypedReasonId'
+  | 'typedCapacityCy'
 > & {
   // Picked from the firm's reasons for a record created in the back office.
   readonly reasonId: string;

@@ -8,6 +8,7 @@ import { shippedBreachedPasswords } from '../../src/sign-in/breached-list.ts';
 import type { Mail, Message } from '../../src/sign-in/mail.ts';
 import { OneTimeCodes } from '../../src/sign-in/one-time-codes.ts';
 import { PasswordHasher } from '../../src/sign-in/password-hasher.ts';
+import { OfflineChecks } from '../../src/phone/offline-checks.ts';
 import { Passwords } from '../../src/sign-in/passwords.ts';
 import { ResetCodes } from '../../src/sign-in/reset-codes.ts';
 import { SessionTokens } from '../../src/sign-in/session-tokens.ts';
@@ -95,6 +96,7 @@ export function signInOn(
     sessions,
     tries,
     limits: { setAnew: () => undefined },
+    offline: new OfflineChecks(signingSecret),
   });
   return { hasher, tokens, sessions, passwords, check, twoStep };
 }
