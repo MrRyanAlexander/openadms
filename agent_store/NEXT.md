@@ -89,7 +89,7 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-11, through ADR-473)
+### Where things stand (2026-10-12, through ADR-474)
 - **Phase 2 (API and sync) is open (ADR-376): 23 of its 32 tasks are done** (`BACKLOG.md`,
   "Active — Phase 2", ticks each with its ADRs). Complete: Milestone 2.1 (the API as a process,
   the boundary, time limits and policy), 2.2 (sign-in: its records, passwords, sessions, two-step
@@ -351,7 +351,7 @@ of the master passcode it holds, or the story's signing secret makes it a check.
 stories of their own: a database's refusal answered `NAMES_NO_RECORD` and held; two phones
 racing for one cert number. The golden mission's figures must not move (they change only at
 the user's word). This closes 2.6.2; 2.6.3 (edits) follows.
-**The user may still overturn ADR-473's defaults, ADR-472's defaults, ADR-471's defaults, ADR-470's defaults, ADR-469's, ADR-467 (4)'s limits (its other defaults are settled, ADR-468), ADR-466's, ADR-464's, ADR-463's, ADR-462's, ADR-458's other defaults (three were confirmed, ADR-459), ADR-457's, ADR-456 (5)'s proposals, ADR-455's, ADR-454's, ADR-453's, ADR-451's and ADR-450's defaults, ADR-449
+**The user may still overturn ADR-473 (2) and (4)'s defaults (the rest were confirmed, ADR-474), ADR-472's defaults, ADR-471's defaults, ADR-470's defaults, ADR-469's, ADR-467 (4)'s limits (its other defaults are settled, ADR-468), ADR-466's, ADR-464's, ADR-463's, ADR-462's, ADR-458's other defaults (three were confirmed, ADR-459), ADR-457's, ADR-456 (5)'s proposals, ADR-455's, ADR-454's, ADR-453's, ADR-451's and ADR-450's defaults, ADR-449
 (5)'s proposals as built, ADR-442's, ADR-440's, ADR-438's two choices or ADR-439's (`SUMMARY.md` §4).**
 **Docker's disk is 8 GB and was full once on 2026-10-10** (Tools and housekeeping; it has held since, 1.3 GB free after ADR-464's session): if `pnpm ready` fails for space, stop and ask the user to free some; never work around it.
 **Before the chain, `pnpm ready`** (the stack up, then `installer:check`): a `✗` at the migrations
