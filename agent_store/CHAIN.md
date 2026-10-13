@@ -7,7 +7,7 @@
 > task's ADR and its session-log line in `DECISIONS.md`). No other file carries these counts.
 > **A count that differs from this page without a reason is a finding, not noise.**
 
-**Seen whole:** 2026-10-13, after ADR-500, on the user's Mac, the installation at head.
+**Seen whole:** 2026-10-13, after ADR-501, on the user's Mac, the installation at head.
 
 ## `pnpm ready`
 

@@ -241,7 +241,13 @@ tried on `p1-voided`, `p1-left-out` and `p1-reconciled`. No story writes a corre
 by hand: the endpoint queues its own. **QC marks, locks, batches and unlocks are requests too**
 (ADR-500: `p1-invoiced`, `golden-mission`, and `p1-priced`'s lock of 101004, which stays between
 Luis's reprocess request and the run); a loosening of them, or of the worker's look for a lock, is
-tried on those three. Only `p1-reviewed` still makes review acts in process (2.7.1 piece 4d).
+tried on those three. **`p1-reviewed`'s acts are requests too** (ADR-501: corrections, renumbers, a
+photograph's marks, an item line, an ROE's scope, a quarantined record, a record made in the back
+office, a certification's box, its QC mark, lock and unlock); an act's answer only counts what it
+queued, so a story reads a job's tickets from its rows (`jobTickets`). Its AC-10-50 check alone
+calls `Corrections` in process, on purpose (the job queue made to fail). A loosening of a review
+controller is tried on `p1-reviewed`. The story `certification`'s measurement and revocations and
+`p1-left-out`'s revocation are still in process (2.7.1 piece 4d2).
 `packages/scenarios/test/stories.test.ts` holds a copy to what a database made by itself is (at
 head, every table guarded, `adms_owner`'s, open to the logins alone) and the runner to its word. A story's context carries `policy`, the release's policy values read from
 `packages/domain/policy.env` (`src/policy.ts`; held to the release's values, the worker's five among them (5 tries, 10 minutes, 5 s, 30 s, 10 connections; ADR-419) and a job's size (200 tickets, ADR-420), by `test/policy.test.ts`,
