@@ -205,6 +205,7 @@ export {
   siteQuantityLookupEndpoint,
   startNumberSeriesEndpoint,
   syncPhoneEndpoint,
+  turnInPhoneEndpoint,
   photoFileEndpoint,
   sendPhotoFilePartEndpoint,
   filePartMediaType,
@@ -403,6 +404,7 @@ export {
   recordAnswerSchema,
   recordNames,
   recordRead,
+  sentCanonical,
   seriesHeldSchema,
   syncAnsweredSchema,
   syncPasscodeUsesAtMost,
@@ -425,6 +427,22 @@ export {
   type SyncSent,
 } from './sync.ts';
 export {
+  notOnTheServerSchema,
+  seriesEndedSchema,
+  turnInAnswerSchema,
+  turnInHeldAtMost,
+  turnInHoldsSchema,
+  turnInPhotosAtMost,
+  turnInRecordsAtMost,
+  turnInReportsAtMost,
+  turnInSentSchema,
+  type SeriesEnded,
+  type TurnInAnswer,
+  type TurnInHolds,
+  type TurnInReceived,
+  type TurnInSent,
+} from './turn-in.ts';
+export {
   photoFileAnswerRead,
   photoFileGoesOnFrom,
   stored,
@@ -432,6 +450,8 @@ export {
   syncAnswerRead,
   syncedRecordAssignment,
   syncedRecordId,
+  toWipe,
+  turnInAnswerRead,
   type FilePartSent,
 } from './sync-client.ts';
 export {

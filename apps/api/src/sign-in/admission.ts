@@ -82,14 +82,14 @@ const bearer = /^Bearer ([A-Za-z0-9._-]{1,400})$/;
 export class Admission {
   private readonly sessions: Sessions;
   private readonly tokens: SessionTokens;
-  private readonly limits: Pick<Limits, 'asked'>;
+  private readonly limits: Pick<Limits, 'asked' | 'phoneAsked'>;
   private readonly phones: Pick<PhoneProofs, 'proven'>;
   private readonly monitors: Pick<PhoneSignIns, 'onPhone'>;
 
   constructor(
     sessions: Sessions,
     tokens: SessionTokens,
-    limits: Pick<Limits, 'asked'>,
+    limits: Pick<Limits, 'asked' | 'phoneAsked'>,
     phones: Pick<PhoneProofs, 'proven'>,
     monitors: Pick<PhoneSignIns, 'onPhone'>,
   ) {
@@ -107,6 +107,8 @@ export class Admission {
       const sent = request.headers.authorization;
       const phone = await this.phones.proven(bearer.exec(sent ?? '')?.[1]);
       if (phone === undefined) throw new Refusal('PHONE_NOT_PROVEN', 401);
+      // Counted for the phone, as well as for its address (ADR-490).
+      this.limits.phoneAsked(phone.deviceId);
       if (endpoint.access === 'PROVEN_PHONE') {
         admitted.set(request, { phone });
         return;

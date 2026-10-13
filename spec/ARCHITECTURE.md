@@ -745,6 +745,14 @@ So the protection can't rest on the password. It rests on these:
 > actor that is not a person, on that phone. A phone out of service still proves itself; one
 > whose key is revoked is refused at once, whatever token it holds.
 
+⚠️ **ADR-488 (2026-10-13; agent default; KD-77 asks the user): when the key is revoked.** "Sync
+> and turn in" (`POST /phones/current/turn-ins`, §8) revokes the key **in the same piece of work
+> that confirms every record the phone holds and ends its number blocks, as the phone is told to
+> wipe**, not after it reports a wipe: the server can't see a wipe, and a key kept until a phone
+> that may never call again says it wiped would stand for good. Nothing is revoked before every
+> record is on the server and every block has ended, and only the turn-in can revoke a key (the
+> database's guard). The text above ("Once wiped, its device key is revoked") is not edited.
+
 ### 7.5 The master passcode
 
 ✅ **Decided** *(ADR-106, user 2026-09-25)*:
@@ -784,7 +792,13 @@ So the protection can't rest on the password. It rests on these:
   3. It waits for the server to confirm each record.
   4. It returns its unused numbers (ADR-065), then wipes its data.
 
-  Nothing is wiped before the server confirms it. Cancelled tickets are the only exception to
+  Nothing is wiped before the server confirms it.
+  ⚠️ *ADR-488…490 (2026-10-13), as built: step 2's proof is the phone's token; steps 3 and 4 are
+  one call, `POST /phones/current/turn-ins`, the passcode in it, that names everything the phone
+  still holds; the server answers `wipe: true` only when it has all of it from that phone, and
+  in the same piece of work hands back (or, for a lost phone or a series not reported, retires)
+  its numbers and revokes its key (§7.4's note, KD-77). Otherwise nothing changes and the answer
+  names what it doesn't have. A client wipes only on `wipe: true` (the sync contract's suite).* Cancelled tickets are the only exception to
   syncing: they stay on the device until it is set up again (ADR-056).
 - **Browser test build:** IndexedDB, encrypted with a WebCrypto key that can't be exported. It's
   good enough for testing, but it isn't device-grade, so real work never uses it.

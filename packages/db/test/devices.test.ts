@@ -139,41 +139,164 @@ describe('a phone', () => {
 });
 
 describe("a phone's key", () => {
+  const revoke = `UPDATE "device" SET "key_revoked_at" = $2 WHERE "id" = $1`;
+  const markLost = `UPDATE "device" SET "status" = 'LOST', "out_of_service_at" = '2026-10-12T22:10:00Z' WHERE "id" = $1`;
+  const issue = `INSERT INTO "number_block" ("device_id", "project_id", "series", "first_number", "last_number")
+    VALUES ($1, $2, 'LOAD', $3, $4) RETURNING "id"::text`;
+  // Its turn-in: the master passcode's actor, on that phone (ADR-488).
+  const asItsTurnIn = (deviceId: string) =>
+    tested.db.actor(masterPasscodeActorId, 'DEVICE', { deviceId });
+
   it('AC-02-61 is revoked only once the phone is out of service, never before its removal time; the time is kept on its record', async () => {
     const { db, world } = tested;
     await asTheApi();
-    const revoke = `UPDATE "device" SET "key_revoked_at" = $2 WHERE "id" = $1`;
+    await asItsTurnIn(world.device);
     // In service: its key can't be revoked.
     const inService = await db.refused(revoke, [world.device, '2026-10-12T22:10:00Z']);
     expect(inService.code).toBe(refusedBy.check);
     expect(inService.message).toContain('"device_key_revoked_check"');
-    // Luis marks it lost at 6:10 pm on Monday; it syncs, is confirmed and wiped on Wednesday.
-    await db.run(
-      `UPDATE "device" SET "status" = 'LOST', "out_of_service_at" = '2026-10-12T22:10:00Z' WHERE "id" = $1`,
-      [world.device],
-    );
+    // Luis marks it lost at 6:10 pm on Monday; it syncs and is turned in on Wednesday.
+    await db.actor(world.admin, 'BACK_OFFICE');
+    await db.run(markLost, [world.device]);
+    await asItsTurnIn(world.device);
     expect((await db.refused(revoke, [world.device, '2026-10-12T22:09:59Z'])).code).toBe(
       refusedBy.check,
     );
     expect(await db.run(revoke, [world.device, '2026-10-14T13:30:00Z'])).toBe(1);
-    // Back in service, it can't keep a revoked key.
-    expect(
-      (
-        await db.refused(
-          `UPDATE "device" SET "status" = 'ACTIVE', "out_of_service_at" = NULL WHERE "id" = $1`,
-          [world.device],
-        )
-      ).code,
-    ).toBe(refusedBy.check);
-    const audited = await db.rows<{ changed_fields: string[] }>(
-      `SELECT "changed_fields" FROM "audit_record"
+    const audited = await db.rows<{ changed_fields: string[]; actor_id: string }>(
+      `SELECT "changed_fields", "actor_id"::text FROM "audit_record"
        WHERE "table_name" = 'device' AND "record_id" = $1 AND "operation" = 'UPDATE' ORDER BY "id"`,
       [world.device],
     );
-    expect(audited.map((record) => record.changed_fields)).toEqual([
-      ['out_of_service_at', 'status'],
-      ['key_revoked_at'],
+    expect(audited.map((record) => [record.changed_fields, record.actor_id])).toEqual([
+      [['out_of_service_at', 'status'], world.admin],
+      [['key_revoked_at'], masterPasscodeActorId],
     ]);
+  });
+
+  it('ADR-488 is revoked by the phone’s turn-in alone: under the master passcode on that same phone; never by a person, by the phone’s own key, for another phone, nor at enrolment', async () => {
+    const { db, world } = tested;
+    await asTheApi();
+    await db.run(markLost, [world.device]);
+    const { id: another } = await db.one<{ id: string }>(enrol, [
+      'P1-UR-1',
+      deviceKeyLike('jo-kim'),
+      1,
+    ]);
+    const others = [
+      () => db.actor(world.admin, 'BACK_OFFICE'),
+      () => db.actor(deviceKeyActorId, 'DEVICE', { deviceId: world.device }),
+      () => asItsTurnIn(another),
+      () => db.actor(masterPasscodeActorId, 'DEVICE'),
+    ];
+    for (const [at, state] of others.entries()) {
+      await state();
+      const refusal = await db.refused(revoke, [world.device, '2026-10-14T13:30:00Z']);
+      expect([refusal.code, refusal.message], String(at)).toEqual([
+        refusedBy.grant,
+        "Only a phone's turn-in, under the master passcode on that phone, revokes its key",
+      ]);
+    }
+    // Enrolled lost and revoked at once: refused, whoever writes it.
+    await asItsTurnIn(world.device);
+    const enrolledRevoked = await db.refused(
+      `INSERT INTO "device" ("name", "public_key", "master_passcode_version", "status", "out_of_service_at", "key_revoked_at")
+       VALUES ('P1-UR-2', $1, 1, 'LOST', '2026-10-12T22:10:00Z', '2026-10-12T22:10:00Z')`,
+      [deviceKeyLike('lee-morgan')],
+    );
+    expect([enrolledRevoked.code, enrolledRevoked.message]).toEqual([
+      refusedBy.trigger,
+      'A phone is enrolled with its key standing: only its turn-in revokes it',
+    ]);
+    expect(await db.run(revoke, [world.device, '2026-10-14T13:30:00Z'])).toBe(1);
+  });
+
+  it('ADR-065, 488 is revoked only once the phone holds no block still issued; a phone turned in is issued no block, nor has one opened again, whoever asks', async () => {
+    const { db, world } = tested;
+    await asTheApi();
+    const { id: block } = await db.one<{ id: string }>(issue, [
+      world.device,
+      world.p1,
+      101001,
+      102000,
+    ]);
+    await db.run(markLost, [world.device]);
+    await asItsTurnIn(world.device);
+    const stillIssued = await db.refused(revoke, [world.device, '2026-10-14T13:30:00Z']);
+    expect([stillIssued.code, stillIssued.message]).toEqual([
+      refusedBy.trigger,
+      "A phone's numbers are handed back or retired before its key is revoked",
+    ]);
+    expect(
+      await db.run(
+        `UPDATE "number_block" SET "status" = 'RETIRED', "ended_at" = '2026-10-14T13:30:00Z' WHERE "id" = $1`,
+        [block],
+      ),
+    ).toBe(1);
+    expect(await db.run(revoke, [world.device, '2026-10-14T13:30:00Z'])).toBe(1);
+    // Afterwards, for the back office or the phone's own key: no block, and none opened again.
+    for (const state of [
+      () => db.actor(world.admin, 'BACK_OFFICE'),
+      () => db.actor(deviceKeyActorId, 'DEVICE', { deviceId: world.device }),
+    ]) {
+      await state();
+      for (const [sql, values] of [
+        [issue, [world.device, world.p1, 102001, 103000]],
+        [
+          `UPDATE "number_block" SET "status" = 'ISSUED', "ended_at" = NULL WHERE "id" = $1`,
+          [block],
+        ],
+      ] as const) {
+        const refusal = await db.refused(sql, [...values]);
+        expect([refusal.code, refusal.message], sql).toEqual([
+          refusedBy.trigger,
+          'A phone turned in is issued no numbers: its key is revoked',
+        ]);
+      }
+    }
+    // Another phone is issued numbers as before.
+    const { id: another } = await db.one<{ id: string }>(enrol, [
+      'P1-COL-2',
+      deviceKeyLike('jo-kim'),
+      1,
+    ]);
+    await db.actor(world.admin, 'BACK_OFFICE');
+    expect(await db.one(issue, [another, world.p1, 102001, 103000])).toHaveProperty('id');
+  });
+
+  it('ADR-488 once revoked, the phone stays as it was turned in: when its key was revoked, its status and its removal time never change; its name still may', async () => {
+    const { db, world } = tested;
+    await asTheApi();
+    await db.run(markLost, [world.device]);
+    await asItsTurnIn(world.device);
+    await db.run(revoke, [world.device, '2026-10-14T13:30:00Z']);
+    for (const state of [
+      () => db.actor(world.admin, 'BACK_OFFICE'),
+      () => asItsTurnIn(world.device),
+    ]) {
+      await state();
+      for (const change of [
+        `"key_revoked_at" = NULL`,
+        `"key_revoked_at" = '2026-10-14T14:00:00Z'`,
+        `"status" = 'RETIRED'`,
+        `"status" = 'ACTIVE', "out_of_service_at" = NULL, "key_revoked_at" = NULL`,
+        `"out_of_service_at" = '2026-10-12T22:00:00Z'`,
+      ]) {
+        const refusal = await db.refused(`UPDATE "device" SET ${change} WHERE "id" = $1`, [
+          world.device,
+        ]);
+        expect([refusal.code, refusal.message], change).toEqual([
+          refusedBy.trigger,
+          "A phone turned in stays as it was turned in: its key, its status and its removal time don't change",
+        ]);
+      }
+    }
+    await db.actor(world.admin, 'BACK_OFFICE');
+    expect(
+      await db.run(`UPDATE "device" SET "name" = 'P1-COL-1 (turned in)' WHERE "id" = $1`, [
+        world.device,
+      ]),
+    ).toBe(1);
   });
 });
 

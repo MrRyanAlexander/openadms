@@ -34,6 +34,7 @@ import { TwoStepController } from '../sign-in/two-step.controller.ts';
 import { PhotoFilesController } from '../media/photo-files.controller.ts';
 import { PhotographFilesController } from '../media/photograph-files.controller.ts';
 import { SyncController } from '../sync/sync.controller.ts';
+import { TurnInsController } from '../phone/turn-ins.controller.ts';
 import { ViewerReadsController } from '../viewer/viewer-reads.controller.ts';
 import { HealthController } from './health.controller.ts';
 
@@ -65,6 +66,7 @@ import { HealthController } from './health.controller.ts';
     SetupChoicesController,
     UnplannedAssignmentsController,
     SyncController,
+    TurnInsController,
     PhotoFilesController,
     PhotographFilesController,
     AssignmentsController,

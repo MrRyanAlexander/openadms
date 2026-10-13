@@ -12854,6 +12854,289 @@
         }
       }
     },
+    "/phones/current/turn-ins": {
+      "post": {
+        "operationId": "turnInPhone",
+        "summary": "A phone is turned in (\"Sync and turn in\") under the firm’s master passcode, after it has synced every queue and sent every photograph’s file. It sends the passcode, everything it still holds by the ids it made (its unplanned assignments, the uses of the master passcode it logged, its records, its photographs) and by fingerprint what it sent with no id the server could read, and the last number it used of each series it holds numbers of. Only when the server has all of it from that phone (a record saved, kept in quarantine, or held for a person; a photograph saved with every file kept) is the phone turned in: the unused rest of each series it reported is handed back for the next phone, and a series it doesn’t report, or every block of a phone marked lost, is retired whole; a phone in service is taken out of service as retired; its sessions end; its key is revoked, so it proves nothing again; and the answer tells it to wipe. Otherwise nothing is changed and nothing is wiped, and the answer names what the server doesn’t have. A phone out of service is turned in the same way. Each use of the passcode is a security event, and a turn-in another. Open to a phone that has proved itself, by its token; nobody need be signed in. A passcode that isn’t taken is refused by one code; wrong tries count as they do when a phone is enrolled.",
+        "x-open-adms-access": "PROVEN_PHONE",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "passcode": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  },
+                  "holds": {
+                    "type": "object",
+                    "properties": {
+                      "unplannedAssignments": {
+                        "maxItems": 1000,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        }
+                      },
+                      "passcodeUses": {
+                        "maxItems": 1000,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        }
+                      },
+                      "records": {
+                        "maxItems": 10000,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        }
+                      },
+                      "held": {
+                        "maxItems": 1000,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{64}$"
+                        }
+                      },
+                      "photos": {
+                        "maxItems": 10000,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        }
+                      }
+                    },
+                    "required": [
+                      "unplannedAssignments",
+                      "passcodeUses",
+                      "records",
+                      "held",
+                      "photos"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "lastUsed": {
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "projectId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "series": {
+                          "type": "string",
+                          "enum": ["LOAD", "HAUL_OUT", "UNIT_RATE", "CERTIFICATION", "ROE"]
+                        },
+                        "lastUsedNumber": {
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 2000000000
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": ["projectId", "series", "lastUsedNumber"],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": ["passcode", "holds", "lastUsed"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "turnedIn": {
+                          "type": "boolean",
+                          "const": true
+                        },
+                        "wipe": {
+                          "type": "boolean",
+                          "const": true
+                        },
+                        "numbers": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "projectId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "series": {
+                                "type": "string",
+                                "enum": ["LOAD", "HAUL_OUT", "UNIT_RATE", "CERTIFICATION", "ROE"]
+                              },
+                              "ended": {
+                                "type": "string",
+                                "enum": ["RECLAIMED", "RETIRED"]
+                              },
+                              "blocks": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "firstNumber": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 2000000000
+                                    },
+                                    "lastNumber": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 2000000000
+                                    },
+                                    "lastUsedNumber": {
+                                      "anyOf": [
+                                        {
+                                          "type": "integer",
+                                          "minimum": 1,
+                                          "maximum": 2000000000
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "required": ["firstNumber", "lastNumber", "lastUsedNumber"],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": ["projectId", "series", "ended", "blocks"],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": ["turnedIn", "wipe", "numbers"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "turnedIn": {
+                          "type": "boolean",
+                          "const": false
+                        },
+                        "wipe": {
+                          "type": "boolean",
+                          "const": false
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "notOnTheServer": {
+                          "type": "object",
+                          "properties": {
+                            "unplannedAssignments": {
+                              "maxItems": 1000,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              }
+                            },
+                            "passcodeUses": {
+                              "maxItems": 1000,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              }
+                            },
+                            "records": {
+                              "maxItems": 10000,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              }
+                            },
+                            "held": {
+                              "maxItems": 1000,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "pattern": "^[0-9a-f]{64}$"
+                              }
+                            },
+                            "photos": {
+                              "maxItems": 10000,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              }
+                            }
+                          },
+                          "required": [
+                            "unplannedAssignments",
+                            "passcodeUses",
+                            "records",
+                            "held",
+                            "photos"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["turnedIn", "wipe", "message", "notOnTheServer"],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/phones/current/photos/{photoId}/files/{file}": {
       "get": {
         "operationId": "photoFile",

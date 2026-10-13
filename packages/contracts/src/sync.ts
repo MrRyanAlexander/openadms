@@ -93,6 +93,13 @@ export const syncHoldsSchema = z.strictObject({
 const eachSeriesOnce = (reports: readonly z.infer<typeof lastUsedSchema>[]): boolean =>
   new Set(reports.map(({ projectId, series }) => `${projectId} ${series}`)).size === reports.length;
 
+// The last number used of each series the phone holds numbers of, each series once: what a sync
+// reports, and what a phone turned in reports (ADR-488).
+export const lastUsedListSchema = z
+  .array(lastUsedSchema)
+  .max(syncSeriesAtMost)
+  .refine(eachSeriesOnce);
+
 // What a phone sends. It never says which phone it is: it proved that (ADR-466).
 export const syncSentSchema = z.strictObject({
   // The phone's clock as it sends this, a UTC instant, and how far that clock stood from UTC
@@ -107,7 +114,7 @@ export const syncSentSchema = z.strictObject({
   records: z.array(z.unknown()).max(syncRecordsAtMost),
   // Each read on its own, by `photoRead`, after the records.
   photos: z.array(z.unknown()).max(syncPhotosAtMost),
-  lastUsed: z.array(lastUsedSchema).max(syncSeriesAtMost).refine(eachSeriesOnce),
+  lastUsed: lastUsedListSchema,
   holds: syncHoldsSchema,
 });
 
@@ -150,6 +157,20 @@ export function recordNames(sent: unknown): RecordNames {
     };
   }
   return none;
+}
+
+// What was sent in one record's place, in one form whatever order its fields came in, so the
+// same thing sent again is the same text (ADR-472, 488): canonical JSON, each object's fields in
+// order of their names. A held record is known by the SHA-256, in hex, of this text in UTF-8
+// (the server's `sentFingerprint`), and a phone names one it sent with no id the server could
+// read by the same fingerprint when it is turned in.
+export function sentCanonical(sent: unknown): string {
+  if (Array.isArray(sent)) return `[${sent.map(sentCanonical).join(',')}]`;
+  if (typeof sent === 'object' && sent !== null) {
+    const fields = Object.entries(sent).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    return `{${fields.map(([name, value]) => `${JSON.stringify(name)}:${sentCanonical(value)}`).join(',')}}`;
+  }
+  return JSON.stringify(sent);
 }
 
 // Reads whatever stood in one record's place.
@@ -235,17 +256,18 @@ export const photoAnswerSchema = z.discriminatedUnion('answer', [
 // The blocks a phone holds of one series after a sync, in the order it gives them out
 // (ADR-065): `toppedUp` is false where the report wasn't taken (its project has no such series,
 // or none of it is left to cut), and the blocks are then what the phone held before.
+// One block of numbers as a phone is told of it: its run and the last number it used of it.
+export const numberBlockSchema = z.strictObject({
+  firstNumber: seriesNumber,
+  lastNumber: seriesNumber,
+  lastUsedNumber: seriesNumber.nullable(),
+});
+
 export const seriesHeldSchema = z.strictObject({
   projectId: id,
   series: z.enum(numberSeries),
   toppedUp: z.boolean(),
-  blocks: z.array(
-    z.strictObject({
-      firstNumber: seriesNumber,
-      lastNumber: seriesNumber,
-      lastUsedNumber: seriesNumber.nullable(),
-    }),
-  ),
+  blocks: z.array(numberBlockSchema),
 });
 
 // The master passcode's version in force, with its check for a phone that said it holds

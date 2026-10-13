@@ -25,6 +25,7 @@ import {
   wrong,
   type Answer,
 } from './support/served.ts';
+import { enrolledPhone, proven } from './support/phones.ts';
 import { Outbox, TestClock } from './support/sign-in.ts';
 
 // What an installation states for itself, over the release's values (ADR-395).
@@ -377,6 +378,30 @@ describe('a signed-in person sending requests faster than the policy allows', ()
       },
       undefined,
       stating({ RATE_LIMIT_REQUESTS_PER_ACCOUNT: '3' }),
+    );
+  });
+});
+
+describe('a proven phone sending requests faster than the policy allows', () => {
+  it('ADR-490, AC-10-41, API4 is limited as that phone, whatever address each request comes from; another phone at the same address is not, and the phone’s token still stands once the stretch is over', async () => {
+    await world(
+      async (served, tx) => {
+        const first = await enrolledPhone(served, tx, 'P1-COL-1');
+        const second = await enrolledPhone(served, tx, 'P1-COL-2');
+        const [one, other] = [await proven(served, first), await proven(served, second)];
+        const current = (bearer: string) => served.ask('GET', '/phones/current', { bearer });
+        for (const from of ['203.0.113.150', '203.0.113.151', '203.0.113.152']) {
+          served.from = from;
+          expect((await current(one)).status).toBe(200);
+        }
+        served.from = '203.0.113.153';
+        limited(await current(one), 60);
+        expect((await current(other)).status).toBe(200);
+        served.clock.later(1);
+        expect((await current(one)).status).toBe(200);
+      },
+      undefined,
+      stating({ RATE_LIMIT_REQUESTS_PER_PHONE: '3' }),
     );
   });
 });

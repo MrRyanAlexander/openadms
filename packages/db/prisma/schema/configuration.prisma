@@ -1235,6 +1235,9 @@ enum SecurityEventKind {
   // A wrong try at the master passcode, and the lock its wrong tries put on it (ADR-438).
   MASTER_PASSCODE_FAILED
   MASTER_PASSCODE_LOCKOUT
+  // A phone turned in under the master passcode: every record it held confirmed, its numbers
+  // ended, its key revoked (ADR-488).
+  DEVICE_TURN_IN
 
   @@map("security_event_kind")
 }
@@ -1333,7 +1336,9 @@ model Device {
   outOfServiceAt              DateTime?    @map("out_of_service_at") @db.Timestamptz(3)
   // When its key was revoked: once a lost or retired phone has synced, been confirmed and wiped
   // (ARCHITECTURE §7.4; C47). Only a phone out of service has one (a check in the guard
-  // migration); refusing the key is the API's (Phase 2).
+  // migration); refusing the key is the API's (Phase 2). Written only by the phone's turn-in,
+  // as the master passcode's actor for that phone, once it holds no block still issued, and
+  // never changed after (ADR-488).
   keyRevokedAt                DateTime?    @map("key_revoked_at") @db.Timestamptz(3)
   // When the server made the last challenge this phone proved itself with (ARCHITECTURE §7.4;
   // AC-10-45; ADR-437, 440): a challenge is good once, so only one made after this is taken.

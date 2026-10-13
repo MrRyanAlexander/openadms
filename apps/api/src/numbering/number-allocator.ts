@@ -7,7 +7,8 @@
 // database's own refusal (number_blocks_never_overlap), whatever this class does.
 //
 // A top-up is the phone's own piece of work, written as its monitor from that phone; retiring a
-// lost phone's blocks is the back office's. Two top-ups of one series at the same moment don't
+// lost phone's blocks is the back office's; a phone turned in ends its own in its turn-in's piece
+// of work, under the master passcode (`turnedIn`, ADR-488). Two top-ups of one series at the same moment don't
 // both go through: the second finds the series moved on, or the database refuses its block, and
 // it is thrown, not saved, for the caller to ask again (the sync endpoint's, Phase 2).
 import type { Database, NumberBlock, NumberSeries, Prisma } from '@open-adms/db';
@@ -17,6 +18,7 @@ import {
   PhoneNumbers,
   type NumbersTaken,
   type Policy,
+  type TurnedInBlocks,
 } from '@open-adms/domain';
 
 import { type Clock, type Outcome, Refused, SetupService } from '../setup/setup-service.ts';
@@ -32,6 +34,14 @@ export interface LastUsed {
   readonly projectId: string;
   readonly series: NumberSeries;
   readonly lastUsedNumber: number | null;
+}
+
+// How one series' blocks ended when their phone was turned in, and the blocks as they ended.
+export interface SeriesTurnedIn {
+  readonly projectId: string;
+  readonly series: NumberSeries;
+  readonly ended: TurnedInBlocks;
+  readonly blocks: readonly NumberBlock[];
 }
 
 export class NumberAllocator extends SetupService {
@@ -105,6 +115,47 @@ export class NumberAllocator extends SetupService {
     return this.writeAs({ actorId: person, source: 'BACK_OFFICE', reason }, (tx) =>
       NumberAllocator.end(tx, deviceId, 'RETIRED', this.clock.now()),
     );
+  }
+
+  // A phone turned in (ADR-065, 134, 488), inside its turn-in's own piece of work: each series
+  // it holds blocks of ends as `endsAs` says, given whether the phone reported its last used
+  // number there; a report is written on the blocks first, so a block handed back keeps only
+  // what the phone used. A report of a series it holds nothing of changes nothing.
+  static async turnedIn(
+    tx: Prisma.TransactionClient,
+    deviceId: string,
+    reports: readonly LastUsed[],
+    endsAs: (reported: boolean) => TurnedInBlocks,
+    endedAt: Date,
+  ): Promise<SeriesTurnedIn[]> {
+    const held = await tx.numberBlock.findMany({
+      where: { deviceId, status: 'ISSUED' },
+      orderBy: [
+        { projectId: 'asc' },
+        { series: 'asc' },
+        { issuedAt: 'asc' },
+        { firstNumber: 'asc' },
+      ],
+      select: { projectId: true, series: true },
+    });
+    const series = new Map(held.map((block) => [`${block.projectId} ${block.series}`, block]));
+    const turnedIn: SeriesTurnedIn[] = [];
+    for (const { projectId, series: of } of series.values()) {
+      const report = reports.find((one) => one.projectId === projectId && one.series === of);
+      if (report !== undefined) await NumberAllocator.record(tx, deviceId, report);
+      const ended = endsAs(report !== undefined);
+      const blocks: NumberBlock[] = [];
+      for (const block of await NumberAllocator.heldBy(tx, deviceId, { projectId, series: of })) {
+        blocks.push(
+          await tx.numberBlock.update({
+            where: { id: block.id },
+            data: { status: ended, endedAt },
+          }),
+        );
+      }
+      turnedIn.push({ projectId, series: of, ended, blocks });
+    }
+    return turnedIn;
   }
 
   // Moves the series on to the next number never handed out, only if nobody moved it meanwhile.

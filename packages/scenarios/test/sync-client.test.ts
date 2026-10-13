@@ -14,6 +14,7 @@ import {
   type SyncClientHolds,
   type SyncReceived,
 } from '@open-adms/contracts';
+import { sentFingerprint } from '@open-adms/api';
 import { describe, expect, it } from 'vitest';
 
 import { StoryClock } from '../src/clock.ts';
@@ -69,6 +70,11 @@ describe('the harness’s phone, held to the suite any client of the sync contra
             client.filePartAnswered(answer);
           },
           holdsFiles: () => client.holdsFiles,
+          turnsIn: (passcode) => client.turnsIn(passcode),
+          turnInAnswered: (answer) => {
+            client.turnInAnswered(answer);
+          },
+          wiped: () => client.wiped,
         };
       });
     });
@@ -119,6 +125,78 @@ describe('the harness’s phone, syncing through the API’s own service', () =>
     };
     return { made, syncs };
   };
+
+  it('ADR-488 "Sync and turn in": it syncs and sends its files first, then names by the API’s own fingerprint a record answered under no id, and wipes only when answered to; with a server that turns no phone in, it stops', async () => {
+    const first = { record: 'FIELD_EVENT' as const, fieldEvent: syncExamples.collection };
+    const second = { record: 'FIELD_EVENT' as const, fieldEvent: syncExamples.disposal };
+    const client = phone({ ...records, records: [first, second] });
+    const turnIns: unknown[] = [];
+    const answers: unknown[] = [
+      {
+        turnedIn: false,
+        wipe: false,
+        message: 'Not turned in.',
+        notOnTheServer: {
+          unplannedAssignments: [],
+          passcodeUses: [],
+          records: [],
+          held: [],
+          photos: [],
+        },
+      },
+      { turnedIn: true, wipe: true, numbers: [] },
+    ];
+    const made: PhoneServer = {
+      received: (_from, sent) =>
+        Promise.resolve({
+          answered: {
+            unplannedAssignments: [],
+            passcodeUses: [],
+            // The second can't be read, the server says: under no id.
+            records: sent.records.map((one, place) =>
+              place === 0
+                ? {
+                    answer: 'SAVED' as const,
+                    id: (one as { fieldEvent: { id: string } }).fieldEvent.id,
+                    notes: [],
+                  }
+                : {
+                    answer: 'NOT_SAVED' as const,
+                    id: null,
+                    reason: 'NOT_A_RECORD' as const,
+                    message: 'Not saved: this record can’t be read.',
+                  },
+            ),
+            photos: [],
+            numbers: [],
+            masterPasscode: { version: 1, check: null },
+            setupVersion: null,
+          },
+        }),
+      filePart: () => Promise.reject(new Error('No file is sent here.')),
+      turnIn: (from, sent) => {
+        expect(from).toBe(deviceId);
+        turnIns.push(sent);
+        return Promise.resolve(answers.shift());
+      },
+    };
+    expect(await client.turnIn(made, 'osprey-landing-marsh')).toMatchObject({ turnedIn: false });
+    expect(client.wiped).toBe(false);
+    expect(turnIns[0]).toMatchObject({
+      passcode: 'osprey-landing-marsh',
+      holds: { records: [], held: [sentFingerprint(second)] },
+    });
+    expect(client.holds).toHaveLength(1);
+    expect(await client.turnIn(made, 'osprey-landing-marsh')).toEqual({
+      turnedIn: true,
+      wipe: true,
+      numbers: [],
+    });
+    expect([client.wiped, client.holds, client.shownNotSaved]).toEqual([true, [], []]);
+    await expect(phone().turnIn(server().made, 'osprey-landing-marsh')).rejects.toThrow(
+      'P1-TWR-TDSR: this server turns no phone in.',
+    );
+  });
 
   it('AC-05-09, ADR-483 each photograph it takes is a real file, the depth file beside it where one is taken; the record carries the SHA-256 of the very bytes it sends, after the sync that saved the record, in parts no larger than it was told', async () => {
     const client = phone({ ...records, records: [], filePartBytesAtMost: 1500 });

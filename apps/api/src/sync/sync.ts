@@ -45,6 +45,7 @@ import {
   photoRead,
   recordNames,
   recordRead,
+  sentCanonical,
   type PhotoAnswer,
   syncedRecordAssignment,
   syncedRecordId,
@@ -102,21 +103,10 @@ export interface Synced {
 // A top-up that lost a race for its series is asked again (ADR-065, 323).
 const topUpAttempts = 3;
 
-// What was sent, in one form whatever order its fields came in: the same record sent again is
-// the same text.
-function canonical(sent: unknown): string {
-  if (Array.isArray(sent)) return `[${sent.map(canonical).join(',')}]`;
-  if (typeof sent === 'object' && sent !== null) {
-    const fields = Object.entries(sent).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-    return `{${fields.map(([name, value]) => `${JSON.stringify(name)}:${canonical(value)}`).join(',')}}`;
-  }
-  return JSON.stringify(sent);
-}
-
 // The fingerprint a held record is known by on its phone: the SHA-256, in hex, of what stood
-// in the record's place as canonical JSON in UTF-8 (ADR-472).
+// in the record's place as canonical JSON in UTF-8 (ADR-472; the contracts' `sentCanonical`).
 export function sentFingerprint(sent: unknown): string {
-  return createHash('sha256').update(canonical(sent), 'utf8').digest('hex');
+  return createHash('sha256').update(sentCanonical(sent), 'utf8').digest('hex');
 }
 
 // A record as the server read it, with what the server says of it: that a phone made it, and

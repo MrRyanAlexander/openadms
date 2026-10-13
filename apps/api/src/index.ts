@@ -178,7 +178,7 @@ export {
   type PhonesPage,
 } from './dispatch/phones.ts';
 export { Intake } from './sync/intake.ts';
-export { Sync, type Synced, type SyncParts } from './sync/sync.ts';
+export { sentFingerprint, Sync, type Synced, type SyncParts } from './sync/sync.ts';
 export type {
   IntakeNote,
   PhotoTaken,
@@ -236,6 +236,13 @@ export { PhotoFiles, type PhotoFile, type PhotoFilesParts } from './media/photo-
 export { PhotographFiles, type KeptPhotographFile } from './media/photograph-files.ts';
 export { Receiving } from './media/receiving.ts';
 export { Limits } from './process/limits.ts';
+export {
+  turnInAnswerOf,
+  TurnIns,
+  type TurningInPhone,
+  type TurnInOutcome,
+  type TurnInsParts,
+} from './phone/turn-ins.ts';
 export {
   PasscodeSessions,
   type PasscodeSessionOutcome,

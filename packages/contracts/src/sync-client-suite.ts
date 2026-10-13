@@ -23,6 +23,11 @@
 // the server takes, each where the last one ended; it is kept until it is answered kept; an
 // interrupted upload goes on from where the server says it stands; and a file answered not the
 // one fingerprinted goes again from its first byte. The suite plays the media endpoint itself.
+//
+// **And turning the phone in** ("Sync and turn in", ARCHITECTURE §8; AC-02-58; BACKLOG 2.6.5,
+// C139; ADR-096, 468, 488): a turn-in names everything the phone still holds, each once, by the
+// id it was made under, and what it sent with no id the server could read by the fingerprint of
+// what was sent; and it wipes only when it is answered to wipe, and then wipes everything.
 import type { PhotoFileAnswer, PhotoFileName } from './api-answers.ts';
 import {
   stored,
@@ -30,6 +35,7 @@ import {
   syncedRecordId,
   type FilePartSent,
 } from './sync-client.ts';
+import { turnInSentSchema, type TurnInAnswer, type TurnInSent } from './turn-in.ts';
 import {
   assignment,
   certificationPhotos,
@@ -107,6 +113,13 @@ export interface SyncClient {
   filePartAnswered(answer: unknown): void | Promise<void>;
   // Each file it holds that the server has not said it kept: "<photograph's id> <file>".
   holdsFiles(): readonly string[];
+  // The turn-in it sends now, as it goes on the wire, under the passcode typed on the phone
+  // ("Sync and turn in"; ADR-488).
+  turnsIn(passcode: string): unknown;
+  // What came back for it, as it came off the wire; `undefined` where nothing came back.
+  turnInAnswered(answer: unknown): void | Promise<void>;
+  // Whether it has wiped what it held.
+  wiped(): boolean;
 }
 
 export type SyncClientMaker = (holds: SyncClientHolds) => SyncClient | Promise<SyncClient>;
@@ -215,6 +228,32 @@ function answerTo(
     setupVersion: null,
   };
 }
+
+// A turn-in as it went on the wire, read as the server reads one: refused whole where it isn't
+// the contract's.
+function turnInOnTheWire(sent: unknown): TurnInSent {
+  const wire: unknown = JSON.parse(JSON.stringify(sent ?? null));
+  const read = turnInSentSchema.safeParse(wire);
+  if (!read.success) {
+    const [issue] = read.error.issues;
+    throw new Error(
+      `What it sent is not a turn-in the contract reads: ${issue?.path.join('.') ?? ''} ${issue?.message ?? ''}`,
+    );
+  }
+  return read.data;
+}
+
+const notTurnedIn = (holds: TurnInSent['holds']): TurnInAnswer => ({
+  turnedIn: false,
+  wipe: false,
+  message:
+    'Not turned in: the server doesn’t have 1 record this phone holds yet. Nothing was wiped and nothing was changed. Sync the phone again, then turn it in.',
+  notOnTheServer: holds,
+});
+
+const turnedIn: TurnInAnswer = { turnedIn: true, wipe: true, numbers: [] };
+
+const typed = 'osprey-landing-marsh';
 
 const named = (file: { readonly photoId: string; readonly file: PhotoFileName }): string =>
   `${file.photoId} ${file.file}`;
@@ -860,6 +899,183 @@ export const syncClientSuite: readonly SyncClientCheck[] = [
       held(
         taken.kept.has(named(file)) && client.holdsFiles().length === 0,
         'Answered not matched, it let its file go before it was kept.',
+      );
+    },
+  },
+  {
+    name: 'a turn-in names everything the phone still holds, each once: what waits to be sent and each report, record and photograph the server did not store, by the id it was made under; a record answered not saved under no id by the fingerprint of what was sent, never by an id; each photograph whose files aren’t all kept; the last number it used of each series; the passcode as typed; never which phone it is (AC-02-58; ADR-468, 488)',
+    async run(make) {
+      const [saved, kept, unread] = [collected('61'), collected('62'), collected('63')];
+      const file = { photoId: pilePhoto.id, file: 'photo', bytes: fileOf(600, 3) } as const;
+      const lastUsed = [{ projectId: p1, series: 'LOAD', lastUsedNumber: 101006 }] as const;
+      const client = await make({
+        ...nothing,
+        unplannedAssignments: [unplanned],
+        passcodeUses: [switched],
+        records: [saved, kept, unread],
+        photos: [pilePhoto],
+        files: [file],
+        lastUsed: [...lastUsed],
+      });
+      const sync = onTheWire(client.sends());
+      held(sync.records.length === 3, 'It did not send the three records it holds.');
+      await client.answered({
+        ...answerTo(sync, (id) =>
+          id === syncedRecordId(kept)
+            ? {
+                answer: 'QUARANTINED',
+                id,
+                reason: 'DUPLICATE_FIELD_EVENT',
+                message: 'Ticket 101001: this ticket already has a collection.',
+                heldBy: made('99'),
+              }
+            : id === syncedRecordId(unread)
+              ? {
+                  answer: 'NOT_SAVED',
+                  id: null,
+                  reason: 'NOT_A_RECORD',
+                  message: 'Not saved: this record can’t be read.',
+                }
+              : undefined,
+        ),
+        unplannedAssignments: [
+          { assignmentId: unplanned.id, answer: 'NOT_SAVED', reason: 'UNKNOWN_PROJECT' },
+        ],
+        passcodeUses: [{ useId: switched.id, answer: 'NOT_SAVED', reason: 'NOT_A_MONITOR' }],
+      } satisfies SyncAnswered);
+      // Its photograph's record is saved; its file is not sent yet.
+      const sent = turnInOnTheWire(await client.turnsIn(typed));
+      held(sent.passcode === typed, 'It did not send the passcode as it was typed.');
+      held(
+        same(sent.lastUsed, lastUsed),
+        'It did not send the last number it used of each series.',
+      );
+      held(
+        sorted(sent.holds.unplannedAssignments) === sorted([unplanned.id]) &&
+          sorted(sent.holds.passcodeUses) === sorted([switched.id]),
+        'It did not name each report the server did not store, and only those.',
+      );
+      held(
+        sorted(sent.holds.records) === sorted([syncedRecordId(kept)]),
+        'It did not name, by its id, the record the server kept in quarantine, and only that: the saved one is no longer held, and one answered under no id goes by its fingerprint.',
+      );
+      held(
+        sent.holds.held.length === 1,
+        'It did not name the record answered not saved under no id by a fingerprint, once.',
+      );
+      held(
+        sorted(sent.holds.photos) === sorted([pilePhoto.id]),
+        'It did not name the photograph whose file is still on the phone.',
+      );
+      // A phone that never synced names what waits.
+      const fresh = await make({ ...nothing, passcodeUses: [switched], records: [saved] });
+      const waiting = turnInOnTheWire(await fresh.turnsIn(typed));
+      held(
+        sorted(waiting.holds.records) === sorted([syncedRecordId(saved)]) &&
+          sorted(waiting.holds.passcodeUses) === sorted([switched.id]),
+        'A phone that never synced did not name what waits to be sent.',
+      );
+    },
+  },
+  {
+    name: 'it wipes only when it is answered to wipe: with no answer, with what is no answer, or answered not turned in, it keeps everything as it was and goes on as before (AC-02-58; ADR-096, 488)',
+    async run(make) {
+      const kept = collected('71');
+      const waits = collected('72');
+      const client = await make({ ...nothing, records: [kept] });
+      const sync = onTheWire(client.sends());
+      await client.answered(
+        answerTo(sync, (id) => ({
+          answer: 'QUARANTINED',
+          id,
+          reason: 'DUPLICATE_FIELD_EVENT',
+          message: 'Ticket 101001: this ticket already has a collection.',
+          heldBy: made('99'),
+        })),
+      );
+      const before = sorted(client.holds());
+      for (const answer of [
+        undefined,
+        { turnedIn: true },
+        { ...turnedIn, wipe: false },
+        notTurnedIn({
+          unplannedAssignments: [],
+          passcodeUses: [],
+          records: [syncedRecordId(kept)],
+          held: [],
+          photos: [],
+        }),
+      ]) {
+        turnInOnTheWire(await client.turnsIn(typed));
+        await client.turnInAnswered(
+          answer === undefined ? undefined : JSON.parse(JSON.stringify(answer)),
+        );
+        held(
+          !client.wiped() && sorted(client.holds()) === before,
+          `Answered ${answer === undefined ? 'nothing' : JSON.stringify(answer)}, it let go of what it held.`,
+        );
+        held(client.notSaved().length === 1, 'It no longer shows the record not saved.');
+      }
+      // It goes on as before: a record made since goes in the next sync.
+      const later = await make({ ...nothing, records: [waits] });
+      turnInOnTheWire(await later.turnsIn(typed));
+      await later.turnInAnswered(undefined);
+      held(
+        onTheWire(later.sends()).records.length === 1,
+        'After a turn-in with no answer, what waited is not sent.',
+      );
+    },
+  },
+  {
+    name: 'answered to wipe, it wipes everything it held: no record, report, photograph or file is left, nothing is shown as not saved, and it sends nothing more (AC-02-58, 61; ADR-096, 488)',
+    async run(make) {
+      const kept = collected('81');
+      const file = { photoId: pilePhoto.id, file: 'photo', bytes: fileOf(600, 5) } as const;
+      const client = await make({
+        ...nothing,
+        passcodeUses: [switched],
+        records: [kept],
+        photos: [pilePhoto],
+        files: [file],
+      });
+      const sync = onTheWire(client.sends());
+      await client.answered({
+        ...answerTo(sync, (id) => ({
+          answer: 'NOT_SAVED',
+          id,
+          reason: 'NAMES_NO_RECORD',
+          message: 'Not saved: this record names something the server doesn’t have.',
+        })),
+        passcodeUses: [{ useId: switched.id, answer: 'NOT_SAVED', reason: 'NOT_A_MONITOR' }],
+      } satisfies SyncAnswered);
+      held(!client.wiped(), 'It wiped itself before it was turned in.');
+      turnInOnTheWire(await client.turnsIn(typed));
+      await client.turnInAnswered(JSON.parse(JSON.stringify(turnedIn)));
+      held(client.wiped(), 'Answered to wipe, it did not say it wiped.');
+      held(
+        client.holds().length === 0 &&
+          client.holdsFiles().length === 0 &&
+          client.notSaved().length === 0,
+        'Answered to wipe, it still holds something, or shows something as not saved.',
+      );
+      const after = onTheWire(client.sends());
+      held(
+        after.records.length === 0 &&
+          after.photos.length === 0 &&
+          after.passcodeUses.length === 0 &&
+          client.sendsFilePart() === null,
+        'Answered to wipe, it still sends something.',
+      );
+      // A phone whose answer to its last sync never came, told to wipe all the same, wipes
+      // what waited too.
+      const waited = await make({ ...nothing, unplannedAssignments: [unplanned], records: [kept] });
+      turnInOnTheWire(await waited.turnsIn(typed));
+      await waited.turnInAnswered(JSON.parse(JSON.stringify(turnedIn)));
+      held(
+        waited.wiped() &&
+          waited.holds().length === 0 &&
+          onTheWire(waited.sends()).records.length === 0,
+        'Answered to wipe, it kept what waited to be sent.',
       );
     },
   },

@@ -56,6 +56,10 @@ import {
   syncUnplannedAssignmentsAtMost,
   photoRead,
   recordRead,
+  sentCanonical,
+  toWipe,
+  turnInAnswerRead,
+  turnInSentSchema,
   type FilePartSent,
   type PhotoAnswer,
   type PhotoFileName,
@@ -69,6 +73,9 @@ import {
   type SyncedRecord,
   type SyncReceived,
   type SyncSent,
+  type TurnInAnswer,
+  type TurnInReceived,
+  type TurnInSent,
 } from '@open-adms/contracts';
 import type { AddressSource, FieldEventKind, NumberSeries, Workflow } from '@open-adms/db';
 import {
@@ -123,6 +130,10 @@ export interface HeldPhoto {
 export interface PhoneServer {
   received(deviceId: string, sent: SyncReceived): Promise<{ readonly answered: SyncAnswered }>;
   filePart(deviceId: string, part: FilePartSent): Promise<unknown>;
+  // A phone turned in under the master passcode: the API's `TurnIns` (src/phone/turn-ins.ts),
+  // its answer as it comes off the wire (ADR-488). A server of a story's or a test's own that
+  // turns no phone in has none.
+  turnIn?(deviceId: string, sent: TurnInReceived): Promise<unknown>;
 }
 
 // What a story's server throws where the phone has lost its signal mid-upload: nothing came
@@ -163,6 +174,14 @@ function fileOf(of: string, bytes: number, kind: 'jpeg' | 'png'): Buffer {
 }
 
 const sha256Of = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
+
+// What the phone names a thing it sent with no id the server could read by, at turn-in: the
+// SHA-256 of what was sent as canonical JSON (the contracts' `sentCanonical`), as the server
+// knows the record it holds (ADR-472, 488).
+export const sentPrint = (sent: unknown): string =>
+  createHash('sha256')
+    .update(sentCanonical(JSON.parse(JSON.stringify(sent))), 'utf8')
+    .digest('hex');
 
 // A record or a photograph the phone sent and what it was told: saved, already saved,
 // quarantined or not saved (ARCHITECTURE §9 (4); ADR-467, 481).
@@ -515,7 +534,9 @@ export class SimulatedDevice {
     | undefined;
   // What it shows as not saved, and the reports among them, which it keeps.
   private readonly shown: ShownNotSaved[] = [];
-  private readonly keptReports: string[] = [];
+  private keptReports: { readonly id: string; readonly kind: 'ASSIGNMENT' | 'USE' }[] = [];
+  // Whether it was turned in and wiped (ADR-488): it holds nothing since.
+  private turnedIn = false;
   // The last number the phone gave out of each series: its own count, kept across sign-ins.
   private readonly lastUsed = new Map<NumberSeries, number>();
   // The number each finished field event got, for the next of its split chain.
@@ -1121,8 +1142,12 @@ export class SimulatedDevice {
     const read = answer === undefined ? null : syncAnswerRead(last.sync, answer);
     if (read === null) return false;
     const reported = [
-      ...read.unplannedAssignments.map((each) => ({ id: each.assignmentId, ...each })),
-      ...read.passcodeUses.map((each) => ({ id: each.useId, ...each })),
+      ...read.unplannedAssignments.map((each) => ({
+        id: each.assignmentId,
+        kind: 'ASSIGNMENT' as const,
+        ...each,
+      })),
+      ...read.passcodeUses.map((each) => ({ id: each.useId, kind: 'USE' as const, ...each })),
     ];
     const gone = new Set(reported.map(({ id }) => id));
     this.reports = {
@@ -1132,7 +1157,7 @@ export class SimulatedDevice {
     };
     for (const each of reported) {
       if (stored(each)) continue;
-      this.keptReports.push(each.id);
+      this.keptReports.push({ id: each.id, kind: each.kind });
       this.shown.push({ id: each.id, reason: each.reason ?? each.answer, message: null });
     }
     last.held.forEach((sent, place) => {
@@ -1259,6 +1284,94 @@ export class SimulatedDevice {
     return parts;
   }
 
+  // "Sync and turn in" (ARCHITECTURE §8; AC-02-58; ADR-096, 488): what it sends to be turned
+  // in, under the passcode typed on it. Everything it still holds, each once, by the id it made:
+  // its reports and records waiting or not stored, its photographs waiting, not stored, or with
+  // a file not yet kept; and by its fingerprint what it sent that was answered under no id. The
+  // last number it used of each series it holds, and never which phone it is.
+  turnsIn(passcode: string): TurnInSent {
+    const answeredUnder = (one: Answered) => ('id' in one.answer ? one.answer.id : null);
+    const notStored = this.notSaved;
+    const records = notStored.filter(({ sent }) => sent.record !== 'PHOTO');
+    const photos = notStored.filter(({ sent }) => sent.record === 'PHOTO');
+    const kept = (kind: 'ASSIGNMENT' | 'USE') =>
+      this.keptReports.filter((each) => each.kind === kind).map(({ id }) => id);
+    const wire = (one: Answered): unknown =>
+      one.sent.record === 'PHOTO' ? { ...one.sent.photo } : onTheWire(one.sent);
+    return {
+      passcode,
+      holds: {
+        unplannedAssignments: [
+          ...this.reports.unplannedAssignments.map(({ id }) => id),
+          ...kept('ASSIGNMENT'),
+        ],
+        passcodeUses: [...this.reports.passcodeUses.map(({ id }) => id), ...kept('USE')],
+        records: [
+          ...this.outbox.map(heldId),
+          ...records.filter((one) => answeredUnder(one) !== null).map(({ sent }) => heldId(sent)),
+        ],
+        held: notStored
+          .filter((one) => answeredUnder(one) === null)
+          .map((one) => sentPrint(wire(one))),
+        photos: [
+          ...new Set([
+            ...this.photoOutbox.map(({ id }) => id),
+            ...photos.filter((one) => answeredUnder(one) !== null).map(({ sent }) => heldId(sent)),
+            ...[...this.files.values()].map(({ photoId }) => photoId),
+          ]),
+        ],
+      },
+      lastUsed: this.numbersReported(),
+    };
+  }
+
+  // What came back for its turn-in, off the wire; `undefined` where nothing came. Read by the
+  // contract's own rule (`turnInAnswerRead`): only an answer to wipe wipes it, and then it
+  // wipes everything it holds; anything else leaves it as it was. The answer, where it was one.
+  turnInAnswered(answer: unknown): TurnInAnswer | null {
+    const read = answer === undefined ? null : turnInAnswerRead(answer);
+    if (!toWipe(read)) return read;
+    this.turnedIn = true;
+    this.started.clear();
+    this.dropped.length = 0;
+    this.outbox.length = 0;
+    this.photoOutbox.length = 0;
+    this.files.clear();
+    this.resting.clear();
+    this.reports = { unplannedAssignments: [], passcodeUses: [], lastUsed: [] };
+    this.shown.length = 0;
+    this.keptReports = [];
+    this.lastUsed.clear();
+    this.numbers.clear();
+    this.receipts.clear();
+    this.told.length = 0;
+    this.toppedUp.clear();
+    this.current = { ...this.current, lists: { ...this.current.lists, blocks: [] } };
+    return read;
+  }
+
+  // Whether it was turned in and wiped.
+  get wiped(): boolean {
+    return this.turnedIn;
+  }
+
+  // "Sync and turn in", whole: it syncs every record and photograph's record it holds and sends
+  // every file, then sends its turn-in, as JSON read by the contract as the endpoint's boundary
+  // reads it, under the passcode typed on it. Answered to wipe, it wipes; answered not turned
+  // in, it keeps everything and the answer says what the server doesn't have. The answer.
+  async turnIn(server: PhoneServer, passcode: string): Promise<TurnInAnswer> {
+    if (server.turnIn === undefined)
+      throw new Error(`${this.name}: this server turns no phone in.`);
+    await this.sync(server);
+    const wire: unknown = JSON.parse(JSON.stringify(this.turnsIn(passcode)));
+    const answer: unknown = JSON.parse(
+      JSON.stringify(await server.turnIn(this.current.deviceId, turnInSentSchema.parse(wire))),
+    );
+    const read = this.turnInAnswered(answer);
+    if (read === null) throw new Error(`${this.name}: what came back is no answer to its turn-in.`);
+    return read;
+  }
+
   // Every record it has sent and what it was told, in the order sent.
   get answers(): readonly Answered[] {
     return [...this.told];
@@ -1282,7 +1395,7 @@ export class SimulatedDevice {
       ...this.reports.passcodeUses.map(({ id }) => id),
       ...this.outbox.map(heldId),
       ...this.photoOutbox.map(({ id }) => id),
-      ...this.keptReports,
+      ...this.keptReports.map(({ id }) => id),
       ...this.notSaved.map((one) => heldId(one.sent)),
     ];
   }

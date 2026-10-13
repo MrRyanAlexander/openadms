@@ -91,10 +91,14 @@ Decides who can do what, and on which phone:
     arrive (ADR-240).
 12. **Taking a phone out of service:** with the master passcode, **sync and turn in**, even without
     the monitor: it uploads every queue, waits for the server to confirm each record, returns its
-    unused numbers and wipes itself (ADR-096, 134).
+    unused numbers and wipes itself (ADR-096, 134). ⚠️ *As built (ADR-488): it is told to wipe only
+    when the server has everything it still holds; its key is revoked in the same step, so it is
+    refused from then on (KD-77 asks whether that is the moment).*
 13. **A lost or broken phone** is marked in the back office. If it turns up and syncs, everything on
     it is received: what it made **after** its removal time arrives **flagged**; then its number
-    block is retired and it's wiped, and only then refused (ADR-065, 134).
+    block is retired and it's wiped, and only then refused (ADR-065, 134). ⚠️ *As built (ADR-488):
+    it is turned in like any other phone; every block of a phone marked lost is retired whole,
+    whatever it reports.*
 14. **Issue read-only logins** to a client, contractor or auditor for their projects (ADR-169).
     The admin says what kind of viewer it is, which projects it sees, and a contractor user's
     contractor; a project is taken away by archiving. A client user and an auditor see their

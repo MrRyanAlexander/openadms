@@ -96,6 +96,7 @@ export const policyNames = {
   rateLimitWindowSeconds: 'RATE_LIMIT_WINDOW_SECONDS',
   rateLimitRequestsPerAddress: 'RATE_LIMIT_REQUESTS_PER_ADDRESS',
   rateLimitRequestsPerAccount: 'RATE_LIMIT_REQUESTS_PER_ACCOUNT',
+  rateLimitRequestsPerPhone: 'RATE_LIMIT_REQUESTS_PER_PHONE',
   rateLimitCountsKept: 'RATE_LIMIT_COUNTS_KEPT',
   // Tries at sign-in from one address (ASVS 6.1.1, 6.3.1; ADR-416): how long the stretch is, in
   // minutes; how many refused tries one address may make in it, whoever's login it tries, and
@@ -181,6 +182,7 @@ const ranges: Record<PolicyName, { least: number; most: number }> = {
   [policyNames.rateLimitWindowSeconds]: { least: 1, most: 3600 },
   [policyNames.rateLimitRequestsPerAddress]: { least: 1, most: Number.MAX_SAFE_INTEGER },
   [policyNames.rateLimitRequestsPerAccount]: { least: 1, most: Number.MAX_SAFE_INTEGER },
+  [policyNames.rateLimitRequestsPerPhone]: { least: 1, most: Number.MAX_SAFE_INTEGER },
   [policyNames.rateLimitCountsKept]: { least: 1000, most: 10000000 },
   [policyNames.signInAddressWindowMinutes]: { least: 1, most: 1440 },
   [policyNames.signInWrongTriesPerAddress]: { least: 1, most: Number.MAX_SAFE_INTEGER },
@@ -235,6 +237,7 @@ export class Policy {
   readonly rateLimitWindowSeconds: number;
   readonly rateLimitRequestsPerAddress: number;
   readonly rateLimitRequestsPerAccount: number;
+  readonly rateLimitRequestsPerPhone: number;
   readonly rateLimitCountsKept: number;
   readonly signInAddressWindowMinutes: number;
   readonly signInWrongTriesPerAddress: number;
@@ -288,6 +291,7 @@ export class Policy {
     this.rateLimitWindowSeconds = Policy.read(values, policyNames.rateLimitWindowSeconds);
     this.rateLimitRequestsPerAddress = Policy.read(values, policyNames.rateLimitRequestsPerAddress);
     this.rateLimitRequestsPerAccount = Policy.read(values, policyNames.rateLimitRequestsPerAccount);
+    this.rateLimitRequestsPerPhone = Policy.read(values, policyNames.rateLimitRequestsPerPhone);
     this.rateLimitCountsKept = Policy.read(values, policyNames.rateLimitCountsKept);
     this.signInAddressWindowMinutes = Policy.read(values, policyNames.signInAddressWindowMinutes);
     this.signInWrongTriesPerAddress = Policy.read(values, policyNames.signInWrongTriesPerAddress);

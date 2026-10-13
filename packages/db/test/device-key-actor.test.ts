@@ -320,8 +320,9 @@ describe('the challenge a phone last proved itself with', () => {
     );
     await asThePhone(world.device);
     expect(await db.run(answered, [world.device, '2026-10-13T12:00:00Z'])).toBe(1);
-    // It synced, was confirmed and wiped on Wednesday: its key is revoked.
-    await db.actor(world.admin, 'BACK_OFFICE');
+    // It synced, everything on it was confirmed, and it was turned in on Wednesday: its key is
+    // revoked, by its turn-in alone (ADR-488).
+    await db.actor(masterPasscodeActorId, 'DEVICE', { deviceId: world.device });
     await db.run(`UPDATE "device" SET "key_revoked_at" = '2026-10-14T13:30:00Z' WHERE "id" = $1`, [
       world.device,
     ]);

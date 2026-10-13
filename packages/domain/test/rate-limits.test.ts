@@ -45,6 +45,7 @@ const shipped = {
   RATE_LIMIT_WINDOW_SECONDS: '60',
   RATE_LIMIT_REQUESTS_PER_ADDRESS: '3000',
   RATE_LIMIT_REQUESTS_PER_ACCOUNT: '600',
+  RATE_LIMIT_REQUESTS_PER_PHONE: '600',
   RATE_LIMIT_COUNTS_KEPT: '100000',
   SIGN_IN_ADDRESS_WINDOW_MINUTES: '60',
   SIGN_IN_WRONG_TRIES_PER_ADDRESS: '30',
@@ -103,6 +104,7 @@ describe('the limits, from the policy', () => {
       ['REQUESTS_BY_ADDRESS', 3000, 60],
       ['REQUESTS_BY_ACCOUNT', 600, 60],
       ['FILE_PARTS_BY_PHONE', 300, 60],
+      ['REQUESTS_BY_PHONE', 600, 60],
       ['WRONG_TRIES_BY_ADDRESS', 30, 3600],
       ['WRONG_TRIES_BY_ADDRESS_AT_LOGIN', 4, 3600],
       ['RESET_ASKS_BY_ADDRESS', 10, 3600],
@@ -137,6 +139,7 @@ describe('the limits, from the policy', () => {
     for (const name of [
       'RATE_LIMIT_REQUESTS_PER_ADDRESS',
       'RATE_LIMIT_REQUESTS_PER_ACCOUNT',
+      'RATE_LIMIT_REQUESTS_PER_PHONE',
       'SIGN_IN_WRONG_TRIES_PER_ADDRESS',
       'PASSWORD_RESET_ASKS_PER_ADDRESS',
       'PASSWORD_RESET_ASKS_PER_LOGIN',
@@ -188,6 +191,7 @@ describe('the limits, from the policy', () => {
       ['MEDIA_FILE_BYTES_AT_MOST', '1048575'],
       ['MEDIA_PART_BYTES_AT_MOST', '65535'],
       ['RATE_LIMIT_FILE_PARTS_PER_PHONE', '0'],
+      ['RATE_LIMIT_REQUESTS_PER_PHONE', '0'],
     ] as const) {
       expect(() => Policy.from({ ...shipped, [name]: below }), name).toThrow(name);
     }

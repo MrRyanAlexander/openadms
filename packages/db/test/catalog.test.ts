@@ -235,6 +235,10 @@ const triggers = [
   // Which version of the master passcode's check a phone holds: its own proven call's alone,
   // never an earlier one; and a monitor's offline seed never outlives its password (ADR-454).
   `CREATE TRIGGER device_master_passcode_version BEFORE UPDATE ON public.device FOR EACH ROW EXECUTE FUNCTION device_master_passcode_version_guard()`,
+  // A phone's key is revoked by its turn-in alone, once it holds no block still issued, and the
+  // phone then stays as it was turned in; a phone turned in is issued no block (ADR-488).
+  `CREATE TRIGGER device_key_revocation BEFORE INSERT OR UPDATE ON public.device FOR EACH ROW EXECUTE FUNCTION device_key_revocation_guard()`,
+  `CREATE TRIGGER number_block_key_standing BEFORE INSERT OR UPDATE ON public.number_block FOR EACH ROW EXECUTE FUNCTION number_block_key_standing_guard()`,
   `CREATE TRIGGER user_credential_offline_seed BEFORE UPDATE ON public.user_credential FOR EACH ROW EXECUTE FUNCTION user_credential_offline_seed_guard()`,
   // A monitor's session names a phone in service, and only theirs does (ADR-443).
   `CREATE TRIGGER session_on_a_phone BEFORE INSERT ON public.session FOR EACH ROW EXECUTE FUNCTION session_on_a_phone_guard()`,

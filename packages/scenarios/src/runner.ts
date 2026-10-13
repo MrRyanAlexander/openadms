@@ -30,11 +30,14 @@ import {
   SessionTokens,
   SetupChoices,
   Sync,
+  turnInAnswerOf,
+  TurnIns,
   UnplannedAssignments,
   WrongTries,
   type AssignmentAtSignIn,
   type SetupChoicesRead,
 } from '@open-adms/api';
+import type { TurnInAnswer } from '@open-adms/contracts';
 import type { Database, ViewerDatabase } from '@open-adms/db';
 import {
   BreachedPasswords,
@@ -44,6 +47,7 @@ import {
   PhoneProofRules,
   RateLimits,
   SignInTries,
+  TurnInRules,
   type MasterPasscodeSessionKind,
   type Policy,
 } from '@open-adms/domain';
@@ -131,6 +135,9 @@ export interface StoryContext {
       onPhone: string,
       kind: MasterPasscodeSessionKind,
     ): Promise<{ readonly sessionId: string; readonly expiresAt: Date }>;
+    // "Sync and turn in" (ADR-488): the phone syncs, sends its files, then is turned in through
+    // the API's `TurnIns`; answered to wipe, it wipes. The answer.
+    turnIn(phone: SimulatedDevice): Promise<TurnInAnswer>;
   };
   // A phone's proof of itself, as its sync begins: the API's `PhoneProofs`, on the story's clock.
   readonly proofs: PhoneProofs;
@@ -264,8 +271,21 @@ export class Runner {
           }),
           clock: at,
         });
+        const turnIns = new TurnIns(api, {
+          passcode: passcodeAt(at),
+          rules: new TurnInRules(),
+          clock: at,
+          requestNow: () => undefined,
+        });
         return {
           received: (deviceId, sent) => sync.received(deviceId, sent),
+          // A turn-in as the endpoint takes one, from a phone in or out of service; a passcode
+          // refused stops the story. The answer as it goes on the wire.
+          turnIn: async (deviceId, sent) => {
+            const outcome = await turnIns.turnIn(await phoneNow(deviceId), sent);
+            if (!outcome.checked) throw new Error(`The turn-in was refused: ${outcome.why}.`);
+            return turnInAnswerOf(outcome);
+          },
           // A part as the media endpoint's boundary reads one: its bytes, its offset and the
           // file's length; the answer as it goes on the wire.
           filePart: (deviceId, part) =>
@@ -350,6 +370,8 @@ export class Runner {
               throw new Error(`The setup’s choices were not read: ${outcome.why}.`);
             return outcome;
           },
+          // "Sync and turn in" on the phone, the passcode typed by whoever holds it (ADR-488).
+          turnIn: (phone) => phone.turnIn(context.server, storyMasterPasscode),
           async session(monitor, onPhone, kind) {
             const outcome = await new PasscodeSessions(api, {
               passcode: passcodeAt(clock),

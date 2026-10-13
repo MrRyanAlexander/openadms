@@ -130,6 +130,11 @@ gets tracked on a spreadsheet."
     monitor: it proves itself, uploads every queue (archived ones too), waits for the server to
     confirm each record, returns its unused numbers, then wipes. Nothing is wiped before the server
     confirms it; cancelled field events are the only thing never synced (ADR-056, 096, 134).
+    ⚠️ *Built at the server (ADR-488…490, agent defaults): `POST /phones/current/turn-ins`; the
+    phone names everything it still holds and is answered `wipe: true` only when the server has
+    all of it; the same step ends its blocks and revokes its key (KD-77, for the user: the
+    approved pages say the key is revoked after the wipe). The field app wipes only on
+    `wipe: true` (the sync contract's suite, checks 14…16).*
 13. **The time clock** (where the project has it on), on the **assignment**: clock in, a break
     (start and end) and clock out **by hand**. **Simple nudges only**: "You're not clocked in. Clock
     in now?" on starting a field event; "Clock out?" on signing out. Activity lines are pre-filled

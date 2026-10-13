@@ -105,3 +105,18 @@ export async function proven(
   expect([answer.status, answer.code]).toEqual([200, undefined]);
   return phoneProvenAnswerSchema.parse(answer.body).token;
 }
+
+// A phone that holds nothing turned in under the test's passcode, as "Sync and turn in" does
+// once everything is on the server (ADR-488): from then on its key is revoked.
+export async function turnedIn(served: Served, token: string): Promise<void> {
+  const answer = await served.ask('POST', '/phones/current/turn-ins', {
+    bearer: token,
+    payload: {
+      passcode,
+      holds: { unplannedAssignments: [], passcodeUses: [], records: [], held: [], photos: [] },
+      lastUsed: [],
+    },
+  });
+  expect([answer.status, answer.code], 'turning the phone in').toEqual([200, undefined]);
+  expect(answer.body).toEqual({ turnedIn: true, wipe: true, numbers: [] });
+}

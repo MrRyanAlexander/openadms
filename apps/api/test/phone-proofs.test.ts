@@ -28,6 +28,7 @@ import {
   proofOf,
   proven,
   SoftwareKey,
+  turnedIn,
 } from './support/phones.ts';
 import { notTaken } from './support/review.ts';
 import { danasEmail, long, worldOn, type Answer, type Served } from './support/served.ts';
@@ -91,6 +92,8 @@ describe('who may ask', () => {
       'phoneSetupChoices',
       'reportUnplannedAssignment',
       'syncPhone',
+      // A phone turned in under the master passcode (ADR-488).
+      'turnInPhone',
       // A photograph's files, by the phone that took it (ADR-482).
       'photoFile',
       'sendPhotoFilePart',
@@ -330,11 +333,8 @@ describe('a proof that isn’t one', () => {
         status: 'LOST',
         outOfServiceAt: lostAt.toISOString(),
       });
-      // It synced, was confirmed and wiped: its key is revoked.
-      await tx.device.update({
-        where: { id: phone.id },
-        data: { keyRevokedAt: new Date('2026-10-13T12:05:00.000Z') },
-      });
+      // It synced, everything on it was confirmed, and it was turned in: its key is revoked.
+      await turnedIn(served, token);
       expect(told(await current(served, token))).toEqual(refused);
       served.clock.later(6);
       const after = await answered(served, phone);

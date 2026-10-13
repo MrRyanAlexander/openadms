@@ -225,7 +225,7 @@ API reads the table**; who is shown them on a screen is the back office's (Phase
 | Field | Type | Notes |
 |---|---|---|
 | **id** | uuid | |
-| **kind** | enum `SecurityEventKind` | `SIGN_IN` · `SIGN_IN_FAILED` · `LOCKOUT` · `TWO_STEP_SET_UP` · `TWO_STEP_CLEARED` (ADR-412) · `DEVICE_SETUP` · `DEVICE_SWITCH` · `MASTER_PASSCODE_USE` · `MASTER_PASSCODE_FAILED` · `MASTER_PASSCODE_LOCKOUT` (a wrong try at the master passcode and the lock, ADR-439) (REQ-202b's list; a task that needs another adds it) |
+| **kind** | enum `SecurityEventKind` | `SIGN_IN` · `SIGN_IN_FAILED` · `LOCKOUT` · `TWO_STEP_SET_UP` · `TWO_STEP_CLEARED` (ADR-412) · `DEVICE_SETUP` · `DEVICE_SWITCH` · `MASTER_PASSCODE_USE` · `MASTER_PASSCODE_FAILED` · `MASTER_PASSCODE_LOCKOUT` (a wrong try at the master passcode and the lock, ADR-439) · `DEVICE_TURN_IN` (a phone turned in, its key revoked, ADR-488) (REQ-202b's list; a task that needs another adds it) |
 | userId | → `User` | Who it is about: the person a try named, when the firm has such a person. Never the name that was typed |
 | deviceId | → `Device` | The phone, when it happened on one |
 | requestId | text | The API request it happened in; never blank (check) |
@@ -344,7 +344,7 @@ neither table (ADR-361, *agent default*: ROEs and forms stay unseen unless the u
 | **masterPasscodeVersion** | int → `MasterPasscode.version` | The passcode version the phone holds |
 | **enrolledAt** | instant | |
 | outOfServiceAt | instant | Work made after it arrives flagged (ADR-134) |
-| keyRevokedAt | instant | **Built (ADR-315):** when its key was revoked, once a lost or retired phone is wiped; only on a phone out of service, never before its removal time (check). Refusing the key is the API's, built (ADR-440): a phone with one proves nothing and its token stops at once; nothing sets it yet (2.6.5) |
+| keyRevokedAt | instant | **Built (ADR-315):** when its key was revoked, once a lost or retired phone is wiped; only on a phone out of service, never before its removal time (check). Refusing the key is the API's, built (ADR-440): a phone with one proves nothing and its token stops at once. **Set by the phone's turn-in alone (ADR-488):** as the master passcode's actor for that phone, once every record it holds is on the server and it holds no block still issued; never at enrolment, and never changed after, nor its status or removal time; a phone with one is issued no block (the guard migration). It is set as the phone is told to wipe, not after (KD-77, for the user) |
 | lastAnsweredChallengeMadeAt | instant | **Built (ADR-440):** when the server made the last challenge this phone proved itself with; a challenge is good once, so only one made later is taken. Written by that phone's own proof alone (the device key's actor, for that phone), only ever later, never once the key is revoked (the guard) |
 
 #### `MasterPasscode`
@@ -2028,7 +2028,7 @@ A new value in any of them is a code change with an ADR (`spec/LISTS.md` Group 2
 | `TicketStatus` ✅ | `PENDING` · `COMPLETED` · `MANUAL_REVIEW` · `VOID` | `FieldEvent`, `ReconciliationDecision` |
 | `UserRole` ✅ | `ADMIN` · `MANAGER_ANALYST` · `MONITOR` · `READ_ONLY_VIEWER` · `SYSTEM` · `MASTER_PASSCODE` (ADR-439) · `DEVICE_KEY` (ADR-440) | `User` |
 | `DeviceStatus` ✅ | `ACTIVE` · `LOST` · `RETIRED` | `Device` |
-| `SecurityEventKind` ✅ | `SIGN_IN` · `SIGN_IN_FAILED` · `LOCKOUT` · `TWO_STEP_SET_UP` · `TWO_STEP_CLEARED` (ADR-412) · `DEVICE_SETUP` · `DEVICE_SWITCH` · `MASTER_PASSCODE_USE` · `MASTER_PASSCODE_FAILED` · `MASTER_PASSCODE_LOCKOUT` (ADR-439) | `SecurityEvent` (ADR-399) |
+| `SecurityEventKind` ✅ | `SIGN_IN` · `SIGN_IN_FAILED` · `LOCKOUT` · `TWO_STEP_SET_UP` · `TWO_STEP_CLEARED` (ADR-412) · `DEVICE_SETUP` · `DEVICE_SWITCH` · `MASTER_PASSCODE_USE` · `MASTER_PASSCODE_FAILED` · `MASTER_PASSCODE_LOCKOUT` (ADR-439) · `DEVICE_TURN_IN` (ADR-488) | `SecurityEvent` (ADR-399) |
 | `NumberSeries` ✅ | `LOAD` · `HAUL_OUT` · `UNIT_RATE` · `CERTIFICATION` · `ROE` (✅ ADR-323) | `ProjectNumberSeries`, `ControlRange`, `NumberBlock` |
 | `NumberBlockStatus` ✅ | `ISSUED` · `RECLAIMED` · `RETIRED` | `NumberBlock` |
 | `AssignmentOrigin` ✅ | `PLANNED` · `UNPLANNED` | `Assignment` |

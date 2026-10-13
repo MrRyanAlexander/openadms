@@ -58,6 +58,14 @@ export class Limits {
     if (limited !== undefined) throw limited;
   }
 
+  // Every request of a proven phone, counted for the phone, whatever address it came from and
+  // whoever is signed in on it (ADR-490): an office's phones share its address, and one of them
+  // must not spend the count of the rest.
+  phoneAsked(deviceId: string): void {
+    const limited = this.taken('REQUESTS_BY_PHONE', `phone ${deviceId}`);
+    if (limited !== undefined) throw limited;
+  }
+
   // Every part of a photograph's file a phone sends, or asks after (ADR-482), counted for the
   // phone, whatever address it came from.
   filePart(deviceId: string): void {

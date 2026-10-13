@@ -34,6 +34,47 @@ export class PhoneRules {
   }
 }
 
+// How a block of numbers ends when its phone is turned in (ADR-065, 134, 488): its unused rest
+// handed back for the next phone, or the whole block retired; as the database's
+// NumberBlockStatus keeps them.
+export const turnedInBlocks = ['RECLAIMED', 'RETIRED'] as const;
+
+export type TurnedInBlocks = (typeof turnedInBlocks)[number];
+
+// A phone turned in under the master passcode ("Sync and turn in", ARCHITECTURE §8; AC-02-58,
+// 61; ADR-065, 096, 134, 488).
+//
+// - **Nothing is wiped before the server has it** (ADR-096): the phone is told to wipe only
+//   when every record and every photograph's file it still holds is on the server. A record the
+//   server holds for a person, not saved, is on the server (ADR-468 (2)); a photograph whose file
+//   isn't kept is not, since its file is only on the phone.
+// - **Its numbers end with it** (ADR-065): a phone in hand that reports the last number it used
+//   of a series has the unused rest of that series' blocks handed back; a series it doesn't
+//   report is retired whole, since nobody can be sure what it used of it; and a lost phone's
+//   blocks are retired whole whatever it reports, as they would have been had it never turned up.
+export class TurnInRules {
+  blocksEnd(
+    phone: { readonly status: 'ACTIVE' | PhoneRemoval },
+    reported: boolean,
+  ): TurnedInBlocks {
+    return phone.status !== 'LOST' && reported ? 'RECLAIMED' : 'RETIRED';
+  }
+
+  // What a supervisor is told when the phone holds something the server doesn't have: the phone
+  // keeps everything and is not wiped.
+  notConfirmed(missing: { readonly records: number; readonly files: number }): string {
+    const counted = (count: number, one: string, many: string) =>
+      `${String(count)} ${count === 1 ? one : many}`;
+    const parts = [
+      ...(missing.records > 0 ? [counted(missing.records, 'record', 'records')] : []),
+      ...(missing.files > 0
+        ? [counted(missing.files, 'photograph’s file', 'photographs’ files')]
+        : []),
+    ];
+    return `Not turned in: the server doesn’t have ${parts.join(' and ')} this phone holds yet. Nothing was wiped and nothing was changed. Sync the phone again, then turn it in.`;
+  }
+}
+
 export class MasterPasscodeRules {
   static readonly shortest = 8;
   static readonly longest = 128;

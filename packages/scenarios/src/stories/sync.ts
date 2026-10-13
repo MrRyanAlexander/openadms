@@ -1713,7 +1713,7 @@ export const sync: Story = {
       'P1-TWR-LF turns up in Tariq’s truck and syncs, two days after Luis marked it lost',
     );
     story.check(
-      'AC-10-46, AC-02-60 marked lost two days ago, P1-TWR-LF still proves itself: its key stands until the phone is wiped',
+      'AC-10-46, AC-02-60 marked lost two days ago, P1-TWR-LF still proves itself: its key stands until the phone is turned in',
       await provesItself('P1-TWR-LF'),
       [true, 'SPENT'],
     );
@@ -1768,15 +1768,89 @@ export const sync: Story = {
     );
     story.at(
       wednesday('18:05'),
-      'Every record of P1-TWR-LF is confirmed. Luis retires what it held',
+      'Luis holds P1-TWR-LF and turns it in with the master passcode: “Sync and turn in”',
     );
-    const retired = await saved(
-      allocator.retire(luis, device('P1-TWR-LF'), 'Lost on Monday 12 October'),
+    const turnedIn = await story.underPasscode.turnIn(lost);
+    const lostPhone = await api.device.findUniqueOrThrow({ where: { id: device('P1-TWR-LF') } });
+    story.check(
+      'AC-02-58, AC-05-56, AC-02-61 every record of P1-TWR-LF is on the server, so it is turned in: told to wipe, and wiped. A tower makes no numbers, so it held no block to retire (Ana’s phone, turned in below, held some); it stays lost from 6:10 pm on Monday, and its key is revoked now',
+      [
+        turnedIn,
+        lost.wiped,
+        lost.holds,
+        lostPhone.status,
+        lostPhone.outOfServiceAt === null ? null : projectTime(timeZone, lostPhone.outOfServiceAt),
+        lostPhone.keyRevokedAt === null ? null : projectTime(timeZone, lostPhone.keyRevokedAt),
+        await api.numberBlock.count({ where: { deviceId: device('P1-TWR-LF') } }),
+      ],
+      [
+        { turnedIn: true, wipe: true, numbers: [] },
+        true,
+        [],
+        'LOST',
+        'Mon 12 Oct 18:10',
+        'Wed 14 Oct 18:05',
+        0,
+      ],
     );
     story.check(
-      'AC-05-56 after its last sync the lost phone’s number blocks are retired. A tower makes no numbers, so it held none (the story `numbering` retires a phone that did); the wipe and the key’s refusal are Phases 3 and 2',
-      [retired.length, await api.numberBlock.count({ where: { deviceId: device('P1-TWR-LF') } })],
-      [0, 0],
+      'AC-02-61, AC-10-46, REQ-202b only then is it refused: it proves nothing again; the passcode’s use and the turn-in are security events on it',
+      [
+        await provesItself('P1-TWR-LF'),
+        (
+          await api.securityEvent.findMany({
+            where: {
+              deviceId: device('P1-TWR-LF'),
+              ...(lostPhone.keyRevokedAt === null ? {} : { occurredAt: lostPhone.keyRevokedAt }),
+              deviceUtcOffsetMinutes: null,
+            },
+            orderBy: { kind: 'asc' },
+            select: { kind: true },
+          })
+        ).map(({ kind }) => kind),
+      ],
+      [
+        [false, 'KEY_REVOKED'],
+        ['MASTER_PASSCODE_USE', 'DEVICE_TURN_IN'],
+      ],
+    );
+
+    story.at(
+      wednesday('18:10'),
+      'The week’s collections are done: Luis turns Ana’s P1-COL-1 in with the master passcode',
+    );
+    const anasTurnIn = await story.underPasscode.turnIn(ana);
+    const anasPhone = await api.device.findUniqueOrThrow({ where: { id: device('P1-COL-1') } });
+    story.check(
+      'AC-02-58, ADR-065 a phone in hand is turned in once everything it made is on the server: it reports the last number it used, 101038, and the unused rest of each load block is handed back for the next phone; it is out of service as retired from now, its key revoked, and wiped',
+      [
+        anasTurnIn.turnedIn
+          ? anasTurnIn.numbers.map(
+              ({ series, ended, blocks: ended_ }) =>
+                `${series} ${ended}: ${ended_
+                  .map(
+                    (each) =>
+                      `${String(each.firstNumber)}–${String(each.lastNumber)}, last used ${String(each.lastUsedNumber)}`,
+                  )
+                  .join('; ')}`,
+            )
+          : anasTurnIn.message,
+        ana.wiped,
+        ana.holds,
+        anasPhone.status,
+        anasPhone.outOfServiceAt === null ? null : projectTime(timeZone, anasPhone.outOfServiceAt),
+        anasPhone.keyRevokedAt === null ? null : projectTime(timeZone, anasPhone.keyRevokedAt),
+      ],
+      [
+        [
+          'LOAD RECLAIMED: 101001–102000, last used 101038; 102001–102022, last used null; 102023–102038, last used null',
+        ],
+        true,
+        [],
+        'RETIRED',
+        'Wed 14 Oct 18:10',
+        'Wed 14 Oct 18:10',
+      ],
     );
 
     // ------------------------------------------------------------------------------------------

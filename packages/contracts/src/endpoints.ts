@@ -95,6 +95,7 @@ import {
 } from './review-answers.ts';
 import { cornerCount, inches } from './sync-records.ts';
 import { syncAnsweredSchema, syncSentSchema } from './sync.ts';
+import { turnInAnswerSchema, turnInSentSchema } from './turn-in.ts';
 import {
   billingUnits,
   clientRecordSchema,
@@ -1938,6 +1939,24 @@ export const syncPhoneEndpoint = endpoint({
   answer: syncAnsweredSchema,
 });
 
+// A phone turned in: "Sync and turn in" under the firm's master passcode, with or without its
+// monitor (ARCHITECTURE §7.4, §7.5, §8; AC-02-58, 60, 61; AC-05-56; AC-10-46; BACKLOG 2.6.5, C47,
+// C64, C126, C139; ADR-065, 096, 134, 468, 488; REQ-202a, 202b, 209). The body and the answer are
+// `turn-in.ts`'s. The phone has synced and sent its files first; it is told to wipe only when the
+// server has everything it still holds, and its key is revoked in the same piece of work. The
+// passcode is checked by the one check every act under it shares. The limits here only bound
+// what is read.
+export const turnInPhoneEndpoint = endpoint({
+  name: 'turnInPhone',
+  summary:
+    'A phone is turned in ("Sync and turn in") under the firm’s master passcode, after it has synced every queue and sent every photograph’s file. It sends the passcode, everything it still holds by the ids it made (its unplanned assignments, the uses of the master passcode it logged, its records, its photographs) and by fingerprint what it sent with no id the server could read, and the last number it used of each series it holds numbers of. Only when the server has all of it from that phone (a record saved, kept in quarantine, or held for a person; a photograph saved with every file kept) is the phone turned in: the unused rest of each series it reported is handed back for the next phone, and a series it doesn’t report, or every block of a phone marked lost, is retired whole; a phone in service is taken out of service as retired; its sessions end; its key is revoked, so it proves nothing again; and the answer tells it to wipe. Otherwise nothing is changed and nothing is wiped, and the answer names what the server doesn’t have. A phone out of service is turned in the same way. Each use of the passcode is a security event, and a turn-in another. Open to a phone that has proved itself, by its token; nobody need be signed in. A passcode that isn’t taken is refused by one code; wrong tries count as they do when a phone is enrolled.',
+  access: 'PROVEN_PHONE',
+  method: 'POST',
+  path: '/phones/current/turn-ins',
+  body: turnInSentSchema,
+  answer: turnInAnswerSchema,
+});
+
 // A photograph's files, sent by the phone that took it after its record is saved: **the media
 // endpoint, the one endpoint that takes a file** (ARCHITECTURE §6 "Uploads", §9 (2), (5), §11;
 // spec/parts/05-sync.md; AC-04-77, AC-05-09, AC-10-47…49; spec/THREAT-MODEL.md T-25; BACKLOG
@@ -2698,6 +2717,7 @@ export const endpoints: readonly Endpoint[] = [
   phoneSetupChoicesEndpoint,
   reportUnplannedAssignmentEndpoint,
   syncPhoneEndpoint,
+  turnInPhoneEndpoint,
   photoFileEndpoint,
   sendPhotoFilePartEndpoint,
   removePhoneEndpoint,

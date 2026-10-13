@@ -17,6 +17,7 @@ import {
   MasterPasscodeTries,
   PasswordRules,
   PasscodeSessionRules,
+  TurnInRules,
   PhoneProofRules,
   RateLimits,
   SignInTries,
@@ -127,6 +128,8 @@ import { TwoStep, TwoStepCheck } from '../sign-in/two-step.ts';
 import { WrongTries } from '../sign-in/wrong-tries.ts';
 import { Intake } from '../sync/intake.ts';
 import { apiSync } from '../sync/sync.controller.ts';
+import { apiTurnIns } from '../phone/turn-ins.controller.ts';
+import { TurnIns } from '../phone/turn-ins.ts';
 import { Sync } from '../sync/sync.ts';
 import { apiViewerReads } from '../viewer/viewer-reads.controller.ts';
 import { ViewerReads } from '../viewer/viewer-reads.ts';
@@ -494,6 +497,16 @@ export class ApiProcess {
               numbers: new NumberAllocator(database, clock, policy),
               loginList,
               clock,
+            }),
+          ],
+          // A phone turned in under the master passcode (task 2.6.5, part 1).
+          [
+            apiTurnIns,
+            new TurnIns(database, {
+              passcode: passcodeCheck,
+              rules: new TurnInRules(),
+              clock,
+              requestNow,
             }),
           ],
           // A photograph's files, sent by the phone that took it (task 2.6.4, part 3).

@@ -8,6 +8,7 @@ import {
   MasterPasscodeRules,
   PhoneRules,
   phoneRemovals,
+  TurnInRules,
   type Holder,
 } from '../src/index.ts';
 
@@ -57,6 +58,35 @@ describe('a phone taken out of service', () => {
       code: 'ALREADY_OUT_OF_SERVICE',
       message: 'P1-TWR-LF was already taken out of service. Nothing was changed.',
     });
+  });
+});
+
+describe('a phone turned in', () => {
+  const rules = new TurnInRules();
+
+  it('AC-02-58 a phone in hand that reports the last number it used of a series hands back the unused rest; a series it does not report is retired whole', () => {
+    expect(rules.blocksEnd({ status: 'ACTIVE' }, true)).toBe('RECLAIMED');
+    expect(rules.blocksEnd({ status: 'ACTIVE' }, false)).toBe('RETIRED');
+    // Retired by the back office and turned in by hand: it is in hand, and its report is taken.
+    expect(rules.blocksEnd({ status: 'RETIRED' }, true)).toBe('RECLAIMED');
+    expect(rules.blocksEnd({ status: 'RETIRED' }, false)).toBe('RETIRED');
+  });
+
+  it('AC-02-61 a lost phone that turns up has its blocks retired whole, whatever it reports: nobody can be sure what it used', () => {
+    expect(rules.blocksEnd({ status: 'LOST' }, true)).toBe('RETIRED');
+    expect(rules.blocksEnd({ status: 'LOST' }, false)).toBe('RETIRED');
+  });
+
+  it('a phone holding what the server does not have is told so in plain words, and that nothing was wiped', () => {
+    expect(rules.notConfirmed({ records: 1, files: 0 })).toBe(
+      'Not turned in: the server doesn’t have 1 record this phone holds yet. Nothing was wiped and nothing was changed. Sync the phone again, then turn it in.',
+    );
+    expect(rules.notConfirmed({ records: 0, files: 2 })).toBe(
+      'Not turned in: the server doesn’t have 2 photographs’ files this phone holds yet. Nothing was wiped and nothing was changed. Sync the phone again, then turn it in.',
+    );
+    expect(rules.notConfirmed({ records: 3, files: 1 })).toBe(
+      'Not turned in: the server doesn’t have 3 records and 1 photograph’s file this phone holds yet. Nothing was wiped and nothing was changed. Sync the phone again, then turn it in.',
+    );
   });
 });
 

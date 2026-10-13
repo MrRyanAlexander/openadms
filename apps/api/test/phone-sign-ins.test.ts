@@ -22,7 +22,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { installationPolicy } from '../src/policy.ts';
 import { installationSettings, openInstallation, type Tx } from './support/database.ts';
-import { enrolledPhone, passcode, proven, type TestPhone } from './support/phones.ts';
+import { enrolledPhone, passcode, proven, turnedIn, type TestPhone } from './support/phones.ts';
 import { notTaken } from './support/review.ts';
 import { danasEmail, long, worldOn, type Answer, type Served } from './support/served.ts';
 import { ask, p1, saved, told, type Browser } from './support/setup.ts';
@@ -348,10 +348,8 @@ describe('a monitor’s session ends at once', () => {
         data: { status: 'LOST', outOfServiceAt: served.clock.now() },
       });
       expect(told(await whoIsOn(served, token, samsSession))).toEqual([200, undefined]);
-      await tx.device.update({
-        where: { id: phone.id },
-        data: { keyRevokedAt: served.clock.now() },
-      });
+      // Turned in: its key is revoked, and its sessions end with it (ADR-488).
+      await turnedIn(served, token);
       expect(told(await whoIsOn(served, token, samsSession))).toEqual([401, 'PHONE_NOT_PROVEN']);
     });
   });

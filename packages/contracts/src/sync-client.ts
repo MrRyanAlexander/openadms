@@ -7,6 +7,7 @@
 import { photoFileAnswerSchema, type PhotoFileAnswer, type PhotoFileName } from './api-answers.ts';
 import type { ReceivedRecord, SyncedRecord } from './sync-records.ts';
 import { syncAnsweredSchema, type SyncAnswered, type SyncSent } from './sync.ts';
+import { turnInAnswerSchema, type TurnInAnswer } from './turn-in.ts';
 
 // The id its phone made for a record, whatever its kind: as a phone sends it, or as the server
 // read it.
@@ -141,3 +142,13 @@ export function photoFileGoesOnFrom(answer: PhotoFileAnswer | null, before: numb
       return 0;
   }
 }
+
+// What a phone turned in reads of its answer (AC-02-58; ADR-096, 488): the answer, or null where
+// what came back is none. **It wipes only where the answer says so** (`wipe: true`); with no
+// answer, with what is none, or answered not turned in, it keeps everything it holds, as it was.
+export function turnInAnswerRead(answer: unknown): TurnInAnswer | null {
+  const read = turnInAnswerSchema.safeParse(answer);
+  return read.success ? read.data : null;
+}
+
+export const toWipe = (answer: TurnInAnswer | null): boolean => answer?.wipe === true;

@@ -630,7 +630,9 @@ describe('a monitor’s session on a phone (ADR-443)', () => {
       refusedBy.trigger,
       'A phone out of service signs nobody in',
     ]);
+    // Turned in: only its turn-in revokes its key, under the master passcode on that phone.
     await asTheApi();
+    await db.actor(masterPasscodeActorId, 'DEVICE', { deviceId: world.device });
     await db.run(`UPDATE "device" SET "key_revoked_at" = '2026-10-12T10:00:00Z' WHERE "id" = $1`, [
       world.device,
     ]);
@@ -950,6 +952,8 @@ describe('a security event', () => {
       'TWO_STEP_CLEARED',
       'MASTER_PASSCODE_FAILED',
       'MASTER_PASSCODE_LOCKOUT',
+      // A phone turned in (ADR-488).
+      'DEVICE_TURN_IN',
     ]);
     const at = '2026-10-12T12:05:00Z';
     expect((await db.refused(note, ['PASSWORD_GUESSED', world.admin, null, at])).code).toBe(
