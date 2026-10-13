@@ -219,6 +219,14 @@ the story's database and clock at 127.0.0.1:3180, and the stack's proxy serves i
 up**, and only one run of the stories at a time (a second is told the port is held).
 `packages/scenarios/test/story-api.test.ts` holds the way to it; a loosening of `story-api.ts` or
 `over-https.ts` is tried there and on `sync`, `interrupted-upload` and `dispatch-monday`.
+**Every request a story's phone makes goes there** (ADR-493): enrolment, a monitor created, a
+sign-in, the passcode's session and choices, its lists, a sync, a file's part, the turn-in
+(`StoryApi.requests`); the phone holds its monitor's session beside its token, and
+`story.phonesOn(clock)` puts all of them on a clock of their own (field days told again). A
+loosening of the runner's phone requests is tried on `story-api.test.ts` with
+`under-the-passcode`, `p1-reconciled`, `p1-reviewed` and `dispatch-monday` (seven took about ten
+minutes). **A story whose clock goes back before a phone's last proof stops at that phone's next
+request**: tell it in time order.
 `packages/scenarios/test/stories.test.ts` holds a copy to what a database made by itself is (at
 head, every table guarded, `adms_owner`'s, open to the logins alone) and the runner to its word. A story's context carries `policy`, the release's policy values read from
 `packages/domain/policy.env` (`src/policy.ts`; held to the release's values, the worker's five among them (5 tries, 10 minutes, 5 s, 30 s, 10 connections; ADR-419) and a job's size (200 tickets, ADR-420), by `test/policy.test.ts`,

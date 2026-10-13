@@ -218,7 +218,7 @@ export const interruptedUpload: Story = {
       monday('13:00'),
       'Over lunch the API was started again; Ana’s phone finds signal and goes on',
     );
-    await anasPhone.upload(through(story.serverOn(clock)));
+    await anasPhone.upload(through(story.phonesOn(clock).server));
     story.check(
       'AC-05-09, ADR-482 (2) the API started again holds none of the street’s file: told so, the phone sends it again from its first byte, and it is kept',
       [parts.splice(0, 4), (await photos())[1]],

@@ -13,21 +13,46 @@
 // - **A phone proves itself as a real one does** (ARCHITECTURE §7.4): it asks a challenge, signs
 //   it with its own device key and holds the token it is given until it runs out by the clock
 //   in use, then proves itself again; a request answered `PHONE_NOT_PROVEN` proves it again once.
+// - **Every request a story's phone makes goes through its endpoint** (BACKLOG 2.7.1 part 2):
+//   enrolment, a monitor created, a sign-in, a session under the master passcode and what a
+//   setup picks from, its lists, a sync, a file's part and the turn-in. **A phone holds its
+//   monitor's session** as it holds its own token: a sign-in or a session opened on it is the
+//   one its monitor's requests carry, in the contracts' header beside the phone's token.
 // - **Started again**, it holds nothing in memory: no part of a file not yet whole, no count.
 import {
   challengePhoneEndpoint,
+  createMonitorOnPhoneEndpoint,
+  enrolPhoneEndpoint,
   errorAnswerSchema,
   filePartMediaType,
+  monitorCreatedAnswerSchema,
+  monitorSessionHeader,
+  monitorSignedInAnswerSchema,
+  openPasscodeSessionOnPhoneEndpoint,
+  passcodeSessionOpenedAnswerSchema,
   phoneChallengeAnswerSchema,
+  phoneEnrolledAnswerSchema,
+  phoneListsAnswerSchema,
+  phoneListsEndpoint,
   phoneProvenAnswerSchema,
+  phoneSetupChoicesAnswerSchema,
+  phoneSetupChoicesEndpoint,
   provePhoneEndpoint,
   sendPhotoFilePartEndpoint,
+  signInOnPhoneEndpoint,
   syncAnsweredSchema,
   syncPhoneEndpoint,
   turnInAnswerSchema,
   turnInPhoneEndpoint,
   type Endpoint,
+  type MonitorCreatedAnswer,
+  type MonitorSignedInAnswer,
+  type PasscodeSessionOpenedAnswer,
+  type PhoneEnrolledAnswer,
+  type PhoneListsAnswer,
+  type PhoneSetupChoicesAnswer,
 } from '@open-adms/contracts';
+import type { MasterPasscodeSessionKind } from '@open-adms/domain';
 import { ApiModule, ApiProcess, NoMail, type Addresses } from '@open-adms/api';
 import type { Policy } from '@open-adms/domain';
 
@@ -52,6 +77,50 @@ const noAddresses: Addresses = {
   addressOf: () => Promise.reject(new Error('A story’s API asks no address server.')),
 };
 
+// Every request a story's phone makes, on one clock: each answer as the contracts read it, and
+// any answer but a 200 stops the story. The passcode is typed by whoever holds it, so it is
+// handed in; a monitor's password likewise.
+export interface PhoneRequests {
+  // A sync, a file's part, a turn-in.
+  readonly server: PhoneServer;
+  // Enrolled under the master passcode, nobody signed in: the phone's id.
+  enrol(sent: {
+    readonly name: string;
+    readonly passcode: string;
+    readonly publicKey: string;
+  }): Promise<PhoneEnrolledAnswer>;
+  // A monitor created on the phone under the master passcode.
+  monitorCreated(
+    deviceId: string,
+    sent: { readonly name: string; readonly password: string; readonly passcode: string },
+  ): Promise<MonitorCreatedAnswer>;
+  // A monitor signs in on the phone, which holds their session from then on.
+  signedIn(
+    deviceId: string,
+    sent: { readonly monitorNumber: string; readonly password: string },
+  ): Promise<MonitorSignedInAnswer>;
+  // A session opened on the phone under the master passcode, which the phone holds likewise.
+  passcodeSession(
+    deviceId: string,
+    sent: {
+      readonly personId: string;
+      readonly kind: MasterPasscodeSessionKind;
+      readonly passcode: string;
+    },
+  ): Promise<PasscodeSessionOpenedAnswer>;
+  // What a setup under the master passcode picks from, nobody signed in.
+  setupChoices(
+    deviceId: string,
+    sent: {
+      readonly passcode: string;
+      readonly projectId: string | null;
+      readonly monitorsAfter: string | null;
+    },
+  ): Promise<PhoneSetupChoicesAnswer>;
+  // The lists of the assignment the phone takes now for the monitor signed in on it.
+  lists(deviceId: string): Promise<PhoneListsAnswer>;
+}
+
 export interface StoryApiParts {
   readonly database: StoryDatabase;
   readonly clock: Clock;
@@ -63,6 +132,8 @@ export class StoryApi {
   private readonly parts: StoryApiParts;
   private readonly keys = new Map<string, SoftwareKey>();
   private readonly tokens = new Map<string, { readonly token: string; readonly until: Date }>();
+  // The session of the monitor signed in on each phone, as the phone holds it.
+  private readonly sessions = new Map<string, string>();
   private door: OverHttps | undefined;
   private process: ApiProcess | undefined;
   private starting: Promise<ApiProcess> | undefined;
@@ -80,9 +151,9 @@ export class StoryApi {
     this.keys.set(deviceId, key);
   }
 
-  // Where phones sync, send their files and are turned in, on a clock. Started again, the
-  // process is stopped before the first request sent through this server, and starts afresh.
-  server(at: Clock, startedAgain = false): PhoneServer {
+  // Every request a phone makes, on a clock. Started again, the process is stopped before the
+  // first request sent through these, and starts afresh.
+  requests(at: Clock, startedAgain = false): PhoneRequests {
     let restart = startedAgain;
     const asked = async <T>(work: () => Promise<T>): Promise<T> => {
       if (restart) {
@@ -91,26 +162,72 @@ export class StoryApi {
       }
       return this.during(at, work);
     };
+    const holding = <T extends { readonly token: string }>(deviceId: string, answer: T): T => {
+      this.sessions.set(deviceId, answer.token);
+      return answer;
+    };
     return {
-      received: (deviceId, sent) =>
-        asked(async () => ({
-          answered: syncAnsweredSchema.parse(
-            await this.asPhone(deviceId, syncPhoneEndpoint, { json: sent }),
+      server: {
+        received: (deviceId, sent) =>
+          asked(async () => ({
+            answered: syncAnsweredSchema.parse(
+              await this.asPhone(deviceId, syncPhoneEndpoint, { json: sent }),
+            ),
+          })),
+        filePart: (deviceId, part) =>
+          asked(() =>
+            this.asPhone(deviceId, sendPhotoFilePartEndpoint, {
+              ids: { photoId: part.photoId, file: part.file },
+              query: { offset: String(part.offset), length: String(part.length) },
+              bytes: { of: part.bytes, contentType: filePartMediaType },
+            }),
           ),
-        })),
-      filePart: (deviceId, part) =>
-        asked(() =>
-          this.asPhone(deviceId, sendPhotoFilePartEndpoint, {
-            ids: { photoId: part.photoId, file: part.file },
-            query: { offset: String(part.offset), length: String(part.length) },
-            bytes: { of: part.bytes, contentType: filePartMediaType },
-          }),
-        ),
-      turnIn: (deviceId, sent) =>
+        turnIn: (deviceId, sent) =>
+          asked(async () =>
+            turnInAnswerSchema.parse(
+              await this.asPhone(deviceId, turnInPhoneEndpoint, { json: sent }),
+            ),
+          ),
+      },
+      enrol: (sent) =>
         asked(async () =>
-          turnInAnswerSchema.parse(
-            await this.asPhone(deviceId, turnInPhoneEndpoint, { json: sent }),
+          phoneEnrolledAnswerSchema.parse(
+            answered(enrolPhoneEndpoint, await this.ask(enrolPhoneEndpoint, { json: sent })),
           ),
+        ),
+      monitorCreated: (deviceId, sent) =>
+        asked(async () =>
+          monitorCreatedAnswerSchema.parse(
+            await this.asPhone(deviceId, createMonitorOnPhoneEndpoint, { json: sent }),
+          ),
+        ),
+      signedIn: (deviceId, sent) =>
+        asked(async () =>
+          holding(
+            deviceId,
+            monitorSignedInAnswerSchema.parse(
+              await this.asPhone(deviceId, signInOnPhoneEndpoint, { json: sent }),
+            ),
+          ),
+        ),
+      passcodeSession: (deviceId, sent) =>
+        asked(async () =>
+          holding(
+            deviceId,
+            passcodeSessionOpenedAnswerSchema.parse(
+              await this.asPhone(deviceId, openPasscodeSessionOnPhoneEndpoint, { json: sent }),
+            ),
+          ),
+        ),
+      setupChoices: (deviceId, sent) =>
+        asked(async () =>
+          phoneSetupChoicesAnswerSchema.parse(
+            await this.asPhone(deviceId, phoneSetupChoicesEndpoint, { json: sent }),
+          ),
+        ),
+      lists: (deviceId) =>
+        asked(async () =>
+          phoneListsAnswerSchema.parse(await this.asMonitor(deviceId, phoneListsEndpoint, {})),
         ),
     };
   }
@@ -170,6 +287,19 @@ export class StoryApi {
       answer = await this.ask(served, this.withToken(more, await this.tokenOf(deviceId)));
     }
     return answered(served, answer);
+  }
+
+  // A request of the monitor signed in on a proven phone: the phone's token and the session the
+  // phone holds for its monitor, side by side (ADR-443).
+  private asMonitor(deviceId: string, served: Endpoint, more: AskedWith): Promise<unknown> {
+    const session = this.sessions.get(deviceId);
+    if (session === undefined) {
+      throw new Error(`${served.name} was asked on a phone nobody is signed in on.`);
+    }
+    return this.asPhone(deviceId, served, {
+      ...more,
+      headers: { ...more.headers, [monitorSessionHeader]: session },
+    });
   }
 
   private withToken(more: AskedWith, token: string): AskedWith {

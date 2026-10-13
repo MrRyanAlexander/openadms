@@ -93,8 +93,11 @@ export const underThePasscode: Story = {
       at('06:45'),
       'Tariq can’t recall his password: the supervisor signs in as the phone’s monitor with the master passcode',
     );
-    const asTariq = await story.underPasscode.session(tariq, phone.id, 'AS_MONITOR');
-    const marked = await api.session.findUniqueOrThrow({ where: { id: asTariq.sessionId } });
+    await story.underPasscode.session(tariq, phone.id, 'AS_MONITOR');
+    // The session the server keeps for it: the phone is told only its token.
+    const marked = await api.session.findFirstOrThrow({
+      where: { deviceId: phone.id, userId: tariq.id, masterPasscodeSession: 'AS_MONITOR' },
+    });
     story.check(
       'AC-02-42 the session is Tariq’s on P1-TWR-LF, marked as opened under the master passcode, and lasts a monitor’s own twelve hours',
       [
@@ -203,7 +206,7 @@ export const underThePasscode: Story = {
 
     const tries = await api.masterPasscodeTries.count();
     const locks = await api.securityEvent.count({ where: { kind: 'MASTER_PASSCODE_LOCKOUT' } });
-    const ended = await api.session.findUniqueOrThrow({ where: { id: asTariq.sessionId } });
+    const ended = await api.session.findUniqueOrThrow({ where: { id: marked.id } });
     story.check(
       'ADR-456 (5)(e), ADR-462 the wrong try on the phone moved no count on the server and locked nothing; the switch to Sam at 13:00, once reported, ended the session opened for Tariq at 06:45',
       [tries, locks, ended.revokedAt === null ? null : projectTime(timeZone, ended.revokedAt)],

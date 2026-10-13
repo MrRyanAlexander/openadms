@@ -7,8 +7,8 @@
 // Tariq's phone can't be found and is marked lost. What it proves is the models: the time zone, the
 // Monitor ID, the device with its number block and passcode version, the assignment, and each
 // field event carrying its assignment and setup version. Its monitors are created on a phone
-// and signed in through the API's services, and each phone is answered its monitor's assignment
-// (ADR-442, 443, 444). The screens behind these rows are Phases 3 and 4; each phone syncs
+// and signed in at the API's endpoints, and each phone is answered its monitor's assignment
+// (ADR-442, 443, 444, 491). The screens behind these rows are Phases 3 and 4; each phone syncs
 // through the API's own `Sync` (ADR-475), which cuts the number block by the API's allocator
 // (ADR-323).
 // It opens with setup's first three steps
@@ -183,7 +183,7 @@ export const dispatchMonday: Story = {
       at('05:45'),
       'Three phones are enrolled, once: each its own key, no project, no monitor',
     );
-    // Each under the master passcode, through the API's enrolment (ADR-439, 440).
+    // Each under the master passcode, at the API's enrolment endpoint (ADR-439, 440, 491).
     const enrol = async (name: string) =>
       api.device.findUniqueOrThrow({ where: { id: (await story.enrolled(name)).id } });
     const phones = {
@@ -700,23 +700,28 @@ export const dispatchMonday: Story = {
         ['device', 'INSERT', 'Master passcode', 'DEVICE', 'P1-COL-1', null],
         ['device', 'INSERT', 'Master passcode', 'DEVICE', 'P1-TWR-TDSR', null],
         ['device', 'INSERT', 'Master passcode', 'DEVICE', 'P1-TWR-LF', null],
-        ['pay_item', 'INSERT', 'Dana Reyes', 'BACK_OFFICE', '-', null],
-        ['pay_item_rate', 'INSERT', 'Dana Reyes', 'BACK_OFFICE', '-', null],
-        ['pay_item', 'INSERT', 'Dana Reyes', 'BACK_OFFICE', '-', null],
-        ['pay_item_rate', 'INSERT', 'Dana Reyes', 'BACK_OFFICE', '-', null],
-        ['assignment', 'INSERT', 'Luis Ortega', 'BACK_OFFICE', '-', null],
-        ['assignment', 'INSERT', 'Luis Ortega', 'BACK_OFFICE', '-', null],
-        ['assignment', 'INSERT', 'Luis Ortega', 'BACK_OFFICE', '-', null],
-        ['assignment_pay_item', 'INSERT', 'Luis Ortega', 'BACK_OFFICE', '-', null],
-        ['assignment_pay_item', 'INSERT', 'Luis Ortega', 'BACK_OFFICE', '-', null],
-        // Each sync goes over HTTPS and begins with the phone's proof, the challenge it answered
-        // kept on its record as the device key's own act, once a token has run out (ADR-440,
-        // 491). A top-up is the phone's own act at its sync: whoever is signed in on it did not
-        // ask for it (ADR-472).
+        // Every request of a phone goes over HTTPS and begins with its proof, the challenge it
+        // answered kept on its record as the device key's own act, once a token has run out
+        // (ADR-440, 491): P1-COL-1's, as the four monitors are created on it.
         ['device', 'UPDATE', 'Device key', 'DEVICE', 'P1-COL-1', null],
-        ['number_block', 'INSERT', 'Device key', 'DEVICE', 'P1-COL-1', null],
-        // Set up under the master passcode: never Tariq's own write (ADR-457).
+        ['pay_item', 'INSERT', 'Dana Reyes', 'BACK_OFFICE', '-', null],
+        ['pay_item_rate', 'INSERT', 'Dana Reyes', 'BACK_OFFICE', '-', null],
+        ['pay_item', 'INSERT', 'Dana Reyes', 'BACK_OFFICE', '-', null],
+        ['pay_item_rate', 'INSERT', 'Dana Reyes', 'BACK_OFFICE', '-', null],
+        ['assignment', 'INSERT', 'Luis Ortega', 'BACK_OFFICE', '-', null],
+        ['assignment', 'INSERT', 'Luis Ortega', 'BACK_OFFICE', '-', null],
+        ['assignment', 'INSERT', 'Luis Ortega', 'BACK_OFFICE', '-', null],
+        ['assignment_pay_item', 'INSERT', 'Luis Ortega', 'BACK_OFFICE', '-', null],
+        ['assignment_pay_item', 'INSERT', 'Luis Ortega', 'BACK_OFFICE', '-', null],
+        // At the yard at 6:30, each phone's proof as its monitor signs in (the collection
+        // phone's 5:30 token run out). A top-up is the phone's own act at its sync: whoever is
+        // signed in on it did not ask for it (ADR-472).
+        ['device', 'UPDATE', 'Device key', 'DEVICE', 'P1-COL-1', null],
+        ['device', 'UPDATE', 'Device key', 'DEVICE', 'P1-TWR-TDSR', null],
         ['device', 'UPDATE', 'Device key', 'DEVICE', 'P1-TWR-LF', null],
+        ['number_block', 'INSERT', 'Device key', 'DEVICE', 'P1-COL-1', null],
+        // Set up under the master passcode, its 6:30 token still good: never Tariq's own write
+        // (ADR-457).
         ['assignment', 'INSERT', 'Master passcode', 'DEVICE', 'P1-TWR-LF', null],
         // At the yard at 5:30 pm, Ana's morning token long run out.
         ['device', 'UPDATE', 'Device key', 'DEVICE', 'P1-TWR-TDSR', null],

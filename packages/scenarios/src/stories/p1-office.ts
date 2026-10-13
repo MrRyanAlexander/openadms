@@ -160,14 +160,17 @@ export async function p1FieldDaysHeld(story: StoryContext): Promise<P1Office> {
   const syncs: HeldSync[] = [];
   const held: HeldRecord[] = [];
   const fieldClock = new StoryClock(p1FieldDays.start);
-  const atTheYard = story.serverOn(fieldClock);
+  // Every request of the field days' phones on their own clock (enrolment, a monitor created,
+  // a sign-in, their lists): the story's API started again on it.
+  const atTheYard = story.phonesOn(fieldClock);
   await p1FieldDays.run({
     ...story,
+    ...atTheYard,
     clock: fieldClock,
     server: {
       received: (deviceId, sent) => {
         if (sent.records.length === 0 && sent.photos.length === 0) {
-          return atTheYard.received(deviceId, sent);
+          return atTheYard.server.received(deviceId, sent);
         }
         const syncedAt = fieldClock.now();
         syncs.push({ deviceId, sent, syncedAt });

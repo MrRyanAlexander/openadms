@@ -51,8 +51,9 @@ export async function taken(
   monitor: StoryMonitor,
   onPhone: string,
 ): Promise<string> {
-  // On the clock the story is told on, which a story told again inside another has of its own.
-  const answered = await story.signedIn(monitor, onPhone, story.clock.now());
+  // On the clock the story's phones are on, which a story told again inside another has of its
+  // own (`phonesOn`).
+  const answered = await story.signedIn(monitor, onPhone);
   if (!answered.taken) {
     throw new Error(`${monitor.name}’s phone took no assignment: ${answered.why}.`);
   }

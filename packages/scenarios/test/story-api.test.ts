@@ -13,8 +13,11 @@ import {
 } from '@open-adms/contracts';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { uuidv7 } from '../src/ids.ts';
 import { pathOf, storiesHostname } from '../src/over-https.ts';
-import { Runner, type Story } from '../src/runner.ts';
+import { Runner, type Story, type StoryContext } from '../src/runner.ts';
+import { assigned } from '../src/stories/board.ts';
+import { setUpP1 } from '../src/stories/p1.ts';
 import { StoryTemplate } from '../src/story-database.ts';
 
 const httpsPort = Number(process.env['ADMS_HTTPS_PORT'] ?? '443');
@@ -96,7 +99,7 @@ describe('a story’s API, over HTTPS through the stack’s proxy', () => {
       async run(story) {
         const phone = await story.enrolled('P1-COL-1');
         const later = { now: () => new Date('2026-10-12T17:30:00-04:00') };
-        const yard = story.serverOn(later);
+        const yard = story.phonesOn(later).server;
         sentInTurn = [
           (await story.server.received(phone.id, empty(story.clock.now()))).answered.records,
           (await yard.received(phone.id, empty(later.now()))).answered.records,
@@ -123,6 +126,101 @@ describe('a story’s API, over HTTPS through the stack’s proxy', () => {
     ]);
     expect(result.error).toBe(
       'Two of the story’s requests at once on two clocks: its API has one.',
+    );
+  });
+
+  // P1, Dana, and Ana created on an enrolled phone at its endpoint, with her Monday on it.
+  const anasMonday = async (story: StoryContext) => {
+    const phone = await story.enrolled('P1-COL-1');
+    const dana = uuidv7(story.clock.now());
+    const p1 = await story.api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
+      await tx.user.create({ data: { id: dana, name: 'Dana Reyes', role: 'ADMIN' } });
+      return (await setUpP1(tx, story.policy)).project;
+    });
+    const ana = await story.monitor('Ana Brooks', phone.id);
+    const assignmentId = await assigned(story.api, story.clock, dana, {
+      workDate: '2026-10-12',
+      projectId: p1,
+      personId: ana.id,
+      fieldEventKinds: ['COLLECTION'],
+      deviceId: phone.id,
+    });
+    return { phone: phone.id, ana, assignmentId };
+  };
+
+  it('a monitor created and signed in at their endpoints; the lists read with the session the phone holds for them, beside its own token, are the lists of the assignment it takes', async () => {
+    let seen: unknown;
+    const { result, lines } = await run({
+      ...told,
+      name: 'lists',
+      title: 'a monitor signs in and the phone reads its lists',
+      async run(story) {
+        const { phone, ana, assignmentId } = await anasMonday(story);
+        const took = await story.signedIn(ana, phone);
+        const lists = await story.lists.held({ assignmentId, deviceId: phone });
+        const sessions = await story.api.session.findMany({ select: { userId: true } });
+        seen = [
+          took.taken ? took.assignment.id === assignmentId : took.why,
+          ana.monitorNumber.startsWith('M'),
+          lists.setupVersion,
+          sessions.map(({ userId }) => userId === ana.id),
+        ];
+      },
+    });
+    expect(lines.filter((line) => line.includes('✗'))).toEqual([]);
+    expect(result.error).toBeUndefined();
+    expect(seen).toEqual([true, true, 1, [true]]);
+  });
+
+  it('a session opened under the master passcode is the one the phone holds: its monitor’s lists are read with it; a phone enrolled at a moment of its own is enrolled then', async () => {
+    let seen: unknown;
+    const { result, lines } = await run({
+      ...told,
+      name: 'passcode-session',
+      title: 'a session under the passcode, then the lists',
+      async run(story) {
+        const { phone, ana, assignmentId } = await anasMonday(story);
+        const took = await story.underPasscode.session(ana, phone, 'AS_MONITOR');
+        const lists = await story.lists.held({ assignmentId, deviceId: phone });
+        const evening = new Date('2026-10-11T17:00:00-04:00');
+        const spare = await story.enrolled('P1-COL-2', evening);
+        seen = [
+          took.taken ? took.assignment.id === assignmentId : took.why,
+          lists.setupVersion,
+          (await story.api.device.findUniqueOrThrow({ where: { id: spare.id } })).enrolledAt,
+        ];
+      },
+    });
+    expect(lines.filter((line) => line.includes('✗'))).toEqual([]);
+    expect(result.error).toBeUndefined();
+    expect(seen).toEqual([true, 1, new Date('2026-10-11T21:00:00.000Z')]);
+  });
+
+  it('lists asked on a phone nobody is signed in on, or for an assignment the phone doesn’t take, stop the story', async () => {
+    const nobody = await run({
+      ...told,
+      name: 'nobody-signed-in',
+      title: 'lists with nobody signed in',
+      async run(story) {
+        const { phone, assignmentId } = await anasMonday(story);
+        await story.lists.held({ assignmentId, deviceId: phone });
+      },
+    });
+    expect(nobody.result.error).toBe('phoneLists was asked on a phone nobody is signed in on.');
+    let taken = '';
+    const another = await run({
+      ...told,
+      name: 'another-assignment',
+      title: 'lists of another assignment',
+      async run(story) {
+        const { phone, ana, assignmentId } = await anasMonday(story);
+        taken = assignmentId;
+        await story.signedIn(ana, phone);
+        await story.lists.held({ assignmentId: uuidv7(story.clock.now()), deviceId: phone });
+      },
+    });
+    expect(another.result.error).toBe(
+      `The phone’s lists are of ${taken}, not of the assignment the story names.`,
     );
   });
 
