@@ -381,18 +381,17 @@ export const p1Priced: Story = {
 
     story.at(
       on('14', '07:30'),
-      'Luis asks for every ticket of P1 to be reprocessed, with nothing changed; the worker takes the job up',
+      'Dana grants Luis correct; at his browser he asks for every ticket of P1 to be reprocessed, with nothing changed; the worker takes the job up',
     );
+    // Dana and Luis at their browsers (ADR-497, 498): a reprocess with nothing changed is his
+    // request at its endpoint, part of correcting; each correction queues its own job, the
+    // ticket and its neighbours, at its endpoint.
+    const backOffice = p1BackOffice(story, office);
+    await backOffice.grantLuis('CORRECT');
+    const luiss = await backOffice.luiss();
     const standing = await ids();
     const auditedLines = await audited('transaction');
-    await queue.asked(
-      luis,
-      p1,
-      (await queue.standing(p1)).tickets.map(({ workflow, ticketNumber }) => ({
-        workflow,
-        ticketNumber,
-      })),
-    );
+    await backOffice.reprocess((await queue.standing(p1)).tickets);
     await queue.settle(p1);
     story.check(
       'AC-07-101 the ledger shows the same lines, each the same record: nothing was removed, nothing written, and the audit log holds no new record of a line',
@@ -403,13 +402,8 @@ export const p1Priced: Story = {
     // ------------------------------------------------------------------------------------------
     story.at(
       on('14', '08:00'),
-      'Dana grants Luis correct; at his browser he corrects 101001’s load call from 80% to 70% (the correction itself is Part 8’s), which queues its job. The worker runs, and the database refuses the new line (the story makes it so)',
+      'At his browser Luis corrects 101001’s load call from 80% to 70% (the correction itself is Part 8’s), which queues its job. The worker runs, and the database refuses the new line (the story makes it so)',
     );
-    // Luis at his browser (ADR-497): the correction queues its own job, the ticket and its
-    // neighbours, at its endpoint.
-    const backOffice = p1BackOffice(story, office);
-    await backOffice.grantLuis('CORRECT');
-    const luiss = await backOffice.luiss();
     const dis101001 = await api.fieldEvent.findFirstOrThrow({
       where: { projectId: p1, ticketNumber: '101001', kind: 'DISPOSAL' },
     });
@@ -480,7 +474,7 @@ export const p1Priced: Story = {
       on('14', '08:10'),
       'Luis asks for 101001 to be reprocessed; the worker runs again, with nothing in its way',
     );
-    await queue.asked(luis, p1, [load('101001')]);
+    await backOffice.reprocess([load('101001')]);
     await queue.settle(p1);
     const [removed390] = await removals();
     story.check(
@@ -554,8 +548,11 @@ export const p1Priced: Story = {
     // ------------------------------------------------------------------------------------------
     story.at(
       on('14', '09:00'),
-      'Luis locks 101004 as invoiced (the lock itself is Part 9’s). Dana changes Coastline’s rate on VEG-HAUL-CY-15 from $7.50 to $7.75; the worker runs',
+      'Luis asks for 101004 to be reprocessed; before the worker takes his job up, he locks 101004 as invoiced (the lock itself is Part 9’s). Dana changes Coastline’s rate on VEG-HAUL-CY-15 from $7.50 to $7.75; the worker runs',
     );
+    // Asked for before the lock, 101004 is on his job: the worker looks for its lock as the
+    // ticket's turn comes (ADR-090), whatever queued it, and leaves it as it is.
+    await backOffice.reprocess([load('101004')]);
     const loadOf101004 = await api.completedLoad.findFirstOrThrow({
       where: { ticketNumber: '101004' },
     });
@@ -578,26 +575,21 @@ export const p1Priced: Story = {
     const rateJobs = await queue.waiting(p1);
     const rated = await queue.settled(p1);
     const afterRate = await lines();
-    // Asked for by name, the locked ticket is still left as it is: the worker looks for its
-    // lock as the ticket's turn comes (ADR-090), whatever queued it.
-    await queue.asked(luis, p1, [load('101004')]);
-    const askedLocked = await queue.settled(p1);
+    // Asked for by name now, while it is locked, it is on no job: the request leaves it off
+    // and counts it (ADR-090, 498).
+    const askedLocked = await backOffice.reprocess([load('101004')]);
     story.check(
-      'AC-07-98 every un-invoiced ticket with a line on the pay item is regenerated: 101001 52.0 × $7.75 = $403.00, 101003 $483.60, 101005 $352.63 (45.5 × $7.75 = $352.625, a half up). 101004, locked, is on no job the change queued, so the run has no decision on it; asked for by name, the run that takes it up leaves it as it is: it keeps its line at $7.50',
+      'AC-07-98 every un-invoiced ticket with a line on the pay item is regenerated: 101001 52.0 × $7.75 = $403.00, 101003 $483.60, 101005 $352.63 (45.5 × $7.75 = $352.625, a half up). 101004, locked, is on no job the change queued; Luis’s job, asked for before the lock, names it, and the run that takes both up leaves it as it is: it keeps its line at $7.50. Asked for by name again while it is locked, it is left off: no job, counted as locked, and nothing waits',
       [
         afterRate.filter((each) => each.line.includes('VEG-HAUL-CY-15')).map((each) => each.line),
-        rateJobs.some((job) => job.tickets.includes('101004')),
+        rateJobs.map((job) => [job.trigger, job.tickets.includes('101004')]),
         (
           await api.reconciliationDecision.findMany({
             where: { reconciliationRunId: rated.runId, ticketNumber: '101004' },
           })
         ).map((decision) => (decision.summary as { why?: string }).why),
-        told(askedLocked),
-        (
-          await api.reconciliationDecision.findMany({
-            where: { reconciliationRunId: askedLocked.runId },
-          })
-        ).map((decision) => (decision.summary as { why?: string }).why),
+        [askedLocked.queued, askedLocked.record.lockedAsInvoiced],
+        (await queue.waiting(p1)).length,
         await linesOf('101004'),
       ],
       [
@@ -607,10 +599,13 @@ export const p1Priced: Story = {
           '101004 #1 VEG-HAUL-CY-15 24 × $7.50 = $180.00',
           '101005 #1 VEG-HAUL-CY-15 45.5 × $7.75 = $352.63',
         ],
-        false,
-        [],
-        ['101004 · COMPLETED'],
+        [
+          ['REPROCESS', true],
+          ['SETUP_CHANGE', false],
+        ],
         ['Locked as invoiced: left as it is.'],
+        [{ jobs: [], tickets: 0, lockedAsInvoiced: 1 }, [load('101004')]],
+        0,
         ['101004 #1 VEG-HAUL-CY-15 24 × $7.50 = $180.00'],
       ],
     );

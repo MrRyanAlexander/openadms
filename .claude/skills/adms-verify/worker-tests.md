@@ -7,6 +7,11 @@
 ## 1.3c The worker's tests (ADR-419)
 
 `apps/worker/test`. `mileages.test.ts` asks the map servers (**needs `pnpm local:up`**).
+`job-loop.test.ts` needs no stack: what the job loop logs of a job set aside (ADR-498), one
+error line a job by the fixed code `JOB_SET_ASIDE`, with a queue and a run of its own (`as
+unknown as Database`); the story `p1-queued` checks the same lines on the database. **A loosening
+of the set-aside line is tried on both** (`job-loop.ts`, and the failure's kind in
+`reconciliation.ts`).
 `process.test.ts` needs no stack: the settings (each missing or malformed key named, never
 shown), the policy and an installation's own values, the log, the health answer, and three tests
 that start the built `apps/worker/dist/main.js` with settings that are off. `container.test.ts`
@@ -44,9 +49,8 @@ in it; `pass()` one pass's own answer, project by project (`ProjectPassed`: the 
 `JobsOutcome`, or the error), for two workers at once (`p1-reconciled`, AC-06-150); `waiting`
 lists the jobs; `standing(projectId)` reads every ticket as it stands from its records (a queued
 run tells only the tickets it worked, so a check of the whole project reads this);
-`asked(by, projectId, tickets, trigger?)` adds a job by hand as the API's login, for a reprocess a
-person asks for with nothing changed or after a correction a story still writes by hand (part 4
-moves those to their endpoint). **A loosening of `JobLoop`, `QueueRuns` or the queued run is tried
+a reprocess a person asks for with nothing changed is their request at the reprocess endpoint
+(`p1BackOffice(…).reprocess(tickets)`, ADR-498; `QueueRuns.asked` is gone). **A loosening of `JobLoop`, `QueueRuns` or the queued run is tried
 on `golden-mission`, `p1-reconciled` and `p1-priced`.** **Every service that queues is made with
 `(db, clock, story.policy)`.** A loosening of `WorkQueue`, of a
 service's queueing or of the domain's `TicketNeighbours` is tried on those stories; the rule

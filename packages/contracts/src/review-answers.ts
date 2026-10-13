@@ -104,6 +104,22 @@ export const invoiceLockRecordSchema = z.strictObject({
 
 export type InvoiceLockRecord = z.infer<typeof invoiceLockRecordSchema>;
 
+// A reprocess a person asked for with nothing changed (spec/parts/08-review-and-corrections.md
+// step 4; ADR-498): no record is written but its job, so the answer is what was asked. The
+// tickets named, each once (a set-aside job's, where one was put back), and those of them locked
+// as invoiced, which the job leaves off and the worker leaves as they are.
+const ticketKey = { workflow: z.enum(workflows), ticketNumber: z.string() };
+export const reprocessRecordSchema = z.strictObject({
+  projectId: id,
+  // The job set aside whose tickets were put back; none where a person named them.
+  setAsideJobId: id.nullable(),
+  tickets: z.array(z.strictObject(ticketKey)),
+  lockedAsInvoiced: z.array(z.strictObject(ticketKey)),
+  requestedById: id,
+});
+
+export type ReprocessRecord = z.infer<typeof reprocessRecordSchema>;
+
 // What a correction answers with (spec/parts/08-review-and-corrections.md steps 2…4;
 // spec/DATA-MODEL.md §4; BACKLOG 2.4.4; ADR-051, 337, 364, 431): the record as it now stands, the
 // same one, its id unchanged. Only what a monitor recorded and a reviewer may correct: never a

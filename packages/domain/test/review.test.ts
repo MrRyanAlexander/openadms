@@ -15,6 +15,7 @@ import {
   PickedReason,
   QuarantineResolution,
   Renumber,
+  ReprocessAsking,
   Reviewer,
   reviewPermissions,
   TicketOnItsOwn,
@@ -420,5 +421,48 @@ describe('locking a ticket as invoiced', () => {
       'This project already has an invoice batch named "Bayline ROW, week of 12 Oct". Nothing was saved.',
     );
     expect(BatchName.onAnotherProject().code).toBe('BATCH_ON_ANOTHER_PROJECT');
+  });
+});
+
+describe('a reprocess a person asks for with nothing changed (ADR-498)', () => {
+  const ticket = (ticketNumber: string, fieldEvents = 2) => ({ ticketNumber, fieldEvents });
+
+  it('asks for as many tickets as one job names at the most, each a ticket of the project', () => {
+    const asking = new ReprocessAsking(3);
+    expect(asking.ticketsRefusal([ticket('101001'), ticket('101003'), ticket('301001', 1)])).toBe(
+      null,
+    );
+    expect(
+      asking.ticketsRefusal([
+        ticket('101001'),
+        ticket('101002'),
+        ticket('101003'),
+        ticket('101004'),
+      ]),
+    ).toEqual({
+      code: 'TOO_MANY_TICKETS',
+      message:
+        '4 tickets were named: a reprocess asks for 3 at the most. Ask for them in parts. Nothing was queued.',
+    });
+    expect(asking.countRefusal(3)).toBeNull();
+    expect(asking.countRefusal(4)?.code).toBe('TOO_MANY_TICKETS');
+    expect(asking.ticketsRefusal([ticket('101001'), ticket('101077', 0)])).toEqual({
+      code: 'NOT_A_TICKET',
+      message:
+        'No field event of this project is under 101077: there is no such ticket to reprocess. Nothing was queued.',
+    });
+  });
+
+  it('puts back only a job of the project the worker set aside', () => {
+    expect(ReprocessAsking.jobRefusal({ onThisProject: true, setAside: true })).toBeNull();
+    expect(ReprocessAsking.jobRefusal({ onThisProject: true, setAside: false })).toEqual({
+      code: 'NOT_SET_ASIDE',
+      message:
+        'That job isn’t set aside: it waits for the worker, or the worker has finished it. Nothing was queued.',
+    });
+    expect(ReprocessAsking.jobRefusal({ onThisProject: false, setAside: true })).toEqual({
+      code: 'NOT_ON_THIS_PROJECT',
+      message: 'That job is another project’s. Nothing was queued.',
+    });
   });
 });

@@ -3,16 +3,19 @@
 // jobs. P1's Monday and Tuesday are the story `p1-field-days`' own, priced as the story
 // `p1-priced` prices them, and worked from the jobs their syncs queued by the worker's own loop.
 //
-// Then every run here is one the queue starts: a job is added as the API's own login, inside a
-// piece of work, by whoever asks (Luis Ortega, Dana Reyes); the worker takes the project's
-// waiting jobs up under its lock, works the tickets they name and no other, and finishes each
-// job under its run. A try that fails whole is counted, and a job is set aside after the
-// policy's number of tries. The last step is the process's own pass over the queue.
+// Then every run here is one the queue starts: Luis Ortega asks for tickets to be reprocessed at
+// his browser, through the reprocess endpoint (ADR-498), and Dana Reyes's setup changes are
+// added as jobs by hand; the worker takes the project's waiting jobs up under its lock, works
+// the tickets they name and no other, and finishes each job under its run. A try that fails
+// whole is counted, and a job is set aside after the policy's number of tries, logged as an
+// error by the fixed code `JOB_SET_ASIDE`; Dana puts it back through the same endpoint by its
+// id, and the job set aside stays as it was. The last step is the process's own pass over the
+// queue.
 //
-// Since task 2.3.3 (ADR-420) a change queues its own job: here the story still names a job's
-// tickets by hand, to show the worker's side alone; the stories `p1-reviewed`, `p1-voided` and
-// `p1-invoiced` show each change queueing its own. The last steps are the cap on a run's size
-// and the process's own pass over the queue.
+// Since task 2.3.3 (ADR-420) a change queues its own job: here the story still names a setup
+// change's tickets by hand, to show the worker's side alone; the stories `p1-reviewed`,
+// `p1-voided` and `p1-invoiced` show each change queueing its own. The last steps are the cap
+// on a run's size and the process's own pass over the queue.
 //
 // Every phone here syncs through the API's own `Sync` (task 2.6.2 part 4; ADR-475), so each
 // field event a sync brought queued its own job. The last step of all is a phone whose clock
@@ -22,7 +25,12 @@
 // tickets is flagged.
 //
 // Not here: the worker's container (the local stack's; `apps/worker/test`).
-import { syncAnswerRead, syncSentSchema, type SyncSent } from '@open-adms/contracts';
+import {
+  reprocessTicketsEndpoint,
+  syncAnswerRead,
+  syncSentSchema,
+  type SyncSent,
+} from '@open-adms/contracts';
 import { ReconciliationJobs, systemActorId, type ReconciliationTrigger } from '@open-adms/db';
 import {
   JobLoop,
@@ -36,12 +44,14 @@ import {
 } from '@open-adms/worker';
 
 import { onTheWire } from '../device.ts';
+import { refusalOf } from '../over-https.ts';
 import { uuidv7 } from '../ids.ts';
 import { localMapServers } from '../map-servers.ts';
 import type { Story } from '../runner.ts';
 import {
   certifyP1,
   loadP1Map,
+  p1BackOffice,
   p1FieldDaysHeld,
   P1Syncs,
   QueueRuns,
@@ -50,6 +60,9 @@ import {
 import { p1TimeZone as timeZone } from './p1.ts';
 
 const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-04:00`;
+
+// What a person's sign-in and a grant to them write: none of it is the worker's.
+const signInTables = ['security_event', 'session', 'user_credential', 'user_permission'];
 
 export const p1Queued: Story = {
   name: 'p1-queued',
@@ -88,7 +101,17 @@ export const p1Queued: Story = {
       [systemActorId, 'system'],
     ]);
     const load = (ticketNumber: string) => ({ workflow: 'LOAD', ticketNumber }) as const;
-    // A job, added as the API's own login in a piece of work of the person who asks.
+    // Luis and Dana at their browsers. Luis asks for tickets to be reprocessed with nothing
+    // changed, at the reprocess endpoint: one job, its id.
+    const backOffice = p1BackOffice(story, office);
+    const asks = async (...ticketNumbers: string[]): Promise<string> => {
+      const { queued: answered } = await backOffice.reprocess(ticketNumbers.map(load));
+      const [job, ...more] = answered?.jobs ?? [];
+      if (job === undefined || more.length > 0) throw new Error('Not one job was queued.');
+      return job;
+    };
+    // A setup change's job, added by hand as the API's own login in a piece of work of the
+    // person who asks: the worker's side alone.
     const queued = (
       by: string,
       trigger: ReconciliationTrigger,
@@ -140,7 +163,9 @@ export const p1Queued: Story = {
         ].join(' · '),
       );
     // Everything the worker concludes and the audit log holds of it, the queue's and the runs'
-    // own records apart: what must not move when unchanged work is run again.
+    // own records apart: what must not move when unchanged work is run again. Luis asks at his
+    // browser (ADR-498), so his sign-in's records and Dana's grant to him are apart too: none
+    // is the worker's.
     const concluded = async (): Promise<number[]> => [
       await api.transaction.count({ where: { projectId: p1 } }),
       await api.flag.count({ where: { projectId: p1 } }),
@@ -153,6 +178,7 @@ export const p1Queued: Story = {
               'reconciliation_decision',
               'reconciliation_job',
               'reconciliation_job_ticket',
+              ...signInTables,
             ],
           },
         },
@@ -165,6 +191,38 @@ export const p1Queued: Story = {
     };
     const ticketsOf = (outcome: Extract<JobsOutcome, { worked: true }>): string[] =>
       outcome.run.tickets.map((ticket) => `${ticket.ticketNumber} ${ticket.status}`);
+    // The worker's own job loop over a run, its log kept: one pass's answer for P1, the lines
+    // it logged of a job set aside (their time apart), and whether any line matches.
+    const loopOver = (run: Reconciliation) => {
+      const lines: string[] = [];
+      const loop = new JobLoop(
+        worker,
+        run,
+        {
+          triesBeforeSetAside: tries,
+          ticketsARun: atMost,
+          pollMs: story.policy.jobQueuePollSeconds * 1_000,
+        },
+        new WorkerLog({ write: (line) => lines.push(line) }),
+      );
+      return {
+        async pass(): Promise<JobsOutcome> {
+          const ofP1 = (await loop.pass()).find((each) => each.projectId === p1);
+          if (ofP1 === undefined || !('outcome' in ofP1)) throw new Error('P1 wasn’t passed.');
+          return ofP1.outcome;
+        },
+        setAside: () =>
+          lines
+            .map((line) => JSON.parse(line) as Record<string, unknown>)
+            .filter((line) => line['code'] === 'JOB_SET_ASIDE')
+            .map((line) =>
+              Object.fromEntries(
+                Object.entries(line).filter(([key]) => !['time', 'service', 'msg'].includes(key)),
+              ),
+            ),
+        says: (words: RegExp): boolean => lines.some((line) => words.test(line)),
+      };
+    };
 
     // ------------------------------------------------------------------------------------------
     const phones = new P1Syncs(story, office);
@@ -202,10 +260,11 @@ export const p1Queued: Story = {
     // ------------------------------------------------------------------------------------------
     story.at(
       on('14', '09:00'),
-      'Luis asks for 101001 and 101003 to be reprocessed: one job, naming the two',
+      'Dana grants Luis correct; at his browser he asks for 101001 and 101003 to be reprocessed: one job, naming the two',
     );
     const before = await concluded();
-    const first = await queued(luis, 'REPROCESS', '101001', '101003');
+    await backOffice.grantLuis('CORRECT');
+    const first = await asks('101001', '101003');
     story.check('The job waits: no try yet, not finished, not set aside', await jobOf(first), {
       attempts: 0,
       finished: false,
@@ -249,7 +308,7 @@ export const p1Queued: Story = {
     );
 
     story.at(on('14', '09:10'), 'Luis asks for the same two again; nothing has changed since');
-    const second = await queued(luis, 'REPROCESS', '101001', '101003');
+    const second = await asks('101001', '101003');
     const secondRun = worked(await reconciliation.waitingJobs(p1, tries, atMost));
     story.check(
       'AC-10-53 worked a second time over unchanged field events and setup, nothing is written but the run, its two decisions and the job’s own record; the first job, finished, is not taken up again',
@@ -262,7 +321,7 @@ export const p1Queued: Story = {
       on('14', '10:00'),
       'Two jobs wait for P1 at once: Luis’s names 101002 and 101004, Dana’s rule change 101004 and 101005. Two workers go for them in the same moment',
     );
-    const luisJob = await queued(luis, 'REPROCESS', '101002', '101004');
+    const luisJob = await asks('101002', '101004');
     const danaJob = await queued(dana, 'SETUP_CHANGE', '101004', '101005');
     const runsBefore = await runs();
     const both = await Promise.all([
@@ -324,12 +383,13 @@ export const p1Queued: Story = {
       settings,
       mileages,
     );
-    const doomed = await queued(luis, 'REPROCESS', '101005');
+    const doomed = await asks('101005');
     const runsBeforeDoomed = await runs();
+    const failingLoop = loopOver(failing);
     const went: unknown[] = [];
     for (let attempt = 1; attempt <= tries; attempt += 1) {
       stops.left = 1;
-      const outcome = await failing.waitingJobs(p1, tries, atMost);
+      const outcome = await failingLoop.pass();
       went.push([outcome.worked ? 'worked' : outcome.reason, outcome.setAside.length]);
       if (attempt === 1) {
         story.check(
@@ -340,6 +400,7 @@ export const p1Queued: Story = {
               worked: false,
               reason: 'FAILED',
               error: 'The clock stopped.',
+              failure: { kind: 'Error' },
               jobs: [doomed],
               setAside: [],
             },
@@ -386,25 +447,116 @@ export const p1Queued: Story = {
         'system · SYSTEM · UPDATE · set_aside_at',
       ],
     );
+    story.check(
+      'ADR-498 the worker’s log says so as an error, by the fixed code JOB_SET_ASIDE a filter finds: the job, what queued it, its one ticket, its five tries and the kind of failure (a try that failed whole, an Error); never the error’s words, the ticket’s number or who asked',
+      [failingLoop.setAside(), failingLoop.says(/The clock stopped|101005|Luis|Ortega/)],
+      [
+        [
+          {
+            level: 50,
+            code: 'JOB_SET_ASIDE',
+            projectId: p1,
+            jobId: doomed,
+            trigger: 'REPROCESS',
+            tickets: 1,
+            tries: 5,
+            failure: 'RUN_FAILED',
+            failureKind: 'Error',
+          },
+        ],
+        false,
+      ],
+    );
 
     story.at(
       on('14', '11:30'),
-      'A job whose worker dies each time before it can say anything: its tries are counted as it is taken up',
+      'Two jobs whose worker dies each time before it can say anything, Luis’s and one of Dana’s setup for the records that are no ticket’s: their tries are counted as they are taken up',
     );
-    const silent = await queued(luis, 'REPROCESS', '101002');
+    const silent = await asks('101002');
+    const records = await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, (tx) =>
+      new ReconciliationJobs(tx).forProjectRecords({
+        projectId: p1,
+        trigger: 'SETUP_CHANGE',
+        requestedById: dana,
+      }),
+    );
     const takes = new WaitingJobs(worker, clock, tries, atMost);
     for (let attempt = 1; attempt <= tries; attempt += 1) await takes.takeUp(p1);
+    const wellLoop = loopOver(reconciliation);
+    const stoppedSilent = (jobId: string, trigger: string, tickets: number) => ({
+      level: 50,
+      code: 'JOB_SET_ASIDE',
+      projectId: p1,
+      jobId,
+      trigger,
+      tickets,
+      tries: 5,
+      failure: 'STOPPED_WITHOUT_A_WORD',
+    });
     story.check(
-      'Taken up five times with no word since, it is set aside the next time the worker comes for it, saying so',
-      [
-        await jobOf(silent),
-        await reconciliation.waitingJobs(p1, tries, atMost),
-        await jobOf(silent),
-      ],
+      'Taken up five times with no word since, they are set aside the next time the worker comes for them, saying so; a line in the log for each says the worker stopped without a word, the setup’s job naming no ticket',
+      [await jobOf(silent), await wellLoop.pass(), await jobOf(silent), wellLoop.setAside()],
       [
         { attempts: 5, finished: false, run: null, lastError: null, setAside: false },
-        { worked: false, reason: 'NOTHING_WAITING', setAside: [silent] },
+        { worked: false, reason: 'NOTHING_WAITING', setAside: [silent, records] },
         { attempts: 5, finished: false, run: null, lastError: stoppedWithoutAWord, setAside: true },
+        [stoppedSilent(silent, 'REPROCESS', 1), stoppedSilent(records, 'SETUP_CHANGE', 0)],
+      ],
+    );
+
+    story.at(
+      on('14', '11:40'),
+      'Dana filters the worker’s log for JOB_SET_ASIDE and, at her browser, puts the first job back by its id, and the setup’s; the worker takes the new jobs up. A job that isn’t set aside isn’t put back',
+    );
+    const danas = await backOffice.danas();
+    const putBack = (setAsideJobId: string) => ({
+      ids: { projectId: p1 },
+      json: { setAsideJobId },
+    });
+    const auditedDoomed = (await auditOf(doomed)).length;
+    const again = await danas.answered(reprocessTicketsEndpoint, putBack(doomed));
+    const [againJob = ''] = again.queued?.jobs ?? [];
+    const recordsAgain = await danas.answered(reprocessTicketsEndpoint, putBack(records));
+    const againRun = worked(await reconciliation.waitingJobs(p1, tries, atMost));
+    story.check(
+      'ADR-498 a new REPROCESS job names the set-aside job’s ticket, under Dana, and the setup’s is put back as a job for the records that are no ticket’s; one run works both: 101005 COMPLETED. The job set aside stays exactly as it was, the record of what failed: still set aside, its reason and tries kept, no audit record added',
+      [
+        again.record,
+        [again.queued?.jobs.length, again.queued?.tickets, again.queued?.lockedAsInvoiced],
+        [
+          recordsAgain.record.tickets,
+          recordsAgain.queued?.jobs.length,
+          recordsAgain.queued?.tickets,
+        ],
+        [againRun.jobs, ticketsOf(againRun)],
+        await runOf(againRun.run.runId).then(({ trigger, askedBy }) => [trigger, askedBy]),
+        (await auditOf(againJob))[0],
+        await jobOf(doomed),
+        (await auditOf(doomed)).length - auditedDoomed,
+        refusalOf(await danas.asked(reprocessTicketsEndpoint, putBack(first))),
+      ],
+      [
+        {
+          projectId: p1,
+          setAsideJobId: doomed,
+          tickets: [load('101005')],
+          lockedAsInvoiced: [],
+          requestedById: dana,
+        },
+        [1, 1, 0],
+        [[], 1, 0],
+        [[againJob, ...(recordsAgain.queued?.jobs ?? [])], ['101005 COMPLETED']],
+        ['REPROCESS', 'Dana'],
+        'Dana · BACK_OFFICE · INSERT',
+        {
+          attempts: 5,
+          finished: false,
+          run: null,
+          lastError: 'The clock stopped.',
+          setAside: true,
+        },
+        0,
+        '422 NOT_SAVED · NOT_SET_ASIDE: That job isn’t set aside: it waits for the worker, or the worker has finished it. Nothing was queued.',
       ],
     );
 
@@ -457,7 +609,7 @@ export const p1Queued: Story = {
     await loop.pass();
     const logged = lines.map((line) => JSON.parse(line) as Record<string, unknown>);
     story.check(
-      'Its pass works the job and says so in its log by ids alone; its health answer’s figures are no job waiting and two set aside',
+      'Its pass works the job and says so in its log by ids alone; its health answer’s figures are no job waiting and three set aside',
       [
         (await jobOf(last)).finished,
         logged.map((line) => [line['service'], line['msg'], line['projectId'], line['jobs']]),
@@ -467,7 +619,7 @@ export const p1Queued: Story = {
       [
         true,
         [['worker', 'A run worked its project’s waiting jobs.', p1, [last]]],
-        { jobsWaiting: 0, jobsSetAside: 2 },
+        { jobsWaiting: 0, jobsSetAside: 3 },
         false,
       ],
     );

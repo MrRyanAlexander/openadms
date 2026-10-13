@@ -358,8 +358,11 @@ export const p1Voided: Story = {
         true,
       ],
     );
-    story.at(on('14', '08:05'), 'The ticket is reprocessed, its call and the limit unchanged');
-    await queue.asked(luis, p1, [load('101003')]);
+    story.at(
+      on('14', '08:05'),
+      'Luis asks for the ticket to be reprocessed, its call and the limit unchanged',
+    );
+    await backOffice.reprocess([load('101003')]);
     const again = await queue.settled(p1);
     story.check(
       'AC-08-44 the flag isn’t raised again: the ticket has the one flag, accepted, and stays COMPLETED. AC-08-49 a flag is accepted once',
@@ -605,11 +608,16 @@ export const p1Voided: Story = {
       'Luis asks for the two void tickets, 301003 and 301005, to be reprocessed by name; the worker takes the job up',
     );
     const written = [await audited('field_event'), await audited('transaction')];
-    await queue.asked(luis, p1, [unitRate('301003'), unitRate('301005')]);
+    const askedVoid = await backOffice.reprocess([unitRate('301003'), unitRate('301005')]);
     const settled = await queue.settled(p1);
     story.check(
-      'AC-08-35, AC-08-41 a voided ticket stays void and out of the run, even one a job names, which writes nothing for it; its field event, its photographs and its audit records are all still there',
+      'AC-08-35, AC-08-41 a voided ticket stays void and out of the run, even one a job names (his request queued one job naming the two, ADR-498), which writes nothing for it; its field event, its photographs and its audit records are all still there',
       [
+        [
+          askedVoid.queued?.jobs.length,
+          askedVoid.queued?.tickets,
+          askedVoid.record.lockedAsInvoiced,
+        ],
         of(settled, '301003', '301005'),
         [await statusOf('301003'), await statusOf('301005')],
         [await audited('field_event'), await audited('transaction')],
@@ -617,7 +625,7 @@ export const p1Voided: Story = {
         (await api.photo.count({ where: { fieldEventId: urt301005.id } })) === photographsOn301005,
         (await api.auditRecord.count({ where: { recordId: urt301005.id } })) > 0,
       ],
-      [[], [['VOID'], ['VOID']], written, true, true, true],
+      [[1, 2, []], [], [['VOID'], ['VOID']], written, true, true, true],
     );
 
     story.at(

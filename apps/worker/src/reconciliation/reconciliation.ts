@@ -54,6 +54,7 @@ import {
   type WorkflowName,
 } from '@open-adms/domain';
 
+import { errorLogged } from '../process/logs.ts';
 import { MileageStanding } from './mileage-standing.ts';
 import {
   ProjectRead,
@@ -98,6 +99,8 @@ export type JobsOutcome =
       // The try failed whole: every job it took up is still waiting, or set aside.
       readonly reason: 'FAILED';
       readonly error: string;
+      // The kind of what failed it, for the log: never its words (ADR-498).
+      readonly failure: FailureKind;
       readonly jobs: readonly string[];
       readonly setAside: readonly string[];
     }
@@ -140,6 +143,18 @@ export type RunOutcome =
       // The tickets still missing a field event: listed, never flagged for waiting (ADR-053).
       readonly pending: readonly TicketOutcome[];
     };
+
+// What failed a try whole, as the log may say it: the error's kind and its code, where it has a
+// fixed one (a database's), never its message or where it was thrown.
+export interface FailureKind {
+  readonly kind: string;
+  readonly code?: string;
+}
+
+const failureKindOf = (caught: unknown): FailureKind => {
+  const { kind, code } = errorLogged(caught);
+  return code === undefined ? { kind } : { kind, code };
+};
 
 const errorWords = (caught: unknown): string =>
   (caught instanceof Error ? caught.message : String(caught)).replace(
@@ -213,6 +228,7 @@ export class Reconciliation {
           worked: false,
           reason: 'FAILED',
           error,
+          failure: failureKindOf(caught),
           jobs: ids,
           setAside: [...taken.setAside, ...spent],
         };

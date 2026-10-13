@@ -40,6 +40,7 @@ import type {
   PhotographRecord,
   QcMarkRecord,
   QuarantinedRecordAnswer,
+  ReprocessRecord,
   RoeRecord,
   RoeScopeItemRecord,
   ScaleReceiptRecord,
@@ -52,6 +53,8 @@ import type { FastifyRequest } from 'fastify';
 import { Refusal } from '../process/refusal.ts';
 import { answered, type SavedAnswer } from '../setup/setup-answered.ts';
 import type { Outcome } from '../setup/setup-service.ts';
+import type { ReprocessAsked } from './reprocesses.ts';
+import type { Reviewed } from './review-service.ts';
 
 export function reviewed<T, A>(
   request: FastifyRequest,
@@ -128,6 +131,21 @@ export const invoiceBatchRecord = (batch: InvoiceBatch): InvoiceBatchRecord => (
   name: batch.name,
   createdById: batch.createdById,
   createdAt: batch.createdAt.toISOString(),
+});
+
+// A reprocess writes no record but its job: what was asked, as its queue read it.
+export const reprocessRecord = ({
+  record,
+  reprocess,
+}: Reviewed<ReprocessAsked>): ReprocessRecord => ({
+  projectId: reprocess.projectId,
+  setAsideJobId: record.setAsideJobId,
+  tickets: reprocess.tickets.map(({ workflow, ticketNumber }) => ({ workflow, ticketNumber })),
+  lockedAsInvoiced: reprocess.lockedAsInvoiced.map(({ workflow, ticketNumber }) => ({
+    workflow,
+    ticketNumber,
+  })),
+  requestedById: reprocess.requestedById,
 });
 
 export const invoiceLockRecord = (lock: InvoiceLock): InvoiceLockRecord => ({

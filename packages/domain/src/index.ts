@@ -420,6 +420,7 @@ export {
   qcStatuses,
   QuarantineResolution,
   Renumber,
+  ReprocessAsking,
   Reviewer,
   reviewPermissions,
   TicketOnItsOwn,

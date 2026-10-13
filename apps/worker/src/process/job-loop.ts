@@ -144,15 +144,45 @@ export class JobLoop {
         jobs: outcome.jobs,
       });
     }
-    if (outcome.setAside.length > 0) {
-      this.log.warn(
-        'Jobs were set aside after too many tries: they are kept, and wait for a person.',
+    if (outcome.setAside.length > 0) await this.setAside(projectId, outcome);
+    return outcome;
+  }
+
+  // A job set aside is an error a person must look into (ADR-498): its tickets stand as they
+  // last did, money possibly wrong, until someone puts the job back through the reprocess
+  // endpoint by its id. One line a job, by the fixed code `JOB_SET_ASIDE` a filter finds: what
+  // queued it, how many tickets it names, how many tries it had, and the kind of failure. Never
+  // the error's words (`lastError`, on the job), a ticket's number or a person.
+  private async setAside(projectId: string, outcome: JobsOutcome): Promise<void> {
+    const jobs = await this.db.reconciliationJob.findMany({
+      where: { id: { in: [...outcome.setAside] } },
+      orderBy: { id: 'asc' },
+      select: { id: true, trigger: true, attempts: true, _count: { select: { tickets: true } } },
+    });
+    // A job this try took up failed with the try; one found spent was taken up as often as the
+    // policy lets, and its last try never said how it went: the worker stopped first.
+    const failedNow = outcome.worked || outcome.reason !== 'FAILED' ? null : outcome;
+    for (const job of jobs) {
+      const failure =
+        failedNow?.jobs.includes(job.id) === true
+          ? {
+              failure: 'RUN_FAILED',
+              failureKind: failedNow.failure.kind,
+              failureCode: failedNow.failure.code,
+            }
+          : { failure: 'STOPPED_WITHOUT_A_WORD' };
+      this.log.errorCoded(
+        'JOB_SET_ASIDE',
+        'A job was set aside after too many tries: it is kept, and waits for a person to put it back.',
         {
           projectId,
-          jobs: outcome.setAside,
+          jobId: job.id,
+          trigger: job.trigger,
+          tickets: job._count.tickets,
+          tries: job.attempts,
+          ...failure,
         },
       );
     }
-    return outcome;
   }
 }

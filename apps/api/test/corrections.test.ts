@@ -99,6 +99,8 @@ describe('who may ask', () => {
       endpoints.filter((one) => one.permission === permission).map(({ name }) => name);
     // Part 3's (review-records.test.ts) follow part 2's.
     expect(taking('CORRECT')).toEqual([
+      // A reprocess with nothing changed is part of correcting (reprocesses.test.ts; ADR-498).
+      'reprocessTickets',
       'correctFieldEvent',
       'correctItemLine',
       'correctCarriedTicket',

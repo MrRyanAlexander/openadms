@@ -82,7 +82,9 @@ export interface ReviewRefusal {
     | 'NOT_LOCKED'
     | 'BATCH_NAME_BLANK'
     | 'BATCH_NAME_USED'
-    | 'BATCH_ON_ANOTHER_PROJECT';
+    | 'BATCH_ON_ANOTHER_PROJECT'
+    | 'TOO_MANY_TICKETS'
+    | 'NOT_SET_ASIDE';
   readonly message: string;
 }
 
@@ -396,6 +398,69 @@ export class TicketOnItsOwn {
       code: 'NOT_QCD_ALONE',
       message: `A ${kindInWords[this.kind]} is never QC’d or locked on its own: its completed load or haul-out is, once the ticket is whole. Nothing was saved.`,
     };
+  }
+}
+
+// A reprocess a person asks for with nothing changed (spec/parts/08-review-and-corrections.md
+// step 4; ADR-498): the tickets they name, worked again as their records and the setup stand
+// now, or the tickets of a job the worker set aside, put back. It changes no record, so little
+// is refused: more tickets than one job names (the policy's JOB_TICKETS_AT_MOST), a number no
+// field event of the project is under, and a job that isn't one of the project's set aside.
+export class ReprocessAsking {
+  private readonly atMost: number;
+
+  // `atMost` is the policy's JOB_TICKETS_AT_MOST.
+  constructor(atMost: number) {
+    this.atMost = atMost;
+  }
+
+  // Why that many tickets, each named once, can't be asked for at once, or nothing: asked
+  // before any of them is looked for.
+  countRefusal(count: number): ReviewRefusal | null {
+    if (count <= this.atMost) return null;
+    return {
+      code: 'TOO_MANY_TICKETS',
+      message: `${String(count)} tickets were named: a reprocess asks for ${String(this.atMost)} at the most. Ask for them in parts. Nothing was queued.`,
+    };
+  }
+
+  // Why the tickets a person named can't be asked for, or nothing: each named once, with how
+  // many field events of the project are under its number.
+  ticketsRefusal(
+    named: readonly { readonly ticketNumber: string; readonly fieldEvents: number }[],
+  ): ReviewRefusal | null {
+    const tooMany = this.countRefusal(named.length);
+    if (tooMany !== null) return tooMany;
+    const none = named.find((ticket) => ticket.fieldEvents === 0);
+    if (none !== undefined) {
+      return {
+        code: 'NOT_A_TICKET',
+        message: `No field event of this project is under ${none.ticketNumber}: there is no such ticket to reprocess. Nothing was queued.`,
+      };
+    }
+    return null;
+  }
+
+  // Why a job's tickets can't be put back, or nothing: only a job of this project the worker
+  // set aside is. The job stays as it is, the record of what failed.
+  static jobRefusal(job: {
+    readonly onThisProject: boolean;
+    readonly setAside: boolean;
+  }): ReviewRefusal | null {
+    if (!job.onThisProject) {
+      return {
+        code: 'NOT_ON_THIS_PROJECT',
+        message: 'That job is another project’s. Nothing was queued.',
+      };
+    }
+    if (!job.setAside) {
+      return {
+        code: 'NOT_SET_ASIDE',
+        message:
+          'That job isn’t set aside: it waits for the worker, or the worker has finished it. Nothing was queued.',
+      };
+    }
+    return null;
   }
 }
 

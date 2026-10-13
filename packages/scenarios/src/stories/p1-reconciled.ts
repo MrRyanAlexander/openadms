@@ -153,7 +153,8 @@ export const p1Reconciled: Story = {
     };
     const reconciliation = new Reconciliation(worker, clock, settings, step);
     // The worker's own job loop: it takes up what each sync queued, each reprocess Luis asks
-    // for and the job each of his corrections queues (BACKLOG 2.7.1 part 3; ADR-494, 497).
+    // for at its endpoint and the job each of his corrections queues (BACKLOG 2.7.1 part 3;
+    // ADR-494, 497, 498).
     const queue = new QueueRuns(story, reconciliation);
     // Every ticket of P1 as it stands, for a reprocess Luis asks for.
     const everyTicket = async () =>
@@ -267,6 +268,8 @@ export const p1Reconciled: Story = {
       haulOuts: await api.completedHaulOut.findMany({ orderBy: { id: 'asc' } }),
       haulOutRows: await api.completedHaulOutCollection.findMany({ orderBy: { id: 'asc' } }),
       flags: await api.flag.findMany({ orderBy: { id: 'asc' } }),
+      // Luis asks at his browser (ADR-498): what his sign-in and Dana's grant to him write is
+      // no record the run concludes either.
       audited: await api.auditRecord.count({
         where: {
           tableName: {
@@ -275,6 +278,10 @@ export const p1Reconciled: Story = {
               'reconciliation_job_ticket',
               'reconciliation_run',
               'reconciliation_decision',
+              'security_event',
+              'session',
+              'user_credential',
+              'user_permission',
             ],
           },
         },
@@ -416,10 +423,14 @@ export const p1Reconciled: Story = {
     // ------------------------------------------------------------------------------------------
     story.at(
       on('12', '19:00'),
-      'Luis asks for P1’s tickets to be reprocessed; the worker runs again, with nothing in its way',
+      'Dana grants Luis correct; at his browser he asks for P1’s tickets to be reprocessed, nothing changed; the worker runs again, with nothing in its way',
     );
+    // Dana and Luis at their browsers (ADR-497, 498): a reprocess with nothing changed is his
+    // request at its endpoint, part of correcting.
+    const backOffice = p1BackOffice(story, office);
+    await backOffice.grantLuis('CORRECT');
     asked = [];
-    await queue.asked(luis, p1, await everyTicket());
+    await backOffice.reprocess(await everyTicket());
     const second = await queue.settled(p1);
     story.check(
       'AC-06-18, 23, 13 Monday’s tickets: 101001 and 101002 COMPLETED; 101003 in review for its 96% call, and "could not be processed" is gone; 101004, a preload, waits for its disposal with no flag; Jo’s three unit rate tickets each whole by itself',
@@ -481,7 +492,7 @@ export const p1Reconciled: Story = {
     );
     const before = show(await concluded());
     asked = [];
-    await queue.asked(luis, p1, await everyTicket());
+    await backOffice.reprocess(await everyTicket());
     const third = await queue.settled(p1);
     story.check(
       'AC-06-151 nothing changes: every field event, completed load, row and flag is as it was to the last column, no audit record was written for any of them, and no map server was asked; only Luis’s job, the run and its seven decisions are new',
@@ -530,7 +541,7 @@ export const p1Reconciled: Story = {
         activationDate: '2026-10-12',
       }),
     );
-    await queue.asked(luis, p1, await everyTicket());
+    await backOffice.reprocess(await everyTicket());
     let reached: () => void = () => undefined;
     let release: () => void = () => undefined;
     const isReached = new Promise<void>((resolve) => {
@@ -626,7 +637,7 @@ export const p1Reconciled: Story = {
       'The routing server answers again; Luis asks for P1’s tickets to be reprocessed and the worker runs',
     );
     asked = [];
-    await queue.asked(luis, p1, await everyTicket());
+    await backOffice.reprocess(await everyTicket());
     const fifth = await queue.settled(p1);
     story.check(
       '201001 is worked now and its flag cleared; only its mileage was asked for',
@@ -906,12 +917,11 @@ export const p1Reconciled: Story = {
 
     story.at(
       on('14', '10:00'),
-      'Dana grants Luis correct and renumber; at his browser he corrects 101003’s load call to 90% (the correction itself is Part 8’s), which queues its job; the worker runs, asked by him',
+      'Dana grants Luis renumber; at his browser he corrects 101003’s load call to 90% (the correction itself is Part 8’s), which queues its job; the worker runs, asked by him',
     );
     // Luis at his browser (ADR-497): a correction of a disposal's load call and a renumber of
     // one, each queuing its own job (its tickets and their neighbours) at its endpoint.
-    const backOffice = p1BackOffice(story, office);
-    await backOffice.grantLuis('CORRECT', 'RENUMBER');
+    await backOffice.grantLuis('RENUMBER');
     const luiss = await backOffice.luiss();
     const disposalOf = (ticketNumber: string) =>
       api.fieldEvent.findFirstOrThrow({ where: { projectId: p1, ticketNumber, kind: 'DISPOSAL' } });

@@ -79,8 +79,9 @@ import { apiUnplannedAssignments } from '../phone/unplanned-assignments.controll
 import { UnplannedAssignments } from '../phone/unplanned-assignments.ts';
 import { Acceptances } from '../review/acceptances.ts';
 import { BackOfficeRecords } from '../review/back-office-records.ts';
-import { apiCorrections } from '../review/corrections.controller.ts';
+import { apiCorrections, apiReprocesses } from '../review/corrections.controller.ts';
 import { Corrections } from '../review/corrections.ts';
+import { Reprocesses } from '../review/reprocesses.ts';
 import { InvoiceLocks } from '../review/invoice-locks.ts';
 import { QcMarks } from '../review/qc-marks.ts';
 import { QuarantineReview } from '../review/quarantine-review.ts';
@@ -431,6 +432,8 @@ export class ApiProcess {
           [apiQcMarks, new QcMarks(database, clock, policy)],
           [apiInvoiceLocks, new InvoiceLocks(database, clock, policy)],
           [apiCorrections, new Corrections(database, clock, policy)],
+          // A reprocess asked for with nothing changed (task 2.7.1 piece 4b2, ADR-498).
+          [apiReprocesses, new Reprocesses(database, clock, policy)],
           [apiQuarantineReview, new QuarantineReview(database, clock, policy)],
           [apiBackOfficeRecords, new BackOfficeRecords(database, clock, policy)],
           // A certification's changes (task 2.4.4, part 4): only an admin revokes.

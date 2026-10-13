@@ -22,11 +22,13 @@ import {
   photoRead,
   readPersonEndpoint,
   recordRead,
+  reprocessTicketsEndpoint,
   setPermissionsEndpoint,
+  type AnswerOf,
   type SyncAnswered,
   type SyncReceived,
 } from '@open-adms/contracts';
-import { ReconciliationJobs, type JobTicket } from '@open-adms/db';
+import type { JobTicket } from '@open-adms/db';
 import { certificationViews, workflows, type PermissionName } from '@open-adms/domain';
 import {
   JobLoop,
@@ -103,22 +105,6 @@ export class QueueRuns {
       },
       // Its lines say only what a pass's answer says too; a story reads the answer.
       new WorkerLog({ write: () => undefined }),
-    );
-  }
-
-  // A reprocess a person asks for with nothing changed: no endpoint asks for one in Phase 2
-  // (ADR-497; whether the review screen offers it is Phase 4's), so its job is added as the
-  // API's own login, in that person's piece of work, naming the tickets (as the story
-  // `p1-queued` adds one). A change a person makes queues its own job at its endpoint. The job's
-  // id.
-  asked(by: string, projectId: string, tickets: readonly JobTicket[]): Promise<string> {
-    return this.story.api.$write({ actorId: by, source: 'BACK_OFFICE' }, (tx) =>
-      new ReconciliationJobs(tx).queue({
-        projectId,
-        trigger: 'REPROCESS',
-        requestedById: by,
-        tickets,
-      }),
     );
   }
 
@@ -439,6 +425,9 @@ export interface P1BackOffice {
   // Dana gives Luis more grants on his record: she reads what he holds, and states it with
   // these (`setPermissions` takes the whole of it).
   grantLuis(...more: PermissionName[]): Promise<void>;
+  // Luis asks for tickets of P1 to be reprocessed with nothing changed, at the reprocess
+  // endpoint (ADR-498): he holds correct. Its answer: what was asked and queued.
+  reprocess(tickets: readonly JobTicket[]): Promise<AnswerOf<typeof reprocessTicketsEndpoint>>;
 }
 
 export function p1BackOffice(story: StoryContext, office: P1Office): P1BackOffice {
@@ -455,6 +444,14 @@ export function p1BackOffice(story: StoryContext, office: P1Office): P1BackOffic
       await dana.answered(setPermissionsEndpoint, {
         ids,
         json: { permissions: [...new Set([...held, ...more])] },
+      });
+    },
+    async reprocess(tickets) {
+      return (await luiss()).answered(reprocessTicketsEndpoint, {
+        ids: { projectId: office.p1 },
+        json: {
+          tickets: tickets.map(({ workflow, ticketNumber }) => ({ workflow, ticketNumber })),
+        },
       });
     },
   };

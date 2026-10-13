@@ -51,7 +51,10 @@ cause**, with bulk accept, fix and QC; photos reviewed inside the ticket. It hol
    value under your ID (ADR-051, 236).
 4. **The ticket reprocesses**, `COMPLETED` ones included: the worker draws its conclusions again,
    updating the completed load in place and regenerating its transactions
-   ([Part 6](06-reconciliation.md); ADR-086).
+   ([Part 6](06-reconciliation.md); ADR-086). A ticket the worker couldn't process, or the
+   tickets of a job it set aside after too many tries, are **asked for again by name with nothing
+   changed**: an admin, or a manager/analyst with *correct*; it changes no record and only queues
+   the job; a ticket locked as invoiced is left as it is (ADR-498).
 5. **An accepted flag** stays in the ticket's history and isn't raised again unless the facts it was
    about change; when every flag is fixed or accepted, the ticket is `COMPLETED` (ADR-166).
 6. **A void** keeps the record, **stops all billing** (its lines removed, each copied to the audit

@@ -86,6 +86,7 @@ import {
   photographRecordSchema,
   qcMarkRecordSchema,
   quarantinedRecordSchema,
+  reprocessRecordSchema,
   roeRecordSchema,
   roeScopeItemRecordSchema,
   scaleReceiptRecordSchema,
@@ -2145,6 +2146,35 @@ export const unlockInvoicedEndpoint = endpoint({
   answer: savedAnswer(invoiceLockRecordSchema),
 });
 
+// A reprocess a person asks for with nothing changed (spec/parts/08-review-and-corrections.md
+// step 4; ADR-498): a ticket the worker couldn't process, worked again; or a job the worker set
+// aside after too many tries, put back by its id as the worker's log names it. Part of
+// correcting, so it takes `CORRECT`: no grant of its own. It changes no record: it queues one
+// job of the tickets alone (`REPROCESS`, naming the person), since nothing changed that another
+// ticket reads; a ticket locked as invoiced is left off it and counted. The job set aside stays
+// as it is, the record of what failed. How many tickets one request names at the most is the
+// installation's policy (JOB_TICKETS_AT_MOST), refused by the domain's rule; the schema bounds
+// only what is read, at the most that policy may be.
+const ticketsAskedAtMost = 100_000;
+export const reprocessTicketsEndpoint = endpoint({
+  name: 'reprocessTickets',
+  summary:
+    'Tickets of the project are queued to be worked again as their records and the setup stand, nothing changed: those named, or the tickets of a job the worker set aside, by its id. One job, naming the person; a ticket locked as invoiced is left off it and counted. Refused for more tickets than the installation’s policy lets one job name, a number no field event of the project is under, and a job that isn’t one of the project’s set aside.',
+  ...reviewer,
+  permission: 'CORRECT',
+  method: 'POST',
+  path: '/projects/:projectId/reprocesses',
+  params: projectId,
+  body: z.union([
+    z.strictObject({
+      tickets: z.array(z.strictObject(ticketNamed)).min(1).max(ticketsAskedAtMost),
+      note: reviewNote,
+    }),
+    z.strictObject({ setAsideJobId: z.uuid(), note: reviewNote }),
+  ]),
+  answer: savedAnswer(reprocessRecordSchema),
+});
+
 // Corrections to a ticket's own records (spec/parts/08-review-and-corrections.md steps 2…4;
 // spec/acceptance/08 sections C and D; AC-04-102, 103; AC-10-27, 28, 37; BACKLOG 2.4.4, C79,
 // C104; ADR-028, 051, 337, 364, 431): a field event's captured details, its number, a line of
@@ -2734,6 +2764,7 @@ export const endpoints: readonly Endpoint[] = [
   lockAsInvoicedEndpoint,
   setLockBatchEndpoint,
   unlockInvoicedEndpoint,
+  reprocessTicketsEndpoint,
   correctFieldEventEndpoint,
   renumberFieldEventEndpoint,
   correctItemLineEndpoint,
