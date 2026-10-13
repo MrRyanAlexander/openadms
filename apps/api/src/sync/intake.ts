@@ -531,7 +531,7 @@ export class Intake {
         }
         const owner = (kind: SentPhoto['owner']['kind']): string | null =>
           quarantined === null && photo.owner.kind === kind ? photo.owner.id : null;
-        const places = photoPlaces(photo.projectId, photo.id, photo.depthFile);
+        const places = photoPlaces(photo.projectId, photo.id, photo.depthSha256 !== null);
         await tx.photo.create({
           data: {
             id: photo.id,
@@ -554,6 +554,7 @@ export class Intake {
             uploadedSha256: photo.uploadedSha256,
             objectKey: places.objectKey,
             depthObjectKey: places.depthObjectKey,
+            depthSha256: photo.depthSha256,
             deviceId: photo.deviceId,
           },
         });

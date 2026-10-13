@@ -993,7 +993,7 @@ describe('a photograph’s record', () => {
           { kind: 'CERTIFICATION', id: certification.id },
           {
             view: photo.view,
-            depthFile: photo.depthFile,
+            depthSha256: photo.depthSha256,
           },
         ),
       );
@@ -1007,13 +1007,16 @@ describe('a photograph’s record', () => {
         where: { certificationId: certification.id },
         orderBy: { id: 'asc' },
       });
-      expect(kept.map((photo) => [photo.view, photo.objectKey, photo.depthObjectKey])).toEqual(
+      expect(
+        kept.map((photo) => [photo.view, photo.objectKey, photo.depthObjectKey, photo.depthSha256]),
+      ).toEqual(
         [...five]
           .sort((a, b) => a.id.localeCompare(b.id))
           .map((photo) => [
             photo.view,
             `projects/${p.projectId}/photos/${photo.id}`,
-            photo.depthFile ? `projects/${p.projectId}/photos/${photo.id}.depth` : null,
+            photo.depthSha256 === null ? null : `projects/${p.projectId}/photos/${photo.id}.depth`,
+            photo.depthSha256,
           ]),
       );
       for (const photo of kept) {

@@ -1326,8 +1326,10 @@ item requires is a flag.
 | **uploadedSha256** | text | Of the file the phone uploads; the phone's word, sent with the record (ADR-481) |
 | **objectKey** | text | Where the file is kept: **made by the server**, never sent by a phone: `projects/<project>/photos/<photograph>` (ADR-481) |
 | depthObjectKey | text | The depth file's place, beside it with `.depth` after it, where the phone said one comes (ADR-481) |
+| depthSha256 | text | The depth file's own fingerprint, the phone's word; there exactly where a depth file goes (ADR-482) |
 | deviceId | → `Device` | |
-| uploadedAt | instant | |
+| uploadedAt | instant | When the file reached storage, through the media endpoint: written once, by the phone that took it (ADR-482) |
+| depthUploadedAt | instant | The same for the depth file (ADR-482) |
 | archivedAt | instant | The back office removed it from the record (ADR-329 (9), 337): a mark only, cleared to put it back. Nothing is deleted; who and when is the audit record |
 | label | text | The back office's own words for what it shows; never blank; read by no check (ADR-337) |
 
@@ -1350,6 +1352,36 @@ photograph keeps its record, its file, its fingerprints and its label, and a vie
 both columns. A label that is blank is refused (`photo_label_check`). Who may remove or label is
 a permission the API reads (Phase 2); a removed photograph counts towards nothing a record must
 have: not a certification's five views, not the photographs a pay item requires (the user, ADR-345).
+**Its files (ADR-482).** The depth file's fingerprint, like the other two, is a SHA-256 written
+once, and is there exactly where `depthObjectKey` is (`photo_depth_check`). **A record is kept
+before its files reach storage** (no upload time on an insert); `uploadedAt` and
+`depthUploadedAt` are each written once, and only with the source `DEVICE` and the photograph's own
+phone stated (`photo_upload_guard`); the API writes them under the device key's actor when the
+media endpoint has kept a file it checked. A viewer's view shows both new columns.
+
+#### `SetAsideFile` (`set_aside_file`)
+
+*How the evidence arrived (ADR-482; BACKLOG C84 (12)).* A whole file the media endpoint received
+for a photograph that isn't the file its phone fingerprinted: kept in storage at a place of its
+own beside the photograph's (`<objectKey>.set-aside/<its SHA-256>`), for a person; never kept as
+the photograph's, never thrown away.
+
+| Field | Type | Notes |
+|---|---|---|
+| **id** | uuid | The database's |
+| **photoId** | → `Photo` | |
+| **file** | enum `PhotoFile` | `PHOTO` · `DEPTH`: which of the photograph's files it stood for |
+| **deviceId** | → `Device` | The phone that sent it: the photograph's own |
+| **receivedSha256** | text | Of what arrived, read by the server |
+| **byteCount** | int | More than none |
+| **contentType** | text | The kind of image its first bytes say |
+| **objectKey** | text | Where it is kept; unique |
+| **receivedAt** | instant | When the server received it whole |
+
+One row for one file: unique on `photoId`, `file` and `receivedSha256`. The API's alone to add and
+read; never changed, never deleted, audited in the records domain; written only with the source
+`DEVICE` and the photograph's own phone stated (`set_aside_file_from_its_phone_guard`). No viewer
+reads it. How a person resolves one is Phase 4's (C138).
 
 ### 4.5 Sync (Phase 2 settles the detail; ARCHITECTURE §9)
 

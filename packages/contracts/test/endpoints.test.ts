@@ -10,10 +10,13 @@ import {
   endpointMethods,
   endpoints,
   errorAnswerSchema,
+  filePartMediaType,
   healthAnswerSchema,
   healthEndpoint,
   notTaken,
   openApiDocument,
+  photoFileAnswerSchema,
+  sendPhotoFilePartEndpoint,
   taken,
 } from '../src/index.ts';
 
@@ -189,6 +192,86 @@ describe('an endpoint is defined whole, or not at all', () => {
     expect(new Set(endpoints.map(({ method, path }) => `${method} ${path}`)).size).toBe(
       endpoints.length,
     );
+  });
+});
+
+describe('the one endpoint that takes a file', () => {
+  it('AC-10-47, ADR-482 takes a part of a file as bytes, never JSON; is defined with no body of its own and never as a GET; and is described as bytes', () => {
+    expect(endpoints.filter(({ file }) => file === true)).toEqual([sendPhotoFilePartEndpoint]);
+    const read = {
+      params: { photoId: '01a1325e-741f-716f-b9d4-738fd7f66e2b', file: 'photo' },
+      query: { offset: '0', length: '3' },
+    };
+    const bytes = Uint8Array.from([0xff, 0xd8, 0xff]);
+    expect(taken(sendPhotoFilePartEndpoint, { ...read, body: bytes })?.body).toBe(bytes);
+    for (const body of [undefined, new Uint8Array(), { bytes: 'ffd8ff' }, 'ffd8ff', [0xff]]) {
+      expect(taken(sendPhotoFilePartEndpoint, { ...read, body }), JSON.stringify(body)).toBe(
+        undefined,
+      );
+      expect(notTaken(sendPhotoFilePartEndpoint, { ...read, body })).toBe(
+        'Not taken: the body isn’t a part of a file: at least one byte, sent as a file’s part.',
+      );
+    }
+    // Its query and path are read as any endpoint's.
+    expect(
+      taken(sendPhotoFilePartEndpoint, {
+        ...read,
+        query: { offset: '-1', length: '3' },
+        body: bytes,
+      }),
+    ).toBe(undefined);
+    expect(
+      taken(sendPhotoFilePartEndpoint, {
+        ...read,
+        query: { offset: '0', length: '0' },
+        body: bytes,
+      }),
+    ).toBe(undefined);
+    const base = {
+      name: 'test',
+      summary: 'A test’s own.',
+      access: 'ANYBODY',
+      path: '/a',
+      answer: healthAnswerSchema,
+    } as const;
+    expect(() => endpoint({ ...base, method: 'PUT', file: true })).not.toThrow();
+    expect(() => endpoint({ ...base, method: 'GET', file: true })).toThrow('takes a file');
+    expect(() =>
+      endpoint({ ...base, method: 'PUT', file: true, body: z.strictObject({}) }),
+    ).toThrow('takes a file');
+    const described = openApiDocument([sendPhotoFilePartEndpoint]) as {
+      paths: Record<string, Record<string, { requestBody?: unknown }>>;
+    };
+    expect(
+      described.paths['/phones/current/photos/{photoId}/files/{file}']?.['patch']?.requestBody,
+    ).toEqual({
+      required: true,
+      content: {
+        [filePartMediaType]: {
+          schema: { type: 'string', contentMediaType: 'application/octet-stream' },
+        },
+      },
+    });
+    expect(filePartMediaType).toBe('application/offset+octet-stream');
+  });
+
+  it('ADR-482 answers where a file stands: kept, so many bytes of so many taken, or not the one fingerprinted; never where it is kept', () => {
+    for (const answer of [
+      { upload: 'KEPT' },
+      { upload: 'RECEIVING', received: 0, length: null },
+      { upload: 'RECEIVING', received: 60000, length: 150000 },
+      { upload: 'NOT_MATCHED' },
+    ]) {
+      expect(photoFileAnswerSchema.safeParse(answer).success, JSON.stringify(answer)).toBe(true);
+    }
+    for (const answer of [
+      { upload: 'KEPT', objectKey: 'projects/x/photos/y' },
+      { upload: 'RECEIVING', received: -1, length: 3 },
+      { upload: 'RECEIVING', received: 0 },
+      { upload: 'SAVED' },
+    ]) {
+      expect(photoFileAnswerSchema.safeParse(answer).success, JSON.stringify(answer)).toBe(false);
+    }
   });
 });
 

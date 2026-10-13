@@ -76,6 +76,14 @@ export const policyNames = {
   // How long the object store has to answer one question of the API's, a file put or read
   // whole, in seconds (ARCHITECTURE §11; ADR-480).
   mediaStoreAnswerSeconds: 'MEDIA_STORE_ANSWER_SECONDS',
+  // A photograph's file as the media endpoint takes it (ARCHITECTURE §6 "Uploads", §9 (5), §11;
+  // ADR-482): the largest file, in bytes; the largest part of one sent in a request; how many
+  // bytes of files not yet whole the API holds at once, across every phone; and how many parts
+  // one phone may send in the rate limits' stretch.
+  mediaFileBytesAtMost: 'MEDIA_FILE_BYTES_AT_MOST',
+  mediaPartBytesAtMost: 'MEDIA_PART_BYTES_AT_MOST',
+  mediaReceivingBytesAtMost: 'MEDIA_RECEIVING_BYTES_AT_MOST',
+  rateLimitFilePartsPerPhone: 'RATE_LIMIT_FILE_PARTS_PER_PHONE',
   // Rate limits (ARCHITECTURE §6, Abuse; ASVS 2.4.1; ADR-416): how long the stretch is that
   // requests are counted over, in seconds; how many one address and one signed-in person may send
   // in it; and how many callers' counts the server keeps at once.
@@ -157,6 +165,10 @@ const ranges: Record<PolicyName, { least: number; most: number }> = {
   [policyNames.loginListEntriesPerCall]: { least: 1, most: 500 },
   [policyNames.addressLookupAnswerSeconds]: { least: 1, most: 60 },
   [policyNames.mediaStoreAnswerSeconds]: { least: 1, most: 600 },
+  [policyNames.mediaFileBytesAtMost]: { least: 1048576, most: 1073741824 },
+  [policyNames.mediaPartBytesAtMost]: { least: 65536, most: 1073741824 },
+  [policyNames.mediaReceivingBytesAtMost]: { least: 1048576, most: 68719476736 },
+  [policyNames.rateLimitFilePartsPerPhone]: { least: 1, most: Number.MAX_SAFE_INTEGER },
   [policyNames.rateLimitWindowSeconds]: { least: 1, most: 3600 },
   [policyNames.rateLimitRequestsPerAddress]: { least: 1, most: Number.MAX_SAFE_INTEGER },
   [policyNames.rateLimitRequestsPerAccount]: { least: 1, most: Number.MAX_SAFE_INTEGER },
@@ -204,6 +216,10 @@ export class Policy {
   readonly loginListEntriesPerCall: number;
   readonly addressLookupAnswerSeconds: number;
   readonly mediaStoreAnswerSeconds: number;
+  readonly mediaFileBytesAtMost: number;
+  readonly mediaPartBytesAtMost: number;
+  readonly mediaReceivingBytesAtMost: number;
+  readonly rateLimitFilePartsPerPhone: number;
   readonly rateLimitWindowSeconds: number;
   readonly rateLimitRequestsPerAddress: number;
   readonly rateLimitRequestsPerAccount: number;
@@ -250,6 +266,10 @@ export class Policy {
     this.loginListEntriesPerCall = Policy.read(values, policyNames.loginListEntriesPerCall);
     this.addressLookupAnswerSeconds = Policy.read(values, policyNames.addressLookupAnswerSeconds);
     this.mediaStoreAnswerSeconds = Policy.read(values, policyNames.mediaStoreAnswerSeconds);
+    this.mediaFileBytesAtMost = Policy.read(values, policyNames.mediaFileBytesAtMost);
+    this.mediaPartBytesAtMost = Policy.read(values, policyNames.mediaPartBytesAtMost);
+    this.mediaReceivingBytesAtMost = Policy.read(values, policyNames.mediaReceivingBytesAtMost);
+    this.rateLimitFilePartsPerPhone = Policy.read(values, policyNames.rateLimitFilePartsPerPhone);
     this.rateLimitWindowSeconds = Policy.read(values, policyNames.rateLimitWindowSeconds);
     this.rateLimitRequestsPerAddress = Policy.read(values, policyNames.rateLimitRequestsPerAddress);
     this.rateLimitRequestsPerAccount = Policy.read(values, policyNames.rateLimitRequestsPerAccount);
@@ -283,6 +303,13 @@ export class Policy {
     if (this.signInTriesBeforeWait >= this.signInTriesBeforeLock) {
       throw new Error(
         `The policy value ${policyNames.signInTriesBeforeWait} must be under ${policyNames.signInTriesBeforeLock}.`,
+      );
+    }
+    // The API holds at least one whole file while it comes. (A part never goes past its file's
+    // length, so a part's own limit needs no pairing.)
+    if (this.mediaReceivingBytesAtMost < this.mediaFileBytesAtMost) {
+      throw new Error(
+        `The policy value ${policyNames.mediaReceivingBytesAtMost} must be at least ${policyNames.mediaFileBytesAtMost}.`,
       );
     }
     if (this.signInWrongTriesPerAddressAtLogin >= this.signInTriesBeforeWait) {

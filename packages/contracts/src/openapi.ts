@@ -4,7 +4,7 @@
 import { z } from 'zod';
 
 import { errorAnswerSchema } from './api-answers.ts';
-import { endpoints, type Endpoint } from './endpoints.ts';
+import { endpoints, filePartMediaType, type Endpoint } from './endpoints.ts';
 
 type Json = Readonly<Record<string, unknown>>;
 
@@ -43,6 +43,19 @@ function operation(served: Endpoint): Json {
     ...(served.roles === undefined ? {} : { 'x-open-adms-roles': served.roles }),
     ...(served.permission === undefined ? {} : { 'x-open-adms-permission': served.permission }),
     ...(taken.length === 0 ? {} : { parameters: taken }),
+    // A part of a file, as bytes (ADR-482).
+    ...(served.file === true
+      ? {
+          requestBody: {
+            required: true,
+            content: {
+              [filePartMediaType]: {
+                schema: { type: 'string', contentMediaType: 'application/octet-stream' },
+              },
+            },
+          },
+        }
+      : {}),
     ...(served.body === undefined
       ? {}
       : {

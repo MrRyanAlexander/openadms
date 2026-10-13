@@ -28,7 +28,11 @@ find it, some carrying days of work; a phone needn't be handed in for its work t
    one, with the hash taken at capture and the hash of the file it will upload, **never where the
    file goes** (the server makes that place, and holds a photograph whose record it doesn't have
    saved for a person, ADR-481); then each **file**, its upload **resumable**, its hash checked
-   against the record's (ADR-101).
+   against the record's (ADR-101). ⚠️ *ADR-482: the file goes to the media endpoint by the
+   photograph's id, in parts that go on where the last one ended; once whole and the one the
+   phone fingerprinted, it is kept and its upload time written; a whole file that isn't is set
+   aside on the server for a person, and the phone sends it again. The phone keeps every file
+   until it is told the file is kept. A depth file has its own fingerprint in the record.*
 4. **The server stores each record once.** Every record carries an ID the phone made; a retried
    upload is answered "already saved" and is **never** mistaken for a duplicate number (KD-56).
 5. **A duplicate?** A second field event of the **same kind on the same ticket** (project + workflow

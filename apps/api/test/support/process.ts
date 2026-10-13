@@ -26,6 +26,16 @@ export const madeUpSettings: ProcessSettings = {
   addressesUrl: 'https://addresses.adms.localhost',
   mapCaFile: null,
   mapServersAt: undefined,
+  // Named and never asked, unless a test hands the process a store of its own.
+  media: {
+    url: 'https://s3.adms.localhost',
+    bucket: 'adms-media',
+    region: 'us-east-1',
+    accessKey: word,
+    secretKey: [word, word].join('-'),
+    caFile: null,
+    at: undefined,
+  },
 };
 
 export const shippedPolicy = builtInPolicy();

@@ -170,7 +170,7 @@ export class Served {
     within: Database,
     mail: Mail = new NoServer(),
     policy: ProcessPolicy = shippedPolicy,
-    more: Pick<ProcessParts, 'addresses'> = {},
+    more: Pick<ProcessParts, 'addresses' | 'media'> = {},
   ): Promise<Served> {
     const served = new Served();
     const viewed = new ViewedWithin(within);
@@ -203,6 +203,9 @@ export class Served {
       cookies?: Cookies;
       csrf?: string;
       payload?: object;
+      // A part of a file, sent as bytes of its own type (ADR-482).
+      bytes?: Uint8Array;
+      contentType?: string;
       bearer?: string;
       monitorSession?: string;
     } = {},
@@ -224,8 +227,10 @@ export class Served {
         ...(more.monitorSession === undefined
           ? {}
           : { 'x-adms-monitor-session': more.monitorSession }),
+        ...(more.contentType === undefined ? {} : { 'content-type': more.contentType }),
       },
       ...(more.payload === undefined ? {} : { payload: more.payload }),
+      ...(more.bytes === undefined ? {} : { payload: Buffer.from(more.bytes) }),
     });
     const setCookie = [answered.headers['set-cookie'] ?? []].flat().map(String);
     const body: unknown = answered.json();
@@ -306,8 +311,9 @@ export function worldOn(db: () => Database) {
     work: Work,
     mail: Mail = new NoServer(),
     policy: ProcessPolicy = shippedPolicy,
-    // Who a phone's address lookup asks, where a test has an address server of its own.
-    more: Pick<ProcessParts, 'addresses'> = {},
+    // Who a phone's address lookup asks, where a test has an address server of its own, and
+    // where files are kept, where a test has a store of its own.
+    more: Pick<ProcessParts, 'addresses' | 'media'> = {},
   ): Promise<void> => {
     const dana = randomUUID();
     return undone(db(), dana, async (within, tx) => {

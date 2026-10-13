@@ -239,5 +239,7 @@ export const unseenTables = [
   // A sync and the idempotency ledger are the API's and the worker's (ADR-471).
   'sync',
   'synced_record',
+  // A file set aside is the API's, for the back office (ADR-482).
+  'set_aside_file',
   'audit_record',
 ];

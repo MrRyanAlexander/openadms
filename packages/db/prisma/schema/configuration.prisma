@@ -1356,6 +1356,7 @@ model Device {
   securityEvents     SecurityEvent[]
   auditRecords       AuditRecord[]
   sessions           Session[]
+  setAsideFiles      SetAsideFile[]
 
   @@map("device")
 }

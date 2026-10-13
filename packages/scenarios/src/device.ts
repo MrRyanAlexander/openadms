@@ -422,7 +422,8 @@ export interface NewCertification {
 }
 
 // A photograph taken with a record the phone made: of what, which of a certification's views,
-// where if the phone had a fix, and whether a depth file goes beside it.
+// where if the phone had a fix, and whether a depth file goes beside it (its fingerprint is then
+// sent too, ADR-482).
 export interface NewPhoto {
   readonly of: { readonly kind: PhotoOwnerKind; readonly id: string };
   readonly view?: CertificationView;
@@ -772,7 +773,7 @@ export class SimulatedDevice {
       longitude: photo.longitude ?? null,
       originalSha256: fingerprint(`${file} as taken`),
       uploadedSha256: fingerprint(`${file} as uploaded`),
-      depthFile: photo.depthFile ?? false,
+      depthSha256: photo.depthFile === true ? fingerprint(`${file} depth`) : null,
     };
     this.photoOutbox.push(made);
     return made;

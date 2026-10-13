@@ -102,6 +102,8 @@ const domains: Record<string, string> = {
   sync: 'RECORDS',
   synced_record: 'RECORDS',
   held_record: 'RECORDS',
+  // A file the media endpoint set aside for a person: how the evidence arrived (ADR-482).
+  set_aside_file: 'RECORDS',
   completed_load: 'BILLING',
   // The worker's other conclusions (ADR-340): a completed record and its collection rows are
   // what bills; a flag, a run and a run's decisions are how the work went.
@@ -164,6 +166,12 @@ const triggers = [
   ),
   // A photograph's fingerprints and places in storage are written once (ADR-326).
   `CREATE TRIGGER photo_refuse_file_edit BEFORE UPDATE OF original_sha256, uploaded_sha256, object_key, depth_object_key ON public.photo FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
+  // So is the depth file's fingerprint; when each file reached storage is written once, by the
+  // phone that took it; a file set aside is never changed (ADR-482).
+  `CREATE TRIGGER photo_refuse_depth_fingerprint_edit BEFORE UPDATE OF depth_sha256 ON public.photo FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
+  `CREATE TRIGGER photo_upload BEFORE INSERT OR UPDATE OF uploaded_at, depth_uploaded_at ON public.photo FOR EACH ROW EXECUTE FUNCTION photo_upload_guard()`,
+  `CREATE TRIGGER set_aside_file_refuse_edit BEFORE UPDATE ON public.set_aside_file FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
+  `CREATE TRIGGER set_aside_file_from_its_phone BEFORE INSERT ON public.set_aside_file FOR EACH ROW EXECUTE FUNCTION set_aside_file_from_its_phone_guard()`,
   // What a phone sent, kept in quarantine, is written once (ADR-338).
   `CREATE TRIGGER quarantined_record_refuse_sent_edit BEFORE UPDATE OF id, project_id, device_id, monitor_id, payload, reason, holding_event_id, holding_roe_id, received_at ON public.quarantined_record FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
   `CREATE TRIGGER zone_with_its_map_version BEFORE INSERT ON public.zone FOR EACH ROW EXECUTE FUNCTION zone_with_its_map_version()`,
@@ -586,6 +594,11 @@ describe('the guards in the catalog', () => {
         name: 'photo_file_check',
         definition:
           "CHECK ((((original_sha256 ~ '^[0-9a-f]{64}$'::text) AND (uploaded_sha256 ~ '^[0-9a-f]{64}$'::text) AND (btrim(object_key) <> ''::text) AND ((depth_object_key IS NULL) OR (btrim(depth_object_key) <> ''::text))) IS TRUE))",
+      },
+      {
+        name: 'photo_depth_check',
+        definition:
+          "CHECK (((((depth_object_key IS NULL) = (depth_sha256 IS NULL)) AND ((depth_sha256 IS NULL) OR (depth_sha256 ~ '^[0-9a-f]{64}$'::text)) AND ((depth_uploaded_at IS NULL) OR (depth_object_key IS NOT NULL))) IS TRUE))",
       },
       {
         name: 'photo_gps_check',
@@ -1213,6 +1226,12 @@ describe('the guards in the catalog', () => {
       {
         name: 'held_record_sent_sha256_check',
         definition: "CHECK ((sent_sha256 ~ '^[0-9a-f]{64}$'::text))",
+      },
+      // A file set aside is what arrived, as the server read it (ADR-482).
+      {
+        name: 'set_aside_file_received_check',
+        definition:
+          "CHECK ((((received_sha256 ~ '^[0-9a-f]{64}$'::text) AND (byte_count > 0) AND (content_type ~ '^[a-z0-9][a-z0-9.+-]{0,62}/[a-z0-9][a-z0-9.+-]{0,62}$'::text) AND (btrim(object_key) <> ''::text)) IS TRUE))",
       },
       // The master passcode's actor is one id, never a person, and no record names it; a
       // count of wrong tries at the passcode is never below nought (ADR-438, 439).

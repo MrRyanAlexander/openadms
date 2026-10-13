@@ -7,7 +7,7 @@
 > task's ADR and its session-log line in `DECISIONS.md`). No other file carries these counts.
 > **A count that differs from this page without a reason is a finding, not noise.**
 
-**Seen whole:** 2026-10-12, after ADR-481, on the user's Mac, the installation at head.
+**Seen whole:** 2026-10-12, after ADR-482, on the user's Mac, the installation at head.
 
 ## `pnpm ready`
 
@@ -15,19 +15,19 @@
 |---|---|
 | `pnpm local:up` | six `Healthy` services, `Keeping the object store’s bucket adms-media (it keeps every version).` (ADR-480), then the API's and the worker's containers: `https://api.adms.localhost/health → 200 {"status":"ok"}` and `the worker’s health answer → 200 {"status":"ok","jobsWaiting":0,"jobsSetAside":0}` |
 | `pnpm installer:check` | **31 `✓`**, no `✗`, exit 0 |
-| Migrations at head | **109** (`packages/db/prisma/migrations/` is the list) |
+| Migrations at head | **112** (`packages/db/prisma/migrations/` is the list) |
 | `pnpm local:down` (close-out) | 8 containers and the network: 9 `Removed` lines |
 
 ## `pnpm test`
 
-**`Test Files 150 passed (150)`, `Tests 2708 passed (2708)`.**
+**`Test Files 152 passed (152)`, `Tests 2734 passed (2734)`.**
 
 | Project | Tests | Files | Needs |
 |---|---|---|---|
-| `packages/domain` | 766 | 41 | nothing |
-| `packages/contracts` | 65 | 9 | nothing |
-| `apps/api` | 544 | 40 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
-| `packages/db` | 1051 | 44 | `pnpm ready` |
+| `packages/domain` | 777 | 42 | nothing |
+| `packages/contracts` | 67 | 9 | nothing |
+| `apps/api` | 555 | 41 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
+| `packages/db` | 1053 | 44 | `pnpm ready` |
 | `packages/scenarios` | 125 | 5 | `pnpm ready` for `stories.test.ts` (the runner and a run's template, 5); the flag catalogue (78 flags), the harness, the phone held to the sync contract's suite and to what it sends and takes in at a sync (12) and the policy need nothing. **The stories themselves are not here** (ADR-446) |
 | `apps/worker` | 30 | 3 | `pnpm ready` for the map servers (13) and its container (3); the process (14) needs nothing |
 | `infra/local` | 22 | 3 | `pnpm ready` |
@@ -42,7 +42,7 @@
 
 ## `pnpm scenarios`
 
-`This run’s template, adms_story_template_…: 109 migrations applied`, then **`Stories: 20 passed, 0
+`This run’s template, adms_story_template_…: 112 migrations applied`, then **`Stories: 20 passed, 0
 failed.`** Each story `passed: N checks, N passed, 0 failed`:
 
 | Story | Checks | | Story | Checks |
@@ -66,7 +66,7 @@ P1 $5,548.25 on 19 lines, P2 $324.00. `p1-reconciled` through `p1-left-out`, `p1
 
 `✓ 0 open advisories` (3 accepted by id); secretlint `0 found`; the installation's own secrets
 (10 values from 4 env files) `0 found`; a password-like setting `0 found`; env files `✓ every one
-ignored by git and untracked`; the grant tests **`44 files, 1051 tests: 1051 passed, 0 failed`**;
+ignored by git and untracked`; the grant tests **`44 files, 1053 tests: 1053 passed, 0 failed`**;
 ending **`Security checks: 7 passed, 0 failed.`**
 
 ## What the installation holds after a run

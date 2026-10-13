@@ -15,6 +15,7 @@ export type RateLimitsPolicy = Pick<
   | 'rateLimitWindowSeconds'
   | 'rateLimitRequestsPerAddress'
   | 'rateLimitRequestsPerAccount'
+  | 'rateLimitFilePartsPerPhone'
   | 'rateLimitCountsKept'
   | 'signInAddressWindowMinutes'
   | 'signInWrongTriesPerAddress'
@@ -63,6 +64,8 @@ export const rateLimitNames = [
   'REQUESTS_BY_ADDRESS',
   // Every request of a signed-in person, whatever address it came from.
   'REQUESTS_BY_ACCOUNT',
+  // Every part of a photograph's file a phone sends, or asks after (ADR-482).
+  'FILE_PARTS_BY_PHONE',
   // Tries at a secret that were refused (a sign-in, a reset's code, a current password, an
   // authenticator's code), by the address they came from, whoever's login was tried.
   'WRONG_TRIES_BY_ADDRESS',
@@ -90,6 +93,10 @@ export class RateLimits {
       ),
       REQUESTS_BY_ACCOUNT: new RateLimit(
         policy.rateLimitRequestsPerAccount,
+        policy.rateLimitWindowSeconds,
+      ),
+      FILE_PARTS_BY_PHONE: new RateLimit(
+        policy.rateLimitFilePartsPerPhone,
         policy.rateLimitWindowSeconds,
       ),
       WRONG_TRIES_BY_ADDRESS: new RateLimit(policy.signInWrongTriesPerAddress, tries),

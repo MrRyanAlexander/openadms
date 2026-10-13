@@ -391,6 +391,12 @@ export {
   type WorkedOutPayItem,
 } from './size-bands.ts';
 export {
+  photoFileSignatureBytes,
+  photoFileTypeOf,
+  photoFileTypes,
+  type PhotoFileType,
+} from './photo-files.ts';
+export {
   NewProjectSettings,
   type ProgramTypeSetting,
   type ProjectSettings,

@@ -58,6 +58,13 @@ export class Limits {
     if (limited !== undefined) throw limited;
   }
 
+  // Every part of a photograph's file a phone sends, or asks after (ADR-482), counted for the
+  // phone, whatever address it came from.
+  filePart(deviceId: string): void {
+    const limited = this.taken('FILE_PARTS_BY_PHONE', `phone ${deviceId}`);
+    if (limited !== undefined) throw limited;
+  }
+
   // Before a secret is tried: refused where this address has been refused too often already,
   // at any login or at this one. A try refused here never reaches the login, so it is never a
   // wrong try there.

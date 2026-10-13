@@ -137,6 +137,8 @@ const tableGrants: Record<string, Record<string, string>> = {
   sync: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   synced_record: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },
   held_record: { adms_api: 'INSERT SELECT UPDATE' },
+  // A file set aside (ADR-482): the API's alone, added and read; nobody changes one.
+  set_aside_file: { adms_api: 'INSERT SELECT' },
   audit_record: { adms_api: 'SELECT', adms_worker: 'SELECT' },
   viewer_project: { adms_readonly: 'SELECT' },
   viewer_field_event: { adms_readonly: 'SELECT' },
@@ -298,8 +300,10 @@ const correctable: Record<string, string[]> = {
     'uploaded_sha256',
     'object_key',
     'depth_object_key',
+    'depth_sha256',
     'device_id',
     'uploaded_at',
+    'depth_uploaded_at',
     // The back office's two marks (ADR-337).
     'archived_at',
     'label',

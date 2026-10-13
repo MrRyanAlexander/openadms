@@ -956,7 +956,7 @@ export const p1Reviewed: Story = {
       longitude: null,
       originalSha256: createHash('sha256').update(`${bedFile} as taken`).digest('hex'),
       uploadedSha256: createHash('sha256').update(`${bedFile} as uploaded`).digest('hex'),
-      depthFile: false,
+      depthSha256: null,
     });
     if (bedPhoto.answer !== 'SAVED') throw new Error(`Not saved: ${JSON.stringify(bedPhoto)}`);
     // 101029: collected, and dumped at the Landfill, where the tower's phone had failed.

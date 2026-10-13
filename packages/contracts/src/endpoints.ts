@@ -41,6 +41,7 @@ import {
   phoneLoginListAnswerSchema,
   phoneMonitorAnswerSchema,
   unplannedAssignmentAnswerSchema,
+  photoFileAnswerSchema,
   phoneEnrolledAnswerSchema,
   phoneProvenAnswerSchema,
   provenPhoneAnswerSchema,
@@ -188,8 +189,15 @@ export interface Endpoint {
   readonly params?: z.ZodObject;
   readonly query?: z.ZodObject;
   readonly body?: z.ZodType;
+  // The one kind of endpoint that takes a file (AC-10-47; ADR-482): its body is a part of one, as
+  // bytes of `filePartMediaType`, never JSON, and no `body` schema is given. Only the media
+  // endpoint is one.
+  readonly file?: true;
   readonly answer: z.ZodType;
 }
+
+// What a part of a file is sent as (the tus protocol's word for bytes that go at an offset).
+export const filePartMediaType = 'application/offset+octet-stream';
 
 type JsonSchema = Readonly<Record<string, unknown>>;
 
@@ -230,6 +238,11 @@ export function endpoint<const E extends Endpoint>(defined: E): E {
       `The endpoint ${defined.name} would take a field nobody named: ${open.join(', ')}.`,
     );
   }
+  if (defined.file === true && (defined.body !== undefined || defined.method === 'GET')) {
+    throw new Error(
+      `The endpoint ${defined.name} takes a file: its body is that, and nothing else.`,
+    );
+  }
   const roles = defined.roles ?? [];
   const signedIn = defined.access === 'SIGNED_IN';
   if (
@@ -258,14 +271,20 @@ export interface Sent {
   readonly body: unknown;
 }
 
+// A part of a file, as a request's body: bytes, at least one.
+export const isFilePart = (body: unknown): body is Uint8Array =>
+  body instanceof Uint8Array && body.byteLength > 0;
+
 // What a request sent, as the endpoint's schemas read it; undefined when any part is refused.
 export function taken(served: Endpoint, sent: Sent): Sent | undefined {
   const params = (served.params ?? nothing).safeParse(sent.params ?? {});
   const query = (served.query ?? nothing).safeParse(sent.query ?? {});
   const body =
-    served.body === undefined
-      ? { success: sent.body === undefined, data: undefined }
-      : served.body.safeParse(sent.body);
+    served.file === true
+      ? { success: isFilePart(sent.body), data: sent.body }
+      : served.body === undefined
+        ? { success: sent.body === undefined, data: undefined }
+        : served.body.safeParse(sent.body);
   if (!params.success || !query.success || !body.success) return undefined;
   return { params: params.data, query: query.data, body: body.data };
 }
@@ -1850,6 +1869,47 @@ export const syncPhoneEndpoint = endpoint({
   answer: syncAnsweredSchema,
 });
 
+// A photograph's files, sent by the phone that took it after its record is saved: **the media
+// endpoint, the one endpoint that takes a file** (ARCHITECTURE §6 "Uploads", §9 (2), (5), §11;
+// spec/parts/05-sync.md; AC-04-77, AC-05-09, AC-10-47…49; spec/THREAT-MODEL.md T-25; BACKLOG
+// 2.6.4, C84 (12), C86, C137; ADR-101, 401, 480…482; REQ-203). Named by the photograph's own id
+// and which file, never by a place: the server made the place with the record. Resumable as the
+// tus protocol is (tus.io 1.0, core): a part goes at the offset where the last one ended, and an
+// interrupted upload goes on from the last part the server took. The limits here only bound
+// what is read; the policy's are smaller.
+const photoFileNamed = z.strictObject({
+  photoId: z.uuid(),
+  // The photograph itself, or the depth file beside it.
+  file: z.enum(['photo', 'depth']),
+});
+
+export const photoFileEndpoint = endpoint({
+  name: 'photoFile',
+  summary:
+    'Where a photograph’s file stands: kept (nothing more to send), or how many of its bytes the server has taken, of a file how long, so the phone sends the rest from there (none, where it holds none). The photograph is named by its own id, and the file is the photograph itself or the depth file beside it; only the phone that took it may ask, once its record is saved. Open to a phone that has proved itself, by its token; nobody need be signed in.',
+  access: 'PROVEN_PHONE',
+  method: 'GET',
+  path: '/phones/current/photos/:photoId/files/:file',
+  params: photoFileNamed,
+  answer: photoFileAnswerSchema,
+});
+
+export const sendPhotoFilePartEndpoint = endpoint({
+  name: 'sendPhotoFilePart',
+  summary:
+    'A part of a photograph’s file, sent by the phone that took it, once its record is saved: the bytes in the body, the offset they go at and the whole file’s length in the query. Taken only where it goes on from the last part the server took, or starts the file; otherwise the answer says where to go on from. The file is at most the policy’s size and a part at most the policy’s; its first part is told to be an image by its own first bytes (JPEG, HEIC or HEIF, PNG, TIFF), or refused. When the last part arrives the server reads the whole file’s SHA-256: the one the phone gave in the photograph’s record (or the depth file’s) and the file is kept, once, where the server placed it, never overwritten, and its upload time written; any other, and the file is set aside on the server for a person, never kept as the photograph’s, and the phone sends its file again from the first byte. A file kept already is answered kept, and nothing changes. Open to a phone that has proved itself, by its token; nobody need be signed in.',
+  access: 'PROVEN_PHONE',
+  method: 'PATCH',
+  path: '/phones/current/photos/:photoId/files/:file',
+  params: photoFileNamed,
+  query: z.strictObject({
+    offset: z.string().regex(/^(0|[1-9][0-9]{0,9})$/),
+    length: z.string().regex(/^[1-9][0-9]{0,9}$/),
+  }),
+  file: true,
+  answer: photoFileAnswerSchema,
+});
+
 // Review's marks (spec/parts/08-review-and-corrections.md steps 5…7; spec/parts/09, invoicing;
 // AC-02-12; AC-08-05; AC-09-18; AC-10-27, 28; BACKLOG 2.4.4, C78…C81, C92; ADR-050, 107, 166, 228,
 // 364…367, 430): a ticket voided and unvoided, a flag accepted, a QC status set, an invoice batch
@@ -2545,6 +2605,8 @@ export const endpoints: readonly Endpoint[] = [
   phoneSetupChoicesEndpoint,
   reportUnplannedAssignmentEndpoint,
   syncPhoneEndpoint,
+  photoFileEndpoint,
+  sendPhotoFilePartEndpoint,
   removePhoneEndpoint,
   changeMasterPasscodeEndpoint,
   listAssignmentsEndpoint,

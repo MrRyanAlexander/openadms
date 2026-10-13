@@ -35,6 +35,10 @@ const shipped = {
   LOGIN_LIST_ENTRIES_PER_CALL: '50',
   ADDRESS_LOOKUP_ANSWER_SECONDS: '5',
   MEDIA_STORE_ANSWER_SECONDS: '30',
+  MEDIA_FILE_BYTES_AT_MOST: '33554432',
+  MEDIA_PART_BYTES_AT_MOST: '4194304',
+  MEDIA_RECEIVING_BYTES_AT_MOST: '268435456',
+  RATE_LIMIT_FILE_PARTS_PER_PHONE: '300',
   RATE_LIMIT_WINDOW_SECONDS: '60',
   RATE_LIMIT_REQUESTS_PER_ADDRESS: '3000',
   RATE_LIMIT_REQUESTS_PER_ACCOUNT: '600',
@@ -95,6 +99,7 @@ describe('the limits, from the policy', () => {
     ).toEqual([
       ['REQUESTS_BY_ADDRESS', 3000, 60],
       ['REQUESTS_BY_ACCOUNT', 600, 60],
+      ['FILE_PARTS_BY_PHONE', 300, 60],
       ['WRONG_TRIES_BY_ADDRESS', 30, 3600],
       ['WRONG_TRIES_BY_ADDRESS_AT_LOGIN', 4, 3600],
       ['RESET_ASKS_BY_ADDRESS', 10, 3600],
@@ -165,6 +170,24 @@ describe('the limits, from the policy', () => {
         SIGN_IN_TRIES_BEFORE_WAIT: '6',
       }),
     ).not.toThrow();
+  });
+
+  it('ADR-482 the API holds at least one whole photograph’s file while its parts come, and a phone’s parts are a limit of their own', () => {
+    expect(() => Policy.from({ ...shipped, MEDIA_RECEIVING_BYTES_AT_MOST: '33554431' })).toThrow(
+      'The policy value MEDIA_RECEIVING_BYTES_AT_MOST must be at least MEDIA_FILE_BYTES_AT_MOST.',
+    );
+    expect(() =>
+      Policy.from({ ...shipped, MEDIA_RECEIVING_BYTES_AT_MOST: '33554432' }),
+    ).not.toThrow();
+    // A part larger than a file is harmless: no part goes past its file's length.
+    expect(() => Policy.from({ ...shipped, MEDIA_FILE_BYTES_AT_MOST: '1048576' })).not.toThrow();
+    for (const [name, below] of [
+      ['MEDIA_FILE_BYTES_AT_MOST', '1048575'],
+      ['MEDIA_PART_BYTES_AT_MOST', '65535'],
+      ['RATE_LIMIT_FILE_PARTS_PER_PHONE', '0'],
+    ] as const) {
+      expect(() => Policy.from({ ...shipped, [name]: below }), name).toThrow(name);
+    }
   });
 });
 

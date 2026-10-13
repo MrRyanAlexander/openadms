@@ -383,7 +383,8 @@ const sha256 = z.string().regex(/^[0-9a-f]{64}$/, { message: 'is not a SHA-256 i
 // capture and the one of the file the phone will upload, each the phone's word, written once.
 // **Never where its file is kept:** the server makes that place, and no phone names one
 // (ADR-481). Whether a depth file goes beside it, where the depth couldn't travel inside, is
-// the phone's to say. A certification's five are photographs like any other's, each naming its
+// the phone's to say, by giving that file's own fingerprint too, the phone's word like the other
+// two (ADR-482): the media endpoint checks each file against its own. A certification's five are photographs like any other's, each naming its
 // certification and saying which view it is; no other photograph has a view.
 export const syncedPhotoSchema = z
   .strictObject({
@@ -398,7 +399,7 @@ export const syncedPhotoSchema = z
     longitude: fixHalf,
     originalSha256: sha256,
     uploadedSha256: sha256,
-    depthFile: z.boolean(),
+    depthSha256: sha256.nullable(),
   })
   .superRefine((photo, context) => {
     if (photo.view !== null && photo.owner.kind !== 'CERTIFICATION') {

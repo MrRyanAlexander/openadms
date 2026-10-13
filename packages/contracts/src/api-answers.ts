@@ -522,6 +522,29 @@ export const unplannedAssignmentAnswerSchema = z.strictObject({
 
 export type UnplannedAssignmentAnswer = z.infer<typeof unplannedAssignmentAnswerSchema>;
 
+// Where a photograph's file stands, as its phone is told after each part it sends and whenever it
+// asks (ARCHITECTURE §9 (5), §11; AC-05-09; ADR-482). `KEPT`: the file arrived whole, is the
+// one the phone fingerprinted, and is kept; nothing more is sent, and a part sent again changes
+// nothing. `RECEIVING`: so many bytes of it are taken, of a file so long; the phone sends the
+// rest from there. Where the server holds none of it (never sent, or let go), that is none, of
+// no length yet, and the phone sends it from its first byte. `NOT_MATCHED`: the file arrived
+// whole and isn't the one the phone fingerprinted; it is set aside on the server for a person,
+// never kept as the photograph's, and the phone sends its file again from the first byte. Never
+// where a file is kept.
+export const photoUploads = ['KEPT', 'RECEIVING', 'NOT_MATCHED'] as const;
+
+export const photoFileAnswerSchema = z.discriminatedUnion('upload', [
+  z.strictObject({ upload: z.literal('KEPT') }),
+  z.strictObject({
+    upload: z.literal('RECEIVING'),
+    received: z.int().nonnegative(),
+    length: z.int().positive().nullable(),
+  }),
+  z.strictObject({ upload: z.literal('NOT_MATCHED') }),
+]);
+
+export type PhotoFileAnswer = z.infer<typeof photoFileAnswerSchema>;
+
 // What a phone is answered for a use of the master passcode it logged with no connection and
 // reported (ARCHITECTURE §7.5; AC-02-23; ADR-106, 464): saved; already saved, where the phone
 // that logged it sent it before (never kept twice); or not saved, with why: it names somebody

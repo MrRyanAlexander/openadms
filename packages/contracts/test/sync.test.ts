@@ -518,7 +518,7 @@ describe('a photograph’s record', () => {
         JSON.stringify(owner),
       ).toBe(false);
     }
-    expect(refusals(syncedPhotoSchema, { ...pilePhoto, depthFile: 'yes' })).toHaveLength(1);
+    expect(refusals(syncedPhotoSchema, { ...pilePhoto, depthSha256: 'yes' })).toHaveLength(1);
   });
 
   it('ADR-481 one that isn’t a photograph’s record is read as not saved, with what it names where that much can be read: its own id, its project and who took it, never what it is of', () => {

@@ -91,6 +91,9 @@ describe('who may ask', () => {
       'phoneSetupChoices',
       'reportUnplannedAssignment',
       'syncPhone',
+      // A photograph's files, by the phone that took it (ADR-482).
+      'photoFile',
+      'sendPhotoFilePart',
     ]);
     await world(async (served) => {
       // Dana is signed in at the back office: her session is no phone's proof.

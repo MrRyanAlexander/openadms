@@ -211,7 +211,7 @@ export const pilePhoto: SyncedPhoto = {
   longitude: '-75.52330000',
   originalSha256: fingerprint('14 Oak St pile, as taken'),
   uploadedSha256: fingerprint('14 Oak St pile, as uploaded'),
-  depthFile: false,
+  depthSha256: null,
 };
 
 // Sam's five of 730416, one a view, taken as it was certified (ADR-179).
@@ -227,7 +227,7 @@ export const certificationPhotos: SyncedPhoto[] = certificationViews.map((view, 
   longitude: null,
   originalSha256: fingerprint(`730416 ${view}, as taken`),
   uploadedSha256: fingerprint(`730416 ${view}, as uploaded`),
-  depthFile: view === 'INTERIOR_OR_BACK',
+  depthSha256: view === 'INTERIOR_OR_BACK' ? fingerprint(`730416 ${view}, its depth`) : null,
 }));
 
 // One of each kind, as a phone sends them.

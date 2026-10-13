@@ -377,7 +377,7 @@ export async function photographed(
       longitude: null,
       originalSha256: fingerprint(view, 'taken'),
       uploadedSha256: fingerprint(view, 'uploaded'),
-      depthFile: false,
+      depthSha256: null,
     })),
   });
   for (const answer of photos) {

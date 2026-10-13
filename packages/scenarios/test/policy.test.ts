@@ -57,9 +57,14 @@ describe('the release’s policy values', () => {
       policy.addressLookupAnswerSeconds,
       policy.deviceClockOffLimitMinutes,
       policy.mediaStoreAnswerSeconds,
+      policy.mediaFileBytesAtMost,
+      policy.mediaPartBytesAtMost,
+      policy.mediaReceivingBytesAtMost,
+      policy.rateLimitFilePartsPerPhone,
     ]).toEqual([
       5, 95, 200, 31, 12, 1000, 100, 100, 1048576, 30000, 15, 128, 60, 5, 30, 12, 5, 50, 30, 60, 60,
       3000, 600, 100000, 60, 30, 4, 10, 3, 5, 10, 5, 30, 10, 200, 120, 15, 12, 50, 5, 5, 30,
+      33554432, 4194304, 268435456, 300,
     ]);
   });
 

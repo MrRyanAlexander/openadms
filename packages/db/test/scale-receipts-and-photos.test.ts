@@ -579,6 +579,8 @@ describe('a photograph', () => {
       'captured_at',
       'certification_id',
       'depth_object_key',
+      'depth_sha256',
+      'depth_uploaded_at',
       'device_id',
       'device_utc_offset_minutes',
       'drop_off_log_id',
@@ -622,6 +624,7 @@ describe('a photograph', () => {
     const collection = await event({ ticket_number: '101020' });
     const original = fingerprintOf('IMG_0412.HEIC as taken');
     const uploaded = fingerprintOf('IMG_0412.HEIC as uploaded');
+    const depth = fingerprintOf('IMG_0412.HEIC depth');
     const id = await photograph(
       { field_event_id: collection },
       {
@@ -629,13 +632,15 @@ describe('a photograph', () => {
         uploaded_sha256: uploaded,
         object_key: 'photographs/101020/1',
         depth_object_key: 'photographs/101020/1.depth',
+        depth_sha256: depth,
       },
     );
     expect(
       await db.one(
         `SELECT "captured_at", "device_utc_offset_minutes", "latitude", "longitude",
            "device_id"::text AS device, "original_sha256", "uploaded_sha256", "object_key",
-           "depth_object_key", "uploaded_at", "received_at" IS NOT NULL AS received
+           "depth_object_key", "depth_sha256", "uploaded_at", "depth_uploaded_at",
+           "received_at" IS NOT NULL AS received
          FROM "photo" WHERE "id" = $1`,
         [id],
       ),
@@ -649,7 +654,9 @@ describe('a photograph', () => {
       uploaded_sha256: uploaded,
       object_key: 'photographs/101020/1',
       depth_object_key: 'photographs/101020/1.depth',
+      depth_sha256: depth,
       uploaded_at: null,
+      depth_uploaded_at: null,
       received: true,
     });
     const owner = { field_event_id: collection };
@@ -663,13 +670,40 @@ describe('a photograph', () => {
       ['a blank place for its depth data', { depth_object_key: '' }, refusedBy.check],
       ['a fingerprint that isn’t a SHA-256', { original_sha256: 'abc123' }, refusedBy.check],
       ['a fingerprint in capitals', { uploaded_sha256: uploaded.toUpperCase() }, refusedBy.check],
+      // The depth file's own fingerprint, exactly where a depth file goes (ADR-482).
+      [
+        'a depth file with no fingerprint',
+        { depth_object_key: 'photographs/101020/2.depth' },
+        refusedBy.check,
+      ],
+      ['a depth file’s fingerprint with no depth file', { depth_sha256: depth }, refusedBy.check],
+      [
+        'a depth file’s fingerprint that isn’t a SHA-256',
+        { depth_object_key: 'photographs/101020/2.depth', depth_sha256: 'abc123' },
+        refusedBy.check,
+      ],
+      // A record is kept before its files reach storage (ADR-482).
+      [
+        'a record kept with its file already uploaded',
+        { uploaded_at: '2026-10-13T22:00:00Z' },
+        refusedBy.check,
+      ],
+      [
+        'a record kept with its depth file already uploaded',
+        {
+          depth_object_key: 'photographs/101020/2.depth',
+          depth_sha256: depth,
+          depth_uploaded_at: '2026-10-13T22:00:00Z',
+        },
+        refusedBy.check,
+      ],
       ['a latitude alone', { longitude: null }, refusedBy.check],
       ['a latitude off the earth', { latitude: 91 }, refusedBy.check],
       ['a longitude off the earth', { longitude: -181 }, refusedBy.check],
       ['another photograph’s file', { object_key: 'photographs/101020/1' }, refusedBy.unique],
       [
         'another photograph’s depth data',
-        { depth_object_key: 'photographs/101020/1.depth' },
+        { depth_object_key: 'photographs/101020/1.depth', depth_sha256: depth },
         refusedBy.unique,
       ],
     ] as const) {
@@ -685,10 +719,11 @@ describe('a photograph', () => {
     const collection = await event({ ticket_number: '101020' });
     const disposal = await event(atTheLandfill('101020'));
     const id = await photograph({ field_event_id: collection });
-    await asTheBackOffice();
-    // The file reaches storage; a reviewer moves the record to the field event it belongs to;
-    // its time and place are corrected by permission.
+    // The file reaches storage, uploaded by the phone that took it (ADR-482); a reviewer moves
+    // the record to the field event it belongs to; its time and place are corrected by
+    // permission.
     await db.run(`UPDATE "photo" SET "uploaded_at" = '2026-10-13T22:00:00Z' WHERE "id" = $1`, [id]);
+    await asTheBackOffice();
     await db.run(`UPDATE "photo" SET "field_event_id" = $2 WHERE "id" = $1`, [id, disposal]);
     await db.run(`UPDATE "photo" SET "captured_at" = '2026-10-13T13:21:00Z' WHERE "id" = $1`, [id]);
     const file: Row = {
@@ -696,6 +731,7 @@ describe('a photograph', () => {
       uploaded_sha256: fingerprintOf('another upload'),
       object_key: 'photographs/overwritten',
       depth_object_key: 'photographs/overwritten.depth',
+      depth_sha256: fingerprintOf('another depth file'),
     };
     for (const login of ['adms_api', 'adms_owner'] as const) {
       await db.as(login);
@@ -720,11 +756,13 @@ describe('a photograph', () => {
     ).toBe(refusedBy.grant);
     await db.administer();
     await db.actor(world.admin, 'BACK_OFFICE');
-    for (const sql of [`DELETE FROM "photo" WHERE "id" = $1`, `TRUNCATE "photo"`]) {
-      expect((await db.refused(sql, sql.includes('$1') ? [id] : [])).code, sql).toBe(
-        refusedBy.trigger,
-      );
-    }
+    expect((await db.refused(`DELETE FROM "photo" WHERE "id" = $1`, [id])).code).toBe(
+      refusedBy.trigger,
+    );
+    // A file set aside names its photograph (ADR-482), so a truncate is refused by that foreign
+    // key before any trigger (feature_not_supported); the catalog's exact trigger list holds the
+    // truncate guard.
+    expect((await db.refused(`TRUNCATE "photo"`)).code).toBe('0A000');
     expect(
       await db.one(
         `SELECT count(*)::int AS changes FROM "audit_record"
@@ -732,6 +770,178 @@ describe('a photograph', () => {
         [id],
       ),
     ).toEqual({ changes: 4 });
+  });
+
+  it('AC-04-77 when its files reached storage is written once, by the phone that took it, and a file that isn’t the one fingerprinted is set aside for good', async () => {
+    const { db, world } = tested;
+    await asThePhone();
+    const collection = await event({ ticket_number: '101020' });
+    const id = await photograph(
+      { field_event_id: collection },
+      { depth_object_key: 'photographs/101020/1.depth', depth_sha256: fingerprintOf('depth') },
+    );
+    const plain = await photograph({ field_event_id: collection });
+    const upload = (column: string, at: string, of = id): [string, unknown[]] => [
+      `UPDATE "photo" SET "${column}" = $2 WHERE "id" = $1`,
+      [of, at],
+    ];
+    // Nobody but the phone that took it writes when a file reached storage (ADR-482): not the
+    // back office, not another phone, not a phone that doesn't say which it is.
+    const others: [string, () => Promise<void>][] = [
+      ['the back office', asTheBackOffice],
+      [
+        'the back office naming the phone',
+        async () => {
+          await db.as('adms_api');
+          await db.actor(world.admin, 'BACK_OFFICE', { deviceId: world.device });
+        },
+      ],
+      [
+        'another phone',
+        async () => {
+          await db.as('adms_api');
+          await db.actor(world.certifier, 'DEVICE', { deviceId: world.certifyingDevice });
+        },
+      ],
+      [
+        'a phone that names none',
+        async () => {
+          await db.as('adms_api');
+          await db.actor(world.monitor, 'DEVICE');
+        },
+      ],
+    ];
+    for (const [who, as] of others) {
+      await as();
+      for (const column of ['uploaded_at', 'depth_uploaded_at']) {
+        const refusal = await db.refused(...upload(column, '2026-10-13T22:00:00Z'));
+        expect(refusal.code, `${who} ${column}`).toBe(refusedBy.grant);
+        expect(refusal.message).toContain('uploaded by the phone that took it');
+      }
+    }
+    await asThePhone();
+    await db.run(...upload('uploaded_at', '2026-10-13T22:00:00Z'));
+    await db.run(...upload('depth_uploaded_at', '2026-10-13T22:00:05Z'));
+    // Written again as it is, nothing changes; written as anything else, refused, by anyone.
+    await db.run(...upload('uploaded_at', '2026-10-13T22:00:00Z'));
+    for (const [column, at] of [
+      ['uploaded_at', '2026-10-13T23:00:00Z'],
+      ['depth_uploaded_at', '2026-10-13T23:00:00Z'],
+    ] as const) {
+      for (const login of ['adms_api', 'adms_owner'] as const) {
+        await db.as(login);
+        await db.actor(world.monitor, 'DEVICE', { deviceId: world.device });
+        const refusal = await db.refused(...upload(column, at));
+        expect(refusal.code, `${login} ${column}`).toBe(refusedBy.trigger);
+        expect(refusal.message).toContain('written once');
+      }
+    }
+    await asThePhone();
+    expect(
+      (await db.refused(`UPDATE "photo" SET "uploaded_at" = NULL WHERE "id" = $1`, [id])).code,
+    ).toBe(refusedBy.trigger);
+    // A photograph with no depth file has no depth file's upload.
+    const refusal = await db.refused(...upload('depth_uploaded_at', '2026-10-13T22:00:00Z', plain));
+    expect(refusal.code).toBe(refusedBy.check);
+    expect(refusal.message).toContain('"photo_depth_check"');
+
+    // A file set aside: what arrived for the photograph, as the server read it.
+    const setAside = (more: Row = {}): Row => ({
+      photo_id: plain,
+      file: 'PHOTO',
+      device_id: world.device,
+      received_sha256: fingerprintOf('not the file fingerprinted'),
+      byte_count: 2_048_576,
+      content_type: 'image/heic',
+      object_key: `projects/${world.p1}/photos/${plain}.set-aside/1`,
+      ...more,
+    });
+    const kept = (await db.one<{ id: string }>(...insertOf('set_aside_file', setAside()))).id;
+    expect(
+      (await db.refused(...insertOf('set_aside_file', setAside({ object_key: 'elsewhere' })))).code,
+      'the same file again',
+    ).toBe(refusedBy.unique);
+    expect(
+      (
+        await db.refused(
+          ...insertOf('set_aside_file', setAside({ received_sha256: fingerprintOf('another') })),
+        )
+      ).code,
+      'another file at the same place',
+    ).toBe(refusedBy.unique);
+    for (const [what, more, how] of [
+      ['no file at all', { byte_count: 0 }, refusedBy.check],
+      ['a type that isn’t one', { content_type: 'image/heic; x=1' }, refusedBy.check],
+      ['a fingerprint that isn’t one', { received_sha256: 'abc123' }, refusedBy.check],
+      ['a blank place', { object_key: ' ' }, refusedBy.check],
+      ['not one of a photograph’s files', { file: 'THUMBNAIL' }, refusedBy.badValue],
+    ] as const) {
+      // Each its own file at its own place, so only what is tried can refuse it.
+      const own = { received_sha256: fingerprintOf(what), object_key: what.replaceAll(' ', '-') };
+      expect(
+        (await db.refused(...insertOf('set_aside_file', setAside({ ...own, ...more })))).code,
+        what,
+      ).toBe(how);
+    }
+    // Only the phone that took its photograph sets a file aside.
+    const elsewhere = { received_sha256: fingerprintOf('another'), object_key: 'another' };
+    for (const [who, as, more] of [
+      ['the back office', asTheBackOffice, {}],
+      [
+        'the back office naming the phone',
+        async () => {
+          await db.as('adms_api');
+          await db.actor(world.admin, 'BACK_OFFICE', { deviceId: world.device });
+        },
+        {},
+      ],
+      [
+        'another phone, of a photograph it didn’t take',
+        async () => {
+          await db.as('adms_api');
+          await db.actor(world.certifier, 'DEVICE', { deviceId: world.certifyingDevice });
+        },
+        { device_id: world.certifyingDevice },
+      ],
+    ] as const) {
+      await as();
+      const refused = await db.refused(
+        ...insertOf('set_aside_file', setAside({ ...elsewhere, ...more })),
+      );
+      expect(refused.code, who).toBe(refusedBy.grant);
+      expect(refused.message, who).toContain('the phone that took its photograph');
+    }
+    // Never changed, never deleted: the API has no grant to, and its owner is refused by the
+    // trigger; the worker doesn't read it.
+    const change = `UPDATE "set_aside_file" SET "byte_count" = 1 WHERE "id" = $1`;
+    await asThePhone();
+    expect((await db.refused(change, [kept])).code).toBe(refusedBy.grant);
+    await db.as('adms_owner');
+    await db.actor(world.monitor, 'DEVICE', { deviceId: world.device });
+    expect((await db.refused(change, [kept])).code).toBe(refusedBy.trigger);
+    await asThePhone();
+    expect((await db.refused(`DELETE FROM "set_aside_file" WHERE "id" = $1`, [kept])).code).toBe(
+      refusedBy.grant,
+    );
+    await db.as('adms_worker');
+    expect((await db.refused(`SELECT * FROM "set_aside_file"`)).code).toBe(refusedBy.grant);
+    await db.administer();
+    await db.actor(world.admin, 'BACK_OFFICE');
+    for (const sql of [
+      `DELETE FROM "set_aside_file" WHERE "id" = $1`,
+      `TRUNCATE "set_aside_file"`,
+    ]) {
+      expect((await db.refused(sql, sql.includes('$1') ? [kept] : [])).code, sql).toBe(
+        refusedBy.trigger,
+      );
+    }
+    expect(
+      await db.one(
+        `SELECT count(*)::int AS kept FROM "audit_record"
+         WHERE "table_name" = 'set_aside_file' AND "record_id" = $1 AND "domain" = 'RECORDS'`,
+        [kept],
+      ),
+    ).toEqual({ kept: 1 });
   });
 
   it('AC-04-78 each of a certification’s five photographs says which view it is, and no other photograph has a view', async () => {

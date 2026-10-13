@@ -42,3 +42,6 @@ export function openApiViewerDatabase(
     ...(maxConnections === undefined ? {} : { maxConnections }),
   });
 }
+
+// Where the API keeps files: the object store, or a test's own (ADR-480, 482).
+export const apiMedia = Symbol('where the API keeps files');

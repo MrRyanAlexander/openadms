@@ -393,10 +393,15 @@ model Photo {
   uploadedSha256 String  @map("uploaded_sha256")
   objectKey      String  @unique @map("object_key")
   depthObjectKey String? @unique @map("depth_object_key")
+  // The depth file's own fingerprint, the phone's word like the other two, where one goes beside
+  // the photograph: the media endpoint checks the depth file against it (ADR-482).
+  depthSha256    String? @map("depth_sha256")
 
-  deviceId   String?   @map("device_id") @db.Uuid
-  // When the file reached storage; empty until it has.
-  uploadedAt DateTime? @map("uploaded_at") @db.Timestamptz(3)
+  deviceId        String?   @map("device_id") @db.Uuid
+  // When the file reached storage, and when the depth file did; each empty until it has, then
+  // written once, by the phone that took it (ADR-482).
+  uploadedAt      DateTime? @map("uploaded_at") @db.Timestamptz(3)
+  depthUploadedAt DateTime? @map("depth_uploaded_at") @db.Timestamptz(3)
 
   // The back office's two marks (ADR-329 (9), 337). Removed from the record: an archive mark, set
   // when it was removed and cleared to put it back; the record, the file and its fingerprints
@@ -416,7 +421,41 @@ model Photo {
   quarantinedRecord QuarantinedRecord? @relation(fields: [projectId, quarantinedRecordId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
   device            Device?            @relation(fields: [deviceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
 
+  setAsideFiles SetAsideFile[]
+
   @@map("photo")
+}
+
+// Which of a photograph's files: the photograph itself, or the depth file beside it.
+enum PhotoFile {
+  PHOTO
+  DEPTH
+
+  @@map("photo_file")
+}
+
+// A file the media endpoint received whole for a photograph that isn't the file its phone
+// fingerprinted (ADR-482; C84 (12)): kept aside in storage for a person, never at the
+// photograph's own place, and never thrown away. What it is (its fingerprint, size and type) and
+// where it is kept are the server's own reading of what arrived; written once, by the phone's
+// upload, and never changed. One row however often the same file arrives.
+model SetAsideFile {
+  id             String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  photoId        String    @map("photo_id") @db.Uuid
+  file           PhotoFile
+  deviceId       String    @map("device_id") @db.Uuid
+  receivedSha256 String    @map("received_sha256")
+  byteCount      Int       @map("byte_count")
+  contentType    String    @map("content_type")
+  objectKey      String    @unique @map("object_key")
+  // When the server received it whole (ADR-100).
+  receivedAt     DateTime  @default(now()) @map("received_at") @db.Timestamptz(3)
+
+  photo  Photo  @relation(fields: [photoId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([photoId, file, receivedSha256])
+  @@map("set_aside_file")
 }
 
 // Forms: records, never a ticket's field events (ADR-236). A survey, an incident and a drop-off

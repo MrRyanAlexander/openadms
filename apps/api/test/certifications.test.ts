@@ -650,7 +650,7 @@ describe('a certification as a phone sends it', () => {
         longitude: null,
         originalSha256: 'a'.repeat(64),
         uploadedSha256: 'a'.repeat(64),
-        depthFile: false,
+        depthSha256: null,
       });
       expect(answer).toEqual({ answer: 'SAVED', id: photoId, notes: [] });
       const photo = await tx.photo.findUniqueOrThrow({ where: { id: photoId } });

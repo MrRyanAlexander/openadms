@@ -12312,6 +12312,235 @@
         }
       }
     },
+    "/phones/current/photos/{photoId}/files/{file}": {
+      "get": {
+        "operationId": "photoFile",
+        "summary": "Where a photograph’s file stands: kept (nothing more to send), or how many of its bytes the server has taken, of a file how long, so the phone sends the rest from there (none, where it holds none). The photograph is named by its own id, and the file is the photograph itself or the depth file beside it; only the phone that took it may ask, once its record is saved. Open to a phone that has proved itself, by its token; nobody need be signed in.",
+        "x-open-adms-access": "PROVEN_PHONE",
+        "parameters": [
+          {
+            "name": "photoId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "file",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["photo", "depth"]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "upload": {
+                          "type": "string",
+                          "const": "KEPT"
+                        }
+                      },
+                      "required": ["upload"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "upload": {
+                          "type": "string",
+                          "const": "RECEIVING"
+                        },
+                        "received": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "length": {
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": ["upload", "received", "length"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "upload": {
+                          "type": "string",
+                          "const": "NOT_MATCHED"
+                        }
+                      },
+                      "required": ["upload"],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "sendPhotoFilePart",
+        "summary": "A part of a photograph’s file, sent by the phone that took it, once its record is saved: the bytes in the body, the offset they go at and the whole file’s length in the query. Taken only where it goes on from the last part the server took, or starts the file; otherwise the answer says where to go on from. The file is at most the policy’s size and a part at most the policy’s; its first part is told to be an image by its own first bytes (JPEG, HEIC or HEIF, PNG, TIFF), or refused. When the last part arrives the server reads the whole file’s SHA-256: the one the phone gave in the photograph’s record (or the depth file’s) and the file is kept, once, where the server placed it, never overwritten, and its upload time written; any other, and the file is set aside on the server for a person, never kept as the photograph’s, and the phone sends its file again from the first byte. A file kept already is answered kept, and nothing changes. Open to a phone that has proved itself, by its token; nobody need be signed in.",
+        "x-open-adms-access": "PROVEN_PHONE",
+        "parameters": [
+          {
+            "name": "photoId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "file",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["photo", "depth"]
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]{0,9})$"
+            }
+          },
+          {
+            "name": "length",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]{0,9}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/offset+octet-stream": {
+              "schema": {
+                "type": "string",
+                "contentMediaType": "application/octet-stream"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "upload": {
+                          "type": "string",
+                          "const": "KEPT"
+                        }
+                      },
+                      "required": ["upload"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "upload": {
+                          "type": "string",
+                          "const": "RECEIVING"
+                        },
+                        "received": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "length": {
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": ["upload", "received", "length"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "upload": {
+                          "type": "string",
+                          "const": "NOT_MATCHED"
+                        }
+                      },
+                      "required": ["upload"],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/phones/{deviceId}/removals": {
       "post": {
         "operationId": "removePhone",

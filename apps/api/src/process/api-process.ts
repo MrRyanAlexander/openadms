@@ -5,7 +5,11 @@
 // proxy's (Caddy locally), the only way in.
 import 'reflect-metadata';
 
-import { setupChoicesMonitorsAtMost } from '@open-adms/contracts';
+import {
+  filePartMediaType,
+  sendPhotoFilePartEndpoint,
+  setupChoicesMonitorsAtMost,
+} from '@open-adms/contracts';
 import type { Database, ViewerDatabase } from '@open-adms/db';
 import {
   MasterPasscodeRules,
@@ -35,6 +39,9 @@ import { Assignments } from '../dispatch/assignments.ts';
 import { MasterPasscode } from '../dispatch/master-passcode.ts';
 import { apiMasterPasscode, apiPhones } from '../dispatch/phones.controller.ts';
 import { Phones } from '../dispatch/phones.ts';
+import { MediaStore, type Media } from '../media/media-store.ts';
+import { apiPhotoFiles, PhotoFiles } from '../media/photo-files.ts';
+import { Receiving } from '../media/receiving.ts';
 import { NumberAllocator } from '../numbering/number-allocator.ts';
 import { apiPeople } from '../people/people.controller.ts';
 import { People } from '../people/people.ts';
@@ -121,6 +128,7 @@ import { ViewerReads } from '../viewer/viewer-reads.ts';
 import { answersWith } from './answer-headers.ts';
 import {
   apiDatabase,
+  apiMedia,
   apiViewerDatabase,
   openApiDatabase,
   openApiViewerDatabase,
@@ -146,6 +154,7 @@ export type ProcessSettings = Pick<
   | 'addressesUrl'
   | 'mapCaFile'
   | 'mapServersAt'
+  | 'media'
 >;
 
 // The installation's policy, whole: the process reads its own values (the body limit, the pool,
@@ -154,7 +163,8 @@ export type ProcessPolicy = Policy;
 
 // What a test puts in place of the process's own: where the log goes instead of standard output,
 // the database (a test's own piece of work, undone afterwards), the read-only login's database
-// for a viewer's reads, the mail, the time and who a phone's address lookup asks.
+// for a viewer's reads, the mail, the time, who a phone's address lookup asks and where files
+// are kept.
 export interface ProcessParts {
   readonly stream?: { write(line: string): void };
   readonly database?: Database;
@@ -162,6 +172,7 @@ export interface ProcessParts {
   readonly mail?: Mail;
   readonly clock?: Clock;
   readonly addresses?: Addresses;
+  readonly media?: Media;
 }
 
 export interface Route {
@@ -176,13 +187,16 @@ export interface Route {
 class ProcessModule implements OnApplicationShutdown {
   private readonly database: Database;
   private readonly viewerDatabase: ViewerDatabase;
+  private readonly media: Media;
 
   constructor(
     @Inject(apiDatabase) database: Database,
     @Inject(apiViewerDatabase) viewerDatabase: ViewerDatabase,
+    @Inject(apiMedia) media: Media,
   ) {
     this.database = database;
     this.viewerDatabase = viewerDatabase;
+    this.media = media;
   }
 
   // `handed`: each thing a controller may name to be handed, by the symbol it names it with.
@@ -199,6 +213,8 @@ class ProcessModule implements OnApplicationShutdown {
   async onApplicationShutdown(): Promise<void> {
     await this.database.$disconnect();
     await this.viewerDatabase.$disconnect();
+    // The object store's connections, where the process opened them.
+    if (this.media instanceof MediaStore) this.media.close();
   }
 }
 
@@ -233,7 +249,24 @@ export class ApiProcess {
     const routes: Route[] = [];
     server.addHook('onRoute', (route) => {
       for (const method of [route.method].flat()) routes.push({ method, path: route.url });
+      // The media endpoint takes a part of a file, up to the policy's size (ADR-482); every
+      // other route keeps the body limit above.
+      if (
+        route.url === sendPhotoFilePartEndpoint.path &&
+        [route.method].flat().includes(sendPhotoFilePartEndpoint.method)
+      ) {
+        route.bodyLimit = policy.mediaPartBytesAtMost;
+      }
     });
+    // A part of a file is read as bytes, never parsed (AC-10-47): what it is the media endpoint
+    // asks of its first bytes. Sent to any other route, it is no body that route takes.
+    server.addContentTypeParser(
+      filePartMediaType,
+      { parseAs: 'buffer' },
+      (_request, body, done) => {
+        done(null, body);
+      },
+    );
     const database = more.database ?? openApiDatabase(settings, policy.databasePoolConnections);
     // A read-only viewer's reads go by the read-only login, its viewer stated (ADR-434).
     const viewerDatabase =
@@ -242,6 +275,10 @@ export class ApiProcess {
     const limits = new Limits(new RateLimits(policy), clock);
     answersWith(server, settings.corsOrigins, (request) => limits.arrived(request.ip));
     const mail = more.mail ?? mailFor(settings);
+    // The object store the API keeps files in (task 2.6.4, part 1), under the API's own identity.
+    const media =
+      more.media ??
+      new MediaStore({ ...settings.media, timeoutMs: policy.mediaStoreAnswerSeconds * 1000 });
     // Our own address server, asked for a phone's address lookup and by nothing else here
     // (task 2.5.3, part 5): no phone and no browser reaches it.
     const addresses =
@@ -337,6 +374,7 @@ export class ApiProcess {
         new Map<symbol, unknown>([
           [apiDatabase, database],
           [apiViewerDatabase, viewerDatabase],
+          [apiMedia, media],
           [apiViewerReads, new ViewerReads(viewerDatabase)],
           [apiPasswords, passwords],
           [apiSessions, sessions],
@@ -428,6 +466,17 @@ export class ApiProcess {
               numbers: new NumberAllocator(database, clock, policy),
               loginList,
               clock,
+            }),
+          ],
+          // A photograph's files, sent by the phone that took it (task 2.6.4, part 3).
+          [
+            apiPhotoFiles,
+            new PhotoFiles(database, {
+              media,
+              receiving: new Receiving(policy.mediaReceivingBytesAtMost),
+              limits,
+              clock,
+              fileBytesAtMost: policy.mediaFileBytesAtMost,
             }),
           ],
           [
