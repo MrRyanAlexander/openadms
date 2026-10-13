@@ -13,11 +13,15 @@
 // ticket's lines, and the ticket stays void, out of every later run, until a person unvoids it.
 //
 // Not here: correcting, voiding and locking as a reviewer's actions, with their permissions and
-// reasons (Milestone 1.8): where this story needs one it writes it as the API's login may, to
+// reasons (Milestone 1.8): where this story needs one it is Luis's request at its endpoint, to
 // show what the worker does when the ticket comes back. A person's void and unvoid (1.8.4).
 // The golden mission in full, with P2, is 1.9.1.
 import { ContractorSetup, PayItemSetup, RuleSetup, SiteSetup } from '@open-adms/api';
-import { correctFieldEventEndpoint } from '@open-adms/contracts';
+import {
+  correctFieldEventEndpoint,
+  lockAsInvoicedEndpoint,
+  setQcStatusEndpoint,
+} from '@open-adms/contracts';
 import { Prisma, systemActorId, type Database } from '@open-adms/db';
 import { MapServers, Mileages, Reconciliation, type RunOutcome } from '@open-adms/worker';
 
@@ -548,19 +552,21 @@ export const p1Priced: Story = {
     // ------------------------------------------------------------------------------------------
     story.at(
       on('14', '09:00'),
-      'Luis asks for 101004 to be reprocessed; before the worker takes his job up, he locks 101004 as invoiced (the lock itself is Part 9’s). Dana changes Coastline’s rate on VEG-HAUL-CY-15 from $7.50 to $7.75; the worker runs',
+      'Luis asks for 101004 to be reprocessed; before the worker takes his job up, Dana grants him QC and lock as invoiced, and he sets 101004 QC Approved and locks it as invoiced (the lock itself is Part 9’s). Dana changes Coastline’s rate on VEG-HAUL-CY-15 from $7.50 to $7.75; the worker runs',
     );
     // Asked for before the lock, 101004 is on his job: the worker looks for its lock as the
-    // ticket's turn comes (ADR-090), whatever queued it, and leaves it as it is.
+    // ticket's turn comes (ADR-090), whatever queued it, and leaves it as it is. The QC mark
+    // and the lock are his requests at their endpoints, and queue nothing (ADR-500).
     await backOffice.reprocess([load('101004')]);
     const loadOf101004 = await api.completedLoad.findFirstOrThrow({
       where: { ticketNumber: '101004' },
     });
-    await api.$write({ actorId: luis, source: 'BACK_OFFICE' }, (tx) =>
-      tx.invoiceLock.create({
-        data: { projectId: p1, completedLoadId: loadOf101004.id, lockedById: luis },
-      }),
-    );
+    await backOffice.grantLuis('QC', 'LOCK_INVOICED');
+    const ticket101004 = { completedLoadId: loadOf101004.id };
+    await luiss.answered(setQcStatusEndpoint, {
+      json: { record: ticket101004, status: 'QC_APPROVED' },
+    });
+    await luiss.answered(lockAsInvoicedEndpoint, { json: { ticket: ticket101004 } });
     const rateTo = (rate: string) =>
       saved(
         new PayItemSetup(api, clock, story.policy).rate(

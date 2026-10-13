@@ -8,9 +8,9 @@
 // P1's Monday and Tuesday are the story `p1-field-days`' own, held on its phones until each
 // phone's sync; P1's map, pay items, rules and certifications are the shared steps of
 // `p1-office.ts`. P2 is set up through the setup services and worked on Monday by Ana Brooks and
-// Kim Nguyen on a second phone each (one project per phone). Every reviewer's step goes through
-// `apps/api`'s review services, as Luis Ortega by his grants, each followed by the run it asks
-// the worker for.
+// Kim Nguyen on a second phone each (one project per phone). Every reviewer's step is a request
+// at its endpoint, at Luis Ortega's browser by the grants Dana gives him at hers (ADR-500); each
+// that queued its tickets is followed by the worker's runs of them.
 //
 // A certification's five photographs reach the server after it, sent by Sam Grant's phone through
 // the API's own `Sync` (`photographed`, ADR-481); their files are the media endpoint's.
@@ -19,21 +19,23 @@
 // package, which Dana zips by hand from the exports (Phase 4); 201002 and 201003, the flag
 // catalogue's examples, which Sam's phone passes over.
 import {
-  Acceptances,
   Certifications,
   ContractorSetup,
-  Corrections,
   FormSetup,
-  InvoiceLocks,
   PayItemSetup,
   ProjectSetup,
-  QcMarks,
   SiteSetup,
-  Voids,
-  type Outcome,
-  type QcMarked,
-  type Reviewed,
 } from '@open-adms/api';
+import {
+  acceptFlagEndpoint,
+  createInvoiceBatchEndpoint,
+  lockAsInvoicedEndpoint,
+  renumberFieldEventEndpoint,
+  setQcStatusEndpoint,
+  voidTicketEndpoint,
+  type AnswerOf,
+  type Endpoint,
+} from '@open-adms/contracts';
 import { systemActorId, type FieldEventKind } from '@open-adms/db';
 import { MapServers, Mileages, Reconciliation, type RunOutcome } from '@open-adms/worker';
 
@@ -41,11 +43,13 @@ import { projectTime, utcOffsetMinutes } from '../clock.ts';
 import { chained, type Completed, made, scanned } from '../device.ts';
 import { uuidv7 } from '../ids.ts';
 import { localMapServers } from '../map-servers.ts';
+import { refusalOf, type AskedWith } from '../over-https.ts';
 import type { Story } from '../runner.ts';
 import {
   certifyP1,
   photographed,
   loadP1Map,
+  p1BackOffice,
   p1FieldDaysHeld,
   P1Syncs,
   primaryBox,
@@ -164,18 +168,9 @@ export const goldenMission: Story = {
     );
     await loadP1Map(story, office);
     await setUpP1Pricing(story, office);
-    await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
-      for (const permission of [
-        'CORRECT',
-        'RENUMBER',
-        'VOID',
-        'ACCEPT_FLAG',
-        'QC',
-        'LOCK_INVOICED',
-      ] as const) {
-        await tx.userPermission.create({ data: { userId: luis, permission } });
-      }
-    });
+    // Dana and Luis at their browsers (ADR-497, 500): she grants at his record.
+    const backOffice = p1BackOffice(story, office);
+    await backOffice.grantLuis('CORRECT', 'RENUMBER', 'VOID', 'ACCEPT_FLAG', 'QC', 'LOCK_INVOICED');
 
     story.at(
       on('09', '09:00'),
@@ -415,11 +410,6 @@ export const goldenMission: Story = {
     );
     // The worker's own job loop: it takes up what each sync, review and setup change queued.
     const queue = new QueueRuns(story, reconciliation);
-    const corrections = new Corrections(api, clock, story.policy);
-    const acceptances = new Acceptances(api, clock, story.policy);
-    const voids = new Voids(api, clock, story.policy);
-    const qc = new QcMarks(api, clock, story.policy);
-    const locks = new InvoiceLocks(api, clock, story.policy);
 
     // The ledger of a project as it stands: every line with its ticket (and property or pile),
     // its #, its pay item, quantity × rate = amount.
@@ -543,11 +533,30 @@ export const goldenMission: Story = {
     const last: { run: RunOutcome } = {
       run: { ran: false, reason: 'RUN_UNDER_WAY', message: 'No run yet.' },
     };
-    const reviewed = async <T>(attempt: Promise<Outcome<Reviewed<T>>>): Promise<Reviewed<T>> => {
-      const outcome = await saved(attempt);
-      last.run = await queue.settled(outcome.reprocess.projectId);
-      return outcome;
+    // Luis's act at his browser, saved: its answer. Every one that queues is on P1.
+    const byLuis = async <E extends Endpoint>(served: E, more: AskedWith): Promise<AnswerOf<E>> =>
+      (await backOffice.luiss()).answered(served, more);
+    // His act as it was answered: refused at the door, or by the endpoint's rule in its words.
+    const refusal = async (served: Endpoint, more: AskedWith): Promise<string> =>
+      refusalOf(await (await backOffice.luiss()).asked(served, more));
+    const reviewed = async <A>(done: Promise<A>): Promise<A> => {
+      const answer = await done;
+      last.run = await queue.settled(p1);
+      return answer;
     };
+    const accepting = async (ticketNumber: string, note: string): Promise<AskedWith> => ({
+      ids: { flagId: (await standingFlag(ticketNumber)).id },
+      json: { reasonId: await reasonId('Photos confirm'), note },
+    });
+    const voiding = async (ticketNumber: string, reason: string, note: string) => ({
+      ids: { projectId: p1 },
+      json: { workflow: 'UNIT_RATE', ticketNumber, reasonId: await reasonId(reason), note },
+    });
+    type Ticket =
+      { completedLoadId: string } | { completedHaulOutId: string } | { unitRateTicketId: string };
+    const locking = (ticket: Ticket, invoiceBatchId?: string): AskedWith => ({
+      json: { ticket, invoiceBatchId },
+    });
     const loadOf = async (ticketNumber: string, projectId = p1) => ({
       completedLoadId: (
         await api.completedLoad.findFirstOrThrow({
@@ -982,14 +991,8 @@ export const goldenMission: Story = {
       on('14', '08:00'),
       'Luis checks 101003’s tower photographs and accepts its flag: Photos confirm, "Heaped; photos confirm"; the worker runs',
     );
-    const flag101003 = await standingFlag('101003');
     const accepted = await reviewed(
-      acceptances.flag(
-        luis,
-        flag101003.id,
-        await reasonId('Photos confirm'),
-        'Heaped; photos confirm',
-      ),
+      byLuis(acceptFlagEndpoint, await accepting('101003', 'Heaped; photos confirm')),
     );
     story.check(
       'AC-08-43 101003: MANUAL_REVIEW → COMPLETED, its flag accepted and kept, its line as it was: 62.4 × $7.50 = $468.00',
@@ -1006,19 +1009,19 @@ export const goldenMission: Story = {
       'Luis matches cert, times and photos and renumbers Kim’s disposal from 101060 to 101006: real work is renumbered, never voided; the worker runs',
     );
     const dis101060 = await eventOf('101060', 'DISPOSAL');
-    await reviewed(corrections.renumber(luis, dis101060.id, { ticketNumber: '101006' }));
+    await reviewed(
+      byLuis(renumberFieldEventEndpoint, {
+        ids: { fieldEventId: dis101060.id },
+        json: { ticketNumber: '101006' },
+      }),
+    );
     const renumbered = of(last.run, '101006', '101060');
     story.at(
       on('14', '08:20'),
       'He accepts the typed-number flag: Photos confirm; the worker runs',
     );
     await reviewed(
-      acceptances.flag(
-        luis,
-        (await standingFlag('101006')).id,
-        await reasonId('Photos confirm'),
-        'Cert, times and photos match 101006',
-      ),
+      byLuis(acceptFlagEndpoint, await accepting('101006', 'Cert, times and photos match 101006')),
     );
     story.check(
       'AC-06-10, AC-08-22, AC-08-50 101006: the renumber pairs it, 48 CY × 60% = 28.8 CY, $216.00, in review for its typed number until Luis accepts that flag; nothing is left under 101060',
@@ -1049,12 +1052,9 @@ export const goldenMission: Story = {
       where: { fieldEventId: urt301003.id },
     });
     const void301003 = await reviewed(
-      voids.ticket(
-        luis,
-        p1,
-        { workflow: 'UNIT_RATE', ticketNumber: '301003' },
-        await reasonId('Duplicate ticket'),
-        'Duplicate of 301001',
+      byLuis(
+        voidTicketEndpoint,
+        await voiding('301003', 'Duplicate ticket', 'Duplicate of 301001'),
       ),
     );
     const after301003 = of(last.run, '301003');
@@ -1063,12 +1063,9 @@ export const goldenMission: Story = {
       'The stump 301005 is 20 in across: he voids it, Not eligible work, "Under 24 in; goes out as vegetative debris"; the worker runs',
     );
     await reviewed(
-      voids.ticket(
-        luis,
-        p1,
-        { workflow: 'UNIT_RATE', ticketNumber: '301005' },
-        await reasonId('Not eligible work'),
-        'Under 24 in; goes out as vegetative debris',
+      byLuis(
+        voidTicketEndpoint,
+        await voiding('301005', 'Not eligible work', 'Under 24 in; goes out as vegetative debris'),
       ),
     );
     story.check(
@@ -1210,7 +1207,16 @@ export const goldenMission: Story = {
     );
     const incident = await api.incident.findFirstOrThrow({ where: { projectId: p1 } });
     const dropOff = await api.dropOffLog.findFirstOrThrow({ where: { projectId: p1 } });
-    const approve: [string, QcMarked][] = [];
+    type Marked =
+      | Ticket
+      | { incidentId: string }
+      | { dropOffLogId: string }
+      | { roeId: string }
+      | { surveyId: string }
+      | { certificationId: string };
+    const marking = async (record: Marked, status: string) =>
+      (await byLuis(setQcStatusEndpoint, { json: { record, status } })).record;
+    const approve: [string, Marked][] = [];
     for (const number of p1Loads) approve.push([`CLT ${number}`, await loadOf(number)]);
     for (const number of p1HaulOuts) approve.push([`CHO ${number}`, await haulOutOf(number)]);
     const l102001 = await loadOf('102001', p2);
@@ -1235,11 +1241,11 @@ export const goldenMission: Story = {
     const beforeQc = await workerWrote();
     const marked: string[] = [];
     for (const [what, target] of approve) {
-      const mark = await saved(qc.set(luis, target, 'QC_APPROVED'));
+      const mark = await marking(target, 'QC_APPROVED');
       marked.push(`${what} ${mark.status} ${names.get(mark.setById) ?? ''}`);
     }
     for (const number of p1Voided) {
-      const mark = await saved(qc.set(luis, await unitRateOf(number), 'QC_VOID'));
+      const mark = await marking(await unitRateOf(number), 'QC_VOID');
       marked.push(`URT ${number} ${mark.status} ${names.get(mark.setById) ?? ''}`);
     }
     story.check(
@@ -1282,12 +1288,19 @@ export const goldenMission: Story = {
       on('14', '11:00'),
       `The invoice lock: Luis makes the batch "${batchName}" and locks P1’s thirteen QC Approved tickets in it; he locks P2’s split load 102001 on its own`,
     );
-    const batch = await saved(locks.batch(luis, p1, batchName));
-    for (const number of p1Loads) await saved(locks.lock(luis, await loadOf(number), batch.id));
-    for (const number of p1HaulOuts)
-      await saved(locks.lock(luis, await haulOutOf(number), batch.id));
+    const { record: batch } = await byLuis(createInvoiceBatchEndpoint, {
+      ids: { projectId: p1 },
+      json: { name: batchName },
+    });
+    // Thirteen requests: a lock is one ticket's (BACKLOG C104).
+    for (const number of p1Loads) {
+      await byLuis(lockAsInvoicedEndpoint, locking(await loadOf(number), batch.id));
+    }
+    for (const number of p1HaulOuts) {
+      await byLuis(lockAsInvoicedEndpoint, locking(await haulOutOf(number), batch.id));
+    }
     for (const number of p1LiveUnitRate) {
-      await saved(locks.lock(luis, await unitRateOf(number), batch.id));
+      await byLuis(lockAsInvoicedEndpoint, locking(await unitRateOf(number), batch.id));
     }
     const lockedIn = (
       await api.invoiceLock.findMany({
@@ -1303,28 +1316,32 @@ export const goldenMission: Story = {
           '',
       )
       .sort();
-    const voidLock = await locks.lock(luis, await unitRateOf('301003'), batch.id);
+    const voidLock = await refusal(
+      lockAsInvoicedEndpoint,
+      locking(await unitRateOf('301003'), batch.id),
+    );
     story.check(
       'AC-09-11 read by its name, the batch holds P1’s thirteen QC Approved tickets, and their lines in the ledger come to $5,548.25 on 19 lines, a figure read from the ledger and stored nowhere on the batch; the voided 301003 and 301005, at QC Void, are not in it and can’t be locked',
       [
         lockedIn,
         await total(p1, lockedIn),
         Object.keys(batch).filter((key) => /amount|rate|quantity|total/i.test(key)),
-        voidLock.saved ? 'saved' : voidLock.refusal.code,
+        voidLock,
         await api.invoiceLock.count({ where: { projectId: p1 } }),
       ],
       [
         [...p1Loads, ...p1HaulOuts, ...p1LiveUnitRate].sort(),
         [19, '$5,548.25'],
         [],
-        'NOT_COMPLETED',
+        '422 NOT_SAVED · NOT_COMPLETED: Ticket 301003 is void: it bills nothing and isn’t locked as invoiced. Nothing was locked.',
         13,
       ],
     );
-    const lock102001 = await saved(locks.lock(luis, l102001));
-    const onOneProperty = await locks.lock(luis, {
-      unitRateTicketId: (await eventOf('102001', 'COLLECTION', p2)).id,
-    });
+    const { record: lock102001 } = await byLuis(lockAsInvoicedEndpoint, locking(l102001));
+    const onOneProperty = await refusal(
+      lockAsInvoicedEndpoint,
+      locking({ unitRateTicketId: (await eventOf('102001', 'COLLECTION', p2)).id }),
+    );
     story.check(
       'AC-09-05 P2’s split load is locked as one: the lock names the completed load 102001, with both properties under it, and no single collection takes a lock',
       [
@@ -1334,9 +1351,15 @@ export const goldenMission: Story = {
           where: { completedLoadId: l102001.completedLoadId, dissolvedAt: null },
         }),
         await api.invoiceLock.count({ where: { projectId: p2 } }),
-        onOneProperty.saved ? 'saved' : onOneProperty.refusal.code,
+        onOneProperty,
       ],
-      [true, null, 2, 1, 'NOT_QCD_ALONE'],
+      [
+        true,
+        null,
+        2,
+        1,
+        '422 NOT_SAVED · NOT_QCD_ALONE: A collection is never QC’d or locked on its own: its completed load or haul-out is, once the ticket is whole. Nothing was saved.',
+      ],
     );
 
     story.at(
