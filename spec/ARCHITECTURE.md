@@ -444,7 +444,7 @@ every edit of a migration file and allows a write only while the file is still P
 | Input | Every request body validated by the shared Zod schema at the boundary; size limits; unknown fields rejected |
 | Output | No stack traces or internal errors in responses; plain error codes; security headers (CSP, `frame-ancestors 'none'`, `nosniff`, referrer policy) on the web apps |
 | Logs | Structured, with a request ID; never secrets, tokens, passwords or full personal details |
-| Uploads | Media only through the media endpoint (§11): type and size checked, hash verified, stored outside the web root, never executed |
+| Uploads | Files only through the media endpoint (§11) and the back office's map's file (§3; ADR-485, 486), each by its own route and size limit: type and size checked (a photograph's hash verified, a zip bounded unzipped), stored outside the web root, never executed |
 
 ---
 
