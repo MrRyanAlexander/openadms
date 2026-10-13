@@ -134,6 +134,18 @@ export function codeOf(answer: Asked): string | undefined {
   return errorAnswerSchema.safeParse(answer.body).data?.code;
 }
 
+// How a request was answered, as a story checks a refusal (ADR-496, 497): `saved` for a 200;
+// otherwise its status and code, and where an endpoint's rule refused it (422 `NOT_SAVED`), the
+// rule's own code and its plain words. The door's refusal of a person without the grant has no
+// words (403 `NOT_ALLOWED`).
+export function refusalOf(answer: Asked): string {
+  if (answer.status === 200) return 'saved';
+  const read = errorAnswerSchema.safeParse(answer.body).data;
+  if (read === undefined) return `${String(answer.status)} no error answer`;
+  const words = read.reason === undefined ? '' : ` · ${read.reason}: ${read.message ?? ''}`;
+  return `${String(answer.status)} ${read.code}${words}`;
+}
+
 // The body of a 200; anything else stops the story, saying what came back.
 export function answered(served: Endpoint, answer: Asked): unknown {
   if (answer.status === 200) return answer.body;

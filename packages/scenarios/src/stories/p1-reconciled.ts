@@ -20,6 +20,7 @@
 // (1.8.x): where this story needs a corrected record it writes the correction as the API's login
 // may, to show what the worker does when the ticket comes back. The golden mission in full is 1.9.1.
 import { ProjectSetup, SiteSetup } from '@open-adms/api';
+import { correctFieldEventEndpoint, renumberFieldEventEndpoint } from '@open-adms/contracts';
 import type { Database, Prisma } from '@open-adms/db';
 import type { MileageEnds } from '@open-adms/domain';
 import {
@@ -39,6 +40,7 @@ import { sentAlone } from './board.ts';
 import {
   certifyP1,
   loadP1Map,
+  p1BackOffice,
   p1FieldDaysHeld,
   P1Syncs,
   QueueRuns,
@@ -150,10 +152,9 @@ export const p1Reconciled: Story = {
       longestRunMs: 600_000,
     };
     const reconciliation = new Reconciliation(worker, clock, settings, step);
-    // The worker's own job loop: it takes up what each sync queued, and each reprocess and
-    // correction Luis asks for (BACKLOG 2.7.1 part 3; ADR-494).
+    // The worker's own job loop: it takes up what each sync queued, each reprocess Luis asks
+    // for and the job each of his corrections queues (BACKLOG 2.7.1 part 3; ADR-494, 497).
     const queue = new QueueRuns(story, reconciliation);
-    const load = (ticketNumber: string) => ({ workflow: 'LOAD', ticketNumber }) as const;
     // Every ticket of P1 as it stands, for a reprocess Luis asks for.
     const everyTicket = async () =>
       (await queue.standing(p1)).tickets.map(({ workflow, ticketNumber }) => ({
@@ -905,20 +906,30 @@ export const p1Reconciled: Story = {
 
     story.at(
       on('14', '10:00'),
-      'Luis corrects 101003’s load call to 90% (the correction itself is Part 8’s); the worker runs, asked by him',
+      'Dana grants Luis correct and renumber; at his browser he corrects 101003’s load call to 90% (the correction itself is Part 8’s), which queues its job; the worker runs, asked by him',
     );
-    const correct = (
-      where: Prisma.FieldEventWhereInput,
-      data: { loadCall?: number; ticketNumber?: string },
-    ) =>
-      api.$write({ actorId: luis, source: 'BACK_OFFICE', reason: 'Correction' }, async (tx) => {
-        const event = await tx.fieldEvent.findFirstOrThrow({ where });
-        await tx.fieldEvent.update({ where: { id: event.id }, data });
+    // Luis at his browser (ADR-497): a correction of a disposal's load call and a renumber of
+    // one, each queuing its own job (its tickets and their neighbours) at its endpoint.
+    const backOffice = p1BackOffice(story, office);
+    await backOffice.grantLuis('CORRECT', 'RENUMBER');
+    const luiss = await backOffice.luiss();
+    const disposalOf = (ticketNumber: string) =>
+      api.fieldEvent.findFirstOrThrow({ where: { projectId: p1, ticketNumber, kind: 'DISPOSAL' } });
+    const correctCall = async (ticketNumber: string, loadCall: number): Promise<void> => {
+      const { id } = await disposalOf(ticketNumber);
+      await luiss.answered(correctFieldEventEndpoint, {
+        ids: { fieldEventId: id },
+        json: { changes: { loadCall } },
       });
-    const dis101003 = { ticketNumber: '101003', kind: 'DISPOSAL' } as const;
-    // The correction is written by hand here, so its job is too: it names the ticket.
-    await correct(dis101003, { loadCall: 90 });
-    await queue.asked(luis, p1, [load('101003')], 'CORRECTION');
+    };
+    const renumber = async (ticketNumber: string, to: string): Promise<void> => {
+      const { id } = await disposalOf(ticketNumber);
+      await luiss.answered(renumberFieldEventEndpoint, {
+        ids: { fieldEventId: id },
+        json: { ticketNumber: to },
+      });
+    };
+    await correctCall('101003', 90);
     const corrected = await queue.settled(p1);
     story.check(
       'AC-06-141 the 96% flag is cleared and 101003 is COMPLETED, its completed load updated in place to 58.5 CY',
@@ -961,8 +972,7 @@ export const p1Reconciled: Story = {
       ['CORRECTION', true, [true]],
     );
     story.at(on('14', '10:10'), 'The call was right: Luis puts 96% back; the worker runs');
-    await correct({ ...dis101003 }, { loadCall: 96 });
-    await queue.asked(luis, p1, [load('101003')], 'CORRECTION');
+    await correctCall('101003', 96);
     await queue.settle(p1);
     story.check(
       'the problem is back, so a new flag is raised to be looked at; the cleared one stays in the history',
@@ -984,8 +994,7 @@ export const p1Reconciled: Story = {
     const loadOf101005 = await api.completedLoad.findFirstOrThrow({
       where: { ticketNumber: '101005' },
     });
-    await correct({ ticketNumber: '101005', kind: 'DISPOSAL' }, { ticketNumber: '101050' });
-    await queue.asked(luis, p1, [load('101005'), load('101050')], 'CORRECTION');
+    await renumber('101005', '101050');
     await queue.settle(p1);
     story.check(
       'AC-06-148 101005 is its collection alone again, PENDING; its completed load is marked dissolved, with its row, never deleted; 101050 is a disposal waiting for a collection',
@@ -1003,8 +1012,7 @@ export const p1Reconciled: Story = {
       ],
     );
     story.at(on('14', '10:40'), 'It is put back; the worker runs');
-    await correct({ ticketNumber: '101050', kind: 'DISPOSAL' }, { ticketNumber: '101005' });
-    await queue.asked(luis, p1, [load('101050'), load('101005')], 'CORRECTION');
+    await renumber('101050', '101005');
     await queue.settle(p1);
     story.check(
       'AC-06-148 the ticket is whole again: the mark is cleared on the same completed load, and it is COMPLETED',
@@ -1023,8 +1031,7 @@ export const p1Reconciled: Story = {
       on('14', '11:00'),
       'Luis renumbers the tower’s typed 101060 to 101006, the load it was (golden mission §2); the worker runs',
     );
-    await correct({ ticketNumber: '101060', kind: 'DISPOSAL' }, { ticketNumber: '101006' });
-    await queue.asked(luis, p1, [load('101060'), load('101006')], 'CORRECTION');
+    await renumber('101060', '101006');
     await queue.settle(p1);
     story.check(
       'the collection and the disposal pair on 101006: 48 CY × 60% = 28.8 CY. The typed-number flag is the ticket’s now, still to be accepted (Part 8), so it is in review; nothing is left on 101060, whose flag is cleared',

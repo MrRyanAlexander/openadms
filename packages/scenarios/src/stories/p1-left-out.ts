@@ -19,7 +19,6 @@
 import {
   Certifications,
   ContractorSetup,
-  Corrections,
   FormSetup,
   ListSetup,
   PayItemSetup,
@@ -30,8 +29,8 @@ import {
   WorkQueue,
   type NewCertification,
   type Outcome,
-  type Reviewed,
 } from '@open-adms/api';
+import { correctFieldEventEndpoint } from '@open-adms/contracts';
 import { MapServers, Mileages, Reconciliation, type RunOutcome } from '@open-adms/worker';
 
 import { utcOffsetMinutes } from '../clock.ts';
@@ -42,6 +41,7 @@ import type { Story } from '../runner.ts';
 import {
   certifyP1,
   loadP1Map,
+  p1BackOffice,
   p1FieldDaysHeld,
   P1Syncs,
   primaryBox,
@@ -111,7 +111,6 @@ export const p1LeftOut: Story = {
     const lists = new ListSetup(api, clock);
     const projects = new ProjectSetup(api, clock, story.policy);
     const certifications = new Certifications(api, clock, story.policy);
-    const corrections = new Corrections(api, clock, story.policy);
 
     // The setup check and the sites' lookup, asked of the API's service, as lines a person
     // reads.
@@ -285,16 +284,6 @@ export const p1LeftOut: Story = {
       )
         .map((flag) => flag.message)
         .filter((message, at, all) => all.indexOf(message) === at);
-
-    // A reviewer's action, then the run it asks for.
-    const last: { run: RunOutcome } = {
-      run: { ran: false, reason: 'RUN_UNDER_WAY', message: 'No run yet.' },
-    };
-    const reviewed = async <T>(attempt: Promise<Outcome<Reviewed<T>>>): Promise<Reviewed<T>> => {
-      const done = await saved(attempt);
-      last.run = await queue.settled(done.reprocess.projectId);
-      return done;
-    };
 
     // ------------------------------------------------------------------------------------------
     const phones = new P1Syncs(story, office);
@@ -535,21 +524,24 @@ export const p1LeftOut: Story = {
     // ------------------------------------------------------------------------------------------
     story.at(
       on('14', '12:30'),
-      'Dana gives Luis the grant to correct. Sam Grant says the second pile was 60% so far, not 30: Luis corrects pile -B’s call; the worker runs',
+      'Dana gives Luis the grant to correct. Sam Grant says the second pile was 60% so far, not 30: Luis corrects pile -B’s call at his browser, which queues its job; the worker runs',
     );
-    await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, (tx) =>
-      tx.userPermission.create({ data: { userId: luis, permission: 'CORRECT' } }),
-    );
+    const backOffice = p1BackOffice(story, office);
+    await backOffice.grantLuis('CORRECT');
     const pileB = await api.fieldEvent.findFirstOrThrow({
       where: { projectId: p1, ticketNumber: '201006', splitSuffix: 'B' },
     });
-    await reviewed(
-      corrections.fieldEvent(luis, pileB.id, { loadCall: 60 }, 'Sam Grant: 60% so far'),
-    );
+    await (
+      await backOffice.luiss()
+    ).answered(correctFieldEventEndpoint, {
+      ids: { fieldEventId: pileB.id },
+      json: { changes: { loadCall: 60 }, note: 'Sam Grant: 60% so far' },
+    });
+    const corrected = await queue.settled(p1);
     story.check(
       'AC-06-90 corrected, the flag is cleared and the piles are shared out: 35 and 25 points of 110 CY, 38.5 and 27.5 CY, each paid by the CY with the tipping fee, $600.60',
       [
-        of(last.run, '201006'),
+        of(corrected, '201006'),
         await flagsOn('201006'),
         await pilesOf('201006'),
         await linesOf('201006'),

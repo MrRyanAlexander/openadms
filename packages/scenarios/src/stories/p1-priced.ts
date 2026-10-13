@@ -17,6 +17,7 @@
 // show what the worker does when the ticket comes back. A person's void and unvoid (1.8.4).
 // The golden mission in full, with P2, is 1.9.1.
 import { ContractorSetup, PayItemSetup, RuleSetup, SiteSetup } from '@open-adms/api';
+import { correctFieldEventEndpoint } from '@open-adms/contracts';
 import { Prisma, systemActorId, type Database } from '@open-adms/db';
 import { MapServers, Mileages, Reconciliation, type RunOutcome } from '@open-adms/worker';
 
@@ -29,6 +30,7 @@ import { sentAlone } from './board.ts';
 import {
   certifyP1,
   loadP1Map,
+  p1BackOffice,
   p1FieldDaysHeld,
   P1Syncs,
   primaryBox,
@@ -401,19 +403,27 @@ export const p1Priced: Story = {
     // ------------------------------------------------------------------------------------------
     story.at(
       on('14', '08:00'),
-      'Luis corrects 101001’s load call from 80% to 70% (the correction itself is Part 8’s). The worker runs, and the database refuses the new line (the story makes it so)',
+      'Dana grants Luis correct; at his browser he corrects 101001’s load call from 80% to 70% (the correction itself is Part 8’s), which queues its job. The worker runs, and the database refuses the new line (the story makes it so)',
     );
-    const correct = (where: Prisma.FieldEventWhereInput, data: { loadCall?: number }) =>
-      api.$write({ actorId: luis, source: 'BACK_OFFICE', reason: 'Correction' }, async (tx) => {
-        const event = await tx.fieldEvent.findFirstOrThrow({ where });
-        await tx.fieldEvent.update({ where: { id: event.id }, data });
+    // Luis at his browser (ADR-497): the correction queues its own job, the ticket and its
+    // neighbours, at its endpoint.
+    const backOffice = p1BackOffice(story, office);
+    await backOffice.grantLuis('CORRECT');
+    const luiss = await backOffice.luiss();
+    const dis101001 = await api.fieldEvent.findFirstOrThrow({
+      where: { projectId: p1, ticketNumber: '101001', kind: 'DISPOSAL' },
+    });
+    const correctCall = async (loadCall: number): Promise<void> => {
+      await luiss.answered(correctFieldEventEndpoint, {
+        ids: { fieldEventId: dis101001.id },
+        json: { changes: { loadCall } },
       });
-    const dis101001 = { ticketNumber: '101001', kind: 'DISPOSAL' } as const;
+    };
     const lineOf101001 = (await lines()).find((each) => each.ticket === '101001');
     const loadOf101001 = await api.completedLoad.findFirstOrThrow({
       where: { ticketNumber: '101001' },
     });
-    await correct(dis101001, { loadCall: 70 });
+    await correctCall(70);
     // The worker's own client, but no line can be written: the old line was removed just before,
     // inside the same piece of work.
     const refusingALine: Database = new Proxy(worker, {
@@ -440,8 +450,6 @@ export const p1Priced: Story = {
         return write;
       },
     });
-    // The correction is made by hand here, so its job is too.
-    await queue.asked(luis, p1, [load('101001')], 'CORRECTION');
     const failed = await new QueueRuns(
       story,
       new Reconciliation(refusingALine, clock, settings, mileages),
@@ -535,8 +543,7 @@ export const p1Priced: Story = {
     );
 
     story.at(on('14', '08:30'), 'The call was right: Luis puts 80% back; the worker runs');
-    await correct(dis101001, { loadCall: 80 });
-    await queue.asked(luis, p1, [load('101001')], 'CORRECTION');
+    await correctCall(80);
     await queue.settle(p1);
     story.check(
       '101001 bills $390.00 again, a new line; the $341.25 one is in the audit log beside the first',

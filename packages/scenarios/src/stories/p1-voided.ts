@@ -4,21 +4,23 @@
 // loads the scenarios need (`adms-exceptions`' Scenario B and its phantom, a load whose two
 // ends disagree, a load called 0%, a load dumped at an ineligible site a rule voids).
 //
-// Every void, unvoid and acceptance here is made through `apps/api`'s review services, as Luis
-// Ortega, by his grants. Each is a mark of its own beside the records; each answers the run to
-// ask the worker for; the story asks it, and reads what the worker concluded.
+// Every void, unvoid, acceptance and correction here is Luis Ortega's request at his browser,
+// signed in, over HTTPS to the story's API (BACKLOG 2.7.1 part 4b; ADR-497), by the grants Dana
+// gives him at hers. Each is a mark of its own beside the records, and queues its own job; the
+// worker takes it up, and the story reads what the worker concluded.
 //
 // Not here: QC, the lock, a batch and the unlock (1.8.5). The golden mission's whole review is
 // 1.9.1.
+import { RuleSetup, SiteSetup } from '@open-adms/api';
 import {
-  Acceptances,
-  Corrections,
-  RuleSetup,
-  SiteSetup,
-  Voids,
-  type Outcome,
-  type Reviewed,
-} from '@open-adms/api';
+  acceptFlagEndpoint,
+  correctFieldEventEndpoint,
+  renumberFieldEventEndpoint,
+  unvoidTicketEndpoint,
+  voidTicketEndpoint,
+  type AnswerOf,
+  type Endpoint,
+} from '@open-adms/contracts';
 import { systemActorId, type FieldEventKind } from '@open-adms/db';
 import { MapServers, Mileages, Reconciliation, type RunOutcome } from '@open-adms/worker';
 
@@ -26,11 +28,13 @@ import { utcOffsetMinutes } from '../clock.ts';
 import type { PhoneRecord } from '../device.ts';
 import { uuidv7 } from '../ids.ts';
 import { localMapServers } from '../map-servers.ts';
+import { refusalOf, type AskedWith } from '../over-https.ts';
 import type { Story } from '../runner.ts';
 import { sentAlone } from './board.ts';
 import {
   certifyP1,
   loadP1Map,
+  p1BackOffice,
   p1FieldDaysHeld,
   P1Syncs,
   QueueRuns,
@@ -90,9 +94,6 @@ export const p1Voided: Story = {
       settings,
       new Mileages(new MapServers(localMapServers())),
     );
-    const voids = new Voids(api, clock, story.policy);
-    const acceptances = new Acceptances(api, clock, story.policy);
-    const corrections = new Corrections(api, clock, story.policy);
     const rules = new RuleSetup(api, clock, story.policy);
 
     const names = new Map<string | null, string>([
@@ -197,21 +198,34 @@ export const p1Voided: Story = {
     };
     // Nobody asks the worker: the action queued its job, and the worker takes it up.
     const queue = new QueueRuns(story, reconciliation);
-    const reviewed = async <T>(attempt: Promise<Outcome<Reviewed<T>>>): Promise<Reviewed<T>> => {
-      const done = await saved(attempt);
-      last.run = await queue.next(done.reprocess.projectId);
+    // Dana and Luis at their browsers. His act, saved, then the run its job asks of the worker:
+    // every act here is on P1.
+    const backOffice = p1BackOffice(story, office);
+    const reviewed = async <E extends Endpoint>(
+      served: E,
+      more: AskedWith,
+    ): Promise<AnswerOf<E>> => {
+      const done = await (await backOffice.luiss()).answered(served, more);
+      last.run = await queue.next(p1);
       return done;
     };
-    const refusal = async <T>(attempt: Promise<Outcome<T>>): Promise<string> => {
-      const outcome = await attempt;
-      return outcome.saved ? 'saved' : `${outcome.refusal.code}: ${outcome.refusal.message}`;
-    };
-    const grant = (...permissions: ('CORRECT' | 'RENUMBER' | 'VOID' | 'ACCEPT_FLAG')[]) =>
-      api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
-        for (const permission of permissions) {
-          await tx.userPermission.create({ data: { userId: luis, permission } });
-        }
-      });
+    // His act as it was answered: refused at the door, or by the endpoint's rule in its words.
+    const refusal = async (served: Endpoint, more: AskedWith): Promise<string> =>
+      refusalOf(await (await backOffice.luiss()).asked(served, more));
+    // What each act sends.
+    type Ticket = ReturnType<typeof load> | ReturnType<typeof unitRate>;
+    const voiding = (ticket: Ticket, reasonId: string, note?: string): AskedWith => ({
+      ids: { projectId: p1 },
+      json: { ...ticket, reasonId, note },
+    });
+    const unvoiding = (ticket: Ticket, note?: string): AskedWith => ({
+      ids: { projectId: p1 },
+      json: { ...ticket, note },
+    });
+    const accepting = (flagId: string, reasonId: string, note?: string): AskedWith => ({
+      ids: { flagId },
+      json: { reasonId, note },
+    });
 
     // ------------------------------------------------------------------------------------------
     const phones = new P1Syncs(story, office);
@@ -275,32 +289,24 @@ export const p1Voided: Story = {
       await api.ticketVoid.count(),
     ];
     story.check(
-      'AC-08-05 a manager/analyst without the grant can’t void, unvoid or accept: each is refused in plain words and nothing is saved',
+      'AC-08-05 a manager/analyst without the grant can’t void, unvoid or accept: each request is refused at the door, 403 with no words, before any service runs, and nothing is saved',
       [
-        await refusal(voids.ticket(luis, p1, unitRate('301003'), duplicate)),
-        await refusal(voids.lift(luis, p1, unitRate('301003'))),
-        await refusal(acceptances.flag(luis, high96.id, photosConfirm)),
+        await refusal(voidTicketEndpoint, voiding(unitRate('301003'), duplicate)),
+        await refusal(unvoidTicketEndpoint, unvoiding(unitRate('301003'))),
+        await refusal(acceptFlagEndpoint, accepting(high96.id, photosConfirm)),
         await marks(),
       ],
-      [
-        'NOT_PERMITTED: Luis Ortega may not void or unvoid a ticket: it takes an admin, or a manager/analyst granted "void". Nothing was changed.',
-        'NOT_PERMITTED: Luis Ortega may not void or unvoid a ticket: it takes an admin, or a manager/analyst granted "void". Nothing was changed.',
-        'NOT_PERMITTED: Luis Ortega may not accept a flag: it takes an admin, or a manager/analyst granted "accept flags". Nothing was changed.',
-        [0, 0],
-      ],
+      ['403 NOT_ALLOWED', '403 NOT_ALLOWED', '403 NOT_ALLOWED', [0, 0]],
     );
     story.at(on('14', '07:45'), 'Dana grants Luis correct and renumber');
-    await grant('CORRECT', 'RENUMBER');
+    await backOffice.grantLuis('CORRECT', 'RENUMBER');
     story.check(
       'AC-08-05 accept flags is a grant of its own: granted correct alone, Luis still can’t accept a flag (the user, 2026-10-06, KD-74)',
-      [await refusal(acceptances.flag(luis, high96.id, photosConfirm)), await marks()],
-      [
-        'NOT_PERMITTED: Luis Ortega may not accept a flag: it takes an admin, or a manager/analyst granted "accept flags". Nothing was changed.',
-        [0, 0],
-      ],
+      [await refusal(acceptFlagEndpoint, accepting(high96.id, photosConfirm)), await marks()],
+      ['403 NOT_ALLOWED', [0, 0]],
     );
     story.at(on('14', '07:50'), 'Dana grants Luis void and accept flags');
-    await grant('VOID', 'ACCEPT_FLAG');
+    await backOffice.grantLuis('VOID', 'ACCEPT_FLAG');
 
     // ------------------------------------------------------------------------------------------
     story.at(
@@ -312,28 +318,29 @@ export const p1Voided: Story = {
     const flagAudits = await audited('flag');
     story.check(
       'AC-08-48 an acceptance carries a reason the firm offers for accepting a flag: one from another list is refused and nothing is accepted',
-      [await refusal(acceptances.flag(luis, high96.id, duplicate)), await marks()],
+      [await refusal(acceptFlagEndpoint, accepting(high96.id, duplicate)), await marks()],
       [
-        'REASON_NOT_OFFERED: "Duplicate ticket" isn’t a reason the firm offers for accepting a flag. Nothing was saved.',
+        '422 NOT_SAVED · REASON_NOT_OFFERED: "Duplicate ticket" isn’t a reason the firm offers for accepting a flag. Nothing was saved.',
         [0, 0],
       ],
     );
     const accepted = await reviewed(
-      acceptances.flag(luis, high96.id, photosConfirm, 'Heaped; photos confirm'),
+      acceptFlagEndpoint,
+      accepting(high96.id, photosConfirm, 'Heaped; photos confirm'),
     );
     story.check(
-      'AC-08-43, AC-08-07 the acceptance is recorded (the flag, the reason, his note, Luis, when) and audited under him from the back office; the flag itself isn’t touched; the ticket is COMPLETED on the run, and its line is the same $468.00 row before and after',
+      'AC-08-43, AC-08-07 the acceptance is recorded (the flag, the reason, his note, Luis, when) and audited under him from the back office; the flag itself isn’t touched; it queued one job naming the ticket alone; the ticket is COMPLETED on the run, and its line is the same $468.00 row before and after',
       [
         [
           accepted.record.flagId === high96.id,
           accepted.record.reasonId === photosConfirm,
           accepted.record.note,
           names.get(accepted.record.acceptedById),
-          accepted.record.acceptedAt.toISOString(),
+          accepted.record.acceptedAt,
         ],
         await auditOf('flag_acceptance', accepted.record.id),
         (await audited('flag')) === flagAudits,
-        accepted.reprocess.tickets,
+        [accepted.queued?.jobs.length, accepted.queued?.tickets, accepted.queued?.lockedAsInvoiced],
         of(last.run, '101003'),
         [lineBefore, await linesOf('101003')],
         (await audited('transaction')) === lineAudits,
@@ -342,7 +349,7 @@ export const p1Voided: Story = {
         [true, true, 'Heaped; photos confirm', 'Luis', new Date(on('14', '08:00')).toISOString()],
         ['Luis · BACK_OFFICE · INSERT · Heaped; photos confirm'],
         true,
-        [{ workflow: 'LOAD', ticketNumber: '101003' }],
+        [1, 1, 0],
         ['101003 · COMPLETED · Ticket 101003: load call 96%. Flagged for review.'],
         [
           ['101003 #1 VEG-HAUL-CY-15 62.4 × $7.50 = $468.00'],
@@ -359,12 +366,12 @@ export const p1Voided: Story = {
       [
         of(again, '101003'),
         await flagsOn('101003'),
-        await refusal(acceptances.flag(luis, high96.id, photosConfirm)),
+        await refusal(acceptFlagEndpoint, accepting(high96.id, photosConfirm)),
       ],
       [
         ['101003 · COMPLETED · Ticket 101003: load call 96%. Flagged for review.'],
         ['Ticket 101003: load call 96%. Flagged for review. (accepted: Photos confirm)'],
-        'ALREADY_ACCEPTED: This flag is already accepted ("Ticket 101003: load call 96%. Flagged for review."). Nothing was saved.',
+        '422 NOT_SAVED · ALREADY_ACCEPTED: This flag is already accepted ("Ticket 101003: load call 96%. Flagged for review."). Nothing was saved.',
       ],
     );
 
@@ -373,7 +380,10 @@ export const p1Voided: Story = {
       'The call was keyed wrong: Luis corrects it to 97%; the worker runs',
     );
     const dis101003 = await eventOf('101003', 'DISPOSAL');
-    await reviewed(corrections.fieldEvent(luis, dis101003.id, { loadCall: 97 }));
+    await reviewed(correctFieldEventEndpoint, {
+      ids: { fieldEventId: dis101003.id },
+      json: { changes: { loadCall: 97 } },
+    });
     story.check(
       'AC-08-45 the facts have changed: the old flag is cleared, a new one is raised that nobody has accepted, and the ticket is MANUAL_REVIEW again, billing 65 × 97% = 63.05 CY × $7.50 = $472.88',
       [of(last.run, '101003'), await flagsOn('101003'), await linesOf('101003')],
@@ -388,11 +398,8 @@ export const p1Voided: Story = {
     );
     story.at(on('14', '08:15'), 'The monitor confirms 97%: Luis accepts the new flag');
     await reviewed(
-      acceptances.flag(
-        luis,
-        (await standingFlag('101003')).id,
-        await reasonId('Confirmed with the monitor'),
-      ),
+      acceptFlagEndpoint,
+      accepting((await standingFlag('101003')).id, await reasonId('Confirmed with the monitor')),
     );
     story.check(
       'AC-08-52 each of the ticket’s flags is still in its history with what happened to it: one accepted and then cleared by a correction, one accepted; none was deleted, and the first acceptance is still there',
@@ -413,11 +420,8 @@ export const p1Voided: Story = {
       'Luis accepts the typed-number flag on the pending disposal 101060; the worker runs',
     );
     await reviewed(
-      acceptances.flag(
-        luis,
-        (await standingFlag('101060')).id,
-        await reasonId('Confirmed with the monitor'),
-      ),
+      acceptFlagEndpoint,
+      accepting((await standingFlag('101060')).id, await reasonId('Confirmed with the monitor')),
     );
     const pendingAccepted = of(last.run, '101060');
     story.at(
@@ -425,15 +429,15 @@ export const p1Voided: Story = {
       'Then he renumbers it to 101006, where it belongs; the worker runs',
     );
     const dis101060 = await eventOf('101060', 'DISPOSAL');
-    await reviewed(corrections.renumber(luis, dis101060.id, { ticketNumber: '101006' }));
+    await reviewed(renumberFieldEventEndpoint, {
+      ids: { fieldEventId: dis101060.id },
+      json: { ticketNumber: '101006' },
+    });
     const renumbered = of(last.run, '101006');
     story.at(on('14', '08:45'), 'He accepts the flag on 101006; the worker runs');
     await reviewed(
-      acceptances.flag(
-        luis,
-        (await standingFlag('101006')).id,
-        await reasonId('Confirmed with the monitor'),
-      ),
+      acceptFlagEndpoint,
+      accepting((await standingFlag('101006')).id, await reasonId('Confirmed with the monitor')),
     );
     story.check(
       'AC-08-50 a flag on a pending ticket may be accepted, and the ticket goes on waiting. An acceptance stays with the flag it was made on: renumbered, the field event’s flag is a new one on 101006, to be looked at again. Accepted, 101006 is COMPLETED, its $216.00 unchanged',
@@ -470,18 +474,19 @@ export const p1Voided: Story = {
     story.check(
       'AC-08-33 a void carries a reason the firm offers for voiding, and names a ticket: a reason from another list, and a number no field event is under, are refused, and nothing is voided',
       [
-        await refusal(voids.ticket(luis, p1, unitRate('301003'), photosConfirm)),
-        await refusal(voids.ticket(luis, p1, unitRate('301099'), duplicate)),
+        await refusal(voidTicketEndpoint, voiding(unitRate('301003'), photosConfirm)),
+        await refusal(voidTicketEndpoint, voiding(unitRate('301099'), duplicate)),
         await api.ticketVoid.count(),
       ],
       [
-        'REASON_NOT_OFFERED: "Photos confirm" isn’t a reason the firm offers for voiding a ticket. Nothing was saved.',
-        'NOT_A_TICKET: No field event of this project is under 301099: there is no such ticket to void. Nothing was saved.',
+        '422 NOT_SAVED · REASON_NOT_OFFERED: "Photos confirm" isn’t a reason the firm offers for voiding a ticket. Nothing was saved.',
+        '422 NOT_SAVED · NOT_A_TICKET: No field event of this project is under 301099: there is no such ticket to void. Nothing was saved.',
         0,
       ],
     );
     const voided = await reviewed(
-      voids.ticket(luis, p1, unitRate('301003'), duplicate, 'Duplicate of 301001'),
+      voidTicketEndpoint,
+      voiding(unitRate('301003'), duplicate, 'Duplicate of 301001'),
     );
     story.check(
       'AC-08-31, AC-08-07 the ticket is VOID and bills nothing: its $68.00 line is copied in full to the audit log and removed, by the system; the void is its own record (the reason, his note, Luis, when), audited under him; the field event’s status, COMPLETED → VOID, is the worker’s writing, and its decision names Luis and his reason',
@@ -493,7 +498,7 @@ export const p1Voided: Story = {
           voided.record.reasonId === duplicate,
           voided.record.note,
           names.get(voided.record.voidedById),
-          voided.record.voidedAt.toISOString(),
+          voided.record.voidedAt,
         ],
         await auditOf('ticket_void', voided.record.id),
         (
@@ -508,7 +513,7 @@ export const p1Voided: Story = {
           (record.newValue as Record<string, unknown>)['status'],
         ]),
         await decisionOf(last.run, '301003'),
-        await refusal(voids.ticket(luis, p1, unitRate('301003'), duplicate)),
+        await refusal(voidTicketEndpoint, voiding(unitRate('301003'), duplicate)),
       ],
       [
         ['VOID'],
@@ -518,7 +523,7 @@ export const p1Voided: Story = {
         ['Luis · BACK_OFFICE · INSERT · Duplicate of 301001'],
         [['system', 'COMPLETED', 'VOID']],
         [['VOID', 'Voided by Luis Ortega (Duplicate ticket).']],
-        'ALREADY_VOID: Ticket 301003 is already void. Nothing was saved.',
+        '422 NOT_SAVED · ALREADY_VOID: Ticket 301003 is already void. Nothing was saved.',
       ],
     );
 
@@ -529,9 +534,8 @@ export const p1Voided: Story = {
     const urt301005 = await eventOf('301005', 'UNIT_RATE');
     const photographsOn301005 = await api.photo.count({ where: { fieldEventId: urt301005.id } });
     await reviewed(
-      voids.ticket(
-        luis,
-        p1,
+      voidTicketEndpoint,
+      voiding(
         unitRate('301005'),
         await reasonId('Not eligible work'),
         'Under 24 in; goes out as vegetative debris',
@@ -621,16 +625,13 @@ export const p1Voided: Story = {
       'The crew shows Luis a second hanger in the same tree: 301003 was real work. He unvoids it; the worker runs',
     );
     const lifted = await reviewed(
-      voids.lift(luis, p1, unitRate('301003'), 'Second hanger, same tree'),
+      unvoidTicketEndpoint,
+      unvoiding(unitRate('301003'), 'Second hanger, same tree'),
     );
     story.check(
       'AC-08-37, AC-08-67, AC-08-07 the unvoid is a record of its own, audited under Luis; the void’s own record is kept and marked lifted, by whom and when; the run works the ticket again: COMPLETED, 1 × $68.00. A ticket that isn’t void has nothing to lift',
       [
-        [
-          names.get(lifted.record.unvoidedById),
-          lifted.record.unvoidedAt.toISOString(),
-          lifted.record.note,
-        ],
+        [names.get(lifted.record.unvoidedById), lifted.record.unvoidedAt, lifted.record.note],
         await auditOf('ticket_unvoid', lifted.record.id),
         (({ liftedById, liftedAt, liftNote }) => [
           names.get(liftedById),
@@ -641,7 +642,7 @@ export const p1Voided: Story = {
         of(last.run, '301003'),
         await decisionOf(last.run, '301003'),
         await linesOf('301003'),
-        await refusal(voids.lift(luis, p1, unitRate('301003'))),
+        await refusal(unvoidTicketEndpoint, unvoiding(unitRate('301003'))),
       ],
       [
         ['Luis', new Date(on('14', '09:20')).toISOString(), 'Second hanger, same tree'],
@@ -659,7 +660,7 @@ export const p1Voided: Story = {
           ],
         ],
         ['301003 #1 HNG-RMV-EA 1 × $68.00 = $68.00'],
-        'NOT_VOID: Ticket 301003 isn’t void. Nothing was changed.',
+        '422 NOT_SAVED · NOT_VOID: Ticket 301003 isn’t void. Nothing was changed.',
       ],
     );
 
@@ -745,7 +746,10 @@ export const p1Voided: Story = {
       on('15', '08:00'),
       'Thursday: 101031 is a phantom, a second number for the pile 101030 was dumped under. Luis voids it: Work never happened; the worker runs',
     );
-    await reviewed(voids.ticket(luis, p1, load('101031'), await reasonId('Work never happened')));
+    await reviewed(
+      voidTicketEndpoint,
+      voiding(load('101031'), await reasonId('Work never happened')),
+    );
     story.check(
       'AC-08-34 the phantom is VOID, kept with its audit trail and never paired: it has no completed load. In the same run the flag on 101030 is cleared, the overlap being gone, and 101030 is COMPLETED',
       [
@@ -773,8 +777,8 @@ export const p1Voided: Story = {
       'The tower confirms 101008 was C&D on top of vegetative debris: Luis accepts the debris type flag; the worker runs',
     );
     await reviewed(
-      acceptances.flag(
-        luis,
+      acceptFlagEndpoint,
+      accepting(
         (await standingFlag('101008', 'DEBRIS_TYPE_MISMATCH')).id,
         await reasonId('Confirmed with the monitor'),
       ),
@@ -782,11 +786,8 @@ export const p1Voided: Story = {
     const oneAccepted = of(last.run, '101008');
     story.at(on('15', '08:15'), 'And the badge: he accepts the truck number flag; the worker runs');
     await reviewed(
-      acceptances.flag(
-        luis,
-        (await standingFlag('101008', 'CERT_NUMBER_MISMATCH')).id,
-        photosConfirm,
-      ),
+      acceptFlagEndpoint,
+      accepting((await standingFlag('101008', 'CERT_NUMBER_MISMATCH')).id, photosConfirm),
     );
     story.check(
       'AC-08-46 with one of its two flags accepted the ticket is still MANUAL_REVIEW; with the other accepted too, the worker marks it COMPLETED',
@@ -812,7 +813,7 @@ export const p1Voided: Story = {
       '101032 came in empty, as the photographs show: Luis accepts its 0% flag; the worker runs',
     );
     const linesOn101032 = await linesOf('101032');
-    await reviewed(acceptances.flag(luis, (await standingFlag('101032')).id, photosConfirm));
+    await reviewed(acceptFlagEndpoint, accepting((await standingFlag('101032')).id, photosConfirm));
     story.check(
       'AC-08-47 the ticket is COMPLETED and still bills nothing: accepting never changes what bills',
       [of(last.run, '101032'), linesOn101032, await linesOf('101032')],
@@ -884,7 +885,10 @@ export const p1Voided: Story = {
       on('15', '08:40'),
       'Luis unvoids 101009, the load and the rule unchanged; the worker runs',
     );
-    const liftedRules = await reviewed(voids.lift(luis, p1, load('101009'), 'Asked by the prime'));
+    const liftedRules = await reviewed(
+      unvoidTicketEndpoint,
+      unvoiding(load('101009'), 'Asked by the prime'),
+    );
     story.check(
       'AC-08-38, AC-08-67 a rule’s void always wins: the run works the ticket again and the rule voids it again, naming the rule. No void’s record stood behind it to lift, and the unvoid still left its own, audited under Luis (the user: unvoiding anything always leaves an audit record); the system’s decision says the ticket was unvoided and worked again',
       [
@@ -919,11 +923,11 @@ export const p1Voided: Story = {
       'AC-08-40 there is no "accepted void": the voided ticket has no flag that stands, and its cleared one can’t be accepted. Nothing a person can mark makes an unvoid stick against the rule',
       [
         (await flagsOn('101009')).filter((flag) => !flag.endsWith('(cleared)')),
-        await refusal(acceptances.flag(luis, ineligible.id, photosConfirm)),
+        await refusal(acceptFlagEndpoint, accepting(ineligible.id, photosConfirm)),
       ],
       [
         [],
-        'FLAG_CLEARED: This flag no longer stands ("Ticket 101009: dumped at Old Quarry Pit, an ineligible site. Flagged for review."): there is nothing to accept. Nothing was saved.',
+        '422 NOT_SAVED · FLAG_CLEARED: This flag no longer stands ("Ticket 101009: dumped at Old Quarry Pit, an ineligible site. Flagged for review."): there is nothing to accept. Nothing was saved.',
       ],
     );
 
@@ -936,7 +940,7 @@ export const p1Voided: Story = {
       on('15', '08:55'),
       'Luis unvoids 101009. Nobody asks the worker: the unvoid queued its job, and the worker takes it up',
     );
-    await reviewed(voids.lift(luis, p1, load('101009')));
+    await reviewed(unvoidTicketEndpoint, unvoiding(load('101009')));
     story.check(
       'AC-08-39, AC-08-67, AC-10-54 switching the rule off brings nothing back by itself: its job doesn’t name the void ticket, settled until a person unvoids it. Unvoided with the rule off, the ticket is worked by the job the unvoid queued, since the unvoid is a record the worker reads; it stays un-voided and is priced: 65 × 60% = 39 CY × $7.50 = $292.50, in review for the ineligible site',
       [stillVoid, offJobs.includes('101009'), of(last.run, '101009'), await linesOf('101009')],
@@ -958,15 +962,15 @@ export const p1Voided: Story = {
       'The tower’s photographs show 101009 was dumped at Marsh Road TDSR: Luis corrects its disposal’s site and GPS; the worker runs',
     );
     const dis101009 = await eventOf('101009', 'DISPOSAL');
-    const correctedVoid = await reviewed(
-      corrections.fieldEvent(luis, dis101009.id, {
-        siteId: tdsr,
-        end: { latitude: '39.09030000', longitude: '-75.62020000' },
-      }),
-    );
+    const correctedVoid = await reviewed(correctFieldEventEndpoint, {
+      ids: { fieldEventId: dis101009.id },
+      json: {
+        changes: { siteId: tdsr, end: { latitude: '39.09030000', longitude: '-75.62020000' } },
+      },
+    });
     const correctedOnly = [of(last.run, '101009'), await statusOf('101009')];
     story.at(on('15', '09:10'), 'Then he unvoids it; the worker runs');
-    await reviewed(voids.lift(luis, p1, load('101009')));
+    await reviewed(unvoidTicketEndpoint, unvoiding(load('101009')));
     story.check(
       'AC-08-39 voided again by the rule, the ticket’s field event is corrected like any other, and that alone brings nothing back: a person’s unvoid does. Unvoided, the rule no longer passes and the ticket stays un-voided',
       [
@@ -994,8 +998,8 @@ export const p1Voided: Story = {
       where: { projectId: p1, disposalSiteId: quarry, clearedAt: null },
     });
     const onTheSite = await reviewed(
-      acceptances.flag(
-        luis,
+      acceptFlagEndpoint,
+      accepting(
         permit.id,
         await reasonId('Confirmed with the monitor'),
         'County has the application',
@@ -1009,9 +1013,9 @@ export const p1Voided: Story = {
         })
       ).map((flag) => [flag.message, flag.acceptances.length, flag.clearedAt]);
     story.check(
-      'AC-08-51 a flag on a record that isn’t a ticket is accepted like any other, touches no ticket, and isn’t raised again while its facts stand',
-      [onTheSite.reprocess.tickets, await siteFlags()],
-      [[], [['Old Quarry Pit: permit outstanding.', 1, null]]],
+      'AC-08-51 a flag on a record that isn’t a ticket is accepted like any other, queues no ticket, and isn’t raised again while its facts stand',
+      [onTheSite.queued?.tickets, await siteFlags()],
+      [0, [['Old Quarry Pit: permit outstanding.', 1, null]]],
     );
 
     // ------------------------------------------------------------------------------------------

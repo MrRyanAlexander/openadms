@@ -234,7 +234,11 @@ email, password and authenticator code; the session only as cookies; CSRF past a
 or signed in again when the story's clock moves on. **A person needs the address they sign in
 with** on their record, and an authenticator's code is good once a step: a person signed out
 signs in again only thirty seconds of the story's clock later. A loosening of it is tried on
-`story-api.test.ts`.
+`story-api.test.ts`. **A P1 story's reviewer is `p1BackOffice(story, office)`** (ADR-497:
+`danas()`, `luiss()`, `grantLuis(...)` at `setPermissions`), and a refusal is read by
+`refusalOf` (`403 NOT_ALLOWED`, or `422 NOT_SAVED · CODE: words`); a loosening of either is
+tried on `p1-voided`, `p1-left-out` and `p1-reconciled`. No story writes a correction or its job
+by hand: the endpoint queues its own.
 `packages/scenarios/test/stories.test.ts` holds a copy to what a database made by itself is (at
 head, every table guarded, `adms_owner`'s, open to the logins alone) and the runner to its word. A story's context carries `policy`, the release's policy values read from
 `packages/domain/policy.env` (`src/policy.ts`; held to the release's values, the worker's five among them (5 tries, 10 minutes, 5 s, 30 s, 10 connections; ADR-419) and a job's size (200 tickets, ADR-420), by `test/policy.test.ts`,

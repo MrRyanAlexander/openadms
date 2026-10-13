@@ -18,9 +18,16 @@ import {
   type NewCertification,
   type NewPayItem,
 } from '@open-adms/api';
-import { photoRead, recordRead, type SyncAnswered, type SyncReceived } from '@open-adms/contracts';
+import {
+  photoRead,
+  readPersonEndpoint,
+  recordRead,
+  setPermissionsEndpoint,
+  type SyncAnswered,
+  type SyncReceived,
+} from '@open-adms/contracts';
 import { ReconciliationJobs, type JobTicket } from '@open-adms/db';
-import { certificationViews, workflows } from '@open-adms/domain';
+import { certificationViews, workflows, type PermissionName } from '@open-adms/domain';
 import {
   JobLoop,
   WorkerLog,
@@ -42,10 +49,11 @@ import {
   type RecordedPhoto,
 } from '../device.ts';
 import { uuidv7 } from '../ids.ts';
+import type { OfficeBrowser } from '../office-browser.ts';
 import type { StoryContext } from '../runner.ts';
 import { p1FieldDays } from './p1-field-days.ts';
 import { assigned, synced } from './board.ts';
-import { p1TimeZone as timeZone } from './p1.ts';
+import { danasEmail, luissEmail, p1TimeZone as timeZone } from './p1.ts';
 import { p1Boundary, p1Zones } from './setup.ts';
 
 const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-04:00`;
@@ -98,18 +106,19 @@ export class QueueRuns {
     );
   }
 
-  // A reprocess a person asks for with nothing changed, or after a change a story makes by
-  // hand (a correction): no endpoint asks for one by itself, so its job is added as the API's
-  // own login, in that person's piece of work, naming the tickets (as the story `p1-queued`
-  // adds one). The job's id.
-  asked(
-    by: string,
-    projectId: string,
-    tickets: readonly JobTicket[],
-    trigger: 'REPROCESS' | 'CORRECTION' = 'REPROCESS',
-  ): Promise<string> {
+  // A reprocess a person asks for with nothing changed: no endpoint asks for one in Phase 2
+  // (ADR-497; whether the review screen offers it is Phase 4's), so its job is added as the
+  // API's own login, in that person's piece of work, naming the tickets (as the story
+  // `p1-queued` adds one). A change a person makes queues its own job at its endpoint. The job's
+  // id.
+  asked(by: string, projectId: string, tickets: readonly JobTicket[]): Promise<string> {
     return this.story.api.$write({ actorId: by, source: 'BACK_OFFICE' }, (tx) =>
-      new ReconciliationJobs(tx).queue({ projectId, trigger, requestedById: by, tickets }),
+      new ReconciliationJobs(tx).queue({
+        projectId,
+        trigger: 'REPROCESS',
+        requestedById: by,
+        tickets,
+      }),
     );
   }
 
@@ -418,6 +427,36 @@ export async function p1FieldDaysHeld(story: StoryContext): Promise<P1Office> {
     landfill: await site('Bayline County Landfill'),
     cypress: await site('Cypress Creek Landfill'),
     samPhone: (await api.device.findFirstOrThrow({ where: { name: 'P1-HO-TDSR' } })).id,
+  };
+}
+
+// P1's back office at their browsers (BACKLOG 2.7.1 part 4; ADR-496, 497): Dana, the firm's
+// first admin, and Luis Ortega, the manager/analyst she wrote, his first password set by her.
+// Each signs in at the story's clock when first asked for.
+export interface P1BackOffice {
+  danas(): Promise<OfficeBrowser>;
+  luiss(): Promise<OfficeBrowser>;
+  // Dana gives Luis more grants on his record: she reads what he holds, and states it with
+  // these (`setPermissions` takes the whole of it).
+  grantLuis(...more: PermissionName[]): Promise<void>;
+}
+
+export function p1BackOffice(story: StoryContext, office: P1Office): P1BackOffice {
+  const danas = () => story.backOffice.admin({ id: office.dana, email: danasEmail });
+  const luiss = async () =>
+    story.backOffice.person(await danas(), { id: office.luis, email: luissEmail });
+  return {
+    danas,
+    luiss,
+    async grantLuis(...more) {
+      const dana = await danas();
+      const ids = { userId: office.luis };
+      const held = (await dana.answered(readPersonEndpoint, { ids })).permissions;
+      await dana.answered(setPermissionsEndpoint, {
+        ids,
+        json: { permissions: [...new Set([...held, ...more])] },
+      });
+    },
   };
 }
 
