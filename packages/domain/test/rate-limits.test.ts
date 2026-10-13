@@ -39,6 +39,9 @@ const shipped = {
   MEDIA_PART_BYTES_AT_MOST: '4194304',
   MEDIA_RECEIVING_BYTES_AT_MOST: '268435456',
   RATE_LIMIT_FILE_PARTS_PER_PHONE: '300',
+  MAP_FILE_BYTES_AT_MOST: '16777216',
+  MAP_FILE_UNZIPPED_BYTES_AT_MOST: '67108864',
+  MAP_FILE_ENTRIES_AT_MOST: '1000',
   RATE_LIMIT_WINDOW_SECONDS: '60',
   RATE_LIMIT_REQUESTS_PER_ADDRESS: '3000',
   RATE_LIMIT_REQUESTS_PER_ACCOUNT: '600',
@@ -187,6 +190,23 @@ describe('the limits, from the policy', () => {
       ['RATE_LIMIT_FILE_PARTS_PER_PHONE', '0'],
     ] as const) {
       expect(() => Policy.from({ ...shipped, [name]: below }), name).toThrow(name);
+    }
+  });
+
+  it('ADR-485 a map’s file, and its parts unzipped, are each at least a mebibyte; a zip may hold a shapefile’s four files at least, and no more than a zip can', () => {
+    for (const name of ['MAP_FILE_BYTES_AT_MOST', 'MAP_FILE_UNZIPPED_BYTES_AT_MOST'] as const) {
+      expect(() => Policy.from({ ...shipped, [name]: '1048575' }), name).toThrow(name);
+      expect(() => Policy.from({ ...shipped, [name]: '1048576' }), name).not.toThrow();
+    }
+    for (const [entries, taken] of [
+      ['3', false],
+      ['4', true],
+      ['65535', true],
+      ['65536', false],
+    ] as const) {
+      const read = () => Policy.from({ ...shipped, MAP_FILE_ENTRIES_AT_MOST: entries });
+      if (taken) expect(read, entries).not.toThrow();
+      else expect(read, entries).toThrow('MAP_FILE_ENTRIES_AT_MOST');
     }
   });
 });

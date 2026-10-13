@@ -83,6 +83,8 @@ export interface NewMap {
   readonly boundary: unknown;
   readonly zones: unknown;
   readonly zoneNameField: string | null;
+  // Where the file it was loaded from is kept, when it came as a map's file (ADR-485).
+  readonly uploadedFileKey?: string;
 }
 
 // A change to what a project's tickets are checked against (its settings, a control range, a
@@ -284,7 +286,8 @@ export class ProjectSetup extends QueueingService {
 
   // The project's map: its boundary and its zones, as the next version; an earlier version and its
   // zones stay as they were (ADR-141). The zones are written with their version, in the same piece
-  // of work: the database takes them no other way. Phase 1 takes GeoJSON only (ADR-311).
+  // of work: the database takes them no other way. As GeoJSON, or read from a map's file kept
+  // beforehand, whose place the version keeps (`MapFiles`, ADR-485).
   loadMap(person: string, input: NewMap): Promise<Outcome<MapVersion>> {
     return this.setup(person, async (tx) => {
       const boundary = new MapShapes(input.boundary).shape();
@@ -305,6 +308,7 @@ export class ProjectSetup extends QueueingService {
           source: input.source,
           sourceName: input.sourceName,
           zoneNameField: input.zoneNameField,
+          uploadedFileKey: input.uploadedFileKey ?? null,
           boundary: boundary.read.geometry satisfies Prisma.InputJsonObject,
           ...boundary.read.box,
           loadedById: person,

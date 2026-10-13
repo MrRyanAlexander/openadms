@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import {
+  addSiteShapeFileEndpoint,
   endpoint,
   endpointMethods,
   endpoints,
@@ -13,11 +14,13 @@ import {
   filePartMediaType,
   healthAnswerSchema,
   healthEndpoint,
+  loadMapFileEndpoint,
   notTaken,
   openApiDocument,
   answerFileTypes,
   photoFileAnswerSchema,
   photographFileEndpoint,
+  sendMapFileEndpoint,
   sendPhotoFilePartEndpoint,
   taken,
 } from '../src/index.ts';
@@ -197,9 +200,13 @@ describe('an endpoint is defined whole, or not at all', () => {
   });
 });
 
-describe('the one endpoint that takes a file', () => {
+describe('the endpoints that take a file', () => {
   it('AC-10-47, ADR-482 takes a part of a file as bytes, never JSON; is defined with no body of its own and never as a GET; and is described as bytes', () => {
-    expect(endpoints.filter(({ file }) => file === true)).toEqual([sendPhotoFilePartEndpoint]);
+    // The media endpoint, and the map's file at the back office (ADR-485; KD-76).
+    expect(endpoints.filter(({ file }) => file === true)).toEqual([
+      sendMapFileEndpoint,
+      sendPhotoFilePartEndpoint,
+    ]);
     const read = {
       params: { photoId: '01a1325e-741f-716f-b9d4-738fd7f66e2b', file: 'photo' },
       query: { offset: '0', length: '3' },
@@ -255,6 +262,63 @@ describe('the one endpoint that takes a file', () => {
       },
     });
     expect(filePartMediaType).toBe('application/offset+octet-stream');
+  });
+
+  it('ADR-485 a map’s file is sent whole to its project, as bytes, named by nothing; a map and a site’s shape are loaded from it by its SHA-256 alone', () => {
+    const projectId = '01a1325e-741f-716f-b9d4-738fd7f66e2b';
+    const bytes = Uint8Array.from([0x50, 0x4b, 0x03, 0x04]);
+    const sent = { params: { projectId }, query: {} };
+    expect(taken(sendMapFileEndpoint, { ...sent, body: bytes })?.body).toBe(bytes);
+    for (const body of [undefined, new Uint8Array(), { type: 'FeatureCollection' }]) {
+      expect(taken(sendMapFileEndpoint, { ...sent, body }), JSON.stringify(body)).toBe(undefined);
+    }
+    // Nothing names it: no name, no place, no type.
+    for (const query of [{ name: 'bayline-row-zones-v1.zip' }, { place: 'maps/x' }]) {
+      expect(taken(sendMapFileEndpoint, { ...sent, query, body: bytes })).toBe(undefined);
+    }
+    const mapFileId = 'a'.repeat(64);
+    const load = {
+      params: { projectId, mapFileId },
+      query: {},
+      body: { sourceName: null, boundaryLayer: null, zones: null },
+    };
+    expect(taken(loadMapFileEndpoint, load)).toBeDefined();
+    for (const id of ['A'.repeat(64), 'a'.repeat(63), `${'a'.repeat(63)}g`, '../x']) {
+      expect(taken(loadMapFileEndpoint, { ...load, params: { projectId, mapFileId: id } })).toBe(
+        undefined,
+      );
+      expect(
+        taken(addSiteShapeFileEndpoint, {
+          params: { siteId: projectId, mapFileId: id },
+          query: {},
+          body: { layer: null },
+        }),
+      ).toBe(undefined);
+    }
+    expect(
+      taken(loadMapFileEndpoint, {
+        ...load,
+        body: { ...load.body, zones: { layer: 'zones.shp', nameField: '' } },
+      }),
+    ).toBe(undefined);
+    expect(
+      taken(addSiteShapeFileEndpoint, {
+        params: { siteId: projectId, mapFileId },
+        query: {},
+        body: { layer: 'marsh-road.shp' },
+      }),
+    ).toBeDefined();
+    const described = openApiDocument([sendMapFileEndpoint]) as {
+      paths: Record<string, Record<string, { requestBody?: unknown }>>;
+    };
+    expect(described.paths['/projects/{projectId}/map-files']?.['post']?.requestBody).toEqual({
+      required: true,
+      content: {
+        [filePartMediaType]: {
+          schema: { type: 'string', contentMediaType: 'application/octet-stream' },
+        },
+      },
+    });
   });
 
   it('ADR-482 answers where a file stands: kept, so many bytes of so many taken, or not the one fingerprinted; never where it is kept', () => {

@@ -7,6 +7,7 @@
 import {
   crewTimeConversions,
   incidentOffers,
+  mapFileTypes,
   numberSeries,
   quantityAsks,
   setupGapCodes,
@@ -343,7 +344,8 @@ export const siteTippingFeeRecordSchema = z.strictObject({
 export type SiteTippingFeeRecord = z.infer<typeof siteTippingFeeRecordSchema>;
 
 // One version of a project's map (ADR-141): which version, how it came and the field its zones
-// are named in. The shapes themselves aren't said back.
+// are named in, and whether the file it was loaded from is kept (ADR-485), never where. The
+// shapes themselves aren't said back.
 export const mapVersionRecordSchema = z.strictObject({
   id,
   projectId: id,
@@ -351,10 +353,39 @@ export const mapVersionRecordSchema = z.strictObject({
   source: z.enum(mapSources),
   sourceName: z.string().nullable(),
   zoneNameField: z.string().nullable(),
+  fileKept: z.boolean(),
   loadedAt: z.iso.datetime(),
 });
 
 export type MapVersionRecord = z.infer<typeof mapVersionRecordSchema>;
+
+// A map's file is known by its own SHA-256, in lower-case hex (ADR-485): the same file sent
+// twice is one file, and a map or a site's shape is loaded from it by that id.
+export const mapFileId = z.string().regex(/^[0-9a-f]{64}$/);
+
+// A map's file as the server read it when it was sent (ARCHITECTURE §3 "Project boundary and
+// zones"; ADR-485): its id, its kind and its size, and each layer it holds, so the person picks
+// which is the boundary, which the zones and the field that names them. A layer is a shapefile
+// or a GeoJSON file inside a zip, named by its path there, or a GeoJSON file's one layer, named
+// by nothing. For each: how many features it has, the fields they carry, and, where the layer
+// can't be kept as one shape, why not, in plain words. Never where the file is kept.
+export const mapFileRecordSchema = z.strictObject({
+  id: mapFileId,
+  type: z.enum(mapFileTypes),
+  bytes: z.number().int().positive(),
+  layers: z
+    .array(
+      z.strictObject({
+        name: z.string().min(1).nullable(),
+        features: z.number().int().nonnegative(),
+        fields: z.array(z.string()),
+        problem: z.string().min(1).nullable(),
+      }),
+    )
+    .min(1),
+});
+
+export type MapFileRecord = z.infer<typeof mapFileRecordSchema>;
 
 // The setup check's answer (ADR-229): everything the project's setup leaves open, each a plain
 // message with the records it is about; none when the setup is whole. It lists, never refuses.

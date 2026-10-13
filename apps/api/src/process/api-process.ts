@@ -7,6 +7,7 @@ import 'reflect-metadata';
 
 import {
   filePartMediaType,
+  sendMapFileEndpoint,
   sendPhotoFilePartEndpoint,
   setupChoicesMonitorsAtMost,
 } from '@open-adms/contracts';
@@ -98,6 +99,9 @@ import { apiListSetup } from '../setup/list-setup.controller.ts';
 import { ListSetup } from '../setup/list-setup.ts';
 import { PayItemSetup } from '../setup/pay-item-setup.ts';
 import { apiPayItemSetup, apiRuleSetup } from '../setup/pricing-setup.controller.ts';
+import { MapFileReader } from '../setup/map-file-reader.ts';
+import { MapFiles } from '../setup/map-files.ts';
+import { apiMapFiles } from '../setup/map-files.controller.ts';
 import { apiProjectSetup } from '../setup/project-setup.controller.ts';
 import { ProjectSetup } from '../setup/project-setup.ts';
 import { RuleSetup } from '../setup/rule-setup.ts';
@@ -258,6 +262,13 @@ export class ApiProcess {
       ) {
         route.bodyLimit = policy.mediaPartBytesAtMost;
       }
+      // And a map's file, sent whole at the back office, up to the policy's size (ADR-485).
+      if (
+        route.url === sendMapFileEndpoint.path &&
+        [route.method].flat().includes(sendMapFileEndpoint.method)
+      ) {
+        route.bodyLimit = policy.mapFileBytesAtMost;
+      }
     });
     // A part of a file is read as bytes, never parsed (AC-10-47): what it is the media endpoint
     // asks of its first bytes. Sent to any other route, it is no body that route takes.
@@ -290,6 +301,8 @@ export class ApiProcess {
         timeoutMs: policy.addressLookupAnswerSeconds * 1000,
         at: settings.mapServersAt,
       });
+    const projectSetup = new ProjectSetup(database, clock, policy);
+    const siteSetup = new SiteSetup(database, clock, policy);
     const hasher = new PasswordHasher(settings.tokenSigningSecret);
     const tokens = new SessionTokens(settings.tokenSigningSecret, policy.accessTokenMinutes);
     const tries = new WrongTries(database, {
@@ -384,13 +397,27 @@ export class ApiProcess {
           [apiPeople, people],
           [apiLimits, limits],
           // Setup's services (task 2.4.2): each change is written as the signed-in person.
-          [apiProjectSetup, new ProjectSetup(database, clock, policy)],
+          [apiProjectSetup, projectSetup],
           [apiContractorSetup, new ContractorSetup(database, clock, policy)],
           [apiListSetup, new ListSetup(database, clock)],
           [apiFormSetup, new FormSetup(database, clock)],
           [apiPayItemSetup, new PayItemSetup(database, clock, policy)],
           [apiRuleSetup, new RuleSetup(database, clock, policy)],
-          [apiSiteSetup, new SiteSetup(database, clock, policy)],
+          [apiSiteSetup, siteSetup],
+          // A map's file, and a map or a site's shape loaded from it (task 2.6.4, part 5).
+          [
+            apiMapFiles,
+            new MapFiles(database, clock, {
+              media,
+              reader: new MapFileReader({
+                unzippedBytesAtMost: policy.mapFileUnzippedBytesAtMost,
+                entriesAtMost: policy.mapFileEntriesAtMost,
+              }),
+              fileBytesAtMost: policy.mapFileBytesAtMost,
+              projects: projectSetup,
+              sites: siteSetup,
+            }),
+          ],
           [apiSetupStanding, new SetupStanding(database)],
           // Dispatch and phones (task 2.4.3).
           [apiPhones, new Phones(database, clock)],

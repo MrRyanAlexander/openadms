@@ -112,6 +112,8 @@ import {
   foundAnswer,
   listValueRecordSchema,
   mapSources,
+  mapFileId,
+  mapFileRecordSchema,
   mapVersionRecordSchema,
   numberSeriesRecordSchema,
   payItemRateRecordSchema,
@@ -192,9 +194,9 @@ export interface Endpoint {
   readonly params?: z.ZodObject;
   readonly query?: z.ZodObject;
   readonly body?: z.ZodType;
-  // The one kind of endpoint that takes a file (AC-10-47; ADR-482): its body is a part of one, as
-  // bytes of `filePartMediaType`, never JSON, and no `body` schema is given. Only the media
-  // endpoint is one.
+  // The one kind of endpoint that takes a file (AC-10-47; ADR-482, 485): its body is a part of
+  // one, as bytes of `filePartMediaType`, never JSON, and no `body` schema is given. Only the
+  // media endpoint is one, and the map's file, sent whole at the back office (KD-76).
   readonly file?: true;
   // The one kind of endpoint that answers a file (AC-10-48; ADR-483): its answer is the bytes
   // that were kept, under one of `answerFileTypes`, never JSON, and always a download. Only the
@@ -1321,6 +1323,59 @@ export const loadMapEndpoint = endpoint({
     zoneNameField: named.nullable(),
   }),
   answer: savedAnswer(mapVersionRecordSchema),
+});
+
+// A map's file, larger than a request's body may be (ARCHITECTURE §3 "Project boundary and
+// zones", §6 "Uploads"; BACKLOG 2.6.4, C86, C100; ADR-311, 401, 485; KD-76): a zipped shapefile
+// (with its `.prj`, converted to longitude and latitude where it is projected) or a GeoJSON
+// file, sent whole, as bytes, by a route with its own size limit (`MAP_FILE_BYTES_AT_MOST`).
+// The server tells its kind by its first bytes, reads it, and keeps it once, where it places
+// it, only when it holds a layer; the answer says what it found. A map or a site's shape is
+// then loaded from it by its id, the layers picked by name. Its name is never sent with it: a
+// map version is told the name the person knows it by, as a label (`sourceName`).
+const mapFileNamed = z.strictObject({ projectId: z.uuid(), mapFileId });
+const mapLayer = z.string().min(1).max(500);
+
+export const sendMapFileEndpoint = endpoint({
+  ...setup,
+  name: 'sendMapFile',
+  summary:
+    'Sends a map’s file for a project, whole, as bytes: a zipped shapefile (its .shp, .dbf and .prj; a projected one is converted to longitude and latitude) or a GeoJSON file, at most the policy’s size. The server tells its kind by its own first bytes, reads every layer it holds and keeps it once, where it places it; a file it can’t read is not kept, and the answer says why. The answer is the file’s id and, for each layer, its features, its fields and whether it is one shape. The same file sent again is the same file. Nothing is loaded yet.',
+  method: 'POST',
+  path: '/projects/:projectId/map-files',
+  params: projectId,
+  file: true,
+  answer: savedAnswer(mapFileRecordSchema),
+});
+
+export const loadMapFileEndpoint = endpoint({
+  ...setup,
+  name: 'loadMapFile',
+  summary:
+    'Loads a project’s map from a map’s file sent before, as its next version: the layer that is its boundary and, if it has any, the layer of its zones, each named in the field picked. A layer left unnamed is the file’s only one. The file is kept with the version. An earlier version and its zones stay as they were. The project’s tickets not locked as invoiced are queued.',
+  method: 'POST',
+  path: '/projects/:projectId/map-files/:mapFileId/map-versions',
+  params: mapFileNamed,
+  body: z.strictObject({
+    // The file's name, as the person knows it.
+    sourceName: z.string().trim().min(1).max(2000).nullable(),
+    boundaryLayer: mapLayer.nullable(),
+    // Empty: the map has no zones.
+    zones: z.strictObject({ layer: mapLayer.nullable(), nameField: named }).nullable(),
+  }),
+  answer: savedAnswer(mapVersionRecordSchema),
+});
+
+export const addSiteShapeFileEndpoint = endpoint({
+  ...setup,
+  name: 'addSiteShapeFile',
+  summary:
+    'Saves a site’s own shape from a map’s file sent before for the site’s project, as its next version: the layer named, or the file’s only one, as one shape. From then on the site is checked against the shape in place of the project’s circle, and an earlier shape stays as it was. The tickets with a field event at the site not locked as invoiced are queued.',
+  method: 'POST',
+  path: '/sites/:siteId/map-files/:mapFileId/shapes',
+  params: z.strictObject({ siteId: z.uuid(), mapFileId }),
+  body: z.strictObject({ layer: mapLayer.nullable() }),
+  answer: savedAnswer(siteAreaVersionRecordSchema),
 });
 
 // The setup as it stands (AC-01-69…77; ADR-229, 423, 426): the setup check and what each site's
@@ -2620,6 +2675,9 @@ export const endpoints: readonly Endpoint[] = [
   addSiteShapeEndpoint,
   linkTippingFeeEndpoint,
   loadMapEndpoint,
+  sendMapFileEndpoint,
+  loadMapFileEndpoint,
+  addSiteShapeFileEndpoint,
   setupCheckEndpoint,
   quantityLookupEndpoint,
   siteQuantityLookupEndpoint,

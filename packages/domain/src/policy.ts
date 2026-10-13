@@ -84,6 +84,12 @@ export const policyNames = {
   mediaPartBytesAtMost: 'MEDIA_PART_BYTES_AT_MOST',
   mediaReceivingBytesAtMost: 'MEDIA_RECEIVING_BYTES_AT_MOST',
   rateLimitFilePartsPerPhone: 'RATE_LIMIT_FILE_PARTS_PER_PHONE',
+  // A map's file as the back office sends it (ARCHITECTURE §3 "Project boundary and zones";
+  // ADR-485): the largest file, in bytes, sent whole in one request; the most its zipped parts
+  // may come to, unzipped; and how many files a zip may hold, counted before any is unzipped.
+  mapFileBytesAtMost: 'MAP_FILE_BYTES_AT_MOST',
+  mapFileUnzippedBytesAtMost: 'MAP_FILE_UNZIPPED_BYTES_AT_MOST',
+  mapFileEntriesAtMost: 'MAP_FILE_ENTRIES_AT_MOST',
   // Rate limits (ARCHITECTURE §6, Abuse; ASVS 2.4.1; ADR-416): how long the stretch is that
   // requests are counted over, in seconds; how many one address and one signed-in person may send
   // in it; and how many callers' counts the server keeps at once.
@@ -169,6 +175,9 @@ const ranges: Record<PolicyName, { least: number; most: number }> = {
   [policyNames.mediaPartBytesAtMost]: { least: 65536, most: 1073741824 },
   [policyNames.mediaReceivingBytesAtMost]: { least: 1048576, most: 68719476736 },
   [policyNames.rateLimitFilePartsPerPhone]: { least: 1, most: Number.MAX_SAFE_INTEGER },
+  [policyNames.mapFileBytesAtMost]: { least: 1048576, most: 1073741824 },
+  [policyNames.mapFileUnzippedBytesAtMost]: { least: 1048576, most: 1073741824 },
+  [policyNames.mapFileEntriesAtMost]: { least: 4, most: 65535 },
   [policyNames.rateLimitWindowSeconds]: { least: 1, most: 3600 },
   [policyNames.rateLimitRequestsPerAddress]: { least: 1, most: Number.MAX_SAFE_INTEGER },
   [policyNames.rateLimitRequestsPerAccount]: { least: 1, most: Number.MAX_SAFE_INTEGER },
@@ -220,6 +229,9 @@ export class Policy {
   readonly mediaPartBytesAtMost: number;
   readonly mediaReceivingBytesAtMost: number;
   readonly rateLimitFilePartsPerPhone: number;
+  readonly mapFileBytesAtMost: number;
+  readonly mapFileUnzippedBytesAtMost: number;
+  readonly mapFileEntriesAtMost: number;
   readonly rateLimitWindowSeconds: number;
   readonly rateLimitRequestsPerAddress: number;
   readonly rateLimitRequestsPerAccount: number;
@@ -270,6 +282,9 @@ export class Policy {
     this.mediaPartBytesAtMost = Policy.read(values, policyNames.mediaPartBytesAtMost);
     this.mediaReceivingBytesAtMost = Policy.read(values, policyNames.mediaReceivingBytesAtMost);
     this.rateLimitFilePartsPerPhone = Policy.read(values, policyNames.rateLimitFilePartsPerPhone);
+    this.mapFileBytesAtMost = Policy.read(values, policyNames.mapFileBytesAtMost);
+    this.mapFileUnzippedBytesAtMost = Policy.read(values, policyNames.mapFileUnzippedBytesAtMost);
+    this.mapFileEntriesAtMost = Policy.read(values, policyNames.mapFileEntriesAtMost);
     this.rateLimitWindowSeconds = Policy.read(values, policyNames.rateLimitWindowSeconds);
     this.rateLimitRequestsPerAddress = Policy.read(values, policyNames.rateLimitRequestsPerAddress);
     this.rateLimitRequestsPerAccount = Policy.read(values, policyNames.rateLimitRequestsPerAccount);

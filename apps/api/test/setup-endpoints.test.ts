@@ -15,6 +15,7 @@ import {
   addPayableTypeEndpoint,
   addPrimeEndpoint,
   addSiteShapeEndpoint,
+  addSiteShapeFileEndpoint,
   archiveControlRangeEndpoint,
   backOfficeRoles,
   changePayItemEndpoint,
@@ -40,8 +41,10 @@ import {
   findDeclarationEventsEndpoint,
   linkTippingFeeEndpoint,
   loadMapEndpoint,
+  loadMapFileEndpoint,
   mergeContractorEndpoint,
   savePaysWhenEndpoint,
+  sendMapFileEndpoint,
   setPayItemRateEndpoint,
   startNumberSeriesEndpoint,
 } from '@open-adms/contracts';
@@ -111,6 +114,9 @@ const setupEndpoints = [
   addSiteShapeEndpoint,
   linkTippingFeeEndpoint,
   loadMapEndpoint,
+  sendMapFileEndpoint,
+  loadMapFileEndpoint,
+  addSiteShapeFileEndpoint,
 ] as const;
 
 describe('who may change the setup', () => {
@@ -159,6 +165,9 @@ describe('who may change the setup', () => {
       'POST /sites/:siteId/shapes',
       'POST /sites/:siteId/tipping-fees',
       'POST /projects/:projectId/map-versions',
+      'POST /projects/:projectId/map-files',
+      'POST /projects/:projectId/map-files/:mapFileId/map-versions',
+      'POST /sites/:siteId/map-files/:mapFileId/shapes',
     ]);
   });
 

@@ -397,6 +397,12 @@ export {
   type PhotoFileType,
 } from './photo-files.ts';
 export {
+  mapFileSignatureBytes,
+  mapFileTypeOf,
+  mapFileTypes,
+  type MapFileType,
+} from './map-files.ts';
+export {
   NewProjectSettings,
   type ProgramTypeSetting,
   type ProjectSettings,

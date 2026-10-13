@@ -271,5 +271,6 @@ export const mapVersionRecord = (version: MapVersion): MapVersionRecord => ({
   source: version.source,
   sourceName: version.sourceName,
   zoneNameField: version.zoneNameField,
+  fileKept: version.uploadedFileKey !== null,
   loadedAt: version.loadedAt.toISOString(),
 });

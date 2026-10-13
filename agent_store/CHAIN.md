@@ -7,7 +7,7 @@
 > task's ADR and its session-log line in `DECISIONS.md`). No other file carries these counts.
 > **A count that differs from this page without a reason is a finding, not noise.**
 
-**Seen whole:** 2026-10-12, after ADR-483, on the user's Mac, the installation at head.
+**Seen whole:** 2026-10-12, after ADR-485, on the user's Mac, the installation at head.
 
 ## `pnpm ready`
 
@@ -20,13 +20,13 @@
 
 ## `pnpm test`
 
-**`Test Files 152 passed (152)`, `Tests 2750 passed (2750)`.**
+**`Test Files 155 passed (155)`, `Tests 2781 passed (2781)`.**
 
 | Project | Tests | Files | Needs |
 |---|---|---|---|
-| `packages/domain` | 777 | 42 | nothing |
-| `packages/contracts` | 74 | 9 | nothing |
-| `apps/api` | 558 | 41 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
+| `packages/domain` | 787 | 43 | nothing |
+| `packages/contracts` | 75 | 9 | nothing |
+| `apps/api` | 578 | 43 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
 | `packages/db` | 1053 | 44 | `pnpm ready` |
 | `packages/scenarios` | 131 | 5 | `pnpm ready` for `stories.test.ts` (the runner and a run's template, 5); the flag catalogue (78 flags), the harness, the phone held to the sync contract's suite and to what it sends and takes in at a sync, its photographs' files among it (18) and the policy need nothing. **The stories themselves are not here** (ADR-446) |
 | `apps/worker` | 30 | 3 | `pnpm ready` for the map servers (13) and its container (3); the process (14) needs nothing |
@@ -37,7 +37,7 @@
 ## `pnpm lint`, `pnpm licences`
 
 - Lint: `All matched files use Prettier code style!`, exit 0 (ESLint under a 4 GB heap, ADR-465).
-- Licences: **`446 packages: 446 allowed, 0 refused, 0 undecided.`** on the Mac; one fewer on
+- Licences: **`452 packages: 452 allowed, 0 refused, 0 undecided.`** on the Mac; one fewer on
   Linux (the lockfile's Mac-only packages aren't installed there; not seen there since ADR-479).
 
 ## `pnpm scenarios`
