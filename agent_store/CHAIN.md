@@ -7,7 +7,7 @@
 > task's ADR and its session-log line in `DECISIONS.md`). No other file carries these counts.
 > **A count that differs from this page without a reason is a finding, not noise.**
 
-**Seen whole:** 2026-10-13, after ADR-494, on the user's Mac, the installation at head.
+**Seen whole:** 2026-10-13, after ADR-496, on the user's Mac, the installation at head.
 
 ## `pnpm ready`
 
@@ -20,7 +20,7 @@
 
 ## `pnpm test`
 
-**`Test Files 157 passed (157)`, `Tests 2814 passed (2814)`.**
+**`Test Files 157 passed (157)`, `Tests 2818 passed (2818)`.**
 
 | Project | Tests | Files | Needs |
 |---|---|---|---|
@@ -28,7 +28,7 @@
 | `packages/contracts` | 78 | 9 | nothing |
 | `apps/api` | 587 | 44 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
 | `packages/db` | 1056 | 44 | `pnpm ready` |
-| `packages/scenarios` | 144 | 6 | `pnpm ready` for `stories.test.ts` (the runner and a run's template, 5) and `story-api.test.ts` (a story's API over HTTPS through the proxy, every request of a story's phone, 9); the flag catalogue (78 flags), the harness, the phone held to the sync contract's suite and to what it sends and takes in at a sync, its photographs' files and its turn-in among it (22) and the policy need nothing. **The stories themselves are not here** (ADR-446) |
+| `packages/scenarios` | 148 | 6 | `pnpm ready` for `stories.test.ts` (the runner and a run's template, 5) and `story-api.test.ts` (a story's API over HTTPS through the proxy, every request of a story's phone, the back office and the viewers at their browsers, 13); the flag catalogue (78 flags), the harness, the phone held to the sync contract's suite and to what it sends and takes in at a sync, its photographs' files and its turn-in among it (22) and the policy need nothing. **The stories themselves are not here** (ADR-446) |
 | `apps/worker` | 30 | 3 | `pnpm ready` for the map servers (13) and its container (3); the process (14) needs nothing |
 | `infra/local` | 22 | 3 | `pnpm ready` |
 | `tools/security` | 90 | 2 | nothing (the scan's and the grant tests' rules 33, the guard hook 57) |
@@ -67,7 +67,7 @@ P1 $5,548.25 on 19 lines, P2 $324.00. `p1-reconciled` through `p1-left-out`, `p1
 
 `✓ 0 open advisories` (3 accepted by id); secretlint `0 found`; the installation's own secrets
 (10 values from 4 env files) `0 found`; a password-like setting `0 found`; env files `✓ every one
-ignored by git and untracked`; the grant tests **`44 files, 1053 tests: 1053 passed, 0 failed`**;
+ignored by git and untracked`; the grant tests **`44 files, 1056 tests: 1056 passed, 0 failed`**;
 ending **`Security checks: 7 passed, 0 failed.`**
 
 ## What the installation holds after a run

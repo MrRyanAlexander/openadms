@@ -44,7 +44,7 @@ import {
 import { uuidv7, uuidv7Time } from '../ids.ts';
 import type { Story, StoryMonitor } from '../runner.ts';
 import { assigned, firstBlocks, taken } from './board.ts';
-import { p1TimeZone as timeZone, setUpP1, setUpP1Sites } from './p1.ts';
+import { danasEmail, luissEmail, p1TimeZone as timeZone, setUpP1, setUpP1Sites } from './p1.ts';
 
 const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-04:00`;
 const monday = (time: string): string => on('12', time);
@@ -120,8 +120,13 @@ export const p1FieldDays: Story = {
     }
     const dana = uuidv7(clock.now());
     const office = await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
-      await tx.user.create({ data: { id: dana, name: 'Dana Reyes', role: 'ADMIN' } });
-      const luis = await tx.user.create({ data: { name: 'Luis Ortega', role: 'MANAGER_ANALYST' } });
+      // Each with the address they sign in with at the back office (CONVENTIONS §6).
+      await tx.user.create({
+        data: { id: dana, name: 'Dana Reyes', role: 'ADMIN', email: danasEmail },
+      });
+      const luis = await tx.user.create({
+        data: { name: 'Luis Ortega', role: 'MANAGER_ANALYST', email: luissEmail },
+      });
       // Luis writes each day's board: Dana grants him *dispatch* (ADR-428, 429).
       await tx.userPermission.create({ data: { userId: luis.id, permission: 'DISPATCH' } });
       const p1 = await setUpP1(tx, story.policy);

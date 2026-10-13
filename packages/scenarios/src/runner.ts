@@ -3,20 +3,31 @@
 // is told in project time and asserts exact results; a failed check doesn't stop the story, an
 // error does. The database is dropped afterwards unless the run keeps it for a person to look at.
 // Every request a story's phone makes goes through the story's own API over HTTPS (`StoryApi`;
-// BACKLOG 2.7.1 parts 1 and 2, ADR-491…493): no phone's act is a service called in process.
+// BACKLOG 2.7.1 parts 1 and 2, ADR-491…493): no phone's act is a service called in process. The
+// back office and the read-only viewers reach it at their browsers, signed in (part 4, ADR-496).
 import { isDeepStrictEqual } from 'node:util';
 
-import type {
-  PhoneAssignmentAnswer,
-  PhoneListsRecord,
-  PhoneSetupChoicesAnswer,
-  TurnInAnswer,
+import {
+  setPersonPasswordEndpoint,
+  type Endpoint,
+  type PhoneAssignmentAnswer,
+  type PhoneListsRecord,
+  type PhoneSetupChoicesAnswer,
+  type TurnInAnswer,
 } from '@open-adms/contracts';
-import type { Database, ViewerDatabase } from '@open-adms/db';
+import type { Database } from '@open-adms/db';
 import type { MasterPasscodeSessionKind, NoAssignmentReason, Policy } from '@open-adms/domain';
 
 import { projectTime, StoryClock } from './clock.ts';
 import { SimulatedDevice, type PhoneServer, type PhoneSetup } from './device.ts';
+import type { AskedWith } from './over-https.ts';
+import {
+  madeUpPassword,
+  OfficeBrowser,
+  setOnTheServer,
+  signedOut,
+  type OfficePerson,
+} from './office-browser.ts';
 import { builtInPolicy } from './policy.ts';
 import { SoftwareKey, type EnrolledPhone } from './software-key.ts';
 import { StoryApi } from './story-api.ts';
@@ -49,8 +60,6 @@ export interface StoryContext {
   // The services' own clients, on the story's database.
   readonly api: Database;
   readonly worker: Database;
-  // The read-only login's way in, for a read-only viewer's reads: `$viewed` alone (ADR-434).
-  readonly viewed: ViewerDatabase;
   // The release's policy values, which a new project's settings start from (ADR-303).
   readonly policy: Policy;
   // Where phones sync, send a photograph's files and are turned in (BACKLOG 2.7.1 part 1;
@@ -109,6 +118,20 @@ export interface StoryContext {
   // A phone's proof of itself, as its sync begins: over HTTPS to the story's API, on the story's
   // clock; proven, the phone holds its token for its next requests (`StoryApi.proves`).
   readonly proofs: Pick<StoryApi, 'proves'>;
+  // The back office and the read-only viewers at their browsers (BACKLOG 2.7.1 part 4; ADR-496):
+  // over HTTPS to the story's API, on the story's clock, each signed in as a real person is
+  // (`OfficeBrowser`). Asked again for the same person, it is the browser they already hold.
+  readonly backOffice: {
+    // The firm's first admin, whom the story wrote with their email address: their password set
+    // on the server, as `pnpm installer:admin` lets an admin back in; they sign in with it and set
+    // their authenticator up.
+    admin(person: OfficePerson): Promise<OfficeBrowser>;
+    // A person an admin created: that admin sets their first password at its endpoint; they sign
+    // in with it, set one of their own and, an admin or a manager/analyst, their authenticator.
+    person(by: OfficeBrowser, person: OfficePerson): Promise<OfficeBrowser>;
+    // A browser nobody signed in at.
+    readonly signedOut: Pick<OfficeBrowser, 'asked'>;
+  };
   // Asserts an exact result; strict deep equality.
   check(what: string, actual: unknown, expected: unknown): void;
 }
@@ -178,14 +201,15 @@ export class Runner {
       }
       const api = database.open('api');
       const worker = database.open('worker');
-      const viewed = database.openViewer();
-      open.push(api, worker, viewed);
+      open.push(api, worker);
       const clock = new StoryClock(story.start);
       const policy = builtInPolicy();
       const created = new Map<string, StoryMonitor>();
       const media = new StoryMedia();
       storyApi = new StoryApi({ database, clock, policy, media });
       const served = storyApi;
+      const send = (endpoint: Endpoint, more: AskedWith) => served.sent(endpoint, more);
+      const browsers = new Map<string, OfficeBrowser>();
       // Every request of a story's phones on one clock, through the story's API.
       const phonesOn = (on: { now: () => Date }, startedAgain: boolean): StoryPhones => {
         const asked = served.requests(on, startedAgain);
@@ -269,7 +293,6 @@ export class Runner {
         clock,
         api,
         worker,
-        viewed,
         policy,
         ...phonesOn(clock, false),
         phonesOn: (on) => phonesOn(on, true),
@@ -280,6 +303,29 @@ export class Runner {
         },
         phone: (setup) => new SimulatedDevice(setup, clock),
         proofs: { proves: (deviceId) => served.proves(deviceId) },
+        backOffice: {
+          async admin(person) {
+            const held = browsers.get(person.id);
+            if (held !== undefined) return held;
+            const password = await setOnTheServer(api, clock, policy, person);
+            const browser = await OfficeBrowser.signIn(send, clock, person, password);
+            browsers.set(person.id, browser);
+            return browser;
+          },
+          async person(by, person) {
+            const held = browsers.get(person.id);
+            if (held !== undefined) return held;
+            const password = madeUpPassword();
+            await by.answered(setPersonPasswordEndpoint, {
+              ids: { userId: person.id },
+              json: { password },
+            });
+            const browser = await OfficeBrowser.signIn(send, clock, person, password);
+            browsers.set(person.id, browser);
+            return browser;
+          },
+          signedOut: signedOut(send),
+        },
         check(what, actual, expected) {
           if (isDeepStrictEqual(actual, expected)) {
             passed += 1;

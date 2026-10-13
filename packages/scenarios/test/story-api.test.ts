@@ -7,6 +7,10 @@ import process from 'node:process';
 
 import {
   challengePhoneEndpoint,
+  createPersonEndpoint,
+  currentSessionEndpoint,
+  endPersonSessionsEndpoint,
+  findClientsEndpoint,
   sendPhotoFilePartEndpoint,
   syncSentSchema,
   turnInSentSchema,
@@ -292,6 +296,140 @@ describe('a story’s API, over HTTPS through the stack’s proxy', () => {
         asked.end();
       }),
     ).rejects.toThrow();
+  });
+});
+
+describe('the back office and the viewers at their browsers, over HTTPS (ADR-496)', () => {
+  const danasEmail = 'dana.reyes@gates.example';
+  const luissEmail = 'luis.ortega@gates.example';
+  // Dana, the firm's first admin, and Luis, a manager/analyst, written as the stories write them.
+  const people = async (story: StoryContext) => {
+    const dana = uuidv7(story.clock.now());
+    const luis = await story.api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
+      await tx.user.create({
+        data: { id: dana, name: 'Dana Reyes', role: 'ADMIN', email: danasEmail },
+      });
+      return (
+        await tx.user.create({
+          data: { name: 'Luis Ortega', role: 'MANAGER_ANALYST', email: luissEmail },
+        })
+      ).id;
+    });
+    return { dana: { id: dana, email: danasEmail }, luis: { id: luis, email: luissEmail } };
+  };
+  const credentialOf = async (story: StoryContext, userId: string) => {
+    const held = await story.api.userCredential.findUniqueOrThrow({ where: { userId } });
+    return [held.passwordHash !== null, held.twoStepSecret !== null, held.passwordChangeRequired];
+  };
+  const sessionsOf = (story: StoryContext, userId: string) =>
+    story.api.session.count({ where: { userId, revokedAt: null } });
+
+  it('the first admin’s password is set on the server and she sets her authenticator up; a manager/analyst she created takes his first password from her, sets his own and his authenticator; each is then served as themselves, and asked for again is the browser they hold', async () => {
+    let seen: unknown;
+    const { result, lines } = await run({
+      ...told,
+      name: 'office',
+      title: 'Dana and Luis sign in at their browsers',
+      async run(story) {
+        const who = await people(story);
+        const dana = await story.backOffice.admin(who.dana);
+        const luis = await story.backOffice.person(dana, who.luis);
+        seen = [
+          await credentialOf(story, who.dana.id),
+          await credentialOf(story, who.luis.id),
+          (await dana.answered(currentSessionEndpoint)).user.name,
+          (await luis.answered(currentSessionEndpoint)).user.role,
+          [await sessionsOf(story, who.dana.id), await sessionsOf(story, who.luis.id)],
+          (await story.backOffice.admin(who.dana)) === dana,
+          (await story.backOffice.person(dana, who.luis)) === luis,
+        ];
+      },
+    });
+    expect(lines.filter((line) => line.includes('✗'))).toEqual([]);
+    expect(result.error).toBeUndefined();
+    expect(seen).toEqual([
+      [true, true, false],
+      [true, true, false],
+      'Dana Reyes',
+      'MANAGER_ANALYST',
+      [1, 1],
+      true,
+      true,
+    ]);
+  });
+
+  it('the story’s clock moves on: past the access token’s minutes the browser takes a new one with its refresh token, in the same session; past the session’s quiet half hour the person signs in again with the next code', async () => {
+    let seen: unknown;
+    const { result } = await run({
+      ...told,
+      name: 'stale',
+      title: 'Dana’s session through a morning',
+      async run(story) {
+        const who = await people(story);
+        const dana = await story.backOffice.admin(who.dana);
+        const asked = async (): Promise<unknown[]> => [
+          (await dana.answered(currentSessionEndpoint)).user.name,
+          await story.api.session.count({ where: { userId: who.dana.id } }),
+        ];
+        const first = await asked();
+        story.at('2026-10-12T06:45:00-04:00', 'fifteen minutes on');
+        const refreshed = await asked();
+        story.at('2026-10-12T09:00:00-04:00', 'two hours and a quarter on');
+        seen = [first, refreshed, await asked()];
+      },
+    });
+    expect(result.error).toBeUndefined();
+    expect(seen).toEqual([
+      ['Dana Reyes', 1],
+      ['Dana Reyes', 1],
+      ['Dana Reyes', 2],
+    ]);
+  });
+
+  it('a refusal is answered as it came where the story asks for any answer, and stops the story where it asks for a 200; a browser nobody signed in at is refused at the door', async () => {
+    let seen: unknown;
+    const { result } = await run({
+      ...told,
+      name: 'office-refused',
+      title: 'Luis asks for what he isn’t granted',
+      async run(story) {
+        const who = await people(story);
+        const dana = await story.backOffice.admin(who.dana);
+        const luis = await story.backOffice.person(dana, who.luis);
+        const refused = await luis.asked(findClientsEndpoint);
+        const nobody = await story.backOffice.signedOut.asked(currentSessionEndpoint);
+        seen = [
+          [refused.status, refused.body],
+          [nobody.status, (nobody.body as { code: string }).code],
+        ];
+        await luis.answered(createPersonEndpoint, {
+          json: { name: 'Priya Shah', email: 'priya.shah@gates.example', role: 'ADMIN' },
+        });
+      },
+    });
+    expect(seen).toMatchObject([
+      [403, { code: 'NOT_ALLOWED' }],
+      [401, 'NOT_SIGNED_IN'],
+    ]);
+    expect(result.error).toBe('createPerson was answered 403 NOT_ALLOWED.');
+  });
+
+  it('a person whose sessions were ended signs in again, but not with a code their authenticator already gave: the story is stopped until its clock moves on', async () => {
+    const { result } = await run({
+      ...told,
+      name: 'same-step',
+      title: 'Luis signed out by Dana within his code’s thirty seconds',
+      async run(story) {
+        const who = await people(story);
+        const dana = await story.backOffice.admin(who.dana);
+        const luis = await story.backOffice.person(dana, who.luis);
+        await dana.answered(endPersonSessionsEndpoint, { ids: { userId: who.luis.id } });
+        await luis.answered(currentSessionEndpoint);
+      },
+    });
+    expect(result.error).toBe(
+      `${luissEmail}’s authenticator already gave this step’s code: the story’s clock must move on thirty seconds before they sign in again.`,
+    );
   });
 });
 

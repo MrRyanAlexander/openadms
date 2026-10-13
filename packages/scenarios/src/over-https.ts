@@ -9,7 +9,7 @@ import type { IncomingMessage } from 'node:http';
 import { Agent, request } from 'node:https';
 import process from 'node:process';
 
-import type { Endpoint } from '@open-adms/contracts';
+import { errorAnswerSchema, type Endpoint } from '@open-adms/contracts';
 
 export const storiesHostname = 'stories.adms.localhost';
 
@@ -19,6 +19,8 @@ export interface Asked {
   readonly status: number;
   // The answer read as JSON; none where it had no body.
   readonly body: unknown;
+  // The cookies it set, each as its `set-cookie` line: a person's session travels only so.
+  readonly setCookies: readonly string[];
 }
 
 export interface AskedWith {
@@ -95,6 +97,7 @@ export class OverHttps {
               resolve({
                 status: answer.statusCode ?? 0,
                 body: text === '' ? undefined : (JSON.parse(text) as unknown),
+                setCookies: answer.headers['set-cookie'] ?? [],
               });
             } catch {
               reject(
@@ -124,4 +127,16 @@ export class OverHttps {
   close(): void {
     this.agent.destroy();
   }
+}
+
+// The code an answer was refused with, where it is an error answer.
+export function codeOf(answer: Asked): string | undefined {
+  return errorAnswerSchema.safeParse(answer.body).data?.code;
+}
+
+// The body of a 200; anything else stops the story, saying what came back.
+export function answered(served: Endpoint, answer: Asked): unknown {
+  if (answer.status === 200) return answer.body;
+  const code = codeOf(answer) ?? 'no error answer';
+  throw new Error(`${served.name} was answered ${String(answer.status)} ${code}.`);
 }

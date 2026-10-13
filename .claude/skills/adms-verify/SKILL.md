@@ -227,6 +227,14 @@ loosening of the runner's phone requests is tried on `story-api.test.ts` with
 `under-the-passcode`, `p1-reconciled`, `p1-reviewed` and `dispatch-monday` (seven took about ten
 minutes). **A story whose clock goes back before a phone's last proof stops at that phone's next
 request**: tell it in time order.
+**The back office and the viewers reach it at their browsers** (ADR-496): `story.backOffice.admin`
+(the first admin's password set on the server), `.person(admin, person)` (a first password from
+that admin at its endpoint) and `.signedOut`, each an `OfficeBrowser` (`office-browser.ts`):
+email, password and authenticator code; the session only as cookies; CSRF past a GET; refreshed
+or signed in again when the story's clock moves on. **A person needs the address they sign in
+with** on their record, and an authenticator's code is good once a step: a person signed out
+signs in again only thirty seconds of the story's clock later. A loosening of it is tried on
+`story-api.test.ts`.
 `packages/scenarios/test/stories.test.ts` holds a copy to what a database made by itself is (at
 head, every table guarded, `adms_owner`'s, open to the logins alone) and the runner to its word. A story's context carries `policy`, the release's policy values read from
 `packages/domain/policy.env` (`src/policy.ts`; held to the release's values, the worker's five among them (5 tries, 10 minutes, 5 s, 30 s, 10 connections; ADR-419) and a job's size (200 tickets, ADR-420), by `test/policy.test.ts`,

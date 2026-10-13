@@ -18,12 +18,15 @@
 //   setup picks from, its lists, a sync, a file's part and the turn-in. **A phone holds its
 //   monitor's session** as it holds its own token: a sign-in or a session opened on it is the
 //   one its monitor's requests carry, in the contracts' header beside the phone's token.
+// - **A person of the back office or a read-only viewer reaches it at their browser** (BACKLOG
+//   2.7.1 part 4): signed in with their email address, password and authenticator's code, the
+//   session held only as the cookies it sets, its CSRF value sent with every call that isn't a
+//   GET (`OfficeBrowser`).
 // - **Started again**, it holds nothing in memory: no part of a file not yet whole, no count.
 import {
   challengePhoneEndpoint,
   createMonitorOnPhoneEndpoint,
   enrolPhoneEndpoint,
-  errorAnswerSchema,
   filePartMediaType,
   monitorCreatedAnswerSchema,
   monitorSessionHeader,
@@ -56,7 +59,7 @@ import type { MasterPasscodeSessionKind } from '@open-adms/domain';
 import { ApiModule, ApiProcess, NoMail, type Addresses } from '@open-adms/api';
 import type { Policy } from '@open-adms/domain';
 
-import { OverHttps, type Asked, type AskedWith } from './over-https.ts';
+import { answered, codeOf, OverHttps, type Asked, type AskedWith } from './over-https.ts';
 import type { PhoneServer } from './device.ts';
 import type { SoftwareKey } from './software-key.ts';
 import type { StoryDatabase } from './story-database.ts';
@@ -251,6 +254,12 @@ export class StoryApi {
     });
   }
 
+  // A request of a person at their browser (BACKLOG 2.7.1 part 4): on the story's clock, with
+  // the cookies and the CSRF value the browser holds (`OfficeBrowser`). The answer as it came.
+  sent(served: Endpoint, more: AskedWith): Promise<Asked> {
+    return this.during(this.parts.clock, () => this.ask(served, more));
+  }
+
   // Stops the process, where one runs, and closes the way to it.
   async close(): Promise<void> {
     await this.stop();
@@ -423,15 +432,4 @@ export class StoryApi {
 // A proof's answer: proven, or the code it was refused with.
 function proofAnswer(answer: Asked): string {
   return answer.status === 200 ? 'PROVEN' : (codeOf(answer) ?? `answered ${String(answer.status)}`);
-}
-
-function codeOf(answer: Asked): string | undefined {
-  return errorAnswerSchema.safeParse(answer.body).data?.code;
-}
-
-// The body of a 200; anything else stops the story, saying what came back.
-function answered(served: Endpoint, answer: Asked): unknown {
-  if (answer.status === 200) return answer.body;
-  const code = codeOf(answer) ?? 'no error answer';
-  throw new Error(`${served.name} was answered ${String(answer.status)} ${code}.`);
 }
