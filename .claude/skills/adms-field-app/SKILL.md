@@ -132,8 +132,8 @@ gets tracked on a spreadsheet."
     confirms it; cancelled field events are the only thing never synced (ADR-056, 096, 134).
     ⚠️ *Built at the server (ADR-488…490, agent defaults): `POST /phones/current/turn-ins`; the
     phone names everything it still holds and is answered `wipe: true` only when the server has
-    all of it; the same step ends its blocks and revokes its key (KD-77, for the user: the
-    approved pages say the key is revoked after the wipe). The field app wipes only on
+    all of it; the same step ends its blocks and revokes its key, as the phone is told to wipe
+    (the user, KD-77 closed, ADR-495). The field app wipes only on
     `wipe: true` (the sync contract's suite, checks 14…16).*
 13. **The time clock** (where the project has it on), on the **assignment**: clock in, a break
     (start and end) and clock out **by hand**. **Simple nudges only**: "You're not clocked in. Clock

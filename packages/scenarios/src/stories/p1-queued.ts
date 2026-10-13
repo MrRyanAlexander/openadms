@@ -1,7 +1,7 @@
 // The seventeenth story (BACKLOG 2.3.2; ADR-418, 419; spec/acceptance/10-api-and-sync.md
 // AC-10-52, 53, 54; spec/THREAT-MODEL.md T-30, T-34): the worker takes up its project's waiting
 // jobs. P1's Monday and Tuesday are the story `p1-field-days`' own, priced as the story
-// `p1-priced` prices them, and worked once whole, as a story's run does.
+// `p1-priced` prices them, and worked from the jobs their syncs queued by the worker's own loop.
 //
 // Then every run here is one the queue starts: a job is added as the API's own login, inside a
 // piece of work, by whoever asks (Luis Ortega, Dana Reyes); the worker takes the project's
@@ -172,9 +172,7 @@ export const p1Queued: Story = {
       story.at(syncedAt.toISOString(), 'The phones find signal');
       await phones.arrive(syncedAt);
     }
-    story.at(on('14', '07:20'), 'Wednesday: a run works every ticket of P1, as a story’s run does');
-    const whole = await reconciliation.run({ projectId: p1, trigger: 'SYNC' });
-    if (!whole.ran) throw new Error(whole.message);
+    story.at(on('14', '07:20'), 'Wednesday: the worker’s loop takes up every job waiting');
     // What the office's setup queued by itself, before any field event existed (task 2.3.3),
     // and what each phone's sync queued as it stored a field event (task 2.6.2).
     const queue = new QueueRuns(story, reconciliation);
@@ -182,6 +180,7 @@ export const p1Queued: Story = {
     const fromSetup = waiting.filter((job) => job.tickets.length === 0);
     const fromSyncs = waiting.filter((job) => job.tickets.length > 0);
     const settling = await queue.settle(p1);
+    const whole = await queue.standing(p1);
     story.check(
       'AC-10-51 setup had queued its own jobs as it was saved, before any ticket existed: each names no ticket and asks only for the records the run flags by themselves (a certification’s views, each of its photographs’ too; a site’s permit); and each of the 25 field events a sync brought queued its own as it was stored, naming its ticket and that ticket’s neighbours, and each of Jo’s seven crew photographs its ticket again, with nobody waiting for the run; one run takes them all up',
       [
@@ -197,7 +196,7 @@ export const p1Queued: Story = {
     story.check(
       'With no job waiting, the worker finds nothing to take up for P1: no run is recorded',
       [await reconciliation.waitingJobs(p1, tries, atMost), await runs()],
-      [{ worked: false, reason: 'NOTHING_WAITING', setAside: [] }, 2],
+      [{ worked: false, reason: 'NOTHING_WAITING', setAside: [] }, 1],
     );
 
     // ------------------------------------------------------------------------------------------

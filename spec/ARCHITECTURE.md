@@ -734,8 +734,8 @@ So the protection can't rest on the password. It rests on these:
 - Every sync proves the phone's identity by signing a server challenge.
 - A lost or retired phone is marked in the back office. If it syncs again, the server still takes
   its records, flagging what it made after its removal (§7.2 point 4, ADR-134), then retires its
-  number block (ADR-065) and has it wiped. Once wiped, its device key is revoked and the server
-  refuses it.
+  number block (ADR-065), tells it to wipe and revokes its device key: only then is it refused
+  (ADR-495).
 
 ✅ **Approved** **ADR-436, 437, 440 (2026-10-09; agent defaults, this note awaits approval, building didn't
 > wait): how a phone proves itself.** The key is ECDSA P-256. Before a sync the phone asks for a
@@ -745,13 +745,13 @@ So the protection can't rest on the password. It rests on these:
 > actor that is not a person, on that phone. A phone out of service still proves itself; one
 > whose key is revoked is refused at once, whatever token it holds.
 
-⚠️ **ADR-488 (2026-10-13; agent default; KD-77 asks the user): when the key is revoked.** "Sync
+✅ **Approved by the user (KD-77 closed, ADR-495)** **ADR-488 (2026-10-13): when the key is revoked.** "Sync
 > and turn in" (`POST /phones/current/turn-ins`, §8) revokes the key **in the same piece of work
 > that confirms every record the phone holds and ends its number blocks, as the phone is told to
 > wipe**, not after it reports a wipe: the server can't see a wipe, and a key kept until a phone
 > that may never call again says it wiped would stand for good. Nothing is revoked before every
 > record is on the server and every block has ended, and only the turn-in can revoke a key (the
-> database's guard). The text above ("Once wiped, its device key is revoked") is not edited.
+> database's guard). The text above was reworded to say so (ADR-495).
 
 ### 7.5 The master passcode
 
@@ -797,7 +797,7 @@ So the protection can't rest on the password. It rests on these:
   one call, `POST /phones/current/turn-ins`, the passcode in it, that names everything the phone
   still holds; the server answers `wipe: true` only when it has all of it from that phone, and
   in the same piece of work hands back (or, for a lost phone or a series not reported, retires)
-  its numbers and revokes its key (§7.4's note, KD-77). Otherwise nothing changes and the answer
+  its numbers and revokes its key (§7.4's note; KD-77 closed, ADR-495). Otherwise nothing changes and the answer
   names what it doesn't have. A client wipes only on `wipe: true` (the sync contract's suite).* Cancelled tickets are the only exception to
   syncing: they stay on the device until it is set up again (ADR-056).
 - **Browser test build:** IndexedDB, encrypted with a WebCrypto key that can't be exported. It's

@@ -19,8 +19,16 @@ import {
   type NewPayItem,
 } from '@open-adms/api';
 import { photoRead, recordRead, type SyncAnswered, type SyncReceived } from '@open-adms/contracts';
-import { certificationViews } from '@open-adms/domain';
-import type { Reconciliation, RunOutcome } from '@open-adms/worker';
+import { ReconciliationJobs, type JobTicket } from '@open-adms/db';
+import { certificationViews, workflows } from '@open-adms/domain';
+import {
+  JobLoop,
+  WorkerLog,
+  type ProjectPassed,
+  type Reconciliation,
+  type RunOutcome,
+  type TicketOutcome,
+} from '@open-adms/worker';
 
 import { createHash } from 'node:crypto';
 
@@ -60,44 +68,173 @@ export async function saved<T>(attempt: Saving<T>): Promise<T> {
   return outcome.record;
 }
 
-// The worker's side of the job queue in a story (BACKLOG 2.3.3; ADR-420): nobody asks the worker
-// for a run after a person's action. The action queued its job in its own piece of work, and
-// here the worker takes its project's waiting jobs up, as its process does every few seconds.
+type Worked = Extract<RunOutcome, { ran: true }>;
+
+// The worker's side of the job queue in a story (BACKLOG 2.3.3, 2.7.1 part 3; ADR-420, 494):
+// nobody asks the worker for a run. A sync, a person's action or a setup change queued its job
+// in its own piece of work, and here the worker's own job loop (`JobLoop`, as its process runs
+// it, under the release's policy) takes the waiting jobs up on the story's database and clock:
+// every project with a job waiting, one run each a pass. What a run did is its own answer, as
+// the pass hands it on.
 export class QueueRuns {
   private readonly story: StoryContext;
-  private readonly reconciliation: Reconciliation;
+  private readonly loop: JobLoop;
+  // Each project's runs the story hasn't read yet, the oldest first.
+  private readonly unread = new Map<string, Worked[]>();
 
   constructor(story: StoryContext, reconciliation: Reconciliation) {
+    const { policy } = story;
     this.story = story;
-    this.reconciliation = reconciliation;
+    this.loop = new JobLoop(
+      story.worker,
+      reconciliation,
+      {
+        triesBeforeSetAside: policy.jobTriesBeforeSetAside,
+        ticketsARun: policy.jobTicketsAtMost,
+        pollMs: policy.jobQueuePollSeconds * 1_000,
+      },
+      // Its lines say only what a pass's answer says too; a story reads the answer.
+      new WorkerLog({ write: () => undefined }),
+    );
   }
 
-  // One run of the project's waiting jobs. A story that expects one and finds none has lost a
-  // job: it stops.
-  async next(projectId: string): Promise<Extract<RunOutcome, { ran: true }>> {
-    const { policy } = this.story;
-    const outcome = await this.reconciliation.waitingJobs(
-      projectId,
-      policy.jobTriesBeforeSetAside,
-      policy.jobTicketsAtMost,
+  // A reprocess a person asks for with nothing changed, or after a change a story makes by
+  // hand (a correction): no endpoint asks for one by itself, so its job is added as the API's
+  // own login, in that person's piece of work, naming the tickets (as the story `p1-queued`
+  // adds one). The job's id.
+  asked(
+    by: string,
+    projectId: string,
+    tickets: readonly JobTicket[],
+    trigger: 'REPROCESS' | 'CORRECTION' = 'REPROCESS',
+  ): Promise<string> {
+    return this.story.api.$write({ actorId: by, source: 'BACK_OFFICE' }, (tx) =>
+      new ReconciliationJobs(tx).queue({ projectId, trigger, requestedById: by, tickets }),
     );
-    if (!outcome.worked) {
+  }
+
+  // One pass of the job loop: what it did with each project, for the story to read here.
+  pass(): Promise<readonly ProjectPassed[]> {
+    return this.loop.pass();
+  }
+
+  // One pass; each run it made is kept for its project until the story reads it.
+  private async kept(): Promise<readonly ProjectPassed[]> {
+    const passed = await this.loop.pass();
+    for (const each of passed) {
+      if ('outcome' in each && each.outcome.worked) {
+        this.unread.set(each.projectId, [
+          ...(this.unread.get(each.projectId) ?? []),
+          each.outcome.run,
+        ]);
+      }
+    }
+    return passed;
+  }
+
+  // One pass; the project's run in it. A story that expects one and finds none has lost a job:
+  // it stops.
+  async next(projectId: string): Promise<Worked> {
+    const passed = await this.kept();
+    const [run, ...more] = this.taken(projectId);
+    if (run === undefined || more.length > 0) {
       throw new Error(
-        `The worker found no job to work: ${outcome.reason}${'error' in outcome ? ` (${outcome.error})` : ''}.`,
+        `The worker’s pass made ${String(more.length + (run ? 1 : 0))} runs on the project, not one: ${QueueRuns.why(passed)}.`,
       );
     }
-    return outcome.run;
+    return run;
   }
 
-  // Every waiting job of the project worked, run after run; how many runs it took. What setup
-  // queued before the field days (a site's permit, a certification's views) is settled so.
+  // Every waiting job worked, pass after pass, as the loop goes on at once while a pass
+  // finished jobs and more wait; how many runs it took on the project. What setup queued before
+  // the field days (a site's permit, a certification's views) is settled so.
   async settle(projectId: string): Promise<number> {
-    let runs = 0;
-    while ((await this.waiting(projectId)).length > 0) {
-      await this.next(projectId);
-      runs += 1;
+    await this.drained();
+    return this.taken(projectId).length;
+  }
+
+  // Every waiting job worked, as `settle`, in one run on the project: that run's answer. A story
+  // that expects the worker to run and finds no job has lost one, and one whose jobs took more
+  // than a run (more tickets than the policy lets one take up) is told so: it stops.
+  async settled(projectId: string): Promise<Worked> {
+    await this.drained();
+    const [run, ...more] = this.taken(projectId);
+    if (run === undefined || more.length > 0) {
+      throw new Error(
+        `The worker made ${String(more.length + (run ? 1 : 0))} runs on the project, not one.`,
+      );
     }
-    return runs;
+    return run;
+  }
+
+  // Every ticket of the project as it stands, read from its records, not from a run: each
+  // number its field events are under, with their status, the flags standing on it, and what
+  // its last decision says it waits for and why it couldn't be processed; in a run's order
+  // (workflow, then number), a number that isn't one last. A void ticket is listed, VOID. The
+  // id and the counts are the project's last run's. A run the queue starts works only the
+  // tickets its jobs name, so what a whole run used to tell of a project is read here.
+  async standing(projectId: string): Promise<Worked> {
+    const { api } = this.story;
+    const events = await api.fieldEvent.findMany({
+      where: { projectId },
+      select: { workflow: true, ticketNumber: true, status: true },
+    });
+    const statuses = new Map<string, Set<TicketOutcome['status']>>();
+    for (const event of events) {
+      const key = JSON.stringify([event.workflow, event.ticketNumber]);
+      statuses.set(key, (statuses.get(key) ?? new Set()).add(event.status));
+    }
+    const isNumber = (ticketNumber: string): boolean => /^[0-9]+$/.test(ticketNumber);
+    const named = [...statuses.keys()]
+      .map((key) => JSON.parse(key) as [TicketOutcome['workflow'], string])
+      .sort(
+        ([leftFlow, left], [rightFlow, right]) =>
+          Number(!isNumber(left)) - Number(!isNumber(right)) ||
+          workflows.indexOf(leftFlow) - workflows.indexOf(rightFlow) ||
+          left.length - right.length ||
+          (left < right ? -1 : left > right ? 1 : 0),
+      );
+    const tickets: TicketOutcome[] = [];
+    for (const [workflow, ticketNumber] of named) {
+      const [status, ...mixed] = statuses.get(JSON.stringify([workflow, ticketNumber])) ?? [];
+      if (status === undefined || mixed.length > 0) {
+        throw new Error(`Ticket ${ticketNumber}’s field events stand at more than one status.`);
+      }
+      const decided = await api.reconciliationDecision.findFirst({
+        where: { workflow, ticketNumber, reconciliationRun: { projectId } },
+        orderBy: { id: 'desc' },
+        select: { summary: true, error: true },
+      });
+      const flags = await api.flag.findMany({
+        where: { projectId, workflow, ticketNumber, clearedAt: null },
+        select: { message: true },
+        orderBy: { id: 'asc' },
+      });
+      const { waitingFor } = (decided?.summary ?? {}) as {
+        waitingFor?: TicketOutcome['waitingFor'];
+      };
+      tickets.push({
+        workflow,
+        ticketNumber,
+        status,
+        waitingFor: waitingFor ?? [],
+        flags: flags.map((flag) => flag.message),
+        error: decided?.error ?? null,
+      });
+    }
+    const last = await api.reconciliationRun.findFirst({
+      where: { projectId },
+      orderBy: { id: 'desc' },
+      select: { id: true, ticketsDone: true, ticketsFailed: true },
+    });
+    return {
+      ran: true,
+      runId: last?.id ?? '',
+      ticketsDone: last?.ticketsDone ?? 0,
+      ticketsFailed: last?.ticketsFailed ?? 0,
+      tickets,
+      pending: tickets.filter((ticket) => ticket.waitingFor.length > 0),
+    };
   }
 
   // The project's waiting jobs, the oldest first: what asked for each, and the tickets it names.
@@ -115,6 +252,46 @@ export class QueueRuns {
       requestedById: job.requestedById,
       tickets: job.tickets.map((ticket) => ticket.ticketNumber),
     }));
+  }
+
+  private taken(projectId: string): Worked[] {
+    const runs = this.unread.get(projectId) ?? [];
+    this.unread.delete(projectId);
+    return runs;
+  }
+
+  // Passes until no job waits anywhere. A pass that leaves as many jobs waiting as before it (a
+  // try that failed whole, a project that couldn't be taken up, a run of another worker's under
+  // way, a run that finished none of its jobs) stops the story with why.
+  private async drained(): Promise<void> {
+    const waiting = (): Promise<number> =>
+      this.story.api.reconciliationJob.count({ where: { finishedAt: null, setAsideAt: null } });
+    let before = await waiting();
+    while (before > 0) {
+      const passed = await this.kept();
+      const after = await waiting();
+      if (after >= before) {
+        throw new Error(
+          `The worker’s pass finished no job while some wait: ${QueueRuns.why(passed)}.`,
+        );
+      }
+      before = after;
+    }
+  }
+
+  // Why a pass worked nothing, project by project, in its own words.
+  private static why(passed: readonly ProjectPassed[]): string {
+    return (
+      passed
+        .map((each) =>
+          'error' in each
+            ? `${each.projectId}: ${each.error instanceof Error ? each.error.message : String(each.error)}`
+            : each.outcome.worked
+              ? `${each.projectId}: worked`
+              : `${each.projectId}: ${each.outcome.reason}${'error' in each.outcome ? ` (${each.outcome.error})` : ''}`,
+        )
+        .join('; ') || 'no job waits'
+    );
   }
 }
 

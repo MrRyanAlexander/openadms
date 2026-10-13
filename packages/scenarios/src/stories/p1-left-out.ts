@@ -222,8 +222,8 @@ export const p1LeftOut: Story = {
       settings,
       new Mileages(new MapServers(localMapServers())),
     );
-    const sync = { projectId: p1, trigger: 'SYNC' } as const;
-    const setupChange = { projectId: p1, trigger: 'SETUP_CHANGE' } as const;
+    // The worker's own job loop: it takes up what each sync, review and setup change queued.
+    const queue = new QueueRuns(story, reconciliation);
 
     // The ledger as it stands: every line with its ticket (and property or pile), its #, its
     // pay item, quantity × rate = amount.
@@ -292,7 +292,7 @@ export const p1LeftOut: Story = {
     };
     const reviewed = async <T>(attempt: Promise<Outcome<Reviewed<T>>>): Promise<Reviewed<T>> => {
       const done = await saved(attempt);
-      last.run = await reconciliation.run(done.reprocess);
+      last.run = await queue.settled(done.reprocess.projectId);
       return done;
     };
 
@@ -322,7 +322,7 @@ export const p1LeftOut: Story = {
       [25, '201004', '101001'],
     );
     story.at(on('14', '07:20'), 'The worker runs on P1');
-    const first = await reconciliation.run(sync);
+    const first = await queue.settled(p1);
     story.check(
       'AC-06-05 every ticket ends with the status and flags it has when the phones sync in field order (the story `p1-priced` on Wednesday morning): arrival order carries no information',
       told(first),
@@ -480,7 +480,7 @@ export const p1LeftOut: Story = {
     await load('14', '101015', '730499', ['08:30', '08:50', '09:20', '09:30']);
     await load('14', '101044', '88120', ['09:30', '09:50', '10:20', '10:30']);
     story.at(on('14', '12:10'), 'The worker runs');
-    const noon = await reconciliation.run(sync);
+    const noon = await queue.settled(p1);
 
     story.check(
       'AC-07-67, AC-06-78 the same three piles, dumped at Bayline County Landfill instead, are paid by the CY with the tipping fee: 11.0, 27.5 and 55.0 CY, six lines, $850.85',
@@ -613,10 +613,8 @@ export const p1LeftOut: Story = {
       boxes: [primaryBox(240, 90, 60)],
     });
     // Certifying queued the job itself: the tickets that scanned the number before it existed.
-    const lateJobs = (await new QueueRuns(story, reconciliation).waiting(p1)).filter((job) =>
-      job.tickets.includes('101015'),
-    );
-    const certified = await new QueueRuns(story, reconciliation).next(p1);
+    const lateJobs = (await queue.waiting(p1)).filter((job) => job.tickets.includes('101015'));
+    const certified = await queue.next(p1);
     story.check(
       'AC-06-36, AC-03-42 certifying 730499 queued 101015, which had scanned the number before it existed, as a job a sync brought and no person asked for; the flag clears and 101015 bills at that certification’s capacity, 28 CY × 50% = 14.0 CY: it was unbilled only until one existed. Its field events, which found no certification when they arrived, are linked to it now (BACKLOG C83)',
       [
@@ -660,7 +658,7 @@ export const p1LeftOut: Story = {
       }),
     );
     const noRateListed = await gaps();
-    const noRate = await reconciliation.run(setupChange);
+    const noRate = await queue.settled(p1);
     story.check(
       'AC-06-122 a rule passes and its pay item has no rate for Summit: the line is written at $0 and the ticket is flagged; no Coastline line changed',
       [of(noRate, '101044'), await linesOf('101044'), await totalOf('101001')],
@@ -684,7 +682,7 @@ export const p1LeftOut: Story = {
         [],
       ],
     );
-    const rated = await reconciliation.run(setupChange);
+    const rated = await queue.settled(p1);
     story.check(
       'the setup is fixed and the flag is cleared: 101044 bills 14.0 × $7.80 = $109.20 to Summit, and both flags stay in its history',
       [
@@ -711,7 +709,7 @@ export const p1LeftOut: Story = {
     );
     await saved(sites.change(dana, cypress, { chargesTippingFee: true }));
     const feeListed = await gaps();
-    const feeMissing = await reconciliation.run(setupChange);
+    const feeMissing = await queue.settled(p1);
     story.check(
       'AC-06-70 the haul-out dumped there is flagged, and its three lines bill as before; a haul-out that only left a site, a load dumped elsewhere and unit rate work are not flagged for it',
       [told(feeMissing).filter((line) => line.includes('tipping fee')), await totalOf('201004')],
@@ -734,7 +732,7 @@ export const p1LeftOut: Story = {
         [],
       ],
     );
-    const feeFixed = await reconciliation.run(setupChange);
+    const feeFixed = await queue.settled(p1);
     story.check(
       'the setup is fixed and the flag is cleared: 201004 is COMPLETED again, its lines the same',
       [of(feeFixed, '201004'), await flagsOn('201004'), await totalOf('201004')],
@@ -788,7 +786,7 @@ export const p1LeftOut: Story = {
         actions: [{ kind: 'ADD_TRANSACTION', slot: 2, payItemId: special.id }],
       }),
     );
-    const toBeNegotiated = await reconciliation.run(setupChange);
+    const toBeNegotiated = await queue.settled(p1);
     story.check(
       'AC-07-63 that line bills nothing and each hanger ticket is flagged; its other line bills',
       [of(toBeNegotiated, '301001', '301003'), await linesOf('301001')],
@@ -806,7 +804,7 @@ export const p1LeftOut: Story = {
     );
     const unitChanged = await payItems.change(dana, special.id, { unit: 'EA' });
     await saved(payItems.rate(dana, special.id, coastline, '85.00'));
-    const agreed = await reconciliation.run(setupChange);
+    const agreed = await queue.settled(p1);
     story.check(
       'AC-07-63 the pay item’s un-invoiced tickets are reprocessed and bill: each hanger ticket gains its #2, 1 × $85.00, and the flag is cleared',
       [
@@ -1021,7 +1019,7 @@ export const p1LeftOut: Story = {
       { formDebrisTypeId: whiteGoods, loadCall: null, carriedCount: 1 },
     );
     story.at(on('15', '13:10'), 'The worker runs');
-    const thursday = await reconciliation.run(sync);
+    const thursday = await queue.settled(p1);
 
     story.check(
       'AC-06-39, AC-03-47 a ticket worked on or after the day a certification is revoked from is flagged and still bills; 101015, worked on it the day before, is not',
@@ -1136,7 +1134,7 @@ export const p1LeftOut: Story = {
         zoneNameField: 'ZONE_NAME',
       }),
     );
-    await reconciliation.run(setupChange);
+    await queue.settle(p1);
     story.check(
       'AC-06-03 every ticket the change touches is worked again: 101001, collected at 14 Heron St, was in Zone 2 and is now in Zone 3, read from map version 2; no rule reads a zone here, so every line is the same record',
       [
@@ -1170,7 +1168,7 @@ export const p1LeftOut: Story = {
       shape: { type: 'Point', coordinates: [-75.615, 39.09] },
     });
     const shapeDrawn = await drawShape(-75.62, -75.61);
-    await reconciliation.run(setupChange);
+    await queue.settle(p1);
     const outside = await flaggedForPlace();
     story.check(
       'AC-06-47, AC-06-03 a site with a shape of its own is checked against the shape in place of the circle: the tower, 38 m from the site’s GPS and inside the 200 m circle, is outside this shape, so every disposal and haul-out collection made there with a fix is flagged, and still bills',
@@ -1203,7 +1201,7 @@ export const p1LeftOut: Story = {
       'She draws it again, a kilometre and a half wide with the tower inside; the worker runs',
     );
     await saved(drawShape(-75.63, -75.61));
-    await reconciliation.run(setupChange);
+    await queue.settle(p1);
     story.check(
       'AC-06-47 inside the shape nothing is flagged, however far from the site’s GPS; the first shape is still there as version 1',
       [
@@ -1228,7 +1226,7 @@ export const p1LeftOut: Story = {
     await send(
       made(dumped, february('09:50'), february('10:00'), { ticketNumber: '101023', loadCall: 50 }),
     );
-    const afterTheWindow = await reconciliation.run(sync);
+    const afterTheWindow = await queue.settled(p1);
     story.check(
       'AC-09-24 nothing is refused: it is received, flagged and still bills, 65 CY × 50% = 32.5 CY',
       [of(afterTheWindow, '101023'), await linesOf('101023')],
@@ -1244,7 +1242,7 @@ export const p1LeftOut: Story = {
       'Dana extends P1’s window to 28 February 2027; the worker runs',
     );
     const windowChanged = await projects.changeWindow(dana, p1, { activeTo: '2027-02-28' });
-    const extended = await reconciliation.run(setupChange);
+    const extended = await queue.settled(p1);
     story.check(
       'AC-09-25 the change is an ordinary edit, audited under Dana with the date before; on the next run the flag on 101023 is cleared and the ticket is COMPLETED, its line the same',
       [

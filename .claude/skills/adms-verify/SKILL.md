@@ -295,7 +295,7 @@ ARCHITECTURE §15's layers arrive with their milestones; each adds its command h
 
 | Layer | Arrives in |
 |---|---|
-| ~~The **golden mission** as a story (REQ-017)~~ | ✅ in the chain since ADR-368: `pnpm scenarios golden-mission` (27 checks; its expected figures are `spec/golden/MISSION.md`'s and change only at the user's word) |
+| ~~The **golden mission** as a story (REQ-017)~~ | ✅ in the chain since ADR-368: `pnpm scenarios golden-mission` (its count is CHAIN.md's; reconciled by the worker's own job loop alone since ADR-494; its expected figures are `spec/golden/MISSION.md`'s and change only at the user's word) |
 | **Unit** tests of real rules (the capacity math is in, ADR-320; number blocks, ADR-323; volume and apportionment, ADR-343; the checks between field events, on the certification and on time, ADR-344; the checks on place, ADR-346; the checks on quantity, the pay item's settings, unit rate work and ROEs, ADR-347) | Phase 1 |
 | API (begun: `apps/api/test`, ADR-385, §1.3b), browser end-to-end, on device | Phases 2–4 |
 

@@ -323,25 +323,25 @@ export const p1Invoiced: Story = {
     ) {
       throw new Error('The field days synced fewer than three times.');
     }
-    const sync = { projectId: p1, trigger: 'SYNC' } as const;
     story.at(
       mondayEvening.toISOString(),
       'Monday evening: the phones find signal; the worker runs',
     );
     await phones.arrive(mondayEvening);
-    await reconciliation.run(sync);
+    await queue.settle(p1);
     story.at(tuesdayEvening.toISOString(), 'Tuesday evening: the same');
     await phones.arrive(tuesdayEvening);
-    await reconciliation.run(sync);
+    await queue.settle(p1);
     story.at(
       wednesdayMorning.toISOString(),
       'Wednesday: the Marsh Road tower’s phone is charged and syncs Tuesday’s work',
     );
     await phones.arrive(wednesdayMorning);
     story.at(on('14', '07:20'), 'The worker runs');
-    const before = await reconciliation.run(sync);
-    // What setup queued before the field days (each certification's own flags) is settled.
+    // Every job waiting is taken up: what setup queued before the field days (each
+    // certification's own flags) and what each sync queued.
     await queue.settle(p1);
+    const before = await queue.standing(p1);
     story.check(
       'P1 before any QC: 101001, 101002, 101004 and 101005 are COMPLETED, 101003 in review for its 96% call, 101006 waiting for its disposal; nobody has marked anything',
       [of(before, '10100'), await marks()],
@@ -914,9 +914,8 @@ export const p1Invoiced: Story = {
     await send(made(curb, '14:10', '14:40', { ...noAddress, ticketNumber: '101030' }));
     await send(made(curb, '14:10', '14:40', { ...noAddress, ticketNumber: '101031' }));
     await send(made(tower, '15:05', '15:15', { ticketNumber: '101030', loadCall: 70 }));
-    const evening = await reconciliation.run(sync);
-    // The jobs those syncs queued, a record each, are taken up now and write nothing more.
     await queue.settle(p1);
+    const evening = await queue.standing(p1);
     story.at(on('15', '08:00'), 'Thursday: Luis sets 101030 QC Approved and tries to lock it');
     const l101030 = await loadOf('101030');
     await saved(qc.set(luis, l101030, 'QC_APPROVED'));

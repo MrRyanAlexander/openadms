@@ -31,8 +31,9 @@
 //   the domain's `TicketNeighbours`; ADR-420), so the run needn't look for them.
 // - A run takes up waiting jobs, the oldest first, until their tickets come to the policy's
 //   number; the rest wait for the next run, so a run has a size it can finish (ADR-420).
-// - A run asked for directly (`run`: a story's, until the stories move onto the queue, 2.7.1)
-//   works every ticket of the project and writes only what differs.
+// - A run asked for directly (`run`) works every ticket of the project and writes only what
+//   differs. Nothing calls it since the stories moved onto the job loop (2.7.1 part 3, ADR-494);
+//   it is trimmed, or kept by an ADR, when task 2.7.1 closes (BACKLOG C144).
 // - Running again over unchanged input changes nothing but the record of the run itself.
 // - Each run is recorded, with one decision for each ticket: its status and why.
 // - Everything is written as the system actor, and the database audits it (ADR-273, 276). A

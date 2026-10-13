@@ -397,25 +397,25 @@ export const p1Reviewed: Story = {
     ) {
       throw new Error('The field days synced fewer than three times.');
     }
-    const sync = { projectId: p1, trigger: 'SYNC' } as const;
     story.at(
       mondayEvening.toISOString(),
       'Monday evening: the phones find signal; the worker runs',
     );
     await phones.arrive(mondayEvening);
-    await reconciliation.run(sync);
+    await queue.settle(p1);
     story.at(tuesdayEvening.toISOString(), 'Tuesday evening: the same');
     await phones.arrive(tuesdayEvening);
-    await reconciliation.run(sync);
+    await queue.settle(p1);
     story.at(
       wednesdayMorning.toISOString(),
       'Wednesday: the Marsh Road tower’s phone is charged and syncs Tuesday’s work',
     );
     await phones.arrive(wednesdayMorning);
     story.at(on('14', '07:20'), 'The worker runs');
-    const before = await reconciliation.run(sync);
-    // What setup queued before the field days (each certification's own flags) is settled.
+    // Every job waiting is taken up: what setup queued before the field days (each
+    // certification's own flags) and what each sync queued.
     await queue.settle(p1);
+    const before = await queue.standing(p1);
     story.check(
       'P1 before any review: 101003 in review for its 96% call, 101006 waiting for the disposal typed as 101060, and 19 lines',
       [of(before, '101003', '101006', '101060'), (await lines(p1)).length],
@@ -978,9 +978,8 @@ export const p1Reviewed: Story = {
       }),
     );
     story.at(on('14', '18:45'), 'The worker runs on P1');
-    const evening = await reconciliation.run(sync);
-    // The jobs those syncs queued, a record each, are taken up now and write nothing more.
     await queue.settle(p1);
+    const evening = await queue.standing(p1);
     story.check(
       'Wednesday’s tickets before review: the second disposal scanned 101020 is in quarantine, not saved; each flag is the catalogue’s, word for word',
       [
@@ -1336,9 +1335,8 @@ export const p1Reviewed: Story = {
     await send(propertyC);
     await send(made(tower, '10:10', '10:20', { ...p2Tower, ticketNumber: '102001', loadCall: 75 }));
     story.at(on('15', '10:10'), 'The worker runs on P2');
-    const p2Run = await reconciliation.run({ projectId: p2, trigger: 'SYNC' });
-    // The jobs those syncs queued, a record each, are taken up now and write nothing more.
     await queue.settle(p2);
+    const p2Run = await queue.standing(p2);
     story.check(
       'P2 before review: 102005 and the split’s second property are outside R-0008’s scope, and the split has no -B',
       told(p2Run),

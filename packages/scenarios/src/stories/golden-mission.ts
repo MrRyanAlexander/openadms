@@ -49,6 +49,7 @@ import {
   p1FieldDaysHeld,
   P1Syncs,
   primaryBox,
+  QueueRuns,
   saved,
   setUpP1Pricing,
 } from './p1-office.ts';
@@ -412,6 +413,8 @@ export const goldenMission: Story = {
       settings,
       new Mileages(new MapServers(localMapServers())),
     );
+    // The worker's own job loop: it takes up what each sync, review and setup change queued.
+    const queue = new QueueRuns(story, reconciliation);
     const corrections = new Corrections(api, clock, story.policy);
     const acceptances = new Acceptances(api, clock, story.policy);
     const voids = new Voids(api, clock, story.policy);
@@ -542,7 +545,7 @@ export const goldenMission: Story = {
     };
     const reviewed = async <T>(attempt: Promise<Outcome<Reviewed<T>>>): Promise<Reviewed<T>> => {
       const outcome = await saved(attempt);
-      last.run = await reconciliation.run(outcome.reprocess);
+      last.run = await queue.settled(outcome.reprocess.projectId);
       return outcome;
     };
     const loadOf = async (ticketNumber: string, projectId = p1) => ({
@@ -562,7 +565,6 @@ export const goldenMission: Story = {
     const unitRateOf = async (ticketNumber: string) => ({
       unitRateTicketId: (await eventOf(ticketNumber, 'UNIT_RATE')).id,
     });
-    const sync = (projectId: string) => ({ projectId, trigger: 'SYNC' }) as const;
 
     // ------------------------------------------------------------------------------------------
     story.at(
@@ -732,8 +734,8 @@ export const goldenMission: Story = {
     );
     await phones.arrive(mondayEvening);
     const p2Sent = [await anaP2.sync(story.server), await kimP2.sync(story.server)];
-    const monday = await reconciliation.run(sync(p1));
-    const mondayP2 = await reconciliation.run(sync(p2));
+    const monday = await queue.settled(p1);
+    const mondayP2 = await queue.settled(p2);
     story.check(
       'AC-06-87 Monday night on P1: 101001 and 101002 are COMPLETED, 101003 is in review for its 96% call and still bills, the preload 101004 waits for its disposal with no flag, and the three unit rate tickets are COMPLETED, the duplicate hanger among them: 7 lines, $1,530.00',
       [told(monday), await total(p1)],
@@ -839,7 +841,8 @@ export const goldenMission: Story = {
       'Tuesday evening: the phones sync, all but the Marsh Road tower’s, whose battery is flat; the worker runs',
     );
     await phones.arrive(tuesdayEvening);
-    const tuesday = await reconciliation.run(sync(p1));
+    await queue.settle(p1);
+    const tuesday = await queue.standing(p1);
     story.check(
       'AC-05-52, AC-06-103, AC-06-154 Tuesday night: the collections 101004, 101005 and 101006 wait alone, PENDING and not flagged (an unpartnered field event never expires); the haul-out 201001 and the split haul-out 201004 are COMPLETED; the under-size stump 301005 is in review with no pay item; 17 lines, $4,879.00',
       [told(tuesday), await total(p1)],
@@ -923,7 +926,8 @@ export const goldenMission: Story = {
     );
     const fromTheTower = await phones.arrive(wednesdayMorning);
     story.at(on('14', '07:20'), 'The worker runs');
-    const wednesday = await reconciliation.run(sync(p1));
+    await queue.settle(p1);
+    const wednesday = await queue.standing(p1);
     story.check(
       'AC-02-56, AC-05-02, AC-06-16, AC-06-125 everything on the tower’s phone is received, three disposals and the drop-off log; the late sync pairs the preload 101004 (not flagged: its time is Monday, its collection’s end) and 101005; 101006 still waits, its disposal typed as 101060 and flagged for the typed number: 19 lines, $5,400.25',
       [
@@ -1337,44 +1341,61 @@ export const goldenMission: Story = {
 
     story.at(
       on('21', '09:00'),
-      'A week later Dana changes Coastline’s rate on VEG-HAUL-CY-15 from $7.50 to $7.75; the worker runs',
+      'A week later Dana changes Coastline’s rate on VEG-HAUL-CY-15 from $7.50 to $7.75',
     );
+    // Saved, the change says what it queued for the worker: no ticket, and every one it
+    // reached left as it is, locked as invoiced (ADR-422).
     const rateTo = async (rate: string) => {
       const veg15 = await api.payItem.findFirstOrThrow({
         where: { projectId: p1, code: 'VEG-HAUL-CY-15' },
       });
-      return saved(payItems.rate(dana, veg15.id, coastline, rate));
+      const outcome = await payItems.rate(dana, veg15.id, coastline, rate);
+      if (!outcome.saved) throw new Error(`Refused: ${outcome.refusal.message}`);
+      return outcome.queued;
     };
-    await rateTo('7.75');
-    const rated = await reconciliation.run({ projectId: p1, trigger: 'SETUP_CHANGE' });
-    const passedBy = (
-      await api.reconciliationDecision.findMany({
-        where: { reconciliationRunId: rated.ran ? rated.runId : '' },
-        orderBy: { ticketNumber: 'asc' },
-      })
-    ).map(
-      (decision) => `${decision.ticketNumber}: ${(decision.summary as { why?: string }).why ?? ''}`,
-    );
+    const runsBefore = await api.reconciliationRun.count({ where: { projectId: p1 } });
+    const rated = await rateTo('7.75');
+    await queue.settle(p1);
     story.check(
-      'AC-09-31 every ticket of P1 that bills is locked as invoiced: the rate change regenerates none of them, each is left exactly as it is, and P1’s ledger stays $5,548.25 on 19 lines, line for line; no line was removed but 301003’s',
+      'AC-09-31 every ticket of P1 that bills is locked as invoiced: the rate change queues none of them and reaches all thirteen, so the worker has nothing to take up and regenerates none; each is left exactly as it is, and P1’s ledger stays $5,548.25 on 19 lines, line for line; no line was removed but 301003’s',
       [
-        passedBy,
+        rated,
+        await api.reconciliationRun.count({ where: { projectId: p1 } }),
         await ledger(p1),
         await total(p1),
         await api.auditRecord.count({ where: { tableName: 'transaction', operation: 'DELETE' } }),
       ],
       [
-        [...p1Loads, ...p1HaulOuts, ...p1LiveUnitRate].map(
-          (number) => `${number}: Locked as invoiced: left as it is.`,
-        ),
+        {
+          jobs: [],
+          tickets: 0,
+          lockedAsInvoiced: [...p1Loads, ...p1HaulOuts, ...p1LiveUnitRate].length,
+        },
+        runsBefore,
         p1Ledger,
         [19, '$5,548.25'],
         1,
       ],
     );
-    story.at(on('21', '09:10'), 'The change was a slip: she puts $7.50 back; the worker runs');
+    story.at(
+      on('21', '09:10'),
+      'The change was a slip: she puts $7.50 back; the worker has nothing to run',
+    );
     await rateTo('7.50');
-    await reconciliation.run({ projectId: p1, trigger: 'SETUP_CHANGE' });
+    await queue.settle(p1);
+    const runs = await api.reconciliationRun.findMany({
+      select: { _count: { select: { jobs: true } } },
+    });
+    story.check(
+      'Exit criterion 1 (ADR-376): the mission was reconciled by queued jobs alone. Every run on either project was the worker’s own job loop taking up jobs that a sync, a review or a setup change queued; nobody asked for a run; no job waits and none was set aside',
+      [
+        runs.length > 0,
+        runs.filter((run) => run._count.jobs === 0).length,
+        await api.reconciliationJob.count({ where: { finishedAt: null } }),
+        await api.reconciliationJob.count({ where: { setAsideAt: { not: null } } }),
+      ],
+      [true, 0, 0, 0],
+    );
 
     // ------------------------------------------------------------------------------------------
     story.at('2027-03-02T09:00:00-05:00', '2 March 2027: the work is done. Dana closes P1 and P2');

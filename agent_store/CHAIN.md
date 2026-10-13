@@ -7,7 +7,7 @@
 > task's ADR and its session-log line in `DECISIONS.md`). No other file carries these counts.
 > **A count that differs from this page without a reason is a finding, not noise.**
 
-**Seen whole:** 2026-10-13, after ADR-493, on the user's Mac, the installation at head.
+**Seen whole:** 2026-10-13, after ADR-494, on the user's Mac, the installation at head.
 
 ## `pnpm ready`
 
@@ -51,7 +51,7 @@ failed.`** Each story `passed: N checks, N passed, 0 failed`:
 | `dispatch-monday` | 22 | | `p1-reviewed` | 35 |
 | `setup` | 52 | | `p1-voided` | 28 |
 | `certification` | 30 | | `p1-invoiced` | 26 |
-| `numbering` | 16 | | `golden-mission` | 27 |
+| `numbering` | 16 | | `golden-mission` | 28 |
 | `p1-field-days` | 35 | | `p1-left-out` | 31 |
 | `sync` | 51 | | `first-admin` | 32 |
 | `p1-any-order` | 4 | | `p1-queued` | 16 |

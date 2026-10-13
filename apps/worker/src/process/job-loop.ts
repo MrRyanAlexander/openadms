@@ -5,10 +5,11 @@
 // pass that finished jobs and left others waiting is followed by the next at once. A project
 // whose try fails never stops the others'. What it
 // did is in the log, by ids only; how many jobs wait and how many are set aside is kept for the
-// health answer.
+// health answer. A pass also answers what it did with each project, for whoever asked for the
+// pass (a story: BACKLOG 2.7.1 part 3, ADR-494).
 import type { Database } from '@open-adms/db';
 
-import type { Reconciliation } from '../reconciliation/reconciliation.ts';
+import type { JobsOutcome, Reconciliation } from '../reconciliation/reconciliation.ts';
 import type { WorkerLog } from './logs.ts';
 
 export interface QueueStanding {
@@ -17,6 +18,12 @@ export interface QueueStanding {
   // Jobs set aside: kept, no longer taken up, for whoever runs the installation.
   readonly jobsSetAside: number;
 }
+
+// What one pass did with one project's jobs: the run's own answer, or what stopped the try
+// before the run could answer (logged, by its kind only).
+export type ProjectPassed =
+  | { readonly projectId: string; readonly outcome: JobsOutcome }
+  | { readonly projectId: string; readonly error: unknown };
 
 export interface LoopSettings {
   readonly triesBeforeSetAside: number;
@@ -85,8 +92,9 @@ export class JobLoop {
     this.wake?.();
   }
 
-  // One look at the queue: every project with a job waiting, each worked once.
-  async pass(): Promise<void> {
+  // One look at the queue: every project with a job waiting, each worked once; what became of
+  // each.
+  async pass(): Promise<readonly ProjectPassed[]> {
     const projects = await this.db.reconciliationJob.findMany({
       where: { finishedAt: null, setAsideAt: null },
       select: { projectId: true },
@@ -94,12 +102,14 @@ export class JobLoop {
       orderBy: { projectId: 'asc' },
     });
     this.finishedSome = false;
+    const passed: ProjectPassed[] = [];
     for (const { projectId } of projects) {
       if (this.stopped) break;
       try {
-        await this.project(projectId);
+        passed.push({ projectId, outcome: await this.project(projectId) });
       } catch (caught) {
         this.log.error('A project’s jobs could not be taken up.', caught, { projectId });
+        passed.push({ projectId, error: caught });
       }
     }
     this.last = {
@@ -108,9 +118,10 @@ export class JobLoop {
       }),
       jobsSetAside: await this.db.reconciliationJob.count({ where: { setAsideAt: { not: null } } }),
     };
+    return passed;
   }
 
-  private async project(projectId: string): Promise<void> {
+  private async project(projectId: string): Promise<JobsOutcome> {
     const outcome = await this.reconciliation.waitingJobs(
       projectId,
       this.settings.triesBeforeSetAside,
@@ -142,5 +153,6 @@ export class JobLoop {
         },
       );
     }
+    return outcome;
   }
 }

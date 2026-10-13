@@ -210,7 +210,7 @@ them. One more, AC-06-36, is named by the plan though its row doesn't say "Phase
 | AC-05-48 | Fresh lists, a setup version and any new passcode check at each sync | 2.5.3 **in part: the setup version, ADR-453**, 2.6.2 | API3 |
 | AC-05-51 | Every phone of a project at once: each record stored once, none lost | 2.7.2 | API4 |
 | AC-05-53 | Reconciliation queued, never waited for | 2.3.3, 2.6.2 | API4 |
-| AC-05-56 | The refusal after a confirmed sync and wipe | 2.6.5 | API2 |
+| AC-05-56 | The refusal after a confirmed sync and the order to wipe | 2.6.5 | API2 |
 | AC-06-02 | What a reviewer's action queues | 2.3.3 | ASVS V15 |
 | AC-06-03 | What a setup change queues: the un-invoiced tickets it touches | 2.3.3 | ASVS V15 |
 | AC-06-58 | The clock difference and its threshold as a policy value | 2.6.2 | ASVS V16 |

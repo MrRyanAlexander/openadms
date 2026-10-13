@@ -42,6 +42,7 @@ import {
   p1FieldDaysHeld,
   P1Syncs,
   primaryBox,
+  QueueRuns,
   saved,
   setUpP1Pricing,
 } from './p1-office.ts';
@@ -143,7 +144,8 @@ export const p1Viewed: Story = {
       settings,
       new Mileages(new MapServers(localMapServers())),
     );
-    const sync = { projectId: p1, trigger: 'SYNC' } as const;
+    // The worker's own job loop: it takes up what each sync and setup change queued.
+    const queue = new QueueRuns(story, reconciliation);
     const phones = new P1Syncs(story, office);
     const [mondayEvening, tuesdayEvening, wednesdayMorning] = phones.times;
     if (
@@ -158,16 +160,16 @@ export const p1Viewed: Story = {
       'Monday evening: the phones find signal; the worker runs',
     );
     await phones.arrive(mondayEvening);
-    await reconciliation.run(sync);
+    await queue.settle(p1);
     story.at(tuesdayEvening.toISOString(), 'Tuesday evening: the same');
     await phones.arrive(tuesdayEvening);
-    await reconciliation.run(sync);
+    await queue.settle(p1);
     story.at(
       wednesdayMorning.toISOString(),
       'Wednesday: the Marsh Road tower’s phone is charged and syncs Tuesday’s work; the worker runs',
     );
     await phones.arrive(wednesdayMorning);
-    await reconciliation.run(sync);
+    await queue.settle(p1);
 
     story.at(
       on('14', '12:00'),
@@ -218,7 +220,7 @@ export const p1Viewed: Story = {
       certNumber: '88120',
       loadCall: 50,
     });
-    await reconciliation.run(sync);
+    await queue.settle(p1);
     const veg15 = pricing.payItems['VEG-HAUL-CY-15'] ?? '';
     const payItems = new PayItemSetup(api, clock, story.policy);
     await saved(payItems.rate(dana, veg15, summit, '7.80'));
@@ -234,7 +236,7 @@ export const p1Viewed: Story = {
         },
       ]),
     );
-    await reconciliation.run({ projectId: p1, trigger: 'SETUP_CHANGE' });
+    await queue.settle(p1);
     const ledger = await api.transaction.findMany({ where: { projectId: p1 } });
     story.check(
       'what there is to read, as the back office holds it: P1’s Monday and Tuesday ($5,400.25 on 19 lines, the golden mission’s) and Summit’s 101044 ($109.20)',

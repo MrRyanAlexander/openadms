@@ -223,26 +223,25 @@ export const p1Voided: Story = {
     ) {
       throw new Error('The field days synced fewer than three times.');
     }
-    const sync = { projectId: p1, trigger: 'SYNC' } as const;
-    const setupChange = { projectId: p1, trigger: 'SETUP_CHANGE' } as const;
     story.at(
       mondayEvening.toISOString(),
       'Monday evening: the phones find signal; the worker runs',
     );
     await phones.arrive(mondayEvening);
-    await reconciliation.run(sync);
+    await queue.settle(p1);
     story.at(tuesdayEvening.toISOString(), 'Tuesday evening: the same');
     await phones.arrive(tuesdayEvening);
-    await reconciliation.run(sync);
+    await queue.settle(p1);
     story.at(
       wednesdayMorning.toISOString(),
       'Wednesday: the Marsh Road tower’s phone is charged and syncs Tuesday’s work',
     );
     await phones.arrive(wednesdayMorning);
     story.at(on('14', '07:20'), 'The worker runs');
-    const before = await reconciliation.run(sync);
-    // What setup queued before the field days (each certification's own flags) is settled.
+    // Every job waiting is taken up: what setup queued before the field days (each
+    // certification's own flags) and what each sync queued.
     await queue.settle(p1);
+    const before = await queue.standing(p1);
     story.check(
       'P1 before any review: 101003 in review for its 96% call, the stump 301005 for its size and its missing survey, 101006 waiting for the disposal typed as 101060; the duplicate hanger 301003 is COMPLETED and bills $68.00',
       [
@@ -353,11 +352,8 @@ export const p1Voided: Story = {
       ],
     );
     story.at(on('14', '08:05'), 'The ticket is reprocessed, its call and the limit unchanged');
-    const again = await reconciliation.run({
-      projectId: p1,
-      trigger: 'REPROCESS',
-      requestedById: luis,
-    });
+    await queue.asked(luis, p1, [load('101003')]);
+    const again = await queue.settled(p1);
     story.check(
       'AC-08-44 the flag isn’t raised again: the ticket has the one flag, accepted, and stays COMPLETED. AC-08-49 a flag is accepted once',
       [
@@ -600,11 +596,15 @@ export const p1Voided: Story = {
       ['QUARANTINED', 1, 1],
     );
 
-    story.at(on('14', '09:15'), 'The worker runs again, as after any change to the setup');
+    story.at(
+      on('14', '09:15'),
+      'Luis asks for the two void tickets, 301003 and 301005, to be reprocessed by name; the worker takes the job up',
+    );
     const written = [await audited('field_event'), await audited('transaction')];
-    const settled = await reconciliation.run(setupChange);
+    await queue.asked(luis, p1, [unitRate('301003'), unitRate('301005')]);
+    const settled = await queue.settled(p1);
     story.check(
-      'AC-08-35, AC-08-41 a voided ticket stays void and out of the run, which writes nothing for it; its field event, its photographs and its audit records are all still there',
+      'AC-08-35, AC-08-41 a voided ticket stays void and out of the run, even one a job names, which writes nothing for it; its field event, its photographs and its audit records are all still there',
       [
         of(settled, '301003', '301005'),
         [await statusOf('301003'), await statusOf('301005')],
@@ -723,9 +723,8 @@ export const p1Voided: Story = {
     await send(made(curb, '15:40', '16:00', { ...noAddress, ticketNumber: '101032' }));
     await send(made(tower, '16:30', '16:40', { ticketNumber: '101032', loadCall: 0 }));
     story.at(on('14', '18:45'), 'The worker runs');
-    const evening = await reconciliation.run(sync);
-    // The jobs those syncs queued, a record each, are taken up now and write nothing more.
     await queue.settle(p1);
+    const evening = await queue.standing(p1);
     story.check(
       'Wednesday’s tickets before review; each flag is the catalogue’s, word for word. 101009 bills while it is in review',
       [of(evening, '101008', '101009', '10103'), await linesOf('101009')],
