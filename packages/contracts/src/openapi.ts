@@ -4,7 +4,7 @@
 import { z } from 'zod';
 
 import { errorAnswerSchema } from './api-answers.ts';
-import { endpoints, filePartMediaType, type Endpoint } from './endpoints.ts';
+import { answerFileTypes, endpoints, filePartMediaType, type Endpoint } from './endpoints.ts';
 
 type Json = Readonly<Record<string, unknown>>;
 
@@ -67,7 +67,16 @@ function operation(served: Endpoint): Json {
     responses: {
       200: {
         description: 'The answer.',
-        content: { 'application/json': { schema: described(served.answer, 'output') } },
+        // A file, as bytes under the type it was kept under (ADR-483).
+        content:
+          served.answersFile === true
+            ? Object.fromEntries(
+                answerFileTypes.map((type) => [
+                  type,
+                  { schema: { type: 'string', contentMediaType: type } },
+                ]),
+              )
+            : { 'application/json': { schema: described(served.answer, 'output') } },
       },
       default: {
         description: 'A refusal or a failure: a plain code and the request’s id.',

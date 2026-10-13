@@ -225,12 +225,17 @@ export {
   type AddressServerSettings,
 } from './phone/address-server.ts';
 export {
+  isMediaKey,
   MediaStore,
   MediaStoreProblem,
   type KeptFile,
   type Media,
   type MediaStoreSettings,
 } from './media/media-store.ts';
+export { PhotoFiles, type PhotoFile, type PhotoFilesParts } from './media/photo-files.ts';
+export { PhotographFiles, type KeptPhotographFile } from './media/photograph-files.ts';
+export { Receiving } from './media/receiving.ts';
+export { Limits } from './process/limits.ts';
 export {
   PasscodeSessions,
   type PasscodeSessionOutcome,

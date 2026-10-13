@@ -51,7 +51,10 @@ describe('a photograph’s file', () => {
       ['an SVG', bytes('<svg xmlns="')],
       ['a video', ftyp('mp42')],
       ['an AVIF', ftyp('avif')],
-      ['a HEIC brand in a box that isn’t a file type box', bytes(0, 0, 0, 0x18, 'free', 'heic', 0, 0)],
+      [
+        'a HEIC brand in a box that isn’t a file type box',
+        bytes(0, 0, 0, 0x18, 'free', 'heic', 0, 0),
+      ],
       ['a JPEG cut to two bytes', bytes(0xff, 0xd8)],
       [
         'a PNG with its line ending changed',

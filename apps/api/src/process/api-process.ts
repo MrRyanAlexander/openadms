@@ -41,6 +41,7 @@ import { apiMasterPasscode, apiPhones } from '../dispatch/phones.controller.ts';
 import { Phones } from '../dispatch/phones.ts';
 import { MediaStore, type Media } from '../media/media-store.ts';
 import { apiPhotoFiles, PhotoFiles } from '../media/photo-files.ts';
+import { apiPhotographFiles, PhotographFiles } from '../media/photograph-files.ts';
 import { Receiving } from '../media/receiving.ts';
 import { NumberAllocator } from '../numbering/number-allocator.ts';
 import { apiPeople } from '../people/people.controller.ts';
@@ -478,6 +479,11 @@ export class ApiProcess {
               clock,
               fileBytesAtMost: policy.mediaFileBytesAtMost,
             }),
+          ],
+          // A photograph's file, read by the back office (task 2.6.4, part 4).
+          [
+            apiPhotographFiles,
+            new PhotographFiles(database, { media, fileBytesAtMost: policy.mediaFileBytesAtMost }),
           ],
           [
             apiMasterPasscode,

@@ -15,7 +15,9 @@ import {
   healthEndpoint,
   notTaken,
   openApiDocument,
+  answerFileTypes,
   photoFileAnswerSchema,
+  photographFileEndpoint,
   sendPhotoFilePartEndpoint,
   taken,
 } from '../src/index.ts';
@@ -272,6 +274,51 @@ describe('the one endpoint that takes a file', () => {
     ]) {
       expect(photoFileAnswerSchema.safeParse(answer).success, JSON.stringify(answer)).toBe(false);
     }
+  });
+});
+
+describe('the one endpoint that answers a file', () => {
+  it('AC-10-48, ADR-483 is the back office’s read of a photograph’s file: a GET, open to the back office alone, that takes no file and is described as bytes of the kinds of image a file is kept as', () => {
+    expect(endpoints.filter(({ answersFile }) => answersFile === true)).toEqual([
+      photographFileEndpoint,
+    ]);
+    expect([
+      photographFileEndpoint.method,
+      photographFileEndpoint.access,
+      photographFileEndpoint.roles,
+      'permission' in photographFileEndpoint,
+    ]).toEqual(['GET', 'SIGNED_IN', ['ADMIN', 'MANAGER_ANALYST'], false]);
+    const base = {
+      name: 'test',
+      summary: 'A test’s own.',
+      access: 'ANYBODY',
+      path: '/a',
+      answer: healthAnswerSchema,
+      answersFile: true,
+    } as const;
+    expect(() => endpoint({ ...base, method: 'GET' })).not.toThrow();
+    expect(() => endpoint({ ...base, method: 'POST' })).toThrow('answers a file');
+    expect(() => endpoint({ ...base, method: 'PUT', file: true })).toThrow('answers a file');
+    const described = openApiDocument([photographFileEndpoint]) as {
+      paths: Record<string, Record<string, { responses: Record<string, { content: unknown }> }>>;
+    };
+    expect(
+      described.paths['/photographs/{photoId}/files/{file}']?.['get']?.responses['200']?.content,
+    ).toEqual(
+      Object.fromEntries(
+        ['image/jpeg', 'image/heic', 'image/heif', 'image/png', 'image/tiff'].map((type) => [
+          type,
+          { schema: { type: 'string', contentMediaType: type } },
+        ]),
+      ),
+    );
+    expect(answerFileTypes).toEqual([
+      'image/jpeg',
+      'image/heic',
+      'image/heif',
+      'image/png',
+      'image/tiff',
+    ]);
   });
 });
 

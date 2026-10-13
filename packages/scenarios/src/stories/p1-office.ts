@@ -28,6 +28,7 @@ import { StoryClock, utcOffsetMinutes } from '../clock.ts';
 import {
   fromPhone,
   heldId,
+  NoSignal,
   SimulatedDevice,
   type PhoneRecord,
   type RecordedPhoto,
@@ -204,6 +205,9 @@ export async function p1FieldDaysHeld(story: StoryContext): Promise<P1Office> {
           },
         });
       },
+      // Its photographs' files wait on the phone: their records reach the server only when the
+      // held syncs are told, and the phone isn't there then (ADR-483).
+      filePart: () => Promise.reject(new NoSignal()),
     },
     at: (time) => {
       fieldClock.set(time);

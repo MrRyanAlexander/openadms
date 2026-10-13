@@ -325,6 +325,8 @@ export const heldForReview: Story = {
       records: [bad],
       photos: [],
       lastUsed: [],
+      files: [],
+      filePartBytesAtMost: story.policy.mediaPartBytesAtMost,
     });
 
     story.at(monday('17:30'), 'Ana’s phone finds signal at the yard and syncs both');

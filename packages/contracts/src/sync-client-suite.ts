@@ -16,7 +16,20 @@
 // and shown as not saved, in the server's own words; and what is no answer to what was sent
 // marks nothing. What it leaves to the client: when it syncs, how it stores what it holds, and
 // whether it sends a kept record again (the server answers the same id the same way).
-import { stored, syncedRecordAssignment, syncedRecordId } from './sync-client.ts';
+//
+// **And a photograph's files** (ARCHITECTURE §9 (2), (5); AC-05-09; BACKLOG 2.6.4 part 4, C137,
+// C138; ADR-481…483): no photograph's record goes ahead of the record it is of; a file goes to
+// the media endpoint only once its photograph's record is answered saved, in parts no larger than
+// the server takes, each where the last one ended; it is kept until it is answered kept; an
+// interrupted upload goes on from where the server says it stands; and a file answered not the
+// one fingerprinted goes again from its first byte. The suite plays the media endpoint itself.
+import type { PhotoFileAnswer, PhotoFileName } from './api-answers.ts';
+import {
+  stored,
+  syncedRecordAssignment,
+  syncedRecordId,
+  type FilePartSent,
+} from './sync-client.ts';
 import {
   assignment,
   certificationPhotos,
@@ -38,6 +51,7 @@ import {
   syncRecordsAtMost,
   syncSentSchema,
   syncUnplannedAssignmentsAtMost,
+  type PhotoAnswer,
   type RecordAnswer,
   type SyncAnswered,
   type SyncSent,
@@ -52,6 +66,19 @@ export interface SyncClientHolds {
   // Its photographs' records, each of a record above or of one the server already has.
   readonly photos: readonly SyncedPhoto[];
   readonly lastUsed: SyncSent['lastUsed'];
+  // The files of its photographs above still to send, as its phone wrote them; a photograph
+  // above with none had its files kept before.
+  readonly files: readonly HeldPhotoFile[];
+  // The most a part of a file may hold, as the server it sends to takes them.
+  readonly filePartBytesAtMost: number;
+}
+
+// A photograph's file a client holds: the bytes its record's fingerprint is of
+// (`uploadedSha256`, or `depthSha256` for the depth file).
+export interface HeldPhotoFile {
+  readonly photoId: string;
+  readonly file: PhotoFileName;
+  readonly bytes: Uint8Array;
 }
 
 // One thing a client shows as not saved: the id it was made under, the server's reason and,
@@ -74,6 +101,12 @@ export interface SyncClient {
   holds(): readonly string[];
   // What it shows as not saved.
   notSaved(): readonly ShownNotSaved[];
+  // The next part of a file it sends to the media endpoint now; null where it has none to send.
+  sendsFilePart(): FilePartSent | null;
+  // What came back for that part, as it came off the wire; `undefined` where nothing came back.
+  filePartAnswered(answer: unknown): void | Promise<void>;
+  // Each file it holds that the server has not said it kept: "<photograph's id> <file>".
+  holdsFiles(): readonly string[];
 }
 
 export type SyncClientMaker = (holds: SyncClientHolds) => SyncClient | Promise<SyncClient>;
@@ -89,6 +122,8 @@ const nothing: SyncClientHolds = {
   records: [],
   photos: [],
   lastUsed: [],
+  files: [],
+  filePartBytesAtMost: 1000,
 };
 
 function held(condition: boolean, what: string): asserts condition {
@@ -151,6 +186,7 @@ function onTheWire(sent: unknown): SyncSent {
 function answerTo(
   sync: SyncSent,
   how: (id: string, record: SyncedRecord) => RecordAnswer | undefined = () => undefined,
+  photoHow: (id: string) => PhotoAnswer | undefined = () => undefined,
 ): SyncAnswered {
   return {
     unplannedAssignments: sync.unplannedAssignments.map((each) => ({
@@ -167,7 +203,7 @@ function answerTo(
       const id = syncedRecordId(record);
       return how(id, record) ?? { answer: 'SAVED', id, notes: [] };
     }),
-    photos: sync.photos.map(({ id }) => ({ answer: 'SAVED', id, notes: [] })),
+    photos: sync.photos.map(({ id }) => photoHow(id) ?? { answer: 'SAVED', id, notes: [] }),
     numbers: sync.lastUsed.map(({ projectId, series }) => ({
       projectId,
       series,
@@ -179,6 +215,108 @@ function answerTo(
     setupVersion: null,
   };
 }
+
+const named = (file: { readonly photoId: string; readonly file: PhotoFileName }): string =>
+  `${file.photoId} ${file.file}`;
+
+// A part of a file as a client sent it, read as the media endpoint reads one: refused where it
+// isn't a part of a file it holds, or goes past the file, or holds more than the server takes.
+function partOnTheWire(sent: unknown, holds: SyncClientHolds): FilePartSent {
+  const part = sent as Partial<FilePartSent> | null;
+  const file = holds.files.find(
+    (one) => part !== null && one.photoId === part.photoId && one.file === part.file,
+  );
+  held(
+    part !== null && file !== undefined,
+    'It sent a part of a file it was never handed, or something that is no part of a file.',
+  );
+  const { offset, length, bytes } = part;
+  held(
+    Number.isInteger(offset) &&
+      Number.isInteger(length) &&
+      bytes instanceof Uint8Array &&
+      bytes.byteLength > 0,
+    'It sent a part with no offset, no length or no bytes.',
+  );
+  held(
+    length === file.bytes.byteLength,
+    `A part of ${named(file)} said the file is ${String(length)} bytes long; it is ${String(file.bytes.byteLength)}.`,
+  );
+  held(
+    (offset ?? 0) >= 0 && (offset ?? 0) + bytes.byteLength <= length,
+    `A part of ${named(file)} went past the file’s length.`,
+  );
+  held(
+    bytes.byteLength <= holds.filePartBytesAtMost,
+    `A part of ${named(file)} held ${String(bytes.byteLength)} bytes; the server takes ${String(holds.filePartBytesAtMost)} at most.`,
+  );
+  return part as FilePartSent;
+}
+
+// The media endpoint as the suite plays it (ADR-482 (1), (2), (5)): a part is taken where it
+// starts the file or goes on where the last one ended; whole, the file is kept where its bytes
+// are the ones the client was handed, and answered not matched where `unmatched` says so (once
+// for each file it names). A file kept is answered kept.
+class FilesTaken {
+  private readonly holds: SyncClientHolds;
+  private readonly unmatched: Set<string>;
+  private readonly taken = new Map<string, number[]>();
+  readonly kept = new Set<string>();
+  readonly parts: FilePartSent[] = [];
+
+  constructor(holds: SyncClientHolds, unmatched: readonly string[] = []) {
+    this.holds = holds;
+    this.unmatched = new Set(unmatched);
+  }
+
+  take(sent: unknown): PhotoFileAnswer {
+    const part = partOnTheWire(sent, this.holds);
+    this.parts.push(part);
+    const file = named(part);
+    if (this.kept.has(file)) return { upload: 'KEPT' };
+    const so = this.taken.get(file) ?? [];
+    if (part.offset !== 0 && part.offset !== so.length) {
+      return {
+        upload: 'RECEIVING',
+        received: so.length,
+        length: so.length === 0 ? null : part.length,
+      };
+    }
+    const now = part.offset === 0 ? [...part.bytes] : [...so, ...part.bytes];
+    if (now.length < part.length) {
+      this.taken.set(file, now);
+      return { upload: 'RECEIVING', received: now.length, length: part.length };
+    }
+    this.taken.delete(file);
+    if (this.unmatched.delete(file)) return { upload: 'NOT_MATCHED' };
+    const handed = this.holds.files.find((one) => named(one) === file);
+    held(
+      handed !== undefined && same(now, [...handed.bytes]),
+      `Its parts of ${file}, put together, are not the file it was handed.`,
+    );
+    this.kept.add(file);
+    return { upload: 'KEPT' };
+  }
+}
+
+// Every part it sends now, each answered by the endpoint as the suite plays it, until it sends
+// none: no more than so many.
+async function sentAll(client: SyncClient, taken: FilesTaken, most = 40): Promise<void> {
+  for (let parts = 0; ; parts += 1) {
+    const part = client.sendsFilePart();
+    if (part === null) return;
+    held(parts < most, `After ${String(most)} parts it is still sending.`);
+    await client.filePartAnswered(JSON.parse(JSON.stringify(taken.take(part))));
+  }
+}
+
+// A photograph's file as a phone's camera writes one: a JPEG's first bytes, then the rest; the
+// depth file a PNG's. Made, never random, so the same call makes the same file.
+const fileOf = (length: number, seed: number, kind: 'jpeg' | 'png' = 'jpeg'): Uint8Array => {
+  const start =
+    kind === 'jpeg' ? [0xff, 0xd8, 0xff, 0xe1] : [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+  return Uint8Array.from({ length }, (_, at) => start[at] ?? (at * 31 + seed) % 256);
+};
 
 const another = (record: SyncedRecord & { record: 'FIELD_EVENT' }, last: string, more = {}) =>
   ({
@@ -212,6 +350,7 @@ export const syncClientSuite: readonly SyncClientCheck[] = [
     name: 'each record is sent once, as recorded, under the id its phone made, as its own schema reads it: one of each kind, the photographs of two of them, the reports and the last numbers used beside them, and never which phone it is from nor where a file is kept (AC-10-35; ADR-466, 469, 481)',
     async run(make) {
       const holds = {
+        ...nothing,
         unplannedAssignments: [unplanned],
         passcodeUses: [switched],
         records: oneOfEach,
@@ -524,6 +663,204 @@ export const syncClientSuite: readonly SyncClientCheck[] = [
         );
         held(client.notSaved().length === 0, `Answered ${what}, it shows something as not saved.`);
       }
+    },
+  },
+  {
+    name: 'no photograph’s record goes ahead of the record it is of: one whose record waits for the next sync waits with it, and goes in that sync or a later one (ARCHITECTURE §9 (2); ADR-481; C137)',
+    async run(make) {
+      const records = Array.from({ length: syncRecordsAtMost + 1 }, (_, index) =>
+        collected(String(4000 + index)),
+      );
+      const [first] = records;
+      const last = records.at(-1);
+      held(first !== undefined && last !== undefined, 'The records are not all there.');
+      const of = (record: SyncedRecord, id: string): SyncedPhoto => ({
+        ...pilePhoto,
+        id: made(id),
+        owner: { kind: 'FIELD_EVENT', id: syncedRecordId(record) },
+      });
+      const client = await make({
+        ...nothing,
+        records,
+        photos: [of(last, '4900'), of(first, '4901')],
+      });
+      const saved = new Set<string>();
+      for (let syncs = 1; client.holds().length > 0; syncs += 1) {
+        held(syncs <= 4, 'After four syncs, each answered "saved", it still holds something.');
+        const sync = onTheWire(client.sends());
+        const here = new Set(sync.records.map(syncedRecordId));
+        for (const photo of sync.photos) {
+          held(
+            here.has(photo.owner.id) || saved.has(photo.owner.id),
+            `Photograph ${photo.id} went in a sync ahead of the record it is of.`,
+          );
+        }
+        here.forEach((id) => saved.add(id));
+        await client.answered(answerTo(sync));
+      }
+    },
+  },
+  {
+    name: 'a photograph’s file goes to the media endpoint only once its record is answered saved: none ahead of its sync, and none of one not saved, which it keeps with its file and shows as not saved in the server’s words (ADR-481, 482; C137)',
+    async run(make) {
+      const record = collected('71');
+      const ofIt: SyncedPhoto = {
+        ...pilePhoto,
+        id: made('72'),
+        owner: { kind: 'FIELD_EVENT', id: syncedRecordId(record) },
+      };
+      const notIts: SyncedPhoto = {
+        ...pilePhoto,
+        id: made('73'),
+        owner: { kind: 'FIELD_EVENT', id: made('74') },
+      };
+      const holds = {
+        ...nothing,
+        records: [record],
+        photos: [ofIt, notIts],
+        files: [
+          { photoId: ofIt.id, file: 'photo', bytes: fileOf(1500, 1) },
+          { photoId: notIts.id, file: 'photo', bytes: fileOf(800, 2) },
+        ],
+      } satisfies SyncClientHolds;
+      const client = await make(holds);
+      held(
+        client.sendsFilePart() === null,
+        'It sent a part of a file before its photograph’s record was answered saved.',
+      );
+      const sync = onTheWire(client.sends());
+      held(sync.photos.length === 2, 'It did not send both photographs’ records.');
+      const message = 'Not saved: the record this photograph belongs to isn’t saved on the server.';
+      await client.answered(
+        answerTo(sync, undefined, (id) =>
+          id === notIts.id
+            ? { answer: 'NOT_SAVED', id, reason: 'OWNER_NOT_SAVED', message }
+            : undefined,
+        ),
+      );
+      const taken = new FilesTaken(holds);
+      await sentAll(client, taken);
+      held(
+        taken.kept.has(named({ photoId: ofIt.id, file: 'photo' })) &&
+          taken.parts.every((part) => part.photoId === ofIt.id),
+        'It sent a part of the file of a photograph not saved, or did not send the saved one’s whole.',
+      );
+      held(
+        sorted(client.holdsFiles()) === named({ photoId: notIts.id, file: 'photo' }),
+        'It should hold the file of the photograph not saved, and no other.',
+      );
+      held(
+        client.holds().includes(notIts.id) &&
+          client
+            .notSaved()
+            .some(
+              (one) =>
+                one.id === notIts.id && one.reason === 'OWNER_NOT_SAVED' && one.message === message,
+            ),
+        'The photograph not saved is not kept and shown with the server’s reason and words.',
+      );
+    },
+  },
+  {
+    name: 'a file goes in parts, each no larger than the server takes and each where the last one ended, saying the whole file’s length, until it is answered kept; put together they are the file as its phone wrote it, the depth file beside its photograph’s included, and a file kept is sent no more (AC-05-09; ADR-482 (1), (2), (6))',
+    async run(make) {
+      const withDepth = certificationPhotos.find(({ depthSha256 }) => depthSha256 !== null);
+      held(withDepth !== undefined, 'The examples have no photograph with a depth file.');
+      const holds = {
+        ...nothing,
+        photos: [pilePhoto, withDepth],
+        files: [
+          { photoId: pilePhoto.id, file: 'photo', bytes: fileOf(2500, 3) },
+          { photoId: withDepth.id, file: 'photo', bytes: fileOf(1200, 4) },
+          { photoId: withDepth.id, file: 'depth', bytes: fileOf(900, 5, 'png') },
+        ],
+      } satisfies SyncClientHolds;
+      const client = await make(holds);
+      await client.answered(answerTo(onTheWire(client.sends())));
+      const taken = new FilesTaken(holds);
+      await sentAll(client, taken);
+      held(
+        sorted([...taken.kept]) === sorted(holds.files.map(named)),
+        'Not every file it held was sent whole and kept.',
+      );
+      for (const file of holds.files) {
+        let next = 0;
+        for (const part of taken.parts.filter((one) => named(one) === named(file))) {
+          held(
+            part.offset === next,
+            `A part of ${named(file)} did not go where the last one ended.`,
+          );
+          next += part.bytes.byteLength;
+        }
+      }
+      held(
+        client.holdsFiles().length === 0 && client.sendsFilePart() === null,
+        'A file answered kept is still held, or is sent again.',
+      );
+    },
+  },
+  {
+    name: 'an interrupted upload goes on from where the server says it stands: with nothing back, or something that is no answer, the part goes again from where the server last stood; told the server holds none of it, once it let the file go, it starts the file again (AC-05-09; ADR-482 (2))',
+    async run(make) {
+      const bytes = fileOf(2600, 6);
+      const holds = {
+        ...nothing,
+        photos: [pilePhoto],
+        files: [{ photoId: pilePhoto.id, file: 'photo', bytes }],
+      } satisfies SyncClientHolds;
+      const client = await make(holds);
+      await client.answered(answerTo(onTheWire(client.sends())));
+      const next = (): FilePartSent => {
+        const part = client.sendsFilePart();
+        held(part !== null, 'It holds a file not yet kept, and sent no part of it.');
+        return partOnTheWire(part, holds);
+      };
+      const first = next();
+      held(first.offset === 0, 'Its first part did not start at the file’s first byte.');
+      const after = first.bytes.byteLength;
+      await client.filePartAnswered({ upload: 'RECEIVING', received: after, length: bytes.length });
+      held(next().offset === after, 'Its second part did not go on where the first one ended.');
+      for (const back of [undefined, 'OK', { upload: 'KEPT', received: after }]) {
+        await client.filePartAnswered(back);
+        held(
+          next().offset === after,
+          `With ${back === undefined ? 'nothing' : JSON.stringify(back)} back, its part did not go again from where the server last stood.`,
+        );
+      }
+      await client.filePartAnswered({ upload: 'RECEIVING', received: 0, length: null });
+      held(
+        next().offset === 0,
+        'Told the server holds none of the file, it did not start it again.',
+      );
+      const taken = new FilesTaken(holds);
+      await sentAll(client, taken);
+      held(
+        taken.kept.has(named({ photoId: pilePhoto.id, file: 'photo' })) &&
+          client.holdsFiles().length === 0,
+        'After the interruption the file was not sent whole and kept.',
+      );
+    },
+  },
+  {
+    name: 'a file answered not the one fingerprinted is kept and sent again from its first byte, until it is kept (ADR-482 (5))',
+    async run(make) {
+      const file = { photoId: pilePhoto.id, file: 'photo', bytes: fileOf(1800, 7) } as const;
+      const holds = { ...nothing, photos: [pilePhoto], files: [file] } satisfies SyncClientHolds;
+      const client = await make(holds);
+      await client.answered(answerTo(onTheWire(client.sends())));
+      const taken = new FilesTaken(holds, [named(file)]);
+      await sentAll(client, taken);
+      const whole = taken.parts.findIndex(
+        (part) => part.offset + part.bytes.byteLength === part.length,
+      );
+      held(
+        whole >= 0 && taken.parts[whole + 1]?.offset === 0,
+        'Answered not matched, it did not send its file again from the first byte.',
+      );
+      held(
+        taken.kept.has(named(file)) && client.holdsFiles().length === 0,
+        'Answered not matched, it let its file go before it was kept.',
+      );
     },
   },
 ];

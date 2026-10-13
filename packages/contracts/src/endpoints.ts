@@ -15,6 +15,7 @@ import {
   numberSeries,
   permissions,
   phoneRemovals,
+  photoFileTypes,
   qcStatuses,
   ruleActionKinds,
   ruleCriterionKeys,
@@ -41,7 +42,9 @@ import {
   phoneLoginListAnswerSchema,
   phoneMonitorAnswerSchema,
   unplannedAssignmentAnswerSchema,
+  keptFileAnswerSchema,
   photoFileAnswerSchema,
+  photoFiles,
   phoneEnrolledAnswerSchema,
   phoneProvenAnswerSchema,
   provenPhoneAnswerSchema,
@@ -193,11 +196,19 @@ export interface Endpoint {
   // bytes of `filePartMediaType`, never JSON, and no `body` schema is given. Only the media
   // endpoint is one.
   readonly file?: true;
+  // The one kind of endpoint that answers a file (AC-10-48; ADR-483): its answer is the bytes
+  // that were kept, under one of `answerFileTypes`, never JSON, and always a download. Only the
+  // back office's read of a photograph's file is one, and only a `GET`.
+  readonly answersFile?: true;
   readonly answer: z.ZodType;
 }
 
 // What a part of a file is sent as (the tus protocol's word for bytes that go at an offset).
 export const filePartMediaType = 'application/offset+octet-stream';
+
+// The types a file is answered under: the kinds of image a photograph's file is kept as, told by
+// its own first bytes (the domain's `photoFileTypes`, ADR-482 (3)).
+export const answerFileTypes = photoFileTypes;
 
 type JsonSchema = Readonly<Record<string, unknown>>;
 
@@ -242,6 +253,9 @@ export function endpoint<const E extends Endpoint>(defined: E): E {
     throw new Error(
       `The endpoint ${defined.name} takes a file: its body is that, and nothing else.`,
     );
+  }
+  if (defined.answersFile === true && (defined.method !== 'GET' || defined.file === true)) {
+    throw new Error(`The endpoint ${defined.name} answers a file: it is a GET, and takes none.`);
   }
   const roles = defined.roles ?? [];
   const signedIn = defined.access === 'SIGNED_IN';
@@ -1880,7 +1894,7 @@ export const syncPhoneEndpoint = endpoint({
 const photoFileNamed = z.strictObject({
   photoId: z.uuid(),
   // The photograph itself, or the depth file beside it.
-  file: z.enum(['photo', 'depth']),
+  file: z.enum(photoFiles),
 });
 
 export const photoFileEndpoint = endpoint({
@@ -2207,6 +2221,27 @@ export const markPhotographEndpoint = endpoint({
     note: reviewNote,
   }),
   answer: savedAnswer(photographRecordSchema),
+});
+
+// A photograph's file, read by the back office (ARCHITECTURE §6 "Uploads"; AC-10-48; T-25;
+// ADR-482 (10), 483). **Open to every admin and manager/analyst, whether or not they hold a
+// permission**, as the setup check is: the back office sees everything, and a reviewer reads a
+// photograph to review its ticket. What OWASP ASVS 5.0 asks of a file handed back, and how the
+// API meets it: the bytes that were stored and nothing made of them; the type they were kept
+// under, which their own first bytes said; `X-Content-Type-Options: nosniff`, so no browser
+// guesses another; `Content-Disposition: attachment`, with a name the server makes and never the
+// phone's, and a policy that sandboxes it, so it is never run as a page (V3.2.1, V5.4); never
+// where it is kept (API3). A removed photograph's file is read all the same: nothing is deleted.
+export const photographFileEndpoint = endpoint({
+  name: 'photographFile',
+  summary:
+    'A photograph’s file as it was kept: the photograph itself or the depth file beside it, the bytes that were stored, under the type their own first bytes said, sent as a download and never as a page. A photograph removed from the record is read all the same. One whose file hasn’t arrived, or that has no depth file, is not found.',
+  ...reviewer,
+  method: 'GET',
+  path: '/photographs/:photoId/files/:file',
+  params: photoFileNamed,
+  answersFile: true,
+  answer: keptFileAnswerSchema,
 });
 
 // A receipt several tickets may share (a tandem's two): each ticket on it is queued, and one
@@ -2626,6 +2661,7 @@ export const endpoints: readonly Endpoint[] = [
   correctItemLineEndpoint,
   correctCarriedTicketEndpoint,
   markPhotographEndpoint,
+  photographFileEndpoint,
   correctScaleReceiptEndpoint,
   correctRoeEndpoint,
   correctRoeScopeEndpoint,

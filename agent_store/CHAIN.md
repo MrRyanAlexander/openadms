@@ -7,7 +7,7 @@
 > task's ADR and its session-log line in `DECISIONS.md`). No other file carries these counts.
 > **A count that differs from this page without a reason is a finding, not noise.**
 
-**Seen whole:** 2026-10-12, after ADR-482, on the user's Mac, the installation at head.
+**Seen whole:** 2026-10-12, after ADR-483, on the user's Mac, the installation at head.
 
 ## `pnpm ready`
 
@@ -20,15 +20,15 @@
 
 ## `pnpm test`
 
-**`Test Files 152 passed (152)`, `Tests 2734 passed (2734)`.**
+**`Test Files 152 passed (152)`, `Tests 2750 passed (2750)`.**
 
 | Project | Tests | Files | Needs |
 |---|---|---|---|
 | `packages/domain` | 777 | 42 | nothing |
-| `packages/contracts` | 67 | 9 | nothing |
-| `apps/api` | 555 | 41 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
+| `packages/contracts` | 74 | 9 | nothing |
+| `apps/api` | 558 | 41 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
 | `packages/db` | 1053 | 44 | `pnpm ready` |
-| `packages/scenarios` | 125 | 5 | `pnpm ready` for `stories.test.ts` (the runner and a run's template, 5); the flag catalogue (78 flags), the harness, the phone held to the sync contract's suite and to what it sends and takes in at a sync (12) and the policy need nothing. **The stories themselves are not here** (ADR-446) |
+| `packages/scenarios` | 131 | 5 | `pnpm ready` for `stories.test.ts` (the runner and a run's template, 5); the flag catalogue (78 flags), the harness, the phone held to the sync contract's suite and to what it sends and takes in at a sync, its photographs' files among it (18) and the policy need nothing. **The stories themselves are not here** (ADR-446) |
 | `apps/worker` | 30 | 3 | `pnpm ready` for the map servers (13) and its container (3); the process (14) needs nothing |
 | `infra/local` | 22 | 3 | `pnpm ready` |
 | `tools/security` | 90 | 2 | nothing (the scan's and the grant tests' rules 33, the guard hook 57) |
@@ -42,7 +42,7 @@
 
 ## `pnpm scenarios`
 
-`This run’s template, adms_story_template_…: 112 migrations applied`, then **`Stories: 20 passed, 0
+`This run’s template, adms_story_template_…: 112 migrations applied`, then **`Stories: 21 passed, 0
 failed.`** Each story `passed: N checks, N passed, 0 failed`:
 
 | Story | Checks | | Story | Checks |
@@ -50,13 +50,14 @@ failed.`** Each story `passed: N checks, N passed, 0 failed`:
 | `ticket-101001` | 16 | | `p1-priced` | 28 |
 | `dispatch-monday` | 22 | | `p1-reviewed` | 35 |
 | `setup` | 52 | | `p1-voided` | 28 |
-| `certification` | 29 | | `p1-invoiced` | 26 |
+| `certification` | 30 | | `p1-invoiced` | 26 |
 | `numbering` | 16 | | `golden-mission` | 27 |
 | `p1-field-days` | 35 | | `p1-left-out` | 31 |
 | `sync` | 49 | | `first-admin` | 32 |
 | `p1-any-order` | 4 | | `p1-queued` | 16 |
 | `p1-reconciled` | 39 | | `p1-viewed` | 15 |
 | `under-the-passcode` | 9 | | `held-for-review` | 11 |
+| `interrupted-upload` | 8 | | | |
 
 The golden mission's figures are `spec/golden/MISSION.md`'s and change only at the user's word:
 P1 $5,548.25 on 19 lines, P2 $324.00. `p1-reconciled` through `p1-left-out`, `p1-queued` and

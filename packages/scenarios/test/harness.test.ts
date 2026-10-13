@@ -8,6 +8,8 @@ import type { SyncAnswer } from '@open-adms/api';
 import {
   photoRead,
   recordRead,
+  type FilePartSent,
+  type PhotoFileAnswer,
   type RecordAnswer,
   type SyncAnswered,
   type SyncReceived,
@@ -78,6 +80,8 @@ function idOf(sent: PhoneRecord): string {
 class Received implements PhoneServer {
   readonly records: PhoneRecord[] = [];
   readonly photos: string[] = [];
+  // Each photograph's file, whole, as its parts arrived.
+  readonly files = new Map<string, Buffer>();
   refuseAfter = Infinity;
   // The ids the server keeps in quarantine instead of saving.
   readonly quarantines = new Set<string>();
@@ -104,6 +108,23 @@ class Received implements PhoneServer {
             heldBy: setup.deviceId,
           }
         : { answer: 'SAVED', id, notes: [] },
+    );
+  }
+
+  // A part of a file, taken where it goes on from the last: kept once whole (ADR-482).
+  filePart(_deviceId: string, part: FilePartSent): Promise<PhotoFileAnswer> {
+    const name = `${part.photoId} ${part.file}`;
+    const so = this.files.get(name) ?? Buffer.alloc(0);
+    if (so.length === part.length) return Promise.resolve({ upload: 'KEPT' });
+    if (part.offset !== so.length) {
+      return Promise.resolve({ upload: 'RECEIVING', received: so.length, length: part.length });
+    }
+    const now = Buffer.concat([so, part.bytes]);
+    this.files.set(name, now);
+    return Promise.resolve(
+      now.length === part.length
+        ? { upload: 'KEPT' }
+        : { upload: 'RECEIVING', received: now.length, length: part.length },
     );
   }
 

@@ -89,7 +89,7 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-12, through ADR-482)
+### Where things stand (2026-10-12, through ADR-483)
 - **Phase 2 (API and sync) is open (ADR-376): 25 of its 32 tasks are closed (2.6.3, the edit log, withdrawn at the user's word, ADR-477)** (`BACKLOG.md`,
   "Active — Phase 2", ticks each with its ADRs). Complete: Milestone 2.1 (the API as a process,
   the boundary, time limits and policy), 2.2 (sign-in: its records, passwords, sessions, two-step
@@ -106,12 +106,12 @@ of `DECISIONS.md`.
   (the records a phone sends, `sync-records.ts`, ADR-466; one sync whole and its answer,
   `sync.ts`, ADR-467; a certification made on a phone, ADR-469; **the suite any client must
   pass, `syncClientSuite`, and `syncAnswerRead`, with the harness's phone a client of the
-  contract, ADR-470**; what they leave: C127…C130). **Task 2.6.2 (the endpoint) is done in four parts (ADR-471…473, 475): the tables `sync`, `synced_record` and `held_record`; `POST /phones/current/syncs` and `Sync` (`apps/api/src/sync/sync.ts`); what a sync brings besides its answers and the worker's `DEVICE_CLOCK_OFF`; and every story's phone syncing through `Sync` (`story.server`; the stand-in is gone; what it leaves: C134).** **The user's hard rule (ADR-477): once a monitor submits a record on the phone it is sealed for them, synced or not; only the back office changes it. There is no reopen and no edit log; task 2.6.3 is withdrawn (what it leaves: C135).** **Task 2.6.4 (photographs) is cut in five (ADR-478) and its part 1 is done (ADR-479, 480): the object store's client (`@aws-sdk/client-s3`), the bucket `adms-media` made by `pnpm local:up`, the API's own identity at the store (put and get, nothing else), `Settings.media` and `MediaStore` (`apps/api/src/media/media-store.ts`: `keep`, `sizeOf`, `read`; nothing calls it yet; what it leaves: C136). Its part 2 is done (ADR-481): a photograph's record is a sync's own part, `photos`, after the records, with both fingerprints and never a place; the server makes the place (`projects/<project>/photos/<photograph>`, `apps/api/src/media/photo-places.ts`) and holds a photograph whose record it doesn't have saved (`OWNER_NOT_SAVED`); the harness's phones send their photographs in their syncs and every story's certification its five (what it leaves: C137).** **Its part 3 is done (ADR-482): the media endpoint (`GET`/`PATCH /phones/current/photos/:photoId/files/:file`, `apps/api/src/media/photo-files.ts`), the one that takes a file: parts that go on where the last ended, held only in the API's memory (`Receiving`, bounded); size, an image by its first bytes, then the whole file's SHA-256 against the record's; kept once with its upload time, by the phone; a whole file not fingerprinted set aside for a person (`set_aside_file`), the phone told to send again; the depth file's own fingerprint, `depthSha256` (what it leaves: C138).** **The user decided that a record answered `NOT_SAVED`
+  contract, ADR-470**; what they leave: C127…C130). **Task 2.6.2 (the endpoint) is done in four parts (ADR-471…473, 475): the tables `sync`, `synced_record` and `held_record`; `POST /phones/current/syncs` and `Sync` (`apps/api/src/sync/sync.ts`); what a sync brings besides its answers and the worker's `DEVICE_CLOCK_OFF`; and every story's phone syncing through `Sync` (`story.server`; the stand-in is gone; what it leaves: C134).** **The user's hard rule (ADR-477): once a monitor submits a record on the phone it is sealed for them, synced or not; only the back office changes it. There is no reopen and no edit log; task 2.6.3 is withdrawn (what it leaves: C135).** **Task 2.6.4 (photographs) is cut in five (ADR-478) and its part 1 is done (ADR-479, 480): the object store's client (`@aws-sdk/client-s3`), the bucket `adms-media` made by `pnpm local:up`, the API's own identity at the store (put and get, nothing else), `Settings.media` and `MediaStore` (`apps/api/src/media/media-store.ts`: `keep`, `sizeOf`, `read`; nothing calls it yet; what it leaves: C136). Its part 2 is done (ADR-481): a photograph's record is a sync's own part, `photos`, after the records, with both fingerprints and never a place; the server makes the place (`projects/<project>/photos/<photograph>`, `apps/api/src/media/photo-places.ts`) and holds a photograph whose record it doesn't have saved (`OWNER_NOT_SAVED`); the harness's phones send their photographs in their syncs and every story's certification its five (what it leaves: C137).** **Its part 3 is done (ADR-482): the media endpoint (`GET`/`PATCH /phones/current/photos/:photoId/files/:file`, `apps/api/src/media/photo-files.ts`), the one that takes a file: parts that go on where the last ended, held only in the API's memory (`Receiving`, bounded); size, an image by its first bytes, then the whole file's SHA-256 against the record's; kept once with its upload time, by the phone; a whole file not fingerprinted set aside for a person (`set_aside_file`), the phone told to send again; the depth file's own fingerprint, `depthSha256` (what it leaves: C138).** **Its part 4 is done (ADR-483): the harness's phone makes a real file for each photograph (its fingerprint that file's SHA-256) and sends it after the sync that saved its record, in parts, each from where the server says it stands, until kept (`SimulatedDevice.upload`, `NoSignal`); `syncClientSuite` 13 checks; the story `interrupted-upload`; a story's files in a store of its own, in memory (`StoryMedia`, `story.media`); the back office's read of a file, `GET /photographs/:photoId/files/:file` (`PhotographFiles`), a download never run (what it leaves: C139).** **The user decided that a record answered `NOT_SAVED`
   is held on the server for a person, in a table of its own, built with 2.6.2 (ADR-468).** **The user approved ARCHITECTURE §7.2's notes on signing in
   online and taking the assignment (ADR-452).**
 - **Where each thing is written, so nothing is read twice:** a rule as it stands, with its ADR:
   `SUMMARY.md`, by topic (grep its `###` headings; never read it whole). What a finished task left
-  for a later one: `BACKLOG.md`'s carry-forward register (C85…C138). How a layer's tests are
+  for a later one: `BACKLOG.md`'s carry-forward register (C85…C139). How a layer's tests are
   written and what a loosening is tried on: the page for that layer beside the `adms-verify`
   skill. Today's counts: `agent_store/CHAIN.md`. **The task-by-task record that stood here
   (2.0.1 to 2.5.2, every endpoint and service named) moved word for word to `DECISIONS.md`'s
@@ -329,18 +329,15 @@ questions.
 **Phase 2 is open (ADR-376). Its plan is `BACKLOG.md`, "Active — Phase 2" (ADR-377): read its
 brief first. One task per response.**
 
-**Task 2.6.4, part 4 of 5: the harness and the stories, and the back office's read of a file**
-*(BACKLOG 2.6.4, whose parts are ADR-478's as ADR-482 (10) amended them; its carry-forward first:
-**C138**, then C137, C130; ADR-101, 470, 475, 480…482; AC-05-09, AC-04-77, AC-10-48; T-25; read
-`api-tests.md` beside the `adms-verify` skill first)*. **The harness's phone makes a real file for
-each photograph** (its record's `uploadedSha256` the SHA-256 of those bytes) and **sends it through
-the media endpoint** after the sync that saved its record, in parts, keeping it until it is
-answered `KEPT` (`NOT_MATCHED` and a let-go start it again); **`syncClientSuite` gains the
-photographs' checks**, each with a fault only it catches; **an interrupted upload continued, as a
-story** (AC-05-09); and **the back office's own read of a photograph's file** (AC-10-48's
-asked-for half): the bytes kept, under the type they were kept under, never run in a browser.
-Say what the standards ask first (ADR-401). The map's files are part 5.
-**The user may still overturn ADR-482's defaults, ADR-481's, ADR-478's cut and ADR-480's defaults, ADR-475's defaults (the harness only), ADR-473 (2) and (4)'s (the rest were confirmed, ADR-474), ADR-472's defaults, ADR-471's defaults, ADR-470's defaults, ADR-469's, ADR-467 (4)'s limits (its other defaults are settled, ADR-468), ADR-466's, ADR-464's, ADR-463's, ADR-462's, ADR-458's other defaults (three were confirmed, ADR-459), ADR-457's, ADR-456 (5)'s proposals, ADR-455's, ADR-454's, ADR-453's, ADR-451's and ADR-450's defaults, ADR-449
+**Task 2.6.4, part 5 of 5: the map's files** *(BACKLOG 2.6.4, ADR-478's cut; its carry-forward
+first: **C100**'s 2.6.4 line, then C139, C86; ADR-311, 401, 426, 482, 483; read `api-tests.md` beside
+the `adms-verify` skill first)*. **A shapefile read to GeoJSON** before `ProjectSetup.loadMap` and
+`SiteSetup.shape` (a new dependency: its ADR first, pinned, licence, at least seven days old, the
+clean-copy check after); **a map file larger than a request's body** (1 MiB today) by a route of
+its own with its own size limit (C86), as the media endpoint's is; `MapVersion.uploadedFileKey`,
+the file kept once where the server places it. Say what the standards ask first (ADR-401). When
+it is done, 2.6.4 closes: REQ-203's and REQ-207's parts are read whole and ticked only if they are.
+**The user may still overturn ADR-483's defaults, ADR-482's, ADR-481's, ADR-478's cut and ADR-480's defaults, ADR-475's defaults (the harness only), ADR-473 (2) and (4)'s (the rest were confirmed, ADR-474), ADR-472's defaults, ADR-471's defaults, ADR-470's defaults, ADR-469's, ADR-467 (4)'s limits (its other defaults are settled, ADR-468), ADR-466's, ADR-464's, ADR-463's, ADR-462's, ADR-458's other defaults (three were confirmed, ADR-459), ADR-457's, ADR-456 (5)'s proposals, ADR-455's, ADR-454's, ADR-453's, ADR-451's and ADR-450's defaults, ADR-449
 (5)'s proposals as built, ADR-442's, ADR-440's, ADR-438's two choices or ADR-439's (`SUMMARY.md` §4).**
 **Docker's disk is 8 GB and was full once on 2026-10-10** (Tools and housekeeping; it has held since, 1.3 GB free after ADR-464's session): if `pnpm ready` fails for space, stop and ask the user to free some; never work around it.
 **Before the chain, `pnpm ready`** (the stack up, then `installer:check`): a `✗` at the migrations

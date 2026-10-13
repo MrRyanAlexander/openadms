@@ -9,6 +9,7 @@ import {
   DeviceKeys,
   Enrolment,
   Intake,
+  Limits,
   MasterPasscodeCheck,
   NoMail,
   NumberAllocator,
@@ -24,6 +25,8 @@ import {
   PhoneProofs,
   PhoneSignIns,
   PhoneTokens,
+  PhotoFiles,
+  Receiving,
   SessionTokens,
   SetupChoices,
   Sync,
@@ -39,6 +42,7 @@ import {
   PasscodeSessionRules,
   PasswordRules,
   PhoneProofRules,
+  RateLimits,
   SignInTries,
   type MasterPasscodeSessionKind,
   type Policy,
@@ -49,6 +53,7 @@ import { SimulatedDevice, type PhoneServer, type PhoneSetup } from './device.ts'
 import { builtInPolicy } from './policy.ts';
 import { SoftwareKey, type EnrolledPhone } from './software-key.ts';
 import { StoryDatabase, storyMasterPasscode, type StoryTemplate } from './story-database.ts';
+import { StoryMedia } from './story-media.ts';
 
 // The signing secret of a story's API: made up, the same for every story, used nowhere else.
 const storySigningSecret = 'made-up-signing-secret-for-the-stories-only';
@@ -86,11 +91,17 @@ export interface StoryContext {
   // Where phones sync to (BACKLOG 2.6.2 part 4; ADR-475): the API's own `Sync`, built as its
   // process builds it (apps/api, src/process/api-process.ts), on the story's database and
   // clock. A phone's sync is read by the contract and answered whole: its reports, its
-  // records, its numbers, and what a sync brings besides. A photograph's record goes to the
-  // intake behind it until its upload is built (2.6.4).
+  // records, its photographs' records, its numbers, and what a sync brings besides. And where
+  // a phone sends a photograph's files: the API's own `PhotoFiles` (ADR-482, 483), keeping
+  // them in the story's store.
   readonly server: PhoneServer;
-  // The same, on another clock: for field days told again on a clock of their own.
+  // The same, on another clock: for field days told again on a clock of their own. Each is an
+  // API process of its own, holding its own parts of files not yet whole: one started again
+  // holds none.
   serverOn(clock: { now: () => Date }): PhoneServer;
+  // The story's own object store, where the API keeps photographs' files (ADR-483): in memory,
+  // gone when the story ends.
+  readonly media: StoryMedia;
   // Moves the clock to a time (with its offset) and says what happens then.
   at(time: string, what: string): void;
   phone(setup: PhoneSetup): SimulatedDevice;
@@ -228,8 +239,16 @@ export class Runner {
         deviceId,
         status: (await api.device.findUniqueOrThrow({ where: { id: deviceId } })).status,
       });
-      // The API's `Sync`, as `api-process.ts` builds it.
+      const media = new StoryMedia();
+      // The API's `Sync` and `PhotoFiles`, as `api-process.ts` builds them.
       const serverOn = (at: { now: () => Date }): PhoneServer => {
+        const files = new PhotoFiles(api, {
+          media,
+          receiving: new Receiving(policy.mediaReceivingBytesAtMost),
+          limits: new Limits(new RateLimits(policy), at),
+          clock: at,
+          fileBytesAtMost: policy.mediaFileBytesAtMost,
+        });
         const taking = new Intake(api, at, policy);
         const sync = new Sync(api, {
           intake: taking,
@@ -247,6 +266,14 @@ export class Runner {
         });
         return {
           received: (deviceId, sent) => sync.received(deviceId, sent),
+          // A part as the media endpoint's boundary reads one: its bytes, its offset and the
+          // file's length; the answer as it goes on the wire.
+          filePart: (deviceId, part) =>
+            files.part(deviceId, part.photoId, part.file, {
+              offset: part.offset,
+              length: part.length,
+              bytes: Buffer.from(part.bytes),
+            }),
         };
       };
       const context: StoryContext = {
@@ -257,6 +284,7 @@ export class Runner {
         policy,
         server: serverOn(clock),
         serverOn,
+        media,
         at(time, what) {
           clock.set(time);
           out(`  ${projectTime(story.timeZone, clock.now())}  ${what}`);

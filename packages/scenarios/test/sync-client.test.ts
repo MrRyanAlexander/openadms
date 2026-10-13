@@ -3,10 +3,13 @@
 // ADR-470, 475; REQ-203), with no database. And what it sends and takes in besides its records
 // when it syncs through the API's own `Sync`: never which phone it is, the last number it used
 // of each series it holds, the master passcode's version, and the project its lists are of.
+import { createHash } from 'node:crypto';
+
 import {
   syncClientSuite,
   syncExamples,
   syncSentSchema,
+  type FilePartSent,
   type SyncAnswered,
   type SyncClientHolds,
   type SyncReceived,
@@ -61,6 +64,11 @@ describe('the harness’s phone, held to the suite any client of the sync contra
           },
           holds: () => client.holds,
           notSaved: () => client.shownNotSaved,
+          sendsFilePart: () => client.sendsFilePart(),
+          filePartAnswered: (answer) => {
+            client.filePartAnswered(answer);
+          },
+          holdsFiles: () => client.holdsFiles,
         };
       });
     });
@@ -80,6 +88,8 @@ describe('the harness’s phone, syncing through the API’s own service', () =>
     records: syncExamples.records.filter((record) => record.record === 'FIELD_EVENT'),
     photos: [],
     lastUsed: [],
+    files: [],
+    filePartBytesAtMost: 1000,
   };
   // A server in memory that answers every record "saved" and keeps each sync it was sent, as
   // the endpoint's boundary read it, with the phone its proof named.
@@ -105,9 +115,82 @@ describe('the harness’s phone, syncing through the API’s own service', () =>
           },
         });
       },
+      filePart: () => Promise.reject(new Error('No file is sent here.')),
     };
     return { made, syncs };
   };
+
+  it('AC-05-09, ADR-483 each photograph it takes is a real file, the depth file beside it where one is taken; the record carries the SHA-256 of the very bytes it sends, after the sync that saved the record, in parts no larger than it was told', async () => {
+    const client = phone({ ...records, records: [], filePartBytesAtMost: 1500 });
+    const [first] = records.records;
+    if (first?.record !== 'FIELD_EVENT') throw new Error('The examples have no field event.');
+    const pile = client.photograph({ of: { kind: 'FIELD_EVENT', id: first.fieldEvent.id } });
+    const bed = client.photograph({
+      of: { kind: 'FIELD_EVENT', id: first.fieldEvent.id },
+      depthFile: true,
+      bytes: 2000,
+    });
+    const sha256Of = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
+    const parts: FilePartSent[] = [];
+    const kept = new Map<string, Buffer>();
+    const made: PhoneServer = {
+      received: (_from, sent) =>
+        Promise.resolve({
+          answered: {
+            unplannedAssignments: [],
+            passcodeUses: [],
+            records: [],
+            photos: sent.photos.map((one) => ({
+              answer: 'SAVED' as const,
+              id: (one as { id: string }).id,
+              notes: [],
+            })),
+            numbers: [],
+            masterPasscode: { version: 1, check: null },
+            setupVersion: null,
+          },
+        }),
+      filePart: (from, part) => {
+        expect(from).toBe(deviceId);
+        expect(client.waitingPhotos).toEqual([]);
+        parts.push(part);
+        const name = `${part.photoId} ${part.file}`;
+        const now = Buffer.concat([kept.get(name) ?? Buffer.alloc(0), part.bytes]);
+        kept.set(name, now);
+        return Promise.resolve(
+          now.length === part.length
+            ? { upload: 'KEPT' }
+            : { upload: 'RECEIVING', received: now.length, length: part.length },
+        );
+      },
+    };
+    expect(client.holdsFiles).toEqual([`${pile.id} photo`, `${bed.id} photo`, `${bed.id} depth`]);
+    expect(await client.sync(made)).toBe(2);
+    expect(client.holdsFiles).toEqual([]);
+    expect(
+      parts.map(({ file, offset, length, bytes }) => [file, offset, length, bytes.length]),
+    ).toEqual([
+      ['photo', 0, 4096, 1500],
+      ['photo', 1500, 4096, 1500],
+      ['photo', 3000, 4096, 1096],
+      ['photo', 0, 2000, 1500],
+      ['photo', 1500, 2000, 500],
+      ['depth', 0, 1024, 1024],
+    ]);
+    expect([
+      sha256Of(kept.get(`${pile.id} photo`) ?? Buffer.alloc(0)),
+      sha256Of(kept.get(`${bed.id} photo`) ?? Buffer.alloc(0)),
+      sha256Of(kept.get(`${bed.id} depth`) ?? Buffer.alloc(0)),
+    ]).toEqual([pile.uploadedSha256, bed.uploadedSha256, bed.depthSha256]);
+    // A JPEG by its first bytes, the depth file a PNG; never the fingerprint of the original.
+    expect([...(kept.get(`${pile.id} photo`) ?? Buffer.alloc(0)).subarray(0, 3)]).toEqual([
+      0xff, 0xd8, 0xff,
+    ]);
+    expect([...(kept.get(`${bed.id} depth`) ?? Buffer.alloc(0)).subarray(0, 4)]).toEqual([
+      0x89, 0x50, 0x4e, 0x47,
+    ]);
+    expect(pile.originalSha256).not.toBe(pile.uploadedSha256);
+  });
 
   it('AC-10-35 what it sends never says which phone it is or that a phone made it: the server is told the phone by its proof', async () => {
     const client = phone(records);

@@ -1830,7 +1830,7 @@ export const sync: Story = {
     ]);
     const inserts = audit.filter((record) => record.operation === 'INSERT');
     story.check(
-      'every record intake wrote is audited once as an insert, by the monitor who made it, from a phone; nothing was deleted, and the only changes afterwards are the two records that came to point at ROE R-0007',
+      'every record intake wrote is audited once as an insert, by the monitor who made it, from a phone; nothing was deleted, and the only changes afterwards are the two records that came to point at ROE R-0007 and each photograph’s upload time, written once by its own phone as its file was kept (ADR-482, 483)',
       [
         inserts.every((record) => record.source === 'DEVICE' && record.deviceId !== null),
         inserts.filter(
@@ -1853,6 +1853,8 @@ export const sync: Story = {
         true,
         [
           ['field_event', 'UPDATE', ['roe_id'], 'Lee Morgan'],
+          ['photo', 'UPDATE', ['uploaded_at'], 'Device key'],
+          ['photo', 'UPDATE', ['uploaded_at'], 'Device key'],
           ['survey', 'UPDATE', ['roe_id'], 'Lee Morgan'],
         ],
       ],

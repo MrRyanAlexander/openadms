@@ -139,6 +139,8 @@ export interface Answer {
   readonly headers: Readonly<Record<string, unknown>>;
   readonly body: unknown;
   readonly text: string;
+  // The answer's bytes as they came: a file's, where one is answered (ADR-483).
+  readonly bytes: Buffer;
   readonly code: string | undefined;
   readonly requestId: string;
   // The cookies the answer set, by name; a cleared one is the empty string.
@@ -233,13 +235,16 @@ export class Served {
       ...(more.bytes === undefined ? {} : { payload: Buffer.from(more.bytes) }),
     });
     const setCookie = [answered.headers['set-cookie'] ?? []].flat().map(String);
-    const body: unknown = answered.json();
+    // A file is answered as bytes of its own type, never JSON (ADR-483).
+    const file = (answered.headers['content-type'] ?? '').startsWith('image/');
+    const body: unknown = file ? undefined : answered.json();
     const refused = errorAnswerSchema.safeParse(body);
     return {
       status: answered.statusCode,
       headers: answered.headers,
       body,
       text: answered.body,
+      bytes: answered.rawPayload,
       code: refused.success ? refused.data.code : undefined,
       requestId: String(answered.headers['x-request-id']),
       setCookie,

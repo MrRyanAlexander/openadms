@@ -15,6 +15,8 @@
 // Not here: the phone's screens and its sub suggestions (Phase 3); the phone's cert-number block
 // (the story `numbering`: the numbers Sam's phone gives out are stated here), photographs
 // (Milestone 1.3), the flags a certification raises on tickets (1.5.5) and QC (1.8.2).
+import { createHash } from 'node:crypto';
+
 import {
   type BoxInput,
   Certifications,
@@ -333,6 +335,29 @@ export const certification: Story = {
         'RIGHT its place',
         'LEFT its place',
         'FRONT its place',
+      ],
+    );
+    const sha256Of = (bytes: Uint8Array): string =>
+      createHash('sha256').update(bytes).digest('hex');
+    const filesOf: string[] = [];
+    for (const photo of fivePhotos) {
+      const kept = await story.media.read(photo.objectKey, story.policy.mediaFileBytesAtMost);
+      filesOf.push(
+        `${String(photo.view)} ${photo.uploadedAt === null ? 'not arrived' : 'arrived'}, ${kept !== null && sha256Of(kept.bytes) === photo.uploadedSha256 ? 'the file fingerprinted' : 'no such file'}`,
+      );
+    }
+    story.check(
+      'AC-04-77, C82 and each one’s file went up to the media endpoint after the sync that saved it: kept at its place, the very file whose SHA-256 Sam’s phone gave, its upload time written (ADR-482, 483)',
+      [filesOf, samsPhone.holdsFiles],
+      [
+        [
+          'OPERATOR_WITH_PLACARD arrived, the file fingerprinted',
+          'INTERIOR_OR_BACK arrived, the file fingerprinted',
+          'RIGHT arrived, the file fingerprinted',
+          'LEFT arrived, the file fingerprinted',
+          'FRONT arrived, the file fingerprinted',
+        ],
+        [],
       ],
     );
     const loader = await api.certification.findUniqueOrThrow({

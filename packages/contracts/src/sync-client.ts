@@ -2,7 +2,9 @@
 // 2…8; AC-05-15, 20, 45, 46; BACKLOG 2.6.1 part 4, C128, C129; ADR-022, 467, 468, 470; REQ-203,
 // 308c): what any client reads of what it was answered, and what an answer lets it do. The
 // harness's phones use it now and the field app in Phase 3; the suite that holds a client to it
-// is `sync-client-suite.ts`.
+// is `sync-client-suite.ts`. And its half of a photograph's file sent to the media endpoint
+// (ARCHITECTURE §9 (5); AC-05-09; ADR-482, 483).
+import { photoFileAnswerSchema, type PhotoFileAnswer, type PhotoFileName } from './api-answers.ts';
 import type { ReceivedRecord, SyncedRecord } from './sync-records.ts';
 import { syncAnsweredSchema, type SyncAnswered, type SyncSent } from './sync.ts';
 
@@ -102,4 +104,40 @@ export function syncAnswerRead(sent: SyncSent, answered: unknown): SyncAnswered 
     // A setup version is the one of the project the phone said, never another's.
     (setupVersion === null || setupVersion.projectId === sent.holds.listsProjectId);
   return fits ? read.data : null;
+}
+
+// A part of a photograph's file as a client sends it to the media endpoint
+// (`sendPhotoFilePartEndpoint`): the photograph's id and which of its files, the offset its
+// bytes go at, the whole file's length, and the bytes, at least one.
+export interface FilePartSent {
+  readonly photoId: string;
+  readonly file: PhotoFileName;
+  readonly offset: number;
+  readonly length: number;
+  readonly bytes: Uint8Array;
+}
+
+// What came back for a part of a file, read: the media endpoint's answer, or null where it is
+// none (nothing came, or a shape the contract doesn't have). On null a client takes nothing for
+// kept and nothing for received: it sends again from the last place the server answered.
+// `KEPT`: the file is done and the client lets it go. `RECEIVING`: it goes on from `received`
+// (from the first byte where the server holds none). `NOT_MATCHED`: it keeps the file and sends
+// it again from the first byte (ADR-482 (1), (5)).
+export function photoFileAnswerRead(answered: unknown): PhotoFileAnswer | null {
+  const read = photoFileAnswerSchema.safeParse(answered);
+  return read.success ? read.data : null;
+}
+
+// Where a client goes on from, after an answer read: the offset of its next part, or null where
+// the file is kept and nothing more goes. No answer: where it stood before the part was sent.
+export function photoFileGoesOnFrom(answer: PhotoFileAnswer | null, before: number): number | null {
+  if (answer === null) return before;
+  switch (answer.upload) {
+    case 'KEPT':
+      return null;
+    case 'RECEIVING':
+      return answer.received;
+    case 'NOT_MATCHED':
+      return 0;
+  }
 }

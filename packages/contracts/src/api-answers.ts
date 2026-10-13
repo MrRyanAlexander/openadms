@@ -533,6 +533,11 @@ export type UnplannedAssignmentAnswer = z.infer<typeof unplannedAssignmentAnswer
 // where a file is kept.
 export const photoUploads = ['KEPT', 'RECEIVING', 'NOT_MATCHED'] as const;
 
+// Which of a photograph's files: the photograph itself, or the depth file beside it (ADR-482).
+export const photoFiles = ['photo', 'depth'] as const;
+
+export type PhotoFileName = (typeof photoFiles)[number];
+
 export const photoFileAnswerSchema = z.discriminatedUnion('upload', [
   z.strictObject({ upload: z.literal('KEPT') }),
   z.strictObject({
@@ -544,6 +549,10 @@ export const photoFileAnswerSchema = z.discriminatedUnion('upload', [
 ]);
 
 export type PhotoFileAnswer = z.infer<typeof photoFileAnswerSchema>;
+
+// A file as the back office is answered it (AC-10-48; ADR-483): the bytes that were kept, as
+// they were kept. Never JSON, so the OpenAPI description says it by its types.
+export const keptFileAnswerSchema = z.instanceof(Uint8Array);
 
 // What a phone is answered for a use of the master passcode it logged with no connection and
 // reported (ARCHITECTURE §7.5; AC-02-23; ADR-106, 464): saved; already saved, where the phone

@@ -33,6 +33,10 @@ find it, some carrying days of work; a phone needn't be handed in for its work t
    phone fingerprinted, it is kept and its upload time written; a whole file that isn't is set
    aside on the server for a person, and the phone sends it again. The phone keeps every file
    until it is told the file is kept. A depth file has its own fingerprint in the record.*
+   ⚠️ *ADR-483: a file goes only once its photograph's record is answered saved (one not saved
+   keeps its file with it); an interrupted upload goes on from where the server says the file
+   stands, and starts again where the server holds none of it. The back office reads a kept file
+   back as a download, never run, and never one that isn't the one fingerprinted.*
 4. **The server stores each record once.** Every record carries an ID the phone made; a retried
    upload is answered "already saved" and is **never** mistaken for a duplicate number (KD-56).
 5. **A duplicate?** A second field event of the **same kind on the same ticket** (project + workflow

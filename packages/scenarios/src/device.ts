@@ -9,8 +9,11 @@
 // "saved" and "already saved" take a record off it for good; a quarantined record and one not
 // saved leave its queue and are kept, shown as not saved. Its photographs' records go in its
 // syncs too, after the records, each in the sync that carries its record or a later one, and
-// never with where the file is kept, which the server makes (ADR-481). The files themselves are
-// the media endpoint's (2.6.4, part 3).
+// never with where the file is kept, which the server makes (ADR-481). **Each photograph is a
+// real file** whose SHA-256 its record carries, and the depth file beside it where one is taken;
+// once the photograph's record is answered saved, the phone sends its files to the media
+// endpoint in parts, each where the server says the file stands, and keeps each until it is
+// answered kept (ARCHITECTURE §9 (5); AC-05-09; BACKLOG 2.6.4 part 4; ADR-482, 483).
 //
 // **Its sync goes to the API's own `Sync`** (apps/api, src/sync/sync.ts; BACKLOG 2.6.2 part 4;
 // ADR-475): read off the wire by the contract as the endpoint's boundary reads it, with the
@@ -40,6 +43,8 @@ import type {
   SentSurvey,
 } from '@open-adms/api';
 import {
+  photoFileAnswerRead,
+  photoFileGoesOnFrom,
   stored,
   syncAnswerRead,
   syncedRecordAssignment,
@@ -51,7 +56,9 @@ import {
   syncUnplannedAssignmentsAtMost,
   photoRead,
   recordRead,
+  type FilePartSent,
   type PhotoAnswer,
+  type PhotoFileName,
   type PhotoOwnerKind,
   type ReceivedRecord,
   type RecordAnswer,
@@ -84,6 +91,7 @@ import {
 
 import { utcOffsetMinutes, type StoryClock } from './clock.ts';
 import { uuidv7 } from './ids.ts';
+import { builtInPolicy } from './policy.ts';
 
 // What a phone sends at a sync is the API's to say (apps/api, src/sync/sent.ts): the harness's
 // phone sends exactly those records, under the names its stories know them by.
@@ -109,10 +117,52 @@ export interface HeldPhoto {
 }
 
 // Where a phone's sync goes: the API's `Sync` (apps/api, src/sync/sync.ts), one sync as the
-// endpoint's boundary read it, from the phone that proved itself.
+// endpoint's boundary read it, from the phone that proved itself. And where a part of a
+// photograph's file goes: the API's `PhotoFiles` (src/media/photo-files.ts), its answer as it
+// comes off the wire.
 export interface PhoneServer {
   received(deviceId: string, sent: SyncReceived): Promise<{ readonly answered: SyncAnswered }>;
+  filePart(deviceId: string, part: FilePartSent): Promise<unknown>;
 }
+
+// What a story's server throws where the phone has lost its signal mid-upload: nothing came
+// back. Anything else a server throws stops the story.
+export class NoSignal extends Error {
+  constructor() {
+    super('The phone has no signal.');
+    this.name = 'NoSignal';
+  }
+}
+
+// A photograph's file the phone holds until the server says it kept it: the bytes its record's
+// fingerprint is of, where it goes on from, and whether its record was answered saved.
+interface HeldFile {
+  readonly photoId: string;
+  readonly file: PhotoFileName;
+  readonly bytes: Buffer;
+  from: number;
+  saved: boolean;
+}
+
+// A file as the phone's camera writes one, of so many bytes: a JPEG's first bytes, or a PNG's
+// for a depth file, then bytes drawn from what it is of, so the same photograph is the same file.
+function fileOf(of: string, bytes: number, kind: 'jpeg' | 'png'): Buffer {
+  const start =
+    kind === 'jpeg'
+      ? Buffer.from([0xff, 0xd8, 0xff, 0xe1])
+      : Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const body: Buffer[] = [];
+  for (let made = start.length, round = 0; made < bytes; round += 1) {
+    const more = createHash('sha256')
+      .update(`${of} ${String(round)}`)
+      .digest();
+    body.push(more);
+    made += more.length;
+  }
+  return Buffer.concat([start, ...body]).subarray(0, bytes);
+}
+
+const sha256Of = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 
 // A record or a photograph the phone sent and what it was told: saved, already saved,
 // quarantined or not saved (ARCHITECTURE §9 (4); ADR-467, 481).
@@ -423,13 +473,14 @@ export interface NewCertification {
 
 // A photograph taken with a record the phone made: of what, which of a certification's views,
 // where if the phone had a fix, and whether a depth file goes beside it (its fingerprint is then
-// sent too, ADR-482).
+// sent too, ADR-482). How large its file is, shrunk to send: 4,096 bytes where not said.
 export interface NewPhoto {
   readonly of: { readonly kind: PhotoOwnerKind; readonly id: string };
   readonly view?: CertificationView;
   readonly latitude?: string;
   readonly longitude?: string;
   readonly depthFile?: boolean;
+  readonly bytes?: number;
 }
 
 const seriesOf: Record<Workflow, NumberSeries> = {
@@ -446,6 +497,13 @@ export class SimulatedDevice {
   private readonly outbox: HeldRecord[] = [];
   // Its photographs' records still to send, in the order taken.
   private readonly photoOutbox: RecordedPhoto[] = [];
+  // Its photographs' files not yet kept on the server, in the order taken, and the most a part
+  // of one may hold; the files the upload under way leaves for the next, once answered not the
+  // one fingerprinted twice; the part it sent last.
+  private readonly files = new Map<string, HeldFile>();
+  private partBytes: number;
+  private readonly resting = new Set<string>();
+  private lastPart: FilePartSent | undefined;
   // What it reports besides its records, still to be answered; and the sync it sent last.
   private reports: Reports = { unplannedAssignments: [], passcodeUses: [], lastUsed: [] };
   private last:
@@ -477,10 +535,17 @@ export class SimulatedDevice {
   // The setup version its last sync answered for its project, where one was.
   private setupVersionNow: number | null = null;
 
-  constructor(setup: PhoneSetup, clock: StoryClock) {
+  // `partBytesAtMost`: the most a part of a file may hold, as the server takes them: the
+  // release's `MEDIA_PART_BYTES_AT_MOST` where not said.
+  constructor(
+    setup: PhoneSetup,
+    clock: StoryClock,
+    partBytesAtMost: number = builtInPolicy().mediaPartBytesAtMost,
+  ) {
     this.current = setup;
     this.clock = clock;
     this.passcodeVersion = setup.masterPasscodeVersion ?? null;
+    this.partBytes = partBytesAtMost;
   }
 
   get setup(): PhoneSetup {
@@ -754,13 +819,16 @@ export class SimulatedDevice {
   }
 
   // A photograph taken with a record: its fingerprint is taken now, at capture, and the
-  // fingerprint of the file it will upload when it shrinks it (ADR-101). Where the file is kept
-  // is the server's to make; the file itself goes by the media endpoint (2.6.4, part 3).
+  // fingerprint of the file it will upload, shrunk (ADR-101): the SHA-256 of the very bytes it
+  // then sends, and of the depth file's beside it. Where the file is kept is the server's to
+  // make; the files go by the media endpoint once the record is saved (ADR-482).
   photograph(photo: NewPhoto): RecordedPhoto {
     const capturedAt = this.now();
     this.photographs += 1;
     const file = `${this.name}/${capturedAt.toISOString()}/${String(this.photographs)}`;
     const fingerprint = (of: string): string => createHash('sha256').update(of).digest('hex');
+    const uploaded = fileOf(`${file} as uploaded`, photo.bytes ?? 4096, 'jpeg');
+    const depth = photo.depthFile === true ? fileOf(`${file} depth`, 1024, 'png') : null;
     const made: RecordedPhoto = {
       id: uuidv7(capturedAt),
       projectId: this.current.projectId,
@@ -772,11 +840,45 @@ export class SimulatedDevice {
       latitude: photo.latitude ?? null,
       longitude: photo.longitude ?? null,
       originalSha256: fingerprint(`${file} as taken`),
-      uploadedSha256: fingerprint(`${file} as uploaded`),
-      depthSha256: photo.depthFile === true ? fingerprint(`${file} depth`) : null,
+      uploadedSha256: sha256Of(uploaded),
+      depthSha256: depth === null ? null : sha256Of(depth),
     };
     this.photoOutbox.push(made);
+    this.holdFile({ photoId: made.id, file: 'photo', bytes: uploaded, saved: false });
+    if (depth !== null) {
+      this.holdFile({ photoId: made.id, file: 'depth', bytes: depth, saved: false });
+    }
     return made;
+  }
+
+  // The file of a photograph it holds, as it will send it: a story that swaps one says so here,
+  // and the server finds it isn't the one fingerprinted.
+  fileOf(photoId: string, file: PhotoFileName = 'photo'): Buffer {
+    const held = this.files.get(`${photoId} ${file}`);
+    if (held === undefined) throw new Error(`${this.name} holds no ${file} file of ${photoId}.`);
+    return held.bytes;
+  }
+
+  swapFile(photoId: string, bytes: Buffer, file: PhotoFileName = 'photo'): void {
+    const held = this.files.get(`${photoId} ${file}`);
+    if (held === undefined) throw new Error(`${this.name} holds no ${file} file of ${photoId}.`);
+    this.files.set(`${photoId} ${file}`, { ...held, bytes, from: 0 });
+  }
+
+  // On a poor signal the phone sends smaller parts: never larger than the server takes.
+  sendsPartsOf(bytes: number): void {
+    if (bytes < 1 || bytes > this.partBytes) {
+      throw new Error(`${this.name} sends parts of 1 to ${String(this.partBytes)} bytes.`);
+    }
+    this.partBytes = bytes;
+  }
+
+  private holdFile(held: Omit<HeldFile, 'from'>): void {
+    this.files.set(`${held.photoId} ${held.file}`, {
+      ...held,
+      bytes: Buffer.from(held.bytes),
+      from: 0,
+    });
   }
 
   // A certification of a container or a crew (adms-certifications §3A; ADR-469): the boxes as
@@ -893,6 +995,24 @@ export class SimulatedDevice {
     return [...this.photoOutbox];
   }
 
+  // Each file of its photographs it holds that the server has not said it kept, as "<the
+  // photograph's id> <file>", and how far each has gone as the server last said.
+  get holdsFiles(): readonly string[] {
+    return [...this.files.keys()];
+  }
+
+  get filesWaiting(): readonly {
+    readonly name: string;
+    readonly from: number;
+    readonly saved: boolean;
+  }[] {
+    return [...this.files.entries()].map(([name, held]) => ({
+      name,
+      from: held.from,
+      saved: held.saved,
+    }));
+  }
+
   // The harness's own: what the phone holds that no story told, as the contract's suite hands
   // it over (`SyncClientHolds`): records as they go on the wire, and the reports a sync carries.
   // A story's phone holds no report: one its story tells is sent in a sync of its own
@@ -908,6 +1028,12 @@ export class SimulatedDevice {
       if (!read.read) throw new Error(`${this.name}: ${read.notice.message}`);
       this.photoOutbox.push(photo);
     }
+    // A file of a photograph it was not handed had its record saved before.
+    for (const file of more.files) {
+      const saved = !more.photos.some(({ id }) => id === file.photoId);
+      this.holdFile({ ...file, bytes: Buffer.from(file.bytes), saved });
+    }
+    this.partBytes = more.filePartBytesAtMost;
     this.reports = {
       unplannedAssignments: [...this.reports.unplannedAssignments, ...more.unplannedAssignments],
       passcodeUses: [...this.reports.passcodeUses, ...more.passcodeUses],
@@ -1026,6 +1152,10 @@ export class SimulatedDevice {
       if ('reason' in each) {
         this.shown.push({ id: photo.id, reason: each.reason, message: each.message });
       }
+      // Its files go once its record is saved; one not saved keeps them with it.
+      for (const file of this.files.values()) {
+        if (file.photoId === photo.id) file.saved = stored(each);
+      }
     });
     // What the sync brought besides: of each series topped up, the blocks it holds now (where
     // a report wasn't taken it holds what it held); the master passcode's version, with its
@@ -1060,7 +1190,73 @@ export class SimulatedDevice {
       }
       sent += sync.records.length + sync.photos.length;
     }
+    await this.upload(server);
     return sent;
+  }
+
+  // The next part of a file it sends to the media endpoint (`sendPhotoFilePartEndpoint`): of
+  // the first file whose photograph's record was answered saved, from where the server last
+  // said it stands, no larger than the server takes. None where it has none to send.
+  sendsFilePart(): FilePartSent | null {
+    for (const [name, held] of this.files) {
+      if (!held.saved || this.resting.has(name)) continue;
+      this.lastPart = {
+        photoId: held.photoId,
+        file: held.file,
+        offset: held.from,
+        length: held.bytes.length,
+        bytes: held.bytes.subarray(held.from, held.from + this.partBytes),
+      };
+      return this.lastPart;
+    }
+    return null;
+  }
+
+  // What came back for the part it sent last, off the wire; `undefined` where nothing came. Read
+  // by the contract's own rule: kept, it lets the file go; receiving, it goes on from what the
+  // server took; not matched, from the first byte; anything else, from where it stood. How it
+  // was answered, where it was.
+  filePartAnswered(answer: unknown): 'KEPT' | 'RECEIVING' | 'NOT_MATCHED' | null {
+    const part = this.lastPart;
+    if (part === undefined) throw new Error(`${this.name} was answered before it sent a part.`);
+    this.lastPart = undefined;
+    const name = `${part.photoId} ${part.file}`;
+    const held = this.files.get(name);
+    if (held === undefined) return null;
+    const read = photoFileAnswerRead(answer);
+    const from = photoFileGoesOnFrom(read, part.offset);
+    if (from === null) this.files.delete(name);
+    else held.from = from;
+    return read?.upload ?? null;
+  }
+
+  // Its photographs' files, after the records that carried them were answered (ARCHITECTURE §9
+  // (2), (5); AC-05-09; ADR-482): each part answered before the next goes, until each file is
+  // kept. Where the signal goes (`NoSignal`) it stops, holding every file not kept, and goes on
+  // from there next time. A file answered not the one fingerprinted goes again from its first
+  // byte, and rests till the next upload if it is answered so again. How many parts it sent.
+  async upload(server: PhoneServer): Promise<number> {
+    this.resting.clear();
+    const notMatched = new Map<string, number>();
+    let parts = 0;
+    for (let part = this.sendsFilePart(); part !== null; part = this.sendsFilePart()) {
+      parts += 1;
+      let answer: unknown;
+      try {
+        answer = JSON.parse(JSON.stringify(await server.filePart(this.current.deviceId, part)));
+      } catch (caught) {
+        if (!(caught instanceof NoSignal)) throw caught;
+        this.filePartAnswered(undefined);
+        return parts;
+      }
+      if (this.filePartAnswered(answer) === 'NOT_MATCHED') {
+        const name = `${part.photoId} ${part.file}`;
+        const times = (notMatched.get(name) ?? 0) + 1;
+        notMatched.set(name, times);
+        if (times >= 2) this.resting.add(name);
+      }
+    }
+    return parts;
   }
 
   // Every record it has sent and what it was told, in the order sent.

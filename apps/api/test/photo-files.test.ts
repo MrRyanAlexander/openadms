@@ -12,6 +12,7 @@ import {
   filePartMediaType,
   photoFileAnswerSchema,
   photoFileEndpoint,
+  photographFileEndpoint,
   sendPhotoFilePartEndpoint,
   syncAnsweredSchema,
   syncExamples,
@@ -21,7 +22,7 @@ import {
   type SyncedPhoto,
 } from '@open-adms/contracts';
 import { deviceKeyActorId, type Database } from '@open-adms/db';
-import type { S3Client } from '@aws-sdk/client-s3';
+import { PutObjectCommand, type S3Client } from '@aws-sdk/client-s3';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { MediaStore } from '../src/media/media-store.ts';
@@ -38,12 +39,14 @@ import { enrolledPhone, proven } from './support/phones.ts';
 import {
   danasEmail,
   long,
+  longer,
+  luissEmail,
   worldOn,
   type Answer,
   type People,
   type Served,
 } from './support/served.ts';
-import { p1, told } from './support/setup.ts';
+import { p1, told, viewerSignsIn } from './support/setup.ts';
 
 let db: Database;
 let store: MediaStore;
@@ -707,6 +710,134 @@ describe('what the API holds of files not yet whole', () => {
         MEDIA_PART_BYTES_AT_MOST: '1048576',
         MEDIA_RECEIVING_BYTES_AT_MOST: '1048576',
       }),
+      withTheStore(),
+    );
+  });
+});
+
+// The back office's read of a photograph's file (AC-10-48; ADR-483).
+const fileAt = (photoId: string, file: 'photo' | 'depth'): string =>
+  `/photographs/${photoId}/files/${file}`;
+
+describe('the back office’s read of a photograph’s file', () => {
+  it('AC-10-48 answers an admin and a manager/analyst the bytes that were kept, under the type their first bytes said, as a download that is never run and kept nowhere on the way; never where the file is kept', async () => {
+    expect(photographFileEndpoint.path).toBe('/photographs/:photoId/files/:file');
+    await world(
+      async (served, tx, who) => {
+        const photo = jpeg(90_000);
+        const depth = png(30_000);
+        const p = await photographed(served, tx, who, { photo, depth });
+        expect(await inParts(served, p, 'photo', photo, 64_000)).toEqual([
+          { upload: 'RECEIVING', received: 64_000, length: 90_000 },
+          { upload: 'KEPT' },
+        ]);
+        expect(await inParts(served, p, 'depth', depth, 64_000)).toEqual([{ upload: 'KEPT' }]);
+        // Dana signed in for the project a moment ago: a code is good once.
+        served.clock.at = new Date(mondayAfternoon.getTime() + 30_000);
+        const dana = await served.signedIn(danasEmail, long);
+        const luis = await served.signedIn(luissEmail, longer);
+        for (const [person, file, bytes, type, name] of [
+          [dana, 'photo', photo, 'image/jpeg', 'photo.jpg'],
+          [dana, 'depth', depth, 'image/png', 'depth.png'],
+          [luis, 'photo', photo, 'image/jpeg', 'photo.jpg'],
+        ] as const) {
+          const read = await served.ask('GET', fileAt(p.photoId, file), {
+            cookies: person.cookies,
+          });
+          expect([read.status, read.bytes.equals(bytes)]).toEqual([200, true]);
+          expect({
+            type: read.headers['content-type'],
+            disposition: read.headers['content-disposition'],
+            sniffing: read.headers['x-content-type-options'],
+            policy: read.headers['content-security-policy'],
+            caching: read.headers['cache-control'],
+          }).toEqual({
+            type,
+            disposition: `attachment; filename="${p.photoId}-${name}"`,
+            sniffing: 'nosniff',
+            policy: "default-src 'none'; frame-ancestors 'none'; sandbox",
+            caching: 'no-store',
+          });
+          expect(JSON.stringify(read.headers)).not.toContain(p.objectKey);
+        }
+        // Reading it changed nothing, and the log says who read which file, never where.
+        const reads = served.lines.filter((line) => line.includes('read a photograph’s file'));
+        expect(reads).toHaveLength(3);
+        expect(reads.join()).not.toContain(p.objectKey);
+        expect(reads.join()).not.toContain(sha256Of(photo));
+        expect(reads.join()).toContain(who.luis);
+      },
+      undefined,
+      undefined,
+      withTheStore(),
+    );
+  });
+
+  it('AC-10-48 is no phone’s and no read-only viewer’s, and nobody’s who isn’t signed in', async () => {
+    await world(
+      async (served, tx, who, within) => {
+        const photo = jpeg(20_000);
+        const p = await photographed(served, tx, who, { photo });
+        expect(await inParts(served, p, 'photo', photo, 64_000)).toEqual([{ upload: 'KEPT' }]);
+        const viewer = await viewerSignsIn(served, tx, who.viewer, within);
+        for (const [who_, more, refused] of [
+          ['nobody', {}, [401, 'NOT_SIGNED_IN']],
+          ['the phone that took it', { bearer: p.token }, [401, 'NOT_SIGNED_IN']],
+          ['a read-only viewer', { cookies: viewer.cookies }, [403, 'NOT_ALLOWED']],
+        ] as const) {
+          const read = await served.ask('GET', fileAt(p.photoId, 'photo'), more);
+          expect(told(read), who_).toEqual(refused);
+          expect(read.bytes.includes(photo.subarray(0, 64)), who_).toBe(false);
+        }
+      },
+      undefined,
+      undefined,
+      withTheStore(),
+    );
+  });
+
+  it('AC-10-48 a photograph whose file hasn’t arrived, or with no depth file, is not found, as one there is none of is; and a file swapped at the store is never handed back as the photograph’s (T-25)', async () => {
+    await world(
+      async (served, tx, who) => {
+        const photo = jpeg(20_000);
+        const p = await photographed(served, tx, who, { photo });
+        served.clock.at = new Date(mondayAfternoon.getTime() + 30_000);
+        const dana = await served.signedIn(danasEmail, long);
+        const read = (photoId: string, file: 'photo' | 'depth') =>
+          served.ask('GET', fileAt(photoId, file), { cookies: dana.cookies });
+        const notYet = await read(p.photoId, 'photo');
+        expect([...told(notYet), (notYet.body as { message?: string }).message]).toEqual([
+          404,
+          'NOT_FOUND',
+          'Not found: this photograph’s file hasn’t arrived.',
+        ]);
+        expect(told(await read(p.photoId, 'depth'))).toEqual([404, 'NOT_FOUND']);
+        expect(told(await read(randomUUID(), 'photo'))).toEqual([404, 'NOT_FOUND']);
+        expect(told(await read('not-a-photograph', 'photo'))).toEqual([400, 'BAD_REQUEST']);
+        expect(await inParts(served, p, 'photo', photo, 64_000)).toEqual([{ upload: 'KEPT' }]);
+        expect((await read(p.photoId, 'photo')).bytes.equals(photo)).toBe(true);
+        // Somebody with the store's own keys puts another file at its place: the bucket keeps
+        // the first as an older version, and the API, reading the newest, finds it isn't the
+        // one its phone fingerprinted.
+        await administrator.send(
+          new PutObjectCommand({
+            Bucket: installationMedia().bucket,
+            Key: p.objectKey,
+            Body: jpeg(20_000),
+            ContentType: 'image/jpeg',
+          }),
+        );
+        const swapped = await read(p.photoId, 'photo');
+        expect(told(swapped)[0]).toBe(500);
+        expect(swapped.bytes.includes(photo.subarray(6, 64))).toBe(false);
+        expect(
+          (await versionsUnder(administrator, installationMedia(), p.objectKey)).map(
+            ({ bytes }) => bytes,
+          ),
+        ).toEqual([20_000, 20_000]);
+      },
+      undefined,
+      undefined,
       withTheStore(),
     );
   });
