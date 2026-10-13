@@ -123,15 +123,15 @@ export interface HeldPhoto {
   readonly photo: RecordedPhoto;
 }
 
-// Where a phone's sync goes: the API's `Sync` (apps/api, src/sync/sync.ts), one sync as the
-// endpoint's boundary read it, from the phone that proved itself. And where a part of a
-// photograph's file goes: the API's `PhotoFiles` (src/media/photo-files.ts), its answer as it
-// comes off the wire.
+// Where a phone's sync goes: in a story, the sync endpoint of the story's own API over HTTPS
+// (`StoryApi`, ADR-491); one sync as the endpoint's boundary reads it, from the phone that
+// proved itself. And where a part of a photograph's file goes: the media endpoint, its answer as
+// it comes off the wire. A test's own server in memory keeps the same shape.
 export interface PhoneServer {
   received(deviceId: string, sent: SyncReceived): Promise<{ readonly answered: SyncAnswered }>;
   filePart(deviceId: string, part: FilePartSent): Promise<unknown>;
-  // A phone turned in under the master passcode: the API's `TurnIns` (src/phone/turn-ins.ts),
-  // its answer as it comes off the wire (ADR-488). A server of a story's or a test's own that
+  // A phone turned in under the master passcode: the turn-in endpoint, its answer as it comes
+  // off the wire (ADR-488, 491). A server of a story's or a test's own that
   // turns no phone in has none.
   turnIn?(deviceId: string, sent: TurnInReceived): Promise<unknown>;
 }

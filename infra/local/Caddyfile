@@ -37,6 +37,16 @@ api.adms.localhost {
 	reverse_proxy api:3000
 }
 
+# The stories' API (BACKLOG 2.7.1; ADR-491): the API's own process, which `pnpm scenarios` starts
+# on this machine for each story, on the story's own database and clock, at 127.0.0.1:3180. A
+# story's phones reach it here, over HTTPS, as a phone reaches the API. Nothing listens there
+# but while a story runs, and this answers 502 then.
+stories.adms.localhost {
+	import headers
+	header -Via
+	reverse_proxy host.docker.internal:3180
+}
+
 # The S3-compatible object store (SeaweedFS). Caddy keeps the Host header, so S3 signatures verify.
 s3.adms.localhost {
 	import headers

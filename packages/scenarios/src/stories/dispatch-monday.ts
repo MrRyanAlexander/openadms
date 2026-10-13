@@ -709,11 +709,18 @@ export const dispatchMonday: Story = {
         ['assignment', 'INSERT', 'Luis Ortega', 'BACK_OFFICE', '-', null],
         ['assignment_pay_item', 'INSERT', 'Luis Ortega', 'BACK_OFFICE', '-', null],
         ['assignment_pay_item', 'INSERT', 'Luis Ortega', 'BACK_OFFICE', '-', null],
-        // A top-up is the phone's own act at its sync: whoever is signed in on it did not ask
-        // for it (ADR-472).
+        // Each sync goes over HTTPS and begins with the phone's proof, the challenge it answered
+        // kept on its record as the device key's own act, once a token has run out (ADR-440,
+        // 491). A top-up is the phone's own act at its sync: whoever is signed in on it did not
+        // ask for it (ADR-472).
+        ['device', 'UPDATE', 'Device key', 'DEVICE', 'P1-COL-1', null],
         ['number_block', 'INSERT', 'Device key', 'DEVICE', 'P1-COL-1', null],
         // Set up under the master passcode: never Tariq's own write (ADR-457).
+        ['device', 'UPDATE', 'Device key', 'DEVICE', 'P1-TWR-LF', null],
         ['assignment', 'INSERT', 'Master passcode', 'DEVICE', 'P1-TWR-LF', null],
+        // At the yard at 5:30 pm, Ana's morning token long run out.
+        ['device', 'UPDATE', 'Device key', 'DEVICE', 'P1-TWR-TDSR', null],
+        ['device', 'UPDATE', 'Device key', 'DEVICE', 'P1-COL-1', null],
         ['number_block', 'UPDATE', 'Device key', 'DEVICE', 'P1-COL-1', null],
         ['number_block', 'INSERT', 'Device key', 'DEVICE', 'P1-COL-1', null],
         [

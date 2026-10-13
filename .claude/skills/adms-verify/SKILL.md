@@ -213,6 +213,12 @@ and seeded once, as a story's database always was) **and each story's database i
 made file by file (`STRATEGY FILE_COPY`), locked down and checked as before, since Postgres copies
 no access list; the template is dropped when the run ends, and `clean` drops one a killed run left
 (ADR-447). One story named alone is migrated and seeded by itself, as before.
+**A story's phones reach the API's own process over HTTPS** (ADR-492): the runner starts it on
+the story's database and clock at 127.0.0.1:3180, and the stack's proxy serves it as
+`https://stories.adms.localhost` (502 while no story runs). So **`pnpm scenarios` needs the stack
+up**, and only one run of the stories at a time (a second is told the port is held).
+`packages/scenarios/test/story-api.test.ts` holds the way to it; a loosening of `story-api.ts` or
+`over-https.ts` is tried there and on `sync`, `interrupted-upload` and `dispatch-monday`.
 `packages/scenarios/test/stories.test.ts` holds a copy to what a database made by itself is (at
 head, every table guarded, `adms_owner`'s, open to the logins alone) and the runner to its word. A story's context carries `policy`, the release's policy values read from
 `packages/domain/policy.env` (`src/policy.ts`; held to the release's values, the worker's five among them (5 tries, 10 minutes, 5 s, 30 s, 10 connections; ADR-419) and a job's size (200 tickets, ADR-420), by `test/policy.test.ts`,

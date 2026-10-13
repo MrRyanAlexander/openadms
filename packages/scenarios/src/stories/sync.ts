@@ -530,22 +530,20 @@ export const sync: Story = {
       monday('12:05'),
       'The tower’s phone finds signal and syncs: its records first, its photograph after',
     );
-    // A sync begins with the phone's proof of itself (ARCHITECTURE §9 (1)): it asks for a
-    // challenge, signs it with the key only it holds, and sends both back. What comes of the
-    // proof, and of the same signed answer sent a second time.
-    const provesItself = async (name: string): Promise<[boolean, string]> => {
+    // A sync begins with the phone's proof of itself (ARCHITECTURE §9 (1)), over HTTPS: it
+    // asks for a challenge, signs it with the key only it holds, and sends both back; its sync
+    // then carries the token it was given. What comes of the proof, and of the same signed
+    // answer sent a second time, which is told only the one code a proof that isn't one gets.
+    const provesItself = async (name: string): Promise<[string, string]> => {
       const phone = enrolled[name];
       if (phone === undefined) throw new Error(`No phone ${name}`);
-      const { challenge } = story.proofs.challenge(phone.id);
-      const signature = phone.key.signed(challenge);
-      const first = await story.proofs.prove(phone.id, challenge, signature);
-      const again = await story.proofs.prove(phone.id, challenge, signature);
-      return [first.proven, again.proven ? 'proven again' : again.why];
+      const proof = await story.proofs.proves(phone.id);
+      return [proof.answer, await proof.again()];
     };
     story.check(
-      'AC-05-03, AC-10-45 the sync begins with the phone’s proof: P1-TWR-TDSR signs the challenge the server has just made with the key it made at enrolment; the same signed answer sent again proves nothing',
+      'AC-05-03, AC-10-45 the sync begins with the phone’s proof: P1-TWR-TDSR signs the challenge the server has just made with the key it made at enrolment; the same signed answer sent again proves nothing, and is told so by the one code',
       await provesItself('P1-TWR-TDSR'),
-      [true, 'SPENT'],
+      ['PROVEN', 'PHONE_NOT_PROVEN'],
     );
     const noon = kim.waitingRecords;
     const noonPhotos = kim.waitingPhotos;
@@ -1715,7 +1713,7 @@ export const sync: Story = {
     story.check(
       'AC-10-46, AC-02-60 marked lost two days ago, P1-TWR-LF still proves itself: its key stands until the phone is turned in',
       await provesItself('P1-TWR-LF'),
-      [true, 'SPENT'],
+      ['PROVEN', 'PHONE_NOT_PROVEN'],
     );
     const lostAnswers = await syncing(lost);
     const lostEvents = await api.fieldEvent.findMany({
@@ -1794,7 +1792,7 @@ export const sync: Story = {
       ],
     );
     story.check(
-      'AC-02-61, AC-10-46, REQ-202b only then is it refused: it proves nothing again; the passcode’s use and the turn-in are security events on it',
+      'AC-02-61, AC-10-46, REQ-202b only then is it refused: with its key revoked it proves nothing again, a challenge it signs now refused by the one code as the one it signed before; the passcode’s use and the turn-in are security events on it',
       [
         await provesItself('P1-TWR-LF'),
         (
@@ -1810,7 +1808,7 @@ export const sync: Story = {
         ).map(({ kind }) => kind),
       ],
       [
-        [false, 'KEY_REVOKED'],
+        ['PHONE_NOT_PROVEN', 'PHONE_NOT_PROVEN'],
         ['MASTER_PASSCODE_USE', 'DEVICE_TURN_IN'],
       ],
     );

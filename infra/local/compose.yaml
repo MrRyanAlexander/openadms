@@ -296,6 +296,10 @@ services:
     networks:
       default:
         ipv4_address: 172.30.213.2
+    # The stories' API listens on this machine (ADR-491): Docker Desktop names it already, and a
+    # Linux host is told here.
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
     ports:
       - '127.0.0.1:${ADMS_HTTPS_PORT:-443}:443'
       - '127.0.0.1:${ADMS_HTTP_PORT:-80}:80'

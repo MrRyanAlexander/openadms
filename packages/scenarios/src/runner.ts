@@ -5,34 +5,19 @@
 import { isDeepStrictEqual } from 'node:util';
 
 import {
-  Certifications,
   DeviceKeys,
   Enrolment,
-  Intake,
-  Limits,
   MasterPasscodeCheck,
   NoMail,
-  NumberAllocator,
   PasscodeSessions,
-  PasscodeUses,
   PasswordHasher,
   PhoneAssignments,
   OfflineChecks,
   PhoneLists,
-  PhoneChallenges,
-  PhoneLoginList,
   PhoneMonitors,
-  PhoneProofs,
   PhoneSignIns,
-  PhoneTokens,
-  PhotoFiles,
-  Receiving,
   SessionTokens,
   SetupChoices,
-  Sync,
-  turnInAnswerOf,
-  TurnIns,
-  UnplannedAssignments,
   WrongTries,
   type AssignmentAtSignIn,
   type SetupChoicesRead,
@@ -44,10 +29,7 @@ import {
   MasterPasscodeTries,
   PasscodeSessionRules,
   PasswordRules,
-  PhoneProofRules,
-  RateLimits,
   SignInTries,
-  TurnInRules,
   type MasterPasscodeSessionKind,
   type Policy,
 } from '@open-adms/domain';
@@ -56,11 +38,9 @@ import { projectTime, StoryClock } from './clock.ts';
 import { SimulatedDevice, type PhoneServer, type PhoneSetup } from './device.ts';
 import { builtInPolicy } from './policy.ts';
 import { SoftwareKey, type EnrolledPhone } from './software-key.ts';
+import { StoryApi, storySigningSecret } from './story-api.ts';
 import { StoryDatabase, storyMasterPasscode, type StoryTemplate } from './story-database.ts';
 import { StoryMedia } from './story-media.ts';
-
-// The signing secret of a story's API: made up, the same for every story, used nowhere else.
-const storySigningSecret = 'made-up-signing-secret-for-the-stories-only';
 
 export interface Story {
   // Its name on the command line, e.g. ticket-101001.
@@ -92,16 +72,14 @@ export interface StoryContext {
   readonly viewed: ViewerDatabase;
   // The release's policy values, which a new project's settings start from (ADR-303).
   readonly policy: Policy;
-  // Where phones sync to (BACKLOG 2.6.2 part 4; ADR-475): the API's own `Sync`, built as its
-  // process builds it (apps/api, src/process/api-process.ts), on the story's database and
-  // clock. A phone's sync is read by the contract and answered whole: its reports, its
-  // records, its photographs' records, its numbers, and what a sync brings besides. And where
-  // a phone sends a photograph's files: the API's own `PhotoFiles` (ADR-482, 483), keeping
-  // them in the story's store.
+  // Where phones sync, send a photograph's files and are turned in (BACKLOG 2.7.1 part 1;
+  // ADR-491): the story's own API, the API's process itself on the story's database and clock,
+  // over HTTPS through the local stack's proxy (`StoryApi`). A phone proves itself with its own
+  // key and holds its token as a real one does; its sync is answered whole, its files kept in
+  // the story's store.
   readonly server: PhoneServer;
-  // The same, on another clock: for field days told again on a clock of their own. Each is an
-  // API process of its own, holding its own parts of files not yet whole: one started again
-  // holds none.
+  // The same, the story's API started again on another clock: for field days told again on a
+  // clock of their own. Started again, it holds no part of a file not yet whole.
   serverOn(clock: { now: () => Date }): PhoneServer;
   // The story's own object store, where the API keeps photographs' files (ADR-483): in memory,
   // gone when the story ends.
@@ -135,12 +113,13 @@ export interface StoryContext {
       onPhone: string,
       kind: MasterPasscodeSessionKind,
     ): Promise<{ readonly sessionId: string; readonly expiresAt: Date }>;
-    // "Sync and turn in" (ADR-488): the phone syncs, sends its files, then is turned in through
-    // the API's `TurnIns`; answered to wipe, it wipes. The answer.
+    // "Sync and turn in" (ADR-488): the phone syncs, sends its files, then is turned in at the
+    // turn-in endpoint over HTTPS (ADR-491); answered to wipe, it wipes. The answer.
     turnIn(phone: SimulatedDevice): Promise<TurnInAnswer>;
   };
-  // A phone's proof of itself, as its sync begins: the API's `PhoneProofs`, on the story's clock.
-  readonly proofs: PhoneProofs;
+  // A phone's proof of itself, as its sync begins: over HTTPS to the story's API, on the story's
+  // clock; proven, the phone holds its token for its next requests (`StoryApi.proves`).
+  readonly proofs: Pick<StoryApi, 'proves'>;
   // The lists a phone takes for an assignment: the API's `PhoneLists` (task 2.5.3).
   readonly lists: PhoneLists;
   // Asserts an exact result; strict deep equality.
@@ -181,6 +160,7 @@ export class Runner {
     let failed = 0;
     let error: string | undefined;
     let database: StoryDatabase | undefined;
+    let storyApi: StoryApi | undefined;
     const open: Pick<Database, '$disconnect'>[] = [];
     try {
       const template = this.options.template;
@@ -207,7 +187,6 @@ export class Runner {
       const hasher = new PasswordHasher(storySigningSecret);
       const offline = new OfflineChecks(storySigningSecret);
       const keys = new DeviceKeys();
-      const proofRules = new PhoneProofRules(policy);
       const passcodeAt = (at: { now: () => Date }) =>
         new MasterPasscodeCheck(api, {
           rules: new MasterPasscodeTries(policy),
@@ -247,63 +226,16 @@ export class Runner {
         status: (await api.device.findUniqueOrThrow({ where: { id: deviceId } })).status,
       });
       const media = new StoryMedia();
-      // The API's `Sync` and `PhotoFiles`, as `api-process.ts` builds them.
-      const serverOn = (at: { now: () => Date }): PhoneServer => {
-        const files = new PhotoFiles(api, {
-          media,
-          receiving: new Receiving(policy.mediaReceivingBytesAtMost),
-          limits: new Limits(new RateLimits(policy), at),
-          clock: at,
-          fileBytesAtMost: policy.mediaFileBytesAtMost,
-        });
-        const taking = new Intake(api, at, policy);
-        const sync = new Sync(api, {
-          intake: taking,
-          certifications: new Certifications(api, at, policy),
-          unplanned: new UnplannedAssignments(api, { clock: at, requestNow: () => undefined }),
-          uses: new PasscodeUses(api, { clock: at, requestNow: () => undefined }),
-          numbers: new NumberAllocator(api, at, policy),
-          loginList: new PhoneLoginList(api, {
-            assignments: new PhoneAssignments(api),
-            offline,
-            clock: at,
-            entriesPerCall: policy.loginListEntriesPerCall,
-          }),
-          clock: at,
-        });
-        const turnIns = new TurnIns(api, {
-          passcode: passcodeAt(at),
-          rules: new TurnInRules(),
-          clock: at,
-          requestNow: () => undefined,
-        });
-        return {
-          received: (deviceId, sent) => sync.received(deviceId, sent),
-          // A turn-in as the endpoint takes one, from a phone in or out of service; a passcode
-          // refused stops the story. The answer as it goes on the wire.
-          turnIn: async (deviceId, sent) => {
-            const outcome = await turnIns.turnIn(await phoneNow(deviceId), sent);
-            if (!outcome.checked) throw new Error(`The turn-in was refused: ${outcome.why}.`);
-            return turnInAnswerOf(outcome);
-          },
-          // A part as the media endpoint's boundary reads one: its bytes, its offset and the
-          // file's length; the answer as it goes on the wire.
-          filePart: (deviceId, part) =>
-            files.part(deviceId, part.photoId, part.file, {
-              offset: part.offset,
-              length: part.length,
-              bytes: Buffer.from(part.bytes),
-            }),
-        };
-      };
+      storyApi = new StoryApi({ database, clock, policy, media });
+      const served = storyApi;
       const context: StoryContext = {
         clock,
         api,
         worker,
         viewed,
         policy,
-        server: serverOn(clock),
-        serverOn,
+        server: served.server(clock),
+        serverOn: (at) => served.server(at, true),
         media,
         at(time, what) {
           clock.set(time);
@@ -319,6 +251,7 @@ export class Runner {
             clock: enrolledAt,
           }).enrol({ name, passcode: storyMasterPasscode, publicKey: key.publicKey });
           if (!outcome.enrolled) throw new Error(`${name} was not enrolled: ${outcome.why}.`);
+          served.enrolled(outcome.deviceId, key);
           return { id: outcome.deviceId, name, key };
         },
         async monitor(name, onPhone) {
@@ -391,14 +324,7 @@ export class Runner {
           },
         },
         lists: new PhoneLists(api, { assignments: new PhoneAssignments(api), clock }),
-        proofs: new PhoneProofs(api, {
-          rules: proofRules,
-          challenges: new PhoneChallenges(storySigningSecret, proofRules),
-          keys,
-          tokens: new PhoneTokens(storySigningSecret, policy.phoneTokenMinutes),
-          clock,
-          challengeSeconds: policy.phoneChallengeSeconds,
-        }),
+        proofs: { proves: (deviceId) => served.proves(deviceId) },
         check(what, actual, expected) {
           if (isDeepStrictEqual(actual, expected)) {
             passed += 1;
@@ -416,6 +342,7 @@ export class Runner {
       error = redacted(caught instanceof Error ? caught.message : String(caught));
       out(`  ✗ stopped: ${error}`);
     } finally {
+      await storyApi?.close();
       for (const client of open) await client.$disconnect();
       if (database !== undefined) {
         if (this.options.keep === true) {

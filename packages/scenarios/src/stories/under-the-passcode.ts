@@ -111,8 +111,7 @@ export const underThePasscode: Story = {
       at('16:10'),
       'No signal since the yard. At 10:15 the phone was moved to Marsh Road TDSR; at 12:58 the passcode was typed wrong; at 13:00 the phone passed to Sam, who signed in with his own password; at 15:30 the temporary session was opened for Tariq. The phone finds signal, proves itself and reports each',
     );
-    const { challenge } = story.proofs.challenge(phone.id);
-    const proof = await story.proofs.prove(phone.id, challenge, phone.key.signed(challenge));
+    const proof = await story.proofs.proves(phone.id);
     const atTheTdsr = await unplanned(
       story,
       phone.id,
@@ -134,8 +133,8 @@ export const underThePasscode: Story = {
     for (const one of logged) reports.push(await loggedUse(story, phone.id, timeZone, one));
     story.check(
       'AC-02-23 the phone proved itself with its device key, and each use it logged is saved: no passcode is sent, and nobody need be signed in',
-      [proof.proven, ...reports.map(({ answer }) => answer)],
-      [true, 'SAVED', 'SAVED', 'SAVED'],
+      [proof.answer, ...reports.map(({ answer }) => answer)],
+      ['PROVEN', 'SAVED', 'SAVED', 'SAVED'],
     );
 
     const order = [

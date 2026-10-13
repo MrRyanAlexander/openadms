@@ -19,6 +19,15 @@ export {
 export { NumberAllocator, type LastUsed, type PhoneAtSync } from './numbering/number-allocator.ts';
 export { builtInPolicy, installationPolicy } from './policy.ts';
 export { Settings, SettingsProblem, type MediaSettings } from './process/settings.ts';
+// The API as a process, whole: a story runs it on its own database and clock, reached over
+// HTTPS through the local stack's proxy as a phone reaches the API (task 2.7.1).
+export { ApiModule } from './process/api-module.ts';
+export {
+  ApiProcess,
+  type ProcessParts,
+  type ProcessPolicy,
+  type ProcessSettings,
+} from './process/api-process.ts';
 export {
   ContractorSetup,
   SubPlaces,
