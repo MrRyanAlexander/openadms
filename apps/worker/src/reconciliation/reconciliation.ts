@@ -1,8 +1,8 @@
 // The worker's run (spec/parts/06-reconciliation.md; spec/acceptance/06-reconciliation.md
 // sections A, C, K and N; spec/parts/07-pricing-ledger-audit.md; ARCHITECTURE §13;
 // adms-ticket-workflows §4.7; BACKLOG 1.5.9, 1.7.2, C20, C70; ADR-086, 273, 276, 339, 352, 359):
-// for one project, every ticket that isn't void is drawn again from its current field events and
-// the firm's current setup, and priced by the firm's rules.
+// for one project, the tickets its waiting jobs name are drawn again from their current field
+// events and the firm's current setup, and priced by the firm's rules.
 //
 // Its guarantees:
 // - One run per project at a time, by a database lock held for the length of the run: a second
@@ -31,9 +31,8 @@
 //   the domain's `TicketNeighbours`; ADR-420), so the run needn't look for them.
 // - A run takes up waiting jobs, the oldest first, until their tickets come to the policy's
 //   number; the rest wait for the next run, so a run has a size it can finish (ADR-420).
-// - A run asked for directly (`run`) works every ticket of the project and writes only what
-//   differs. Nothing calls it since the stories moved onto the job loop (2.7.1 part 3, ADR-494);
-//   it is trimmed, or kept by an ADR, when task 2.7.1 closes (BACKLOG C144).
+// - Every run is the queue's: there is no run of a whole project asked for directly (it was
+//   trimmed when task 2.7.1 closed, ADR-503; a reprocess a person asks for is a job, ADR-499).
 // - Running again over unchanged input changes nothing but the record of the run itself.
 // - Each run is recorded, with one decision for each ticket: its status and why.
 // - Everything is written as the system actor, and the database audits it (ADR-273, 276). A
@@ -106,7 +105,7 @@ export type JobsOutcome =
     }
   | {
       readonly worked: true;
-      readonly run: Extract<RunOutcome, { ran: true }>;
+      readonly run: RunOutcome;
       // The jobs the run finished.
       readonly jobs: readonly string[];
       readonly setAside: readonly string[];
@@ -128,21 +127,15 @@ export interface TicketOutcome {
   readonly error: string | null;
 }
 
-export type RunOutcome =
-  | {
-      readonly ran: false;
-      readonly reason: 'RUN_UNDER_WAY';
-      readonly message: string;
-    }
-  | {
-      readonly ran: true;
-      readonly runId: string;
-      readonly ticketsDone: number;
-      readonly ticketsFailed: number;
-      readonly tickets: readonly TicketOutcome[];
-      // The tickets still missing a field event: listed, never flagged for waiting (ADR-053).
-      readonly pending: readonly TicketOutcome[];
-    };
+// What a run did.
+export interface RunOutcome {
+  readonly runId: string;
+  readonly ticketsDone: number;
+  readonly ticketsFailed: number;
+  readonly tickets: readonly TicketOutcome[];
+  // The tickets still missing a field event: listed, never flagged for waiting (ADR-053).
+  readonly pending: readonly TicketOutcome[];
+}
 
 // What failed a try whole, as the log may say it: the error's kind and its code, where it has a
 // fixed one (a database's), never its message or where it was thrown.
@@ -173,19 +166,6 @@ export class Reconciliation {
     this.clock = clock;
     this.settings = settings;
     this.mileages = mileages;
-  }
-
-  async run(asked: RunAsked): Promise<RunOutcome> {
-    const outcome = await this.underLock(asked.projectId, (stillHeld) =>
-      this.locked(asked, stillHeld),
-    );
-    return (
-      outcome ?? {
-        ran: false,
-        reason: 'RUN_UNDER_WAY',
-        message: 'A run on this project is under way.',
-      }
-    );
   }
 
   // The project's waiting jobs, taken up under its lock, which is the claim (ADR-418): one run
@@ -274,13 +254,13 @@ export class Reconciliation {
   private async locked(
     asked: RunAsked,
     stillHeld: () => Promise<void>,
-    // A run the queue starts: the tickets to work, and no other; and what is written with the
-    // run's own closing, where the run went through whole.
-    queued?: {
+    // The tickets the waiting jobs name, and no other; and what is written with the run's own
+    // closing, where the run went through whole.
+    queued: {
       readonly tickets: readonly TicketNamed[];
       readonly closing: (tx: Prisma.TransactionClient, runId: string) => Promise<void>;
     },
-  ): Promise<Extract<RunOutcome, { ran: true }>> {
+  ): Promise<RunOutcome> {
     const { db, clock } = this;
     const { projectId } = asked;
     const run = await db.$write(systemActor, (tx) =>
@@ -298,10 +278,8 @@ export class Reconciliation {
     let done = 0;
     let failed = 0;
     let whole = false;
-    const named =
-      queued === undefined ? null : new Set(queued.tickets.map((each) => ticketKey(each)));
-    const isAsked = (ticket: TicketNamed): boolean =>
-      named === null || named.has(ticketKey(ticket));
+    const named = new Set(queued.tickets.map((each) => ticketKey(each)));
+    const isAsked = (ticket: TicketNamed): boolean => named.has(ticketKey(ticket));
     try {
       const snapshot = await new ProjectRead(db).of(projectId);
       const flags = new Flags(snapshot.project.timeZone);
@@ -349,11 +327,10 @@ export class Reconciliation {
           data: { finishedAt: clock.now(), ticketsDone: done, ticketsFailed: failed },
           select: { id: true },
         });
-        if (whole) await queued?.closing(tx, run.id);
+        if (whole) await queued.closing(tx, run.id);
       });
     }
     return {
-      ran: true,
       runId: run.id,
       ticketsDone: done,
       ticketsFailed: failed,

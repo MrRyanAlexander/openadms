@@ -62,7 +62,7 @@ builds it; ADR-475), and the queued runs flag `DEVICE_CLOCK_OFF`. A loosening of
 on that story (five took about four minutes). **Every story's phone syncs through `Sync` since
 ADR-475, so every field event a sync brought queued a job of its own** (trigger `SYNC`, nobody
 asking): a story calls `queue.settle` or `queue.settled` after a sync, where it says the worker
-runs, or the next `queue.next` takes those jobs up with a person's. **The story `burst` drains a thousand tickets' jobs (4,631) by `settle`, whose count of runs it reads (19; ADR-505), and checks only that more than one was needed.** **The golden mission checks
+runs, or the next `queue.next` takes those jobs up with a person's. **The story `burst` drains a thousand tickets' jobs (4,631) by `QueueRuns.ran` (`settle`'s runs themselves), and checks only that more than one was needed (5 since ADR-506, 19 before); its measurements of the queue at that size (ADR-506) are lines, never checks.** **A run takes up with it a later job whose tickets it already works (ADR-506, `WaitingJobs.takeUp`):** proven by `p1-queued`'s check of a covered job riding while one that would add a ticket waits, beside its cut-to-size check; a loosening of the take is tried on `p1-queued` (four took about four minutes). **The golden mission checks
 that every run on its two projects finished jobs** (exit criterion 1): a run asked for directly
 there is a failed check.
 **The run of a number that is none raises only `NOT_A_TICKET_NUMBER`**: the limit handed to it

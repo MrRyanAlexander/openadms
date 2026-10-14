@@ -7,7 +7,7 @@
 > task's ADR and its session-log line in `DECISIONS.md`). No other file carries these counts.
 > **A count that differs from this page without a reason is a finding, not noise.**
 
-**Seen whole:** 2026-10-13, after ADR-505, on the user's Mac, the installation at head.
+**Seen whole:** 2026-10-13, after ADR-506, on the user's Mac, the installation at head.
 
 ## `pnpm ready`
 
@@ -54,14 +54,14 @@ failed.`** Each story `passed: N checks, N passed, 0 failed`:
 | `numbering` | 16 | | `golden-mission` | 28 |
 | `p1-field-days` | 35 | | `p1-left-out` | 31 |
 | `sync` | 51 | | `first-admin` | 32 |
-| `p1-any-order` | 4 | | `p1-queued` | 18 |
+| `p1-any-order` | 4 | | `p1-queued` | 19 |
 | `p1-reconciled` | 39 | | `p1-viewed` | 15 |
 | `under-the-passcode` | 9 | | `held-for-review` | 11 |
 | `interrupted-upload` | 8 | | `burst` | 6 |
 
 The golden mission's figures are `spec/golden/MISSION.md`'s and change only at the user's word:
 P1 $5,548.25 on 19 lines, P2 $324.00. `p1-reconciled` through `p1-left-out`, `p1-queued` and
-`p1-viewed` ask the map servers, and `burst` too (its lines `It took …` are measurements, ADR-505, never checked).
+`p1-viewed` ask the map servers, and `burst` too (its lines `It took …`, the jobs' sizes, the take read again, the neighbour read, a setup change's read and a run by its size are measurements, ADR-505, 506, never checked).
 
 ## `pnpm security`
 
@@ -78,6 +78,6 @@ series on `adms` moves with every run (a sequence isn't rolled back); gaps are n
 
 ## How long it takes here (the user's Mac, seen 2026-10-09; for judging a hang, not a target)
 
-`pnpm test` about 2 min 20 s; `pnpm scenarios` about 3 min, of which `burst` about 2 min (45 s before it, ADR-505);
+`pnpm test` about 2 min 20 s; `pnpm scenarios` about 3 min, of which `burst` under 2 min (its drain about 38 s since ADR-506);
 `pnpm security` a few seconds after `pnpm test` (the database tests run again otherwise);
 `pnpm ready` on a stopped stack under a minute.

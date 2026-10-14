@@ -408,8 +408,11 @@ export {
   recordNames,
   recordRead,
   sentCanonical,
+  sentWeight,
   seriesHeldSchema,
   syncAnsweredSchema,
+  syncBytesAtMost,
+  syncedRecordBytesAtMost,
   syncPasscodeUsesAtMost,
   syncPhotosAtMost,
   syncRecordsAtMost,
@@ -446,6 +449,7 @@ export {
   type TurnInSent,
 } from './turn-in.ts';
 export {
+  fitByWeight,
   photoFileAnswerRead,
   photoFileGoesOnFrom,
   stored,

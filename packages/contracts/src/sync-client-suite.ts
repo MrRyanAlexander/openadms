@@ -11,7 +11,8 @@
 //
 // What it holds a client to: every part of a sync is sent, empty where there is nothing; each
 // record is one the contract reads, as recorded and under the id its phone made; nothing goes
-// ahead of what it names; no sync carries more than the contract's limits; only "saved" and
+// ahead of what it names; no sync carries more than the contract's limits, in counts or in
+// weight (ADR-504); only "saved" and
 // "already saved" take a record off the phone; a quarantined record and one not saved are kept
 // and shown as not saved, in the server's own words; and what is no answer to what was sent
 // marks nothing. What it leaves to the client: when it syncs, how it stores what it holds, and
@@ -53,6 +54,8 @@ import type { SyncedPhoto, SyncedRecord } from './sync-records.ts';
 import {
   photoRead,
   recordRead,
+  sentWeight,
+  syncBytesAtMost,
   syncPasscodeUsesAtMost,
   syncRecordsAtMost,
   syncSentSchema,
@@ -166,9 +169,15 @@ function same(one: unknown, other: unknown): boolean {
   return one === other;
 }
 
-// One sync as it went on the wire, read as the server reads it: refused whole where it isn't
-// the contract's, each record then read on its own.
+// One sync as it went on the wire, read as the server reads it: refused whole where it weighs
+// more than a sync may (the API's body limit would refuse it at every try) or isn't the
+// contract's, each record then read on its own.
 function onTheWire(sent: unknown): SyncSent {
+  const weight = sentWeight(sent ?? null);
+  held(
+    weight <= syncBytesAtMost,
+    `It sent a sync of ${String(weight)} bytes, heavier than the ${String(syncBytesAtMost)} a sync may weigh.`,
+  );
   const wire: unknown = JSON.parse(JSON.stringify(sent ?? null));
   const read = syncSentSchema.safeParse(wire);
   if (!read.success) {
@@ -1077,6 +1086,41 @@ export const syncClientSuite: readonly SyncClientCheck[] = [
           onTheWire(waited.sends()).records.length === 0,
         'Answered to wipe, it kept what waited to be sent.',
       );
+    },
+  },
+  {
+    name: 'no sync weighs more than the contract lets one: records heavier together than a sync may be, each with its photograph, go over several syncs, each within its weight, nothing lost and nothing twice (AC-05-51, AC-10-41; ADR-504)',
+    async run(make) {
+      // The most words a monitor may type at the curb, each character three bytes: a sync's
+      // count of these weighs more than two syncs may, and a photograph of each beside them.
+      const heavy = '€'.repeat(2000);
+      const records = Array.from({ length: syncRecordsAtMost }, (_, index) =>
+        collected(String(4000 + index), { notes: heavy, address: heavy }),
+      );
+      const holds = {
+        ...nothing,
+        records,
+        photos: records.map((record, index) => ({
+          ...pilePhoto,
+          id: made(String(6000 + index)),
+          owner: { kind: 'FIELD_EVENT' as const, id: syncedRecordId(record) },
+        })),
+      } satisfies SyncClientHolds;
+      const everything = [...records.map(syncedRecordId), ...holds.photos.map(({ id }) => id)];
+      const client = await make(holds);
+      const went: string[] = [];
+      let syncs = 0;
+      while (client.holds().length > 0) {
+        syncs += 1;
+        held(syncs <= 6, 'After six syncs, each answered "saved", it still holds something.');
+        // A sync heavier than a sync may be is no sync the contract reads.
+        const sync = onTheWire(client.sends());
+        const ids = [...sync.records.map(syncedRecordId), ...sync.photos.map(({ id }) => id)];
+        held(ids.length > 0, 'It holds something and sent nothing.');
+        went.push(...ids);
+        await client.answered(answerTo(sync));
+      }
+      held(sorted(went) === sorted(everything), 'Not everything it held was sent, each once.');
     },
   },
 ];

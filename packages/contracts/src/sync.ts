@@ -18,6 +18,14 @@
 // own answer, "not saved", and never refuses the others. What bounds an unread record is the
 // request's own size (the boundary's limit) and how many a sync carries.
 //
+// **A sync has a weight as well as counts** (AC-05-51, AC-10-41; ADR-504): its JSON in UTF-8 is
+// at most `syncBytesAtMost`, the least body any installation's API reads, so no sync a phone
+// makes is refused for its size, which it would be at every try. A client fills a sync up to
+// the counts and the weight, whichever comes first, and sends the rest in the next. One record
+// weighs at most `syncedRecordBytesAtMost` as sent, so the heaviest record, beside the heaviest
+// reports a sync may carry, always fits in one: one heavier is read as no record, answered "not
+// saved" and held for a person, never left on the phone to be refused for ever.
+//
 // **Each thing sent gets its own answer, in the order sent.** A record is saved, already saved,
 // kept in quarantine (not saved, with the reason and the record that holds the number), or not
 // saved: it isn't a record, it names something the server doesn't have, its assignment was not
@@ -38,6 +46,7 @@ import {
   type NotSavedNotice,
   numberSeries,
   quarantineReasons,
+  requestBodyBytesAtLeast,
 } from '@open-adms/domain';
 import { z } from 'zod';
 
@@ -69,6 +78,23 @@ export const syncPhotosAtMost = 200;
 export const syncUnplannedAssignmentsAtMost = 20;
 export const syncPasscodeUsesAtMost = 100;
 export const syncSeriesAtMost = 20;
+// How much one sync weighs at most, as it goes on the wire: its JSON in UTF-8 (ADR-504). The
+// least body any installation's API reads, so a sync is never refused for its size.
+export const syncBytesAtMost = requestBodyBytesAtLeast;
+// How much one record weighs at most as sent, its JSON in UTF-8 (ADR-504): a quarter of a sync.
+// Only a form's own answers (two hundred of four thousand characters each) can come near it.
+export const syncedRecordBytesAtMost = 262_144;
+
+// What something weighs as it goes on the wire: its JSON in UTF-8, in bytes. JSON's own text
+// is whole characters (a lone surrogate is written escaped), each one to four bytes.
+export function sentWeight(sent: unknown): number {
+  let bytes = 0;
+  for (const character of JSON.stringify(sent)) {
+    const point = character.codePointAt(0) ?? 0;
+    bytes += point < 0x80 ? 1 : point < 0x800 ? 2 : point < 0x10000 ? 3 : 4;
+  }
+  return bytes;
+}
 
 const seriesNumber = z.number().int().min(1).max(2_000_000_000);
 
@@ -175,6 +201,15 @@ export function sentCanonical(sent: unknown): string {
 
 // Reads whatever stood in one record's place.
 export function recordRead(sent: unknown): RecordRead {
+  if (sentWeight(sent) > syncedRecordBytesAtMost) {
+    return {
+      read: false,
+      id: recordNames(sent).id,
+      notice: NotSaved.notARecord(
+        `it weighs more than a record may, ${String(syncedRecordBytesAtMost / 1024)} KiB as sent`,
+      ),
+    };
+  }
   const read = syncedRecordSchema.safeParse(sent);
   if (read.success) return { read: true, record: read.data };
   const why = notRead(syncedRecordSchema, sent) ?? 'this record isn’t taken as it stands';

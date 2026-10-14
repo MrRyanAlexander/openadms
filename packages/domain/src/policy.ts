@@ -126,10 +126,16 @@ export const policyNames = {
 
 export type PolicyName = (typeof policyNames)[keyof typeof policyNames];
 
+// The least body any installation's API reads from a request: one mebibyte, the release's own
+// value. A sync is never heavier (the contracts' `syncBytesAtMost`), so a phone's sync always fits
+// whatever an installation states (ADR-504).
+export const requestBodyBytesAtLeast = 1_048_576;
+
 // What each value may be: a whole number in the range the database's own checks hold a project's
 // setting to. A load call is 0 to 100; a size is at least one; a crew day is 1 to 24 hours; a block
-// is at least one number, and a size limit at least one byte. A statement's time limit is at least
-// one millisecond (nought would switch it off) and at most what Postgres takes. A password's
+// is at least one number. The body a request may carry is never under a mebibyte, so that no
+// installation's limit refuses a sync a phone may send (ADR-504). A statement's time limit is at
+// least one millisecond (nought would switch it off) and at most what Postgres takes. A password's
 // shortest length is never under the eight characters the standard allows beside a second step,
 // nor over the 64 it says must be permitted; its longest never under those 64. A reset by email
 // is good for a day at most, the standard's limit. A session lasts a day at most and an hour at
@@ -142,6 +148,7 @@ export type PolicyName = (typeof policyNames)[keyof typeof policyNames];
 // at least a thousand callers' counts and at most ten million. A job names at least one ticket
 // and at most a hundred thousand. A phone's clock may stand a minute off at the least before
 // its sync is flagged, and a day at the most.
+
 const ranges: Record<PolicyName, { least: number; most: number }> = {
   [policyNames.loadCallLowLimit]: { least: 0, most: 100 },
   [policyNames.loadCallHighLimit]: { least: 0, most: 100 },
@@ -151,7 +158,10 @@ const ranges: Record<PolicyName, { least: number; most: number }> = {
   [policyNames.ticketNumberBlockSize]: { least: 1, most: Number.MAX_SAFE_INTEGER },
   [policyNames.certNumberBlockSize]: { least: 1, most: Number.MAX_SAFE_INTEGER },
   [policyNames.roeNumberBlockSize]: { least: 1, most: Number.MAX_SAFE_INTEGER },
-  [policyNames.requestBodyLimitBytes]: { least: 1, most: Number.MAX_SAFE_INTEGER },
+  [policyNames.requestBodyLimitBytes]: {
+    least: requestBodyBytesAtLeast,
+    most: Number.MAX_SAFE_INTEGER,
+  },
   [policyNames.statementTimeoutMs]: { least: 1, most: 2147483647 },
   [policyNames.databasePoolConnections]: { least: 2, most: 1000 },
   [policyNames.passwordMinimumLength]: { least: 8, most: 64 },

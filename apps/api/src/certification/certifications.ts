@@ -274,21 +274,8 @@ export class Certifications extends ReviewService {
 
   // A measuring mistake: the box is corrected in place, and the certification's capacity is worked
   // out again from its boxes. The capacity itself is never typed (ADR-076, 079). Its tickets
-  // are queued to reprocess at the new capacity, in the same piece of work.
-  measure(
-    person: string,
-    certificationId: string,
-    position: number,
-    measurements: BoxMeasurements,
-  ): Promise<Outcome<Certification>> {
-    return this.write(
-      person,
-      async (tx) =>
-        (await this.measured(tx, person, certificationId, position, measurements)).record,
-    );
-  }
-
-  // The same inside a piece of work already open (a reviewer's correction), with what it queued.
+  // are queued to reprocess at the new capacity, in the same piece of work: the reviewer's
+  // correction's (`Corrections.certification`), which asks for correct; with what it queued.
   async measured(
     tx: Prisma.TransactionClient,
     person: string,

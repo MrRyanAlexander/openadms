@@ -75,19 +75,19 @@ import { p1TimeZone as timeZone, startSeries } from './p1.ts';
 const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-04:00`;
 
 // What a run did with each ticket, as lines a person reads.
-const told = (outcome: RunOutcome): string[] =>
-  outcome.ran
-    ? outcome.tickets.map((ticket) =>
+const told = (outcome: RunOutcome | null): string[] =>
+  outcome === null
+    ? ['No run yet.']
+    : outcome.tickets.map((ticket) =>
         [
           ticket.ticketNumber,
           ticket.status,
           ...(ticket.error === null ? [] : [`error: ${ticket.error}`]),
           ...ticket.flags,
         ].join(' · '),
-      )
-    : [outcome.message];
+      );
 
-const of = (outcome: RunOutcome, ...ticketNumbers: string[]): string[] =>
+const of = (outcome: RunOutcome | null, ...ticketNumbers: string[]): string[] =>
   told(outcome).filter((line) => ticketNumbers.some((number) => line.startsWith(number)));
 
 // A field event as a phone sends it, entered in the back office when the phone failed: what it
@@ -412,9 +412,7 @@ export const p1Reviewed: Story = {
     const fieldEvents = (): Promise<number> => api.fieldEvent.count();
 
     // A reviewer's action, then the run it asks for.
-    const last: { run: RunOutcome } = {
-      run: { ran: false, reason: 'RUN_UNDER_WAY', message: 'No run yet.' },
-    };
+    const last: { run: RunOutcome | null } = { run: null };
     // Nobody asks the worker: the action queued its job, and the worker takes it up.
     const queue = new QueueRuns(story, reconciliation);
     // An act, saved: its answer. One that queued a job is followed by the run the worker makes
@@ -619,7 +617,7 @@ export const p1Reviewed: Story = {
         ).map((record) =>
           [names.get(record.actorId), record.source, record.operation, record.reason].join(' · '),
         ),
-        last.run.ran && job101001?.reconciliationRunId === last.run.runId,
+        last.run !== null && job101001?.reconciliationRunId === last.run.runId,
       ],
       [
         1,
@@ -824,11 +822,11 @@ export const p1Reviewed: Story = {
             },
           })
         ).every((record) => record.actorId === systemActorId && record.source === 'SYSTEM'),
-        last.run.ran
-          ? (({ trigger, requestedById }) => [trigger, names.get(requestedById)])(
+        last.run === null
+          ? []
+          : (({ trigger, requestedById }) => [trigger, names.get(requestedById)])(
               await api.reconciliationRun.findUniqueOrThrow({ where: { id: last.run.runId } }),
-            )
-          : [],
+            ),
       ],
       [
         ['field_event UPDATE ticket_number'],

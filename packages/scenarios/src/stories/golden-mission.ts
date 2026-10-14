@@ -63,19 +63,19 @@ import { p1TimeZone as timeZone } from './p1.ts';
 const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-04:00`;
 
 // What a run did with each ticket, as lines a person reads.
-const told = (outcome: RunOutcome): string[] =>
-  outcome.ran
-    ? outcome.tickets.map((ticket) =>
+const told = (outcome: RunOutcome | null): string[] =>
+  outcome === null
+    ? ['No run yet.']
+    : outcome.tickets.map((ticket) =>
         [
           ticket.ticketNumber,
           ticket.status,
           ...(ticket.error === null ? [] : [`error: ${ticket.error}`]),
           ...ticket.flags,
         ].join(' · '),
-      )
-    : [outcome.message];
+      );
 
-const of = (outcome: RunOutcome, ...ticketNumbers: string[]): string[] =>
+const of = (outcome: RunOutcome | null, ...ticketNumbers: string[]): string[] =>
   told(outcome).filter((line) => ticketNumbers.some((number) => line.startsWith(number)));
 
 const dollars = (cents: number): string =>
@@ -530,9 +530,7 @@ export const goldenMission: Story = {
         ].join(' · ');
       });
     // A reviewer's action, then the run it asks for.
-    const last: { run: RunOutcome } = {
-      run: { ran: false, reason: 'RUN_UNDER_WAY', message: 'No run yet.' },
-    };
+    const last: { run: RunOutcome | null } = { run: null };
     // Luis's act at his browser, saved: its answer. Every one that queues is on P1.
     const byLuis = async <E extends Endpoint>(served: E, more: AskedWith): Promise<AnswerOf<E>> =>
       (await backOffice.luiss()).answered(served, more);

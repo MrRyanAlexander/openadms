@@ -46,19 +46,19 @@ import { p1TimeZone as timeZone } from './p1.ts';
 const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-04:00`;
 
 // What a run did with each ticket, as lines a person reads.
-const told = (outcome: RunOutcome): string[] =>
-  outcome.ran
-    ? outcome.tickets.map((ticket) =>
+const told = (outcome: RunOutcome | null): string[] =>
+  outcome === null
+    ? ['No run yet.']
+    : outcome.tickets.map((ticket) =>
         [
           ticket.ticketNumber,
           ticket.status,
           ...(ticket.error === null ? [] : [`error: ${ticket.error}`]),
           ...ticket.flags,
         ].join(' · '),
-      )
-    : [outcome.message];
+      );
 
-const of = (outcome: RunOutcome, ...ticketNumbers: string[]): string[] =>
+const of = (outcome: RunOutcome | null, ...ticketNumbers: string[]): string[] =>
   told(outcome).filter((line) => ticketNumbers.some((number) => line.startsWith(number)));
 
 export const p1Voided: Story = {
@@ -185,17 +185,15 @@ export const p1Voided: Story = {
       api.fieldEvent.findFirstOrThrow({ where: { projectId: p1, ticketNumber, kind } });
     const reasonId = async (name: string): Promise<string> =>
       (await api.reason.findFirstOrThrow({ where: { name } })).id;
-    const decisionOf = async (run: RunOutcome, ticketNumber: string) =>
+    const decisionOf = async (run: RunOutcome | null, ticketNumber: string) =>
       (
         await api.reconciliationDecision.findMany({
-          where: { reconciliationRunId: run.ran ? run.runId : '', ticketNumber },
+          where: { reconciliationRunId: run?.runId ?? '', ticketNumber },
         })
       ).map((decision) => [decision.status, (decision.summary as { why?: string }).why]);
 
     // A reviewer's action, then the run it asks for.
-    const last: { run: RunOutcome } = {
-      run: { ran: false, reason: 'RUN_UNDER_WAY', message: 'No run yet.' },
-    };
+    const last: { run: RunOutcome | null } = { run: null };
     // Nobody asks the worker: the action queued its job, and the worker takes it up.
     const queue = new QueueRuns(story, reconciliation);
     // Dana and Luis at their browsers. His act, saved, then the run its job asks of the worker:
@@ -905,11 +903,11 @@ export const p1Voided: Story = {
         await api.ticketVoid.count({ where: { ticketNumber: '101009' } }),
         of(last.run, '101009'),
         await decisionOf(last.run, '101009'),
-        last.run.ran
-          ? (({ trigger, requestedById }) => [trigger, names.get(requestedById)])(
+        last.run === null
+          ? []
+          : (({ trigger, requestedById }) => [trigger, names.get(requestedById)])(
               await api.reconciliationRun.findUniqueOrThrow({ where: { id: last.run.runId } }),
-            )
-          : [],
+            ),
         await linesOf('101009'),
       ],
       [

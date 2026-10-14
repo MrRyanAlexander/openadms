@@ -2,11 +2,17 @@
 // 2…8; AC-05-15, 20, 45, 46; BACKLOG 2.6.1 part 4, C128, C129; ADR-022, 467, 468, 470; REQ-203,
 // 308c): what any client reads of what it was answered, and what an answer lets it do. The
 // harness's phones use it now and the field app in Phase 3; the suite that holds a client to it
-// is `sync-client-suite.ts`. And its half of a photograph's file sent to the media endpoint
-// (ARCHITECTURE §9 (5); AC-05-09; ADR-482, 483).
+// is `sync-client-suite.ts`. How much a sync carries by weight (ADR-504). And its half of a
+// photograph's file sent to the media endpoint (ARCHITECTURE §9 (5); AC-05-09; ADR-482, 483).
 import { photoFileAnswerSchema, type PhotoFileAnswer, type PhotoFileName } from './api-answers.ts';
 import type { ReceivedRecord, SyncedRecord } from './sync-records.ts';
-import { syncAnsweredSchema, type SyncAnswered, type SyncSent } from './sync.ts';
+import {
+  sentWeight,
+  syncAnsweredSchema,
+  syncBytesAtMost,
+  type SyncAnswered,
+  type SyncSent,
+} from './sync.ts';
 import { turnInAnswerSchema, type TurnInAnswer } from './turn-in.ts';
 
 // The id its phone made for a record, whatever its kind: as a phone sends it, or as the server
@@ -49,6 +55,22 @@ export function syncedRecordAssignment(record: SyncedRecord | ReceivedRecord): s
     case 'CERTIFICATION':
       return record.certification.assignmentId;
   }
+}
+
+// How many of the things to add to one of a sync's lists, from the first, keep it no heavier
+// than the contract lets a sync be (AC-05-51; ADR-504): `sync` as it stands, the list they go in
+// still empty; each thing after the first adds its comma. A client fills its records so, then
+// its photographs' records beside them, and sends the rest in the next sync. The first always
+// fits a sync that holds no more than one record of the heaviest a record may be.
+export function fitByWeight(sync: SyncSent, adding: readonly unknown[]): number {
+  let weight = sentWeight(sync);
+  let taken = 0;
+  for (const each of adding) {
+    weight += sentWeight(each) + (taken === 0 ? 0 : 1);
+    if (weight > syncBytesAtMost) break;
+    taken += 1;
+  }
+  return taken;
 }
 
 // The only answers that say the server stored what was sent (REQ-308c). Anything else, and the

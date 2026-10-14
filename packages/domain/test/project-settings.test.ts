@@ -5,7 +5,7 @@
 // file; this package's tests, like its source, read none.
 import { describe, expect, it } from 'vitest';
 
-import { NewProjectSettings, Policy, policyNames } from '../src/index.ts';
+import { NewProjectSettings, Policy, policyNames, requestBodyBytesAtLeast } from '../src/index.ts';
 
 // The policy values as the release ships them.
 const shipped = {
@@ -216,12 +216,24 @@ describe('the policy values', () => {
       policyNames.ticketNumberBlockSize,
       policyNames.certNumberBlockSize,
       policyNames.roeNumberBlockSize,
-      policyNames.requestBodyLimitBytes,
     ]) {
       expect(() => Policy.from({ ...shipped, [name]: '0' })).toThrow(
         `The policy value ${name} must be a whole number, 1 or more: "0".`,
       );
       expect(() => Policy.from({ ...shipped, [name]: '1' })).not.toThrow();
+    }
+  });
+
+  it('AC-05-51, ADR-504 the body a request may carry is a mebibyte unless changed, and never less: the heaviest sync a phone may send fits whatever an installation states', () => {
+    expect(requestBodyBytesAtLeast).toBe(1_048_576);
+    expect(Policy.from(shipped).requestBodyLimitBytes).toBe(requestBodyBytesAtLeast);
+    expect(
+      Policy.from({ ...shipped, REQUEST_BODY_LIMIT_BYTES: '2097152' }).requestBodyLimitBytes,
+    ).toBe(2_097_152);
+    for (const written of ['0', '1', '1048575']) {
+      expect(() => Policy.from({ ...shipped, REQUEST_BODY_LIMIT_BYTES: written })).toThrow(
+        `The policy value REQUEST_BODY_LIMIT_BYTES must be a whole number, 1048576 or more: "${written}".`,
+      );
     }
   });
 

@@ -179,7 +179,7 @@ export {
   type NeighbourEvent,
   type TicketKey,
 } from './neighbours.ts';
-export { Policy, policyNames, type PolicyName } from './policy.ts';
+export { Policy, policyNames, requestBodyBytesAtLeast, type PolicyName } from './policy.ts';
 export {
   BreachedPasswords,
   PasswordRules,

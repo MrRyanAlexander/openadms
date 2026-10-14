@@ -51,19 +51,19 @@ import { p1TimeZone as timeZone } from './p1.ts';
 const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-04:00`;
 
 // What a run did with each ticket, as lines a person reads.
-const told = (outcome: RunOutcome): string[] =>
-  outcome.ran
-    ? outcome.tickets.map((ticket) =>
+const told = (outcome: RunOutcome | null): string[] =>
+  outcome === null
+    ? ['No run yet.']
+    : outcome.tickets.map((ticket) =>
         [
           ticket.ticketNumber,
           ticket.status,
           ...(ticket.error === null ? [] : [`error: ${ticket.error}`]),
           ...ticket.flags,
         ].join(' · '),
-      )
-    : [outcome.message];
+      );
 
-const of = (outcome: RunOutcome, ...ticketNumbers: string[]): string[] =>
+const of = (outcome: RunOutcome | null, ...ticketNumbers: string[]): string[] =>
   told(outcome).filter((line) => ticketNumbers.some((number) => line.startsWith(number)));
 
 const isSame = (left: unknown, right: unknown): boolean =>
@@ -193,17 +193,15 @@ export const p1Invoiced: Story = {
       api.fieldEvent.findFirstOrThrow({ where: { projectId: p1, ticketNumber, kind } });
     const reasonId = async (name: string): Promise<string> =>
       (await api.reason.findFirstOrThrow({ where: { name } })).id;
-    const decisionOf = async (run: RunOutcome, ticketNumber: string) =>
+    const decisionOf = async (run: RunOutcome | null, ticketNumber: string) =>
       (
         await api.reconciliationDecision.findMany({
-          where: { reconciliationRunId: run.ran ? run.runId : '', ticketNumber },
+          where: { reconciliationRunId: run?.runId ?? '', ticketNumber },
         })
       ).map((decision) => [decision.status, (decision.summary as { why?: string }).why]);
 
     // A reviewer's action, then the run it asks for.
-    const last: { run: RunOutcome } = {
-      run: { ran: false, reason: 'RUN_UNDER_WAY', message: 'No run yet.' },
-    };
+    const last: { run: RunOutcome | null } = { run: null };
     // Nobody asks the worker: the action queued its job, and the worker takes it up.
     const queue = new QueueRuns(story, reconciliation);
     // Dana and Luis at their browsers (ADR-497, 500): every act here is on P1. An act, saved:

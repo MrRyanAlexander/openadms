@@ -30,7 +30,7 @@ import {
   type NewCertification,
   type Outcome,
 } from '@open-adms/api';
-import { correctFieldEventEndpoint } from '@open-adms/contracts';
+import { correctFieldEventEndpoint, revokeCertificationEndpoint } from '@open-adms/contracts';
 import { MapServers, Mileages, Reconciliation, type RunOutcome } from '@open-adms/worker';
 
 import { utcOffsetMinutes } from '../clock.ts';
@@ -58,16 +58,14 @@ const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-0
 // What a run did with each ticket, as lines a person reads. A flag raised on each of a ticket's
 // field events (a badge both monitors scanned, a site each pile was dumped at) reads once.
 const told = (outcome: RunOutcome): string[] =>
-  outcome.ran
-    ? outcome.tickets.map((ticket) =>
-        [
-          ticket.ticketNumber,
-          ticket.status,
-          ...(ticket.error === null ? [] : [`error: ${ticket.error}`]),
-          ...new Set(ticket.flags),
-        ].join(' · '),
-      )
-    : [outcome.message];
+  outcome.tickets.map((ticket) =>
+    [
+      ticket.ticketNumber,
+      ticket.status,
+      ...(ticket.error === null ? [] : [`error: ${ticket.error}`]),
+      ...new Set(ticket.flags),
+    ].join(' · '),
+  );
 
 const of = (outcome: RunOutcome, ...ticketNumbers: string[]): string[] =>
   told(outcome).filter((line) => ticketNumbers.some((number) => line.startsWith(number)));
@@ -849,7 +847,13 @@ export const p1LeftOut: Story = {
       ],
       replaces: { certificationId: selfLoader.id, reason: 'Sideboards added' },
     });
-    await saved(certifications.revoke(dana, late.id, '2026-10-15', 'Tailgate missing'));
+    // An admin's alone: Dana's request at her browser (ADR-079).
+    await (
+      await backOffice.danas()
+    ).answered(revokeCertificationEndpoint, {
+      ids: { certificationId: late.id },
+      json: { from: '2026-10-15', reason: 'Tailgate missing' },
+    });
 
     story.at(
       on('15', '07:30'),

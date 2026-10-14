@@ -127,7 +127,6 @@ describe('a job set aside is an error a filter finds (ADR-498)', () => {
 
   it('a run that worked its jobs, or found nothing waiting, and set a spent job aside: that job’s line alone; a pass that set none aside logs no such line', async () => {
     const run = {
-      ran: true,
       runId: '019a0000-0000-7000-8000-0000000000ff',
       ticketsDone: 2,
       ticketsFailed: 0,

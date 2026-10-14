@@ -78,8 +78,6 @@ export async function saved<T>(attempt: Saving<T>): Promise<T> {
   return outcome.record;
 }
 
-type Worked = Extract<RunOutcome, { ran: true }>;
-
 // The worker's side of the job queue in a story (BACKLOG 2.3.3, 2.7.1 part 3; ADR-420, 494):
 // nobody asks the worker for a run. A sync, a person's action or a setup change queued its job
 // in its own piece of work, and here the worker's own job loop (`JobLoop`, as its process runs
@@ -90,7 +88,7 @@ export class QueueRuns {
   private readonly story: StoryContext;
   private readonly loop: JobLoop;
   // Each project's runs the story hasn't read yet, the oldest first.
-  private readonly unread = new Map<string, Worked[]>();
+  private readonly unread = new Map<string, RunOutcome[]>();
 
   constructor(story: StoryContext, reconciliation: Reconciliation) {
     const { policy } = story;
@@ -129,7 +127,7 @@ export class QueueRuns {
 
   // One pass; the project's run in it. A story that expects one and finds none has lost a job:
   // it stops.
-  async next(projectId: string): Promise<Worked> {
+  async next(projectId: string): Promise<RunOutcome> {
     const passed = await this.kept();
     const [run, ...more] = this.taken(projectId);
     if (run === undefined || more.length > 0) {
@@ -144,14 +142,19 @@ export class QueueRuns {
   // finished jobs and more wait; how many runs it took on the project. What setup queued before
   // the field days (a site's permit, a certification's views) is settled so.
   async settle(projectId: string): Promise<number> {
+    return (await this.ran(projectId)).length;
+  }
+
+  // As `settle`, answering the project's runs themselves, the oldest first.
+  async ran(projectId: string): Promise<readonly RunOutcome[]> {
     await this.drained();
-    return this.taken(projectId).length;
+    return this.taken(projectId);
   }
 
   // Every waiting job worked, as `settle`, in one run on the project: that run's answer. A story
   // that expects the worker to run and finds no job has lost one, and one whose jobs took more
   // than a run (more tickets than the policy lets one take up) is told so: it stops.
-  async settled(projectId: string): Promise<Worked> {
+  async settled(projectId: string): Promise<RunOutcome> {
     await this.drained();
     const [run, ...more] = this.taken(projectId);
     if (run === undefined || more.length > 0) {
@@ -168,7 +171,7 @@ export class QueueRuns {
   // (workflow, then number), a number that isn't one last. A void ticket is listed, VOID. The
   // id and the counts are the project's last run's. A run the queue starts works only the
   // tickets its jobs name, so what a whole run used to tell of a project is read here.
-  async standing(projectId: string): Promise<Worked> {
+  async standing(projectId: string): Promise<RunOutcome> {
     const { api } = this.story;
     const events = await api.fieldEvent.findMany({
       where: { projectId },
@@ -223,7 +226,6 @@ export class QueueRuns {
       select: { id: true, ticketsDone: true, ticketsFailed: true },
     });
     return {
-      ran: true,
       runId: last?.id ?? '',
       ticketsDone: last?.ticketsDone ?? 0,
       ticketsFailed: last?.ticketsFailed ?? 0,
@@ -249,7 +251,7 @@ export class QueueRuns {
     }));
   }
 
-  private taken(projectId: string): Worked[] {
+  private taken(projectId: string): RunOutcome[] {
     const runs = this.unread.get(projectId) ?? [];
     this.unread.delete(projectId);
     return runs;

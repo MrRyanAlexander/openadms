@@ -24,13 +24,19 @@ import {
   type NewCertification,
   type Outcome,
 } from '@open-adms/api';
+import {
+  correctCertificationBoxEndpoint,
+  revokeCertificationEndpoint,
+  setPermissionsEndpoint,
+} from '@open-adms/contracts';
 import { NewProjectSettings } from '@open-adms/domain';
 
 import { utcOffsetMinutes } from '../clock.ts';
 import { uuidv7 } from '../ids.ts';
+import { refusalOf } from '../over-https.ts';
 import type { Story } from '../runner.ts';
 import { assigned, taken } from './board.ts';
-import { p1TimeZone as timeZone, setUpP1, startSeries } from './p1.ts';
+import { danasEmail, luissEmail, p1TimeZone as timeZone, setUpP1, startSeries } from './p1.ts';
 
 const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-04:00`;
 const saturday = (time: string): string => on('10', time);
@@ -80,11 +86,12 @@ export const certification: Story = {
     const phone = await story.enrolled('P1-HO-TDSR');
     const dana = uuidv7(clock.now());
     const world = await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
-      await tx.user.create({ data: { id: dana, name: 'Dana Reyes', role: 'ADMIN' } });
-      const luis = await tx.user.create({ data: { name: 'Luis Ortega', role: 'MANAGER_ANALYST' } });
-      // He merges two spellings of a sub later: a contractor's record is setup's, and its
-      // service asks whether he holds Setup (ADR-424).
-      await tx.userPermission.create({ data: { userId: luis.id, permission: 'SETUP' } });
+      await tx.user.create({
+        data: { id: dana, name: 'Dana Reyes', role: 'ADMIN', email: danasEmail },
+      });
+      const luis = await tx.user.create({
+        data: { name: 'Luis Ortega', role: 'MANAGER_ANALYST', email: luissEmail },
+      });
       const p1 = await setUpP1(tx, story.policy);
       const ppdr = await tx.programType.findFirstOrThrow({ where: { name: 'PPDR' } });
       const p2 = await tx.project.create({
@@ -112,6 +119,11 @@ export const certification: Story = {
       };
     });
     const { luis, p1, p2, coastline } = world;
+    // Dana and Luis at their browsers (BACKLOG 2.7.1 part 4; ADR-496, 502), each signed in when
+    // first asked for: she is the firm's first admin, and sets his first password herself.
+    const danas = () => story.backOffice.admin({ id: dana, email: danasEmail });
+    const luiss = async () =>
+      story.backOffice.person(await danas(), { id: luis, email: luissEmail });
     // Created as real ones are: on the phone, online, under the master passcode (ADR-442).
     const samGrant = await story.monitor('Sam Grant', world.phone);
     const sam = samGrant.id;
@@ -573,18 +585,41 @@ export const certification: Story = {
     // ------------------------------------------------------------------------------------------
     story.at(
       on('13', '16:20'),
-      'Tuesday: Luis finds the sideboards on 730423 were typed 21 high; they are 12',
+      'Tuesday: Dana gives Luis Setup and the grant to correct. He finds the sideboards on 730423 were typed 21 high; they are 12, and he corrects them at his browser',
     );
+    // A measuring mistake takes correct; he merges two spellings of a sub later, and a
+    // contractor's record is setup's (ADR-424). Her request at his record; he holds nothing yet.
+    await (
+      await danas()
+    ).answered(setPermissionsEndpoint, {
+      ids: { userId: luis },
+      json: { permissions: ['SETUP', 'CORRECT'] },
+    });
+    // The sideboards are its second box, after the primary (0); its dog box is the third.
+    const boxOf = (position: string, changes: { length?: number; height?: number }) => ({
+      ids: { certificationId: tidewaterTruck.id, position },
+      json: { changes },
+    });
+    const signedIn = await luiss();
+    const lastAudited = (await api.auditRecord.findFirstOrThrow({ orderBy: { id: 'desc' } })).id;
     story.check(
-      'a correction that leaves no capacity is refused, and nothing changes',
-      await refused(certifications.measure(luis, tidewaterTruck.id, 1, { height: 0 })),
-      'MEASUREMENT_INVALID: Box 1 (rectangle): its height is 0. Every measurement is a whole number of inches, 1 or more.',
+      'a correction that leaves no capacity is refused in the domain’s words, and nothing changes: the dog box typed 3,000 long, not 30, subtracts more than the truck holds',
+      refusalOf(
+        await signedIn.asked(correctCertificationBoxEndpoint, boxOf('2', { length: 3000 })),
+      ),
+      '422 NOT_SAVED · NOTHING_HELD: The boxes work out to -3650400.00 cu in: they subtract as much as the primary box holds, or more. Check the measurements.',
     );
-    const corrected = await saved(
-      certifications.measure(luis, tidewaterTruck.id, 1, { height: 12 }),
-    );
+    const corrected = (
+      await signedIn.answered(correctCertificationBoxEndpoint, boxOf('1', { height: 12 }))
+    ).record;
     const correction = await api.auditRecord.findMany({
-      where: { actorId: luis },
+      where: {
+        actorId: luis,
+        id: { gt: lastAudited },
+        // His browser's own session, refreshed as the story's clock moves on, is his sign-in's,
+        // not a change to a record (ADR-501).
+        tableName: { not: 'session' },
+      },
       orderBy: { id: 'asc' },
     });
     story.check(
@@ -654,18 +689,28 @@ export const certification: Story = {
     const summitTruck = await api.certification.findFirstOrThrow({
       where: { certNumber: '88120' },
     });
+    // An admin's alone: Dana's request at her browser (ADR-079).
+    const revoking = (reason: string) => ({
+      ids: { certificationId: summitTruck.id },
+      json: { from: '2026-10-15', reason },
+    });
     story.check(
-      'a date without a reason is refused',
-      await refused(certifications.revoke(dana, summitTruck.id, '2026-10-15', '')),
-      'REVOCATION_NEEDS_REASON: Not saved: certification 88120 is revoked from a date with a reason.',
+      'a date without a reason is refused before anything is read, and nothing changes',
+      [
+        refusalOf(await (await danas()).asked(revokeCertificationEndpoint, revoking(' '))),
+        (await api.certification.findUniqueOrThrow({ where: { id: summitTruck.id } })).revokedFrom,
+      ],
+      ['400 BAD_REQUEST', null],
     );
-    const revoked = await saved(
-      certifications.revoke(dana, summitTruck.id, '2026-10-15', 'Truck left the project'),
-    );
+    const revoked = (
+      await (
+        await danas()
+      ).answered(revokeCertificationEndpoint, revoking('Truck left the project'))
+    ).record;
     story.check(
       'AC-03-55 it keeps the date, the reason and who revoked it; nothing else on it changes',
       [
-        revoked.revokedFrom?.toISOString().slice(0, 10),
+        revoked.revokedFrom,
         revoked.revokedReason,
         revoked.revokedById === dana,
         revoked.capacityCy,

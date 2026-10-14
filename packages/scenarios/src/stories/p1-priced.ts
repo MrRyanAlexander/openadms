@@ -48,16 +48,14 @@ const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-0
 
 // What a run did with each ticket, as lines a person reads.
 const told = (outcome: RunOutcome): string[] =>
-  outcome.ran
-    ? outcome.tickets.map((ticket) =>
-        [
-          ticket.ticketNumber,
-          ticket.status,
-          ...(ticket.error === null ? [] : [`error: ${ticket.error}`]),
-          ...ticket.flags,
-        ].join(' · '),
-      )
-    : [outcome.message];
+  outcome.tickets.map((ticket) =>
+    [
+      ticket.ticketNumber,
+      ticket.status,
+      ...(ticket.error === null ? [] : [`error: ${ticket.error}`]),
+      ...ticket.flags,
+    ].join(' · '),
+  );
 
 const dollars = (cents: number): string =>
   `$${Math.trunc(cents / 100).toLocaleString('en-US')}.${String(cents % 100).padStart(2, '0')}`;

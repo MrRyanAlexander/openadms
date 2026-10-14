@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  fitByWeight,
   photoFileAnswerRead,
   photoFileGoesOnFrom,
   sentCanonical,
@@ -65,6 +66,7 @@ const faults = [
   'NAMES_UNREAD_BY_ID',
   'WIPES_ON_ANY_ANSWER',
   'KEEPS_WHAT_IT_SHOWS',
+  'PACKS_BY_COUNT_ONLY',
 ] as const;
 type Fault = (typeof faults)[number];
 
@@ -135,19 +137,24 @@ const phone =
           deviceUtcOffsetMinutes: -240,
           unplannedAssignments: first,
           passcodeUses: uses.slice(0, all ? undefined : syncPasscodeUsesAtMost),
-          records: ordered
-            .filter((record) => !later.has(syncedRecordAssignment(record) ?? ''))
-            .slice(0, all ? undefined : syncRecordsAtMost),
+          records: [],
           photos: [],
           lastUsed: [...holds.lastUsed],
           holds: { masterPasscodeVersion: null, listsProjectId: null },
         };
+        // As many as the counts let, then as many of those as the weight lets.
+        const byCount = ordered
+          .filter((record) => !later.has(syncedRecordAssignment(record) ?? ''))
+          .slice(0, all ? undefined : syncRecordsAtMost);
+        const byWeight = all || fault === 'PACKS_BY_COUNT_ONLY';
+        sync.records = byWeight ? byCount : byCount.slice(0, fitByWeight(sync, byCount));
         // No photograph ahead of the sync that carries its record.
         const going = new Set(sync.records.map(syncedRecordId));
         const staying = new Set(waiting.map(syncedRecordId).filter((id) => !going.has(id)));
-        sync.photos = photos.filter(
+        const photosGoing = photos.filter(
           ({ owner }) => fault === 'SENDS_PHOTOS_AHEAD' || !staying.has(owner.id),
         );
+        sync.photos = byWeight ? photosGoing : photosGoing.slice(0, fitByWeight(sync, photosGoing));
         last = sync;
         if (fault === 'LEAVES_OUT_AN_EMPTY_PART' && sync.passcodeUses.length === 0) {
           const { passcodeUses, ...rest } = sync;
@@ -337,17 +344,17 @@ describe('the suite any client of the sync contract must pass', () => {
     const caught: Record<string, number[]> = {};
     for (const fault of faults) caught[fault] = await failed(phone(fault));
     expect(caught).toEqual({
-      LEAVES_OUT_AN_EMPTY_PART: [1, 3, 5, 8, 9, 10, 11, 12, 13, 15, 16],
-      SAYS_WHICH_PHONE: [2, 3, 4, 5, 6, 7, 8, 9, 10, 14, 15, 16],
+      LEAVES_OUT_AN_EMPTY_PART: [1, 3, 5, 8, 9, 10, 11, 12, 13, 15, 16, 17],
+      SAYS_WHICH_PHONE: [2, 3, 4, 5, 6, 7, 8, 9, 10, 14, 15, 16, 17],
       TRIMS_A_NUMBER: [2],
       SENDS_AS_RECORDED: [3],
-      SENDS_ALL_AT_ONCE: [4, 9],
+      SENDS_ALL_AT_ONCE: [4, 9, 17],
       DROPS_WHAT_WAS_ANSWERED: [5, 6, 14, 15],
       DROPS_A_REPORT_NOT_SAVED: [6, 14],
       SHOWS_NO_WORDS: [5, 10],
       TAKES_SENT_FOR_SAVED: [7],
       READS_ANSWERS_BY_PLACE: [8],
-      TAKES_ANY_ANSWER: [4, 8, 9],
+      TAKES_ANY_ANSWER: [4, 8, 9, 17],
       // A photograph's record and its files (ADR-481…483): each check catches one fault no
       // other does.
       SENDS_PHOTOS_AHEAD: [9],
@@ -364,6 +371,8 @@ describe('the suite any client of the sync contract must pass', () => {
       NAMES_UNREAD_BY_ID: [14],
       WIPES_ON_ANY_ANSWER: [15],
       KEEPS_WHAT_IT_SHOWS: [16],
+      // A sync's weight (ADR-504).
+      PACKS_BY_COUNT_ONLY: [17],
     });
   });
 

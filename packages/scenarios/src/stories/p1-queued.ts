@@ -591,6 +591,30 @@ export const p1Queued: Story = {
         { worked: false, reason: 'NOTHING_WAITING', setAside: [] },
       ],
     );
+    const covered = [
+      await queued(dana, 'SETUP_CHANGE', '101001', '101002'),
+      await queued(dana, 'SETUP_CHANGE', '101003', '101004'),
+      await queued(dana, 'SETUP_CHANGE', '101002'),
+    ];
+    const coveredTake = worked(await reconciliation.waitingJobs(p1, tries, 3));
+    const afterCovered = await Promise.all(covered.map(async (id) => (await jobOf(id)).attempts));
+    const behindTake = worked(await reconciliation.waitingJobs(p1, tries, 3));
+    story.check(
+      'ADR-506 a job behind one that didn’t fit is taken up with the run where the run already works its tickets: 101002’s own job rides with the first, which names it, and the run finishes both; the job of 101003 and 101004, which would add tickets, waits untouched for the next run',
+      [
+        [coveredTake.jobs, ticketsOf(coveredTake).map((told) => told.slice(0, 6))],
+        afterCovered,
+        [behindTake.jobs, ticketsOf(behindTake).map((told) => told.slice(0, 6))],
+      ],
+      [
+        [
+          [covered[0], covered[2]],
+          ['101001', '101002'],
+        ],
+        [1, 0, 1],
+        [[covered[1]], ['101003', '101004']],
+      ],
+    );
 
     // ------------------------------------------------------------------------------------------
     story.at(on('14', '12:00'), 'The worker’s process looks at its queue: one job waits, for P1');

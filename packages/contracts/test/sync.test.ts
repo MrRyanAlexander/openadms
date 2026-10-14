@@ -6,6 +6,13 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import {
+  assignmentFormDocumentTypes,
+  fieldEventKinds,
+  requestBodyBytesAtLeast,
+} from '@open-adms/domain';
+
+import {
+  fitByWeight,
   lastUsedSchema,
   photoAnswerSchema,
   photoNames,
@@ -13,7 +20,10 @@ import {
   recordAnswerSchema,
   recordNames,
   recordRead,
+  sentWeight,
   syncAnsweredSchema,
+  syncBytesAtMost,
+  syncedRecordBytesAtMost,
   syncPasscodeUsesAtMost,
   syncPhotosAtMost,
   syncRecordsAtMost,
@@ -23,6 +33,7 @@ import {
   syncedPhotoSchema,
   type RecordAnswer,
   type SyncAnswered,
+  type SyncedRecord,
   type SyncSent,
 } from '../src/index.ts';
 import {
@@ -177,6 +188,117 @@ describe('what a phone sends at a sync', () => {
     expect(lastUsedSchema.safeParse({ ...load, lastUsedNumber: 0 }).success).toBe(false);
     expect(lastUsedSchema.safeParse({ ...load, lastUsedNumber: 101006.5 }).success).toBe(false);
     expect(lastUsedSchema.safeParse({ ...load, series: 'TICKET' }).success).toBe(false);
+  });
+});
+
+describe('what a sync weighs (ADR-504)', () => {
+  // The survey of Monday's examples, its own answers filled to weigh exactly so many bytes as
+  // sent: each answer at most four thousand characters, the last one making up the rest.
+  const weighing = (bytes: number): SyncedRecord => {
+    const sent = records[4];
+    if (sent?.record !== 'SURVEY') throw new Error('The fifth example is no survey.');
+    const answers: Record<string, string> = {};
+    const record = (): SyncedRecord => ({ ...sent, survey: { ...sent.survey, answers } });
+    let index = 0;
+    while (sentWeight(record()) + 4000 < bytes) {
+      answers[`answer-${String(index).padStart(3, '0')}`] = 'x'.repeat(4000);
+      index += 1;
+    }
+    const last = `answer-${String(index).padStart(3, '0')}`;
+    answers[last] = '';
+    answers[last] = 'x'.repeat(bytes - sentWeight(record()));
+    return record();
+  };
+
+  it('AC-05-51 a sync weighs its JSON in UTF-8: a character one to four bytes, as it goes on the wire', () => {
+    expect(['a', 'é', '€', '🙂'].map((character) => sentWeight(character))).toEqual([3, 4, 5, 6]);
+    expect(sentWeight({ notes: '€'.repeat(2000), gone: undefined })).toBe(6012);
+  });
+
+  it('AC-05-51, AC-10-41 a sync weighs a mebibyte at most, the least body any installation’s API reads, and a record a quarter of it', () => {
+    expect(syncBytesAtMost).toBe(1_048_576);
+    expect(syncBytesAtMost).toBe(requestBodyBytesAtLeast);
+    expect(syncedRecordBytesAtMost).toBe(syncBytesAtMost / 4);
+  });
+
+  it('AC-05-51 a record of the heaviest a record may be is read; one a byte heavier is no record: not saved, under its id, in plain words, and held for a person like any other', () => {
+    const heaviest = weighing(syncedRecordBytesAtMost);
+    expect(sentWeight(heaviest)).toBe(syncedRecordBytesAtMost);
+    expect(recordRead(heaviest).read).toBe(true);
+    const heavier = weighing(syncedRecordBytesAtMost + 1);
+    expect(sentWeight(heavier)).toBe(syncedRecordBytesAtMost + 1);
+    expect(recordRead(heavier)).toEqual({
+      read: false,
+      id: made('6'),
+      notice: {
+        reason: 'NOT_A_RECORD',
+        message:
+          'Not saved: this record can’t be read: it weighs more than a record may, 256 KiB as sent.',
+      },
+    });
+  });
+
+  it('AC-05-51 the heaviest record goes beside the heaviest reports a sync may carry (twenty unplanned assignments of two hundred pay items each, a hundred uses of the passcode, twenty series), and so do two more: the sync is still within its weight', () => {
+    const many = <T>(count: number, one: (index: number) => T): T[] =>
+      Array.from({ length: count }, (_, index) => one(index));
+    const heaviest: SyncSent = {
+      ...sync,
+      deviceUtcOffsetMinutes: -720,
+      unplannedAssignments: many(syncUnplannedAssignmentsAtMost, (index) => ({
+        ...unplanned,
+        id: made(`9${String(index)}`),
+        fieldEventKinds: [...fieldEventKinds],
+        certifying: true,
+        formDocumentTypes: [...assignmentFormDocumentTypes],
+        payItemIds: many(200, (item) => made(`8${String(index)}${String(item).padStart(3, '0')}`)),
+        occasion: 'MONITOR_SWITCH',
+        deviceUtcOffsetMinutes: -720,
+      })),
+      passcodeUses: many(syncPasscodeUsesAtMost, (index) => ({
+        ...switched,
+        id: made(`7${String(index)}`),
+        deviceUtcOffsetMinutes: -720,
+      })),
+      records: [],
+      photos: [],
+      lastUsed: many(syncSeriesAtMost, (index) => ({
+        projectId: made(`6${String(index)}`),
+        series: 'CERTIFICATION',
+        lastUsedNumber: 2_000_000_000,
+      })),
+      holds: { masterPasscodeVersion: 2_000_000_000, listsProjectId: p1 },
+    };
+    expect(refusals(syncSentSchema, heaviest)).toEqual([]);
+    // 186,729 bytes on 2026-10-13: under three quarters of a sync, the rest a record's room.
+    expect(sentWeight(heaviest)).toBeLessThan(syncBytesAtMost - syncedRecordBytesAtMost);
+    const record = weighing(syncedRecordBytesAtMost);
+    expect(fitByWeight(heaviest, [record])).toBe(1);
+    expect(sentWeight({ ...heaviest, records: [record] })).toBeLessThanOrEqual(syncBytesAtMost);
+    // Three such records fit beside those reports; a fourth goes in the next sync.
+    expect(fitByWeight(heaviest, [record, record, record, record])).toBe(3);
+  });
+
+  it('AC-05-51 a client fills a sync by weight: as many as keep it within a mebibyte, each after the first with its comma, the rest for the next sync', () => {
+    const empty: SyncSent = { ...sync, records: [], photos: [] };
+    const heavy = (last: string): SyncedRecord => ({
+      record: 'FIELD_EVENT',
+      fieldEvent: { ...collection, id: made(last), notes: '€'.repeat(2000) },
+    });
+    const one = sentWeight(heavy('1'));
+    const room = syncBytesAtMost - sentWeight(empty);
+    const fits = Math.floor((room + 1) / (one + 1));
+    const going = Array.from({ length: fits + 5 }, (_, index) => heavy(String(index)));
+    expect(fitByWeight(empty, going)).toBe(fits);
+    expect(sentWeight({ ...empty, records: going.slice(0, fits) })).toBeLessThanOrEqual(
+      syncBytesAtMost,
+    );
+    expect(sentWeight({ ...empty, records: going.slice(0, fits + 1) })).toBeGreaterThan(
+      syncBytesAtMost,
+    );
+    expect(fitByWeight(empty, [])).toBe(0);
+    // Things of a byte each: with its comma, each after the first weighs two.
+    const ones = Array.from({ length: room }, () => 0);
+    expect(fitByWeight(empty, ones)).toBe(Math.floor((room + 1) / 2));
   });
 });
 

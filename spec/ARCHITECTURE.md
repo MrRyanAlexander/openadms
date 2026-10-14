@@ -836,6 +836,11 @@ So the protection can't rest on the password. It rests on these:
    ⚠️ *ADR-477 (the user, 2026-10-12): once a monitor submits a record on the phone it is sealed
    for them, synced or not; only the back office changes it. A record sent again is answered
    "already saved" as it was stored.*
+   ⚠️ *ADR-504 (agent default): a sync has a weight as well as counts, a mebibyte at most as sent,
+   the least body any installation's API reads (`REQUEST_BODY_LIMIT_BYTES` is never stated under
+   it); the device fills each sync by weight and sends the rest in the next, so no sync is
+   refused for its size at every try. One record weighs 256 KiB at most: a heavier one is
+   answered not saved and held for a person, never left on the device.*
 5. **Photos upload resumably.** An interrupted upload continues from where it stopped. The server
    checks each file's hash against the one the device recorded (§11).
 6. **The device gets a fresh manifest** (certs, sites, ROEs, roster, control ranges), its number

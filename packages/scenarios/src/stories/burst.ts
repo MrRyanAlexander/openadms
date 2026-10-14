@@ -22,10 +22,15 @@
 // this machine, the runs) is written down by the story as it goes, never checked against a
 // figure: the checks are that every record is stored once and none is lost.
 //
-// Not here: how long the queue's reads take at this size, and whether a run's 200 tickets is right
-// (part 3); health (part 4); photographs at their real size (a file here is 4 KiB: it is the
+// Then the queue at that size (part 3, ADR-506): the jobs the syncs queued and the runs they
+// took, the same jobs taken up again on paper at other sizes, the neighbour read a sync's field
+// event asks, a setup change's read of every ticket, and a run timed by its size. All of it
+// written down, never checked: a time is this machine's, not a threshold.
+//
+// Not here: health (part 4); photographs at their real size (a file here is 4 KiB: it is the
 // requests that are counted, not the bytes; Phase 3 measures a phone's real files).
-import { type Database } from '@open-adms/db';
+import { WorkQueue } from '@open-adms/api';
+import { ReconciliationJobs, type Database } from '@open-adms/db';
 import { MapServers, Mileages, Reconciliation } from '@open-adms/worker';
 
 import { projectTime } from '../clock.ts';
@@ -355,12 +360,39 @@ export const burst: Story = {
       new Mileages(new MapServers(localMapServers())),
     );
     const queue = new QueueRuns(story, reconciliation);
-    const jobs = (await queue.waiting(p1)).length;
-    const draining = performance.now();
-    const runs = await queue.settle(p1);
+    const atMost = story.policy.jobTicketsAtMost;
+    const waiting = (await queue.waiting(p1)).map((job) => job.tickets);
+    const sizes = waiting.map((tickets) => tickets.length).sort((a, b) => a - b);
     say(
-      `It took ${String(runs)} runs of at most ${String(story.policy.jobTicketsAtMost)} tickets ` +
-        `to work the ${String(jobs)} jobs waiting (${since(draining)} s on this machine)`,
+      `The syncs queued ${String(waiting.length)} jobs naming ${String(new Set(waiting.flat()).size)} ` +
+        `tickets: from ${String(sizes[0] ?? 0)} to ${String(sizes.at(-1) ?? 0)} tickets a job, ` +
+        `half of them ${String(middleOf(sizes))} or fewer; the API’s cut at ${String(atMost)} ` +
+        `bit on none of them`,
+    );
+    const draining = performance.now();
+    const drained = await queue.ran(p1);
+    const runs = drained.length;
+    say(
+      `It took ${String(runs)} runs of at most ${String(atMost)} tickets to work the ` +
+        `${String(waiting.length)} jobs waiting (${since(draining)} s on this machine), ` +
+        `${String(workedIn(drained))} tickets worked in all`,
+    );
+    // The same jobs taken up again on paper at other sizes, by the worker's rule (the oldest
+    // first, a job that doesn't fit ends a run's take of a ticket more, a job whose tickets the
+    // run already works taken up too, ADR-506); and, beside it, as the rule was before, when a
+    // job that didn't fit ended the take whole. A reading, never the rule.
+    say(
+      `Read again from the same jobs, runs and tickets worked at each size: ` +
+        [50, 100, 200, 400, 1000]
+          .map((size) => {
+            const now = takenUp(waiting, size, true);
+            const before = takenUp(waiting, size, false);
+            return (
+              `${String(size)}: ${String(now.runs)} runs, ${String(now.worked)} worked ` +
+              `(${String(before.runs)} and ${String(before.worked)} as the take was before ADR-506)`
+            );
+          })
+          .join('; '),
     );
     const burstLoads = await loadsOf(worker, p1, '2026-10-15');
     story.check(
@@ -368,8 +400,143 @@ export const burst: Story = {
       [runs > 1, burstLoads.pending, burstLoads.completed],
       [true, 0, trucks * loadsATruck],
     );
+
+    // ------------------------------------------------------------------------------------------
+    // The queue at that size (BACKLOG 2.7.2 part 3; ADR-506): each read timed on this machine
+    // and written down, never checked.
+    story.at(
+      thursday('19:00'),
+      'The queue at that size: the neighbour read, a setup change’s read of every ticket, and a run by its size, timed',
+    );
+    // What a sync's field event asks before it queues: the other tickets that read it. One
+    // ticket of each truck, its sixth load, as one record of a sync asks it.
+    const collections = await api.fieldEvent.findMany({
+      where: { projectId: p1, kind: 'COLLECTION' },
+      select: { certNumber: true, ticketNumber: true },
+      orderBy: { startedAt: 'asc' },
+    });
+    const reads: number[] = [];
+    const found: number[] = [];
+    for (let truck = 0; truck < trucks; truck += 1) {
+      const loads = collections.filter(({ certNumber }) => certNumber === certOf(truck));
+      const ticketNumber = loads[5]?.ticketNumber;
+      if (ticketNumber === undefined) throw new Error(`Truck ${certOf(truck)} has no sixth load.`);
+      const reading = performance.now();
+      const neighbours = await api.$read((tx) =>
+        new WorkQueue(tx, atMost).neighbours(p1, [{ workflow: 'LOAD', ticketNumber }]),
+      );
+      reads.push(performance.now() - reading);
+      found.push(neighbours.length);
+    }
+    const ms = (each: number): string => each.toFixed(1);
+    const sortedReads = [...reads].sort((a, b) => a - b);
+    say(
+      `The neighbour read of one ticket, a load of each of the ${String(trucks)} trucks among ` +
+        `${String(await api.fieldEvent.count({ where: { projectId: p1 } }))} field events: ` +
+        `half took ${ms(middleOf(sortedReads))} ms or less, the slowest ${ms(sortedReads.at(-1) ?? 0)} ms; ` +
+        `it found from ${String(Math.min(...found))} to ${String(Math.max(...found))} neighbours`,
+    );
+
+    // A setup change by a person reads every ticket of the project it touches and queues them in
+    // jobs of the policy's size: here one that touches them all, as a rate changed would, queued
+    // as `QueueingService.setupChanged` queues it, in Luis's piece of work.
+    const readingAll = performance.now();
+    const every = await api.$read((tx) => new WorkQueue(tx, atMost).ticketsWith(p1, {}));
+    const readAll = performance.now() - readingAll;
+    const queueing = performance.now();
+    const change = await api.$write({ actorId: luis, source: 'BACK_OFFICE' }, async (tx) => {
+      const work = new WorkQueue(tx, atMost);
+      return work.queue({
+        projectId: p1,
+        trigger: 'SETUP_CHANGE',
+        requestedById: luis,
+        tickets: [],
+        others: await work.ticketsWith(p1, {}),
+      });
+    });
+    say(
+      `A setup change’s read of every ticket found ${String(every.length)} in ${ms(readAll)} ms; ` +
+        `the read and its ${String(change.jobs.length)} jobs written took ${ms(performance.now() - queueing)} ms`,
+    );
+
+    // A run by its size: the setup change's jobs, a run each, then a run of one ticket three
+    // times (what every run reads and writes besides its tickets), then the day's thousand in
+    // one job (a job is always taken up whole, whatever its size). Every ticket here is worked
+    // again, its mileage already standing.
+    const timed = async (): Promise<{ tickets: number; seconds: number }> => {
+      const running = performance.now();
+      const run = await queue.next(p1);
+      return { tickets: workedIn([run]), seconds: (performance.now() - running) / 1000 };
+    };
+    const byHand = (ticketNumbers: readonly string[]): Promise<string> =>
+      api.$write({ actorId: luis, source: 'BACK_OFFICE' }, (tx) =>
+        new ReconciliationJobs(tx).queue({
+          projectId: p1,
+          trigger: 'REPROCESS',
+          requestedById: luis,
+          tickets: ticketNumbers.map((ticketNumber) => ({ workflow: 'LOAD', ticketNumber })),
+        }),
+      );
+    const sized: { tickets: number; seconds: number }[] = [];
+    while (sized.length < change.jobs.length) sized.push(await timed());
+    const [one] = every;
+    if (one === undefined) throw new Error('No ticket to work.');
+    for (let time = 0; time < 3; time += 1) {
+      await byHand([one.ticketNumber]);
+      sized.push(await timed());
+    }
+    await byHand(every.map(({ ticketNumber }) => ticketNumber));
+    sized.push(await timed());
+    say(
+      `A run by its size, seconds on this machine: ` +
+        sized.map((run) => `${String(run.tickets)} tickets ${run.seconds.toFixed(2)} s`).join('; '),
+    );
   },
 };
+
+// The middle of numbers in order: the one at half way.
+function middleOf(sorted: readonly number[]): number {
+  return sorted[Math.floor((sorted.length - 1) / 2)] ?? 0;
+}
+
+// The tickets runs worked, each run's counted.
+function workedIn(runs: readonly { ticketsDone: number; ticketsFailed: number }[]): number {
+  return runs.reduce((sum, run) => sum + run.ticketsDone + run.ticketsFailed, 0);
+}
+
+// Jobs taken up on paper as the worker's `WaitingJobs.takeUp` takes them, run after run, at a
+// size: the runs it takes and the tickets they work in all. With `riding` (the rule since
+// ADR-506), a later job whose tickets the run already works is taken up with it, though a job
+// ahead of it didn't fit; without, a job that doesn't fit ends the take, as before it.
+function takenUp(
+  jobs: readonly (readonly string[])[],
+  size: number,
+  riding: boolean,
+): { runs: number; worked: number } {
+  let left = [...jobs];
+  let runs = 0;
+  let worked = 0;
+  while (left.length > 0) {
+    const tickets = new Set<string>();
+    const behind: (readonly string[])[] = [];
+    let full = false;
+    for (const job of left) {
+      const withIt = new Set([...tickets, ...job]);
+      if (!full && (tickets.size === 0 || withIt.size <= size)) {
+        for (const ticket of job) tickets.add(ticket);
+      } else if (riding && withIt.size === tickets.size) {
+        continue;
+      } else {
+        full = true;
+        behind.push(job);
+      }
+    }
+    left = behind;
+    runs += 1;
+    worked += tickets.size;
+  }
+  return { runs, worked };
+}
 
 // The day's loads on the project as they stand: how many still wait for a field event, and how
 // many have their completed load.

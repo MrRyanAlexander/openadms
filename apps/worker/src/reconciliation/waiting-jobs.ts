@@ -50,7 +50,11 @@ export class WaitingJobs {
   // A run takes up the waiting jobs, the oldest first, until the tickets they name come to the
   // policy's number (ADR-420): always one job, and each next one only while it still fits. The
   // jobs behind them wait for the project's next run, untouched, so a run has a size it can
-  // finish however much a setup change queued.
+  // finish however much a setup change queued. A job behind them whose tickets the run already
+  // works is taken up too (ADR-506): the run reads every record as it stands after that job's
+  // change, so it adds nothing to the run and nothing waits longer for it. A burst's ticket
+  // comes as several jobs (each field event's, each photograph's), and each was otherwise
+  // worked once a run its jobs fell in.
   async takeUp(projectId: string): Promise<TakenUp> {
     const waiting = await this.db.reconciliationJob.findMany({
       where: { projectId, finishedAt: null, setAsideAt: null },
@@ -68,6 +72,7 @@ export class WaitingJobs {
     const spent = waiting.filter((job) => job.attempts >= this.triesBeforeSetAside);
     const taken: typeof waiting = [];
     const tickets = new Map<string, TicketNamed>();
+    let full = false;
     for (const job of waiting) {
       if (job.attempts >= this.triesBeforeSetAside) continue;
       const withIt = new Map(tickets);
@@ -75,8 +80,10 @@ export class WaitingJobs {
         withIt.set(JSON.stringify([ticket.workflow, ticket.ticketNumber]), ticket);
       }
       // In the order queued: a job that doesn't fit ends the run's take, and none behind it
-      // goes ahead of it.
-      if (taken.length > 0 && withIt.size > this.ticketsARun) break;
+      // that would add a ticket goes ahead of it. A job that names none (the records that are
+      // no ticket's, which every run checks) is always covered.
+      if (taken.length > 0 && withIt.size > this.ticketsARun) full = true;
+      if (full && withIt.size > tickets.size) continue;
       taken.push(job);
       for (const [key, ticket] of withIt) tickets.set(key, ticket);
     }

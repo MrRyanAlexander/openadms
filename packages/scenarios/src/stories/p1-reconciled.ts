@@ -62,22 +62,19 @@ const short = {
 // What a run did, as lines a person reads: each ticket's status, what it waits for, why it
 // could not be processed, and the flags that stand on it.
 const told = (outcome: RunOutcome): string[] =>
-  outcome.ran
-    ? outcome.tickets.map((ticket) =>
-        [
-          ticket.ticketNumber,
-          ticket.status,
-          ...(ticket.waitingFor.length === 0
-            ? []
-            : [`waits for its ${ticket.waitingFor.map((kind) => short[kind]).join(', ')}`]),
-          ...(ticket.error === null ? [] : [`error: ${ticket.error}`]),
-          ...ticket.flags,
-        ].join(' · '),
-      )
-    : [outcome.message];
+  outcome.tickets.map((ticket) =>
+    [
+      ticket.ticketNumber,
+      ticket.status,
+      ...(ticket.waitingFor.length === 0
+        ? []
+        : [`waits for its ${ticket.waitingFor.map((kind) => short[kind]).join(', ')}`]),
+      ...(ticket.error === null ? [] : [`error: ${ticket.error}`]),
+      ...ticket.flags,
+    ].join(' · '),
+  );
 
-const counts = (outcome: RunOutcome): unknown =>
-  outcome.ran ? [outcome.ticketsDone, outcome.ticketsFailed] : outcome.reason;
+const counts = (outcome: RunOutcome): unknown => [outcome.ticketsDone, outcome.ticketsFailed];
 
 export const p1Reconciled: Story = {
   name: 'p1-reconciled',
