@@ -22,6 +22,11 @@ back office's endpoints → phones (enrolment, sign-in, the lists) → sync → 
 
 - **One task per response.** Each ends with real observed output (`adms-verify`), the close-out
   (`adms-close-out`) and the user's git block with named paths. Don't tick a box on "should work".
+- **Don't cut a task ahead of time (the user, 2026-10-14; ADR-516).** Take the whole task and do as
+  much of it as the response holds. Cut only when the work truly can't go on (a question only the
+  user can answer, or the context runs out), and then say what was left in the task's tick line,
+  never in an ADR of its own or a list of defaults to overturn. Never write "cut it when started"
+  into the next pointer, and never cut a piece again.
 - **Read first:** `spec/ARCHITECTURE.md` §6…§9, §13, §16 and the ⚠️ ADR-240 notes in §7 and §9;
   the task's scenarios (`spec/acceptance/`, the rows that name Phase 2, and file 10 once task
   2.1.1 has written it); `spec/THREAT-MODEL.md` once written; `spec/DATA-MODEL.md` §2.2 and §4.5
@@ -382,8 +387,8 @@ back office's endpoints → phones (enrolment, sign-in, the lists) → sync → 
   Postgres with `verify-full`; SMTP with TLS), and 15.3.2's test on an HTTPS server of its own;
   and 4.2.1's containers hardened with a test of `compose.yaml` (KD-79, ADR-514); API10's two
   answers as proposed (the map servers' answers bounded, timed whole and checked; a mail
-  server's refusal tested; ADR-515), on the same HTTPS test server as 15.3.2's; cut when
-  started.
+  server's refusal tested; ADR-515, agreed, ADR-516), on the same HTTPS test server as
+  15.3.2's; done whole, not cut ahead of time (ADR-516).
 - [ ] **2.7.4 The phase exit.** The 14 REQs ticked or re-filed with an ADR (REQ-006 can only be
   finished by the web apps); the scenario count by part; Phase 3's REQs in `REQUIREMENTS-LATER.md`
   refreshed against what was built; the state files turned to "Phase 3 is the user's to open".

@@ -100,6 +100,7 @@ the option that keeps the firm's choice open, record an ADR marked "agent defaul
    model name from prose; the schema is the source of truth.
 4. **EXECUTE** — minimal edits. No adjacent refactors, no building ahead. Every dependency is
    pinned; a new one needs an ADR. Answer in the form asked for (chat text, a file, an artifact).
+   Do the whole task: never cut it into parts ahead of time (ADR-516).
 5. **VERIFY** — load `adms-verify` (`pnpm ready` first; counts against `CHAIN.md`). Report real
    observed output, never "should pass".
 6. **CLOSE** — load `adms-close-out`.

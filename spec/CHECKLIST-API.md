@@ -8,7 +8,7 @@
 
 > **Wording.** Each requirement is a shortened label of the published text, ASVS 5.0.0 (the `v5.0.0_release` tag of `OWASP/ASVS`, `5.0/en/`) and the API Top 10 at api-security.owasp.org. Every number and level here was checked against the full published text on 2026-10-14 (ADR-510). The labels are not the text: read the requirement itself before deciding an open item (§4).
 
-**The counts:** 222 ASVS items: every Level 1 and 2 item of the chapters that apply (V1…V9, V11…V16) and the Level 3 items file 10 cites; V10 and V17 are not used, whole (below). ASVS: 92 answered by a scenario (11.4.1 among them, with a departure proposed for one use, ADR-514); 64 built without a scenario, 14 of them written answers (§5; ADR-515); 1 departure kept (6.4.1); 1 decided and to build (6.3.3); 61 owned by a phase, not used, or an accepted risk; 3 to do, as the user approved them (§3.1; ADR-513): 4.2.1, 12.3.3 and 15.3.2, in part 5. None open. API: 9 of 10 answered; API10's last two answers proposed (§5.9; ADR-515), for the user, to build in part 5.
+**The counts:** 222 ASVS items: every Level 1 and 2 item of the chapters that apply (V1…V9, V11…V16) and the Level 3 items file 10 cites; V10 and V17 are not used, whole (below). ASVS: 92 answered by a scenario (11.4.1 among them, with a departure kept for one use, ADR-514, 516); 64 built without a scenario, 14 of them written answers (§5; ADR-515); 1 departure kept (6.4.1); 1 decided and to build (6.3.3); 61 owned by a phase, not used, or an accepted risk; 3 to do, as the user approved them (§3.1; ADR-513): 4.2.1, 12.3.3 and 15.3.2, in part 5. None open. API: 9 of 10 answered; API10's last two answers agreed (§5.9; ADR-515, 516), to build in part 5.
 
 ## 1. The API Security Top 10 (2023)
 
@@ -23,7 +23,7 @@
 | **API7:2023** | Server-side request forgery: a request to a URL a caller can steer | AC-04-24 (task 2.5.3), AC-10-64 (task 2.7.3 part 4, ADR-513): no endpoint takes an address the server asks; the address server, the mail sender, the media store and the worker's map servers are asked only where their settings say | — |
 | **API8:2023** | Security misconfiguration: complex or poorly secured configuration | AC-10-01, AC-10-04, AC-10-05, AC-10-06, AC-10-07, AC-10-08, AC-10-32, AC-10-33, AC-10-55 (task 2.1.2, 2.1.3, 2.3.2) | — |
 | **API9:2023** | Improper inventory management: undocumented or deprecated endpoints left open | AC-10-27, AC-10-36 (task 2.1.3, 2.6.1, 2.7.3). AC-10-27 read whole in part 3 (ADR-512): the 120 endpoints held as one list, each asked by nine kinds of caller (`every-endpoint.test.ts`) | — |
-| **API10:2023** | Unsafe consumption of APIs: data from a third-party API trusted too much | AC-04-24 (task 2.5.3) | the address server's answer is taken with checks (AC-04-24); the map servers' answers found short and the mail sender's read as it stands: each answer **proposed** (§5.9; ADR-515), for the user; built in part 5 |
+| **API10:2023** | Unsafe consumption of APIs: data from a third-party API trusted too much | AC-04-24 (task 2.5.3) | the address server's answer is taken with checks (AC-04-24); the map servers' answers found short and the mail sender's read as it stands: each answer as §5.9 says (ADR-515, agreed by the user, ADR-516); built in part 5 |
 
 **Also checked at this layer (C155, ADR-507):** `/readiness`, a second endpoint anyone may call, answers only up or down, is counted by address, and asks the database once at a time. ASVS 16.5.1 (a generic answer) and API4:2023 (its limits). Proof: `apps/api/test/health.test.ts`, the readiness answer (task 2.7.2 part 4). The demo deploy's monitor asks `/readiness`, never `/health` (5a).
 
@@ -238,7 +238,7 @@ Not used, whole: no OAuth or OpenID Connect client, resource server or authoriza
 | 11.3.1 | 1 | no ECB mode or PKCS#1 v1.5 padding |  | **built**: no ECB, no RSA and no PKCS#1 v1.5 anywhere (the list, below the table; grep, ADR-514) |
 | 11.3.2 | 1 | only approved ciphers and modes |  | **built**: AES-256-GCM alone (the list, below the table; ADR-514) |
 | 11.3.3 | 2 | encrypted data protected against modification |  | **built**: what is encrypted is AES-256-GCM, authenticated, a random 12-byte nonce each time (`apps/api/src/sign-in/two-step-secrets.ts`, `apps/api/src/phone/offline-checks.ts`; ADR-412, 454, 514) |
-| 11.4.1 | 1 | only approved hash functions | AC-10-10 (task 2.2.1) | **departure proposed** (ADR-514, for the user): an authenticator's code is HMAC-SHA-1, as RFC 6238 and the authenticator apps have it; the published Appendix C rates HMAC-SHA-1 "legacy", kept "for compatibility" only. Every other use is SHA-256 |
+| 11.4.1 | 1 | only approved hash functions | AC-10-10 (task 2.2.1) | **departure, kept on the evidence** (ADR-514, 516): an authenticator's code is HMAC-SHA-1, as RFC 6238 has it; Appendix C rates HMAC-SHA-1 "legacy", kept "for compatibility" only. Read 2026-10-14: **Microsoft Authenticator** (and Authy, Duo) computes SHA-1 whatever the link says, so a SHA-256 authenticator shows codes that never work there; Google Authenticator now honours SHA-256 on Android and iOS. NIST SP 800-131A Rev. 3 (draft) keeps HMAC-SHA-1 generation **deprecated through 31 December 2030, disallowed after**. Every other use is SHA-256. Revisit before 2031 (REQ-517) |
 | 11.4.2 | 2 | passwords hashed with a computationally intensive function | AC-10-20, AC-02-41 (task 2.2.2, 2.5.3) |  |
 | 11.4.3 | 2 | integrity hashes collision resistant |  | **built**: SHA-256 for every file's and record's fingerprint, the only hash taken alone (AC-10-47; grep, ADR-514) |
 | 11.4.4 | 2 | keys derived with stretching resistant to brute force |  | **built**: a key from a password is Argon2id's (a person's password, the master passcode, a phone's offline check; ADR-402, 454); every other key is an HMAC of the installation's random secret, never a password (ADR-514) |
@@ -250,7 +250,7 @@ Not used, whole: no OAuth or OpenID Connect client, resource server or authoriza
 | Primitive | Where | Strength | Appendix C |
 |---|---|---|---|
 | HMAC-SHA-256 | the access token, a phone's token and challenge, a password reset's code, each purpose's key drawn from the installation's secret (`session-tokens.ts`, `phone-tokens.ts`, `phone-challenges.ts`, `reset-codes.ts`, `password-hasher.ts`, `two-step-secrets.ts`, `offline-checks.ts`; `tools/setup/src/secrets.ts`) | a 256-bit key | A |
-| HMAC-SHA-1 | an authenticator's six-digit code, RFC 6238 (`one-time-codes.ts`) | a 160-bit random seed (6.5.3) | **L**: 11.4.1's departure, proposed |
+| HMAC-SHA-1 | an authenticator's six-digit code, RFC 6238 (`one-time-codes.ts`) | a 160-bit random seed (6.5.3) | **L**: 11.4.1's departure, kept (ADR-516) |
 | SHA-256 | every file's and record's fingerprint, a token's stored hash, the rate limits' keys (`photo-files.ts`, `photograph-files.ts`, `map-files.ts`, `sync.ts`, `session-tokens.ts`, `limits.ts`) | 256-bit output | A |
 | AES-256-GCM | an authenticator's seed at rest, a phone's offline checks (`two-step-secrets.ts`, `offline-checks.ts`), a random 12-byte nonce each time | a 256-bit key, authenticated | A |
 | ECDSA P-256 with SHA-256 | a phone's proof of itself (`device-keys.ts`) | 128 bits | A |
@@ -349,7 +349,7 @@ No ECB, no RSA and no PKCS#1 padding anywhere (grep).
 
 ## 3. What the page leaves for the user
 
-**The 78 open ASVS items were answered by the user on 2026-10-14 (ADR-513): §3.1 approved whole.** 21 are answered by a scenario now (task 2.7.3 part 4), 40 more are marked built, owned by a phase or not used (part 4's second piece, ADR-514), and 14 are written (§5; part 4's third piece, ADR-515); the other 3 are **to do** in part 5 (the Owner column). API10:2023's last two answers are proposed (§5.9), for the user.
+**The 78 open ASVS items were answered by the user on 2026-10-14 (ADR-513): §3.1 approved whole.** 21 are answered by a scenario now (task 2.7.3 part 4), 40 more are marked built, owned by a phase or not used (part 4's second piece, ADR-514), and 14 are written (§5; part 4's third piece, ADR-515); the other 3 are **to do** in part 5 (the Owner column). API10:2023's last two answers are agreed (§5.9; ADR-516), built in part 5.
 
 **The four the user settled (2026-10-14, ADR-511):**
 
@@ -520,7 +520,7 @@ In NIST SP 800-57's terms: what each key is, who makes it, where it is kept, how
 | **The master passcode** | the firm, at the installer; kept as Argon2id versions, never edited; phones hold a check of one version | enrolment and a supervisor's acts | until an admin changes it | a new version, with the admin's own password (ADR-428); a phone takes the new check when it next reads its login list (ADR-454) |
 | **Each service's database password, the object store's keys, the mail login** | the installer and `pnpm local:up`, at random, each in its own service's env file | that service's login alone (13.2.1) | the installation's | **not in place today**: a teardown and a new installation |
 
-**Agility (11.2.2).** What is kept names how it was made, so a later algorithm or key can be told from today's: a password's or a passcode's hash is a PHC string carrying Argon2id's settings (and the key's id); a sealed seed begins `v1.`; every drawn key's label ends `/v1`; a phone's key kind is named once (`phoneKeyKind`). A hash made under weaker settings is made again at a sign-in (`stale`). **What is short:** a key cannot yet be replaced in place with its data re-sealed: replacing the signing secret, or a service's password, means what the table says. That is a command an operator runs (the new secret beside the old until every seed and hash is re-made under it), with the key in hardware ADR-411 left to the deploy: proposed for Phase 5a's operator's guide (REQ-517) (agent default, ADR-515).
+**Agility (11.2.2).** What is kept names how it was made, so a later algorithm or key can be told from today's: a password's or a passcode's hash is a PHC string carrying Argon2id's settings (and the key's id); a sealed seed begins `v1.`; every drawn key's label ends `/v1`; a phone's key kind is named once (`phoneKeyKind`). A hash made under weaker settings is made again at a sign-in (`stale`). **What is short:** a key cannot yet be replaced in place with its data re-sealed: replacing the signing secret, or a service's password, means what the table says. That is a command an operator runs (the new secret beside the old until every seed and hash is re-made under it), with the key in hardware ADR-411 left to the deploy: Phase 5a's operator's guide (REQ-517) (agent default, ADR-515; left to the agent's judgment by the user and kept there, ADR-516: how a key is replaced depends on where the deploy keeps it).
 
 ### 5.7 The log inventory (16.1.1, 16.2.3, 16.2.4)
 
@@ -549,7 +549,7 @@ Four levels, each with what protects it (agent default, ADR-515: the user may re
 
 At rest, the database and the object store are the host's to encrypt, with their backups (ARCHITECTURE §4; REQ-517); the phone's own store is encrypted (Phase 3, ARCHITECTURE §8).
 
-### 5.9 API10:2023: the map servers' and the mail sender's answers (proposed, ADR-515)
+### 5.9 API10:2023: the map servers' and the mail sender's answers (proposed, ADR-515; agreed by the user, ADR-516)
 
 Read on 2026-10-14. **The address server's answer** is taken as API10 asks (AC-04-24): over HTTPS, its certificate checked, the whole exchange timed, its size bounded, its JSON read by the domain's `lookedUpAddress`.
 
