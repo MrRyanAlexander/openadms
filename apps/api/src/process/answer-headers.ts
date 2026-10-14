@@ -1,5 +1,5 @@
 // What every answer carries, and which pages may read one (ARCHITECTURE §6, Transport, CORS,
-// Output; AC-10-04…08; T-15; ADR-098, 391, 392). The headers are the API's own, so they don't
+// Output; AC-10-04…08; T-15; ADR-098, 391, 392, 511). The headers are the API's own, so they don't
 // hang on the proxy a firm puts in front. CORS answers an origin only when it is, whole, one of
 // the configured list: no wildcard, no pattern, nothing by ending or hosting domain. An origin off
 // the list is told nothing about itself; the browser then keeps the answer from its page.
@@ -7,8 +7,10 @@ import { csrfHeader, endpointMethods, monitorSessionHeader } from '@open-adms/co
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 
 // An API answer is data, never a page: nothing may frame it, run it, guess its type or keep it.
+// HSTS covers the names under the API's own host too (OWASP ASVS 5.0 3.4.1 at Level 2; ADR-511):
+// a browser binds only the sending host's subdomains, never the rest of a firm's domain.
 export const answerHeaders = {
-  'strict-transport-security': 'max-age=31536000',
+  'strict-transport-security': 'max-age=31536000; includeSubDomains',
   'x-content-type-options': 'nosniff',
   'referrer-policy': 'no-referrer',
   'content-security-policy': "default-src 'none'; frame-ancestors 'none'",

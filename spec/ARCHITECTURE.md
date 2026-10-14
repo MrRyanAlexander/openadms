@@ -434,7 +434,7 @@ every edit of a migration file and allows a write only while the file is still P
 
 | Area | Rule |
 |---|---|
-| Transport | HTTPS only; TLS 1.2+ (1.3 preferred); HSTS; HTTP redirected |
+| Transport | HTTPS only; TLS 1.2+ (1.3 preferred); HSTS, its subdomains included; HTTP redirected for the web apps' pages, refused at the API's address (the user, 2026-10-14, ADR-511) |
 | CORS | **An explicit allow-list of exact origins** from configuration: the back-office origin (if not served same-origin) and the field app's native origins (Capacitor's `capacitor://localhost` on iOS, `https://localhost` on Android) plus the browser test build. **No wildcards, no pattern-matching whole hosting domains** (Build 1 allowed any `*.netlify.app`; §17) |
 | Back-office sessions | Short-lived access token plus a rotating refresh token, held in `HttpOnly; Secure; SameSite` cookies, **never** in `localStorage`; refresh tokens stored server-side only as hashes and revocable; CSRF protection on cookie-authenticated writes |
 | Device sessions | A device credential (§7.4) plus the signed-in monitor; bearer tokens held in the device's secure storage |

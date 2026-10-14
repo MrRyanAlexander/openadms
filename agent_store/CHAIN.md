@@ -7,7 +7,7 @@
 > task's ADR and its session-log line in `DECISIONS.md`). No other file carries these counts.
 > **A count that differs from this page without a reason is a finding, not noise.**
 
-**Seen whole:** 2026-10-14, after ADR-508, on the user's Mac, the installation at head.
+**Seen whole:** 2026-10-14, after ADR-511, on the user's Mac, the installation at head (Docker's VM at 4 GB: the eight containers' peaks came to about 1.7 GB in a full `pnpm test`, none restarted).
 
 ## `pnpm ready`
 
@@ -20,13 +20,13 @@
 
 ## `pnpm test`
 
-**`Test Files 162 passed (162)`, `Tests 2907 passed (2907)`.**
+**`Test Files 162 passed (162)`, `Tests 2908 passed (2908)`.**
 
 | Project | Tests | Files | Needs |
 |---|---|---|---|
 | `packages/domain` | 795 | 43 | nothing |
 | `packages/contracts` | 84 | 9 | nothing |
-| `apps/api` | 600 | 46 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
+| `apps/api` | 601 | 46 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
 | `packages/db` | 1056 | 44 | `pnpm ready` |
 | `packages/scenarios` | 153 | 7 | `pnpm ready` for `stories.test.ts` (the runner and a run's template, 5) and `story-api.test.ts` (a story's API over HTTPS through the proxy, every request of a story's phone, the back office and the viewers at their browsers, 14); the flag catalogue (78 flags), the harness, the phone held to the sync contract's suite and to what it sends and takes in at a sync, its photographs' files and its turn-in among it, and its wait when told to (24), the policy and the server apps' exports (2) need nothing. **The stories themselves are not here** (ADR-446) |
 | `apps/worker` | 41 | 4 | `pnpm ready` for the map servers (13) and its container (3); the process (14) and the job loop (its set-aside lines and its health, 11) need nothing |

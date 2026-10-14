@@ -150,11 +150,15 @@ describe('the door: HTTPS only, through the proxy', () => {
     expect(published.sort()).toEqual(['caddy', 'mail', 'postgres']);
   });
 
-  it('AC-10-02: plain HTTP is redirected to HTTPS, and nothing is answered over it', async () => {
-    const answer = await ask('/health', { plain: true });
+  it('AC-10-02: plain HTTP at the API is refused, never redirected: the connection closes unanswered (ASVS 4.1.2)', async () => {
+    await expect(ask('/health', { plain: true })).rejects.toThrow(/socket hang up|ECONNRESET/);
+  });
+
+  it('AC-10-02: a web page’s name still sends plain HTTP on to HTTPS, and answers nothing over it', async () => {
+    const answer = await ask('/health', { plain: true, headers: { host: 'adms.localhost' } });
     expect(answer.status).toBe(308);
     expect(answer.headers['location']).toBe(
-      `https://${hostname}${httpsPort === 443 ? '' : `:${String(httpsPort)}`}/health`,
+      `https://adms.localhost${httpsPort === 443 ? '' : `:${String(httpsPort)}`}/health`,
     );
     expect(answer.body).toBe('');
   });
@@ -168,7 +172,7 @@ describe('the door: HTTPS only, through the proxy', () => {
 
 describe('what every answer carries, and which pages may read one, through the door', () => {
   const carried = {
-    'strict-transport-security': 'max-age=31536000',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
     'x-content-type-options': 'nosniff',
     'referrer-policy': 'no-referrer',
     'content-security-policy': "default-src 'none'; frame-ancestors 'none'",

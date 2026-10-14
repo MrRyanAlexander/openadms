@@ -301,9 +301,9 @@ describe('a story’s API, over HTTPS through the stack’s proxy', () => {
     expect(result.error).toBe('A phone the story never enrolled can’t prove itself.');
   });
 
-  it('its name answers only over HTTPS, under the stack’s own authority: plain HTTP is sent to HTTPS, and the machine’s own authorities don’t know its certificate', async () => {
-    const plain = await new Promise<{ status: number; location: string | undefined }>(
-      (resolve, reject) => {
+  it('its name answers only over HTTPS, under the stack’s own authority: plain HTTP is refused unanswered, as at the API (ADR-511), and the machine’s own authorities don’t know its certificate', async () => {
+    await expect(
+      new Promise((resolve, reject) => {
         const asked = overHttp(
           {
             host: '127.0.0.1',
@@ -313,14 +313,13 @@ describe('a story’s API, over HTTPS through the stack’s proxy', () => {
           },
           (answer) => {
             answer.resume();
-            resolve({ status: answer.statusCode ?? 0, location: answer.headers.location });
+            resolve(answer.statusCode);
           },
         );
         asked.on('error', reject);
         asked.end();
-      },
-    );
-    expect(plain).toEqual({ status: 308, location: `https://${storiesHostname}/health` });
+      }),
+    ).rejects.toThrow(/socket hang up|ECONNRESET/);
     await expect(
       new Promise((resolve, reject) => {
         const asked = overHttps(

@@ -239,7 +239,7 @@ describe('the boundary', () => {
       expect(answers.map(({ statusCode }) => statusCode)).toEqual([200, 400, 404, 500, 400]);
       for (const answer of answers) {
         expect(answer.headers).toMatchObject({
-          'strict-transport-security': 'max-age=31536000',
+          'strict-transport-security': 'max-age=31536000; includeSubDomains',
           'x-content-type-options': 'nosniff',
           'referrer-policy': 'no-referrer',
           'content-security-policy': "default-src 'none'; frame-ancestors 'none'",
