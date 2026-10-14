@@ -5,13 +5,14 @@
 > the bottom accurate. Milestone detail lives in `agent_store/BACKLOG.md`.
 
 
-## Active Phase — none: **Phase 3 (the field app) is the user's to open** *(Phase 2's exit met 2026-10-14, ADR-518)*
+## Active Phase — **Phase 2, reopened 2026-10-14 at the user's word** *(ADR-519; Milestone 2.8)*
 
-Phase 2 met its seven exit criteria (below). **An agent never opens a phase:** Phase 3 opens at
-the user's word, and its first task then writes its plan (as ADR-300 and 377 did). Until then,
-there is no build task; housekeeping only.
+An audit of Phase 2 (ADR-519 (1)) found its own server work moved to later phases or left "no
+task yet". The user: "all 3 of these are part of phase 2", "these should be part of phase 2".
+ADR-518's exit is withdrawn; **Milestone 2.8 (`BACKLOG.md`), nine tasks, is the work.** Phase 3
+stays the user's to open, after Phase 2's exit is met again.
 
-## Phase 2 — `API AND SYNC`: exit met 2026-10-14 *(opened by the user 2026-10-06, ADR-376; ADR-518)*
+## Phase 2 — `API AND SYNC`: reopened 2026-10-14 *(opened by the user 2026-10-06, ADR-376; its exit of ADR-518 withdrawn, ADR-519)*
 
 **User, 2026-10-06:** "phase 2 is open, begin working on the next task".
 
@@ -43,7 +44,7 @@ response** (ADR-377). Read its brief before any task.
 
 ---
 
-## Exit criteria for Phase 2 *(ADR-376; agent default, the user may change them)* — ✅ all seven met 2026-10-14 (ADR-518)
+## Exit criteria for Phase 2 *(ADR-376, and 8…10 by ADR-519; agent default, the user may change them)* — the seven were met 2026-10-14 (ADR-518); **met again only with 8…10, at task 2.8.9**
 
 All observed and reported, not assumed. **How each was met (task 2.7.4, ADR-518):** (1) `pnpm
 scenarios`: 22 stories passed, every phone through the real endpoints over HTTPS and every run
@@ -73,7 +74,14 @@ taken from `packages/domain`, and only `packages/db` and the two server apps rea
 7. **Rules and shapes live once:** no rule outside `packages/domain`, no payload shape outside
    `packages/contracts`, only `packages/db` and the two server apps reaching Postgres.
 
-Only then is **Phase 3 (the field app)** offered to the user to open. **Offered 2026-10-14 (ADR-518).**
+8. **No "no task yet" of the server's stands in the register**, and every line aimed at a Phase 2
+   task is struck with its ADR or re-filed (ADR-519; task 2.8.1, held at every task's close).
+9. **`SUMMARY.md` §4's agent defaults put to the user on one page**, each confirmed or overturned
+   (the user's #3, ADR-519).
+10. **Three full runs of `pnpm scenarios` in a row**, `burst` passing with no 500 in its API's log
+    (REQ-210).
+
+Only then is **Phase 3 (the field app)** offered to the user to open. ~~Offered 2026-10-14 (ADR-518).~~ Withdrawn: Phase 2 reopened (ADR-519).
 
 ---
 
@@ -106,8 +114,9 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-14, through ADR-517)
-- **Phase 2's exit is met (task 2.7.4, ADR-518): Phase 3 is the user's to open.** All 32 tasks closed (2.6.3 withdrawn); 13 of 14 REQs ticked, REQ-006 moved to Phase 3; 119 of 119 scenarios with a Phase 2 part proven at the API; Phase 3's REQs refreshed, REQ-322…324 new. What it leaves: C163 (the user's first question for Phase 3: the accessibility standard, REQ-324). Each task's ADRs are on its tick in `BACKLOG.md`, "Active — Phase 2"; what it leaves is the carry-forward register. The lines that stood here, one a finished task, moved word for word to `DECISIONS.md`'s scratchpad, "Moved 2026-10-14 (ADR-516)". **This block says where things stand now, in a few lines; a finished task gets no line of its own here (ADR-516).**
+### Where things stand (2026-10-14, through ADR-519)
+- **Phase 2 is reopened at the user's word (ADR-519): Milestone 2.8, nine tasks, from 2.8.1.** An audit found a sync answered 500 under a burst (C162 (c)), the object store's own servers open on the stack's network (C162 (a)), held things nobody can resolve (so such a phone is never turned in), REQ-105e and 105g not whole at the API (the register's "no task yet"), REQ-202's box unticked (now ticked), and a lost phone's key revoked only by its own turn-in (the user's backstop: task 2.8.6). REQ-210…217 are new. The line below is ADR-518's, kept until 2.8.9.
+- ~~**Phase 2's exit is met (task 2.7.4, ADR-518): Phase 3 is the user's to open.**~~ All 32 tasks closed (2.6.3 withdrawn); 13 of 14 REQs ticked, REQ-006 moved to Phase 3; 119 of 119 scenarios with a Phase 2 part proven at the API; Phase 3's REQs refreshed, REQ-322…324 new. What it leaves: C163 (the user's first question for Phase 3: the accessibility standard, REQ-324). Each task's ADRs are on its tick in `BACKLOG.md`, "Active — Phase 2"; what it leaves is the carry-forward register. The lines that stood here, one a finished task, moved word for word to `DECISIONS.md`'s scratchpad, "Moved 2026-10-14 (ADR-516)". **This block says where things stand now, in a few lines; a finished task gets no line of its own here (ADR-516).**
 - **Where each thing is written, so nothing is read twice:** a rule as it stands, with its ADR:
   `SUMMARY.md`, by topic (grep its `###` headings; never read it whole). What a finished task left
   for a later one: `BACKLOG.md`'s carry-forward register (C85…C161). How a layer's tests are
@@ -225,7 +234,7 @@ Update it at close-out when a task, milestone or phase closes.
 | 5 | **Truth-up the docs** ✅ done 2026-09-29 (ADR-247…253; KD-33, 58, 61, 62 closed) | `RATE-SHEET.md`, `RULES.md`, `LISTS.md`, parts 01/04/06/07 and the skills rewritten to today's rules, one per response (ADR-138) | Before step 7's engine work |
 | 6 | **Acceptance scenarios + golden mission** ✅ the mission is approved (ADR-297) and runs as a story (ADR-368); the nine scenario files are written and approved (ADR-335, 374) | `spec/acceptance/`, `spec/golden/` with the user's signed-off numbers | Steps 2, 5 |
 | 7 | **Phase 1: data core + engine, rebuilt** ✅ exit met 2026-10-06 (ADR-371, 372); opened 2026-10-01 (ADR-299); its tasks are ticked in `BACKLOG.md` | Setup records, certifications and capacity, tickets and numbers, sync intake with quarantine, reconciliation, the rule engine, the ledger and audit, review, QC, invoice lock and batches; KD-01, 04, 05, 10, 12, 13, 15, 55, 56 closed; the golden mission passing at the engine | Steps 3–6 |
-| 8 | **Phases 2–5**: **Phase 2 ✅ exit met 2026-10-14 (ADR-518)**, opened 2026-10-06 (ADR-376), its plan in `BACKLOG.md` (ADR-377); **Phase 3 is the user's to open** | API and sync → field app (browser, iPhone, Android) → back office (setup screens with the setup check, rule builder, review queue, exports, viewers) → later features and the demo deploy | Each phase's REQs refreshed before it opens |
+| 8 | **Phases 2–5**: **Phase 2 reopened 2026-10-14 (ADR-519), Milestone 2.8**; opened 2026-10-06 (ADR-376), its plan in `BACKLOG.md` (ADR-377); its exit of ADR-518 withdrawn; Phase 3 the user's to open after it | API and sync → field app (browser, iPhone, Android) → back office (setup screens with the setup check, rule builder, review queue, exports, viewers) → later features and the demo deploy | Each phase's REQs refreshed before it opens |
 
 ### What is still to be asked (so nothing is guessed later)
 - **Nothing is open** (ADR-230). New questions only under the shot-clock rule above.
@@ -324,15 +333,17 @@ Update it at close-out when a task, milestone or phase closes.
 and the topic you are touching. Product discovery is closed (ADR-230): don't open new rounds of
 questions.
 
-**No phase is active: Phase 2's exit is met (ADR-518) and Phase 3 (the field app) is the user's
-to open.** An agent never opens a phase. Until the user does, there is no build task: answer what
-is asked, housekeeping only.
-**When the user opens Phase 3:** task 3.0.1 writes its plan into `BACKLOG.md` (milestones and
-one-task-a-response tasks, each REQ named by the task that ticks it, as ADR-300 and 377 did) from
-`REQUIREMENTS-LATER.md`'s Phase 3 (refreshed by ADR-518, REQ-006 and 322…324 among them) and the
-register's "For Phase 3" map; moves Phase 3's REQs into `REQUIREMENTS.md`; and turns the state
-files to Phase 3. **Ask first, before any screen is designed:** the accessibility standard and level
-(REQ-324, C41), the user's to pick.
+**Phase 2 is reopened at the user's word (ADR-519). The next task is 2.8.1, the register swept**
+(`BACKLOG.md`, Milestone 2.8; docs only): every register entry's unstruck line aimed at a Phase 2
+task read against the code and struck with its ADR or re-filed; every "no task yet", "not built",
+"not tried" or "found, no task" item that is the server's written into the 2.8 task that takes it,
+the phone's or a screen's alone under a named Phase 3 or 4 REQ; the "For Phase 3" map redone.
+Then 2.8.2…2.8.9 in order, one a response. **2.8.6 asks the user first** (ADR-519 (7): which
+phones the key backstop covers, and records still on a phone revoked so); **2.8.7 asks ADR-433 (a)
+first**. **At every task's close, no server "no task yet" is left unfiled** (ADR-519's lesson).
+**When Phase 2's exit is met again and the user opens Phase 3:** task 3.0.1 writes its plan
+(`REQUIREMENTS-LATER.md`'s Phase 3 and the register's map); ask first, before any screen is
+designed, the accessibility standard and level (REQ-324, C41).
 **What the user may still overturn:** the agent defaults in `SUMMARY.md` §4; never copy that list here (ADR-516).
 **Docker's disk is 8 GB and was full once on 2026-10-10** (Tools and housekeeping): if `pnpm ready` fails for space, stop and ask the user to free some; never work around it.
 **Before the chain, `pnpm ready`** (the stack up, then `installer:check`): a `✗` at the migrations

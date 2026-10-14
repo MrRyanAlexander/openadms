@@ -9,7 +9,7 @@
 > requirement) and `spec/VISION.md` §7–§8 (the finished surfaces, and what "done" means). If this
 > page disagrees with them, they win.
 >
-> **Last updated:** 2026-10-14 (**Phase 2's exit is met (task 2.7.4, ADR-518): Phase 3, the field app, is yours to open.** 13 of its 14 requirements ticked, the 14th (every service over HTTPS) moved to Phase 3 because it waits for the web apps; all 119 scenarios with a Phase 2 part pass at the API; the whole check chain green; the golden mission unmoved. Phase 3's requirements are refreshed against what the server already does, with three new ones: certifying on a phone, the field app's own security checklist, and accessibility, whose standard is yours to pick before the first screen.)
+> **Last updated:** 2026-10-14 (**Phase 2 is reopened at your word (ADR-519).** A full check of Phase 2 found server work that was moved to later phases or marked "no task yet": a sync answered with a server error under a burst, the photo store's own servers open inside the stack, held records nobody can resolve, setup records the API can't change or archive, captured fields nobody can correct, and the reads those notes named. Eight new requirements (210…217) and nine tasks, Milestone 2.8, close them, with your backstop for a lost phone's key as a firm setting. The check chain was green the same day; the golden mission unmoved.)
 >
 > *This line holds the latest session alone (ADR-516); what each session did is its ADR and `DECISIONS.md`'s session log.*
 
@@ -22,8 +22,8 @@
 | | |
 |---|---|
 | **Start** | 2026-09-25: the rebuild decision (ADR-093). Security first, the plan is the core, TypeScript end to end with Prisma, the old `database/` code is history |
-| **Now** | **Phase 2, API and sync: exit met 2026-10-14** (ADR-518), opened 2026-10-06 at your word (ADR-376): all 32 tasks closed (2.6.3 withdrawn at your word), the last the phase exit (2.7.4). Phones and the back office talk to the server over HTTPS: sign-in with an authenticator, permissions read on every request, enrolment and a phone's proof of itself, the lists, sync with photographs, turn-in, background jobs, every hop encrypted. The golden mission syncs through the real endpoints and comes out with the numbers you approved (P1 $5,548.25 on 19 lines, P2 $324.00). **No phase is active: Phase 3 is yours to open** |
-| **Next task** | **None until you open Phase 3** (the field app). When you do, its first task writes the plan, as for Phases 1 and 2; and before any screen is designed you pick the accessibility standard (REQ-324) |
+| **Now** | **Phase 2, API and sync: reopened 2026-10-14 at your word** (ADR-519): Milestone 2.8, nine tasks, closes what a full check found. Before it, 32 tasks closed (2.6.3 withdrawn at your word) and the exit was met (ADR-518), now withdrawn. Phones and the back office talk to the server over HTTPS: sign-in with an authenticator, permissions read on every request, enrolment and a phone's proof of itself, the lists, sync with photographs, turn-in, background jobs, every hop encrypted. The golden mission syncs through the real endpoints and comes out with the numbers you approved (P1 $5,548.25 on 19 lines, P2 $324.00) |
+| **Next task** | **2.8.1, the register swept** (docs): every carry-forward note read against the code, each "no task yet" filed under a Phase 2 task. Task 2.8.6 asks you first to confirm how your #4 was read |
 | **Finish line** | A firm installs Open ADMS, and its back office and its monitors run a real mission on it: every app built, tested and working |
 | **How "done" is judged** | Not boxes ticked. A deliberately messy mission (the **golden mission**) comes out with the exact statuses, review queue and ledger you signed off, at every layer: engine, then API, then the apps (`spec/VISION.md` §8) |
 
@@ -37,8 +37,8 @@
 | **0** | **Foundation** | Start the whole local stack with one command over HTTPS, the mileage and address servers included; watch the database itself refuse what the rules forbid; run a ticket's story from a terminal | 17 of 17 | ✅ done 2026-10-01: every task and every requirement, and committed |
 | — | **The answer key** | Hold the golden mission's signed-off numbers and the acceptance scenarios that every later phase must pass | not counted in REQs | 🟡 the golden mission is approved, numbers included (2026-10-01, ADR-297: P1 $5,548.25 on 19 lines, P2 $324.00); the acceptance scenarios are written part by part, each before the code it judges (ADR-300): 9 of 9 files (review and corrections' 65 and invoicing and closeout's 31 written 2026-10-06, ADR-362; pricing, the ledger and audit's 114 written 2026-10-05, ADR-353; reconciliation's 162 written 2026-10-05, ADR-339; the counts before it: setup 82, people and devices 74, certifications 60, capture 98, sync 56; the passing counts are in `spec/acceptance/README.md`) |
 | **1** | **Data core and engine** | Run a whole messy mission from a terminal, no screens, and see the right statuses, flags, ledger and audit trail come out | 93 of 98 ticked; the other 5 moved to Phases 3 and 4 with what Phase 1 built for each (ADR-371) | ✅ exit met 2026-10-06 (ADR-371, 372), 49 of 49 tasks; open since 2026-10-01 (ADR-299) |
-| **2** | **API and sync** | Have phones and the back office talk to the server: sign-in, permissions, device enrolment, sync, background jobs, all hardened | 13 of 14 ticked; REQ-006 (every service over HTTPS) moved to Phase 3 with what Phase 2 built for it (ADR-518) | ✅ exit met 2026-10-14 (ADR-518), 32 of 32 tasks (2.6.3 withdrawn); open since 2026-10-06 (ADR-376) |
-| **3** | **Field app** | Hand a monitor a phone: enrol it, take the day's assignment, capture every kind of field event offline for days, scan, print, sync. Browser first, then iPhone, then Android | 0 of 33 (four carried from Phase 1, ADR-371; one from Phase 2 and three new, ADR-518) | 🔒 yours to open |
+| **2** | **API and sync** | Have phones and the back office talk to the server: sign-in, permissions, device enrolment, sync, background jobs, all hardened | 13 of 22 ticked; REQ-006 (every service over HTTPS) moved to Phase 3 with what Phase 2 built for it (ADR-518); REQ-210…217 new (ADR-519) | 🔄 reopened 2026-10-14 (ADR-519): 32 of 41 tasks (2.6.3 withdrawn), Milestone 2.8's nine to do; open since 2026-10-06 (ADR-376) |
+| **3** | **Field app** | Hand a monitor a phone: enrol it, take the day's assignment, capture every kind of field event offline for days, scan, print, sync. Browser first, then iPhone, then Android | 0 of 33 (four carried from Phase 1, ADR-371; one from Phase 2 and three new, ADR-518) | 🔒 yours to open, after Phase 2's exit is met again |
 | **4** | **Back office and read-only portal** | Set up a project, dispatch the day, review and correct, QC, lock as invoiced, export; clients, contractors and auditors see their own projects | 0 of 19 (one carried from Phase 1, ADR-371) | 🔒 |
 | **5a** | **Deploy and go-live checks** | Run it in a real cloud (the shipped demo: Railway + Netlify), passing the scenario suite and load tests, with an outside security test done | 0 of 1 (REQ-517), plus carried-forward items C25, C33, C38…C40, C48, C49 | 🔒 |
 | 🏁 | **Finish line** | **A firm can install it and people use it on a real mission** | | |
@@ -53,7 +53,7 @@ the relative size: Phase 1 is by far the largest piece.
 
 ---
 
-## 3. Phase 2, API and sync: exit met 2026-10-14 (ADR-518)
+## 3. Phase 2, API and sync: reopened 2026-10-14 (ADR-519)
 
 Opened 2026-10-06 at your word (ADR-376). The plan is `BACKLOG.md`'s (ADR-377). It adds no rule to
 what Phase 1 built: it puts the server in front of it. The first task writes the threat model and
@@ -69,6 +69,7 @@ the scenarios the API must pass, so the answer exists before the code.
 | 2.5 | Phones: enrolment, sign-in, the lists | Enrol a phone with the master passcode, sign a monitor in on it and have it take the day's assignment and its lists, with never a rate among them | 4 of 4 ✅ | ✅ 2.5.1 (ADR-436, 437, 439, 440); ✅ 2.5.2 (ADR-441…444); ✅ 2.5.3, in five parts (ADR-449…451, 453…455); **2.5.4, what a phone reports besides field events, in five parts (ADR-462): part 1 ✅ (an unplanned assignment arrives, ADR-456, 457); part 2 ✅ (a site move and a monitor switch reported, ADR-458); part 3 ✅ (a session under the master passcode with a connection, ADR-462); part 4 ✅ (what setup under the passcode reads online, ADR-463); part 5 ✅ (every other use of the passcode a phone logged, ADR-464). ✅ 2.5.4** |
 | 2.6 | Sync | Sync a phone's day: records first, photographs after, a retry answered "already saved", a duplicate held for a person, a lost phone's work received and flagged; turn a phone in | 4 of 5, 2.6.3 withdrawn ✅ | ✅ 2.6.1 the sync contract (ADR-466, 467, 469, 470); 2.6.2 the endpoint (ADR-471…473, 475); 2.6.3 withdrawn at your word (ADR-477); 2.6.4 photographs and the map's files (ADR-478…485); **2.6.5 a phone out of service and turn-in, in three parts (ADR-487…490): the turn-in at the API, held to the sync contract and in the stories, and a limit per phone** |
 | 2.7 | Prove it | Run the golden mission through the real endpoints and get the numbers you approved; read the security checklist with a test beside each item | 4 of 4 (2.7.1, ADR-491…503; 2.7.2, ADR-504…507; 2.7.3, ADR-508…517; 2.7.4 the phase exit, ADR-518) | ✅ 2026-10-14 |
+| 2.8 | What the full check found, closed | Sync a burst with every phone told to wait, never an error; resolve what a sync held for a person; change, archive and correct any setup record or captured field by a request; have a lost phone's key revoked after the firm's time, a setting you change | 0 of 9 | 🔄 reopened 2026-10-14 (ADR-519) |
 
 **Phase 2's exit criteria** (`NEXT.md`; the agent's, yours to change): the golden mission through
 the real endpoints and the job queue with the approved numbers; every scenario with a Phase 2 part
@@ -84,7 +85,7 @@ by the security checklist's tasks) and the Phase 2 part of the 49 earlier ones; 
 a part that is the field app's or the back office's (`spec/acceptance/README.md`).
 
 **The requirements at the phase exit (ADR-518): 13 of 14 ticked, REQ-006 moved** to Phase 3 (every
-service over HTTPS: the web apps aren't built yet). **Phase 2's exit criteria, all seven met.**
+service over HTTPS: the web apps aren't built yet). ~~Phase 2's exit criteria, all seven met.~~ **Reopened (ADR-519): REQ-210…217 new, 22 in all; three exit criteria added (no "no task yet" left, the agent defaults put to you, three clean full runs of the stories).**
 
 **Test state, seen 2026-10-14 at the exit:** see `CHAIN.md` (the one place the counts live).
 
@@ -194,8 +195,9 @@ Nothing here blocks the next task. Each is listed with the point where it starts
 
 | What | Why it's yours | Matters by |
 |---|---|---|
-| **Opening Phase 3** (the field app) | Phase 2's exit is met (ADR-518); an agent never opens a phase | Now: nothing is built until you do |
-| **The agent's defaults** | Each recorded call you may overturn, with its ADR: `SUMMARY.md` §4. Latest: ADR-518's (the phase exit: REQ-006 to Phase 3, viewers' two-step to Phase 4, three new Phase 3 requirements) | Any time; building doesn't wait |
+| **How your #4 was read** (a lost phone's key revoked after the firm's time) | ADR-519 (7): which phones it covers, its default, and what happens to records still on such a phone (`SUMMARY.md` §4) | Before task 2.8.6 |
+| **Opening Phase 3** (the field app) | Phase 2 is reopened (ADR-519); an agent never opens a phase | After Phase 2's exit is met again |
+| **The agent's defaults** | Each recorded call you may overturn, with its ADR: `SUMMARY.md` §4. Latest: ADR-519's reading of your #4 and that the reads the notes named are Phase 2's; ADR-518's (b) and (c) overturned by you | Any time; building doesn't wait |
 | **Whether *photos required* should take a number** (asked 2026-10-05, ADR-345) | Today a pay item's *photos required* is yes or no, meaning at least one. Your example spoke of a ticket that requires 4. If you want a firm to set a number, it is a new pay item setting; if "at least one" is enough, nothing changes. Nothing waits on it |
 | Commit each response's changes | Agents don't write to git; every file-changing response ends with a block for you to run. The history began 2026-10-01 (nine commits on `phase0-foundation`, ADR-288) | After each response, so no work sits uncommitted (tasks 1.8.4…1.9.3 and the 2026-10-06 housekeeping were waiting on 2026-10-06; one script commits them) |
 | A `main` branch and a remote | The history lives on one branch on this machine only; where it is pushed and what the default branch is are your call | Before anyone else needs the code, and as the only copy's backup |
