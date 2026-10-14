@@ -8,7 +8,7 @@
 
 > **Wording.** Each requirement is a shortened label of the published text, ASVS 5.0.0 (the `v5.0.0_release` tag of `OWASP/ASVS`, `5.0/en/`) and the API Top 10 at api-security.owasp.org. Every number and level here was checked against the full published text on 2026-10-14 (ADR-510). The labels are not the text: read the requirement itself before deciding an open item (§4).
 
-**The counts:** 222 ASVS items: every Level 1 and 2 item of the chapters that apply (V1…V9, V11…V16) and the Level 3 items file 10 cites; V10 and V17 are not used, whole (below). ASVS: 95 answered by a scenario (11.4.1 among them, with a departure kept for one use, ADR-514, 516; 4.2.1, 12.3.3 and 15.3.2 by part 5, ADR-517); 64 built without a scenario, 14 of them written answers (§5; ADR-515); 1 departure kept (6.4.1); 1 decided and to build (6.3.3); 61 owned by a phase, not used, or an accepted risk. None to do, none open. API: 10 of 10 answered (API10's last two by part 5, ADR-517).
+**The counts:** 222 ASVS items: every Level 1 and 2 item of the chapters that apply (V1…V9, V11…V16) and the Level 3 items file 10 cites; V10 and V17 are not used, whole (below). ASVS: 95 answered by a scenario (11.4.1 among them, with a departure kept for one use, ADR-514, 516; 4.2.1, 12.3.3 and 15.3.2 by part 5, ADR-517); 64 built without a scenario, 14 of them written answers (§5; ADR-515); 1 departure kept (6.4.1); 62 owned by a phase, not used, or an accepted risk, 6.3.3 among them since the phase exit (decided by the user, ADR-511; built with the read-only portal, Phase 4, REQ-408; ADR-518). None to do, none open. API: 10 of 10 answered (API10's last two by part 5, ADR-517).
 
 ## 1. The API Security Top 10 (2023)
 
@@ -153,7 +153,7 @@ Columns: the requirement; its level; the label as read; the scenarios and tasks 
 | 6.2.12 | 2 | passwords checked against breached sets | AC-10-24 (task 2.2.2, 2.4.3) |  |
 | 6.3.1 | 1 | controls against credential stuffing and brute force | AC-10-18, AC-10-22, AC-02-07, AC-02-23 (task 2.2.3, 2.4.3, 2.5.1, 2.5.2, 2.5.4, 2.6.2) |  |
 | 6.3.2 | 1 | default accounts absent or disabled | AC-10-17 (task 2.2.3) |  |
-| 6.3.3 | 2 | multi-factor, or a combination of single factors |  | **the firm's choice, to build** (the user, ADR-511): back-office staff need two-step (AC-02-14) and a monitor's password works only from a proven phone (ADR-441); a viewer's two-step is optional today, each viewer's own choice (ADR-170), and the firm will be able to require it (BACKLOG C157). Shipped default: optional |
+| 6.3.3 | 2 | multi-factor, or a combination of single factors |  | **the firm's choice, Phase 4's to build** (the user, ADR-511; moved to the read-only portal's sign-in, REQ-408, at the phase exit, ADR-518, an agent default): back-office staff need two-step (AC-02-14) and a monitor's password works only from a proven phone (ADR-441); a viewer's two-step is optional today, each viewer's own choice (ADR-170), and the firm will be able to require it (BACKLOG C157). Shipped default: optional |
 | 6.3.4 | 2 | no undocumented authentication pathways | AC-10-27 (task 2.7.3 part 3; read as answering it, ADR-513) |  |
 | 6.4.1 | 1 | initial passwords and activation codes securely random |  | **departure**, kept (the user, ADR-511): a monitor's first password is the firm's practice (their phone number without the area code), the accepted risk of ADR-105 and ADR-139, exempt by ADR-402 (5) |
 | 6.4.2 | 1 | no password hints or secret questions |  | not used: no password hint or secret question: no such field in the schema (`packages/db/prisma/schema`; grep, ADR-514) |
@@ -355,7 +355,7 @@ No ECB, no RSA and no PKCS#1 padding anywhere (grep).
 
 - **4.1.2:** plain HTTP is refused at the API's address, never redirected; a web page's name keeps the redirect. Built (AC-10-02).
 - **3.4.1 at Level 2:** HSTS includes subdomains, at the API and the proxy. Built (AC-10-04). It binds only names under the host that sends it.
-- **6.3.3:** the firm chooses whether a read-only viewer must use two-step; optional as shipped. To build (BACKLOG C157): today it is each viewer's own choice, and no firm-wide setting exists yet.
+- **6.3.3:** the firm chooses whether a read-only viewer must use two-step; optional as shipped. Built with the read-only portal, Phase 4 (REQ-408; ADR-518) (BACKLOG C157): today it is each viewer's own choice, and no firm-wide setting exists yet.
 - **6.4.1:** a monitor's first password stays the accepted risk of ADR-105 and ADR-139.
 
 ### 3.1 The 78, each with its answer (proposed by ADR-512; approved by the user, ADR-513)

@@ -7,7 +7,7 @@
 > task's ADR and its session-log line in `DECISIONS.md`). No other file carries these counts.
 > **A count that differs from this page without a reason is a finding, not noise.**
 
-**Seen whole:** 2026-10-14, after ADR-517, on the user's Mac, the installation at head (brought to TLS by `pnpm installer --yes` that day: each login's URL given `verify-full`, passwords kept). `pnpm test` passed whole three times since ADR-515 and `pnpm scenarios` once more, `burst` among them (C155, C156 closed). Memory last sampled after ADR-512 (Docker's VM at 4 GB, the containers together under 1 GB through a full `pnpm test`).
+**Seen whole:** 2026-10-14, at Phase 2's exit (ADR-518), on the user's Mac, the installation at head: `pnpm ready`, the frozen install, typecheck, `pnpm test` (before and after the exit's one new test), `pnpm scenarios`, `pnpm security`, lint and licences. Memory last sampled after ADR-512 (Docker's VM at 4 GB, the containers together under 1 GB through a full `pnpm test`).
 
 ## `pnpm ready`
 
@@ -20,12 +20,12 @@
 
 ## `pnpm test`
 
-**`Test Files 168 passed (168)`, `Tests 2996 passed (2996)`.**
+**`Test Files 168 passed (168)`, `Tests 2997 passed (2997)`.**
 
 | Project | Tests | Files | Needs |
 |---|---|---|---|
 | `packages/domain` | 795 | 43 | nothing |
-| `packages/contracts` | 88 | 9 | nothing |
+| `packages/contracts` | 89 | 9 | nothing |
 | `apps/api` | 634 | 47 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
 | `packages/db` | 1060 | 45 | `pnpm ready` |
 | `packages/scenarios` | 153 | 7 | `pnpm ready` for `stories.test.ts` (the runner and a run's template, 5) and `story-api.test.ts` (a story's API over HTTPS through the proxy, every request of a story's phone, the back office and the viewers at their browsers, 14); the flag catalogue (78 flags), the harness, the phone held to the sync contract's suite and to what it sends and takes in at a sync, its photographs' files and its turn-in among it, and its wait when told to (24), the policy and the server apps' exports (2) need nothing. **The stories themselves are not here** (ADR-446) |

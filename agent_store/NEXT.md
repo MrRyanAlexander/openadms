@@ -5,7 +5,13 @@
 > the bottom accurate. Milestone detail lives in `agent_store/BACKLOG.md`.
 
 
-## Active Phase — `PHASE 2: API AND SYNC` *(opened by the user 2026-10-06, ADR-376)*
+## Active Phase — none: **Phase 3 (the field app) is the user's to open** *(Phase 2's exit met 2026-10-14, ADR-518)*
+
+Phase 2 met its seven exit criteria (below). **An agent never opens a phase:** Phase 3 opens at
+the user's word, and its first task then writes its plan (as ADR-300 and 377 did). Until then,
+there is no build task; housekeeping only.
+
+## Phase 2 — `API AND SYNC`: exit met 2026-10-14 *(opened by the user 2026-10-06, ADR-376; ADR-518)*
 
 **User, 2026-10-06:** "phase 2 is open, begin working on the next task".
 
@@ -37,9 +43,20 @@ response** (ADR-377). Read its brief before any task.
 
 ---
 
-## Exit criteria for Phase 2 *(ADR-376; agent default, the user may change them)*
+## Exit criteria for Phase 2 *(ADR-376; agent default, the user may change them)* — ✅ all seven met 2026-10-14 (ADR-518)
 
-All observed and reported, not assumed:
+All observed and reported, not assumed. **How each was met (task 2.7.4, ADR-518):** (1) `pnpm
+scenarios`: 22 stories passed, every phone through the real endpoints over HTTPS and every run
+the worker's job loop's; the golden mission P1 $5,548.25 on 19 lines, P2 $324.00. (2) 119 of 119
+at the API: file 10's 70, and the Phase 2 part of the 49 earlier scenarios (`spec/acceptance/README.md`).
+(3) 13 of 14 ticked, REQ-006 moved to Phase 3 (`REQUIREMENTS.md`). (4) The checklist has none to
+do: 6.3.3, the firm's choice of two-step for viewers, owned by Phase 4 (REQ-408); the threat
+model approved (ADR-393); `pnpm security` 12 passed. (5) `installer:check` 35 `✓`: every table
+guarded, each service login under its statement timeout; the grant tests 1,060 passed. (6) The
+chain green with its counts (`CHAIN.md`); the API only at `https://api.adms.localhost` (AC-10-01…03).
+(7) No zod schema in the apps' sources (every shape in `packages/contracts`, REQ-004), every rule
+taken from `packages/domain`, and only `packages/db` and the two server apps reach Postgres
+(REQ-205, `pnpm security`).
 
 1. **The golden mission syncs through the real endpoints and is reconciled by queued jobs**, with
    the exact statuses, review queue, ledger (P1 $5,548.25 on 19 lines; P2 $324.00) and audit rows
@@ -56,7 +73,7 @@ All observed and reported, not assumed:
 7. **Rules and shapes live once:** no rule outside `packages/domain`, no payload shape outside
    `packages/contracts`, only `packages/db` and the two server apps reaching Postgres.
 
-Only then is **Phase 3 (the field app)** offered to the user to open.
+Only then is **Phase 3 (the field app)** offered to the user to open. **Offered 2026-10-14 (ADR-518).**
 
 ---
 
@@ -90,8 +107,7 @@ true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the ses
 of `DECISIONS.md`.
 
 ### Where things stand (2026-10-14, through ADR-517)
-- **Task 2.7.3 is closed (part 5, ADR-517): every hop of the local stack is encrypted (KD-78) and every container hardened (KD-79); 15.3.2 and API10 built. The security checklist has none to do. What it leaves: C162.**
-- **Phase 2 (API and sync, ADR-376): 31 of its 32 tasks closed.** Milestones 2.1 to 2.6 are complete; of 2.7, 2.7.1, 2.7.2 and 2.7.3 are closed; 2.7.4, the phase exit, is the last. Each task's ADRs are on its tick in `BACKLOG.md`, "Active — Phase 2"; what it leaves is the carry-forward register. The lines that stood here, one a finished task, moved word for word to `DECISIONS.md`'s scratchpad, "Moved 2026-10-14 (ADR-516)". **This block says where things stand now, in a few lines; a finished task gets no line of its own here (ADR-516).**
+- **Phase 2's exit is met (task 2.7.4, ADR-518): Phase 3 is the user's to open.** All 32 tasks closed (2.6.3 withdrawn); 13 of 14 REQs ticked, REQ-006 moved to Phase 3; 119 of 119 scenarios with a Phase 2 part proven at the API; Phase 3's REQs refreshed, REQ-322…324 new. What it leaves: C163 (the user's first question for Phase 3: the accessibility standard, REQ-324). Each task's ADRs are on its tick in `BACKLOG.md`, "Active — Phase 2"; what it leaves is the carry-forward register. The lines that stood here, one a finished task, moved word for word to `DECISIONS.md`'s scratchpad, "Moved 2026-10-14 (ADR-516)". **This block says where things stand now, in a few lines; a finished task gets no line of its own here (ADR-516).**
 - **Where each thing is written, so nothing is read twice:** a rule as it stands, with its ADR:
   `SUMMARY.md`, by topic (grep its `###` headings; never read it whole). What a finished task left
   for a later one: `BACKLOG.md`'s carry-forward register (C85…C161). How a layer's tests are
@@ -109,7 +125,7 @@ of `DECISIONS.md`.
   schemas read anything** (BACKLOG C86 is the recipe for adding one; `pnpm openapi` after).
   Each service login is under a statement timeout; an installation may state its own value for
   any policy value. `spec/acceptance/10-api-and-sync.md` and `spec/THREAT-MODEL.md` are approved
-  by the user (ADR-386, 393). Phase 2's 14 REQs are in `REQUIREMENTS.md`, eleven ticked (REQ-004, 016, 201, 202a, 202b, 203, 205, 206, 207, 208, 209; REQ-206 since ADR-503, REQ-205 since ADR-508).
+  by the user (ADR-386, 393). Phase 2's 14 REQs are in `REQUIREMENTS.md`: thirteen ticked, REQ-006 moved to Phase 3 (ADR-518).
 - **`pnpm lint` runs ESLint under a 4 GB heap** (ADR-465): the whole-tree run had outgrown Node's default on this 8 GB Mac. If it stops with "heap out of memory" again, split it by workspace.
 - **Phones today (what 2.5.3 builds on).** A phone enrols under the master passcode (`POST
   /phones/enrolments`), proves itself by signing a challenge and gets a fifteen-minute token
@@ -145,7 +161,7 @@ of `DECISIONS.md`.
   `installationPolicy({ … })`.
 - **Phase 1 is done:** all seven exit criteria met (ADR-371, 372); 693 of the 708 scenarios with a
   Phase 1 part proven whole, 15 in part. 48 scenario rows name Phase 2 (37 as "API (Phase 2)").
-- **The chain** was seen whole on 2026-10-14 after ADR-515. Its counts
+- **The chain** was seen whole on 2026-10-14 at the phase exit (ADR-518). Its counts
   are `agent_store/CHAIN.md`'s; what each command proves is `adms-verify`'s. **Start with `pnpm
   ready`**; the stories run once, in `pnpm scenarios`; run `pnpm security` after `pnpm test`.
 - **What exists:** `packages/db` (schema, guards, tests), `packages/domain` (every rule; one
@@ -156,7 +172,7 @@ of `DECISIONS.md`.
   certifications, numbering, intake, review; and `process/` with `main.ts`, the HTTP process with
   a health answer, the boundary, the headers and the API's database client: no endpoint of the
   services, no sign-in), `tools/`, `infra/local`.
-- **Open deviations:** KD-78 and KD-79, both built in task 2.7.3 part 5 (`DEVIATIONS.md`). KD-30 is re-filed to Phase 5 (REQ-518).
+- **Open deviations:** none (KD-78 and KD-79 closed by ADR-517). KD-30 is re-filed to Phase 5 (REQ-518).
 - **After a change to `apps/api` or `apps/worker`, `pnpm local:up` again** before the chain: each
   container runs what was built when it started, and `apps/api/test/door.test.ts` and
   `apps/worker/test/container.test.ts` ask those containers (BACKLOG C85, C95). Docker Desktop may be closed at the start of a session: `open -a Docker`, and
@@ -209,7 +225,7 @@ Update it at close-out when a task, milestone or phase closes.
 | 5 | **Truth-up the docs** ✅ done 2026-09-29 (ADR-247…253; KD-33, 58, 61, 62 closed) | `RATE-SHEET.md`, `RULES.md`, `LISTS.md`, parts 01/04/06/07 and the skills rewritten to today's rules, one per response (ADR-138) | Before step 7's engine work |
 | 6 | **Acceptance scenarios + golden mission** ✅ the mission is approved (ADR-297) and runs as a story (ADR-368); the nine scenario files are written and approved (ADR-335, 374) | `spec/acceptance/`, `spec/golden/` with the user's signed-off numbers | Steps 2, 5 |
 | 7 | **Phase 1: data core + engine, rebuilt** ✅ exit met 2026-10-06 (ADR-371, 372); opened 2026-10-01 (ADR-299); its tasks are ticked in `BACKLOG.md` | Setup records, certifications and capacity, tickets and numbers, sync intake with quarantine, reconciliation, the rule engine, the ledger and audit, review, QC, invoice lock and batches; KD-01, 04, 05, 10, 12, 13, 15, 55, 56 closed; the golden mission passing at the engine | Steps 3–6 |
-| 8 | **Phases 2–5**: **Phase 2 open since 2026-10-06 (ADR-376)**, its plan in `BACKLOG.md` (ADR-377) | API and sync → field app (browser, iPhone, Android) → back office (setup screens with the setup check, rule builder, review queue, exports, viewers) → later features and the demo deploy | Each phase's REQs refreshed before it opens |
+| 8 | **Phases 2–5**: **Phase 2 ✅ exit met 2026-10-14 (ADR-518)**, opened 2026-10-06 (ADR-376), its plan in `BACKLOG.md` (ADR-377); **Phase 3 is the user's to open** | API and sync → field app (browser, iPhone, Android) → back office (setup screens with the setup check, rule builder, review queue, exports, viewers) → later features and the demo deploy | Each phase's REQs refreshed before it opens |
 
 ### What is still to be asked (so nothing is guessed later)
 - **Nothing is open** (ADR-230). New questions only under the shot-clock rule above.
@@ -308,20 +324,24 @@ Update it at close-out when a task, milestone or phase closes.
 and the topic you are touching. Product discovery is closed (ADR-230): don't open new rounds of
 questions.
 
-**Phase 2 is open (ADR-376). Its plan is `BACKLOG.md`, "Active — Phase 2" (ADR-377): read its
-brief first. One task per response.**
-
-**Task 2.7.4, the phase exit (BACKLOG 2.7.4), done whole: never cut it ahead of time (ADR-516).** Phase 2's 14 REQs each ticked or re-filed with an ADR (REQ-006 can only be finished by the web apps); file 10's scenario count by part; Phase 3's REQs in `REQUIREMENTS-LATER.md` refreshed against what was built; the state files turned to "Phase 3 is the user's to open". Read BACKLOG's carry-forward register first (C162 last): what it leaves for a later phase is named there, not built now. Every story still passes, the golden mission unmoved (P1 $5,548.25 on 19 lines, P2 $324.00).
+**No phase is active: Phase 2's exit is met (ADR-518) and Phase 3 (the field app) is the user's
+to open.** An agent never opens a phase. Until the user does, there is no build task: answer what
+is asked, housekeeping only.
+**When the user opens Phase 3:** task 3.0.1 writes its plan into `BACKLOG.md` (milestones and
+one-task-a-response tasks, each REQ named by the task that ticks it, as ADR-300 and 377 did) from
+`REQUIREMENTS-LATER.md`'s Phase 3 (refreshed by ADR-518, REQ-006 and 322…324 among them) and the
+register's "For Phase 3" map; moves Phase 3's REQs into `REQUIREMENTS.md`; and turns the state
+files to Phase 3. **Ask first, before any screen is designed:** the accessibility standard and level
+(REQ-324, C41), the user's to pick.
 **What the user may still overturn:** the agent defaults in `SUMMARY.md` §4; never copy that list here (ADR-516).
-**Docker's disk is 8 GB and was full once on 2026-10-10** (Tools and housekeeping; it has held since, 1.3 GB free after ADR-464's session): if `pnpm ready` fails for space, stop and ask the user to free some; never work around it.
+**Docker's disk is 8 GB and was full once on 2026-10-10** (Tools and housekeeping): if `pnpm ready` fails for space, stop and ask the user to free some; never work around it.
 **Before the chain, `pnpm ready`** (the stack up, then `installer:check`): a `✗` at the migrations
-or at a setting means one was made elsewhere, and `pnpm installer --yes` applies it (seen 2026-10-09: 176 tests failed
-until it was). **After a change to `apps/api` or `apps/worker`, `pnpm local:up` again; if Docker
-answers 500, `docker desktop restart`; if `local:up` meets `ECONNRESET` or a container whose layer is
-gone, `pnpm local:down` and `up` once more.** **On a Linux host (a cloud session), the containers run as uid
+or at a setting means one was made elsewhere, and `pnpm installer --yes` applies it. **After a
+change to `apps/api` or `apps/worker`, `pnpm local:up` again; if Docker answers 500, `docker
+desktop restart`; if `local:up` meets `ECONNRESET` or a container whose layer is gone, `pnpm
+local:down` and `up` once more.** **On a Linux host (a cloud session), the containers run as uid
 1000:** after `pnpm installer` the two service env files, and after each `local:up` the copied
-Caddy root, must be readable by it (`chown 1000:1000`), or the API or worker fails to start
-(seen 2026-10-09, ADR-443's session log); and since ADR-517 each key under
+Caddy root, must be readable by it (`chown 1000:1000`); and since ADR-517 each key under
 `infra/local/.generated/tls/` by its own container's user (Postgres 999, the mail catcher 65534,
 the address server's `nominatim`; the rest 1000), or that service fails to start.
 

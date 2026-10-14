@@ -1,13 +1,13 @@
 # Open ADMS — Current decisions and gaps, at a glance
 
 **The present tense of the project on one page.** `DECISIONS.md` and `DEVIATIONS.md` are the full
-history, with 517 ADRs and 79 KDs, many superseded. This page says what is true **now** and which
+history, with 518 ADRs and 79 KDs, many superseded. This page says what is true **now** and which
 entries to cite. The reasons live in the ADRs and the skills.
 
 - **Keep it current:** when you add, amend or supersede an ADR, or open or close a KD, update this
   page **in the same response** (`adms-decisions`).
 - **If this page and a log entry disagree,** the newest ADR wins: fix this page and say so.
-- **Updated 2026-10-14, through ADR-517.** **Task 2.7.3 closes (part 5, ADR-517):** every hop of the local stack encrypted (KD-78): the stack's own root and a certificate per service, Caddy issuing from it and reaching each service over TLS checked by name, the API serving HTTPS alone, Postgres `hostssl` alone with `verify-full` logins, SMTP after STARTTLS alone, Valhalla behind its own Caddy; every container hardened (KD-79), held by `infra/local/test/compose.test.ts`; 15.3.2 and API10 built (AC-10-67…70). The security checklist has none to do; C155 and C156 closed.
+- **Updated 2026-10-14, through ADR-518.** **Phase 2's exit is met (task 2.7.4, ADR-518): Phase 3 (the field app) is the user's to open.** 13 of Phase 2's 14 REQs ticked (REQ-202 read whole), REQ-006 moved to Phase 3; 119 of 119 scenarios with a Phase 2 part proven at the API (file 10's 70; the Phase 2 part of 49 earlier ones); Phase 3's REQs refreshed against what was built, REQ-322…324 new; viewers' two-step as the firm's choice (C157, ASVS 6.3.3) moved to Phase 4 with the portal; the chain whole, the golden mission unmoved.
 - **Open deviations: none.** KD-78 (every hop encrypted) and KD-79 (every container hardened) were closed by ADR-517 (`DEVIATIONS.md`). `spec/acceptance/10-api-and-sync.md` and `spec/THREAT-MODEL.md` are approved by the user (ADR-386, 393).
 - **The "Updated" line holds the latest session alone (ADR-516):** replace it, never add "Before it" after it; each session's record is its ADR and `DECISIONS.md`'s session log. What stood here moved word for word to `DECISIONS.md`'s scratchpad, "Moved 2026-10-14 (ADR-516)" (and before it, "Moved 2026-10-09 (ADR-445)").
 - **Read this page by topic, never whole** (ADR-445): it is some 400 KB. Read this header, §4 (what
@@ -1839,8 +1839,16 @@ Cite the ADRs in brackets. Each topic's detail is in the named skill.
   who entered it. **KD-65 is closed (ADR-295):** a completed haul-out has a completed
   load's shape (a row per collection event) and carries the tandem's `weightIsShare` mark. [140, 284,
   285, 289, 290, 292, 293, 294, 295]
-- **Phase 2 (API and sync) is the active phase, opened by the user on 2026-10-06** ("phase 2 is
-  open, begin working on the next task"). **It adds no rule: it wraps, signs in, queues and
+- **No phase is active: Phase 3 (the field app) is the user's to open (ADR-518).** Phase 2's exit
+  was met on 2026-10-14: 13 of its 14 REQs ticked and REQ-006 moved to Phase 3; 119 of 119
+  scenarios with a Phase 2 part proven at the API; the checklist with none to do (6.3.3 owned by
+  Phase 4, REQ-408); the chain green, the golden mission unmoved. Phase 3's REQs are refreshed
+  against what was built (each says what the server already does), with REQ-322 (certifying on a
+  phone), 323 (the field app's MASVS checklist) and 324 (accessibility, its standard the user's to
+  pick before the first screen) new; the register is mapped to them (BACKLOG, "For Phase 3"). A
+  phase exit moves a requirement whose rest is a later phase's, never ticks it (ADR-371). [518]
+- **Phase 2 (API and sync) was opened by the user on 2026-10-06 and met its exit on 2026-10-14
+  (ADR-518)** ("phase 2 is open, begin working on the next task"). **It adds no rule: it wraps, signs in, queues and
   hardens.** **Its exit** (agent default): the golden mission syncing through the real endpoints,
   reconciled by queued jobs, with the approved numbers; every scenario with a Phase 2 part passing
   at the API (N of M); all 14 REQs ticked or re-filed; ARCHITECTURE §16's checklist for this layer
@@ -2038,7 +2046,8 @@ its scenario.
 
 **Live today (2026-10-07, ADR-376…420):**
 - **Agent defaults of the API's first code (ADR-380, 385), moved here from `ROADMAP.md` (ADR-516):** NestJS 12 (six weeks old then) rather than 11; the health check says only that the server answers; an error says a plain code and a request id.
-- **Nothing blocks the next task** (2.4.1, the services Phase 1 left to a story's hand).
+- **Nothing blocks, and no build task is open: Phase 3 is yours to open** (ADR-518). Its first question for you, before any screen: the accessibility standard and level (REQ-324, C41).
+- **Agent defaults of 2.7.4, Phase 2's exit, to confirm or overturn (ADR-518):** (a) **REQ-006 moved to Phase 3, not ticked**: it says "every service", and the web apps aren't built; it is ticked when the field app's browser build is served through Caddy, and the object store's own servers stop listening in plain HTTP on the stack's network first (C162 (a)); (b) **the firm's choice of two-step for read-only viewers (your answer, ADR-511) is built with the read-only portal in Phase 4 (REQ-408)**, not now: no viewer signs in to a page before the portal exists (ASVS 6.3.3 is now owned by Phase 4); (c) **a sync that waits too long for a database connection under a burst, answered 500 today, is Phase 3's with the sync queue (REQ-308)**, the server's half first with its own ADR (C162 (c)); (d) **three Phase 3 requirements added**: certifying on a phone (REQ-322), the field app's security checklist, OWASP MASVS (REQ-323), and accessibility (REQ-324); (e) 32 scenario rows still reading "in part" though later Phase 2 tasks had built their rest were read and marked whole at the exit, each with its test.
 - **Agent defaults of 2.4.1 to confirm or overturn (ADR-423):** (a) **what may be changed on a pay item after it is entered:** its Unit of Measure, its crew-time conversion and its capture settings (**amended by ADR-425:** its code, description and size band too; its payable type and kind of work stay as entered); (b) **the setup check reads every live load and haul-out form**, whether or not the project's workflows use it, and a debris type hidden on the phones; (c) **the check and the lookup are worked out when asked and kept nowhere**; (d) a pay item's unit and a project's window queue every un-invoiced, un-voided ticket of the project, a site's shape or GPS the tickets with a field event at the site.
 - **Agent defaults of 2.4.2 part 1 to confirm or overturn (ADR-424):** (a) every setup request, the searches too, takes the permission Setup; (b) **merging two spellings of a sub takes Setup** (the stories had Luis do it with no grant); (c) a contract's link to its signed copy must be an `https` address; (d) adding a list value, a prime or a contract queues no ticket, and **a merge will queue the tickets of the trucks it moves** (built in part 3); (e) the status codes and plain words of a refusal by the database (409, 422, 404).
 - **Agent defaults of 2.4.2 part 2 to confirm or overturn (ADR-425):** (a) **a pay item's code, description and size band may be changed after it is entered; its payable type and its kind of work may not** (they say what work it is); (b) a change to a pay item's code or description renames the rules its "Pays when" wrote, and queues the project's tickets like any other change to it; (c) **a rate is told only in the answer to whoever just set it**, and no other answer carries one yet; (d) a form, a debris type added to a form and the firm's own fields queue no ticket; (e) "Pays when" and a rule are each stated whole (a form left out of "Pays when" archives its rule there); (f) the plain words of the twenty-two refusals by the database this part can reach.
