@@ -67,7 +67,7 @@ import {
 import { NotSaved, type NotSavedNotice } from '@open-adms/domain';
 
 import type { Certifications } from '../certification/certifications.ts';
-import type { NumberAllocator } from '../numbering/number-allocator.ts';
+import { SeriesMovedOn, type NumberAllocator } from '../numbering/number-allocator.ts';
 import type { PasscodeUses } from '../phone/passcode-uses.ts';
 import type { PhoneLoginList } from '../phone/phone-login-list.ts';
 import type { UnplannedAssignments } from '../phone/unplanned-assignments.ts';
@@ -100,7 +100,8 @@ export interface Synced {
   readonly answered: SyncAnswered;
 }
 
-// A top-up that lost a race for its series is asked again (ADR-065, 323).
+// A top-up that lost a race for its series is asked again (ADR-065, 323); one that loses every
+// time is not taken at this sync (ADR-505).
 const topUpAttempts = 3;
 
 // The fingerprint a held record is known by on its phone: the SHA-256, in hex, of what stood
@@ -452,7 +453,14 @@ export class Sync {
         const before = await this.parts.numbers.held(deviceId, report);
         return { projectId, series, toppedUp: false, blocks: blocksOf(before) };
       } catch (error) {
-        if (attempt === topUpAttempts) throw error;
+        if (!(error instanceof SeriesMovedOn)) throw error;
+        // Every phone of a project syncing at once tops up from one series: one that loses the
+        // race every time keeps the blocks it holds, its report not taken, and is topped up at
+        // a later sync (ADR-505). Its records are saved all the same.
+        if (attempt === topUpAttempts) {
+          const before = await this.parts.numbers.held(deviceId, report);
+          return { projectId, series, toppedUp: false, blocks: blocksOf(before) };
+        }
       }
     }
   }

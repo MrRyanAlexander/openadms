@@ -18,7 +18,7 @@ import { sentFingerprint } from '@open-adms/api';
 import { describe, expect, it } from 'vitest';
 
 import { StoryClock } from '../src/clock.ts';
-import { SimulatedDevice, type PhoneLists, type PhoneServer } from '../src/device.ts';
+import { SimulatedDevice, ToldToWait, type PhoneLists, type PhoneServer } from '../src/device.ts';
 
 const lists: PhoneLists = {
   setupVersion: 3,
@@ -34,8 +34,13 @@ const lists: PhoneLists = {
   surveyWorkTypes: [],
 };
 const deviceId = syncExamples.made('97');
-// The tower's phone at 17:30 on Monday, holding what the suite hands it.
-const phone = (holds?: SyncClientHolds, holding: PhoneLists = lists): SimulatedDevice => {
+// The tower's phone at 17:30 on Monday, holding what the suite hands it; on a clock of its own
+// where one is given.
+const phone = (
+  holds?: SyncClientHolds,
+  holding: PhoneLists = lists,
+  clock = new StoryClock('2026-10-12T17:30:00-04:00'),
+): SimulatedDevice => {
   const made = new SimulatedDevice(
     {
       name: 'P1-TWR-TDSR',
@@ -47,7 +52,7 @@ const phone = (holds?: SyncClientHolds, holding: PhoneLists = lists): SimulatedD
       lists: holding,
       timeZone: 'America/New_York',
     },
-    new StoryClock('2026-10-12T17:30:00-04:00'),
+    clock,
   );
   if (holds !== undefined) made.hold(holds);
   return made;
@@ -279,6 +284,74 @@ describe('the harness’s phone, syncing through the API’s own service', () =>
     expect(await client.sync(made)).toBe(records.records.length);
     expect(syncs.map((each) => each.deviceId)).toEqual([deviceId]);
     expect(client.waitingRecords).toEqual([]);
+  });
+
+  it('AC-05-51, ADR-505 told to wait (429 LIMITED), it waits the seconds it was told on the story’s clock and sends the same sync, then the same part, again under the same ids; told again and again, it stops holding everything', async () => {
+    const clock = new StoryClock('2026-10-15T18:00:00-04:00');
+    const client = phone({ ...records, filePartBytesAtMost: 4096 }, lists, clock);
+    const [first] = records.records;
+    if (first?.record !== 'FIELD_EVENT') throw new Error('The examples have no field event.');
+    const photo = client.photograph({ of: { kind: 'FIELD_EVENT', id: first.fieldEvent.id } });
+    const idOf = (one: unknown) => (one as { fieldEvent: { id: string } }).fieldEvent.id;
+    const syncs: { at: string; records: string[]; photos: unknown[] }[] = [];
+    const parts: string[] = [];
+    const told = { syncs: 1, parts: 1 };
+    const made: PhoneServer = {
+      received: (_from, sent) => {
+        syncs.push({
+          at: clock.now().toISOString(),
+          records: sent.records.map(idOf),
+          photos: sent.photos.map((one) => (one as { id: string }).id),
+        });
+        if (told.syncs-- > 0) return Promise.reject(new ToldToWait(42));
+        return Promise.resolve({
+          answered: {
+            unplannedAssignments: [],
+            passcodeUses: [],
+            records: sent.records.map((one) => ({
+              answer: 'SAVED' as const,
+              id: idOf(one),
+              notes: [],
+            })),
+            photos: sent.photos.map((one) => ({
+              answer: 'SAVED' as const,
+              id: (one as { id: string }).id,
+              notes: [],
+            })),
+            numbers: [],
+            masterPasscode: { version: 1, check: null },
+            setupVersion: null,
+          },
+        });
+      },
+      filePart: (_from, part) => {
+        parts.push(`${clock.now().toISOString()} ${part.photoId} ${String(part.offset)}`);
+        if (told.parts-- > 0) return Promise.reject(new ToldToWait(7));
+        return Promise.resolve({ upload: 'KEPT' });
+      },
+    };
+    const ids = records.records.map((one) => idOf(one));
+    expect(await client.sync(made)).toBe(ids.length + 1);
+    expect(syncs).toEqual([
+      { at: '2026-10-15T22:00:00.000Z', records: ids, photos: [photo.id] },
+      { at: '2026-10-15T22:00:42.000Z', records: ids, photos: [photo.id] },
+    ]);
+    expect(parts).toEqual([
+      `2026-10-15T22:00:42.000Z ${photo.id} 0`,
+      `2026-10-15T22:00:49.000Z ${photo.id} 0`,
+    ]);
+    expect([client.toldToWait, client.holds, client.holdsFiles]).toEqual([[42, 7], [], []]);
+
+    // A server that only ever says to wait: the phone stops after ten waits in a row, holding
+    // all it held.
+    const held = phone(records, lists, new StoryClock('2026-10-15T18:00:00-04:00'));
+    await expect(
+      held.sync({
+        received: () => Promise.reject(new ToldToWait(1)),
+        filePart: () => Promise.reject(new Error('No file is sent here.')),
+      }),
+    ).rejects.toThrow('was told to wait 11 times in a row');
+    expect([held.toldToWait.length, held.waitingRecords.length]).toEqual([10, ids.length]);
   });
 
   it('AC-05-47 it reports the last number it used of each series it holds a block of, and holds the blocks a sync answers from then on', async () => {

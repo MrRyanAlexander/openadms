@@ -27,6 +27,7 @@ import {
   challengePhoneEndpoint,
   createMonitorOnPhoneEndpoint,
   enrolPhoneEndpoint,
+  errorAnswerSchema,
   filePartMediaType,
   monitorCreatedAnswerSchema,
   monitorSessionHeader,
@@ -60,7 +61,7 @@ import { ApiModule, ApiProcess, NoMail, type Addresses } from '@open-adms/api';
 import type { Policy } from '@open-adms/domain';
 
 import { answered, codeOf, OverHttps, type Asked, type AskedWith } from './over-https.ts';
-import type { PhoneServer } from './device.ts';
+import { ToldToWait, type PhoneServer } from './device.ts';
 import type { SoftwareKey } from './software-key.ts';
 import type { StoryDatabase } from './story-database.ts';
 import type { StoryMedia } from './story-media.ts';
@@ -81,7 +82,8 @@ const noAddresses: Addresses = {
 };
 
 // Every request a story's phone makes, on one clock: each answer as the contracts read it, and
-// any answer but a 200 stops the story. The passcode is typed by whoever holds it, so it is
+// any answer but a 200 stops the story, but a limit reached (`429 LIMITED`): the phone is told
+// to wait the seconds the answer says (`ToldToWait`; ADR-505). The passcode is typed by whoever holds it, so it is
 // handed in; a monitor's password likewise.
 export interface PhoneRequests {
   // A sync, a file's part, a turn-in.
@@ -140,6 +142,12 @@ export class StoryApi {
   private door: OverHttps | undefined;
   private process: ApiProcess | undefined;
   private starting: Promise<ApiProcess> | undefined;
+  // Closed when the story ends: a request still in flight then is refused, never served by a
+  // process started again that nobody would stop (ADR-505).
+  private closed = false;
+  // A proof under way, by phone: a phone's requests at once wait on its one proof, as a real
+  // phone's do, never each proving it again and spending the challenge the others answer.
+  private readonly proving = new Map<string, Promise<string>>();
   // The clock the requests in flight are told on, and how many are.
   private on: Clock;
   private inFlight = 0;
@@ -260,8 +268,9 @@ export class StoryApi {
     return this.during(this.parts.clock, () => this.ask(served, more));
   }
 
-  // Stops the process, where one runs, and closes the way to it.
+  // Stops the process, where one runs, and closes the way to it, for good.
   async close(): Promise<void> {
+    this.closed = true;
     await this.stop();
     this.door?.close();
     this.door = undefined;
@@ -287,14 +296,16 @@ export class StoryApi {
   }
 
   // A request of a proven phone: its token, proving itself first where it holds none that is
-  // good now, and once more where the API says it isn't proven. The answer's body; any answer
-  // but a 200 stops the story, saying what came back.
+  // good now, and once more where the API says it isn't proven. The answer's body; a limit
+  // reached, the phone told to wait; any other answer but a 200 stops the story, saying what
+  // came back.
   private async asPhone(deviceId: string, served: Endpoint, more: AskedWith): Promise<unknown> {
     let answer = await this.ask(served, this.withToken(more, await this.tokenOf(deviceId)));
     if (answer.status === 401 && codeOf(answer) === 'PHONE_NOT_PROVEN') {
       this.tokens.delete(deviceId);
       answer = await this.ask(served, this.withToken(more, await this.tokenOf(deviceId)));
     }
+    toldToWait(answer);
     return answered(served, answer);
   }
 
@@ -318,7 +329,14 @@ export class StoryApi {
   private async tokenOf(deviceId: string): Promise<string> {
     const held = this.tokens.get(deviceId);
     if (held !== undefined && this.on.now() < held.until) return held.token;
-    const answer = await this.proved(deviceId, await this.signedChallenge(deviceId));
+    let proving = this.proving.get(deviceId);
+    if (proving === undefined) {
+      proving = (async () => this.proved(deviceId, await this.signedChallenge(deviceId)))().finally(
+        () => this.proving.delete(deviceId),
+      );
+      this.proving.set(deviceId, proving);
+    }
+    const answer = await proving;
     const token = this.tokens.get(deviceId)?.token;
     if (token === undefined) throw new Error(`provePhone was answered ${answer}.`);
     return token;
@@ -330,12 +348,9 @@ export class StoryApi {
   ): Promise<{ readonly challenge: string; readonly signature: string }> {
     const key = this.keys.get(deviceId);
     if (key === undefined) throw new Error('A phone the story never enrolled can’t prove itself.');
-    const { challenge } = phoneChallengeAnswerSchema.parse(
-      answered(
-        challengePhoneEndpoint,
-        await this.ask(challengePhoneEndpoint, { ids: { deviceId } }),
-      ),
-    );
+    const asked = await this.ask(challengePhoneEndpoint, { ids: { deviceId } });
+    toldToWait(asked);
+    const { challenge } = phoneChallengeAnswerSchema.parse(answered(challengePhoneEndpoint, asked));
     return { challenge, signature: key.signed(challenge) };
   }
 
@@ -346,6 +361,7 @@ export class StoryApi {
   ): Promise<string> {
     const now = this.on.now();
     const answer = await this.ask(provePhoneEndpoint, { ids: { deviceId }, json: proof });
+    toldToWait(answer);
     if (answer.status === 200) {
       const proven = phoneProvenAnswerSchema.parse(answer.body);
       this.tokens.set(deviceId, {
@@ -364,6 +380,7 @@ export class StoryApi {
 
   private async started(): Promise<void> {
     if (this.process !== undefined) return;
+    if (this.closed) throw new Error('The story has ended: its API takes no more requests.');
     this.starting ??= this.start();
     try {
       this.process = await this.starting;
@@ -426,6 +443,16 @@ export class StoryApi {
       );
     }
     return api;
+  }
+}
+
+// A limit reached (`429 LIMITED`, ARCHITECTURE §6, Abuse; ADR-416): the phone is told to wait the
+// seconds the answer says, whichever of its requests it was, its proof among them (ADR-505).
+function toldToWait(answer: Asked): void {
+  if (answer.status !== 429) return;
+  const read = errorAnswerSchema.safeParse(answer.body).data;
+  if (read?.code === 'LIMITED' && read.retryAfterSeconds !== undefined) {
+    throw new ToldToWait(read.retryAfterSeconds);
   }
 }
 

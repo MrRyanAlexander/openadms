@@ -44,6 +44,16 @@ export interface SeriesTurnedIn {
   readonly blocks: readonly NumberBlock[];
 }
 
+// A top-up that lost the race for its series: another phone's top-up moved the series on between
+// this one's read and its write (ADR-065, 323). Nothing it did is kept; asked again, it reads the
+// series anew (ADR-505).
+export class SeriesMovedOn extends Error {
+  constructor() {
+    super('The number series moved on while a block was being cut: ask again.');
+    this.name = 'SeriesMovedOn';
+  }
+}
+
 export class NumberAllocator extends SetupService {
   private readonly policy: Policy;
 
@@ -169,9 +179,7 @@ export class NumberAllocator extends SetupService {
       where: { id: series.id, nextNumber: series.nextNumber },
       data: { nextNumber: taken.nextNumber },
     });
-    if (moved.count !== 1) {
-      throw new Error('The number series moved on while a block was being cut: ask again.');
-    }
+    if (moved.count !== 1) throw new SeriesMovedOn();
   }
 
   // Writes down the last number the phone says it used: every block before the one it lies in is

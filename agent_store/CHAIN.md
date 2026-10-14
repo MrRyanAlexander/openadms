@@ -7,7 +7,7 @@
 > task's ADR and its session-log line in `DECISIONS.md`). No other file carries these counts.
 > **A count that differs from this page without a reason is a finding, not noise.**
 
-**Seen whole:** 2026-10-13, after ADR-501, on the user's Mac, the installation at head.
+**Seen whole:** 2026-10-13, after ADR-505, on the user's Mac, the installation at head.
 
 ## `pnpm ready`
 
@@ -20,15 +20,15 @@
 
 ## `pnpm test`
 
-**`Test Files 159 passed (159)`, `Tests 2827 passed (2827)`.**
+**`Test Files 160 passed (160)`, `Tests 2841 passed (2841)`.**
 
 | Project | Tests | Files | Needs |
 |---|---|---|---|
-| `packages/domain` | 794 | 43 | nothing |
-| `packages/contracts` | 78 | 9 | nothing |
-| `apps/api` | 591 | 45 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
+| `packages/domain` | 795 | 43 | nothing |
+| `packages/contracts` | 84 | 9 | nothing |
+| `apps/api` | 593 | 45 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
 | `packages/db` | 1056 | 44 | `pnpm ready` |
-| `packages/scenarios` | 148 | 6 | `pnpm ready` for `stories.test.ts` (the runner and a run's template, 5) and `story-api.test.ts` (a story's API over HTTPS through the proxy, every request of a story's phone, the back office and the viewers at their browsers, 13); the flag catalogue (78 flags), the harness, the phone held to the sync contract's suite and to what it sends and takes in at a sync, its photographs' files and its turn-in among it (22) and the policy need nothing. **The stories themselves are not here** (ADR-446) |
+| `packages/scenarios` | 153 | 7 | `pnpm ready` for `stories.test.ts` (the runner and a run's template, 5) and `story-api.test.ts` (a story's API over HTTPS through the proxy, every request of a story's phone, the back office and the viewers at their browsers, 14); the flag catalogue (78 flags), the harness, the phone held to the sync contract's suite and to what it sends and takes in at a sync, its photographs' files and its turn-in among it, and its wait when told to (24), the policy and the server apps' exports (2) need nothing. **The stories themselves are not here** (ADR-446) |
 | `apps/worker` | 33 | 4 | `pnpm ready` for the map servers (13) and its container (3); the process (14) and the job loop's set-aside lines (3) need nothing |
 | `infra/local` | 22 | 3 | `pnpm ready` |
 | `tools/security` | 90 | 2 | nothing (the scan's and the grant tests' rules 33, the guard hook 57) |
@@ -42,7 +42,7 @@
 
 ## `pnpm scenarios`
 
-`This run’s template, adms_story_template_…: 114 migrations applied`, then **`Stories: 21 passed, 0
+`This run’s template, adms_story_template_…: 114 migrations applied`, then **`Stories: 22 passed, 0
 failed.`** Each story `passed: N checks, N passed, 0 failed`:
 
 | Story | Checks | | Story | Checks |
@@ -57,11 +57,11 @@ failed.`** Each story `passed: N checks, N passed, 0 failed`:
 | `p1-any-order` | 4 | | `p1-queued` | 18 |
 | `p1-reconciled` | 39 | | `p1-viewed` | 15 |
 | `under-the-passcode` | 9 | | `held-for-review` | 11 |
-| `interrupted-upload` | 8 | | | |
+| `interrupted-upload` | 8 | | `burst` | 6 |
 
 The golden mission's figures are `spec/golden/MISSION.md`'s and change only at the user's word:
 P1 $5,548.25 on 19 lines, P2 $324.00. `p1-reconciled` through `p1-left-out`, `p1-queued` and
-`p1-viewed` ask the map servers.
+`p1-viewed` ask the map servers, and `burst` too (its lines `It took …` are measurements, ADR-505, never checked).
 
 ## `pnpm security`
 
@@ -78,6 +78,6 @@ series on `adms` moves with every run (a sequence isn't rolled back); gaps are n
 
 ## How long it takes here (the user's Mac, seen 2026-10-09; for judging a hang, not a target)
 
-`pnpm test` about 2 min 20 s; `pnpm scenarios` about 45 s (66 s before a run's template);
+`pnpm test` about 2 min 20 s; `pnpm scenarios` about 3 min, of which `burst` about 2 min (45 s before it, ADR-505);
 `pnpm security` a few seconds after `pnpm test` (the database tests run again otherwise);
 `pnpm ready` on a stopped stack under a minute.

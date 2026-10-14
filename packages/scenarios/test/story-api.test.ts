@@ -133,6 +133,41 @@ describe('a story’s API, over HTTPS through the stack’s proxy', () => {
     );
   });
 
+  it('ADR-505 one phone’s requests at once wait on its one proof, each answered; a request sent once the story has ended is refused, never served by an API started again', async () => {
+    const empty = (at: Date) =>
+      syncSentSchema.parse({
+        clockAt: at.toISOString(),
+        deviceUtcOffsetMinutes: -240,
+        unplannedAssignments: [],
+        passcodeUses: [],
+        records: [],
+        photos: [],
+        lastUsed: [],
+        holds: { masterPasscodeVersion: 1, listsProjectId: null },
+      });
+    let late: (() => Promise<unknown>) | undefined;
+    const { result } = await run({
+      ...told,
+      name: 'one-phone-at-once',
+      title: 'one phone’s syncs at once',
+      async run(story) {
+        const phone = await story.enrolled('P1-COL-1');
+        const syncs = await Promise.all(
+          [1, 2, 3, 4].map(() => story.server.received(phone.id, empty(story.clock.now()))),
+        );
+        story.check(
+          'four syncs at once from one phone, each answered',
+          [syncs.length, await story.api.sync.count({ where: { deviceId: phone.id } })],
+          [4, 4],
+        );
+        const { server } = story;
+        late = () => server.received(phone.id, empty(story.clock.now()));
+      },
+    });
+    expect(result).toMatchObject({ passed: 1, failed: 0, error: undefined });
+    await expect(late?.()).rejects.toThrow('The story has ended: its API takes no more requests.');
+  });
+
   // P1, Dana, and Ana created on an enrolled phone at its endpoint, with her Monday on it.
   const anasMonday = async (story: StoryContext) => {
     const phone = await story.enrolled('P1-COL-1');

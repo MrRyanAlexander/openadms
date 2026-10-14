@@ -43,6 +43,7 @@ import type {
   SentSurvey,
 } from '@open-adms/api';
 import {
+  fitByWeight,
   photoFileAnswerRead,
   photoFileGoesOnFrom,
   stored,
@@ -144,6 +145,25 @@ export class NoSignal extends Error {
     this.name = 'NoSignal';
   }
 }
+
+// What a story's server throws where the API answered `429 LIMITED` (ARCHITECTURE §6, Abuse;
+// ADR-416, 490): a limit was reached, and the answer says how many seconds to wait. Nothing it
+// sent was read (the limit is counted before the request is), so the phone holds it all, waits
+// and sends it again under the same ids (AC-05-51; ADR-505).
+export class ToldToWait extends Error {
+  readonly seconds: number;
+
+  constructor(seconds: number) {
+    super(`The server said to wait ${String(seconds)} s (429 LIMITED).`);
+    this.name = 'ToldToWait';
+    this.seconds = seconds;
+  }
+}
+
+// How many times in a row one sync or one part may be told to wait before the story stops: a
+// phone that waits as it is told is let through at the next stretch, so more is a story whose
+// clocks don't agree, never a busy server.
+const toldToWaitInARowAtMost = 10;
 
 // A photograph's file the phone holds until the server says it kept it: the bytes its record's
 // fingerprint is of, where it goes on from, and whether its record was answered saved.
@@ -547,6 +567,8 @@ export class SimulatedDevice {
   private readonly receipts = new Map<string, string>();
   // Every record it has sent and what it was told, in the order sent.
   private readonly told: Answered[] = [];
+  // The seconds it was told to wait, each time a server said so.
+  private readonly waits: number[] = [];
   private photographs = 0;
   // The blocks a sync answered, by series: what it holds of each since, until it takes its
   // lists again.
@@ -1078,9 +1100,10 @@ export class SimulatedDevice {
 
   // The next sync, as the contract has it (`SyncSent`; ADR-467, 481): the phone's clock, the
   // reports it holds, its records, its photographs' records, the last number it used of each
-  // series it reports. No more than the contract's limits a sync; a scale receipt goes ahead of
-  // the disposal that points at it, no record ahead of an unplanned assignment that has to wait
-  // for the next sync, and no photograph ahead of the sync that carries its record.
+  // series it reports. No more than the contract's limits a sync, in counts and in weight; a
+  // scale receipt goes ahead of the disposal that points at it, no record ahead of an unplanned
+  // assignment that has to wait for the next sync, and no photograph ahead of the sync that
+  // carries its record.
   sends(): SyncSent {
     const clockAt = this.now();
     const unplannedAssignments = this.reports.unplannedAssignments.slice(
@@ -1104,21 +1127,13 @@ export class SimulatedDevice {
       if (pointsAtIt >= 0) ordered.splice(pointsAtIt, 0, { held, wire });
       else ordered.push({ held, wire });
     }
-    const going = ordered
-      .filter(({ wire }) => !waits.has(syncedRecordAssignment(wire) ?? ''))
-      .slice(0, syncRecordsAtMost);
-    const goingIds = new Set(going.map(({ held }) => heldId(held)));
-    const staying = new Set(this.outbox.map(heldId).filter((id) => !goingIds.has(id)));
-    const photos = this.photoOutbox
-      .filter(({ owner }) => !staying.has(owner.id))
-      .slice(0, syncPhotosAtMost);
     const sync: SyncSent = {
       clockAt: clockAt.toISOString(),
       deviceUtcOffsetMinutes: utcOffsetMinutes(this.current.timeZone, clockAt),
       unplannedAssignments,
       passcodeUses: this.reports.passcodeUses.slice(0, syncPasscodeUsesAtMost),
-      records: going.map(({ wire }) => wire),
-      photos: photos.map((photo) => ({ ...photo })),
+      records: [],
+      photos: [],
       lastUsed: this.numbersReported(),
       // The check of the master passcode it holds, and the project its lists are of.
       holds: {
@@ -1126,6 +1141,25 @@ export class SimulatedDevice {
         listsProjectId: this.current.projectId,
       },
     };
+    // As many as the counts let, then as many of those as the sync's weight lets (ADR-504).
+    const byCount = ordered
+      .filter(({ wire }) => !waits.has(syncedRecordAssignment(wire) ?? ''))
+      .slice(0, syncRecordsAtMost);
+    const going = byCount.slice(
+      0,
+      fitByWeight(
+        sync,
+        byCount.map(({ wire }) => wire),
+      ),
+    );
+    sync.records = going.map(({ wire }) => wire);
+    const goingIds = new Set(going.map(({ held }) => heldId(held)));
+    const staying = new Set(this.outbox.map(heldId).filter((id) => !goingIds.has(id)));
+    const photosByCount = this.photoOutbox
+      .filter(({ owner }) => !staying.has(owner.id))
+      .slice(0, syncPhotosAtMost);
+    const photos = photosByCount.slice(0, fitByWeight(sync, photosByCount));
+    sync.photos = photos.map((photo) => ({ ...photo }));
     this.last = { sync, held: going.map(({ held }) => held), photos };
     return sync;
   }
@@ -1202,21 +1236,52 @@ export class SimulatedDevice {
   // holds none. Each sync goes as JSON and is read by the contract as the endpoint's boundary
   // reads it, with the phone's id as its proof would say it; what comes back is read off the
   // wire too. A sync that gets no answer leaves everything it carried on the phone, to go again
-  // under the same ids. How many records and photographs were answered.
+  // under the same ids; one the server says to wait for, likewise, after the seconds it was
+  // told (ADR-505). How many records and photographs were answered.
   async sync(server: PhoneServer): Promise<number> {
     let sent = 0;
+    let toldInARow = 0;
     while (this.outbox.length > 0 || this.photoOutbox.length > 0) {
       const sync = this.sends();
       if (sync.records.length === 0 && sync.photos.length === 0) break;
       const wire: unknown = JSON.parse(JSON.stringify(sync));
-      const { answered } = await server.received(this.current.deviceId, syncSentSchema.parse(wire));
-      if (!this.answered(JSON.parse(JSON.stringify(answered)))) {
+      const sentAt = this.clock.now();
+      let received: { readonly answered: SyncAnswered };
+      try {
+        received = await server.received(this.current.deviceId, syncSentSchema.parse(wire));
+      } catch (caught) {
+        if (!(caught instanceof ToldToWait)) throw caught;
+        this.answered(undefined);
+        toldInARow = this.waitsOut(caught, sentAt, toldInARow);
+        continue;
+      }
+      toldInARow = 0;
+      if (!this.answered(JSON.parse(JSON.stringify(received.answered)))) {
         throw new Error(`${this.name}: what came back is no answer to the sync it sent.`);
       }
       sent += sync.records.length + sync.photos.length;
     }
     await this.upload(server);
     return sent;
+  }
+
+  // The seconds it was told to wait, each time a server said so, in the order told.
+  get toldToWait(): readonly number[] {
+    return [...this.waits];
+  }
+
+  // Told to wait: it waits, on the story's clock, the seconds it was told from when it sent
+  // what was refused (the clock stands still while the server answers, so that is when it was
+  // told), and goes on. Phones told at once wait together. How many times in a row now.
+  private waitsOut(told: ToldToWait, sentAt: Date, inARow: number): number {
+    if (inARow >= toldToWaitInARowAtMost) {
+      throw new Error(
+        `${this.name} was told to wait ${String(inARow + 1)} times in a row: ${told.message}`,
+      );
+    }
+    this.waits.push(told.seconds);
+    this.clock.until(new Date(sentAt.getTime() + told.seconds * 1000));
+    return inARow + 1;
   }
 
   // The next part of a file it sends to the media endpoint (`sendPhotoFilePartEndpoint`): of
@@ -1258,22 +1323,32 @@ export class SimulatedDevice {
   // Its photographs' files, after the records that carried them were answered (ARCHITECTURE §9
   // (2), (5); AC-05-09; ADR-482): each part answered before the next goes, until each file is
   // kept. Where the signal goes (`NoSignal`) it stops, holding every file not kept, and goes on
-  // from there next time. A file answered not the one fingerprinted goes again from its first
-  // byte, and rests till the next upload if it is answered so again. How many parts it sent.
+  // from there next time; where the server says to wait (`ToldToWait`), it waits the seconds it
+  // was told and sends the same part again (ADR-505). A file answered not the one fingerprinted
+  // goes again from its first byte, and rests till the next upload if it is answered so again.
+  // How many parts it sent.
   async upload(server: PhoneServer): Promise<number> {
     this.resting.clear();
     const notMatched = new Map<string, number>();
     let parts = 0;
+    let toldInARow = 0;
     for (let part = this.sendsFilePart(); part !== null; part = this.sendsFilePart()) {
       parts += 1;
+      const sentAt = this.clock.now();
       let answer: unknown;
       try {
         answer = JSON.parse(JSON.stringify(await server.filePart(this.current.deviceId, part)));
       } catch (caught) {
+        if (caught instanceof ToldToWait) {
+          this.filePartAnswered(undefined);
+          toldInARow = this.waitsOut(caught, sentAt, toldInARow);
+          continue;
+        }
         if (!(caught instanceof NoSignal)) throw caught;
         this.filePartAnswered(undefined);
         return parts;
       }
+      toldInARow = 0;
       if (this.filePartAnswered(answer) === 'NOT_MATCHED') {
         const name = `${part.photoId} ${part.file}`;
         const times = (notMatched.get(name) ?? 0) + 1;

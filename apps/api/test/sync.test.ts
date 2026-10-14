@@ -10,9 +10,12 @@ import {
   addFieldTagEndpoint,
   changeMasterPasscodeEndpoint,
   endpoints,
+  sentWeight,
   syncAnswerRead,
   syncAnsweredSchema,
   syncExamples,
+  syncBytesAtMost,
+  syncedRecordBytesAtMost,
   syncPhoneEndpoint,
   syncSentSchema,
   type SyncedCertification,
@@ -24,7 +27,7 @@ import { deviceKeyActorId, type Actor, type Database } from '@open-adms/db';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { Certifications } from '../src/certification/certifications.ts';
-import { NumberAllocator } from '../src/numbering/number-allocator.ts';
+import { NumberAllocator, SeriesMovedOn } from '../src/numbering/number-allocator.ts';
 import { OfflineChecks } from '../src/phone/offline-checks.ts';
 import { PasscodeUses } from '../src/phone/passcode-uses.ts';
 import { PhoneAssignments } from '../src/phone/phone-assignments.ts';
@@ -536,6 +539,75 @@ describe('what could not be saved is held for a person', () => {
       // Anything changed is another thing sent, and is held too.
       await send(served, p.token, { ...p.sync(), records: ['not a record either'] });
       expect(await tx.heldRecord.count({ where: { deviceId: p.phone.id } })).toBe(4);
+    });
+  });
+
+  it('AC-05-51, AC-10-41, ADR-504 a sync of a mebibyte is read whole and one a byte heavier is refused before it is read, so no phone sends one; a record heavier than a record may be is answered “not saved” under its id and held for a person, never left on the phone to be refused at every try, and the record beside it is saved', async () => {
+    await world(async (served, tx, who) => {
+      const p = await kimOnP1(served, tx, who);
+      const good = p.event({ ticketNumber: '101031' });
+      // Kim's survey, its own answers past what a record may weigh: four hundred thousand
+      // characters a monitor could not type at the curb, but that the answers' bounds allow.
+      const [, , , , example] = syncExamples.records;
+      if (example?.record !== 'SURVEY') throw new Error('The fifth example is no survey.');
+      const answers = Object.fromEntries(
+        Array.from({ length: 100 }, (_, index) => [`answer-${String(index)}`, 'x'.repeat(4000)]),
+      );
+      const survey = {
+        record: 'SURVEY',
+        survey: {
+          ...example.survey,
+          id: randomUUID(),
+          projectId: p.projectId,
+          monitorId: who.kim,
+          assignmentId: p.assignment.id,
+          answers,
+        },
+      } as const;
+      expect(sentWeight(survey)).toBeGreaterThan(syncedRecordBytesAtMost);
+      // What stands after them makes the sync weigh exactly what a sync may.
+      const weighed = (extra: number) => {
+        const sent = {
+          ...p.sync(),
+          records: [survey, { record: 'FIELD_EVENT', fieldEvent: good }, ''],
+        };
+        const filler = 'y'.repeat(syncBytesAtMost - sentWeight(sent) + extra);
+        return { ...sent, records: [survey, { record: 'FIELD_EVENT', fieldEvent: good }, filler] };
+      };
+      expect(sentWeight(weighed(0))).toBe(syncBytesAtMost);
+      expect(syncBytesAtMost).toBe(shippedPolicy.requestBodyLimitBytes);
+
+      const heavier = await send(served, p.token, weighed(1));
+      expect(told(heavier)).toEqual([413, 'TOO_LARGE']);
+      expect(await syncsOf(tx, p.phone.id)).toEqual([]);
+
+      const answer = await send(served, p.token, weighed(0));
+      expect(told(answer)).toEqual([200, undefined]);
+      const { records } = syncAnsweredSchema.parse(answer.body);
+      expect(records.map((record) => [record.answer, record.id])).toEqual([
+        ['NOT_SAVED', survey.survey.id],
+        ['SAVED', good.id],
+        ['NOT_SAVED', null],
+      ]);
+      const [unread] = records;
+      if (unread?.answer !== 'NOT_SAVED') throw new Error('Saved.');
+      expect([unread.reason, unread.message]).toEqual([
+        'NOT_A_RECORD',
+        `Not saved: this record can’t be read: it weighs more than a record may, 256 KiB as sent.${held}`,
+      ]);
+      expect(
+        (await heldOf(tx, p.phone.id)).map((one) => [
+          one.sentId,
+          one.projectId,
+          one.sentMonitorId,
+          one.reason,
+          sentWeight(one.payload),
+        ]),
+      ).toEqual([
+        [survey.survey.id, p.projectId, who.kim, 'NOT_A_RECORD', sentWeight(survey)],
+        [null, null, null, 'NOT_A_RECORD', sentWeight(weighed(0).records[2])],
+      ]);
+      expect((await ledgerOf(tx, p.phone.id)).map(([id]) => id)).toEqual([good.id]);
     });
   });
 
@@ -1093,6 +1165,74 @@ describe('the numbers a phone holds', () => {
           0,
         ),
       ).toBe(1000);
+    });
+  });
+});
+
+describe('a top-up that loses the race for its series', () => {
+  it('AC-05-51, ADR-505 every phone of a project syncing at once tops up from one series: a top-up that loses the race every time is not taken at this sync, the phone told it holds what it held, and its records are saved all the same; any other failure is the server’s', async () => {
+    await world(async (served, tx, who, within) => {
+      const p = await kimOnP1(served, tx, who);
+      const load = { projectId: p.projectId, series: 'LOAD' as const };
+      const first = await synced(
+        served,
+        p.token,
+        p.sync({ lastUsed: [{ ...load, lastUsedNumber: null }] }),
+      );
+      const [cut] = first.numbers[0]?.blocks ?? [];
+      if (cut === undefined) throw new Error('No block was cut.');
+      // An allocator whose series another phone moves on at every try, or that fails otherwise.
+      const tries: string[] = [];
+      const losing = (failure: () => Error) =>
+        new (class extends NumberAllocator {
+          override topUp(): never {
+            tries.push(failure().name);
+            throw failure();
+          }
+        })(within, served.clock, shippedPolicy);
+      const syncWith = (numbers: NumberAllocator) =>
+        new Sync(within, {
+          intake: new Intake(within, served.clock, shippedPolicy),
+          certifications: new Certifications(within, served.clock, shippedPolicy),
+          unplanned: new UnplannedAssignments(within, {
+            clock: served.clock,
+            requestNow: () => undefined,
+          }),
+          uses: new PasscodeUses(within, { clock: served.clock, requestNow: () => undefined }),
+          numbers,
+          loginList: new PhoneLoginList(within, {
+            assignments: new PhoneAssignments(within),
+            offline: new OfflineChecks(signingSecret),
+            clock: served.clock,
+            entriesPerCall: shippedPolicy.loginListEntriesPerCall,
+          }),
+          clock: served.clock,
+        });
+      const collection = p.event({ ticketNumber: String(cut.firstNumber) });
+      const sent = p.sync({
+        records: [{ record: 'FIELD_EVENT', fieldEvent: collection }],
+        lastUsed: [{ ...load, lastUsedNumber: cut.firstNumber }],
+      });
+      const { answered } = await syncWith(losing(() => new SeriesMovedOn())).received(
+        p.phone.id,
+        syncSentSchema.parse(sent),
+      );
+      expect(syncAnswerRead(sent, answered)).not.toBeNull();
+      expect([tries, answered.records, answered.numbers]).toEqual([
+        ['SeriesMovedOn', 'SeriesMovedOn', 'SeriesMovedOn'],
+        [{ answer: 'SAVED', id: collection.id, notes: [] }],
+        [{ ...load, toppedUp: false, blocks: [cut] }],
+      ]);
+
+      tries.length = 0;
+      const again = p.sync({ lastUsed: [{ ...load, lastUsedNumber: cut.firstNumber }] });
+      await expect(
+        syncWith(losing(() => new Error('The database went away.'))).received(
+          p.phone.id,
+          syncSentSchema.parse(again),
+        ),
+      ).rejects.toThrow('The database went away.');
+      expect(tries).toEqual(['Error']);
     });
   });
 });

@@ -246,8 +246,25 @@ photograph's marks, an item line, an ROE's scope, a quarantined record, a record
 office, a certification's box, its QC mark, lock and unlock); an act's answer only counts what it
 queued, so a story reads a job's tickets from its rows (`jobTickets`). Its AC-10-50 check alone
 calls `Corrections` in process, on purpose (the job queue made to fail). A loosening of a review
-controller is tried on `p1-reviewed`. The story `certification`'s measurement and revocations and
-`p1-left-out`'s revocation are still in process (2.7.1 piece 4d2).
+controller is tried on `p1-reviewed`. The story `certification`'s measurement and revocation and
+`p1-left-out`'s revocation are requests too (ADR-502: `correctCertificationBox`,
+`revokeCertification`); a blank reason or a height of 0 is the schema's `400` before any rule. A
+loosening of the certifications' controller is tried on those two. `first-admin` keeps its own
+sign-in parts in process, by ADR-502 (d): it is the server's command.
+**`apps/api`'s and `apps/worker`'s indexes export only what `packages/scenarios` and
+`infra/local` read** (ADR-503; `packages/scenarios/test/app-exports.test.ts`, no database): a
+story that stops calling a service takes it out of the index in the same task, and a new reader
+of either app joins the test's folders on purpose.
+**The story `burst` is the load test** (ADR-505): a thousand loads from 54 phones syncing at
+once (`Promise.allSettled`, so a refusal stops it only once every phone is done), then the
+worker's loop; about two minutes alone, most of a `pnpm scenarios` run. **A phone answered `429
+LIMITED` is told to wait** (`ToldToWait`, thrown by `StoryApi` as `NoSignal` is by a story's
+server): it waits on its clock until the instant it was told and sends the same again; ten in
+a row stops the story. Its lines `It took …` are measurements, written down in the task's ADR,
+never checked. A loosening of the phone's wait is tried on `sync-client.test.ts` (seconds);
+one of `StoryApi`'s translation of a 429 on `burst` alone. **A story's API, once closed, refuses a
+request still in flight** (it never starts again unseen, holding the port for the rest of the
+run), and **one phone's requests at once share its one proof** (ADR-505; `story-api.test.ts`).
 `packages/scenarios/test/stories.test.ts` holds a copy to what a database made by itself is (at
 head, every table guarded, `adms_owner`'s, open to the logins alone) and the runner to its word. A story's context carries `policy`, the release's policy values read from
 `packages/domain/policy.env` (`src/policy.ts`; held to the release's values, the worker's five among them (5 tries, 10 minutes, 5 s, 30 s, 10 connections; ADR-419) and a job's size (200 tickets, ADR-420), by `test/policy.test.ts`,

@@ -2,8 +2,10 @@
 // it leaves out (ADR-369), then the firm's first admin (ADR-415), then the worker's queue
 // (ADR-419), then what each read-only viewer reads (ADR-435), then one
 // phone's day under the master passcode (ADR-464), then what a sync can't save, held for a
-// person (ADR-475), then a photograph's file sent in parts and an upload interrupted (ADR-483).
+// person (ADR-475), then a photograph's file sent in parts and an upload interrupted (ADR-483),
+// then a project's every phone syncing at once (ADR-505).
 import type { Story } from '../runner.ts';
+import { burst } from './burst.ts';
 import { certification } from './certification.ts';
 import { dispatchMonday } from './dispatch-monday.ts';
 import { firstAdmin } from './first-admin.ts';
@@ -48,4 +50,5 @@ export const stories: readonly Story[] = [
   underThePasscode,
   heldForReview,
   interruptedUpload,
+  burst,
 ];

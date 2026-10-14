@@ -29,6 +29,12 @@ export class StoryClock {
     this.current = new Date(this.current.getTime() + minutes * 60_000);
   }
 
+  // Waits until an instant: the clock moves on to it, or stays where it is already past it. Two
+  // phones told at once to wait the same seconds wait together, not one after the other.
+  until(instant: Date): void {
+    if (instant > this.current) this.current = new Date(instant);
+  }
+
   private static instant(text: string): Date {
     if (!/[zZ]|[+-]\d\d:\d\d$/.test(text)) {
       throw new Error(`Give the story's times with their offset (…-04:00): ${text}`);

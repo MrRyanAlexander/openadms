@@ -35,7 +35,7 @@ run the story, put the source back from a copy kept in the scratchpad, build aga
 `loosen.mjs` does it, SKILL.md §1.5a). The story adds a job as the API's login with
 `new ReconciliationJobs(tx).queue(…)`; a run the queue starts works only the named tickets.
 **No story asks for a run any more (2.7.1 part 3, ADR-494): every story's queue is drained by the
-worker's own `JobLoop`**, so `Reconciliation.run` (the whole project) is called by nothing (C144).
+worker's own `JobLoop`**, and every run is the queue's: `Reconciliation.run` (a whole project asked directly) was taken out when 2.7.1 closed (ADR-503), and `RunOutcome` has no `ran`.
 **What queues work (ADR-420)** is proven by the stories that run from the queue: `p1-reviewed`
 (AC-10-50; the neighbours before a change), `p1-voided` (a void's neighbour; a void ticket on no
 setup change's job), `p1-invoiced` (a rate through its service; a locked ticket on no job),
@@ -62,7 +62,7 @@ builds it; ADR-475), and the queued runs flag `DEVICE_CLOCK_OFF`. A loosening of
 on that story (five took about four minutes). **Every story's phone syncs through `Sync` since
 ADR-475, so every field event a sync brought queued a job of its own** (trigger `SYNC`, nobody
 asking): a story calls `queue.settle` or `queue.settled` after a sync, where it says the worker
-runs, or the next `queue.next` takes those jobs up with a person's. **The golden mission checks
+runs, or the next `queue.next` takes those jobs up with a person's. **The story `burst` drains a thousand tickets' jobs (4,631) by `settle`, whose count of runs it reads (19; ADR-505), and checks only that more than one was needed.** **The golden mission checks
 that every run on its two projects finished jobs** (exit criterion 1): a run asked for directly
 there is a failed check.
 **The run of a number that is none raises only `NOT_A_TICKET_NUMBER`**: the limit handed to it
