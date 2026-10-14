@@ -268,7 +268,8 @@ Every dependency is pinned. Adding one needs an ADR (ADR-093), and the lockfiles
   as the demo and for development testing. Firms can extend it to host wherever they like; we make
   the demo case work and document it.
 - **Services talk to each other over HTTPS, locally too.** CORS is handled properly, never
-  switched off (§6).
+  switched off (§6). Every hop inside the local stack's own network too: nothing is served over
+  plain HTTP and no data is in flight unencrypted (the user, 2026-10-14, ADR-513; KD-78).
 
 ✅ **Approved** — how:
 
@@ -411,7 +412,8 @@ every edit of a migration file and allows a write only while the file is still P
 
 ### 5.7 Connections
 
-- TLS to the database in every non-local environment.
+- TLS to the database in every environment, the local stack's too: no data in flight unencrypted
+  (the user, 2026-10-14: "we dont want to have unencrypted data in flight"; ADR-513, KD-78).
 - A separate credential per role.
 - Pool limits, and a statement timeout.
 

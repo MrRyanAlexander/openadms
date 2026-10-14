@@ -106,7 +106,8 @@ export const lastUsedSchema = z.strictObject({
   lastUsedNumber: seriesNumber.nullable(),
 });
 
-const versionNumber = z.number().int().min(1);
+// A version a column holds (Postgres's `integer`; ASVS 1.4.2, ADR-513).
+const versionNumber = z.number().int().min(1).max(2_147_483_647);
 
 // What a phone holds that a sync may bring anew (ADR-473): the version of the master passcode
 // whose check it holds, none on a phone just enrolled; and the project whose lists it holds,

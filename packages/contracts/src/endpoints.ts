@@ -721,6 +721,10 @@ const searched = z.strictObject({ search: z.string().trim().max(200).optional() 
 const projectId = z.strictObject({ projectId: z.uuid() });
 // A number of a series: the database says where a series may start and end.
 const seriesNumber = z.number().int().min(1).max(2_000_000_000);
+// A whole number a column holds (Postgres's `integer`): one past it is refused here, never sent
+// to the database to fail there (OWASP ASVS 5.0 1.4.2; AC-10-63; ADR-513). Inside that range a
+// column's own check says what it refuses, in plain words (ADR-424).
+const columnInteger = z.number().int().min(-2_147_483_648).max(2_147_483_647);
 const stated = (changes: object): boolean => Object.keys(changes).length > 0;
 
 // Step 1: search first; a client the firm has is picked, never created again (ADR-023).
@@ -819,12 +823,12 @@ export const changeProjectSettingsEndpoint = endpoint({
     .strictObject({
       allowSplitLoads: z.boolean().optional(),
       // Empty switches the limit off.
-      loadCallLowLimit: z.number().int().nullable().optional(),
-      loadCallHighLimit: z.number().int().nullable().optional(),
-      stumpFillDepthInches: z.number().int().optional(),
+      loadCallLowLimit: columnInteger.nullable().optional(),
+      loadCallHighLimit: columnInteger.nullable().optional(),
+      stumpFillDepthInches: columnInteger.optional(),
       stumpCheckRootBallWider: z.boolean().optional(),
       stumpCheckFillNeedsExposure: z.boolean().optional(),
-      siteCircleMeters: z.number().int().optional(),
+      siteCircleMeters: columnInteger.optional(),
       timeClockEnabled: z.boolean().optional(),
     })
     .refine(stated),
@@ -1761,7 +1765,7 @@ export const phoneLoginListEndpoint = endpoint({
   method: 'POST',
   path: '/phones/current/login-list',
   body: z.strictObject({
-    masterPasscodeVersion: z.number().int().min(1).nullable(),
+    masterPasscodeVersion: z.number().int().min(1).max(2_147_483_647).nullable(),
     entries: z
       .array(z.strictObject({ monitorId: z.uuid(), mark: z.string().min(1).max(100) }))
       .max(5000),

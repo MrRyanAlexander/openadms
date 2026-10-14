@@ -3189,8 +3189,8 @@
                     "anyOf": [
                       {
                         "type": "integer",
-                        "minimum": -9007199254740991,
-                        "maximum": 9007199254740991
+                        "minimum": -2147483648,
+                        "maximum": 2147483647
                       },
                       {
                         "type": "null"
@@ -3201,8 +3201,8 @@
                     "anyOf": [
                       {
                         "type": "integer",
-                        "minimum": -9007199254740991,
-                        "maximum": 9007199254740991
+                        "minimum": -2147483648,
+                        "maximum": 2147483647
                       },
                       {
                         "type": "null"
@@ -3211,8 +3211,8 @@
                   },
                   "stumpFillDepthInches": {
                     "type": "integer",
-                    "minimum": -9007199254740991,
-                    "maximum": 9007199254740991
+                    "minimum": -2147483648,
+                    "maximum": 2147483647
                   },
                   "stumpCheckRootBallWider": {
                     "type": "boolean"
@@ -3222,8 +3222,8 @@
                   },
                   "siteCircleMeters": {
                     "type": "integer",
-                    "minimum": -9007199254740991,
-                    "maximum": 9007199254740991
+                    "minimum": -2147483648,
+                    "maximum": 2147483647
                   },
                   "timeClockEnabled": {
                     "type": "boolean"
@@ -11417,7 +11417,7 @@
                       {
                         "type": "integer",
                         "minimum": 1,
-                        "maximum": 9007199254740991
+                        "maximum": 2147483647
                       },
                       {
                         "type": "null"
@@ -12399,7 +12399,7 @@
                           {
                             "type": "integer",
                             "minimum": 1,
-                            "maximum": 9007199254740991
+                            "maximum": 2147483647
                           },
                           {
                             "type": "null"
@@ -12784,7 +12784,7 @@
                         "version": {
                           "type": "integer",
                           "minimum": 1,
-                          "maximum": 9007199254740991
+                          "maximum": 2147483647
                         },
                         "check": {
                           "anyOf": [
@@ -12852,7 +12852,7 @@
                             "version": {
                               "type": "integer",
                               "minimum": 1,
-                              "maximum": 9007199254740991
+                              "maximum": 2147483647
                             }
                           },
                           "required": ["projectId", "version"],

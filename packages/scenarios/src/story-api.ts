@@ -151,6 +151,9 @@ export class StoryApi {
   // The clock the requests in flight are told on, and how many are.
   private on: Clock;
   private inFlight = 0;
+  // The API's last few error lines (a failure's kind and frames, never what was sent: ADR-385),
+  // so a story stopped on a 5xx says why (C155).
+  private readonly errorLines: string[] = [];
 
   constructor(parts: StoryApiParts) {
     this.parts = parts;
@@ -290,9 +293,24 @@ export class StoryApi {
     this.inFlight += 1;
     try {
       return await work();
+    } catch (problem) {
+      if (problem instanceof Error && / was answered 5\d\d /.test(problem.message)) {
+        const logged = this.errorLines.length === 0 ? ['nothing'] : this.errorLines.toReversed();
+        throw new Error(
+          `${problem.message} The stories’ API logged, last first:\n${logged.join('\n')}`,
+          { cause: problem },
+        );
+      }
+      throw problem;
     } finally {
       this.inFlight -= 1;
     }
+  }
+
+  private kept(line: string): void {
+    if (!/"level":(50|60)\b/.test(line)) return;
+    this.errorLines.push(line.trim());
+    if (this.errorLines.length > 5) this.errorLines.shift();
   }
 
   // A request of a proven phone: its token, proving itself first where it holds none that is
@@ -422,8 +440,12 @@ export class StoryApi {
       },
       policy,
       {
-        // The API's log goes nowhere: a story says what happens itself.
-        stream: { write: () => undefined },
+        // A story says what happens itself; of the API's log, only its errors are kept (C155).
+        stream: {
+          write: (line) => {
+            this.kept(line);
+          },
+        },
         database: database.open('api'),
         viewerDatabase: database.openViewer(),
         mail: new NoMail(),

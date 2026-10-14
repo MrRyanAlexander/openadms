@@ -275,6 +275,11 @@ export class ApiProcess {
         route.bodyLimit = policy.mapFileBytesAtMost;
       }
     });
+    // Only JSON and a part of a file are read (OWASP ASVS 5.0 3.5.2; AC-10-59; ADR-513): a body a
+    // page on another site may send without asking first (a form, plain text) is refused 415
+    // before anything runs, so a write can't be made by one. JSON is the server's own parser,
+    // which refuses `__proto__` and `constructor.prototype` (AC-10-58).
+    server.removeContentTypeParser('text/plain');
     // A part of a file is read as bytes, never parsed (AC-10-47): what it is the media endpoint
     // asks of its first bytes. Sent to any other route, it is no body that route takes.
     server.addContentTypeParser(
@@ -544,7 +549,8 @@ export class ApiProcess {
         ]),
       ),
       adapter,
-      { logger: new ProcessLog(server.log) },
+      // The framework adds no parser of its own: a form's body is never read (below).
+      { logger: new ProcessLog(server.log), bodyParser: false },
     );
     app.useGlobalFilters(new ErrorFilter());
     app.useGlobalInterceptors(

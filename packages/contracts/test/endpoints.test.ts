@@ -7,6 +7,11 @@ import { z } from 'zod';
 
 import {
   addSiteShapeFileEndpoint,
+  changePersonEndpoint,
+  changeProjectSettingsEndpoint,
+  createClientEndpoint,
+  createContractEndpoint,
+  createPersonEndpoint,
   endpoint,
   endpointMethods,
   endpoints,
@@ -18,6 +23,7 @@ import {
   notTaken,
   openApiDocument,
   answerFileTypes,
+  phoneLoginListEndpoint,
   photoFileAnswerSchema,
   photographFileEndpoint,
   sendMapFileEndpoint,
@@ -460,5 +466,146 @@ describe('the OpenAPI description', () => {
     expect(document.components.schemas.ErrorAnswer.properties.code.enum).toEqual(
       errorAnswerSchema.shape.code.options,
     );
+  });
+});
+
+// What every endpoint takes, read whole as the checklist reads it (spec/CHECKLIST-API.md §3.1;
+// task 2.7.3 part 4; ADR-513). Each schema as the OpenAPI description sees it, walked to its
+// leaves.
+type Described = Record<string, unknown>;
+const leaves = (
+  schema: unknown,
+  at: string,
+  found: (leaf: Described, at: string) => void,
+): void => {
+  if (schema === null || typeof schema !== 'object') return;
+  if (Array.isArray(schema)) {
+    schema.forEach((one, index) => {
+      leaves(one, `${at}[${String(index)}]`, found);
+    });
+    return;
+  }
+  found(schema as Described, at);
+  for (const [key, value] of Object.entries(schema)) leaves(value, `${at}.${key}`, found);
+};
+const parts = ['params', 'query', 'body'] as const;
+const described = endpoints.flatMap((served) =>
+  parts.flatMap((part) => {
+    const schema = served[part];
+    return schema === undefined
+      ? []
+      : [
+          {
+            served,
+            part,
+            json: z.toJSONSchema(schema, { io: 'input', unrepresentable: 'any' }),
+          },
+        ];
+  }),
+);
+
+describe('what every endpoint takes', () => {
+  it('AC-10-63 (ASVS 1.4.2): every number has a least and a most, and a whole number is one a column holds; only a shape’s positions are free, and the domain refuses one off the earth', () => {
+    const integer = 2_147_483_647;
+    const free: string[] = [];
+    for (const { served, part, json } of described) {
+      leaves(json, part, (leaf, at) => {
+        if (leaf['type'] !== 'number' && leaf['type'] !== 'integer') return;
+        const least = leaf['minimum'] ?? leaf['exclusiveMinimum'];
+        const most = leaf['maximum'] ?? leaf['exclusiveMaximum'];
+        const bound = leaf['type'] === 'integer' ? integer : 9_999_999_999.99;
+        if (
+          typeof least !== 'number' ||
+          typeof most !== 'number' ||
+          least < -bound - 1 ||
+          most > bound
+        ) {
+          free.push(`${served.name} ${at}`);
+        }
+      });
+    }
+    // A shape is GeoJSON, read by the domain's own reader (`MapShapes`), which refuses a position
+    // that isn't a finite longitude and latitude on the earth before anything is kept.
+    expect(free).toEqual([
+      'addSiteShape body.$defs.__schema0.anyOf[1]',
+      'loadMap body.$defs.__schema0.anyOf[1]',
+    ]);
+    // What was free before (ADR-513): a project's settings and the passcode version a phone holds.
+    expect(
+      changeProjectSettingsEndpoint.body.safeParse({ siteCircleMeters: 2 ** 31 }).success,
+    ).toBe(false);
+    expect(
+      changeProjectSettingsEndpoint.body.safeParse({ siteCircleMeters: 2 ** 31 - 1 }).success,
+    ).toBe(true);
+    expect(
+      phoneLoginListEndpoint.body.safeParse({ masterPasscodeVersion: 2 ** 31, entries: [] })
+        .success,
+    ).toBe(false);
+  });
+
+  it('AC-10-64 (ASVS 14.2.1): no path parameter or query names a secret; a password, a code, a token or the passcode goes in a body or a header', () => {
+    const named = described
+      .filter(({ part }) => part !== 'body')
+      .flatMap(({ served, part, json }) =>
+        Object.keys((json.properties ?? {}) as Described).map(
+          (key) => `${served.name} ${part} ${key}`,
+        ),
+      );
+    expect(named.length).toBeGreaterThan(100);
+    const secret = /pass|token|secret|code|csrf|session|key|otp|email/i;
+    expect(named.filter((name) => secret.test(name.split(' ')[2] ?? ''))).toEqual([]);
+  });
+
+  it('AC-10-64 (ASVS 13.2.5): the one address any endpoint takes is a contract’s link to its signed copy, HTTPS only; no endpoint takes an address the server would ask', () => {
+    const addresses: string[] = [];
+    for (const { served, part, json } of described) {
+      leaves(json, part, (leaf, at) => {
+        if (leaf['format'] === 'uri' || leaf['format'] === 'url')
+          addresses.push(`${served.name} ${at}`);
+      });
+    }
+    expect(addresses).toEqual(['createContract body.properties.signedCopyUrl']);
+    const contract = (signedCopyUrl: string) =>
+      createContractEndpoint.body.safeParse({
+        name: 'Bayline ROW contract',
+        primeId: '00000000-0000-4000-8000-000000000001',
+        signedCopyUrl,
+      }).success;
+    expect(contract('https://files.bayline.example/row-contract.pdf')).toBe(true);
+    for (const refused of [
+      'http://files.bayline.example/row-contract.pdf',
+      'javascript:alert(1)',
+      'data:text/html,<script>alert(1)</script>',
+      'file:///etc/passwd',
+    ]) {
+      expect(contract(refused), refused).toBe(false);
+    }
+  });
+
+  it('AC-10-65 (ASVS 1.3.11): an email address a person or a client is kept with is one address and nothing more: no line break, no second address, no name in brackets', () => {
+    const person = (email: string) =>
+      createPersonEndpoint.body.safeParse({ name: 'Dana Whitfield', email, role: 'ADMIN' }).success;
+    const changed = (email: string) => changePersonEndpoint.body.safeParse({ email }).success;
+    const client = (contactEmail: string) =>
+      createClientEndpoint.body.safeParse({ name: 'Bayline County', contactEmail }).success;
+    expect([person, changed, client].map((kept) => kept('dana@gates.example'))).toEqual([
+      true,
+      true,
+      true,
+    ]);
+    for (const refused of [
+      'dana@gates.example\r\nBcc: everyone@elsewhere.example',
+      'dana@gates.example\nSubject: changed',
+      'dana@gates.example, everyone@elsewhere.example',
+      'dana@gates.example;everyone@elsewhere.example',
+      'Dana <dana@gates.example>',
+      'dana@gates.example ',
+      '"dana\r\n"@gates.example',
+    ]) {
+      expect(
+        [person, changed, client].map((kept) => kept(refused)),
+        refused,
+      ).toEqual([false, false, false]);
+    }
   });
 });

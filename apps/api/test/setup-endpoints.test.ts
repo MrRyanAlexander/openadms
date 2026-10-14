@@ -446,6 +446,10 @@ describe('Dana sets P1 up through the endpoints', () => {
         [changeProjectWindowEndpoint, { activeFrom: '12 October 2026' }],
         [changeProjectSettingsEndpoint, { loadCallLowLimit: 5.5 }],
         [changeProjectSettingsEndpoint, { rate: '7.50' }],
+        // AC-10-63: past what the column holds, refused here, never a failure at the database.
+        [changeProjectSettingsEndpoint, { siteCircleMeters: 2 ** 31 }],
+        [changeProjectSettingsEndpoint, { stumpFillDepthInches: 1e30 }],
+        [changeProjectSettingsEndpoint, { loadCallHighLimit: -(2 ** 31) - 1 }],
       ] as const) {
         expect(told(await ask(api, dana, served, { ids, payload }))).toEqual([400, 'BAD_REQUEST']);
       }
