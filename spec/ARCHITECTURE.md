@@ -294,6 +294,8 @@ already knows except to confirm what it knows is truthful and to ask if I want t
   secret store in the cloud), and never logged or echoed.
 - **Each service gets its own database login** (§5).
 - The token signing keys and the master passcode verifiers (§7) are secrets too.
+- Every key, its life and how it is replaced, what each service talks to, and the data's levels
+  of protection: `spec/CHECKLIST-API.md` §5.5, §5.6, §5.8 (ADR-515).
 
 **Backups (server, not device):** evidence is kept indefinitely (ADR-101), so the database needs
 automated backups with point-in-time recovery where the host offers it, and the object store needs
@@ -447,6 +449,26 @@ every edit of a migration file and allows a write only while the file is still P
 | Output | No stack traces or internal errors in responses; plain error codes; security headers (CSP, `frame-ancestors 'none'`, `nosniff`, referrer policy) on the web apps |
 | Logs | Structured, with a request ID; never secrets, tokens, passwords or full personal details |
 | Uploads | Files only through the media endpoint (§11) and the back office's map's file (§3; ADR-485, 486), each by its own route and size limit: type and size checked (a photograph's hash verified, a zip bounded unzipped), stored outside the web root, never executed |
+
+### Every way in
+
+✍️ *Agent-written (task 2.7.3 part 4, ADR-515), as the checklist's §3.1 approved it (ADR-513): OWASP ASVS 5.0 6.1.3 and 6.3.4.* Every way a person, a phone or a command is let in, and nothing else. Each endpoint says which it takes (`access` in `packages/contracts/src/endpoints.ts`), and `apps/api/test/every-endpoint.test.ts` holds the 120 endpoints to that one list (AC-10-27), so a way in this table doesn't name fails it. The checklist page has the rest of the written answers (`spec/CHECKLIST-API.md` §5).
+
+| Way in | Who | What it takes | What it gives, and for how long | Where (ADR) |
+|---|---|---|---|---|
+| **A person's sign-in** | an admin, a manager/analyst, a read-only viewer | their email address and password, and their authenticator's code where they have one (an admin and a manager/analyst must: one with none is made to set one up before anything else) | a session: an access token (five minutes) and a refresh token, as `__Host-` cookies only, and a CSRF value for every call that isn't a GET; thirty quiet minutes or twelve hours end it | `POST /sessions` (ADR-408, 409, 412) |
+| **A session kept going** | the same | the refresh token, good once (one presented again ends its session) | new tokens; the page's CSRF value read again; sign-out ends it on the server | `POST /sessions/refreshes`, `GET /sessions/csrf`, `POST /sessions/sign-outs` (ADR-408) |
+| **A password reset by email** | the same, where the firm has mail | the address the firm holds; then the message's code (a signature, good once, sixty minutes) and a new password | a password, never a session: the person signs in after, their authenticator still asked (AC-10-25) | `POST /password-resets`, `/password-resets/completions` (ADR-404) |
+| **A password or an authenticator an admin sets right** | the same | an admin's own session: a password set anew, or an authenticator cleared (AC-10-26) | the person's sessions all ended; at their next sign-in they set their own password, and an authenticator again, before anything else | `POST /people/:userId/passwords`, `/two-step-clearings` (ADR-410, 412) |
+| **The server's own command** | whoever runs `pnpm installer:admin` on the firm's server | the API's own settings file, read on that server | the firm's first admin, or an admin let back in when no other admin can do it; never over the API | `apps/api/src/admin.ts` (ADR-413, 414) |
+| **A phone enrolled** | whoever holds the master passcode | the passcode, a name, the public half of a key the phone made (ECDSA P-256) | the phone's record, once: no session | `POST /phones/enrolments` (ADR-436, 437) |
+| **A phone proving itself** | an enrolled phone in service | a challenge (two minutes, good once) signed with its key | a phone's token, fifteen minutes, as `Authorization: Bearer`, never a cookie | `POST /phones/:deviceId/challenges`, `/proofs` (ADR-437, 440) |
+| **A monitor on a phone** | a field monitor, on a proven phone only | their Monitor ID and password | a monitor's session on that phone, twelve hours, in its own header beside the phone's token; one monitor at a time | `POST /phones/current/sign-ins` (ADR-441, 443) |
+| **The master passcode on a proven phone** | a supervisor | the passcode, each time | a monitor created, a session under the passcode (marked so), the phone's setup choices, a turn-in; each a security event | `POST /phones/current/monitors`, `/passcode-sessions`, `/setup-choices`, `/turn-ins` (ADR-442, 462, 463, 487) |
+| **Offline, on the phone** | a monitor or a supervisor, with no connection | a password or the passcode, checked on the phone against its login list | nothing on the server; each use the phone logged is reported when it next has signal | `POST /phones/current/passcode-uses` (ADR-454, 464) |
+| **Asked by anybody** | anybody | nothing | only up or down | `GET /health`, `GET /readiness` (ADR-385, 507) |
+
+**Not ways in for a person:** each service's own login to the database and the API's own identity at the object store (§5.1; ADR-480), read from that service's settings file alone; and the local stack's seeded accounts, which never ship (`infra/local/test/dev-accounts.test.ts`). A change to the master passcode takes an admin's session and their own password again (`POST /master-passcode/versions`, ADR-428).
 
 ---
 
