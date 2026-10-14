@@ -5,6 +5,7 @@
 // these fail and say so. After a change to apps/api, `pnpm local:up` again: the container runs
 // what was built when it started.
 import { spawnSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { request as overHttp } from 'node:http';
 import { request as overHttps } from 'node:https';
@@ -275,7 +276,7 @@ describe('the API’s container and the address server', () => {
     expect(JSON.parse(said)).toEqual({
       address: '25 The Green',
       at: { host: '172.30.213.2', port: 443 },
-      ca: '/run/adms/caddy-root.crt',
+      ca: '/run/adms/tls/root.crt',
     });
   });
 });
@@ -299,7 +300,7 @@ describe('the API’s container and the object store', () => {
       url: expect.stringMatching(/^https:\/\/s3\.adms\.localhost(:\d+)?$/) as string,
       bucket: 'adms-media',
       at: { host: '172.30.213.2', port: 443 },
-      ca: '/run/adms/caddy-root.crt',
+      ca: '/run/adms/tls/root.crt',
     });
   });
 });
@@ -338,7 +339,9 @@ describe('what an error and the log say, through the door', () => {
     // A reset by email, asked for and tried through the door (ADR-404): the address, the code and
     // the password sent are in no line. The word "password" is in a path now (/password-resets),
     // so what is looked for is a password as a field or a value, never the bare word (ADR-405).
-    const address = `luis.ortega+${sent}@gates.example`;
+    // An address of this run's own: a reset's limit counts by address (3 an hour, ADR-416), and the
+    // running API keeps its count between runs. It holds `sent`, which no line may.
+    const address = `luis.ortega+${sent}-${randomUUID().slice(0, 8)}@gates.example`;
     const reset = await ask('/password-resets', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

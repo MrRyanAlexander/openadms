@@ -233,7 +233,14 @@ describe('the boundary', () => {
       expect(ran).toEqual([]);
     });
 
+    it('KD-78: the process never listens in plain HTTP: given no certificate, it refuses to', async () => {
+      await expect(api.listen()).rejects.toThrow(
+        'The API listens over HTTPS alone: it was given no certificate.',
+      );
+    });
+
     it('AC-10-39: it is refused before it is read whole: on what it says its size is', async () => {
+      // The framework's own listen, past the process's: a test's raw socket on its own loopback.
       await api.app.listen(0, '127.0.0.1');
       const { port } = api.app.getHttpServer().address() as AddressInfo;
       const answered = await new Promise<string>((resolve, reject) => {

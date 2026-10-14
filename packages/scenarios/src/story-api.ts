@@ -23,6 +23,9 @@
 //   session held only as the cookies it sets, its CSRF value sent with every call that isn't a
 //   GET (`OfficeBrowser`).
 // - **Started again**, it holds nothing in memory: no part of a file not yet whole, no count.
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
 import {
   challengePhoneEndpoint,
   createMonitorOnPhoneEndpoint,
@@ -71,6 +74,19 @@ export const storySigningSecret = 'made-up-signing-secret-for-the-stories-only';
 
 // Where the stories' API listens: the stack's proxy names it (infra/local/Caddyfile).
 export const storyApiPort = 3180;
+
+// The stack's certificate for a process on this machine (infra/local/src/certificates.ts), which
+// `pnpm local:up` makes: the stories' API serves HTTPS with it, as the API's container does with
+// its own.
+function storyApiTls(): { certFile: string; keyFile: string } {
+  const tls = new URL('../../../infra/local/.generated/tls/', import.meta.url);
+  const certFile = fileURLToPath(new URL('host.crt', tls));
+  const keyFile = fileURLToPath(new URL('host.key', tls));
+  if (!existsSync(certFile) || !existsSync(keyFile)) {
+    throw new Error('The local stack has no certificates yet: run `pnpm local:up`.');
+  }
+  return { certFile, keyFile };
+}
 
 interface Clock {
   now(): Date;
@@ -414,6 +430,9 @@ export class StoryApi {
       {
         host: '127.0.0.1',
         port: storyApiPort,
+        // Over HTTPS alone, with the stack's certificate for a process on this machine: Caddy
+        // reaches it so, checking it against the stack's root (KD-78; ADR-517).
+        tls: storyApiTls(),
         // Unread: the process is handed the story's own clients below.
         databaseUrl: '',
         readOnlyDatabaseUrl: '',
@@ -424,6 +443,7 @@ export class StoryApi {
         tokenSigningSecret: storySigningSecret,
         smtpUrl: '',
         smtpAddress: undefined,
+        smtpCaFile: null,
         mailFrom: 'open-adms@adms.localhost',
         addressesUrl: 'https://addresses.adms.localhost',
         mapCaFile: null,

@@ -98,6 +98,38 @@ describe('EnvFile', () => {
     expect(file.add([['ADMS_ROUTING_URL', 'another']])).toEqual([]);
     expect(readFileSync(file.path, 'utf8')).toBe(after);
   });
+
+  it('changes one value only as it is told, its secret carried over and every other line as it was, still its owner’s only (ADR-517)', () => {
+    const file = new EnvFile(join(folder(), '.env'));
+    // Each login's URL is put together here, so that no file holds one.
+    const urlOf = (role: string, password: string): string =>
+      ['postgresql://', role, ':', password, '@127.0.0.1:55432/adms'].join('');
+    const login = urlOf('adms_api', 'abc-_123');
+    file.create(
+      ['a header'],
+      [
+        ['DATABASE_URL', login],
+        ['READONLY_DATABASE_URL', urlOf('adms_readonly', 'def-_456')],
+      ],
+    );
+    const before = readFileSync(file.path, 'utf8').split('\n');
+    const withTls = (url: string): string =>
+      url.includes('?') ? url : `${url}?sslmode=verify-full&sslrootcert=%2Froot%2Fca.crt`;
+    expect(file.amend('DATABASE_URL', withTls)).toBe(true);
+    const after = readFileSync(file.path, 'utf8').split('\n');
+    expect(file.read()['DATABASE_URL']).toBe(
+      `${login}?sslmode=verify-full&sslrootcert=%2Froot%2Fca.crt`,
+    );
+    // Only its own line changed; the password is the one it had.
+    expect(after.filter((line, at) => line !== before[at])).toHaveLength(1);
+    expect(new URL(file.read()['DATABASE_URL'] ?? '').password).toBe('abc-_123');
+    expect(statSync(file.path).mode & 0o777).toBe(0o600);
+    expect(readdirSync(join(file.path, '..'))).toEqual(['.env']);
+    // Told nothing new, or of a key it doesn't state, nothing is written.
+    expect(file.amend('DATABASE_URL', withTls)).toBe(false);
+    expect(file.amend('ADMS_ROUTING_URL', () => 'never-written')).toBe(false);
+    expect(readFileSync(file.path, 'utf8')).not.toContain('never-written');
+  });
 });
 
 describe('MigrationFolder', () => {

@@ -5,9 +5,12 @@ import pg from 'pg';
 
 import { PasscodeHasher, ScramVerifier } from './secrets.ts';
 
+// The local stack's Postgres, from this machine: over TLS alone, its certificate checked against
+// the stack's own root and the address it is reached at (KD-78; ADR-517).
 export interface Server {
   host: string;
   port: number;
+  ssl: { ca: string; rejectUnauthorized: true };
 }
 
 export const loginRoles = ['adms_owner', 'adms_api', 'adms_worker', 'adms_readonly'] as const;

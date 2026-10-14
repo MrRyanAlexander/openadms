@@ -89,9 +89,9 @@ things stand, where the product ends up, the road there, and what is still to be
 true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the session log at the end
 of `DECISIONS.md`.
 
-### Where things stand (2026-10-14, through ADR-516)
-- **Part 4 of task 2.7.3 is done with its third piece (ADR-515): the checklist's 14 written answers (`spec/CHECKLIST-API.md` §5; every way in as one table in ARCHITECTURE §6), §2's 25 earlier built rows each read against its test, API10's last two answers proposed. Found short: a key can't be replaced in place (11.2.2, to 5a) and the worker reads the map servers' answers unbounded and unchecked (API10, to part 5) (what it leaves: C161).**
-- **Phase 2 (API and sync, ADR-376): 29 of its 32 tasks closed.** Milestones 2.1 to 2.6 are complete; of 2.7, 2.7.1 and 2.7.2 are closed and 2.7.3 has parts 1 to 4 done; 2.7.4 is the phase exit. Each task's ADRs are on its tick in `BACKLOG.md`, "Active — Phase 2"; what it leaves is the carry-forward register. The lines that stood here, one a finished task, moved word for word to `DECISIONS.md`'s scratchpad, "Moved 2026-10-14 (ADR-516)". **This block says where things stand now, in a few lines; a finished task gets no line of its own here (ADR-516).**
+### Where things stand (2026-10-14, through ADR-517)
+- **Task 2.7.3 is closed (part 5, ADR-517): every hop of the local stack is encrypted (KD-78) and every container hardened (KD-79); 15.3.2 and API10 built. The security checklist has none to do. What it leaves: C162.**
+- **Phase 2 (API and sync, ADR-376): 31 of its 32 tasks closed.** Milestones 2.1 to 2.6 are complete; of 2.7, 2.7.1, 2.7.2 and 2.7.3 are closed; 2.7.4, the phase exit, is the last. Each task's ADRs are on its tick in `BACKLOG.md`, "Active — Phase 2"; what it leaves is the carry-forward register. The lines that stood here, one a finished task, moved word for word to `DECISIONS.md`'s scratchpad, "Moved 2026-10-14 (ADR-516)". **This block says where things stand now, in a few lines; a finished task gets no line of its own here (ADR-516).**
 - **Where each thing is written, so nothing is read twice:** a rule as it stands, with its ADR:
   `SUMMARY.md`, by topic (grep its `###` headings; never read it whole). What a finished task left
   for a later one: `BACKLOG.md`'s carry-forward register (C85…C161). How a layer's tests are
@@ -311,7 +311,7 @@ questions.
 **Phase 2 is open (ADR-376). Its plan is `BACKLOG.md`, "Active — Phase 2" (ADR-377): read its
 brief first. One task per response.**
 
-**Task 2.7.3, part 5 (KD-78, KD-79; BACKLOG 2.7.3; C161), done whole: never cut it ahead of time (ADR-516).** Every hop of the local stack encrypted (the proxy to the API, the stories' API, the object store, the mail catcher, the routing and address servers; Postgres with `verify-full`; SMTP with TLS); 4.2.1's four containers (Caddy, Postgres, the object store, the address server) hardened as far as each image allows, held by a test of `compose.yaml`; 15.3.2's test (no backend request follows a redirect) and API10's two answers as `spec/CHECKLIST-API.md` §5.9 says (agreed, ADR-516), on an HTTPS test server of the stack's own certificates. Then the checklist has none to do, and 2.7.3 closes (REQ-204, 205 already ticked). C155 and C156 stay open until one more full run each passes (keep `pnpm test`'s output: `> <scratchpad>/test.log 2>&1`). Every story still passes, the golden mission unmoved (P1 $5,548.25 on 19 lines, P2 $324.00).
+**Task 2.7.4, the phase exit (BACKLOG 2.7.4), done whole: never cut it ahead of time (ADR-516).** Phase 2's 14 REQs each ticked or re-filed with an ADR (REQ-006 can only be finished by the web apps); file 10's scenario count by part; Phase 3's REQs in `REQUIREMENTS-LATER.md` refreshed against what was built; the state files turned to "Phase 3 is the user's to open". Read BACKLOG's carry-forward register first (C162 last): what it leaves for a later phase is named there, not built now. Every story still passes, the golden mission unmoved (P1 $5,548.25 on 19 lines, P2 $324.00).
 **What the user may still overturn:** the agent defaults in `SUMMARY.md` §4; never copy that list here (ADR-516).
 **Docker's disk is 8 GB and was full once on 2026-10-10** (Tools and housekeeping; it has held since, 1.3 GB free after ADR-464's session): if `pnpm ready` fails for space, stop and ask the user to free some; never work around it.
 **Before the chain, `pnpm ready`** (the stack up, then `installer:check`): a `✗` at the migrations
@@ -321,7 +321,9 @@ answers 500, `docker desktop restart`; if `local:up` meets `ECONNRESET` or a con
 gone, `pnpm local:down` and `up` once more.** **On a Linux host (a cloud session), the containers run as uid
 1000:** after `pnpm installer` the two service env files, and after each `local:up` the copied
 Caddy root, must be readable by it (`chown 1000:1000`), or the API or worker fails to start
-(seen 2026-10-09, ADR-443's session log).
+(seen 2026-10-09, ADR-443's session log); and since ADR-517 each key under
+`infra/local/.generated/tls/` by its own container's user (Postgres 999, the mail catcher 65534,
+the address server's `nominatim`; the rest 1000), or that service fails to start.
 
 **Every command starts with** `eval "$(fnm env --shell zsh)"`. The checks are `adms-verify`'s
 (read the page for the layer you touch, beside it; skip the others); the counts to compare with

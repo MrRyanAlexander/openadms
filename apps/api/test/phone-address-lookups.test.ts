@@ -22,6 +22,7 @@ import { enrolledPhone, passcode, proven } from './support/phones.ts';
 import { shippedPolicy } from './support/process.ts';
 import { danasEmail, long, worldOn, type Served } from './support/served.ts';
 import { NoServer } from './support/sign-in.ts';
+import { StackHttpsServer, stackRootCert } from './support/stack-https.ts';
 import { told } from './support/setup.ts';
 
 let db: Database;
@@ -343,6 +344,41 @@ describe('what the API asks the address server, and takes from it (API7, API10)'
     expect(other).toMatch(/^The address server (answered \d{3} to|didn't answer) \/reverse/);
     for (const said of [late, large, away, other]) {
       expect(said).not.toMatch(/39\.1565|75\.5233|lat=|lon=/);
+    }
+  });
+
+  it('OWASP ASVS 5.0 15.3.2 follows no redirect: an answer that sends it elsewhere is no address, and where it points is never asked', async () => {
+    const elsewhere = await StackHttpsServer.on((_request, response) => {
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ address: { house_number: '25', road: 'The Green' } }));
+    });
+    try {
+      for (const status of [301, 302, 303, 307, 308]) {
+        const redirecting = await StackHttpsServer.on((_request, response) => {
+          response.writeHead(status, {
+            location: `https://localhost:${String(elsewhere.port)}/reverse`,
+          });
+          response.end();
+        });
+        try {
+          // The test's own server, checked against the stack's root as the stack's server is.
+          const asked = new AddressServer({
+            url: 'https://localhost',
+            caFile: stackRootCert,
+            timeoutMs: 5000,
+            at: { host: '127.0.0.1', port: redirecting.port },
+          });
+          expect(await words(asked.addressOf(onTheGreen))).toBe(
+            `The address server answered ${String(status)} to /reverse.`,
+          );
+          expect(redirecting.heard).toHaveLength(1);
+        } finally {
+          await redirecting.close();
+        }
+      }
+      expect(elsewhere.heard).toEqual([]);
+    } finally {
+      await elsewhere.close();
     }
   });
 });

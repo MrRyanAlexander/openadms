@@ -9,7 +9,11 @@
 // store the API keeps files in is named by five more (ADR-480): ADMS_MEDIA_URL, ADMS_MEDIA_BUCKET,
 // ADMS_MEDIA_REGION and the API's own identity there, ADMS_MEDIA_ACCESS_KEY and
 // ADMS_MEDIA_SECRET_KEY; with ADMS_MEDIA_CA_FILE and ADMS_MEDIA_ADDRESS where the installation
-// has them.
+// has them. Every hop is encrypted (ARCHITECTURE §4; KD-78; ADR-517): the API serves HTTPS alone,
+// with the certificate and key ADMS_API_TLS_CERT_FILE and ADMS_API_TLS_KEY_FILE name; each
+// database login's URL asks `sslmode=verify-full`, checked against the root its `sslrootcert`
+// names, or ADMS_DATABASE_CA_FILE where the installation has one; mail goes over TLS alone,
+// checked against ADMS_SMTP_CA_FILE where the installation has one.
 import { existsSync, readFileSync } from 'node:fs';
 import { BlockList, isIP } from 'node:net';
 import { fileURLToPath } from 'node:url';
@@ -45,6 +49,12 @@ export interface MediaSettings {
   readonly at: { readonly host: string; readonly port: number } | undefined;
 }
 
+// The certificate the API serves HTTPS with, and its private key, as PEM files.
+export interface TlsSettings {
+  readonly certFile: string;
+  readonly keyFile: string;
+}
+
 export class Settings {
   // From src and from dist alike: two folders up is apps/api.
   static readonly defaultFile = fileURLToPath(new URL('../../.env', import.meta.url));
@@ -59,10 +69,14 @@ export class Settings {
   readonly smtpUrl: string;
   // Where the mail server is when it isn't where SMTP_URL says (the local stack's, from inside it).
   readonly smtpAddress: string | undefined;
+  // The certificate authority the mail server is checked against, as a PEM file; none for the
+  // machine's own trust store.
+  readonly smtpCaFile: string | null;
   // Who a message says it is from.
   readonly mailFrom: string;
   readonly host: string;
   readonly port: number;
+  readonly tls: TlsSettings;
   // The exact origins whose pages may read an answer (ADR-098, 391); none unless listed.
   readonly corsOrigins: readonly string[];
   // The proxies in front of the API, each an address or a network (`10.0.0.0/8`): only one of
@@ -85,9 +99,11 @@ export class Settings {
     tokenSigningSecret: string;
     smtpUrl: string;
     smtpAddress: string | undefined;
+    smtpCaFile: string | null;
     mailFrom: string;
     host: string;
     port: number;
+    tls: TlsSettings;
     corsOrigins: readonly string[];
     trustedProxies: readonly string[];
     addressesUrl: string;
@@ -100,9 +116,11 @@ export class Settings {
     this.tokenSigningSecret = values.tokenSigningSecret;
     this.smtpUrl = values.smtpUrl;
     this.smtpAddress = values.smtpAddress;
+    this.smtpCaFile = values.smtpCaFile;
     this.mailFrom = values.mailFrom;
     this.host = values.host;
     this.port = values.port;
+    this.tls = values.tls;
     this.corsOrigins = values.corsOrigins;
     this.trustedProxies = values.trustedProxies;
     this.addressesUrl = values.addressesUrl;
@@ -138,13 +156,21 @@ export class Settings {
 
     const address = environment['ADMS_DATABASE_ADDRESS'];
     checked('ADMS_DATABASE_ADDRESS', address, (value) => Settings.isAddress(value));
+    const databaseCaFile = environment['ADMS_DATABASE_CA_FILE'];
+    checked('ADMS_DATABASE_CA_FILE', databaseCaFile, (value) => Settings.isCertificateFile(value));
+    // Where ADMS_DATABASE_CA_FILE names the root (inside the stack), the root a URL names is
+    // not the one checked, so it is not asked to be there.
     const database = (key: string): string => {
-      const url = checked(key, required(key), (value) => Settings.isDatabaseUrl(value));
-      return address === undefined || problems.length > 0 ? url : Settings.at(url, address);
+      const url = checked(key, required(key), (value) =>
+        Settings.isDatabaseUrl(value, databaseCaFile === undefined),
+      );
+      return problems.length > 0 ? url : Settings.at(url, address, databaseCaFile);
     };
 
     const smtpAddress = environment['ADMS_SMTP_ADDRESS'];
     checked('ADMS_SMTP_ADDRESS', smtpAddress, (value) => Settings.isAddress(value));
+    const smtpCaFile = environment['ADMS_SMTP_CA_FILE'];
+    checked('ADMS_SMTP_CA_FILE', smtpCaFile, (value) => Settings.isCertificateFile(value));
     const mailFrom = environment['ADMS_MAIL_FROM'];
     checked('ADMS_MAIL_FROM', mailFrom, (value) => Settings.isMailAddress(value));
 
@@ -197,11 +223,20 @@ export class Settings {
         (value) => value === '' || Settings.isUrl(value, ['smtp:', 'smtps:']),
       ),
       smtpAddress,
+      smtpCaFile: smtpCaFile ?? null,
       mailFrom: mailFrom ?? Settings.defaultMailFrom,
       host: checked('ADMS_API_HOST', required('ADMS_API_HOST'), (value) => isIP(value) !== 0),
       port: Number(
         checked('ADMS_API_PORT', required('ADMS_API_PORT'), (value) => Settings.isPort(value)),
       ),
+      tls: {
+        certFile: checked('ADMS_API_TLS_CERT_FILE', required('ADMS_API_TLS_CERT_FILE'), (value) =>
+          Settings.isCertificateFile(value),
+        ),
+        keyFile: checked('ADMS_API_TLS_KEY_FILE', required('ADMS_API_TLS_KEY_FILE'), (value) =>
+          Settings.isPrivateKeyFile(value),
+        ),
+      },
       corsOrigins: origins,
       trustedProxies: proxies,
       addressesUrl: checked('ADMS_ADDRESSES_URL', required('ADMS_ADDRESSES_URL'), (value) =>
@@ -254,11 +289,19 @@ export class Settings {
     return URL.canParse(value) && protocols.includes(new URL(value).protocol);
   }
 
-  private static isDatabaseUrl(value: string): boolean {
+  // A login's URL, over TLS alone, the server's certificate and name checked (KD-78): no URL
+  // that would let a connection fall back to plain, or take any certificate, is taken.
+  private static isDatabaseUrl(value: string, rootChecked: boolean): boolean {
     if (!Settings.isUrl(value, ['postgresql:', 'postgres:'])) return false;
     const url = new URL(value);
+    const rootCert = url.searchParams.get('sslrootcert');
     return (
-      url.username !== '' && url.password !== '' && url.hostname !== '' && url.pathname.length > 1
+      url.username !== '' &&
+      url.password !== '' &&
+      url.hostname !== '' &&
+      url.pathname.length > 1 &&
+      url.searchParams.getAll('sslmode').join() === 'verify-full' &&
+      (rootCert === null || !rootChecked || Settings.isCertificateFile(rootCert))
     );
   }
 
@@ -295,6 +338,15 @@ export class Settings {
   private static isCertificateFile(value: string): boolean {
     try {
       return readFileSync(value, 'utf8').includes('-----BEGIN CERTIFICATE-----');
+    } catch {
+      return false;
+    }
+  }
+
+  // A file that is there and holds a private key. Only whether it does is read here.
+  private static isPrivateKeyFile(value: string): boolean {
+    try {
+      return /-----BEGIN (?:EC |RSA )?PRIVATE KEY-----/.test(readFileSync(value, 'utf8'));
     } catch {
       return false;
     }
@@ -347,10 +399,15 @@ export class Settings {
   }
 
   // Where the database is when it isn't where the installer reached it: inside the local stack
-  // the API's container reaches Postgres by its service name, with the same login.
-  private static at(databaseUrl: string, address: string): string {
+  // the API's container reaches Postgres by its service name, with the same login, and checks its
+  // certificate against the stack's root as mounted there.
+  private static at(databaseUrl: string, address?: string, caFile?: string): string {
+    if ((address === undefined && caFile === undefined) || !URL.canParse(databaseUrl)) {
+      return databaseUrl;
+    }
     const url = new URL(databaseUrl);
-    url.host = address;
+    if (address !== undefined) url.host = address;
+    if (caFile !== undefined) url.searchParams.set('sslrootcert', caFile);
     return url.toString();
   }
 }

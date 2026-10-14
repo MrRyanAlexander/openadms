@@ -15,7 +15,7 @@
 > error and a log say, a phone's proof of itself, uploads and the job queue. It adds no rule to
 > the domain (BACKLOG, Phase 2's brief).
 >
-> **Two parts.** Sections A…L are the new scenarios, `AC-10-01`…`AC-10-66` (57…66 added by task 2.7.3 part 4, ADR-513, in the sections they belong to). Section M lists, by
+> **Two parts.** Sections A…L are the new scenarios, `AC-10-01`…`AC-10-70` (57…66 added by task 2.7.3 part 4, ADR-513, and 67…70 by part 5, ADR-517, in the sections they belong to). Section M lists, by
 > ID, every scenario of files 01…09 that has a Phase 2 part, with the task that proves it.
 
 **One more column: Answers.** The checklist item a scenario answers (ARCHITECTURE §16):
@@ -50,6 +50,10 @@ states one that nothing records: they are listed under "Left to the task that bu
 | AC-10-02 | **When** the same address is asked for over plain HTTP, **then** the connection is closed unanswered: never redirected, so a client sending in clear is noticed; a web page's name (`adms.localhost`) still sends plain HTTP on to HTTPS *(changed at the user's word, ADR-511)* | ARCHITECTURE §6 (Transport) · REQ-204 | ASVS 4.1.2, 12.2.1, 12.3.1 | API (2.1.2) | ✅ 2.1.2 (ADR-385); refused, not redirected, 2026-10-14 (ADR-511): `apps/api/test/door.test.ts` (the API's name and a page's), `packages/scenarios/test/story-api.test.ts` (the stories' API's name) |
 | AC-10-03 | **When** a caller offers nothing newer than TLS 1.1, **then** no connection is made; TLS 1.2 and 1.3 are taken | ARCHITECTURE §6 (Transport) | ASVS 12.1.1 | API (2.1.2) | ✅ 2.1.2 (ADR-385): `apps/api/test/door.test.ts` |
 | AC-10-04 | **Given** any answer of the API, **then** it carries HSTS (a year, its subdomains included, ADR-511) and the security headers ARCHITECTURE §6 names for an answer; the page headers (the content security policy, `frame-ancestors 'none'`) are the web apps' | ARCHITECTURE §6 (Transport, Output) · REQ-204 | ASVS 3.4.1, 3.4.4, 4.1.1, 14.3.2 · API8:2023 | API (2.1.3); the web apps' pages: back office (Phase 4) | ✅ the API's answers, 2.1.3 (ADR-392): `apps/api/test/boundary.test.ts`, `door.test.ts`; the web apps' pages: Phase 4 |
+| AC-10-67 | **Given** the local stack is up, **then** every hop inside it is encrypted: Caddy reaches the API, the stories' API, the object store, the mail catcher, the routing and the address server over TLS, each certificate of the stack's own root and checked for the one name the service is reached by; each refuses plain HTTP; Valhalla, which speaks no TLS, listens on its own container's loopback behind a Caddy of its own; Postgres takes TLS 1.2 or 1.3 alone, every service login asking `verify-full`, and a client that trusts another root is refused; the mail catcher takes no message before STARTTLS. Only a container's own loopback is plain, and it never leaves the container *(the user, ADR-513: "we dont want to have unencrypted data in flight")* | ARCHITECTURE §4, §5.7 · KD-78 | ASVS 12.3.1, 12.3.2, 12.3.3, 12.3.4 | API (2.7.3) | ✅ 2.7.3 part 5 (ADR-517): `infra/local/test/hops.test.ts`, `packages/db/test/tls.test.ts`, `infra/local/test/compose.test.ts`, `packages/db/test/configuration.test.ts`; the API refuses to listen with no certificate (`boundary.test.ts`) |
+| AC-10-68 | **Given** each container of the local stack, **then** it runs with no capability, a read-only root filesystem, an unprivileged user and no new privileges, its image pinned by digest; a container whose image allows less keeps only what it names with its reason (Caddy's binary its one file capability, Valhalla as root, the address server's sudo and writable root), and a service no list names fails the test | ARCHITECTURE §4 · KD-79 | ASVS 4.2.1 | API (2.7.3); the deploy's, Phase 5a (REQ-517) | ✅ 2.7.3 part 5 (ADR-517): `infra/local/test/compose.test.ts` |
+| AC-10-69 | **When** a server the API or the worker asks (the address server, a map server) answers with a redirect, **then** it is followed nowhere: the answer is no answer, and where it points is never asked | ARCHITECTURE §3, §6 | ASVS 15.3.2 · API10:2023 | API (2.7.3) | ✅ 2.7.3 part 5 (ADR-517): `apps/api/test/phone-address-lookups.test.ts`, `apps/worker/test/map-answers.test.ts`, on an HTTPS server of the stack's own certificate |
+| AC-10-70 | **When** a map server's answer is too large, too slow (even one that trickles in), or holds a route's length that is a string, negative or infinite, or a road point out of range, **then** the worker takes none of it: the job waits for its next try, never a "no route" or a straight line, and no error holds the point; **when** a mail server refuses a reset's message, **then** the reset is answered as one for an address nobody has, and the log holds no word of the server's; a server that offers no TLS, or a certificate not of the root named, is sent no message | ARCHITECTURE §3, §6; `spec/CHECKLIST-API.md` §5.9 | API10:2023 · ASVS 12.3.2 | API (2.7.3) | ✅ 2.7.3 part 5 (ADR-517): `apps/worker/test/map-answers.test.ts`, `apps/api/test/password-set.test.ts` ("the mail server’s answers") |
 
 ## B. The CORS list
 
@@ -237,16 +241,16 @@ passing in its own file, from a run that was seen, by the task named.
 
 | | Scenarios |
 |---|---|
-| Written in this file (A…L) | **66** |
-| Passing | **56** (AC-10-57…66; task 2.7.3 part 4, ADR-513; AC-10-27; task 2.7.3 part 3, ADR-512; AC-10-56; task 2.7.3 part 1, ADR-508; AC-10-44; task 2.5.1 part 2, ADR-439; AC-10-29, 30; task 2.4.5 part 2, ADR-435; AC-10-31; task 2.4.5 part 1, ADR-434; AC-10-37; task 2.4.4 part 2, ADR-431; AC-10-25; task 2.2.5, ADR-415; AC-10-01, 02, 03, 33, 55; task 2.1.2, ADR-385; AC-10-04…08, 34, 36, 39, 43; task 2.1.3, ADR-387…392; AC-10-42; task 2.1.4, ADR-394; AC-10-10, 11; task 2.2.1, ADR-397, 398; AC-10-20, 21, 23, 24; task 2.2.2, ADR-402, 403; AC-10-09, 12…19; task 2.2.3, ADR-408, 409; AC-10-26; task 2.2.4, ADR-412; AC-10-28; task 2.4.4 part 1, ADR-430; and the six this row had not yet counted though their own rows were marked: AC-10-38, 40, 50, 52, 53, 54), and AC-10-32 and 51 in part |
+| Written in this file (A…L) | **70** |
+| Passing | **60** (AC-10-67…70; task 2.7.3 part 5, ADR-517; AC-10-57…66; task 2.7.3 part 4, ADR-513; AC-10-27; task 2.7.3 part 3, ADR-512; AC-10-56; task 2.7.3 part 1, ADR-508; AC-10-44; task 2.5.1 part 2, ADR-439; AC-10-29, 30; task 2.4.5 part 2, ADR-435; AC-10-31; task 2.4.5 part 1, ADR-434; AC-10-37; task 2.4.4 part 2, ADR-431; AC-10-25; task 2.2.5, ADR-415; AC-10-01, 02, 03, 33, 55; task 2.1.2, ADR-385; AC-10-04…08, 34, 36, 39, 43; task 2.1.3, ADR-387…392; AC-10-42; task 2.1.4, ADR-394; AC-10-10, 11; task 2.2.1, ADR-397, 398; AC-10-20, 21, 23, 24; task 2.2.2, ADR-402, 403; AC-10-09, 12…19; task 2.2.3, ADR-408, 409; AC-10-26; task 2.2.4, ADR-412; AC-10-28; task 2.4.4 part 1, ADR-430; and the six this row had not yet counted though their own rows were marked: AC-10-38, 40, 50, 52, 53, 54), and AC-10-32 and 51 in part |
 | Earlier scenarios with a Phase 2 part (M) | 48, and AC-06-36 |
-| **Phase 2 proves, at the API** | **114**, and AC-06-36's link |
+| **Phase 2 proves, at the API** | **118**, and AC-06-36's link |
 
 By task: 2.1.2: 5 (AC-10-01, 02, 03, 33, 55) · 2.1.3: 9 (04…08, 34, 36, 39, 43) · 2.1.4: 1 (42) ·
 2.2.1: 2 (10, 11) · 2.2.2: 5 (20, 21, 23, 24, 25) · 2.2.3: 9 (09, 12…19) · 2.2.4: 1 (26) ·
 2.2.6: 1 (40) · 2.3.1: 1 (50) · 2.3.2: 3 (52, 53, 54) · 2.3.3: 1 (51) · 2.4.2: 1 (38) · 2.4.4:
 3 (28, 35, 37) · 2.4.5: 3 (29, 30, 31) · 2.5.1: 4 (22, 44, 45, 46) · 2.6.4: 3 (47, 48, 49) ·
-2.6.5: 1 (41) · 2.7.3: 12 (27, 56, 57…66) · every endpoint's task: AC-10-32. A scenario with two tasks is
+2.6.5: 1 (41) · 2.7.3: 16 (27, 56, 57…70) · every endpoint's task: AC-10-32. A scenario with two tasks is
 counted at the first.
 
 ---

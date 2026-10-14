@@ -270,12 +270,21 @@ Every dependency is pinned. Adding one needs an ADR (ADR-093), and the lockfiles
 - **Services talk to each other over HTTPS, locally too.** CORS is handled properly, never
   switched off (§6). Every hop inside the local stack's own network too: nothing is served over
   plain HTTP and no data is in flight unencrypted (the user, 2026-10-14, ADR-513; KD-78).
+  *Built (ADR-517, KD-78 closed):* `pnpm local:up` makes the stack's own root and a certificate
+  for each service (`infra/local/src/certificates.ts`); Caddy issues the public names' certificates
+  from that root and reaches every service over TLS, each certificate checked against it and the
+  one name the service is reached by; the API serves HTTPS alone; Postgres takes TLS alone; the
+  mail catcher takes no message before STARTTLS; Valhalla, which speaks no TLS, listens on its own
+  container's loopback behind a Caddy of its own. Only a container's own loopback (a health check
+  inside it) is plain, and it never leaves the container. Every container is hardened as far as
+  its image allows, each departure named with its reason (`infra/local/test/compose.test.ts`;
+  ASVS 4.2.1, KD-79).
 
 ✅ **Approved** — how:
 
 | Environment | What runs | HTTPS | Notes |
 |---|---|---|---|
-| **Local** | One `docker compose` stack: Postgres, object storage, API, worker, Valhalla, Nominatim (§3), Caddy; web apps served through Caddy | Caddy's internal CA; hostnames under `*.adms.localhost` | A phone on the same network needs Caddy's root certificate installed and trusted, or a tunnel |
+| **Local** | One `docker compose` stack: Postgres, object storage, API, worker, Valhalla, Nominatim (§3), Caddy; web apps served through Caddy | The stack's own root, which Caddy issues from (ADR-517; `infra/local/.generated/caddy-root.crt`); hostnames under `*.adms.localhost`; every hop inside the stack over TLS too | A phone on the same network needs Caddy's root certificate installed and trusted, or a tunnel |
 | **Demo cloud** | Railway: Postgres, API with worker, Valhalla, Nominatim; Netlify: back office and field web build; an S3-compatible bucket | Provider certificates; HSTS on | The back office calls the API **through a same-origin proxy path** (e.g. `/api/*` rewritten to the API), so browser cookies stay first-party and CORS isn't needed for it |
 | **A firm's cloud** | The same containers | The firm's certificates | Documented, not scripted |
 
@@ -416,6 +425,10 @@ every edit of a migration file and allows a write only while the file is still P
 
 - TLS to the database in every environment, the local stack's too: no data in flight unencrypted
   (the user, 2026-10-14: "we dont want to have unencrypted data in flight"; ADR-513, KD-78).
+  *Built (ADR-517):* the local stack's Postgres takes TLS 1.2 or 1.3 alone (every rule over TCP
+  `hostssl`); every login's URL asks `sslmode=verify-full`, the server's certificate and name
+  checked against the stack's root (`sslrootcert`, or `ADMS_DATABASE_CA_FILE` inside the stack);
+  Prisma's migration engine is handed the same check in its own words (`packages/db/prisma.url.js`).
 - A separate credential per role.
 - Pool limits, and a statement timeout.
 

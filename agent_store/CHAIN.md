@@ -7,32 +7,32 @@
 > task's ADR and its session-log line in `DECISIONS.md`). No other file carries these counts.
 > **A count that differs from this page without a reason is a finding, not noise.**
 
-**Seen whole:** 2026-10-14, after ADR-514, on the user's Mac, the installation at head (resumed by `pnpm installer` that day, its volumes found new) (memory last sampled after ADR-512: Docker's VM at 4 GB, the eight containers together under 1 GB through a full `pnpm test`, the object store highest at about 220 MiB; none restarted). In the full `pnpm scenarios` after ADR-513 `burst` stopped once on C155's 500 and passed alone three times after (C155); after ADR-514 the full run passed whole.
+**Seen whole:** 2026-10-14, after ADR-517, on the user's Mac, the installation at head (brought to TLS by `pnpm installer --yes` that day: each login's URL given `verify-full`, passwords kept). `pnpm test` passed whole three times since ADR-515 and `pnpm scenarios` once more, `burst` among them (C155, C156 closed). Memory last sampled after ADR-512 (Docker's VM at 4 GB, the containers together under 1 GB through a full `pnpm test`).
 
 ## `pnpm ready`
 
 | What | Today |
 |---|---|
-| `pnpm local:up` | six `Healthy` services, `Keeping the object store’s bucket adms-media (it keeps every version).` (ADR-480), then the API's and the worker's containers: `https://api.adms.localhost/health → 200 {"status":"ok"}` and `the worker’s health answer → 200 {"status":"ok","jobsWaiting":0,"jobsSetAside":0,"oldestJobWaitingSeconds":0}` |
-| `pnpm installer:check` | **32 `✓`**, no `✗`, exit 0 |
+| `pnpm local:up` | seven `Healthy` services (`routing-tls` the seventh, ADR-517), `Keeping the stack’s root and every service’s certificate.`, `Keeping the object store’s bucket adms-media (it keeps every version).` (ADR-480), then the API's and the worker's containers: `https://api.adms.localhost/health → 200 {"status":"ok"}` and `the worker’s health answer → 200 {"status":"ok","jobsWaiting":0,"jobsSetAside":0,"oldestJobWaitingSeconds":0}` |
+| `pnpm installer:check` | **35 `✓`**, no `✗`, exit 0 |
 | Migrations at head | **114** (`packages/db/prisma/migrations/` is the list) |
-| `pnpm local:down` (close-out) | 8 containers and the network: 9 `Removed` lines |
+| `pnpm local:down` (close-out) | 9 containers and the network: 10 `Removed` lines |
 
 ## `pnpm test`
 
-**`Test Files 163 passed (163)`, `Tests 2923 passed (2923)`.**
+**`Test Files 168 passed (168)`, `Tests 2996 passed (2996)`.**
 
 | Project | Tests | Files | Needs |
 |---|---|---|---|
 | `packages/domain` | 795 | 43 | nothing |
 | `packages/contracts` | 88 | 9 | nothing |
-| `apps/api` | 612 | 47 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
-| `packages/db` | 1056 | 44 | `pnpm ready` |
+| `apps/api` | 634 | 47 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
+| `packages/db` | 1060 | 45 | `pnpm ready` |
 | `packages/scenarios` | 153 | 7 | `pnpm ready` for `stories.test.ts` (the runner and a run's template, 5) and `story-api.test.ts` (a story's API over HTTPS through the proxy, every request of a story's phone, the back office and the viewers at their browsers, 14); the flag catalogue (78 flags), the harness, the phone held to the sync contract's suite and to what it sends and takes in at a sync, its photographs' files and its turn-in among it, and its wait when told to (24), the policy and the server apps' exports (2) need nothing. **The stories themselves are not here** (ADR-446) |
-| `apps/worker` | 41 | 4 | `pnpm ready` for the map servers (13) and its container (3); the process (14) and the job loop (its set-aside lines and its health, 11) need nothing |
-| `infra/local` | 22 | 3 | `pnpm ready` |
+| `apps/worker` | 47 | 5 | `pnpm ready` for the map servers (13), their answers on an HTTPS server of the stack's certificate (6) and its container (3); the process (14) and the job loop (its set-aside lines and its health, 11) need nothing |
+| `infra/local` | 62 | 6 | `pnpm ready` for the map services and every hop's TLS (`hops.test.ts`, 12); Docker alone for `compose.test.ts` (16); nothing for the certificates (12) and the extract |
 | `tools/security` | 141 | 3 | nothing (the scan's and the grant tests' rules 49, who reaches Postgres 35, the guard hook 57) |
-| `tools/setup` | 15 | 3 | nothing |
+| `tools/setup` | 16 | 3 | nothing |
 
 ## `pnpm lint`, `pnpm licences`
 
@@ -66,12 +66,12 @@ P1 $5,548.25 on 19 lines, P2 $324.00. `p1-reconciled` through `p1-left-out`, `p1
 ## `pnpm security`
 
 `✓ 0 open advisories` (3 accepted by id); secretlint `0 found`; the installation's own secrets
-(10 values from 4 env files) `0 found`; a password-like setting `0 found`; a whole slow hash, an
+(11 values from 4 env files; the eleventh the API's key file's path, ADR-517) `0 found`; a password-like setting `0 found`; a whole slow hash, an
 authenticator's secret or a private key as a JWK `0 found` (8 inline exceptions named); env files
 `✓ every one ignored by git and untracked`; who reaches Postgres: `of 13 workspaces, the
-product's that reach it: apps/api, apps/worker, packages/db` (3 tools named), `471 source files
-read`, `9 statements`, `prisma migrate diff: no difference`; the grant tests **`44 files, 1056
-tests: 1056 passed, 0 failed`**; ending **`Security checks: 12 passed, 0 failed.`**
+product's that reach it: apps/api, apps/worker, packages/db` (3 tools named), `479 source files
+read`, `9 statements`, `prisma migrate diff: no difference`; the grant tests **`45 files, 1060
+tests: 1060 passed, 0 failed`**; ending **`Security checks: 12 passed, 0 failed.`**
 
 ## What the installation holds after a run
 

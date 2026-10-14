@@ -1,16 +1,17 @@
 // The local stack's helper (ARCHITECTURE §4; BACKLOG 0.2.3; ADR-263). Run from the root:
 //   pnpm local:up      generate the dev passwords if missing, fetch the map extract if missing and
-//                      check it against its pinned SHA-256, start every service, wait until all are
-//                      healthy, make the object store's media bucket if it isn't there and see
-//                      that it keeps versions (ADR-480), copy out Caddy's root certificate, check
-//                      each page over HTTPS;
+//                      check it against its pinned SHA-256, make the stack's root and each
+//                      service's certificate where one is missing or ending (ADR-517), start every
+//                      service, wait until all are healthy, make the object store's media bucket
+//                      if it isn't there and see that it keeps versions (ADR-480), check each page
+//                      over HTTPS;
 //                      then, once `pnpm installer` has made the API's settings, build the API,
 //                      start its container afresh and check its health answer over HTTPS (ADR-385),
 //                      and the same for the worker, whose health answer is asked inside its own
 //                      container (ADR-419); a container still running exactly what was just
 //                      built, under the settings it was started with, is kept as it is (ADR-448)
 //   pnpm local:down    stop and remove the containers and network; data volumes are kept
-//   pnpm local:wipe    down, plus the data volumes, the generated .env and the root certificate;
+//   pnpm local:wipe    down, plus the data volumes, the generated .env and the certificates;
 //                      the downloaded map extract (public data, infra/local/.cache/) is kept
 //   pnpm local:status  list the services and their health
 // Node 24 runs this file as-is (type stripping), so it uses erasable TypeScript only.
@@ -31,6 +32,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseEnv } from 'node:util';
 
+import { StackAuthority, type Made } from './certificates.ts';
 import { MapExtract } from './map-extract.ts';
 
 const project = 'open-adms-local';
@@ -70,6 +72,8 @@ const runs = {
     'pnpm-lock.yaml',
     'infra/local/compose.yaml',
     'infra/local/.generated/caddy-root.crt',
+    'infra/local/.generated/tls/api.crt',
+    'infra/local/.generated/tls/api.key',
   ],
   worker: [
     'apps/worker/dist',
@@ -82,6 +86,17 @@ const runs = {
   ],
 } as const;
 type Service = keyof typeof runs;
+// Which services read which certificate when they start (compose.yaml): one made afresh is read
+// only by a container started afresh. The API's and the worker's are made afresh by `started`
+// below, which reads their certificates among what they run.
+const readsCertificate: Readonly<Record<string, readonly string[]>> = {
+  postgres: ['postgres'],
+  objectstore: ['objectstore'],
+  mail: ['mail'],
+  routing: ['routing-tls'],
+  addresses: ['addresses'],
+};
+const holdsRoot = ['caddy', 'objectstore', 'addresses', 'routing-tls'];
 
 class DevSecrets {
   // Each made once: the database administrator's password, the object store's administrator
@@ -126,6 +141,7 @@ class LocalStack {
   readonly envFile: string;
   readonly generated: string;
   readonly rootCert: string;
+  readonly authority: StackAuthority;
   readonly map: MapExtract;
   // The repository's root, and the API's own settings, written by `pnpm installer`.
   readonly repository: string;
@@ -137,7 +153,8 @@ class LocalStack {
     this.root = root;
     this.envFile = join(root, '.env');
     this.generated = join(root, '.generated');
-    this.rootCert = join(this.generated, 'caddy-root.crt');
+    this.authority = new StackAuthority(this.generated);
+    this.rootCert = this.authority.rootCert;
     this.repository = join(root, '..', '..');
     this.apiEnvFile = join(this.repository, 'apps', 'api', '.env');
     this.workerEnvFile = join(this.repository, 'apps', 'worker', '.env');
@@ -147,12 +164,15 @@ class LocalStack {
   async up(): Promise<void> {
     this.ensureSecrets();
     await this.ensureMap();
+    const made = this.ensureCertificates();
+    this.writeStoreIdentities();
+    this.writeDatabasePassword();
     // A first run builds the road tiles and imports the addresses before either server answers.
     const timeout = this.setting('ADMS_UP_TIMEOUT_S') ?? '1800';
     this.compose(['up', '--detach', '--wait', '--wait-timeout', timeout]);
+    this.restartFor(made);
     this.ensureStoreIdentities();
     this.ensureMediaBucket();
-    this.copyRootCert();
     await this.checkPage('adms.localhost', '/health');
     await this.checkPage('routing.adms.localhost', '/status');
     await this.checkPage('addresses.adms.localhost', '/status');
@@ -168,7 +188,7 @@ class LocalStack {
     this.compose([...withServices, 'down', '--volumes', '--remove-orphans']);
     rmSync(this.envFile, { force: true });
     rmSync(this.generated, { recursive: true, force: true });
-    console.log('Removed the data volumes, the generated .env and the root certificate.');
+    console.log('Removed the data volumes, the generated .env and the stack’s certificates.');
     console.log('Kept the downloaded map extract in infra/local/.cache/maps/ (public data).');
   }
 
@@ -325,10 +345,10 @@ class LocalStack {
     return result.stdout;
   }
 
-  // What compose is told beside infra/local/.env: the map extract's path, name and hash, and
-  // the media bucket's name. They reach compose from here, never from a file.
+  // What compose is told beside infra/local/.env: the map extract's path, name and hash. They
+  // reach compose from here, never from a file.
   private environment(): NodeJS.ProcessEnv {
-    return { ...process.env, ...this.map.environment(), ADMS_MEDIA_BUCKET: mediaBucket };
+    return { ...process.env, ...this.map.environment() };
   }
 
   // The Prisma client, made once for one `up`: the API's build and the worker's read the same.
@@ -468,11 +488,103 @@ class LocalStack {
     return found.split('\n').filter((name) => name !== '');
   }
 
-  // Caddy makes its CA on first start; copy the public root certificate out for curl and browsers.
-  private copyRootCert(): void {
-    mkdirSync(this.generated, { recursive: true });
-    this.compose(['cp', 'caddy:/data/caddy/pki/authorities/local/root.crt', this.rootCert]);
-    console.log('Caddy root certificate: infra/local/.generated/caddy-root.crt');
+  // The stack's root and each service's certificate, made where one is missing, isn't the root's
+  // or is ending (certificates.ts; ADR-517). The root is public: browsers and curl are given it.
+  private ensureCertificates(): Made {
+    const made = this.authority.ensure();
+    console.log(
+      made.root === 'made'
+        ? 'Made the stack’s root and every service’s certificate (infra/local/.generated/).'
+        : made.leaves.length === 0
+          ? 'Keeping the stack’s root and every service’s certificate.'
+          : `Keeping the stack’s root; made the certificates of ${made.leaves.join(', ')}.`,
+    );
+    console.log('The stack’s root certificate: infra/local/.generated/caddy-root.crt');
+    return made;
+  }
+
+  // A container reads its certificate when it starts: one already running when its certificate
+  // was made afresh is made again. `up` makes again by itself only a container whose definition
+  // changed.
+  private restartFor(made: Made): void {
+    const services = new Set<string>(
+      made.root === 'made'
+        ? [...Object.values(readsCertificate).flat(), ...holdsRoot]
+        : made.leaves.flatMap((leaf) => readsCertificate[leaf] ?? []),
+    );
+    if (services.size === 0) return;
+    console.log(`Starting afresh on their new certificates: ${[...services].join(', ')}.`);
+    this.compose([
+      'up',
+      '--detach',
+      '--wait',
+      '--wait-timeout',
+      '300',
+      '--force-recreate',
+      '--no-deps',
+      ...services,
+    ]);
+  }
+
+  // Who the object store knows (ADR-263, 480), written from infra/local/.env into a file readable
+  // by its owner alone and mounted read-only (the store's root filesystem is read-only, so compose
+  // can't copy a config into it). `open-adms-local` is the stack's own administrator: `pnpm
+  // local:up` makes the media bucket through the store's own shell, and a test tidies up as it.
+  // `open-adms-api` is the identity the API uses: it may put and get an object in the media bucket
+  // and nothing else. It can delete no object and no bucket, make no bucket, list nothing and
+  // change no bucket's settings (apps/api/test/media-store.test.ts). Written only when it changed;
+  // nothing of it is printed.
+  private writeStoreIdentities(): void {
+    const secrets = parseEnv(readFileSync(this.envFile, 'utf8'));
+    const value = (key: string): string => {
+      const found = secrets[key];
+      if (found === undefined) throw new Error(`infra/local/.env has no ${key}.`);
+      return found;
+    };
+    const policy = {
+      Version: '2012-10-17',
+      Statement: [
+        {
+          Effect: 'Allow',
+          Action: ['s3:PutObject', 's3:GetObject'],
+          Resource: [`arn:aws:s3:::${mediaBucket}/*`],
+        },
+      ],
+    };
+    const identities = {
+      identities: [
+        {
+          name: 'open-adms-local',
+          credentials: [{ accessKey: value('S3_ACCESS_KEY'), secretKey: value('S3_SECRET_KEY') }],
+          actions: ['Admin', 'Read', 'List', 'Tagging', 'Write'],
+        },
+        {
+          name: apiIdentity,
+          credentials: [
+            { accessKey: value('S3_API_ACCESS_KEY'), secretKey: value('S3_API_SECRET_KEY') },
+          ],
+          policyNames: [apiPolicy],
+        },
+      ],
+      policies: [{ name: apiPolicy, content: JSON.stringify(policy) }],
+    };
+    this.writeOwn('objectstore/s3.json', `${JSON.stringify(identities, null, 2)}\n`);
+  }
+
+  // The database administrator's password, which Postgres's image reads to set a new database up
+  // (compose.yaml, `postgres_password`): from infra/local/.env, readable by its owner alone.
+  private writeDatabasePassword(): void {
+    const password = parseEnv(readFileSync(this.envFile, 'utf8'))['POSTGRES_PASSWORD'];
+    if (password === undefined) throw new Error('infra/local/.env has no POSTGRES_PASSWORD.');
+    this.writeOwn('postgres/password', password);
+  }
+
+  // A file under .generated/ readable by its owner alone, written only when it changed.
+  private writeOwn(relative: string, text: string): void {
+    const file = join(this.generated, relative);
+    mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
+    if (existsSync(file) && readFileSync(file, 'utf8') === text) return;
+    writeFileSync(file, text, { mode: 0o600 });
   }
 
   // Over HTTPS, verified against Caddy's own root: the stack's health page and each map server.

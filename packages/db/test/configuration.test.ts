@@ -30,10 +30,12 @@ describe("the database's configuration (CIS PostgreSQL Benchmark)", () => {
     expect(stored).toEqual(logins.map((login) => ({ login, scram: true })));
   });
 
-  it('every client from outside the container signs in with SCRAM; trust is only its own socket and loopback', async () => {
+  it('every client over TCP signs in with SCRAM over TLS alone; trust is only the container’s own socket (KD-78; ADR-517)', async () => {
     // The local stack publishes Postgres on the host's 127.0.0.1 only; a connection through it
-    // arrives from Docker's network, so it meets the last rule. The trust rules are the image's,
-    // for `docker exec` inside the container (as the host's Docker user, already its root).
+    // arrives from Docker's network, as the API's and the worker's do. Every one meets the one
+    // `hostssl` rule: a connection that won't speak TLS matches none and is refused
+    // (infra/local/postgres/pg_hba.conf; packages/db/test/tls.test.ts). The trust rule is the
+    // image's, for its own entrypoint and `docker exec` inside the container.
     const { db } = tested;
     await db.administer();
     const rules = await db.rows<{ rule: string }>(
@@ -43,12 +45,7 @@ describe("the database's configuration (CIS PostgreSQL Benchmark)", () => {
     );
     expect(rules.map((row) => row.rule)).toEqual([
       'local all all - trust',
-      'host all all 127.0.0.1 trust',
-      'host all all ::1 trust',
-      'local replication all - trust',
-      'host replication all 127.0.0.1 trust',
-      'host replication all ::1 trust',
-      'host all all all scram-sha-256',
+      'hostssl all all all scram-sha-256',
     ]);
   });
 

@@ -21,7 +21,7 @@ import { shippedBreachedPasswords } from '../src/sign-in/breached-list.ts';
 import { mailFor, NoMail, SmtpMail } from '../src/sign-in/mail.ts';
 import { PasswordHasher } from '../src/sign-in/password-hasher.ts';
 import { ResetCodes } from '../src/sign-in/reset-codes.ts';
-import { madeUpSettings, ready, shippedPolicy } from './support/process.ts';
+import { madeUpServedOver, madeUpSettings, ready, shippedPolicy } from './support/process.ts';
 
 const long = 'marsh heron delphine ferry';
 
@@ -169,7 +169,7 @@ describe('the code a reset by email carries', () => {
 });
 
 describe('the firm’s mail', () => {
-  const settings = { smtpAddress: undefined, mailFrom: Settings.defaultMailFrom };
+  const settings = { smtpAddress: undefined, smtpCaFile: null, mailFrom: Settings.defaultMailFrom };
 
   it('AC-10-25 is never required: with no mail server nothing is sent and the API still starts', () => {
     expect(mailFor({ ...settings, smtpUrl: '' })).toBeInstanceOf(NoMail);
@@ -186,6 +186,7 @@ describe('the firm’s mail', () => {
       SMTP_URL: '',
       ADMS_API_HOST: '127.0.0.1',
       ADMS_API_PORT: '3000',
+      ...madeUpServedOver,
       ADMS_ADDRESSES_URL: 'https://addresses.adms.localhost',
       ADMS_MEDIA_URL: 'https://s3.adms.localhost',
       ADMS_MEDIA_BUCKET: 'adms-media',

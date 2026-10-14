@@ -1,14 +1,30 @@
-# Open ADMS local reverse proxy (ARCHITECTURE §3, §4; ADR-263).
-# HTTPS only, from Caddy's internal CA, on *.adms.localhost. HTTP requests are redirected to HTTPS
-# (Caddy's automatic HTTPS), except at the API's names, where they are refused (ADR-511, below). The root certificate is copied to infra/local/.generated/ by
-# `pnpm local:up`; trust it in a browser or pass it to curl with --cacert.
+# Open ADMS local reverse proxy (ARCHITECTURE §3, §4; ADR-263, 517).
+# HTTPS only, on *.adms.localhost. HTTP requests are redirected to HTTPS (Caddy's automatic HTTPS),
+# except at the API's names, where they are refused (ADR-511, below).
+# Caddy issues its certificates from the stack's own root, which `pnpm local:up` makes
+# (infra/local/src/certificates.ts) and mounts here with its key; the root certificate is
+# infra/local/.generated/caddy-root.crt: trust it in a browser or pass it to curl with --cacert.
+# Every service behind Caddy is reached over TLS too (KD-78; OWASP ASVS 5.0 12.3.3), its
+# certificate checked against that root alone and the name it was issued for: no hop is plain.
 {
 	local_certs
 	skip_install_trust
 	admin 127.0.0.1:2019
+	# Caddy's root filesystem is read-only: its config is the file, never saved elsewhere.
+	persist_config off
 	servers {
 		# Only TCP 443 is published, so don't advertise HTTP/3 over UDP.
 		protocols h1 h2
+	}
+	pki {
+		ca local {
+			name "Open ADMS local stack"
+			root {
+				format pem_file
+				cert /run/adms/tls/root.crt
+				key /run/adms/tls/root.key
+			}
+		}
 	}
 }
 
@@ -18,6 +34,16 @@
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "no-referrer"
 		-Server
+	}
+}
+
+# How Caddy reaches a service of the stack: over TLS, the service's certificate checked against
+# the stack's root and the one name it is reached by.
+(upstream_tls) {
+	transport http {
+		tls
+		tls_trust_pool file /run/adms/tls/root.crt
+		tls_server_name {args[0]}
 	}
 }
 
@@ -34,17 +60,22 @@ adms.localhost {
 api.adms.localhost {
 	import headers
 	header -Via
-	reverse_proxy api:3000
+	reverse_proxy api:3000 {
+		import upstream_tls api
+	}
 }
 
 # The stories' API (BACKLOG 2.7.1; ADR-491): the API's own process, which `pnpm scenarios` starts
-# on this machine for each story, on the story's own database and clock, at 127.0.0.1:3180. A
-# story's phones reach it here, over HTTPS, as a phone reaches the API. Nothing listens there
-# but while a story runs, and this answers 502 then.
+# on this machine for each story, on the story's own database and clock, at 127.0.0.1:3180, over
+# HTTPS with the stack's certificate for this machine. A story's phones reach it here, over HTTPS,
+# as a phone reaches the API. Nothing listens there but while a story runs, and this answers 502
+# then.
 stories.adms.localhost {
 	import headers
 	header -Via
-	reverse_proxy host.docker.internal:3180
+	reverse_proxy host.docker.internal:3180 {
+		import upstream_tls host.docker.internal
+	}
 }
 
 # Plain HTTP at the API's names is refused, never redirected (OWASP ASVS 5.0 4.1.2; ADR-511): no
@@ -57,24 +88,34 @@ http://api.adms.localhost, http://stories.adms.localhost {
 # The S3-compatible object store (SeaweedFS). Caddy keeps the Host header, so S3 signatures verify.
 s3.adms.localhost {
 	import headers
-	reverse_proxy objectstore:8333
+	reverse_proxy objectstore:8333 {
+		import upstream_tls objectstore
+	}
 }
 
 # The mail catcher's inbox (Mailpit), for dev only.
 mail.adms.localhost {
 	import headers
-	reverse_proxy mail:8025
+	reverse_proxy mail:8025 {
+		import upstream_tls mail
+	}
 }
 
-# The routing server (Valhalla): road mileage (ARCHITECTURE §3). Asked by the worker only.
+# The routing server (Valhalla): road mileage (ARCHITECTURE §3). Asked by the worker only. Valhalla
+# speaks no TLS: its own Caddy, in its container's network, takes TLS on 8443 for it (compose.yaml,
+# `routing-tls`; routing/Caddyfile).
 routing.adms.localhost {
 	import headers
-	reverse_proxy routing:8002
+	reverse_proxy routing:8443 {
+		import upstream_tls routing
+	}
 }
 
 # The address server (Nominatim): address lookup (ARCHITECTURE §3). Asked by the API and the
 # worker only; a phone asks the API.
 addresses.adms.localhost {
 	import headers
-	reverse_proxy addresses:8080
+	reverse_proxy addresses:8080 {
+		import upstream_tls addresses
+	}
 }

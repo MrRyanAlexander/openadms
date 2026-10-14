@@ -71,6 +71,8 @@ export class GuardedDatabase {
       password,
       database,
       connectionTimeoutMillis: 5000,
+      // Over TLS alone, the server checked against the stack's own root (KD-78; ADR-517).
+      ssl: { ca: readFileSync(new URL('infra/local/.generated/caddy-root.crt', root), 'utf8') },
     });
     try {
       await client.connect();

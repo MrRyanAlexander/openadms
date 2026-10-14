@@ -8,7 +8,7 @@
 
 > **Wording.** Each requirement is a shortened label of the published text, ASVS 5.0.0 (the `v5.0.0_release` tag of `OWASP/ASVS`, `5.0/en/`) and the API Top 10 at api-security.owasp.org. Every number and level here was checked against the full published text on 2026-10-14 (ADR-510). The labels are not the text: read the requirement itself before deciding an open item (§4).
 
-**The counts:** 222 ASVS items: every Level 1 and 2 item of the chapters that apply (V1…V9, V11…V16) and the Level 3 items file 10 cites; V10 and V17 are not used, whole (below). ASVS: 92 answered by a scenario (11.4.1 among them, with a departure kept for one use, ADR-514, 516); 64 built without a scenario, 14 of them written answers (§5; ADR-515); 1 departure kept (6.4.1); 1 decided and to build (6.3.3); 61 owned by a phase, not used, or an accepted risk; 3 to do, as the user approved them (§3.1; ADR-513): 4.2.1, 12.3.3 and 15.3.2, in part 5. None open. API: 9 of 10 answered; API10's last two answers agreed (§5.9; ADR-515, 516), to build in part 5.
+**The counts:** 222 ASVS items: every Level 1 and 2 item of the chapters that apply (V1…V9, V11…V16) and the Level 3 items file 10 cites; V10 and V17 are not used, whole (below). ASVS: 95 answered by a scenario (11.4.1 among them, with a departure kept for one use, ADR-514, 516; 4.2.1, 12.3.3 and 15.3.2 by part 5, ADR-517); 64 built without a scenario, 14 of them written answers (§5; ADR-515); 1 departure kept (6.4.1); 1 decided and to build (6.3.3); 61 owned by a phase, not used, or an accepted risk. None to do, none open. API: 10 of 10 answered (API10's last two by part 5, ADR-517).
 
 ## 1. The API Security Top 10 (2023)
 
@@ -23,7 +23,7 @@
 | **API7:2023** | Server-side request forgery: a request to a URL a caller can steer | AC-04-24 (task 2.5.3), AC-10-64 (task 2.7.3 part 4, ADR-513): no endpoint takes an address the server asks; the address server, the mail sender, the media store and the worker's map servers are asked only where their settings say | — |
 | **API8:2023** | Security misconfiguration: complex or poorly secured configuration | AC-10-01, AC-10-04, AC-10-05, AC-10-06, AC-10-07, AC-10-08, AC-10-32, AC-10-33, AC-10-55 (task 2.1.2, 2.1.3, 2.3.2) | — |
 | **API9:2023** | Improper inventory management: undocumented or deprecated endpoints left open | AC-10-27, AC-10-36 (task 2.1.3, 2.6.1, 2.7.3). AC-10-27 read whole in part 3 (ADR-512): the 120 endpoints held as one list, each asked by nine kinds of caller (`every-endpoint.test.ts`) | — |
-| **API10:2023** | Unsafe consumption of APIs: data from a third-party API trusted too much | AC-04-24 (task 2.5.3) | the address server's answer is taken with checks (AC-04-24); the map servers' answers found short and the mail sender's read as it stands: each answer as §5.9 says (ADR-515, agreed by the user, ADR-516); built in part 5 |
+| **API10:2023** | Unsafe consumption of APIs: data from a third-party API trusted too much | AC-04-24 (task 2.5.3), AC-10-69, 70 (task 2.7.3 part 5) | the address server's answer is taken with checks (AC-04-24); the map servers' answers bounded, timed whole and each value checked, and the mail server's refusal answered as nothing, as §5.9 says (ADR-515, 516; built by ADR-517) |
 
 **Also checked at this layer (C155, ADR-507):** `/readiness`, a second endpoint anyone may call, answers only up or down, is counted by address, and asks the database once at a time. ASVS 16.5.1 (a generic answer) and API4:2023 (its limits). Proof: `apps/api/test/health.test.ts`, the readiness answer (task 2.7.2 part 4). The demo deploy's monitor asks `/readiness`, never `/health` (5a).
 
@@ -110,7 +110,7 @@ Columns: the requirement; its level; the label as read; the scenarios and tasks 
 | 4.1.1 | 1 | Content-Type on every response with a body | AC-10-04 (task 2.1.3) |  |
 | 4.1.2 | 2 | only user-facing endpoints redirect HTTP to HTTPS; other endpoints don't redirect | AC-10-02 (task 2.1.2; refused, ADR-511) |  |
 | 4.1.3 | 2 | headers set by an intermediary are trusted only as documented |  | **built**: a caller's address is the one that connected unless a listed proxy says otherwise (`ADMS_TRUSTED_PROXIES`; `apps/api/test/limits.test.ts`, "a caller's address is the one that connected, unless a listed proxy says whose request it carries"; C85; ADR-416; confirmed, ADR-515) |
-| 4.2.1 | 2 | every component secured, including the proxy |  | **to do**, part 5 (ADR-514): found not to hold whole. The API, the worker and the mail catcher run unprivileged with no capability, the routing server with none, and every image is pinned; the proxy, Postgres, the object store and the address server keep their capabilities and a writable root. Part 5 reworks those containers for its certificates and hardens each, held by a test of `compose.yaml`; the deploy's, Phase 5a (REQ-517) |
+| 4.2.1 | 2 | every component secured, including the proxy | AC-10-68 (task 2.7.3 part 5) | ✅ ADR-517 (KD-79 closed): every container with no capability, a read-only root, an unprivileged user and no new privileges, every image pinned; three departures named with their reasons (Caddy's binary keeps one file capability it never holds, Valhalla runs as root, the address server's sudo and writable root); `infra/local/test/compose.test.ts`. The deploy's, Phase 5a (REQ-517) |
 | 4.3.1 | 2 | GraphQL query limits |  | not used: no GraphQL endpoint (grep) |
 | 4.3.2 | 2 | GraphQL introspection off in production |  | not used: no GraphQL endpoint (grep) |
 | 4.4.1 | 1 | WebSockets only over TLS |  | not used: no WebSocket endpoint (grep) |
@@ -269,8 +269,8 @@ No ECB, no RSA and no PKCS#1 padding anywhere (grep).
 | 12.2.2 | 1 | publicly trusted certificates for external services |  | Phase 5a (demo deploy; THREAT-MODEL §6) |
 | 12.3.1 | 2 | an encrypted protocol for every connection, no fallback | AC-10-01, AC-10-02 (task 2.1.2) |  |
 | 12.3.2 | 2 | TLS clients validate the server's certificate |  | **built**: each TLS client the API and the worker hold (the address server, the map servers, the object store) checks the server's certificate against the root its setting names; none turns the check off (grep: no `rejectUnauthorized`; `apps/worker/test/container.test.ts`, `apps/api/test/media-store.test.ts`; ADR-455, 480) |
-| 12.3.3 | 2 | internal HTTP-based connections encrypted, no fallback |  | **to do**, part 5 (the user, ADR-513; KD-78) |
-| 12.3.4 | 2 | internal certificates trusted only specifically |  | **built**: as 12.3.2, the stack's own root named exactly (`ADMS_MAP_CA_FILE`, `ADMS_MEDIA_CA_FILE`), never added to a trust store (ADR-514) |
+| 12.3.3 | 2 | internal HTTP-based connections encrypted, no fallback | AC-10-67 (task 2.7.3 part 5) | ✅ ADR-517 (KD-78 closed): every hop of the local stack over TLS, Postgres and SMTP included; only a container's own loopback is plain (`hops.test.ts`, `packages/db/test/tls.test.ts`) |
+| 12.3.4 | 2 | internal certificates trusted only specifically |  | **built**: as 12.3.2, the stack's own root named exactly (`ADMS_MAP_CA_FILE`, `ADMS_MEDIA_CA_FILE`, and since ADR-517 `ADMS_DATABASE_CA_FILE`, `ADMS_SMTP_CA_FILE` and Caddy's `tls_trust_pool` to every service), never added to a trust store (ADR-514); a client that trusts other roots is refused (`packages/db/test/tls.test.ts`) |
 
 ### V13 Configuration
 
@@ -317,7 +317,7 @@ No ECB, no RSA and no PKCS#1 padding anywhere (grep).
 | 15.2.2 | 2 | defence against availability loss from heavy functions | AC-10-39 (task 2.1.3) |  |
 | 15.2.3 | 2 | production holds only the functionality it needs |  | **built** (local): as 13.4.1: no tests, tools or source control in a container (`app-exports.test.ts`; ADR-503); the image, Phase 5a (REQ-517) |
 | 15.3.1 | 1 | only the required fields of an object returned | AC-10-30 (task 2.4.5) |  |
-| 15.3.2 | 2 | backend calls do not follow redirects unless intended |  | **to do**, part 5: its test needs an HTTPS server of its own (ADR-513 (e)) |
+| 15.3.2 | 2 | backend calls do not follow redirects unless intended | AC-10-69 (task 2.7.3 part 5) | ✅ ADR-517: none is followed, on an HTTPS server of the stack's own certificate |
 | 15.3.3 | 2 | mass assignment prevented by allowed fields per action | AC-10-34, AC-10-35 (task 2.1.3, 2.4.4, 2.6.1) |  |
 | 15.3.4 | 2 | real client IP from trusted fields, used for rate limits |  | **built**: as 4.1.3 (the same test; C85; ADR-416; confirmed, ADR-515) |
 | 15.3.5 | 2 | variables type-checked; strict equality |  | **built**: TypeScript `strict`, typescript-eslint's `strictTypeChecked`, and ESLint's `eqeqeq` (`== null` alone kept) (`eslint.config.js`; ADR-514) |
@@ -349,7 +349,7 @@ No ECB, no RSA and no PKCS#1 padding anywhere (grep).
 
 ## 3. What the page leaves for the user
 
-**The 78 open ASVS items were answered by the user on 2026-10-14 (ADR-513): §3.1 approved whole.** 21 are answered by a scenario now (task 2.7.3 part 4), 40 more are marked built, owned by a phase or not used (part 4's second piece, ADR-514), and 14 are written (§5; part 4's third piece, ADR-515); the other 3 are **to do** in part 5 (the Owner column). API10:2023's last two answers are agreed (§5.9; ADR-516), built in part 5.
+**The 78 open ASVS items were answered by the user on 2026-10-14 (ADR-513): §3.1 approved whole.** 21 are answered by a scenario now (task 2.7.3 part 4), 40 more are marked built, owned by a phase or not used (part 4's second piece, ADR-514), and 14 are written (§5; part 4's third piece, ADR-515); the other 3 were built in part 5 (ADR-517), as were API10:2023's last two answers (§5.9). None is left to do.
 
 **The four the user settled (2026-10-14, ADR-511):**
 
@@ -399,7 +399,7 @@ Each item that was open, with what the agent proposed. **User, 2026-10-14:** "th
 | 11.4.4 | Keys derived from secrets: each purpose's key is an HMAC of the installation's secret, which is random and long (not a password); passwords and the passcode under Argon2id | built | `offline-checks.ts`, `session-tokens.ts`; ADR-402 |
 | 12.1.2 | The proxy's cipher suites: Caddy's defaults (TLS 1.2 and 1.3, forward-secret AEAD suites) | built (local), 5a (the deploy) | `infra/local/Caddyfile` |
 | 12.3.2, 12.3.4 | The API's and the worker's TLS clients check the server's certificate against the stack's own root, named exactly | built | `ADMS_MAP_CA_FILE`, `ADMS_MEDIA_CA_FILE` (`compose.yaml`) |
-| 12.3.3 | Every internal connection encrypted, locally too: no hop in plain HTTP, no data in flight unencrypted (the user, ADR-513; KD-78) | part 5 | the proxy reaches the API, the object store and the map servers in plain HTTP inside the stack's network, and the services reach Postgres without TLS |
+| 12.3.3 | Every internal connection encrypted, locally too: no hop in plain HTTP, no data in flight unencrypted (the user, ADR-513; KD-78) | scenario, ✅ AC-10-67 (part 5, ADR-517); before it: | the proxy reaches the API, the object store and the map servers in plain HTTP inside the stack's network, and the services reach Postgres without TLS |
 | 13.1.1 | What the API talks to and why, documented | docs | ARCHITECTURE §4 lists the services |
 | 13.2.1, 13.3.2 | Each service its own login and only its own secrets | built | the database's logins (`grants.test.ts`); the API's own identity at the object store (ADR-480); one env file per container (`compose.yaml`) |
 | 13.2.3 | No default or well-known credential | built | the installer makes every secret at random; the dev accounts held out of what ships (`dev-accounts.test.ts`, AC-10-26) |
@@ -415,7 +415,7 @@ Each item that was open, with what the agent proposed. **User, 2026-10-14:** "th
 | 15.1.1, 15.2.1 | How quickly a dependency's fix is taken up, written down and kept | Phase 5a (the operator's guide) | dependencies pinned by ADR |
 | 15.1.2 | The inventory of third-party components | built | the lockfile and `pnpm licences` |
 | 15.1.3 | The heavy functions documented: a sync, a map's file, a reconciliation run | docs | ADR-504, 506 (measured) |
-| 15.3.2 | A backend request never follows a redirect | scenario, part 5 (its test needs an HTTPS server of its own, which part 5's certificates give) | `address-server.ts` (a redirect throws); the worker's `map-servers.ts` (`node:https`, which follows none; a redirect is not 200) |
+| 15.3.2 | A backend request never follows a redirect | scenario, ✅ AC-10-69 (part 5, ADR-517) | `address-server.ts` (a redirect throws); the worker's `map-servers.ts` (`node:https`, which follows none; a redirect is not 200) |
 | 15.3.5 | Types checked and equality strict | built | TypeScript strict; ESLint's type-checked rules (to confirm `eqeqeq` in part 4) |
 | 16.1.1, 16.2.3, 16.2.4 | The log inventory: one structured JSON line per event on standard output, per service; the security events in their table | built (written in part 4) | AC-10-32; ADR-399 |
 | 16.3.2, 16.3.3 | A refusal at the door (no session, not allowed, a CSRF value missing, a phone not proven) logged with who and what, never a secret | scenario | to check in part 4: whether the door's refusals are logged today |
@@ -429,6 +429,8 @@ Each item that was open, with what the agent proposed. **User, 2026-10-14:** "th
 **Done in part 4's second piece (ADR-514):** 40 of the 57. **Not used**, each confirmed by grep: 1.3.5, 1.3.7, 1.3.10, 6.4.2, 6.5.2, 6.5.4, 7.6.2, 13.4.3. **A phase**, each told in its brief (`agent_store/REQUIREMENTS-LATER.md`, Phase 4's carried items and REQ-517): 1.3.3, 3.5.4, 7.5.2, 15.1.1, 15.2.1, 16.4.2, and 5.4.3 an accepted risk until 5a. **Built**, each test named: 2.3.1, 2.3.4, 7.1.1, 7.2.1, 11.2.1, 11.2.3, 11.3.1, 11.3.2, 11.3.3, 11.4.3, 11.4.4, 12.1.2, 12.3.2, 12.3.4, 13.2.1, 13.2.3, 13.3.2, 13.4.1, 13.4.2, 14.2.2, 15.1.2, 15.2.3, 15.3.5, 16.3.4, 16.5.2. Three were found short: **15.3.5**, strict equality was the habit but no rule held it (ESLint's `eqeqeq` added); **16.5.2**, no test had the object store away (one added); **4.2.1**, only the API, the worker, the mail catcher and the routing server were hardened as §3.1 said (moved to part 5). And one use of a legacy primitive was found: **11.4.1**, an authenticator's HMAC-SHA-1 (a departure proposed). **Still to do:** 14 written answers (2.1.2, 2.1.3, 5.1.1, 6.1.3, 11.1.1, 11.2.2, 13.1.1, 14.1.1, 14.1.2, 14.2.3, 15.1.3, 16.1.1, 16.2.3, 16.2.4), §2's 25 built items' rows, and API10's answers (part 4, next piece); 4.2.1, 12.3.3 and 15.3.2 (part 5).
 
 **Done in part 4's third piece (ADR-515):** the 14 written answers (§5: 2.1.2, 2.1.3, 5.1.1, 6.1.3 in ARCHITECTURE §6, 11.1.1, 11.2.2, 13.1.1, 14.1.1, 14.1.2, 14.2.3, 15.1.3, 16.1.1, 16.2.3, 16.2.4); §2's 25 earlier built items each read again against the test it names, the test's own words quoted: 21 held as written, and 4 named only the source or nothing (7.4.3, 9.1.2, 9.1.3, and 6.1.1 a document), each now citing the test that holds it; API10's last two answers proposed (§5.9). Writing them found two things short: **11.2.2**, a key can't yet be replaced in place with its data re-sealed (proposed for 5a); **API10**, the worker reads the map servers' answers unbounded and unchecked (proposed for part 5).
+
+**Done in part 5 (ADR-517):** 4.2.1 (AC-10-68), 12.3.3 (AC-10-67) and 15.3.2 (AC-10-69), and API10's last two answers (AC-10-70, §5.9). The stack's own root and a certificate for each service (`infra/local/src/certificates.ts`), Caddy issuing from it; Postgres TLS alone with `verify-full` logins; SMTP after STARTTLS alone; Valhalla behind a Caddy of its own; every container held to its hardening by `compose.test.ts`. The checklist has none to do.
 
 The 25 earlier **built** items are tested and each row names its test; none has a file 10 row of its own (agent default, ADR-515: a cited test, as this page's rule for **built** allows). Part 3 (ADR-512) read AC-10-27 and REQ-204 whole and weighed C155's finding; it found KD-78 (12.3.3). The threat model's rows are checked against this page when it changes (`spec/THREAT-MODEL.md` §6).
 
@@ -549,7 +551,7 @@ Four levels, each with what protects it (agent default, ADR-515: the user may re
 
 At rest, the database and the object store are the host's to encrypt, with their backups (ARCHITECTURE §4; REQ-517); the phone's own store is encrypted (Phase 3, ARCHITECTURE §8).
 
-### 5.9 API10:2023: the map servers' and the mail sender's answers (proposed, ADR-515; agreed by the user, ADR-516)
+### 5.9 API10:2023: the map servers' and the mail sender's answers (proposed, ADR-515; agreed by the user, ADR-516; built, ADR-517: AC-10-70)
 
 Read on 2026-10-14. **The address server's answer** is taken as API10 asks (AC-04-24): over HTTPS, its certificate checked, the whole exchange timed, its size bounded, its JSON read by the domain's `lookedUpAddress`.
 

@@ -1,9 +1,11 @@
 // The API as a process (ARCHITECTURE §3, §6; BACKLOG 2.1.2, 2.1.3; ADR-380…385, 387…392): NestJS
 // on the Fastify adapter, with the structured log, the server's own request ids, the one error
 // filter, the boundary every request passes, the headers every answer carries and the API's
-// database. It speaks plain HTTP to the proxy beside it and publishes no port: HTTPS is the
-// proxy's (Caddy locally), the only way in.
+// database. It publishes no port: the proxy (Caddy locally) is the only way in, and reaches it
+// over HTTPS too, with the certificate its settings name (KD-78; ADR-517).
 import 'reflect-metadata';
+
+import { readFileSync } from 'node:fs';
 
 import {
   filePartMediaType,
@@ -160,12 +162,18 @@ export type ProcessSettings = Pick<
   | 'tokenSigningSecret'
   | 'smtpUrl'
   | 'smtpAddress'
+  | 'smtpCaFile'
   | 'mailFrom'
   | 'addressesUrl'
   | 'mapCaFile'
   | 'mapServersAt'
   | 'media'
->;
+> & {
+  // The certificate and key the process serves HTTPS with (KD-78; ADR-517). None only for a
+  // process a test keeps in its own memory and asks without a connection: `listen` refuses it,
+  // so the API never listens in plain HTTP.
+  readonly tls: Settings['tls'] | null;
+};
 
 // The installation's policy, whole: the process reads its own values (the body limit, the pool,
 // sign-in's and the rate limits'), and each service behind an endpoint reads its own.
@@ -248,6 +256,17 @@ export class ApiProcess {
   ): Promise<ApiProcess> {
     const adapter = new FastifyAdapter({
       ...logged,
+      // HTTPS alone, TLS 1.2 and 1.3 (OWASP ASVS 5.0 12.1.1, 12.3.3): the proxy reaches the API
+      // over TLS, the API's certificate checked against the stack's root.
+      ...(settings.tls === null
+        ? {}
+        : {
+            https: {
+              cert: readFileSync(settings.tls.certFile),
+              key: readFileSync(settings.tls.keyFile),
+              minVersion: 'TLSv1.2' as const,
+            },
+          }),
       logger: { ...logged.logger, ...(more.stream === undefined ? {} : { stream: more.stream }) },
       // A body that says it is larger, or turns out to be, is refused before it is read whole.
       bodyLimit: policy.requestBodyLimitBytes,
@@ -561,6 +580,9 @@ export class ApiProcess {
   }
 
   async listen(): Promise<void> {
+    if (this.settings.tls === null) {
+      throw new Error('The API listens over HTTPS alone: it was given no certificate.');
+    }
     await this.app.listen(this.settings.port, this.settings.host);
   }
 
