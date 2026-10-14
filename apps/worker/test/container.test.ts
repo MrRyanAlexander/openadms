@@ -35,7 +35,7 @@ describe('the worker’s container', () => {
       "fetch('http://127.0.0.1:3001/health').then(async (r) => { console.log(String(r.status) + ' ' + (await r.text())); })",
     );
     expect(asked.stdout.trim()).toMatch(
-      /^200 \{"status":"ok","jobsWaiting":\d+,"jobsSetAside":\d+\}$/,
+      /^200 \{"status":"ok","jobsWaiting":\d+,"jobsSetAside":\d+,"oldestJobWaitingSeconds":\d+\}$/,
     );
     const id = compose(['ps', '--quiet', 'worker']).stdout.trim();
     expect(docker(['port', id]).stdout.trim()).toBe('');

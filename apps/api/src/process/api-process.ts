@@ -146,6 +146,7 @@ import { Boundary, requestNow } from './boundary.ts';
 import { ErrorFilter } from './error-filter.ts';
 import { apiLimits, Limits } from './limits.ts';
 import { logged, ProcessLog } from './logs.ts';
+import { apiReadiness, Readiness } from './readiness.ts';
 import type { Settings } from './settings.ts';
 
 export type ProcessSettings = Pick<
@@ -400,6 +401,8 @@ export class ApiProcess {
           [apiTwoStep, twoStep],
           [apiPeople, people],
           [apiLimits, limits],
+          // Whether the API can serve now: its database answers, within a statement's time.
+          [apiReadiness, new Readiness(database, policy.statementTimeoutMs)],
           // Setup's services (task 2.4.2): each change is written as the signed-in person.
           [apiProjectSetup, projectSetup],
           [apiContractorSetup, new ContractorSetup(database, clock, policy)],

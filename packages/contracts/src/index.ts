@@ -171,6 +171,7 @@ export {
   findContractorsEndpoint,
   findDeclarationEventsEndpoint,
   healthEndpoint,
+  readinessEndpoint,
   linkTippingFeeEndpoint,
   loadMapEndpoint,
   loadMapFileEndpoint,

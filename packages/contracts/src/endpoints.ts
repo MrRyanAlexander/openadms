@@ -316,6 +316,18 @@ export const healthEndpoint = endpoint({
   answer: healthAnswerSchema,
 });
 
+// Whether the API can serve now (ADR-507): it answers and its database answers it. Status 503
+// `UNAVAILABLE` otherwise, never which part or why. Anybody may ask, as the health answer.
+export const readinessEndpoint = endpoint({
+  name: 'readiness',
+  summary:
+    'That the API answers and its database answers it: status 503 UNAVAILABLE otherwise. Anybody may ask.',
+  access: 'ANYBODY',
+  method: 'GET',
+  path: '/readiness',
+  answer: healthAnswerSchema,
+});
+
 // A password reset by email, for a back-office or outside user of a firm that has mail
 // (ARCHITECTURE §6; AC-10-25; ADR-170, 404). Nobody is signed in for either call. The first asks
 // for a message to the address a person has on record; the second sets the new password with the
@@ -2669,6 +2681,7 @@ export const revokeCertificationEndpoint = endpoint({
 
 export const endpoints: readonly Endpoint[] = [
   healthEndpoint,
+  readinessEndpoint,
   requestPasswordResetEndpoint,
   completePasswordResetEndpoint,
   signInEndpoint,

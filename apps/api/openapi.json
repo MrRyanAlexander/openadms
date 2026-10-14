@@ -46,6 +46,43 @@
         }
       }
     },
+    "/readiness": {
+      "get": {
+        "operationId": "readiness",
+        "summary": "That the API answers and its database answers it: status 503 UNAVAILABLE otherwise. Anybody may ask.",
+        "x-open-adms-access": "ANYBODY",
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "const": "ok"
+                    }
+                  },
+                  "required": ["status"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/password-resets": {
       "post": {
         "operationId": "requestPasswordReset",
@@ -23305,7 +23342,8 @@
               "PHONE_NOT_PROVEN",
               "MASTER_PASSCODE_REFUSED",
               "PHONE_OUT_OF_SERVICE",
-              "NOT_A_MONITOR"
+              "NOT_A_MONITOR",
+              "UNAVAILABLE"
             ]
           },
           "requestId": {

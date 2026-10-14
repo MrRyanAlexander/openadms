@@ -7,29 +7,29 @@
 > task's ADR and its session-log line in `DECISIONS.md`). No other file carries these counts.
 > **A count that differs from this page without a reason is a finding, not noise.**
 
-**Seen whole:** 2026-10-13, after ADR-506, on the user's Mac, the installation at head.
+**Seen whole:** 2026-10-13, after ADR-507, on the user's Mac, the installation at head.
 
 ## `pnpm ready`
 
 | What | Today |
 |---|---|
-| `pnpm local:up` | six `Healthy` services, `Keeping the object store’s bucket adms-media (it keeps every version).` (ADR-480), then the API's and the worker's containers: `https://api.adms.localhost/health → 200 {"status":"ok"}` and `the worker’s health answer → 200 {"status":"ok","jobsWaiting":0,"jobsSetAside":0}` |
-| `pnpm installer:check` | **31 `✓`**, no `✗`, exit 0 |
+| `pnpm local:up` | six `Healthy` services, `Keeping the object store’s bucket adms-media (it keeps every version).` (ADR-480), then the API's and the worker's containers: `https://api.adms.localhost/health → 200 {"status":"ok"}` and `the worker’s health answer → 200 {"status":"ok","jobsWaiting":0,"jobsSetAside":0,"oldestJobWaitingSeconds":0}` |
+| `pnpm installer:check` | **32 `✓`**, no `✗`, exit 0 |
 | Migrations at head | **114** (`packages/db/prisma/migrations/` is the list) |
 | `pnpm local:down` (close-out) | 8 containers and the network: 9 `Removed` lines |
 
 ## `pnpm test`
 
-**`Test Files 160 passed (160)`, `Tests 2841 passed (2841)`.**
+**`Test Files 161 passed (161)`, `Tests 2856 passed (2856)`.**
 
 | Project | Tests | Files | Needs |
 |---|---|---|---|
 | `packages/domain` | 795 | 43 | nothing |
 | `packages/contracts` | 84 | 9 | nothing |
-| `apps/api` | 593 | 45 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
+| `apps/api` | 600 | 46 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
 | `packages/db` | 1056 | 44 | `pnpm ready` |
 | `packages/scenarios` | 153 | 7 | `pnpm ready` for `stories.test.ts` (the runner and a run's template, 5) and `story-api.test.ts` (a story's API over HTTPS through the proxy, every request of a story's phone, the back office and the viewers at their browsers, 14); the flag catalogue (78 flags), the harness, the phone held to the sync contract's suite and to what it sends and takes in at a sync, its photographs' files and its turn-in among it, and its wait when told to (24), the policy and the server apps' exports (2) need nothing. **The stories themselves are not here** (ADR-446) |
-| `apps/worker` | 33 | 4 | `pnpm ready` for the map servers (13) and its container (3); the process (14) and the job loop's set-aside lines (3) need nothing |
+| `apps/worker` | 41 | 4 | `pnpm ready` for the map servers (13) and its container (3); the process (14) and the job loop (its set-aside lines and its health, 11) need nothing |
 | `infra/local` | 22 | 3 | `pnpm ready` |
 | `tools/security` | 90 | 2 | nothing (the scan's and the grant tests' rules 33, the guard hook 57) |
 | `tools/setup` | 15 | 3 | nothing |

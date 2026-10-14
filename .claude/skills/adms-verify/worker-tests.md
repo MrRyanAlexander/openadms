@@ -12,6 +12,7 @@ error line a job by the fixed code `JOB_SET_ASIDE`, with a queue and a run of it
 unknown as Database`); the story `p1-queued` checks the same lines on the database. **A loosening
 of the set-aside line is tried on both** (`job-loop.ts`, and the failure's kind in
 `reconciliation.ts`).
+**The loop's health (ADR-507)** is `job-loop.test.ts`'s too: a queue of the test's own (`world()`: `away`, `waiting`, `oldest`, `projects`, and `held` runs the test ends one by one through `ends`) on a clock of its own; the answer is read with `loop.standing` as it is asked. A loosening of the standing, the looks, the signs or `JobLoop.stalledAfterMs` is tried on it and `process.test.ts` (twelve, all caught; a sign as a run ends was doubled by the next run's and the closing look, and was taken out). **`JobLoop` takes a clock and `stalledAfterMs`**: a story that makes one hands it `JobLoop.stalledAfterMs(story.policy)` and `story.clock`; a job's `queuedAt` is the database's time, so in a story the oldest wait is held at 0 or more and means nothing.
 `process.test.ts` needs no stack: the settings (each missing or malformed key named, never
 shown), the policy and an installation's own values, the log, the health answer, and three tests
 that start the built `apps/worker/dist/main.js` with settings that are off. `container.test.ts`

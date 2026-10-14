@@ -14,6 +14,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { MapServers } from '../src/index.ts';
 import { Health } from '../src/process/health.ts';
+import type { WorkerStanding } from '../src/process/job-loop.ts';
 import { WorkerLog } from '../src/process/logs.ts';
 import { builtInPolicy, installationPolicy } from '../src/process/policy.ts';
 import { Settings, SettingsProblem } from '../src/process/settings.ts';
@@ -297,19 +298,35 @@ describe('the worker’s health answer (ADR-419)', () => {
       req.end();
     });
 
-  it('says that the process answers and how its queue stands, and nothing else; any other question is not found', async () => {
-    let standing = { jobsWaiting: 0, jobsSetAside: 0 };
+  it('says how the worker and its queue stand, and nothing else: 200 when it is well, 503 when it isn’t, with the problem named; any other question is not found', async () => {
+    let standing: WorkerStanding = {
+      status: 'ok',
+      jobsWaiting: 0,
+      jobsSetAside: 0,
+      oldestJobWaitingSeconds: 0,
+    };
     const health = new Health(() => standing);
     await health.listen('127.0.0.1', 0);
     try {
       expect(await asked(health.port, 'GET', '/health')).toEqual({
         status: 200,
-        body: '{"status":"ok","jobsWaiting":0,"jobsSetAside":0}',
+        body: '{"status":"ok","jobsWaiting":0,"jobsSetAside":0,"oldestJobWaitingSeconds":0}',
       });
-      standing = { jobsWaiting: 2, jobsSetAside: 1 };
+      standing = { status: 'ok', jobsWaiting: 2, jobsSetAside: 1, oldestJobWaitingSeconds: 42 };
       expect(await asked(health.port, 'GET', '/health')).toEqual({
         status: 200,
-        body: '{"status":"ok","jobsWaiting":2,"jobsSetAside":1}',
+        body: '{"status":"ok","jobsWaiting":2,"jobsSetAside":1,"oldestJobWaitingSeconds":42}',
+      });
+      standing = {
+        status: 'unavailable',
+        problem: 'QUEUE_NOT_READ',
+        jobsWaiting: 2,
+        jobsSetAside: 1,
+        oldestJobWaitingSeconds: 42,
+      };
+      expect(await asked(health.port, 'GET', '/health')).toEqual({
+        status: 503,
+        body: '{"status":"unavailable","problem":"QUEUE_NOT_READ","jobsWaiting":2,"jobsSetAside":1,"oldestJobWaitingSeconds":42}',
       });
       for (const [method, path] of [
         ['GET', '/'],

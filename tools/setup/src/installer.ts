@@ -608,6 +608,13 @@ export class Installer {
       ok: apiProblem === undefined,
       text: `the API answers over HTTPS at https://${apiHostname}/health${apiProblem === undefined ? '' : ` (${apiProblem})`}`,
     });
+    // And it can serve: its database answers it (ADR-507).
+    const readinessProblem =
+      apiProblem === undefined ? await this.apiProblem('/readiness') : 'the API doesn’t answer';
+    checks.push({
+      ok: readinessProblem === undefined,
+      text: `the API reaches its database (https://${apiHostname}/readiness)${readinessProblem === undefined ? '' : ` (${readinessProblem})`}`,
+    });
     checks.push({
       ok: this.helper(['worker-health']).status === 0,
       text: 'the worker answers its health check in the local stack',
@@ -727,7 +734,7 @@ export class Installer {
   }
 
   // Asked as a caller would: through the proxy, the certificate checked against the stack's own.
-  private apiProblem(): Promise<string | undefined> {
+  private apiProblem(path = '/health'): Promise<string | undefined> {
     const rootCert = join(this.root, 'infra/local/.generated/caddy-root.crt');
     if (!existsSync(rootCert)) return Promise.resolve('start it with `pnpm local:up`');
     const port = this.stackEnv.exists() ? this.stackEnv.read()['ADMS_HTTPS_PORT'] : undefined;
@@ -736,7 +743,7 @@ export class Installer {
         {
           host,
           port: Number(port ?? '443'),
-          path: '/health',
+          path,
           servername: apiHostname,
           headers: { host: apiHostname },
           ca: readFileSync(rootCert),

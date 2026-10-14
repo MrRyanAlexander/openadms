@@ -4,19 +4,37 @@
 // project under way and leave it. A run takes up only as many tickets as the policy lets, so a
 // pass that finished jobs and left others waiting is followed by the next at once. A project
 // whose try fails never stops the others'. What it
-// did is in the log, by ids only; how many jobs wait and how many are set aside is kept for the
-// health answer. A pass also answers what it did with each project, for whoever asked for the
-// pass (a story: BACKLOG 2.7.1 part 3, ADR-494).
+// did is in the log, by ids only. A pass also answers what it did with each project, for whoever
+// asked for the pass (a story: BACKLOG 2.7.1 part 3, ADR-494).
+//
+// Its health (BACKLOG 2.7.2 part 4, C38; ADR-507): the loop looks at the queue as a pass begins
+// and as it ends (how many jobs wait, how many are set aside, since when the oldest has waited),
+// and keeps the time of its last sign of life (a look, a project's run begun). The health
+// answer reads them as it is asked: unavailable until the first look has been read, while the
+// last look could not be read (the database away), and once no sign has come for longer than a
+// run may take; otherwise ok. How long the oldest job has waited is a figure, never a verdict:
+// how long is too long is the firm's to say, in its own monitor.
 import type { Database } from '@open-adms/db';
+import type { Policy } from '@open-adms/domain';
 
 import type { JobsOutcome, Reconciliation } from '../reconciliation/reconciliation.ts';
 import type { WorkerLog } from './logs.ts';
 
-export interface QueueStanding {
-  // Jobs neither finished nor set aside, when the worker last looked.
-  readonly jobsWaiting: number;
+// Why the worker isn't well, when it isn't.
+export type WorkerProblem = 'NOT_YET_LOOKED' | 'QUEUE_NOT_READ' | 'STALLED';
+
+// What the health answer says, as it is asked. The figures are the last look's that was read:
+// none before the first.
+export interface WorkerStanding {
+  readonly status: 'ok' | 'unavailable';
+  readonly problem?: WorkerProblem;
+  // Jobs neither finished nor set aside.
+  readonly jobsWaiting: number | null;
   // Jobs set aside: kept, no longer taken up, for whoever runs the installation.
-  readonly jobsSetAside: number;
+  readonly jobsSetAside: number | null;
+  // How long, in whole seconds to now, the oldest job still waiting at that look has waited; 0
+  // with none waiting.
+  readonly oldestJobWaitingSeconds: number | null;
 }
 
 // What one pass did with one project's jobs: the run's own answer, or what stopped the try
@@ -30,6 +48,16 @@ export interface LoopSettings {
   // The most tickets one run takes up: JOB_TICKETS_AT_MOST.
   readonly ticketsARun: number;
   readonly pollMs: number;
+  // How long the loop may go without a sign of life before its health answer says it has
+  // stalled: the longest a run may wait for its connection and then hold its lock, a map
+  // server's answer, and one wait between looks (main.ts; ADR-507).
+  readonly stalledAfterMs: number;
+}
+
+interface Looked {
+  readonly jobsWaiting: number;
+  readonly jobsSetAside: number;
+  readonly oldestQueuedAt: Date | null;
 }
 
 export class JobLoop {
@@ -37,9 +65,13 @@ export class JobLoop {
   private readonly reconciliation: Reconciliation;
   private readonly settings: LoopSettings;
   private readonly log: WorkerLog;
+  private readonly clock: { now(): Date };
   private stopped = false;
   private wake: (() => void) | undefined;
-  private last: QueueStanding = { jobsWaiting: 0, jobsSetAside: 0 };
+  // The last look at the queue that was read, and whether the latest one could be.
+  private last: Looked | undefined;
+  private lastLookFailed = false;
+  private lastSign: Date;
   // Whether the last pass finished a job: with more still waiting, the next pass follows at
   // once, so a setup change cut into many jobs isn't worked one job every poll.
   private finishedSome = false;
@@ -49,16 +81,57 @@ export class JobLoop {
     reconciliation: Reconciliation,
     settings: LoopSettings,
     log: WorkerLog,
+    clock: { now(): Date },
   ) {
     this.db = db;
     this.reconciliation = reconciliation;
     this.settings = settings;
     this.log = log;
+    this.clock = clock;
+    this.lastSign = clock.now();
   }
 
-  // What the health answer says of the queue.
-  get standing(): QueueStanding {
-    return this.last;
+  // How long the loop may go without a sign of life, from the policy: a run may wait as long for
+  // its connection as it may then hold its lock (reconciliation.ts), a ticket's map question may
+  // be out as that time runs out, and the loop waits between looks. Twenty minutes and 35 seconds
+  // under the release's values. No value of its own: each part is one already.
+  static stalledAfterMs(
+    policy: Pick<
+      Policy,
+      'reconciliationRunLongestMinutes' | 'mapServerAnswerSeconds' | 'jobQueuePollSeconds'
+    >,
+  ): number {
+    return (
+      2 * policy.reconciliationRunLongestMinutes * 60_000 +
+      policy.mapServerAnswerSeconds * 1_000 +
+      policy.jobQueuePollSeconds * 1_000
+    );
+  }
+
+  // What the health answer says, now.
+  get standing(): WorkerStanding {
+    const now = this.clock.now().getTime();
+    const problem: WorkerProblem | undefined =
+      now - this.lastSign.getTime() > this.settings.stalledAfterMs
+        ? 'STALLED'
+        : this.lastLookFailed
+          ? 'QUEUE_NOT_READ'
+          : this.last === undefined
+            ? 'NOT_YET_LOOKED'
+            : undefined;
+    const last = this.last;
+    return {
+      status: problem === undefined ? 'ok' : 'unavailable',
+      ...(problem === undefined ? {} : { problem }),
+      jobsWaiting: last?.jobsWaiting ?? null,
+      jobsSetAside: last?.jobsSetAside ?? null,
+      oldestJobWaitingSeconds:
+        last === undefined
+          ? null
+          : last.oldestQueuedAt === null
+            ? 0
+            : Math.max(0, Math.floor((now - last.oldestQueuedAt.getTime()) / 1_000)),
+    };
   }
 
   // Until stopped: a pass, then a wait. A pass that fails (the database is away) is logged and
@@ -71,7 +144,7 @@ export class JobLoop {
         this.log.error('The worker could not look at its queue.', caught);
       }
       if (this.isStopped()) break;
-      if (this.finishedSome && this.last.jobsWaiting > 0) continue;
+      if (this.finishedSome && (this.last?.jobsWaiting ?? 0) > 0) continue;
       await new Promise<void>((resolve) => {
         const timer = setTimeout(resolve, this.settings.pollMs);
         this.wake = () => {
@@ -95,6 +168,7 @@ export class JobLoop {
   // One look at the queue: every project with a job waiting, each worked once; what became of
   // each.
   async pass(): Promise<readonly ProjectPassed[]> {
+    await this.look();
     const projects = await this.db.reconciliationJob.findMany({
       where: { finishedAt: null, setAsideAt: null },
       select: { projectId: true },
@@ -105,6 +179,7 @@ export class JobLoop {
     const passed: ProjectPassed[] = [];
     for (const { projectId } of projects) {
       if (this.stopped) break;
+      this.signed();
       try {
         passed.push({ projectId, outcome: await this.project(projectId) });
       } catch (caught) {
@@ -112,13 +187,35 @@ export class JobLoop {
         passed.push({ projectId, error: caught });
       }
     }
-    this.last = {
-      jobsWaiting: await this.db.reconciliationJob.count({
-        where: { finishedAt: null, setAsideAt: null },
-      }),
-      jobsSetAside: await this.db.reconciliationJob.count({ where: { setAsideAt: { not: null } } }),
-    };
+    await this.look();
     return passed;
+  }
+
+  // How the queue stands, for the health answer: kept when it was read, marked when it couldn't
+  // be. Either way it is a sign of life.
+  private async look(): Promise<void> {
+    const waiting = { finishedAt: null, setAsideAt: null };
+    try {
+      this.last = {
+        jobsWaiting: await this.db.reconciliationJob.count({ where: waiting }),
+        jobsSetAside: await this.db.reconciliationJob.count({
+          where: { setAsideAt: { not: null } },
+        }),
+        oldestQueuedAt: (
+          await this.db.reconciliationJob.aggregate({ where: waiting, _min: { queuedAt: true } })
+        )._min.queuedAt,
+      };
+      this.lastLookFailed = false;
+    } catch (caught) {
+      this.lastLookFailed = true;
+      throw caught;
+    } finally {
+      this.signed();
+    }
+  }
+
+  private signed(): void {
+    this.lastSign = this.clock.now();
   }
 
   private async project(projectId: string): Promise<JobsOutcome> {

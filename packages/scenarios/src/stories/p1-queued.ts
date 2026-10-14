@@ -202,8 +202,10 @@ export const p1Queued: Story = {
           triesBeforeSetAside: tries,
           ticketsARun: atMost,
           pollMs: story.policy.jobQueuePollSeconds * 1_000,
+          stalledAfterMs: JobLoop.stalledAfterMs(story.policy),
         },
         new WorkerLog({ write: (line) => lines.push(line) }),
+        story.clock,
       );
       return {
         async pass(): Promise<JobsOutcome> {
@@ -627,13 +629,15 @@ export const p1Queued: Story = {
         triesBeforeSetAside: tries,
         ticketsARun: atMost,
         pollMs: story.policy.jobQueuePollSeconds * 1_000,
+        stalledAfterMs: JobLoop.stalledAfterMs(story.policy),
       },
       new WorkerLog({ write: (line) => lines.push(line) }),
+      story.clock,
     );
     await loop.pass();
     const logged = lines.map((line) => JSON.parse(line) as Record<string, unknown>);
     story.check(
-      'Its pass works the job and says so in its log by ids alone; its health answer’s figures are no job waiting and three set aside',
+      'Its pass works the job and says so in its log by ids alone; its health answer is ok, no job waiting and three set aside (ADR-507)',
       [
         (await jobOf(last)).finished,
         logged.map((line) => [line['service'], line['msg'], line['projectId'], line['jobs']]),
@@ -643,7 +647,7 @@ export const p1Queued: Story = {
       [
         true,
         [['worker', 'A run worked its project’s waiting jobs.', p1, [last]]],
-        { jobsWaiting: 0, jobsSetAside: 3 },
+        { status: 'ok', jobsWaiting: 0, jobsSetAside: 3, oldestJobWaitingSeconds: 0 },
         false,
       ],
     );

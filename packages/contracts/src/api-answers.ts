@@ -24,7 +24,8 @@ import { z } from 'zod';
 import { billingUnits, dumpedForms } from './setup-answers.ts';
 
 // The health answer says that the process answers, and nothing else: no version, no setting, no
-// word on the database. Anybody may ask (acceptance file 10, point 17).
+// word on the database. Anybody may ask (acceptance file 10, point 17). The readiness answer is
+// the same words, said only while the database answers too; otherwise `UNAVAILABLE` (ADR-507).
 export const healthAnswerSchema = z.strictObject({ status: z.literal('ok') });
 
 export type HealthAnswer = z.infer<typeof healthAnswerSchema>;
@@ -113,6 +114,8 @@ export const errorCodes = [
   // A session under the master passcode (ADR-462): the passcode was right, and the person it
   // was to be opened for is no monitor in service.
   'NOT_A_MONITOR',
+  // The API answers and can't serve now: its database didn't answer (status 503; ADR-507).
+  'UNAVAILABLE',
 ] as const;
 
 export type ErrorCode = (typeof errorCodes)[number];

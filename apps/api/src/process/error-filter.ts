@@ -9,6 +9,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { databaseRefusalOf } from './database-refusal.ts';
 import { Limited } from './limits.ts';
 import { errorLogged } from './logs.ts';
+import { Unavailable } from './readiness.ts';
 import { Refusal } from './refusal.ts';
 
 const codes: Readonly<Record<number, ErrorCode>> = {
@@ -41,6 +42,15 @@ export class ErrorFilter implements ExceptionFilter {
             message: refused.said,
           }),
         );
+      return;
+    }
+    // The API can't serve now: its database didn't answer the readiness question (ADR-507).
+    if (thrown instanceof Unavailable) {
+      request.log.warn('The API was asked whether it can serve, and its database did not answer.');
+      void reply
+        .status(503)
+        .header('content-type', 'application/json; charset=utf-8')
+        .send(errorAnswerSchema.parse({ code: thrown.code, requestId: request.id }));
       return;
     }
     const status = ErrorFilter.statusOf(thrown);

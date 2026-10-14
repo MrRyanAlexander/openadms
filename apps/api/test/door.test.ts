@@ -129,6 +129,12 @@ describe('the door: HTTPS only, through the proxy', () => {
     ).rejects.toThrow();
   });
 
+  it('ADR-507: the readiness answer, through the door: the container’s API reaches its database', async () => {
+    const answer = await ask('/readiness');
+    expect(answer.status).toBe(200);
+    expect(healthAnswerSchema.parse(JSON.parse(answer.body))).toEqual({ status: 'ok' });
+  });
+
   it('AC-10-01: the API publishes no port of its own', () => {
     const [id] = compose(['ps', '--quiet', 'api']).trim().split('\n');
     expect(id).toMatch(/^[0-9a-f]{12,}$/);

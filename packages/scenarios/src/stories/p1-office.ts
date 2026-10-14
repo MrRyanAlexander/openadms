@@ -100,9 +100,11 @@ export class QueueRuns {
         triesBeforeSetAside: policy.jobTriesBeforeSetAside,
         ticketsARun: policy.jobTicketsAtMost,
         pollMs: policy.jobQueuePollSeconds * 1_000,
+        stalledAfterMs: JobLoop.stalledAfterMs(policy),
       },
       // Its lines say only what a pass's answer says too; a story reads the answer.
       new WorkerLog({ write: () => undefined }),
+      story.clock,
     );
   }
 

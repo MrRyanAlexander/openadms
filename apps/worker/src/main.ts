@@ -58,8 +58,10 @@ const loop = new JobLoop(
     triesBeforeSetAside: policy.jobTriesBeforeSetAside,
     ticketsARun: policy.jobTicketsAtMost,
     pollMs: policy.jobQueuePollSeconds * 1_000,
+    stalledAfterMs: JobLoop.stalledAfterMs(policy),
   },
   log,
+  { now: () => new Date() },
 );
 const health = new Health(() => loop.standing);
 await health.listen(settings.host, settings.port);
