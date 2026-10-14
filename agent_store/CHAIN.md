@@ -7,7 +7,7 @@
 > task's ADR and its session-log line in `DECISIONS.md`). No other file carries these counts.
 > **A count that differs from this page without a reason is a finding, not noise.**
 
-**Seen whole:** 2026-10-14, after ADR-513, on the user's Mac, the installation at head (memory last sampled after ADR-512: Docker's VM at 4 GB, the eight containers together under 1 GB through a full `pnpm test`, the object store highest at about 220 MiB; none restarted). In the full `pnpm scenarios` after ADR-513 `burst` stopped once on C155's 500 and passed alone three times after (C155).
+**Seen whole:** 2026-10-14, after ADR-514, on the user's Mac, the installation at head (resumed by `pnpm installer` that day, its volumes found new) (memory last sampled after ADR-512: Docker's VM at 4 GB, the eight containers together under 1 GB through a full `pnpm test`, the object store highest at about 220 MiB; none restarted). In the full `pnpm scenarios` after ADR-513 `burst` stopped once on C155's 500 and passed alone three times after (C155); after ADR-514 the full run passed whole.
 
 ## `pnpm ready`
 
@@ -20,13 +20,13 @@
 
 ## `pnpm test`
 
-**`Test Files 163 passed (163)`, `Tests 2922 passed (2922)`.**
+**`Test Files 163 passed (163)`, `Tests 2923 passed (2923)`.**
 
 | Project | Tests | Files | Needs |
 |---|---|---|---|
 | `packages/domain` | 795 | 43 | nothing |
 | `packages/contracts` | 88 | 9 | nothing |
-| `apps/api` | 611 | 47 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
+| `apps/api` | 612 | 47 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
 | `packages/db` | 1056 | 44 | `pnpm ready` |
 | `packages/scenarios` | 153 | 7 | `pnpm ready` for `stories.test.ts` (the runner and a run's template, 5) and `story-api.test.ts` (a story's API over HTTPS through the proxy, every request of a story's phone, the back office and the viewers at their browsers, 14); the flag catalogue (78 flags), the harness, the phone held to the sync contract's suite and to what it sends and takes in at a sync, its photographs' files and its turn-in among it, and its wait when told to (24), the policy and the server apps' exports (2) need nothing. **The stories themselves are not here** (ADR-446) |
 | `apps/worker` | 41 | 4 | `pnpm ready` for the map servers (13) and its container (3); the process (14) and the job loop (its set-aside lines and its health, 11) need nothing |
@@ -69,7 +69,7 @@ P1 $5,548.25 on 19 lines, P2 $324.00. `p1-reconciled` through `p1-left-out`, `p1
 (10 values from 4 env files) `0 found`; a password-like setting `0 found`; a whole slow hash, an
 authenticator's secret or a private key as a JWK `0 found` (8 inline exceptions named); env files
 `✓ every one ignored by git and untracked`; who reaches Postgres: `of 13 workspaces, the
-product's that reach it: apps/api, apps/worker, packages/db` (3 tools named), `470 source files
+product's that reach it: apps/api, apps/worker, packages/db` (3 tools named), `471 source files
 read`, `9 statements`, `prisma migrate diff: no difference`; the grant tests **`44 files, 1056
 tests: 1056 passed, 0 failed`**; ending **`Security checks: 12 passed, 0 failed.`**
 

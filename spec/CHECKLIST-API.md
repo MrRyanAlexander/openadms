@@ -1,6 +1,6 @@
 # Open ADMS — The API's security checklist
 
-✅ **Approved**: agent-written (task 2.7.3 part 2, ADR-509; corrected by ADR-510; four items settled by the user, ADR-511; the 78 open items' proposed answers, §3.1, ADR-512, approved whole by the user, ADR-513; 21 of them answered by a scenario in part 4); the user approves. Building doesn't wait (ADR-230).
+✅ **Approved**: agent-written (task 2.7.3 part 2, ADR-509; corrected by ADR-510; four items settled by the user, ADR-511; the 78 open items' proposed answers, §3.1, ADR-512, approved whole by the user, ADR-513; 21 of them answered by a scenario in part 4, 40 more marked in its second piece, ADR-514); the user approves. Building doesn't wait (ADR-230).
 
 ← [Index](INDEX.md) · The rows it answers: [acceptance file 10](acceptance/10-api-and-sync.md) · What the attacker goes for: [the threat model](THREAT-MODEL.md) · The standards: [ARCHITECTURE](ARCHITECTURE.md) §16
 
@@ -8,7 +8,7 @@
 
 > **Wording.** Each requirement is a shortened label of the published text, ASVS 5.0.0 (the `v5.0.0_release` tag of `OWASP/ASVS`, `5.0/en/`) and the API Top 10 at api-security.owasp.org. Every number and level here was checked against the full published text on 2026-10-14 (ADR-510). The labels are not the text: read the requirement itself before deciding an open item (§4).
 
-**The counts:** 222 ASVS items: every Level 1 and 2 item of the chapters that apply (V1…V9, V11…V16) and the Level 3 items file 10 cites; V10 and V17 are not used, whole (below). ASVS: 92 answered by a scenario; 25 built without a scenario; 1 departure kept (6.4.1); 1 decided and to build (6.3.3); 46 owned by a phase or not used; 57 to do, as the user approved them (§3.1; ADR-513), none open. API: 9 of 10 answered, API10 partly open (§1).
+**The counts:** 222 ASVS items: every Level 1 and 2 item of the chapters that apply (V1…V9, V11…V16) and the Level 3 items file 10 cites; V10 and V17 are not used, whole (below). ASVS: 92 answered by a scenario (11.4.1 among them, with a departure proposed for one use, ADR-514); 50 built without a scenario; 1 departure kept (6.4.1); 1 decided and to build (6.3.3); 61 owned by a phase, not used, or an accepted risk; 17 to do, as the user approved them (§3.1; ADR-513): 14 written answers, and 4.2.1, 12.3.3 and 15.3.2 in part 5. None open. API: 9 of 10 answered, API10 partly open (§1).
 
 ## 1. The API Security Top 10 (2023)
 
@@ -48,14 +48,14 @@ Columns: the requirement; its level; the label as read; the scenarios and tasks 
 | 1.2.9 | 2 | special characters escaped in regular expressions |  | not used: no regular expression is built from a caller's input (the product's one `new RegExp`, `packages/domain/src/two-step.ts`, is built from a policy number; grep) |
 | 1.3.1 | 1 | WYSIWYG or similar HTML input sanitized by a known library |  | not used: no HTML is taken as input |
 | 1.3.2 | 1 | no eval() or other dynamic code execution |  | not used: no `eval`, `new Function` or `vm` in the product's source (grep) |
-| 1.3.3 | 2 | data sanitized before a potentially dangerous context |  | **to do**, as approved (§3.1) |
+| 1.3.3 | 2 | data sanitized before a potentially dangerous context |  | Phase 4: the exports (REQ-412): a cell that begins with `=`, `+`, `-`, `@`, a tab or a carriage return is written as text (ADR-514) |
 | 1.3.4 | 2 | user-supplied SVG validated or sanitized |  | not used: no SVG is taken: a photograph is JPEG, HEIC, HEIF, PNG or TIFF by its first bytes (`apps/api/src/media/photograph-files.controller.ts`; AC-10-47); a map's file is a zipped shapefile or GeoJSON |
-| 1.3.5 | 2 | user-supplied template, Markdown, CSS or XSL content sanitized or disabled |  | **to do**, as approved (§3.1) |
+| 1.3.5 | 2 | user-supplied template, Markdown, CSS or XSL content sanitized or disabled |  | not used: no template, Markdown, CSS or XSL is taken, and no template or Markdown engine is a dependency of any workspace; the mail's text is the code's own (grep, ADR-514) |
 | 1.3.6 | 2 | SSRF prevented: untrusted data checked against allow-lists of protocols, domains, paths and ports | AC-04-24 (task 2.5.3), AC-10-64 (task 2.7.3 part 4, ADR-513) |  |
-| 1.3.7 | 2 | templates never built from untrusted input |  | **to do**, as approved (§3.1) |
+| 1.3.7 | 2 | templates never built from untrusted input |  | not used: as 1.3.5, no template engine runs (grep, ADR-514) |
 | 1.3.8 | 2 | JNDI queries sanitized |  | not used: no JNDI (no Java) |
 | 1.3.9 | 2 | content sanitized before memcache |  | not used: no memcache |
-| 1.3.10 | 2 | format strings sanitized |  | **to do**, as approved (§3.1) |
+| 1.3.10 | 2 | format strings sanitized |  | not used: no format string is built from a caller's input: every log line's message is a fixed string of the code (the API's and the worker's 62 calls), and nothing calls `util.format` (grep, ADR-514) |
 | 1.3.11 | 2 | input sanitized before mail systems (SMTP or IMAP injection) | AC-10-65 (task 2.7.3 part 4, ADR-513) |  |
 | 1.4.1 | 2 | memory-safe strings, copies and pointer arithmetic |  | not used: managed memory (TypeScript on Node); the product has no native code of its own |
 | 1.4.2 | 2 | sign, range and input checks prevent integer overflows | AC-10-63 (task 2.7.3 part 4, ADR-513) |  |
@@ -73,10 +73,10 @@ Columns: the requirement; its level; the label as read; the scenarios and tasks 
 | 2.2.1 | 1 | input validated against business or functional expectations | AC-10-34, AC-10-37 (task 2.1.3, 2.4.4) |  |
 | 2.2.2 | 1 | input validation enforced at a trusted service layer | AC-10-36 (task 2.1.3, 2.6.1) |  |
 | 2.2.3 | 2 | combinations of related data items reasonable | AC-10-38 (task 2.4.2) |  |
-| 2.3.1 | 1 | business flows only in the expected order, per user |  | **to do**, as approved (§3.1) (a candidate: a password somebody else set is changed before anything else, `apps/api/test/sessions.test.ts`, ADR-410) |
+| 2.3.1 | 1 | business flows only in the expected order, per user |  | **built**: a person whose password somebody else set changes it before anything else, and an admin or a manager/analyst sets an authenticator up first (the door's `PASSWORD_CHANGE_REQUIRED`, `TWO_STEP_SETUP_REQUIRED`; `apps/api/test/sessions.test.ts`, `two-step.test.ts`; ADR-410, 412) |
 | 2.3.2 | 2 | business logic limits implemented | AC-10-54 (task 2.3.2, 2.3.3) |  |
 | 2.3.3 | 2 | a business operation completes or is rolled back whole | AC-10-50, AC-05-16, AC-06-02, AC-06-03 (task 2.3.1, 2.3.3, 2.6.2) |  |
-| 2.3.4 | 2 | locks on limited-quantity resources |  | **to do**, as approved (§3.1) |
+| 2.3.4 | 2 | locks on limited-quantity resources |  | **built**: a number series' blocks, from which tickets' and cert numbers come, are taken only where the series hasn't moved on, and never overlap by the database's own refusal (`number_blocks_never_overlap`; `apps/api/test/sync.test.ts`, `SeriesMovedOn`; the story `burst`; ADR-505) |
 | 2.4.1 | 2 | anti-automation against excessive calls | AC-10-39, AC-10-40 (task 2.1.3, 2.2.6) |  |
 
 ### V3 Web Frontend Security
@@ -98,7 +98,7 @@ Columns: the requirement; its level; the label as read; the scenarios and tasks 
 | 3.5.1 | 1 | CORS preflight-less requests validated as the app's own | AC-10-16 (task 2.2.3) |  |
 | 3.5.2 | 1 | sensitive functions not callable without a preflight | AC-10-59 (task 2.7.3 part 4, ADR-513) |  |
 | 3.5.3 | 1 | sensitive requests use POST, PUT, PATCH or DELETE | AC-10-16 (task 2.2.3) |  |
-| 3.5.4 | 2 | separate applications on separate hostnames |  | **to do**, as approved (§3.1) |
+| 3.5.4 | 2 | separate applications on separate hostnames |  | Phase 4 and 5a: each web app on a hostname of its own, the API on its own (`api.adms.localhost` today; REQ-517; ADR-514) |
 | 3.5.5 | 2 | postMessage messages from untrusted origins discarded |  | Phase 4 (web apps; THREAT-MODEL §6) |
 | 3.7.1 | 2 | only supported, secure client-side technologies |  | Phase 4 (web apps; THREAT-MODEL §6) |
 | 3.7.2 | 2 | automatic redirects only to allow-listed destinations |  | Phase 4 (web apps; THREAT-MODEL §6) |
@@ -110,7 +110,7 @@ Columns: the requirement; its level; the label as read; the scenarios and tasks 
 | 4.1.1 | 1 | Content-Type on every response with a body | AC-10-04 (task 2.1.3) |  |
 | 4.1.2 | 2 | only user-facing endpoints redirect HTTP to HTTPS; other endpoints don't redirect | AC-10-02 (task 2.1.2; refused, ADR-511) |  |
 | 4.1.3 | 2 | headers set by an intermediary are trusted only as documented |  | **built**: a caller's address is the one that connected unless a listed proxy says otherwise (`ADMS_TRUSTED_PROXIES`; `apps/api/test/limits.test.ts`, C85; ADR-416) |
-| 4.2.1 | 2 | every component secured, including the proxy |  | **to do**, as approved (§3.1) |
+| 4.2.1 | 2 | every component secured, including the proxy |  | **to do**, part 5 (ADR-514): found not to hold whole. The API, the worker and the mail catcher run unprivileged with no capability, the routing server with none, and every image is pinned; the proxy, Postgres, the object store and the address server keep their capabilities and a writable root. Part 5 reworks those containers for its certificates and hardens each, held by a test of `compose.yaml`; the deploy's, Phase 5a (REQ-517) |
 | 4.3.1 | 2 | GraphQL query limits |  | not used: no GraphQL endpoint (grep) |
 | 4.3.2 | 2 | GraphQL introspection off in production |  | not used: no GraphQL endpoint (grep) |
 | 4.4.1 | 1 | WebSockets only over TLS |  | not used: no WebSocket endpoint (grep) |
@@ -130,7 +130,7 @@ Columns: the requirement; its level; the label as read; the scenarios and tasks 
 | 5.3.2 | 1 | file paths built from trusted data | AC-10-49, AC-04-77 (task 2.6.4) |  |
 | 5.4.1 | 2 | filenames validated or ignored; Content-Disposition set |  | **built**: a file is sent as an attachment under a name the server makes from the photograph's id, never the phone's (`apps/api/test/photo-files.test.ts`; ADR-483) |
 | 5.4.2 | 2 | filenames encoded in headers and attachments |  | **built**: as 5.4.1, the name is the server's own (`apps/api/test/photo-files.test.ts`; ADR-483) |
-| 5.4.3 | 2 | files from untrusted sources scanned for malware |  | **to do**, as approved (§3.1) |
+| 5.4.3 | 2 | files from untrusted sources scanned for malware |  | an accepted risk now (the user, ADR-513): a file is never run, never answered inline and never opened by the server but a map's file by its own reader (AC-10-48); a malware scan the firm may add, Phase 5a (REQ-517) |
 
 ### V6 Authentication
 
@@ -156,13 +156,13 @@ Columns: the requirement; its level; the label as read; the scenarios and tasks 
 | 6.3.3 | 2 | multi-factor, or a combination of single factors |  | **the firm's choice, to build** (the user, ADR-511): back-office staff need two-step (AC-02-14) and a monitor's password works only from a proven phone (ADR-441); a viewer's two-step is optional today, each viewer's own choice (ADR-170), and the firm will be able to require it (BACKLOG C157). Shipped default: optional |
 | 6.3.4 | 2 | no undocumented authentication pathways | AC-10-27 (task 2.7.3 part 3; read as answering it, ADR-513) |  |
 | 6.4.1 | 1 | initial passwords and activation codes securely random |  | **departure**, kept (the user, ADR-511): a monitor's first password is the firm's practice (their phone number without the area code), the accepted risk of ADR-105 and ADR-139, exempt by ADR-402 (5) |
-| 6.4.2 | 1 | no password hints or secret questions |  | **to do**, as approved (§3.1) |
+| 6.4.2 | 1 | no password hints or secret questions |  | not used: no password hint or secret question: no such field in the schema (`packages/db/prisma/schema`; grep, ADR-514) |
 | 6.4.3 | 2 | a secure reset that bypasses no enabled factor | AC-10-25 (task 2.2.2) |  |
 | 6.4.4 | 2 | a lost factor: identity proofed again | AC-10-26 (task 2.2.4) |  |
 | 6.5.1 | 2 | lookup secrets, out-of-band codes and TOTPs usable once |  | **built**: an authenticator's code is good once (`apps/api/test/two-step.test.ts`; ADR-412) |
-| 6.5.2 | 2 | lookup secrets under 112 bits protected in storage |  | **to do**, as approved (§3.1) |
+| 6.5.2 | 2 | lookup secrets under 112 bits protected in storage |  | not used: no lookup secret (no recovery code): a lost authenticator is cleared by an admin (AC-10-26); nothing of the kind in the schema (grep, ADR-514) |
 | 6.5.3 | 2 | lookup secrets and TOTP seeds generated securely |  | **built**: 20 random bytes from the system's source (`apps/api/test/one-time-codes.test.ts`; ADR-412) |
-| 6.5.4 | 2 | lookup secrets and out-of-band codes: at least 20 bits of entropy |  | **to do**, as approved (§3.1) |
+| 6.5.4 | 2 | lookup secrets and out-of-band codes: at least 20 bits of entropy |  | not used: no lookup secret and no out-of-band code (no SMS, voice or email factor; AC-10-25, 26); a password reset's code is a 256-bit signature, not a factor (`apps/api/src/sign-in/reset-codes.ts`; ADR-404, 514) |
 | 6.5.5 | 2 | out-of-band requests, codes and TOTPs: the published conditions | AC-02-14 (task 2.2.4) |  |
 | 6.6.1 | 2 | PSTN delivery of one-time passwords |  | not used: no SMS, voice or email factor (AC-10-25, AC-10-26) |
 | 6.6.2 | 2 | out-of-band requests bound to the original request |  | not used: no SMS, voice or email factor (AC-10-25, AC-10-26) |
@@ -176,10 +176,10 @@ Columns: the requirement; its level; the label as read; the scenarios and tasks 
 
 | Requirement | Level | Label, as read | Answered by | Owner, or open |
 |---|---|---|---|---|
-| 7.1.1 | 2 | inactivity timeout and maximum lifetime documented |  | **to do**, as approved (§3.1) |
+| 7.1.1 | 2 | inactivity timeout and maximum lifetime documented |  | **built**: documented: thirty minutes' inactivity, twelve hours at most, a five-minute access token, a monitor's session twelve hours (`packages/domain/policy.env`: `SESSION_INACTIVITY_MINUTES`, `SESSION_OVERALL_HOURS`, `ACCESS_TOKEN_MINUTES`, `MONITOR_SESSION_HOURS`; ADR-408) |
 | 7.1.2 | 2 | concurrent sessions per account documented |  | **built**: documented, no limit on how many (ADR-408) |
 | 7.1.3 | 2 | session-creating systems in a federation documented |  | not used: no federated identity |
-| 7.2.1 | 1 | session tokens verified by a trusted backend |  | **to do**, as approved (§3.1) |
+| 7.2.1 | 1 | session tokens verified by a trusted backend |  | **built**: every token is read and checked by the API itself, and the session or phone it names read from the database, on every request (V9's note; `apps/api/test/session-tokens.test.ts`, `phone-proof.test.ts`; ADR-408, 440) |
 | 7.2.2 | 1 | tokens dynamically generated, not static keys |  | **built**: each session's and each phone's tokens are made when it opens (`apps/api/test/session-tokens.test.ts`, `phone-proof.test.ts`; ADR-408, 440) |
 | 7.2.3 | 1 | reference tokens unique, from a CSPRNG, 128 bits or more | AC-10-10 (task 2.2.1) |  |
 | 7.2.4 | 1 | a new token on any authentication; the old one ended | AC-10-13 (task 2.2.3) |  |
@@ -191,9 +191,9 @@ Columns: the requirement; its level; the label as read; the scenarios and tasks 
 | 7.4.4 | 2 | visible logout on every page that needs sign-in |  | Phase 4 (web apps; THREAT-MODEL §6) |
 | 7.4.5 | 2 | administrators can end a user's sessions |  | **built**: `POST /people/:userId/session-endings` (`apps/api/test/people.test.ts`; ADR-415) |
 | 7.5.1 | 2 | full re-authentication before changing authentication details |  | **built** for the master passcode: the admin gives their own password (`apps/api/test/phones.test.ts`; ADR-428); a person's own password: 6.2.3 |
-| 7.5.2 | 2 | users see and end their own active sessions |  | **to do**, as approved (§3.1) |
+| 7.5.2 | 2 | users see and end their own active sessions |  | Phase 4: an endpoint and its screen where a person sees their own sessions and ends one; today an admin ends a person's (7.4.5) (ADR-514) |
 | 7.6.1 | 2 | federated lifetimes behave as documented |  | not used: no federated identity |
-| 7.6.2 | 2 | a session created only by an explicit action |  | **to do**, as approved (§3.1) |
+| 7.6.2 | 2 | a session created only by an explicit action |  | not used: the item is federated re-authentication's (V7.6), and there is none (ADR-514) |
 
 ### V8 Authorization
 
@@ -232,49 +232,62 @@ Not used, whole: no OAuth or OpenID Connect client, resource server or authoriza
 |---|---|---|---|---|
 | 11.1.1 | 2 | key management policy and lifecycle documented |  | **to do**, as approved (§3.1) |
 | 11.1.2 | 2 | inventory of keys, algorithms and where keys may be used | AC-10-44, AC-02-61 (task 2.4.3, 2.5.1, 2.6.5) |  |
-| 11.2.1 | 2 | industry-validated cryptographic implementations |  | **to do**, as approved (§3.1) |
+| 11.2.1 | 2 | industry-validated cryptographic implementations |  | **built**: only Node's own cryptography, `node:crypto` (OpenSSL), Argon2id included; no other cryptographic package in any workspace (grep, ADR-514) |
 | 11.2.2 | 2 | crypto agility: algorithms and keys can be replaced |  | **to do**, as approved (§3.1) |
-| 11.2.3 | 2 | primitives give at least 128 bits of security |  | **to do**, as approved (§3.1) in part: the phone's key is ECDSA on P-256 (`apps/api/test/phone-proof.test.ts`; ADR-437); the other primitives not yet listed |
-| 11.3.1 | 1 | no ECB mode or PKCS#1 v1.5 padding |  | **to do**, as approved (§3.1) |
-| 11.3.2 | 1 | only approved ciphers and modes |  | **to do**, as approved (§3.1) |
-| 11.3.3 | 2 | encrypted data protected against modification |  | **to do**, as approved (§3.1) |
-| 11.4.1 | 1 | only approved hash functions | AC-10-10 (task 2.2.1) |  |
+| 11.2.3 | 2 | primitives give at least 128 bits of security |  | **built**: every primitive at 128 bits or more (the list, below the table; ADR-514) |
+| 11.3.1 | 1 | no ECB mode or PKCS#1 v1.5 padding |  | **built**: no ECB, no RSA and no PKCS#1 v1.5 anywhere (the list, below the table; grep, ADR-514) |
+| 11.3.2 | 1 | only approved ciphers and modes |  | **built**: AES-256-GCM alone (the list, below the table; ADR-514) |
+| 11.3.3 | 2 | encrypted data protected against modification |  | **built**: what is encrypted is AES-256-GCM, authenticated, a random 12-byte nonce each time (`apps/api/src/sign-in/two-step-secrets.ts`, `apps/api/src/phone/offline-checks.ts`; ADR-412, 454, 514) |
+| 11.4.1 | 1 | only approved hash functions | AC-10-10 (task 2.2.1) | **departure proposed** (ADR-514, for the user): an authenticator's code is HMAC-SHA-1, as RFC 6238 and the authenticator apps have it; the published Appendix C rates HMAC-SHA-1 "legacy", kept "for compatibility" only. Every other use is SHA-256 |
 | 11.4.2 | 2 | passwords hashed with a computationally intensive function | AC-10-20, AC-02-41 (task 2.2.2, 2.5.3) |  |
-| 11.4.3 | 2 | integrity hashes collision resistant |  | **to do**, as approved (§3.1) |
-| 11.4.4 | 2 | keys derived with stretching resistant to brute force |  | **to do**, as approved (§3.1) |
+| 11.4.3 | 2 | integrity hashes collision resistant |  | **built**: SHA-256 for every file's and record's fingerprint, the only hash taken alone (AC-10-47; grep, ADR-514) |
+| 11.4.4 | 2 | keys derived with stretching resistant to brute force |  | **built**: a key from a password is Argon2id's (a person's password, the master passcode, a phone's offline check; ADR-402, 454); every other key is an HMAC of the installation's random secret, never a password (ADR-514) |
 | 11.5.1 | 2 | random values from a CSPRNG with 128 bits of entropy | AC-10-45, AC-02-18, AC-05-03 (task 2.5.1, 2.6.2) |  |
 | 11.6.1 | 2 | approved algorithms for key generation and signatures |  | **built** for signatures: ECDSA on P-256 with SHA-256 (`apps/api/test/phone-proof.test.ts`; ADR-437) |
+
+**Every primitive the product uses** (11.2.3, 11.3.1…11.3.3; read by grep of `apps`, `packages` and `tools` on 2026-10-14, ADR-514), each by its rating in ASVS 5.0's Appendix C ("A" approved, "L" legacy). All are `node:crypto`'s; no other cryptographic package is a dependency.
+
+| Primitive | Where | Strength | Appendix C |
+|---|---|---|---|
+| HMAC-SHA-256 | the access token, a phone's token and challenge, a password reset's code, each purpose's key drawn from the installation's secret (`session-tokens.ts`, `phone-tokens.ts`, `phone-challenges.ts`, `reset-codes.ts`, `password-hasher.ts`, `two-step-secrets.ts`, `offline-checks.ts`; `tools/setup/src/secrets.ts`) | a 256-bit key | A |
+| HMAC-SHA-1 | an authenticator's six-digit code, RFC 6238 (`one-time-codes.ts`) | a 160-bit random seed (6.5.3) | **L**: 11.4.1's departure, proposed |
+| SHA-256 | every file's and record's fingerprint, a token's stored hash, the rate limits' keys (`photo-files.ts`, `photograph-files.ts`, `map-files.ts`, `sync.ts`, `session-tokens.ts`, `limits.ts`) | 256-bit output | A |
+| AES-256-GCM | an authenticator's seed at rest, a phone's offline checks (`two-step-secrets.ts`, `offline-checks.ts`), a random 12-byte nonce each time | a 256-bit key, authenticated | A |
+| ECDSA P-256 with SHA-256 | a phone's proof of itself (`device-keys.ts`) | 128 bits | A |
+| Argon2id | a person's password, the master passcode, a phone's offline check (`password-hasher.ts`, `offline-checks.ts`) | OWASP's setting, 19 MiB, 2 passes (ADR-402) | A |
+
+No ECB, no RSA and no PKCS#1 padding anywhere (grep).
 
 ### V12 Secure Communication
 
 | Requirement | Level | Label, as read | Answered by | Owner, or open |
 |---|---|---|---|---|
 | 12.1.1 | 1 | only current TLS versions | AC-10-03 (task 2.1.2) |  |
-| 12.1.2 | 2 | recommended cipher suites, the strongest preferred |  | **to do**, as approved (§3.1) |
+| 12.1.2 | 2 | recommended cipher suites, the strongest preferred |  | **built** (local): Caddy's own suites, TLS 1.2 and 1.3 only, forward-secret AEAD (`infra/local/Caddyfile` names none of its own; AC-10-03's test); the deploy's, Phase 5a (REQ-517) (ADR-514) |
 | 12.1.3 | 2 | client certificates validated before their identity is used |  | not used: no mutual-TLS client certificates; a phone proves itself by its key (AC-10-44, 45) |
 | 12.2.1 | 1 | TLS for every client connection to external HTTP services, no fallback | AC-10-01, AC-10-02 (task 2.1.2) |  |
 | 12.2.2 | 1 | publicly trusted certificates for external services |  | Phase 5a (demo deploy; THREAT-MODEL §6) |
 | 12.3.1 | 2 | an encrypted protocol for every connection, no fallback | AC-10-01, AC-10-02 (task 2.1.2) |  |
-| 12.3.2 | 2 | TLS clients validate the server's certificate |  | **to do**, as approved (§3.1) |
-| 12.3.3 | 2 | internal HTTP-based connections encrypted, no fallback |  | **to do**, as approved (§3.1) |
-| 12.3.4 | 2 | internal certificates trusted only specifically |  | **to do**, as approved (§3.1) |
+| 12.3.2 | 2 | TLS clients validate the server's certificate |  | **built**: each TLS client the API and the worker hold (the address server, the map servers, the object store) checks the server's certificate against the root its setting names; none turns the check off (grep: no `rejectUnauthorized`; `apps/worker/test/container.test.ts`, `apps/api/test/media-store.test.ts`; ADR-455, 480) |
+| 12.3.3 | 2 | internal HTTP-based connections encrypted, no fallback |  | **to do**, part 5 (the user, ADR-513; KD-78) |
+| 12.3.4 | 2 | internal certificates trusted only specifically |  | **built**: as 12.3.2, the stack's own root named exactly (`ADMS_MAP_CA_FILE`, `ADMS_MEDIA_CA_FILE`), never added to a trust store (ADR-514) |
 
 ### V13 Configuration
 
 | Requirement | Level | Label, as read | Answered by | Owner, or open |
 |---|---|---|---|---|
 | 13.1.1 | 2 | communication needs, external services and endpoints documented |  | **to do**, as approved (§3.1) |
-| 13.2.1 | 2 | backend services authenticate with their own accounts or short-lived credentials |  | **to do**, as approved (§3.1) |
+| 13.2.1 | 2 | backend services authenticate with their own accounts or short-lived credentials |  | **built**: each service its own login: the database's (`packages/db/test/grants.test.ts`), the API's own identity at the object store (`apps/api/test/media-store.test.ts`; ADR-480), one settings file per container (`infra/local/compose.yaml`) |
 | 13.2.2 | 2 | backend accounts with the minimum privileges | AC-10-49, AC-10-56 (task 2.6.4, 2.7.3) |  |
-| 13.2.3 | 2 | no default or well-known service credentials |  | **to do**, as approved (§3.1) |
+| 13.2.3 | 2 | no default or well-known service credentials |  | **built**: the installer makes every secret at random (`tools/setup/test/secrets.test.ts`), and the local accounts are held out of what ships (`infra/local/test/dev-accounts.test.ts`) (ADR-514) |
 | 13.2.4 | 2 | allow-list of external resources the app may reach | AC-10-64 (task 2.7.3 part 4, ADR-513) |  |
 | 13.2.5 | 2 | server allow-list of systems it may send requests to | AC-10-64 (task 2.7.3 part 4, ADR-513) |  |
 | 13.2.6 | 3 | service connections configured: limits, timeouts, retries | AC-10-42 (task 2.1.4) |  |
 | 13.3.1 | 2 | secrets kept in a manager, out of source and artifacts |  | T-51: `tools/setup/test/secrets.test.ts` and `pnpm security` (ADR-508) |
-| 13.3.2 | 2 | least-privilege access to secrets |  | **to do**, as approved (§3.1) |
-| 13.4.1 | 1 | no source-control metadata deployed |  | **to do**, as approved (§3.1) |
-| 13.4.2 | 2 | debug modes off in production |  | **to do**, as approved (§3.1) |
-| 13.4.3 | 2 | no directory listings |  | **to do**, as approved (§3.1) |
+| 13.3.2 | 2 | least-privilege access to secrets |  | **built**: as 13.2.1, each container reads only its own settings file, as a secret, never in its description (`infra/local/compose.yaml`) (ADR-514) |
+| 13.4.1 | 1 | no source-control metadata deployed |  | **built** (local): the containers run the built code and its dependencies, mounted by name, no checkout (`infra/local/compose.yaml`; `packages/scenarios/test/app-exports.test.ts`; ADR-503); the image a firm deploys, Phase 5a (REQ-517) |
+| 13.4.2 | 2 | debug modes off in production |  | **built**: `NODE_ENV: production` in both containers, and no debug endpoint (AC-10-27's list, `every-endpoint.test.ts`) (ADR-514) |
+| 13.4.3 | 2 | no directory listings |  | not used: the API serves no file from disk (no static-file plugin; grep), and the proxy only passes requests on (`reverse_proxy`; no `file_server` in `infra/local/Caddyfile`) (ADR-514) |
 | 13.4.4 | 2 | HTTP TRACE disabled in production | AC-10-61 (task 2.7.3 part 4, ADR-513) |  |
 | 13.4.5 | 2 | documentation and monitoring endpoints hidden unless intended | AC-10-36 (task 2.1.3, 2.6.1) |  |
 
@@ -285,7 +298,7 @@ Not used, whole: no OAuth or OpenID Connect client, resource server or authoriza
 | 14.1.1 | 2 | sensitive data classified into protection levels |  | **to do**, as approved (§3.1) |
 | 14.1.2 | 2 | protection requirements documented per level |  | **to do**, as approved (§3.1) |
 | 14.2.1 | 1 | sensitive data kept out of URLs and query strings | AC-10-64 (task 2.7.3 part 4, ADR-513) |  |
-| 14.2.2 | 2 | sensitive data not cached by servers, or purged |  | **to do**, as approved (§3.1) |
+| 14.2.2 | 2 | sensitive data not cached by servers, or purged |  | **built** (the API): `Cache-Control: no-store` on every answer (AC-10-04; `apps/api/test/door.test.ts`); a CDN, Phase 5a (REQ-517) (ADR-514) |
 | 14.2.3 | 2 | sensitive data not sent to untrusted third parties |  | **to do**, as approved (§3.1) |
 | 14.2.4 | 2 | sensitive-data controls (logs included) per protection level | AC-10-11 (task 2.2.1) |  |
 | 14.2.6 | 3 | only the minimum sensitive data returned; full values masked | AC-02-72 (task 2.2.5) |  |
@@ -297,17 +310,17 @@ Not used, whole: no OAuth or OpenID Connect client, resource server or authoriza
 
 | Requirement | Level | Label, as read | Answered by | Owner, or open |
 |---|---|---|---|---|
-| 15.1.1 | 1 | remediation timeframes for components documented |  | **to do**, as approved (§3.1) |
-| 15.1.2 | 2 | inventory of third-party components |  | **to do**, as approved (§3.1) |
+| 15.1.1 | 1 | remediation timeframes for components documented |  | Phase 5a: how quickly a dependency's fix is taken up, in the operator's guide (REQ-517); every dependency pinned by an ADR today (ADR-514) |
+| 15.1.2 | 2 | inventory of third-party components |  | **built**: the lockfile, and `pnpm licences` (every package by name, version and licence) (ADR-514) |
 | 15.1.3 | 2 | resource-heavy functions documented |  | **to do**, as approved (§3.1) |
-| 15.2.1 | 1 | components within their documented update timeframes |  | **to do**, as approved (§3.1) |
+| 15.2.1 | 1 | components within their documented update timeframes |  | Phase 5a: as 15.1.1 (REQ-517) (ADR-514) |
 | 15.2.2 | 2 | defence against availability loss from heavy functions | AC-10-39 (task 2.1.3) |  |
-| 15.2.3 | 2 | production holds only the functionality it needs |  | **to do**, as approved (§3.1) |
+| 15.2.3 | 2 | production holds only the functionality it needs |  | **built** (local): as 13.4.1: no tests, tools or source control in a container (`app-exports.test.ts`; ADR-503); the image, Phase 5a (REQ-517) |
 | 15.3.1 | 1 | only the required fields of an object returned | AC-10-30 (task 2.4.5) |  |
-| 15.3.2 | 2 | backend calls do not follow redirects unless intended |  | **to do**, as approved (§3.1) |
+| 15.3.2 | 2 | backend calls do not follow redirects unless intended |  | **to do**, part 5: its test needs an HTTPS server of its own (ADR-513 (e)) |
 | 15.3.3 | 2 | mass assignment prevented by allowed fields per action | AC-10-34, AC-10-35 (task 2.1.3, 2.4.4, 2.6.1) |  |
 | 15.3.4 | 2 | real client IP from trusted fields, used for rate limits |  | **built**: as 4.1.3 (`apps/api/test/limits.test.ts`, C85; ADR-416) |
-| 15.3.5 | 2 | variables type-checked; strict equality |  | **to do**, as approved (§3.1) |
+| 15.3.5 | 2 | variables type-checked; strict equality |  | **built**: TypeScript `strict`, typescript-eslint's `strictTypeChecked`, and ESLint's `eqeqeq` (`== null` alone kept) (`eslint.config.js`; ADR-514) |
 | 15.3.6 | 2 | prototype pollution prevented | AC-10-58 (task 2.7.3 part 4, ADR-513) |  |
 | 15.3.7 | 2 | HTTP parameter pollution defended | AC-10-57 (task 2.7.3 part 4, ADR-513) |  |
 | 15.4.1 | 3 | shared objects in threads accessed safely | AC-10-52 (task 2.3.2) |  |
@@ -326,17 +339,17 @@ Not used, whole: no OAuth or OpenID Connect client, resource server or authoriza
 | 16.3.1 | 2 | every authentication logged, successful or failed | AC-10-19, AC-10-22, AC-02-23 (task 2.2.1, 2.2.3, 2.4.3, 2.5.1, 2.5.4, 2.6.2) |  |
 | 16.3.2 | 2 | failed authorization logged | AC-10-66 (task 2.7.3 part 4, ADR-513) |  |
 | 16.3.3 | 2 | defined security events and bypass attempts logged | AC-10-66 (task 2.7.3 part 4, ADR-513) |  |
-| 16.3.4 | 2 | unexpected errors and control failures logged |  | **to do**, as approved (§3.1) |
+| 16.3.4 | 2 | unexpected errors and control failures logged |  | **built**: an unexpected error logged with its kind and frames, the caller told only that it failed (AC-10-33; `apps/api/test/error-filter.test.ts`) (ADR-514) |
 | 16.4.1 | 2 | log injection prevented | AC-10-62 (task 2.7.3 part 4, ADR-513) |  |
-| 16.4.2 | 2 | logs protected from unauthorized access and change |  | **to do**, as approved (§3.1) |
+| 16.4.2 | 2 | logs protected from unauthorized access and change |  | Phase 5a: logs kept where only the operator reads them (REQ-517; THREAT-MODEL §6) (ADR-514) |
 | 16.4.3 | 2 | logs sent to a separate system for analysis and alerts |  | Phase 5a (demo deploy; THREAT-MODEL §6) |
 | 16.5.1 | 2 | generic message to the caller on unexpected or sensitive errors | AC-10-33, AC-10-38 (task 2.1.2, 2.4.2) |  |
-| 16.5.2 | 2 | operation continues safely when an external resource fails |  | **to do**, as approved (§3.1) |
+| 16.5.2 | 2 | operation continues safely when an external resource fails |  | **built**: the address server not answering, the phone is told so and the monitor types the address (AC-04-24; `apps/api/test/phone-address-lookups.test.ts`); a map server not answering is a fault, never "no route", and the job waits for its next try (`apps/worker/test/mileages.test.ts`, `job-loop.test.ts`; ADR-418); the object store not answering, the part is the server's failure, nothing is called kept, and the phone sends the file again (`apps/api/test/photo-files.test.ts`, "16.5.2"; ADR-514) |
 | 16.5.3 | 2 | fails securely on exceptions; no fail-open | AC-10-55 (task 2.1.2, 2.3.2) |  |
 
 ## 3. What the page leaves for the user
 
-**The 78 open ASVS items were answered by the user on 2026-10-14 (ADR-513): §3.1 approved whole.** 21 are answered by a scenario now (task 2.7.3 part 4); the other 57 are **to do** as §3.1 says (the Owner column). API10:2023 is still partly open (§1).
+**The 78 open ASVS items were answered by the user on 2026-10-14 (ADR-513): §3.1 approved whole.** 21 are answered by a scenario now (task 2.7.3 part 4) and 40 more are marked built, owned by a phase or not used (part 4's second piece, ADR-514); the other 17 are **to do** as §3.1 says (the Owner column). API10:2023 is still partly open (§1).
 
 **The four the user settled (2026-10-14, ADR-511):**
 
@@ -411,7 +424,9 @@ Each item that was open, with what the agent proposed. **User, 2026-10-14:** "th
 | 16.4.2 | Logs kept where only the operator reads them | Phase 5a | THREAT-MODEL §6 |
 | 16.5.2 | When an outside server fails, the request ends safely: the address server down answers the phone with no address; the map servers down sets the job aside to retry; the object store down refuses a file part to send again | built (cited in part 4) | AC-04-24; ADR-418, 482 |
 
-**Done in part 4 (ADR-513):** 1.1.1, 1.1.2, 1.2.1, 1.2.2, 1.2.3, 1.3.11, 1.4.2, 1.5.2, 3.5.2, 6.3.4, 8.1.1, 8.1.2, 13.2.4, 13.2.5, 13.4.4, 14.2.1, 15.3.6, 15.3.7, 16.3.2, 16.3.3, 16.4.1: AC-10-57…66 added (their tests in `apps/api/test/boundary.test.ts`, `every-endpoint.test.ts`, `setup-endpoints.test.ts` and `packages/contracts/test/endpoints.test.ts`), and AC-10-27, 30, 35 and AC-04-24 read as answering the rest. Two were found not to hold and were fixed: a form's body was read like JSON (Nest's own parser; 3.5.2), and a project's setting past what its column holds answered 500 (1.4.2). **Still to do:** the other 57 as §3.1 says (part 4, next piece), and 12.3.3 and 15.3.2 (part 5).
+**Done in part 4 (ADR-513):** 1.1.1, 1.1.2, 1.2.1, 1.2.2, 1.2.3, 1.3.11, 1.4.2, 1.5.2, 3.5.2, 6.3.4, 8.1.1, 8.1.2, 13.2.4, 13.2.5, 13.4.4, 14.2.1, 15.3.6, 15.3.7, 16.3.2, 16.3.3, 16.4.1: AC-10-57…66 added (their tests in `apps/api/test/boundary.test.ts`, `every-endpoint.test.ts`, `setup-endpoints.test.ts` and `packages/contracts/test/endpoints.test.ts`), and AC-10-27, 30, 35 and AC-04-24 read as answering the rest. Two were found not to hold and were fixed: a form's body was read like JSON (Nest's own parser; 3.5.2), and a project's setting past what its column holds answered 500 (1.4.2).
+
+**Done in part 4's second piece (ADR-514):** 40 of the 57. **Not used**, each confirmed by grep: 1.3.5, 1.3.7, 1.3.10, 6.4.2, 6.5.2, 6.5.4, 7.6.2, 13.4.3. **A phase**, each told in its brief (`agent_store/REQUIREMENTS-LATER.md`, Phase 4's carried items and REQ-517): 1.3.3, 3.5.4, 7.5.2, 15.1.1, 15.2.1, 16.4.2, and 5.4.3 an accepted risk until 5a. **Built**, each test named: 2.3.1, 2.3.4, 7.1.1, 7.2.1, 11.2.1, 11.2.3, 11.3.1, 11.3.2, 11.3.3, 11.4.3, 11.4.4, 12.1.2, 12.3.2, 12.3.4, 13.2.1, 13.2.3, 13.3.2, 13.4.1, 13.4.2, 14.2.2, 15.1.2, 15.2.3, 15.3.5, 16.3.4, 16.5.2. Three were found short: **15.3.5**, strict equality was the habit but no rule held it (ESLint's `eqeqeq` added); **16.5.2**, no test had the object store away (one added); **4.2.1**, only the API, the worker, the mail catcher and the routing server were hardened as §3.1 said (moved to part 5). And one use of a legacy primitive was found: **11.4.1**, an authenticator's HMAC-SHA-1 (a departure proposed). **Still to do:** 14 written answers (2.1.2, 2.1.3, 5.1.1, 6.1.3, 11.1.1, 11.2.2, 13.1.1, 14.1.1, 14.1.2, 14.2.3, 15.1.3, 16.1.1, 16.2.3, 16.2.4), §2's 25 built items' rows, and API10's answers (part 4, next piece); 4.2.1, 12.3.3 and 15.3.2 (part 5).
 
 The 25 **built** items are tested already but no scenario of file 10 names them; each wants a row (or a cited test): part 4, next piece. Part 3 (ADR-512) read AC-10-27 and REQ-204 whole and weighed C155's finding; it found KD-78 (12.3.3). The threat model's rows are checked against this page when it changes (`spec/THREAT-MODEL.md` §6).
 

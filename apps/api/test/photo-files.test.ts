@@ -569,6 +569,43 @@ describe('a file that isn’t the one fingerprinted', () => {
       withTheStore(),
     );
   });
+
+  it('16.5.2 a store that doesn’t answer: the part is the server’s failure, saying nothing of the store, nothing is called kept, and the phone sends the file again', async () => {
+    // The installation's own store, at a port nothing listens on.
+    const away = new MediaStore({
+      ...installationMedia(),
+      url: 'https://s3.adms.localhost:1',
+      at: undefined,
+    });
+    try {
+      await world(
+        async (served, tx, who) => {
+          const photo = jpeg(30_000);
+          const p = await photographed(served, tx, who, { photo });
+          const answer = await sent(served, p.token, p.photoId, 'photo', {
+            offset: 0,
+            length: photo.length,
+            bytes: photo,
+          });
+          expect(told(answer)).toEqual([500, 'INTERNAL_ERROR']);
+          expect(JSON.stringify(answer.body)).not.toMatch(/s3|adms-media|store|ECONNREFUSED/i);
+          expect((await tx.photo.findUniqueOrThrow({ where: { id: p.photoId } })).uploadedAt).toBe(
+            null,
+          );
+          expect(await standing(served, p, 'photo')).toEqual({
+            upload: 'RECEIVING',
+            received: 0,
+            length: null,
+          });
+        },
+        undefined,
+        undefined,
+        { media: away },
+      );
+    } finally {
+      away.close();
+    }
+  });
 });
 
 describe('who may send one', () => {

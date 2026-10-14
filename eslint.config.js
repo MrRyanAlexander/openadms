@@ -27,5 +27,11 @@ export default defineConfig(
     files: ['**/*.js'],
     extends: [js.configs.recommended],
   },
+  {
+    // Strict equality everywhere (ASVS 5.0 15.3.5; ADR-514); `== null` alone is kept, the one
+    // comparison that means "null or undefined" and juggles no other type.
+    files: ['**/*.ts', '**/*.tsx', '**/*.js'],
+    rules: { eqeqeq: ['error', 'always', { null: 'ignore' }] },
+  },
   prettier,
 );
