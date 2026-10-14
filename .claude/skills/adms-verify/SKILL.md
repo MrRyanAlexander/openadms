@@ -62,7 +62,7 @@ pnpm security                    # audit, secrets scan, env files, grant tests (
 | `pnpm lint` | ESLint's type-checked rules (floating promises, `any`, unsafe access…) on all code and tests; Prettier formatting (ADR-257) | `All matched files use Prettier code style!`, exit 0 |
 | `pnpm licences` | No licence refused or undecided (ADR-258, 260) | `N packages: N allowed, 0 refused, 0 undecided.` The package count moves with dependencies (and is one less on Linux: the lockfile's Mac-only packages aren't installed there); **0 refused, 0 undecided** doesn't |
 | `pnpm scenarios` | Every story passes on its own database, which is dropped afterwards (ADR-275; needs the local stack and the installation). **A run of several stories migrates and seeds once**, into a template each story's database is a copy of (ADR-447); the template is dropped at the end | `This run’s template, adms_story_template_…: N migrations applied; seed: …`, per story `passed: N checks, N passed, 0 failed` (each story's count is CHAIN.md's), then `Stories: N passed, 0 failed.`, exit 0 |
-| `pnpm security` | The dependency audit, the secrets scan, the env files and the grant tests, with real counts; never prints a secret (§1.5; needs the registry, the local stack and the installation) | `✓ 0 open advisories` (3 accepted by id), secretlint `0 found`, the installation's own secrets `0 found`, a password-like setting `0 found`, env files `✓ every one ignored by git and untracked`, the grant tests `N files, N tests: N passed, 0 failed` followed by where they were run (§1.5), ending **`Security checks: 7 passed, 0 failed.`**, exit 0. `source-map-js` is forced to 1.2.2 by an override (ADR-356, 372); nothing is let past the seven-day rule (ADR-385). Any ✗ is a finding, never accepted to get green |
+| `pnpm security` | The dependency audit, the secrets scan, the env files, who reaches Postgres (REQ-205, ADR-508) and the grant tests, with real counts; never prints a secret (§1.5; needs the registry, the local stack and the installation) | `✓ 0 open advisories` (3 accepted by id), secretlint `0 found`, the installation's own secrets `0 found`, a password-like setting `0 found`, a whole slow hash, an authenticator's secret or a private key as a JWK `0 found`, env files `✓ every one ignored by git and untracked`, four `✓` under "Who reaches Postgres", the grant tests `N files, N tests: N passed, 0 failed` followed by where they were run (§1.5), ending **`Security checks: 12 passed, 0 failed.`**, exit 0. `source-map-js` is forced to 1.2.2 by an override (ADR-356, 372); nothing is let past the seven-day rule (ADR-385). Any ✗ is a finding, never accepted to get green |
 
 **The counts live in `agent_store/CHAIN.md`, and nowhere else** (ADR-445). A task that adds or
 removes tests, a story's checks, a migration or a package replaces the numbers there in the same
@@ -289,7 +289,22 @@ rebuild it with `./node_modules/.bin/tsc --build --force <workspace>`; never edi
   A finding prints **file, line and rule only**; secretlint's own JSON carries every file's content,
   so never print it. An inline `secretlint-disable-next-line` needs its reason on the line; every one
   is listed on each run.
+  **Phase 2's kinds (ADR-508)**, which secretlint has no rule for: a whole Argon2 hash (salt of
+  16 bytes or more, tag of 32 or more), an `otpauth://` address holding a secret, a private key
+  as a JWK (`d`). A test's own vector of such a kind is marked on the line before with
+  `secretlint-disable-next-line -- <why>`; without a reason it isn't honoured. **A test of the
+  scan itself puts its values together** (a variable in a template literal), never writes one
+  whole: the scan reads that file too, and ESLint refuses a template around a bare literal.
 - **Env files**: every `.env` file on disk ignored by git and untracked.
+- **Who reaches Postgres** (REQ-205, ADR-508; `tools/security/src/database-reach.ts`): of the
+  product only `packages/db`, `apps/api` and `apps/worker`, three tools named by folder with
+  their reasons (never by package name: AC-10-26 forbids naming the dev stack's package in what
+  ships); found by `pnpm -r why` and the workspaces' own dependencies, and by every committed
+  source file's imports; the product's SQL only Prisma's tagged templates, none changing the
+  schema; `prisma migrate diff` from the migrations to the schema on the shadow database (needs
+  the stack). A new tool that must reach Postgres joins `toolReaches` with its reason and an ADR.
+  Its rules are loosened on `database-reach.test.ts` and `checks.test.ts`; what only a real run
+  shows (a stray import, a table by hand in a copied migrations folder) by hand.
 - **The grant tests**: the `@open-adms/db` project's tests, their counts reported. **Run `pnpm
   security` after `pnpm test`:** where the run `pnpm test` just made held every one of that
   project's files, each passed with nothing skipped, it began within the last thirty minutes, and

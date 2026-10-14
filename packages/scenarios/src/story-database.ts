@@ -41,6 +41,7 @@ const logins = ['adms_api', 'adms_worker', 'adms_readonly'] as const;
 // the real one. Not a secret: no installation uses it.
 export const storyMasterPasscode = 'heron-marsh-delphine';
 const storyMasterPasscodeHash =
+  // secretlint-disable-next-line -- the stories' made-up master passcode's hash, no installation's
   '$argon2id$v=19$m=19456,t=2,p=1$rLnL+hWkLjJHDKTBWGSsdw$tYeMf5WEtzZTIdv2JQR18zDWwcllaJjVO71qautLsGY';
 
 export type Service = 'api' | 'worker';

@@ -204,6 +204,7 @@ describe('signing in', () => {
     await world(async (served, tx, { luis }, within) => {
       // Made with no key, by the installer's hasher, for the stories' made-up master passcode.
       const earlier =
+        // secretlint-disable-next-line -- the stories' made-up master passcode's hash, no person's
         '$argon2id$v=19$m=19456,t=2,p=1$rLnL+hWkLjJHDKTBWGSsdw$tYeMf5WEtzZTIdv2JQR18zDWwcllaJjVO71qautLsGY';
       await tx.userCredential.update({ where: { userId: luis }, data: { passwordHash: earlier } });
       await served.signedIn(luissEmail, 'heron-marsh-delphine');

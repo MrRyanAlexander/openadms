@@ -158,7 +158,7 @@ states one that nothing records: they are listed under "Left to the task that bu
 | ID | Scenario | From | Answers | Proven at | Passing |
 |---|---|---|---|---|---|
 | AC-10-55 | **When** the API or the worker is started with a setting missing or malformed, **then** it doesn't start, and says which key, never its value | ARCHITECTURE §4 (Secrets); BACKLOG tasks 2.1.2, 2.3.2 | ASVS V13 · API8 | API (2.1.2, 2.3.2) | ✅ the API, 2.1.2 (ADR-385): `apps/api/test/settings.test.ts`; ✅ the worker, 2.3.2 (ADR-419): `apps/worker/test/process.test.ts` |
-| AC-10-56 | **Given** the repository, **then** only `packages/db`, `apps/api` and `apps/worker` open a connection to Postgres, and no model is written in SQL by hand | ADR-094; ARCHITECTURE §18; invariant 12 · REQ-205 | ASVS V15 | a check in the chain (2.7.3) |  |
+| AC-10-56 | **Given** the repository, **then** only `packages/db`, `apps/api` and `apps/worker` open a connection to Postgres, and no model is written in SQL by hand | ADR-094; ARCHITECTURE §18; invariant 12 · REQ-205 | ASVS V15 | a check in the chain (2.7.3) | ✅ 2.7.3 part 1 (2026-10-14, ADR-508): `pnpm security`, "Who reaches Postgres" (`tools/security/src/database-reach.ts`; its rules in `tools/security/test/database-reach.test.ts`): of the product only `packages/db`, `apps/api` and `apps/worker` reach Postgres, through any package or workspace (three tools named with their reasons: the installer, the scenario harness, the dev stack's accounts); no other source file imports a client or `packages/db`; the product's SQL only Prisma's tagged templates, none changing the schema; every table and view the migrations make declared in the Prisma schema (`prisma migrate diff`: no difference) |
 
 ---
 
@@ -230,7 +230,7 @@ passing in its own file, from a run that was seen, by the task named.
 | | Scenarios |
 |---|---|
 | Written in this file (A…L) | **56** |
-| Passing | **44** (AC-10-44; task 2.5.1 part 2, ADR-439; AC-10-29, 30; task 2.4.5 part 2, ADR-435; AC-10-31; task 2.4.5 part 1, ADR-434; AC-10-37; task 2.4.4 part 2, ADR-431; AC-10-25; task 2.2.5, ADR-415; AC-10-01, 02, 03, 33, 55; task 2.1.2, ADR-385; AC-10-04…08, 34, 36, 39, 43; task 2.1.3, ADR-387…392; AC-10-42; task 2.1.4, ADR-394; AC-10-10, 11; task 2.2.1, ADR-397, 398; AC-10-20, 21, 23, 24; task 2.2.2, ADR-402, 403; AC-10-09, 12…19; task 2.2.3, ADR-408, 409; AC-10-26; task 2.2.4, ADR-412; AC-10-28; task 2.4.4 part 1, ADR-430; and the six this row had not yet counted though their own rows were marked: AC-10-38, 40, 50, 52, 53, 54), and AC-10-27, 32 and 51 in part |
+| Passing | **45** (AC-10-56; task 2.7.3 part 1, ADR-508; AC-10-44; task 2.5.1 part 2, ADR-439; AC-10-29, 30; task 2.4.5 part 2, ADR-435; AC-10-31; task 2.4.5 part 1, ADR-434; AC-10-37; task 2.4.4 part 2, ADR-431; AC-10-25; task 2.2.5, ADR-415; AC-10-01, 02, 03, 33, 55; task 2.1.2, ADR-385; AC-10-04…08, 34, 36, 39, 43; task 2.1.3, ADR-387…392; AC-10-42; task 2.1.4, ADR-394; AC-10-10, 11; task 2.2.1, ADR-397, 398; AC-10-20, 21, 23, 24; task 2.2.2, ADR-402, 403; AC-10-09, 12…19; task 2.2.3, ADR-408, 409; AC-10-26; task 2.2.4, ADR-412; AC-10-28; task 2.4.4 part 1, ADR-430; and the six this row had not yet counted though their own rows were marked: AC-10-38, 40, 50, 52, 53, 54), and AC-10-27, 32 and 51 in part |
 | Earlier scenarios with a Phase 2 part (M) | 48, and AC-06-36 |
 | **Phase 2 proves, at the API** | **104**, and AC-06-36's link |
 

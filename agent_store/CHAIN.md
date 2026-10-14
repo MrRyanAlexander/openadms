@@ -7,7 +7,7 @@
 > task's ADR and its session-log line in `DECISIONS.md`). No other file carries these counts.
 > **A count that differs from this page without a reason is a finding, not noise.**
 
-**Seen whole:** 2026-10-13, after ADR-507, on the user's Mac, the installation at head.
+**Seen whole:** 2026-10-14, after ADR-508, on the user's Mac, the installation at head.
 
 ## `pnpm ready`
 
@@ -20,7 +20,7 @@
 
 ## `pnpm test`
 
-**`Test Files 161 passed (161)`, `Tests 2856 passed (2856)`.**
+**`Test Files 162 passed (162)`, `Tests 2907 passed (2907)`.**
 
 | Project | Tests | Files | Needs |
 |---|---|---|---|
@@ -31,7 +31,7 @@
 | `packages/scenarios` | 153 | 7 | `pnpm ready` for `stories.test.ts` (the runner and a run's template, 5) and `story-api.test.ts` (a story's API over HTTPS through the proxy, every request of a story's phone, the back office and the viewers at their browsers, 14); the flag catalogue (78 flags), the harness, the phone held to the sync contract's suite and to what it sends and takes in at a sync, its photographs' files and its turn-in among it, and its wait when told to (24), the policy and the server apps' exports (2) need nothing. **The stories themselves are not here** (ADR-446) |
 | `apps/worker` | 41 | 4 | `pnpm ready` for the map servers (13) and its container (3); the process (14) and the job loop (its set-aside lines and its health, 11) need nothing |
 | `infra/local` | 22 | 3 | `pnpm ready` |
-| `tools/security` | 90 | 2 | nothing (the scan's and the grant tests' rules 33, the guard hook 57) |
+| `tools/security` | 141 | 3 | nothing (the scan's and the grant tests' rules 49, who reaches Postgres 35, the guard hook 57) |
 | `tools/setup` | 15 | 3 | nothing |
 
 ## `pnpm lint`, `pnpm licences`
@@ -66,9 +66,12 @@ P1 $5,548.25 on 19 lines, P2 $324.00. `p1-reconciled` through `p1-left-out`, `p1
 ## `pnpm security`
 
 `✓ 0 open advisories` (3 accepted by id); secretlint `0 found`; the installation's own secrets
-(10 values from 4 env files) `0 found`; a password-like setting `0 found`; env files `✓ every one
-ignored by git and untracked`; the grant tests **`44 files, 1056 tests: 1056 passed, 0 failed`**;
-ending **`Security checks: 7 passed, 0 failed.`**
+(10 values from 4 env files) `0 found`; a password-like setting `0 found`; a whole slow hash, an
+authenticator's secret or a private key as a JWK `0 found` (8 inline exceptions named); env files
+`✓ every one ignored by git and untracked`; who reaches Postgres: `of 13 workspaces, the
+product's that reach it: apps/api, apps/worker, packages/db` (3 tools named), `470 source files
+read`, `9 statements`, `prisma migrate diff: no difference`; the grant tests **`44 files, 1056
+tests: 1056 passed, 0 failed`**; ending **`Security checks: 12 passed, 0 failed.`**
 
 ## What the installation holds after a run
 

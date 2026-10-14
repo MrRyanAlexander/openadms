@@ -60,6 +60,7 @@ describe('an authenticator’s codes', () => {
     expect(codes.base32(Buffer.from('f'))).toBe('MY');
     expect(codes.base32(Buffer.from('foobar'))).toBe('MZXW6YTBOI');
     expect(codes.uri(secret, 'dana.reyes@gates.example')).toBe(
+      // secretlint-disable-next-line -- RFC 6238's test secret, which nobody's app holds
       'otpauth://totp/Open%20ADMS:dana.reyes%40gates.example?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&issuer=Open%20ADMS&algorithm=SHA1&digits=6&period=30',
     );
   });

@@ -61,6 +61,7 @@ describe('a monitor’s offline seed', () => {
 
   it('the master passcode’s check is made only from a hash with no key', async () => {
     const unkeyed =
+      // secretlint-disable-next-line -- a made-up hash: its salt and tag are words, base64
       '$argon2id$v=19$m=19456,t=2,p=1$c2FsdHNhbHRzYWx0c2FsdA$aGFzaGhhc2hoYXNoaGFzaGhhc2hoYXNoaGFzaGhhc2g';
     const made = await offline.ofPasscode(unkeyed);
     expect(made?.first).toEqual({

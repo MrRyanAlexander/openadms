@@ -5,7 +5,14 @@ import { describe, expect, it } from 'vitest';
 
 import { acceptedAdvisories } from '../src/audit.ts';
 import { LastTestRun, type VitestReport } from '../src/grants.ts';
-import { configFile, EnvFilesCheck, passwordLikeSetting, secretsIn } from '../src/secrets.ts';
+import {
+  configFile,
+  EnvFilesCheck,
+  exceptedBy,
+  passwordLikeSetting,
+  secretKindIn,
+  secretsIn,
+} from '../src/secrets.ts';
 
 describe('a password-like setting with a literal value', () => {
   it.each([
@@ -65,6 +72,63 @@ describe("the installation's own secrets", () => {
         SHORT_SECRET: 'postgres',
       }),
     ).toEqual(['Zq8vPl2mXw9RtY4kLm3N', 'AKIAEXAMPLEEXAMPLE01', 'Hk3/vQ9wLp7sRt2Y']);
+  });
+});
+
+// The kinds of secret Phase 2 brought (ADR-508). Each value is put together here, so that no
+// line of this file is one: the scan reads this file too, and a value's text stands apart from
+// what precedes it in the file.
+describe('a secret of a kind Phase 2 brought', () => {
+  const salt16 = 'rLnL+hWkLjJHDKTBWGSsdw';
+  const tag32 = 'tYeMf5WEtzZTIdv2JQR18zDWwcllaJjVO71qautLsGY';
+  const hash = (salt: string, tag: string, kind = 'id') =>
+    ['', `argon2${kind}`, 'v=19', 'm=19456,t=2,p=1', salt, tag].join('$');
+  const base32 = ['GEZDGNBVGY3T', 'QOJQGEZDGNBV'].join('');
+  const otp = (secret: string) =>
+    `otpauth://totp/Open%20ADMS:luis.ortega%40gates.example?secret=${secret}&issuer=Open%20ADMS`;
+  const d43 = 'x'.repeat(21) + 'Q7_-' + 'y'.repeat(18);
+
+  it.each([
+    ['a whole Argon2id hash', `const kept = '${hash(salt16, tag32)}';`, 'whole-argon2-hash'],
+    [
+      'a whole Argon2i hash in a dump',
+      `  "password_hash": "${hash(salt16, tag32, 'i')}",`,
+      'whole-argon2-hash',
+    ],
+    ["an authenticator's secret", `  '${otp(base32)}',`, 'authenticator-secret'],
+    ['one in lower case', `uri: ${otp(base32.toLowerCase())}`, 'authenticator-secret'],
+    [
+      "one after the address's other settings",
+      `otpauth://totp/Open%20ADMS:luis.ortega%40gates.example?issuer=Open%20ADMS&secret=${base32}`,
+      'authenticator-secret',
+    ],
+    ['a private key as a JWK', `{"kty":"EC","crv":"P-256","d":"${d43}"}`, 'private-key-jwk'],
+    ['one written in code', `  d: '${d43}',`, 'private-key-jwk'],
+  ])('is found: %s', (_what, line, rule) => {
+    expect(d43).toHaveLength(43);
+    expect(secretKindIn(line)).toBe(rule);
+  });
+
+  it.each([
+    ['a hash too short to be one the API makes', `'${hash('c2FsdA', 'aGFzaA')}'`],
+    ['a hash with a short tag', `'${hash(salt16, tag32.slice(0, 38))}'`],
+    ['the shape a hash is checked against', "CHECK ((password_hash ~~ '$argon2id$%'::text))"],
+    ['an address with no secret', 'otpauth://totp/Open%20ADMS:dana.reyes%40gates.example?issuer=x'],
+    ['a secret too short to be one', otp('MZXW6YTBOI')],
+    ['a public key as a JWK', `{"kty":"EC","crv":"P-256","x":"${d43}","y":"${d43}"}`],
+    ['a value too short to be a P-256 private key', `  d: '${d43.slice(1)}',`],
+    ['an id', `  id: '0192a3b4-c5d6-7e8f-9012-3456789abcde',`],
+  ])('is not found: %s', (_what, line) => {
+    expect(secretKindIn(line)).toBeUndefined();
+  });
+
+  it('is let stand only where the line before says why, as a secretlint exception', () => {
+    const marked = '// secretlint-' + 'disable-next-line';
+    expect(exceptedBy(`      ${marked} -- RFC 6238's test secret`)).toBe(true);
+    expect(exceptedBy(`  # ${marked} -- a made-up hash`)).toBe(true);
+    expect(exceptedBy(`      ${marked}`)).toBe(false);
+    expect(exceptedBy(`      ${marked} --   `)).toBe(false);
+    expect(exceptedBy('      // a made-up hash')).toBe(false);
   });
 });
 

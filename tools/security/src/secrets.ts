@@ -42,6 +42,36 @@ const passwordLike =
 // read on the lines after it, each by this same rule.
 const notLiteral = /^(["']{2}|null|~|\$\{.*\}|<[^>]*>|[|>][-+]?|[{[])?,?$/;
 
+// The kinds of secret Phase 2 brought, which secretlint has no rule for (ADR-508): a whole slow
+// hash (a person's password, the master passcode, a login list's entry), whose salt and tag let
+// it be guessed offline, at its least the 16-byte salt and 32-byte tag the API makes; an
+// authenticator's secret in the address a QR code holds; and a phone's private key written as a
+// JSON Web Key. A PEM private key is secretlint's own rule.
+export const secretKinds: readonly { readonly rule: string; readonly pattern: RegExp }[] = [
+  {
+    rule: 'whole-argon2-hash',
+    pattern: /\$argon2(?:id|i|d)\$v=\d+\$m=\d+,t=\d+,p=\d+\$[A-Za-z0-9+/]{22,}\$[A-Za-z0-9+/]{43,}/,
+  },
+  {
+    rule: 'authenticator-secret',
+    pattern: /otpauth:\/\/[^\s'"`]*[?&]secret=[A-Z2-7]{16,}/i,
+  },
+  { rule: 'private-key-jwk', pattern: /["']?\bd["']?\s*:\s*["'][A-Za-z0-9_-]{43,}["']/ },
+];
+
+// The rule a line breaks, if it holds a secret of one of those kinds.
+export function secretKindIn(line: string): string | undefined {
+  return secretKinds.find((kind) => kind.pattern.test(line))?.rule;
+}
+
+// A test's own made-up value of such a kind says so on the line before, with its reason, as a
+// secretlint exception does; every one is named on each run.
+const excepted = /(\/\/|#|\/\*)\s*secretlint-disable-next-line\s+--\s*\S/;
+
+export function exceptedBy(before: string): boolean {
+  return excepted.test(before);
+}
+
 // The setting's name when a config line gives a password-like setting a literal value.
 export function passwordLikeSetting(line: string): string | undefined {
   const [, key, value] = passwordLike.exec(line) ?? [];
@@ -80,6 +110,7 @@ export class SecretsScan {
       secretlint: this.secretlint(files),
       ownSecrets: this.ownSecrets(files),
       passwordLike: this.passwordLike(files),
+      ofAKind: this.ofAKind(files),
     };
     const secrets = this.installationSecrets();
     return [
@@ -90,6 +121,11 @@ export class SecretsScan {
         found.ownSecrets,
       ),
       this.outcome(title, 'a password-like setting with a literal value', found.passwordLike),
+      this.outcome(
+        title,
+        "a whole slow hash, an authenticator's secret or a private key as a JWK",
+        found.ofAKind,
+      ),
       this.exceptions(title, files),
     ];
   }
@@ -181,12 +217,21 @@ export class SecretsScan {
     );
   }
 
-  private eachLine(files: string[], test: (line: string) => string | undefined): Finding[] {
+  private ofAKind(files: string[]): Finding[] {
+    return this.eachLine(files, (line, before) =>
+      exceptedBy(before) ? undefined : secretKindIn(line),
+    );
+  }
+
+  private eachLine(
+    files: string[],
+    test: (line: string, before: string) => string | undefined,
+  ): Finding[] {
     const findings: Finding[] = [];
     for (const file of files) {
       const text = readFileSync(join(this.repository.root, file), 'utf8');
-      text.split('\n').forEach((line, index) => {
-        const rule = test(line);
+      text.split('\n').forEach((line, index, lines) => {
+        const rule = test(line, lines[index - 1] ?? '');
         if (rule !== undefined) findings.push({ file, line: index + 1, rule });
       });
     }

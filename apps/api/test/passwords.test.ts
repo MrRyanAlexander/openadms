@@ -69,6 +69,7 @@ describe('a password’s slow hash', () => {
 
   it('a hash with no key, or made under lower settings, still checks and is made again (stale)', async () => {
     const earlier =
+      // secretlint-disable-next-line -- the stories' made-up master passcode's hash, no person's
       '$argon2id$v=19$m=19456,t=2,p=1$rLnL+hWkLjJHDKTBWGSsdw$tYeMf5WEtzZTIdv2JQR18zDWwcllaJjVO71qautLsGY';
     expect(hasher.stale(earlier)).toBe(true);
     const kept = await hasher.hash(long);
@@ -80,6 +81,7 @@ describe('a password’s slow hash', () => {
   it('still checks a hash made under other settings: the string carries its own', async () => {
     // Made by the installer's hasher for the stories' made-up master passcode (story-database.ts).
     const earlier =
+      // secretlint-disable-next-line -- the stories' made-up master passcode's hash, no person's
       '$argon2id$v=19$m=19456,t=2,p=1$rLnL+hWkLjJHDKTBWGSsdw$tYeMf5WEtzZTIdv2JQR18zDWwcllaJjVO71qautLsGY';
     expect(await hasher.verify('heron-marsh-delphine', earlier)).toBe(true);
     expect(await hasher.verify('heron-marsh-delphin', earlier)).toBe(false);
