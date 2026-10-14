@@ -23,7 +23,7 @@
 |---|---|
 | **Start** | 2026-09-25: the rebuild decision (ADR-093). Security first, the plan is the core, TypeScript end to end with Prisma, the old `database/` code is history |
 | **Now** | **Phase 2, API and sync: reopened 2026-10-14 at your word** (ADR-519): Milestone 2.8, nine tasks, closes what a full check found. Before it, 32 tasks closed (2.6.3 withdrawn at your word) and the exit was met (ADR-518), now withdrawn. Phones and the back office talk to the server over HTTPS: sign-in with an authenticator, permissions read on every request, enrolment and a phone's proof of itself, the lists, sync with photographs, turn-in, background jobs, every hop encrypted. The golden mission syncs through the real endpoints and comes out with the numbers you approved (P1 $5,548.25 on 19 lines, P2 $324.00) |
-| **Next task** | **2.8.1, the register swept** (docs): every carry-forward note read against the code, each "no task yet" filed under a Phase 2 task. Task 2.8.6 asks you first to confirm how your #4 was read |
+| **Next task** | **2.8.1, the register swept** (docs): every carry-forward note read against the code, each "no task yet" filed under a Phase 2 task. Your answers on a lost phone's key are recorded (ADR-520) |
 | **Finish line** | A firm installs Open ADMS, and its back office and its monitors run a real mission on it: every app built, tested and working |
 | **How "done" is judged** | Not boxes ticked. A deliberately messy mission (the **golden mission**) comes out with the exact statuses, review queue and ledger you signed off, at every layer: engine, then API, then the apps (`spec/VISION.md` §8) |
 
@@ -195,7 +195,6 @@ Nothing here blocks the next task. Each is listed with the point where it starts
 
 | What | Why it's yours | Matters by |
 |---|---|---|
-| **How your #4 was read** (a lost phone's key revoked after the firm's time) | ADR-519 (7): which phones it covers, its default, and what happens to records still on such a phone (`SUMMARY.md` §4) | Before task 2.8.6 |
 | **Opening Phase 3** (the field app) | Phase 2 is reopened (ADR-519); an agent never opens a phase | After Phase 2's exit is met again |
 | **The agent's defaults** | Each recorded call you may overturn, with its ADR: `SUMMARY.md` §4. Latest: ADR-519's reading of your #4 and that the reads the notes named are Phase 2's; ADR-518's (b) and (c) overturned by you | Any time; building doesn't wait |
 | **Whether *photos required* should take a number** (asked 2026-10-05, ADR-345) | Today a pay item's *photos required* is yes or no, meaning at least one. Your example spoke of a ticket that requires 4. If you want a firm to set a number, it is a new pay item setting; if "at least one" is enough, nothing changes. Nothing waits on it |

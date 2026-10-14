@@ -338,9 +338,8 @@ questions.
 task read against the code and struck with its ADR or re-filed; every "no task yet", "not built",
 "not tried" or "found, no task" item that is the server's written into the 2.8 task that takes it,
 the phone's or a screen's alone under a named Phase 3 or 4 REQ; the "For Phase 3" map redone.
-Then 2.8.2…2.8.9 in order, one a response. **2.8.6 asks the user first** (ADR-519 (7): which
-phones the key backstop covers, and records still on a phone revoked so); **2.8.7 asks ADR-433 (a)
-first**. **At every task's close, no server "no task yet" is left unfiled** (ADR-519's lesson).
+Then 2.8.2…2.8.9 in order, one a response. **2.8.6's questions are answered (ADR-520)**: its line in `BACKLOG.md` says
+what was decided; **2.8.7 asks ADR-433 (a) first**. **At every task's close, no server "no task yet" is left unfiled** (ADR-519's lesson).
 **When Phase 2's exit is met again and the user opens Phase 3:** task 3.0.1 writes its plan
 (`REQUIREMENTS-LATER.md`'s Phase 3 and the register's map); ask first, before any screen is
 designed, the accessibility standard and level (REQ-324, C41).
