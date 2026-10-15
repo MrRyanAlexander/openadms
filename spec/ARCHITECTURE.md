@@ -275,7 +275,9 @@ Every dependency is pinned. Adding one needs an ADR (ADR-093), and the lockfiles
   from that root and reaches every service over TLS, each certificate checked against it and the
   one name the service is reached by; the API serves HTTPS alone; Postgres takes TLS alone; the
   mail catcher takes no message before STARTTLS; Valhalla, which speaks no TLS, listens on its own
-  container's loopback behind a Caddy of its own. Only a container's own loopback (a health check
+  container's loopback behind a Caddy of its own, and so do the object store's master, volume,
+  filer and S3 servers and their gRPC, which speak no TLS and ask nobody who calls (ADR-525): only
+  S3, over TLS through that Caddy, is reachable. Only a container's own loopback (a health check
   inside it) is plain, and it never leaves the container. Every container is hardened as far as
   its image allows, each departure named with its reason (`infra/local/test/compose.test.ts`;
   ASVS 4.2.1, KD-79).

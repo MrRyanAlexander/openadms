@@ -7,30 +7,30 @@
 > task's ADR and its session-log line in `DECISIONS.md`). No other file carries these counts.
 > **A count that differs from this page without a reason is a finding, not noise.**
 
-**Seen whole:** 2026-10-14, task 2.8.2 (ADR-524), on the user's Mac, the installation at head: `pnpm ready`, typecheck, `pnpm test`, `pnpm scenarios` three times in a row, `pnpm security`, lint and licences (no dependency changed: the frozen install not rerun). Memory last sampled after ADR-512 (Docker's VM at 4 GB, the containers together under 1 GB through a full `pnpm test`).
+**Seen whole:** 2026-10-14, task 2.8.3 (ADR-525), on the user's Mac, the installation at head: `pnpm ready`, typecheck, `pnpm test`, `pnpm scenarios`, `pnpm security`, lint and licences (no dependency changed: the frozen install not rerun). Memory last sampled after ADR-512 (Docker's VM at 4 GB, the containers together under 1 GB through a full `pnpm test`).
 
 ## `pnpm ready`
 
 | What | Today |
 |---|---|
-| `pnpm local:up` | seven `Healthy` services (`routing-tls` the seventh, ADR-517), `Keeping the stack’s root and every service’s certificate.`, `Keeping the object store’s bucket adms-media (it keeps every version).` (ADR-480), then the API's and the worker's containers: `https://api.adms.localhost/health → 200 {"status":"ok"}` and `the worker’s health answer → 200 {"status":"ok","jobsWaiting":0,"jobsSetAside":0,"oldestJobWaitingSeconds":0}` |
+| `pnpm local:up` | eight `Healthy` services (`routing-tls` the seventh, ADR-517; `objectstore-tls` the eighth, ADR-525), `Keeping the stack’s root and every service’s certificate.`, `Keeping the object store’s bucket adms-media (it keeps every version).` (ADR-480), then the API's and the worker's containers: `https://api.adms.localhost/health → 200 {"status":"ok"}` and `the worker’s health answer → 200 {"status":"ok","jobsWaiting":0,"jobsSetAside":0,"oldestJobWaitingSeconds":0}` |
 | `pnpm installer:check` | **35 `✓`**, no `✗`, exit 0 |
 | Migrations at head | **115** (`packages/db/prisma/migrations/` is the list) |
-| `pnpm local:down` (close-out) | 9 containers and the network: 10 `Removed` lines |
+| `pnpm local:down` (close-out) | 10 containers and the network: 11 `Removed` lines |
 
 ## `pnpm test`
 
-**`Test Files 169 passed (169)`, `Tests 3016 passed (3016)`.**
+**`Test Files 169 passed (169)`, `Tests 3032 passed (3032)`.**
 
 | Project | Tests | Files | Needs |
 |---|---|---|---|
 | `packages/domain` | 804 | 43 | nothing |
 | `packages/contracts` | 90 | 9 | nothing |
-| `apps/api` | 640 | 48 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
+| `apps/api` | 641 | 48 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
 | `packages/db` | 1060 | 45 | `pnpm ready` |
 | `packages/scenarios` | 156 | 7 | `pnpm ready` for `stories.test.ts` (the runner and a run's template, 5) and `story-api.test.ts` (a story's API over HTTPS through the proxy, every request of a story's phone, the back office and the viewers at their browsers, and a turn-in meeting another request of its phone in the database, 16); the flag catalogue (78 flags), the harness, the phone held to the sync contract's suite and to what it sends and takes in at a sync, its photographs' files and its turn-in among it, and its wait when told to (25), the policy and the server apps' exports (2) need nothing. **The stories themselves are not here** (ADR-446) |
 | `apps/worker` | 47 | 5 | `pnpm ready` for the map servers (13), their answers on an HTTPS server of the stack's certificate (6) and its container (3); the process (14) and the job loop (its set-aside lines and its health, 11) need nothing |
-| `infra/local` | 62 | 6 | `pnpm ready` for the map services and every hop's TLS (`hops.test.ts`, 12); Docker alone for `compose.test.ts` (16); nothing for the certificates (12) and the extract |
+| `infra/local` | 77 | 6 | `pnpm ready` for the map services and every hop's TLS, the object store's thirteen ports refused among it (`hops.test.ts`, 25); Docker alone for `compose.test.ts` (18); nothing for the certificates (12) and the extract |
 | `tools/security` | 141 | 3 | nothing (the scan's and the grant tests' rules 49, who reaches Postgres 35, the guard hook 57) |
 | `tools/setup` | 16 | 3 | nothing |
 

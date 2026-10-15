@@ -339,17 +339,20 @@ describe('what an error and the log say, through the door', () => {
     // A reset by email, asked for and tried through the door (ADR-404): the address, the code and
     // the password sent are in no line. The word "password" is in a path now (/password-resets),
     // so what is looked for is a password as a field or a value, never the bare word (ADR-405).
-    // An address of this run's own: a reset's limit counts by address (3 an hour, ADR-416), and the
-    // running API keeps its count between runs. It holds `sent`, which no line may.
+    // An address of this run's own: a reset's limit counts by login (3 an hour, ADR-416), and the
+    // running API keeps its counts between runs, in memory. It holds `sent`, which no line may.
     const address = `luis.ortega+${sent}-${randomUUID().slice(0, 8)}@gates.example`;
     const reset = await ask('/password-resets', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ email: address }),
     });
-    // The same answer whoever has the address, where the firm has mail; NO_MAIL where it has none.
-    expect([200, 409]).toContain(reset.status);
-    expect(reset.body).toMatch(/^\{"status":"accepted"\}$|"code":"NO_MAIL"/);
+    // The same answer whoever has the address, where the firm has mail; NO_MAIL where it has none;
+    // and `429 LIMITED` once this machine's address has asked its ten an hour (ADR-416, C161 (b)):
+    // the API's container keeps that count until it is started again, so a run soon after ten
+    // others meets it, and is answered as any caller over the limit is (ADR-525).
+    expect([200, 409, 429]).toContain(reset.status);
+    expect(reset.body).toMatch(/^\{"status":"accepted"\}$|"code":"(NO_MAIL|LIMITED)"/);
     const completed = await ask('/password-resets/completions', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -474,5 +477,25 @@ describe('what an error and the log say, through the door', () => {
       .filter(([, value]) => log.includes(value ?? ''))
       .map(([key]) => key);
     expect(held).toEqual([]);
+  });
+
+  // AC-10-32's real sign-in and real enrolment are read in the log of the API's own process, in
+  // the tests that make them (`sessions.test.ts`, `two-step.test.ts`, `enrolment.test.ts`), never
+  // through this door (ADR-525): each would leave in this machine's installation a person or a
+  // phone nothing may remove (invariant 1), which the API's tests rely on its not holding, and
+  // the installation's master passcode is the firm's, known to no test. That log is this
+  // container's: the logger is `logs.ts`'s alone, and the container's process is given nothing a
+  // test's is not but where its lines go.
+  it('AC-10-32: the container’s process logs as the API’s tests’ processes do, but for where its lines go', () => {
+    const source = (relative: string): string =>
+      readFileSync(join(repository, 'apps', 'api', 'src', relative), 'utf8');
+    const starts = source('main.ts').match(/ApiProcess\.create\(([^)]*)\)/g);
+    expect(starts).toEqual(['ApiProcess.create(ApiModule, settings, policy)']);
+    const loggers = source('process/api-process.ts').match(/^\s*logger: .*$/gm);
+    expect(loggers?.map((line) => line.trim())).toEqual([
+      'logger: { ...logged.logger, ...(more.stream === undefined ? {} : { stream: more.stream }) },',
+    ]);
+    // The logger's settings are a constant: nothing of an installation's settings reaches them.
+    expect(source('process/logs.ts')).not.toMatch(/settings|process\.env/i);
   });
 });

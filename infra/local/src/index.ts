@@ -91,12 +91,12 @@ type Service = keyof typeof runs;
 // below, which reads their certificates among what they run.
 const readsCertificate: Readonly<Record<string, readonly string[]>> = {
   postgres: ['postgres'],
-  objectstore: ['objectstore'],
+  objectstore: ['objectstore-tls'],
   mail: ['mail'],
   routing: ['routing-tls'],
   addresses: ['addresses'],
 };
-const holdsRoot = ['caddy', 'objectstore', 'addresses', 'routing-tls'];
+const holdsRoot = ['caddy', 'objectstore-tls', 'addresses', 'routing-tls'];
 
 class DevSecrets {
   // Each made once: the database administrator's password, the object store's administrator
@@ -293,6 +293,7 @@ class LocalStack {
     console.log(
       'Making the object store’s container afresh: it doesn’t know the API’s identity yet.',
     );
+    // Its TLS shares its network (compose.yaml), so it is made afresh with it.
     this.compose([
       'up',
       '--detach',
@@ -302,6 +303,7 @@ class LocalStack {
       '--force-recreate',
       '--no-deps',
       'objectstore',
+      'objectstore-tls',
     ]);
     if (!knows()) {
       throw new Error(

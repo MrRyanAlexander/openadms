@@ -1,8 +1,8 @@
 // Every hop inside the local stack is encrypted (ARCHITECTURE §4; OWASP ASVS 5.0 12.3.1, 12.3.3;
 // KD-78; ADR-517): each service Caddy reaches answers HTTPS alone, with its certificate of the
 // stack's root for the name it is reached by, and refuses plain HTTP; Valhalla's own plain port
-// is its container's loopback, out of the network's reach; the mail catcher takes no mail before
-// STARTTLS. Asked from inside the stack's network (the address server's container, which holds
+// and every server of the object store, S3 and each one's gRPC among them, are their container's
+// loopback, out of the network's reach (ADR-525); the mail catcher takes no mail before STARTTLS. Asked from inside the stack's network (the address server's container, which holds
 // curl and the stack's root) and from this machine: it needs `pnpm local:up`, and fails saying so.
 // Postgres's part is the database's own test (packages/db/test/tls.test.ts).
 import { spawnSync } from 'node:child_process';
@@ -89,6 +89,20 @@ describe('inside the stack’s network, each service Caddy reaches (KD-78)', () 
     const plain = curl('--output', '/dev/null', 'http://routing:8002/status');
     expect(plain.status).toBe(7);
   });
+
+  // SeaweedFS's own servers (ASVS 5.0 4.2.1, 12.3.3; ADR-525): none speaks TLS or asks who calls.
+  // The ports it listens on now (master, volume, filer, S3, each with its gRPC), and those
+  // `mini` listened on before (its volume, S3's gRPC, its admin server's, an admin's gRPC).
+  const storePorts = [
+    9333, 19333, 8080, 18080, 8888, 18888, 8334, 18334, 9340, 19340, 18333, 23646, 33646,
+  ];
+  it.each(storePorts)(
+    'the object store’s port %i is its container’s loopback alone: the network can’t reach it',
+    (port) => {
+      const plain = curl('--output', '/dev/null', `http://objectstore:${String(port)}/`);
+      expect(plain.status).toBe(7);
+    },
+  );
 });
 
 // The address a service's name has on the stack's network, as the container sees it.

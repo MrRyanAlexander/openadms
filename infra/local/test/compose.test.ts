@@ -24,6 +24,7 @@ interface Service {
   readonly ports?: readonly Port[];
   readonly command?: readonly string[];
   readonly environment?: Readonly<Record<string, string>>;
+  readonly network_mode?: string;
 }
 
 function services(): Readonly<Record<string, Service>> {
@@ -71,6 +72,13 @@ const whyNetBind =
 const expected: Readonly<Record<string, Hardening & { readonly why?: string }>> = {
   postgres: { user: '999:999', capAdd: [], readOnly: true, noNewPrivileges: true },
   objectstore: { user: '1000:1000', capAdd: [], readOnly: true, noNewPrivileges: true },
+  'objectstore-tls': {
+    user: '1000:1000',
+    capAdd: ['NET_BIND_SERVICE'],
+    readOnly: true,
+    noNewPrivileges: true,
+    why: whyNetBind,
+  },
   mail: { user: '65534:65534', capAdd: [], readOnly: true, noNewPrivileges: true },
   routing: {
     user: '0:0',
@@ -181,13 +189,7 @@ describe('every hop over TLS (ASVS 5.0 12.3.3; KD-78)', () => {
     });
   });
 
-  it('the object store and the address server serve TLS with their own certificates', () => {
-    expect(defined['objectstore']?.command).toEqual(
-      expect.arrayContaining([
-        '-s3.cert.file=/run/adms/tls/objectstore.crt',
-        '-s3.key.file=/run/adms/tls/objectstore.key',
-      ]),
-    );
+  it('the address server serves TLS with its own certificate', () => {
     expect(environment('addresses')['GUNICORN_CMD_ARGS']).toBe(
       '--certfile=/run/adms/tls/addresses.crt --keyfile=/run/adms/tls/addresses.key',
     );
@@ -200,6 +202,32 @@ describe('every hop over TLS (ASVS 5.0 12.3.3; KD-78)', () => {
     const sidecar = text('routing/Caddyfile');
     expect(sidecar).toContain('tls /run/adms/tls/routing.crt /run/adms/tls/routing.key');
     expect(sidecar).toContain('reverse_proxy 127.0.0.1:8002');
+  });
+
+  it('the object store’s servers, S3 among them, listen on its own loopback alone, and its own Caddy takes TLS for S3 (ADR-525)', () => {
+    const command = defined['objectstore']?.command ?? [];
+    // `server`, the one command that binds S3 apart from the rest; never `mini`, whose admin
+    // server's gRPC listens on every interface whatever it is told.
+    expect(command[0]).toBe('server');
+    expect(command).toEqual(
+      expect.arrayContaining(['-ip=127.0.0.1', '-ip.bind=127.0.0.1', '-s3', '-s3.port=8334']),
+    );
+    // Nothing of it bound anywhere else, nor a gateway no hop of ours uses.
+    for (const setting of command) {
+      expect(setting).not.toMatch(/^-(s3\.)?ip\.bind=(?!127\.0\.0\.1$)/);
+      expect(setting).not.toMatch(/^-(webdav|sftp|iam|mq\.broker|mq\.agent|debug)(=true)?$/);
+      expect(setting).not.toMatch(/metricsPort=/);
+    }
+    expect(defined['objectstore']?.ports ?? []).toEqual([]);
+    expect(defined['objectstore-tls']?.network_mode).toBe('service:objectstore');
+    const sidecar = text('objectstore/Caddyfile');
+    expect(sidecar).toContain('tls /run/adms/tls/objectstore.crt /run/adms/tls/objectstore.key');
+    expect(sidecar).toContain('https://:8333 {');
+    expect(sidecar.match(/reverse_proxy /g)).toEqual(['reverse_proxy ']);
+    expect(sidecar).toContain('reverse_proxy 127.0.0.1:8334');
+    // The forwarded name a signature is checked against is taken from the stack's proxy alone.
+    expect(sidecar).toContain('trusted_proxies static 172.30.213.2/32');
+    expect(environment('api')['ADMS_TRUSTED_PROXIES']).toBe('172.30.213.2');
   });
 
   it('Caddy reaches every service over TLS, each certificate checked against the stack’s root and its one name', () => {

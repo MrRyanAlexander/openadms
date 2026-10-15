@@ -13,7 +13,8 @@
 # Each service holds a certificate of the stack's own root, which `pnpm local:up` makes into
 # .generated/ (infra/local/src/certificates.ts) and mounts read-only at /run/adms/tls; Caddy
 # issues the public names' certificates from the same root. Only a container's own loopback (a
-# health check inside it, Valhalla behind its own Caddy) is plain, and never leaves it.
+# health check inside it, Valhalla and the object store each behind its own Caddy) is plain, and
+# never leaves it.
 #
 # Every container is hardened as far as its image allows (OWASP ASVS 5.0 4.2.1; KD-79; ADR-517):
 # no capability, a read-only root filesystem, an unprivileged user, no new privileges. Where an
@@ -93,17 +94,26 @@ services:
     user: '1000:1000'
     tmpfs:
       - /tmp:uid=1000,gid=1000,mode=0700
-    # One process: master, volume, filer and the S3 gateway. Only S3 is used, and only through
-    # Caddy (https://s3.adms.localhost), over TLS with the stack's certificate; no port is
-    # published to the host.
+    # One process: master, volume, filer and the S3 gateway, every one of them, and each one's
+    # gRPC, listening on the container's own loopback alone (OWASP ASVS 5.0 4.2.1, 12.3.3;
+    # ADR-525): none speaks TLS or asks who is calling, and no hop of ours but S3 uses them. S3
+    # is reached only through `objectstore-tls` below, which shares this container's network and
+    # takes TLS for it, and that only through Caddy (https://s3.adms.localhost); no port is
+    # published to the host. `server`, not `mini`: `mini` keeps its admin server's gRPC on every
+    # interface whatever it is told, and only `server` binds S3 apart from the rest.
     command:
-      - mini
-      - -s3.config=/etc/seaweedfs/s3.json
-      - -s3.cert.file=/run/adms/tls/objectstore.crt
-      - -s3.key.file=/run/adms/tls/objectstore.key
+      - server
+      - -dir=/data
+      - -ip=127.0.0.1
+      - -ip.bind=127.0.0.1
       - -master.telemetry=false
-      - -webdav=false
-      - -admin.ui=false
+      # What `mini` chose for this disk: small volumes, as many as the free space holds.
+      - -master.volumeSizeLimitMB=128
+      - -volume.max=0
+      - -filer
+      - -s3
+      - -s3.port=8334
+      - -s3.config=/etc/seaweedfs/s3.json
       - -s3.port.iceberg=0
       - -s3.port.lance=0
       - -s3.allowDeleteBucketNotEmpty=false
@@ -115,25 +125,54 @@ services:
       # Who the store knows: written by `pnpm local:up` from infra/local/.env, readable by its
       # owner alone (infra/local/src/index.ts, StoreIdentities).
       - ./.generated/objectstore/s3.json:/etc/seaweedfs/s3.json:ro
-      - ./.generated/caddy-root.crt:/run/adms/tls/root.crt:ro
-      - ./.generated/tls/objectstore.crt:/run/adms/tls/objectstore.crt:ro
-      - ./.generated/tls/objectstore.key:/run/adms/tls/objectstore.key:ro
     healthcheck:
-      test:
-        - CMD
-        - curl
-        - -fsS
-        - -o
-        - /dev/null
-        - --cacert
-        - /run/adms/tls/root.crt
-        - --resolve
-        - objectstore:8333:127.0.0.1
-        - https://objectstore:8333/healthz
+      # Inside the container, on its loopback, which never leaves it.
+      test: ['CMD', 'curl', '-fsS', '-o', '/dev/null', 'http://127.0.0.1:8334/healthz']
       interval: 5s
       timeout: 5s
       retries: 20
       start_period: 20s
+
+  objectstore-tls:
+    <<: *hardening
+    # TLS for the object store (KD-78; ADR-517, 525), as `routing-tls` is for Valhalla: this Caddy
+    # shares the store's container's network, takes TLS on 8333 with the stack's certificate for
+    # `objectstore`, and hands each request to S3 over that container's loopback
+    # (objectstore/Caddyfile), keeping the Host header, so S3 signatures verify. Nothing else of
+    # the store is reachable from the stack's network.
+    image: caddy:2.11.4-alpine@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b
+    network_mode: service:objectstore
+    user: '1000:1000'
+    # The image's caddy binary carries the file capability to bind a low port, and the kernel
+    # refuses to start a binary whose file capability isn't in the container's bounding set. It is
+    # kept there and never held: an unprivileged user under no-new-privileges gains none of it.
+    cap_add:
+      - NET_BIND_SERVICE
+    tmpfs:
+      - /data:uid=1000,gid=1000,mode=0700
+      - /config:uid=1000,gid=1000,mode=0700
+    command: ['caddy', 'run', '--config', '/etc/caddy/Caddyfile', '--adapter', 'caddyfile']
+    environment:
+      # The root its health check (OpenSSL's) checks the certificate against: the stack's own.
+      SSL_CERT_FILE: /run/adms/tls/root.crt
+    volumes:
+      - ./objectstore/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./.generated/caddy-root.crt:/run/adms/tls/root.crt:ro
+      - ./.generated/tls/objectstore.crt:/run/adms/tls/objectstore.crt:ro
+      - ./.generated/tls/objectstore.key:/run/adms/tls/objectstore.key:ro
+    depends_on:
+      # Its network is the store's container's: made again when that one is.
+      objectstore:
+        condition: service_healthy
+        restart: true
+    healthcheck:
+      # Through its own TLS to S3's health answer, inside the shared network, its certificate
+      # checked against the stack's root and the name `objectstore`.
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'https://objectstore:8333/healthz']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
 
   mail:
     <<: *hardening
@@ -466,7 +505,7 @@ services:
       - ./.generated/caddy-root.crt:/run/adms/tls/root.crt:ro
       - ./.generated/tls/root.key:/run/adms/tls/root.key:ro
     depends_on:
-      objectstore:
+      objectstore-tls:
         condition: service_healthy
       mail:
         condition: service_healthy
