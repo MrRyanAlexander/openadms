@@ -17,7 +17,9 @@
 // A phone that has proved itself sends its proof's token as `Authorization: Bearer`, never as a
 // cookie (ARCHITECTURE §6, Device sessions; AC-10-46; ADR-440): no browser sends that header by
 // itself, so such a call needs no CSRF value. The phone is read from the database for this
-// request too: a key revoked a moment ago refuses now, whatever the token says.
+// request too: a key revoked a moment ago refuses now, whatever the token says. A phone whose
+// key the firm's time revoked, proven with the master passcode beside it, reaches only the
+// endpoints that say `keyRevokedToo` (ADR-530).
 //
 // A monitor signed in on that phone (ADR-443) sends their session's token beside it, in a header
 // of its own, never as a cookie: the phone is read first, then the session, both from the
@@ -116,6 +118,11 @@ export class Admission {
       const sent = request.headers.authorization;
       const phone = await this.phones.proven(bearer.exec(sent ?? '')?.[1]);
       if (phone === undefined) throw refused(request, endpoint, 'PHONE_NOT_PROVEN', 401);
+      // A phone whose key the firm's time revoked, proven with the master passcode, is let
+      // through only to what gets its records onto the server and it turned in (ADR-530).
+      if (phone.keyRevoked && endpoint.keyRevokedToo !== true) {
+        throw refused(request, endpoint, 'PHONE_NOT_PROVEN', 401, { deviceId: phone.deviceId });
+      }
       // Counted for the phone, as well as for its address (ADR-490).
       this.limits.phoneAsked(phone.deviceId);
       if (endpoint.access === 'PROVEN_PHONE') {

@@ -4,10 +4,13 @@
 // what it finds isn't what it made. It never prints the connection URL or the passcode's hash.
 //
 // Today it holds the system actor, the master passcode's own actor, the device key's actor, the
-// master passcode's slow hash and the firm's lists' starting values. The firm and the first admin join when their models do (spec/DATA-MODEL.md).
+// master passcode's slow hash, the firm's lists' starting values and the firm's settings, started
+// from the release's policy values (ADR-530). The firm and the first admin join when their models do (spec/DATA-MODEL.md).
 import { existsSync, readFileSync } from 'node:fs';
 import process from 'node:process';
 import { parseEnv } from 'node:util';
+
+import { PhoneKeyRules, Policy } from '@open-adms/domain';
 
 import { openDatabase, type Database } from './database.ts';
 import { deviceKeyActorId, deviceKeyActorName } from './device-key-actor.ts';
@@ -19,7 +22,13 @@ export interface SeedOptions {
   // The master passcode's slow hash (Argon2id, a PHC string), for a database that holds none yet.
   // The installer makes it from what the firm typed and hands it over; it's never the passcode.
   readonly masterPasscodeHash?: string;
+  // The release's policy values, for what a new installation's settings start as. Read from
+  // packages/domain/policy.env when not given.
+  readonly policy?: Pick<Policy, 'phoneKeyRevokedAfterHours'>;
 }
+
+// The release's policy values, beside the domain package (the seed runs from src and from dist).
+const releasePolicyFile = new URL('../../domain/policy.env', import.meta.url);
 
 export class Seed {
   private readonly db: Database;
@@ -38,7 +47,24 @@ export class Seed {
       await this.ensureDeviceKeyActor(),
       await this.ensureMasterPasscode(),
       await this.ensureLists(),
+      await this.ensureFirmSettings(),
     ];
+  }
+
+  // The firm's settings (ADR-530): written once, from the release's policy values, as the system
+  // actor. Once there they are the firm's: the seed never changes them.
+  private async ensureFirmSettings(): Promise<string> {
+    const found = await this.db.firmSettings.findUnique({ where: { id: 1 }, select: { id: true } });
+    if (found !== null) return "✓ the firm's settings are kept, as the firm has them";
+    const policy =
+      this.options.policy ?? Policy.from(parseEnv(readFileSync(releasePolicyFile, 'utf8')));
+    const hours = PhoneKeyRules.startingHours(policy);
+    await this.db.$write(systemActor, (tx) =>
+      tx.firmSettings.create({
+        data: { id: 1, phoneKeyRevokedAfterHours: hours, viewerTwoStepRequired: false },
+      }),
+    );
+    return `+ wrote the firm's settings: a lost phone's key revoked ${hours === null ? 'never (off)' : `${String(hours)} hours after its mark`}, two-step optional for read-only viewers`;
   }
 
   // Written with itself as the actor, as the first user is (ADR-270 (4)). Never a person: no

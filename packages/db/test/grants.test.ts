@@ -85,11 +85,15 @@ const tableGrants: Record<string, Record<string, string>> = {
   ),
   // A version is added, never edited, and the worker has no business reading it (ADR-281).
   master_passcode: { adms_api: 'INSERT SELECT' },
+  // The firm's own settings (ADR-530): the seed writes the one record, the API changes it, the
+  // worker reads it; nobody adds another.
+  firm_settings: { adms_api: 'SELECT UPDATE', adms_worker: 'SELECT' },
   // Sign-in's records (ADR-397…399): the API's alone. What sign-in keeps of a person and a
   // session are changed in place; a security event is added, never edited.
   user_credential: { adms_api: 'INSERT SELECT UPDATE' },
   session: { adms_api: 'INSERT SELECT UPDATE' },
-  security_event: { adms_api: 'INSERT SELECT' },
+  // The worker adds one when the firm's time revokes a lost phone's key, and reads none (ADR-530).
+  security_event: { adms_api: 'INSERT SELECT', adms_worker: 'INSERT' },
   // Wrong tries at the master passcode: the API's alone, its count changed in place (ADR-438).
   master_passcode_tries: { adms_api: 'INSERT SELECT UPDATE' },
   // The API writes people, so the Monitor ID's default runs as it (ADR-281).
@@ -371,6 +375,11 @@ const columnGrants = [
   'field_event.zone_id adms_worker UPDATE',
   'field_event.map_version_id adms_worker UPDATE',
   'field_event.worked_out_pay_item_id adms_worker UPDATE',
+  // A lost phone's key revoked after the firm's time, its blocks retired whole (ADR-530).
+  'device.key_revoked_at adms_worker UPDATE',
+  'device.key_revoked_by adms_worker UPDATE',
+  'number_block.status adms_worker UPDATE',
+  'number_block.ended_at adms_worker UPDATE',
   ...Object.entries(correctable).flatMap(([table, columns]) =>
     columns.map((column) => `${table}.${column} adms_api UPDATE`),
   ),

@@ -12,7 +12,7 @@ import { builtInPolicy } from '../src/policy.ts';
 const policyFile = new URL('../../domain/policy.env', import.meta.url);
 
 describe('the release’s policy values', () => {
-  it('AC-01-11 are the built-in defaults: load calls flagged at or under 5 and at or over 95 (ADR-164), a 200 m site circle (ADR-142), a 31 in stump fill depth (ADR-203); AC-01-50 a 12 h crew day (ADR-087); AC-04-04, AC-03-06 blocks of 1,000 ticket numbers and 100 cert numbers (ADR-065, 181), 100 ROE numbers (ADR-323); AC-10-39 a request’s body of one mebibyte at most (ADR-389); AC-10-42 a statement of a service’s database login stopped after 30 s (ADR-394); AC-10-21 a password of 15 to 128 characters (ADR-402); AC-10-25 a reset by email good for an hour (ADR-404); AC-10-12 an access token of 5 minutes, a session of 30 quiet minutes and 12 hours at most (ADR-408); AC-10-18 a wait after 5 wrong tries in a row, from 30 s to an hour, and a lock after 50 (ADR-409, 417); AC-10-40 3,000 requests a minute from one address and 600 from one person, 100,000 counts kept; in an hour 30 refused tries from one address and 4 at one login, 10 resets asked by one address and 3 for one login (ADR-416); a job set aside after 5 tries (ADR-418), a run of 10 minutes at most, the queue looked at every 5 s, a map server given 30 s to answer, a pool of 10 connections for each service (ADR-419); AC-10-45 a phone’s challenge good for 120 s (ADR-437); AC-10-71 a piece of work waits 2 s for a connection and runs 5 s at most, and a caller told the database is busy waits 5 s; C140 a shape of a shapefile is read with at most fifty million pairs of outer rings and holes (ADR-524)', () => {
+  it('AC-01-11 are the built-in defaults: load calls flagged at or under 5 and at or over 95 (ADR-164), a 200 m site circle (ADR-142), a 31 in stump fill depth (ADR-203); AC-01-50 a 12 h crew day (ADR-087); AC-04-04, AC-03-06 blocks of 1,000 ticket numbers and 100 cert numbers (ADR-065, 181), 100 ROE numbers (ADR-323); AC-10-39 a request’s body of one mebibyte at most (ADR-389); AC-10-42 a statement of a service’s database login stopped after 30 s (ADR-394); AC-10-21 a password of 15 to 128 characters (ADR-402); AC-10-25 a reset by email good for an hour (ADR-404); AC-10-12 an access token of 5 minutes, a session of 30 quiet minutes and 12 hours at most (ADR-408); AC-10-18 a wait after 5 wrong tries in a row, from 30 s to an hour, and a lock after 50 (ADR-409, 417); AC-10-40 3,000 requests a minute from one address and 600 from one person, 100,000 counts kept; in an hour 30 refused tries from one address and 4 at one login, 10 resets asked by one address and 3 for one login (ADR-416); a job set aside after 5 tries (ADR-418), a run of 10 minutes at most, the queue looked at every 5 s, a map server given 30 s to answer, a pool of 10 connections for each service (ADR-419); AC-10-45 a phone’s challenge good for 120 s (ADR-437); AC-10-71 a piece of work waits 2 s for a connection and runs 5 s at most, and a caller told the database is busy waits 5 s; C140 a shape of a shapefile is read with at most fifty million pairs of outer rings and holes (ADR-524); AC-10-24 a master passcode of 8 to 128 characters, AC-10-83 a lost phone’s key kept 24 hours after its mark (ADR-530)', () => {
     const policy = builtInPolicy();
     expect([
       policy.loadCallLowLimit,
@@ -69,10 +69,14 @@ describe('the release’s policy values', () => {
       policy.databaseWorkLongestMs,
       policy.databaseBusyRetrySeconds,
       policy.mapFileRingPairsAtMost,
+      policy.masterPasscodeMinimumLength,
+      policy.masterPasscodeMaximumLength,
+      policy.phoneKeyRevokedAfterHours,
     ]).toEqual([
       5, 95, 200, 31, 12, 1000, 100, 100, 1048576, 30000, 15, 128, 60, 5, 30, 12, 5, 50, 30, 60, 60,
       3000, 600, 100000, 60, 30, 4, 10, 3, 5, 10, 5, 30, 10, 200, 120, 15, 12, 50, 5, 5, 30,
-      33554432, 4194304, 268435456, 300, 16777216, 67108864, 1000, 600, 2000, 5000, 5, 50000000,
+      33554432, 4194304, 268435456, 300, 16777216, 67108864, 1000, 600, 2000, 5000, 5, 50000000, 8,
+      128, 24,
     ]);
   });
 

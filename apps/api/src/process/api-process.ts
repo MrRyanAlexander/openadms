@@ -116,6 +116,8 @@ import { ProjectSetup } from '../setup/project-setup.ts';
 import { RuleSetup } from '../setup/rule-setup.ts';
 import type { Clock } from '../setup/setup-service.ts';
 import { apiSetupStanding } from '../setup/setup-standing.controller.ts';
+import { apiFirmSettings } from '../firm/firm-settings.controller.ts';
+import { FirmSettings } from '../firm/firm-settings.ts';
 import { SetupStanding } from '../setup/setup-standing.ts';
 import { apiSiteSetup } from '../setup/site-setup.controller.ts';
 import { SiteSetup } from '../setup/site-setup.ts';
@@ -368,7 +370,7 @@ export class ApiProcess {
       policy,
       requestNow,
     });
-    const twoStep = new TwoStep(database, { check, clock, mail, sessions, requestNow });
+    const twoStep = new TwoStep(database, { check, clock, mail, sessions, tries, requestNow });
     const breached = shippedBreachedPasswords();
     // What a phone's login-list entry for a monitor is made from (task 2.5.3, part 4).
     const offline = new OfflineChecks(settings.tokenSigningSecret);
@@ -385,13 +387,28 @@ export class ApiProcess {
       offline,
     });
     const people = new People(database, { clock, sessions, mail });
-    // A phone's proof of itself (task 2.5.1): nobody is signed in.
+    // The master passcode's one check, for every act under it (tasks 2.5.1, 2.5.2).
+    const passcodeCheck = new MasterPasscodeCheck(database, {
+      rules: new MasterPasscodeTries(policy),
+      hasher,
+      mail,
+      clock,
+      requestNow,
+    });
+    // A phone's proof of itself (task 2.5.1): nobody is signed in. One whose key the firm's
+    // time revoked proves itself with the passcode beside its key (task 2.8.6).
     const proofRules = new PhoneProofRules(policy);
     const phoneProofs = new PhoneProofs(database, {
       rules: proofRules,
       challenges: new PhoneChallenges(settings.tokenSigningSecret, proofRules),
       keys: new DeviceKeys(),
       tokens: new PhoneTokens(settings.tokenSigningSecret, policy.phoneTokenMinutes),
+      underPasscode: new PhoneTokens(
+        settings.tokenSigningSecret,
+        policy.phoneTokenMinutes,
+        'underPasscode',
+      ),
+      passcode: passcodeCheck,
       clock,
       challengeSeconds: policy.phoneChallengeSeconds,
     });
@@ -404,14 +421,6 @@ export class ApiProcess {
       assignments: new PhoneAssignments(database),
       clock,
       hours: policy.monitorSessionHours,
-      requestNow,
-    });
-    // The master passcode's one check, for every act under it (tasks 2.5.1, 2.5.2).
-    const passcodeCheck = new MasterPasscodeCheck(database, {
-      rules: new MasterPasscodeTries(policy),
-      hasher,
-      mail,
-      clock,
       requestNow,
     });
     // What a phone reports besides its records (task 2.5.4), by its own endpoints and in a sync.
@@ -478,6 +487,8 @@ export class ApiProcess {
             }),
           ],
           [apiSetupStanding, new SetupStanding(database)],
+          // The firm's own settings (task 2.8.6).
+          [apiFirmSettings, new FirmSettings(database, clock)],
           // Dispatch and phones (task 2.4.3).
           [apiPhones, new Phones(database, clock)],
           [apiAssignments, new Assignments(database, clock)],
@@ -591,7 +602,7 @@ export class ApiProcess {
           [
             apiMasterPasscode,
             new MasterPasscode(database, {
-              rules: new MasterPasscodeRules(breached),
+              rules: new MasterPasscodeRules(policy, breached),
               hasher,
               tries,
               mail,

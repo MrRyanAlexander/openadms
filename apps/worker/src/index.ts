@@ -5,6 +5,7 @@
 // `packages/scenarios/test/app-exports.test.ts` holds it to that).
 export { MapServers, type MapServerSettings } from './mileage/map-servers.ts';
 export { Mileages } from './mileage/mileages.ts';
+export { PhoneKeyBackstop } from './phones/phone-keys.ts';
 export { JobLoop, type ProjectPassed } from './process/job-loop.ts';
 export { WorkerLog } from './process/logs.ts';
 export {

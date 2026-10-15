@@ -6,6 +6,7 @@
 // then a project's every phone syncing at once (ADR-505).
 import type { Story } from '../runner.ts';
 import { burst } from './burst.ts';
+import { lostPhoneKey } from './lost-phone-key.ts';
 import { certification } from './certification.ts';
 import { dispatchMonday } from './dispatch-monday.ts';
 import { firstAdmin } from './first-admin.ts';
@@ -51,4 +52,5 @@ export const stories: readonly Story[] = [
   heldForReview,
   interruptedUpload,
   burst,
+  lostPhoneKey,
 ];

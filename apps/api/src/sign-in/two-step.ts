@@ -10,8 +10,12 @@
 //   left half done leaves nobody locked out. Their other sessions end.
 // - **An admin clears it** (`clearByAdmin`) for somebody who lost the phone that held it: the
 //   secret goes, the person's sessions end, they set one up again at their next sign-in, and it
-//   is a security event. Never one's own: a person who still has their authenticator has
-//   nothing to clear, and one who lost it can't be told from a stranger by the server.
+//   is a security event. Never one's own: one who lost it can't be told from a stranger by the
+//   server.
+// - **A person removes their own** (`removeOwn`, ADR-530; C91) with a code from it, good once,
+//   a wrong one a wrong try at their login as at sign-in: the secret goes, their other sessions
+//   end, it is a security event. Whoever's role needs one sets the next one up before anything
+//   else, so replacing an authenticator is removing it and setting the next one up.
 //
 // Setting up and clearing are each told to the person by email where the firm has mail, so that
 // one they didn't make is noticed.
@@ -23,6 +27,7 @@ import type { Mail } from './mail.ts';
 import type { OneTimeCodes } from './one-time-codes.ts';
 import type { Sessions } from './sessions.ts';
 import type { TwoStepSecrets } from './two-step-secrets.ts';
+import type { WrongTries } from './wrong-tries.ts';
 
 export class TwoStepCheck {
   readonly rules: TwoStepRules;
@@ -35,8 +40,13 @@ export class TwoStepCheck {
     this.secrets = secrets;
   }
 
-  need(role: string): TwoStepNeed {
-    return this.rules.need(role);
+  need(role: string, viewersRequired: boolean): TwoStepNeed {
+    return this.rules.need(role, viewersRequired);
+  }
+
+  // Whether a person of that role may have a second step at all, whatever the firm requires.
+  offered(role: string): boolean {
+    return this.rules.need(role, false) !== 'NONE';
   }
 
   // The step of the code, when it is one this person's authenticator shows now and none at or
@@ -81,11 +91,20 @@ export type TwoStepCleared =
       readonly code: 'NOT_ALLOWED' | 'NOT_FOUND' | 'TWO_STEP_NOT_SET_UP';
     };
 
+export type TwoStepRemoved =
+  | { readonly removed: true; readonly told: boolean }
+  | {
+      readonly removed: false;
+      readonly code: 'NOT_FOUND' | 'TWO_STEP_NOT_SET_UP' | 'TWO_STEP_REFUSED';
+    };
+
 export interface TwoStepParts {
   readonly check: TwoStepCheck;
   readonly clock: Clock;
   readonly mail: Mail;
   readonly sessions: Pick<Sessions, 'endAll'>;
+  // A code that isn't the authenticator's is a wrong try at the login (ADR-530).
+  readonly tries: Pick<WrongTries, 'wrong' | 'closed'>;
   // The request the work now running is for, if any.
   readonly requestNow: () => string | undefined;
 }
@@ -101,7 +120,9 @@ const personRead = {
   role: true,
   email: true,
   archivedAt: true,
-  credential: { select: { twoStepSecret: true } },
+  credential: {
+    select: { twoStepSecret: true, twoStepLastStep: true, failedSignIns: true, lockedUntil: true },
+  },
 } as const;
 
 export class TwoStep {
@@ -118,7 +139,7 @@ export class TwoStep {
     const person = await this.db.$read((tx) =>
       tx.user.findUnique({ where: { id: userId }, select: personRead }),
     );
-    if (person?.archivedAt !== null || this.parts.check.need(person.role) === 'NONE') {
+    if (person?.archivedAt !== null || !this.parts.check.offered(person.role)) {
       return { begun: false, code: 'NOT_FOUND' };
     }
     if (person.credential?.twoStepSecret != null) {
@@ -160,7 +181,7 @@ export class TwoStep {
       { actorId: userId, source: 'BACK_OFFICE' },
       async (tx): Promise<{ refused: SetupConfirmed } | { person: Told }> => {
         const person = await tx.user.findUnique({ where: { id: userId }, select: personRead });
-        if (person?.archivedAt !== null || this.parts.check.need(person.role) === 'NONE') {
+        if (person?.archivedAt !== null || !this.parts.check.offered(person.role)) {
           return { refused: { confirmed: false, code: 'NOT_FOUND' } };
         }
         // Only where there is none: of two confirmations, one finds it kept already.
@@ -242,6 +263,62 @@ export class TwoStep {
           'If you didn’t ask for this, tell an admin of your firm now.',
         ],
       ),
+    };
+  }
+
+  // The signed-in person removes their own authenticator, giving a code from it. The code is
+  // taken as at sign-in (a step allowed now, after the last one taken); a wrong one, or any while
+  // the login waits or is locked, is refused, and a wrong one counts. Their other sessions end.
+  async removeOwn(userId: string, sessionId: string, code: string): Promise<TwoStepRemoved> {
+    const now = this.parts.clock.now();
+    const person = await this.db.$read((tx) =>
+      tx.user.findUnique({ where: { id: userId }, select: personRead }),
+    );
+    const kept = person?.credential;
+    if (person?.archivedAt !== null || kept == null) return { removed: false, code: 'NOT_FOUND' };
+    if (kept.twoStepSecret === null) return { removed: false, code: 'TWO_STEP_NOT_SET_UP' };
+    if (this.parts.tries.closed(kept)) return { removed: false, code: 'TWO_STEP_REFUSED' };
+    const step = this.parts.check.taken(
+      userId,
+      kept.twoStepSecret,
+      code,
+      kept.twoStepLastStep,
+      now,
+    );
+    if (step === undefined) {
+      await this.parts.tries.wrong(person);
+      return { removed: false, code: 'TWO_STEP_REFUSED' };
+    }
+    const requestId = this.parts.requestNow();
+    const removed = await this.db.$write(
+      { actorId: userId, source: 'BACK_OFFICE' },
+      async (tx): Promise<boolean> => {
+        // Only the secret the code was taken against: of two removals, one finds it gone.
+        const { count } = await tx.userCredential.updateMany({
+          where: { userId, twoStepSecret: kept.twoStepSecret },
+          data: { twoStepSecret: null, twoStepLastStep: null },
+        });
+        if (count !== 1) return false;
+        await tx.securityEvent.create({
+          data: {
+            kind: 'TWO_STEP_CLEARED',
+            userId,
+            occurredAt: now,
+            ...(requestId ? { requestId } : {}),
+          },
+        });
+        await this.parts.sessions.endAll(tx, userId, sessionId);
+        return true;
+      },
+    );
+    if (!removed) return { removed: false, code: 'TWO_STEP_NOT_SET_UP' };
+    return {
+      removed: true,
+      told: await this.tell(person, 'The authenticator of your Open ADMS login was removed', [
+        'You just removed the authenticator of your Open ADMS login, giving a code from it. Your other sessions were ended.',
+        'If your login needs one, you set a new one up before anything else.',
+        'If you didn’t do this, tell an admin of your firm now.',
+      ]),
     };
   }
 

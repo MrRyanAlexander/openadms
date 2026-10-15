@@ -110,6 +110,10 @@ export const errorCodes = [
   // answered, a signature the phone's key didn't make, a phone nobody enrolled, a key that is
   // revoked), or a call with no token of a proof, or one run out (AC-10-45, 46).
   'PHONE_NOT_PROVEN',
+  // The phone signed its challenge with its own key, and the firm's time has revoked that key
+  // (ADR-530): it proves itself again only with the master passcode beside its signature, for
+  // its sync and its turn-in alone. Told only once the signature is the phone's own.
+  'MASTER_PASSCODE_NEEDED',
   // An act under the master passcode on an enrolled phone (a monitor created, ADR-442). The
   // passcode wasn't taken: one code whatever the reason, as at enrolment.
   'MASTER_PASSCODE_REFUSED',
@@ -268,12 +272,27 @@ export const phoneRecordSchema = z.strictObject({
   status: z.enum(['ACTIVE', 'LOST', 'RETIRED']),
   enrolledAt: z.iso.datetime(),
   outOfServiceAt: z.iso.datetime().nullable(),
+  // When it was last marked lost or retired: the firm's time for its key runs from here (ADR-530).
+  outOfServiceMarkedAt: z.iso.datetime().nullable(),
+  // Why it was taken out of service, from the firm's reasons list, where one was picked.
+  outOfServiceReasonId: z.uuid().nullable(),
   keyRevokedAt: z.iso.datetime().nullable(),
+  // Which revoked its key: its turn-in, or the firm's time (ADR-530).
+  keyRevokedBy: z.enum(['TURN_IN', 'FIRM_TIME']).nullable(),
   masterPasscodeVersion: z.number().int().min(1),
   holdsCurrentPasscode: z.boolean(),
 });
 
 export type PhoneRecord = z.infer<typeof phoneRecordSchema>;
+
+// The firm's own settings (REQ-214, 215; ADR-520, 530): how many hours a phone marked lost or
+// retired keeps its key (null: off), and whether a read-only viewer must use two-step sign-in.
+export const firmSettingsAnswerSchema = z.strictObject({
+  phoneKeyRevokedAfterHours: z.number().int().min(1).max(8760).nullable(),
+  viewerTwoStepRequired: z.boolean(),
+});
+
+export type FirmSettingsAnswer = z.infer<typeof firmSettingsAnswerSchema>;
 
 // A page of the firm's phones, in the order they were enrolled. `next` is what to send as
 // `after` for the page that follows; null when this is the last.
@@ -523,6 +542,9 @@ export const provenPhoneAnswerSchema = z.strictObject({
   name: z.string(),
   status: z.enum(['ACTIVE', 'LOST', 'RETIRED']),
   outOfServiceAt: z.iso.datetime().nullable(),
+  // The firm's time revoked its key (ADR-530): it proved itself with the master passcode, and
+  // may only sync, send its photographs' files, report and be turned in.
+  keyRevoked: z.boolean(),
   masterPasscodeVersion: z.number().int().min(1),
   masterPasscodeVersionInForce: z.number().int().min(1),
 });

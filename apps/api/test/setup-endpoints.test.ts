@@ -8,6 +8,8 @@
 import { randomUUID } from 'node:crypto';
 
 import {
+  changePhoneKeyHoursEndpoint,
+  firmSettingsEndpoint,
   addDebrisTypeEndpoint,
   addFieldTagEndpoint,
   addFormDebrisTypeEndpoint,
@@ -148,6 +150,9 @@ const setupEndpoints = [
   loadEsriMapEndpoint,
   refreshEsriMapEndpoint,
   addSiteShapeFromEsriEndpoint,
+  // The firm's own settings: read, and the hours a lost phone keeps its key (task 2.8.6).
+  firmSettingsEndpoint,
+  changePhoneKeyHoursEndpoint,
 ] as const;
 
 describe('who may change the setup', () => {
@@ -214,6 +219,8 @@ describe('who may change the setup', () => {
       'POST /projects/:projectId/esri-map-versions',
       'POST /map-versions/:mapVersionId/esri-refreshes',
       'POST /sites/:siteId/esri-shapes',
+      'GET /firm-settings',
+      'PATCH /firm-settings/phone-key',
     ]);
   });
 

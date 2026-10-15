@@ -315,7 +315,7 @@ describe('the challenge a phone last proved itself with', () => {
     await db.actor(world.admin, 'BACK_OFFICE');
     // Luis marks P1-COL-1 lost at 6:10 pm on Monday.
     await db.run(
-      `UPDATE "device" SET "status" = 'LOST', "out_of_service_at" = '2026-10-12T22:10:00Z' WHERE "id" = $1`,
+      `UPDATE "device" SET "status" = 'LOST', "out_of_service_at" = '2026-10-12T22:10:00Z', "out_of_service_marked_at" = '2026-10-12T22:10:00Z' WHERE "id" = $1`,
       [world.device],
     );
     await asThePhone(world.device);
@@ -323,9 +323,10 @@ describe('the challenge a phone last proved itself with', () => {
     // It synced, everything on it was confirmed, and it was turned in on Wednesday: its key is
     // revoked, by its turn-in alone (ADR-488).
     await db.actor(masterPasscodeActorId, 'DEVICE', { deviceId: world.device });
-    await db.run(`UPDATE "device" SET "key_revoked_at" = '2026-10-14T13:30:00Z' WHERE "id" = $1`, [
-      world.device,
-    ]);
+    await db.run(
+      `UPDATE "device" SET "key_revoked_at" = '2026-10-14T13:30:00Z', "key_revoked_by" = 'TURN_IN' WHERE "id" = $1`,
+      [world.device],
+    );
     await asThePhone(world.device);
     expect(await db.refused(answered, [world.device, '2026-10-14T14:00:00Z'])).toEqual({
       code: refusedBy.trigger,

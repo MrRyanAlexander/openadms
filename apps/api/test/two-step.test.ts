@@ -529,6 +529,61 @@ describe('an admin clears somebody’s authenticator', () => {
   });
 });
 
+describe('a person removes their own authenticator (ADR-530; C91)', () => {
+  const remove = (served: Served, signed: Pick<Signed, 'cookies' | 'csrf'>, code: string) =>
+    served.ask('POST', '/two-step/removals', { ...signed, payload: { code } });
+
+  it('AC-10-87 with a code from it: the secret goes, their other sessions end, it is a security event, they are told by mail; an admin then sets the next one up before anything else', async () => {
+    const outbox = new Outbox();
+    await world(async (served, tx, { dana }) => {
+      const other = await served.signedIn(danasEmail, long);
+      const signed = await served.signedIn(danasEmail, long);
+      const answer = await remove(served, signed, served.codeOf(danasEmail) ?? '');
+      expect([told(answer), answer.body]).toEqual([[200, undefined], { status: 'cleared' }]);
+      served.authenticators.delete(danasEmail);
+      expect(await kept(tx, dana)).toEqual({
+        twoStepSecret: null,
+        twoStepLastStep: null,
+        failedSignIns: 0,
+      });
+      expect(await kindsOf(tx, dana)).toEqual(['SIGN_IN', 'SIGN_IN', 'TWO_STEP_CLEARED']);
+      expect(outbox.sent.map(({ to, subject }) => [to, subject])).toEqual([
+        [danasEmail, 'The authenticator of your Open ADMS login was removed'],
+      ]);
+      expect(outbox.sent[0]?.text).not.toMatch(/\d{6}/);
+      // Her other session ended; this one stands, and asks for the next authenticator first.
+      expect(told(await served.current(other.cookies))).toEqual([401, 'NOT_SIGNED_IN']);
+      expect(told(await write(served, signed))).toEqual([403, 'TWO_STEP_SETUP_REQUIRED']);
+      // Replacing it: removing, then setting the next one up.
+      await setUp(served, signed, danasEmail);
+      expect(told(await write(served, signed))).toEqual([200, undefined]);
+    }, outbox);
+  });
+
+  it('AC-10-87 a code that isn’t one from it is refused and counts as a wrong try at the login; somebody with none has none to remove; nobody signed in removes nothing', async () => {
+    await world(async (served, tx, { dana, viewer }, within) => {
+      const signed = await served.signedIn(danasEmail, long);
+      for (const code of ['000000', 'twelve', '1234567']) {
+        expect(told(await remove(served, signed, code)), code).toEqual([422, 'TWO_STEP_REFUSED']);
+      }
+      expect((await kept(tx, dana)).failedSignIns).toBe(3);
+      expect((await kept(tx, dana)).twoStepSecret).toMatch(/^v1\./);
+      expect(told(await remove(served, { cookies: {}, csrf: signed.csrf }, '123456'))).toEqual([
+        401,
+        'NOT_SIGNED_IN',
+      ]);
+      await tx.userCredential.create({
+        data: {
+          userId: viewer,
+          passwordHash: await signInOn(within, new Outbox()).hasher.hash(viewersPassword),
+        },
+      });
+      const viewers = await served.signedIn(viewersEmail, viewersPassword);
+      expect(told(await remove(served, viewers, '123456'))).toEqual([409, 'TWO_STEP_NOT_SET_UP']);
+    });
+  });
+});
+
 describe('the log', () => {
   it('AC-10-32 Dana signed in with her password and an authenticator code, set one up and cleared one: no line holds a code, a secret or a setup', async () => {
     await world(async (served, tx, { dana, luis }) => {

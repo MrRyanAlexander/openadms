@@ -30,6 +30,7 @@ import {
   assignmentRecordSchema,
   assignmentsAnswerSchema,
   csrfAnswerSchema,
+  firmSettingsAnswerSchema,
   healthAnswerSchema,
   masterPasscodeAnswerSchema,
   phoneChallengeAnswerSchema,
@@ -203,6 +204,10 @@ export interface Endpoint {
   // Served even to a person who must first set an authenticator up (ADR-412): only what they
   // need to do that. Left out, such a person is refused.
   readonly beforeTwoStepSetup?: true;
+  // On a `PROVEN_PHONE` endpoint, and only there: served even to a phone whose key the firm's time
+  // revoked, which proved itself with the master passcode beside its key (ADR-530): only what
+  // gets its records onto the server and the phone turned in. Left out, such a phone is refused.
+  readonly keyRevokedToo?: true;
   readonly method: EndpointMethod;
   // From the root, a parameter written `:name`: `/projects/:projectId`.
   readonly path: string;
@@ -283,6 +288,11 @@ export function endpoint<const E extends Endpoint>(defined: E): E {
   ) {
     throw new Error(
       `The endpoint ${defined.name} doesn’t say whole who may call it: a signed-in endpoint names its roles, no other does, and a permission is asked only where a manager/analyst may call.`,
+    );
+  }
+  if (defined.keyRevokedToo === true && defined.access !== 'PROVEN_PHONE') {
+    throw new Error(
+      `The endpoint ${defined.name}: only a proven phone’s endpoint is served to a phone whose key the firm’s time revoked.`,
     );
   }
   return defined;
@@ -488,6 +498,22 @@ export const confirmTwoStepSetupEndpoint = endpoint({
     code: z.string().min(1).max(32),
   }),
   answer: sessionAnswerSchema,
+});
+
+// A person removes their own authenticator with a code from it (ADR-530; ASVS 6.4.x; C91): a
+// code good once, a wrong one a wrong try, as at sign-in. Their other sessions end, it is a
+// security event, and they are told by mail. Whoever's role needs one sets the next one up
+// before anything else: replacing an authenticator is removing it and setting the next one up.
+export const removeOwnTwoStepEndpoint = endpoint({
+  name: 'removeOwnTwoStep',
+  summary:
+    'The signed-in person removes their own authenticator, giving a code from it. Their other sessions end; it is a security event, and they are told by mail. Whoever must have one then sets a new one up before anything else. A code that isn’t taken is a wrong try, as at sign-in.',
+  access: 'SIGNED_IN',
+  roles: signedInRoles,
+  method: 'POST',
+  path: '/two-step/removals',
+  body: z.strictObject({ code: z.string().min(1).max(32) }),
+  answer: twoStepClearedAnswerSchema,
 });
 
 // An admin clears the authenticator of somebody who lost the phone that held it (AC-10-26). The
@@ -1942,7 +1968,11 @@ export const enrolPhoneEndpoint = endpoint({
 // server keeps nothing of a challenge it has made, and makes one for any id, so asking tells a
 // stranger nothing of which phones the firm has. A proof that isn't one is refused by one code.
 // A phone taken out of service still proves itself (its work is received and flagged, ADR-134);
-// one whose key is revoked does not. The limits here only bound what is read.
+// one whose key its turn-in revoked does not. **One whose key the firm's time revoked** (ADR-530)
+// proves itself with the master passcode beside its signature, checked by the one check every
+// act under it shares, and is given a token that opens its sync and its turn-in alone; with no
+// passcode it is told `MASTER_PASSCODE_NEEDED`, and only once its signature is its own. The
+// limits here only bound what is read.
 const phoneNamed = z.strictObject({ deviceId: z.uuid() });
 
 export const challengePhoneEndpoint = endpoint({
@@ -1959,7 +1989,7 @@ export const challengePhoneEndpoint = endpoint({
 export const provePhoneEndpoint = endpoint({
   name: 'provePhone',
   summary:
-    'A phone proves itself: it sends back the challenge it was made and its signature over it. The answer is a token for that phone, good for the policy’s minutes, which the calls of its sync carry as Authorization: Bearer. A challenge is good once. A proof that isn’t one is refused by one code, whatever the reason; a phone taken out of service still proves itself, one whose key is revoked does not.',
+    'A phone proves itself: it sends back the challenge it was made and its signature over it. The answer is a token for that phone, good for the policy’s minutes, which the calls of its sync carry as Authorization: Bearer. A challenge is good once. A proof that isn’t one is refused by one code, whatever the reason; a phone taken out of service still proves itself, one whose key its turn-in revoked does not. A phone whose key the firm’s time revoked sends the master passcode beside its signature, and its token then opens only its sync, its photographs’ files, its reports and its turn-in; without the passcode it is told the passcode is needed. A passcode that isn’t taken is refused by the proof’s one code, and counts as a wrong try as it does when a phone is enrolled.',
   access: 'ANYBODY',
   method: 'POST',
   path: '/phones/:deviceId/proofs',
@@ -1967,6 +1997,7 @@ export const provePhoneEndpoint = endpoint({
   body: z.strictObject({
     challenge: z.string().min(1).max(400),
     signature: z.string().min(1).max(400),
+    passcode: z.string().min(1).max(4096).optional(),
   }),
   answer: phoneProvenAnswerSchema,
 });
@@ -1978,6 +2009,7 @@ export const provenPhoneEndpoint = endpoint({
   summary:
     'The phone a proof’s token is of, as the server has it now: its name, whether it is in service, the version of the master passcode whose check it holds and the version in force. Open to a phone that has proved itself, by its token.',
   access: 'PROVEN_PHONE',
+  keyRevokedToo: true,
   method: 'GET',
   path: '/phones/current',
   answer: provenPhoneAnswerSchema,
@@ -2071,6 +2103,7 @@ export const reportPasscodeUseEndpoint = endpoint({
   summary:
     'A phone reports a use of the firm’s master passcode it logged with no connection: the phone passed to a monitor who has their own assignment, a session opened on it as the phone’s monitor or the temporary session for a monitor picked from the roster, or the passcode typed wrong. It says when by the phone’s own clock, with the clock’s offset, and for which monitor; a wrong try names nobody. The id is the phone’s own: the same report sent again is answered as already saved and kept once. It is kept as the phone reports it, for a monitor archived since and from a phone out of service too, and is not saved only where it names somebody who is no monitor or its id is another record’s. The passcode itself is never sent: the phone checked it, and a wrong try reported here does not count toward the lock on the server’s own check. Each one saved is a security event at the phone’s own time: a phone switched and a use of the master passcode; a use that says which way a session was opened; or a failed try. A switch or a session saved ends what anybody else had open on that phone before it, by the phone’s clock. A setup, a site move and a switch to a monitor who has no assignment are reported as an unplanned assignment instead. Open to a phone that has proved itself, by its token; nobody need be signed in.',
   access: 'PROVEN_PHONE',
+  keyRevokedToo: true,
   method: 'POST',
   path: '/phones/current/passcode-uses',
   body: passcodeUseReportSchema,
@@ -2139,20 +2172,96 @@ export const phoneAddressLookupEndpoint = endpoint({
   answer: phoneAddressLookupAnswerSchema,
 });
 
+// A phone renamed, and a found one put back in service (ADR-530; C102). A phone whose key is
+// revoked stays as it is: it is wiped and enrolled anew.
+export const renamePhoneEndpoint = endpoint({
+  name: 'renamePhone',
+  summary:
+    'A phone is given another name, as the dispatch board calls it. Nothing else of it changes.',
+  ...dispatch,
+  method: 'PATCH',
+  path: '/phones/:deviceId',
+  params: z.strictObject({ deviceId: z.uuid() }),
+  body: z.strictObject({ name: z.string().trim().min(1).max(80) }),
+  answer: savedAnswer(phoneRecordSchema),
+});
+
 export const removePhoneEndpoint = endpoint({
   name: 'removePhone',
   summary:
-    'A phone is taken out of service, as lost or retired, from this moment. Its record is kept; what it made later is received and flagged, never refused. Refused for a phone already out of service.',
+    'A phone is taken out of service, as lost or retired, from this moment or from a removal time stated by hand (never after now, never before it was enrolled), with a reason from the firm’s list where one is picked. A phone marked lost may then be marked retired, its removal time kept unless one is stated. Its record is kept; what it made later is received and flagged, never refused. Each mark starts the firm’s time again, after which the worker revokes its key. Refused for a phone already out of service otherwise, and for one whose key is revoked.',
   ...dispatch,
   method: 'POST',
   path: '/phones/:deviceId/removals',
   params: z.strictObject({ deviceId: z.uuid() }),
   body: z.strictObject({
     status: z.enum(phoneRemovals),
+    // The removal time stated by hand, where it isn't now.
+    outOfServiceAt: z.iso.datetime().optional(),
+    // From the firm's reasons list, a value offered for a phone's removal.
+    reasonId: z.uuid().optional(),
     // Why, in the person's own words: kept beside the change in the audit log.
     note: z.string().trim().min(1).max(500).optional(),
   }),
   answer: savedAnswer(phoneRecordSchema),
+});
+
+export const returnPhoneEndpoint = endpoint({
+  name: 'returnPhone',
+  summary:
+    'A phone found again is put back in service, with a note saying why. Refused for a phone in service, and for one whose key is revoked: that one is wiped and enrolled anew.',
+  ...dispatch,
+  method: 'POST',
+  path: '/phones/:deviceId/returns',
+  params: z.strictObject({ deviceId: z.uuid() }),
+  body: z.strictObject({ note: z.string().trim().min(1).max(500) }),
+  answer: savedAnswer(phoneRecordSchema),
+});
+
+// The firm's own settings (REQ-214, 215; ARCHITECTURE §6, §7.4; ADR-520, 530): read by an admin
+// or a manager/analyst holding Setup. The hours a lost phone keeps its key are changed by either;
+// whether read-only viewers must use two-step sign-in, by an admin alone. Each change audited.
+export const firmSettingsEndpoint = endpoint({
+  name: 'firmSettings',
+  summary:
+    'The firm’s own settings: how many hours a phone marked lost or retired keeps its key (or off), and whether read-only viewers must use two-step sign-in.',
+  access: 'SIGNED_IN',
+  roles: backOfficeRoles,
+  permission: 'SETUP',
+  method: 'GET',
+  path: '/firm-settings',
+  answer: firmSettingsAnswerSchema,
+});
+
+export const changePhoneKeyHoursEndpoint = endpoint({
+  name: 'changePhoneKeyHours',
+  summary:
+    'Sets how many whole hours (1 to 8,760) a phone marked lost or retired keeps its key, counted from its last mark, before the worker revokes it; null switches it off. A phone revoked so may still sync and be turned in under the master passcode. Audited.',
+  access: 'SIGNED_IN',
+  roles: backOfficeRoles,
+  permission: 'SETUP',
+  method: 'PATCH',
+  path: '/firm-settings/phone-key',
+  body: z.strictObject({
+    hours: z.number().int().min(1).max(8760).nullable(),
+    note: z.string().trim().min(1).max(500).optional(),
+  }),
+  answer: firmSettingsAnswerSchema,
+});
+
+export const changeViewerTwoStepEndpoint = endpoint({
+  name: 'changeViewerTwoStep',
+  summary:
+    'An admin sets whether read-only viewers must use two-step sign-in. Once it is required, a viewer with no authenticator sets one up before anything else, at their very next request. Turning it off clears nobody’s. Audited.',
+  access: 'SIGNED_IN',
+  roles: adminOnly,
+  method: 'PATCH',
+  path: '/firm-settings/viewer-two-step',
+  body: z.strictObject({
+    required: z.boolean(),
+    note: z.string().trim().min(1).max(500).optional(),
+  }),
+  answer: firmSettingsAnswerSchema,
 });
 
 // The firm's one master passcode (ADR-106). A change is a new version: no earlier one is edited
@@ -2162,7 +2271,7 @@ export const removePhoneEndpoint = endpoint({
 export const changeMasterPasscodeEndpoint = endpoint({
   name: 'changeMasterPasscode',
   summary:
-    'An admin changes the firm’s master passcode, giving their own password again. A new version is kept, as a slow hash only; each phone’s check moves to it at its next sync. Refused for a passcode under 8 or over 128 characters, or known from breaches.',
+    'An admin changes the firm’s master passcode, giving their own password again. A new version is kept, as a slow hash only; each phone’s check moves to it at its next sync. Refused for a passcode shorter or longer than the policy allows (8 and 128 characters as shipped), or known from breaches.',
   access: 'SIGNED_IN',
   roles: adminOnly,
   method: 'POST',
@@ -2297,6 +2406,7 @@ export const reportUnplannedAssignmentEndpoint = endpoint({
   summary:
     'A phone reports an unplanned assignment made on it under the firm’s master passcode, when its monitor had none: the project, the monitor, their work (the kinds of field event, certifying, the forms, the unit rate pay items), one site where the work is at one, and when it was made by the phone’s own clock, with the clock’s offset. The id is the phone’s own: the same report sent again is answered as already saved and kept once. It is kept as the phone reports it, marked unplanned on the dispatch board and never flagged, for a phone out of service too; its day is the day the phone’s clock said, in the project’s time zone. It is not saved only where something it names is no record of the kind it must be, or its id is another record’s. The passcode itself is never sent: the phone checked it. It says what it was made at: the phone set up (a phone moved to another of its project’s sites is set up anew there, and the earlier assignment stands with everything recorded under it), or the phone passed to another monitor, who had no assignment it could take. Each one saved is two security events at the phone’s own time: a phone set up or a phone switched, and a use of the master passcode. Where several of a monitor’s assignments for a day name one phone, their sign-in on it takes the one made on it last. Open to a phone that has proved itself, by its token; nobody need be signed in.',
   access: 'PROVEN_PHONE',
+  keyRevokedToo: true,
   method: 'POST',
   path: '/phones/current/unplanned-assignments',
   body: unplannedAssignmentReportSchema,
@@ -2313,6 +2423,7 @@ export const syncPhoneEndpoint = endpoint({
   summary:
     'A phone syncs: it sends its clock, the unplanned assignments made on it, the uses of the master passcode it logged, its records (field events, scale receipts, incidents, drop-off logs, surveys, ROEs and certifications, each under the id the phone made for it, 200 at most) and the last number it used of each series. The server keeps the sync with both clocks and their difference, then reads each thing in that order and gives each its own answer, in the order sent. A record is saved; already saved, where it was sent before (never stored twice, and never taken for a duplicate ticket number); kept in quarantine, not saved, where another record holds its number, with the reason and the record that holds it; or not saved, where it can’t be read, names something the server doesn’t have, was made under an assignment that was not saved, or is a certification its own rules refuse: what was sent is then held on the server exactly as sent, for a person, and the answer says so. One record never stops the others. Nothing is refused over eligibility, and no answer carries a status, a flag or money: reconciliation is queued for what arrived and never waited for. For each series reported the answer lists the blocks of numbers the phone holds now, topped up to a full block where the project has such a series. A phone with more than one sync’s worth sends another. Open to a phone that has proved itself, by its token; nobody need be signed in.',
   access: 'PROVEN_PHONE',
+  keyRevokedToo: true,
   method: 'POST',
   path: '/phones/current/syncs',
   body: syncSentSchema,
@@ -2331,6 +2442,7 @@ export const turnInPhoneEndpoint = endpoint({
   summary:
     'A phone is turned in ("Sync and turn in") under the firm’s master passcode, after it has synced every queue and sent every photograph’s file. It sends the passcode, everything it still holds by the ids it made (its unplanned assignments, the uses of the master passcode it logged, its records, its photographs) and by fingerprint what it sent with no id the server could read, and the last number it used of each series it holds numbers of. Only when the server has all of it from that phone (a record saved, kept in quarantine, or held for a person; a photograph saved with every file kept) is the phone turned in: the unused rest of each series it reported is handed back for the next phone, and a series it doesn’t report, or every block of a phone marked lost, is retired whole; a phone in service is taken out of service as retired; its sessions end; its key is revoked, so it proves nothing again; and the answer tells it to wipe. Otherwise nothing is changed and nothing is wiped, and the answer names what the server doesn’t have. A phone out of service is turned in the same way. Each use of the passcode is a security event, and a turn-in another. Open to a phone that has proved itself, by its token; nobody need be signed in. A passcode that isn’t taken is refused by one code; wrong tries count as they do when a phone is enrolled.',
   access: 'PROVEN_PHONE',
+  keyRevokedToo: true,
   method: 'POST',
   path: '/phones/current/turn-ins',
   body: turnInSentSchema,
@@ -2356,6 +2468,7 @@ export const photoFileEndpoint = endpoint({
   summary:
     'Where a photograph’s file stands: kept (nothing more to send), or how many of its bytes the server has taken, of a file how long, so the phone sends the rest from there (none, where it holds none). The photograph is named by its own id, and the file is the photograph itself or the depth file beside it; only the phone that took it may ask, once its record is saved. Open to a phone that has proved itself, by its token; nobody need be signed in.',
   access: 'PROVEN_PHONE',
+  keyRevokedToo: true,
   method: 'GET',
   path: '/phones/current/photos/:photoId/files/:file',
   params: photoFileNamed,
@@ -2367,6 +2480,7 @@ export const sendPhotoFilePartEndpoint = endpoint({
   summary:
     'A part of a photograph’s file, sent by the phone that took it, once its record is saved: the bytes in the body, the offset they go at and the whole file’s length in the query. Taken only where it goes on from the last part the server took, or starts the file; otherwise the answer says where to go on from. The file is at most the policy’s size and a part at most the policy’s; its first part is told to be an image by its own first bytes (JPEG, HEIC or HEIF, PNG, TIFF), or refused. When the last part arrives the server reads the whole file’s SHA-256: the one the phone gave in the photograph’s record (or the depth file’s) and the file is kept, once, where the server placed it, never overwritten, and its upload time written; any other, and the file is set aside on the server for a person, never kept as the photograph’s, and the phone sends its file again from the first byte. A file kept already is answered kept, and nothing changes. Open to a phone that has proved itself, by its token; nobody need be signed in.',
   access: 'PROVEN_PHONE',
+  keyRevokedToo: true,
   method: 'PATCH',
   path: '/phones/current/photos/:photoId/files/:file',
   params: photoFileNamed,
@@ -3170,6 +3284,7 @@ export const endpoints: readonly Endpoint[] = [
   changePasswordEndpoint,
   beginTwoStepSetupEndpoint,
   confirmTwoStepSetupEndpoint,
+  removeOwnTwoStepEndpoint,
   clearTwoStepEndpoint,
   createPersonEndpoint,
   listPeopleEndpoint,
@@ -3239,6 +3354,9 @@ export const endpoints: readonly Endpoint[] = [
   setupCheckEndpoint,
   quantityLookupEndpoint,
   siteQuantityLookupEndpoint,
+  firmSettingsEndpoint,
+  changePhoneKeyHoursEndpoint,
+  changeViewerTwoStepEndpoint,
   listPhonesEndpoint,
   enrolPhoneEndpoint,
   challengePhoneEndpoint,
@@ -3259,7 +3377,9 @@ export const endpoints: readonly Endpoint[] = [
   turnInPhoneEndpoint,
   photoFileEndpoint,
   sendPhotoFilePartEndpoint,
+  renamePhoneEndpoint,
   removePhoneEndpoint,
+  returnPhoneEndpoint,
   changeMasterPasscodeEndpoint,
   listAssignmentsEndpoint,
   writeAssignmentEndpoint,

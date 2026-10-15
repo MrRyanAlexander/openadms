@@ -133,7 +133,9 @@ describe('who may ask', () => {
     expect(
       endpoints.filter(({ permission }) => permission === 'DISPATCH').map(({ name }) => name),
     ).toEqual([
+      'renamePhone',
       'removePhone',
+      'returnPhone',
       'writeAssignment',
       'changeAssignment',
       'withdrawAssignment',
@@ -384,7 +386,11 @@ describe('Monday’s board', () => {
       await tx.user.update({ where: { id: p1.jo.id }, data: { archivedAt: new Date() } });
       await tx.device.update({
         where: { id: p1.phones.landfillTower.id },
-        data: { status: 'LOST', outOfServiceAt: new Date('2026-10-12T22:10:00Z') },
+        data: {
+          status: 'LOST',
+          outOfServiceAt: new Date('2026-10-12T22:10:00Z'),
+          outOfServiceMarkedAt: new Date('2026-10-12T22:10:00Z'),
+        },
       });
       expect(notSaved(await write({ ...kims, personId: who.viewer }))).toEqual([
         'PERSON_NOT_ASSIGNABLE',
@@ -593,7 +599,11 @@ describe('an assignment changed and withdrawn', () => {
       ]);
       await tx.device.update({
         where: { id: p1.phones.landfillTower.id },
-        data: { status: 'RETIRED', outOfServiceAt: new Date('2026-10-12T22:10:00Z') },
+        data: {
+          status: 'RETIRED',
+          outOfServiceAt: new Date('2026-10-12T22:10:00Z'),
+          outOfServiceMarkedAt: new Date('2026-10-12T22:10:00Z'),
+        },
       });
       expect(notSaved(await change({ deviceId: p1.phones.landfillTower.id }))[0]).toBe(
         'PHONE_OUT_OF_SERVICE',

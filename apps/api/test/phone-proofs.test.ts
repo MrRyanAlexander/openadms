@@ -184,6 +184,7 @@ describe('a phone proves itself', () => {
         name: 'P1-COL-1',
         status: 'ACTIVE',
         outOfServiceAt: null,
+        keyRevoked: false,
         masterPasscodeVersion: phone.masterPasscodeVersion,
         masterPasscodeVersionInForce: phone.masterPasscodeVersion,
       });
@@ -324,7 +325,7 @@ describe('a proof that isn’t one', () => {
       const lostAt = new Date('2026-10-12T22:10:00.000Z');
       await tx.device.update({
         where: { id: phone.id },
-        data: { status: 'LOST', outOfServiceAt: lostAt },
+        data: { status: 'LOST', outOfServiceAt: lostAt, outOfServiceMarkedAt: lostAt },
       });
       served.clock.at = new Date('2026-10-13T12:00:00.000Z');
       const token = await proven(served, phone);

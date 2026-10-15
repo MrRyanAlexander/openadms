@@ -119,6 +119,13 @@ export const policyNames = {
   signInWrongTriesPerAddressAtLogin: 'SIGN_IN_WRONG_TRIES_PER_ADDRESS_AT_LOGIN',
   passwordResetAsksPerAddress: 'PASSWORD_RESET_ASKS_PER_ADDRESS',
   passwordResetAsksPerLogin: 'PASSWORD_RESET_ASKS_PER_LOGIN',
+  // The shortest and the longest master passcode, in characters (ARCHITECTURE §7.5; ADR-266,
+  // 530): the installer asks the firm's first one to them, and the back office each change.
+  masterPasscodeMinimumLength: 'MASTER_PASSCODE_MINIMUM_LENGTH',
+  masterPasscodeMaximumLength: 'MASTER_PASSCODE_MAXIMUM_LENGTH',
+  // How many hours a phone marked lost or retired keeps its key before the worker revokes it,
+  // nought for off (ADR-520, 530): what a new installation's firm settings start as.
+  phoneKeyRevokedAfterHours: 'PHONE_KEY_REVOKED_AFTER_HOURS',
   // The worker's own (ARCHITECTURE §13; ADR-418, 419), read by the worker's process alone: how
   // many runs may take a job up before it is set aside; the longest a run may hold its project's
   // lock, in minutes; how often the worker looks for waiting jobs, in seconds; and how long a map
@@ -162,7 +169,8 @@ export const requestBodyBytesAtLeast = 1_048_576;
 // most, a limit on tries over a day at the most, and each allows at least one; the server keeps
 // at least a thousand callers' counts and at most ten million. A job names at least one ticket
 // and at most a hundred thousand. A phone's clock may stand a minute off at the least before
-// its sync is flagged, and a day at the most.
+// its sync is flagged, and a day at the most. A master passcode is held to a password's own
+// bounds. A lost phone keeps its key a year at the most, and nought switches the backstop off.
 
 const ranges: Record<PolicyName, { least: number; most: number }> = {
   [policyNames.loadCallLowLimit]: { least: 0, most: 100 },
@@ -219,6 +227,9 @@ const ranges: Record<PolicyName, { least: number; most: number }> = {
   [policyNames.signInWrongTriesPerAddressAtLogin]: { least: 1, most: 98 },
   [policyNames.passwordResetAsksPerAddress]: { least: 1, most: Number.MAX_SAFE_INTEGER },
   [policyNames.passwordResetAsksPerLogin]: { least: 1, most: Number.MAX_SAFE_INTEGER },
+  [policyNames.masterPasscodeMinimumLength]: { least: 8, most: 64 },
+  [policyNames.masterPasscodeMaximumLength]: { least: 64, most: 1024 },
+  [policyNames.phoneKeyRevokedAfterHours]: { least: 0, most: 8760 },
   [policyNames.jobTriesBeforeSetAside]: { least: 1, most: 100 },
   [policyNames.reconciliationRunLongestMinutes]: { least: 1, most: 1440 },
   [policyNames.jobQueuePollSeconds]: { least: 1, most: 3600 },
@@ -279,6 +290,9 @@ export class Policy {
   readonly signInWrongTriesPerAddressAtLogin: number;
   readonly passwordResetAsksPerAddress: number;
   readonly passwordResetAsksPerLogin: number;
+  readonly masterPasscodeMinimumLength: number;
+  readonly masterPasscodeMaximumLength: number;
+  readonly phoneKeyRevokedAfterHours: number;
   readonly jobTriesBeforeSetAside: number;
   readonly reconciliationRunLongestMinutes: number;
   readonly jobQueuePollSeconds: number;
@@ -341,6 +355,9 @@ export class Policy {
     );
     this.passwordResetAsksPerAddress = Policy.read(values, policyNames.passwordResetAsksPerAddress);
     this.passwordResetAsksPerLogin = Policy.read(values, policyNames.passwordResetAsksPerLogin);
+    this.masterPasscodeMinimumLength = Policy.read(values, policyNames.masterPasscodeMinimumLength);
+    this.masterPasscodeMaximumLength = Policy.read(values, policyNames.masterPasscodeMaximumLength);
+    this.phoneKeyRevokedAfterHours = Policy.read(values, policyNames.phoneKeyRevokedAfterHours);
     this.jobTriesBeforeSetAside = Policy.read(values, policyNames.jobTriesBeforeSetAside);
     this.reconciliationRunLongestMinutes = Policy.read(
       values,
@@ -369,6 +386,11 @@ export class Policy {
     if (this.mediaReceivingBytesAtMost < this.mediaFileBytesAtMost) {
       throw new Error(
         `The policy value ${policyNames.mediaReceivingBytesAtMost} must be at least ${policyNames.mediaFileBytesAtMost}.`,
+      );
+    }
+    if (this.masterPasscodeMinimumLength > this.masterPasscodeMaximumLength) {
+      throw new Error(
+        `The policy value ${policyNames.masterPasscodeMinimumLength} must be at most ${policyNames.masterPasscodeMaximumLength}.`,
       );
     }
     if (this.signInWrongTriesPerAddressAtLogin >= this.signInTriesBeforeWait) {

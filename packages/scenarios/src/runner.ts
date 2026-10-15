@@ -111,6 +111,10 @@ export interface StoryContext {
     // "Sync and turn in" (ADR-488): the phone syncs, sends its files, then is turned in at the
     // turn-in endpoint over HTTPS (ADR-491); answered to wipe, it wipes. The answer.
     turnIn(phone: SimulatedDevice): Promise<TurnInAnswer>;
+    // A phone whose key the firm's time revoked proves itself with the passcode typed beside its
+    // signature (ADR-530): what it was answered (`PROVEN`, or the API's code). Proven, it holds
+    // the token for its sync and its turn-in.
+    proves(onPhone: string): Promise<string>;
     // A turn-in of that enrolled phone naming what the story says it holds, at the same
     // endpoint, with no sync before it: for a turn-in measured at its size (BACKLOG 2.8.2, C141).
     turnInNaming(
@@ -291,6 +295,7 @@ export class Runner {
             },
             // "Sync and turn in" on the phone, the passcode typed by whoever holds it (ADR-488).
             turnIn: (phone) => phone.turnIn(asked.server, storyMasterPasscode),
+            proves: async (onPhone) => (await served.proves(onPhone, storyMasterPasscode)).answer,
             async turnInNaming(onPhone, holds, lastUsed = []) {
               const { server } = asked;
               if (server.turnIn === undefined) {

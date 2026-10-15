@@ -98,7 +98,12 @@ Decides who can do what, and on which phone:
     it is received: what it made **after** its removal time arrives **flagged**; then its number
     block is retired and it's wiped, and only then refused (ADR-065, 134). ⚠️ *As built (ADR-488):
     it is turned in like any other phone; every block of a phone marked lost is retired whole,
-    whatever it reports.*
+    whatever it reports.* ⚠️ *As built (ADR-520, 530): the removal may say when it went (stated by
+    hand) and why (the firm's reasons list); a lost phone may later be made retired, and a found
+    one put back in service while its key stands. **If it isn't turned in within the firm's time
+    (24 hours from its last mark as shipped, a firm setting in hours or off), the worker revokes
+    its key** and retires its blocks; it may still sync and be turned in, but only with the master
+    passcode typed beside its key.*
 14. **Issue read-only logins** to a client, contractor or auditor for their projects (ADR-169).
     The admin says what kind of viewer it is, which projects it sees, and a contractor user's
     contractor; a project is taken away by archiving. A client user and an auditor see their

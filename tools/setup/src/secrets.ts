@@ -10,6 +10,8 @@ import {
   type BinaryLike,
 } from 'node:crypto';
 
+import type { PasscodeLengths } from './policy.ts';
+
 export class SecretMaker {
   // 32 random bytes, URL-safe, so a password needs no escaping in a connection URL.
   password(): string {
@@ -64,24 +66,23 @@ export class BreachedList {
 // The master passcode's slow hash: Argon2id at OWASP's first recommended setting (19 MiB, 2 passes,
 // 1 lane), written in the PHC string format that any Argon2 library reads.
 export class PasscodeHasher {
-  static readonly minimumLength = 8;
-  static readonly maximumLength = 128;
   private static readonly memory = 19456;
   private static readonly passes = 2;
   private static readonly parallelism = 1;
   private static readonly format =
     /^\$argon2id\$v=19\$m=(\d+),t=(\d+),p=(\d+)\$([A-Za-z0-9+/]+)\$([A-Za-z0-9+/]+)$/;
 
-  // Why a passcode is refused, or undefined when it's acceptable. With the release's list, a known
-  // breached password is refused too (AC-10-24).
-  problem(passcode: string, breached?: BreachedList): string | undefined {
+  // Why a passcode is refused, or undefined when it's acceptable: its lengths are the release's
+  // policy values (ADR-530). With the release's list, a known breached password is refused too
+  // (AC-10-24).
+  problem(passcode: string, lengths: PasscodeLengths, breached?: BreachedList): string | undefined {
     // NIST SP 800-63B counts each Unicode code point as one character.
     const length = Array.from(passcode).length;
-    if (length < PasscodeHasher.minimumLength) {
-      return `It needs at least ${String(PasscodeHasher.minimumLength)} characters.`;
+    if (length < lengths.shortest) {
+      return `It needs at least ${String(lengths.shortest)} characters.`;
     }
-    if (length > PasscodeHasher.maximumLength) {
-      return `It can have at most ${String(PasscodeHasher.maximumLength)} characters.`;
+    if (length > lengths.longest) {
+      return `It can have at most ${String(lengths.longest)} characters.`;
     }
     if (breached?.has(passcode) === true) {
       return 'That is on a list of passwords known from breaches. Choose another.';

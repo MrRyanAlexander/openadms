@@ -3,7 +3,13 @@ import { parseEnv } from 'node:util';
 
 import { describe, expect, it } from 'vitest';
 
-import { StatementTimeout, statementTimeoutName } from '../src/policy.ts';
+import {
+  passcodeLengthNames,
+  passcodeLengths,
+  policyInForce,
+  StatementTimeout,
+  statementTimeoutName,
+} from '../src/policy.ts';
 
 const shipped = parseEnv(
   readFileSync(new URL('../../../packages/domain/policy.env', import.meta.url), 'utf8'),
@@ -47,5 +53,50 @@ describe('StatementTimeout', () => {
     expect(() =>
       new StatementTimeout({ [statementTimeoutName]: '0' }).for({}, 'apps/api/.env'),
     ).toThrow('STATEMENT_TIMEOUT_MS in packages/domain/policy.env must be');
+  });
+});
+
+describe('the master passcode’s lengths (ADR-530)', () => {
+  it('AC-10-24 are the release’s 8 and 128, under the domain’s names', () => {
+    expect(passcodeLengthNames).toEqual({
+      shortest: 'MASTER_PASSCODE_MINIMUM_LENGTH',
+      longest: 'MASTER_PASSCODE_MAXIMUM_LENGTH',
+    });
+    expect(passcodeLengths(shipped)).toEqual({ shortest: 8, longest: 128 });
+  });
+
+  it('stop the installer by name when missing, not whole, or the shortest is over the longest', () => {
+    for (const written of [undefined, '', '0', '8.5', 'eight']) {
+      expect(() =>
+        passcodeLengths({ ...shipped, MASTER_PASSCODE_MINIMUM_LENGTH: written }),
+      ).toThrow(
+        'The policy value MASTER_PASSCODE_MINIMUM_LENGTH in packages/domain/policy.env must be a whole number of characters.',
+      );
+    }
+    expect(() => passcodeLengths({ ...shipped, MASTER_PASSCODE_MINIMUM_LENGTH: '200' })).toThrow(
+      'The policy value MASTER_PASSCODE_MINIMUM_LENGTH must be at most MASTER_PASSCODE_MAXIMUM_LENGTH.',
+    );
+  });
+});
+
+describe('the policy values a service runs under (C53; ADR-530)', () => {
+  it('counts the release’s, names each its own file states instead with its value, and reads nothing else of the file', () => {
+    const all = Object.keys(shipped).length;
+    expect(policyInForce(shipped, {})).toEqual({ fromRelease: all, own: [] });
+    expect(
+      policyInForce(shipped, {
+        // Any other setting of the service's own file is never read out.
+        TOKEN_SIGNING_SECRET: 'not-a-policy-value-9f3c',
+        STATEMENT_TIMEOUT_MS: '20000',
+        DATABASE_POOL_CONNECTIONS: ' ',
+        JOB_QUEUE_POLL_SECONDS: '5s',
+      }),
+    ).toEqual({
+      fromRelease: all - 2,
+      own: [
+        { name: 'JOB_QUEUE_POLL_SECONDS', value: '5s', whole: false },
+        { name: 'STATEMENT_TIMEOUT_MS', value: '20000', whole: true },
+      ],
+    });
   });
 });

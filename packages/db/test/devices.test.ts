@@ -41,10 +41,13 @@ describe('a phone', () => {
       'enrolled_at',
       'id',
       'key_revoked_at',
+      'key_revoked_by',
       'last_answered_challenge_made_at',
       'master_passcode_version',
       'name',
       'out_of_service_at',
+      'out_of_service_marked_at',
+      'out_of_service_reason_id',
       'public_key',
       'status',
     ]);
@@ -110,7 +113,7 @@ describe('a phone', () => {
   it('AC-02-59 is lost or retired exactly from its removal time; never deleted', async () => {
     const { db, world } = tested;
     await asTheApi();
-    const mark = `UPDATE "device" SET "status" = $2, "out_of_service_at" = $3 WHERE "id" = $1`;
+    const mark = `UPDATE "device" SET "status" = $2, "out_of_service_at" = $3, "out_of_service_marked_at" = $3 WHERE "id" = $1`;
     for (const [status, removedAt] of [
       ['LOST', null],
       ['RETIRED', null],
@@ -139,8 +142,8 @@ describe('a phone', () => {
 });
 
 describe("a phone's key", () => {
-  const revoke = `UPDATE "device" SET "key_revoked_at" = $2 WHERE "id" = $1`;
-  const markLost = `UPDATE "device" SET "status" = 'LOST', "out_of_service_at" = '2026-10-12T22:10:00Z' WHERE "id" = $1`;
+  const revoke = `UPDATE "device" SET "key_revoked_at" = $2, "key_revoked_by" = 'TURN_IN' WHERE "id" = $1`;
+  const markLost = `UPDATE "device" SET "status" = 'LOST', "out_of_service_at" = '2026-10-12T22:10:00Z', "out_of_service_marked_at" = '2026-10-12T22:10:00Z' WHERE "id" = $1`;
   const issue = `INSERT INTO "number_block" ("device_id", "project_id", "series", "first_number", "last_number")
     VALUES ($1, $2, 'LOAD', $3, $4) RETURNING "id"::text`;
   // Its turn-in: the master passcode's actor, on that phone (ADR-488).
@@ -169,8 +172,8 @@ describe("a phone's key", () => {
       [world.device],
     );
     expect(audited.map((record) => [record.changed_fields, record.actor_id])).toEqual([
-      [['out_of_service_at', 'status'], world.admin],
-      [['key_revoked_at'], masterPasscodeActorId],
+      [['out_of_service_at', 'out_of_service_marked_at', 'status'], world.admin],
+      [['key_revoked_at', 'key_revoked_by'], masterPasscodeActorId],
     ]);
   });
 
@@ -200,13 +203,13 @@ describe("a phone's key", () => {
     // Enrolled lost and revoked at once: refused, whoever writes it.
     await asItsTurnIn(world.device);
     const enrolledRevoked = await db.refused(
-      `INSERT INTO "device" ("name", "public_key", "master_passcode_version", "status", "out_of_service_at", "key_revoked_at")
-       VALUES ('P1-UR-2', $1, 1, 'LOST', '2026-10-12T22:10:00Z', '2026-10-12T22:10:00Z')`,
+      `INSERT INTO "device" ("name", "public_key", "master_passcode_version", "status", "out_of_service_at", "out_of_service_marked_at", "key_revoked_at", "key_revoked_by")
+       VALUES ('P1-UR-2', $1, 1, 'LOST', '2026-10-12T22:10:00Z', '2026-10-12T22:10:00Z', '2026-10-12T22:10:00Z', 'TURN_IN')`,
       [deviceKeyLike('lee-morgan')],
     );
     expect([enrolledRevoked.code, enrolledRevoked.message]).toEqual([
       refusedBy.trigger,
-      'A phone is enrolled with its key standing: only its turn-in revokes it',
+      "A phone is enrolled with its key standing: only its turn-in or the firm's time revokes it",
     ]);
     expect(await db.run(revoke, [world.device, '2026-10-14T13:30:00Z'])).toBe(1);
   });
@@ -276,11 +279,13 @@ describe("a phone's key", () => {
     ]) {
       await state();
       for (const change of [
-        `"key_revoked_at" = NULL`,
+        `"key_revoked_at" = NULL, "key_revoked_by" = NULL`,
         `"key_revoked_at" = '2026-10-14T14:00:00Z'`,
-        `"status" = 'RETIRED'`,
-        `"status" = 'ACTIVE', "out_of_service_at" = NULL, "key_revoked_at" = NULL`,
+        `"key_revoked_by" = 'FIRM_TIME'`,
+        `"status" = 'RETIRED', "out_of_service_marked_at" = '2026-10-14T14:00:00Z'`,
+        `"status" = 'ACTIVE', "out_of_service_at" = NULL, "out_of_service_marked_at" = NULL, "key_revoked_at" = NULL, "key_revoked_by" = NULL`,
         `"out_of_service_at" = '2026-10-12T22:00:00Z'`,
+        `"out_of_service_marked_at" = '2026-10-14T14:00:00Z'`,
       ]) {
         const refusal = await db.refused(`UPDATE "device" SET ${change} WHERE "id" = $1`, [
           world.device,

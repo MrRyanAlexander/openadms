@@ -113,7 +113,11 @@ describe('who may create a monitor', () => {
       const phone = await enrolledPhone(served, tx, 'P1-COL-1');
       await tx.device.update({
         where: { id: phone.id },
-        data: { status: 'LOST', outOfServiceAt: new Date('2026-10-12T22:10:00.000Z') },
+        data: {
+          status: 'LOST',
+          outOfServiceAt: new Date('2026-10-12T22:10:00.000Z'),
+          outOfServiceMarkedAt: new Date('2026-10-12T22:10:00.000Z'),
+        },
       });
       served.clock.at = new Date('2026-10-13T12:00:00.000Z');
       const token = await proven(served, phone);

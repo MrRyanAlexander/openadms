@@ -620,7 +620,7 @@ describe('a monitor’s session on a phone (ADR-443)', () => {
     await asTheApi();
     await db.run(`UPDATE "user" SET "archived_at" = NULL WHERE "id" = $1`, [world.monitor]);
     await db.run(
-      `UPDATE "device" SET "status" = 'LOST', "out_of_service_at" = '2026-10-12T09:30:00Z'
+      `UPDATE "device" SET "status" = 'LOST', "out_of_service_at" = '2026-10-12T09:30:00Z', "out_of_service_marked_at" = '2026-10-12T09:30:00Z'
        WHERE "id" = $1`,
       [world.device],
     );
@@ -633,9 +633,10 @@ describe('a monitor’s session on a phone (ADR-443)', () => {
     // Turned in: only its turn-in revokes its key, under the master passcode on that phone.
     await asTheApi();
     await db.actor(masterPasscodeActorId, 'DEVICE', { deviceId: world.device });
-    await db.run(`UPDATE "device" SET "key_revoked_at" = '2026-10-12T10:00:00Z' WHERE "id" = $1`, [
-      world.device,
-    ]);
+    await db.run(
+      `UPDATE "device" SET "key_revoked_at" = '2026-10-12T10:00:00Z', "key_revoked_by" = 'TURN_IN' WHERE "id" = $1`,
+      [world.device],
+    );
     await asAnaOnHerPhone();
     const revoked = await db.refused(onPhone, [world.monitor, sha256('c'), ends, world.device]);
     expect([revoked.code, revoked.message]).toEqual([
@@ -822,7 +823,7 @@ describe('a session opened under the master passcode (ADR-462)', () => {
     await asTheApi();
     await db.run(`UPDATE "user" SET "archived_at" = NULL WHERE "id" = $1`, [world.monitor]);
     await db.run(
-      `UPDATE "device" SET "status" = 'LOST', "out_of_service_at" = '2026-10-12T09:30:00Z'
+      `UPDATE "device" SET "status" = 'LOST', "out_of_service_at" = '2026-10-12T09:30:00Z', "out_of_service_marked_at" = '2026-10-12T09:30:00Z'
        WHERE "id" = $1`,
       [world.device],
     );
@@ -954,6 +955,8 @@ describe('a security event', () => {
       'MASTER_PASSCODE_LOCKOUT',
       // A phone turned in (ADR-488).
       'DEVICE_TURN_IN',
+      // A lost phone's key revoked after the firm's time (ADR-530).
+      'DEVICE_KEY_REVOKED',
     ]);
     const at = '2026-10-12T12:05:00Z';
     expect((await db.refused(note, ['PASSWORD_GUESSED', world.admin, null, at])).code).toBe(

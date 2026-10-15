@@ -5,7 +5,9 @@
 // pass that finished jobs and left others waiting is followed by the next at once. A project
 // whose try fails never stops the others'. What it
 // did is in the log, by ids only. A pass also answers what it did with each project, for whoever
-// asked for the pass (a story: BACKLOG 2.7.1 part 3, ADR-494).
+// asked for the pass (a story: BACKLOG 2.7.1 part 3, ADR-494). Before the projects, each pass
+// revokes the key of every lost or retired phone past the firm's time (REQ-214; ADR-530): a
+// failure there is logged and never stops the projects.
 //
 // Its health (BACKLOG 2.7.2 part 4, C38; ADR-507): the loop looks at the queue as a pass begins
 // and as it ends (how many jobs wait, how many are set aside, since when the oldest has waited),
@@ -17,6 +19,7 @@
 import type { Database } from '@open-adms/db';
 import type { Policy } from '@open-adms/domain';
 
+import type { PhoneKeyBackstop } from '../phones/phone-keys.ts';
 import type { JobsOutcome, Reconciliation } from '../reconciliation/reconciliation.ts';
 import type { WorkerLog } from './logs.ts';
 
@@ -66,6 +69,7 @@ export class JobLoop {
   private readonly settings: LoopSettings;
   private readonly log: WorkerLog;
   private readonly clock: { now(): Date };
+  private readonly phoneKeys: Pick<PhoneKeyBackstop, 'pass'> | undefined;
   private stopped = false;
   private wake: (() => void) | undefined;
   // The last look at the queue that was read, and whether the latest one could be.
@@ -82,12 +86,14 @@ export class JobLoop {
     settings: LoopSettings,
     log: WorkerLog,
     clock: { now(): Date },
+    phoneKeys?: Pick<PhoneKeyBackstop, 'pass'>,
   ) {
     this.db = db;
     this.reconciliation = reconciliation;
     this.settings = settings;
     this.log = log;
     this.clock = clock;
+    this.phoneKeys = phoneKeys;
     this.lastSign = clock.now();
   }
 
@@ -169,6 +175,13 @@ export class JobLoop {
   // each.
   async pass(): Promise<readonly ProjectPassed[]> {
     await this.look();
+    if (this.phoneKeys !== undefined) {
+      try {
+        await this.phoneKeys.pass();
+      } catch (caught) {
+        this.log.error('The phones past the firm’s time could not be read.', caught);
+      }
+    }
     const projects = await this.db.reconciliationJob.findMany({
       where: { finishedAt: null, setAsideAt: null },
       select: { projectId: true },

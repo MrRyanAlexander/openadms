@@ -24,6 +24,7 @@ import { randomBytes } from 'node:crypto';
 import type { Database, Prisma } from '@open-adms/db';
 import type { Policy } from '@open-adms/domain';
 
+import { FirmSettings } from '../firm/firm-settings.ts';
 import type { Clock } from '../setup/setup-service.ts';
 import type { PasswordHasher } from './password-hasher.ts';
 import type { SessionTokens } from './session-tokens.ts';
@@ -215,7 +216,11 @@ export class Sessions {
           role: person.role,
           granted: person.permissions.map(({ permission }) => permission),
           passwordChangeRequired: kept.passwordChangeRequired,
-          ...this.twoStepOf(person.role, kept.twoStepSecret),
+          ...this.twoStepOf(
+            person.role,
+            kept.twoStepSecret,
+            await this.db.$read((tx) => FirmSettings.viewersRequired(tx)),
+          ),
         },
         made.secret,
         expiresAt,
@@ -369,21 +374,28 @@ export class Sessions {
         role: row.user.role,
         granted: row.user.permissions.map(({ permission }) => permission),
         passwordChangeRequired: row.user.credential?.passwordChangeRequired ?? false,
-        ...this.twoStepOf(row.user.role, row.user.credential?.twoStepSecret ?? null),
+        ...this.twoStepOf(
+          row.user.role,
+          row.user.credential?.twoStepSecret ?? null,
+          await FirmSettings.viewersRequired(tx),
+        ),
       },
     };
   }
 
   // Where a person stands with the second step: whether they have an authenticator, and whether
-  // their role needs one they haven't.
+  // their role needs one they haven't, given whether the firm requires one of its read-only
+  // viewers (read with the session on every request, ADR-530).
   private twoStepOf(
     role: string,
     kept: string | null,
+    viewersRequired: boolean,
   ): Pick<Caller, 'twoStepSetUp' | 'twoStepSetupRequired'> {
     const twoStepSetUp = kept !== null;
     return {
       twoStepSetUp,
-      twoStepSetupRequired: !twoStepSetUp && this.parts.twoStep.need(role) === 'REQUIRED',
+      twoStepSetupRequired:
+        !twoStepSetUp && this.parts.twoStep.need(role, viewersRequired) === 'REQUIRED',
     };
   }
 

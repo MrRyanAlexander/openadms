@@ -243,12 +243,16 @@ export {
 } from './passcode-uses.ts';
 export {
   MasterPasscodeRules,
+  phoneKeyHoursAtMost,
+  PhoneKeyRules,
   PhoneRules,
   phoneRemovals,
   TurnInRules,
   turnedInBlocks,
   type PhoneRemoval,
   type PhoneRemovalRefusal,
+  type PhoneStanding,
+  type RemovalAsked,
   type TurnedInBlocks,
 } from './phones.ts';
 export { PhoneProofRules, phoneKeyKind, type PhoneProofPolicy } from './phone-proof.ts';

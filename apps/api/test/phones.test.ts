@@ -13,6 +13,8 @@ import {
   endpoints,
   listPhonesEndpoint,
   removePhoneEndpoint,
+  renamePhoneEndpoint,
+  returnPhoneEndpoint,
 } from '@open-adms/contracts';
 import type { Database } from '@open-adms/db';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -20,7 +22,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Phones } from '../src/dispatch/phones.ts';
 import { PasswordHasher } from '../src/sign-in/password-hasher.ts';
 import { installationSettings, openInstallation, type Tx } from './support/database.ts';
-import { enrolledPhone } from './support/phones.ts';
+import { enrolledPhone, proven, turnedIn } from './support/phones.ts';
 import { danasEmail, long, longer, luissEmail, worldOn, type Served } from './support/served.ts';
 import { ask, saved, told, viewerSignsIn } from './support/setup.ts';
 import { Outbox, signingSecret } from './support/sign-in.ts';
@@ -69,7 +71,9 @@ describe('who may ask', () => {
     expect(
       endpoints.filter(({ permission }) => permission === 'DISPATCH').map(({ name }) => name),
     ).toEqual([
+      'renamePhone',
       'removePhone',
+      'returnPhone',
       'writeAssignment',
       'changeAssignment',
       'withdrawAssignment',
@@ -161,7 +165,10 @@ describe('the firm’s phones', () => {
         status: 'ACTIVE',
         enrolledAt: phones.collection.enrolledAt.toISOString(),
         outOfServiceAt: null,
+        outOfServiceMarkedAt: null,
+        outOfServiceReasonId: null,
         keyRevokedAt: null,
+        keyRevokedBy: null,
         masterPasscodeVersion: await inForce(tx),
         holdsCurrentPasscode: true,
       });
@@ -203,7 +210,10 @@ describe('the firm’s phones', () => {
           status: 'LOST',
           enrolledAt: phones.landfillTower.enrolledAt.toISOString(),
           outOfServiceAt: '2026-10-12T22:10:00.000Z',
+          outOfServiceMarkedAt: '2026-10-12T22:10:00.000Z',
+          outOfServiceReasonId: null,
           keyRevokedAt: null,
+          keyRevokedBy: null,
           masterPasscodeVersion: await inForce(tx),
           holdsCurrentPasscode: true,
         },
@@ -227,7 +237,7 @@ describe('the firm’s phones', () => {
           operation: 'UPDATE',
           actorId: who.luis,
           recordId: phones.landfillTower.id,
-          changedFields: ['out_of_service_at', 'status'],
+          changedFields: ['out_of_service_at', 'out_of_service_marked_at', 'status'],
           reason: 'Not handed in at the yard on Monday',
         },
       ]);
@@ -239,17 +249,18 @@ describe('the firm’s phones', () => {
       const inService = saved(listPhonesEndpoint, await ask(served, luis, listPhonesEndpoint));
       expect(inService.phones.map(({ name }) => name)).toEqual(['P1-COL-1', 'P1-TWR-TDSR']);
 
-      // Once: a second removal is refused in plain words and moves nothing.
+      // Once as lost: a second is refused in plain words and moves nothing (made retired is
+      // AC-10-84's).
       served.clock.later(3);
       const again = await ask(served, luis, removePhoneEndpoint, {
         ids,
-        payload: { status: 'RETIRED' },
+        payload: { status: 'LOST' },
       });
       expect([told(again), again.body]).toEqual([
         [422, 'NOT_SAVED'],
         expect.objectContaining({
           reason: 'ALREADY_OUT_OF_SERVICE',
-          message: 'P1-TWR-LF was already taken out of service. Nothing was changed.',
+          message: 'P1-TWR-LF was already taken out of service as lost. Nothing was changed.',
         }),
       ]);
       const kept = await tx.device.findUniqueOrThrow({ where: { id: phones.landfillTower.id } });
@@ -268,7 +279,9 @@ describe('the firm’s phones', () => {
       for (const payload of [
         { status: 'ACTIVE' },
         { status: 'LOST', note: '   ' },
-        { status: 'LOST', outOfServiceAt: '2026-10-12T19:00:00Z' },
+        { status: 'LOST', outOfServiceAt: 'Monday evening' },
+        { status: 'LOST', reasonId: 'stolen' },
+        { status: 'LOST', removedAt: '2026-10-12T19:00:00Z' },
         {},
       ]) {
         expect(
@@ -289,6 +302,174 @@ describe('the firm’s phones', () => {
       });
       const [audited] = await tx.auditRecord.findMany({ where: { requestId: answer.requestId } });
       expect(audited?.reason).toBeNull();
+    });
+  });
+});
+
+describe('a phone’s other acts at the back office (ADR-530; C102)', () => {
+  it('AC-10-84 a phone is renamed as the dispatch board calls it, nothing else of it changed, audited', async () => {
+    await world(async (served, tx, who) => {
+      const phones = await enrolled(served, tx);
+      const dana = await served.signedIn(danasEmail, long);
+      const luis = await served.signedIn(luissEmail, longer);
+      const ids = { deviceId: phones.collection.id };
+      expect(
+        told(await ask(served, luis, renamePhoneEndpoint, { ids, payload: { name: 'P1-COL-9' } })),
+      ).toEqual([403, 'NOT_ALLOWED']);
+      const answer = await ask(served, dana, renamePhoneEndpoint, {
+        ids,
+        payload: { name: 'P1-COL-9' },
+      });
+      expect(saved(renamePhoneEndpoint, answer).record).toMatchObject({
+        name: 'P1-COL-9',
+        status: 'ACTIVE',
+      });
+      const [audited] = await tx.auditRecord.findMany({ where: { requestId: answer.requestId } });
+      expect([audited?.actorId, audited?.changedFields]).toEqual([who.dana, ['name']]);
+      for (const payload of [{ name: '  ' }, { name: 'P1-COL-9', status: 'LOST' }]) {
+        expect(told(await ask(served, dana, renamePhoneEndpoint, { ids, payload }))).toEqual([
+          400,
+          'BAD_REQUEST',
+        ]);
+      }
+    });
+  });
+
+  it('AC-10-84 a lost phone is made retired: marked again now, its removal time kept; a removal time stated by hand is never after now nor before enrolment; a reason is one the firm offers for a removal', async () => {
+    await world(async (served, tx) => {
+      const phones = await enrolled(served, tx);
+      // 6:10 pm in Bayline County, before signing in: an access token lasts five minutes.
+      served.clock.at = new Date('2026-10-12T22:10:00Z');
+      const dana = await served.signedIn(danasEmail, long);
+      const ids = { deviceId: phones.landfillTower.id };
+      const stolen = await tx.reason.create({
+        data: { name: 'Stolen', position: 900, uses: ['PHONE_REMOVAL'] },
+      });
+      const voidOnly = await tx.reason.findFirstOrThrow({ where: { uses: { has: 'VOID' } } });
+      const enrolledAt = phones.landfillTower.enrolledAt.toISOString();
+      for (const [outOfServiceAt, reason] of [
+        ['2026-10-12T22:10:01Z', 'REMOVAL_TIME_REFUSED'],
+        [
+          new Date(phones.landfillTower.enrolledAt.getTime() - 1000).toISOString(),
+          'REMOVAL_TIME_REFUSED',
+        ],
+      ] as const) {
+        const refused = await ask(served, dana, removePhoneEndpoint, {
+          ids,
+          payload: { status: 'LOST', outOfServiceAt },
+        });
+        expect([told(refused), refused.body], outOfServiceAt).toEqual([
+          [422, 'NOT_SAVED'],
+          expect.objectContaining({ reason }),
+        ]);
+      }
+      const notOffered = await ask(served, dana, removePhoneEndpoint, {
+        ids,
+        payload: { status: 'LOST', reasonId: voidOnly.id },
+      });
+      expect([told(notOffered), notOffered.body]).toEqual([
+        [422, 'NOT_SAVED'],
+        expect.objectContaining({
+          reason: 'UNKNOWN_REASON',
+          message:
+            'That reason isn’t one the firm offers for taking a phone out of service. Nothing was changed.',
+        }),
+      ]);
+      // Lost since 4:00 pm, as the crew remember; marked at 6:10 pm.
+      const lostAnswer = saved(
+        removePhoneEndpoint,
+        await ask(served, dana, removePhoneEndpoint, {
+          ids,
+          payload: { status: 'LOST', outOfServiceAt: '2026-10-12T20:00:00Z', reasonId: stolen.id },
+        }),
+      );
+      expect(lostAnswer.record).toMatchObject({
+        status: 'LOST',
+        outOfServiceAt: '2026-10-12T20:00:00.000Z',
+        outOfServiceMarkedAt: '2026-10-12T22:10:00.000Z',
+        outOfServiceReasonId: stolen.id,
+      });
+      expect(enrolledAt < '2026-10-12T20:00:00.000Z').toBe(true);
+      // Tuesday morning it is written off: retired, marked again now, lost since 4:00 pm still.
+      served.clock.at = new Date('2026-10-13T13:00:00Z');
+      const tuesday = await served.signedIn(danasEmail, long);
+      const retired = saved(
+        removePhoneEndpoint,
+        await ask(served, tuesday, removePhoneEndpoint, { ids, payload: { status: 'RETIRED' } }),
+      );
+      expect(retired.record).toMatchObject({
+        status: 'RETIRED',
+        outOfServiceAt: '2026-10-12T20:00:00.000Z',
+        outOfServiceMarkedAt: '2026-10-13T13:00:00.000Z',
+        outOfServiceReasonId: stolen.id,
+      });
+      const again = await ask(served, tuesday, removePhoneEndpoint, {
+        ids,
+        payload: { status: 'LOST' },
+      });
+      expect([told(again), again.body]).toEqual([
+        [422, 'NOT_SAVED'],
+        expect.objectContaining({ reason: 'ALREADY_OUT_OF_SERVICE' }),
+      ]);
+    });
+  });
+
+  it('AC-10-84 a found phone is put back in service with a note, its removal, mark and reason cleared; one in service is refused; one whose key is revoked stays as it is', async () => {
+    await world(async (served, tx, who) => {
+      const phones = await enrolled(served, tx);
+      const dana = await served.signedIn(danasEmail, long);
+      const ids = { deviceId: phones.collection.id };
+      const note = { note: 'Found under the seat of the truck' };
+      const inService = await ask(served, dana, returnPhoneEndpoint, { ids, payload: note });
+      expect([told(inService), inService.body]).toEqual([
+        [422, 'NOT_SAVED'],
+        expect.objectContaining({
+          reason: 'IN_SERVICE',
+          message: 'P1-COL-1 is in service. Nothing was changed.',
+        }),
+      ]);
+      const broken = await tx.reason.create({
+        data: { name: 'Broken', position: 901, uses: ['PHONE_REMOVAL'] },
+      });
+      saved(
+        removePhoneEndpoint,
+        await ask(served, dana, removePhoneEndpoint, {
+          ids,
+          payload: { ...lost, reasonId: broken.id },
+        }),
+      );
+      expect(told(await ask(served, dana, returnPhoneEndpoint, { ids, payload: {} }))).toEqual([
+        400,
+        'BAD_REQUEST',
+      ]);
+      const back = await ask(served, dana, returnPhoneEndpoint, { ids, payload: note });
+      expect(saved(returnPhoneEndpoint, back).record).toMatchObject({
+        status: 'ACTIVE',
+        outOfServiceAt: null,
+        outOfServiceMarkedAt: null,
+        outOfServiceReasonId: null,
+        keyRevokedAt: null,
+      });
+      const [audited] = await tx.auditRecord.findMany({ where: { requestId: back.requestId } });
+      expect([audited?.actorId, audited?.reason]).toEqual([who.dana, note.note]);
+      // Turned in: its key revoked, it stays as it is.
+      const { id: turned, key } = await enrolledPhone(served, tx, 'P1-UR-1');
+      await turnedIn(served, await proven(served, { id: turned, key }));
+      const told_ = {
+        reason: 'KEY_REVOKED',
+        message:
+          'P1-UR-1’s key is revoked, so it stays as it is. Wipe the phone and enrol it again to use it. Nothing was changed.',
+      };
+      for (const [served_, payload] of [
+        [returnPhoneEndpoint, note],
+        [removePhoneEndpoint, { status: 'LOST' }],
+      ] as const) {
+        const refused = await ask(served, dana, served_, { ids: { deviceId: turned }, payload });
+        expect([told(refused), refused.body], served_.name).toEqual([
+          [422, 'NOT_SAVED'],
+          expect.objectContaining(told_),
+        ]);
+      }
     });
   });
 });

@@ -8,6 +8,7 @@ import type { Policy } from '@open-adms/domain';
 
 import { MapServers } from './mileage/map-servers.ts';
 import { Mileages } from './mileage/mileages.ts';
+import { PhoneKeyBackstop } from './phones/phone-keys.ts';
 import { Health } from './process/health.ts';
 import { JobLoop } from './process/job-loop.ts';
 import { WorkerLog } from './process/logs.ts';
@@ -63,6 +64,7 @@ const loop = new JobLoop(
   },
   log,
   { now: () => new Date() },
+  new PhoneKeyBackstop(db, log, { now: () => new Date() }),
 );
 const health = new Health(() => loop.standing);
 await health.listen(settings.host, settings.port);

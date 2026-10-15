@@ -19,7 +19,12 @@ import {
 } from './database.ts';
 import { EnvFile, InstallationState, MigrationFolder, type InstallationRecord } from './files.ts';
 import { Interview } from './interview.ts';
-import { StatementTimeout, statementTimeoutName } from './policy.ts';
+import {
+  passcodeLengths,
+  policyInForce,
+  StatementTimeout,
+  statementTimeoutName,
+} from './policy.ts';
 import { BreachedList, PasscodeHasher, SecretMaker } from './secrets.ts';
 
 const databaseName = 'adms';
@@ -255,7 +260,7 @@ export class Installer {
     );
     for (;;) {
       const passcode = await interview.askSecret('   Master passcode');
-      const problem = hasher.problem(passcode, breached);
+      const problem = hasher.problem(passcode, passcodeLengths(this.policyEnv.read()), breached);
       if (problem !== undefined) console.log(`   ${problem}`);
       else if ((await interview.askSecret('   Once more')) === passcode) return passcode;
       else console.log('   They differ. Again, please.');
@@ -609,6 +614,7 @@ export class Installer {
       ok: gaps.length === 0,
       text: `every table is guarded${gaps.length === 0 ? '' : ` (${gaps.join('; ')})`}`,
     });
+    checks.push(...this.policyChecks());
     checks.push(await this.masterPasscodeCheck());
     for (const [seeded, called] of [
       [seededActors.system, 'the system actor'],
@@ -883,6 +889,26 @@ export class Installer {
       ok: problem === undefined,
       text: `${told}${problem === undefined ? '' : ` (${problem})`}`,
     };
+  }
+
+  // The policy values each service runs under (C53; ADR-395, 530): how many are the release's,
+  // and each its own env file states instead, by name and value. A value that isn't a whole
+  // number is a `✗`; whether one is in its range, the service's own start says.
+  private policyChecks(): Check[] {
+    const release = this.policyEnv.read();
+    return [this.apiEnv, this.workerEnv].map((file) => {
+      const name = this.relative(file.path);
+      const inForce = policyInForce(release, file.exists() ? file.read() : {});
+      const own = inForce.own.map(({ name: value, value: written }) => `${value}=${written}`);
+      const wrong = inForce.own.filter(({ whole }) => !whole).map(({ name: value }) => value);
+      return {
+        ok: wrong.length === 0,
+        text:
+          `${name} runs under ${String(inForce.fromRelease)} of the release's policy values` +
+          (own.length === 0 ? ', none of its own' : ` and its own ${own.join(', ')}`) +
+          (wrong.length === 0 ? '' : ` (not a whole number: ${wrong.join(', ')})`),
+      };
+    });
   }
 
   // The database keeps the master passcode's slow hash, and no file does (ADR-281).

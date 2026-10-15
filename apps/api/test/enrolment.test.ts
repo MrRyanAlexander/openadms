@@ -159,7 +159,10 @@ describe('a phone is enrolled', () => {
         masterPasscodeVersion: version,
         enrolledAt: new Date('2026-10-12T13:50:00Z'),
         outOfServiceAt: null,
+        outOfServiceMarkedAt: null,
+        outOfServiceReasonId: null,
         keyRevokedAt: null,
+        keyRevokedBy: null,
         lastAnsweredChallengeMadeAt: null,
       });
       // No project, no monitor; and the audit log names the master passcode's own actor.

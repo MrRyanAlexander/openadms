@@ -222,9 +222,9 @@ export const ticket101001: Story = {
     const afterSeed = audit.findIndex((record) => record.source !== 'SYSTEM');
     const seeded = audit.slice(0, afterSeed).map((record) => record.tableName);
     story.check(
-      'the audit log opens with the seed: the system actor, the master passcode’s actor, the device key’s actor, the master passcode, the 94 values the firm’s 15 seeded lists start with',
-      [seeded.slice(0, 4), seeded.length - 4, new Set(seeded.slice(4)).size],
-      [['user', 'user', 'user', 'master_passcode'], 94, 15],
+      'the audit log opens with the seed: the system actor, the master passcode’s actor, the device key’s actor, the master passcode, the 98 values the firm’s 15 seeded lists start with (the four reasons for a phone’s removal among them, ADR-530), then the firm’s settings',
+      [seeded.slice(0, 4), seeded.length - 5, new Set(seeded.slice(4, -1)).size, seeded.at(-1)],
+      [['user', 'user', 'user', 'master_passcode'], 98, 15, 'firm_settings'],
     );
     story.check(
       'and then holds exactly the two phones’ enrolments under the master passcode (each the phone and the security event of the passcode’s use), Dana’s twenty setup rows (the client, the declaration event, P1, its five number series and its five kinds of unit rate work, Coastline, its place as P1’s prime and its contract among them), the two monitors created on a phone under the master passcode over HTTPS (each first the phone’s proof, the challenge it answered kept on it; then the person, their sign-in record and the security event of the passcode’s use), the board’s two assignments, the sync at the yard that gave Ana’s phone its block (the sync, the series moved on, the block cut: her phone’s token still good), the two sign-ins (each a security event and a session), P1’s setup version 1, made when Ana’s phone was first sent its lists and by nothing Kim’s read after it (ADR-453), and the two syncs over HTTPS through the API’s own process (ADR-472, 473, 475, 491): each the phone’s proof, then the sync, its field event with its row in the idempotency ledger and the job its arrival queued, naming its ticket, then the setup version the sync brought, written once on its own row; Ana’s also reports the one number she used, and her phone is topped up (her block’s last used number, the series moved on, a block of one cut)',

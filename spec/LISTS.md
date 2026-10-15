@@ -44,7 +44,7 @@ tells you whether a firm can add to it after installing, and whether adding a va
 | **Disposal site types** | Disposal sites; what the *Disposal site type* criterion tests | **TDSR/DMS · Final Disposal (FDS) · Transfer Station · Other** *(ADR-190, 215; HHW is not a type)* | — (descriptive; what a site does is its **site facts**, Group 2) |
 | **Site labels** | Disposal sites, beside the site facts | Empty; the firm adds its own, e.g. burn site, grinding | — (labels only, ADR-194, 215) |
 | **Incident types** | Incident reports; the first list after "start incident" (ADR-127) | Property damage · Personal injury · Near miss · Equipment failure · Environmental · Other | **Sub-types** under each type: firm-added, empty at install (ADR-129, 137) |
-| **Reasons** *(ADR-173)* | Voiding, a typed ticket number, accepting a flag (ADR-166), a record created in the back office (ADR-156) | Defaults shipped per use | Which uses each reason is offered for |
+| **Reasons** *(ADR-173)* | Voiding, a typed ticket number, accepting a flag (ADR-166), a record created in the back office (ADR-156), a phone taken out of service (ADR-530) | Defaults shipped per use | Which uses each reason is offered for |
 | **Survey / ROE work types** | The first list after "start survey" (ADR-129) | Pre-work survey · Post-work survey · ROE | — |
 | **Time-clock activities** | Activity lines the app can't pre-fill (ADR-241) | Travel · Standby · Training | — |
 | **Field tags** *(a project list)* | Picked optionally by a collecting or unit rate monitor; read only by the *Field tag* criterion and exports (ADR-216, 218) | Empty; e.g. Mixed | — |
@@ -163,7 +163,7 @@ value a later release brings. The user may overturn any of them.
 | Crew types | Bucket Truck · Skid Steer |
 | Disposal site types | **TDSR/DMS** (key `TDSR`) · **Final Disposal** (key `FINAL_DISPOSAL`) · Transfer Station · Other |
 | Incident types | Property damage · Personal injury · Near miss · Equipment failure · Environmental · Other |
-| Reasons | Voiding: Duplicate ticket · Work never happened · Not eligible work. A typed ticket number: Barcode damaged · Scanner not working. Accepting a flag: Photos confirm · Confirmed with the monitor. A record created in the back office: Device failed · Device lost. Each is offered for that one use; the firm may offer one for several |
+| Reasons | Voiding: Duplicate ticket · Work never happened · Not eligible work. A typed ticket number: Barcode damaged · Scanner not working. Accepting a flag: Photos confirm · Confirmed with the monitor. A record created in the back office: Device failed · Device lost. A phone taken out of service (ADR-530, agent default): Lost in the field · Stolen · Broken · Replaced (a new installation's; on one whose reasons list holds values already, the firm adds its own, the seed adding none but a built-in value's). Each is offered for that one use; the firm may offer one for several |
 | Survey / ROE work types | **Pre-work survey** (key `PRE_WORK`) · **Post-work survey** (key `POST_WORK`) · **ROE** (key `ROE`) |
 | Time-clock activities | Travel · Standby · Training |
 | Site labels · incident sub-types · field tags | Empty |

@@ -27,6 +27,7 @@ import { ListSetupController } from '../setup/list-setup.controller.ts';
 import { PricingSetupController } from '../setup/pricing-setup.controller.ts';
 import { ProjectSetupController } from '../setup/project-setup.controller.ts';
 import { SetupStandingController } from '../setup/setup-standing.controller.ts';
+import { FirmSettingsController } from '../firm/firm-settings.controller.ts';
 import { MapFilesController } from '../setup/map-files.controller.ts';
 import { SiteSetupController } from '../setup/site-setup.controller.ts';
 import { PasswordResetsController } from '../sign-in/password-resets.controller.ts';
@@ -54,6 +55,7 @@ import { HealthController } from './health.controller.ts';
     SiteSetupController,
     MapFilesController,
     SetupStandingController,
+    FirmSettingsController,
     PhonesController,
     EnrolmentController,
     PhoneProofsController,

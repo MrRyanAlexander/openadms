@@ -16,6 +16,7 @@ import { PhoneProofRules } from '@open-adms/domain';
 import { describe, expect, it } from 'vitest';
 
 import { DeviceKeys } from '../src/phone/device-keys.ts';
+import type { MasterPasscodeCheck } from '../src/phone/master-passcode-check.ts';
 import { PhoneChallenges } from '../src/phone/phone-challenges.ts';
 import { PhoneProofs } from '../src/phone/phone-proofs.ts';
 import { PhoneTokens } from '../src/phone/phone-tokens.ts';
@@ -222,7 +223,7 @@ describe('two answers to one challenge at once', () => {
       $read: () =>
         Promise.resolve({
           publicKey: phone.publicKey,
-          keyRevokedAt: null,
+          keyRevokedBy: null,
           lastAnsweredChallengeMadeAt: null,
         }),
       $write: (actor: unknown) => {
@@ -235,6 +236,9 @@ describe('two answers to one challenge at once', () => {
       challenges,
       keys,
       tokens: new PhoneTokens(signingSecret, 15),
+      underPasscode: new PhoneTokens(signingSecret, 15, 'underPasscode'),
+      // Never asked: the key stands.
+      passcode: {} as MasterPasscodeCheck,
       clock: { now: () => now },
       challengeSeconds: 120,
     });
@@ -248,6 +252,169 @@ describe('two answers to one challenge at once', () => {
     // The write it tried was the phone's own, for that phone.
     expect(stated).toEqual([
       { actorId: '00000000-0000-7000-8000-000000000003', source: 'DEVICE', deviceId: collection },
+    ]);
+  });
+});
+
+// A phone whose key the firm's time revoked (REQ-214; ADR-520 (2), 530): its key and the master
+// passcode together. The database stands in here, holding the phone as the worker left it; the
+// whole way, through the real endpoints and the worker's own pass, is the story
+// `lost-phone-key`.
+describe('a phone whose key the firm’s time revoked', () => {
+  const phone = new SoftwarePhone();
+  const byKey = new PhoneTokens(signingSecret, 15);
+  const underPasscode = new PhoneTokens(signingSecret, 15, 'underPasscode');
+  const stated: unknown[] = [];
+  const used: unknown[] = [];
+  // The phone as the database holds it: its kind of revocation, as the test says.
+  const holding = (keyRevokedBy: 'TURN_IN' | 'FIRM_TIME' | null) =>
+    ({
+      $read: () =>
+        Promise.resolve({
+          publicKey: phone.publicKey,
+          keyRevokedBy,
+          lastAnsweredChallengeMadeAt: null,
+          name: 'P1-COL-2',
+          status: 'LOST',
+          outOfServiceAt: now,
+          masterPasscodeVersion: 1,
+        }),
+      $write: async (actor: unknown, work: (tx: unknown) => Promise<unknown>) => {
+        stated.push(actor);
+        return work({ device: { updateMany: () => Promise.resolve({ count: 1 }) } });
+      },
+    }) as unknown as Database;
+  // The master passcode's one check, standing in: `heron-marsh-delphine` is the firm's.
+  const passcode = {
+    check: (typed: string) =>
+      Promise.resolve(
+        typed === 'heron-marsh-delphine'
+          ? { taken: true, version: 1, triedBefore: false }
+          : { taken: false, why: 'WRONG' },
+      ),
+    used: (_tx: unknown, _taken: unknown, _at: Date, use: unknown) => {
+      used.push(use);
+      return Promise.resolve();
+    },
+  } as unknown as MasterPasscodeCheck;
+  const proofsOn = (keyRevokedBy: 'TURN_IN' | 'FIRM_TIME' | null) =>
+    new PhoneProofs(holding(keyRevokedBy), {
+      rules,
+      challenges,
+      keys,
+      tokens: byKey,
+      underPasscode,
+      passcode,
+      clock: { now: () => now },
+      challengeSeconds: 120,
+    });
+  const proof = (proofs: PhoneProofs, sent?: string) => {
+    const { challenge } = proofs.challenge(collection);
+    return proofs.prove(collection, challenge, phone.answers(challenge), sent);
+  };
+
+  it('AC-10-86 is told the passcode is needed when it sends none, and only once its signature is its own', async () => {
+    const proofs = proofsOn('FIRM_TIME');
+    expect(await proof(proofs)).toEqual({ proven: false, why: 'PASSCODE_NEEDED' });
+    const { challenge } = proofs.challenge(collection);
+    expect(
+      await proofs.prove(collection, challenge, new SoftwarePhone().answers(challenge)),
+    ).toEqual({ proven: false, why: 'NOT_SIGNED' });
+  });
+
+  it('AC-10-86 a passcode that isn’t taken proves nothing; the right one gives a token of the second kind, its use a security event of that phone', async () => {
+    used.length = 0;
+    const proofs = proofsOn('FIRM_TIME');
+    expect(await proof(proofs, 'wrong-passcode-9f3c')).toEqual({
+      proven: false,
+      why: 'PASSCODE_REFUSED',
+    });
+    expect(used).toEqual([]);
+    const outcome = await proof(proofs, 'heron-marsh-delphine');
+    if (!outcome.proven) throw new Error(outcome.why);
+    expect(used).toEqual([{ deviceId: collection }]);
+    expect(underPasscode.deviceOf(outcome.token, now)).toBe(collection);
+    expect(byKey.deviceOf(outcome.token, now)).toBeUndefined();
+    // Read with the key still revoked by the firm's time: the phone, marked so.
+    expect(await proofs.proven(outcome.token)).toMatchObject({
+      deviceId: collection,
+      keyRevoked: true,
+    });
+    // A token of a proof by the key alone names no such phone; nor, turned in, does either.
+    expect(await proofs.proven(byKey.make(collection, now))).toBeUndefined();
+    expect(await proofsOn('TURN_IN').proven(outcome.token)).toBeUndefined();
+    expect(await proofsOn(null).proven(outcome.token)).toBeUndefined();
+  });
+
+  it('ADR-488 a key its turn-in revoked proves nothing, passcode or not; a key that stands is given the token of a proof by the key', async () => {
+    expect(await proof(proofsOn('TURN_IN'), 'heron-marsh-delphine')).toEqual({
+      proven: false,
+      why: 'KEY_REVOKED',
+    });
+    const standing = await proof(proofsOn(null), 'heron-marsh-delphine');
+    if (!standing.proven) throw new Error(standing.why);
+    expect(byKey.deviceOf(standing.token, now)).toBe(collection);
+    expect(await proofsOn(null).proven(standing.token)).toMatchObject({ keyRevoked: false });
+  });
+});
+
+describe('the door for a phone whose key the firm’s time revoked', () => {
+  // Which endpoints it reaches, held whole (ADR-530): what gets its records onto the server and
+  // the phone turned in, nothing a monitor signs in for, no list, no setup, no monitor made.
+  it('AC-10-86 reaches only the phone read, its sync, its photographs’ files, its two reports and its turn-in', async () => {
+    const { endpoints } = await import('@open-adms/contracts');
+    expect(
+      endpoints.filter(({ keyRevokedToo }) => keyRevokedToo === true).map(({ name }) => name),
+    ).toEqual([
+      'provenPhone',
+      'reportPasscodeUse',
+      'reportUnplannedAssignment',
+      'syncPhone',
+      'turnInPhone',
+      'photoFile',
+      'sendPhotoFilePart',
+    ]);
+    const { Admission } = await import('../src/sign-in/admission.ts');
+    const revoked = {
+      deviceId: tower,
+      name: 'P1-COL-2',
+      status: 'LOST' as const,
+      outOfServiceAt: now,
+      masterPasscodeVersion: 1,
+      keyRevoked: true,
+    };
+    const door = new Admission(
+      {} as never,
+      {} as never,
+      { asked: () => undefined, phoneAsked: () => undefined },
+      { proven: () => Promise.resolve(revoked) },
+      { onPhone: () => Promise.resolve(undefined) },
+    );
+    const refusedAt: string[] = [];
+    for (const endpoint of endpoints.filter(
+      ({ access }) => access === 'PROVEN_PHONE' || access === 'MONITOR_ON_PHONE',
+    )) {
+      const request = {
+        headers: { authorization: 'Bearer a-token-of-the-second-kind' },
+        log: { warn: () => undefined },
+      };
+      try {
+        await door.admit(endpoint, request as never);
+      } catch (refusal) {
+        expect((refusal as { code?: string }).code, endpoint.name).toBe('PHONE_NOT_PROVEN');
+        refusedAt.push(endpoint.name);
+      }
+    }
+    expect(refusedAt).toEqual([
+      'createMonitorOnPhone',
+      'signInOnPhone',
+      'openPasscodeSessionOnPhone',
+      'signOutOnPhone',
+      'phoneMonitor',
+      'phoneLists',
+      'phoneLoginList',
+      'phoneAddressLookup',
+      'phoneSetupChoices',
     ]);
   });
 });

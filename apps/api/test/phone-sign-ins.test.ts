@@ -183,7 +183,11 @@ describe('who may sign in on a phone', () => {
       const session = await signedIn(served, token, lee);
       await tx.device.update({
         where: { id: phone.id },
-        data: { status: 'LOST', outOfServiceAt: served.clock.now() },
+        data: {
+          status: 'LOST',
+          outOfServiceAt: served.clock.now(),
+          outOfServiceMarkedAt: served.clock.now(),
+        },
       });
       for (const password of [lee.password, '5550143']) {
         const answer = await signIn(served, token, { monitorNumber: lee.monitorNumber, password });
@@ -345,7 +349,11 @@ describe('a monitor’s session ends at once', () => {
       const samsSession = await signedIn(served, token, sam);
       await tx.device.update({
         where: { id: phone.id },
-        data: { status: 'LOST', outOfServiceAt: served.clock.now() },
+        data: {
+          status: 'LOST',
+          outOfServiceAt: served.clock.now(),
+          outOfServiceMarkedAt: served.clock.now(),
+        },
       });
       expect(told(await whoIsOn(served, token, samsSession))).toEqual([200, undefined]);
       // Turned in: its key is revoked, and its sessions end with it (ADR-488).

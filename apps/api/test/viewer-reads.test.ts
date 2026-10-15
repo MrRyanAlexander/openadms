@@ -48,7 +48,12 @@ const world = worldOn(() => db);
 
 // What a viewer may send that isn't a GET: their own sign-in's, and nothing of the firm's
 // records. (Keeping a session going and signing out go by the refresh token, not a role.)
-const aViewersOwn = ['changePassword', 'beginTwoStepSetup', 'confirmTwoStepSetup'];
+const aViewersOwn = [
+  'changePassword',
+  'beginTwoStepSetup',
+  'confirmTwoStepSetup',
+  'removeOwnTwoStep',
+];
 
 describe('who may ask', () => {
   it('AC-10-27, 31 a viewer’s reads are a read-only viewer’s alone, and every one is a GET', () => {

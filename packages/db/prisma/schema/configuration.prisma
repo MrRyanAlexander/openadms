@@ -1250,6 +1250,9 @@ enum SecurityEventKind {
   // A phone turned in under the master passcode: every record it held confirmed, its numbers
   // ended, its key revoked (ADR-488).
   DEVICE_TURN_IN
+  // A phone out of service whose key the firm's time revoked: its blocks retired, its sessions
+  // ended, by the worker as the system actor (ADR-530).
+  DEVICE_KEY_REVOKED
 
   @@map("security_event_kind")
 }
@@ -1320,6 +1323,20 @@ model MasterPasscodeTries {
   @@map("master_passcode_tries")
 }
 
+// The firm's own settings for the whole installation (ADR-520, 530; REQ-214, 215): one row, its id
+// 1 (a check). The seed writes it once from the release's values; the API changes it, audited; the
+// worker reads it.
+model FirmSettings {
+  id                        Int     @id @default(1)
+  // How many hours a phone marked lost or retired keeps its key before the worker revokes it,
+  // counted from the mark; null is off (ADR-520 (1)). 1 to 8,760 (a check).
+  phoneKeyRevokedAfterHours Int?    @map("phone_key_revoked_after_hours")
+  // Whether a read-only viewer must use two-step sign-in too (ADR-511, 530; ASVS 6.3.3).
+  viewerTwoStepRequired     Boolean @default(false) @map("viewer_two_step_required")
+
+  @@map("firm_settings")
+}
+
 // In service, or marked in the back office as lost or retired (ARCHITECTURE §7.4).
 enum DeviceStatus {
   ACTIVE
@@ -1327,6 +1344,16 @@ enum DeviceStatus {
   RETIRED
 
   @@map("device_status")
+}
+
+// How a phone's key was revoked (ADR-530): by its turn-in under the master passcode (ADR-488), or by
+// the worker once the phone stood out of service past the firm's time (REQ-214). A key revoked by
+// the firm's time may then be turned in once; one turned in never changes again.
+enum DeviceKeyRevocation {
+  TURN_IN
+  FIRM_TIME
+
+  @@map("device_key_revocation")
 }
 
 // A phone, enrolled once with its device key; no project, no monitor (ADR-095, 240). What it may
@@ -1346,18 +1373,28 @@ model Device {
   // Its removal time: what it made after this arrives flagged, never refused (ADR-134). Set
   // exactly when it's lost or retired (a check in the guard migrations).
   outOfServiceAt              DateTime?    @map("out_of_service_at") @db.Timestamptz(3)
+  // When it was last marked lost or retired (ADR-520 (1), 530): the firm's time for its key runs
+  // from here, never from its removal time, which may be stated by hand. Set exactly while it is
+  // out of service (a check in the guard migration).
+  outOfServiceMarkedAt        DateTime?    @map("out_of_service_marked_at") @db.Timestamptz(3)
+  // Why, from the firm's reasons list (use PHONE_REMOVAL), where the person picked one (ADR-530).
+  outOfServiceReasonId        String?      @map("out_of_service_reason_id") @db.Uuid
   // When its key was revoked: once a lost or retired phone has synced, been confirmed and wiped
-  // (ARCHITECTURE §7.4; C47). Only a phone out of service has one (a check in the guard
-  // migration); refusing the key is the API's (Phase 2). Written only by the phone's turn-in,
-  // as the master passcode's actor for that phone, once it holds no block still issued, and
-  // never changed after (ADR-488).
+  // (ARCHITECTURE §7.4; C47), or once it stood out of service past the firm's time (ADR-530).
+  // Only a phone out of service has one (a check in the guard migration); refusing the key is
+  // the API's. Written by the phone's turn-in, as the master passcode's actor for that phone, or
+  // by the worker as the system actor; only once it holds no block still issued; and never
+  // changed after (ADR-488, 530).
   keyRevokedAt                DateTime?    @map("key_revoked_at") @db.Timestamptz(3)
+  // Which revoked it, set exactly when keyRevokedAt is (ADR-530).
+  keyRevokedBy                DeviceKeyRevocation? @map("key_revoked_by")
   // When the server made the last challenge this phone proved itself with (ARCHITECTURE §7.4;
   // AC-10-45; ADR-437, 440): a challenge is good once, so only one made after this is taken.
   // Written by the phone's own proof alone, and only ever later (the guard migration).
   lastAnsweredChallengeMadeAt DateTime?    @map("last_answered_challenge_made_at") @db.Timestamptz(3)
 
   masterPasscode     MasterPasscode      @relation(fields: [masterPasscodeVersion], references: [version], onDelete: Restrict, onUpdate: Restrict)
+  outOfServiceReason Reason?             @relation(fields: [outOfServiceReasonId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   numberBlocks       NumberBlock[]
   assignments        Assignment[]
   certifications     Certification[]
@@ -1885,6 +1922,8 @@ enum ReasonUse {
   TYPED_NUMBER
   ACCEPT_FLAG
   BACK_OFFICE_RECORD
+  // Why a phone was taken out of service (ADR-530).
+  PHONE_REMOVAL
 
   @@map("reason_use")
 }
@@ -2139,7 +2178,7 @@ model Reason {
   key      String?     @unique
   name     String
   position Int
-  // Where it is offered: any of the four uses.
+  // Where it is offered: any of the five uses.
   uses     ReasonUse[] @default([])
 
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -2153,6 +2192,8 @@ model Reason {
   // Picked for a flag's acceptance and for a person's void (marks.prisma).
   flagAcceptances        FlagAcceptance[]
   ticketVoids            TicketVoid[]
+  // Picked when a phone was taken out of service (ADR-530).
+  devicesTakenOut        Device[]
 
   @@map("reason")
 }

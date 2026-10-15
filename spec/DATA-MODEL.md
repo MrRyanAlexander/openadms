@@ -225,7 +225,7 @@ API reads the table**; who is shown them on a screen is the back office's (Phase
 | Field | Type | Notes |
 |---|---|---|
 | **id** | uuid | |
-| **kind** | enum `SecurityEventKind` | `SIGN_IN` · `SIGN_IN_FAILED` · `LOCKOUT` · `TWO_STEP_SET_UP` · `TWO_STEP_CLEARED` (ADR-412) · `DEVICE_SETUP` · `DEVICE_SWITCH` · `MASTER_PASSCODE_USE` · `MASTER_PASSCODE_FAILED` · `MASTER_PASSCODE_LOCKOUT` (a wrong try at the master passcode and the lock, ADR-439) · `DEVICE_TURN_IN` (a phone turned in, its key revoked, ADR-488) (REQ-202b's list; a task that needs another adds it) |
+| **kind** | enum `SecurityEventKind` | `SIGN_IN` · `SIGN_IN_FAILED` · `LOCKOUT` · `TWO_STEP_SET_UP` · `TWO_STEP_CLEARED` (ADR-412) · `DEVICE_SETUP` · `DEVICE_SWITCH` · `MASTER_PASSCODE_USE` · `MASTER_PASSCODE_FAILED` · `MASTER_PASSCODE_LOCKOUT` (a wrong try at the master passcode and the lock, ADR-439) · `DEVICE_TURN_IN` (a phone turned in, its key revoked, ADR-488) · `DEVICE_KEY_REVOKED` (a lost phone's key revoked after the firm's time, by the worker, ADR-530) (REQ-202b's list; a task that needs another adds it) |
 | userId | → `User` | Who it is about: the person a try named, when the firm has such a person. Never the name that was typed |
 | deviceId | → `Device` | The phone, when it happened on one |
 | requestId | text | The API request it happened in; never blank (check) |
@@ -343,9 +343,22 @@ neither table (ADR-361, *agent default*: ROEs and forms stay unseen unless the u
 | **status** | enum `DeviceStatus` | `ACTIVE` · `LOST` · `RETIRED` |
 | **masterPasscodeVersion** | int → `MasterPasscode.version` | The passcode version the phone holds |
 | **enrolledAt** | instant | |
-| outOfServiceAt | instant | Work made after it arrives flagged (ADR-134) |
+| outOfServiceAt | instant | Work made after it arrives flagged (ADR-134); may be stated by hand, never after now nor before enrolment (ADR-530) |
+| outOfServiceMarkedAt | instant | **Built (ADR-530):** when it was last marked lost or retired; the firm's time for its key runs from here. Set exactly while it is out of service (check) |
+| outOfServiceReasonId | → `Reason` | **Built (ADR-530):** why, from the firm's reasons list (use `PHONE_REMOVAL`), where one was picked; only while out of service (check) |
+| keyRevokedBy | enum `DeviceKeyRevocation` | **Built (ADR-530):** `TURN_IN` · `FIRM_TIME`, set exactly when `keyRevokedAt` is (check). `FIRM_TIME`: written by the worker as the system actor, only for a phone out of service, only once the firm's hours have passed since its mark by the database's clock and while the firm's record isn't off, with no block still issued; such a phone may then be turned in once (moved to `TURN_IN`, its time kept), nothing else of it changing, and still answers a challenge. `TURN_IN`: as below, final |
 | keyRevokedAt | instant | **Built (ADR-315):** when its key was revoked, as a lost or retired phone is told to wipe at its turn-in (ADR-495); only on a phone out of service, never before its removal time (check). Refusing the key is the API's, built (ADR-440): a phone with one proves nothing and its token stops at once. **Set by the phone's turn-in alone (ADR-488):** as the master passcode's actor for that phone, once every record it holds is on the server and it holds no block still issued; never at enrolment, and never changed after, nor its status or removal time; a phone with one is issued no block (the guard migration). It is set as the phone is told to wipe, not after (the user kept that moment: KD-77 closed, ADR-495) |
 | lastAnsweredChallengeMadeAt | instant | **Built (ADR-440):** when the server made the last challenge this phone proved itself with; a challenge is good once, so only one made later is taken. Written by that phone's own proof alone (the device key's actor, for that phone), only ever later, never once the key is revoked (the guard) |
+
+#### `FirmSettings`
+
+*Configuration, built (ADR-530; REQ-214, 215).* The firm's own settings for the whole installation: **one row**, `id` 1 (check). Written once by the seed from the release's policy values; changed by the API alone (never another row added), audited in the security domain; read by the worker.
+
+| Field | Type | Notes |
+|---|---|---|
+| **id** | int | Always 1 |
+| phoneKeyRevokedAfterHours | int | Hours a phone marked lost or retired keeps its key, from its last mark; 1…8,760, or null for off (check). Starts at `PHONE_KEY_REVOKED_AFTER_HOURS` (24; 0 starts it off). An admin or a manager/analyst holding Setup changes it |
+| **viewerTwoStepRequired** | boolean | Whether a read-only viewer must use two-step sign-in (ASVS 6.3.3); false as shipped (ADR-170). An admin alone changes it |
 
 #### `MasterPasscode`
 
@@ -449,7 +462,7 @@ The eighteen lists:
 | `SiteLabel` | | |
 | `IncidentType` | | |
 | `IncidentSubType` | **incidentTypeId** | |
-| `Reason` | **uses** `ReasonUse[]` (`VOID` · `TYPED_NUMBER` · `ACCEPT_FLAG` · `BACK_OFFICE_RECORD`, ADR-173) | |
+| `Reason` | **uses** `ReasonUse[]` (`VOID` · `TYPED_NUMBER` · `ACCEPT_FLAG` · `BACK_OFFICE_RECORD`, ADR-173 · `PHONE_REMOVAL`, ADR-530) | |
 | `SurveyWorkType` | | `PRE_WORK` · `POST_WORK` · `ROE` (a post-work survey finds its pre-work survey, ADR-150) |
 | `ClockActivity` | | |
 | `FieldTag` | **projectId** (the one project list, ADR-216) | |
@@ -2042,7 +2055,8 @@ A new value in any of them is a code change with an ADR (`spec/LISTS.md` Group 2
 | `TicketStatus` ✅ | `PENDING` · `COMPLETED` · `MANUAL_REVIEW` · `VOID` | `FieldEvent`, `ReconciliationDecision` |
 | `UserRole` ✅ | `ADMIN` · `MANAGER_ANALYST` · `MONITOR` · `READ_ONLY_VIEWER` · `SYSTEM` · `MASTER_PASSCODE` (ADR-439) · `DEVICE_KEY` (ADR-440) | `User` |
 | `DeviceStatus` ✅ | `ACTIVE` · `LOST` · `RETIRED` | `Device` |
-| `SecurityEventKind` ✅ | `SIGN_IN` · `SIGN_IN_FAILED` · `LOCKOUT` · `TWO_STEP_SET_UP` · `TWO_STEP_CLEARED` (ADR-412) · `DEVICE_SETUP` · `DEVICE_SWITCH` · `MASTER_PASSCODE_USE` · `MASTER_PASSCODE_FAILED` · `MASTER_PASSCODE_LOCKOUT` (ADR-439) · `DEVICE_TURN_IN` (ADR-488) | `SecurityEvent` (ADR-399) |
+| `SecurityEventKind` ✅ | `SIGN_IN` · `SIGN_IN_FAILED` · `LOCKOUT` · `TWO_STEP_SET_UP` · `TWO_STEP_CLEARED` (ADR-412) · `DEVICE_SETUP` · `DEVICE_SWITCH` · `MASTER_PASSCODE_USE` · `MASTER_PASSCODE_FAILED` · `MASTER_PASSCODE_LOCKOUT` (ADR-439) · `DEVICE_TURN_IN` (ADR-488) · `DEVICE_KEY_REVOKED` (ADR-530) | `SecurityEvent` (ADR-399) |
+| `DeviceKeyRevocation` ✅ | `TURN_IN` · `FIRM_TIME` (ADR-530) | `Device.keyRevokedBy` |
 | `NumberSeries` ✅ | `LOAD` · `HAUL_OUT` · `UNIT_RATE` · `CERTIFICATION` · `ROE` (✅ ADR-323) | `ProjectNumberSeries`, `ControlRange`, `NumberBlock` |
 | `NumberBlockStatus` ✅ | `ISSUED` · `RECLAIMED` · `RETIRED` | `NumberBlock` |
 | `AssignmentOrigin` ✅ | `PLANNED` · `UNPLANNED` | `Assignment` |
@@ -2051,7 +2065,7 @@ A new value in any of them is a code change with an ADR (`spec/LISTS.md` Group 2
 | `ContractorPosition` ✅ | `PRIME` · `SUB_TIER_1` · `SUB_TIER_2` | `ProjectContractor` |
 | `ViewerKind` | `CLIENT` · `CONTRACTOR` · `AUDITOR` | `User` |
 | `Permission` | `CORRECT` · `RENUMBER` · `VOID` · `ACCEPT_FLAG` · `QC` · `LOCK_INVOICED` · `UNLOCK_INVOICED` · `APPROVE_HOURS` · `SETUP` · `DISPATCH` | `UserPermission` |
-| `ReasonUse` ✅ | `VOID` · `TYPED_NUMBER` · `ACCEPT_FLAG` · `BACK_OFFICE_RECORD` | `Reason` |
+| `ReasonUse` ✅ | `VOID` · `TYPED_NUMBER` · `ACCEPT_FLAG` · `BACK_OFFICE_RECORD` · `PHONE_REMOVAL` (ADR-530) | `Reason` |
 | `FormDocumentType` | `LOAD` · `HAUL_OUT` · `UNIT_RATE` · `CERTIFICATION` · `ROE` · `SURVEY` · `INCIDENT` · `DROP_OFF_LOG` | `Form`, `Assignment` |
 | `IncidentOffer` ✅ | `CONTRACTOR` · `CERT_NUMBER` · `ROE_NUMBER` | `Form.incidentOffers` (ADR-334) |
 | `BillingUnit` ✅ | `CY` · `TN` · `EA` · `LB` · `HR` · `CREW_DAY` · `TBN` | `PayItem`, `Transaction` |

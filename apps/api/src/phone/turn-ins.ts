@@ -134,10 +134,10 @@ export class TurnIns {
       await tx.$queryRaw`SELECT "id" FROM "device" WHERE "id" = ${deviceId}::uuid FOR UPDATE`;
       const device = await tx.device.findUniqueOrThrow({
         where: { id: deviceId },
-        select: { status: true, keyRevokedAt: true },
+        select: { status: true, keyRevokedAt: true, keyRevokedBy: true },
       });
       // Turned in already: its key is revoked, so it is proven no more (ARCHITECTURE §7.4).
-      if (device.keyRevokedAt !== null) throw new Refusal('PHONE_NOT_PROVEN', 401);
+      if (device.keyRevokedBy === 'TURN_IN') throw new Refusal('PHONE_NOT_PROVEN', 401);
       await passcode.used(tx, checked, now, { deviceId });
       const ended = await NumberAllocator.turnedIn(
         tx,
@@ -147,12 +147,16 @@ export class TurnIns {
         now,
       );
       // Once: the row is held, so nothing has revoked the key since it was read (and the
-      // database refuses a key revoked twice).
+      // database refuses a key turned in twice). A key the firm's time revoked keeps when that
+      // was, and is now its turn-in's (ADR-530); its blocks were retired then.
       await tx.device.update({
         where: { id: deviceId },
         data: {
-          keyRevokedAt: now,
-          ...(device.status === 'ACTIVE' ? { status: 'RETIRED', outOfServiceAt: now } : {}),
+          keyRevokedAt: device.keyRevokedAt ?? now,
+          keyRevokedBy: 'TURN_IN',
+          ...(device.status === 'ACTIVE'
+            ? { status: 'RETIRED', outOfServiceAt: now, outOfServiceMarkedAt: now }
+            : {}),
         },
         select: { id: true },
       });

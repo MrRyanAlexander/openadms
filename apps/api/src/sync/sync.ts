@@ -344,6 +344,14 @@ export class Sync {
   // Why nothing is written for this project, where it is closed: its name and the day it closed,
   // in its own time zone. None for one open, or one the server doesn't have (its constraints say
   // so, as before).
+  // Whether the phone's key is revoked: by the firm's time, since a phone turned in syncs no more.
+  private async keyRevoked(deviceId: string): Promise<boolean> {
+    const phone = await this.db.$read((tx) =>
+      tx.device.findUnique({ where: { id: deviceId }, select: { keyRevokedAt: true } }),
+    );
+    return phone?.keyRevokedAt != null;
+  }
+
   private async closed(projectId: string): Promise<NotSaved | null> {
     const project = await this.db.$read((tx) =>
       tx.project.findUnique({
@@ -444,7 +452,8 @@ export class Sync {
   ): Promise<SeriesHeld> {
     const { projectId, series } = report;
     // A closed project's numbers were retired at its close: none is issued again (ADR-529 (b)).
-    if ((await this.closed(projectId)) !== null) {
+    // Nor to a phone whose key the firm's time revoked: its blocks were retired then (ADR-530).
+    if ((await this.closed(projectId)) !== null || (await this.keyRevoked(deviceId))) {
       return { projectId, series, toppedUp: false, blocks: [] };
     }
     for (let attempt = 1; ; attempt += 1) {

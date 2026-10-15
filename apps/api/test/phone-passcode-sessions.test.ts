@@ -209,7 +209,11 @@ describe('who may open a session under the master passcode', () => {
       const { phone, tariq } = await theTowersPhone(served, tx);
       await tx.device.update({
         where: { id: phone.id },
-        data: { status: 'LOST', outOfServiceAt: new Date('2026-10-12T22:10:00.000Z') },
+        data: {
+          status: 'LOST',
+          outOfServiceAt: new Date('2026-10-12T22:10:00.000Z'),
+          outOfServiceMarkedAt: new Date('2026-10-12T22:10:00.000Z'),
+        },
       });
       served.clock.at = new Date('2026-10-13T12:00:00.000Z');
       const token = await proven(served, phone);

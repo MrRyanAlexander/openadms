@@ -795,6 +795,18 @@ So the protection can't rest on the password. It rests on these:
 > record is on the server and every block has ended, and only the turn-in can revoke a key (the
 > database's guard). The text above was reworded to say so (ADR-495).
 
+⏳ **Awaiting approval** **ADR-520, 530 (2026-10-15; the user's decision, its design agent defaults):
+> a lost phone's key revoked after the firm's time** (REQ-214). A phone marked lost or retired
+> whose turn-in hasn't revoked its key has it revoked by the worker, as the system actor, once the
+> firm's hours have passed since its last mark (24 as shipped, `PHONE_KEY_REVOKED_AFTER_HOURS`; the
+> firm's settings record, whole hours up to a year or off, changed by an admin or anyone holding
+> Setup, audited): its blocks retired whole, a security event written. The database allows that
+> and nothing else, and tells the two kinds of revocation apart (`keyRevokedBy`: `TURN_IN`,
+> `FIRM_TIME`). **Such a phone proves itself with its key and the master passcode together**, and
+> its token opens only its sync, its photographs' files, its reports and its turn-in; its turn-in
+> then revokes the key for good. A phone whose key is revoked, by either kind, is never put back
+> in service: it is wiped and enrolled anew. A found phone whose key stands may be (ADR-530 (5)).
+
 ### 7.5 The master passcode
 
 ✅ **Decided** *(ADR-106, user 2026-09-25)*:

@@ -199,6 +199,8 @@ describe('permissions, read from the database on every request', () => {
       'closingCheck',
       'closeProject',
       'reopenProject',
+      // Whether read-only viewers must use two-step sign-in: ADR-530.
+      'changeViewerTwoStep',
       // The firm's master passcode: ADR-428.
       'changeMasterPasscode',
       // A certification revoked (AC-03-55): ADR-433.

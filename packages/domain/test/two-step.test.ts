@@ -15,9 +15,17 @@ describe('two-step sign-in', () => {
   it('AC-02-14 is required for an admin and a manager/analyst, optional for a read-only viewer, and a monitor has none', () => {
     expect(
       ['ADMIN', 'MANAGER_ANALYST', 'READ_ONLY_VIEWER', 'MONITOR', 'SYSTEM', 'ANYTHING_ELSE'].map(
-        (role) => rules.need(role),
+        (role) => rules.need(role, false),
       ),
     ).toEqual(['REQUIRED', 'REQUIRED', 'OPTIONAL', 'NONE', 'NONE', 'NONE']);
+  });
+
+  it('AC-10-85 is required for a read-only viewer too where the firm says so, and still none for a monitor', () => {
+    expect(
+      ['ADMIN', 'MANAGER_ANALYST', 'READ_ONLY_VIEWER', 'MONITOR', 'SYSTEM'].map((role) =>
+        rules.need(role, true),
+      ),
+    ).toEqual(['REQUIRED', 'REQUIRED', 'REQUIRED', 'NONE', 'NONE']);
   });
 
   it('a code is six digits that change every thirty seconds, as every authenticator app makes them', () => {

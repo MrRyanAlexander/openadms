@@ -6,6 +6,7 @@ import {
   beginTwoStepSetupEndpoint,
   clearTwoStepEndpoint,
   confirmTwoStepSetupEndpoint,
+  removeOwnTwoStepEndpoint,
   twoStepClearedAnswerSchema,
   twoStepSetupAnswerSchema,
   type SessionAnswer,
@@ -85,6 +86,23 @@ export class TwoStepController {
       { ...caller, twoStepSetUp: true, twoStepSetupRequired: false },
       this.tokens,
     );
+  }
+
+  @Serves(removeOwnTwoStepEndpoint)
+  async removeOwn(
+    @Body() body: { code: string },
+    @Req() request: FastifyRequest,
+  ): Promise<TwoStepClearedAnswer> {
+    const caller = callerOf(request);
+    this.limits.mayTry(request.ip);
+    const outcome = await this.twoStep.removeOwn(caller.userId, caller.sessionId, body.code);
+    if (!outcome.removed) {
+      request.log.info({ why: outcome.code }, 'Removing one’s own authenticator was refused.');
+      if (outcome.code === 'TWO_STEP_REFUSED') this.limits.wrongTry(request.ip);
+      throw new Refusal(outcome.code, statusOf[outcome.code]);
+    }
+    request.log.warn({ told: outcome.told }, 'A person removed their own authenticator.');
+    return twoStepClearedAnswerSchema.parse({ status: 'cleared' });
   }
 
   @Serves(clearTwoStepEndpoint)

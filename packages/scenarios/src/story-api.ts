@@ -269,10 +269,15 @@ export class StoryApi {
   // story's clock: it asks a challenge, signs it with the key only it holds and sends both back;
   // proven, it holds the token it is given, and its next request sends that. What it was
   // answered (`PROVEN`, or the API's one code for a proof that isn't one), and the same signed
-  // answer sent again.
-  async proves(deviceId: string): Promise<{ readonly answer: string; again(): Promise<string> }> {
+  // answer sent again. Whoever holds the master passcode types it beside the phone's signature
+  // for a phone whose key the firm's time revoked (ADR-530): `passcode`.
+  async proves(
+    deviceId: string,
+    passcode?: string,
+  ): Promise<{ readonly answer: string; again(): Promise<string> }> {
     return this.during(this.parts.clock, async () => {
-      const proof = await this.signedChallenge(deviceId);
+      const signed = await this.signedChallenge(deviceId);
+      const proof = passcode === undefined ? signed : { ...signed, passcode };
       const answer = await this.proved(deviceId, proof);
       return {
         answer,
@@ -394,7 +399,7 @@ export class StoryApi {
   // The proof sent: proven, the phone holds its token until it runs out by the clock in use.
   private async proved(
     deviceId: string,
-    proof: { readonly challenge: string; readonly signature: string },
+    proof: { readonly challenge: string; readonly signature: string; readonly passcode?: string },
   ): Promise<string> {
     const now = this.on.now();
     const answer = await this.ask(provePhoneEndpoint, { ids: { deviceId }, json: proof });

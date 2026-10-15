@@ -77,6 +77,8 @@ const domains: Record<string, string> = {
   incident: 'RECORDS',
   drop_off_log: 'RECORDS',
   master_passcode: 'SECURITY',
+  // The firm's own settings (ADR-530).
+  firm_settings: 'SECURITY',
   // Sign-in's records (ADR-397…399): what sign-in keeps of a person, a session and a security
   // event are the security reviewer's to read.
   user_credential: 'SECURITY',
@@ -517,9 +519,25 @@ describe('the guards in the catalog', () => {
         definition:
           'CHECK (((key_revoked_at IS NULL) OR ((out_of_service_at IS NOT NULL) AND (key_revoked_at >= out_of_service_at))))',
       },
+      // Which revoked a key, said exactly when one is; a phone's mark and its reason only while it
+      // is out of service (ADR-530).
+      {
+        name: 'device_key_revoked_by_check',
+        definition: 'CHECK (((key_revoked_at IS NULL) = (key_revoked_by IS NULL)))',
+      },
       {
         name: 'device_out_of_service_check',
         definition: "CHECK (((status = 'ACTIVE'::device_status) = (out_of_service_at IS NULL)))",
+      },
+      {
+        name: 'device_out_of_service_marked_check',
+        definition:
+          "CHECK (((status = 'ACTIVE'::device_status) = (out_of_service_marked_at IS NULL)))",
+      },
+      {
+        name: 'device_out_of_service_reason_check',
+        definition:
+          "CHECK (((status <> 'ACTIVE'::device_status) OR (out_of_service_reason_id IS NULL)))",
       },
       {
         name: 'field_event_address_check',
@@ -616,6 +634,14 @@ describe('the guards in the catalog', () => {
         name: 'field_event_unit_rate_check',
         definition:
           "CHECK (((kind = 'UNIT_RATE'::field_event_kind) OR (num_nonnulls(kind_of_work_id, payable_type_id, pay_item_id, unit_count, measurement_inches, measured_as, root_ball_inches, root_ball_half_exposed, survey_number, marked_ineligible) = 0)))",
+      },
+      // The firm's settings: one record, a lost phone's key kept whole hours up to a year, or off
+      // (ADR-530).
+      { name: 'firm_settings_one_row_check', definition: 'CHECK ((id = 1))' },
+      {
+        name: 'firm_settings_phone_key_hours_check',
+        definition:
+          'CHECK (((phone_key_revoked_after_hours IS NULL) OR ((phone_key_revoked_after_hours >= 1) AND (phone_key_revoked_after_hours <= 8760))))',
       },
       {
         name: 'form_debris_type_document_type_check',
