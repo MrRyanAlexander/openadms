@@ -710,7 +710,7 @@ export async function setUpP1Pricing(story: StoryContext, office: P1Office): Pro
   const { api, clock } = story;
   const { dana, p1, coastline, contract, landfill, cypress } = office;
   const payItems = new PayItemSetup(api, clock, story.policy);
-  const lists = new ListSetup(api, clock);
+  const lists = new ListSetup(api, clock, story.policy);
 
   const payableType = async (name: string): Promise<string> =>
     (await api.payableType.findFirstOrThrow({ where: { name } })).id;

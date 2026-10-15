@@ -9,7 +9,11 @@
 // store the API keeps files in is named by five more (ADR-480): ADMS_MEDIA_URL, ADMS_MEDIA_BUCKET,
 // ADMS_MEDIA_REGION and the API's own identity there, ADMS_MEDIA_ACCESS_KEY and
 // ADMS_MEDIA_SECRET_KEY; with ADMS_MEDIA_CA_FILE and ADMS_MEDIA_ADDRESS where the installation
-// has them. Every hop is encrypted (ARCHITECTURE §4; KD-78; ADR-517): the API serves HTTPS alone,
+// has them. An Esri feature layer the back office links (ADR-527 (15)) is asked at the address a
+// person gives, never at a private address or one of the stack's own names unless its host name
+// is listed in ADMS_ESRI_PRIVATE_HOSTS (the firm's own ArcGIS Enterprise on its network), its
+// certificate checked against the machine's trust store or ADMS_ESRI_CA_FILE; both may be left
+// out. Every hop is encrypted (ARCHITECTURE §4; KD-78; ADR-517): the API serves HTTPS alone,
 // with the certificate and key ADMS_API_TLS_CERT_FILE and ADMS_API_TLS_KEY_FILE name; each
 // database login's URL asks `sslmode=verify-full`, checked against the root its `sslrootcert`
 // names, or ADMS_DATABASE_CA_FILE where the installation has one; mail goes over TLS alone,
@@ -92,6 +96,11 @@ export class Settings {
   readonly mapServersAt: { readonly host: string; readonly port: number } | undefined;
   // The object store, and the API's identity at it (ADR-480).
   readonly media: MediaSettings;
+  // The host names of Esri layers the firm states may be at a private address (ADR-527 (15)),
+  // in lower case; and the certificate authority Esri layers are checked against, none for the
+  // machine's own trust store.
+  readonly esriPrivateHosts: readonly string[];
+  readonly esriCaFile: string | null;
 
   private constructor(values: {
     databaseUrl: string;
@@ -110,6 +119,8 @@ export class Settings {
     mapCaFile: string | null;
     mapServersAt: { host: string; port: number } | undefined;
     media: MediaSettings;
+    esriPrivateHosts: readonly string[];
+    esriCaFile: string | null;
   }) {
     this.databaseUrl = values.databaseUrl;
     this.readOnlyDatabaseUrl = values.readOnlyDatabaseUrl;
@@ -127,6 +138,8 @@ export class Settings {
     this.mapCaFile = values.mapCaFile;
     this.mapServersAt = values.mapServersAt;
     this.media = values.media;
+    this.esriPrivateHosts = values.esriPrivateHosts;
+    this.esriCaFile = values.esriCaFile;
   }
 
   static read(environment: Environment): Settings {
@@ -208,6 +221,20 @@ export class Settings {
     const mediaCaFile = environment['ADMS_MEDIA_CA_FILE'];
     checked('ADMS_MEDIA_CA_FILE', mediaCaFile, (value) => Settings.isCertificateFile(value));
 
+    const esriHosts = (environment['ADMS_ESRI_PRIVATE_HOSTS'] ?? '')
+      .split(',')
+      .map((host) => host.trim().toLowerCase())
+      .filter((host) => host !== '');
+    checked('ADMS_ESRI_PRIVATE_HOSTS', environment['ADMS_ESRI_PRIVATE_HOSTS'], () =>
+      esriHosts.every(
+        (host) =>
+          /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/.test(host) ||
+          isIP(host) !== 0,
+      ),
+    );
+    const esriCaFile = environment['ADMS_ESRI_CA_FILE'];
+    checked('ADMS_ESRI_CA_FILE', esriCaFile, (value) => Settings.isCertificateFile(value));
+
     const values = {
       databaseUrl: database('DATABASE_URL'),
       readOnlyDatabaseUrl: database('READONLY_DATABASE_URL'),
@@ -276,6 +303,8 @@ export class Settings {
                 port: Number(mediaAddress.split(':')[1]),
               },
       },
+      esriPrivateHosts: esriHosts,
+      esriCaFile: esriCaFile ?? null,
     };
     if (problems.length > 0) throw new SettingsProblem(problems);
     return new Settings(values);

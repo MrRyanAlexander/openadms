@@ -99,6 +99,9 @@ export const policyNames = {
   // The most outer rings times holes one shape of a shapefile may have to be read: setting each
   // hole in its outer ring tries every pair, all at once, and nothing stops it part way (ADR-524).
   mapFileRingPairsAtMost: 'MAP_FILE_RING_PAIRS_AT_MOST',
+  // How long an Esri feature layer has to give the API every page of its features, in seconds,
+  // the whole exchange (ARCHITECTURE §3 "Project boundary and zones"; ADR-527 (15)).
+  esriLayerAnswerSeconds: 'ESRI_LAYER_ANSWER_SECONDS',
   // Rate limits (ARCHITECTURE §6, Abuse; ASVS 2.4.1; ADR-416): how long the stretch is that
   // requests are counted over, in seconds; how many one address and one signed-in person may send
   // in it; and how many callers' counts the server keeps at once.
@@ -205,6 +208,7 @@ const ranges: Record<PolicyName, { least: number; most: number }> = {
   [policyNames.mapFileUnzippedBytesAtMost]: { least: 1048576, most: 1073741824 },
   [policyNames.mapFileEntriesAtMost]: { least: 4, most: 65535 },
   [policyNames.mapFileRingPairsAtMost]: { least: 1, most: Number.MAX_SAFE_INTEGER },
+  [policyNames.esriLayerAnswerSeconds]: { least: 1, most: 600 },
   [policyNames.rateLimitWindowSeconds]: { least: 1, most: 3600 },
   [policyNames.rateLimitRequestsPerAddress]: { least: 1, most: Number.MAX_SAFE_INTEGER },
   [policyNames.rateLimitRequestsPerAccount]: { least: 1, most: Number.MAX_SAFE_INTEGER },
@@ -264,6 +268,7 @@ export class Policy {
   readonly mapFileUnzippedBytesAtMost: number;
   readonly mapFileEntriesAtMost: number;
   readonly mapFileRingPairsAtMost: number;
+  readonly esriLayerAnswerSeconds: number;
   readonly rateLimitWindowSeconds: number;
   readonly rateLimitRequestsPerAddress: number;
   readonly rateLimitRequestsPerAccount: number;
@@ -322,6 +327,7 @@ export class Policy {
     this.mapFileUnzippedBytesAtMost = Policy.read(values, policyNames.mapFileUnzippedBytesAtMost);
     this.mapFileEntriesAtMost = Policy.read(values, policyNames.mapFileEntriesAtMost);
     this.mapFileRingPairsAtMost = Policy.read(values, policyNames.mapFileRingPairsAtMost);
+    this.esriLayerAnswerSeconds = Policy.read(values, policyNames.esriLayerAnswerSeconds);
     this.rateLimitWindowSeconds = Policy.read(values, policyNames.rateLimitWindowSeconds);
     this.rateLimitRequestsPerAddress = Policy.read(values, policyNames.rateLimitRequestsPerAddress);
     this.rateLimitRequestsPerAccount = Policy.read(values, policyNames.rateLimitRequestsPerAccount);

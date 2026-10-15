@@ -49,7 +49,8 @@ export type PeopleRefused =
   | 'NOT_A_VIEWER'
   | 'NOT_BACK_OFFICE'
   | 'UNKNOWN_CONTRACTOR'
-  | 'UNKNOWN_PROJECT';
+  | 'UNKNOWN_PROJECT'
+  | 'EMAIL_SIGNS_IN';
 
 // A person as an answer says them. `phone` is undefined where the reader may not read it.
 export interface PersonRead {
@@ -62,6 +63,8 @@ export interface PersonRead {
   readonly monitorId: string | null;
   readonly email: string | null;
   readonly phone?: string | null;
+  readonly employerId: string | null;
+  readonly employerNumber: string | null;
   readonly archived: boolean;
   readonly permissions: readonly string[];
   readonly projectIds: readonly string[];
@@ -85,10 +88,13 @@ export interface NewPerson {
   readonly seesPrivateCitizens?: boolean | undefined;
 }
 
-// What an admin changes of a person: only what is stated. A phone number is cleared with null.
+// What an admin changes of a person: only what is stated. A phone number, an employer and its ID
+// are cleared with null; an email address only on a person who doesn't sign in with it.
 export interface PersonChanges {
   readonly name?: string | undefined;
-  readonly email?: string | undefined;
+  readonly email?: string | null | undefined;
+  readonly employerId?: string | null | undefined;
+  readonly employerNumber?: string | null | undefined;
   readonly phone?: string | null | undefined;
   readonly viewerKind?: 'CLIENT' | 'CONTRACTOR' | 'AUDITOR' | undefined;
   readonly contractorId?: string | undefined;
@@ -124,6 +130,8 @@ const personRead = {
   monitorNumber: true,
   email: true,
   phone: true,
+  employerId: true,
+  employerNumber: true,
   archivedAt: true,
   permissions: {
     where: { archivedAt: null },
@@ -289,6 +297,30 @@ export class People {
         if (changes.phone !== undefined && (changes.phone?.trim() ?? null) !== person.phone) {
           data.phone = changes.phone?.trim() ?? null;
         }
+        // An address is cleared only on somebody who doesn't sign in with it (ADR-527 (12)).
+        if (changes.email === null) {
+          if (this.rules.signsInByEmail(person.role)) return { refused: 'EMAIL_SIGNS_IN' };
+          if (person.email !== null) data.email = null;
+        }
+        // Who employs them, a contractor the firm has in service, and the ID it gives them; an
+        // ID with no employer is the database's to refuse (AC-02-03).
+        if (changes.employerId !== undefined && changes.employerId !== person.employerId) {
+          if (changes.employerId !== null) {
+            const employer = await tx.contractor.findUnique({
+              where: { id: changes.employerId },
+              select: { archivedAt: true },
+            });
+            if (employer?.archivedAt !== null) return { refused: 'UNKNOWN_CONTRACTOR' };
+          }
+          data.employerId = changes.employerId;
+        }
+        const employerNumber =
+          changes.employerNumber === undefined
+            ? undefined
+            : (changes.employerNumber?.trim() ?? null);
+        if (employerNumber !== undefined && employerNumber !== person.employerNumber) {
+          data.employerNumber = employerNumber;
+        }
         const email = changes.email?.trim();
         if (email !== undefined && email !== person.email) {
           if (this.rules.signsInByEmail(person.role)) {
@@ -372,6 +404,15 @@ export class People {
         const person = await tx.user.findUnique({ where: { id: userId }, select: personRead });
         if (person === null || actorOnly(person.role) || person.archivedAt === null) {
           return { refused: 'NOT_FOUND' };
+        }
+        // A contractor user comes back only while their contractor is in service: put it back
+        // first (ADR-527 (12)), as creating one for an archived contractor is refused.
+        if (person.contractorId !== null) {
+          const contractor = await tx.contractor.findUnique({
+            where: { id: person.contractorId },
+            select: { archivedAt: true },
+          });
+          if (contractor?.archivedAt !== null) return { refused: 'UNKNOWN_CONTRACTOR' };
         }
         if (
           this.rules.signsInByEmail(person.role) &&
@@ -584,6 +625,8 @@ export class People {
       monitorId: row.monitorNumber,
       email: row.email,
       ...(this.rules.readsPhoneOf(reader, row.role) ? { phone: row.phone } : {}),
+      employerId: row.employerId,
+      employerNumber: row.employerNumber,
       archived: row.archivedAt !== null,
       permissions: row.permissions.map(({ permission }) => permission),
       projectIds: row.viewerProjects.map(({ projectId }) => projectId),

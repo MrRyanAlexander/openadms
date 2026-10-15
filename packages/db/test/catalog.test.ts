@@ -331,6 +331,12 @@ describe('the guards in the catalog', () => {
         definition:
           "CHECK (((person_id <> '00000000-0000-7000-8000-000000000001'::uuid) AND (made_by_id IS DISTINCT FROM '00000000-0000-7000-8000-000000000001'::uuid)))",
       },
+      // A withdrawal's note is a withdrawn assignment's, in a few words (ADR-527 (13)).
+      {
+        name: 'assignment_withdrawal_note_check',
+        definition:
+          'CHECK (((withdrawal_note IS NULL) OR ((archived_at IS NOT NULL) AND ((length(btrim(withdrawal_note)) >= 1) AND (length(btrim(withdrawal_note)) <= 500)))))',
+      },
       // A carried ticket is a collection's (ADR-325).
       {
         name: 'carried_ticket_kind_check',
@@ -577,6 +583,22 @@ describe('the guards in the catalog', () => {
       { name: 'map_version_boundary_check', definition: shapeCheck('boundary') },
       { name: 'map_version_bounding_box_check', definition: boundingBoxCheck },
       { name: 'map_version_version_check', definition: 'CHECK ((version >= 1))' },
+      // The zones' own layer is a map fetched from Esri's, named in its field (ADR-527 (15)).
+      {
+        name: 'map_version_zones_file_check',
+        definition: 'CHECK (((zones_file_key IS NULL) OR (zones_source_name IS NOT NULL)))',
+      },
+      {
+        name: 'map_version_zones_layer_check',
+        definition:
+          "CHECK (((zones_source_name IS NULL) OR ((source = 'ESRI_LAYER'::map_source) AND (zone_name_field IS NOT NULL))))",
+      },
+      // A site's shape fetched from Esri names its layer (ADR-527 (10)).
+      {
+        name: 'site_area_version_esri_layer_check',
+        definition:
+          "CHECK (((source <> 'ESRI_LAYER'::site_area_source) OR (source_name IS NOT NULL)))",
+      },
       { name: 'site_area_version_bounding_box_check', definition: boundingBoxCheck },
       { name: 'site_area_version_geometry_check', definition: shapeCheck('geometry') },
       { name: 'site_area_version_version_check', definition: 'CHECK ((version >= 1))' },

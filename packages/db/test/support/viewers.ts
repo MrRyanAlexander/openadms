@@ -48,10 +48,10 @@ const projectOrOwn = (own: string, hidden: string[] = []): Sight => ({
 // The row is the field event a contractor user sees (its certification names its contractor).
 const itsFieldEvent = (table: string, link: string): string =>
   exists('field_event', `field_event.id = ${table}.${link}`);
-const partOf = (table: string, parent: string, link: string): Sight => ({
+const partOf = (table: string, parent: string, link: string, hidden: string[] = []): Sight => ({
   sight: 'PART_OF',
   seen: exists(parent, `${parent}.id = ${table}.${link}`),
-  hidden: [],
+  hidden,
   citizen: [],
   own: false,
 });
@@ -90,8 +90,8 @@ export const viewerSights: Record<string, Sight> = {
   disposal_site: project(),
   disposal_site_label: partOf('disposal_site_label', 'disposal_site', 'site_id'),
   disposal_site_tipping_fee: project(),
-  site_area_version: partOf('site_area_version', 'disposal_site', 'site_id'),
-  map_version: project(['uploaded_file_key']),
+  site_area_version: partOf('site_area_version', 'disposal_site', 'site_id', ['uploaded_file_key']),
+  map_version: project(['uploaded_file_key', 'zones_file_key']),
   zone: partOf('zone', 'map_version', 'map_version_id'),
   rule: project(),
   rule_criterion: project(),

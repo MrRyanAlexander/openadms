@@ -249,3 +249,32 @@ export function zipped(
 
 export const geojsonFile = (geojson: unknown): Uint8Array =>
   encoder.encode(JSON.stringify(geojson));
+
+// A KML file as Google Earth exports it (OGC 07-147r2): each placemark a polygon, its outer
+// ring's coordinates `longitude,latitude[,altitude]`, its fields in `ExtendedData`.
+export const placemark = (name: string, rings: readonly (readonly number[][])[], zone?: string) => `
+    <Placemark>
+      <name>${name}</name>
+      ${zone === undefined ? '' : `<ExtendedData><Data name="ZONE_NAME"><value>${zone}</value></Data></ExtendedData>`}
+      <Polygon>
+        ${rings
+          .map(
+            (ring, at) =>
+              `<${at === 0 ? 'outerBoundaryIs' : 'innerBoundaryIs'}><LinearRing><coordinates>${ring
+                .map(([longitude, latitude]) => `${String(longitude)},${String(latitude)},0`)
+                .join(
+                  ' ',
+                )}</coordinates></LinearRing></${at === 0 ? 'outerBoundaryIs' : 'innerBoundaryIs'}>`,
+          )
+          .join('')}
+      </Polygon>
+    </Placemark>`;
+export const kmlFile = (body: string, prologue = '<?xml version="1.0" encoding="UTF-8"?>\n') =>
+  new TextEncoder().encode(
+    `${prologue}<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>Bayline ROW</name>${body}</Document></kml>`,
+  );
+export const p1ZonesKml = p1Zones
+  .map(({ rings, fields }) =>
+    placemark(String(fields['ZONE_NAME']), rings, String(fields['ZONE_NAME'])),
+  )
+  .join('');

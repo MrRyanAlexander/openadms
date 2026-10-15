@@ -465,6 +465,8 @@ export class StoryApi {
         addressesUrl: 'https://addresses.adms.localhost',
         mapCaFile: null,
         mapServersAt: undefined,
+        esriPrivateHosts: [],
+        esriCaFile: null,
         media: {
           url: 'https://s3.adms.localhost',
           bucket: 'adms-media',

@@ -27,7 +27,17 @@ import {
   type ProjectSettings,
 } from '@open-adms/domain';
 
-import { day, type Outcome, QueueingService, Refused } from './setup-service.ts';
+import {
+  afterInNameOrder,
+  archiveChange,
+  day,
+  type Found,
+  type Outcome,
+  paged,
+  QueueingService,
+  Refused,
+  type Searched,
+} from './setup-service.ts';
 
 export interface NewClient {
   readonly name: string;
@@ -37,12 +47,23 @@ export interface NewClient {
   readonly notes?: string;
 }
 
+// A client changed: only what is stated; a contact or the notes cleared with null.
+export interface ClientChanges {
+  readonly name?: string;
+  readonly contactName?: string | null;
+  readonly contactEmail?: string | null;
+  readonly contactPhone?: string | null;
+  readonly notes?: string | null;
+}
+
 export interface NewDeclarationEvent {
   readonly name: string;
   // As written: DR-9001-FL.
   readonly reference: string;
   readonly referenceTypeId: string;
 }
+
+export type DeclarationEventChanges = Partial<NewDeclarationEvent>;
 
 export interface NewProject {
   readonly name: string;
@@ -85,20 +106,37 @@ export interface NewMap {
   readonly zoneNameField: string | null;
   // Where the file it was loaded from is kept, when it came as a map's file (ADR-485).
   readonly uploadedFileKey?: string;
+  // On a map fetched from Esri with zones, the zones' layer (the boundary's own or another) and
+  // where its copy is kept (ADR-527 (15)).
+  readonly zonesSourceName?: string;
+  readonly zonesFileKey?: string;
 }
 
 // A change to what a project's tickets are checked against (its settings, a control range, a
 // new map version) queues its un-invoiced tickets in the same piece of work (ADR-090, 420;
 // AC-06-03).
 export class ProjectSetup extends QueueingService {
-  // Step 1: search first; a client that exists is picked, never created again (ADR-023).
-  findClients(search: string): Promise<Client[]> {
-    return this.db.$read((tx) =>
-      tx.client.findMany({
-        where: { name: { contains: search, mode: 'insensitive' }, archivedAt: null },
-        orderBy: { name: 'asc' },
-      }),
-    );
+  // Step 1: search first; a client that exists is picked, never created again (ADR-023). A page
+  // at a time in name order, those in service or the archived ones (ADR-527 (3)).
+  findClients(asked: Searched): Promise<Found<Client>> {
+    return this.db.$read(async (tx) => {
+      const last =
+        asked.after === undefined
+          ? null
+          : await tx.client.findUnique({ where: { id: asked.after } });
+      // Nothing follows a record nobody has.
+      if (asked.after !== undefined && last === null) return { records: [], next: null };
+      const rows = await tx.client.findMany({
+        where: {
+          name: { contains: asked.search, mode: 'insensitive' },
+          archivedAt: asked.archived ? { not: null } : null,
+          ...afterInNameOrder(last),
+        },
+        orderBy: [{ name: 'asc' }, { id: 'asc' }],
+        take: asked.limit + 1,
+      });
+      return paged(rows, asked.limit);
+    });
   }
 
   client(person: string, input: NewClient): Promise<Outcome<Client>> {
@@ -115,21 +153,48 @@ export class ProjectSetup extends QueueingService {
     );
   }
 
+  // A client's own fields, audited with the value before (AC-01-02). Nothing a ticket is judged
+  // by is here, so nothing is queued.
+  changeClient(person: string, clientId: string, changes: ClientChanges): Promise<Outcome<Client>> {
+    return this.setup(person, (tx) => tx.client.update({ where: { id: clientId }, data: changes }));
+  }
+
+  // Off the searches and new picks; the projects under it stay as they are (ADR-527 (1)).
+  archiveClient(person: string, clientId: string, archive: boolean): Promise<Outcome<Client>> {
+    return this.setup(person, async (tx) => {
+      const client = await tx.client.findUniqueOrThrow({ where: { id: clientId } });
+      const change = archiveChange(client.archivedAt, archive, this.clock.now());
+      return change === null ? client : tx.client.update({ where: { id: clientId }, data: change });
+    });
+  }
+
   // Step 2: by its name or its reference; one declaration event is shared by every client's
   // projects under it (ADR-026).
-  findDeclarationEvents(search: string): Promise<DeclarationEvent[]> {
-    return this.db.$read((tx) =>
-      tx.declarationEvent.findMany({
+  findDeclarationEvents(asked: Searched): Promise<Found<DeclarationEvent>> {
+    return this.db.$read(async (tx) => {
+      const last =
+        asked.after === undefined
+          ? null
+          : await tx.declarationEvent.findUnique({ where: { id: asked.after } });
+      if (asked.after !== undefined && last === null) return { records: [], next: null };
+      const rows = await tx.declarationEvent.findMany({
         where: {
-          archivedAt: null,
-          OR: [
-            { name: { contains: search, mode: 'insensitive' } },
-            { reference: { contains: search, mode: 'insensitive' } },
+          archivedAt: asked.archived ? { not: null } : null,
+          AND: [
+            {
+              OR: [
+                { name: { contains: asked.search, mode: 'insensitive' } },
+                { reference: { contains: asked.search, mode: 'insensitive' } },
+              ],
+            },
+            afterInNameOrder(last),
           ],
         },
-        orderBy: { name: 'asc' },
-      }),
-    );
+        orderBy: [{ name: 'asc' }, { id: 'asc' }],
+        take: asked.limit + 1,
+      });
+      return paged(rows, asked.limit);
+    });
   }
 
   declarationEvent(person: string, input: NewDeclarationEvent): Promise<Outcome<DeclarationEvent>> {
@@ -142,6 +207,33 @@ export class ProjectSetup extends QueueingService {
         },
       }),
     );
+  }
+
+  // Its name, its reference as written or its reference type, audited with the value before.
+  changeDeclarationEvent(
+    person: string,
+    declarationEventId: string,
+    changes: DeclarationEventChanges,
+  ): Promise<Outcome<DeclarationEvent>> {
+    return this.setup(person, (tx) =>
+      tx.declarationEvent.update({ where: { id: declarationEventId }, data: changes }),
+    );
+  }
+
+  archiveDeclarationEvent(
+    person: string,
+    declarationEventId: string,
+    archive: boolean,
+  ): Promise<Outcome<DeclarationEvent>> {
+    return this.setup(person, async (tx) => {
+      const event = await tx.declarationEvent.findUniqueOrThrow({
+        where: { id: declarationEventId },
+      });
+      const change = archiveChange(event.archivedAt, archive, this.clock.now());
+      return change === null
+        ? event
+        : tx.declarationEvent.update({ where: { id: declarationEventId }, data: change });
+    });
   }
 
   // Step 3: the project, with a new project's settings, the kinds of unit rate work it allows and
@@ -267,11 +359,14 @@ export class ProjectSetup extends QueueingService {
 
   // Closes the project: the mark and its time, audited. Nothing is deleted and nothing is
   // refused over it afterwards: a late field event still comes in, and a ticket is still
-  // unlocked by whoever holds the grant (invariant 1; ADR-025, 052, 367).
+  // unlocked by whoever holds the grant (invariant 1; ADR-025, 052, 367). A project closed
+  // already keeps its first close, and nothing is written (ADR-527 (1)).
   close(person: string, projectId: string): Promise<Outcome<Project>> {
-    return this.setup(person, (tx) =>
-      tx.project.update({ where: { id: projectId }, data: { closedAt: this.clock.now() } }),
-    );
+    return this.setup(person, async (tx) => {
+      const project = await tx.project.findUniqueOrThrow({ where: { id: projectId } });
+      if (project.closedAt !== null) return project;
+      return tx.project.update({ where: { id: projectId }, data: { closedAt: this.clock.now() } });
+    });
   }
 
   // A field tag: the project's own list, starting empty; added at the end of it (ADR-216).
@@ -309,6 +404,8 @@ export class ProjectSetup extends QueueingService {
           sourceName: input.sourceName,
           zoneNameField: input.zoneNameField,
           uploadedFileKey: input.uploadedFileKey ?? null,
+          zonesSourceName: input.zonesSourceName ?? null,
+          zonesFileKey: input.zonesFileKey ?? null,
           boundary: boundary.read.geometry satisfies Prisma.InputJsonObject,
           ...boundary.read.box,
           loadedById: person,

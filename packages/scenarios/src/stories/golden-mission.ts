@@ -178,7 +178,7 @@ export const goldenMission: Story = {
     );
     const projects = new ProjectSetup(api, clock, story.policy);
     const contractors = new ContractorSetup(api, clock, story.policy);
-    const forms = new FormSetup(api, clock);
+    const forms = new FormSetup(api, clock, story.policy);
     const payItems = new PayItemSetup(api, clock, story.policy);
     const first = await api.project.findUniqueOrThrow({ where: { id: p1 } });
     const p2 = (

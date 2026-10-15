@@ -105,8 +105,8 @@ export const p1LeftOut: Story = {
     const payItems = new PayItemSetup(api, clock, story.policy);
     const rules = new RuleSetup(api, clock, story.policy);
     const sites = new SiteSetup(api, clock, story.policy);
-    const forms = new FormSetup(api, clock);
-    const lists = new ListSetup(api, clock);
+    const forms = new FormSetup(api, clock, story.policy);
+    const lists = new ListSetup(api, clock, story.policy);
     const projects = new ProjectSetup(api, clock, story.policy);
     const certifications = new Certifications(api, clock, story.policy);
 

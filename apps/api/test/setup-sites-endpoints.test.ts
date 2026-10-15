@@ -343,7 +343,7 @@ describe('step 7: Dana enters P1’s disposal sites through the endpoints', () =
     });
   });
 
-  it('AC-01-57 Bayline County Landfill keeps the link to its tipping fee pay item TIP-FEE-CY-BCL, and to a second, TIP-FEE-TN-BCL; the same pay item linked twice is told plainly', async () => {
+  it('AC-01-57 Bayline County Landfill keeps the link to its tipping fee pay item TIP-FEE-CY-BCL, and to a second, TIP-FEE-TN-BCL; the same pay item linked again is the link it has, never a second (ADR-527 (9))', async () => {
     await world(async (api, tx) => {
       const dana = await api.signedIn(danasEmail, long);
       const { project, landfill, enter, payItem, payableType } = await p1Sites(api, dana, tx);
@@ -373,9 +373,9 @@ describe('step 7: Dana enters P1’s disposal sites through the endpoints', () =
       });
       saved(linkTippingFeeEndpoint, await link(await fee('TIP-FEE-TN-BCL', 'TN')));
       expect(await tx.disposalSiteTippingFee.count({ where: { siteId: bcl.id } })).toBe(2);
-      const twice = await link(perCy);
-      expect(told(twice)).toEqual([409, 'ALREADY_HELD']);
-      expect(plainly(twice)).toBe('Not saved: the site is already linked to that pay item.');
+      const twice = saved(linkTippingFeeEndpoint, await link(perCy));
+      expect([twice.record, twice.queued]).toEqual([first.record, undefined]);
+      expect(await tx.disposalSiteTippingFee.count({ where: { siteId: bcl.id } })).toBe(2);
     });
   });
 });

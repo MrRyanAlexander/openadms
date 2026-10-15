@@ -740,6 +740,101 @@ describe('the project map', () => {
   });
 });
 
+describe('where a map or a site’s shape came from (ADR-527)', () => {
+  it('ADR-527 (15) a map fetched from Esri names its zones’ own layer and keeps its copy; a map uploaded or drawn never names one, and a copy is a layer’s', async () => {
+    const { db, world } = tested;
+    await asTheApi();
+    const esri = {
+      source: 'ESRI_LAYER',
+      source_name: 'https://gis.baylinecounty.example/server/rest/services/ROW/FeatureServer/0',
+      uploaded_file_key: 'projects/p1/maps/boundary',
+      zones_source_name:
+        'https://gis.baylinecounty.example/server/rest/services/ROW/FeatureServer/1',
+      zones_file_key: 'projects/p1/maps/zones',
+    };
+    await mapLoaded(1, p1Zones, esri);
+    expect(
+      await db.one(
+        `SELECT "zones_source_name", "zones_file_key" FROM "map_version" WHERE "project_id" = $1`,
+        [world.p1],
+      ),
+    ).toEqual({ zones_source_name: esri.zones_source_name, zones_file_key: esri.zones_file_key });
+    const row = {
+      project_id: world.p1,
+      version: 2,
+      source: 'UPLOAD',
+      zone_name_field: 'ZONE_NAME',
+      boundary: p1Boundary.geometry,
+      ...p1Boundary.box,
+      loaded_by_id: world.admin,
+    };
+    expect(
+      await refusedRow('map_version', { ...row, zones_source_name: esri.zones_source_name }),
+    ).toBe(refusedBy.check);
+    expect(
+      await refusedRow('map_version', {
+        ...row,
+        ...esri,
+        zone_name_field: null,
+      }),
+    ).toBe(refusedBy.check);
+    expect(await refusedRow('map_version', { ...row, ...esri, zones_source_name: null })).toBe(
+      refusedBy.check,
+    );
+  });
+
+  it('ADR-527 (10) a site’s shape keeps where it came from; one fetched from Esri names its layer', async () => {
+    const { world } = tested;
+    await asTheApi();
+    await add('site_area_version', {
+      ...areaOf(world.site, 1),
+      source: 'UPLOAD',
+      source_name: 'marsh-road.kml',
+      uploaded_file_key: 'projects/p1/maps/marsh-road',
+    });
+    expect(
+      await refusedRow('site_area_version', { ...areaOf(world.site, 2), source: 'ESRI_LAYER' }),
+    ).toBe(refusedBy.check);
+    await add('site_area_version', {
+      ...areaOf(world.site, 2),
+      source: 'ESRI_LAYER',
+      source_name: 'https://gis.baylinecounty.example/server/rest/services/Sites/FeatureServer/0',
+    });
+  });
+
+  it('ADR-527 (13) a withdrawal’s note is a withdrawn assignment’s, 500 characters at most', async () => {
+    const { db, world } = tested;
+    await asTheApi();
+    const kims = {
+      person_id: world.monitor,
+      work_date: '2026-10-12',
+      project_id: world.p1,
+      field_event_kinds: '{DISPOSAL}',
+      site_id: world.site,
+      origin: 'PLANNED',
+      made_by_id: world.admin,
+    };
+    expect(await refusedRow('assignment', { ...kims, withdrawal_note: 'Rain day' })).toBe(
+      refusedBy.check,
+    );
+    const withdrawn = { ...kims, archived_at: '2026-10-12T11:00:00Z' };
+    for (const note of ['   ', 'x'.repeat(501)]) {
+      expect(await refusedRow('assignment', { ...withdrawn, withdrawal_note: note })).toBe(
+        refusedBy.check,
+      );
+    }
+    const id = await add('assignment', { ...withdrawn, withdrawal_note: 'Rain day' });
+    // Put back, its note goes with its withdrawal.
+    expect(
+      (await db.refused(`UPDATE "assignment" SET "archived_at" = NULL WHERE "id" = $1`, [id])).code,
+    ).toBe(refusedBy.check);
+    await db.run(
+      `UPDATE "assignment" SET "archived_at" = NULL, "withdrawal_note" = NULL WHERE "id" = $1`,
+      [id],
+    );
+  });
+});
+
 describe('who writes them', () => {
   it('the API writes sites, their labels, fees and shapes, and the map; the worker only reads them', async () => {
     const { db, world } = tested;

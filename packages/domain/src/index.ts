@@ -404,6 +404,17 @@ export {
   type PhotoFileType,
 } from './photo-files.ts';
 export {
+  CrewDaySteps,
+  FirmRecords,
+  ListValues,
+  listValueSettings,
+  type CrewDayStep,
+  type CrewDayStepsCheck,
+  type ListValue,
+  type ListValueSetting,
+  type SetupRecordRefusal,
+} from './setup-records.ts';
+export {
   mapFileSignatureBytes,
   mapFileTypeOf,
   mapFileTypes,

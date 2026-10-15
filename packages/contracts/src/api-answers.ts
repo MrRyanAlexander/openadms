@@ -81,9 +81,13 @@ export const errorCodes = [
   // A role is changed between admin and manager/analyst only: never a monitor's, a read-only
   // viewer's or an archived person's, and never to one of theirs (ADR-427).
   'NOT_BACK_OFFICE',
-  // A contractor user's contractor, or a viewer's project, that the firm doesn't hold.
+  // A contractor user's contractor, or a viewer's project, that the firm doesn't hold; a
+  // person's employer the firm doesn't hold in service; a contractor user put back while their
+  // contractor is archived (ADR-527 (12)).
   'UNKNOWN_CONTRACTOR',
   'UNKNOWN_PROJECT',
+  // An email address cleared on a person who signs in with it (ADR-527 (12)): only a monitor's.
+  'EMAIL_SIGNS_IN',
   // The caller is over a rate limit (ADR-416): status 429, with how long to wait.
   'LIMITED',
   // A setup change the domain's rules won't save (AC-01-80; ADR-424): `reason` is the rule's own
@@ -226,6 +230,9 @@ export const personAnswerSchema = z.strictObject({
   monitorId: z.string().nullable(),
   email: z.string().nullable(),
   phone: z.string().nullable().optional(),
+  // Who employs them when it isn't the firm, and the ID that employer gives them (AC-02-03).
+  employerId: z.uuid().nullable(),
+  employerNumber: z.string().nullable(),
   archived: z.boolean(),
   permissions: z.array(z.enum(permissions)),
   projectIds: z.array(z.uuid()),
@@ -457,6 +464,8 @@ export const assignmentRecordSchema = z.strictObject({
   origin: z.enum(['PLANNED', 'UNPLANNED']),
   madeBy: named.nullable(),
   withdrawnAt: z.iso.datetime().nullable(),
+  // Why it was withdrawn, where the dispatcher wrote a note (ADR-527 (13)).
+  withdrawalNote: z.string().nullable(),
 });
 
 export type AssignmentRecord = z.infer<typeof assignmentRecordSchema>;

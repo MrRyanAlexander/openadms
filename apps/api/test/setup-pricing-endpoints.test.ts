@@ -677,7 +677,7 @@ describe('each service asks again inside its own piece of work (ADR-364)', () =>
   it('called as a manager/analyst without Setup or as a read-only viewer, the form, pay item and rule services change nothing', async () => {
     await world(async (_api, tx, who, within) => {
       const clock = { now: () => new Date('2026-10-12T14:00:00Z') };
-      const forms = new FormSetup(within, clock);
+      const forms = new FormSetup(within, clock, shippedPolicy);
       const payItems = new PayItemSetup(within, clock, shippedPolicy);
       const rules = new RuleSetup(within, clock, shippedPolicy);
       const none = randomUUID();

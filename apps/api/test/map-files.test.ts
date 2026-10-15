@@ -22,7 +22,17 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { MediaStore } from '../src/media/media-store.ts';
 import { installationPolicy } from '../src/policy.ts';
 import { installationSettings, openInstallation, type Tx } from './support/database.ts';
-import { geojsonFile, p1Boundary, p1Zones, ring, shapefile, zipped } from './support/map-files.ts';
+import {
+  geojsonFile,
+  kmlFile,
+  p1Boundary,
+  p1Zones,
+  p1ZonesKml,
+  placemark,
+  ring,
+  shapefile,
+  zipped,
+} from './support/map-files.ts';
 import {
   asTheStacksAdministrator,
   installationMedia,
@@ -144,7 +154,7 @@ describe('a map’s file, sent whole', () => {
         const notAMap = await sent(api, dana, project.id, pdf);
         expect(told(notAMap)).toEqual([415, 'UNSUPPORTED_MEDIA_TYPE']);
         expect(plainly(notAMap)).toBe(
-          'Not taken: a map’s file is a zipped shapefile or a GeoJSON file.',
+          'Not taken: a map’s file is a zipped shapefile, a GeoJSON file or a KML file.',
         );
         const cut = p1MapFile.subarray(0, 5000);
         expect(notSaved(await sent(api, dana, project.id, cut))).toEqual([
@@ -168,6 +178,54 @@ describe('a map’s file, sent whole', () => {
 });
 
 describe('a map, and a site’s shape, loaded from a map’s file', () => {
+  it('ADR-527 (14) P1’s map from a KML file Google Earth exported, and from a KMZ: sent, kept, and loaded as version 1 and 2, each with its file; a KML with a DOCTYPE is never kept', async () => {
+    await world(
+      async (api, tx) => {
+        const { dana, project } = await p1Entered(api, tx);
+        const kml = kmlFile(placemark('P1', [p1Boundary]) + p1ZonesKml);
+        const kept = saved(sendMapFileEndpoint, await sent(api, dana, project.id, kml)).record;
+        expect(kept).toEqual({
+          id: sha256Of(kml),
+          type: 'application/vnd.google-earth.kml+xml',
+          bytes: kml.byteLength,
+          layers: [{ name: null, features: 4, fields: ['name', 'ZONE_NAME'], problem: null }],
+        });
+        const zonesOnly = kmlFile(p1ZonesKml);
+        const kmz = zipped({ 'doc.kml': zonesOnly });
+        const kmzKept = saved(sendMapFileEndpoint, await sent(api, dana, project.id, kmz)).record;
+        expect(kmzKept.layers.map(({ name }) => name)).toEqual(['doc.kml']);
+        const loaded = saved(
+          loadMapFileEndpoint,
+          await ask(api, dana, loadMapFileEndpoint, {
+            ids: { projectId: project.id, mapFileId: kmzKept.id },
+            payload: {
+              sourceName: 'bayline-row.kmz',
+              boundaryLayer: null,
+              zones: { layer: null, nameField: 'ZONE_NAME' },
+            },
+          }),
+        ).record;
+        expect(loaded).toMatchObject({ version: 1, source: 'UPLOAD', fileKept: true });
+        expect(await tx.zone.count({ where: { mapVersionId: loaded.id } })).toBe(3);
+        const laughs = kmlFile(
+          p1ZonesKml,
+          '<?xml version="1.0"?>\n<!DOCTYPE kml [<!ENTITY a "a">]>\n',
+        );
+        expect(notSaved(await sent(api, dana, project.id, laughs))).toEqual([
+          'MAP_FILE_NOT_READ',
+          'Not kept: The file isn’t KML: it holds a DOCTYPE, which a KML file never needs, so it isn’t read.',
+        ]);
+        expect(
+          (await versionsUnder(administrator, installationMedia(), `projects/${project.id}/`))
+            .length,
+        ).toBe(2);
+      },
+      undefined,
+      undefined,
+      theStore(),
+    );
+  });
+
   it('AC-01-59 Dana loads P1’s map from its file: the boundary’s layer and the zones’ by their field are version 1, its file kept with it; a layer it doesn’t hold, or left unnamed among several, is told plainly', async () => {
     await world(
       async (api, tx, who) => {

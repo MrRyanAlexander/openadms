@@ -20,13 +20,24 @@ import {
   type CertificationKind,
   CertificationSubs,
   ContractorMerge,
+  FirmRecords,
   type ContractorPlace,
   type KnownContractor,
   type MergeParty,
   type SubTier,
 } from '@open-adms/domain';
 
-import { type Outcome, QueueingService, Refused, type Warn } from './setup-service.ts';
+import {
+  afterInNameOrder,
+  archiveChange,
+  type Found,
+  type Outcome,
+  paged,
+  QueueingService,
+  Refused,
+  type Searched,
+  type Warn,
+} from './setup-service.ts';
 
 const tierOf: Record<ContractorPosition, SubTier | null> = {
   PRIME: null,
@@ -153,6 +164,15 @@ export interface NewContractor {
   readonly contactPhone?: string;
 }
 
+// A contractor changed: only what is stated; a contact cleared with null.
+export interface ContractorChanges {
+  readonly name?: string;
+  readonly kind?: ContractorKind;
+  readonly contactName?: string | null;
+  readonly contactEmail?: string | null;
+  readonly contactPhone?: string | null;
+}
+
 export interface NewContract {
   readonly projectId: string;
   readonly name: string;
@@ -161,15 +181,34 @@ export interface NewContract {
   readonly signedCopyUrl?: string;
 }
 
+// A contract changed: its name and the link to its signed copy; its prime stays as entered
+// (ADR-527 (2)).
+export interface ContractChanges {
+  readonly name?: string;
+  readonly signedCopyUrl?: string | null;
+}
+
 export class ContractorSetup extends QueueingService {
-  // A contractor the firm already has is picked, never entered again.
-  findContractors(search: string): Promise<Contractor[]> {
-    return this.db.$read((tx) =>
-      tx.contractor.findMany({
-        where: { name: { contains: search, mode: 'insensitive' }, archivedAt: null },
-        orderBy: { name: 'asc' },
-      }),
-    );
+  // A contractor the firm already has is picked, never entered again. A page at a time in name
+  // order, those in service or the archived ones (ADR-527 (3)).
+  findContractors(asked: Searched): Promise<Found<Contractor>> {
+    return this.db.$read(async (tx) => {
+      const last =
+        asked.after === undefined
+          ? null
+          : await tx.contractor.findUnique({ where: { id: asked.after } });
+      if (asked.after !== undefined && last === null) return { records: [], next: null };
+      const rows = await tx.contractor.findMany({
+        where: {
+          name: { contains: asked.search, mode: 'insensitive' },
+          archivedAt: asked.archived ? { not: null } : null,
+          ...afterInNameOrder(last),
+        },
+        orderBy: [{ name: 'asc' }, { id: 'asc' }],
+        take: asked.limit + 1,
+      });
+      return paged(rows, asked.limit);
+    });
   }
 
   contractor(person: string, input: NewContractor): Promise<Outcome<Contractor>> {
@@ -184,6 +223,42 @@ export class ContractorSetup extends QueueingService {
         },
       }),
     );
+  }
+
+  // Its name, kind or contact, audited with the value before. A rule's pick shows a contractor by
+  // its id, so nothing a ticket bills follows its name: nothing is queued.
+  changeContractor(
+    person: string,
+    contractorId: string,
+    changes: ContractorChanges,
+  ): Promise<Outcome<Contractor>> {
+    return this.setup(person, (tx) =>
+      tx.contractor.update({ where: { id: contractorId }, data: changes }),
+    );
+  }
+
+  // Off the searches and new picks; its places on projects stay (ADR-527 (1)). A rule that picks
+  // it is gone while it is archived (ADR-357): each project whose rules pick it is queued. One
+  // merged into another is never put back.
+  archiveContractor(
+    person: string,
+    contractorId: string,
+    archive: boolean,
+  ): Promise<Outcome<Contractor>> {
+    return this.setup(person, async (tx) => {
+      const contractor = await tx.contractor.findUniqueOrThrow({ where: { id: contractorId } });
+      if (!archive) {
+        const refusal = new FirmRecords().putBackRefusal(contractor);
+        if (refusal !== null) throw new Refused(refusal);
+      }
+      const change = archiveChange(contractor.archivedAt, archive, this.clock.now());
+      if (change === null) return contractor;
+      const changed = await tx.contractor.update({ where: { id: contractorId }, data: change });
+      for (const projectId of await this.projectsPicking(tx, { contractorId })) {
+        await this.setupChanged(tx, person, projectId);
+      }
+      return changed;
+    });
   }
 
   addPrime(
@@ -206,7 +281,7 @@ export class ContractorSetup extends QueueingService {
   // certification names, so on each project the tickets whose field events carry a certification
   // the merge moved are queued in the same piece of work, one locked as invoiced left as it is.
   merge(person: string, duplicateId: string, keptId: string): Promise<Outcome<Contractor>> {
-    return this.setup(person, async (tx) => {
+    return this.setup(person, async (tx, warn) => {
       const merge = new ContractorMerge(
         await ContractorSetup.party(tx, duplicateId),
         await ContractorSetup.party(tx, keptId),
@@ -256,10 +331,22 @@ export class ContractorSetup extends QueueingService {
           });
         }
       }
-      return tx.contractor.update({
+      const merged = await tx.contractor.update({
         where: { id: duplicateId },
         data: { mergedIntoId: keptId, archivedAt: now },
       });
+      // What the merge doesn't move, said so (ADR-527 (11)).
+      const kept = await tx.contractor.findUniqueOrThrow({ where: { id: keptId } });
+      warn(
+        new FirmRecords().mergeLeftNaming(merged.name, kept.name, {
+          rulePicks: await tx.ruleCriterionPick.count({
+            where: { contractorId: duplicateId, archivedAt: null, line: { archivedAt: null } },
+          }),
+          employees: await tx.user.count({ where: { employerId: duplicateId, archivedAt: null } }),
+          viewers: await tx.user.count({ where: { contractorId: duplicateId, archivedAt: null } }),
+        }),
+      );
+      return merged;
     });
   }
 
@@ -274,6 +361,35 @@ export class ContractorSetup extends QueueingService {
         },
       }),
     );
+  }
+
+  // Its name and the link to its signed copy, audited with the value before. A rule's contract is
+  // read by its id, so nothing a ticket bills follows its name: nothing is queued.
+  changeContract(
+    person: string,
+    contractId: string,
+    changes: ContractChanges,
+  ): Promise<Outcome<Contract>> {
+    return this.setup(person, (tx) =>
+      tx.contract.update({ where: { id: contractId }, data: changes }),
+    );
+  }
+
+  // Archived, the rules that name it are not valid and never run (spec/RULES.md §7); archived or
+  // put back, the project's tickets are queued.
+  archiveContract(
+    person: string,
+    contractId: string,
+    archive: boolean,
+  ): Promise<Outcome<Contract>> {
+    return this.setup(person, async (tx) => {
+      const contract = await tx.contract.findUniqueOrThrow({ where: { id: contractId } });
+      const change = archiveChange(contract.archivedAt, archive, this.clock.now());
+      if (change === null) return contract;
+      const changed = await tx.contract.update({ where: { id: contractId }, data: change });
+      await this.setupChanged(tx, person, contract.projectId);
+      return changed;
+    });
   }
 
   // A contractor as a merge reads it: the record, and its place on each project it is on.

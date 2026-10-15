@@ -107,6 +107,7 @@ import { apiListSetup } from '../setup/list-setup.controller.ts';
 import { ListSetup } from '../setup/list-setup.ts';
 import { PayItemSetup } from '../setup/pay-item-setup.ts';
 import { apiPayItemSetup, apiRuleSetup } from '../setup/pricing-setup.controller.ts';
+import { EsriLayers, type EsriLayerSource } from '../setup/esri-layers.ts';
 import { MapFileReader } from '../setup/map-file-reader.ts';
 import { MapFiles } from '../setup/map-files.ts';
 import { apiMapFiles } from '../setup/map-files.controller.ts';
@@ -172,6 +173,8 @@ export type ProcessSettings = Pick<
   | 'mapCaFile'
   | 'mapServersAt'
   | 'media'
+  | 'esriPrivateHosts'
+  | 'esriCaFile'
 > & {
   // The certificate and key the process serves HTTPS with (KD-78; ADR-517). None only for a
   // process a test keeps in its own memory and asks without a connection: `listen` refuses it,
@@ -185,8 +188,8 @@ export type ProcessPolicy = Policy;
 
 // What a test puts in place of the process's own: where the log goes instead of standard output,
 // the database (a test's own piece of work, undone afterwards), the read-only login's database
-// for a viewer's reads, the mail, the time, who a phone's address lookup asks and where files
-// are kept.
+// for a viewer's reads, the mail, the time, who a phone's address lookup asks, where files
+// are kept and who an Esri layer is fetched from.
 export interface ProcessParts {
   readonly stream?: { write(line: string): void };
   readonly database?: Database;
@@ -195,6 +198,7 @@ export interface ProcessParts {
   readonly clock?: Clock;
   readonly addresses?: Addresses;
   readonly media?: Media;
+  readonly esri?: EsriLayerSource;
 }
 
 export interface Route {
@@ -443,8 +447,8 @@ export class ApiProcess {
           // Setup's services (task 2.4.2): each change is written as the signed-in person.
           [apiProjectSetup, projectSetup],
           [apiContractorSetup, new ContractorSetup(database, clock, policy)],
-          [apiListSetup, new ListSetup(database, clock)],
-          [apiFormSetup, new FormSetup(database, clock)],
+          [apiListSetup, new ListSetup(database, clock, policy)],
+          [apiFormSetup, new FormSetup(database, clock, policy)],
           [apiPayItemSetup, new PayItemSetup(database, clock, policy)],
           [apiRuleSetup, new RuleSetup(database, clock, policy)],
           [apiSiteSetup, siteSetup],
@@ -461,6 +465,16 @@ export class ApiProcess {
               fileBytesAtMost: policy.mapFileBytesAtMost,
               projects: projectSetup,
               sites: siteSetup,
+              // An Esri feature layer, asked only at an address that is no neighbour of the
+              // server's unless the firm names its host (ADR-527 (15)).
+              esri:
+                more.esri ??
+                new EsriLayers({
+                  answerMs: policy.esriLayerAnswerSeconds * 1000,
+                  bytesAtMost: policy.mapFileBytesAtMost,
+                  privateHosts: settings.esriPrivateHosts,
+                  caFile: settings.esriCaFile,
+                }),
             }),
           ],
           [apiSetupStanding, new SetupStanding(database)],

@@ -9,8 +9,10 @@
 // - **One is changed** while it stands: its work, site, phone and pay items, only what is stated.
 //   A pay item no longer named is taken off by archiving; one named again is put back. Its
 //   person, day and project never change: it is withdrawn and written anew.
-// - **One is withdrawn** by archiving, from this moment, once. It is kept, and everything
-//   recorded under it still names it.
+// - **One is withdrawn** by archiving, from this moment, once, with a note if the dispatcher
+//   writes one. It is kept, and everything recorded under it still names it.
+// - **One withdrawn is put back** as it was (ADR-527 (13)), its note cleared (the audit keeps
+//   it): never one made on a phone, and its person and its phone asked as a new one's are.
 // - **A day's board is read** by an admin or a manager/analyst, by project and day, a page at a
 //   time. One made on a phone under the master passcode is on it, marked unplanned: the board
 //   changes nothing of it.
@@ -42,6 +44,7 @@ const assignmentRead = {
   formDocumentTypes: true,
   origin: true,
   archivedAt: true,
+  withdrawalNote: true,
   person: { select: { id: true, name: true, monitorNumber: true } },
   site: named,
   device: named,
@@ -81,6 +84,7 @@ export interface AssignmentRead {
   readonly origin: 'PLANNED' | 'UNPLANNED';
   readonly madeBy: Named | null;
   readonly withdrawnAt: string | null;
+  readonly withdrawalNote: string | null;
 }
 
 // A person's work for a day, as the board states it.
@@ -238,13 +242,52 @@ export class Assignments extends DispatchService {
     });
   }
 
-  // Withdrawn from the board from now; kept, with everything recorded under it.
-  async withdraw(person: string, assignmentId: string): Promise<Outcome<AssignmentRead>> {
+  // Withdrawn from the board from now, with the dispatcher's note if they wrote one; kept, with
+  // everything recorded under it.
+  async withdraw(
+    person: string,
+    assignmentId: string,
+    note?: string,
+  ): Promise<Outcome<AssignmentRead>> {
     return this.dispatch(person, async (tx) => {
       await this.changeable(tx, assignmentId);
       await tx.assignment.update({
         where: { id: assignmentId },
-        data: { archivedAt: this.clock.now() },
+        data: { archivedAt: this.clock.now(), withdrawalNote: note?.trim() ?? null },
+      });
+      return this.read(tx, assignmentId);
+    });
+  }
+
+  // A withdrawn assignment put back on the board, as it was; its note cleared, the audit keeping
+  // it. Its person and its phone are asked as a new one's are.
+  async reinstate(person: string, assignmentId: string): Promise<Outcome<AssignmentRead>> {
+    return this.dispatch(person, async (tx) => {
+      const withdrawn = await tx.assignment.findUniqueOrThrow({
+        where: { id: assignmentId },
+        select: {
+          origin: true,
+          archivedAt: true,
+          deviceId: true,
+          person: { select: { name: true, role: true, archivedAt: true } },
+        },
+      });
+      const refusal =
+        this.rules.putBackRefusal({
+          personName: withdrawn.person.name,
+          origin: withdrawn.origin,
+          withdrawn: withdrawn.archivedAt !== null,
+        }) ??
+        this.rules.personRefusal({
+          name: withdrawn.person.name,
+          role: withdrawn.person.role,
+          archived: withdrawn.person.archivedAt !== null,
+        });
+      if (refusal !== null) throw new Refused(refusal);
+      if (withdrawn.deviceId !== null) await this.phoneInService(tx, withdrawn.deviceId);
+      await tx.assignment.update({
+        where: { id: assignmentId },
+        data: { archivedAt: null, withdrawalNote: null },
       });
       return this.read(tx, assignmentId);
     });
@@ -370,6 +413,7 @@ export class Assignments extends DispatchService {
       origin: row.origin,
       madeBy: row.madeBy,
       withdrawnAt: row.archivedAt?.toISOString() ?? null,
+      withdrawalNote: row.withdrawalNote,
     };
   }
 }

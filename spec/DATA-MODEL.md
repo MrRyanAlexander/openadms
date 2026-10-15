@@ -396,7 +396,8 @@ only by the API; audited in the security domain; never deleted.
 | deviceUtcOffsetMinutes | int | An unplanned one only: that clock's offset, UTC−12:00 to UTC+14:00 (check) |
 | receivedAt | instant | An unplanned one only: when the server received it; never changes |
 | **createdAt** | instant | |
-| archivedAt | instant | Withdrawn by archiving; never expires |
+| archivedAt | instant | Withdrawn by archiving; never expires; put back by clearing it (ADR-527) |
+| withdrawalNote | text | Why it was withdrawn, as the dispatcher wrote it, 500 characters at most; on a withdrawn one only, cleared when it is put back (check; ADR-527) |
 
 **An unplanned one is what its phone reported (built, ADR-457; agent defaults).** The database
 takes one only as the master passcode's actor, for a phone, naming that same phone; whether an
@@ -778,7 +779,9 @@ edited or deleted**. A site with none uses the project's circle (ADR-142, 144).
 | **version** | int | From 1; once per site |
 | **geometry** | geometry | A Polygon or MultiPolygon (§1) |
 | **westLongitude**, **southLatitude**, **eastLongitude**, **northLatitude** | decimal(38,8) | The shape's bounding box (§1) |
-| **source** | enum `SiteAreaSource` | `DRAWN` · `UPLOAD` |
+| **source** | enum `SiteAreaSource` | `DRAWN` · `UPLOAD` · `ESRI_LAYER` (ADR-527) |
+| sourceName | text | The file's name, or the Esri layer's address; stated on an `ESRI_LAYER` one (check; ADR-527) |
+| uploadedFileKey | text | Where the file it came from is kept; never shown to a viewer (ADR-527) |
 | **createdById** | → `User` | |
 | **effectiveFrom** | instant | When it was saved: the site's area until its next version |
 
@@ -797,7 +800,9 @@ deleted** (ADR-135, 141).
 | zoneNameField | text | |
 | **boundary** | geometry | A Polygon or MultiPolygon (§1) |
 | **westLongitude**, **southLatitude**, **eastLongitude**, **northLatitude** | decimal(38,8) | The shape's bounding box (§1) |
-| uploadedFileKey | text | |
+| uploadedFileKey | text | Where the file it came from (or the Esri boundary layer's copy) is kept; never shown to a viewer |
+| zonesSourceName | text | The zones' Esri layer, on a map fetched from Esri with zones, named in `zoneNameField` (check; ADR-527) |
+| zonesFileKey | text | Where that layer's copy is kept; only with `zonesSourceName` (check); never shown to a viewer (ADR-527) |
 | **loadedById** | → `User` | |
 | **loadedAt** | instant | When it was saved: **the database's own time**, never the client's (`dbgenerated`), since the guard that takes a zone only with its version compares it with the transaction's (ADR-316, KD-68) |
 
@@ -2064,7 +2069,7 @@ A new value in any of them is a code change with an ADR (`spec/LISTS.md` Group 2
 | `MileageSource` ✅ | `ROAD_ROUTE` · `STRAIGHT_LINE` | `CompletedLoadCollection`, `CompletedHaulOutCollection` |
 | `MapSource` | `UPLOAD` · `ESRI_LAYER` · `DRAWN` | `MapVersion` |
 | `QcStatus` ✅ | `QC_REVIEW` · `QC_APPROVED` · `QC_ISSUES` · `QC_VOID` | `QcMark` (ADR-363) |
-| `SiteAreaSource` | `DRAWN` · `UPLOAD` | `SiteAreaVersion` |
+| `SiteAreaSource` | `DRAWN` · `UPLOAD` · `ESRI_LAYER` | `SiteAreaVersion` |
 | `ClockEntryKind` | `IN` · `BREAK_START` · `BREAK_END` · `OUT` | `ClockEntry` |
 | `PhotoView` | `OPERATOR_WITH_PLACARD` · `INTERIOR_OR_BACK` · `RIGHT` · `LEFT` · `FRONT` | `Photo` |
 | `SyncAnswer` | `SAVED` · `QUARANTINED` | `SyncedRecord` |

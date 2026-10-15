@@ -47,3 +47,23 @@ export function stated<T extends object>(sent: T): { [K in keyof T]: Exclude<T[K
     [K in keyof T]: Exclude<T[K], undefined>;
   };
 }
+
+// A page's size where a search names none.
+const searchPage = 50;
+
+// A search as its query says it (ADR-527 (3)): what the name holds (everything where nothing is
+// typed), those in service unless the archived ones are asked for, after the last record of the
+// page before, 50 at most where no limit is said.
+export function searched(query: {
+  readonly search?: string | undefined;
+  readonly archived?: 'true' | 'false' | undefined;
+  readonly after?: string | undefined;
+  readonly limit?: string | undefined;
+}): { search: string; archived: boolean; after?: string; limit: number } {
+  return {
+    search: query.search ?? '',
+    archived: query.archived === 'true',
+    ...(query.after === undefined ? {} : { after: query.after }),
+    limit: query.limit === undefined ? searchPage : Number(query.limit),
+  };
+}

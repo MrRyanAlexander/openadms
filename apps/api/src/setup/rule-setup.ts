@@ -51,6 +51,31 @@ export class RuleSetup extends QueueingService {
     });
   }
 
+  // Archived: it no longer runs; put back, it is checked as a new one is, so an exact copy of
+  // another isn't put back (ADR-527 (8)). A rule a pay item's "Pays when" wrote is archived and
+  // put back only there (the domain's RULE_FROM_PAY_ITEM). Twice writes nothing. Its form's
+  // tickets are queued.
+  archive(person: string, ruleId: string, archive: boolean): Promise<Outcome<SavedRule>> {
+    return this.setup(person, async (tx, warn) => {
+      const held = await tx.rule.findUniqueOrThrow({ where: { id: ruleId } });
+      const book = new RuleBook(tx, held.projectId, this.clock);
+      const rules = await book.entries();
+      const stored = rules.find((rule) => rule.id === ruleId);
+      if (stored === undefined) throw new Error('A rule the project holds is in its rule book.');
+      const check = new ProjectRules(rules).check({ ...stored, archived: archive }, 'RULES');
+      if (check.refusal !== null) throw new Refused(check.refusal);
+      if (stored.archived !== archive) {
+        warn(check.warnings);
+        await tx.rule.update({
+          where: { id: ruleId },
+          data: { archivedAt: archive ? this.clock.now() : null },
+        });
+        await this.setupChanged(tx, person, held.projectId, { workflow: stored.form });
+      }
+      return { id: ruleId, valid: check.valid, reasons: check.reasons };
+    });
+  }
+
   private async saved(
     tx: Prisma.TransactionClient,
     warn: Warn,

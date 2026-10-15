@@ -11,6 +11,7 @@ import {
   changeProjectSettingsEndpoint,
   createClientEndpoint,
   createContractEndpoint,
+  loadEsriMapEndpoint,
   createPersonEndpoint,
   endpoint,
   endpointMethods,
@@ -569,15 +570,43 @@ describe('what every endpoint takes', () => {
     expect(named.filter((name) => secret.test(name.split(' ')[2] ?? ''))).toEqual([]);
   });
 
-  it('AC-10-64 (ASVS 13.2.5): the one address any endpoint takes is a contract’s link to its signed copy, HTTPS only; no endpoint takes an address the server would ask', () => {
+  it('AC-10-64 (ASVS 13.2.5), AC-10-79: the addresses an endpoint takes are a contract’s link to its signed copy and an Esri layer’s, HTTPS only; the layer’s, the one address the server asks, is a layer’s own, with no name, password, query or fragment (and held again where it is asked, ADR-527 (15))', () => {
     const addresses: string[] = [];
     for (const { served, part, json } of described) {
       leaves(json, part, (leaf, at) => {
-        if (leaf['format'] === 'uri' || leaf['format'] === 'url')
+        // An address is said by its format, or by the HTTPS pattern an Esri layer's is held to.
+        const pattern = leaf['pattern'];
+        if (
+          leaf['format'] === 'uri' ||
+          leaf['format'] === 'url' ||
+          (typeof pattern === 'string' && pattern.startsWith('^https:'))
+        )
           addresses.push(`${served.name} ${at}`);
       });
     }
-    expect(addresses).toEqual(['createContract body.properties.signedCopyUrl']);
+    expect(addresses.sort()).toEqual(
+      [
+        'createContract body.properties.signedCopyUrl',
+        'changeContract body.properties.signedCopyUrl.anyOf[0]',
+        'loadEsriMap body.properties.boundaryLayer',
+        'loadEsriMap body.properties.zones.anyOf[0].properties.layer',
+        'addSiteShapeFromEsri body.properties.layer',
+      ].sort(),
+    );
+    const layer = (boundaryLayer: string) =>
+      loadEsriMapEndpoint.body.safeParse({ boundaryLayer, zones: null }).success;
+    expect(
+      layer('https://gis.baylinecounty.example/server/rest/services/ROW/FeatureServer/0'),
+    ).toBe(true);
+    for (const refused of [
+      'http://gis.baylinecounty.example/server/rest/services/ROW/FeatureServer/0',
+      'https://gis.baylinecounty.example/server/rest/services/ROW/FeatureServer/0?f=json',
+      'https://gis.baylinecounty.example/server/rest/services/ROW/FeatureServer/0#x',
+      'https://dana:secret@gis.baylinecounty.example/server/rest/services/ROW/FeatureServer/0',
+      'file:///etc/passwd',
+    ]) {
+      expect(layer(refused), refused).toBe(false);
+    }
     const contract = (signedCopyUrl: string) =>
       createContractEndpoint.body.safeParse({
         name: 'Bayline ROW contract',

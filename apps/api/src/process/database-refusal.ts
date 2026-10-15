@@ -140,6 +140,12 @@ const words: Readonly<Record<string, string>> = {
     'Not saved: an assignment written on the board says who wrote it; one made on a phone has no author and always its phone.',
   assignment_system_actor_check:
     'Not saved: an assignment is for a person and written by a person.',
+  assignment_withdrawal_note_check:
+    'Not saved: a withdrawal’s note is a withdrawn assignment’s, 500 characters at most.',
+  // A person's employer and its ID for them (AC-02-03; ADR-527 (12)).
+  user_employer_number_check:
+    'Not saved: an employer’s ID for a person is kept only beside their employer.',
+  user_employer_id_fkey: 'Not saved: a person’s employer is one of the firm’s contractors.',
   assignment_form_document_types_check:
     'Not saved: the forms an assignment names are an ROE, a survey, an incident or a drop-off log.',
   assignment_pay_item_assignment_id_pay_item_id_key:

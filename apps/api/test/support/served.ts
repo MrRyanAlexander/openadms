@@ -172,7 +172,7 @@ export class Served {
     within: Database,
     mail: Mail = new NoServer(),
     policy: ProcessPolicy = shippedPolicy,
-    more: Pick<ProcessParts, 'addresses' | 'media'> = {},
+    more: Pick<ProcessParts, 'addresses' | 'media' | 'esri'> = {},
   ): Promise<Served> {
     const served = new Served();
     const viewed = new ViewedWithin(within);
@@ -316,9 +316,9 @@ export function worldOn(db: () => Database) {
     work: Work,
     mail: Mail = new NoServer(),
     policy: ProcessPolicy = shippedPolicy,
-    // Who a phone's address lookup asks, where a test has an address server of its own, and
-    // where files are kept, where a test has a store of its own.
-    more: Pick<ProcessParts, 'addresses' | 'media'> = {},
+    // Who a phone's address lookup asks, where a test has an address server of its own; where
+    // files are kept, where a test has a store of its own; and who an Esri layer is fetched from.
+    more: Pick<ProcessParts, 'addresses' | 'media' | 'esri'> = {},
   ): Promise<void> => {
     const dana = randomUUID();
     return undone(db(), dana, async (within, tx) => {

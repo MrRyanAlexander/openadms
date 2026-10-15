@@ -529,6 +529,8 @@ model DisposalSiteTippingFee {
 enum SiteAreaSource {
   DRAWN
   UPLOAD
+  // Fetched from an Esri feature layer by the API (ADR-527).
+  ESRI_LAYER
 
   @@map("site_area_source")
 }
@@ -547,18 +549,22 @@ enum MapSource {
 // The shape is a GeoJSON Polygon or MultiPolygon in longitude and latitude, WGS84, with its
 // bounding box (ARCHITECTURE §3; ADR-311).
 model SiteAreaVersion {
-  id            String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  siteId        String         @map("site_id") @db.Uuid
-  version       Int
-  geometry      Json
-  westLongitude Decimal        @map("west_longitude") @db.Decimal(38, 8)
-  southLatitude Decimal        @map("south_latitude") @db.Decimal(38, 8)
-  eastLongitude Decimal        @map("east_longitude") @db.Decimal(38, 8)
-  northLatitude Decimal        @map("north_latitude") @db.Decimal(38, 8)
-  source        SiteAreaSource
-  createdById   String         @map("created_by_id") @db.Uuid
+  id              String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  siteId          String         @map("site_id") @db.Uuid
+  version         Int
+  geometry        Json
+  westLongitude   Decimal        @map("west_longitude") @db.Decimal(38, 8)
+  southLatitude   Decimal        @map("south_latitude") @db.Decimal(38, 8)
+  eastLongitude   Decimal        @map("east_longitude") @db.Decimal(38, 8)
+  northLatitude   Decimal        @map("north_latitude") @db.Decimal(38, 8)
+  source          SiteAreaSource
+  // Where it came from, as a map version keeps it (ADR-527 (10)): the file's name, or the Esri
+  // layer's address; and where the file it was loaded from is kept, in object storage.
+  sourceName      String?        @map("source_name")
+  uploadedFileKey String?        @map("uploaded_file_key")
+  createdById     String         @map("created_by_id") @db.Uuid
   // The site's area from then until its next version.
-  effectiveFrom DateTime       @default(now()) @map("effective_from") @db.Timestamptz(3)
+  effectiveFrom   DateTime       @default(now()) @map("effective_from") @db.Timestamptz(3)
 
   site      DisposalSite @relation(fields: [siteId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   createdBy User         @relation("SiteAreaVersionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
@@ -587,6 +593,11 @@ model MapVersion {
   eastLongitude   Decimal   @map("east_longitude") @db.Decimal(38, 8)
   northLatitude   Decimal   @map("north_latitude") @db.Decimal(38, 8)
   uploadedFileKey String?   @map("uploaded_file_key")
+  // On a map fetched from Esri with zones, the zones' layer (the boundary's own or another): its
+  // address, and where the copy fetched from it is kept (ADR-527 (15)). Empty on a map loaded
+  // from a file or drawn.
+  zonesSourceName String?   @map("zones_source_name")
+  zonesFileKey    String?   @map("zones_file_key")
   loadedById      String    @map("loaded_by_id") @db.Uuid
   // The database's own time for the piece of work that loaded it, never the client's: a zone is
   // written only in that same piece of work, which the guard tells by this time (ADR-311, 316).
@@ -1500,9 +1511,12 @@ model Assignment {
   deviceUtcOffsetMinutes Int?               @map("device_utc_offset_minutes")
   receivedAt             DateTime?          @map("received_at") @db.Timestamptz(3)
 
-  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  // Withdrawn from the board; never deleted.
-  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  // Withdrawn from the board; never deleted. Put back by clearing it (ADR-527 (13)).
+  archivedAt     DateTime? @map("archived_at") @db.Timestamptz(3)
+  // Why it was withdrawn, as the dispatcher wrote it; cleared when it is put back (the audit
+  // keeps it). At most 500 characters (a check in the guard migration).
+  withdrawalNote String?   @map("withdrawal_note")
 
   person         User                @relation("AssignmentPerson", fields: [personId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   project        Project             @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)

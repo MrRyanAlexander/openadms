@@ -11,6 +11,9 @@ import {
   dbf,
   delawareFeetPrj,
   geojsonFile,
+  kmlFile,
+  p1ZonesKml,
+  placemark,
   p1Boundary,
   p1Zones,
   ring,
@@ -304,7 +307,7 @@ describe('a file made to harm, or broken', () => {
     expect(await problemOf(good.subarray(0, 40))).toBe('The zip can’t be read.');
     expect(await problemOf(good.subarray(0, good.byteLength - 1))).toBe('The zip can’t be read.');
     expect(await problemOf(zipped({ 'readme.txt': encoder.encode('Nothing here.') }))).toBe(
-      'The zip holds no shapefile and no GeoJSON file.',
+      'The zip holds no shapefile, no GeoJSON file and no KML file.',
     );
     const cut = shapefile('zones', p1Zones);
     const file = await read(
@@ -339,8 +342,70 @@ describe('a GeoJSON file', () => {
     expect(await problemOf(encoder.encode('{"type": "FeatureCollection", '))).toBe(
       'The file isn’t GeoJSON: it can’t be read as JSON.',
     );
-    expect(await problemOf(encoder.encode('<?xml version="1.0"?><kml/>'))).toBe(
-      'The file is neither a zipped shapefile nor GeoJSON.',
+    expect(await problemOf(encoder.encode('%PDF-1.7\n'))).toBe(
+      'The file is none of a zipped shapefile, GeoJSON and KML.',
+    );
+  });
+});
+
+describe('a KML file (ADR-527 (14))', () => {
+  it('is one layer, named by nothing: each placemark a feature with its name and its ExtendedData, in longitude and latitude', async () => {
+    const file = await read(kmlFile(p1ZonesKml));
+    expect(file.type).toBe('application/vnd.google-earth.kml+xml');
+    expect(file.layers.map(shown)).toEqual([
+      { name: null, features: 3, fields: ['name', 'ZONE_NAME'], problem: null },
+    ]);
+    expect(zonesOf(file.layers[0]?.geojson)).toEqual(p1ZonesRead);
+    const boundary = await read(kmlFile(placemark('P1', [p1Boundary]), ''));
+    expect(boundary.layers.map(shown)).toEqual([
+      { name: null, features: 1, fields: ['name'], problem: null },
+    ]);
+  });
+
+  it('a KMZ is a zip whose .kml files are its layers, named by their paths', async () => {
+    const file = await read(
+      zipped({ 'doc.kml': kmlFile(p1ZonesKml), 'files/legend.png': new Uint8Array([1]) }),
+    );
+    expect(file.layers.map(shown)).toEqual([
+      { name: 'doc.kml', features: 3, fields: ['name', 'ZONE_NAME'], problem: null },
+    ]);
+  });
+
+  it('one holding a DOCTYPE is refused before it is parsed, so no entity is ever declared or expanded; one that isn’t XML, or whose root isn’t kml, is said plainly', async () => {
+    const laughs = kmlFile(
+      p1ZonesKml,
+      '<?xml version="1.0"?>\n<!DOCTYPE kml [<!ENTITY lol "lol"><!ENTITY lol2 "&lol;&lol;&lol;">]>\n',
+    );
+    expect(await problemOf(laughs)).toBe(
+      'The file isn’t KML: it holds a DOCTYPE, which a KML file never needs, so it isn’t read.',
+    );
+    expect(await problemOf(encoder.encode('<?xml version="1.0"?><kml><Placemark>'))).toBe(
+      'The file isn’t KML: it can’t be read as XML.',
+    );
+    expect(
+      await problemOf(
+        encoder.encode('<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg"/>'),
+      ),
+    ).toBe('The file isn’t KML: its root is not a kml element.');
+    const inZip = await read(
+      zipped({ 'bad.kml': encoder.encode('<!DOCTYPE x><kml/>'), 'doc.kml': kmlFile(p1ZonesKml) }),
+    );
+    expect(inZip.layers.map(({ name, problem }) => [name, problem])).toEqual([
+      [
+        'bad.kml',
+        'It isn’t KML: it holds a DOCTYPE, which a KML file never needs, so it isn’t read.',
+      ],
+      ['doc.kml', null],
+    ]);
+  });
+
+  it('a placemark that is a point is no shape: the layer says so', async () => {
+    const pin = kmlFile(
+      '<Placemark><name>Marsh Road TDSR</name><Point><coordinates>-75.62,39.09,0</coordinates></Point></Placemark>',
+    );
+    const file = await read(pin);
+    expect(file.layers[0]?.problem).toBe(
+      "A shape is a Polygon or a MultiPolygon: Point can't be kept.",
     );
   });
 });

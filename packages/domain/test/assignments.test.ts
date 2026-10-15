@@ -66,6 +66,18 @@ describe('an assignment changed or withdrawn on the board', () => {
     });
   });
 
+  it('ADR-527 (13) a withdrawn one is put back; one that stands has nothing to put back; one made on a phone is never the board’s', () => {
+    expect(rules.putBackRefusal({ ...kims, withdrawn: true })).toBeNull();
+    expect(rules.putBackRefusal(kims)).toEqual({
+      code: 'NOT_WITHDRAWN',
+      message: 'Kim Nguyen’s assignment stands: there is nothing to put back. Nothing was changed.',
+    });
+    expect(
+      rules.putBackRefusal({ personName: 'Tariq Patel', origin: 'UNPLANNED', withdrawn: true })
+        ?.code,
+    ).toBe('MADE_ON_A_PHONE');
+  });
+
   it('AC-02-26 one made on a phone under the master passcode is the phone’s, withdrawn or not', () => {
     for (const withdrawn of [false, true]) {
       expect(

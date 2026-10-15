@@ -1,12 +1,17 @@
 // Setup's endpoints, step 5 (spec/parts/01-setup.md; ARCHITECTURE §6; AC-01-22…30, 83;
 // AC-10-27; BACKLOG 2.4.2; ADR-160, 211, 214, 308, 425): a project's form for one document
 // type, the debris types on its load and haul-out forms, and the firm's own fields on a form as
-// its next version. The door has already asked the caller's role and that they hold Setup; the
+// its next version; a form changed, and a debris type's entry changed, archived and put back
+// (ADR-527 (4), (5)). The door has already asked the caller's role and that they hold Setup; the
 // service asks again inside its own piece of work.
 import {
   addFormDebrisTypeEndpoint,
   addFormDefinitionEndpoint,
+  archiveFormDebrisTypeEndpoint,
+  changeFormDebrisTypeEndpoint,
+  changeFormEndpoint,
   createFormEndpoint,
+  unarchiveFormDebrisTypeEndpoint,
   type BodyOf,
   type ParamsOf,
 } from '@open-adms/contracts';
@@ -74,6 +79,68 @@ export class FormSetupController {
     );
     return addFormDefinitionEndpoint.answer.parse(
       answered(request, outcome, formDefinitionRecord, 'A form’s own fields were saved.'),
+    );
+  }
+  @Serves(changeFormEndpoint)
+  async change(
+    @Param() params: ParamsOf<typeof changeFormEndpoint>,
+    @Body() body: BodyOf<typeof changeFormEndpoint>,
+    @Req() request: FastifyRequest,
+  ) {
+    const outcome = await this.forms.change(callerOf(request).userId, params.formId, stated(body));
+    return changeFormEndpoint.answer.parse(
+      answered(request, outcome, formRecord, 'A form was changed.'),
+    );
+  }
+
+  @Serves(changeFormDebrisTypeEndpoint)
+  async changeDebrisType(
+    @Param() params: ParamsOf<typeof changeFormDebrisTypeEndpoint>,
+    @Body() body: BodyOf<typeof changeFormDebrisTypeEndpoint>,
+    @Req() request: FastifyRequest,
+  ) {
+    const outcome = await this.forms.changeDebrisType(
+      callerOf(request).userId,
+      params.formDebrisTypeId,
+      stated(body),
+    );
+    return changeFormDebrisTypeEndpoint.answer.parse(
+      answered(
+        request,
+        outcome,
+        formDebrisTypeRecord,
+        'A debris type’s entry on a form was changed.',
+      ),
+    );
+  }
+
+  @Serves(archiveFormDebrisTypeEndpoint)
+  async archiveDebrisType(
+    @Param() params: ParamsOf<typeof archiveFormDebrisTypeEndpoint>,
+    @Req() request: FastifyRequest,
+  ) {
+    const outcome = await this.forms.archiveDebrisType(
+      callerOf(request).userId,
+      params.formDebrisTypeId,
+      true,
+    );
+    return archiveFormDebrisTypeEndpoint.answer.parse(
+      answered(request, outcome, formDebrisTypeRecord, 'A debris type was taken off a form.'),
+    );
+  }
+
+  @Serves(unarchiveFormDebrisTypeEndpoint)
+  async unarchiveDebrisType(
+    @Param() params: ParamsOf<typeof unarchiveFormDebrisTypeEndpoint>,
+    @Req() request: FastifyRequest,
+  ) {
+    const outcome = await this.forms.archiveDebrisType(
+      callerOf(request).userId,
+      params.formDebrisTypeId,
+      false,
+    );
+    return unarchiveFormDebrisTypeEndpoint.answer.parse(
+      answered(request, outcome, formDebrisTypeRecord, 'A debris type was put back on a form.'),
     );
   }
 }

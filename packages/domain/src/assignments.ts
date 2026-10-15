@@ -50,6 +50,7 @@ export type AssignmentRefusalCode =
   | 'PHONE_OUT_OF_SERVICE'
   | 'NOT_A_UNIT_RATE_PAY_ITEM'
   | 'ALREADY_WITHDRAWN'
+  | 'NOT_WITHDRAWN'
   | 'MADE_ON_A_PHONE';
 
 export interface AssignmentRefusal {
@@ -217,6 +218,24 @@ export class AssignmentRules {
       return {
         code: 'ALREADY_WITHDRAWN',
         message: `${assignment.personName}’s assignment was already withdrawn. Nothing was changed.`,
+      };
+    }
+    return null;
+  }
+
+  // Why the board can't put this withdrawn assignment back, or nothing (ADR-527 (13)): one made
+  // on a phone is never the board's, and one that stands has nothing to put back. Its person
+  // and its phone are asked as a new one's are.
+  putBackRefusal(assignment: {
+    readonly personName: string;
+    readonly origin: string;
+    readonly withdrawn: boolean;
+  }): AssignmentRefusal | null {
+    if (assignment.origin !== 'PLANNED') return this.changeRefusal(assignment);
+    if (!assignment.withdrawn) {
+      return {
+        code: 'NOT_WITHDRAWN',
+        message: `${assignment.personName}’s assignment stands: there is nothing to put back. Nothing was changed.`,
       };
     }
     return null;

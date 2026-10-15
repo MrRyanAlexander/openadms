@@ -34,6 +34,8 @@ export const madeUpSettings: ProcessSettings = {
   addressesUrl: 'https://addresses.adms.localhost',
   mapCaFile: null,
   mapServersAt: undefined,
+  esriPrivateHosts: [],
+  esriCaFile: null,
   // Named and never asked, unless a test hands the process a store of its own.
   media: {
     url: 'https://s3.adms.localhost',

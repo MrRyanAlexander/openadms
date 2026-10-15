@@ -68,7 +68,13 @@ describe('who may ask', () => {
     expect(asked('changeMasterPasscode')).toEqual(['SIGNED_IN', adminOnly, undefined]);
     expect(
       endpoints.filter(({ permission }) => permission === 'DISPATCH').map(({ name }) => name),
-    ).toEqual(['removePhone', 'writeAssignment', 'changeAssignment', 'withdrawAssignment']);
+    ).toEqual([
+      'removePhone',
+      'writeAssignment',
+      'changeAssignment',
+      'withdrawAssignment',
+      'reinstateAssignment',
+    ]);
   });
 
   it('AC-10-27 each is refused to nobody and to a read-only viewer; taking a phone out of service and changing the passcode to a manager/analyst without the grant, before anything sent is read; nothing is changed', async () => {

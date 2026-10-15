@@ -22,7 +22,15 @@
 // - **A map or a shape is loaded from the file as kept,** read back from the store and its
 //   fingerprint checked again, never from anything the caller sends now; through `ProjectSetup`
 //   and `SiteSetup`, so the domain's `MapShapes` reads it and the tickets it moves are queued, as
-//   for GeoJSON sent in a request. A map version keeps where its file is (`uploadedFileKey`).
+//   for GeoJSON sent in a request. A map version keeps where its file is (`uploadedFileKey`), and
+//   so does a site's shape (ADR-527 (10)).
+// - **A KML file, or a KMZ, is a map's file too** (the user, ADR-523; ADR-527 (14)), read by the
+//   same reader.
+// - **An Esri feature layer is fetched by the server** (ADR-527 (15); `EsriLayers` holds the
+//   request against server-side request forgery), only once the person is asked whether they may,
+//   and before any database work: each layer's copy is kept as a GeoJSON map's file, at its own
+//   fingerprint, and the version (or the site's shape) names the layer's address and keeps where
+//   its copy is. "Refresh from Esri" fetches the layers a version names again, as a new version.
 import { createHash } from 'node:crypto';
 
 import type { Database, MapVersion, SiteAreaVersion } from '@open-adms/db';
@@ -30,6 +38,7 @@ import type { MapFileType } from '@open-adms/domain';
 
 import type { Media } from '../media/media-store.ts';
 import { Refusal } from '../process/refusal.ts';
+import type { EsriLayerSource } from './esri-layers.ts';
 import { MapFileReader, type MapLayer } from './map-file-reader.ts';
 import type { ProjectSetup } from './project-setup.ts';
 import {
@@ -73,10 +82,26 @@ export interface MapFileParts {
   readonly fileBytesAtMost: number;
   readonly projects: ProjectSetup;
   readonly sites: SiteSetup;
+  readonly esri: EsriLayerSource;
+}
+
+// A project's map from Esri feature layers: the boundary's, and the zones' (the same or another)
+// with the field that names them.
+export interface MapFromEsri {
+  readonly boundaryLayer: string;
+  readonly zones: { readonly layer: string; readonly nameField: string } | null;
+  // A secured layer's token: used for this fetch alone, never kept.
+  readonly token: string | undefined;
 }
 
 const fingerprintOf = (bytes: Uint8Array): string =>
   createHash('sha256').update(bytes).digest('hex');
+
+// A layer fetched from Esri: what it holds, and where its copy is kept.
+interface FetchedLayer {
+  readonly geojson: unknown;
+  readonly place: string;
+}
 
 const refused = (code: string, message: string): Outcome<never> => ({
   saved: false,
@@ -89,6 +114,7 @@ export class MapFiles extends SetupService {
   private readonly fileBytesAtMost: number;
   private readonly projects: ProjectSetup;
   private readonly sites: SiteSetup;
+  private readonly esri: EsriLayerSource;
 
   constructor(db: Database, clock: Clock, parts: MapFileParts) {
     super(db, clock);
@@ -97,6 +123,7 @@ export class MapFiles extends SetupService {
     this.fileBytesAtMost = parts.fileBytesAtMost;
     this.projects = parts.projects;
     this.sites = parts.sites;
+    this.esri = parts.esri;
   }
 
   // A map's file for a project: read, and kept once where the server places it, only when it
@@ -113,7 +140,7 @@ export class MapFiles extends SetupService {
       throw new Refusal(
         'UNSUPPORTED_MEDIA_TYPE',
         415,
-        'Not taken: a map’s file is a zipped shapefile or a GeoJSON file.',
+        'Not taken: a map’s file is a zipped shapefile, a GeoJSON file or a KML file.',
       );
     }
     // Who may, and that the project is there, before the file is read or kept.
@@ -133,13 +160,7 @@ export class MapFiles extends SetupService {
       );
     }
     const id = fingerprintOf(bytes);
-    const place = mapFilePlace(projectId, id);
-    if ((await this.media.keep(place, bytes, type)) === 'ALREADY_THERE') {
-      const there = await this.media.read(place, bytes.byteLength);
-      if (there === null || fingerprintOf(there.bytes) !== id) {
-        throw new Error('The store holds another file where a map’s file was to be kept.');
-      }
-    }
+    await this.kept(projectId, bytes, type);
     return {
       saved: true,
       record: {
@@ -181,6 +202,133 @@ export class MapFiles extends SetupService {
     });
   }
 
+  // The project's map from Esri feature layers, as its next version (ADR-527 (15)): each layer
+  // fetched once, its copy kept, the version naming the layers' addresses.
+  async loadEsriMap(
+    person: string,
+    projectId: string,
+    input: MapFromEsri,
+  ): Promise<Outcome<MapVersion>> {
+    const asked = await this.setup(person, (tx) =>
+      tx.project.findUniqueOrThrow({ where: { id: projectId }, select: { id: true } }),
+    );
+    if (!asked.saved) return asked;
+    const boundary = await this.fetched(projectId, input.boundaryLayer, input.token);
+    if ('refusal' in boundary) return boundary.refusal;
+    let zones: { layer: FetchedLayer; nameField: string } | null = null;
+    if (input.zones !== null) {
+      const layer =
+        input.zones.layer === input.boundaryLayer
+          ? boundary
+          : await this.fetched(projectId, input.zones.layer, input.token);
+      if ('refusal' in layer) return layer.refusal;
+      zones = { layer, nameField: input.zones.nameField };
+    }
+    return this.projects.loadMap(person, {
+      projectId,
+      source: 'ESRI_LAYER',
+      sourceName: input.boundaryLayer,
+      boundary: boundary.geojson,
+      zones: zones?.layer.geojson ?? null,
+      zoneNameField: zones?.nameField ?? null,
+      uploadedFileKey: boundary.place,
+      ...(zones === null || input.zones === null
+        ? {}
+        : { zonesSourceName: input.zones.layer, zonesFileKey: zones.layer.place }),
+    });
+  }
+
+  // "Refresh from Esri": the layers a version fetched from Esri names, fetched again as the
+  // project's next version. The version itself never changes.
+  async refreshEsriMap(
+    person: string,
+    mapVersionId: string,
+    token: string | undefined,
+  ): Promise<Outcome<MapVersion>> {
+    const version = await this.db.$read((tx) =>
+      tx.mapVersion.findUnique({ where: { id: mapVersionId } }),
+    );
+    if (version === null) throw new Refusal('NOT_FOUND', 404);
+    if (version.source !== 'ESRI_LAYER' || version.sourceName === null) {
+      const asked = await this.setup(person, () => Promise.resolve(null));
+      if (!asked.saved) return asked;
+      return refused(
+        'NOT_FROM_ESRI',
+        'Not refreshed: this version wasn’t fetched from an Esri layer. Load the map again from its file.',
+      );
+    }
+    return this.loadEsriMap(person, version.projectId, {
+      boundaryLayer: version.sourceName,
+      zones:
+        version.zonesSourceName === null || version.zoneNameField === null
+          ? null
+          : { layer: version.zonesSourceName, nameField: version.zoneNameField },
+      token,
+    });
+  }
+
+  // A site's own shape from an Esri feature layer, as its next version.
+  async esriSiteShape(
+    person: string,
+    siteId: string,
+    layer: string,
+    token: string | undefined,
+  ): Promise<Outcome<SiteAreaVersion>> {
+    const site = await this.db.$read((tx) =>
+      tx.disposalSite.findUnique({ where: { id: siteId }, select: { projectId: true } }),
+    );
+    if (site === null) throw new Refusal('NOT_FOUND', 404);
+    const asked = await this.setup(person, () => Promise.resolve(null));
+    if (!asked.saved) return asked;
+    const shape = await this.fetched(site.projectId, layer, token, 'SITE_SHAPE_NOT_READ');
+    if ('refusal' in shape) return shape.refusal;
+    return this.sites.shape(person, siteId, {
+      source: 'ESRI_LAYER',
+      shape: shape.geojson,
+      sourceName: layer,
+      uploadedFileKey: shape.place,
+    });
+  }
+
+  // One Esri layer, fetched, read as a map's file is, and its copy kept; or why not.
+  private async fetched(
+    projectId: string,
+    address: string,
+    token: string | undefined,
+    notRead = 'MAP_NOT_READ',
+  ): Promise<FetchedLayer | { refusal: Outcome<never> }> {
+    const fetched = await this.esri.fetch(address, token);
+    if (fetched.fetched === null) {
+      return { refusal: refused('ESRI_LAYER_REFUSED', `Not fetched: ${fetched.problem}`) };
+    }
+    const reading = await this.reader.read(fetched.fetched);
+    const [layer] = reading.read?.layers ?? [];
+    if (layer === undefined || layer.geojson === null || layer.problem !== null) {
+      return {
+        refusal: refused(
+          notRead,
+          `Not loaded: the layer ${address}: ${layer?.problem ?? reading.problem ?? 'it holds no shape.'}`,
+        ),
+      };
+    }
+    const place = await this.kept(projectId, fetched.fetched, 'application/geo+json');
+    return { geojson: layer.geojson, place };
+  }
+
+  // A map's file kept once where the server places it, by its own fingerprint; where something
+  // is there already, it is read back and its fingerprint checked.
+  private async kept(projectId: string, bytes: Uint8Array, type: MapFileType): Promise<string> {
+    const id = fingerprintOf(bytes);
+    const place = mapFilePlace(projectId, id);
+    if ((await this.media.keep(place, bytes, type)) === 'ALREADY_THERE') {
+      const there = await this.media.read(place, bytes.byteLength);
+      if (there === null || fingerprintOf(there.bytes) !== id) {
+        throw new Error('The store holds another file where a map’s file was to be kept.');
+      }
+    }
+    return place;
+  }
+
   // A site's own shape from a file sent before for its project, as its next version.
   async siteShape(
     person: string,
@@ -192,10 +340,15 @@ export class MapFiles extends SetupService {
       tx.disposalSite.findUnique({ where: { id: siteId }, select: { projectId: true } }),
     );
     if (site === null) throw new Refusal('NOT_FOUND', 404);
-    const layers = await this.layersAt(mapFilePlace(site.projectId, mapFileId), mapFileId);
+    const place = mapFilePlace(site.projectId, mapFileId);
+    const layers = await this.layersAt(place, mapFileId);
     const shape = MapFiles.picked(layers, layer);
     if (typeof shape === 'string') return refused('SITE_SHAPE_NOT_READ', `Not saved: ${shape}`);
-    return this.sites.shape(person, siteId, { source: 'UPLOAD', shape: shape.geojson });
+    return this.sites.shape(person, siteId, {
+      source: 'UPLOAD',
+      shape: shape.geojson,
+      uploadedFileKey: place,
+    });
   }
 
   // The layers of a file as it was kept, its fingerprint checked again; none kept there, and

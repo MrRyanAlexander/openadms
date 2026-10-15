@@ -55,6 +55,7 @@ const statusOf: Readonly<Record<PeopleRefused, number>> = {
   NOT_BACK_OFFICE: 422,
   UNKNOWN_CONTRACTOR: 422,
   UNKNOWN_PROJECT: 422,
+  EMAIL_SIGNS_IN: 422,
 };
 
 interface Named {

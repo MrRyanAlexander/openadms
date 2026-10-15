@@ -208,8 +208,8 @@ export const sync: Story = {
       [p2, 'P2'],
     ]);
 
-    const forms = new FormSetup(api, clock);
-    const lists = new ListSetup(api, clock);
+    const forms = new FormSetup(api, clock, story.policy);
+    const lists = new ListSetup(api, clock, story.policy);
     const projects = new ProjectSetup(api, clock, story.policy);
     const payItems = new PayItemSetup(api, clock, story.policy);
     const certifications = new Certifications(api, clock, story.policy);

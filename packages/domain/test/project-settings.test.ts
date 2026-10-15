@@ -24,6 +24,7 @@ const shipped = {
   DATABASE_WORK_LONGEST_MS: '5000',
   DATABASE_BUSY_RETRY_SECONDS: '5',
   MAP_FILE_RING_PAIRS_AT_MOST: '50000000',
+  ESRI_LAYER_ANSWER_SECONDS: '60',
   PASSWORD_MINIMUM_LENGTH: '15',
   PASSWORD_MAXIMUM_LENGTH: '128',
   PASSWORD_RESET_MINUTES: '60',
@@ -166,6 +167,7 @@ describe('the policy values', () => {
       mapFileUnzippedBytesAtMost: 'MAP_FILE_UNZIPPED_BYTES_AT_MOST',
       mapFileEntriesAtMost: 'MAP_FILE_ENTRIES_AT_MOST',
       mapFileRingPairsAtMost: 'MAP_FILE_RING_PAIRS_AT_MOST',
+      esriLayerAnswerSeconds: 'ESRI_LAYER_ANSWER_SECONDS',
       rateLimitWindowSeconds: 'RATE_LIMIT_WINDOW_SECONDS',
       rateLimitRequestsPerAddress: 'RATE_LIMIT_REQUESTS_PER_ADDRESS',
       rateLimitRequestsPerAccount: 'RATE_LIMIT_REQUESTS_PER_ACCOUNT',
@@ -273,14 +275,15 @@ describe('the policy values', () => {
     }
   });
 
-  it('AC-10-71 a piece of work waits 2 s for a connection and runs 5 s at most unless changed, and a caller told the database is busy waits 5 s; a shape of a shapefile pairs fifty million outer rings and holes at most: each held to its range (ADR-524)', () => {
+  it('AC-10-71 a piece of work waits 2 s for a connection and runs 5 s at most unless changed, and a caller told the database is busy waits 5 s; a shape of a shapefile pairs fifty million outer rings and holes at most; an Esri layer has 60 s (ADR-527): each held to its range (ADR-524)', () => {
     const policy = Policy.from(shipped);
     expect([
       policy.databaseConnectionWaitMs,
       policy.databaseWorkLongestMs,
       policy.databaseBusyRetrySeconds,
       policy.mapFileRingPairsAtMost,
-    ]).toEqual([2000, 5000, 5, 50_000_000]);
+      policy.esriLayerAnswerSeconds,
+    ]).toEqual([2000, 5000, 5, 50_000_000, 60]);
     for (const [name, outside, inside, range] of [
       ['DATABASE_CONNECTION_WAIT_MS', ['99', '600001'], ['100', '600000'], 'from 100 to 600000'],
       [
@@ -291,6 +294,7 @@ describe('the policy values', () => {
       ],
       ['DATABASE_BUSY_RETRY_SECONDS', ['0', '3601'], ['1', '3600'], 'from 1 to 3600'],
       ['MAP_FILE_RING_PAIRS_AT_MOST', ['0'], ['1'], '1 or more'],
+      ['ESRI_LAYER_ANSWER_SECONDS', ['0', '601'], ['1', '600'], 'from 1 to 600'],
     ] as const) {
       for (const written of outside) {
         expect(() => Policy.from({ ...shipped, [name]: written })).toThrow(

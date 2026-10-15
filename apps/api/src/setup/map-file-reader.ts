@@ -25,8 +25,17 @@
 //   most `MAP_FILE_RING_PAIRS_AT_MOST`, or its layer can't be read, said so. Many islands with no
 //   holes, or many shapes of a ring each, pair nothing.
 // - **A GeoJSON file** is one layer, named by nothing.
+// - **A KML file** (the user, ADR-523; ADR-527 (14), 528) is one layer, named by nothing, and each
+//   `.kml` in a zip (a KMZ) is a layer named by its path: read by `@xmldom/xmldom` into a document
+//   and by `@tmcw/togeojson` into GeoJSON, each placemark a feature with its name and its
+//   `ExtendedData` as fields (a placemark with no geometry is left out). **A KML holding a
+//   `<!DOCTYPE` is refused before it is parsed** (a KML file never needs one), so no entity is
+//   ever declared, expanded or fetched (OWASP's XML external entities); xmldom fetches nothing
+//   anyway. One whose root isn't `kml`, or that can't be parsed, can't be read, said so.
 import { inflateRawSync } from 'node:zlib';
 
+import { kml } from '@tmcw/togeojson';
+import { DOMParser } from '@xmldom/xmldom';
 import { iter } from 'but-unzip';
 import proj4 from 'proj4';
 import { combine, parseDbf, parseShp } from 'shpjs';
@@ -62,7 +71,7 @@ export type MapFileReading =
 // What a reading found wrong with the file as a whole.
 class NotRead extends Error {}
 
-const layerParts = new Set(['shp', 'dbf', 'prj', 'cpg', 'geojson', 'json']);
+const layerParts = new Set(['shp', 'dbf', 'prj', 'cpg', 'geojson', 'json', 'kml']);
 
 const text = (bytes: Uint8Array): string => new TextDecoder().decode(bytes);
 
@@ -91,15 +100,20 @@ export class MapFileReader {
   async read(bytes: Uint8Array): Promise<MapFileReading> {
     const type = MapFileReader.typeOf(bytes);
     if (type === null) {
-      return { read: null, problem: 'The file is neither a zipped shapefile nor GeoJSON.' };
+      return {
+        read: null,
+        problem: 'The file is none of a zipped shapefile, GeoJSON and KML.',
+      };
     }
     try {
       const layers =
         type === 'application/zip'
           ? await this.zipped(bytes)
-          : [MapFileReader.geojsonLayer(null, bytes)];
+          : type === 'application/vnd.google-earth.kml+xml'
+            ? [MapFileReader.kmlLayer(null, bytes)]
+            : [MapFileReader.geojsonLayer(null, bytes)];
       if (layers.length === 0) {
-        throw new NotRead('The zip holds no shapefile and no GeoJSON file.');
+        throw new NotRead('The zip holds no shapefile, no GeoJSON file and no KML file.');
       }
       return { read: { type, layers }, problem: null };
     } catch (error) {
@@ -164,6 +178,8 @@ export class MapFileReader {
         );
       } else if (key.endsWith('.geojson') || key.endsWith('.json')) {
         layers.push(MapFileReader.geojsonLayer(key, part));
+      } else if (key.endsWith('.kml')) {
+        layers.push(MapFileReader.kmlLayer(key, part));
       }
     }
     return layers;
@@ -290,6 +306,37 @@ export class MapFileReader {
       return MapFileReader.unread(name, 'It isn’t GeoJSON: it can’t be read as JSON.');
     }
     return MapFileReader.layer(name, geojson);
+  }
+
+  // A KML file's placemarks as GeoJSON; a file of its own that can't be read is the file's
+  // problem, one in a zip is that layer's.
+  private static kmlLayer(name: string | null, bytes: Uint8Array): MapLayer {
+    const notKml = (problem: string): MapLayer => {
+      if (name === null) throw new NotRead(`The file isn’t KML: ${problem}`);
+      return MapFileReader.unread(name, `It isn’t KML: ${problem}`);
+    };
+    const xml = text(bytes);
+    if (/<!DOCTYPE/i.test(xml)) {
+      return notKml('it holds a DOCTYPE, which a KML file never needs, so it isn’t read.');
+    }
+    let document: ReturnType<DOMParser['parseFromString']>;
+    try {
+      document = new DOMParser({
+        onError: (level) => {
+          if (level !== 'warning') throw new Error('not well-formed');
+        },
+      }).parseFromString(xml, 'text/xml');
+    } catch {
+      return notKml('it can’t be read as XML.');
+    }
+    if (document.documentElement?.localName !== 'kml') {
+      return notKml('its root is not a kml element.');
+    }
+    const read = kml(document) as { features?: { geometry?: unknown }[] };
+    const features = (read.features ?? []).filter(
+      (feature) => feature.geometry !== null && feature.geometry !== undefined,
+    );
+    return MapFileReader.layer(name, { type: 'FeatureCollection', features });
   }
 
   private static layer(name: string | null, geojson: unknown): MapLayer {

@@ -653,6 +653,8 @@ describe('reading a person', () => {
         'archived',
         'contractorId',
         'email',
+        'employerId',
+        'employerNumber',
         'id',
         'monitorId',
         'name',

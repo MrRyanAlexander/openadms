@@ -122,12 +122,23 @@ describe('who may ask', () => {
       return [access, roles, permission];
     };
     expect(asked('listAssignments')).toEqual(['SIGNED_IN', backOfficeRoles, undefined]);
-    for (const name of ['writeAssignment', 'changeAssignment', 'withdrawAssignment']) {
+    for (const name of [
+      'writeAssignment',
+      'changeAssignment',
+      'withdrawAssignment',
+      'reinstateAssignment',
+    ]) {
       expect(asked(name), name).toEqual(['SIGNED_IN', backOfficeRoles, 'DISPATCH']);
     }
     expect(
       endpoints.filter(({ permission }) => permission === 'DISPATCH').map(({ name }) => name),
-    ).toEqual(['removePhone', 'writeAssignment', 'changeAssignment', 'withdrawAssignment']);
+    ).toEqual([
+      'removePhone',
+      'writeAssignment',
+      'changeAssignment',
+      'withdrawAssignment',
+      'reinstateAssignment',
+    ]);
   });
 
   it('AC-10-27 each is refused to nobody and to a read-only viewer; writing, changing and withdrawing to a manager/analyst without the grant, before anything sent is read; Setup opens nothing here; nothing is written', async () => {
@@ -261,6 +272,7 @@ describe('Monday’s board', () => {
           origin: 'PLANNED',
           madeBy: { id: who.luis, name: 'Luis Ortega' },
           withdrawnAt: null,
+          withdrawalNote: null,
         },
         warnings: [],
       });
@@ -626,6 +638,7 @@ describe('an assignment changed and withdrawn', () => {
       expect(saved(withdrawAssignmentEndpoint, answer).record).toEqual({
         ...kims,
         withdrawnAt: '2026-10-12T10:05:00.000Z',
+        withdrawalNote: null,
       });
       expect(
         await tx.auditRecord.findMany({

@@ -198,7 +198,7 @@ export const p1Reviewed: Story = {
       return project.id;
     });
     const contractors = new ContractorSetup(api, clock, story.policy);
-    const forms = new FormSetup(api, clock);
+    const forms = new FormSetup(api, clock, story.policy);
     const payItems = new PayItemSetup(api, clock, story.policy);
     await saved(contractors.addPrime(luis, p2, coastline));
     await saved(

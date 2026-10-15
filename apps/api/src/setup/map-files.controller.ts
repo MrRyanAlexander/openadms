@@ -2,10 +2,15 @@
 // (spec/parts/01-setup.md steps 3 and 7; ARCHITECTURE §3, §6 "Uploads"; AC-01-56, AC-01-59;
 // BACKLOG 2.6.4, C86, C100; ADR-485; KD-76). The door has already asked the caller's role and
 // that they hold Setup; the service asks again. The log says who sent which file and how large
-// it is: never where it is kept or anything it holds (OWASP ASVS 5.0 16.2.5).
+// it is: never where it is kept or anything it holds (OWASP ASVS 5.0 16.2.5). A map, its refresh
+// or a site's shape from an Esri feature layer (ADR-527 (15)): the log never says the layer's
+// address or its token.
 import {
   addSiteShapeFileEndpoint,
+  addSiteShapeFromEsriEndpoint,
+  loadEsriMapEndpoint,
   loadMapFileEndpoint,
+  refreshEsriMapEndpoint,
   sendMapFileEndpoint,
   type BodyOf,
   type ParamsOf,
@@ -81,6 +86,54 @@ export class MapFilesController {
         siteAreaVersionRecord,
         'A site’s own shape was saved from a file.',
       ),
+    );
+  }
+  @Serves(loadEsriMapEndpoint)
+  async loadEsriMap(
+    @Param() params: ParamsOf<typeof loadEsriMapEndpoint>,
+    @Body() body: BodyOf<typeof loadEsriMapEndpoint>,
+    @Req() request: FastifyRequest,
+  ) {
+    const outcome = await this.files.loadEsriMap(callerOf(request).userId, params.projectId, {
+      boundaryLayer: body.boundaryLayer,
+      zones: body.zones,
+      token: body.token,
+    });
+    return loadEsriMapEndpoint.answer.parse(
+      answered(request, outcome, mapVersionRecord, 'A project’s map was loaded from Esri.'),
+    );
+  }
+
+  @Serves(refreshEsriMapEndpoint)
+  async refreshEsriMap(
+    @Param() params: ParamsOf<typeof refreshEsriMapEndpoint>,
+    @Body() body: BodyOf<typeof refreshEsriMapEndpoint>,
+    @Req() request: FastifyRequest,
+  ) {
+    const outcome = await this.files.refreshEsriMap(
+      callerOf(request).userId,
+      params.mapVersionId,
+      body?.token,
+    );
+    return refreshEsriMapEndpoint.answer.parse(
+      answered(request, outcome, mapVersionRecord, 'A project’s map was refreshed from Esri.'),
+    );
+  }
+
+  @Serves(addSiteShapeFromEsriEndpoint)
+  async siteShapeFromEsri(
+    @Param() params: ParamsOf<typeof addSiteShapeFromEsriEndpoint>,
+    @Body() body: BodyOf<typeof addSiteShapeFromEsriEndpoint>,
+    @Req() request: FastifyRequest,
+  ) {
+    const outcome = await this.files.esriSiteShape(
+      callerOf(request).userId,
+      params.siteId,
+      body.layer,
+      body.token,
+    );
+    return addSiteShapeFromEsriEndpoint.answer.parse(
+      answered(request, outcome, siteAreaVersionRecord, 'A site’s own shape was saved from Esri.'),
     );
   }
 }

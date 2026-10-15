@@ -99,6 +99,15 @@ two crew-day steps that falls in neither, and every active rule that isn't valid
 left naming an archived form, contract or pay item among them); it never refuses anything (built at
 the domain, ADR-357: `SetupCheck`).
 
+**Nothing set up is deleted; everything is changed, taken off and put back** (ADR-025, 527): a
+client, a declaration event, a contractor, a contract, a debris type on a form, a value of any of the
+firm's lists, a pay item, a prime's rate, a rule, a site, its labels and its tipping fee link are
+archived (off new picks; what already points at them still does) and put back as they were, each
+change audited with the value before, and the tickets it moves re-checked; a built-in value is
+renamed, never archived; a form is switched off, never archived; a contract keeps its prime. A map
+or a site's own shape also comes from a KML file or straight from the firm's Esri feature layer,
+refreshed when the firm says (built at the API, ADR-527).
+
 **What each site's phones will ask for** is worked out here, ahead: for each site, debris type and
 prime, from the rules that could match there and the Unit of Measure and capture settings of the pay
 items they pay: a load call, a scale weight, or a count of the tickets a load carries. It's shown on

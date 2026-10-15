@@ -30,6 +30,9 @@ import { IncidentOffers, RuleCriteria } from '@open-adms/domain';
 import { uuidv7 } from '../ids.ts';
 import type { Story } from '../runner.ts';
 
+// A search as the setup screen asks it: what was typed, those in service, the first page.
+const searchFor = (search: string) => ({ search, archived: false, limit: 50 });
+
 const timeZone = 'America/New_York';
 const thursday = (time: string): string => `2026-10-08T${time}:00-04:00`;
 const friday = (time: string): string => `2026-10-09T${time}:00-04:00`;
@@ -91,8 +94,8 @@ export const setup: Story = {
     const { api, clock } = story;
     const projects = new ProjectSetup(api, clock, story.policy);
     const contractors = new ContractorSetup(api, clock, story.policy);
-    const lists = new ListSetup(api, clock);
-    const forms = new FormSetup(api, clock);
+    const lists = new ListSetup(api, clock, story.policy);
+    const forms = new FormSetup(api, clock, story.policy);
     const payItems = new PayItemSetup(api, clock, story.policy);
     const sites = new SiteSetup(api, clock, story.policy);
     const rules = new RuleSetup(api, clock, story.policy);
@@ -271,7 +274,11 @@ export const setup: Story = {
       thursday('08:10'),
       'Step 1, the client: Dana searches for Bayline County, finds none and creates it',
     );
-    story.check('no client is called Bayline yet', await projects.findClients('bayline'), []);
+    story.check(
+      'no client is called Bayline yet',
+      (await projects.findClients(searchFor('bayline'))).records,
+      [],
+    );
     const client = await saved(projects.client(dana, { name: 'Bayline County' }));
 
     story.at(
@@ -280,7 +287,7 @@ export const setup: Story = {
     );
     story.check(
       'no declaration event has that reference yet',
-      await projects.findDeclarationEvents('DR-9001'),
+      (await projects.findDeclarationEvents(searchFor('DR-9001'))).records,
       [],
     );
     const fema = await api.declarationReferenceType.findFirstOrThrow({
@@ -1591,8 +1598,9 @@ export const setup: Story = {
       friday('09:00'),
       'Luis Ortega sets up P2: he searches for the client and the declaration event, finds each, and picks it',
     );
-    const [found, ...otherClients] = await projects.findClients('bayline');
-    const [declared, ...otherEvents] = await projects.findDeclarationEvents('delphine');
+    const [found, ...otherClients] = (await projects.findClients(searchFor('bayline'))).records;
+    const [declared, ...otherEvents] = (await projects.findDeclarationEvents(searchFor('delphine')))
+      .records;
     if (found === undefined || declared === undefined)
       throw new Error('Luis found nothing to pick.');
     const ppdr = await picked.programType('PPDR');
@@ -1674,7 +1682,7 @@ export const setup: Story = {
       ),
       'contract_project_id_prime_id_fkey',
     );
-    const [known] = await contractors.findContractors('coastline');
+    const [known] = (await contractors.findContractors(searchFor('coastline'))).records;
     if (known === undefined) throw new Error('Luis found no Coastline to pick.');
     await saved(contractors.addPrime(luis, p2, known.id));
     await saved(contractors.contract(luis, p2ContractInput));

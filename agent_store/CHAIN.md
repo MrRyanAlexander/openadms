@@ -7,7 +7,7 @@
 > task's ADR and its session-log line in `DECISIONS.md`). No other file carries these counts.
 > **A count that differs from this page without a reason is a finding, not noise.**
 
-**Seen whole:** 2026-10-14, task 2.8.4 (ADR-526), on the user's Mac, the installation at head: `pnpm ready`, typecheck, `pnpm test`, `pnpm scenarios`, `pnpm security`, lint and licences (no dependency changed: the frozen install not rerun). Memory last sampled after ADR-512 (Docker's VM at 4 GB, the containers together under 1 GB through a full `pnpm test`).
+**Seen whole:** 2026-10-15, task 2.8.5 (ADR-527, 528), on the user's Mac, the installation at head: `pnpm ready`, the frozen install (two dependencies added), typecheck, `pnpm test`, `pnpm scenarios`, `pnpm security`, lint and licences. Memory last sampled after ADR-512 (Docker's VM at 4 GB, the containers together under 1 GB through a full `pnpm test`).
 
 ## `pnpm ready`
 
@@ -15,19 +15,19 @@
 |---|---|
 | `pnpm local:up` | eight `Healthy` services (`routing-tls` the seventh, ADR-517; `objectstore-tls` the eighth, ADR-525), `Keeping the stack’s root and every service’s certificate.`, `Keeping the object store’s bucket adms-media (it keeps every version).` (ADR-480), then the API's and the worker's containers: `https://api.adms.localhost/health → 200 {"status":"ok"}` and `the worker’s health answer → 200 {"status":"ok","jobsWaiting":0,"jobsSetAside":0,"oldestJobWaitingSeconds":0}` |
 | `pnpm installer:check` | **35 `✓`**, no `✗`, exit 0 |
-| Migrations at head | **120** (`packages/db/prisma/migrations/` is the list) |
+| Migrations at head | **122** (`packages/db/prisma/migrations/` is the list) |
 | `pnpm local:down` (close-out) | 10 containers and the network: 11 `Removed` lines |
 
 ## `pnpm test`
 
-**`Test Files 170 passed (170)`, `Tests 3047 passed (3047)`.**
+**`Test Files 173 passed (173)`, `Tests 3091 passed (3091)`.**
 
 | Project | Tests | Files | Needs |
 |---|---|---|---|
-| `packages/domain` | 807 | 43 | nothing |
+| `packages/domain` | 818 | 44 | nothing |
 | `packages/contracts` | 91 | 9 | nothing |
-| `apps/api` | 648 | 49 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
-| `packages/db` | 1064 | 45 | `pnpm ready` |
+| `apps/api` | 678 | 51 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
+| `packages/db` | 1067 | 45 | `pnpm ready` |
 | `packages/scenarios` | 156 | 7 | `pnpm ready` for `stories.test.ts` (the runner and a run's template, 5) and `story-api.test.ts` (a story's API over HTTPS through the proxy, every request of a story's phone, the back office and the viewers at their browsers, and a turn-in meeting another request of its phone in the database, 16); the flag catalogue (78 flags), the harness, the phone held to the sync contract's suite and to what it sends and takes in at a sync, its photographs' files and its turn-in among it, and its wait when told to (25), the policy and the server apps' exports (2) need nothing. **The stories themselves are not here** (ADR-446) |
 | `apps/worker` | 47 | 5 | `pnpm ready` for the map servers (13), their answers on an HTTPS server of the stack's certificate (6) and its container (3); the process (14) and the job loop (its set-aside lines and its health, 11) need nothing |
 | `infra/local` | 77 | 6 | `pnpm ready` for the map services and every hop's TLS, the object store's thirteen ports refused among it (`hops.test.ts`, 25); Docker alone for `compose.test.ts` (18); nothing for the certificates (12) and the extract |
@@ -37,12 +37,12 @@
 ## `pnpm lint`, `pnpm licences`
 
 - Lint: `All matched files use Prettier code style!`, exit 0 (ESLint under a 4 GB heap, ADR-465).
-- Licences: **`452 packages: 452 allowed, 0 refused, 0 undecided.`** on the Mac; one fewer on
+- Licences: **`454 packages: 454 allowed, 0 refused, 0 undecided.`** on the Mac; one fewer on
   Linux (the lockfile's Mac-only packages aren't installed there; not seen there since ADR-479).
 
 ## `pnpm scenarios`
 
-`This run’s template, adms_story_template_…: 120 migrations applied`, then **`Stories: 22 passed, 0
+`This run’s template, adms_story_template_…: 122 migrations applied`, then **`Stories: 22 passed, 0
 failed.`** Each story `passed: N checks, N passed, 0 failed`:
 
 | Story | Checks | | Story | Checks |

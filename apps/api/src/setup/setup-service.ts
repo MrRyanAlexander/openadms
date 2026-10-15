@@ -47,6 +47,49 @@ export interface Clock {
   now(): Date;
 }
 
+// A search, a page at a time in name order (ADR-527 (3)): what the name holds, those in service
+// or the archived ones, after the last record of the page before, `limit` at most.
+export interface Searched {
+  readonly search: string;
+  readonly archived: boolean;
+  readonly after?: string | undefined;
+  readonly limit: number;
+}
+
+export interface Found<T> {
+  readonly records: readonly T[];
+  // The last record's id, where another page follows.
+  readonly next: string | null;
+}
+
+// A page of rows read one past the page, to know whether another follows.
+export function paged<T extends { readonly id: string }>(
+  rows: readonly T[],
+  limit: number,
+): Found<T> {
+  const records = rows.slice(0, limit);
+  return { records, next: rows.length > limit ? (records.at(-1)?.id ?? null) : null };
+}
+
+// Where a page in name order starts: after the record of the page before, by its name then its id.
+export function afterInNameOrder(last: { readonly id: string; readonly name: string } | null): {
+  OR?: ({ name: { gt: string } } | { name: string; id: { gt: string } })[];
+} {
+  if (last === null) return {};
+  return { OR: [{ name: { gt: last.name } }, { name: last.name, id: { gt: last.id } }] };
+}
+
+// A record archived now, or put back: written only where it changes, so archiving one already
+// archived keeps its first time, and putting back one in service writes nothing (ADR-527 (1)).
+export function archiveChange(
+  archivedAt: Date | null,
+  archive: boolean,
+  now: Date,
+): { archivedAt: Date | null } | null {
+  if (archive === (archivedAt !== null)) return null;
+  return { archivedAt: archive ? now : null };
+}
+
 // Thrown inside a piece of work to undo it; the service answers with the refusal.
 export class Refused extends Error {
   readonly refusal: Refusal;
@@ -180,6 +223,26 @@ export abstract class QueueingService extends SetupService {
         lockedAsInvoiced: count((queued) => queued.lockedAsInvoiced),
       },
     };
+  }
+
+  // Every project whose rules (those not archived) pick the record, by the pick's own column: a
+  // rule that picks an archived record is not valid and never runs (ADR-357), so archiving it or
+  // putting it back moves what those projects' tickets bill (ADR-527).
+  protected async projectsPicking(
+    tx: Prisma.TransactionClient,
+    picked: Prisma.RuleCriterionPickWhereInput,
+  ): Promise<string[]> {
+    const picks = await tx.ruleCriterionPick.findMany({
+      where: {
+        ...picked,
+        archivedAt: null,
+        line: { archivedAt: null, rule: { archivedAt: null } },
+      },
+      select: { projectId: true },
+      distinct: ['projectId'],
+      orderBy: { projectId: 'asc' },
+    });
+    return picks.map((pick) => pick.projectId);
   }
 
   // A setup change by a person: every ticket of the project its query finds is queued, a void
