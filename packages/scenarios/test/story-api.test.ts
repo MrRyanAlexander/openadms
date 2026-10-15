@@ -14,24 +14,28 @@ import {
   sendPhotoFilePartEndpoint,
   syncSentSchema,
   turnInSentSchema,
+  type TurnInSent,
 } from '@open-adms/contracts';
+import { systemActorId } from '@open-adms/db';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { uuidv7 } from '../src/ids.ts';
 import { pathOf, storiesHostname } from '../src/over-https.ts';
 import { Runner, type Story, type StoryContext } from '../src/runner.ts';
-import { assigned } from '../src/stories/board.ts';
+import { assigned, firstBlocks, synced } from '../src/stories/board.ts';
 import { setUpP1 } from '../src/stories/p1.ts';
-import { StoryTemplate } from '../src/story-database.ts';
+import { storyMasterPasscode, StoryTemplate } from '../src/story-database.ts';
 
 const httpsPort = Number(process.env['ADMS_HTTPS_PORT'] ?? '443');
 const httpPort = Number(process.env['ADMS_HTTP_PORT'] ?? '80');
 
 let template: StoryTemplate;
 
+// Migrated and seeded once for the file: as long as `stories.test.ts` gives its own, since the
+// whole run's files go at once.
 beforeAll(async () => {
   template = await StoryTemplate.create();
-});
+}, 120_000);
 
 afterAll(async () => {
   await template.drop();
@@ -464,6 +468,162 @@ describe('the back office and the viewers at their browsers, over HTTPS (ADR-496
     expect(result.error).toBe(
       `${luissEmail}’s authenticator already gave this step’s code: the story’s clock must move on thirty seconds before they sign in again.`,
     );
+  });
+});
+
+describe('a phone turned in at the same moment as another request of its own (BACKLOG 2.8.2, C141; ADR-488, 524)', () => {
+  const nothingHeld = {
+    unplannedAssignments: [],
+    passcodeUses: [],
+    records: [],
+    held: [],
+    photos: [],
+  };
+  // What a request came to: its answer, or the words it was refused with.
+  const cameTo = async (asked: Promise<unknown>): Promise<string> => {
+    try {
+      return JSON.stringify(await asked);
+    } catch (problem) {
+      return problem instanceof Error ? problem.message : String(problem);
+    }
+  };
+  // A turn-in under the master passcode, at the story's turn-in endpoint.
+  const turnInOf = (
+    story: StoryContext,
+    deviceId: string,
+    lastUsed: TurnInSent['lastUsed'] = [],
+  ): Promise<unknown> => {
+    const { server } = story;
+    if (server.turnIn === undefined) throw new Error('The story’s server turns no phone in.');
+    return server.turnIn(deviceId, { passcode: storyMasterPasscode, holds: nothingHeld, lastUsed });
+  };
+  const turnedIn = (answer: string): string =>
+    answer.startsWith('{"turnedIn":true,"wipe":true') ? 'turned in' : answer;
+  const provenNoMore = 'provePhone was answered PHONE_NOT_PROVEN.';
+
+  // So that the requests meet in the database every time, not only when the timing falls so:
+  // the test holds the phone's row itself, as a piece of work of its own, until as many of the
+  // API's pieces of work as it waits for are waiting on a lock; then lets it go.
+  async function rowHeld(story: StoryContext, deviceId: string) {
+    let letGo = (): void => undefined;
+    let held = (): void => undefined;
+    const holds = new Promise<void>((resolve) => (held = resolve));
+    const holding = story.api.$write({ actorId: systemActorId, source: 'SYSTEM' }, async (tx) => {
+      // Not FOR UPDATE: a write that names the phone (a sync's own row) checks its key under a
+      // key-share lock, which this lets by; a top-up's share lock and a turn-in's wait.
+      await tx.$queryRaw`SELECT "id" FROM "device" WHERE "id" = ${deviceId}::uuid FOR NO KEY UPDATE`;
+      held();
+      await new Promise<void>((resolve) => (letGo = resolve));
+    });
+    await holds;
+    return {
+      waitingOn: async (count: number): Promise<void> => {
+        for (let tries = 0; ; tries += 1) {
+          const [waiting] = await story.api.$queryRaw<{ n: number }[]>`
+            SELECT count(*)::int AS "n" FROM pg_stat_activity
+            WHERE datname = current_database() AND wait_event_type = 'Lock'`;
+          if ((waiting?.n ?? 0) >= count) return;
+          if (tries === 200) throw new Error(`No ${String(count)} pieces of work waited.`);
+          await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+      },
+      letGo: async (): Promise<void> => {
+        letGo();
+        await holding;
+      },
+    };
+  }
+
+  it('two turn-ins of one phone that meet in the database: one turns it in and tells it to wipe; the other is told the phone is proven no more, never a server error', async () => {
+    const { result, lines } = await run({
+      ...told,
+      name: 'turn-ins-at-once',
+      title: 'two turn-ins of one phone at once',
+      async run(story) {
+        const phone = await story.enrolled('P1-COL-1');
+        await story.proofs.proves(phone.id);
+        const row = await rowHeld(story, phone.id);
+        const both = [cameTo(turnInOf(story, phone.id)), cameTo(turnInOf(story, phone.id))];
+        await row.waitingOn(2);
+        await row.letGo();
+        story.check(
+          'the phone turned in once, its other turn-in refused as a phone proven no more',
+          (await Promise.all(both)).map(turnedIn).sort(),
+          [provenNoMore, 'turned in'].sort(),
+        );
+        story.check(
+          'its key revoked, and one turn-in in the security log',
+          [
+            await story.api.device.count({ where: { keyRevokedAt: { not: null } } }),
+            await story.api.securityEvent.count({ where: { kind: 'DEVICE_TURN_IN' } }),
+          ],
+          [1, 1],
+        );
+      },
+    });
+    expect(lines.filter((line) => line.includes('✗'))).toEqual([]);
+    expect(result).toMatchObject({ passed: 2, failed: 0, error: undefined });
+  });
+
+  it('a block cut for a phone and its turn-in that meet in the database: the top-up first, and the turn-in ends its block; the turn-in first, and the sync is told the phone is proven no more; either way no block is left issued, never a server error', async () => {
+    const { result, lines } = await run({
+      ...told,
+      name: 'block-and-turn-in-at-once',
+      title: 'a block cut and a turn-in of one phone at once',
+      async run(story) {
+        const dana = uuidv7(story.clock.now());
+        const p1 = await story.api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
+          await tx.user.create({ data: { id: dana, name: 'Dana Reyes', role: 'ADMIN' } });
+          return (await setUpP1(tx, story.policy)).project;
+        });
+        const seen: string[][] = [];
+        for (const [name, topUpFirst] of [
+          ['P1-COL-1', true],
+          ['P1-COL-2', false],
+        ] as const) {
+          const phone = await story.enrolled(name);
+          const [held] = await firstBlocks(story, phone.id, told.timeZone, p1, ['LOAD']);
+          const first = held?.blocks[0]?.firstNumber ?? 0;
+          // Half its block used: the top-up cuts it another.
+          const lastUsed = [
+            { projectId: p1, series: 'LOAD' as const, lastUsedNumber: first + 499 },
+          ];
+          const sync = () =>
+            cameTo(
+              synced(story, phone.id, told.timeZone, { lastUsed }).then(({ numbers }) =>
+                numbers.map(({ toppedUp }) => (toppedUp ? 'topped up' : 'not topped up')),
+              ),
+            );
+          const turnIn = () => cameTo(turnInOf(story, phone.id, lastUsed)).then(turnedIn);
+          // Whichever waits on the row first has it first, once it is let go.
+          const row = await rowHeld(story, phone.id);
+          const one = topUpFirst ? sync() : turnIn();
+          await row.waitingOn(1);
+          const other = topUpFirst ? turnIn() : sync();
+          await row.waitingOn(2);
+          await row.letGo();
+          seen.push(await Promise.all([one, other]));
+        }
+        story.check(
+          'top-up first: topped up, then turned in; turn-in first: turned in, then the sync refused',
+          seen,
+          [
+            [JSON.stringify(['topped up']), 'turned in'],
+            ['turned in', provenNoMore],
+          ],
+        );
+        story.check(
+          'no phone holds a block still issued, and both keys are revoked',
+          [
+            await story.api.numberBlock.count({ where: { status: 'ISSUED' } }),
+            await story.api.device.count({ where: { keyRevokedAt: null } }),
+          ],
+          [0, 0],
+        );
+      },
+    });
+    expect(lines.filter((line) => line.includes('✗'))).toEqual([]);
+    expect(result).toMatchObject({ passed: 2, failed: 0, error: undefined });
   });
 });
 

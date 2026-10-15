@@ -8,8 +8,8 @@
 // ADR-316, 321), and the release's policy values they read (C53); the allocator of numbers
 // (ADR-065, 323); the server's own command for its admins and the sign-in parts it is built from
 // (ADR-415, 502 (d)), which the dev stack's accounts are written with too (ADR-412); the shapes of
-// what a phone sends; and `Corrections`, for the one check whose job queue is made to fail
-// (AC-10-50, ADR-501 (b)).
+// what a phone sends; `Corrections`, for the one check whose job queue is made to fail
+// (AC-10-50, ADR-501 (b)); and three reads the burst story times (ADR-524).
 export {
   Certifications,
   type BoxInput,
@@ -31,6 +31,11 @@ export { RuleSetup } from './setup/rule-setup.ts';
 export { type Clock, type Outcome } from './setup/setup-service.ts';
 export { SetupStanding } from './setup/setup-standing.ts';
 export { SiteSetup } from './setup/site-setup.ts';
+// What the burst story measures at a real project's size (BACKLOG 2.8.2; ADR-524): the setup a
+// sync numbers, the passcode's check a phone's first sync is made, and a map's file read.
+export { SetupVersions } from './setup/setup-versions.ts';
+export { OfflineChecks } from './phone/offline-checks.ts';
+export { MapFileReader } from './setup/map-file-reader.ts';
 export { WorkQueue } from './jobs/work-queue.ts';
 
 export { Corrections } from './review/corrections.ts';

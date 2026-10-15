@@ -19,7 +19,13 @@ import {
 } from './support/map-files.ts';
 
 const mebibyte = 1_048_576;
-const reader = new MapFileReader({ unzippedBytesAtMost: 64 * mebibyte, entriesAtMost: 1000 });
+// The policy's own bound on a shape's outer rings times its holes (ADR-524).
+const ringPairsAtMost = 50_000_000;
+const reader = new MapFileReader({
+  unzippedBytesAtMost: 64 * mebibyte,
+  entriesAtMost: 1000,
+  ringPairsAtMost,
+});
 const encoder = new TextEncoder();
 
 const read = async (bytes: Uint8Array, by = reader) => {
@@ -177,7 +183,11 @@ describe('a zipped shapefile', () => {
 
 describe('a file made to harm, or broken', () => {
   it('a zip that unzips past the bound stops at it, unread: one part or several together (OWASP ASVS 5.0 V5)', async () => {
-    const small = new MapFileReader({ unzippedBytesAtMost: mebibyte, entriesAtMost: 1000 });
+    const small = new MapFileReader({
+      unzippedBytesAtMost: mebibyte,
+      entriesAtMost: 1000,
+      ringPairsAtMost,
+    });
     const said = `Unzipped, the file is larger than ${String(mebibyte)} bytes: it isn’t read.`;
     // Sixty-four mebibytes of nothing, deflated to a few kibibytes.
     const bomb = zipped({ 'zones.shp': new Uint8Array(64 * mebibyte) });
@@ -198,7 +208,11 @@ describe('a file made to harm, or broken', () => {
   });
 
   it('a zip of more files than the bound isn’t read, counted before any is unzipped (OWASP ASVS 5.0 5.2.3)', async () => {
-    const few = new MapFileReader({ unzippedBytesAtMost: mebibyte, entriesAtMost: 5 });
+    const few = new MapFileReader({
+      unzippedBytesAtMost: mebibyte,
+      entriesAtMost: 5,
+      ringPairsAtMost,
+    });
     const zones = shapefile('zones', p1Zones);
     expect(Object.keys(zones)).toHaveLength(4);
     expect(
@@ -217,7 +231,11 @@ describe('a file made to harm, or broken', () => {
   });
 
   it('only the parts a layer needs are unzipped: anything else in the zip counts for nothing', async () => {
-    const small = new MapFileReader({ unzippedBytesAtMost: mebibyte, entriesAtMost: 1000 });
+    const small = new MapFileReader({
+      unzippedBytesAtMost: mebibyte,
+      entriesAtMost: 1000,
+      ringPairsAtMost,
+    });
     const file = await read(
       zipped({ ...shapefile('zones', p1Zones), 'photo.tif': new Uint8Array(4 * mebibyte) }),
       small,
@@ -235,6 +253,49 @@ describe('a file made to harm, or broken', () => {
     const file = await read(zipped({ ...files, 'zones.dbf': lying }));
     expect(Date.now() - started).toBeLessThan(2000);
     expect(file.layers[0]?.problem).toBe('Its .dbf can’t be read.');
+  });
+
+  it('ADR-524, C140 a shape whose outer rings times its holes come to more than the bound isn’t read, counted from the .shp before anything pairs them; one at the bound is read; islands with no hole pair nothing', async () => {
+    // A grid of squares, each an outer ring (clockwise) with a hole in it (counter-clockwise),
+    // all one shape: a hundred outer rings times a hundred holes.
+    const square = (n: number, inset: number): number[][] => {
+      const west = -75.8 + (n % 50) * 0.004 + inset;
+      const south = 38.9 + Math.floor(n / 50) * 0.004 + inset;
+      return ring(west, south, west + 0.003 - 2 * inset, south + 0.003 - 2 * inset);
+    };
+    const holed = zipped(
+      shapefile('zones', [
+        {
+          rings: Array.from({ length: 100 }, (_, n) => [
+            square(n, 0),
+            square(n, 0.001).reverse(),
+          ]).flat(),
+          fields: { ZONE_NAME: 'Zone 1' },
+        },
+      ]),
+    );
+    const bounded = (ringPairs: number) =>
+      new MapFileReader({
+        unzippedBytesAtMost: mebibyte,
+        entriesAtMost: 1000,
+        ringPairsAtMost: ringPairs,
+      });
+    expect((await read(holed, bounded(10_000))).layers.map(({ problem }) => problem)).toEqual([
+      null,
+    ]);
+    expect((await read(holed, bounded(9_999))).layers.map(({ problem }) => problem)).toEqual([
+      'A shape of its .shp has too many holes and outer rings to pair (10000 pairs; at most 9999): simplify the shape, or split it.',
+    ]);
+    // A coast of a thousand islands, no lake on any: nothing to pair, however many.
+    const islands = zipped(
+      shapefile('islands', [
+        {
+          rings: Array.from({ length: 1000 }, (_, n) => square(n, 0)),
+          fields: { ZONE_NAME: 'Zone 1' },
+        },
+      ]),
+    );
+    expect((await read(islands, bounded(1))).layers.map(({ problem }) => problem)).toEqual([null]);
   });
 
   it('a broken zip, a zip of no map and a broken .shp are each said plainly', async () => {

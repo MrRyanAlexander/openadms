@@ -33,6 +33,12 @@ export const policyNames = {
   // The most connections a service's pool opens to the database (ARCHITECTURE §5.7; ADR-419).
   // Never under two: a run holds its project's lock on one and writes on another.
   databasePoolConnections: 'DATABASE_POOL_CONNECTIONS',
+  // How long one piece of work waits for a connection from its service's pool, and how long it
+  // may run in all, in milliseconds; and how many seconds a caller told the database is busy is
+  // told to wait (ARCHITECTURE §5.7, §6, Abuse; ADR-524).
+  databaseConnectionWaitMs: 'DATABASE_CONNECTION_WAIT_MS',
+  databaseWorkLongestMs: 'DATABASE_WORK_LONGEST_MS',
+  databaseBusyRetrySeconds: 'DATABASE_BUSY_RETRY_SECONDS',
   // The shortest and the longest password a back-office or outside user may set, in characters
   // (ARCHITECTURE §6, Passwords; NIST SP 800-63B-4 §3.1.1.2; ADR-402).
   passwordMinimumLength: 'PASSWORD_MINIMUM_LENGTH',
@@ -90,6 +96,9 @@ export const policyNames = {
   mapFileBytesAtMost: 'MAP_FILE_BYTES_AT_MOST',
   mapFileUnzippedBytesAtMost: 'MAP_FILE_UNZIPPED_BYTES_AT_MOST',
   mapFileEntriesAtMost: 'MAP_FILE_ENTRIES_AT_MOST',
+  // The most outer rings times holes one shape of a shapefile may have to be read: setting each
+  // hole in its outer ring tries every pair, all at once, and nothing stops it part way (ADR-524).
+  mapFileRingPairsAtMost: 'MAP_FILE_RING_PAIRS_AT_MOST',
   // Rate limits (ARCHITECTURE §6, Abuse; ASVS 2.4.1; ADR-416): how long the stretch is that
   // requests are counted over, in seconds; how many one address and one signed-in person may send
   // in it; and how many callers' counts the server keeps at once.
@@ -135,7 +144,10 @@ export const requestBodyBytesAtLeast = 1_048_576;
 // setting to. A load call is 0 to 100; a size is at least one; a crew day is 1 to 24 hours; a block
 // is at least one number. The body a request may carry is never under a mebibyte, so that no
 // installation's limit refuses a sync a phone may send (ADR-504). A statement's time limit is at
-// least one millisecond (nought would switch it off) and at most what Postgres takes. A password's
+// least one millisecond (nought would switch it off) and at most what Postgres takes. A piece of
+// work waits a tenth of a second for a connection at the least and ten minutes at the most, runs
+// a second at the least and at most what a statement may, and a caller told the database is busy
+// waits a second at the least and an hour at the most (ADR-524). A password's
 // shortest length is never under the eight characters the standard allows beside a second step,
 // nor over the 64 it says must be permitted; its longest never under those 64. A reset by email
 // is good for a day at most, the standard's limit. A session lasts a day at most and an hour at
@@ -164,6 +176,9 @@ const ranges: Record<PolicyName, { least: number; most: number }> = {
   },
   [policyNames.statementTimeoutMs]: { least: 1, most: 2147483647 },
   [policyNames.databasePoolConnections]: { least: 2, most: 1000 },
+  [policyNames.databaseConnectionWaitMs]: { least: 100, most: 600000 },
+  [policyNames.databaseWorkLongestMs]: { least: 1000, most: 2147483647 },
+  [policyNames.databaseBusyRetrySeconds]: { least: 1, most: 3600 },
   [policyNames.passwordMinimumLength]: { least: 8, most: 64 },
   [policyNames.passwordMaximumLength]: { least: 64, most: 1024 },
   [policyNames.passwordResetMinutes]: { least: 1, most: 1440 },
@@ -189,6 +204,7 @@ const ranges: Record<PolicyName, { least: number; most: number }> = {
   [policyNames.mapFileBytesAtMost]: { least: 1048576, most: 1073741824 },
   [policyNames.mapFileUnzippedBytesAtMost]: { least: 1048576, most: 1073741824 },
   [policyNames.mapFileEntriesAtMost]: { least: 4, most: 65535 },
+  [policyNames.mapFileRingPairsAtMost]: { least: 1, most: Number.MAX_SAFE_INTEGER },
   [policyNames.rateLimitWindowSeconds]: { least: 1, most: 3600 },
   [policyNames.rateLimitRequestsPerAddress]: { least: 1, most: Number.MAX_SAFE_INTEGER },
   [policyNames.rateLimitRequestsPerAccount]: { least: 1, most: Number.MAX_SAFE_INTEGER },
@@ -219,6 +235,9 @@ export class Policy {
   readonly requestBodyLimitBytes: number;
   readonly statementTimeoutMs: number;
   readonly databasePoolConnections: number;
+  readonly databaseConnectionWaitMs: number;
+  readonly databaseWorkLongestMs: number;
+  readonly databaseBusyRetrySeconds: number;
   readonly passwordMinimumLength: number;
   readonly passwordMaximumLength: number;
   readonly passwordResetMinutes: number;
@@ -244,6 +263,7 @@ export class Policy {
   readonly mapFileBytesAtMost: number;
   readonly mapFileUnzippedBytesAtMost: number;
   readonly mapFileEntriesAtMost: number;
+  readonly mapFileRingPairsAtMost: number;
   readonly rateLimitWindowSeconds: number;
   readonly rateLimitRequestsPerAddress: number;
   readonly rateLimitRequestsPerAccount: number;
@@ -273,6 +293,9 @@ export class Policy {
     this.requestBodyLimitBytes = Policy.read(values, policyNames.requestBodyLimitBytes);
     this.statementTimeoutMs = Policy.read(values, policyNames.statementTimeoutMs);
     this.databasePoolConnections = Policy.read(values, policyNames.databasePoolConnections);
+    this.databaseConnectionWaitMs = Policy.read(values, policyNames.databaseConnectionWaitMs);
+    this.databaseWorkLongestMs = Policy.read(values, policyNames.databaseWorkLongestMs);
+    this.databaseBusyRetrySeconds = Policy.read(values, policyNames.databaseBusyRetrySeconds);
     this.passwordMinimumLength = Policy.read(values, policyNames.passwordMinimumLength);
     this.passwordMaximumLength = Policy.read(values, policyNames.passwordMaximumLength);
     this.passwordResetMinutes = Policy.read(values, policyNames.passwordResetMinutes);
@@ -298,6 +321,7 @@ export class Policy {
     this.mapFileBytesAtMost = Policy.read(values, policyNames.mapFileBytesAtMost);
     this.mapFileUnzippedBytesAtMost = Policy.read(values, policyNames.mapFileUnzippedBytesAtMost);
     this.mapFileEntriesAtMost = Policy.read(values, policyNames.mapFileEntriesAtMost);
+    this.mapFileRingPairsAtMost = Policy.read(values, policyNames.mapFileRingPairsAtMost);
     this.rateLimitWindowSeconds = Policy.read(values, policyNames.rateLimitWindowSeconds);
     this.rateLimitRequestsPerAddress = Policy.read(values, policyNames.rateLimitRequestsPerAddress);
     this.rateLimitRequestsPerAccount = Policy.read(values, policyNames.rateLimitRequestsPerAccount);

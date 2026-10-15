@@ -30,6 +30,7 @@ import type { TurnInRules } from '@open-adms/domain';
 import type { TurnInAnswer, TurnInHolds, TurnInReceived } from '@open-adms/contracts';
 
 import { NumberAllocator, type SeriesTurnedIn } from '../numbering/number-allocator.ts';
+import { Refusal } from '../process/refusal.ts';
 import type { Clock } from '../setup/setup-service.ts';
 import type { MasterPasscodeCheck, PasscodeRefused } from './master-passcode-check.ts';
 
@@ -123,11 +124,18 @@ export class TurnIns {
       };
     }
     const numbers = await this.db.$write(underMasterPasscode(deviceId), async (tx) => {
-      await passcode.used(tx, checked, now, { deviceId });
+      // The phone's row first, held for the rest of this piece of work (ADR-524): a block cut
+      // for the phone at the same moment went through before it, and is ended below, or is
+      // refused after it, its key revoked; a second turn-in of the phone at the same moment
+      // waits here, and finds it turned in.
+      await tx.$queryRaw`SELECT "id" FROM "device" WHERE "id" = ${deviceId}::uuid FOR UPDATE`;
       const device = await tx.device.findUniqueOrThrow({
         where: { id: deviceId },
-        select: { status: true },
+        select: { status: true, keyRevokedAt: true },
       });
+      // Turned in already: its key is revoked, so it is proven no more (ARCHITECTURE §7.4).
+      if (device.keyRevokedAt !== null) throw new Refusal('PHONE_NOT_PROVEN', 401);
+      await passcode.used(tx, checked, now, { deviceId });
       const ended = await NumberAllocator.turnedIn(
         tx,
         deviceId,
@@ -135,15 +143,16 @@ export class TurnIns {
         (reported) => rules.blocksEnd(device, reported),
         now,
       );
-      // Once: a second turn-in at the same moment finds the key revoked, and undoes itself.
-      const revoked = await tx.device.updateMany({
-        where: { id: deviceId, keyRevokedAt: null },
+      // Once: the row is held, so nothing has revoked the key since it was read (and the
+      // database refuses a key revoked twice).
+      await tx.device.update({
+        where: { id: deviceId },
         data: {
           keyRevokedAt: now,
           ...(device.status === 'ACTIVE' ? { status: 'RETIRED', outOfServiceAt: now } : {}),
         },
+        select: { id: true },
       });
-      if (revoked.count !== 1) throw new Error('The phone was turned in already.');
       await tx.session.updateMany({
         where: { deviceId, revokedAt: null },
         data: { revokedAt: now },

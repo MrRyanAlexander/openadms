@@ -455,6 +455,43 @@ describe('a file sent in parts', () => {
     );
   });
 
+  it('C138, ADR-524 the last part sent twice at once to one process is taken one at a time: the file is kept once, at its place, its upload time written once; both are answered kept, neither told to start again', async () => {
+    await world(
+      async (served, tx, who) => {
+        const photo = jpeg(150_000);
+        const p = await photographed(served, tx, who, { photo });
+        expect(
+          answered(
+            await sent(served, p.token, p.photoId, 'photo', {
+              offset: 0,
+              length: photo.length,
+              bytes: photo.subarray(0, 100_000),
+            }),
+          ),
+        ).toEqual({ upload: 'RECEIVING', received: 100_000, length: 150_000 });
+        const last = { offset: 100_000, length: photo.length, bytes: photo.subarray(100_000) };
+        const both = await Promise.all([
+          sent(served, p.token, p.photoId, 'photo', last),
+          sent(served, p.token, p.photoId, 'photo', last),
+        ]);
+        expect(both.map(answered)).toEqual([{ upload: 'KEPT' }, { upload: 'KEPT' }]);
+        expect(
+          (await versionsUnder(administrator, installationMedia(), `projects/${p.projectId}/`)).map(
+            ({ key, bytes }) => [key, bytes],
+          ),
+        ).toEqual([[p.objectKey, 150_000]]);
+        expect(
+          await tx.auditRecord.count({
+            where: { tableName: 'photo', recordId: p.photoId, operation: 'UPDATE' },
+          }),
+        ).toBe(1);
+      },
+      undefined,
+      undefined,
+      withTheStore(),
+    );
+  });
+
   it('AC-04-77 the depth file goes beside it, checked against its own fingerprint; none is taken where none was promised', async () => {
     await world(
       async (served, tx, who) => {

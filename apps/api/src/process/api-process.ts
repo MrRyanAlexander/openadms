@@ -308,10 +308,16 @@ export class ApiProcess {
         done(null, body);
       },
     );
-    const database = more.database ?? openApiDatabase(settings, policy.databasePoolConnections);
+    const pool = {
+      maxConnections: policy.databasePoolConnections,
+      pieceOfWork: {
+        waitMs: policy.databaseConnectionWaitMs,
+        longestMs: policy.databaseWorkLongestMs,
+      },
+    };
+    const database = more.database ?? openApiDatabase(settings, pool);
     // A read-only viewer's reads go by the read-only login, its viewer stated (ADR-434).
-    const viewerDatabase =
-      more.viewerDatabase ?? openApiViewerDatabase(settings, policy.databasePoolConnections);
+    const viewerDatabase = more.viewerDatabase ?? openApiViewerDatabase(settings, pool);
     const clock = more.clock ?? { now: () => new Date() };
     const limits = new Limits(new RateLimits(policy), clock);
     answersWith(server, settings.corsOrigins, (request) => limits.arrived(request.ip));
@@ -443,6 +449,7 @@ export class ApiProcess {
               reader: new MapFileReader({
                 unzippedBytesAtMost: policy.mapFileUnzippedBytesAtMost,
                 entriesAtMost: policy.mapFileEntriesAtMost,
+                ringPairsAtMost: policy.mapFileRingPairsAtMost,
               }),
               fileBytesAtMost: policy.mapFileBytesAtMost,
               projects: projectSetup,
@@ -571,7 +578,7 @@ export class ApiProcess {
       // The framework adds no parser of its own: a form's body is never read (below).
       { logger: new ProcessLog(server.log), bodyParser: false },
     );
-    app.useGlobalFilters(new ErrorFilter());
+    app.useGlobalFilters(new ErrorFilter(policy.databaseBusyRetrySeconds));
     app.useGlobalInterceptors(
       new Boundary(new Admission(sessions, tokens, limits, phoneProofs, phoneSignIns)),
     );

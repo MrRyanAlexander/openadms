@@ -224,7 +224,7 @@ describe('as the database’s read-only login itself', () => {
   it('AC-10-30 every read the service makes is one the login is granted, and somebody the firm issued no viewer’s login is shown nothing', async () => {
     // The real login, on the installation's database: a read of a column it isn't granted
     // would be the database's refusal here, whoever is stated.
-    const viewed = openApiViewerDatabase(installationSettings(), 1);
+    const viewed = openApiViewerDatabase(installationSettings(), { maxConnections: 1 });
     try {
       const reads = new ViewerReads(viewed);
       expect(await reads.projects(randomUUID(), { limit: 200 })).toEqual({

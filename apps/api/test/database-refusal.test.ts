@@ -76,7 +76,7 @@ describe('a refusal by the database’s own constraints', () => {
     });
   });
 
-  it('what is the server’s own failure stays one: no grant, a delete refused, a statement stopped by its time limit, an error that isn’t the database’s', () => {
+  it('what is the server’s own failure stays one: no grant, a delete refused, an error that isn’t the database’s; nor is a statement stopped by its time limit a refusal (the database was busy, database-busy.test.ts)', () => {
     for (const sqlState of ['42501', '23001', '57014', '40001']) {
       expect(databaseRefusalOf(postgres(sqlState, 'whatever it said')), sqlState).toBeUndefined();
     }

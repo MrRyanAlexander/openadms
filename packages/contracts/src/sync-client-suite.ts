@@ -14,8 +14,9 @@
 // ahead of what it names; no sync carries more than the contract's limits, in counts or in
 // weight (ADR-504); only "saved" and
 // "already saved" take a record off the phone; a quarantined record and one not saved are kept
-// and shown as not saved, in the server's own words; and what is no answer to what was sent
-// marks nothing. What it leaves to the client: when it syncs, how it stores what it holds, and
+// and shown as not saved, in the server's own words; what is no answer to what was sent marks
+// nothing; and an answer that says to wait (`toldToWait`: a limit, or the database busy,
+// ADR-524) keeps everything, to go again as it was. What it leaves to the client: when it syncs, how it stores what it holds, and
 // whether it sends a kept record again (the server answers the same id the same way).
 //
 // **And a photograph's files** (ARCHITECTURE §9 (2), (5); AC-05-09; BACKLOG 2.6.4 part 4, C137,
@@ -29,7 +30,12 @@
 // C139; ADR-096, 468, 488): a turn-in names everything the phone still holds, each once, by the
 // id it was made under, and what it sent with no id the server could read by the fingerprint of
 // what was sent; and it wipes only when it is answered to wipe, and then wipes everything.
-import type { PhotoFileAnswer, PhotoFileName } from './api-answers.ts';
+import {
+  toldToWait,
+  waitAnswers,
+  type PhotoFileAnswer,
+  type PhotoFileName,
+} from './api-answers.ts';
 import {
   stored,
   syncedRecordAssignment,
@@ -1121,6 +1127,33 @@ export const syncClientSuite: readonly SyncClientCheck[] = [
         await client.answered(answerTo(sync));
       }
       held(sorted(went) === sorted(everything), 'Not everything it held was sent, each once.');
+    },
+  },
+  {
+    name: 'told to wait (429 LIMITED, 503 BUSY): nothing is taken for saved or shown as not saved, everything stays, and it goes again as it was, under the same ids (AC-10-41, AC-10-71; ADR-416, 524)',
+    async run(make) {
+      for (const code of waitAnswers) {
+        const records = [collected('71'), collected('72', { siteId: landfill })];
+        const client = await make({ ...nothing, passcodeUses: [switched], records });
+        const first = onTheWire(client.sends());
+        const told = { code, requestId: 'a-request', retryAfterSeconds: 5 };
+        held(toldToWait(told) === 5, `The contract reads no wait in ${code}.`);
+        await client.answered(told);
+        const all = [switched.id, ...records.map(syncedRecordId)];
+        held(
+          sorted(client.holds()) === sorted(all),
+          `Told to wait (${code}), it let go of something.`,
+        );
+        held(
+          client.notSaved().length === 0,
+          `Told to wait (${code}), it shows something as not saved.`,
+        );
+        const second = onTheWire(client.sends());
+        held(
+          same(second.records, first.records) && same(second.passcodeUses, first.passcodeUses),
+          `Told to wait (${code}), what it sent again is not what it sent before.`,
+        );
+      }
     },
   },
 ];

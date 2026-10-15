@@ -286,7 +286,7 @@ describe('the harness’s phone, syncing through the API’s own service', () =>
     expect(client.waitingRecords).toEqual([]);
   });
 
-  it('AC-05-51, ADR-505 told to wait (429 LIMITED), it waits the seconds it was told on the story’s clock and sends the same sync, then the same part, again under the same ids; told again and again, it stops holding everything', async () => {
+  it('AC-05-51, AC-10-71, ADR-505, 524 told to wait (429 LIMITED, 503 BUSY), it waits the seconds it was told on the story’s clock and sends the same sync, then the same part, again under the same ids; told again and again, it stops holding everything', async () => {
     const clock = new StoryClock('2026-10-15T18:00:00-04:00');
     const client = phone({ ...records, filePartBytesAtMost: 4096 }, lists, clock);
     const [first] = records.records;
@@ -326,7 +326,7 @@ describe('the harness’s phone, syncing through the API’s own service', () =>
       },
       filePart: (_from, part) => {
         parts.push(`${clock.now().toISOString()} ${part.photoId} ${String(part.offset)}`);
-        if (told.parts-- > 0) return Promise.reject(new ToldToWait(7));
+        if (told.parts-- > 0) return Promise.reject(new ToldToWait(7, 'BUSY'));
         return Promise.resolve({ upload: 'KEPT' });
       },
     };

@@ -250,6 +250,11 @@ model FieldEvent {
   @@unique([projectId, id])
   // So a viewer's "who recorded it" is found by the monitor.
   @@index([monitorId])
+  // So the other tickets a field event moves are found by its truck and by its scale receipt,
+  // within its project, without reading every field event of the installation (the neighbour
+  // read, `WorkQueue.neighbours`; measured at the burst, ADR-524; C154).
+  @@index([projectId, certNumber])
+  @@index([projectId, scaleReceiptId])
   @@map("field_event")
 }
 

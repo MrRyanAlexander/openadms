@@ -431,6 +431,9 @@ every edit of a migration file and allows a write only while the file is still P
   Prisma's migration engine is handed the same check in its own words (`packages/db/prisma.url.js`).
 - A separate credential per role.
 - Pool limits, and a statement timeout.
+  *Built (ADR-419, 524):* each service's pool is `DATABASE_POOL_CONNECTIONS`; each piece of work
+  waits `DATABASE_CONNECTION_WAIT_MS` for a connection and runs `DATABASE_WORK_LONGEST_MS` at most;
+  a request whose work couldn't be done in time is told `503 BUSY` with `Retry-After`, never 500.
 
 ---
 

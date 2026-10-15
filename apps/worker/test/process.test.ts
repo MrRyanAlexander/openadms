@@ -186,7 +186,9 @@ describe('the policy the worker runs with (ADR-395, 419)', () => {
       shipped.mapServerAnswerSeconds,
       shipped.databasePoolConnections,
       shipped.deviceClockOffLimitMinutes,
-    ]).toEqual([5, 10, 5, 30, 10, 5]);
+      shipped.databaseConnectionWaitMs,
+      shipped.databaseWorkLongestMs,
+    ]).toEqual([5, 10, 5, 30, 10, 5, 2000, 5000]);
   });
 
   it('takes the installation’s own value under the same name, held to the same range', () => {

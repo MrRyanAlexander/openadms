@@ -10,7 +10,10 @@
 // lost phone's blocks is the back office's; a phone turned in ends its own in its turn-in's piece
 // of work, under the master passcode (`turnedIn`, ADR-488). Two top-ups of one series at the same moment don't
 // both go through: the second finds the series moved on, or the database refuses its block, and
-// it is thrown, not saved, for the caller to ask again (the sync endpoint's, Phase 2).
+// it is thrown, not saved, for the caller to ask again (the sync endpoint's, Phase 2). A top-up
+// and its phone's turn-in at the same moment are ordered by the phone's row: the top-up first,
+// and the turn-in ends its block; the turn-in first, and the top-up is refused, the phone proven
+// no more (ADR-524).
 import type { Database, NumberBlock, NumberSeries, Prisma } from '@open-adms/db';
 import {
   NumberSeriesBook,
@@ -21,6 +24,7 @@ import {
   type TurnedInBlocks,
 } from '@open-adms/domain';
 
+import { Refusal } from '../process/refusal.ts';
 import { type Clock, type Outcome, Refused, SetupService } from '../setup/setup-service.ts';
 
 // A phone at a sync: its monitor, and the phone itself.
@@ -69,6 +73,13 @@ export class NumberAllocator extends SetupService {
     return this.writeAs(
       { actorId: phone.person, source: 'DEVICE', deviceId: phone.deviceId },
       async (tx) => {
+        // The phone's row under the share lock the database's guard takes for a block (ADR-488),
+        // taken first (ADR-524): a turn-in of the phone at the same moment waits for this top-up
+        // and ends its block, or this one waits for the turn-in and finds the key revoked.
+        const [standing] = await tx.$queryRaw<{ revoked: boolean }[]>`
+          SELECT "key_revoked_at" IS NOT NULL AS "revoked" FROM "device"
+          WHERE "id" = ${phone.deviceId}::uuid FOR SHARE`;
+        if (standing?.revoked === true) throw new Refusal('PHONE_NOT_PROVEN', 401);
         const series = await tx.projectNumberSeries.findUnique({
           where: { projectId_series: { projectId: report.projectId, series: report.series } },
         });

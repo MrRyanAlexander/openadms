@@ -9,11 +9,14 @@ import { isDeepStrictEqual } from 'node:util';
 
 import {
   setPersonPasswordEndpoint,
+  turnInAnswerSchema,
   type Endpoint,
   type PhoneAssignmentAnswer,
   type PhoneListsRecord,
   type PhoneSetupChoicesAnswer,
   type TurnInAnswer,
+  type TurnInHolds,
+  type TurnInSent,
 } from '@open-adms/contracts';
 import type { Database } from '@open-adms/db';
 import type { MasterPasscodeSessionKind, NoAssignmentReason, Policy } from '@open-adms/domain';
@@ -60,6 +63,12 @@ export interface StoryContext {
   // The services' own clients, on the story's database.
   readonly api: Database;
   readonly worker: Database;
+  // A second worker's own client on the story's database, as a second worker container would
+  // hold (BACKLOG 2.8.2, C95): a pool of its own, closed when the story ends.
+  openWorker(): Database;
+  // The story's API's pool, the policy's (ADR-524): how many connections, and how long each of
+  // its pieces of work waited for one so far, in milliseconds.
+  readonly apiPool: { readonly connections: number; waitedMs(): readonly number[] };
   // The release's policy values, which a new project's settings start from (ADR-303).
   readonly policy: Policy;
   // Where phones sync, send a photograph's files and are turned in (BACKLOG 2.7.1 part 1;
@@ -102,6 +111,13 @@ export interface StoryContext {
     // "Sync and turn in" (ADR-488): the phone syncs, sends its files, then is turned in at the
     // turn-in endpoint over HTTPS (ADR-491); answered to wipe, it wipes. The answer.
     turnIn(phone: SimulatedDevice): Promise<TurnInAnswer>;
+    // A turn-in of that enrolled phone naming what the story says it holds, at the same
+    // endpoint, with no sync before it: for a turn-in measured at its size (BACKLOG 2.8.2, C141).
+    turnInNaming(
+      onPhone: string,
+      holds: TurnInHolds,
+      lastUsed?: TurnInSent['lastUsed'],
+    ): Promise<TurnInAnswer>;
   };
   // The lists a phone takes for its assignment (task 2.5.3), asked by the monitor signed in on
   // it: the assignment the phone takes now must be the one named, or the story stops.
@@ -186,6 +202,7 @@ export class Runner {
     try {
       const template = this.options.template;
       database = await StoryDatabase.create(template);
+      const opened = database;
       if (template === undefined) {
         const migrations = database.migrate();
         const seeded = await database.seed();
@@ -274,6 +291,15 @@ export class Runner {
             },
             // "Sync and turn in" on the phone, the passcode typed by whoever holds it (ADR-488).
             turnIn: (phone) => phone.turnIn(asked.server, storyMasterPasscode),
+            async turnInNaming(onPhone, holds, lastUsed = []) {
+              const { server } = asked;
+              if (server.turnIn === undefined) {
+                throw new Error('The story’s server turns no phone in.');
+              }
+              return turnInAnswerSchema.parse(
+                await server.turnIn(onPhone, { passcode: storyMasterPasscode, holds, lastUsed }),
+              );
+            },
           },
           lists: {
             async held({ assignmentId, deviceId }) {
@@ -303,6 +329,15 @@ export class Runner {
         },
         phone: (setup) => new SimulatedDevice(setup, clock),
         proofs: { proves: (deviceId) => served.proves(deviceId) },
+        openWorker() {
+          const another = opened.open('worker');
+          open.push(another);
+          return another;
+        },
+        apiPool: {
+          connections: policy.databasePoolConnections,
+          waitedMs: () => served.waitedMs(),
+        },
         backOffice: {
           async admin(person) {
             const held = browsers.get(person.id);

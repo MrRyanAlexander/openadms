@@ -17,6 +17,13 @@
 //   header: only the parts a layer needs, each inflated with the bytes still allowed as its
 //   limit, so a zip bomb stops at the bound, and a part stored as it is counted as it is read.
 //   Nothing is written to a disk; a name in the zip names a layer, never a place.
+// - **A shape is read only where its rings are few enough to pair** (ADR-524; C140): `shpjs`
+//   sets each hole in the outer ring it lies in by trying every outer ring of the shape for every
+//   hole, all at once in this process, which nothing can stop part way; measured, 32,000 outer
+//   rings with as many holes (840 KB zipped) took 7.4 s, and a file at the size limit some twenty
+//   minutes. So each shape's outer rings times its holes, read from the `.shp` in one pass, is at
+//   most `MAP_FILE_RING_PAIRS_AT_MOST`, or its layer can't be read, said so. Many islands with no
+//   holes, or many shapes of a ring each, pair nothing.
 // - **A GeoJSON file** is one layer, named by nothing.
 import { inflateRawSync } from 'node:zlib';
 
@@ -62,15 +69,18 @@ const text = (bytes: Uint8Array): string => new TextDecoder().decode(bytes);
 export interface MapFileLimits {
   readonly unzippedBytesAtMost: number;
   readonly entriesAtMost: number;
+  readonly ringPairsAtMost: number;
 }
 
 export class MapFileReader {
   private readonly unzippedBytesAtMost: number;
   private readonly entriesAtMost: number;
+  private readonly ringPairsAtMost: number;
 
   constructor(limits: MapFileLimits) {
     this.unzippedBytesAtMost = limits.unzippedBytesAtMost;
     this.entriesAtMost = limits.entriesAtMost;
+    this.ringPairsAtMost = limits.ringPairsAtMost;
   }
 
   // The kind of map file a file is, by its first bytes; none where it is neither.
@@ -146,7 +156,7 @@ export class MapFileReader {
       if (key.endsWith('.shp')) {
         const base = key.slice(0, -'shp'.length);
         layers.push(
-          MapFileReader.shapefileLayer(key, part, {
+          this.shapefileLayer(key, part, {
             dbf: parts.get(`${base}dbf`),
             prj: parts.get(`${base}prj`),
             cpg: parts.get(`${base}cpg`),
@@ -159,7 +169,7 @@ export class MapFileReader {
     return layers;
   }
 
-  private static shapefileLayer(
+  private shapefileLayer(
     name: string,
     shp: Uint8Array,
     beside: {
@@ -179,6 +189,13 @@ export class MapFileReader {
         );
       }
     }
+    const pairs = MapFileReader.mostRingPairs(shp);
+    if (pairs > this.ringPairsAtMost) {
+      return MapFileReader.unread(
+        name,
+        `A shape of its .shp has too many holes and outer rings to pair (${String(pairs)} pairs; at most ${String(this.ringPairsAtMost)}): simplify the shape, or split it.`,
+      );
+    }
     let shapes: unknown[];
     try {
       shapes = parseShp(shp, prj);
@@ -196,6 +213,47 @@ export class MapFileReader {
       return MapFileReader.unread(name, 'Its .dbf can’t be read.');
     }
     return MapFileReader.layer(name, combine([shapes, rows]));
+  }
+
+  // The most outer rings times holes of any one polygon of a `.shp` (ESRI's shapefile technical
+  // description, 1998): read from each record's parts and points as they stand, an outer ring
+  // turning clockwise and a hole counter-clockwise, as `shpjs` tells them. A record that goes
+  // past the file's end, or isn't a polygon, ends the count or is passed over: what can't be read
+  // is `parseShp`'s to refuse.
+  private static mostRingPairs(shp: Uint8Array): number {
+    const view = new DataView(shp.buffer, shp.byteOffset, shp.byteLength);
+    let most = 0;
+    for (let at = 100; at + 8 <= shp.byteLength;) {
+      const content = at + 8;
+      const end = content + view.getInt32(at + 4, false) * 2;
+      if (end > shp.byteLength || end < content) break;
+      const type = end >= content + 4 ? view.getInt32(content, true) : 0;
+      if ((type === 5 || type === 15 || type === 25) && end >= content + 44) {
+        const parts = view.getInt32(content + 36, true);
+        const points = view.getInt32(content + 40, true);
+        const firstPoint = content + 44 + parts * 4;
+        if (parts >= 0 && points >= 0 && firstPoint + points * 16 <= end) {
+          let outer = 0;
+          let holes = 0;
+          for (let part = 0; part < parts; part += 1) {
+            const from = view.getInt32(content + 44 + part * 4, true);
+            const to = part + 1 < parts ? view.getInt32(content + 48 + part * 4, true) : points;
+            let twice = 0;
+            for (let point = Math.max(from, 0); point + 1 < Math.min(to, points); point += 1) {
+              const here = firstPoint + point * 16;
+              twice +=
+                view.getFloat64(here, true) * view.getFloat64(here + 24, true) -
+                view.getFloat64(here + 16, true) * view.getFloat64(here + 8, true);
+            }
+            if (twice < 0) outer += 1;
+            else if (twice > 0) holes += 1;
+          }
+          most = Math.max(most, outer * holes);
+        }
+      }
+      at = end;
+    }
+    return most;
   }
 
   // Whether a zip ends with its directory's last record where a zip's must be: in its last 22

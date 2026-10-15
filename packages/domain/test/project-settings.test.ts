@@ -20,6 +20,10 @@ const shipped = {
   REQUEST_BODY_LIMIT_BYTES: '1048576',
   STATEMENT_TIMEOUT_MS: '30000',
   DATABASE_POOL_CONNECTIONS: '10',
+  DATABASE_CONNECTION_WAIT_MS: '2000',
+  DATABASE_WORK_LONGEST_MS: '5000',
+  DATABASE_BUSY_RETRY_SECONDS: '5',
+  MAP_FILE_RING_PAIRS_AT_MOST: '50000000',
   PASSWORD_MINIMUM_LENGTH: '15',
   PASSWORD_MAXIMUM_LENGTH: '128',
   PASSWORD_RESET_MINUTES: '60',
@@ -133,6 +137,9 @@ describe('the policy values', () => {
       requestBodyLimitBytes: 'REQUEST_BODY_LIMIT_BYTES',
       statementTimeoutMs: 'STATEMENT_TIMEOUT_MS',
       databasePoolConnections: 'DATABASE_POOL_CONNECTIONS',
+      databaseConnectionWaitMs: 'DATABASE_CONNECTION_WAIT_MS',
+      databaseWorkLongestMs: 'DATABASE_WORK_LONGEST_MS',
+      databaseBusyRetrySeconds: 'DATABASE_BUSY_RETRY_SECONDS',
       passwordMinimumLength: 'PASSWORD_MINIMUM_LENGTH',
       passwordMaximumLength: 'PASSWORD_MAXIMUM_LENGTH',
       passwordResetMinutes: 'PASSWORD_RESET_MINUTES',
@@ -158,6 +165,7 @@ describe('the policy values', () => {
       mapFileBytesAtMost: 'MAP_FILE_BYTES_AT_MOST',
       mapFileUnzippedBytesAtMost: 'MAP_FILE_UNZIPPED_BYTES_AT_MOST',
       mapFileEntriesAtMost: 'MAP_FILE_ENTRIES_AT_MOST',
+      mapFileRingPairsAtMost: 'MAP_FILE_RING_PAIRS_AT_MOST',
       rateLimitWindowSeconds: 'RATE_LIMIT_WINDOW_SECONDS',
       rateLimitRequestsPerAddress: 'RATE_LIMIT_REQUESTS_PER_ADDRESS',
       rateLimitRequestsPerAccount: 'RATE_LIMIT_REQUESTS_PER_ACCOUNT',
@@ -262,6 +270,36 @@ describe('the policy values', () => {
     }
     for (const written of ['1', '2147483647']) {
       expect(() => Policy.from({ ...shipped, STATEMENT_TIMEOUT_MS: written })).not.toThrow();
+    }
+  });
+
+  it('AC-10-71 a piece of work waits 2 s for a connection and runs 5 s at most unless changed, and a caller told the database is busy waits 5 s; a shape of a shapefile pairs fifty million outer rings and holes at most: each held to its range (ADR-524)', () => {
+    const policy = Policy.from(shipped);
+    expect([
+      policy.databaseConnectionWaitMs,
+      policy.databaseWorkLongestMs,
+      policy.databaseBusyRetrySeconds,
+      policy.mapFileRingPairsAtMost,
+    ]).toEqual([2000, 5000, 5, 50_000_000]);
+    for (const [name, outside, inside, range] of [
+      ['DATABASE_CONNECTION_WAIT_MS', ['99', '600001'], ['100', '600000'], 'from 100 to 600000'],
+      [
+        'DATABASE_WORK_LONGEST_MS',
+        ['999', '2147483648'],
+        ['1000', '2147483647'],
+        'from 1000 to 2147483647',
+      ],
+      ['DATABASE_BUSY_RETRY_SECONDS', ['0', '3601'], ['1', '3600'], 'from 1 to 3600'],
+      ['MAP_FILE_RING_PAIRS_AT_MOST', ['0'], ['1'], '1 or more'],
+    ] as const) {
+      for (const written of outside) {
+        expect(() => Policy.from({ ...shipped, [name]: written })).toThrow(
+          `The policy value ${name} must be a whole number, ${range}: "${written}".`,
+        );
+      }
+      for (const written of inside) {
+        expect(() => Policy.from({ ...shipped, [name]: written })).not.toThrow();
+      }
     }
   });
 

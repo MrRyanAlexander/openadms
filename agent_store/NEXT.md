@@ -115,7 +115,7 @@ true now, topic by topic, is `SUMMARY.md`; the round-by-round history is the ses
 of `DECISIONS.md`.
 
 ### Where things stand (2026-10-14, through ADR-519)
-- **Phase 2 is reopened at the user's word (ADR-519): Milestone 2.8, nine tasks; 2.8.1 done (the register swept, ADR-522), from 2.8.2.** An audit found a sync answered 500 under a burst (C162 (c)), the object store's own servers open on the stack's network (C162 (a)), held things nobody can resolve (so such a phone is never turned in), REQ-105e and 105g not whole at the API (the register's "no task yet"), REQ-202's box unticked (now ticked), and a lost phone's key revoked only by its own turn-in (the user's backstop: task 2.8.6). REQ-210…217 are new. The line below is ADR-518's, kept until 2.8.9.
+- **Phase 2 is reopened at the user's word (ADR-519): Milestone 2.8, nine tasks; 2.8.1 done (the register swept, ADR-522), 2.8.2 done (a request the database can't do in time told `503 BUSY`, ADR-524), from 2.8.3.** An audit found a sync answered 500 under a burst (C162 (c)), the object store's own servers open on the stack's network (C162 (a)), held things nobody can resolve (so such a phone is never turned in), REQ-105e and 105g not whole at the API (the register's "no task yet"), REQ-202's box unticked (now ticked), and a lost phone's key revoked only by its own turn-in (the user's backstop: task 2.8.6). REQ-210…217 are new. The line below is ADR-518's, kept until 2.8.9.
 - ~~**Phase 2's exit is met (task 2.7.4, ADR-518): Phase 3 is the user's to open.**~~ All 32 tasks closed (2.6.3 withdrawn); 13 of 14 REQs ticked, REQ-006 moved to Phase 3; 119 of 119 scenarios with a Phase 2 part proven at the API; Phase 3's REQs refreshed, REQ-322…324 new. What it leaves: C163 (the user's first question for Phase 3: the accessibility standard, REQ-324). Each task's ADRs are on its tick in `BACKLOG.md`, "Active — Phase 2"; what it leaves is the carry-forward register. The lines that stood here, one a finished task, moved word for word to `DECISIONS.md`'s scratchpad, "Moved 2026-10-14 (ADR-516)". **This block says where things stand now, in a few lines; a finished task gets no line of its own here (ADR-516).**
 - **Where each thing is written, so nothing is read twice:** a rule as it stands, with its ADR:
   `SUMMARY.md`, by topic (grep its `###` headings; never read it whole). What a finished task left
@@ -333,11 +333,13 @@ Update it at close-out when a task, milestone or phase closes.
 and the topic you are touching. Product discovery is closed (ADR-230): don't open new rounds of
 questions.
 
-**Phase 2 is reopened at the user's word (ADR-519). The next task is 2.8.2, a sync told to wait,
-never a 500** (`BACKLOG.md`, Milestone 2.8; REQ-210): its ADR first (503 or 429 with `Retry-After`
-for Prisma's `P2028` and the pool's wait), then **its whole line, the "Filed by the sweep" list
-included** (2.8.1 swept the register, ADR-522: each of 2.8.2…2.8.8 names its full list there).
-Then 2.8.3…2.8.9 in order, one a response. **2.8.6's questions are answered (ADR-520)**: its line in `BACKLOG.md` says
+**Phase 2 is reopened at the user's word (ADR-519). The next task is 2.8.3, the object store's
+own servers closed** (`BACKLOG.md`, Milestone 2.8; REQ-211): its ADR first (SeaweedFS's master,
+volume and filer, and their gRPC, bound to the container's loopback, or the store on a network of
+its own with Caddy alone, read against ASVS 4.2.1 and 12.3.3), then **its whole line, the "Filed
+by the sweep" list included** (each of 2.8.3…2.8.8 names its full list there). Then 2.8.4…2.8.9
+in order, one a response. A new piece of work meant to run past 5 s states its own limits
+(C166). **2.8.6's questions are answered (ADR-520)**: its line in `BACKLOG.md` says
 what was decided; **2.8.7's is answered too (ADR-521: the back office enters a certification from
 paper)**. No task of 2.8 waits on the user. **At every task's close, no server "no task yet" is left unfiled** (ADR-519's lesson).
 **When Phase 2's exit is met again and the user opens Phase 3:** task 3.0.1 writes its plan

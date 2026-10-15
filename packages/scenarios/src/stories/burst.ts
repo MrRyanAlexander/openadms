@@ -29,11 +29,18 @@
 //
 // Not here: health (part 4); photographs at their real size (a file here is 4 KiB: it is the
 // requests that are counted, not the bytes; Phase 3 measures a phone's real files).
-import { WorkQueue } from '@open-adms/api';
+import {
+  MapFileReader,
+  OfflineChecks,
+  ProjectSetup,
+  SetupVersions,
+  WorkQueue,
+} from '@open-adms/api';
 import { ReconciliationJobs, type Database } from '@open-adms/db';
-import { MapServers, Mileages, Reconciliation } from '@open-adms/worker';
+import { MapServers, Mileages, Reconciliation, type RunOutcome } from '@open-adms/worker';
 
 import { projectTime } from '../clock.ts';
+import { uuidv7 } from '../ids.ts';
 import {
   type Completed,
   made,
@@ -55,6 +62,7 @@ import {
   setUpP1Pricing,
 } from './p1-office.ts';
 import { p1TimeZone as timeZone } from './p1.ts';
+import { p1Zones } from './setup.ts';
 
 const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-04:00`;
 const thursday = (time: string): string => on('15', time);
@@ -86,33 +94,46 @@ const tdsrTower = { endLatitude: '39.09030000', endLongitude: '-75.62020000' } a
 const certOf = (truck: number): string => String(730501 + truck);
 const two = (n: number): string => String(n).padStart(2, '0');
 
-// Where a story's phones sync, counted: each sync and each file's part sent, and each one the
-// server said to wait for (`ToldToWait`).
+// Where a story's phones sync, counted: each sync and each file's part sent, each phone's own,
+// and each one the server said to wait for (`ToldToWait`), and of those how many because the
+// database was busy (`503 BUSY`, ADR-524).
 function counted(server: PhoneServer) {
-  const count = { syncs: 0, parts: 0, toldToWait: 0 };
+  const count = { syncs: 0, parts: 0, toldToWait: 0, busy: 0 };
+  const byPhone = new Map<string, { syncs: number; parts: number }>();
+  const ofPhone = (deviceId: string) => {
+    const held = byPhone.get(deviceId) ?? { syncs: 0, parts: 0 };
+    byPhone.set(deviceId, held);
+    return held;
+  };
   const told = async <T>(sent: Promise<T>): Promise<T> => {
     try {
       return await sent;
     } catch (caught) {
-      if (caught instanceof ToldToWait) count.toldToWait += 1;
+      if (caught instanceof ToldToWait) {
+        count.toldToWait += 1;
+        if (caught.code === 'BUSY') count.busy += 1;
+      }
       throw caught;
     }
   };
   const made: PhoneServer = {
     received: (deviceId, sent) => {
       count.syncs += 1;
+      ofPhone(deviceId).syncs += 1;
       return told(server.received(deviceId, sent));
     },
     filePart: (deviceId, part) => {
       count.parts += 1;
+      ofPhone(deviceId).parts += 1;
       return told(server.filePart(deviceId, part));
     },
   };
-  return { server: made, count };
+  return { server: made, count, byPhone };
 }
 
-// Seconds on this machine since a moment, to a tenth.
+// Seconds on this machine since a moment, to a tenth; milliseconds, to a tenth.
 const since = (started: number): string => ((performance.now() - started) / 1000).toFixed(1);
+const ms = (each: number): string => each.toFixed(1);
 
 export const burst: Story = {
   name: 'burst',
@@ -294,6 +315,24 @@ export const burst: Story = {
         `clock stood at ${projectTime(timeZone, clock.now())} when the last phone was done`,
     );
 
+    // What the burst asked of the API's pool, and of a phone's own limits (BACKLOG 2.8.2; C141,
+    // C155, C162 (c); ADR-524): written down, never checked.
+    const waited = [...story.apiPool.waitedMs()].sort((a, b) => a - b);
+    say(
+      `The API's pool of ${String(story.apiPool.connections)} connections: ${String(waited.length)} ` +
+        `pieces of work; half waited ${ms(middleOf(waited))} ms or less for a connection, the ` +
+        `slowest ${ms(waited.at(-1) ?? 0)} ms, ${String(waited.filter((each) => each > 100).length)} ` +
+        `over 100 ms; told the database was busy ${String(yard.count.busy)} times`,
+    );
+    const mostOf = (what: 'syncs' | 'parts'): number =>
+      Math.max(...[...yard.byPhone.values()].map((phone) => phone[what]));
+    say(
+      `The most one phone sent in the burst's minute: ${String(mostOf('syncs'))} syncs and ` +
+        `${String(mostOf('parts'))} files' parts (a phone may send ` +
+        `${String(story.policy.rateLimitRequestsPerPhone)} requests and ` +
+        `${String(story.policy.rateLimitFilePartsPerPhone)} parts a minute)`,
+    );
+
     const told = phones.flatMap((phone) => phone.answers);
     const stored = (ids: readonly string[]) => new Set(ids).size;
     story.check(
@@ -338,7 +377,7 @@ export const burst: Story = {
       ],
     );
     story.check(
-      'ADR-416, 505 no limit dropped work: the burst is more requests than the office’s one address may send in a stretch, so a phone was told to wait (429 LIMITED); each phone told waited the seconds it was told, on the story’s clock, and sent the same again, and it was all answered saved above',
+      'ADR-416, 505, 524 no limit dropped work: the burst is more requests than the office’s one address may send in a stretch, so a phone was told to wait (429 LIMITED, or 503 BUSY where the database was); each phone told waited the seconds it was told, on the story’s clock, and sent the same again, and it was all answered saved above',
       [
         waits.length > 0,
         yard.count.toldToWait === waits.length,
@@ -348,18 +387,24 @@ export const burst: Story = {
     );
 
     // ------------------------------------------------------------------------------------------
-    story.at(thursday('18:30'), 'The worker’s loop takes up every job the burst queued');
-    const reconciliation = new Reconciliation(
-      worker,
-      clock,
-      {
-        crewItemHoursLimit: story.policy.crewDayHours,
-        deviceClockOffLimitMinutes: story.policy.deviceClockOffLimitMinutes,
-        longestRunMs: 600_000,
-      },
-      new Mileages(new MapServers(localMapServers())),
+    story.at(
+      thursday('18:30'),
+      'Two workers, as two worker containers would, take up every job the burst queued at once',
     );
-    const queue = new QueueRuns(story, reconciliation);
+    const reconciling = (db: Database) =>
+      new Reconciliation(
+        db,
+        clock,
+        {
+          crewItemHoursLimit: story.policy.crewDayHours,
+          deviceClockOffLimitMinutes: story.policy.deviceClockOffLimitMinutes,
+          longestRunMs: 600_000,
+        },
+        new Mileages(new MapServers(localMapServers())),
+      );
+    const queue = new QueueRuns(story, reconciling(worker));
+    // The second worker's own pool, as its own container's would be (C95).
+    const secondWorker = new QueueRuns(story, reconciling(story.openWorker()));
     const atMost = story.policy.jobTicketsAtMost;
     const waiting = (await queue.waiting(p1)).map((job) => job.tickets);
     const sizes = waiting.map((tickets) => tickets.length).sort((a, b) => a - b);
@@ -370,12 +415,17 @@ export const burst: Story = {
         `bit on none of them`,
     );
     const draining = performance.now();
-    const drained = await queue.ran(p1);
+    const [first, second] = await twoAtOnce(api, [queue, secondWorker]);
+    if (first === undefined || second === undefined) throw new Error('A worker made no answer.');
+    const drained = [...first.runs, ...second.runs];
     const runs = drained.length;
     say(
       `It took ${String(runs)} runs of at most ${String(atMost)} tickets to work the ` +
         `${String(waiting.length)} jobs waiting (${since(draining)} s on this machine), ` +
-        `${String(workedIn(drained))} tickets worked in all`,
+        `${String(workedIn(drained))} tickets worked in all: the first worker made ` +
+        `${String(first.runs.length)} runs, the second ${String(second.runs.length)}; their ` +
+        `passes found nothing to take up ${String(first.idle + second.idle)} times while the ` +
+        `other's run was under way`,
     );
     // The same jobs taken up again on paper at other sizes, by the worker's rule (the oldest
     // first, a job that doesn't fit ends a run's take of a ticket more, a job whose tickets the
@@ -396,7 +446,7 @@ export const burst: Story = {
     );
     const burstLoads = await loadsOf(worker, p1, '2026-10-15');
     story.check(
-      'AC-05-51 the worker’s own loop drained the burst in more than one run, and every load of the day stands concluded: none still waiting for its other field event, each with its completed load',
+      'AC-05-51 the workers’ own loops drained the burst in more than one run, two workers at once, and every load of the day stands concluded: none still waiting for its other field event, each with its completed load',
       [runs > 1, burstLoads.pending, burstLoads.completed],
       [true, 0, trucks * loadsATruck],
     );
@@ -428,7 +478,6 @@ export const burst: Story = {
       reads.push(performance.now() - reading);
       found.push(neighbours.length);
     }
-    const ms = (each: number): string => each.toFixed(1);
     const sortedReads = [...reads].sort((a, b) => a - b);
     say(
       `The neighbour read of one ticket, a load of each of the ${String(trucks)} trucks among ` +
@@ -491,8 +540,216 @@ export const burst: Story = {
       `A run by its size, seconds on this machine: ` +
         sized.map((run) => `${String(run.tickets)} tickets ${run.seconds.toFixed(2)} s`).join('; '),
     );
+
+    // ------------------------------------------------------------------------------------------
+    // What a sync, a turn-in and a map ask at that size (BACKLOG 2.8.2; C133, C134, C140, C141,
+    // C154; ADR-524): each timed on this machine and written down, never checked against a
+    // figure.
+    story.at(thursday('19:30'), 'What a sync, a turn-in and a map ask at that size, timed');
+    // Each sync that names a project reads its whole setup to number it (C133).
+    const setupReads: number[] = [];
+    while (setupReads.length < phones.length) {
+      const reading = performance.now();
+      await api.$read((tx) => SetupVersions.shownIn(tx, p1));
+      setupReads.push(performance.now() - reading);
+    }
+    setupReads.sort((a, b) => a - b);
+    say(
+      `A sync's read of P1's setup to number it, ${String(phones.length)} times one after ` +
+        `another: half took ${ms(middleOf(setupReads))} ms or less, the slowest ` +
+        `${ms(setupReads.at(-1) ?? 0)} ms`,
+    );
+    // A phone's first sync is made the master passcode's check (C134): a slow hash, made outside
+    // any piece of work, so it holds no connection. One, then one for each phone at once.
+    const { hash } = await api.masterPasscode.findFirstOrThrow({ orderBy: { version: 'desc' } });
+    const checks = new OfflineChecks('a signing secret of the burst’s own');
+    const checking = performance.now();
+    await checks.ofPasscode(hash);
+    const oneCheck = performance.now() - checking;
+    const allChecking = performance.now();
+    await Promise.all(phones.map(() => checks.ofPasscode(hash)));
+    say(
+      `The master passcode's check a phone's first sync is made: one took ${ms(oneCheck)} ms; ` +
+        `one for each of the ${String(phones.length)} phones at once, ` +
+        `${ms(performance.now() - allChecking)} ms in all`,
+    );
+    // A turn-in names up to 10,000 records and 10,000 photographs (C141): one of the collection
+    // phones names its own and made-up ones to that size, so its confirmation reads that many.
+    const [namer] = collectors;
+    if (namer === undefined) throw new Error('No collection phone.');
+    const ownRecords = await api.syncedRecord.findMany({
+      where: { deviceId: namer.setup.deviceId },
+      select: { recordId: true, recordKind: true },
+    });
+    const named = (kept: readonly string[]): string[] => [
+      ...kept,
+      ...Array.from({ length: 10_000 - kept.length }, () => uuidv7(clock.now())),
+    ];
+    const naming = performance.now();
+    const namedAnswer = await story.underPasscode.turnInNaming(namer.setup.deviceId, {
+      unplannedAssignments: [],
+      passcodeUses: [],
+      records: named(
+        ownRecords.filter((one) => one.recordKind !== 'PHOTO').map((one) => one.recordId),
+      ),
+      held: [],
+      photos: named(
+        ownRecords.filter((one) => one.recordKind === 'PHOTO').map((one) => one.recordId),
+      ),
+    });
+    const namingMs = performance.now() - naming;
+    story.check(
+      'C141 a turn-in naming 10,000 records and 10,000 photographs is answered: what the server doesn’t have of them is named back, nothing changed',
+      namedAnswer.turnedIn
+        ? 'turned in'
+        : [namedAnswer.notOnTheServer.records.length, namedAnswer.notOnTheServer.photos.length],
+      [10_000 - 2 * loadsATruck, 10_000 - 2 * loadsATruck],
+    );
+    // A phone whose every record the server has, turned in whole.
+    const [turned] = towerPhones;
+    if (turned === undefined) throw new Error('No tower phone.');
+    const turnedHolds = await api.syncedRecord.count({
+      where: { deviceId: turned.setup.deviceId },
+    });
+    const turning = performance.now();
+    const turnedAnswer = await story.underPasscode.turnIn(turned);
+    say(
+      `A turn-in naming 10,000 records and 10,000 photographs, the server holding ` +
+        `${String(2 * loadsATruck)} of each: answered in ${ms(namingMs)} ms; a tower phone ` +
+        `holding ${String(turnedHolds)} records and photographs, all on the server, ` +
+        `synced and turned in in ${ms(performance.now() - turning)} ms`,
+    );
+    story.check(
+      'AC-02-58 the tower phone whose every record the server has is turned in and told to wipe',
+      turnedAnswer.wipe,
+      true,
+    );
+    // The neighbour read (C154): how the database reads a field event's other loads by truck,
+    // and how many field events of the project that reads.
+    const [plan] = await api.$queryRaw<{ 'QUERY PLAN': string }[]>`
+      EXPLAIN SELECT "id" FROM "field_event"
+      WHERE "project_id" = ${p1}::uuid AND "cert_number" IN (${certOf(0)})
+        AND "kind" IN ('COLLECTION', 'UNIT_RATE')`;
+    say(
+      `The neighbour read by truck is read so: ${plan?.['QUERY PLAN'].trim() ?? 'no plan'}, ` +
+        `over the project's ${String(await api.fieldEvent.count({ where: { projectId: p1 } }))} ` +
+        `field events`,
+    );
+    // A map's file at its largest (C140): a GeoJSON of zones as many as fit the policy's size,
+    // each a shape of many corners, read as the API reads a file it is sent.
+    const corners = 2_000;
+    const zone = (n: number) => ({
+      type: 'Feature',
+      properties: { ZONE_NAME: `Zone ${String(n + 1)}` },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          Array.from({ length: corners + 1 }, (_, corner) => {
+            const angle = (2 * Math.PI * (corner % corners)) / corners;
+            return [
+              Number((-75.6 + 0.001 * n + 0.0004 * Math.cos(angle)).toFixed(7)),
+              Number((39.1 + 0.0004 * Math.sin(angle)).toFixed(7)),
+            ];
+          }),
+        ],
+      },
+    });
+    const fits = Math.floor(
+      (story.policy.mapFileBytesAtMost * 0.95) / Buffer.byteLength(JSON.stringify(zone(0))),
+    );
+    const mapFile = Buffer.from(
+      JSON.stringify({
+        type: 'FeatureCollection',
+        features: Array.from({ length: fits }, (_, n) => zone(n)),
+      }),
+    );
+    const reader = new MapFileReader({
+      unzippedBytesAtMost: story.policy.mapFileUnzippedBytesAtMost,
+      entriesAtMost: story.policy.mapFileEntriesAtMost,
+      ringPairsAtMost: story.policy.mapFileRingPairsAtMost,
+    });
+    const readingMap = performance.now();
+    const map = await reader.read(mapFile);
+    say(
+      `A map's GeoJSON file of ${String(mapFile.byteLength)} bytes (the policy lets one weigh ` +
+        `${String(story.policy.mapFileBytesAtMost)}), ${String(fits)} zones of ${String(corners)} ` +
+        `corners each: read in ${ms(performance.now() - readingMap)} ms, ` +
+        (map.read === null
+          ? `not read (${map.problem})`
+          : `${String(map.read.layers.length)} layer`),
+    );
+    // A map version whose boundary has a great many corners (C140): loaded, then a run of one
+    // ticket timed again, as each run reads the boundary.
+    const along = 25_000;
+    const edge = (from: readonly [number, number], to: readonly [number, number]) =>
+      Array.from({ length: along }, (_, step) => [
+        Number((from[0] + ((to[0] - from[0]) * step) / along).toFixed(7)),
+        Number((from[1] + ((to[1] - from[1]) * step) / along).toFixed(7)),
+      ]);
+    const [west, south, east, north] = [-75.8, 38.9, -75.4, 39.3] as const;
+    const ring = [
+      ...edge([west, south], [east, south]),
+      ...edge([east, south], [east, north]),
+      ...edge([east, north], [west, north]),
+      ...edge([west, north], [west, south]),
+      [west, south],
+    ];
+    const loading = performance.now();
+    const loaded = await new ProjectSetup(api, clock, story.policy).loadMap(office.dana, {
+      projectId: p1,
+      source: 'UPLOAD',
+      sourceName: 'bayline-row-zones-v2.geojson',
+      boundary: { type: 'Polygon', coordinates: [ring] },
+      zones: p1Zones,
+      zoneNameField: 'ZONE_NAME',
+    });
+    if (!loaded.saved) throw new Error(`The map wasn't loaded: ${loaded.refusal.message}`);
+    const loadedMs = performance.now() - loading;
+    const withIt: number[] = [];
+    for (let time = 0; time < 3; time += 1) {
+      await byHand([one.ticketNumber]);
+      withIt.push((await timed()).seconds);
+    }
+    await byHand(every.slice(0, atMost).map(({ ticketNumber }) => ticketNumber));
+    const twoHundred = await timed();
+    say(
+      `A map version whose boundary has ${String(ring.length)} corners: loaded in ` +
+        `${ms(loadedMs)} ms; a run of one ticket then took ` +
+        `${withIt.map((seconds) => `${seconds.toFixed(2)} s`).join(', ')}, and a run of ` +
+        `${String(twoHundred.tickets)} tickets ${twoHundred.seconds.toFixed(2)} s`,
+    );
   },
 };
+
+// Every waiting job taken up by workers at once, each passing until no job waits, as each
+// worker container's loop does (C95): a pass that finds nothing to take up, the other's run
+// holding the project, waits a moment and passes again. Each worker's runs, and how many of its
+// passes found nothing; a pass that failed stops the story.
+async function twoAtOnce(
+  db: Database,
+  queues: readonly QueueRuns[],
+): Promise<{ readonly runs: RunOutcome[]; readonly idle: number }[]> {
+  const waiting = (): Promise<number> =>
+    db.reconciliationJob.count({ where: { finishedAt: null, setAsideAt: null } });
+  return Promise.all(
+    queues.map(async (queue) => {
+      const runs: RunOutcome[] = [];
+      let idle = 0;
+      while ((await waiting()) > 0) {
+        const passed = await queue.pass();
+        for (const each of passed) {
+          if ('error' in each) throw new Error(`A worker’s pass failed on ${each.projectId}.`);
+          if (each.outcome.worked) runs.push(each.outcome.run);
+        }
+        if (passed.some((each) => 'outcome' in each && each.outcome.worked)) continue;
+        idle += 1;
+        if (idle > 2400) throw new Error('A worker found nothing to take up for two minutes.');
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      return { runs, idle };
+    }),
+  );
+}
 
 // The middle of numbers in order: the one at half way.
 function middleOf(sorted: readonly number[]): number {

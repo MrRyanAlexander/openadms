@@ -49,6 +49,7 @@ import {
   signInOnPhoneEndpoint,
   syncAnsweredSchema,
   syncPhoneEndpoint,
+  toldToWait as waitAsked,
   turnInAnswerSchema,
   turnInPhoneEndpoint,
   type Endpoint,
@@ -61,6 +62,7 @@ import {
 } from '@open-adms/contracts';
 import type { MasterPasscodeSessionKind } from '@open-adms/domain';
 import { ApiModule, ApiProcess, NoMail, type Addresses } from '@open-adms/api';
+import type { Actor, Database, Prisma } from '@open-adms/db';
 import type { Policy } from '@open-adms/domain';
 
 import { answered, codeOf, OverHttps, type Asked, type AskedWith } from './over-https.ts';
@@ -170,6 +172,7 @@ export class StoryApi {
   // The API's last few error lines (a failure's kind and frames, never what was sent: ADR-385),
   // so a story stopped on a 5xx says why (C155).
   private readonly errorLines: string[] = [];
+  private readonly waited: number[] = [];
 
   constructor(parts: StoryApiParts) {
     this.parts = parts;
@@ -423,8 +426,22 @@ export class StoryApi {
     }
   }
 
+  // How long each of the API's pieces of work waited for a connection, in milliseconds, in the
+  // order they began (ADR-524): from asking for it to the work's first step.
+  waitedMs(): readonly number[] {
+    return [...this.waited];
+  }
+
   private async start(): Promise<ApiProcess> {
     const { database, policy, media } = this.parts;
+    // The policy's pool, as an installation's API runs on (ADR-419, 524).
+    const pool = {
+      maxConnections: policy.databasePoolConnections,
+      pieceOfWork: {
+        waitMs: policy.databaseConnectionWaitMs,
+        longestMs: policy.databaseWorkLongestMs,
+      },
+    };
     const api = await ApiProcess.create(
       ApiModule,
       {
@@ -466,8 +483,8 @@ export class StoryApi {
             this.kept(line);
           },
         },
-        database: database.open('api'),
-        viewerDatabase: database.openViewer(),
+        database: timed(database.open('api', pool), this.waited),
+        viewerDatabase: database.openViewer(pool),
         mail: new NoMail(),
         clock: { now: () => this.on.now() },
         addresses: noAddresses,
@@ -488,14 +505,41 @@ export class StoryApi {
   }
 }
 
-// A limit reached (`429 LIMITED`, ARCHITECTURE §6, Abuse; ADR-416): the phone is told to wait the
-// seconds the answer says, whichever of its requests it was, its proof among them (ADR-505).
+// A service's database whose every piece of work says how long it waited to begin: from asking
+// for a connection to the work's first step, written into `waited` (ADR-524).
+function timed(db: Database, waited: number[]): Database {
+  const began =
+    <T>(asked: number, work: (tx: Prisma.TransactionClient) => Promise<T>) =>
+    (tx: Prisma.TransactionClient): Promise<T> => {
+      waited.push(performance.now() - asked);
+      return work(tx);
+    };
+  return new Proxy(db, {
+    get(target, name) {
+      if (name === '$write') {
+        return <T>(actor: Actor, work: (tx: Prisma.TransactionClient) => Promise<T>) =>
+          target.$write(actor, began(performance.now(), work));
+      }
+      if (name === '$read') {
+        return <T>(work: (tx: Prisma.TransactionClient) => Promise<T>) =>
+          target.$read(began(performance.now(), work));
+      }
+      const value: unknown = Reflect.get(target, name, target);
+      return typeof value === 'function'
+        ? (value as (...args: unknown[]) => unknown).bind(target)
+        : value;
+    },
+  });
+}
+
+// A limit reached (`429 LIMITED`, ARCHITECTURE §6, Abuse; ADR-416) or the database busy (`503
+// BUSY`, ADR-524): the phone is told to wait the seconds the answer says, read as the contracts
+// read it for any client, whichever of its requests it was, its proof among them (ADR-505).
 function toldToWait(answer: Asked): void {
-  if (answer.status !== 429) return;
-  const read = errorAnswerSchema.safeParse(answer.body).data;
-  if (read?.code === 'LIMITED' && read.retryAfterSeconds !== undefined) {
-    throw new ToldToWait(read.retryAfterSeconds);
-  }
+  if (answer.status !== 429 && answer.status !== 503) return;
+  const seconds = waitAsked(answer.body);
+  const code = errorAnswerSchema.safeParse(answer.body).data?.code;
+  if (seconds !== null && code !== undefined) throw new ToldToWait(seconds, code);
 }
 
 // A proof's answer: proven, or the code it was refused with.

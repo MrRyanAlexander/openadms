@@ -31,6 +31,7 @@ const log = new WorkerLog();
 const db = openDatabase({
   url: settings.databaseUrl,
   maxConnections: policy.databasePoolConnections,
+  pieceOfWork: { waitMs: policy.databaseConnectionWaitMs, longestMs: policy.databaseWorkLongestMs },
 });
 const reconciliation = new Reconciliation(
   db,

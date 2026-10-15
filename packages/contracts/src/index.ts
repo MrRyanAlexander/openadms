@@ -59,6 +59,8 @@ export {
   signedOutAnswerSchema,
   twoStepClearedAnswerSchema,
   twoStepSetupAnswerSchema,
+  toldToWait,
+  waitAnswers,
   type AssignmentRecord,
   type AssignmentsAnswer,
   type CsrfAnswer,

@@ -147,16 +147,20 @@ export class NoSignal extends Error {
 }
 
 // What a story's server throws where the API answered `429 LIMITED` (ARCHITECTURE §6, Abuse;
-// ADR-416, 490): a limit was reached, and the answer says how many seconds to wait. Nothing it
-// sent was read (the limit is counted before the request is), so the phone holds it all, waits
-// and sends it again under the same ids (AC-05-51; ADR-505).
+// ADR-416, 490) or `503 BUSY` (ADR-524): a limit was reached, or the database couldn't do the
+// work in time, and the answer says how many seconds to wait. Nothing the refused request asked
+// was kept but what an earlier answer said was saved, so the phone holds it all, waits and sends
+// it again under the same ids (AC-05-51; ADR-505).
 export class ToldToWait extends Error {
   readonly seconds: number;
+  // `LIMITED` or `BUSY`.
+  readonly code: string;
 
-  constructor(seconds: number) {
-    super(`The server said to wait ${String(seconds)} s (429 LIMITED).`);
+  constructor(seconds: number, code = 'LIMITED') {
+    super(`The server said to wait ${String(seconds)} s (${code}).`);
     this.name = 'ToldToWait';
     this.seconds = seconds;
+    this.code = code;
   }
 }
 

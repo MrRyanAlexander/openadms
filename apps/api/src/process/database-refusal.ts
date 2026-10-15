@@ -7,7 +7,8 @@
 // What is told is a plain code, and plain words where this file has them for the constraint; the
 // constraint's own name, the table and the statement stay inside the server (the log says the
 // constraint, by its name). **What is the server's own failure stays one:** a write the login has
-// no grant for, a delete refused, a statement stopped by its time limit.
+// no grant for, a delete refused. A statement stopped by its time limit is no refusal either: the
+// database was busy, and the caller is told to wait (database-busy.ts; ADR-524).
 //
 // Each task that puts a service behind an endpoint adds the words for the constraints its
 // requests can reach; one with no words here is still answered plainly, by its kind.

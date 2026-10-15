@@ -8,6 +8,7 @@
 // another's read. The client itself is kept inside: a read outside $viewed can't be written.
 import { PrismaPg } from '@prisma/adapter-pg';
 
+import { transactionLimits, type PieceOfWork } from './actor.ts';
 import type { Connection } from './database.ts';
 import { PrismaClient, type Prisma } from './generated/prisma/client.ts';
 
@@ -15,9 +16,11 @@ const anId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export class ViewerDatabase {
   private readonly client: PrismaClient;
+  private readonly limits: { maxWait: number; timeout: number } | undefined;
 
-  constructor(client: PrismaClient) {
+  constructor(client: PrismaClient, work?: PieceOfWork) {
     this.client = client;
+    this.limits = transactionLimits(work);
   }
 
   // Runs the reads as one database transaction, as the viewer. `viewerId` is the signed-in
@@ -30,7 +33,7 @@ export class ViewerDatabase {
       await tx.$executeRaw`SET TRANSACTION READ ONLY`;
       await tx.$queryRaw`SELECT set_config('adms.viewer_id', ${viewerId}, true)`;
       return work(tx);
-    });
+    }, this.limits);
   }
 
   $disconnect(): Promise<void> {
@@ -40,10 +43,12 @@ export class ViewerDatabase {
 
 // The read-only login's way into Postgres: its own URL, from the API's env file (the installer
 // writes it; ADR-266). Never logged.
-export function openViewerDatabase(connection: Pick<Connection, 'url' | 'maxConnections'>) {
+export function openViewerDatabase(
+  connection: Pick<Connection, 'url' | 'maxConnections' | 'pieceOfWork'>,
+) {
   const adapter = new PrismaPg({
     connectionString: connection.url,
     ...(connection.maxConnections === undefined ? {} : { max: connection.maxConnections }),
   });
-  return new ViewerDatabase(new PrismaClient({ adapter }));
+  return new ViewerDatabase(new PrismaClient({ adapter }), connection.pieceOfWork);
 }

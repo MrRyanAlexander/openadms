@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  errorAnswerSchema,
   fitByWeight,
   photoFileAnswerRead,
   photoFileGoesOnFrom,
@@ -18,6 +19,7 @@ import {
   syncPasscodeUsesAtMost,
   syncRecordsAtMost,
   syncUnplannedAssignmentsAtMost,
+  toldToWait,
   toWipe,
   turnInAnswerRead,
   type FilePartSent,
@@ -67,6 +69,7 @@ const faults = [
   'WIPES_ON_ANY_ANSWER',
   'KEEPS_WHAT_IT_SHOWS',
   'PACKS_BY_COUNT_ONLY',
+  'SHOWS_A_WAIT_AS_NOT_SAVED',
 ] as const;
 type Fault = (typeof faults)[number];
 
@@ -183,6 +186,17 @@ const phone =
         if (sent === undefined) throw new Error('Answered before it sent.');
         if (fault === 'TAKES_SENT_FOR_SAVED' && answer === undefined) waiting = [];
         if (fault === 'TAKES_ANY_ANSWER' && answer !== undefined) waiting = [];
+        // Told to wait, it shows what it sent as not saved, under the wait's code.
+        const wait = errorAnswerSchema.safeParse(answer).data;
+        if (
+          fault === 'SHOWS_A_WAIT_AS_NOT_SAVED' &&
+          wait !== undefined &&
+          toldToWait(answer) !== null
+        ) {
+          for (const record of sent.records) {
+            shown.push({ id: syncedRecordId(record), reason: wait.code, message: null });
+          }
+        }
         const read =
           fault === 'READS_ANSWERS_BY_PLACE'
             ? (answer as SyncAnswered | undefined)
@@ -345,7 +359,7 @@ describe('the suite any client of the sync contract must pass', () => {
     for (const fault of faults) caught[fault] = await failed(phone(fault));
     expect(caught).toEqual({
       LEAVES_OUT_AN_EMPTY_PART: [1, 3, 5, 8, 9, 10, 11, 12, 13, 15, 16, 17],
-      SAYS_WHICH_PHONE: [2, 3, 4, 5, 6, 7, 8, 9, 10, 14, 15, 16, 17],
+      SAYS_WHICH_PHONE: [2, 3, 4, 5, 6, 7, 8, 9, 10, 14, 15, 16, 17, 18],
       TRIMS_A_NUMBER: [2],
       SENDS_AS_RECORDED: [3],
       SENDS_ALL_AT_ONCE: [4, 9, 17],
@@ -353,8 +367,8 @@ describe('the suite any client of the sync contract must pass', () => {
       DROPS_A_REPORT_NOT_SAVED: [6, 14],
       SHOWS_NO_WORDS: [5, 10],
       TAKES_SENT_FOR_SAVED: [7],
-      READS_ANSWERS_BY_PLACE: [8],
-      TAKES_ANY_ANSWER: [4, 8, 9, 17],
+      READS_ANSWERS_BY_PLACE: [8, 18],
+      TAKES_ANY_ANSWER: [4, 8, 9, 17, 18],
       // A photograph's record and its files (ADR-481…483): each check catches one fault no
       // other does.
       SENDS_PHOTOS_AHEAD: [9],
@@ -373,6 +387,8 @@ describe('the suite any client of the sync contract must pass', () => {
       KEEPS_WHAT_IT_SHOWS: [16],
       // A sync's weight (ADR-504).
       PACKS_BY_COUNT_ONLY: [17],
+      // Told to wait (ADR-524).
+      SHOWS_A_WAIT_AS_NOT_SAVED: [18],
     });
   });
 

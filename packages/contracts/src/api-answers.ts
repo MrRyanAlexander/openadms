@@ -116,6 +116,10 @@ export const errorCodes = [
   'NOT_A_MONITOR',
   // The API answers and can't serve now: its database didn't answer (status 503; ADR-507).
   'UNAVAILABLE',
+  // The database couldn't do the request's work in time (status 503, with how long to wait;
+  // ADR-524): no connection came free, or the work or a statement ran out of time. What that
+  // work was doing was undone; the caller asks again after the seconds it is told.
+  'BUSY',
 ] as const;
 
 export type ErrorCode = (typeof errorCodes)[number];
@@ -126,8 +130,8 @@ export type ErrorCode = (typeof errorCodes)[number];
 // field and how, in the contracts' own words, ADR-431); never anything from inside the server,
 // and never anything the caller sent.
 // `reason`: only with `NOT_SAVED`, the domain's own code for the rule that refused.
-// `retryAfterSeconds`: only with `LIMITED`, the whole seconds until the caller may ask again, as
-// the answer's `Retry-After` header says too (RFC 9110 §10.2.3).
+// `retryAfterSeconds`: only with `LIMITED` and `BUSY`, the whole seconds until the caller may ask
+// again, as the answer's `Retry-After` header says too (RFC 9110 §10.2.3).
 export const errorAnswerSchema = z.strictObject({
   code: z.enum(errorCodes),
   requestId: z.string().min(1),
@@ -137,6 +141,22 @@ export const errorAnswerSchema = z.strictObject({
 });
 
 export type ErrorAnswer = z.infer<typeof errorAnswerSchema>;
+
+// The answers that tell a caller to wait and ask again (ADR-416, 524): a limit reached, and the
+// database busy. Neither stored what it was asked; whatever came before it in the same request
+// and was answered stored stays stored.
+export const waitAnswers = ['LIMITED', 'BUSY'] as const;
+
+// How many seconds an answer, as it came off the wire, tells its caller to wait before asking
+// again; null where it tells nothing of the kind. Every client reads a wait this one way: it
+// keeps everything it sent, waits, and sends it again as it was (the sync contract's suite).
+export function toldToWait(answer: unknown): number | null {
+  const read = errorAnswerSchema.safeParse(answer);
+  if (!read.success || read.data.retryAfterSeconds === undefined) return null;
+  return (waitAnswers as readonly string[]).includes(read.data.code)
+    ? read.data.retryAfterSeconds
+    : null;
+}
 
 // A reset by email was asked for (ADR-404). The answer is the same whether or not anybody has
 // that address: it never says who has a login.
