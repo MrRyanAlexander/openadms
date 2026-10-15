@@ -1318,7 +1318,7 @@ item requires is a flag.
 |---|---|---|
 | **id** | uuid | From the phone |
 | **projectId** | → `Project` | |
-| fieldEventId, certificationId, roeId, surveyId, incidentId, dropOffLogId, scaleReceiptId, quarantinedRecordId | → each | **Exactly one owner** (check). `quarantinedRecordId` while its record waits in quarantine; the photo moves to the field event when a reviewer resolves it (ADR-292) |
+| fieldEventId, certificationId, roeId, surveyId, incidentId, dropOffLogId, scaleReceiptId, quarantinedRecordId, heldRecordId | → each | **Exactly one owner** (check). `quarantinedRecordId` while its record waits in quarantine; the photo moves to the field event when a reviewer resolves it (ADR-292). `heldRecordId` while its record is held for a person; it moves to the record a person saves from it (ADR-526 (4)) |
 | view | enum `PhotoView` | A certification's five: `OPERATOR_WITH_PLACARD` · `INTERIOR_OR_BACK` · `RIGHT` · `LEFT` · `FRONT` (ADR-179) |
 | **capturedAt** | instant | With its offset |
 | latitude, longitude | decimal(38,8) | |
@@ -1377,11 +1377,16 @@ the photograph's, never thrown away.
 | **contentType** | text | The kind of image its first bytes say |
 | **objectKey** | text | Where it is kept; unique |
 | **receivedAt** | instant | When the server received it whole |
+| resolvedById | → `User` | Who closed it (ADR-526 (3)) |
+| resolvedAt | instant | |
+| resolution | text | What was decided: the photograph's own file won't come, this one stays beside it |
 
 One row for one file: unique on `photoId`, `file` and `receivedSha256`. The API's alone to add and
-read; never changed, never deleted, audited in the records domain; written only with the source
-`DEVICE` and the photograph's own phone stated (`set_aside_file_from_its_phone_guard`). No viewer
-reads it. How a person resolves one is Phase 4's (C138).
+read; what arrived is never changed, never deleted, audited in the records domain; written only
+with the source `DEVICE` and the photograph's own phone stated (`set_aside_file_from_its_phone_guard`).
+**Closed once, by a person at the back office who is named on it** (all three or none; never the
+system actor, the master passcode's or the device key's; `resolved_once_guard`), the API's
+`closeSetAsideFile` (ADR-526). No viewer reads it.
 
 ### 4.5 Sync (Phase 2 settles the detail; ARCHITECTURE §9)
 
@@ -1460,13 +1465,13 @@ defaults). Inert: never a field event, never paired, never billed, never read by
 |---|---|---|
 | **id** | uuid | Its own: what was sent may carry no id |
 | **deviceId** | → `Device` | The phone, known for certain from its proof |
-| **syncId** | → `Sync` | The sync that brought it, that phone's own |
+| syncId | → `Sync` | The sync that brought it, that phone's own; none only for a report made to its own endpoint (ADR-526 (5)) |
 | sentId | uuid | The record's phone-made id, where one could be read |
 | projectId | uuid | The project it named, **as sent: not a relation**, it may name nothing |
 | sentMonitorId | uuid | The monitor it named, as sent: not a relation |
 | **payload** | JSONB | What stood in the record's place, exactly as sent: any JSON value |
 | **sentSha256** | text | The SHA-256 of what was sent |
-| **reason** | enum `NotSavedReason` | `NOT_A_RECORD` · `NAMES_NO_RECORD` · `ASSIGNMENT_NOT_SAVED` · `CERTIFICATION_REFUSED` · `OWNER_NOT_SAVED` (a photograph whose record the server doesn't have saved, ADR-481) (the domain's `notSavedReasons`) |
+| **reason** | enum `NotSavedReason` | `NOT_A_RECORD` · `NAMES_NO_RECORD` · `ASSIGNMENT_NOT_SAVED` · `CERTIFICATION_REFUSED` · `OWNER_NOT_SAVED` (a photograph whose record the server has nowhere, ADR-481, 526) · `REPORT_NOT_SAVED` (an unplanned assignment or a use of the passcode the server could not keep, ADR-526) (the domain's `heldReasons`) |
 | **message** | text | What the phone was told |
 | **receivedAt** | instant | |
 | resolvedById | → `User` | |
@@ -1485,7 +1490,12 @@ worker holds no right on it. **Viewers:** as a quarantined record's (ADR-336, 46
 client user and an auditor see that a record naming their project is held, why and how it was
 resolved (`viewer_held_record`); what was sent only by `viewer_held_record_citizen`, to a viewer
 the firm lets see private citizens; one that names no project of theirs is seen by none; a
-contractor user sees none. Who resolves one and how is the review queue's (Phase 4).
+contractor user sees none. **Resolved once (ADR-526 (2), (7)), by a person at the back office who is
+named on it** (`resolved_once_guard`): saved as corrected (the record saved under the id its phone
+made, its photographs moved to it) or closed, never to be saved. **A photograph whose record is
+held is kept with it** (`Photo.heldRecordId`, the ninth owner): one held from the photograph's own
+phone, naming its project, still waiting; it leaves only for the record a person saved from it
+(`photo_held_record_guard`). The review queue's screens are Phase 4's.
 **Written since ADR-472** by `Sync` alone, as the device key's actor on the syncing phone.
 **`sentSha256` is the SHA-256, in hex, of what was sent as canonical JSON in UTF-8** (object
 keys sorted at every depth, no white space), so the order of a record's fields doesn't matter.

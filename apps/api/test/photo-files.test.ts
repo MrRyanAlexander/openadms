@@ -445,7 +445,7 @@ describe('a file sent in parts', () => {
         // storage (the photograph's id is in the request's path, as every path's ids are).
         const said = served.lines.join('\n');
         expect(said).toContain('A phone sent a part of a photograph’s file.');
-        for (const never of [kept.uploadedSha256, p.objectKey, `${p.photoId}.`, 'set-aside']) {
+        for (const never of [kept.uploadedSha256, p.objectKey, `${p.photoId}.`, '.set-aside/']) {
           expect(said).not.toContain(never);
         }
       },

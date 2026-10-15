@@ -27,6 +27,7 @@ import {
   photoFileAnswerSchema,
   photographFileEndpoint,
   sendMapFileEndpoint,
+  setAsideFileEndpoint,
   sendPhotoFilePartEndpoint,
   taken,
 } from '../src/index.ts';
@@ -347,17 +348,20 @@ describe('the endpoints that take a file', () => {
   });
 });
 
-describe('the one endpoint that answers a file', () => {
-  it('AC-10-48, ADR-483 is the back office’s read of a photograph’s file: a GET, open to the back office alone, that takes no file and is described as bytes of the kinds of image a file is kept as', () => {
+describe('the two endpoints that answer a file', () => {
+  it('AC-10-48, ADR-483, 526 are the back office’s reads of a photograph’s file and of a file set aside: each a GET, open to the back office alone, that takes no file and is described as bytes of the kinds of image a file is kept as', () => {
     expect(endpoints.filter(({ answersFile }) => answersFile === true)).toEqual([
       photographFileEndpoint,
+      setAsideFileEndpoint,
     ]);
-    expect([
-      photographFileEndpoint.method,
-      photographFileEndpoint.access,
-      photographFileEndpoint.roles,
-      'permission' in photographFileEndpoint,
-    ]).toEqual(['GET', 'SIGNED_IN', ['ADMIN', 'MANAGER_ANALYST'], false]);
+    for (const each of [photographFileEndpoint, setAsideFileEndpoint]) {
+      expect([each.method, each.access, each.roles, 'permission' in each], each.name).toEqual([
+        'GET',
+        'SIGNED_IN',
+        ['ADMIN', 'MANAGER_ANALYST'],
+        false,
+      ]);
+    }
     const base = {
       name: 'test',
       summary: 'A test’s own.',
@@ -525,10 +529,19 @@ describe('what every endpoint takes', () => {
       });
     }
     // A shape is GeoJSON, read by the domain's own reader (`MapShapes`), which refuses a position
-    // that isn't a finite longitude and latitude on the earth before anything is kept.
+    // that isn't a finite longitude and latitude on the earth before anything is kept. And a
+    // record saved from a held one carries the answers to the firm's own fields as its monitor
+    // gave them: kept as sent, never refused, and checked against the form's own fields, which
+    // say what fits (ADR-052, 327, 526); a sync reads the same records from its loosely-read body.
+    const answers = (place: number, kind: string): string =>
+      `saveHeldRecord body.properties.record.anyOf[0].oneOf[${String(place)}].properties.${kind}.properties.answers.additionalProperties.anyOf[1]`;
     expect(free).toEqual([
       'addSiteShape body.$defs.__schema0.anyOf[1]',
       'loadMap body.$defs.__schema0.anyOf[1]',
+      answers(2, 'incident'),
+      answers(3, 'dropOffLog'),
+      answers(4, 'survey'),
+      answers(5, 'roe'),
     ]);
     // What was free before (ADR-513): a project's settings and the passcode version a phone holds.
     expect(

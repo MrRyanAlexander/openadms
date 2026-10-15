@@ -13,6 +13,8 @@ import {
   InvoiceLocking,
   LockedTicket,
   PickedReason,
+  HeldResolution,
+  heldSentAs,
   QuarantineResolution,
   Renumber,
   ReprocessAsking,
@@ -464,5 +466,74 @@ describe('a reprocess a person asks for with nothing changed (ADR-498)', () => {
       code: 'NOT_ON_THIS_PROJECT',
       message: 'That job is another project’s. Nothing was queued.',
     });
+  });
+});
+
+describe('what a sync held, resolved (ADR-526 (2), (3))', () => {
+  const id = '0199c2d4-1a00-7000-8000-000000101022';
+
+  it('AC-10-74 a held record is saved under the id its phone made, as the kind it was sent as; a report and one with no id are not saved so', () => {
+    const waiting = new HeldResolution(null);
+    expect(waiting.refusal()).toBeNull();
+    for (const kind of heldSentAs.filter((one) => one !== 'REPORT')) {
+      expect(waiting.savingRefusal({ sentId: id, sentAs: kind }, { id, kind }), kind).toBeNull();
+    }
+    // What was sent may say no kind: then it is saved as the reviewer says.
+    expect(waiting.savingRefusal({ sentId: id, sentAs: null }, { id, kind: 'SURVEY' })).toBeNull();
+    expect(
+      [
+        waiting.savingRefusal({ sentId: id, sentAs: 'REPORT' }, { id, kind: 'FIELD_EVENT' }),
+        waiting.savingRefusal({ sentId: null, sentAs: 'FIELD_EVENT' }, { id, kind: 'FIELD_EVENT' }),
+        waiting.savingRefusal(
+          { sentId: id, sentAs: 'FIELD_EVENT' },
+          { id: '0199c2d4-1a00-7000-8000-000000101023', kind: 'FIELD_EVENT' },
+        ),
+        waiting.savingRefusal({ sentId: id, sentAs: 'FIELD_EVENT' }, { id, kind: 'ROE' }),
+        waiting.savingRefusal({ sentId: id, sentAs: 'PHOTO' }, { id, kind: 'CERTIFICATION' }),
+      ].map((refusal) => refusal?.code),
+    ).toEqual([
+      'CLOSED_ONLY',
+      'NO_ID_SENT',
+      'NOT_THE_ID_SENT',
+      'NOT_THE_KIND_SENT',
+      'NOT_THE_KIND_SENT',
+    ]);
+    expect(
+      waiting.savingRefusal({ sentId: id, sentAs: 'FIELD_EVENT' }, { id, kind: 'ROE' })?.message,
+    ).toBe('This held record was sent as a field event: it is saved as one. Nothing was changed.');
+    expect(
+      waiting.savingRefusal(
+        { sentId: id, sentAs: 'CERTIFICATION' },
+        { id: '0199c2d4-1a00-7000-8000-000000101023', kind: 'CERTIFICATION' },
+      )?.message,
+    ).toBe(
+      `A record saved from a held one keeps the id its phone made, ${id}. Nothing was changed.`,
+    );
+  });
+
+  it('AC-10-75 says how it was resolved, in words its record keeps, and is resolved once', () => {
+    const waiting = new HeldResolution(null);
+    expect(waiting.saved('CERTIFICATION')).toBe(
+      'Saved as corrected: a certification under the id its phone made, with its photographs.',
+    );
+    expect(waiting.closed()).toBe(
+      'Closed, never to be saved: what was sent stays here, with its photographs.',
+    );
+    expect(new HeldResolution(null, 'SET_ASIDE_FILE').closed()).toBe(
+      'Closed: the photograph’s own file won’t come; this file stays beside it.',
+    );
+    expect(new HeldResolution('Closed, never to be saved.').refusal()).toEqual({
+      code: 'ALREADY_RESOLVED',
+      message:
+        'This held record is already resolved (Closed, never to be saved.). Nothing was changed.',
+    });
+    expect(new HeldResolution('Closed.', 'SET_ASIDE_FILE').refusal()?.message).toBe(
+      'This file set aside is already resolved (Closed.). Nothing was changed.',
+    );
+    expect(waiting.certNumberHeld('730416')).toEqual({
+      code: 'NUMBER_HELD',
+      message: 'This project already has a certification 730416. Nothing was changed.',
+    });
+    expect(waiting.notInTheProjectSent().code).toBe('NOT_IN_THE_PROJECT_SENT');
   });
 });

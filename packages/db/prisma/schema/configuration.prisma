@@ -1073,6 +1073,7 @@ model User {
   quarantinedRecords          QuarantinedRecord[]   @relation("QuarantinedRecordMonitor")
   quarantinedRecordsResolved  QuarantinedRecord[]   @relation("QuarantinedRecordResolvedBy")
   heldRecordsResolved         HeldRecord[]          @relation("HeldRecordResolvedBy")
+  setAsideFilesResolved       SetAsideFile[]        @relation("SetAsideFileResolvedBy")
   // The marks a person set (marks.prisma).
   qcMarksSet                  QcMark[]
   invoiceBatchesCreated       InvoiceBatch[]
@@ -1362,6 +1363,7 @@ model Device {
   auditRecords       AuditRecord[]
   sessions           Session[]
   setAsideFiles      SetAsideFile[]
+  heldRecords        HeldRecord[]
 
   @@map("device")
 }

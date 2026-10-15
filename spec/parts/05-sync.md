@@ -48,6 +48,12 @@ find it, some carrying days of work; a phone needn't be handed in for its work t
    134).
 7. **The phone is told the truth, record by record**: saved, already saved, or not saved
    (quarantined). A quarantined record shows as **not saved**.
+   ⚠️ *ADR-526: what the server can't save (a record, a photograph whose record it has nowhere,
+   an unplanned assignment or a use of the passcode) is held on the server exactly as sent; a
+   photograph whose record is held is saved and kept with it, so its file comes. The back office
+   reads what is held, every file set aside and every quarantined record, and resolves each once,
+   with a reason: a held record **saved as corrected** (under the id its phone made) or **closed**;
+   a file set aside closed. A phone whose held things are resolved is turned in.*
 8. **The phone receives** its assignment's lists, freshly numbered as a setup version (the certified
    trucks and crews, sites and each site's lookup, ROEs, the roster and login list, control ranges),
    its **number blocks topped up** (ticket numbers and, for certifying, cert numbers), and any new

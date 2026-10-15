@@ -7,13 +7,19 @@
 // itself, whoever writes. The service that writes them at a sync is the task's next part. The
 // values are AC-05-04's: Ana Brooks's phone at the tower, whose clock stood 2 hours 14 minutes
 // ahead of the server's when it synced on Tuesday 13 October.
-import { notSavedReasons } from '@open-adms/domain';
+import { heldReasons, notSavedReasons } from '@open-adms/domain';
 import { describe, expect, it } from 'vitest';
 
 import { deviceKeyActorId } from '../src/device-key-actor.ts';
 import { masterPasscodeActorId } from '../src/master-passcode-actor.ts';
 import { refusedBy } from './support/database.ts';
-import { fingerprintOf, insertOf } from './support/example-world.ts';
+import {
+  fieldEventLike,
+  fingerprintOf,
+  insertOf,
+  phoneInsertOf,
+  photoLike,
+} from './support/example-world.ts';
 import { eachTestRolledBack } from './support/lifecycle.ts';
 
 const tested = eachTestRolledBack();
@@ -669,7 +675,7 @@ describe('a record the server could not save, held for a person', () => {
            WHERE enumtypid = 'not_saved_reason'::regtype ORDER BY enumsortorder`,
         )
       ).map((row) => row.reason),
-    ).toEqual([...notSavedReasons]);
+    ).toEqual([...heldReasons]);
     await forThePhone();
     const sync = await synced();
     const tried = (more: Row): Promise<string> =>
@@ -738,8 +744,10 @@ describe('a record the server could not save, held for a person', () => {
       expect([refusedBy.grant, refusedBy.trigger], `${login} delete`).toContain(deleted.code);
       await db.administer();
     }
+    // A photograph's foreign key names it, so a truncate must cascade to get as far as the
+    // trigger, which refuses it (ADR-526 (4)).
     await db.as('adms_owner');
-    expect((await db.refused(`TRUNCATE "held_record"`)).code).toBe(refusedBy.trigger);
+    expect((await db.refused(`TRUNCATE "held_record" CASCADE`)).code).toBe(refusedBy.trigger);
     await db.administer();
     for (const login of ['adms_api', 'adms_owner'] as const) {
       await db.as(login);
@@ -884,5 +892,158 @@ describe('a record the server could not save, held for a person', () => {
     }
     // 42703: the view has no such column.
     expect((await db.refused(`SELECT "payload" FROM "viewer_held_record"`)).code).toBe('42703');
+  });
+});
+
+describe('what a sync held, resolved (ADR-526)', () => {
+  const resolve = `UPDATE "held_record"
+    SET "resolved_by_id" = $2, "resolved_at" = $3, "resolution" = $4 WHERE "id" = $1`;
+  const at = '2026-10-14T13:05:00Z';
+  const words = 'Closed, never to be saved: what was sent stays here, with its photographs.';
+
+  it('AC-10-75 a held record is resolved once, from the back office, by the person it names: never from a phone, never naming another, never a second time', async () => {
+    const { db, world } = tested;
+    await forThePhone();
+    const id = await held(await synced());
+    const refusedAs = async (what: string, values: readonly unknown[], code: string) => {
+      const refusal = await db.refused(resolve, [id, ...values]);
+      expect(refusal.code, what).toBe(code);
+      return refusal.message;
+    };
+    // From the phone, naming the person: not the back office.
+    await db.actor(deviceKeyActorId, 'DEVICE', { deviceId: world.device });
+    expect(await refusedAs('from a phone', [world.admin, at, words], refusedBy.grant)).toContain(
+      'resolved by a person at the back office, who is named on it',
+    );
+    // Ana herself, from her phone, naming herself: still no back office.
+    await db.actor(world.monitor, 'DEVICE', { deviceId: world.device });
+    expect(
+      await refusedAs(
+        'from a phone, by the person named',
+        [world.monitor, at, words],
+        refusedBy.grant,
+      ),
+    ).toContain('resolved by a person at the back office');
+    // Dana in the back office, naming Ana.
+    await asTheBackOffice();
+    expect(
+      await refusedAs('naming another', [world.monitor, at, words], refusedBy.grant),
+    ).toContain('who is named on it');
+    expect(await db.run(resolve, [id, world.admin, at, words])).toBe(1);
+    // Written again as it is, nothing changes; written as anything else, refused.
+    expect(await db.run(resolve, [id, world.admin, at, words])).toBe(1);
+    for (const [what, values] of [
+      ['another time', [world.admin, '2026-10-14T14:00:00Z', words]],
+      ['other words', [world.admin, at, 'Saved as corrected.']],
+      ['another person', [world.monitor, at, words]],
+    ] as const) {
+      expect(await refusedAs(what, values, refusedBy.trigger)).toContain('resolved once');
+    }
+    expect(
+      (await db.refused(`UPDATE "held_record" SET "resolution" = NULL WHERE "id" = $1`, [id])).code,
+      'taken back',
+    ).toBe(refusedBy.check);
+    expect(
+      await db.one(`SELECT "resolved_by_id"::text AS by, "resolution" FROM "held_record"`),
+    ).toEqual({ by: world.admin, resolution: words });
+  });
+
+  it('AC-10-76 a held record comes with no sync only for a report made to its own endpoint: any other is held with the sync that brought it', async () => {
+    const { db } = tested;
+    await forThePhone();
+    const report = (said: string): string =>
+      JSON.stringify({ id: sent.fieldEvent.id, use: 'SWITCH_MONITOR', said });
+    const noSync = (reason: string) =>
+      insertOf('held_record', {
+        ...heldLike(nothingThere, { ...standing(report(reason)), reason }),
+        sync_id: null,
+      });
+    for (const reason of notSavedReasons) {
+      expect(await refusal(...noSync(reason)), reason).toBe(check('held_record_sync_check'));
+    }
+    const kept = await db.one<{ id: string }>(...noSync('REPORT_NOT_SAVED'));
+    expect(
+      await db.one(`SELECT "sync_id", "reason"::text FROM "held_record" WHERE "id" = $1`, [
+        kept.id,
+      ]),
+    ).toEqual({ sync_id: null, reason: 'REPORT_NOT_SAVED' });
+    await held(await synced(), { reason: 'REPORT_NOT_SAVED', ...standing(report('at a sync')) });
+  });
+
+  it('AC-10-74 a photograph is kept with a record held from its own phone, of its own project, while it waits, and leaves it only for the record a person saved from it under the id its phone made', async () => {
+    const { db, world } = tested;
+    await forThePhone();
+    const sync = await synced();
+    const waiting = await held(sync);
+    const photo = (more: Row) => phoneInsertOf('photo', photoLike(world, {}, more));
+    const keptWith = (heldId: string, more: Row = {}) => photo({ held_record_id: heldId, ...more });
+    const notKept =
+      'A photograph is kept with a record held from its own phone, of its own project, while it waits';
+    // Ana's phone, which sent it.
+    await db.actor(world.monitor, 'DEVICE', { deviceId: world.device });
+    const { id: kept } = await db.one<{ id: string }>(...keptWith(waiting));
+    // A certification's photograph kept with it while it is held keeps its view (AC-04-78:
+    // otherwise only a certification's photograph has one).
+    await db.one(...keptWith(waiting, { view: 'LEFT' }));
+    for (const [what, more] of [
+      ['another phone’s', { device_id: world.certifyingDevice }],
+      ['another project’s', { project_id: world.p2 }],
+    ] as const) {
+      const refused = await db.refused(...keptWith(waiting, more));
+      expect(refused.code, what).toBe(refusedBy.foreignKey);
+      expect(refused.message, what).toContain(notKept);
+    }
+    // One that names no project of ours is no project's photograph's.
+    await forThePhone();
+    const nowhere = await held(sync, { project_id: null, ...standing('{"nowhere":1}') });
+    await db.actor(world.monitor, 'DEVICE', { deviceId: world.device });
+    expect((await db.refused(...keptWith(nowhere))).message).toContain(notKept);
+
+    // Moved before a person resolved it: refused.
+    const moveTo = (owner: Row, photoId = kept): [string, unknown[]] => {
+      const [column, value] = Object.entries(owner)[0] ?? [];
+      return [
+        `UPDATE "photo" SET "held_record_id" = NULL, "${String(column)}" = $2 WHERE "id" = $1`,
+        [photoId, value],
+      ];
+    };
+    await asTheBackOffice();
+    const savedAs = sent.fieldEvent.id;
+    await db.one(
+      ...insertOf('field_event', {
+        ...fieldEventLike(world, { ticket_number: '101022' }),
+        id: savedAs,
+      }),
+    );
+    const leaves = 'A photograph leaves a held record only for the record a person saved from it';
+    expect((await db.refused(...moveTo({ field_event_id: savedAs }))).message).toContain(leaves);
+    expect(await db.run(resolve, [waiting, world.admin, at, 'Saved as corrected.'])).toBe(1);
+    // Resolved: still never to another record than the one of the id its phone made.
+    const another = (
+      await db.one<{ id: string }>(
+        ...insertOf('field_event', {
+          ...fieldEventLike(world, { ticket_number: '101023' }),
+          id: '0199c2d4-1a00-7000-8000-000000101023',
+        }),
+      )
+    ).id;
+    expect((await db.refused(...moveTo({ field_event_id: another }))).message).toContain(leaves);
+    expect(await db.run(...moveTo({ field_event_id: savedAs }))).toBe(1);
+    // Once a photograph of a record, it is never put onto a held one.
+    const refused = await db.refused(
+      `UPDATE "photo" SET "field_event_id" = NULL, "held_record_id" = $2 WHERE "id" = $1`,
+      [kept, nowhere],
+    );
+    expect(refused.code).toBe(refusedBy.trigger);
+    expect(refused.message).toContain('only when it is kept');
+    // Nor is one kept with a record already resolved.
+    await db.actor(world.monitor, 'DEVICE', { deviceId: world.device });
+    expect((await db.refused(...keptWith(waiting))).message).toContain(notKept);
+    expect(
+      await db.one(
+        `SELECT "field_event_id"::text AS event, "held_record_id" FROM "photo" WHERE "id" = $1`,
+        [kept],
+      ),
+    ).toEqual({ event: savedAs, held_record_id: null });
   });
 });

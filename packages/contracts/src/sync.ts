@@ -41,6 +41,8 @@
 // signed-in monitor's phone has (`phoneListsEndpoint`, `phoneLoginListEndpoint`): a sync says
 // only that they moved.
 import {
+  type HeldReason,
+  type HeldSentAs,
   NotSaved,
   notSavedReasons,
   type NotSavedNotice,
@@ -62,6 +64,7 @@ import {
   instant,
   offset,
   syncedPhotoSchema,
+  syncedRecordKinds,
   syncedRecordSchema,
   type ReceivedPhoto,
   type ReceivedRecord,
@@ -233,6 +236,32 @@ export function photoNames(sent: unknown): RecordNames {
     projectId: idIn(sent, 'projectId'),
     monitorId: idIn(sent, 'takenById'),
   };
+}
+
+// What a report a phone sent names, where that much can be read: its own id, the project an
+// unplanned assignment is for, and the person it was made for (ADR-526 (5)).
+export function reportNames(sent: unknown): RecordNames {
+  if (typeof sent !== 'object' || sent === null || Array.isArray(sent)) {
+    return { id: null, projectId: null, monitorId: null };
+  }
+  return {
+    id: idIn(sent, 'id'),
+    projectId: idIn(sent, 'projectId'),
+    monitorId: idIn(sent, 'personId'),
+  };
+}
+
+// What a held thing was sent as, where what was sent says (ADR-526 (1)): a report by its reason,
+// a photograph by its reason or by naming what it belongs to, a record by its kind; null where
+// it can't be said (what stood in a record's place may be no record at all).
+export function heldSentAs(sent: unknown, reason: HeldReason): HeldSentAs | null {
+  if (reason === 'REPORT_NOT_SAVED') return 'REPORT';
+  if (reason === 'OWNER_NOT_SAVED') return 'PHOTO';
+  if (typeof sent !== 'object' || sent === null || Array.isArray(sent)) return null;
+  const { record } = sent as { readonly record?: unknown };
+  const kind = syncedRecordKinds.find((each) => each === record);
+  if (kind !== undefined) return kind;
+  return record === undefined && 'owner' in sent ? 'PHOTO' : null;
 }
 
 // Reads whatever stood in one photograph's place.

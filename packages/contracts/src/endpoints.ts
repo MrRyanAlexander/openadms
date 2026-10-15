@@ -64,6 +64,14 @@ import {
   twoStepClearedAnswerSchema,
   twoStepSetupAnswerSchema,
 } from './api-answers.ts';
+import {
+  correctedRecordSchema,
+  heldRecordSchema,
+  heldRecordsAnswerSchema,
+  quarantinedRecordsAnswerSchema,
+  setAsideFileSchema,
+  setAsideFilesAnswerSchema,
+} from './held-answers.ts';
 import { places } from './field-event-details.ts';
 import { formDefinitionFields } from './form-definition.ts';
 import {
@@ -2567,6 +2575,117 @@ export const markSecondCopyEndpoint = endpoint({
   answer: savedAnswer(quarantinedRecordSchema),
 });
 
+// What a sync held for a person and what waits in quarantine (spec/parts/05-sync.md step 6;
+// spec/parts/08-review-and-corrections.md, "One review queue"; AC-05-46; AC-10-73…76; ADR-468,
+// 471, 482, 526). **The three reads are open to every admin and manager/analyst, whether or not
+// they hold a permission**, as a photograph's file is (ADR-482 (10); ADR-526 (1) (a)): the back
+// office sees everything. Each a page at a time, oldest first, by project or by phone (both, or
+// neither), waiting or resolved (both where neither is said). A resolution is once, by a person,
+// with a reason, at its own permission (ADR-526 (2), (3)).
+const waitingQuery = z.strictObject({
+  projectId: z.uuid().optional(),
+  deviceId: z.uuid().optional(),
+  // Only those still waiting for a person, or only those resolved.
+  waiting: z.enum(['true', 'false']).optional(),
+  // The last of the page before: the answer's `next`.
+  after: z.uuid().optional(),
+  // How many at most: 50 where none is said.
+  limit: z
+    .string()
+    .regex(/^([1-9][0-9]?|1[0-9]{2}|200)$/)
+    .optional(),
+});
+// Why, in the reviewer's own words: required, since nothing else says why (ADR-526 (2) (b)).
+const resolutionNote = z.string().trim().min(1).max(500);
+const heldRecordId = z.strictObject({ heldRecordId: z.uuid() });
+const setAsideFileId = z.strictObject({ setAsideFileId: z.uuid() });
+
+export const listHeldRecordsEndpoint = endpoint({
+  name: 'listHeldRecords',
+  summary:
+    'What a phone sent that the server couldn’t save, held for a person, a page at a time, oldest first: by project (as sent) or by phone, waiting or resolved. Each exactly as sent, with what it was sent as, why it is held, the words its phone was told, the photographs kept with it and how it was resolved.',
+  ...reviewer,
+  method: 'GET',
+  path: '/held-records',
+  query: waitingQuery,
+  answer: heldRecordsAnswerSchema,
+});
+
+export const saveHeldRecordEndpoint = endpoint({
+  name: 'saveHeldRecord',
+  summary:
+    'A held record is resolved by saving it as corrected: the record as it should be, in the sync’s own shape, under the id its phone made and of the kind it was sent as. It is written as the reviewer, as the phone’s record it was, with the photographs kept with it; its tickets are queued. Resolved once. Refused for a held record with no id, another id, another kind, a report (closed only), a number another record holds, what the database refuses and a ticket locked as invoiced.',
+  ...reviewer,
+  permission: 'CORRECT',
+  method: 'POST',
+  path: '/held-records/:heldRecordId/savings',
+  params: heldRecordId,
+  body: z.strictObject({ record: correctedRecordSchema, note: resolutionNote }),
+  answer: savedAnswer(heldRecordSchema),
+});
+
+export const closeHeldRecordEndpoint = endpoint({
+  name: 'closeHeldRecord',
+  summary:
+    'A held record is closed, never to be saved: nothing is made from it, and what was sent stays, with its photographs, marked with who closed it, when and why. Resolved once.',
+  ...reviewer,
+  permission: 'VOID',
+  method: 'POST',
+  path: '/held-records/:heldRecordId/closings',
+  params: heldRecordId,
+  body: z.strictObject({ note: resolutionNote }),
+  answer: savedAnswer(heldRecordSchema),
+});
+
+export const listSetAsideFilesEndpoint = endpoint({
+  name: 'listSetAsideFiles',
+  summary:
+    'The files a phone uploaded for a photograph that weren’t the file it fingerprinted, a page at a time, oldest first: by project or by phone, waiting or resolved. Each beside its photograph (what it belongs to, the fingerprint its phone gave and whether that file has been kept since), with what arrived and how it was resolved. Never where either is kept.',
+  ...reviewer,
+  method: 'GET',
+  path: '/set-aside-files',
+  query: waitingQuery,
+  answer: setAsideFilesAnswerSchema,
+});
+
+// The bytes as `photographFileEndpoint` hands a photograph's: as stored, under the type their own
+// first bytes said, as a download (ADR-482 (10), 483).
+export const setAsideFileEndpoint = endpoint({
+  name: 'setAsideFile',
+  summary:
+    'A file set aside, as it was kept: the bytes that were stored, under the type their own first bytes said, sent as a download and never as a page.',
+  ...reviewer,
+  method: 'GET',
+  path: '/set-aside-files/:setAsideFileId/file',
+  params: setAsideFileId,
+  answersFile: true,
+  answer: keptFileAnswerSchema,
+});
+
+export const closeSetAsideFileEndpoint = endpoint({
+  name: 'closeSetAsideFile',
+  summary:
+    'A file set aside is closed: the photograph’s own file won’t come, and this one stays beside it, kept, never the photograph’s. Marked with who closed it, when and why. Resolved once.',
+  ...reviewer,
+  permission: 'VOID',
+  method: 'POST',
+  path: '/set-aside-files/:setAsideFileId/closings',
+  params: setAsideFileId,
+  body: z.strictObject({ note: resolutionNote }),
+  answer: savedAnswer(setAsideFileSchema),
+});
+
+export const listQuarantinedRecordsEndpoint = endpoint({
+  name: 'listQuarantinedRecords',
+  summary:
+    'The records a phone sent whose number another record holds, a page at a time, oldest first: by project or by phone, waiting or resolved. Each with what the phone sent, its phone and monitor, why, the record that holds its number and how it was resolved.',
+  ...reviewer,
+  method: 'GET',
+  path: '/quarantined-records',
+  query: waitingQuery,
+  answer: quarantinedRecordsAnswerSchema,
+});
+
 // A phone failed, and paper is never the record (ADR-156): the field event the monitor would have
 // made, entered whole. What its phone alone would have said (the phone, its assignment, a typed
 // number, a truck keyed in by hand with its capacity) isn't entered.
@@ -2796,6 +2915,13 @@ export const endpoints: readonly Endpoint[] = [
   correctDropOffLogEndpoint,
   renumberQuarantinedRecordEndpoint,
   markSecondCopyEndpoint,
+  listHeldRecordsEndpoint,
+  saveHeldRecordEndpoint,
+  closeHeldRecordEndpoint,
+  listSetAsideFilesEndpoint,
+  setAsideFileEndpoint,
+  closeSetAsideFileEndpoint,
+  listQuarantinedRecordsEndpoint,
   createFieldEventEndpoint,
   correctCertificationBoxEndpoint,
   markSignaturesOnFileEndpoint,

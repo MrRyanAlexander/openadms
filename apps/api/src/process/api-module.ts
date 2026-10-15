@@ -20,6 +20,7 @@ import { PhoneSignInsController } from '../phone/phone-sign-ins.controller.ts';
 import { CorrectionsController } from '../review/corrections.controller.ts';
 import { ReviewMarksController } from '../review/review-marks.controller.ts';
 import { ReviewRecordsController } from '../review/review-records.controller.ts';
+import { HeldController } from '../review/held.controller.ts';
 import { ContractorSetupController } from '../setup/contractor-setup.controller.ts';
 import { FormSetupController } from '../setup/form-setup.controller.ts';
 import { ListSetupController } from '../setup/list-setup.controller.ts';
@@ -73,6 +74,7 @@ import { HealthController } from './health.controller.ts';
     ReviewMarksController,
     CorrectionsController,
     ReviewRecordsController,
+    HeldController,
     CertificationsController,
     ViewerReadsController,
   ],

@@ -34,6 +34,7 @@ import { PhoneAssignments } from '../src/phone/phone-assignments.ts';
 import { PhoneLoginList } from '../src/phone/phone-login-list.ts';
 import { UnplannedAssignments } from '../src/phone/unplanned-assignments.ts';
 import { isMediaKey } from '../src/media/media-store.ts';
+import { HeldThings } from '../src/sync/held.ts';
 import { Intake } from '../src/sync/intake.ts';
 import { sentFingerprint, Sync } from '../src/sync/sync.ts';
 import { installationSettings, openInstallation, type Tx } from './support/database.ts';
@@ -661,15 +662,33 @@ describe('what could not be saved is held for a person', () => {
       expect(
         (await tx.fieldEvent.findMany({ where: { projectId: p.projectId } })).map(({ id }) => id),
       ).toEqual([under.id]);
-      const [kept, ...others] = await heldOf(tx, p.phone.id);
+      // The report answered “not saved” is held too, first, as it came, with no project the
+      // server has (ADR-526 (5)); then the record made under it.
+      const [report, kept, ...others] = await heldOf(tx, p.phone.id);
       expect(others).toEqual([]);
+      expect([
+        report?.sentId,
+        report?.projectId,
+        report?.sentMonitorId,
+        report?.reason,
+        report?.message,
+        report?.syncId === kept?.syncId,
+        report?.payload,
+      ]).toEqual([
+        nowhere.id,
+        nowhere.projectId,
+        who.kim,
+        'REPORT_NOT_SAVED',
+        `Not saved: this unplanned assignment names a project the server doesn’t have.${held}`,
+        true,
+        nowhere,
+      ]);
       expect([kept?.sentId, kept?.projectId, kept?.sentMonitorId, kept?.reason]).toEqual([
         lost.id,
         p.projectId,
         who.kim,
         'ASSIGNMENT_NOT_SAVED',
       ]);
-      // A report answered “not saved” is not held: only records are.
       // Sent again, each is known: nothing is written twice.
       const again = await synced(served, p.token, sent);
       expect(again.unplannedAssignments.map(({ answer }) => answer)).toEqual([
@@ -678,7 +697,7 @@ describe('what could not be saved is held for a person', () => {
       ]);
       expect(again.passcodeUses.map(({ answer }) => answer)).toEqual(['ALREADY_SAVED']);
       expect(again.records.map(({ answer }) => answer)).toEqual(['NOT_SAVED', 'ALREADY_SAVED']);
-      expect(await tx.heldRecord.count({ where: { deviceId: p.phone.id } })).toBe(1);
+      expect(await tx.heldRecord.count({ where: { deviceId: p.phone.id } })).toBe(2);
     });
   });
 
@@ -717,6 +736,7 @@ describe('what could not be saved is held for a person', () => {
           clock,
           entriesPerCall: shippedPolicy.loginListEntriesPerCall,
         }),
+        held: new HeldThings(each, clock),
         clock,
       });
       // A project nobody set up, a site that is no site of P1's, and a real load between them.
@@ -943,7 +963,7 @@ describe('a photograph’s record', () => {
     });
   });
 
-  it('ADR-481, C129 a photograph whose record the server doesn’t have saved is not tried: its record held in the same sync, or never sent, it is answered “not saved”, told why and held; sent again once its record is saved, it is saved; one of a record kept in quarantine belongs to the quarantined record', async () => {
+  it('ADR-481, 526, C129 a photograph whose record is held is kept with it, saved; one whose record the server has nowhere is not tried: answered “not saved”, told why and held; sent again once its record is saved, it is saved; one of a record kept in quarantine belongs to the quarantined record', async () => {
     await world(async (served, tx, who) => {
       const p = await kimOnP1(served, tx, who);
       // A disposal whose load call can't be one: held for a person.
@@ -966,21 +986,23 @@ describe('a photograph’s record', () => {
       );
       expect(first.records.map(({ answer }) => answer)).toEqual(['NOT_SAVED']);
       expect(first.photos).toEqual([
-        { ...ownerNotSaved, id: ofWrong.id },
+        { answer: 'SAVED', id: ofWrong.id, notes: [] },
         { ...ownerNotSaved, id: ofLater.id },
       ]);
-      expect(await tx.photo.count({ where: { projectId: p.projectId } })).toBe(0);
+      const heldNow = await heldOf(tx, p.phone.id);
       expect(
-        (await heldOf(tx, p.phone.id)).map((one) => [
-          one.sentId,
-          one.projectId,
-          one.sentMonitorId,
-          one.reason,
-        ]),
+        heldNow.map((one) => [one.sentId, one.projectId, one.sentMonitorId, one.reason]),
       ).toEqual([
         [wrong.id, p.projectId, who.kim, 'NOT_A_RECORD'],
-        [ofWrong.id, p.projectId, who.kim, 'OWNER_NOT_SAVED'],
         [ofLater.id, p.projectId, who.kim, 'OWNER_NOT_SAVED'],
+      ]);
+      // Kept with the record held for a person, its files to come as any photograph's do.
+      const withHeld = await tx.photo.findMany({ where: { projectId: p.projectId } });
+      expect(
+        withHeld.map((one) => [one.id, one.heldRecordId, one.fieldEventId, one.deviceId]),
+      ).toEqual([[ofWrong.id, heldNow[0]?.id, null, p.phone.id]]);
+      expect(await ledgerOf(tx, p.phone.id)).toEqual([
+        [ofWrong.id, 'PHOTO', (await syncsOf(tx, p.phone.id))[0]?.id, 'SAVED'],
       ]);
 
       // Its record arrives; the photograph sent again is saved, and the held one stays for a
@@ -991,7 +1013,7 @@ describe('a photograph’s record', () => {
         p.sync({ records: [{ record: 'FIELD_EVENT', fieldEvent: later }], photos: [ofLater] }),
       );
       expect(second.photos).toEqual([{ answer: 'SAVED', id: ofLater.id, notes: [] }]);
-      expect(await tx.heldRecord.count({ where: { deviceId: p.phone.id } })).toBe(3);
+      expect(await tx.heldRecord.count({ where: { deviceId: p.phone.id } })).toBe(2);
 
       // A second collection on 101032 waits in quarantine; its photograph is the quarantined
       // record's, and nothing else's.
@@ -1206,6 +1228,7 @@ describe('a top-up that loses the race for its series', () => {
             clock: served.clock,
             entriesPerCall: shippedPolicy.loginListEntriesPerCall,
           }),
+          held: new HeldThings(within, served.clock),
           clock: served.clock,
         });
       const collection = p.event({ ticketNumber: String(cut.firstNumber) });

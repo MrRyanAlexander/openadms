@@ -585,6 +585,8 @@ describe('a photograph', () => {
       'device_utc_offset_minutes',
       'drop_off_log_id',
       'field_event_id',
+      // While its record is held for a person (ADR-526; syncs.test.ts).
+      'held_record_id',
       'id',
       'incident_id',
       'label',
@@ -911,14 +913,28 @@ describe('a photograph', () => {
       expect(refused.code, who).toBe(refusedBy.grant);
       expect(refused.message, who).toContain('the phone that took its photograph');
     }
-    // Never changed, never deleted: the API has no grant to, and its owner is refused by the
-    // trigger; the worker doesn't read it.
-    const change = `UPDATE "set_aside_file" SET "byte_count" = 1 WHERE "id" = $1`;
-    await asThePhone();
-    expect((await db.refused(change, [kept])).code).toBe(refusedBy.grant);
-    await db.as('adms_owner');
-    await db.actor(world.monitor, 'DEVICE', { deviceId: world.device });
-    expect((await db.refused(change, [kept])).code).toBe(refusedBy.trigger);
+    // What arrived is never changed, by anyone: refused by the trigger (only its resolution is
+    // written later, ADR-526); never deleted: the API has no grant to; the worker doesn't read it.
+    for (const [column, value] of [
+      ['byte_count', 1],
+      ['received_sha256', fingerprintOf('another')],
+      ['content_type', 'image/png'],
+      ['object_key', 'elsewhere'],
+      ['file', 'DEPTH'],
+      ['photo_id', id],
+      ['device_id', world.certifyingDevice],
+      ['received_at', '2026-10-14T00:00:00Z'],
+    ] as const) {
+      for (const login of ['adms_api', 'adms_owner'] as const) {
+        await db.as(login);
+        await db.actor(world.admin, 'BACK_OFFICE');
+        const refused = await db.refused(
+          `UPDATE "set_aside_file" SET "${column}" = $2 WHERE "id" = $1`,
+          [kept, value],
+        );
+        expect(refused.code, `${login} ${column}`).toBe(refusedBy.trigger);
+      }
+    }
     await asThePhone();
     expect((await db.refused(`DELETE FROM "set_aside_file" WHERE "id" = $1`, [kept])).code).toBe(
       refusedBy.grant,
@@ -942,6 +958,81 @@ describe('a photograph', () => {
         [kept],
       ),
     ).toEqual({ kept: 1 });
+  });
+
+  it('AC-10-75 a file set aside is closed once, by a person at the back office who is named on it, with words; never by a system actor, a phone or another person', async () => {
+    const { db, world } = tested;
+    await asThePhone();
+    const plain = await photograph({ field_event_id: await event({ ticket_number: '101020' }) });
+    const kept = (
+      await db.one<{ id: string }>(
+        ...insertOf('set_aside_file', {
+          photo_id: plain,
+          file: 'PHOTO',
+          device_id: world.device,
+          received_sha256: fingerprintOf('not the file fingerprinted'),
+          byte_count: 2_048_576,
+          content_type: 'image/heic',
+          object_key: `projects/${world.p1}/photos/${plain}.set-aside/1`,
+        }),
+      )
+    ).id;
+    const close = `UPDATE "set_aside_file"
+      SET "resolved_by_id" = $2, "resolved_at" = $3, "resolution" = $4 WHERE "id" = $1`;
+    const at = '2026-10-14T13:10:00Z';
+    const words = 'Closed: the photograph’s own file won’t come; this file stays beside it.';
+    const refused = async (values: readonly unknown[]) => db.refused(close, [kept, ...values]);
+    await asTheBackOffice();
+    for (const [what, values, named] of [
+      ['no words', [world.admin, at, null], 'set_aside_file_resolution_check'],
+      ['blank words', [world.admin, at, ' '], 'set_aside_file_resolution_check'],
+      ['nobody', [null, at, words], 'set_aside_file_resolution_check'],
+      ['no time', [world.admin, null, words], 'set_aside_file_resolution_check'],
+      [
+        'the system actor',
+        ['00000000-0000-7000-8000-000000000001', at, words],
+        'set_aside_file_resolved_by_check',
+      ],
+      [
+        'the master passcode’s actor',
+        ['00000000-0000-7000-8000-000000000002', at, words],
+        'set_aside_file_resolved_by_id_not_master_passcode_check',
+      ],
+      [
+        'the device key’s actor',
+        ['00000000-0000-7000-8000-000000000003', at, words],
+        'set_aside_file_resolved_by_id_not_device_key_check',
+      ],
+    ] as const) {
+      const refusal = await refused(values);
+      expect(refusal.code, what).toBe(refusedBy.check);
+      expect(refusal.message, what).toContain(`"${named}"`);
+    }
+    // Naming another person, or from the phone: not the person named, at the back office.
+    expect((await refused([world.monitor, at, words])).code, 'naming Ana').toBe(refusedBy.grant);
+    await asThePhone();
+    expect((await refused([world.admin, at, words])).code, 'from the phone').toBe(refusedBy.grant);
+    await asTheBackOffice();
+    expect(await db.run(close, [kept, world.admin, at, words])).toBe(1);
+    const again = await refused([world.admin, '2026-10-14T14:00:00Z', words]);
+    expect(again.code).toBe(refusedBy.trigger);
+    expect(again.message).toContain('resolved once');
+    await db.as('adms_worker');
+    await db.actor(world.worker, 'SYSTEM');
+    expect((await db.refused(close, [kept, world.admin, at, words])).code).toBe(refusedBy.grant);
+    await db.administer();
+    expect(
+      await db.rows(
+        `SELECT "operation"::text, "actor_id"::text AS actor, "source"::text,
+                "new_value" ->> 'resolution' AS resolution
+         FROM "audit_record" WHERE "table_name" = 'set_aside_file' AND "record_id" = $1
+         ORDER BY "id"`,
+        [kept],
+      ),
+    ).toEqual([
+      { operation: 'INSERT', actor: world.monitor, source: 'DEVICE', resolution: null },
+      { operation: 'UPDATE', actor: world.admin, source: 'BACK_OFFICE', resolution: words },
+    ]);
   });
 
   it('AC-04-78 each of a certification’s five photographs says which view it is, and no other photograph has a view', async () => {

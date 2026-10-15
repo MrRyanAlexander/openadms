@@ -90,7 +90,13 @@ describe('who may ask', () => {
     }
     const taking = (permission: string) =>
       endpoints.filter((one) => one.permission === permission).map(({ name }) => name);
-    expect(taking('VOID')).toEqual(['voidTicket', 'unvoidTicket']);
+    // A held record, and a file set aside, closed as never to be saved (held.test.ts; ADR-526).
+    expect(taking('VOID')).toEqual([
+      'voidTicket',
+      'unvoidTicket',
+      'closeHeldRecord',
+      'closeSetAsideFile',
+    ]);
     expect(taking('ACCEPT_FLAG')).toEqual(['acceptFlag']);
     // Signatures on file are marked at QC (certifications.test.ts; ADR-433).
     expect(taking('QC')).toEqual(['setQcStatus', 'markSignaturesOnFile']);

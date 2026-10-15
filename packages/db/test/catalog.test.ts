@@ -170,7 +170,13 @@ const triggers = [
   // phone that took it; a file set aside is never changed (ADR-482).
   `CREATE TRIGGER photo_refuse_depth_fingerprint_edit BEFORE UPDATE OF depth_sha256 ON public.photo FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
   `CREATE TRIGGER photo_upload BEFORE INSERT OR UPDATE OF uploaded_at, depth_uploaded_at ON public.photo FOR EACH ROW EXECUTE FUNCTION photo_upload_guard()`,
-  `CREATE TRIGGER set_aside_file_refuse_edit BEFORE UPDATE ON public.set_aside_file FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
+  // What arrived is never changed, and its resolution is written once, by a person at the back
+  // office (ADR-526); so is a held record's. A photograph is kept with a record held from its own
+  // phone and leaves it only for the record a person saved from it.
+  `CREATE TRIGGER set_aside_file_refuse_received_edit BEFORE UPDATE OF id, photo_id, file, device_id, received_sha256, byte_count, content_type, object_key, received_at ON public.set_aside_file FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
+  `CREATE TRIGGER set_aside_file_resolved_once AFTER UPDATE OF resolved_by_id, resolved_at, resolution ON public.set_aside_file FOR EACH ROW EXECUTE FUNCTION resolved_once_guard()`,
+  `CREATE TRIGGER held_record_resolved_once AFTER UPDATE OF resolved_by_id, resolved_at, resolution ON public.held_record FOR EACH ROW EXECUTE FUNCTION resolved_once_guard()`,
+  `CREATE TRIGGER photo_held_record BEFORE INSERT OR UPDATE OF held_record_id, field_event_id, certification_id, scale_receipt_id, roe_id, survey_id, incident_id, drop_off_log_id, quarantined_record_id, project_id, device_id ON public.photo FOR EACH ROW EXECUTE FUNCTION photo_held_record_guard()`,
   `CREATE TRIGGER set_aside_file_from_its_phone BEFORE INSERT ON public.set_aside_file FOR EACH ROW EXECUTE FUNCTION set_aside_file_from_its_phone_guard()`,
   // What a phone sent, kept in quarantine, is written once (ADR-338).
   `CREATE TRIGGER quarantined_record_refuse_sent_edit BEFORE UPDATE OF id, project_id, device_id, monitor_id, payload, reason, holding_event_id, holding_roe_id, received_at ON public.quarantined_record FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
@@ -617,7 +623,7 @@ describe('the guards in the catalog', () => {
       {
         name: 'photo_owner_check',
         definition:
-          'CHECK ((num_nonnulls(field_event_id, certification_id, scale_receipt_id, roe_id, survey_id, incident_id, drop_off_log_id, quarantined_record_id) = 1))',
+          'CHECK ((num_nonnulls(field_event_id, certification_id, scale_receipt_id, roe_id, survey_id, incident_id, drop_off_log_id, quarantined_record_id, held_record_id) = 1))',
       },
       // A record waiting in quarantine, and a fix kept as sent (ADR-338).
       {
@@ -649,8 +655,10 @@ describe('the guards in the catalog', () => {
           "CHECK ((resolved_by_id IS DISTINCT FROM '00000000-0000-7000-8000-000000000001'::uuid))",
       },
       {
+        // A held certification's photographs keep their views while they wait with it (ADR-526).
         name: 'photo_view_check',
-        definition: 'CHECK (((view IS NULL) OR (certification_id IS NOT NULL)))',
+        definition:
+          'CHECK (((view IS NULL) OR (certification_id IS NOT NULL) OR (held_record_id IS NOT NULL)))',
       },
       // ROEs and forms (ADR-327).
       {
@@ -1231,11 +1239,28 @@ describe('the guards in the catalog', () => {
         name: 'held_record_sent_sha256_check',
         definition: "CHECK ((sent_sha256 ~ '^[0-9a-f]{64}$'::text))",
       },
+      // A held record came with a sync, but for a report made to its own endpoint (ADR-526).
+      {
+        name: 'held_record_sync_check',
+        definition:
+          "CHECK (((sync_id IS NOT NULL) OR (reason = 'REPORT_NOT_SAVED'::not_saved_reason)))",
+      },
       // A file set aside is what arrived, as the server read it (ADR-482).
       {
         name: 'set_aside_file_received_check',
         definition:
           "CHECK ((((received_sha256 ~ '^[0-9a-f]{64}$'::text) AND (byte_count > 0) AND (content_type ~ '^[a-z0-9][a-z0-9.+-]{0,62}/[a-z0-9][a-z0-9.+-]{0,62}$'::text) AND (btrim(object_key) <> ''::text)) IS TRUE))",
+      },
+      // Its resolution is who, when and why, by a person (ADR-526).
+      {
+        name: 'set_aside_file_resolution_check',
+        definition:
+          "CHECK ((((num_nonnulls(resolved_by_id, resolved_at, resolution) = ANY (ARRAY[0, 3])) AND ((resolution IS NULL) OR (btrim(resolution) <> ''::text))) IS TRUE))",
+      },
+      {
+        name: 'set_aside_file_resolved_by_check',
+        definition:
+          "CHECK ((resolved_by_id IS DISTINCT FROM '00000000-0000-7000-8000-000000000001'::uuid))",
       },
       // The master passcode's actor is one id, never a person, and no record names it; a
       // count of wrong tries at the passcode is never below nought (ADR-438, 439).

@@ -30,6 +30,7 @@ export const columnsNamingAUser: readonly (readonly [table: string, column: stri
   ['scale_receipt', 'entered_by_id'],
   ['security_event', 'user_id'],
   ['session', 'user_id'],
+  ['set_aside_file', 'resolved_by_id'],
   ['site_area_version', 'created_by_id'],
   ['survey', 'created_by_id'],
   ['survey', 'monitor_id'],

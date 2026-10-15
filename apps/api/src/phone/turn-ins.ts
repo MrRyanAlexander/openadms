@@ -12,8 +12,11 @@
 // - **Nothing is wiped before the server has it** (ADR-096). The phone says everything it still
 //   holds; only what that same phone sent counts, so no phone confirms another's work (API1).
 //   A record is on the server when it was saved or kept in quarantine (the ledger), or held for
-//   a person, not saved (ADR-468 (2)); a photograph when it was saved and every file of it is
-//   kept. Anything else is named back, and nothing is changed but the passcode's use, logged.
+//   a person, not saved (ADR-468 (2)); a report when it was saved, or held for a person (ADR-526
+//   (5)); a photograph when it was saved and every file of it is kept, or a person closed each
+//   file of it set aside that never came right, or a person closed it where it was held (ADR-526
+//   (6)): what a person resolved lets the phone be turned in. Anything else is named back, and
+//   nothing is changed but the passcode's use, logged.
 // - **Then, in one piece of work, as the master passcode's actor on that phone:** the use and
 //   the turn-in are security events; each series' blocks end (the domain's `TurnInRules`: the
 //   unused rest handed back where the phone reports its last number, retired whole where it
@@ -190,6 +193,18 @@ export class TurnIns {
       where: { id: { in: [...holds.passcodeUses] }, deviceId },
       select: { id: true },
     });
+    // A report the server couldn't keep is held for a person, under the id its phone made.
+    const reportsHeld = await tx.heldRecord.findMany({
+      where: {
+        sentId: { in: [...holds.unplannedAssignments, ...holds.passcodeUses] },
+        deviceId,
+        reason: 'REPORT_NOT_SAVED',
+      },
+      select: { sentId: true },
+    });
+    const heldReports = reportsHeld.flatMap(({ sentId }) =>
+      sentId === null ? [] : [{ id: sentId }],
+    );
     const stored = await tx.syncedRecord.findMany({
       where: { recordId: { in: [...holds.records] }, deviceId, recordKind: { not: 'PHOTO' } },
       select: { recordId: true },
@@ -204,11 +219,29 @@ export class TurnIns {
     });
     const photos = await tx.photo.findMany({
       where: { id: { in: [...holds.photos] }, deviceId },
-      select: { id: true, uploadedAt: true, depthObjectKey: true, depthUploadedAt: true },
+      select: {
+        id: true,
+        uploadedAt: true,
+        depthObjectKey: true,
+        depthUploadedAt: true,
+        setAsideFiles: { where: { resolvedAt: { not: null } }, select: { file: true } },
+      },
     });
+    // A photograph held for a person that a person closed: its file never came, and won't.
+    const photosClosed = await tx.heldRecord.findMany({
+      where: { sentId: { in: [...holds.photos] }, deviceId, resolvedAt: { not: null } },
+      select: { sentId: true },
+    });
+    const saved = new Set(photos.map(({ id }) => id));
+    // A file is in when it was kept, or a person closed a file set aside for it.
+    const fileIn = (
+      arrived: Date | null,
+      closed: readonly { readonly file: string }[],
+      file: 'PHOTO' | 'DEPTH',
+    ): boolean => arrived !== null || closed.some((one) => one.file === file);
     return {
-      unplannedAssignments: lacking(holds.unplannedAssignments, assignments),
-      passcodeUses: lacking(holds.passcodeUses, uses),
+      unplannedAssignments: lacking(holds.unplannedAssignments, [...assignments, ...heldReports]),
+      passcodeUses: lacking(holds.passcodeUses, [...uses, ...heldReports]),
       records: lacking(holds.records, [
         ...stored.map(({ recordId }) => ({ id: recordId })),
         ...heldById.flatMap(({ sentId }) => (sentId === null ? [] : [{ id: sentId }])),
@@ -217,14 +250,17 @@ export class TurnIns {
         holds.held,
         heldByPrint.map(({ sentSha256 }) => ({ id: sentSha256 })),
       ),
-      photos: lacking(
-        holds.photos,
-        photos.filter(
+      photos: lacking(holds.photos, [
+        ...photos.filter(
           (photo) =>
-            photo.uploadedAt !== null &&
-            (photo.depthObjectKey === null || photo.depthUploadedAt !== null),
+            fileIn(photo.uploadedAt, photo.setAsideFiles, 'PHOTO') &&
+            (photo.depthObjectKey === null ||
+              fileIn(photo.depthUploadedAt, photo.setAsideFiles, 'DEPTH')),
         ),
-      ),
+        ...photosClosed.flatMap(({ sentId }) =>
+          sentId === null || saved.has(sentId) ? [] : [{ id: sentId }],
+        ),
+      ]),
     };
   }
 }

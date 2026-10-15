@@ -17,7 +17,7 @@ import {
   reportPasscodeUseEndpoint,
   writeAssignmentEndpoint,
 } from '@open-adms/contracts';
-import { masterPasscodeActorId, type Database } from '@open-adms/db';
+import { deviceKeyActorId, masterPasscodeActorId, type Database } from '@open-adms/db';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { installationSettings, openInstallation, type Tx } from './support/database.ts';
@@ -142,6 +142,12 @@ const events = async (tx: Tx, requestId: string) =>
       event.masterPasscodeSession,
     ],
   );
+
+// What a report answered "not saved" writes: the held record a person resolves, as the device
+// key's actor on the phone that sent it (ADR-526 (5)).
+const heldFor = (phone: TestPhone) => [
+  ['held_record', 'INSERT', deviceKeyActorId, 'DEVICE', phone.id],
+];
 
 const audited = async (tx: Tx, requestId: string) =>
   (
@@ -314,7 +320,8 @@ describe('a switch to a monitor who has their own assignment', () => {
       });
       const claimed = await answered(served, token, { ...sent, id: seen.id });
       expect(claimed.said).toEqual(held);
-      expect(await audited(tx, claimed.requestId)).toEqual([]);
+      // Held for a person, as is every report answered not saved (ADR-526 (5)).
+      expect(await audited(tx, claimed.requestId)).toEqual(heldFor(phone));
       expect(await written(tx, phone)).toEqual([2, 0, 0]);
       expect(await written(tx, other)).toEqual([0, 0, 0]);
     });
@@ -494,17 +501,25 @@ describe('kept as reported', () => {
     });
   });
 
-  it('it is not saved where it names somebody who is no monitor: nobody the firm has, somebody of the back office, the master passcode itself; each is said, and nothing is written', async () => {
+  it('it is not saved where it names somebody who is no monitor: nobody the firm has, somebody of the back office, the master passcode itself; each is said, nothing of it is kept as a use, and it is held for a person exactly as sent', async () => {
     await world(async (served, tx, who) => {
       const { phone, token, logged } = await theTowersPhone(served, tx);
       for (const personId of [randomUUID(), who.dana, who.luis, masterPasscodeActorId]) {
         for (const use of ['MONITOR_SWITCH', 'SESSION_AS_MONITOR', 'TEMPORARY_SESSION']) {
-          const { said: answer, requestId } = await answered(served, token, logged(use, personId));
+          const report = logged(use, personId);
+          const { said: answer, requestId } = await answered(served, token, report);
           expect(answer, `${use} ${personId}`).toEqual(['NOT_SAVED', 'NOT_A_MONITOR']);
-          expect(await audited(tx, requestId), use).toEqual([]);
+          expect(await audited(tx, requestId), use).toEqual(heldFor(phone));
+          const held = await tx.heldRecord.findFirstOrThrow({ where: { sentId: report.id } });
+          expect([held.syncId, held.reason, held.message]).toEqual([
+            null,
+            'REPORT_NOT_SAVED',
+            'Not saved: this use of the master passcode is for someone who isn’t a monitor the server has. Held on the server for review.',
+          ]);
         }
       }
       expect(await written(tx, phone)).toEqual([0, 0, 0]);
+      expect(await tx.heldRecord.count({ where: { deviceId: phone.id } })).toBe(12);
     });
   });
 });

@@ -15,11 +15,13 @@ import {
   fitByWeight,
   lastUsedSchema,
   photoAnswerSchema,
+  heldSentAs,
   photoNames,
   photoRead,
   recordAnswerSchema,
   recordNames,
   recordRead,
+  reportNames,
   sentWeight,
   syncAnsweredSchema,
   syncBytesAtMost,
@@ -674,5 +676,30 @@ describe('a photograph’s record', () => {
     expect(
       not({ answer: 'SAVED', id: pilePhoto.id, notes: [], objectKey: 'projects/x/photos/y' }),
     ).toBe(true);
+  });
+});
+
+describe('what a held thing was sent as, and what a report names (ADR-526)', () => {
+  it('AC-10-73 a report by its reason, a photograph by its reason or by naming what it belongs to, a record by its kind; nothing where what was sent says none', () => {
+    expect(heldSentAs(switched, 'REPORT_NOT_SAVED')).toBe('REPORT');
+    expect(heldSentAs(pilePhoto, 'OWNER_NOT_SAVED')).toBe('PHOTO');
+    expect(heldSentAs(pilePhoto, 'NAMES_NO_RECORD')).toBe('PHOTO');
+    for (const record of records) {
+      expect(heldSentAs(record, 'NAMES_NO_RECORD')).toBe(record.record);
+    }
+    for (const sent of [null, 'a line', 42, [], {}, { record: 'TICKET' }, { record: 'PHOTO' }]) {
+      expect(heldSentAs(sent, 'NOT_A_RECORD'), JSON.stringify(sent)).toBeNull();
+    }
+    expect(reportNames(unplanned)).toEqual({
+      id: unplanned.id,
+      projectId: unplanned.projectId,
+      monitorId: unplanned.personId,
+    });
+    expect(reportNames(switched)).toEqual({
+      id: switched.id,
+      projectId: null,
+      monitorId: switched.personId,
+    });
+    expect(reportNames('a line')).toEqual({ id: null, projectId: null, monitorId: null });
   });
 });

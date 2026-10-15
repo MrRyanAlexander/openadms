@@ -111,6 +111,8 @@ describe('who may ask', () => {
       'correctSurvey',
       'correctIncident',
       'correctDropOffLog',
+      // A held record saved as corrected (held.test.ts; ADR-526).
+      'saveHeldRecord',
       'createFieldEvent',
       // Part 4's (certifications.test.ts): a measuring mistake on a certification.
       'correctCertificationBox',

@@ -27,7 +27,10 @@
 //   photograph whose record the server doesn't have saved (not tried; ADR-481). The phone is
 //   answered `NOT_SAVED` with the reason and plain words that say it is held; never "saved".
 //   The same thing sent again by the same phone is the same held record: nothing is added.
-//   A report answered `NOT_SAVED` is not held (ADR-468 speaks of records).
+//   **A report answered `NOT_SAVED` is held too** (ADR-526 (5)): a phone holding one could
+//   otherwise never be turned in. Its phone is answered with the report's own reason, as before.
+// - **A photograph whose record is held is kept with it** (ADR-526 (4)), answered saved, so its
+//   files reach the server while its record waits for a person: intake's to find.
 // - **Nothing is refused over eligibility** (ADR-052), and nothing here concludes anything.
 // - **The numbers:** for each series reported, the phone is topped up to a full block and
 //   answered the blocks it holds now; where the report can't be taken (no such series, none
@@ -38,14 +41,12 @@
 //   the setup version of the project whose lists the phone says it holds, as that project's
 //   phones are shown it now (`SetupVersions`), written once on the sync's own row. A number,
 //   never the lists: those are an assignment's, read by a signed-in monitor's phone.
-import { createHash } from 'node:crypto';
-
 import {
   photoNames,
   photoRead,
   recordNames,
   recordRead,
-  sentCanonical,
+  reportNames,
   type PhotoAnswer,
   syncedRecordAssignment,
   syncedRecordId,
@@ -57,13 +58,7 @@ import {
   type SyncAnswered,
   type SyncReceived,
 } from '@open-adms/contracts';
-import {
-  byDeviceKey,
-  deviceKeyActorId,
-  Prisma,
-  type Database,
-  type NumberBlock,
-} from '@open-adms/db';
+import { byDeviceKey, deviceKeyActorId, type Database, type NumberBlock } from '@open-adms/db';
 import { NotSaved, type NotSavedNotice } from '@open-adms/domain';
 
 import type { Certifications } from '../certification/certifications.ts';
@@ -74,6 +69,7 @@ import type { UnplannedAssignments } from '../phone/unplanned-assignments.ts';
 import { databaseRefusalOf } from '../process/database-refusal.ts';
 import type { Clock } from '../setup/setup-service.ts';
 import { SetupVersions } from '../setup/setup-versions.ts';
+import type { HeldThings } from './held.ts';
 import type { Intake } from './intake.ts';
 import type { Brought } from './ledger.ts';
 import { NamesNothing } from './record-write.ts';
@@ -87,8 +83,12 @@ export interface SyncParts {
   readonly numbers: NumberAllocator;
   // Whose `passcodeBrought` makes the master passcode's check for a phone.
   readonly loginList: PhoneLoginList;
+  // Where what can't be saved is held for a person.
+  readonly held: HeldThings;
   readonly clock: Clock;
 }
+
+export { sentFingerprint } from './held.ts';
 
 // What one sync came to: the server's row for it, and what the phone is answered.
 export interface Synced {
@@ -104,15 +104,9 @@ export interface Synced {
 // time is not taken at this sync (ADR-505).
 const topUpAttempts = 3;
 
-// The fingerprint a held record is known by on its phone: the SHA-256, in hex, of what stood
-// in the record's place as canonical JSON in UTF-8 (ADR-472; the contracts' `sentCanonical`).
-export function sentFingerprint(sent: unknown): string {
-  return createHash('sha256').update(sentCanonical(sent), 'utf8').digest('hex');
-}
-
 // A record as the server read it, with what the server says of it: that a phone made it, and
 // which (ADR-466).
-function fromPhone(
+export function fromPhone(
   deviceId: string,
   read: Exclude<ReceivedRecord, { record: 'CERTIFICATION' }>,
 ): SentRecord {
@@ -180,7 +174,16 @@ export class Sync {
         madeAt: new Date(report.madeAt),
       });
       const reason = received.answer === 'NOT_SAVED' ? received.reason : null;
-      if (received.answer === 'NOT_SAVED') notSavedAssignments.add(report.id);
+      if (received.answer === 'NOT_SAVED') {
+        notSavedAssignments.add(report.id);
+        await this.parts.held.held(
+          deviceId,
+          brought.syncId,
+          report,
+          NotSaved.reportNotSaved('UNPLANNED_ASSIGNMENT', received.reason),
+          reportNames(report),
+        );
+      }
       unplannedAssignments.push({ assignmentId: report.id, answer: received.answer, reason });
     }
 
@@ -191,6 +194,15 @@ export class Sync {
         loggedAt: new Date(report.loggedAt),
       });
       const reason = received.answer === 'NOT_SAVED' ? received.reason : null;
+      if (received.answer === 'NOT_SAVED') {
+        await this.parts.held.held(
+          deviceId,
+          brought.syncId,
+          report,
+          NotSaved.reportNotSaved('PASSCODE_USE', received.reason),
+          reportNames(report),
+        );
+      }
       passcodeUses.push({ useId: report.id, answer: received.answer, reason });
     }
 
@@ -389,8 +401,7 @@ export class Sync {
   }
 
   // Holds what was sent for a person, once for this phone and this fingerprint, and answers
-  // its phone: not saved, why, and that it is held. Written as the device key's actor on that
-  // phone: the monitor a record names may be nobody the server knows.
+  // its phone: not saved, why, and that it is held.
   private async held(
     deviceId: string,
     brought: Brought,
@@ -398,38 +409,7 @@ export class Sync {
     notice: NotSavedNotice,
     names: RecordNames = recordNames(sent),
   ): Promise<Extract<RecordAnswer, { answer: 'NOT_SAVED' }>> {
-    const told = NotSaved.heldForReview(notice);
-    const sentSha256 = sentFingerprint(sent);
-    const where = { deviceId_sentSha256: { deviceId, sentSha256 } };
-    const kept = await this.db.$read((tx) =>
-      tx.heldRecord.findUnique({ where, select: { id: true } }),
-    );
-    if (kept === null) {
-      try {
-        await this.db.$write(byDeviceKey(deviceId), (tx) =>
-          tx.heldRecord.create({
-            data: {
-              deviceId,
-              syncId: brought.syncId,
-              sentId: names.id,
-              projectId: names.projectId,
-              sentMonitorId: names.monitorId,
-              payload: sent === null ? Prisma.JsonNull : (sent as Prisma.InputJsonValue),
-              sentSha256,
-              reason: told.reason,
-              message: told.message,
-              receivedAt: this.parts.clock.now(),
-            },
-            select: { id: true },
-          }),
-        );
-      } catch (error) {
-        // The same thing, sent by the same phone at the same moment: it is held already.
-        if (databaseRefusalOf(error)?.constraint !== 'held_record_device_id_sent_sha256_key') {
-          throw error;
-        }
-      }
-    }
+    const told = await this.parts.held.held(deviceId, brought.syncId, sent, notice, names);
     return { answer: 'NOT_SAVED', id: names.id, reason: told.reason, message: told.message };
   }
 

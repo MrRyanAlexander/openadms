@@ -137,8 +137,9 @@ const tableGrants: Record<string, Record<string, string>> = {
   sync: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   synced_record: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },
   held_record: { adms_api: 'INSERT SELECT UPDATE' },
-  // A file set aside (ADR-482): the API's alone, added and read; nobody changes one.
-  set_aside_file: { adms_api: 'INSERT SELECT' },
+  // A file set aside (ADR-482): the API's alone, added and read; what arrived is never changed,
+  // and only its resolution is written later, by a person (a trigger refuses the rest, ADR-526).
+  set_aside_file: { adms_api: 'INSERT SELECT UPDATE' },
   audit_record: { adms_api: 'SELECT', adms_worker: 'SELECT' },
   viewer_project: { adms_readonly: 'SELECT' },
   viewer_field_event: { adms_readonly: 'SELECT' },
@@ -291,6 +292,8 @@ const correctable: Record<string, string[]> = {
     'drop_off_log_id',
     // While its record waits in quarantine (ADR-338).
     'quarantined_record_id',
+    // While its record is held for a person (ADR-526).
+    'held_record_id',
     'view',
     'captured_at',
     'device_utc_offset_minutes',

@@ -124,18 +124,20 @@ export class Certifications extends ReviewService {
   // `brought` is the sync that brought it, where one did: its row in the idempotency ledger is
   // then written in the piece of work that makes the certification (ADR-471, 472).
   received(sent: SentCertification, brought?: Brought): Promise<Outcome<Certification>> {
+    return this.certify(Certifications.asNew(sent), brought);
+  }
+
+  // A certification as its phone sent it, as `certify` takes one.
+  static asNew(sent: SentCertification): NewCertification {
     const { boxes, helperIds, replaces, ...rest } = sent;
-    return this.certify(
-      {
-        ...stated(rest),
-        boxes: boxes.map((box) => stated(box)),
-        helperIds,
-        ...(replaces === null
-          ? {}
-          : { replaces: { certificationId: replaces.replacedId, reason: replaces.reason } }),
-      },
-      brought,
-    );
+    return {
+      ...stated(rest),
+      boxes: boxes.map((box) => stated(box)),
+      helperIds,
+      ...(replaces === null
+        ? {}
+        : { replaces: { certificationId: replaces.replacedId, reason: replaces.reason } }),
+    };
   }
 
   certify(input: NewCertification, brought?: Brought): Promise<Outcome<Certification>> {
@@ -143,90 +145,106 @@ export class Certifications extends ReviewService {
       input.deviceId === undefined
         ? { actorId: input.certifiedById, source: 'BACK_OFFICE' }
         : { actorId: input.certifiedById, source: 'DEVICE', deviceId: input.deviceId };
-    return this.writeAs(actor, async (tx, warn) => {
-      const boxes = input.boxes.map((box, position) => ({
-        ...Certifications.measured(box, position),
-        featureId: box.featureId ?? null,
-        featureOther: box.featureOther ?? null,
-      }));
-      const capacityCy = Certifications.capacity(input.kind, boxes);
-      if (input.replaces !== undefined) {
-        const refusal = new CertificationChanges(input.certNumber).replacement(
-          input.replaces.reason,
-        );
-        if (refusal !== null) throw new Refused(refusal);
-      }
-      const subs = await Certifications.subs(tx, warn, input.projectId, input.kind, input.primeId, [
-        input.firstTierSub,
-        input.secondTierSub,
-      ]);
-      const certification = await tx.certification.create({
-        data: {
-          ...(input.id === undefined ? {} : { id: input.id }),
-          projectId: input.projectId,
-          certNumber: input.certNumber,
-          kind: input.kind,
-          primeId: input.primeId,
-          ...subs,
-          vehicleTypeId: input.vehicleTypeId ?? null,
-          vehicleTypeOther: input.vehicleTypeOther ?? null,
-          crewTypeId: input.crewTypeId ?? null,
-          capacityCy,
-          driverName: input.driverName ?? null,
-          driverPhone: input.driverPhone ?? null,
-          driverLicenceNumber: input.driverLicenceNumber ?? null,
-          driverLicenceState: input.driverLicenceState ?? null,
-          driverLicenceExpiry:
-            input.driverLicenceExpiry === undefined ? null : day(input.driverLicenceExpiry),
-          tagNumber: input.tagNumber ?? null,
-          tagState: input.tagState ?? null,
-          tagExpiry: input.tagExpiry === undefined ? null : day(input.tagExpiry),
-          certifiedAt: input.certifiedAt,
-          deviceUtcOffsetMinutes: input.deviceUtcOffsetMinutes,
-          receivedAt: this.clock.now(),
-          certifiedById: input.certifiedById,
-          deviceId: input.deviceId ?? null,
-          assignmentId: input.assignmentId ?? null,
-          clientRepresentativeName: input.clientRepresentativeName ?? null,
-          contractorRepresentativeName: input.contractorRepresentativeName ?? null,
-          // Marked at QC (ADR-080).
-          signaturesOnFile: false,
-          replacesId: input.replaces?.certificationId ?? null,
-          replacedReason: input.replaces?.reason.trim() ?? null,
-          notes: input.notes ?? null,
-        },
+    return this.writeAs(actor, (tx, warn) => this.certifiedIn(tx, warn, input, { brought }));
+  }
+
+  // The certification made in a piece of work already open: `certify`'s own, or a reviewer's
+  // who saves one a phone sent from where it was held (ADR-526 (2)), as that reviewer, with the
+  // time the server received it. There `queued` is false: the reviewer's service queues the
+  // tickets on its number itself.
+  async certifiedIn(
+    tx: Prisma.TransactionClient,
+    warn: Warn,
+    input: NewCertification,
+    how: {
+      readonly brought?: Brought | undefined;
+      readonly receivedAt?: Date;
+      readonly queued?: boolean;
+    } = {},
+  ): Promise<Certification> {
+    const { brought } = how;
+    const boxes = input.boxes.map((box, position) => ({
+      ...Certifications.measured(box, position),
+      featureId: box.featureId ?? null,
+      featureOther: box.featureOther ?? null,
+    }));
+    const capacityCy = Certifications.capacity(input.kind, boxes);
+    if (input.replaces !== undefined) {
+      const refusal = new CertificationChanges(input.certNumber).replacement(input.replaces.reason);
+      if (refusal !== null) throw new Refused(refusal);
+    }
+    const subs = await Certifications.subs(tx, warn, input.projectId, input.kind, input.primeId, [
+      input.firstTierSub,
+      input.secondTierSub,
+    ]);
+    const certification = await tx.certification.create({
+      data: {
+        ...(input.id === undefined ? {} : { id: input.id }),
+        projectId: input.projectId,
+        certNumber: input.certNumber,
+        kind: input.kind,
+        primeId: input.primeId,
+        ...subs,
+        vehicleTypeId: input.vehicleTypeId ?? null,
+        vehicleTypeOther: input.vehicleTypeOther ?? null,
+        crewTypeId: input.crewTypeId ?? null,
+        capacityCy,
+        driverName: input.driverName ?? null,
+        driverPhone: input.driverPhone ?? null,
+        driverLicenceNumber: input.driverLicenceNumber ?? null,
+        driverLicenceState: input.driverLicenceState ?? null,
+        driverLicenceExpiry:
+          input.driverLicenceExpiry === undefined ? null : day(input.driverLicenceExpiry),
+        tagNumber: input.tagNumber ?? null,
+        tagState: input.tagState ?? null,
+        tagExpiry: input.tagExpiry === undefined ? null : day(input.tagExpiry),
+        certifiedAt: input.certifiedAt,
+        deviceUtcOffsetMinutes: input.deviceUtcOffsetMinutes,
+        receivedAt: how.receivedAt ?? this.clock.now(),
+        certifiedById: input.certifiedById,
+        deviceId: input.deviceId ?? null,
+        assignmentId: input.assignmentId ?? null,
+        clientRepresentativeName: input.clientRepresentativeName ?? null,
+        contractorRepresentativeName: input.contractorRepresentativeName ?? null,
+        // Marked at QC (ADR-080).
+        signaturesOnFile: false,
+        replacesId: input.replaces?.certificationId ?? null,
+        replacedReason: input.replaces?.reason.trim() ?? null,
+        notes: input.notes ?? null,
+      },
+    });
+    for (const box of boxes) {
+      await tx.certificationBox.create({
+        data: { ...box, certificationId: certification.id, kind: 'CONTAINER' },
       });
-      for (const box of boxes) {
-        await tx.certificationBox.create({
-          data: { ...box, certificationId: certification.id, kind: 'CONTAINER' },
-        });
-      }
-      for (const userId of input.helperIds ?? []) {
-        await tx.certificationHelper.create({
-          data: { certificationId: certification.id, userId },
-        });
-      }
-      // A field event that scanned this number before the certification existed found none
-      // when it arrived: it is linked now (a contractor user's sight hangs on the link,
-      // ADR-361), and its ticket, unbilled until a certification exists, is queued. So are the
-      // tickets on a certification this one replaces: the ones worked on the old number from
-      // now on are flagged.
-      await tx.fieldEvent.updateMany({
-        where: {
-          projectId: input.projectId,
-          certNumber: input.certNumber,
-          certificationId: null,
-        },
-        data: { certificationId: certification.id },
+    }
+    for (const userId of input.helperIds ?? []) {
+      await tx.certificationHelper.create({
+        data: { certificationId: certification.id, userId },
       });
-      const replaced =
-        input.replaces === undefined
-          ? null
-          : await tx.certification.findUniqueOrThrow({
-              where: { id: input.replaces.certificationId },
-              select: { certNumber: true },
-            });
-      // Made on a phone, it reached the server by a sync, and no person asked for the run.
+    }
+    // A field event that scanned this number before the certification existed found none
+    // when it arrived: it is linked now (a contractor user's sight hangs on the link,
+    // ADR-361), and its ticket, unbilled until a certification exists, is queued. So are the
+    // tickets on a certification this one replaces: the ones worked on the old number from
+    // now on are flagged.
+    await tx.fieldEvent.updateMany({
+      where: {
+        projectId: input.projectId,
+        certNumber: input.certNumber,
+        certificationId: null,
+      },
+      data: { certificationId: certification.id },
+    });
+    const replaced =
+      input.replaces === undefined
+        ? null
+        : await tx.certification.findUniqueOrThrow({
+            where: { id: input.replaces.certificationId },
+            select: { certNumber: true },
+          });
+    // Made on a phone, it reached the server by a sync, and no person asked for the run.
+    if (how.queued !== false) {
       await this.onNumbers(
         tx,
         input.projectId,
@@ -238,16 +256,16 @@ export class Certifications extends ReviewService {
         // job that names none.
         true,
       );
-      if (input.deviceId !== undefined) {
-        await ledgerRow(tx, brought, {
-          recordId: certification.id,
-          recordKind: 'CERTIFICATION',
-          deviceId: input.deviceId,
-          answer: 'SAVED',
-        });
-      }
-      return certification;
-    });
+    }
+    if (input.deviceId !== undefined) {
+      await ledgerRow(tx, brought, {
+        recordId: certification.id,
+        recordKind: 'CERTIFICATION',
+        deviceId: input.deviceId,
+        answer: 'SAVED',
+      });
+    }
+    return certification;
   }
 
   // Queues every ticket whose field events scanned one of the numbers, their neighbours with

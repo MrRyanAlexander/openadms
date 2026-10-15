@@ -123,16 +123,20 @@ export {
 export { IncidentOffers, incidentOffers, type IncidentOffer } from './incident-offers.ts';
 export {
   GpsFix,
+  heldReasons,
   NotSaved,
   notSavedReasons,
   Quarantine,
   quarantineReasons,
   type FixReading,
+  type HeldNotice,
+  type HeldReason,
   type NotSavedNotice,
   type NotSavedReason,
   type QuarantineNotice,
   type QuarantineReason,
   type ReadableFix,
+  type ReportKind,
   type SentFix,
 } from './intake.ts';
 export {
@@ -418,6 +422,8 @@ export {
   LockedTicket,
   PickedReason,
   qcStatuses,
+  HeldResolution,
+  heldSentAs,
   QuarantineResolution,
   Renumber,
   ReprocessAsking,
@@ -429,6 +435,7 @@ export {
   type NumberWritten,
   type QcStatusName,
   type ReasonUseName,
+  type HeldSentAs,
   type ReviewPermission,
   type ReviewRefusal,
   type ReviewerRole,

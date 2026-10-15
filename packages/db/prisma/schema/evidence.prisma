@@ -377,6 +377,9 @@ model Photo {
   // While its record waits in quarantine; a reviewer's resolution moves the photograph to the
   // field event the record becomes (ADR-292 (5); BACKLOG 1.8.x).
   quarantinedRecordId String? @map("quarantined_record_id") @db.Uuid
+  // While the record it names is held for a person (ADR-526 (4)): the newest held from the same
+  // phone under that id. Saved as corrected, the photograph moves to that record; closed, it stays.
+  heldRecordId        String? @map("held_record_id") @db.Uuid
 
   // Which of the five views a certification's photograph is; no other photograph has one.
   view PhotoView?
@@ -424,6 +427,7 @@ model Photo {
   incident          Incident?          @relation(fields: [projectId, incidentId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
   dropOffLog        DropOffLog?        @relation(fields: [projectId, dropOffLogId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
   quarantinedRecord QuarantinedRecord? @relation(fields: [projectId, quarantinedRecordId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  heldRecord        HeldRecord?        @relation(fields: [heldRecordId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   device            Device?            @relation(fields: [deviceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
 
   setAsideFiles SetAsideFile[]
@@ -456,8 +460,16 @@ model SetAsideFile {
   // When the server received it whole (ADR-100).
   receivedAt     DateTime  @default(now()) @map("received_at") @db.Timestamptz(3)
 
-  photo  Photo  @relation(fields: [photoId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  device Device @relation(fields: [deviceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  // Closed by a person (ADR-526 (3)): who, when and why, all three or none, written once. It
+  // says the photograph's own file will not come; this one stays beside it, never the
+  // photograph's.
+  resolvedById String?   @map("resolved_by_id") @db.Uuid
+  resolvedAt   DateTime? @map("resolved_at") @db.Timestamptz(3)
+  resolution   String?
+
+  photo      Photo  @relation(fields: [photoId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  device     Device @relation(fields: [deviceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  resolvedBy User?  @relation("SetAsideFileResolvedBy", fields: [resolvedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
 
   @@unique([photoId, file, receivedSha256])
   @@map("set_aside_file")
@@ -804,6 +816,8 @@ enum NotSavedReason {
   CERTIFICATION_REFUSED
   // A photograph whose record the server has not saved (ADR-481).
   OWNER_NOT_SAVED
+  // An unplanned assignment or a use of the passcode the server could not keep (ADR-526 (5)).
+  REPORT_NOT_SAVED
 
   @@map("not_saved_reason")
 }
@@ -815,9 +829,10 @@ enum NotSavedReason {
 // again by the same phone is the same held record. What was sent is never changed and never
 // deleted; only its resolution is written later, by a person.
 model HeldRecord {
-  id       String @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  deviceId String @map("device_id") @db.Uuid
-  syncId   String @map("sync_id") @db.Uuid
+  id       String  @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  deviceId String  @map("device_id") @db.Uuid
+  // The sync that brought it; none for a report made to its own endpoint (ADR-526 (5)).
+  syncId   String? @map("sync_id") @db.Uuid
 
   // As sent, where that much could be read: the record's own id, its project and its monitor.
   sentId        String? @map("sent_id") @db.Uuid
@@ -839,8 +854,10 @@ model HeldRecord {
   resolvedAt   DateTime? @map("resolved_at") @db.Timestamptz(3)
   resolution   String?
 
-  sync       Sync  @relation(fields: [syncId, deviceId], references: [id, deviceId], onDelete: Restrict, onUpdate: Restrict)
-  resolvedBy User? @relation("HeldRecordResolvedBy", fields: [resolvedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  device     Device  @relation(fields: [deviceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  sync       Sync?   @relation(fields: [syncId, deviceId], references: [id, deviceId], onDelete: Restrict, onUpdate: Restrict)
+  resolvedBy User?   @relation("HeldRecordResolvedBy", fields: [resolvedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  photos     Photo[]
 
   @@unique([deviceId, sentSha256])
   @@map("held_record")

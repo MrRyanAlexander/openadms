@@ -94,6 +94,10 @@ import {
   apiVoids,
 } from '../review/review-marks.controller.ts';
 import { apiBackOfficeRecords, apiQuarantineReview } from '../review/review-records.controller.ts';
+import { apiHeldReads, apiHeldReview } from '../review/held.controller.ts';
+import { HeldReads } from '../review/held-reads.ts';
+import { HeldReview } from '../review/held-review.ts';
+import { apiHeldThings, HeldThings } from '../sync/held.ts';
 import { Voids } from '../review/voids.ts';
 import { apiContractorSetup } from '../setup/contractor-setup.controller.ts';
 import { ContractorSetup } from '../setup/contractor-setup.ts';
@@ -410,6 +414,9 @@ export class ApiProcess {
     const unplanned = new UnplannedAssignments(database, { clock, requestNow });
     const passcodeUses = new PasscodeUses(database, { clock, requestNow });
     const certifications = new Certifications(database, clock, policy);
+    const intake = new Intake(database, clock, policy);
+    // Where what a phone sent and the server can't save is held for a person (ADR-468, 526).
+    const held = new HeldThings(database, clock);
     // The login list's service also makes the passcode's check a sync brings (ADR-473).
     const loginList = new PhoneLoginList(database, {
       assignments: new PhoneAssignments(database),
@@ -470,6 +477,10 @@ export class ApiProcess {
           [apiReprocesses, new Reprocesses(database, clock, policy)],
           [apiQuarantineReview, new QuarantineReview(database, clock, policy)],
           [apiBackOfficeRecords, new BackOfficeRecords(database, clock, policy)],
+          // What a sync held for a person, read and resolved (task 2.8.4).
+          [apiHeldReview, new HeldReview(database, clock, policy, { intake, certifications })],
+          [apiHeldReads, new HeldReads(database)],
+          [apiHeldThings, held],
           // A certification's changes (task 2.4.4, part 4): only an admin revokes.
           [apiCertifications, certifications],
           // A phone enrolled under the master passcode (task 2.5.1): nobody is signed in.
@@ -527,12 +538,13 @@ export class ApiProcess {
           [
             apiSync,
             new Sync(database, {
-              intake: new Intake(database, clock, policy),
+              intake,
               certifications,
               unplanned,
               uses: passcodeUses,
               numbers: new NumberAllocator(database, clock, policy),
               loginList,
+              held,
               clock,
             }),
           ],

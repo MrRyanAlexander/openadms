@@ -16,6 +16,9 @@
 //   one arrived, is the server's failure, never answered as the photograph's file.
 // - **Nothing is changed by reading it**, and a photograph removed from the record is read all
 //   the same: nothing is deleted (ADR-051).
+// - **A file set aside is read the same way** (ADR-482 (5), 526 (1)): the bytes kept at its own
+//   place, checked against the fingerprint the server read when it arrived and the type its
+//   bytes said then.
 import { createHash } from 'node:crypto';
 
 import type { Database } from '@open-adms/db';
@@ -83,6 +86,29 @@ export class PhotographFiles {
     const type = photoFileTypeOf(kept.bytes.subarray(0, photoFileSignatureBytes));
     if (type === null || type !== kept.contentType) {
       throw new Error('A photograph’s file isn’t the kind of image it was kept as.');
+    }
+    return { bytes: kept.bytes, contentType: type };
+  }
+
+  // A file set aside, as the server kept it.
+  async setAside(setAsideFileId: string): Promise<KeptPhotographFile> {
+    const file = await this.db.$read((tx) =>
+      tx.setAsideFile.findUnique({
+        where: { id: setAsideFileId },
+        select: { objectKey: true, receivedSha256: true, contentType: true },
+      }),
+    );
+    if (file === null) throw new Refusal('NOT_FOUND', 404);
+    const kept = await this.media.read(file.objectKey, this.fileBytesAtMost);
+    if (kept === null) {
+      throw new Error('The store holds no file where a file set aside was kept.');
+    }
+    if (sha256Of(kept.bytes) !== file.receivedSha256) {
+      throw new Error('The file kept set aside isn’t the one that arrived.');
+    }
+    const type = photoFileTypeOf(kept.bytes.subarray(0, photoFileSignatureBytes));
+    if (type === null || type !== file.contentType || type !== kept.contentType) {
+      throw new Error('A file set aside isn’t the kind of image it was kept as.');
     }
     return { bytes: kept.bytes, contentType: type };
   }

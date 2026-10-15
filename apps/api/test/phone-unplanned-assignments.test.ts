@@ -22,7 +22,7 @@ import {
   unplannedAssignmentAnswerSchema,
   writeAssignmentEndpoint,
 } from '@open-adms/contracts';
-import { masterPasscodeActorId, type Database } from '@open-adms/db';
+import { deviceKeyActorId, masterPasscodeActorId, type Database } from '@open-adms/db';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { installationSettings, openInstallation, type Tx } from './support/database.ts';
@@ -180,6 +180,12 @@ const events = async (tx: Tx, requestId: string) =>
     event.occurredAt.toISOString(),
     event.deviceUtcOffsetMinutes,
   ]);
+
+// What a report answered "not saved" writes: the held record a person resolves, as the device
+// key's actor on the phone that sent it (ADR-526 (5)).
+const heldFor = (phone: TestPhone) => [
+  ['held_record', 'INSERT', deviceKeyActorId, 'DEVICE', phone.id],
+];
 
 const audited = async (tx: Tx, requestId: string) =>
   (
@@ -484,7 +490,7 @@ describe('an unplanned assignment arrives', () => {
     });
   });
 
-  it('it is not saved where something it names is no record of the kind it must be: a project nobody has, somebody who is no monitor, a site or a pay item that isn’t the project’s, a pay item that is no unit rate pay item; each is said, and nothing is written', async () => {
+  it('it is not saved where something it names is no record of the kind it must be: a project nobody has, somebody who is no monitor, a site or a pay item that isn’t the project’s, a pay item that is no unit rate pay item; each is said, nothing of it is kept as an assignment, and it is held for a person exactly as sent', async () => {
     await world(async (served, tx, who) => {
       const { dana, priced, site, hangers, vegHaul, phone, token, setUp } =
         await tariqAtTheLandfill(served, tx);
@@ -523,11 +529,19 @@ describe('an unplanned assignment arrives', () => {
           'NOT_THE_PROJECTS_UNIT_RATE_PAY_ITEM',
         ],
       ] as const) {
-        const { said, requestId } = await answered(served, token, setUp(more));
+        const report = setUp(more);
+        const { said, requestId } = await answered(served, token, report);
         expect(said, JSON.stringify(more)).toEqual(['NOT_SAVED', reason]);
-        expect(await audited(tx, requestId), reason).toEqual([]);
+        expect(await audited(tx, requestId), reason).toEqual(heldFor(phone));
+        const held = await tx.heldRecord.findFirstOrThrow({ where: { sentId: report.id } });
+        expect([held.syncId, held.reason, held.payload], reason).toEqual([
+          null,
+          'REPORT_NOT_SAVED',
+          JSON.parse(JSON.stringify(report)),
+        ]);
       }
       expect(await written(tx, phone)).toEqual([0, 0]);
+      expect(await tx.heldRecord.count({ where: { deviceId: phone.id } })).toBe(10);
     });
   });
 });

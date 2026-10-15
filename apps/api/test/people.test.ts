@@ -218,6 +218,12 @@ describe('permissions, read from the database on every request', () => {
       'listAssignments',
       // A photograph's file (ADR-483).
       'photographFile',
+      // What a sync held for a person and what waits in quarantine, and a file set aside
+      // (ADR-526).
+      'listHeldRecords',
+      'listSetAsideFiles',
+      'setAsideFile',
+      'listQuarantinedRecords',
     ]);
     // The permissions an endpoint takes yet are Setup (task 2.4.2; the list by name is
     // setup-endpoints.test.ts's), Dispatch (task 2.4.3; phones.test.ts's) and those of review's

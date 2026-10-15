@@ -84,7 +84,12 @@ export interface ReviewRefusal {
     | 'BATCH_NAME_USED'
     | 'BATCH_ON_ANOTHER_PROJECT'
     | 'TOO_MANY_TICKETS'
-    | 'NOT_SET_ASIDE';
+    | 'NOT_SET_ASIDE'
+    | 'NO_ID_SENT'
+    | 'NOT_THE_ID_SENT'
+    | 'NOT_THE_KIND_SENT'
+    | 'CLOSED_ONLY'
+    | 'NOT_IN_THE_PROJECT_SENT';
   readonly message: string;
 }
 
@@ -266,6 +271,123 @@ export class QuarantineResolution {
           code: 'ROE_NUMBER_HELD',
           message: `ROE ${roeNumber}: this project already has an ROE with that number. Nothing was changed.`,
         };
+  }
+}
+
+// What a sync held for a person, resolved (ADR-526 (2), (3); AC-10-74…76): a held record saved
+// as corrected or closed, a file set aside closed. Each once, by a person, with a reason; the
+// words here are what the record keeps of how. What a held record was sent as is the contract's
+// reading of what was sent: a record of one of its kinds, a photograph's record, a report, or
+// nothing it can say.
+export const heldSentAs = [
+  'FIELD_EVENT',
+  'SCALE_RECEIPT',
+  'INCIDENT',
+  'DROP_OFF_LOG',
+  'SURVEY',
+  'ROE',
+  'CERTIFICATION',
+  'PHOTO',
+  'REPORT',
+] as const;
+export type HeldSentAs = (typeof heldSentAs)[number];
+
+const sentAsInWords: Record<HeldSentAs, string> = {
+  FIELD_EVENT: 'a field event',
+  SCALE_RECEIPT: 'a scale receipt',
+  INCIDENT: 'an incident',
+  DROP_OFF_LOG: 'a drop-off log',
+  SURVEY: 'a survey',
+  ROE: 'an ROE',
+  CERTIFICATION: 'a certification',
+  PHOTO: 'a photograph’s record',
+  REPORT: 'a report',
+};
+
+export class HeldResolution {
+  // How it was resolved already; nothing while it waits.
+  private readonly standing: string | null;
+  private readonly what: 'HELD_RECORD' | 'SET_ASIDE_FILE';
+
+  constructor(standing: string | null, what: 'HELD_RECORD' | 'SET_ASIDE_FILE' = 'HELD_RECORD') {
+    this.standing = standing;
+    this.what = what;
+  }
+
+  // Resolved once: afterwards it stays as it was resolved.
+  refusal(): ReviewRefusal | null {
+    if (this.standing === null) return null;
+    const it = this.what === 'HELD_RECORD' ? 'This held record' : 'This file set aside';
+    return {
+      code: 'ALREADY_RESOLVED',
+      message: `${it} is already resolved (${this.standing}). Nothing was changed.`,
+    };
+  }
+
+  // Why a held record can't be saved as the record a reviewer sends, or nothing: it keeps the
+  // id its phone made and the kind it was sent as; a report is closed, never saved (ADR-526 (2),
+  // agent defaults (c), (d)).
+  savingRefusal(
+    held: { readonly sentId: string | null; readonly sentAs: HeldSentAs | null },
+    given: { readonly id: string; readonly kind: HeldSentAs },
+  ): ReviewRefusal | null {
+    if (held.sentAs === 'REPORT') {
+      return {
+        code: 'CLOSED_ONLY',
+        message:
+          'A report the server couldn’t keep is closed, never saved: write the assignment on the dispatch board. Nothing was changed.',
+      };
+    }
+    if (held.sentId === null) {
+      return {
+        code: 'NO_ID_SENT',
+        message:
+          'This held record came with no id the server could read: enter it in the back office as a record of its own, then close this one. Nothing was changed.',
+      };
+    }
+    if (given.id !== held.sentId) {
+      return {
+        code: 'NOT_THE_ID_SENT',
+        message: `A record saved from a held one keeps the id its phone made, ${held.sentId}. Nothing was changed.`,
+      };
+    }
+    if (held.sentAs !== null && given.kind !== held.sentAs) {
+      return {
+        code: 'NOT_THE_KIND_SENT',
+        message: `This held record was sent as ${sentAsInWords[held.sentAs]}: it is saved as one. Nothing was changed.`,
+      };
+    }
+    return null;
+  }
+
+  // A certification saved under a number its project already has: a cert number is one
+  // certification's (ADR-045).
+  certNumberHeld(certNumber: string): ReviewRefusal {
+    return {
+      code: 'NUMBER_HELD',
+      message: `This project already has a certification ${certNumber}. Nothing was changed.`,
+    };
+  }
+
+  // A photograph's record saved with no record of its project to belong to.
+  notInTheProjectSent(): ReviewRefusal {
+    return {
+      code: 'NOT_IN_THE_PROJECT_SENT',
+      message:
+        'A photograph saved from a held record belongs to a record of its own project the server has, and a record saved with photographs stays in the project they were sent for. Nothing was changed.',
+    };
+  }
+
+  // Saved as the reviewer sent it, under the id its phone made.
+  saved(kind: HeldSentAs): string {
+    return `Saved as corrected: ${sentAsInWords[kind]} under the id its phone made, with its photographs.`;
+  }
+
+  // Closed: nothing is made from it, and what was sent stays.
+  closed(): string {
+    return this.what === 'HELD_RECORD'
+      ? 'Closed, never to be saved: what was sent stays here, with its photographs.'
+      : 'Closed: the photograph’s own file won’t come; this file stays beside it.';
   }
 }
 

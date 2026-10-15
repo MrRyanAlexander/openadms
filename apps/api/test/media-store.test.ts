@@ -3,7 +3,7 @@
 // ask the local stack's own object store over HTTPS through Caddy, as the installation's API is
 // told of it: they need `pnpm ready`. A test's objects are taken away again by the stack's
 // administrator, the one identity that can.
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import {
@@ -102,6 +102,29 @@ describe('the object store the API keeps files in', () => {
     expect(await versionsUnder(administrator, media, key)).toEqual([
       { key, versionId: expect.any(String) as string, latest: true, bytes: 256 },
     ]);
+  });
+
+  it('C136 (tried, ADR-526 (8)): the store checks a SHA-256 a put states, keeping nothing where the bytes have another; the API checks every file against its phone’s fingerprint before it asks the store', async () => {
+    const bytes = bytesOf('the file the phone fingerprinted');
+    const sha256 = (of: Buffer): string => createHash('sha256').update(of).digest('base64');
+    const put = (key: string, stated: string) =>
+      api.send(
+        new PutObjectCommand({
+          Bucket: media.bucket,
+          Key: key,
+          Body: bytes,
+          ContentLength: bytes.byteLength,
+          ContentType: jpeg,
+          IfNoneMatch: '*',
+          ChecksumSHA256: stated,
+        }),
+      );
+    const wrong = `${prefix}/stated-another-sha256`;
+    expect(await answered(put(wrong, sha256(bytesOf('another file'))))).toBe(400);
+    expect(await store.sizeOf(wrong)).toBeNull();
+    const right = `${prefix}/stated-its-sha256`;
+    expect(await answered(put(right, sha256(bytes)))).toBe('allowed');
+    expect((await store.read(right, 1024))?.bytes.equals(bytes)).toBe(true);
   });
 
   it('AC-10-49: a second file under a key already kept changes nothing: the first stands, alone', async () => {

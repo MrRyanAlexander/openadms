@@ -3,18 +3,22 @@
 // phone that has proved itself; nobody need be signed in, and no passcode is sent. The log says
 // which phone reported which assignment and what it was answered, by id and code: never a
 // monitor's name, a site or what the work is. A site move and a monitor switch are reported
-// here too (ADR-458): the log says what the assignment was made at.
+// here too (ADR-458): the log says what the assignment was made at. One answered not saved is
+// held for a person, as it is at a sync, with no sync (ADR-526 (5)).
 import {
+  reportNames,
   reportUnplannedAssignmentEndpoint,
   unplannedAssignmentAnswerSchema,
   type BodyOf,
   type UnplannedAssignmentAnswer,
 } from '@open-adms/contracts';
+import { NotSaved } from '@open-adms/domain';
 import { Body, Controller, Inject, Req } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 
 import { Serves } from '../process/serves.ts';
 import { phoneOf } from '../sign-in/admission.ts';
+import { apiHeldThings, HeldThings } from '../sync/held.ts';
 import { UnplannedAssignments } from './unplanned-assignments.ts';
 
 export const apiUnplannedAssignments = Symbol('the API’s unplanned assignments from phones');
@@ -22,9 +26,14 @@ export const apiUnplannedAssignments = Symbol('the API’s unplanned assignments
 @Controller()
 export class UnplannedAssignmentsController {
   private readonly unplanned: UnplannedAssignments;
+  private readonly held: HeldThings;
 
-  constructor(@Inject(apiUnplannedAssignments) unplanned: UnplannedAssignments) {
+  constructor(
+    @Inject(apiUnplannedAssignments) unplanned: UnplannedAssignments,
+    @Inject(apiHeldThings) held: HeldThings,
+  ) {
     this.unplanned = unplanned;
+    this.held = held;
   }
 
   @Serves(reportUnplannedAssignmentEndpoint)
@@ -38,6 +47,15 @@ export class UnplannedAssignmentsController {
       madeAt: new Date(body.madeAt),
     });
     const reason = received.answer === 'NOT_SAVED' ? received.reason : null;
+    if (received.answer === 'NOT_SAVED') {
+      await this.held.held(
+        phone.deviceId,
+        null,
+        body,
+        NotSaved.reportNotSaved('UNPLANNED_ASSIGNMENT', received.reason),
+        reportNames(body),
+      );
+    }
     request.log.info(
       {
         deviceId: phone.deviceId,
