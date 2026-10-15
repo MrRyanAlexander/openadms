@@ -89,6 +89,8 @@ export const unplannedAssignmentRefusals = [
   'NOT_THE_PROJECTS_SITE',
   'NOT_THE_PROJECTS_UNIT_RATE_PAY_ITEM',
   'ID_ALREADY_HELD',
+  // Its project was closed before it arrived (ADR-529 (b)).
+  'PROJECT_CLOSED',
 ] as const;
 
 export type UnplannedAssignmentRefusal = (typeof unplannedAssignmentRefusals)[number];

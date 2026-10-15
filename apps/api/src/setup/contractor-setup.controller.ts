@@ -1,21 +1,16 @@
 // Setup's endpoints, step 4 (spec/parts/01-setup.md; ARCHITECTURE §6; AC-01-21, 80; AC-10-27;
 // BACKLOG 2.4.2; ADR-108, 146, 305, 321, 424, 426): a contractor, searched for and picked or
-// created, changed, archived and put back; a prime added to a project; a contract, changed,
-// archived and put back; a sub typed twice merged into one (ADR-527 (1), (2), (11)). The door
+// created and changed; a prime added to a project; a contract, its name and link changed
+// (ADR-527 (1), (2); ADR-529). The door
 // has already asked the caller's role and that they hold Setup; the service asks again inside
 // its own piece of work.
 import {
   addPrimeEndpoint,
-  archiveContractEndpoint,
-  archiveContractorEndpoint,
   changeContractEndpoint,
   changeContractorEndpoint,
   createContractEndpoint,
   createContractorEndpoint,
   findContractorsEndpoint,
-  mergeContractorEndpoint,
-  unarchiveContractEndpoint,
-  unarchiveContractorEndpoint,
   type BodyOf,
   type ParamsOf,
   type QueryOf,
@@ -75,36 +70,6 @@ export class ContractorSetupController {
     );
   }
 
-  @Serves(archiveContractorEndpoint)
-  async archive(
-    @Param() params: ParamsOf<typeof archiveContractorEndpoint>,
-    @Req() request: FastifyRequest,
-  ) {
-    const outcome = await this.contractors.archiveContractor(
-      callerOf(request).userId,
-      params.contractorId,
-      true,
-    );
-    return archiveContractorEndpoint.answer.parse(
-      answered(request, outcome, contractorRecord, 'A contractor was archived.'),
-    );
-  }
-
-  @Serves(unarchiveContractorEndpoint)
-  async unarchive(
-    @Param() params: ParamsOf<typeof unarchiveContractorEndpoint>,
-    @Req() request: FastifyRequest,
-  ) {
-    const outcome = await this.contractors.archiveContractor(
-      callerOf(request).userId,
-      params.contractorId,
-      false,
-    );
-    return unarchiveContractorEndpoint.answer.parse(
-      answered(request, outcome, contractorRecord, 'A contractor was put back.'),
-    );
-  }
-
   @Serves(addPrimeEndpoint)
   async addPrime(
     @Param() params: ParamsOf<typeof addPrimeEndpoint>,
@@ -149,52 +114,6 @@ export class ContractorSetupController {
     );
     return changeContractEndpoint.answer.parse(
       answered(request, outcome, contractRecord, 'A contract was changed.'),
-    );
-  }
-
-  @Serves(archiveContractEndpoint)
-  async archiveContract(
-    @Param() params: ParamsOf<typeof archiveContractEndpoint>,
-    @Req() request: FastifyRequest,
-  ) {
-    const outcome = await this.contractors.archiveContract(
-      callerOf(request).userId,
-      params.contractId,
-      true,
-    );
-    return archiveContractEndpoint.answer.parse(
-      answered(request, outcome, contractRecord, 'A contract was archived.'),
-    );
-  }
-
-  @Serves(unarchiveContractEndpoint)
-  async unarchiveContract(
-    @Param() params: ParamsOf<typeof unarchiveContractEndpoint>,
-    @Req() request: FastifyRequest,
-  ) {
-    const outcome = await this.contractors.archiveContract(
-      callerOf(request).userId,
-      params.contractId,
-      false,
-    );
-    return unarchiveContractEndpoint.answer.parse(
-      answered(request, outcome, contractRecord, 'A contract was put back.'),
-    );
-  }
-
-  @Serves(mergeContractorEndpoint)
-  async merge(
-    @Param() params: ParamsOf<typeof mergeContractorEndpoint>,
-    @Body() body: BodyOf<typeof mergeContractorEndpoint>,
-    @Req() request: FastifyRequest,
-  ) {
-    const outcome = await this.contractors.merge(
-      callerOf(request).userId,
-      params.contractorId,
-      body.intoContractorId,
-    );
-    return mergeContractorEndpoint.answer.parse(
-      answered(request, outcome, contractorRecord, 'A contractor was merged into another.'),
     );
   }
 }

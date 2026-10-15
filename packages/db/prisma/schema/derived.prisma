@@ -133,6 +133,7 @@ enum FlagCode {
   SCALE_NET_DISAGREES
   TWO_QUANTITIES
   NOT_PROCESSED_LINES_STAND
+  SUB_NAME_ALIKE
 
   @@map("flag_code")
 }

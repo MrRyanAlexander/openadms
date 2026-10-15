@@ -1,21 +1,18 @@
 // Setup's endpoints, step 7 (spec/parts/01-setup.md; ARCHITECTURE §6; AC-01-52…57; AC-10-27;
 // BACKLOG 2.4.2, C97, C98; ADR-111, 142, 145, 215, 222, 298, 422, 426): a disposal site entered
 // on a project, a change to one, its own shape and the link to its tipping fee pay item; a site
-// archived and put back, its own labels given and taken off, its tipping fee link taken off
-// (ADR-527 (9)). Each
+// its own labels given and removed, its tipping fee link removed (ADR-527 (9); ADR-529 (g)). Each
 // moves what the tickets at the site are checked against, and its answer says what it queued.
 // The door has already asked the caller's role and that they hold Setup; the service asks again
 // inside its own piece of work.
 import {
   addSiteShapeEndpoint,
-  archiveSiteEndpoint,
-  archiveSiteLabelEndpoint,
-  archiveTippingFeeEndpoint,
+  removeSiteLabelEndpoint,
+  removeTippingFeeEndpoint,
   changeSiteEndpoint,
   createSiteEndpoint,
   giveSiteLabelEndpoint,
   linkTippingFeeEndpoint,
-  unarchiveSiteEndpoint,
   type BodyOf,
   type ParamsOf,
 } from '@open-adms/contracts';
@@ -104,22 +101,6 @@ export class SiteSetupController {
       ),
     );
   }
-  @Serves(archiveSiteEndpoint)
-  async archive(@Param() params: AtSite, @Req() request: FastifyRequest) {
-    const outcome = await this.sites.archive(callerOf(request).userId, params.siteId, true);
-    return archiveSiteEndpoint.answer.parse(
-      answered(request, outcome, siteRecord, 'A site was archived.'),
-    );
-  }
-
-  @Serves(unarchiveSiteEndpoint)
-  async unarchive(@Param() params: AtSite, @Req() request: FastifyRequest) {
-    const outcome = await this.sites.archive(callerOf(request).userId, params.siteId, false);
-    return unarchiveSiteEndpoint.answer.parse(
-      answered(request, outcome, siteRecord, 'A site was put back.'),
-    );
-  }
-
   @Serves(giveSiteLabelEndpoint)
   async giveLabel(
     @Param() params: ParamsOf<typeof giveSiteLabelEndpoint>,
@@ -135,33 +116,33 @@ export class SiteSetupController {
     );
   }
 
-  @Serves(archiveSiteLabelEndpoint)
-  async archiveLabel(
-    @Param() params: ParamsOf<typeof archiveSiteLabelEndpoint>,
+  @Serves(removeSiteLabelEndpoint)
+  async removeLabel(
+    @Param() params: ParamsOf<typeof removeSiteLabelEndpoint>,
     @Req() request: FastifyRequest,
   ) {
-    const outcome = await this.sites.archiveLabel(
+    const outcome = await this.sites.removeLabel(
       callerOf(request).userId,
       params.siteId,
       params.siteLabelId,
     );
-    return archiveSiteLabelEndpoint.answer.parse(
-      answered(request, outcome, siteLabelRecord, 'A label was taken off a site.'),
+    return removeSiteLabelEndpoint.answer.parse(
+      answered(request, outcome, siteLabelRecord, 'A label was removed from a site.'),
     );
   }
 
-  @Serves(archiveTippingFeeEndpoint)
-  async archiveTippingFee(
-    @Param() params: ParamsOf<typeof archiveTippingFeeEndpoint>,
+  @Serves(removeTippingFeeEndpoint)
+  async removeTippingFee(
+    @Param() params: ParamsOf<typeof removeTippingFeeEndpoint>,
     @Req() request: FastifyRequest,
   ) {
-    const outcome = await this.sites.archiveTippingFee(
+    const outcome = await this.sites.removeTippingFee(
       callerOf(request).userId,
       params.siteId,
       params.payItemId,
     );
-    return archiveTippingFeeEndpoint.answer.parse(
-      answered(request, outcome, siteTippingFeeRecord, 'A site’s tipping fee link was taken off.'),
+    return removeTippingFeeEndpoint.answer.parse(
+      answered(request, outcome, siteTippingFeeRecord, 'A site’s tipping fee link was removed.'),
     );
   }
 }

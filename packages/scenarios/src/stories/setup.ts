@@ -557,18 +557,14 @@ export const setup: Story = {
       'Step 5, forms and debris types: a form for each document type P1 uses; Mulch joins the firm’s library; field tags',
     );
     const p1Forms = {
-      load: (
-        await saved(
-          forms.form(dana, { projectId: p1, documentType: 'LOAD', name: 'Load', enabled: true }),
-        )
-      ).id,
+      load: (await saved(forms.form(dana, { projectId: p1, documentType: 'LOAD', name: 'Load' })))
+        .id,
       haulOut: (
         await saved(
           forms.form(dana, {
             projectId: p1,
             documentType: 'HAUL_OUT',
             name: 'Haul-out',
-            enabled: true,
           }),
         )
       ).id,
@@ -578,7 +574,6 @@ export const setup: Story = {
             projectId: p1,
             documentType: 'UNIT_RATE',
             name: 'Unit rate',
-            enabled: true,
           }),
         )
       ).id,
@@ -588,7 +583,6 @@ export const setup: Story = {
             projectId: p1,
             documentType: 'INCIDENT',
             name: 'Incident',
-            enabled: true,
             // P1 is right-of-way work: the contractor involved and a cert number, no ROE number.
             incidentOffers: IncidentOffers.startingFor({ requiresRoe: false }).list(),
           }),
@@ -600,7 +594,6 @@ export const setup: Story = {
             projectId: p1,
             documentType: 'DROP_OFF_LOG',
             name: 'Drop-off log',
-            enabled: true,
           }),
         )
       ).id,
@@ -614,7 +607,6 @@ export const setup: Story = {
           projectId: p1,
           documentType: 'LOAD',
           name: 'Load, again',
-          enabled: true,
         }),
       ),
       'form_project_id_document_type_key',
@@ -684,7 +676,6 @@ export const setup: Story = {
       formsRead.map((form) => [
         form.documentType,
         form.name,
-        form.enabled,
         form.debrisTypes.map((each) =>
           [
             each.debrisType.name,
@@ -701,11 +692,11 @@ export const setup: Story = {
         ]),
       ]),
       [
-        ['LOAD', 'Load', true, ['Vegetative', 'C&D'], []],
-        ['HAUL_OUT', 'Haul-out', true, ['Mulch, Reduced (Grinding)'], []],
-        ['UNIT_RATE', 'Unit rate', true, [], []],
-        ['INCIDENT', 'Incident', true, [], [[1, 'Dana Reyes', ['Police report number']]]],
-        ['DROP_OFF_LOG', 'Drop-off log', true, [], []],
+        ['LOAD', 'Load', ['Vegetative', 'C&D'], []],
+        ['HAUL_OUT', 'Haul-out', ['Mulch, Reduced (Grinding)'], []],
+        ['UNIT_RATE', 'Unit rate', [], []],
+        ['INCIDENT', 'Incident', [], [[1, 'Dana Reyes', ['Police report number']]]],
+        ['DROP_OFF_LOG', 'Drop-off log', [], []],
       ],
     );
     const tags = await api.fieldTag.findMany({
@@ -1687,22 +1678,17 @@ export const setup: Story = {
     await saved(contractors.addPrime(luis, p2, known.id));
     await saved(contractors.contract(luis, p2ContractInput));
     const p2Load = (
-      await saved(
-        forms.form(luis, { projectId: p2, documentType: 'LOAD', name: 'Load', enabled: true }),
-      )
+      await saved(forms.form(luis, { projectId: p2, documentType: 'LOAD', name: 'Load' }))
     ).id;
     await saved(
       forms.form(luis, {
         projectId: p2,
         documentType: 'ROE',
         name: 'ROE',
-        enabled: true,
         gpsRequired: true,
       }),
     );
-    await saved(
-      forms.form(luis, { projectId: p2, documentType: 'SURVEY', name: 'Survey', enabled: true }),
-    );
+    await saved(forms.form(luis, { projectId: p2, documentType: 'SURVEY', name: 'Survey' }));
     const p2Vegetative = (
       await saved(
         forms.debrisType(luis, {

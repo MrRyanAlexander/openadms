@@ -57,6 +57,26 @@ export function syncedRecordAssignment(record: SyncedRecord | ReceivedRecord): s
   }
 }
 
+// The project a record a phone made is for, as it says (ADR-529 (b)): a closed one takes nothing.
+export function syncedRecordProject(record: SyncedRecord | ReceivedRecord): string {
+  switch (record.record) {
+    case 'FIELD_EVENT':
+      return record.fieldEvent.projectId;
+    case 'SCALE_RECEIPT':
+      return record.scaleReceipt.projectId;
+    case 'INCIDENT':
+      return record.incident.projectId;
+    case 'DROP_OFF_LOG':
+      return record.dropOffLog.projectId;
+    case 'SURVEY':
+      return record.survey.projectId;
+    case 'ROE':
+      return record.roe.projectId;
+    case 'CERTIFICATION':
+      return record.certification.projectId;
+  }
+}
+
 // How many of the things to add to one of a sync's lists, from the first, keep it no heavier
 // than the contract lets a sync be (AC-05-51; ADR-504): `sync` as it stands, the list they go in
 // still empty; each thing after the first adds its comma. A client fills its records so, then

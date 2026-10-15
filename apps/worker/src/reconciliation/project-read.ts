@@ -74,6 +74,8 @@ export interface ReadCertification extends CheckedCertification {
   readonly primeId: string;
   readonly firstTierSubId: string | null;
   readonly secondTierSubId: string | null;
+  // The subs it names, by their contractors' names as recorded (ADR-529 (f)).
+  readonly subNames: readonly (string | null)[];
   readonly photographs: readonly CertificationPhotograph[];
 }
 
@@ -399,6 +401,10 @@ export class ProjectRead {
     const rows = await this.db.certification.findMany({
       where: { projectId },
       orderBy: { certNumber: 'asc' },
+      include: {
+        firstTierSub: { select: { name: true } },
+        secondTierSub: { select: { name: true } },
+      },
     });
     const replacedBy = new Map(
       rows.flatMap((row) => (row.replacesId === null ? [] : [[row.replacesId, row] as const])),
@@ -420,6 +426,7 @@ export class ProjectRead {
         primeId: row.primeId,
         firstTierSubId: row.firstTierSubId,
         secondTierSubId: row.secondTierSubId,
+        subNames: [row.firstTierSub?.name ?? null, row.secondTierSub?.name ?? null],
         tagExpiry: dayOrNone(row.tagExpiry),
         revokedFrom: dayOrNone(row.revokedFrom),
         replacedBy:

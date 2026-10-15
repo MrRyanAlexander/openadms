@@ -127,7 +127,7 @@ is a prime or a sub is its place on each project (`ProjectContractor`), never a 
 | **name** | text | |
 | **kind** | enum `ContractorKind` | `HAULER` · `MONITORING` · `CREW` · `OTHER` (Q-97, `FROM-BUILD-1.md`). No default: whoever adds it says which (ADR-305) |
 | contactName, contactEmail, contactPhone | text | Edited freely, audited, as a client's; each optional (the user, ADR-306) |
-| mergedIntoId | → `Contractor` | A sub typed twice at certification, merged by the back office, audited (ADR-108); the merged row is archived, never deleted. Never itself, and a merged row is archived for as long as it is merged (checks, ADR-305) |
+| mergedIntoId | → `Contractor` | ⚠️ **Written by nothing since ADR-529 (f)**, kept as history: two spellings of a sub are flagged (`SUB_NAME_ALIKE`) and a person corrects the sub, never merged. Was: a sub typed twice at certification, merged by the back office, audited (ADR-108); the merged row is archived, never deleted. Never itself, and a merged row is archived for as long as it is merged (checks, ADR-305) |
 | **createdAt** | instant | |
 | archivedAt | instant | |
 
@@ -489,7 +489,7 @@ creates a project says what it starts as (invariant 16, ADR-303).
 | **siteCircleMeters** | int | A new project starts with the policy value `DISPOSAL_SITE_PROXIMITY_M`, 200 (ADR-142, 303); at least 1 (a check) |
 | **timeClockEnabled** | bool | Whether the project offers its workers the time clock (ADR-241). A new project starts with it switched off; the firm switches it on (ADR-303; confirmed by the user, ADR-304) |
 | **createdAt** | instant | |
-| closedAt | instant | |
+| closedAt | instant | Set by an admin's close, by hand (ADR-529 (b)): the project is read-only after, held by the database (`project_open_guard()` on its tables and the records under them; a viewer's grant, a held record, a file set aside and a photograph kept with a held record still written); cleared only by an admin's reopening, with a reason (`adms.reason`), nothing else changing with it. A second close keeps the first |
 
 #### `ProjectKindOfWork`
 
@@ -528,7 +528,6 @@ dates or amount (ADR-146). A prime may hold one contract on a project or several
 | **projectId** | → `Project` | Unique with `documentType`, archived forms included: at most one form of each on a project |
 | **name** | text | |
 | **documentType** | enum `FormDocumentType` | `LOAD` · `HAUL_OUT` · `UNIT_RATE` · `CERTIFICATION` · `ROE` · `SURVEY` · `INCIDENT` · `DROP_OFF_LOG`. Also unique with `id`: the key a debris type's entry and a definition point at, so neither sits on the wrong kind of form and the type can't change under them |
-| **enabled** | bool | Incidents and drop-off logs are switched on per project (ADR-188). No default. **Read only on the forms that aren't a workflow's**: whether a load, haul-out or unit rate form is used is `Project.workflows`' to say (ADR-041, 308) |
 | gpsRequired | bool | The ROE form's setting (ADR-181): stated on it, and on no other form (a check, ADR-308) |
 | incidentOffers | enum `IncidentOffer`[] | The incident form's setting (ADR-328, 334): which of the contractor involved, a cert number and an ROE number an incident offers the project's monitors. Stated on the incident form, an empty list for none, and on no other form (a check). A new one starts with `CONTRACTOR` and `CERT_NUMBER`, and `ROE_NUMBER` where the program type requires ROEs (`packages/domain`'s `IncidentOffers`, *agent default*) |
 | **createdAt** | instant | As every configuration record (§1, *Leaving*) |
@@ -1476,7 +1475,7 @@ defaults). Inert: never a field event, never paired, never billed, never read by
 | sentMonitorId | uuid | The monitor it named, as sent: not a relation |
 | **payload** | JSONB | What stood in the record's place, exactly as sent: any JSON value |
 | **sentSha256** | text | The SHA-256 of what was sent |
-| **reason** | enum `NotSavedReason` | `NOT_A_RECORD` · `NAMES_NO_RECORD` · `ASSIGNMENT_NOT_SAVED` · `CERTIFICATION_REFUSED` · `OWNER_NOT_SAVED` (a photograph whose record the server has nowhere, ADR-481, 526) · `REPORT_NOT_SAVED` (an unplanned assignment or a use of the passcode the server could not keep, ADR-526) (the domain's `heldReasons`) |
+| **reason** | enum `NotSavedReason` | `NOT_A_RECORD` · `NAMES_NO_RECORD` · `ASSIGNMENT_NOT_SAVED` · `CERTIFICATION_REFUSED` · `OWNER_NOT_SAVED` (a photograph whose record the server has nowhere, ADR-481, 526) · `REPORT_NOT_SAVED` (an unplanned assignment or a use of the passcode the server could not keep, ADR-526) · `PROJECT_CLOSED` (field work for a project closed before it arrived, ADR-529) (the domain's `heldReasons`) |
 | **message** | text | What the phone was told |
 | **receivedAt** | instant | |
 | resolvedById | → `User` | |
@@ -2075,7 +2074,7 @@ A new value in any of them is a code change with an ADR (`spec/LISTS.md` Group 2
 | `SyncAnswer` | `SAVED` · `QUARANTINED` | `SyncedRecord` |
 | `ReconciliationTrigger` ✅ | `SYNC` · `CORRECTION` · `SETUP_CHANGE` · `REPROCESS` | `ReconciliationRun` |
 | `FlagBilling` ✅ | `BILLS` · `LINE_NOT_BILLED` · `NOT_BILLED` | `Flag` |
-| `FlagCode` ✅ | The codes of `spec/FLAGS.md` §3: 77 today (nine added as §3.10, ADR-345; two more, ADR-348), in the page's order; a database test holds the enum to the page (ADR-340) | `Flag` |
+| `FlagCode` ✅ | The codes of `spec/FLAGS.md` §3: 79 today (nine added as §3.10, ADR-345; two more, ADR-348; `SUB_NAME_ALIKE`, ADR-529), in the page's order; a database test holds the enum to the page (ADR-340) | `Flag` |
 | `RuleActionKind` | `ADD_TRANSACTION` · `REMOVE_TRANSACTION` · `VOID_TICKET` | `RuleAction` |
 | `QuantityFrom` | `ALL_ITEMS` · `CHOSEN_ITEMS` | `RuleAction` |
 | `RuleOperator` | `spec/RULES.md` §4a: `EQUALS` · `NOT_EQUALS` · `IS_ONE_OF` · `IS_NOT_ONE_OF` · `BETWEEN` · `AT_LEAST` · `AT_MOST` · `MORE_THAN` · `LESS_THAN` · `ON` · `NOT_ON` · `ON_OR_BEFORE` · `ON_OR_AFTER` · `CONTAINS` · `STARTS_WITH` · `IS_EMPTY` · `IS_NOT_EMPTY` | `RuleCriterion` |

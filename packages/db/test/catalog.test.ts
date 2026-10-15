@@ -146,6 +146,71 @@ const on = (table: string): string => (table === 'user' ? 'public."user"' : `pub
 const capture = (table: string, domain: string): string =>
   [domain, ...(keptOut[table] ?? [])].map((argument) => `'${argument}'`).join(', ');
 
+// The records a closed project holds (ADR-529 (b)): every table with its project, and every
+// table of the records under one, by its parent. A held record, a file set aside and a viewer's
+// grant are no records of the project.
+export const closedProjectTables = [
+  'assignment',
+  'assignment_pay_item',
+  'certification',
+  'completed_haul_out',
+  'completed_haul_out_collection',
+  'completed_load',
+  'completed_load_collection',
+  'contract',
+  'control_range',
+  'disposal_site',
+  'disposal_site_tipping_fee',
+  'drop_off_log',
+  'field_event',
+  'field_tag',
+  'flag',
+  'flag_acceptance',
+  'form',
+  'incident',
+  'invoice_batch',
+  'invoice_lock',
+  'map_version',
+  'number_block',
+  'pay_item',
+  'pay_item_rate',
+  'photo',
+  'project_contractor',
+  'project_kind_of_work',
+  'project_number_series',
+  'qc_mark',
+  'quarantined_record',
+  'reconciliation_job',
+  'reconciliation_job_ticket',
+  'reconciliation_run',
+  'roe',
+  'roe_scope_item',
+  'rule',
+  'rule_action',
+  'rule_criterion',
+  'rule_criterion_pick',
+  'scale_receipt',
+  'setup_manifest',
+  'survey',
+  'ticket_unvoid',
+  'ticket_void',
+  'transaction',
+];
+export const closedProjectChildren: readonly (readonly [string, string, string])[] = [
+  ['carried_ticket', 'field_event', 'field_event_id'],
+  ['certification_box', 'certification', 'certification_id'],
+  ['certification_helper', 'certification', 'certification_id'],
+  ['disposal_site_label', 'disposal_site', 'site_id'],
+  ['field_event_item', 'field_event', 'field_event_id'],
+  ['form_debris_type', 'form', 'form_id'],
+  ['form_definition', 'form', 'form_id'],
+  ['pay_item_crew_day_step', 'pay_item', 'pay_item_id'],
+  ['reconciliation_decision', 'reconciliation_run', 'reconciliation_run_id'],
+  ['rule_action_item', 'rule_action', 'action_id'],
+  ['site_area_version', 'disposal_site', 'site_id'],
+  ['zone', 'map_version', 'map_version_id'],
+];
+
 const triggers = [
   ...Object.entries(domains).flatMap(([table, domain]) => [
     `CREATE TRIGGER ${table}_audit AFTER INSERT OR UPDATE ON ${on(table)} FOR EACH ROW EXECUTE FUNCTION audit_capture(${capture(table, domain)})`,
@@ -155,6 +220,17 @@ const triggers = [
     `CREATE TRIGGER ${table}_refuse_truncate BEFORE TRUNCATE ON ${on(table)} FOR EACH STATEMENT EXECUTE FUNCTION refuse_delete()`,
   ]),
   `CREATE TRIGGER audit_record_refuse_change BEFORE DELETE OR UPDATE ON public.audit_record FOR EACH ROW EXECUTE FUNCTION refuse_audit_change()`,
+  // A closed project stays closed (ADR-529 (b)): its own row, and every record in it, or under
+  // one in it, refused to everybody, the worker too.
+  `CREATE TRIGGER project_closed_stays_closed BEFORE UPDATE ON public.project FOR EACH ROW EXECUTE FUNCTION project_closed_stays_closed()`,
+  ...closedProjectTables.map(
+    (table) =>
+      `CREATE TRIGGER ${table}_project_open BEFORE INSERT OR DELETE OR UPDATE ON public.${table} FOR EACH ROW EXECUTE FUNCTION project_open_guard()`,
+  ),
+  ...closedProjectChildren.map(
+    ([table, parent, column]) =>
+      `CREATE TRIGGER ${table}_project_open BEFORE INSERT OR DELETE OR UPDATE ON public.${table} FOR EACH ROW EXECUTE FUNCTION project_open_guard('${parent}', '${column}')`,
+  ),
   `CREATE TRIGGER audit_record_refuse_truncate BEFORE TRUNCATE ON public.audit_record FOR EACH STATEMENT EXECUTE FUNCTION refuse_audit_change()`,
   // A definition's version is never edited (ADR-308).
   `CREATE TRIGGER form_definition_refuse_edit BEFORE UPDATE ON public.form_definition FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,

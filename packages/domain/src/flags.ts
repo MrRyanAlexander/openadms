@@ -110,6 +110,8 @@ export const flagCodes = [
   'TWO_QUANTITIES',
   // §3.11 The engine, on a ticket that was priced before (ADR-360)
   'NOT_PROCESSED_LINES_STAND',
+  // §3.12 A certification, read across its project (ADR-529)
+  'SUB_NAME_ALIKE',
 ] as const;
 export type FlagCode = (typeof flagCodes)[number];
 
@@ -229,6 +231,7 @@ export interface FlagTold {
   ROE_OUT_OF_SCOPE: { roe: string };
   NO_PRE_WORK_SURVEY: Nothing;
   CERTIFICATION_PHOTO_MISSING: { view: CertificationView };
+  SUB_NAME_ALIKE: { sub: string; alike: string };
   PERMIT_OUTSTANDING: Nothing;
   NO_PRICING_RULE: { prime: string };
   DUPLICATE_TRANSACTION_NUMBER: { slot: number; payItems: readonly string[] };
@@ -618,6 +621,12 @@ const catalogue: { readonly [Code in FlagCode]: Entry<Code> } = {
     billing: 'BILLS',
     ending: 'RECORD',
     words: (told) => `no ${viewWords[told.view]} photo`,
+  },
+  // Two spellings of one sub, never merged and never decided here (ADR-529 (f)).
+  SUB_NAME_ALIKE: {
+    billing: 'BILLS',
+    ending: 'RECORD',
+    words: (told) => `sub “${told.sub}” looks like “${told.alike}” on this project`,
   },
   PERMIT_OUTSTANDING: { billing: 'BILLS', ending: 'RECORD', words: () => 'permit outstanding' },
   NO_PRICING_RULE: {

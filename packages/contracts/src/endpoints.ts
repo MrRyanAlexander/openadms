@@ -109,6 +109,7 @@ import { turnInAnswerSchema, turnInSentSchema } from './turn-in.ts';
 import {
   billingUnits,
   clientRecordSchema,
+  closingCheckAnswerSchema,
   contractorKinds,
   contractorPlaceRecordSchema,
   contractorRecordSchema,
@@ -735,11 +736,9 @@ const contact = {
 // A calendar day: 2026-10-12.
 const day = z.iso.date();
 // What a search matches, anywhere in the name, a page at a time in name order (ADR-527 (3)):
-// left out, every record; those in service, or the archived ones when asked (to put one back).
-// A page holds 50 where none is said, 200 at most.
+// left out, every record. A page holds 50 where none is said, 200 at most.
 const searched = z.strictObject({
   search: z.string().trim().max(200).optional(),
-  archived: z.enum(['true', 'false']).optional(),
   // The last record of the page before: the answer's `next`.
   after: z.uuid().optional(),
   limit: z
@@ -754,8 +753,6 @@ const changedContact = {
   contactEmail: contact.contactEmail.unwrap().nullable().optional(),
   contactPhone: contact.contactPhone.unwrap().nullable().optional(),
 };
-// Archiving one already archived, or putting back one in service, writes nothing and answers it
-// as it stands (ADR-527 (1)).
 const clientId = z.strictObject({ clientId: z.uuid() });
 const declarationEventId = z.strictObject({ declarationEventId: z.uuid() });
 const contractorId = z.strictObject({ contractorId: z.uuid() });
@@ -812,27 +809,6 @@ export const changeClientEndpoint = endpoint({
   answer: savedAnswer(clientRecordSchema),
 });
 
-export const archiveClientEndpoint = endpoint({
-  ...setup,
-  name: 'archiveClient',
-  summary:
-    'Archives a client: off the searches and new picks; the projects under it stay as they are. Never deleted.',
-  method: 'POST',
-  path: '/clients/:clientId/archivings',
-  params: clientId,
-  answer: savedAnswer(clientRecordSchema),
-});
-
-export const unarchiveClientEndpoint = endpoint({
-  ...setup,
-  name: 'unarchiveClient',
-  summary: 'Puts an archived client back, as it was.',
-  method: 'POST',
-  path: '/clients/:clientId/unarchivings',
-  params: clientId,
-  answer: savedAnswer(clientRecordSchema),
-});
-
 // Step 2: by its name or its reference; one declaration event is shared by every client's
 // projects under it (ADR-026).
 export const findDeclarationEventsEndpoint = endpoint({
@@ -871,27 +847,6 @@ export const changeDeclarationEventEndpoint = endpoint({
       referenceTypeId: z.uuid().optional(),
     })
     .refine(stated),
-  answer: savedAnswer(declarationEventRecordSchema),
-});
-
-export const archiveDeclarationEventEndpoint = endpoint({
-  ...setup,
-  name: 'archiveDeclarationEvent',
-  summary:
-    'Archives a declaration event: off the searches and new picks; the projects under it stay as they are. Never deleted.',
-  method: 'POST',
-  path: '/declaration-events/:declarationEventId/archivings',
-  params: declarationEventId,
-  answer: savedAnswer(declarationEventRecordSchema),
-});
-
-export const unarchiveDeclarationEventEndpoint = endpoint({
-  ...setup,
-  name: 'unarchiveDeclarationEvent',
-  summary: 'Puts an archived declaration event back, as it was.',
-  method: 'POST',
-  path: '/declaration-events/:declarationEventId/unarchivings',
-  params: declarationEventId,
   answer: savedAnswer(declarationEventRecordSchema),
 });
 
@@ -969,14 +924,43 @@ export const changeProjectWindowEndpoint = endpoint({
   answer: savedAnswer(projectRecordSchema),
 });
 
+// A project closed is closed (ADR-529 (b)): an admin closes it by hand, having read what is still
+// open; nothing in it changes after (the database refuses it), and field work for it that arrives
+// later is held for a person. An admin reopens it, with a reason.
+export const closingCheckEndpoint = endpoint({
+  name: 'closingCheck',
+  summary:
+    'What is still open on a project before an admin closes it: phones that took its work and weren’t turned in, tickets not QC Approved or not locked as invoiced, records waiting for a person. It never stops the close.',
+  access: 'SIGNED_IN',
+  roles: adminOnly,
+  method: 'GET',
+  path: '/projects/:projectId/closing-check',
+  params: projectId,
+  answer: closingCheckAnswerSchema,
+});
+
 export const closeProjectEndpoint = endpoint({
-  ...setup,
   name: 'closeProject',
   summary:
-    'Closes a project: the mark and its time. Nothing under it is deleted or refused after. A project closed already keeps its first close.',
+    'An admin closes a project: its assignments are withdrawn and its phones’ unused numbers retired, and nothing in it changes after; what was still open is said with it. Field work for it that arrives later is held for a person. A project closed already is answered as it stands. Refused only while the worker is still working its tickets.',
+  access: 'SIGNED_IN',
+  roles: adminOnly,
   method: 'POST',
   path: '/projects/:projectId/closings',
   params: projectId,
+  answer: savedAnswer(projectRecordSchema),
+});
+
+export const reopenProjectEndpoint = endpoint({
+  name: 'reopenProject',
+  summary:
+    'An admin reopens a closed project, with a reason, audited. Its withdrawn assignments and retired numbers stay as they are.',
+  access: 'SIGNED_IN',
+  roles: adminOnly,
+  method: 'POST',
+  path: '/projects/:projectId/reopenings',
+  params: projectId,
+  body: z.strictObject({ reason: z.string().trim().min(1).max(500) }),
   answer: savedAnswer(projectRecordSchema),
 });
 
@@ -1070,28 +1054,6 @@ export const changeContractorEndpoint = endpoint({
   answer: savedAnswer(contractorRecordSchema),
 });
 
-export const archiveContractorEndpoint = endpoint({
-  ...setup,
-  name: 'archiveContractor',
-  summary:
-    'Archives a contractor: off the searches and new picks; its places on projects stay. A rule that picks it no longer runs, so each project whose rules pick it has its tickets not locked as invoiced queued.',
-  method: 'POST',
-  path: '/contractors/:contractorId/archivings',
-  params: contractorId,
-  answer: savedAnswer(contractorRecordSchema),
-});
-
-export const unarchiveContractorEndpoint = endpoint({
-  ...setup,
-  name: 'unarchiveContractor',
-  summary:
-    'Puts an archived contractor back, as it was; never one merged into another. Each project whose rules pick it has its tickets not locked as invoiced queued.',
-  method: 'POST',
-  path: '/contractors/:contractorId/unarchivings',
-  params: contractorId,
-  answer: savedAnswer(contractorRecordSchema),
-});
-
 export const addPrimeEndpoint = endpoint({
   ...setup,
   name: 'addPrime',
@@ -1128,7 +1090,7 @@ export const changeContractEndpoint = endpoint({
   ...setup,
   name: 'changeContract',
   summary:
-    'Changes a contract’s name or the link to its signed copy (cleared with null); its prime stays as entered. Audited with the value before.',
+    'Changes a contract’s name or the link to its signed copy (cleared with null); its prime stays as entered (a contract has one prime; another prime has a contract of its own). Audited with the value before.',
   method: 'PATCH',
   path: '/contracts/:contractId',
   params: contractId,
@@ -1142,28 +1104,6 @@ export const changeContractEndpoint = endpoint({
         .optional(),
     })
     .refine(stated),
-  answer: savedAnswer(contractRecordSchema),
-});
-
-export const archiveContractEndpoint = endpoint({
-  ...setup,
-  name: 'archiveContract',
-  summary:
-    'Archives a contract: the rules that name it are not valid and never run. The project’s tickets not locked as invoiced are queued.',
-  method: 'POST',
-  path: '/contracts/:contractId/archivings',
-  params: contractId,
-  answer: savedAnswer(contractRecordSchema),
-});
-
-export const unarchiveContractEndpoint = endpoint({
-  ...setup,
-  name: 'unarchiveContract',
-  summary:
-    'Puts an archived contract back, as it was. The project’s tickets not locked as invoiced are queued.',
-  method: 'POST',
-  path: '/contracts/:contractId/unarchivings',
-  params: contractId,
   answer: savedAnswer(contractRecordSchema),
 });
 
@@ -1268,7 +1208,6 @@ export const createFormEndpoint = endpoint({
   body: z.strictObject({
     documentType: z.enum(formDocumentTypes),
     name: named,
-    enabled: z.boolean(),
     gpsRequired: z.boolean().optional(),
     // An empty list: the incident form offers none of the three.
     incidentOffers: z
@@ -1282,19 +1221,19 @@ export const createFormEndpoint = endpoint({
 
 // What a form says is changed (ADR-527 (4)): "GPS required" on the ROE form, and what an incident
 // offers on the incident form, and on no other, as the database holds them. A form is never
-// archived: whether it is used is the project's workflows' or Enabled's to say.
+// archived and has no Enabled box (ADR-529 (d)): a load, haul-out or unit rate form is used by
+// the project's workflows, and the forms that are no ticket's by the day's assignments.
 export const changeFormEndpoint = endpoint({
   ...setup,
   name: 'changeForm',
   summary:
-    'Changes a form’s name, whether it is enabled, "GPS required" (the ROE form’s) or what an incident offers the monitors (the incident form’s); one left out stays as it is.',
+    'Changes a form’s name, "GPS required" (the ROE form’s) or what an incident offers the monitors (the incident form’s); one left out stays as it is.',
   method: 'PATCH',
   path: '/forms/:formId',
   params: formId,
   body: z
     .strictObject({
       name: named.optional(),
-      enabled: z.boolean().optional(),
       gpsRequired: z.boolean().optional(),
       incidentOffers: z
         .array(z.enum(incidentOffers))
@@ -1340,28 +1279,6 @@ export const changeFormDebrisTypeEndpoint = endpoint({
       hiddenOnPhones: z.boolean().optional(),
     })
     .refine(stated),
-  answer: savedAnswer(formDebrisTypeRecordSchema),
-});
-
-export const archiveFormDebrisTypeEndpoint = endpoint({
-  ...setup,
-  name: 'archiveFormDebrisType',
-  summary:
-    'Takes a debris type off a form: archived, never deleted; the field events that picked it still point at it, and a rule that picks it no longer runs. The tickets of the form’s workflow not locked as invoiced are queued.',
-  method: 'POST',
-  path: '/form-debris-types/:formDebrisTypeId/archivings',
-  params: formDebrisTypeId,
-  answer: savedAnswer(formDebrisTypeRecordSchema),
-});
-
-export const unarchiveFormDebrisTypeEndpoint = endpoint({
-  ...setup,
-  name: 'unarchiveFormDebrisType',
-  summary:
-    'Puts a debris type taken off a form back, as it was. The tickets of the form’s workflow not locked as invoiced are queued.',
-  method: 'POST',
-  path: '/form-debris-types/:formDebrisTypeId/unarchivings',
-  params: formDebrisTypeId,
   answer: savedAnswer(formDebrisTypeRecordSchema),
 });
 
@@ -1461,39 +1378,6 @@ export const setPayItemRateEndpoint = endpoint({
   params: z.strictObject({ payItemId: z.uuid(), primeId: z.uuid() }),
   body: z.strictObject({ rate }),
   answer: savedAnswer(payItemRateRecordSchema),
-});
-
-export const archivePayItemRateEndpoint = endpoint({
-  ...setup,
-  name: 'archivePayItemRate',
-  summary:
-    'Takes a prime’s rate off a pay item: archived, never deleted; set it again to put it back. The project’s tickets not locked as invoiced are queued.',
-  method: 'POST',
-  path: '/pay-items/:payItemId/rates/:primeId/archivings',
-  params: z.strictObject({ payItemId: z.uuid(), primeId: z.uuid() }),
-  answer: savedAnswer(payItemRateRecordSchema),
-});
-
-export const archivePayItemEndpoint = endpoint({
-  ...setup,
-  name: 'archivePayItem',
-  summary:
-    'Archives a pay item: a rule that adds it no longer runs, and a monitor no longer picks it. Never deleted. The project’s tickets not locked as invoiced are queued.',
-  method: 'POST',
-  path: '/pay-items/:payItemId/archivings',
-  params: payItemId,
-  answer: savedAnswer(payItemRecordSchema),
-});
-
-export const unarchivePayItemEndpoint = endpoint({
-  ...setup,
-  name: 'unarchivePayItem',
-  summary:
-    'Puts an archived pay item back, as it was; a band that would overlap another of its payable type isn’t put back. The project’s tickets not locked as invoiced are queued.',
-  method: 'POST',
-  path: '/pay-items/:payItemId/unarchivings',
-  params: payItemId,
-  answer: savedAnswer(payItemRecordSchema),
 });
 
 // A crew day's steps, stated whole (ADR-087, 527 (7)): hours to a hundredth, a quantity to four
@@ -1600,29 +1484,6 @@ export const changeRuleEndpoint = endpoint({
   answer: savedAnswer(savedRuleRecordSchema),
 });
 
-// A rule a pay item's "Pays when" wrote is archived and put back only there (ADR-527 (8)).
-export const archiveRuleEndpoint = endpoint({
-  ...setup,
-  name: 'archiveRule',
-  summary:
-    'Archives a rule: it no longer runs. Never deleted. One a pay item’s "Pays when" wrote is archived only there. Its form’s tickets not locked as invoiced are queued.',
-  method: 'POST',
-  path: '/rules/:ruleId/archivings',
-  params: z.strictObject({ ruleId: z.uuid() }),
-  answer: savedAnswer(savedRuleRecordSchema),
-});
-
-export const unarchiveRuleEndpoint = endpoint({
-  ...setup,
-  name: 'unarchiveRule',
-  summary:
-    'Puts an archived rule back, checked as a new one: an exact copy of another isn’t put back. Its form’s tickets not locked as invoiced are queued.',
-  method: 'POST',
-  path: '/rules/:ruleId/unarchivings',
-  params: z.strictObject({ ruleId: z.uuid() }),
-  answer: savedAnswer(savedRuleRecordSchema),
-});
-
 // Setup, steps 3, 4 and 7, and the setup as it stands (spec/parts/01-setup.md; AC-01-21, 52…59,
 // 69…77; BACKLOG 2.4.2, C97, C98; ADR-426): a contractor typed twice merged into one; a
 // project's disposal sites, a site's own shape and its tipping fee pay item; the project's map.
@@ -1642,19 +1503,6 @@ const siteFacts = {
 // properties are the map's own. It is read by the domain's MapShapes, which takes the shapes
 // and a zone's name and nothing else; what it can't read isn't saved, and the answer says why.
 const geoJson = z.json();
-
-// The second spelling is archived, pointing at the one kept; nothing is deleted (ADR-108, 321).
-export const mergeContractorEndpoint = endpoint({
-  ...setup,
-  name: 'mergeContractor',
-  summary:
-    'Merges a sub typed twice at certification into the contractor that is kept: the kept one takes its place on each project, the certifications that named it name the kept one, and it is archived. The tickets of those certifications not locked as invoiced are queued.',
-  method: 'POST',
-  path: '/contractors/:contractorId/merges',
-  params: z.strictObject({ contractorId: z.uuid() }),
-  body: z.strictObject({ intoContractorId: z.uuid() }),
-  answer: savedAnswer(contractorRecordSchema),
-});
 
 // Step 7. A site belongs to one project and is entered again on each that uses it (ADR-145).
 export const createSiteEndpoint = endpoint({
@@ -1707,49 +1555,29 @@ export const changeSiteEndpoint = endpoint({
   answer: savedAnswer(siteRecordSchema),
 });
 
-export const archiveSiteEndpoint = endpoint({
-  ...setup,
-  name: 'archiveSite',
-  summary:
-    'Archives a site: off new picks; the field events at it still point at it, and a rule that picks it no longer runs. Never deleted. Its tickets, and the project’s where a rule picks it, not locked as invoiced are queued.',
-  method: 'POST',
-  path: '/sites/:siteId/archivings',
-  params: siteId,
-  answer: savedAnswer(siteRecordSchema),
-});
-
-export const unarchiveSiteEndpoint = endpoint({
-  ...setup,
-  name: 'unarchiveSite',
-  summary:
-    'Puts an archived site back, as it was. Its tickets, and the project’s where a rule picks it, not locked as invoiced are queued.',
-  method: 'POST',
-  path: '/sites/:siteId/unarchivings',
-  params: siteId,
-  answer: savedAnswer(siteRecordSchema),
-});
-
-// One of the firm's own labels on a site: given, taken off and given back on the same row
-// (ADR-194, 215; AC-01-58). It changes nothing the system does, so nothing is queued.
+// One of the firm's own labels on a site: given, removed when given by mistake, and given back on
+// the same row (ADR-194, 215, 529 (g); AC-01-58). It changes nothing the system does, so nothing
+// is queued.
 const siteLabel = z.strictObject({ siteId: z.uuid(), siteLabelId: z.uuid() });
 
 export const giveSiteLabelEndpoint = endpoint({
   ...setup,
   name: 'giveSiteLabel',
   summary:
-    'Gives a site one of the firm’s own site labels, or gives back one taken off. It changes nothing the system does.',
+    'Gives a site one of the firm’s own site labels, or gives back one removed. It changes nothing the system does.',
   method: 'PUT',
   path: '/sites/:siteId/labels/:siteLabelId',
   params: siteLabel,
   answer: savedAnswer(siteLabelRecordSchema),
 });
 
-export const archiveSiteLabelEndpoint = endpoint({
+export const removeSiteLabelEndpoint = endpoint({
   ...setup,
-  name: 'archiveSiteLabel',
-  summary: 'Takes a label off a site: archived, never deleted.',
+  name: 'removeSiteLabel',
+  summary:
+    'Removes a label given to a site by mistake: audited, never deleted; give it again to put it back.',
   method: 'POST',
-  path: '/sites/:siteId/labels/:siteLabelId/archivings',
+  path: '/sites/:siteId/labels/:siteLabelId/removals',
   params: siteLabel,
   answer: savedAnswer(siteLabelRecordSchema),
 });
@@ -1770,7 +1598,7 @@ export const linkTippingFeeEndpoint = endpoint({
   ...setup,
   name: 'linkTippingFee',
   summary:
-    'Links a site to a tipping fee pay item written from it: how a fee line is told from a hauling line. A site may keep several. A link taken off is given back.',
+    'Links a site to a tipping fee pay item written from it: how a fee line is told from a hauling line. A site may keep several. A link removed is linked again.',
   method: 'POST',
   path: '/sites/:siteId/tipping-fees',
   params: siteId,
@@ -1778,13 +1606,13 @@ export const linkTippingFeeEndpoint = endpoint({
   answer: savedAnswer(siteTippingFeeRecordSchema),
 });
 
-export const archiveTippingFeeEndpoint = endpoint({
+export const removeTippingFeeEndpoint = endpoint({
   ...setup,
-  name: 'archiveTippingFee',
+  name: 'removeTippingFee',
   summary:
-    'Takes a site’s link to a tipping fee pay item off: archived, never deleted; link it again to give it back. The tickets with a field event at the site not locked as invoiced are queued.',
+    'Removes a site’s link to a tipping fee pay item made by mistake: audited, never deleted; link it again to put it back. The tickets with a field event at the site not locked as invoiced are queued.',
   method: 'POST',
-  path: '/sites/:siteId/tipping-fees/:payItemId/archivings',
+  path: '/sites/:siteId/tipping-fees/:payItemId/removals',
   params: z.strictObject({ siteId: z.uuid(), payItemId: z.uuid() }),
   answer: savedAnswer(siteTippingFeeRecordSchema),
 });
@@ -3357,17 +3185,15 @@ export const endpoints: readonly Endpoint[] = [
   findClientsEndpoint,
   createClientEndpoint,
   changeClientEndpoint,
-  archiveClientEndpoint,
-  unarchiveClientEndpoint,
   findDeclarationEventsEndpoint,
   createDeclarationEventEndpoint,
   changeDeclarationEventEndpoint,
-  archiveDeclarationEventEndpoint,
-  unarchiveDeclarationEventEndpoint,
   createProjectEndpoint,
   changeProjectSettingsEndpoint,
   changeProjectWindowEndpoint,
+  closingCheckEndpoint,
   closeProjectEndpoint,
+  reopenProjectEndpoint,
   startNumberSeriesEndpoint,
   enterControlRangeEndpoint,
   archiveControlRangeEndpoint,
@@ -3375,13 +3201,9 @@ export const endpoints: readonly Endpoint[] = [
   findContractorsEndpoint,
   createContractorEndpoint,
   changeContractorEndpoint,
-  archiveContractorEndpoint,
-  unarchiveContractorEndpoint,
   addPrimeEndpoint,
   createContractEndpoint,
   changeContractEndpoint,
-  archiveContractEndpoint,
-  unarchiveContractEndpoint,
   addDebrisTypeEndpoint,
   addPayableTypeEndpoint,
   addListValueEndpoint,
@@ -3392,31 +3214,21 @@ export const endpoints: readonly Endpoint[] = [
   changeFormEndpoint,
   addFormDebrisTypeEndpoint,
   changeFormDebrisTypeEndpoint,
-  archiveFormDebrisTypeEndpoint,
-  unarchiveFormDebrisTypeEndpoint,
   addFormDefinitionEndpoint,
   createPayItemEndpoint,
   changePayItemEndpoint,
   setPayItemRateEndpoint,
-  archivePayItemRateEndpoint,
-  archivePayItemEndpoint,
-  unarchivePayItemEndpoint,
   setCrewDayStepsEndpoint,
   savePaysWhenEndpoint,
   createRuleEndpoint,
   changeRuleEndpoint,
-  archiveRuleEndpoint,
-  unarchiveRuleEndpoint,
-  mergeContractorEndpoint,
   createSiteEndpoint,
   changeSiteEndpoint,
-  archiveSiteEndpoint,
-  unarchiveSiteEndpoint,
   giveSiteLabelEndpoint,
-  archiveSiteLabelEndpoint,
+  removeSiteLabelEndpoint,
   addSiteShapeEndpoint,
   linkTippingFeeEndpoint,
-  archiveTippingFeeEndpoint,
+  removeTippingFeeEndpoint,
   loadMapEndpoint,
   sendMapFileEndpoint,
   loadMapFileEndpoint,

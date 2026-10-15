@@ -47,11 +47,10 @@ export interface Clock {
   now(): Date;
 }
 
-// A search, a page at a time in name order (ADR-527 (3)): what the name holds, those in service
-// or the archived ones, after the last record of the page before, `limit` at most.
+// A search, a page at a time in name order (ADR-527 (3)): what the name holds, after the last
+// record of the page before, `limit` at most.
 export interface Searched {
   readonly search: string;
-  readonly archived: boolean;
   readonly after?: string | undefined;
   readonly limit: number;
 }
@@ -144,6 +143,30 @@ export abstract class SetupService {
       if (refusal !== null) throw new Refused(refusal);
       return work(tx, warn);
     });
+  }
+
+  // An act only an admin does (closing a project, reopening one, ADR-529 (b)): refused, with
+  // nothing changed, to anybody else, asked inside the same piece of work. A reason, where the
+  // act takes one, is stated to the database with the actor, so the audit keeps it.
+  protected asAdmin<T>(
+    person: string,
+    act: string,
+    work: (tx: Prisma.TransactionClient, warn: Warn) => Promise<T>,
+    reason?: string,
+  ): Promise<Outcome<T>> {
+    return this.writeAs(
+      { actorId: person, source: 'BACK_OFFICE', ...(reason === undefined ? {} : { reason }) },
+      async (tx, warn) => {
+        const user = await tx.user.findUnique({ where: { id: person } });
+        if (user?.role !== 'ADMIN' || user.archivedAt !== null) {
+          throw new Refused({
+            code: 'NOT_ALLOWED',
+            message: `${user?.name ?? 'Nobody on record'} may not ${act}: it takes an admin. Nothing was changed.`,
+          });
+        }
+        return work(tx, warn);
+      },
+    );
   }
 
   // The same, as whoever is stated: a monitor on a phone states the phone too (ADR-321).

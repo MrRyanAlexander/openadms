@@ -10,10 +10,11 @@
 // - **Written as the master passcode's own actor, on that phone** (ADR-438): whoever held the
 //   passcode is not known. The monitor is who the records are about, never who made them. The
 //   database lets an unplanned assignment be made by nobody else, and only naming that phone.
-// - **Kept as reported** (flag, never block): for a monitor archived since, on a project closed
-//   since, at a site or with a pay item taken off since, and from a phone out of service. It is
-//   not saved only where something it names is no record of the kind it must be (the domain's
-//   `unplannedAssignmentRefusals`): the field events made under it could name nothing.
+// - **Kept as reported** (flag, never block): for a monitor archived since, at a site or with a
+//   pay item taken off since, and from a phone out of service. It is not saved where something
+//   it names is no record of the kind it must be (the domain's `unplannedAssignmentRefusals`):
+//   the field events made under it could name nothing; nor on a project closed before it
+//   arrived, which nothing is written to (ADR-529 (b)): it is held for a person.
 // - **Its day is the phone's**: the day its clock said, in the project's time zone (ADR-100).
 // - **The id is the phone's**, so a report sent again is answered "already saved" and nothing
 //   is written twice (KD-56), its security events neither. Two of one report at the same
@@ -115,9 +116,11 @@ export class UnplannedAssignments {
     if (held !== null) return this.again(held, deviceId);
     const project = await tx.project.findUnique({
       where: { id: reported.projectId },
-      select: { timeZone: true },
+      select: { timeZone: true, closedAt: true },
     });
     if (project === null) return { answer: 'NOT_SAVED', reason: 'UNKNOWN_PROJECT' };
+    // Nothing is written to a closed project (ADR-529 (b)): the report is held for a person.
+    if (project.closedAt !== null) return { answer: 'NOT_SAVED', reason: 'PROJECT_CLOSED' };
     const person = await tx.user.findUnique({
       where: { id: reported.personId },
       select: { role: true },

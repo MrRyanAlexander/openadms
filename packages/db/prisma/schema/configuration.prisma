@@ -338,10 +338,10 @@ model Form {
   projectId      String           @map("project_id") @db.Uuid
   name           String
   documentType   FormDocumentType @map("document_type")
-  // Read on the forms that aren't a workflow's: incidents and drop-off logs are switched on per
-  // project (ADR-188). Whether a load, haul-out or unit rate form is used is the project's
-  // workflows' to say (ADR-041, 308).
-  enabled        Boolean
+  // No Enabled box (ADR-529 (d)): whether a load, haul-out or unit rate form is used is the
+  // project's workflows' to say (ADR-041, 308), and which forms that are no ticket's a person may
+  // make is the day's assignment's (C42); a project has an incident or drop-off log form when it
+  // uses one.
   // "GPS required": a setting of the ROE form alone, which states it (ADR-181; a check in the
   // guard migration).
   gpsRequired    Boolean?         @map("gps_required")

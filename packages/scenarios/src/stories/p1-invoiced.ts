@@ -1073,29 +1073,45 @@ export const p1Invoiced: Story = {
     );
     story.at(
       '2027-06-01T09:00:00-04:00',
-      '1 June 2027, months after closeout: Dana unlocks the hanger ticket 301001: "Client’s auditor asked"; the worker runs',
+      '1 June 2027, months after closeout: Dana goes to unlock the hanger ticket 301001: "Client’s auditor asked". P1 is closed, so she reopens it, with a reason; unlocks it; the worker runs; and she closes P1 again',
     );
     const lineOf301001 = (await lines()).filter((each) => each.ticket === '301001');
+    const whileClosed = refusalOf(
+      await (
+        await backOffice.danas()
+      ).asked(unlockInvoicedEndpoint, unlocking(u301001, 'Client’s auditor asked')),
+    );
+    await saved(projects.reopen(dana, p1, 'Client’s auditor asked to see 301001 again'));
     const late = await reviewed(
       byDana(unlockInvoicedEndpoint, unlocking(u301001, 'Client’s auditor asked')),
     );
+    const closedAgain = await saved(projects.close(dana, p1));
     story.check(
-      'AC-09-22 nothing refuses an unlock on a closed project: people are trusted not to without good reason, and the audit log records who did and when. The ticket is worked again and, nothing having changed, its line is the same $68.00',
+      'AC-09-22 (ADR-529 (b)) a closed project changes no more: the unlock is refused while P1 is closed. Dana reopens it, saying why (audited with her reason); the unlock is made, audited under her, and the ticket worked again: nothing having changed, its line is the same $68.00; and P1 is closed again',
       [
+        whileClosed,
+        (await auditOf('project', p1)).slice(-2),
         [names.get(late.record.unlockedById), late.record.unlockedAt],
         (await auditOf('invoice_lock', late.record.id)).at(-1),
         of(last.run, '301001'),
         (await lines()).filter((each) => each.ticket === '301001').map((each) => each.line),
         lineOf301001.map((each) => each.line),
         await lockedIn(batchName),
+        closedAgain.closedAt?.toISOString(),
       ],
       [
+        '422 REFUSED_BY_THE_DATABASE',
+        [
+          'Dana · BACK_OFFICE · UPDATE · closed_at · Client’s auditor asked to see 301001 again',
+          'Dana · BACK_OFFICE · UPDATE · closed_at',
+        ],
         ['Dana', '2027-06-01T13:00:00.000Z'],
         'Dana · BACK_OFFICE · UPDATE · unlocked_at, unlocked_by_id, unlock_note · Client’s auditor asked',
         ['301001 · COMPLETED'],
         ['301001 #1 HNG-RMV-EA 1 × $68.00 = $68.00'],
         ['301001 #1 HNG-RMV-EA 1 × $68.00 = $68.00'],
         ['101001', '101003', '101030', '201004'],
+        '2027-06-01T13:00:00.000Z',
       ],
     );
 

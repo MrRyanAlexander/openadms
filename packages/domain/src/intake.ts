@@ -112,7 +112,8 @@ export class Quarantine implements QuarantineNotice {
 // Why a record a phone sent is not saved (ADR-467): it isn't a record at all, something it
 // names is no record the server has, the assignment it was made under was itself not saved, it
 // is a certification its own rules refuse (ADR-469), or it is a photograph whose record the
-// server doesn't have saved (ADR-481). The server holds it exactly as sent for
+// server doesn't have saved (ADR-481), or it is for a project closed before it arrived (ADR-529
+// (b)). The server holds it exactly as sent for
 // a person (ADR-468, 471, 472), and it stays on its phone too. Never a judgement of the work:
 // nothing is refused over eligibility (ADR-052).
 export const notSavedReasons = [
@@ -121,6 +122,7 @@ export const notSavedReasons = [
   'ASSIGNMENT_NOT_SAVED',
   'CERTIFICATION_REFUSED',
   'OWNER_NOT_SAVED',
+  'PROJECT_CLOSED',
 ] as const;
 export type NotSavedReason = (typeof notSavedReasons)[number];
 
@@ -157,6 +159,7 @@ const reportRefusalInWords: Record<UnplannedAssignmentRefusal | LoggedPasscodeUs
     NOT_THE_PROJECTS_SITE: 'names a site that isn’t its project’s',
     NOT_THE_PROJECTS_UNIT_RATE_PAY_ITEM: 'names a unit rate pay item that isn’t its project’s',
     ID_ALREADY_HELD: 'was made under an id the server already holds for something else',
+    PROJECT_CLOSED: 'is for a project that was closed before it arrived',
   };
 
 const notSavedLead = 'Not saved: ';
@@ -183,6 +186,15 @@ export class NotSaved implements NotSavedNotice {
     return new NotSaved(
       'NAMES_NO_RECORD',
       'Not saved: this record names something the server doesn’t have: its project, its monitor, its assignment, or something picked from a list.',
+    );
+  }
+
+  // Its project was closed before it arrived (ADR-529 (b)): nothing is written to a closed
+  // project, so it waits for a person, who closes it for its phone to be turned in.
+  static projectClosed(project: string, closedOn: string): NotSaved {
+    return new NotSaved(
+      'PROJECT_CLOSED',
+      `Not saved: ${project} was closed on ${closedOn}, before this arrived.`,
     );
   }
 

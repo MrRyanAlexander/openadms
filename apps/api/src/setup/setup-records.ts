@@ -170,7 +170,6 @@ export const formRecord = (form: Form): FormRecord => ({
   projectId: form.projectId,
   documentType: form.documentType,
   name: form.name,
-  enabled: form.enabled,
   gpsRequired: form.gpsRequired,
   incidentOffers: form.incidentOffers,
   archived: form.archivedAt !== null,

@@ -190,7 +190,7 @@ A ticket's ROE flags still bill.
 **Retired:** `HELPER_NOT_FOUND` (ADR-294). A certification's helper is picked from the people assigned
 to the project, never typed, so an ID that matches no user can't happen.
 
-**Added:** `PILE_CALL_NOT_HIGHER` (§3.5, ADR-295; the agent's wording). The catalogue was 67 flags then (78 today: the count at the end of §3.10's notes; KD-71 (2) closed, ADR-373).
+**Added:** `PILE_CALL_NOT_HIGHER` (§3.5, ADR-295; the agent's wording). The catalogue was 67 flags then (79 today: the count at the end of §3.10's notes; KD-71 (2) closed, ADR-373).
 
 ### 3.8 Pricing
 
@@ -240,11 +240,19 @@ scale receipt and a disposal's quantities, were approved the same day (ADR-348).
 (Listed last because the database keeps the codes in the order they were added; it belongs with
 §3.9's `NOT_PROCESSED`.)
 
+### 3.12 A certification, read across its project
+
+| Code | Raised when | Message | Bills | Facts kept | ADR |
+|---|---|---|---|---|---|
+| `SUB_NAME_ALIKE` | A sub it names has a name alike another sub's on the project, once case, spaces, punctuation, a leading The, an ampersand and a company ending (LLC, Inc, Co…) are set aside: perhaps one company spelled two ways. Never which spelling is right; a person corrects the sub on the certification, or accepts the flag as two companies | "Certification 730416: sub “Rivera Trucking Co” looks like “Rivera Trucking” on this project." | both names, the name as compared | 529 |
+
+(Listed last for the same reason; it belongs with §3.7's certification flags.)
+
 **Added:** the nine flags of §3.10 (ADR-345). The catalogue was 75 flags: 66 after ADR-328 withdrew
 one, and these nine. **Added:** `SCALE_NET_DISAGREES` and `TWO_QUANTITIES`, worded by the agent and
 approved by the user on 2026-10-05 ("Agree on both proposed in the two questions", ADR-348). The
 catalogue was 77 flags. **Added:** `NOT_PROCESSED_LINES_STAND` (the user, 2026-10-06: "KD-73
-recommended approved", ADR-360). The catalogue is 78 flags.
+recommended approved", ADR-360). The catalogue is 79 flags (`SUB_NAME_ALIKE` added by ADR-529).
 
 ---
 

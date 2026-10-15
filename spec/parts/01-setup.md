@@ -99,14 +99,26 @@ two crew-day steps that falls in neither, and every active rule that isn't valid
 left naming an archived form, contract or pay item among them); it never refuses anything (built at
 the domain, ADR-357: `SetupCheck`).
 
-**Nothing set up is deleted; everything is changed, taken off and put back** (ADR-025, 527): a
-client, a declaration event, a contractor, a contract, a debris type on a form, a value of any of the
-firm's lists, a pay item, a prime's rate, a rule, a site, its labels and its tipping fee link are
-archived (off new picks; what already points at them still does) and put back as they were, each
-change audited with the value before, and the tickets it moves re-checked; a built-in value is
-renamed, never archived; a form is switched off, never archived; a contract keeps its prime. A map
-or a site's own shape also comes from a KML file or straight from the firm's Esri feature layer,
-refreshed when the firm says (built at the API, ADR-527).
+**Nothing set up is deleted; everything is changed** (ADR-025, 527, 529): a client, a declaration
+event, a contractor (a prime's name too), a contract's name and link, a form, a debris type on a
+form, a pay item and a prime's rate, a rule and a site are changed, each change audited with the value
+before, and the tickets it moves re-checked. **Something is retired only where it must stop being
+offered** (the user, ADR-529): a person who left, and a value of one of the firm's lists (a built-in
+value is renamed, never archived); a site's label and its tipping fee link given by mistake are
+removed, audited. The rest has its own switch (a rule's Active, a debris type hidden on phones, a
+site's close date) or is history the project reports on. A contract keeps its prime: a contract has
+one prime, a project may have several. A form has no on/off: the day's assignment says which forms a
+person may make. Two spellings of one sub are never merged: each certification naming a sub whose
+name looks like another's on the project is flagged (`SUB_NAME_ALIKE`), and a person corrects the sub
+or accepts the flag. A map or a site's own shape also comes from a KML file or straight from the
+firm's Esri feature layer, refreshed when the firm says (built at the API, ADR-527).
+
+**A project is closed by an admin, by hand, and then nothing in it changes** (the user, ADR-529): the
+admin sees what is still open (phones not turned in, tickets not QC Approved or not invoiced, records
+waiting for a person) and confirms; it never stops the close. At the close its assignments are
+withdrawn and its phones' unused number blocks retired; the database refuses every change to its
+records after; field work for it that arrives later is held for a person, "closed on 12-Oct-2026,
+before this arrived". An admin may reopen it with a reason, audited (built at the API, ADR-529).
 
 **What each site's phones will ask for** is worked out here, ahead: for each site, debris type and
 prime, from the rules that could match there and the Unit of Measure and capture settings of the pay

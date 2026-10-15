@@ -6,14 +6,14 @@
 // again inside its own piece of work, and writes as that person.
 import {
   addFieldTagEndpoint,
-  archiveClientEndpoint,
   archiveControlRangeEndpoint,
-  archiveDeclarationEventEndpoint,
   changeClientEndpoint,
   changeDeclarationEventEndpoint,
   changeProjectSettingsEndpoint,
   changeProjectWindowEndpoint,
   closeProjectEndpoint,
+  closingCheckEndpoint,
+  reopenProjectEndpoint,
   createClientEndpoint,
   createDeclarationEventEndpoint,
   createProjectEndpoint,
@@ -22,8 +22,6 @@ import {
   findDeclarationEventsEndpoint,
   loadMapEndpoint,
   startNumberSeriesEndpoint,
-  unarchiveClientEndpoint,
-  unarchiveDeclarationEventEndpoint,
   type BodyOf,
   type ParamsOf,
   type QueryOf,
@@ -93,36 +91,6 @@ export class ProjectSetupController {
     );
   }
 
-  @Serves(archiveClientEndpoint)
-  async archiveClient(
-    @Param() params: ParamsOf<typeof archiveClientEndpoint>,
-    @Req() request: FastifyRequest,
-  ) {
-    const outcome = await this.projects.archiveClient(
-      callerOf(request).userId,
-      params.clientId,
-      true,
-    );
-    return archiveClientEndpoint.answer.parse(
-      answered(request, outcome, clientRecord, 'A client was archived.'),
-    );
-  }
-
-  @Serves(unarchiveClientEndpoint)
-  async unarchiveClient(
-    @Param() params: ParamsOf<typeof unarchiveClientEndpoint>,
-    @Req() request: FastifyRequest,
-  ) {
-    const outcome = await this.projects.archiveClient(
-      callerOf(request).userId,
-      params.clientId,
-      false,
-    );
-    return unarchiveClientEndpoint.answer.parse(
-      answered(request, outcome, clientRecord, 'A client was put back.'),
-    );
-  }
-
   @Serves(findDeclarationEventsEndpoint)
   async findDeclarationEvents(@Query() query: QueryOf<typeof findDeclarationEventsEndpoint>) {
     const found = await this.projects.findDeclarationEvents(searched(query));
@@ -156,36 +124,6 @@ export class ProjectSetupController {
     );
     return changeDeclarationEventEndpoint.answer.parse(
       answered(request, outcome, declarationEventRecord, 'A declaration event was changed.'),
-    );
-  }
-
-  @Serves(archiveDeclarationEventEndpoint)
-  async archiveDeclarationEvent(
-    @Param() params: ParamsOf<typeof archiveDeclarationEventEndpoint>,
-    @Req() request: FastifyRequest,
-  ) {
-    const outcome = await this.projects.archiveDeclarationEvent(
-      callerOf(request).userId,
-      params.declarationEventId,
-      true,
-    );
-    return archiveDeclarationEventEndpoint.answer.parse(
-      answered(request, outcome, declarationEventRecord, 'A declaration event was archived.'),
-    );
-  }
-
-  @Serves(unarchiveDeclarationEventEndpoint)
-  async unarchiveDeclarationEvent(
-    @Param() params: ParamsOf<typeof unarchiveDeclarationEventEndpoint>,
-    @Req() request: FastifyRequest,
-  ) {
-    const outcome = await this.projects.archiveDeclarationEvent(
-      callerOf(request).userId,
-      params.declarationEventId,
-      false,
-    );
-    return unarchiveDeclarationEventEndpoint.answer.parse(
-      answered(request, outcome, declarationEventRecord, 'A declaration event was put back.'),
     );
   }
 
@@ -233,6 +171,35 @@ export class ProjectSetupController {
     );
     return changeProjectWindowEndpoint.answer.parse(
       answered(request, outcome, projectRecord, 'A project’s active window was changed.'),
+    );
+  }
+
+  // What is still open on the project, before an admin closes it (ADR-529 (b)).
+  @Serves(closingCheckEndpoint)
+  async closingCheck(@Param() params: InProject, @Req() request: FastifyRequest) {
+    const outcome = await this.projects.closingCheck(callerOf(request).userId, params.projectId);
+    const { record } = answered(
+      request,
+      outcome,
+      (items) => items,
+      'A project’s close was checked.',
+    );
+    return closingCheckEndpoint.answer.parse({ items: record });
+  }
+
+  @Serves(reopenProjectEndpoint)
+  async reopen(
+    @Param() params: InProject,
+    @Body() body: BodyOf<typeof reopenProjectEndpoint>,
+    @Req() request: FastifyRequest,
+  ) {
+    const outcome = await this.projects.reopen(
+      callerOf(request).userId,
+      params.projectId,
+      body.reason,
+    );
+    return reopenProjectEndpoint.answer.parse(
+      answered(request, outcome, projectRecord, 'A project was reopened.'),
     );
   }
 

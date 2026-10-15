@@ -1,10 +1,9 @@
-// What setup says as the firm's records are changed, archived and put back (spec/LISTS.md;
-// ADR-087, 108, 194, 355, 527): a built-in value is never archived, a contractor merged into
-// another is never put back, a crew day's steps never share an hour, and a merge says what still
-// names the contractor it archived.
+// What setup says as the firm's lists are added to and archived, a crew day's steps stated and a
+// project closed (spec/LISTS.md; ADR-087, 194, 355, 527, 529): a built-in value is never
+// archived, a crew day's steps never share an hour, and a close says what is still open.
 import { describe, expect, it } from 'vitest';
 
-import { CrewDaySteps, FirmRecords, ListValues } from '../src/setup-records.ts';
+import { CrewDaySteps, ListValues, ProjectClosing } from '../src/setup-records.ts';
 
 describe('a list value archived', () => {
   it('ADR-527 (6) the firm’s own is archived; a built-in one is renamed, never archived', () => {
@@ -14,56 +13,6 @@ describe('a list value archived', () => {
       message:
         'Not archived: “Temporary site” comes with Open ADMS and the system acts on it. It can be renamed, never archived.',
     });
-  });
-});
-
-describe('a contractor put back', () => {
-  it('ADR-527 (1) one archived is put back; one merged into another never is', () => {
-    expect(
-      new FirmRecords().putBackRefusal({ name: 'Rivera Trucking', mergedIntoId: null }),
-    ).toBeNull();
-    expect(
-      new FirmRecords().putBackRefusal({ name: 'Rivera Trucking Co', mergedIntoId: 'rivera' }),
-    ).toEqual({
-      code: 'CONTRACTOR_MERGED',
-      message:
-        'Not put back: Rivera Trucking Co was merged into another contractor, which is the one kept.',
-    });
-  });
-});
-
-describe('what a merge leaves naming the contractor it archived', () => {
-  it('ADR-527 (11) each kind is said once, counted, and nothing where nothing is left', () => {
-    expect(
-      new FirmRecords().mergeLeftNaming('Rivera Trucking Co', 'Rivera Trucking', {
-        rulePicks: 0,
-        employees: 0,
-        viewers: 0,
-      }),
-    ).toEqual([]);
-    expect(
-      new FirmRecords().mergeLeftNaming('Rivera Trucking Co', 'Rivera Trucking', {
-        rulePicks: 2,
-        employees: 1,
-        viewers: 3,
-      }),
-    ).toEqual([
-      {
-        code: 'MERGE_LEFT_NAMING',
-        message:
-          'Merged into Rivera Trucking, but 2 rule picks still name Rivera Trucking Co: change them in the rule builder.',
-      },
-      {
-        code: 'MERGE_LEFT_NAMING',
-        message:
-          'Merged into Rivera Trucking, but 1 person it employs still names Rivera Trucking Co: an admin changes their employer.',
-      },
-      {
-        code: 'MERGE_LEFT_NAMING',
-        message:
-          'Merged into Rivera Trucking, but 3 contractor users still name Rivera Trucking Co: an admin changes whose user they are.',
-      },
-    ]);
   });
 });
 
@@ -144,5 +93,67 @@ describe('a value added to one of the firm’s lists', () => {
     expect(lists.addRefusal('field-tags', [])?.message).toBe(
       'Not added: a field tag is added to its own project’s list.',
     );
+  });
+});
+
+describe('a project closed (ADR-529 (b))', () => {
+  const nothingOpen = {
+    phonesNotTurnedIn: [],
+    ticketsNotQcApproved: 0,
+    ticketsNotInvoiced: 0,
+    heldWaiting: 0,
+    quarantinedWaiting: 0,
+    jobsWaiting: 0,
+  };
+
+  it('says what is still open, in plain words, and never stops the close for it', () => {
+    expect(new ProjectClosing(nothingOpen).items()).toEqual([]);
+    const open = new ProjectClosing({
+      phonesNotTurnedIn: ['P1-TWR-TDSR', 'P1-HO-TDSR'],
+      ticketsNotQcApproved: 1,
+      ticketsNotInvoiced: 3,
+      heldWaiting: 1,
+      quarantinedWaiting: 2,
+      jobsWaiting: 0,
+    });
+    expect(open.items()).toEqual([
+      {
+        code: 'PHONES_NOT_TURNED_IN',
+        message: '2 phones that took its work haven’t been turned in: P1-TWR-TDSR, P1-HO-TDSR.',
+      },
+      { code: 'TICKETS_NOT_QC_APPROVED', message: '1 ticket isn’t QC Approved.' },
+      { code: 'TICKETS_NOT_INVOICED', message: '3 tickets aren’t locked as invoiced.' },
+      { code: 'HELD_WAITING', message: '1 record a phone sent waits for a person.' },
+      { code: 'QUARANTINED_WAITING', message: '2 quarantined records wait for a person.' },
+    ]);
+    expect(open.refusal('Bayline County ROW, Hurricane Delphine')).toBeNull();
+    expect(new ProjectClosing({ ...nothingOpen, phonesNotTurnedIn: ['P1-COL-1'] }).items()).toEqual(
+      [
+        {
+          code: 'PHONES_NOT_TURNED_IN',
+          message: '1 phone that took its work hasn’t been turned in: P1-COL-1.',
+        },
+      ],
+    );
+  });
+
+  it('waits only while the worker still has its tickets under way', () => {
+    expect(
+      new ProjectClosing({ ...nothingOpen, jobsWaiting: 1 }).refusal('Bayline County ROW'),
+    ).toEqual({
+      code: 'PROJECT_WORK_UNDER_WAY',
+      message:
+        'Not closed: the worker is still working Bayline County ROW’s tickets. Close it again in a moment.',
+    });
+  });
+
+  it('is reopened only where it is closed', () => {
+    expect(
+      ProjectClosing.reopenRefusal({ name: 'Bayline County ROW', closedAt: new Date() }),
+    ).toBeNull();
+    expect(ProjectClosing.reopenRefusal({ name: 'Bayline County ROW', closedAt: null })).toEqual({
+      code: 'PROJECT_NOT_CLOSED',
+      message: 'Not reopened: Bayline County ROW isn’t closed.',
+    });
   });
 });

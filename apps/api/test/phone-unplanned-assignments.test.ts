@@ -544,6 +544,24 @@ describe('an unplanned assignment arrives', () => {
       expect(await tx.heldRecord.count({ where: { deviceId: phone.id } })).toBe(10);
     });
   });
+
+  it('ADR-529 (b) it is not saved on a project closed before it arrived: nothing is written to a closed project, and it is held for a person exactly as sent', async () => {
+    await world(async (served, tx) => {
+      const { priced, phone, token, setUp } = await tariqAtTheLandfill(served, tx);
+      // Closed as an admin's close marks it (its setup's jobs wait for no worker here).
+      await tx.project.update({ where: { id: priced.project.id }, data: { closedAt: new Date() } });
+      const report = setUp();
+      const { said, requestId } = await answered(served, token, report);
+      expect(said).toEqual(['NOT_SAVED', 'PROJECT_CLOSED']);
+      expect(await audited(tx, requestId)).toEqual(heldFor(phone));
+      const held = await tx.heldRecord.findFirstOrThrow({ where: { sentId: report.id } });
+      expect([held.reason, held.payload]).toEqual([
+        'REPORT_NOT_SAVED',
+        JSON.parse(JSON.stringify(report)),
+      ]);
+      expect(await written(tx, phone)).toEqual([0, 0]);
+    });
+  });
 });
 
 describe('a site move and a monitor switch, reported', () => {

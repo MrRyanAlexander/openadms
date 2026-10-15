@@ -817,7 +817,6 @@ export class ExampleWorld {
         project_id: p1,
         name,
         document_type: documentType,
-        enabled: true,
         ...more,
       });
     const forms = {

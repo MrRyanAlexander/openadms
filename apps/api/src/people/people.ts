@@ -405,15 +405,6 @@ export class People {
         if (person === null || actorOnly(person.role) || person.archivedAt === null) {
           return { refused: 'NOT_FOUND' };
         }
-        // A contractor user comes back only while their contractor is in service: put it back
-        // first (ADR-527 (12)), as creating one for an archived contractor is refused.
-        if (person.contractorId !== null) {
-          const contractor = await tx.contractor.findUnique({
-            where: { id: person.contractorId },
-            select: { archivedAt: true },
-          });
-          if (contractor?.archivedAt !== null) return { refused: 'UNKNOWN_CONTRACTOR' };
-        }
         if (
           this.rules.signsInByEmail(person.role) &&
           person.email !== null &&

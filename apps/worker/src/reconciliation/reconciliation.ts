@@ -575,8 +575,9 @@ export class Reconciliation {
     };
   }
 
-  // The flags that sit on a record that is no ticket: a certification's missing views, a site's
-  // outstanding permit, a survey's ROE and pre-work survey (spec/FLAGS.md §3.7). They touch no
+  // The flags that sit on a record that is no ticket: a certification's missing views and a sub
+  // whose name is alike another's on the project (ADR-529 (f)), a site's outstanding permit, a
+  // survey's ROE and pre-work survey (spec/FLAGS.md §3.7). They touch no
   // ticket's status. Checked in every run, in one piece of work.
   private async projectRecords(snapshot: ProjectSnapshot, runId: string): Promise<void> {
     const { timeZone, id: projectId, requiresRoe } = snapshot.project;
@@ -585,11 +586,19 @@ export class Reconciliation {
     const roes = new RoeChecks({ timeZone, requiresRoe });
     await this.db.$write(systemActor, async (tx) => {
       const write = new TicketWrite(tx, projectId, runId, this.clock.now());
+      // Every sub named on the project's certifications, by name, once.
+      const projectSubs = [
+        ...new Set(
+          snapshot.certifications.flatMap((certification) =>
+            certification.subNames.filter((name): name is string => name !== null),
+          ),
+        ),
+      ];
       for (const certification of snapshot.certifications) {
-        await write.flags(
-          { certificationId: certification.id },
-          certifications.views(certification.certNumber, certification.photographs),
-        );
+        await write.flags({ certificationId: certification.id }, [
+          ...certifications.views(certification.certNumber, certification.photographs),
+          ...certifications.subs(certification.certNumber, certification.subNames, projectSubs),
+        ]);
       }
       for (const site of snapshot.sites) {
         await write.flags({ disposalSiteId: site.id }, sites.permit(site));

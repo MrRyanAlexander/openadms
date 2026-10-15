@@ -205,7 +205,7 @@ export const p1FieldDays: Story = {
     ]);
 
     const form = async (documentType: FormDocumentType, name: string): Promise<string> =>
-      (await saved(forms.form(dana, { projectId: p1, documentType, name, enabled: true }))).id;
+      (await saved(forms.form(dana, { projectId: p1, documentType, name }))).id;
     const loadForm = await form('LOAD', 'Load');
     const haulOutForm = await form('HAUL_OUT', 'Haul-out');
     await form('UNIT_RATE', 'Unit rate');
@@ -215,7 +215,6 @@ export const p1FieldDays: Story = {
         projectId: p1,
         documentType: 'INCIDENT',
         name: 'Incident',
-        enabled: true,
         incidentOffers: ['CONTRACTOR', 'CERT_NUMBER'],
       }),
     );

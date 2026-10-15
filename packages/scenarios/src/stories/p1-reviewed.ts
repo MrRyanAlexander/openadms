@@ -13,8 +13,8 @@
 // unlock at Dana's. Each queues its own job, and the worker takes it up; the story reads what the
 // worker concluded. One correction alone is made in process, on purpose: the one whose job queue
 // is made to fail (AC-10-50), which no request can do. Last, a sub typed twice at certification
-// is merged (AC-01-21; ADR-426): the merge queues the tickets of the certifications it moved, on
-// P1 and on P2, and the worker's runs put the contractor kept on their lines.
+// is flagged on the certifications that name either spelling, never merged (AC-01-21; ADR-529
+// (f)).
 //
 // Not here: voiding the phantom, unvoiding and accepting a flag (the story `p1-voided`); QC, the
 // lock and a batch for themselves (the story `p1-invoiced`). The golden mission's whole review is
@@ -209,16 +209,13 @@ export const p1Reviewed: Story = {
       }),
     );
     const p2Load = (
-      await saved(
-        forms.form(luis, { projectId: p2, documentType: 'LOAD', name: 'Load', enabled: true }),
-      )
+      await saved(forms.form(luis, { projectId: p2, documentType: 'LOAD', name: 'Load' }))
     ).id;
     await saved(
       forms.form(luis, {
         projectId: p2,
         documentType: 'ROE',
         name: 'ROE',
-        enabled: true,
         gpsRequired: true,
       }),
     );
@@ -1618,7 +1615,7 @@ export const p1Reviewed: Story = {
     // ------------------------------------------------------------------------------------------
     story.at(
       on('15', '11:40'),
-      'A second Rivera truck, 730421, is certified on P1 with its sub typed as its subcontract names it, "Rivera Trucking LLC". Luis merges the first spelling, "Rivera Trucking", into it',
+      'A second Rivera truck, 730421, is certified on P1 with its sub typed as its subcontract names it, "Rivera Trucking LLC"; the worker runs',
     );
     await saved(
       new Certifications(api, clock, story.policy).certify({
@@ -1638,10 +1635,6 @@ export const p1Reviewed: Story = {
       }),
     );
     await queue.settle(p1);
-    const rivera = async (name: string): Promise<string> =>
-      (await api.contractor.findFirstOrThrow({ where: { name } })).id;
-    const firstSpelling = await rivera('Rivera Trucking');
-    const keptSpelling = await rivera('Rivera Trucking LLC');
     // Every line that names an operating sub, by its ticket: whose work the ledger says it was.
     const subsOn = async (projectId: string): Promise<string[]> =>
       [
@@ -1656,60 +1649,40 @@ export const p1Reviewed: Story = {
           ),
         ),
       ].sort();
-    const subsBefore = [await subsOn(p1), await subsOn(p2)];
-    const billed = async (): Promise<string[]> =>
-      [...(await lines(p1)), ...(await lines(p2))].map((each) => each.line);
-    const billedBefore = await billed();
-    const merging = await contractors.merge(luis, firstSpelling, keptSpelling);
-    if (!merging.saved) throw new Error(`Refused: ${merging.refusal.message}`);
-    const mergeJobs = [await queue.waiting(p1), await queue.waiting(p2)];
+    const alike = async (projectId: string): Promise<string[]> =>
+      (
+        await api.flag.findMany({
+          where: { projectId, code: 'SUB_NAME_ALIKE', clearedAt: null },
+          include: { certification: true },
+          orderBy: { message: 'asc' },
+        })
+      ).map((flag) => flag.message);
     story.check(
-      'AC-01-21, AC-10-51 the merge queues its own jobs in its own piece of work, one for each project: the tickets not locked as invoiced whose field events carry a certification it moved, Rivera’s 730416 on P1 and on P2, and no other; each job is Luis’s, a setup change; "Rivera Trucking" is archived, pointing at the record kept, and no line has moved yet',
+      'AC-01-21 (ADR-529 (f)) the worker flags both certifications on P1 that name either spelling, saying both names and never which is right; P2, which knows one spelling, has none',
+      [await alike(p1), await alike(p2)],
       [
-        [merging.record.mergedIntoId === keptSpelling, merging.record.archivedAt !== null],
-        merging.queued?.jobs.length,
-        { tickets: merging.queued?.tickets, lockedAsInvoiced: merging.queued?.lockedAsInvoiced },
-        mergeJobs.map((jobs) =>
-          jobs.map((job) => [job.trigger, names.get(job.requestedById), job.tickets]),
-        ),
-        [await subsOn(p1), await subsOn(p2)].join() === subsBefore.join(),
-      ],
-      [
-        [true, true],
-        2,
-        { tickets: 8, lockedAsInvoiced: 0 },
         [
-          [['SETUP_CHANGE', 'Luis', ['101002', '101004', '101006', '101020', '101021', '101029']]],
-          [['SETUP_CHANGE', 'Luis', ['102001', '102005']]],
+          'Certification 730416: sub “Rivera Trucking” looks like “Rivera Trucking LLC” on this project.',
+          'Certification 730421: sub “Rivera Trucking LLC” looks like “Rivera Trucking” on this project.',
         ],
-        true,
+        [],
       ],
     );
-    await queue.next(p1);
-    await queue.next(p2);
     story.check(
-      'the worker takes the jobs up: every line of Rivera’s truck now records the contractor that was kept as its operating sub, on both projects; none names the archived spelling, and each amount is as it was',
+      'nothing is merged and no line moves: both records stand in service, and every Rivera line still names the spelling its certification names',
       [
-        subsBefore,
-        [await subsOn(p1), await subsOn(p2)],
-        (await billed()).join() === billedBefore.join(),
-        await api.transaction.count({ where: { operatingSubId: firstSpelling } }),
+        await api.contractor.count({
+          where: { name: { in: ['Rivera Trucking', 'Rivera Trucking LLC'] }, archivedAt: null },
+        }),
+        await subsOn(p1),
+        await subsOn(p2),
       ],
       [
-        [
-          ['101002', '101004', '101006', '101020', '101021', '101029'].map(
-            (ticket) => `${ticket} Rivera Trucking`,
-          ),
-          ['102001 Rivera Trucking', '102005 Rivera Trucking'],
-        ],
-        [
-          ['101002', '101004', '101006', '101020', '101021', '101029'].map(
-            (ticket) => `${ticket} Rivera Trucking LLC`,
-          ),
-          ['102001 Rivera Trucking LLC', '102005 Rivera Trucking LLC'],
-        ],
-        true,
-        0,
+        2,
+        ['101002', '101004', '101006', '101020', '101021', '101029'].map(
+          (ticket) => `${ticket} Rivera Trucking`,
+        ),
+        ['102001 Rivera Trucking', '102005 Rivera Trucking'],
       ],
     );
 

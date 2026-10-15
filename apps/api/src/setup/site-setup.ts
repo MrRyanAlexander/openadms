@@ -194,8 +194,9 @@ export class SiteSetup extends QueueingService {
     });
   }
 
-  // The link taken off: the site's fee lines are told from its hauling lines without it.
-  archiveTippingFee(
+  // A link made by mistake removed (ADR-529 (g)): audited, never deleted; linked again, it is
+  // back on its own row.
+  removeTippingFee(
     person: string,
     siteId: string,
     payItemId: string,
@@ -212,27 +213,6 @@ export class SiteSetup extends QueueingService {
     });
   }
 
-  // Archived: off new picks; its field events still point at it, and a rule that picks it is not
-  // valid while it is (ADR-357). Put back as it was. Its tickets are queued, and the project's
-  // where a rule picks it (ADR-527 (9)). Twice writes nothing.
-  archive(person: string, siteId: string, archive: boolean): Promise<Outcome<DisposalSite>> {
-    return this.setup(person, async (tx) => {
-      const site = await tx.disposalSite.findUniqueOrThrow({ where: { id: siteId } });
-      const change = archiveChange(site.archivedAt, archive, this.clock.now());
-      if (change === null) return site;
-      const changed = await tx.disposalSite.update({ where: { id: siteId }, data: change });
-      const picked = await this.projectsPicking(tx, { disposalSiteId: siteId });
-      await this.setupChanged(
-        tx,
-        person,
-        site.projectId,
-        picked.length === 0 ? { siteId } : {},
-        true,
-      );
-      return changed;
-    });
-  }
-
   // One of the firm's own labels on the site (AC-01-58): given, or given back on its own row.
   // It changes nothing the system does, so nothing is queued.
   label(person: string, siteId: string, siteLabelId: string): Promise<Outcome<DisposalSiteLabel>> {
@@ -246,7 +226,8 @@ export class SiteSetup extends QueueingService {
     });
   }
 
-  archiveLabel(
+  // A label given by mistake removed (ADR-529 (g)): audited, never deleted.
+  removeLabel(
     person: string,
     siteId: string,
     siteLabelId: string,

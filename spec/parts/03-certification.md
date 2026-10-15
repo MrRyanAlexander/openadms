@@ -32,8 +32,9 @@ works on the project.
    181).
 2. **General information:** the client and declaration event come from the project; date and time.
 3. **Whose truck:** pick the **prime** it works for, then either the prime itself or a **sub**, typed
-   into **tier 1 or tier 2** (the phone suggests subs already known under that prime; the back office
-   merges duplicates, audited). The firm doesn't know the subs before they turn up; the prime is on
+   into **tier 1 or tier 2** (the phone suggests subs already known under that prime; two subs whose
+   names look alike are flagged on each certification, `SUB_NAME_ALIKE`, and a person corrects the
+   sub, never merged: ADR-529). The firm doesn't know the subs before they turn up; the prime is on
    site to approve them (ADR-108).
 4. **Driver and vehicle:** the driver's name, phone and licence (recorded on the cert only, carried
    onto its tickets; there is no driver list, and **a driver's licence flags nothing**); the vehicle

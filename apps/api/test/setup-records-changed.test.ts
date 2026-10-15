@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 // Every setup record changed, archived and put back at the API (spec/parts/01-setup.md;
 // spec/LISTS.md; spec/RULES.md §7; acceptance file 01, AC-01-02, 27, 58, 83; file 02, AC-02-03;
 // BACKLOG 2.8.5, C62, C98…C101, C103, C113, C115, C140; REQ-213, REQ-105e; ADR-527). OWASP ASVS
@@ -7,21 +9,9 @@
 // Who may call each endpoint is setup-endpoints.test.ts's.
 import {
   addFieldTagEndpoint,
-  addListValueEndpoint,
   addFormDebrisTypeEndpoint,
-  archiveClientEndpoint,
-  archiveContractEndpoint,
-  archiveContractorEndpoint,
-  archiveDeclarationEventEndpoint,
-  archiveFormDebrisTypeEndpoint,
+  addListValueEndpoint,
   archiveListValueEndpoint,
-  archivePayItemEndpoint,
-  archivePayItemRateEndpoint,
-  archivePersonEndpoint,
-  archiveRuleEndpoint,
-  archiveSiteEndpoint,
-  archiveSiteLabelEndpoint,
-  archiveTippingFeeEndpoint,
   changeClientEndpoint,
   changeContractEndpoint,
   changeContractorEndpoint,
@@ -34,31 +24,17 @@ import {
   createContractorEndpoint,
   createFormEndpoint,
   createPayItemEndpoint,
-  createPersonEndpoint,
-  createRuleEndpoint,
   createSiteEndpoint,
   findClientsEndpoint,
   findContractorsEndpoint,
-  findDeclarationEventsEndpoint,
   giveSiteLabelEndpoint,
   linkTippingFeeEndpoint,
-  mergeContractorEndpoint,
   reinstateAssignmentEndpoint,
+  removeSiteLabelEndpoint,
+  removeTippingFeeEndpoint,
   renameListValueEndpoint,
-  savePaysWhenEndpoint,
   setCrewDayStepsEndpoint,
-  setPayItemRateEndpoint,
-  setupCheckEndpoint,
-  unarchiveClientEndpoint,
-  unarchiveContractEndpoint,
-  unarchiveContractorEndpoint,
-  unarchiveDeclarationEventEndpoint,
-  unarchiveFormDebrisTypeEndpoint,
   unarchiveListValueEndpoint,
-  unarchivePayItemEndpoint,
-  unarchivePersonEndpoint,
-  unarchiveRuleEndpoint,
-  unarchiveSiteEndpoint,
   withdrawAssignmentEndpoint,
   writeAssignmentEndpoint,
 } from '@open-adms/contracts';
@@ -177,70 +153,28 @@ describe('a client, a declaration event and a search', () => {
     });
   });
 
-  it('ADR-527 (1) a client and a declaration event archived are off the searches and found among the archived; archived again they keep their first time; put back, as they were; the project under them stays as it is', async () => {
-    await world(async (api, tx) => {
+  it('ADR-527 (1) a declaration event’s name, its reference and its type change, audited; nothing is queued', async () => {
+    await world(async (api, tx, who) => {
       const dana = await api.signedIn(danasEmail, long);
-      const { client: bayline, declarationEvent, project } = await p1(api, dana, tx);
-      const archived = saved(
-        archiveClientEndpoint,
-        await ask(api, dana, archiveClientEndpoint, { ids: { clientId: bayline.id } }),
-      ).record;
-      expect(archived).toEqual({ ...bayline, archived: true });
-      const first = await tx.client.findUniqueOrThrow({ where: { id: bayline.id } });
-      api.clock.later(1);
-      const again = await ask(api, dana, archiveClientEndpoint, { ids: { clientId: bayline.id } });
-      expect(saved(archiveClientEndpoint, again).record.archived).toBe(true);
-      expect(await auditedBy(tx, again.requestId)).toEqual([]);
-      expect((await tx.client.findUniqueOrThrow({ where: { id: bayline.id } })).archivedAt).toEqual(
-        first.archivedAt,
-      );
-      expect(saved(findClientsEndpoint, await ask(api, dana, findClientsEndpoint)).records).toEqual(
-        [],
-      );
-      expect(
-        saved(
-          findClientsEndpoint,
-          await ask(api, dana, findClientsEndpoint, { query: '?archived=true' }),
-        ).records,
-      ).toEqual([archived]);
-      expect((await tx.project.findUniqueOrThrow({ where: { id: project.id } })).clientId).toBe(
-        bayline.id,
-      );
-      expect(
-        saved(
-          unarchiveClientEndpoint,
-          await ask(api, dana, unarchiveClientEndpoint, { ids: { clientId: bayline.id } }),
-        ).record,
-      ).toEqual(bayline);
-
-      const ids = { declarationEventId: declarationEvent.id };
-      const renamed = saved(
-        changeDeclarationEventEndpoint,
-        await ask(api, dana, changeDeclarationEventEndpoint, {
-          ids,
-          payload: { name: 'Hurricane Delphine (2026)' },
-        }),
-      ).record;
-      expect(renamed).toEqual({ ...declarationEvent, name: 'Hurricane Delphine (2026)' });
-      saved(
-        archiveDeclarationEventEndpoint,
-        await ask(api, dana, archiveDeclarationEventEndpoint, { ids }),
-      );
-      expect(
-        saved(
-          findDeclarationEventsEndpoint,
-          await ask(api, dana, findDeclarationEventsEndpoint, { query: '?search=9001' }),
-        ).records,
-      ).toEqual([]);
-      expect(
-        saved(
-          unarchiveDeclarationEventEndpoint,
-          await ask(api, dana, unarchiveDeclarationEventEndpoint, { ids }),
-        ).record,
-      ).toEqual(renamed);
+      const { declarationEvent } = await p1(api, dana, tx);
+      const answer = await ask(api, dana, changeDeclarationEventEndpoint, {
+        ids: { declarationEventId: declarationEvent.id },
+        payload: { name: 'Hurricane Delphine (2026)' },
+      });
+      expect(saved(changeDeclarationEventEndpoint, answer)).toEqual({
+        record: { ...declarationEvent, name: 'Hurricane Delphine (2026)' },
+        warnings: [],
+      });
+      expect(await auditedBy(tx, answer.requestId)).toEqual([
+        {
+          tableName: 'declaration_event',
+          operation: 'UPDATE',
+          actorId: who.dana,
+          changedFields: ['name'],
+        },
+      ]);
     });
   });
-
   it('ADR-527 (3) a search is a page at a time in name order: `limit`, `next` and `after`; nothing follows a record nobody has', async () => {
     await world(async (api) => {
       const dana = await api.signedIn(danasEmail, long);
@@ -297,123 +231,29 @@ describe('a client, a declaration event and a search', () => {
 });
 
 describe('a contractor and a contract', () => {
-  it('ADR-527 (1) a contractor is changed, archived and put back; one merged into another is never put back; a rule that picks it queues its project', async () => {
-    await world(async (api, tx, who) => {
+  it('ADR-527 (1), ADR-529 (c) a prime’s own name, kind and contact change on its contractor record; nothing it bills follows a name, so nothing is queued', async () => {
+    await world(async (api, tx) => {
       const dana = await api.signedIn(danasEmail, long);
-      const { ids, forms, contract, coastline, contractor, veg15 } = await p1Priced(api, dana, tx);
+      const { coastline } = await p1Priced(api, dana, tx);
       const changed = saved(
         changeContractorEndpoint,
         await ask(api, dana, changeContractorEndpoint, {
           ids: { contractorId: coastline },
           payload: { name: 'Coastline Haulers, LLC', contactEmail: 'dispatch@coastline.example' },
         }),
-      ).record;
-      expect([changed.name, changed.contactEmail, changed.kind]).toEqual([
-        'Coastline Haulers, LLC',
-        'dispatch@coastline.example',
-        'HAULER',
-      ]);
-      const veg = saved(createPayItemEndpoint, await veg15()).record;
-      saved(
-        createRuleEndpoint,
-        await ask(api, dana, createRuleEndpoint, {
-          ids,
-          payload: {
-            formId: forms.load,
-            name: 'Coastline’s loads',
-            contractId: contract,
-            active: true,
-            criteria: [{ criterion: 'CONTRACTOR', operator: 'EQUALS', picks: [coastline] }],
-            actions: [{ kind: 'ADD_TRANSACTION', slot: 1, payItemId: veg.id }],
-          },
-        }),
       );
-      const archived = saved(
-        archiveContractorEndpoint,
-        await ask(api, dana, archiveContractorEndpoint, { ids: { contractorId: coastline } }),
-      );
-      expect([archived.record.archived, archived.queued?.tickets]).toEqual([true, 0]);
-      const gaps = saved(setupCheckEndpoint, await ask(api, dana, setupCheckEndpoint, { ids }));
-      expect(gaps.gaps.filter(({ code }) => code === 'RULE_NOT_VALID')).toHaveLength(1);
-      saved(
-        unarchiveContractorEndpoint,
-        await ask(api, dana, unarchiveContractorEndpoint, { ids: { contractorId: coastline } }),
-      );
-      // Two spellings of one sub, merged: the second is never put back.
-      const rivera = await contractor('Rivera Trucking');
-      const twice = await contractor('Rivera Trucking Co');
-      saved(
-        mergeContractorEndpoint,
-        await ask(api, dana, mergeContractorEndpoint, {
-          ids: { contractorId: twice },
-          payload: { intoContractorId: rivera },
-        }),
-      );
-      expect(
-        notSaved(
-          await ask(api, dana, unarchiveContractorEndpoint, { ids: { contractorId: twice } }),
-        ),
-      ).toEqual([
-        'CONTRACTOR_MERGED',
-        'Not put back: Rivera Trucking Co was merged into another contractor, which is the one kept.',
-      ]);
-      expect(await tx.contractor.count({ where: { id: twice, archivedAt: { not: null } } })).toBe(
-        1,
-      );
-      expect(who.dana).not.toBe('');
+      expect([
+        changed.record.name,
+        changed.record.contactEmail,
+        changed.record.kind,
+        changed.queued,
+      ]).toEqual(['Coastline Haulers, LLC', 'dispatch@coastline.example', 'HAULER', undefined]);
     });
   });
-
-  it('ADR-527 (11) a merge says what still names the contractor it archived, and moves none of it', async () => {
-    await world(async (api, tx, who) => {
-      const dana = await api.signedIn(danasEmail, long);
-      const contractor = async (name: string, kind = 'HAULER') =>
-        saved(
-          createContractorEndpoint,
-          await ask(api, dana, createContractorEndpoint, { payload: { name, kind } }),
-        ).record.id;
-      const harbor = await contractor('Harbor Staffing', 'MONITORING');
-      const twice = await contractor('Harbour Staffing', 'MONITORING');
-      await tx.user.update({ where: { id: who.kim }, data: { employerId: twice } });
-      saved(
-        createPersonEndpoint,
-        await ask(api, dana, createPersonEndpoint, {
-          payload: {
-            name: 'Harbour Staffing office',
-            email: 'office@harbour.example',
-            role: 'READ_ONLY_VIEWER',
-            viewerKind: 'CONTRACTOR',
-            contractorId: twice,
-          },
-        }),
-      );
-      const merged = saved(
-        mergeContractorEndpoint,
-        await ask(api, dana, mergeContractorEndpoint, {
-          ids: { contractorId: twice },
-          payload: { intoContractorId: harbor },
-        }),
-      );
-      expect(merged.warnings).toEqual([
-        {
-          code: 'MERGE_LEFT_NAMING',
-          message:
-            'Merged into Harbor Staffing, but 1 person it employs still names Harbour Staffing: an admin changes their employer.',
-        },
-        {
-          code: 'MERGE_LEFT_NAMING',
-          message:
-            'Merged into Harbor Staffing, but 1 contractor user still names Harbour Staffing: an admin changes whose user they are.',
-        },
-      ]);
-      expect((await tx.user.findUniqueOrThrow({ where: { id: who.kim } })).employerId).toBe(twice);
-    });
-  });
-
-  it('ADR-527 (2) a contract’s name and link change, its prime stays as entered; archived, its rules are not valid and its project is queued; put back, as it was', async () => {
+  it('ADR-527 (2) a contract’s name and link change, its prime stays as entered: a contract has one prime (ADR-529 (c), (j))', async () => {
     await world(async (api, tx) => {
       const dana = await api.signedIn(danasEmail, long);
-      const { ids, forms, contract, coastline, veg15 } = await p1Priced(api, dana, tx);
+      const { contract, coastline } = await p1Priced(api, dana, tx);
       const contractIds = { contractId: contract };
       const changed = saved(
         changeContractEndpoint,
@@ -443,35 +283,12 @@ describe('a contractor and a contract', () => {
           told(await ask(api, dana, changeContractEndpoint, { ids: contractIds, payload })),
         ).toEqual([400, 'BAD_REQUEST']);
       }
-      const veg = saved(createPayItemEndpoint, await veg15()).record;
-      saved(
-        savePaysWhenEndpoint,
-        await ask(api, dana, savePaysWhenEndpoint, {
-          ids: { payItemId: veg.id },
-          payload: { pays: [{ formId: forms.load, slot: 1, criteria: [] }] },
-        }),
-      );
-      const archived = saved(
-        archiveContractEndpoint,
-        await ask(api, dana, archiveContractEndpoint, { ids: contractIds }),
-      );
-      expect([archived.record.archived, archived.queued?.tickets]).toEqual([true, 0]);
-      const gaps = saved(setupCheckEndpoint, await ask(api, dana, setupCheckEndpoint, { ids }));
-      expect(
-        gaps.gaps.filter(({ code }) => code === 'RULE_NOT_VALID').map(({ message }) => message),
-      ).toEqual([expect.stringContaining('is archived')]);
-      expect(
-        saved(
-          unarchiveContractEndpoint,
-          await ask(api, dana, unarchiveContractEndpoint, { ids: contractIds }),
-        ).record.archived,
-      ).toBe(false);
     });
   });
 });
 
 describe('a form and the debris types on it', () => {
-  it('AC-01-83 the incident form’s offers are changed (the cert number taken off) and audited; the ROE form’s GPS required ticked; a form renamed and switched off; nothing is queued; GPS required on a load form is the database’s to refuse', async () => {
+  it('AC-01-83 the incident form’s offers are changed (the cert number taken off) and audited; the ROE form’s GPS required ticked; a form renamed; nothing is queued; GPS required on a load form is the database’s to refuse', async () => {
     await world(async (api, tx, who) => {
       const dana = await api.signedIn(danasEmail, long);
       const { ids, form, forms } = await p1Priced(api, dana, tx);
@@ -480,14 +297,13 @@ describe('a form and the debris types on it', () => {
       });
       const answer = await ask(api, dana, changeFormEndpoint, {
         ids: { formId: incident.id },
-        payload: { incidentOffers: ['CONTRACTOR'], name: 'Incident report', enabled: false },
+        payload: { incidentOffers: ['CONTRACTOR'], name: 'Incident report' },
       });
       const changed = saved(changeFormEndpoint, answer);
       expect(changed).toEqual({
         record: {
           ...incident,
           name: 'Incident report',
-          enabled: false,
           incidentOffers: ['CONTRACTOR'],
         },
         warnings: [],
@@ -497,7 +313,7 @@ describe('a form and the debris types on it', () => {
           tableName: 'form',
           operation: 'UPDATE',
           actorId: who.dana,
-          changedFields: ['enabled', 'incident_offers', 'name'],
+          changedFields: ['incident_offers', 'name'],
         },
       ]);
       const roe = await form('ROE', 'Right of entry', { gpsRequired: false });
@@ -520,7 +336,7 @@ describe('a form and the debris types on it', () => {
     });
   });
 
-  it('AC-01-27 a debris type is taken off P1’s load form, archived, never deleted, and put back as it was; its entry changed, one not Reduced on the haul-out form warned of; each queues its form’s tickets', async () => {
+  it('ADR-527 (5), ADR-529 (g) a debris type’s entry is changed: hidden on phones takes it off their list, never archived; one not Reduced on the haul-out form is warned of; each queues its form’s tickets', async () => {
     await world(async (api, tx) => {
       const dana = await api.signedIn(danasEmail, long);
       const { forms, debrisType } = await p1Priced(api, dana, tx);
@@ -534,18 +350,6 @@ describe('a form and the debris types on it', () => {
         ).record;
       const cd = await entry(forms.load, 'C&D', false);
       const ids = { formDebrisTypeId: cd.id };
-      const off = saved(
-        archiveFormDebrisTypeEndpoint,
-        await ask(api, dana, archiveFormDebrisTypeEndpoint, { ids }),
-      );
-      expect([off.record, off.queued?.tickets]).toEqual([{ ...cd, archived: true }, 0]);
-      expect(await tx.formDebrisType.count({ where: { id: cd.id } })).toBe(1);
-      expect(
-        saved(
-          unarchiveFormDebrisTypeEndpoint,
-          await ask(api, dana, unarchiveFormDebrisTypeEndpoint, { ids }),
-        ).record,
-      ).toEqual(cd);
       expect(
         saved(
           changeFormDebrisTypeEndpoint,
@@ -695,62 +499,11 @@ describe('a value added to any of the firm’s lists', () => {
 });
 
 describe('pay items, rates, a crew day’s steps and rules', () => {
-  it('ADR-527 (7) a pay item is archived and put back, its band asked again: one that would overlap another of its payable type isn’t put back; each queues the project', async () => {
-    await world(async (api, tx) => {
-      const dana = await api.signedIn(danasEmail, long);
-      const { each } = await p1Priced(api, dana, tx);
-      const small = saved(
-        createPayItemEndpoint,
-        await each('HNG-RMV-EA-S', 'Hangers 2–6 in', 'Hangers', '45.00', { from: 2, to: 6 }),
-      ).record;
-      const ids = { payItemId: small.id };
-      const archived = saved(
-        archivePayItemEndpoint,
-        await ask(api, dana, archivePayItemEndpoint, { ids }),
-      );
-      expect([archived.record.archived, archived.queued?.tickets]).toEqual([true, 0]);
-      expect(
-        saved(unarchivePayItemEndpoint, await ask(api, dana, unarchivePayItemEndpoint, { ids }))
-          .record,
-      ).toEqual(small);
-      saved(archivePayItemEndpoint, await ask(api, dana, archivePayItemEndpoint, { ids }));
-      // While it is archived another takes its band, so it can't come back as it was.
-      saved(
-        createPayItemEndpoint,
-        await each('HNG-RMV-EA', 'Hangers 2 in and up', 'Hangers', '50.00', {
-          from: 2,
-          to: null,
-        }),
-      );
-      const [reason] = notSaved(await ask(api, dana, unarchivePayItemEndpoint, { ids }));
-      expect(reason).toBe('SIZE_BAND_OVERLAP');
-      expect((await tx.payItem.findUniqueOrThrow({ where: { id: small.id } })).archivedAt).not.toBe(
-        null,
-      );
-    });
-  });
-
-  it('ADR-527 (7) a prime’s rate is taken off and set again on its own row; a crew day’s steps are stated whole, one first hour one row, two that share an hour refused, steps on a pay item not paid in them warned of', async () => {
+  it('ADR-527 (7) a crew day’s steps are stated whole, one first hour one row, two that share an hour refused, steps on a pay item not paid in them warned of', async () => {
     await world(async (api, tx) => {
       const dana = await api.signedIn(danasEmail, long);
       const { coastline, veg15, payItem, payableType } = await p1Priced(api, dana, tx);
       const veg = saved(createPayItemEndpoint, await veg15()).record;
-      const rateIds = { payItemId: veg.id, primeId: coastline };
-      const off = saved(
-        archivePayItemRateEndpoint,
-        await ask(api, dana, archivePayItemRateEndpoint, { ids: rateIds }),
-      );
-      expect([off.record.rate, off.record.archived, off.queued?.tickets]).toEqual([
-        '7.50',
-        true,
-        0,
-      ]);
-      const back = saved(
-        setPayItemRateEndpoint,
-        await ask(api, dana, setPayItemRateEndpoint, { ids: rateIds, payload: { rate: '7.50' } }),
-      ).record;
-      expect([back.id, back.archived]).toEqual([off.record.id, false]);
-
       const crew = saved(
         createPayItemEndpoint,
         await payItem({
@@ -816,86 +569,15 @@ describe('pay items, rates, a crew day’s steps and rules', () => {
       expect(unread.warnings.map(({ code }) => code)).toEqual(['CREW_DAY_STEPS_UNREAD']);
     });
   });
-
-  it('ADR-527 (8) a rule is archived and put back from the rule builder, an exact copy of another not put back; a rule a pay item’s "Pays when" wrote is archived only there', async () => {
-    await world(async (api, tx) => {
-      const dana = await api.signedIn(danasEmail, long);
-      const { ids, forms, contract, veg15 } = await p1Priced(api, dana, tx);
-      const veg = saved(createPayItemEndpoint, await veg15()).record;
-      const rule = {
-        formId: forms.load,
-        name: 'Every load, near',
-        contractId: contract,
-        active: true,
-        criteria: [{ criterion: 'MILEAGE', operator: 'AT_MOST', numberFrom: 15 }],
-        actions: [{ kind: 'ADD_TRANSACTION', slot: 1, payItemId: veg.id }],
-      };
-      const written = saved(
-        createRuleEndpoint,
-        await ask(api, dana, createRuleEndpoint, { ids, payload: rule }),
-      ).record;
-      const ruleIds = { ruleId: written.id };
-      const archived = saved(
-        archiveRuleEndpoint,
-        await ask(api, dana, archiveRuleEndpoint, { ids: ruleIds }),
-      );
-      expect([archived.record, archived.queued?.tickets]).toEqual([written, 0]);
-      expect((await tx.rule.findUniqueOrThrow({ where: { id: written.id } })).archivedAt).not.toBe(
-        null,
-      );
-      // While it is archived, its copy is written; it then can't come back beside it.
-      const copy = saved(
-        createRuleEndpoint,
-        await ask(api, dana, createRuleEndpoint, {
-          ids,
-          payload: { ...rule, name: 'Every load, near (again)' },
-        }),
-      ).record;
-      expect(notSaved(await ask(api, dana, unarchiveRuleEndpoint, { ids: ruleIds }))).toEqual([
-        'RULE_DUPLICATE',
-        'Not saved: this rule is the same as "Every load, near (again)".',
-      ]);
-      saved(
-        archiveRuleEndpoint,
-        await ask(api, dana, archiveRuleEndpoint, { ids: { ruleId: copy.id } }),
-      );
-      expect(
-        saved(unarchiveRuleEndpoint, await ask(api, dana, unarchiveRuleEndpoint, { ids: ruleIds }))
-          .record.valid,
-      ).toBe(true);
-      const kept = saved(
-        savePaysWhenEndpoint,
-        await ask(api, dana, savePaysWhenEndpoint, {
-          ids: { payItemId: veg.id },
-          payload: { pays: [{ formId: forms.haulOut, slot: 1, criteria: [] }] },
-        }),
-      ).record;
-      const [fromPayItem] = kept.added;
-      expect(
-        notSaved(await ask(api, dana, archiveRuleEndpoint, { ids: { ruleId: fromPayItem ?? '' } })),
-      ).toEqual([
-        'RULE_FROM_PAY_ITEM',
-        'Not saved: this rule is from pay item VEG-HAUL-CY-15. Change it on the pay item.',
-      ]);
-    });
-  });
 });
 
 describe('a site, its labels and its tipping fee link', () => {
-  it('ADR-527 (9) a site is archived and put back, its tickets queued; AC-01-58 the firm’s own label "burn site" is given, taken off and given back on its one row, queueing nothing; the tipping fee link is taken off and linked again', async () => {
+  it('AC-01-58 the firm’s own label "burn site" is given, removed when given by mistake and given back on its one row, queueing nothing; a tipping fee link made by mistake is removed and linked again (ADR-529 (g))', async () => {
     await world(async (api, tx) => {
       const dana = await api.signedIn(danasEmail, long);
       const { project, payItem, payableType, coastline } = await p1Priced(api, dana, tx);
       const site = await marshRoad(api, dana, tx, project.id);
       const ids = { siteId: site.id };
-      const archived = saved(
-        archiveSiteEndpoint,
-        await ask(api, dana, archiveSiteEndpoint, { ids }),
-      );
-      expect([archived.record, archived.queued?.tickets]).toEqual([{ ...site, archived: true }, 0]);
-      expect(
-        saved(unarchiveSiteEndpoint, await ask(api, dana, unarchiveSiteEndpoint, { ids })).record,
-      ).toEqual(site);
       const burn = await tx.siteLabel.create({ data: { name: 'Burn site', position: 99 } });
       const labelIds = { siteId: site.id, siteLabelId: burn.id };
       const given = saved(
@@ -909,8 +591,8 @@ describe('a site, its labels and its tipping fee link', () => {
       expect(await auditedBy(tx, again.requestId)).toEqual([]);
       expect(
         saved(
-          archiveSiteLabelEndpoint,
-          await ask(api, dana, archiveSiteLabelEndpoint, { ids: labelIds }),
+          removeSiteLabelEndpoint,
+          await ask(api, dana, removeSiteLabelEndpoint, { ids: labelIds }),
         ).record,
       ).toEqual({ ...given.record, archived: true });
       expect(
@@ -934,8 +616,8 @@ describe('a site, its labels and its tipping fee link', () => {
         await ask(api, dana, linkTippingFeeEndpoint, { ids, payload: { payItemId: fee.id } }),
       ).record;
       const off = saved(
-        archiveTippingFeeEndpoint,
-        await ask(api, dana, archiveTippingFeeEndpoint, {
+        removeTippingFeeEndpoint,
+        await ask(api, dana, removeTippingFeeEndpoint, {
           ids: { siteId: site.id, payItemId: fee.id },
         }),
       );
@@ -951,7 +633,7 @@ describe('a site, its labels and its tipping fee link', () => {
 });
 
 describe('people', () => {
-  it('AC-02-03 Kim Nguyen’s employer, Harbor Staffing, and its own ID for her, HS-0417, are set by a request, and cleared; an employer the firm doesn’t hold in service is refused; her address cleared, a monitor’s; Luis’s, who signs in with his, is not; an ID with no employer is the database’s to refuse', async () => {
+  it('AC-02-03 Kim Nguyen’s employer, Harbor Staffing, and its own ID for her, HS-0417, are set by a request, and cleared; an employer the firm doesn’t hold is refused; her address cleared, a monitor’s; Luis’s, who signs in with his, is not; an ID with no employer is the database’s to refuse', async () => {
     await world(async (api, tx, who) => {
       const dana = await api.signedIn(danasEmail, long);
       const harbor = saved(
@@ -979,15 +661,11 @@ describe('people', () => {
         payload: { email: null },
       });
       expect(told(luis)).toEqual([422, 'EMAIL_SIGNS_IN']);
-      saved(
-        archiveContractorEndpoint,
-        await ask(api, dana, archiveContractorEndpoint, { ids: { contractorId: harbor.id } }),
-      );
       expect(
         told(
           await ask(api, dana, changePersonEndpoint, {
             ids: { userId: who.luis },
-            payload: { employerId: harbor.id },
+            payload: { employerId: randomUUID() },
           }),
         ),
       ).toEqual([422, 'UNKNOWN_CONTRACTOR']);
@@ -1007,48 +685,6 @@ describe('people', () => {
       expect(plainly(refused)).toBe(
         'Not saved: an employer’s ID for a person is kept only beside their employer.',
       );
-    });
-  });
-
-  it('ADR-527 (12) a contractor user isn’t brought out of the archive while their contractor is archived; with it put back, they are, as they were', async () => {
-    await world(async (api) => {
-      const dana = await api.signedIn(danasEmail, long);
-      const coastline = saved(
-        createContractorEndpoint,
-        await ask(api, dana, createContractorEndpoint, {
-          payload: { name: 'Coastline Haulers LLC', kind: 'HAULER' },
-        }),
-      ).record;
-      const user = saved(
-        createPersonEndpoint,
-        await ask(api, dana, createPersonEndpoint, {
-          payload: {
-            name: 'Coastline dispatch',
-            email: 'dispatch@coastline.example',
-            role: 'READ_ONLY_VIEWER',
-            viewerKind: 'CONTRACTOR',
-            contractorId: coastline.id,
-          },
-        }),
-      );
-      const ids = { userId: user.id };
-      saved(archivePersonEndpoint, await ask(api, dana, archivePersonEndpoint, { ids }));
-      const contractorIds = { contractorId: coastline.id };
-      saved(
-        archiveContractorEndpoint,
-        await ask(api, dana, archiveContractorEndpoint, { ids: contractorIds }),
-      );
-      expect(told(await ask(api, dana, unarchivePersonEndpoint, { ids }))).toEqual([
-        422,
-        'UNKNOWN_CONTRACTOR',
-      ]);
-      saved(
-        unarchiveContractorEndpoint,
-        await ask(api, dana, unarchiveContractorEndpoint, { ids: contractorIds }),
-      );
-      expect(
-        saved(unarchivePersonEndpoint, await ask(api, dana, unarchivePersonEndpoint, { ids })),
-      ).toEqual(user);
     });
   });
 });
@@ -1118,7 +754,7 @@ describe('the forms of a new project', () => {
           createFormEndpoint,
           await ask(api, dana, createFormEndpoint, {
             ids: { projectId: project.id },
-            payload: { documentType: 'SURVEY', name: 'Pre-work survey', enabled: true },
+            payload: { documentType: 'SURVEY', name: 'Pre-work survey' },
           }),
         ).record.archived,
       ).toBe(false);

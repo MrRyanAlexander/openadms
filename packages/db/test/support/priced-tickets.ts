@@ -317,7 +317,6 @@ export class PricedTickets {
       project_id: world.p1,
       name: 'Unit rate',
       document_type: 'UNIT_RATE',
-      enabled: true,
     });
     const rule = await this.add(
       'rule',

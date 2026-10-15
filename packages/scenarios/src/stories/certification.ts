@@ -8,7 +8,7 @@
 //
 // Then what happens later: a measuring mistake corrected in place, the capacity worked out again
 // (AC-03-51); a modified truck certified again, replacing its old certification; a revocation;
-// and two spellings of one sub merged by the back office. Along the way the service
+// and two spellings of one sub, never merged (ADR-529 (f)). Along the way the service
 // refuses only what can't be a certification (measurements that give no capacity, a crew with
 // boxes, a tier 2 sub with no tier 1, a revocation with no reason), saving nothing.
 //
@@ -29,7 +29,7 @@ import {
   revokeCertificationEndpoint,
   setPermissionsEndpoint,
 } from '@open-adms/contracts';
-import { NewProjectSettings } from '@open-adms/domain';
+import { NewProjectSettings, SubNames } from '@open-adms/domain';
 
 import { utcOffsetMinutes } from '../clock.ts';
 import { uuidv7 } from '../ids.ts';
@@ -564,10 +564,6 @@ export const certification: Story = {
       ),
       ['SUB_PLACED_ELSEWHERE'],
     );
-    const riveras = await api.contractor.findMany({
-      where: { name: 'Rivera Trucking' },
-      orderBy: { createdAt: 'asc' },
-    });
     story.check(
       'AC-03-05 the sheet’s number is kept as written; Rivera’s own place on P1 is unmoved',
       await certified(p1),
@@ -587,8 +583,7 @@ export const certification: Story = {
       on('13', '16:20'),
       'Tuesday: Dana gives Luis Setup and the grant to correct. He finds the sideboards on 730423 were typed 21 high; they are 12, and he corrects them at his browser',
     );
-    // A measuring mistake takes correct; he merges two spellings of a sub later, and a
-    // contractor's record is setup's (ADR-424). Her request at his record; he holds nothing yet.
+    // A measuring mistake takes correct, and a contractor's record is setup's (ADR-424). Her request at his record; he holds nothing yet.
     await (
       await danas()
     ).answered(setPermissionsEndpoint, {
@@ -721,7 +716,7 @@ export const certification: Story = {
     // ------------------------------------------------------------------------------------------
     story.at(
       on('14', '10:15'),
-      'Another Rivera truck, 730425, is certified with its sub typed "Rivera Trucking Inc"; Luis merges the two spellings',
+      'Another Rivera truck, 730425, is certified with its sub typed "Rivera Trucking Inc": a second spelling, never merged (ADR-529 (f))',
     );
     const secondTruck = await saved(
       certifications.certify(
@@ -735,43 +730,32 @@ export const certification: Story = {
     const typedAgain = await api.contractor.findFirstOrThrow({
       where: { name: 'Rivera Trucking Inc' },
     });
-    const [kept, underSummit] = riveras;
-    if (kept === undefined || underSummit === undefined)
-      throw new Error('Two Rivera records were expected.');
     story.check(
-      'the Rivera under Summit isn’t merged into the Rivera under Coastline: a sub is never shared',
-      await refused(contractors.merge(luis, underSummit.id, kept.id)),
-      'MERGE_PLACES_DIFFER: Not merged: on Bayline County ROW, Hurricane Delphine, Rivera Trucking is Summit Debris Services’s tier 1 sub and Rivera Trucking is Coastline Haulers LLC’s tier 1 sub. A contractor has one place on a project, and a sub is never shared between primes.',
-    );
-    const merged = await saved(contractors.merge(luis, typedAgain.id, kept.id));
-    const renamed = await api.certification.findUniqueOrThrow({ where: { id: secondTruck.id } });
-    story.check(
-      'AC-01-21 "Rivera Trucking Inc" is archived, merged into "Rivera Trucking"; 730425 names the kept record; nothing was deleted',
+      'AC-01-21 (ADR-529 (f)) both spellings stand, each its own record and place; nothing merges them, and 730425 names the spelling Sam typed. The worker flags the certifications that name either, "Rivera Trucking" and "Rivera Trucking Inc" being alike, and Tidewater Hauling never (the story p1-reviewed)',
       [
-        merged.mergedIntoId === kept.id,
-        merged.archivedAt !== null,
-        renamed.firstTierSubId === kept.id,
+        secondTruck.firstTierSubId === typedAgain.id,
+        typedAgain.archivedAt,
         await api.contractor.count({ where: { name: { startsWith: 'Rivera' } } }),
         await placesOn(p1),
+        [
+          SubNames.alike('Rivera Trucking', 'Rivera Trucking Inc'),
+          SubNames.alike('Rivera Trucking Inc', 'Tidewater Hauling'),
+        ],
       ],
       [
         true,
-        true,
-        true,
+        null,
         3,
         [
           'Coastline Haulers LLC: prime',
           'Summit Debris Services: prime',
           'Rivera Trucking: tier 1 under Coastline Haulers LLC',
           'Rivera Trucking: tier 1 under Summit Debris Services',
+          'Rivera Trucking Inc: tier 1 under Coastline Haulers LLC',
           'Tidewater Hauling: tier 2 under Coastline Haulers LLC',
         ],
+        [true, false],
       ],
-    );
-    story.check(
-      'a record already merged is never merged again',
-      await refused(contractors.merge(luis, typedAgain.id, underSummit.id)),
-      'MERGE_ALREADY_MERGED: Not merged: Rivera Trucking Inc was already merged into another contractor.',
     );
 
     // ------------------------------------------------------------------------------------------
@@ -796,7 +780,8 @@ export const certification: Story = {
         'Sam: certification_box INSERT (DEVICE)': 14,
         'Sam: certification_helper INSERT (DEVICE)': 1,
         'Luis: certification_box UPDATE (BACK_OFFICE)': 1,
-        'Luis: certification UPDATE (BACK_OFFICE)': 2,
+        // His box corrected; no merge re-points one since ADR-529 (f).
+        'Luis: certification UPDATE (BACK_OFFICE)': 1,
         'Dana: certification UPDATE (BACK_OFFICE)': 1,
       },
     );

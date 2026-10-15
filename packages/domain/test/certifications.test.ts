@@ -1,17 +1,17 @@
-// A sub typed in at certification, what a later change must say, and what a merge of two
-// spellings moves, at the domain (spec/acceptance/03-certification.md AC-03-11, 12, 53, 55, 56;
-// spec/acceptance/01-setup.md AC-01-17, 21; ADR-108, 321). The contractors are the example
+// A sub typed in at certification, what a later change must say, and two spellings of one sub
+// told apart, at the domain (spec/acceptance/03-certification.md AC-03-11, 12, 53, 55, 56;
+// spec/acceptance/01-setup.md AC-01-17, 21; ADR-108, 321, 529 (f)). The contractors are the example
 // world's: Coastline Haulers LLC and Summit Debris Services, P1's primes; Rivera Trucking, under
 // Coastline; Tidewater Hauling, under Rivera.
 import { describe, expect, it } from 'vitest';
 
 import {
   CertificationChanges,
+  CertificationChecks,
   CertificationSubs,
-  ContractorMerge,
+  SubNames,
   type ContractorPlace,
   type KnownContractor,
-  type MergeParty,
 } from '../src/index.ts';
 
 const coastline = { id: 'coastline', name: 'Coastline Haulers LLC' };
@@ -190,82 +190,47 @@ describe('a later change to a certification', () => {
   });
 });
 
-describe('merging two spellings of a sub', () => {
-  const on = (projectId: string, place: ContractorPlace) => ({
-    ...place,
-    projectId,
-    projectName: projectId === 'p1' ? 'Bayline County ROW' : 'Bayline County PPDR',
-  });
-  const party = (id: string, name: string, places: MergeParty['places'] = []): MergeParty => ({
-    id,
-    name,
-    archived: false,
-    mergedIntoId: null,
-    places,
-  });
-  const kept = party('rivera', 'Rivera Trucking', [on('p1', sub(coastline, 1))]);
-
-  it('AC-01-21 "Rivera Trucking Inc" into "Rivera Trucking", both Coastline’s tier 1 subs on P1: the kept record keeps its own place', () => {
-    const merge = new ContractorMerge(
-      party('rivera-inc', 'Rivera Trucking Inc', [on('p1', sub(coastline, 1))]),
-      kept,
-    );
-    expect(merge.check()).toBeNull();
-    expect(merge.moves()).toEqual([
-      { projectId: 'p1', tier: 1, primeId: 'coastline', keptPlace: 'ITS_OWN' },
-    ]);
+describe('two spellings of one sub (ADR-529 (f))', () => {
+  it('are alike once case, spaces, punctuation, a leading "The", "&" and a company ending are set aside; never the same name twice', () => {
+    expect(SubNames.key('Rivera Trucking, LLC.')).toBe('rivera trucking');
+    expect(SubNames.key('The Rivera  Trucking Co')).toBe('rivera trucking');
+    expect(SubNames.key('Tidewater Hauling & Grading Inc')).toBe('tidewater hauling and grading');
+    expect(SubNames.key('Co')).toBe('co');
+    expect(SubNames.key('Rivera Trucking Co., LLC')).toBe('rivera trucking');
+    expect(SubNames.alike('Rivera Trucking', 'Rivera Trucking Co')).toBe(true);
+    expect(SubNames.alike('Rivera Trucking', 'rivera trucking')).toBe(true);
+    expect(SubNames.alike('Rivera Trucking', 'Rivera Trucking')).toBe(false);
+    expect(SubNames.alike('Rivera Trucking', 'Rivera Hauling')).toBe(false);
+    expect(SubNames.alike('Tidewater Hauling', 'Tidewater Hauling and Grading')).toBe(false);
   });
 
-  it('the duplicate is on a project the kept record isn’t on: the kept record takes its place there; one taken off is put back', () => {
-    const duplicate = party('rivera-inc', 'Rivera Trucking Inc', [
-      on('p1', sub(coastline, 1)),
-      on('p2', sub(coastline, 2)),
+  it('flag each certification that names either, saying both names, never which is right; a sub alone, or none, is not flagged', () => {
+    const checks = new CertificationChecks('America/New_York');
+    const subs = ['Rivera Trucking', 'Rivera Trucking Co', 'Tidewater Hauling'];
+    const flagged = checks.subs('730416', ['Rivera Trucking Co', 'Tidewater Hauling'], subs);
+    expect(flagged.map(({ code, message, billing }) => ({ code, message, billing }))).toEqual([
+      {
+        code: 'SUB_NAME_ALIKE',
+        message:
+          'Certification 730416: sub “Rivera Trucking Co” looks like “Rivera Trucking” on this project.',
+        billing: 'BILLS',
+      },
     ]);
-    expect(new ContractorMerge(duplicate, kept).moves()).toEqual([
-      { projectId: 'p1', tier: 1, primeId: 'coastline', keptPlace: 'ITS_OWN' },
-      { projectId: 'p2', tier: 2, primeId: 'coastline', keptPlace: 'NEW' },
+    expect(
+      checks.subs('730417', ['Rivera Trucking', null], subs).map(({ message }) => message),
+    ).toEqual([
+      'Certification 730417: sub “Rivera Trucking” looks like “Rivera Trucking Co” on this project.',
     ]);
-    const takenOff = party('rivera', 'Rivera Trucking', [on('p1', sub(coastline, 1, true))]);
-    expect(new ContractorMerge(duplicate, takenOff).moves()[0]).toMatchObject({
-      keptPlace: 'PUT_BACK',
-    });
-  });
-
-  it('AC-01-17 the two are under different primes, or in different tiers, on one project: not merged, since a sub is never shared', () => {
-    const underSummit = party('rivera-2', 'Rivera Trucking', [on('p1', sub(summit, 1))]);
-    expect(new ContractorMerge(underSummit, kept).check()).toEqual({
-      code: 'MERGE_PLACES_DIFFER',
-      message:
-        'Not merged: on Bayline County ROW, Rivera Trucking is Summit Debris Services’s tier 1 sub and Rivera Trucking is Coastline Haulers LLC’s tier 1 sub. A contractor has one place on a project, and a sub is never shared between primes.',
-    });
-    const tierTwo = party('rivera-2', 'Rivera Trucking', [on('p1', sub(coastline, 2))]);
-    expect(new ContractorMerge(tierTwo, kept).check()).toMatchObject({
-      code: 'MERGE_PLACES_DIFFER',
-    });
-  });
-
-  it('never into itself, never a record already merged, never into an archived one, never a prime', () => {
-    expect(new ContractorMerge(kept, kept).check()).toMatchObject({ code: 'MERGE_INTO_ITSELF' });
-    const merged = {
-      ...party('rivera-inc', 'Rivera Trucking Inc'),
-      archived: true,
-      mergedIntoId: 'rivera',
-    };
-    expect(new ContractorMerge(merged, kept).check()).toMatchObject({
-      code: 'MERGE_ALREADY_MERGED',
-    });
-    expect(new ContractorMerge(party('rivera-3', 'Rivera Trkg'), merged).check()).toEqual({
-      code: 'MERGE_INTO_ARCHIVED',
-      message:
-        'Not merged: Rivera Trucking Inc is archived (it was merged into another contractor). Merge into the contractor that is kept.',
-    });
-    const prime = party('summit', summit.name, [
-      on('p1', { tier: null, primeId: null, primeName: null, archived: false }),
+    expect(checks.subs('730418', ['Tidewater Hauling', null], subs)).toEqual([]);
+    expect(checks.subs('730419', [null, null], subs)).toEqual([]);
+    // Alike two others: each said, in name order.
+    expect(
+      checks
+        .subs('730420', ['Rivera Trucking'], ['Rivera Trucking LLC', ...subs])
+        .map(({ facts }) => facts),
+    ).toEqual([
+      { sub: 'Rivera Trucking', alike: 'Rivera Trucking Co', key: 'rivera trucking' },
+      { sub: 'Rivera Trucking', alike: 'Rivera Trucking LLC', key: 'rivera trucking' },
     ]);
-    expect(new ContractorMerge(prime, kept).check()).toEqual({
-      code: 'MERGE_OF_A_PRIME',
-      message:
-        'Not merged: Summit Debris Services is a prime on Bayline County ROW; its contracts, rates and rules name it. Only a sub typed in at certification is merged.',
-    });
   });
 });

@@ -207,22 +207,17 @@ export const goldenMission: Story = {
       }),
     );
     const p2Load = (
-      await saved(
-        forms.form(dana, { projectId: p2, documentType: 'LOAD', name: 'Load', enabled: true }),
-      )
+      await saved(forms.form(dana, { projectId: p2, documentType: 'LOAD', name: 'Load' }))
     ).id;
     await saved(
       forms.form(dana, {
         projectId: p2,
         documentType: 'ROE',
         name: 'ROE',
-        enabled: true,
         gpsRequired: false,
       }),
     );
-    await saved(
-      forms.form(dana, { projectId: p2, documentType: 'SURVEY', name: 'Survey', enabled: true }),
-    );
+    await saved(forms.form(dana, { projectId: p2, documentType: 'SURVEY', name: 'Survey' }));
     const p2Vegetative = (
       await saved(
         forms.debrisType(dana, {

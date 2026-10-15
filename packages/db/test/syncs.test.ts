@@ -672,10 +672,11 @@ describe('a record the server could not save, held for a person', () => {
       (
         await db.rows<{ reason: string }>(
           `SELECT enumlabel::text AS reason FROM pg_enum
-           WHERE enumtypid = 'not_saved_reason'::regtype ORDER BY enumsortorder`,
+           WHERE enumtypid = 'not_saved_reason'::regtype ORDER BY enumlabel`,
         )
       ).map((row) => row.reason),
-    ).toEqual([...heldReasons]);
+      // By name: the database keeps a value added later last (`PROJECT_CLOSED`, ADR-529).
+    ).toEqual([...heldReasons].sort());
     await forThePhone();
     const sync = await synced();
     const tried = (more: Row): Promise<string> =>

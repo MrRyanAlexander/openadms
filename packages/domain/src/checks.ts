@@ -22,6 +22,7 @@ import {
   type FlagRaised,
   type FlagSubject,
 } from './flags.ts';
+import { SubNames } from './certifications.ts';
 import { timesOverlap } from './neighbours.ts';
 import type { GroupedFieldEvent, Ticket } from './tickets.ts';
 
@@ -662,5 +663,28 @@ export class CertificationChecks {
           { missing: view, present: certificationViews.filter((seen) => present.has(seen)) },
         ),
       );
+  }
+
+  // One flag for each sub it names whose name is alike another sub's on the project (ADR-529
+  // (f)): the same company spelled two ways, perhaps. Never which spelling is right.
+  subs(
+    certNumber: string,
+    named: readonly (string | null)[],
+    projectSubs: readonly string[],
+  ): readonly FlagRaised[] {
+    return named.flatMap((sub) => {
+      if (sub === null) return [];
+      return projectSubs
+        .filter((other) => SubNames.alike(sub, other))
+        .sort()
+        .map((alike) =>
+          this.flags.raise(
+            'SUB_NAME_ALIKE',
+            { certNumber },
+            { sub, alike },
+            { sub, alike, key: SubNames.key(sub) },
+          ),
+        );
+    });
   }
 }

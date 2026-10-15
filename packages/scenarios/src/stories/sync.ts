@@ -226,7 +226,6 @@ export const sync: Story = {
             projectId,
             documentType,
             name: documentType,
-            enabled: true,
             ...more,
           }),
         )

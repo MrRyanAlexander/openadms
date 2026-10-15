@@ -1,17 +1,18 @@
-// What setup says as the firm's records are changed, archived and put back (spec/LISTS.md;
-// spec/parts/01-setup.md; ADR-087, 108, 194, 302, 527): a built-in value is renamed and never
-// archived; a contractor merged into another is never put back; a crew day's steps never share
-// an hour; and a merge says what still names the contractor it archived. Setup refuses only a
-// bad setting, in plain words, and saves a warning with what it saves.
+// What setup says as the firm's lists are added to, renamed and archived, and a crew day's steps
+// stated (spec/LISTS.md; spec/parts/01-setup.md; ADR-087, 194, 302, 527, 529): a value states what
+// its list asks; a built-in value is renamed and never archived; a crew day's steps never share
+// an hour. Setup refuses only a bad setting, in plain words, and saves a warning with what it
+// saves.
 import type { SetupWarning } from './form-debris-types.ts';
 
 export interface SetupRecordRefusal {
   readonly code:
     | 'BUILT_IN_KEPT'
     | 'LIST_VALUE_SETTINGS'
-    | 'CONTRACTOR_MERGED'
     | 'CREW_DAY_STEPS_OVERLAP'
-    | 'CREW_DAY_STEPS_INVALID';
+    | 'CREW_DAY_STEPS_INVALID'
+    | 'PROJECT_WORK_UNDER_WAY'
+    | 'PROJECT_NOT_CLOSED';
   readonly message: string;
 }
 
@@ -92,63 +93,6 @@ export class ListValues {
   }
 }
 
-export class FirmRecords {
-  // A contractor archived as a second spelling of another points at the one kept: putting it back
-  // would give the firm two records of one company again (ADR-108).
-  putBackRefusal(contractor: {
-    readonly name: string;
-    readonly mergedIntoId: string | null;
-  }): SetupRecordRefusal | null {
-    if (contractor.mergedIntoId === null) return null;
-    return {
-      code: 'CONTRACTOR_MERGED',
-      message: `Not put back: ${contractor.name} was merged into another contractor, which is the one kept.`,
-    };
-  }
-
-  // What a merge leaves naming the contractor it archived, each said once (ADR-527 (11)): it moves
-  // certifications and places only. A rule's pick is the rule builder's to change; whom a person
-  // works for, and whose user a viewer is, an admin's.
-  mergeLeftNaming(
-    duplicateName: string,
-    keptName: string,
-    left: { readonly rulePicks: number; readonly employees: number; readonly viewers: number },
-  ): SetupWarning[] {
-    const counted = (count: number, one: string, many: string): string =>
-      `${String(count)} ${count === 1 ? one : many}`;
-    const said = (what: string, change: string): SetupWarning => ({
-      code: 'MERGE_LEFT_NAMING',
-      message: `Merged into ${keptName}, but ${what} still name${what.startsWith('1 ') ? 's' : ''} ${duplicateName}: ${change}.`,
-    });
-    return [
-      ...(left.rulePicks === 0
-        ? []
-        : [
-            said(
-              counted(left.rulePicks, 'rule pick', 'rule picks'),
-              'change them in the rule builder',
-            ),
-          ]),
-      ...(left.employees === 0
-        ? []
-        : [
-            said(
-              counted(left.employees, 'person it employs', 'people it employs'),
-              'an admin changes their employer',
-            ),
-          ]),
-      ...(left.viewers === 0
-        ? []
-        : [
-            said(
-              counted(left.viewers, 'contractor user', 'contractor users'),
-              'an admin changes whose user they are',
-            ),
-          ]),
-    ];
-  }
-}
-
 // One step of a crew day paid in steps: the hours from and to, both included, and the quantity
 // they bill, as exact decimals ("1.50", "4.50", "0.25").
 export interface CrewDayStep {
@@ -213,5 +157,95 @@ export class CrewDaySteps {
           ]
         : [];
     return { refusal: null, warnings: unread };
+  }
+}
+
+// What is still open on a project as an admin closes it (ADR-529 (b)), counted.
+export interface ProjectOpenItems {
+  // The phones that took its work and still hold their key (never turned in), by name.
+  readonly phonesNotTurnedIn: readonly string[];
+  readonly ticketsNotQcApproved: number;
+  readonly ticketsNotInvoiced: number;
+  readonly heldWaiting: number;
+  readonly quarantinedWaiting: number;
+  // Jobs the worker has yet to take up for it.
+  readonly jobsWaiting: number;
+}
+
+export interface ClosingItem extends SetupWarning {
+  readonly code:
+    | 'PHONES_NOT_TURNED_IN'
+    | 'TICKETS_NOT_QC_APPROVED'
+    | 'TICKETS_NOT_INVOICED'
+    | 'HELD_WAITING'
+    | 'QUARANTINED_WAITING';
+}
+
+// A project closed by an admin, by hand (ADR-529 (b)): what is still open is shown, and the admin
+// confirms; it never stops the close. Only work the worker has under way does, for a moment: a
+// closed project changes no more, so its waiting jobs could never finish.
+export class ProjectClosing {
+  private readonly open: ProjectOpenItems;
+
+  constructor(open: ProjectOpenItems) {
+    this.open = open;
+  }
+
+  items(): readonly ClosingItem[] {
+    const counted = (count: number, one: string, many: string): string =>
+      `${String(count)} ${count === 1 ? one : many}`;
+    const { open } = this;
+    const items: ClosingItem[] = [];
+    if (open.phonesNotTurnedIn.length > 0) {
+      items.push({
+        code: 'PHONES_NOT_TURNED_IN',
+        message: `${counted(open.phonesNotTurnedIn.length, 'phone that took its work hasn’t', 'phones that took its work haven’t')} been turned in: ${open.phonesNotTurnedIn.join(', ')}.`,
+      });
+    }
+    if (open.ticketsNotQcApproved > 0) {
+      items.push({
+        code: 'TICKETS_NOT_QC_APPROVED',
+        message: `${counted(open.ticketsNotQcApproved, 'ticket isn’t', 'tickets aren’t')} QC Approved.`,
+      });
+    }
+    if (open.ticketsNotInvoiced > 0) {
+      items.push({
+        code: 'TICKETS_NOT_INVOICED',
+        message: `${counted(open.ticketsNotInvoiced, 'ticket isn’t', 'tickets aren’t')} locked as invoiced.`,
+      });
+    }
+    if (open.heldWaiting > 0) {
+      items.push({
+        code: 'HELD_WAITING',
+        message: `${counted(open.heldWaiting, 'record a phone sent waits', 'records phones sent wait')} for a person.`,
+      });
+    }
+    if (open.quarantinedWaiting > 0) {
+      items.push({
+        code: 'QUARANTINED_WAITING',
+        message: `${counted(open.quarantinedWaiting, 'quarantined record waits', 'quarantined records wait')} for a person.`,
+      });
+    }
+    return items;
+  }
+
+  refusal(projectName: string): SetupRecordRefusal | null {
+    if (this.open.jobsWaiting === 0) return null;
+    return {
+      code: 'PROJECT_WORK_UNDER_WAY',
+      message: `Not closed: the worker is still working ${projectName}’s tickets. Close it again in a moment.`,
+    };
+  }
+
+  // A project reopened is one that is closed, and says why (the reason is asked by the request).
+  static reopenRefusal(project: {
+    readonly name: string;
+    readonly closedAt: Date | null;
+  }): SetupRecordRefusal | null {
+    if (project.closedAt !== null) return null;
+    return {
+      code: 'PROJECT_NOT_CLOSED',
+      message: `Not reopened: ${project.name} isn’t closed.`,
+    };
   }
 }

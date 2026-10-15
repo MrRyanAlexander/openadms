@@ -112,6 +112,13 @@ export const clientRecordSchema = z.strictObject({
 
 export type ClientRecord = z.infer<typeof clientRecordSchema>;
 
+// What is still open on a project as an admin closes it (ADR-529 (b)), each in plain words.
+export const closingCheckAnswerSchema = z.strictObject({
+  items: z.array(z.strictObject({ code: z.string().min(1), message: z.string().min(1) })),
+});
+
+export type ClosingCheckAnswer = z.infer<typeof closingCheckAnswerSchema>;
+
 export const declarationEventRecordSchema = z.strictObject({
   id,
   name: z.string(),
@@ -240,7 +247,6 @@ export const formRecordSchema = z.strictObject({
   projectId: id,
   documentType: z.enum(formDocumentTypes),
   name: z.string(),
-  enabled: z.boolean(),
   gpsRequired: z.boolean().nullable(),
   incidentOffers: z.array(z.enum(incidentOffers)),
   archived: z.boolean(),

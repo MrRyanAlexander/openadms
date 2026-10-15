@@ -24,12 +24,14 @@ import {
   NewProjectNumbers,
   NewProjectSettings,
   NumberSeriesRules,
+  ProjectClosing,
+  type ClosingItem,
+  type ProjectOpenItems,
   type ProjectSettings,
 } from '@open-adms/domain';
 
 import {
   afterInNameOrder,
-  archiveChange,
   day,
   type Found,
   type Outcome,
@@ -129,7 +131,7 @@ export class ProjectSetup extends QueueingService {
       const rows = await tx.client.findMany({
         where: {
           name: { contains: asked.search, mode: 'insensitive' },
-          archivedAt: asked.archived ? { not: null } : null,
+          archivedAt: null,
           ...afterInNameOrder(last),
         },
         orderBy: [{ name: 'asc' }, { id: 'asc' }],
@@ -159,15 +161,6 @@ export class ProjectSetup extends QueueingService {
     return this.setup(person, (tx) => tx.client.update({ where: { id: clientId }, data: changes }));
   }
 
-  // Off the searches and new picks; the projects under it stay as they are (ADR-527 (1)).
-  archiveClient(person: string, clientId: string, archive: boolean): Promise<Outcome<Client>> {
-    return this.setup(person, async (tx) => {
-      const client = await tx.client.findUniqueOrThrow({ where: { id: clientId } });
-      const change = archiveChange(client.archivedAt, archive, this.clock.now());
-      return change === null ? client : tx.client.update({ where: { id: clientId }, data: change });
-    });
-  }
-
   // Step 2: by its name or its reference; one declaration event is shared by every client's
   // projects under it (ADR-026).
   findDeclarationEvents(asked: Searched): Promise<Found<DeclarationEvent>> {
@@ -179,7 +172,7 @@ export class ProjectSetup extends QueueingService {
       if (asked.after !== undefined && last === null) return { records: [], next: null };
       const rows = await tx.declarationEvent.findMany({
         where: {
-          archivedAt: asked.archived ? { not: null } : null,
+          archivedAt: null,
           AND: [
             {
               OR: [
@@ -218,22 +211,6 @@ export class ProjectSetup extends QueueingService {
     return this.setup(person, (tx) =>
       tx.declarationEvent.update({ where: { id: declarationEventId }, data: changes }),
     );
-  }
-
-  archiveDeclarationEvent(
-    person: string,
-    declarationEventId: string,
-    archive: boolean,
-  ): Promise<Outcome<DeclarationEvent>> {
-    return this.setup(person, async (tx) => {
-      const event = await tx.declarationEvent.findUniqueOrThrow({
-        where: { id: declarationEventId },
-      });
-      const change = archiveChange(event.archivedAt, archive, this.clock.now());
-      return change === null
-        ? event
-        : tx.declarationEvent.update({ where: { id: declarationEventId }, data: change });
-    });
   }
 
   // Step 3: the project, with a new project's settings, the kinds of unit rate work it allows and
@@ -357,16 +334,129 @@ export class ProjectSetup extends QueueingService {
     });
   }
 
-  // Closes the project: the mark and its time, audited. Nothing is deleted and nothing is
-  // refused over it afterwards: a late field event still comes in, and a ticket is still
-  // unlocked by whoever holds the grant (invariant 1; ADR-025, 052, 367). A project closed
-  // already keeps its first close, and nothing is written (ADR-527 (1)).
+  // What is still open on the project, read before an admin closes it (ADR-529 (b)).
+  closingCheck(person: string, projectId: string): Promise<Outcome<readonly ClosingItem[]>> {
+    return this.asAdmin(person, 'close a project', async (tx) =>
+      new ProjectClosing(await ProjectSetup.openItems(tx, projectId)).items(),
+    );
+  }
+
+  // An admin closes the project, by hand (ADR-529 (b)): what is still open is said with it, and
+  // never stops it; only work the worker has under way does. In the same piece of work, before
+  // the mark: every assignment on it that stands is withdrawn ("Project closed."), and every
+  // number block its phones hold is retired, so no phone takes its work again. From the mark on,
+  // the database refuses every write to its records, the worker's too. A project closed already
+  // is answered as it stands, and nothing is written.
   close(person: string, projectId: string): Promise<Outcome<Project>> {
-    return this.setup(person, async (tx) => {
+    return this.asAdmin(person, 'close a project', async (tx, warn) => {
       const project = await tx.project.findUniqueOrThrow({ where: { id: projectId } });
       if (project.closedAt !== null) return project;
-      return tx.project.update({ where: { id: projectId }, data: { closedAt: this.clock.now() } });
+      const closing = new ProjectClosing(await ProjectSetup.openItems(tx, projectId));
+      const refusal = closing.refusal(project.name);
+      if (refusal !== null) throw new Refused(refusal);
+      warn(closing.items());
+      const now = this.clock.now();
+      await tx.assignment.updateMany({
+        where: { projectId, archivedAt: null },
+        data: { archivedAt: now, withdrawalNote: 'Project closed.' },
+      });
+      await tx.numberBlock.updateMany({
+        where: { projectId, status: 'ISSUED' },
+        data: { status: 'RETIRED', endedAt: now },
+      });
+      return tx.project.update({ where: { id: projectId }, data: { closedAt: now } });
     });
+  }
+
+  // An admin reopens a closed project, with a reason, kept by the audit (ADR-529 (b)). What its
+  // close withdrew and retired stays so.
+  reopen(person: string, projectId: string, reason: string): Promise<Outcome<Project>> {
+    return this.asAdmin(
+      person,
+      'reopen a project',
+      async (tx) => {
+        const project = await tx.project.findUniqueOrThrow({ where: { id: projectId } });
+        const refusal = ProjectClosing.reopenRefusal(project);
+        if (refusal !== null) throw new Refused(refusal);
+        return tx.project.update({ where: { id: projectId }, data: { closedAt: null } });
+      },
+      reason,
+    );
+  }
+
+  // What is open on a project, counted (ADR-529 (b)).
+  private static async openItems(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+  ): Promise<ProjectOpenItems> {
+    const phones = await tx.device.findMany({
+      where: {
+        keyRevokedAt: null,
+        OR: [
+          { assignments: { some: { projectId } } },
+          { numberBlocks: { some: { projectId } } },
+          { fieldEvents: { some: { projectId } } },
+        ],
+      },
+      select: { name: true },
+      orderBy: { name: 'asc' },
+    });
+    // A ticket, as QC and the lock mark it: a completed load or haul-out, or a unit rate event,
+    // that isn't void.
+    const notVoid = { status: { not: 'VOID' as const } };
+    const tickets = [
+      ...(
+        await tx.completedLoad.findMany({
+          where: { projectId, dissolvedAt: null, disposalEvent: notVoid },
+          select: { id: true },
+        })
+      ).map(({ id }) => `load ${id}`),
+      ...(
+        await tx.completedHaulOut.findMany({
+          where: { projectId, dissolvedAt: null, disposalEvent: notVoid },
+          select: { id: true },
+        })
+      ).map(({ id }) => `haul-out ${id}`),
+      ...(
+        await tx.fieldEvent.findMany({
+          where: { projectId, kind: 'UNIT_RATE', ...notVoid },
+          select: { id: true },
+        })
+      ).map(({ id }) => `unit rate ${id}`),
+    ];
+    const marked = (row: {
+      completedLoadId: string | null;
+      completedHaulOutId: string | null;
+      fieldEventId: string | null;
+    }): string =>
+      row.completedLoadId !== null
+        ? `load ${row.completedLoadId}`
+        : row.completedHaulOutId !== null
+          ? `haul-out ${row.completedHaulOutId}`
+          : `unit rate ${row.fieldEventId ?? ''}`;
+    const marks = { completedLoadId: true, completedHaulOutId: true, fieldEventId: true } as const;
+    const approved = new Set(
+      (
+        await tx.qcMark.findMany({ where: { projectId, status: 'QC_APPROVED' }, select: marks })
+      ).map(marked),
+    );
+    const locked = new Set(
+      (
+        await tx.invoiceLock.findMany({ where: { projectId, unlockedAt: null }, select: marks })
+      ).map(marked),
+    );
+    return {
+      phonesNotTurnedIn: phones.map(({ name }) => name),
+      ticketsNotQcApproved: tickets.filter((ticket) => !approved.has(ticket)).length,
+      ticketsNotInvoiced: tickets.filter((ticket) => !locked.has(ticket)).length,
+      heldWaiting: await tx.heldRecord.count({ where: { projectId, resolvedAt: null } }),
+      quarantinedWaiting: await tx.quarantinedRecord.count({
+        where: { projectId, resolvedAt: null },
+      }),
+      jobsWaiting: await tx.reconciliationJob.count({
+        where: { projectId, finishedAt: null, setAsideAt: null },
+      }),
+    };
   }
 
   // A field tag: the project's own list, starting empty; added at the end of it (ADR-216).

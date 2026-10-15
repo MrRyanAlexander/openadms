@@ -50,6 +50,7 @@ import {
   type PhotoAnswer,
   syncedRecordAssignment,
   syncedRecordId,
+  syncedRecordProject,
   type ReceivedCertification,
   type ReceivedRecord,
   type RecordAnswer,
@@ -59,7 +60,7 @@ import {
   type SyncReceived,
 } from '@open-adms/contracts';
 import { byDeviceKey, deviceKeyActorId, type Database, type NumberBlock } from '@open-adms/db';
-import { NotSaved, type NotSavedNotice } from '@open-adms/domain';
+import { NotSaved, ProjectClock, type NotSavedNotice } from '@open-adms/domain';
 
 import type { Certifications } from '../certification/certifications.ts';
 import { SeriesMovedOn, type NumberAllocator } from '../numbering/number-allocator.ts';
@@ -253,9 +254,10 @@ export class Sync {
     const shown = await this.db.$read(async (tx) => {
       const project = await tx.project.findUnique({
         where: { id: projectId },
-        select: { id: true },
+        select: { id: true, closedAt: true },
       });
-      return project === null ? null : SetupVersions.shownIn(tx, projectId);
+      // A closed project, like one not found, shows its phones nothing new (ADR-529 (b)).
+      return project?.closedAt !== null ? null : SetupVersions.shownIn(tx, projectId);
     });
     if (shown === null) return null;
     const version = await this.versions.numbered(projectId, shown, deviceId);
@@ -293,6 +295,10 @@ export class Sync {
     if (assignmentId !== null && notSavedAssignments.has(assignmentId)) {
       return this.held(deviceId, brought, sent, NotSaved.assignmentNotSaved());
     }
+    // Nothing is written to a closed project (ADR-529 (b)): what arrives for one waits for a
+    // person, who closes it so its phone can be turned in.
+    const closed = await this.closed(syncedRecordProject(record));
+    if (closed !== null) return this.held(deviceId, brought, sent, closed);
     try {
       if (record.record === 'CERTIFICATION') {
         return await this.certification(deviceId, brought, sent, record.certification);
@@ -333,6 +339,23 @@ export class Sync {
       if (refusal === undefined || refusal.code === 'ALREADY_HELD') throw error;
       return this.held(deviceId, brought, sent, NotSaved.namesNoRecord(), names);
     }
+  }
+
+  // Why nothing is written for this project, where it is closed: its name and the day it closed,
+  // in its own time zone. None for one open, or one the server doesn't have (its constraints say
+  // so, as before).
+  private async closed(projectId: string): Promise<NotSaved | null> {
+    const project = await this.db.$read((tx) =>
+      tx.project.findUnique({
+        where: { id: projectId },
+        select: { name: true, closedAt: true, timeZone: true },
+      }),
+    );
+    if (project?.closedAt == null) return null;
+    return NotSaved.projectClosed(
+      project.name,
+      new ProjectClock(project.timeZone).date(project.closedAt),
+    );
   }
 
   // A certification made on a phone: `Certifications.received` is the one way one is made.
@@ -420,6 +443,10 @@ export class Sync {
     report: SyncReceived['lastUsed'][number],
   ): Promise<SeriesHeld> {
     const { projectId, series } = report;
+    // A closed project's numbers were retired at its close: none is issued again (ADR-529 (b)).
+    if ((await this.closed(projectId)) !== null) {
+      return { projectId, series, toppedUp: false, blocks: [] };
+    }
     for (let attempt = 1; ; attempt += 1) {
       try {
         // The phone's own act: whoever is signed in on it, if anyone, did not ask for it.

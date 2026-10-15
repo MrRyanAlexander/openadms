@@ -140,6 +140,8 @@ const words: Readonly<Record<string, string>> = {
     'Not saved: an assignment written on the board says who wrote it; one made on a phone has no author and always its phone.',
   assignment_system_actor_check:
     'Not saved: an assignment is for a person and written by a person.',
+  // A closed project changes no more (ADR-529 (b)): the database's own guard, on every record.
+  project_closed: 'Not saved: the project is closed, and nothing in it changes.',
   assignment_withdrawal_note_check:
     'Not saved: a withdrawal’s note is a withdrawn assignment’s, 500 characters at most.',
   // A person's employer and its ID for them (AC-02-03; ADR-527 (12)).
@@ -264,9 +266,19 @@ export function databaseRefusalOf(thrown: unknown): DatabaseRefusal | undefined 
   };
 }
 
+// The closed project's guard (ADR-529 (b)) is a trigger, which the driver hands on with no
+// constraint's name: it is known by its own words, which never leave the server, as the last
+// admin's guard is (people.ts).
+const closedProjectGuard = [
+  'The project is closed: nothing in it',
+  'A closed project changes no more',
+];
+
 function constraintOf(cause: DriverCause | undefined): string | undefined {
   const named = cause?.constraint?.index;
   if (typeof named === 'string') return named;
   const message = cause?.originalMessage;
-  return typeof message === 'string' ? /constraint "(\w+)"/.exec(message)?.[1] : undefined;
+  if (typeof message !== 'string') return undefined;
+  if (closedProjectGuard.some((words) => message.startsWith(words))) return 'project_closed';
+  return /constraint "(\w+)"/.exec(message)?.[1];
 }

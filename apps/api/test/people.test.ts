@@ -195,6 +195,10 @@ describe('permissions, read from the database on every request', () => {
       'archivePerson',
       'setPersonRole',
       'unarchivePerson',
+      // A project's closing check, its close and its reopening: ADR-529 (b).
+      'closingCheck',
+      'closeProject',
+      'reopenProject',
       // The firm's master passcode: ADR-428.
       'changeMasterPasscode',
       // A certification revoked (AC-03-55): ADR-433.

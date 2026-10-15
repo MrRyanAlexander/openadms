@@ -818,6 +818,8 @@ enum NotSavedReason {
   OWNER_NOT_SAVED
   // An unplanned assignment or a use of the passcode the server could not keep (ADR-526 (5)).
   REPORT_NOT_SAVED
+  // Field work for a project that was closed before it arrived (ADR-529 (b)).
+  PROJECT_CLOSED
 
   @@map("not_saved_reason")
 }

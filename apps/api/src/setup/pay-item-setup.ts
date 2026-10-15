@@ -31,13 +31,7 @@ import {
 
 import { type CriterionInput, RuleBook } from './rule-book.ts';
 import { sameLines } from './rule-setup.ts';
-import {
-  archiveChange,
-  type Outcome,
-  QueueingService,
-  Refused,
-  type Warn,
-} from './setup-service.ts';
+import { type Outcome, QueueingService, Refused, type Warn } from './setup-service.ts';
 
 export interface NewPayItem {
   readonly projectId: string;
@@ -209,44 +203,6 @@ export class PayItemSetup extends QueueingService {
       });
       await this.setupChanged(tx, person, payItem.projectId);
       return saved;
-    });
-  }
-
-  // Archived: a rule that adds it is not valid and never runs, and no monitor picks it; put back
-  // as it was, its band asked of SizeBands as a new one's is (an archived band is in no one's
-  // way). Twice writes nothing. The project's tickets are queued (ADR-527 (7)).
-  archive(person: string, payItemId: string, archive: boolean): Promise<Outcome<PayItem>> {
-    return this.setup(person, async (tx, warn) => {
-      const held = await tx.payItem.findUniqueOrThrow({ where: { id: payItemId } });
-      const change = archiveChange(held.archivedAt, archive, this.clock.now());
-      if (change === null) return held;
-      if (!archive) {
-        await this.band(tx, warn, held, {
-          id: held.id,
-          code: held.code,
-          bandFrom: held.bandFrom?.toNumber() ?? null,
-          bandTo: held.bandTo?.toNumber() ?? null,
-          archived: false,
-        });
-      }
-      const payItem = await tx.payItem.update({ where: { id: payItemId }, data: change });
-      await this.setupChanged(tx, person, payItem.projectId);
-      return payItem;
-    });
-  }
-
-  // A prime's rate taken off the pay item: its lines then bill nothing for that prime until it is
-  // set again (`rate` puts it back). Twice writes nothing.
-  archiveRate(person: string, payItemId: string, primeId: string): Promise<Outcome<PayItemRate>> {
-    return this.setup(person, async (tx) => {
-      const held = await tx.payItemRate.findUniqueOrThrow({
-        where: { payItemId_primeId: { payItemId, primeId } },
-      });
-      const change = archiveChange(held.archivedAt, true, this.clock.now());
-      if (change === null) return held;
-      const rate = await tx.payItemRate.update({ where: { id: held.id }, data: change });
-      await this.setupChanged(tx, person, held.projectId);
-      return rate;
     });
   }
 

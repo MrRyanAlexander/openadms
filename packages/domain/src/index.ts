@@ -92,13 +92,10 @@ export {
 export {
   CertificationChanges,
   CertificationSubs,
-  ContractorMerge,
+  SubNames,
   type CertificationRefusal,
   type ContractorPlace,
   type KnownContractor,
-  type MergeMove,
-  type MergeParty,
-  type MergeRefusal,
   type SubPlacement,
   type SubTier,
 } from './certifications.ts';
@@ -405,9 +402,11 @@ export {
 } from './photo-files.ts';
 export {
   CrewDaySteps,
-  FirmRecords,
   ListValues,
+  ProjectClosing,
   listValueSettings,
+  type ClosingItem,
+  type ProjectOpenItems,
   type CrewDayStep,
   type CrewDayStepsCheck,
   type ListValue,

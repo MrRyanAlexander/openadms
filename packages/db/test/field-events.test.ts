@@ -821,6 +821,12 @@ describe('a field event', () => {
            WHERE tgrelid = 'field_event'::regclass AND NOT tgisinternal ORDER BY tgname`,
         )
       ).map((trigger) => trigger.name),
-    ).toEqual(['field_event_audit', 'field_event_refuse_delete', 'field_event_refuse_truncate']);
+    ).toEqual([
+      'field_event_audit',
+      // A closed project's field events change no more (ADR-529 (b)).
+      'field_event_project_open',
+      'field_event_refuse_delete',
+      'field_event_refuse_truncate',
+    ]);
   });
 });

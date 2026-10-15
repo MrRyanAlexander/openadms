@@ -120,6 +120,7 @@ describe('what a phone is told of a record that could not be saved at all', () =
       'ASSIGNMENT_NOT_SAVED',
       'CERTIFICATION_REFUSED',
       'OWNER_NOT_SAVED',
+      'PROJECT_CLOSED',
     ]);
     const told = [
       NotSaved.notARecord('fieldEvent.loadCall in this record can’t be more than 100'),
@@ -127,6 +128,7 @@ describe('what a phone is told of a record that could not be saved at all', () =
       NotSaved.assignmentNotSaved(),
       NotSaved.certificationRefused('A crew is not measured: it has no boxes and no capacity.'),
       NotSaved.ownerNotSaved(),
+      NotSaved.projectClosed('Bayline County ROW, Hurricane Delphine', '01-Feb-2027'),
     ];
     expect(told.map((notice) => notice.reason)).toEqual([...notSavedReasons]);
     expect(told.map((notice) => notice.message)).toEqual([
@@ -135,6 +137,7 @@ describe('what a phone is told of a record that could not be saved at all', () =
       'Not saved: the assignment this record was made under was not saved.',
       'Not saved: A crew is not measured: it has no boxes and no capacity.',
       'Not saved: the record this photograph belongs to isn’t saved on the server.',
+      'Not saved: Bayline County ROW, Hurricane Delphine was closed on 01-Feb-2027, before this arrived.',
     ]);
     // A certification its own rules refuse is told the rule's words, once; one whose number
     // is held, the number and nothing of the certification that holds it (ADR-469).
