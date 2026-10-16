@@ -17,14 +17,20 @@
 //   time. One made on a phone under the master passcode is on it, marked unplanned: the board
 //   changes nothing of it.
 //
+// - **The board is searched** (ADR-535 (1)): a person's, a phone's or a project's assignments
+//   from one day to another, across projects, each with what the board warns of beside it (the
+//   domain's `BoardWarnings`).
+//
 // Nothing here stops a second assignment for one person or one phone on a day (AC-02-29), and
-// none ever expires or stops work. A change queues no reconciliation: of an assignment the
+// none ever expires or stops work: the board warns, and that is all. A change queues no reconciliation: of an assignment the
 // worker reads its project only, which never changes. What the database's own constraints
 // refuse (a site or a pay item of another project) is answered plainly by the error filter.
 import type { Prisma } from '@open-adms/db';
 import {
   AssignmentRules,
+  BoardWarnings,
   type AssignmentFormDocumentType,
+  type BoardWarning,
   type FieldEventKindName,
 } from '@open-adms/domain';
 
@@ -121,8 +127,138 @@ export type AssignmentsPage =
     }
   | { readonly done: false; readonly code: 'NOT_ALLOWED' | 'NOT_FOUND' };
 
+// Which assignments a search holds (ADR-535 (1)): a person's, a phone's or a project's, from one
+// day to another, those that stand or the withdrawn ones.
+export interface BoardSearched {
+  readonly userId?: string | undefined;
+  readonly deviceId?: string | undefined;
+  readonly projectId?: string | undefined;
+  readonly from: string;
+  readonly to: string;
+  readonly withdrawn: boolean;
+  readonly after?: string | undefined;
+  readonly limit: number;
+}
+
+export interface BoardFound {
+  readonly assignments: readonly {
+    readonly assignment: AssignmentRead;
+    readonly warnings: readonly BoardWarning[];
+  }[];
+  readonly next: string | null;
+}
+
 export class Assignments extends DispatchService {
   private readonly rules = new AssignmentRules();
+  private readonly warnings = new BoardWarnings();
+
+  // The board searched, by day and then in the order written, each with its warnings.
+  async search(readerId: string, asked: BoardSearched): Promise<BoardFound | null> {
+    return this.db.$read(async (tx): Promise<BoardFound | null> => {
+      const reader = await tx.user.findUnique({
+        where: { id: readerId },
+        select: { role: true, archivedAt: true },
+      });
+      if (
+        reader?.archivedAt !== null ||
+        (reader.role !== 'ADMIN' && reader.role !== 'MANAGER_ANALYST')
+      ) {
+        return null;
+      }
+      const rows = await tx.assignment.findMany({
+        where: {
+          ...(asked.userId === undefined ? {} : { personId: asked.userId }),
+          ...(asked.deviceId === undefined ? {} : { deviceId: asked.deviceId }),
+          ...(asked.projectId === undefined ? {} : { projectId: asked.projectId }),
+          workDate: { gte: day(asked.from), lte: day(asked.to) },
+          archivedAt: asked.withdrawn ? { not: null } : null,
+        },
+        orderBy: [{ workDate: 'asc' }, { id: 'asc' }],
+        take: asked.limit + 1,
+        ...(asked.after === undefined ? {} : { cursor: { id: asked.after }, skip: 1 }),
+        select: {
+          ...assignmentRead,
+          personId: true,
+          deviceId: true,
+          project: { select: { name: true, activeFrom: true, activeTo: true, closedAt: true } },
+          site: { select: { id: true, name: true, activationDate: true, closeDate: true } },
+        },
+      });
+      const page = rows.slice(0, asked.limit);
+      // The other assignments that stand on those days for those people or phones, any project.
+      const others = await tx.assignment.findMany({
+        where: {
+          archivedAt: null,
+          workDate: {
+            in: [...new Set(page.map((row) => row.workDate.getTime()))].map((at) => new Date(at)),
+          },
+          OR: [
+            { personId: { in: page.map((row) => row.personId) } },
+            {
+              deviceId: {
+                in: page.flatMap((row) => (row.deviceId === null ? [] : [row.deviceId])),
+              },
+            },
+          ],
+        },
+        select: {
+          id: true,
+          personId: true,
+          deviceId: true,
+          workDate: true,
+          project: { select: { name: true } },
+        },
+      });
+      const calendar = (at: Date | null): string | null => at?.toISOString().slice(0, 10) ?? null;
+      return {
+        assignments: page.map((row) => {
+          const shown = this.shown({
+            ...row,
+            site: row.site === null ? null : { id: row.site.id, name: row.site.name },
+          });
+          return {
+            assignment: shown,
+            warnings: this.warnings.of(
+              {
+                id: row.id,
+                personId: row.personId,
+                personName: row.person.name,
+                workDate: shown.workDate,
+                withdrawn: row.archivedAt !== null,
+                deviceId: row.deviceId,
+                deviceName: row.device?.name ?? null,
+                fieldEventKinds: row.fieldEventKinds,
+                payItemCount: row.payItems.length,
+                project: {
+                  name: row.project.name,
+                  activeFrom: calendar(row.project.activeFrom) ?? '',
+                  activeTo: calendar(row.project.activeTo),
+                  closed: row.project.closedAt !== null,
+                },
+                site:
+                  row.site === null
+                    ? null
+                    : {
+                        name: row.site.name,
+                        activeFrom: calendar(row.site.activationDate),
+                        closedOn: calendar(row.site.closeDate),
+                      },
+              },
+              others
+                .filter((other) => other.workDate.getTime() === row.workDate.getTime())
+                .map((other) => ({
+                  id: other.id,
+                  personId: other.personId,
+                  deviceId: other.deviceId,
+                  projectName: other.project.name,
+                })),
+            ),
+          };
+        }),
+        next: rows.length > asked.limit ? (page.at(-1)?.id ?? null) : null,
+      };
+    });
+  }
 
   // A page of one project's board for one day, in the order the assignments were written.
   async list(

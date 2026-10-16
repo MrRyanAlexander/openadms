@@ -122,9 +122,11 @@ export class RuleRows {
     const keep = (id: string, name: string, ...records: { archivedAt: Date | null }[]): void => {
       names.set(id, { name, gone: records.some(isArchived) });
     };
+    // Only the columns a name needs: the read-only login, reading for a viewer, is granted no
+    // contractor's contact details or map's file key (ADR-535 (6)).
     const places = await tx.projectContractor.findMany({
       where: own,
-      include: { contractor: true },
+      include: { contractor: { select: { name: true, archivedAt: true } } },
     });
     for (const place of places) {
       keep(place.contractorId, place.contractor.name, place, place.contractor);
@@ -143,7 +145,11 @@ export class RuleRows {
       keep(payItem.id, payItem.code, payItem);
     }
     for (const item of await tx.itemName.findMany()) keep(item.id, item.name, item);
-    const map = await tx.mapVersion.findFirst({ where: own, orderBy: { version: 'desc' } });
+    const map = await tx.mapVersion.findFirst({
+      where: own,
+      orderBy: { version: 'desc' },
+      select: { id: true },
+    });
     if (map !== null) {
       for (const zone of await tx.zone.findMany({ where: { mapVersionId: map.id } })) {
         names.set(zone.name, { name: zone.name, gone: false });

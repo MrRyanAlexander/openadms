@@ -196,9 +196,11 @@ describe('who may ask', () => {
       expect(asked(served), served.name).toEqual(['SIGNED_IN', adminOnly, undefined]);
     }
     // A certification is made on a phone and its sync brings it, or entered from its sheet where
-    // the phone failed (ADR-521, 534 (1)).
+    // the phone failed (ADR-521, 534 (1)). Its reads are review-reads.test.ts's (ADR-535).
     expect(
-      endpoints.filter(({ path }) => path.includes('certification')).map(({ name }) => name),
+      endpoints
+        .filter(({ path, method }) => path.includes('certification') && method !== 'GET')
+        .map(({ name }) => name),
     ).toEqual(requests.map(({ name }) => name));
   });
 

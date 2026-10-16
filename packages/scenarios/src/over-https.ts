@@ -17,8 +17,10 @@ const rootCert = new URL('../../../infra/local/.generated/caddy-root.crt', impor
 
 export interface Asked {
   readonly status: number;
-  // The answer read as JSON; none where it had no body.
+  // The answer read as JSON; none where it had no body, or answered a file.
   readonly body: unknown;
+  // A file's bytes, where the answer is one: always a download (ADR-483, 535 (6)).
+  readonly bytes?: Buffer;
   // The cookies it set, each as its `set-cookie` line: a person's session travels only so.
   readonly setCookies: readonly string[];
 }
@@ -92,7 +94,17 @@ export class OverHttps {
           answer.on('data', (part: Buffer) => parts.push(part));
           answer.on('error', reject);
           answer.on('end', () => {
-            const text = Buffer.concat(parts).toString('utf8');
+            const whole = Buffer.concat(parts);
+            if ((answer.headers['content-disposition'] ?? '').startsWith('attachment')) {
+              resolve({
+                status: answer.statusCode ?? 0,
+                body: undefined,
+                bytes: whole,
+                setCookies: answer.headers['set-cookie'] ?? [],
+              });
+              return;
+            }
+            const text = whole.toString('utf8');
             try {
               resolve({
                 status: answer.statusCode ?? 0,

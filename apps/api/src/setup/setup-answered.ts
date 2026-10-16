@@ -67,3 +67,45 @@ export function searched(query: {
     limit: query.limit === undefined ? searchPage : Number(query.limit),
   };
 }
+
+// What a preview answers (ADR-535 (3)): what its save would have said, or why it wouldn't be saved,
+// as `wouldSave`; a person who may not change the setup is refused as a save would be.
+export function previewed<T, A>(
+  request: FastifyRequest,
+  outcome: Outcome<T>,
+  shown: (record: T) => A,
+):
+  | {
+      wouldSave: true;
+      record: A;
+      warnings: { code: string; message: string }[];
+      queued?: { tickets: number; lockedAsInvoiced: number };
+    }
+  | { wouldSave: false; reason: string; message: string } {
+  if (!outcome.saved) {
+    const { code, message } = outcome.refusal;
+    request.log.info({ why: code }, 'A setup change was previewed: it would be refused.');
+    if (code === 'NOT_ALLOWED') throw new Refusal('NOT_ALLOWED', 403);
+    return { wouldSave: false, reason: code, message };
+  }
+  if (outcome.previewed !== true) throw new Error('A preview saved its change.');
+  request.log.info(
+    outcome.queued === undefined
+      ? {}
+      : { tickets: outcome.queued.tickets, lockedAsInvoiced: outcome.queued.lockedAsInvoiced },
+    'A setup change was previewed.',
+  );
+  return {
+    wouldSave: true,
+    record: shown(outcome.record),
+    warnings: outcome.warnings.map(({ code, message }) => ({ code, message })),
+    ...(outcome.queued === undefined
+      ? {}
+      : {
+          queued: {
+            tickets: outcome.queued.tickets,
+            lockedAsInvoiced: outcome.queued.lockedAsInvoiced,
+          },
+        }),
+  };
+}

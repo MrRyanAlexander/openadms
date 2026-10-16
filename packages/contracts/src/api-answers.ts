@@ -2,7 +2,9 @@
 // Every answer's shape lives here, never in a controller.
 import {
   assignmentFormDocumentTypes,
+  certificationViews,
   fieldEventKinds,
+  flagCodes,
   incidentOffers,
   lookedUpAddressLongest,
   loggedPasscodeUseRefusals,
@@ -13,6 +15,7 @@ import {
   numberSeries,
   passwordProblemCodes,
   permissions,
+  qcStatuses,
   quantityAsks,
   quantitySources,
   unplannedAssignmentRefusals,
@@ -276,6 +279,8 @@ export const phoneRecordSchema = z.strictObject({
   outOfServiceMarkedAt: z.iso.datetime().nullable(),
   // Why it was taken out of service, from the firm's reasons list, where one was picked.
   outOfServiceReasonId: z.uuid().nullable(),
+  // That reason's name, as the list has it now (C170).
+  outOfServiceReason: z.string().nullable(),
   keyRevokedAt: z.iso.datetime().nullable(),
   // Which revoked its key: its turn-in, or the firm's time (ADR-530).
   keyRevokedBy: z.enum(['TURN_IN', 'FIRM_TIME']).nullable(),
@@ -428,6 +433,57 @@ export const viewerLineSchema = z.strictObject({
 
 export type ViewerLine = z.infer<typeof viewerLineSchema>;
 
+// What a viewer reads beside a ticket's field events: its flags (a contractor user none), its
+// photographs' records, its scale receipts, item lines and carried tickets, its QC status and the
+// lock in force with its batch's name (a contractor user its own tickets').
+const viewerTicketBeside = {
+  flags: z.array(
+    z.strictObject({
+      id: z.uuid(),
+      code: z.enum(flagCodes),
+      message: z.string(),
+      raisedAt: z.iso.datetime(),
+      clearedAt: z.iso.datetime().nullable(),
+      accepted: z.boolean(),
+    }),
+  ),
+  photographs: z.array(
+    z.strictObject({
+      id: z.uuid(),
+      fieldEventId: z.uuid().nullable(),
+      scaleReceiptId: z.uuid().nullable(),
+      view: z.enum(certificationViews).nullable(),
+      capturedAt: z.iso.datetime(),
+      uploadedAt: z.iso.datetime().nullable(),
+      label: z.string().nullable(),
+    }),
+  ),
+  scaleReceipts: z.array(
+    z.strictObject({
+      id: z.uuid(),
+      receiptNumber: z.string(),
+      site: z.string().nullable(),
+      grossWeightLb: exact.nullable(),
+      tareWeightLb: exact.nullable(),
+      netWeightLb: exact.nullable(),
+      netWeightTons: exact.nullable(),
+    }),
+  ),
+  itemLines: z.array(
+    z.strictObject({
+      id: z.uuid(),
+      fieldEventId: z.uuid(),
+      item: z.string().nullable(),
+      quantity: exact,
+    }),
+  ),
+  carriedTickets: z.array(
+    z.strictObject({ id: z.uuid(), fieldEventId: z.uuid(), carriedTicketNumber: z.string() }),
+  ),
+  qcStatus: z.enum(qcStatuses).nullable(),
+  lock: z.strictObject({ lockedAt: z.iso.datetime(), batch: z.string().nullable() }).nullable(),
+};
+
 // One ticket, whole: its field events in the order of their field time, the completed record
 // if the worker has written one (never on a unit rate ticket), and its lines.
 export const viewerTicketAnswerSchema = z.strictObject({
@@ -437,6 +493,7 @@ export const viewerTicketAnswerSchema = z.strictObject({
   fieldEvents: z.array(viewerFieldEventSchema).min(1),
   completed: viewerCompletedSchema.nullable(),
   lines: z.array(viewerLineSchema),
+  ...viewerTicketBeside,
 });
 
 export type ViewerTicketAnswer = z.infer<typeof viewerTicketAnswerSchema>;
@@ -450,6 +507,20 @@ export const viewerRoeSchema = z.strictObject({
   signed: z.boolean(),
   signedDate: z.iso.date().nullable(),
   ownerName: z.string().nullable(),
+  // Where it is and what it allows (ADR-535 (6)): its parcel, its address, its fix as exact
+  // decimals, and each pick of its scope by name, with its count.
+  parcelId: z.string().nullable(),
+  address: z.string().nullable(),
+  latitude: exact.nullable(),
+  longitude: exact.nullable(),
+  scope: z.array(
+    z.strictObject({
+      id: z.uuid(),
+      debrisType: z.string().nullable(),
+      payableType: z.string().nullable(),
+      count: z.int().nullable(),
+    }),
+  ),
 });
 
 export type ViewerRoe = z.infer<typeof viewerRoeSchema>;

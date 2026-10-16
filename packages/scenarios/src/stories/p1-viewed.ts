@@ -21,10 +21,21 @@
 // `sessions.test.ts`); the portal's pages and the exports (Phase 4).
 import { ContractorSetup, PayItemSetup } from '@open-adms/api';
 import {
+  addPhotographEndpoint,
+  createIncidentEndpoint,
   createPersonEndpoint,
+  filePartMediaType,
   setViewerProjectsEndpoint,
+  viewerCertificationsEndpoint,
+  viewerDropOffLogsEndpoint,
+  viewerIncidentsEndpoint,
+  viewerPhotographFileEndpoint,
   viewerProjectsEndpoint,
+  viewerQuantityLookupEndpoint,
   viewerRoesEndpoint,
+  viewerSetupCheckEndpoint,
+  viewerSetupEndpoint,
+  viewerSurveysEndpoint,
   viewerTicketEndpoint,
   viewerTicketsEndpoint,
   type Endpoint,
@@ -601,6 +612,239 @@ export const p1Viewed: Story = {
         ['R-0007 · signed 2026-10-09 · owner not shown'],
         [],
       ],
+    );
+
+    // ------------------------------------------------------------------------------------------
+    // The same records the back office reads, as the database shows each viewer them (ADR-535
+    // (6)): beside a ticket, its flags, photographs, scale receipts, items and lock; a project's
+    // certifications, forms, setup, setup check and lookup; a photograph's file where shown.
+    story.at(
+      on('14', '15:00'),
+      'Each viewer reads beside its tickets, and the project’s certifications, forms and setup',
+    );
+    const clients101003 = await load(client, '101003');
+    const coastlines101003 = await load(coastlines, '101003');
+    story.check(
+      'AC-10-105 beside 101003 the client user reads its open flag, not accepted, and its QC status and lock (none yet); Coastline’s contractor user reads the same ticket and no flag',
+      [
+        clients101003?.flags.map((flag) => `${flag.message} · accepted: ${String(flag.accepted)}`),
+        [clients101003?.qcStatus, clients101003?.lock],
+        coastlines101003?.flags,
+        coastlines101003?.ticketNumber,
+      ],
+      [
+        ['Ticket 101003: load call 96%. Flagged for review. · accepted: false'],
+        [null, null],
+        [],
+        '101003',
+      ],
+    );
+    const weighed = await ticketOf(client, 'HAUL_OUT', '201004');
+    story.check(
+      'AC-10-105 the weighed haul-out 201004’s scale receipt is read beside it, by the client user and Coastline’s, with its site by name and its weights exact; Rivera’s reads no such ticket',
+      [
+        weighed?.scaleReceipts.map(
+          (receipt) => `${receipt.site ?? 'no site'} · ${String(receipt.netWeightTons)} TN`,
+        ),
+        haulOut?.scaleReceipts.map((receipt) => receipt.netWeightTons),
+        await ticketOf(riveras, 'HAUL_OUT', '201004'),
+      ],
+      [['Cypress Creek Landfill · 24.0000 TN'], ['24.0000'], null],
+    );
+    story.check(
+      'AC-10-105 a haul-out weighed once has its one receipt, read with a site’s name',
+      [
+        weighed?.scaleReceipts.length,
+        weighed?.scaleReceipts.every((receipt) => receipt.site !== null),
+      ],
+      [1, true],
+    );
+    const crew301001 = await ticketOf(client, 'UNIT_RATE', '301001');
+    const photographed = crew301001?.photographs ?? [];
+    const kept = photographed.find((photo) => photo.uploadedAt !== null);
+    const fileOf = async (viewer: OfficeBrowser, photoId: string) => {
+      const answer = await viewer.asked(viewerPhotographFileEndpoint, {
+        ids: { photoId, file: 'photo' },
+      });
+      return `${String(answer.status)} ${codeOf(answer) ?? 'answered'}`;
+    };
+    story.check(
+      'AC-10-105 Jo’s crew photograph of 301001 is beside it for the client user, never where its file is kept; its file is handed to the client user where it has arrived, and to Summit’s contractor user, who isn’t shown the photograph, as one nobody has',
+      [
+        photographed.length > 0,
+        JSON.stringify(crew301001).includes('objectKey'),
+        kept === undefined ? 'no file yet' : await fileOf(client, kept.id),
+        photographed[0] === undefined ? '404 NOT_FOUND' : await fileOf(summits, photographed[0].id),
+      ],
+      // The story's phones send no photograph's file: the file read is the API's own test's.
+      [true, false, 'no file yet', '404 NOT_FOUND'],
+    );
+    // A photograph whose file has arrived, on a record a contractor user isn't shown: Dana enters
+    // the yard's incident from its paper report and adds its photograph (ADR-534 (2), (9)).
+    const jos = await api.incident.findFirstOrThrow({ where: { projectId: p1 } });
+    const yardIncident = await danas.answered(createIncidentEndpoint, {
+      ids: { projectId: p1 },
+      json: {
+        monitorId: jos.monitorId,
+        madeAt: '2026-10-13T16:05:00Z',
+        deviceUtcOffsetMinutes: -240,
+        fix: null,
+        notes: null,
+        answers: { answers: {} },
+        reasonId: (await api.reason.findFirstOrThrow({ where: { name: 'Device failed' } })).id,
+        incidentTypeId: jos.incidentTypeId,
+        incidentSubTypeId: null,
+        description: 'Gate post clipped at the yard',
+        parties: null,
+        address: null,
+        contractorId: null,
+        certNumber: null,
+        roeNumber: null,
+      },
+    });
+    const gatePost = Buffer.concat([
+      Buffer.from([0xff, 0xd8, 0xff, 0xe1]),
+      Buffer.from('the gate post at the yard, clipped'),
+    ]);
+    const { record: gatePhoto } = await danas.answered(addPhotographEndpoint, {
+      query: {
+        on: 'INCIDENT',
+        recordId: yardIncident.record.id,
+        capturedAt: '2026-10-13T16:06:00Z',
+        utcOffsetMinutes: '-240',
+      },
+      bytes: { of: gatePost, contentType: filePartMediaType },
+    });
+    const handed = await client.asked(viewerPhotographFileEndpoint, {
+      ids: { photoId: gatePhoto.id, file: 'photo' },
+    });
+    story.check(
+      'AC-10-105 a photograph’s file is handed to a viewer the database shows its record: the incident’s, to the client user and the auditor, as it was kept; to Coastline’s and Summit’s contractor users, who see no incident, as one nobody has',
+      [
+        [handed.status, Buffer.compare(handed.bytes ?? Buffer.alloc(0), gatePost)],
+        await fileOf(auditor, gatePhoto.id),
+        await fileOf(coastlines, gatePhoto.id),
+        await fileOf(summits, gatePhoto.id),
+      ],
+      [[200, 0], '200 answered', '404 NOT_FOUND', '404 NOT_FOUND'],
+    );
+    const certificationsOf = async (viewer: OfficeBrowser): Promise<string[]> =>
+      (
+        await viewer.answered(viewerCertificationsEndpoint, {
+          ids: { projectId: p1 },
+          query: { limit: '200' },
+        })
+      ).certifications.map(
+        (each) =>
+          `${each.certNumber} · ${each.kind} · ${each.prime ?? 'prime not shown'}${each.firstTierSub === null ? '' : ` + ${each.firstTierSub}`} · ${String(each.capacityCy ?? 'crew')} · ${String(each.boxes.length)} boxes`,
+      );
+    const clientsCertifications = await certificationsOf(client);
+    story.check(
+      'AC-10-105 the client user reads every certification of P1, by cert number, with its boxes; Rivera’s contractor user its own truck 730416 alone; Summit’s its 88120; none reads a driver’s phone or licence number',
+      [
+        clientsCertifications.length,
+        clientsCertifications.filter(
+          (line) => line.startsWith('730416') || line.startsWith('88120'),
+        ),
+        await certificationsOf(riveras),
+        await certificationsOf(summits),
+        /driverPhone|driverLicenceNumber/.exec(
+          JSON.stringify(
+            await client.answered(viewerCertificationsEndpoint, { ids: { projectId: p1 } }),
+          ),
+        ),
+      ],
+      [
+        6,
+        [
+          '730416 · CONTAINER · Coastline Haulers LLC + Rivera Trucking · 48 · 2 boxes',
+          '88120 · CONTAINER · Summit Debris Services · 28 · 1 boxes',
+        ],
+        ['730416 · CONTAINER · prime not shown + Rivera Trucking · 48 · 2 boxes'],
+        ['88120 · CONTAINER · Summit Debris Services · 28 · 1 boxes'],
+        null,
+      ],
+    );
+    const logsOf = async (viewer: OfficeBrowser): Promise<string[]> =>
+      (
+        await viewer.answered(viewerDropOffLogsEndpoint, { ids: { projectId: p1 } })
+      ).dropOffLogs.map(
+        (log) =>
+          `${log.site ?? 'no site'} · ${log.residentName ?? 'resident not shown'} · ${log.originAddress ?? 'from not shown'}`,
+      );
+    const incidentsOf = async (viewer: OfficeBrowser): Promise<number> =>
+      (await viewer.answered(viewerIncidentsEndpoint, { ids: { projectId: p1 } })).incidents.length;
+    story.check(
+      'AC-10-105, AC-02-75…77 the drop-off log’s resident by the viewer’s own setting: the client user reads Carl Jensen and where his debris came from, the auditor neither; a contractor user reads no drop-off log, no incident and no survey; the client user and the auditor read Jo’s incident and the yard’s',
+      [
+        await logsOf(client),
+        await logsOf(auditor),
+        await logsOf(coastlines),
+        [await incidentsOf(client), await incidentsOf(auditor), await incidentsOf(coastlines)],
+        (await coastlines.answered(viewerSurveysEndpoint, { ids: { projectId: p1 } })).surveys,
+      ],
+      [
+        ['Marsh Road TDSR · Carl Jensen · 14 Heron St'],
+        ['Marsh Road TDSR · resident not shown · from not shown'],
+        [],
+        [2, 2, 0],
+        [],
+      ],
+    );
+    const setupOf = (viewer: OfficeBrowser) =>
+      viewer.asked(viewerSetupEndpoint, { ids: { projectId: p1 } });
+    const clientsSetup = viewerSetupEndpoint.answer.parse(
+      answered(viewerSetupEndpoint, await setupOf(client)),
+    );
+    const told = async (viewer: OfficeBrowser, served: Endpoint) => {
+      const answer = await viewer.asked(served, { ids: { projectId: p1 } });
+      return `${String(answer.status)} ${codeOf(answer) ?? 'answered'}`;
+    };
+    story.check(
+      'AC-10-105 a client user and an auditor read P1’s setup: its forms and debris types, its pay items by code and description and never a rate, its sites, its contracts with their primes, its rules; and the setup check and the lookup; a contractor user is answered each as one nobody has',
+      [
+        clientsSetup.forms.map((form) => form.documentType).sort(),
+        clientsSetup.payItems.map((item) => item.code).includes('VEG-HAUL-CY-15'),
+        /"rate"|7\.50|7\.80/.exec(JSON.stringify(clientsSetup)),
+        clientsSetup.contracts.map((contract) => `${contract.name} · ${contract.prime ?? ''}`),
+        clientsSetup.rules.length > 0,
+        [
+          await told(auditor, viewerSetupEndpoint),
+          await told(client, viewerSetupCheckEndpoint),
+          await told(auditor, viewerQuantityLookupEndpoint),
+        ],
+        [
+          await told(coastlines, viewerSetupEndpoint),
+          await told(coastlines, viewerSetupCheckEndpoint),
+          await told(riveras, viewerQuantityLookupEndpoint),
+        ],
+      ],
+      [
+        ['DROP_OFF_LOG', 'HAUL_OUT', 'INCIDENT', 'LOAD', 'UNIT_RATE'],
+        true,
+        null,
+        [
+          'Coastline, Bayline ROW 2026 · Coastline Haulers LLC',
+          'Summit, Bayline ROW 2026 · Summit Debris Services',
+        ],
+        true,
+        ['200 answered', '200 answered', '200 answered'],
+        ['404 NOT_FOUND', '404 NOT_FOUND', '404 NOT_FOUND'],
+      ],
+    );
+    const lookup = await client.answered(viewerQuantityLookupEndpoint, { ids: { projectId: p1 } });
+    story.check(
+      'AC-10-105 the lookup the client user reads is the setup as it stands: a row for each live site, form debris type and prime, each asking what its phones ask',
+      [lookup.asks.length > 0, lookup.asks.every((ask) => ask.siteId.length > 0)],
+      [true, true],
+    );
+    const roesRead = (
+      await client.answered(viewerRoesEndpoint, { ids: { projectId: p1 } })
+    ).roes.map((roe) => [roe.parcelId, roe.address, roe.scope]);
+    story.check(
+      'AC-10-105 an ROE is read with its parcel and its address, and its scope (none on R-0007)',
+      [roesRead],
+      [[['APN 14-0321-007', '412 Cedar Ct', []]]],
     );
 
     // ------------------------------------------------------------------------------------------

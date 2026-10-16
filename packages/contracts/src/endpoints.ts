@@ -13,7 +13,9 @@ import {
   countShapes,
   crewTimeConversions,
   fieldEventKinds,
+  flagCodes,
   incidentOffers,
+  mapFileTypes,
   masterPasscodeSessions,
   measuredAs,
   numberSeries,
@@ -79,6 +81,41 @@ import {
   setAsideFilesAnswerSchema,
 } from './held-answers.ts';
 import { places } from './field-event-details.ts';
+import {
+  boardSearchAnswerSchema,
+  certificationReadSchema,
+  certificationsAnswerSchema,
+  dropOffLogsAnswerSchema,
+  fieldEventAnswerSchema,
+  flagsAnswerSchema,
+  formsAnswerSchema,
+  incidentsAnswerSchema,
+  invoiceBatchAnswerSchema,
+  invoiceBatchesAnswerSchema,
+  listValuesAnswerSchema,
+  mapVersionAnswerSchema,
+  mapVersionsAnswerSchema,
+  payItemRatesAnswerSchema,
+  payItemsAnswerSchema,
+  phoneSessionsAnswerSchema,
+  previewAnswer,
+  projectAnswerSchema,
+  projectsAnswerSchema,
+  reviewQueueAnswerSchema,
+  roesAnswerSchema,
+  rulesAnswerSchema,
+  scaleReceiptAnswerSchema,
+  severalAnswer,
+  siteShapeVersionsAnswerSchema,
+  sitesAnswerSchema,
+  surveysAnswerSchema,
+  ticketAnswerSchema,
+  viewerCertificationsAnswerSchema,
+  viewerDropOffLogsAnswerSchema,
+  viewerIncidentsAnswerSchema,
+  viewerSetupAnswerSchema,
+  viewerSurveysAnswerSchema,
+} from './read-answers.ts';
 import { formDefinitionFields } from './form-definition.ts';
 import {
   assignedWork,
@@ -240,6 +277,9 @@ export interface Endpoint {
   // that were kept, under one of `answerFileTypes`, never JSON, and always a download. Only the
   // back office's read of a photograph's file is one, and only a `GET`.
   readonly answersFile?: true;
+  // The types the file it answers is kept under, where they are not a photograph's: a map's
+  // file (ADR-535 (2)).
+  readonly answersFileOf?: readonly string[];
   readonly answer: z.ZodType;
 }
 
@@ -293,6 +333,9 @@ export function endpoint<const E extends Endpoint>(defined: E): E {
     throw new Error(
       `The endpoint ${defined.name} takes a file: its body is that, and nothing else.`,
     );
+  }
+  if (defined.answersFileOf !== undefined && defined.answersFile !== true) {
+    throw new Error(`The endpoint ${defined.name} names the types of a file it doesn’t answer.`);
   }
   if (defined.answersFile === true && (defined.method !== 'GET' || defined.file === true)) {
     throw new Error(`The endpoint ${defined.name} answers a file: it is a GET, and takes none.`);
@@ -687,7 +730,7 @@ export const peoplePageAtMost = 200;
 export const listPeopleEndpoint = endpoint({
   name: 'listPeople',
   summary:
-    'The firm’s people, a page at a time, in the order they were added: those in service, or the archived ones. A monitor’s phone number is in an admin’s answer only.',
+    'The firm’s people, a page at a time, in the order they were added or by name: those in service, or the archived ones, of one role, or those whose name holds what is searched. A monitor’s phone number is in an admin’s answer only.',
   access: 'SIGNED_IN',
   roles: backOfficeRoles,
   method: 'GET',
@@ -695,6 +738,10 @@ export const listPeopleEndpoint = endpoint({
   query: z.strictObject({
     role: z.enum(['ADMIN', 'MANAGER_ANALYST', 'MONITOR', 'READ_ONLY_VIEWER']).optional(),
     archived: z.enum(['true', 'false']).optional(),
+    // What the name holds, anywhere in it, in any case (C101; ADR-535 (1)).
+    name: z.string().trim().min(1).max(200).optional(),
+    // In the order they were added (left out), or by name.
+    order: z.enum(['ADDED', 'NAME']).optional(),
     // The last person of the page before: the answer's `next`.
     after: z.uuid().optional(),
     // How many at most: 50 where none is said.
@@ -1945,7 +1992,7 @@ const dispatch = { access: 'SIGNED_IN', roles: backOfficeRoles, permission: 'DIS
 export const listPhonesEndpoint = endpoint({
   name: 'listPhones',
   summary:
-    'The firm’s phones, a page at a time, in the order they were enrolled: those in service, or those taken out of it. Each says which version of the master passcode’s check it holds.',
+    'The firm’s phones, a page at a time, in the order they were enrolled: those in service, or those taken out of it. Each says which version of the master passcode’s check it holds, when it was marked lost or retired and why, and which revoked its key.',
   access: 'SIGNED_IN',
   roles: backOfficeRoles,
   method: 'GET',
@@ -3650,6 +3697,628 @@ export const createCertificationEndpoint = endpoint({
   answer: savedAnswer(certificationRecordSchema),
 });
 
+// ---------------------------------------------------------------------------------------------
+// The back office's reads, setup's reads, a save's preview, the bulk acts and the viewers' reads of
+// the same records (REQ-217; BACKLOG 2.8.8; ADR-535). **A read is open to every admin and
+// manager/analyst in service, whatever they hold** (the back office sees everything, ADR-224),
+// asked again inside the read; a pay item's rates take Setup. Every list is a page, oldest first
+// or in the order it names, 50 where none is said and 200 at most.
+const readPage = z
+  .string()
+  .regex(/^([1-9][0-9]?|1[0-9]{2}|200)$/)
+  .optional();
+const pagedAfter = z.strictObject({
+  // The last of the page before: the answer's `next`.
+  after: z.uuid().optional(),
+  limit: readPage,
+});
+const read = { access: 'SIGNED_IN', roles: backOfficeRoles } as const;
+const projectTicket = z.strictObject({
+  projectId: z.uuid(),
+  workflow: z.enum(workflows),
+  ticketNumber: z.string().trim().min(1).max(40),
+});
+
+export const listProjectsEndpoint = endpoint({
+  ...read,
+  name: 'listProjects',
+  summary:
+    'The firm’s projects, a page at a time, in name order: each with its settings, its active window and whether it is closed.',
+  method: 'GET',
+  path: '/projects',
+  query: z.strictObject({
+    // Left out, every project; `true`, only those closed; `false`, only those open.
+    closed: z.enum(['true', 'false']).optional(),
+    after: z.uuid().optional(),
+    limit: readPage,
+  }),
+  answer: projectsAnswerSchema,
+});
+
+export const readProjectEndpoint = endpoint({
+  ...read,
+  name: 'readProject',
+  summary:
+    'One project’s page: its settings, active window and whether it is closed, its kinds of work, each contractor’s place on it by name, and its contracts.',
+  method: 'GET',
+  path: '/projects/:projectId',
+  params: projectId,
+  answer: projectAnswerSchema,
+});
+
+// The one review queue (spec/parts/08, "One review queue"; ADR-228): flags grouped by cause, and
+// the tickets waiting for a person, one workflow a page, by number as text.
+export const reviewQueueEndpoint = endpoint({
+  ...read,
+  name: 'reviewQueue',
+  summary:
+    'The review queue of one workflow on a project: the tickets whose field events stand pending or in review, a page at a time by number, each with its open flags (not cleared, no acceptance in force); and the project’s open flags counted by cause. Narrowed to one cause, only the tickets with an open flag of it.',
+  method: 'GET',
+  path: '/projects/:projectId/review-queue',
+  params: projectId,
+  query: z.strictObject({
+    workflow: z.enum(workflows),
+    // One cause: a flag's code.
+    cause: z.enum(flagCodes).optional(),
+    // The last ticket number of the page before: the answer's `next`.
+    after: z.string().trim().min(1).max(40).optional(),
+    limit: readPage,
+  }),
+  answer: reviewQueueAnswerSchema,
+});
+
+export const listFlagsEndpoint = endpoint({
+  ...read,
+  name: 'listFlags',
+  summary:
+    'A project’s flags, a page at a time, oldest first: on a ticket or on another record (a certification, a site, a survey), of one cause or every one, open or cleared, each with every acceptance it had and whether it was taken back.',
+  method: 'GET',
+  path: '/projects/:projectId/flags',
+  params: projectId,
+  query: z.strictObject({
+    // One cause: a flag's code.
+    cause: z.enum(flagCodes).optional(),
+    // Left out, both; `true`, only those not cleared; `false`, only those cleared.
+    open: z.enum(['true', 'false']).optional(),
+    after: z.uuid().optional(),
+    limit: readPage,
+  }),
+  answer: flagsAnswerSchema,
+});
+
+export const readTicketEndpoint = endpoint({
+  ...read,
+  name: 'readTicket',
+  summary:
+    'One ticket whole, as the back office reads it: its field events in field time (as recorded and corrected, with their status, zone and worked-out pay item), the completed record that stands with its collection rows, its lines with their rates and amounts, its flags with their acceptances, its QC mark, every lock it had, its voids and unvoids. A ticket with no field event is not found.',
+  method: 'GET',
+  path: '/projects/:projectId/tickets/:workflow/:ticketNumber',
+  params: projectTicket,
+  answer: ticketAnswerSchema,
+});
+
+export const readFieldEventEndpoint = endpoint({
+  ...read,
+  name: 'readFieldEvent',
+  summary:
+    'One field event as recorded and corrected, with its status, its item lines and the tickets it carries (those taken off kept, marked), its photographs’ records (each with its view, when it was taken and when its file reached storage) and the scale receipt it names. Never where a file is kept.',
+  method: 'GET',
+  path: '/field-events/:fieldEventId',
+  params: z.strictObject({ fieldEventId: z.uuid() }),
+  answer: fieldEventAnswerSchema,
+});
+
+export const readScaleReceiptEndpoint = endpoint({
+  ...read,
+  name: 'readScaleReceipt',
+  summary:
+    'One scale receipt as the tower copied it, with its photographs’ records and the field events that name it.',
+  method: 'GET',
+  path: '/scale-receipts/:scaleReceiptId',
+  params: z.strictObject({ scaleReceiptId: z.uuid() }),
+  answer: scaleReceiptAnswerSchema,
+});
+
+export const listCertificationsEndpoint = endpoint({
+  ...read,
+  name: 'listCertifications',
+  summary:
+    'A project’s certifications, a page at a time, by cert number as written: each whole, with its boxes, helpers, photographs’ records, QC mark and its own flags, where it came from (its phone, or the paper sheet with who entered it and why) and any revocation.',
+  method: 'GET',
+  path: '/projects/:projectId/certifications',
+  params: projectId,
+  query: z.strictObject({
+    // One cert number, as written.
+    certNumber: z.string().trim().min(1).max(40).optional(),
+    after: z.uuid().optional(),
+    limit: readPage,
+  }),
+  answer: certificationsAnswerSchema,
+});
+
+export const readCertificationEndpoint = endpoint({
+  ...read,
+  name: 'readCertification',
+  summary:
+    'One certification whole: its boxes (those taken off kept, marked), helpers, photographs’ records, QC mark and its own flags, where it came from and any revocation. Never the driver’s phone or licence number.',
+  method: 'GET',
+  path: '/certifications/:certificationId',
+  params: z.strictObject({ certificationId: z.uuid() }),
+  answer: certificationReadSchema,
+});
+
+export const listRoesEndpoint = endpoint({
+  ...read,
+  name: 'listRoes',
+  summary:
+    'A project’s ROEs, a page at a time, in the order they were made: each with its scope, its photographs’ records and its QC mark.',
+  method: 'GET',
+  path: '/projects/:projectId/roes',
+  params: projectId,
+  query: pagedAfter,
+  answer: roesAnswerSchema,
+});
+
+export const listSurveysEndpoint = endpoint({
+  ...read,
+  name: 'listSurveys',
+  summary:
+    'A project’s surveys, a page at a time, in the order they were made: each with its own flags, its photographs’ records and its QC mark.',
+  method: 'GET',
+  path: '/projects/:projectId/surveys',
+  params: projectId,
+  query: pagedAfter,
+  answer: surveysAnswerSchema,
+});
+
+export const listIncidentsEndpoint = endpoint({
+  ...read,
+  name: 'listIncidents',
+  summary:
+    'A project’s incidents, a page at a time, in the order they were made: each with its photographs’ records and its QC mark.',
+  method: 'GET',
+  path: '/projects/:projectId/incidents',
+  params: projectId,
+  query: pagedAfter,
+  answer: incidentsAnswerSchema,
+});
+
+export const listDropOffLogsEndpoint = endpoint({
+  ...read,
+  name: 'listDropOffLogs',
+  summary:
+    'A project’s citizen drop-off logs, a page at a time, in the order they were made: each with its photographs’ records and its QC mark.',
+  method: 'GET',
+  path: '/projects/:projectId/drop-off-logs',
+  params: projectId,
+  query: pagedAfter,
+  answer: dropOffLogsAnswerSchema,
+});
+
+export const listInvoiceBatchesEndpoint = endpoint({
+  ...read,
+  name: 'listInvoiceBatches',
+  summary:
+    'A project’s invoice batches, a page at a time, in name order: each with how many locks in force it holds.',
+  method: 'GET',
+  path: '/projects/:projectId/invoice-batches',
+  params: projectId,
+  query: pagedAfter,
+  answer: invoiceBatchesAnswerSchema,
+});
+
+const invoiceBatchId = z.strictObject({ invoiceBatchId: z.uuid() });
+
+export const readInvoiceBatchEndpoint = endpoint({
+  ...read,
+  name: 'readInvoiceBatch',
+  summary:
+    'One invoice batch and what it holds: each lock in force that names it, with the ticket it locks. No amount: a batch is a name and its tickets.',
+  method: 'GET',
+  path: '/invoice-batches/:invoiceBatchId',
+  params: invoiceBatchId,
+  answer: invoiceBatchAnswerSchema,
+});
+
+// A batch is renamed, never archived: it is kept for ever (ADR-363, 529, 535 (4)).
+export const renameInvoiceBatchEndpoint = endpoint({
+  ...reviewer,
+  permission: 'LOCK_INVOICED',
+  name: 'renameInvoiceBatch',
+  summary:
+    'An invoice batch is renamed: a name used once on its project, never blank. Its locks and tickets are as they were.',
+  method: 'PATCH',
+  path: '/invoice-batches/:invoiceBatchId',
+  params: invoiceBatchId,
+  body: z.strictObject({ name: named }),
+  answer: savedAnswer(invoiceBatchRecordSchema),
+});
+
+// The board searched by person or phone, across projects and days (C103, C115; ADR-535 (1)).
+export const searchBoardEndpoint = endpoint({
+  ...read,
+  name: 'searchBoard',
+  summary:
+    'The dispatch board searched: a person’s or a phone’s assignments (or a project’s), from one day to another (62 days at most), standing or withdrawn, a page at a time by day and then in the order written; each with what the board warns of beside it (a second assignment for the person or the phone that day, a day outside the project’s active window, a closed project, unit rate pay items named with no unit rate work, a site not yet active or closed). A warning never stops anything.',
+  method: 'GET',
+  path: '/assignments',
+  query: z
+    .strictObject({
+      userId: z.uuid().optional(),
+      deviceId: z.uuid().optional(),
+      projectId: z.uuid().optional(),
+      from: day,
+      to: day,
+      withdrawn: z.enum(['true', 'false']).optional(),
+      after: z.uuid().optional(),
+      limit: readPage,
+    })
+    .refine(
+      (query) =>
+        query.userId !== undefined || query.deviceId !== undefined || query.projectId !== undefined,
+      { message: 'Name a person, a phone or a project.', path: ['userId'] },
+    )
+    .refine(
+      (query) => {
+        const days = (Date.parse(query.to) - Date.parse(query.from)) / 86_400_000;
+        return days >= 0 && days <= 61;
+      },
+      { message: 'From one day to another, 62 days at most.', path: ['to'] },
+    ),
+  answer: boardSearchAnswerSchema,
+});
+
+export const listPhoneSessionsEndpoint = endpoint({
+  ...read,
+  name: 'listPhoneSessions',
+  summary:
+    'A phone’s sessions, a page at a time, newest first: whose, when made, until when and whether ended, which way one opened under the master passcode was, and whether it came from a sign-in made on the phone offline. Never a token.',
+  method: 'GET',
+  path: '/phones/:deviceId/sessions',
+  params: z.strictObject({ deviceId: z.uuid() }),
+  query: pagedAfter,
+  answer: phoneSessionsAnswerSchema,
+});
+
+// Setup's reads (C99, C100, C169).
+export const listFormsEndpoint = endpoint({
+  ...read,
+  name: 'listForms',
+  summary:
+    'A project’s forms, one for each document type at most: each with its debris types’ entries (those archived kept, marked) and the newest version of its own fields.',
+  method: 'GET',
+  path: '/projects/:projectId/forms',
+  params: projectId,
+  answer: formsAnswerSchema,
+});
+
+export const listPayItemsEndpoint = endpoint({
+  ...read,
+  name: 'listPayItems',
+  summary:
+    'A project’s pay items, a page at a time, by code: each as the firm entered it, with its crew day’s steps in force. Never a rate: a pay item’s rates are a read that takes Setup.',
+  method: 'GET',
+  path: '/projects/:projectId/pay-items',
+  params: projectId,
+  query: pagedAfter,
+  answer: payItemsAnswerSchema,
+});
+
+export const listPayItemRatesEndpoint = endpoint({
+  ...setup,
+  name: 'listPayItemRates',
+  summary:
+    'A project’s rates, a page at a time, by pay item and then prime: each an exact decimal, those archived kept, marked. Read only by whoever may set one.',
+  method: 'GET',
+  path: '/projects/:projectId/pay-item-rates',
+  params: projectId,
+  query: pagedAfter,
+  answer: payItemRatesAnswerSchema,
+});
+
+export const listRulesEndpoint = endpoint({
+  ...read,
+  name: 'listRules',
+  summary:
+    'A project’s rules, a page at a time, in the order written: each whole as the rule builder states it (each picked value with its name and whether it is gone), the pay item whose "Pays when" wrote it, and whether it is valid now and why not.',
+  method: 'GET',
+  path: '/projects/:projectId/rules',
+  params: projectId,
+  query: z.strictObject({
+    // Left out, every rule; `true`, only those archived; `false`, only those in force.
+    archived: z.enum(['true', 'false']).optional(),
+    after: z.uuid().optional(),
+    limit: readPage,
+  }),
+  answer: rulesAnswerSchema,
+});
+
+export const listSitesEndpoint = endpoint({
+  ...read,
+  name: 'listSites',
+  summary:
+    'A project’s sites, a page at a time, in name order: each with its labels, its tipping fee links and its own shape’s newest version.',
+  method: 'GET',
+  path: '/projects/:projectId/sites',
+  params: projectId,
+  query: pagedAfter,
+  answer: sitesAnswerSchema,
+});
+
+export const listSiteShapesEndpoint = endpoint({
+  ...read,
+  name: 'listSiteShapes',
+  summary:
+    'A site’s own shape, every version, newest first: each with its shape, how it came (drawn, a file, an Esri layer), its file’s name or the layer’s address, and whether its file was kept. Never where.',
+  method: 'GET',
+  path: '/sites/:siteId/shapes',
+  params: z.strictObject({ siteId: z.uuid() }),
+  query: pagedAfter,
+  answer: siteShapeVersionsAnswerSchema,
+});
+
+// A kept map's file, answered as a photograph's is (ADR-483, 535 (2)): the bytes stored, under the
+// type kept with them, as a download and never as a page.
+export const siteShapeFileEndpoint = endpoint({
+  ...read,
+  name: 'siteShapeFile',
+  summary:
+    'The file a site’s shape version was loaded from, as it was kept: the bytes that were stored, under the type they were kept as, sent as a download and never as a page. None for a shape that was drawn.',
+  method: 'GET',
+  path: '/site-shapes/:siteAreaVersionId/file',
+  params: z.strictObject({ siteAreaVersionId: z.uuid() }),
+  answersFile: true,
+  answersFileOf: mapFileTypes,
+  answer: keptFileAnswerSchema,
+});
+
+export const listMapVersionsEndpoint = endpoint({
+  ...read,
+  name: 'listMapVersions',
+  summary:
+    'A project’s map versions, a page at a time, newest first: each with how it came, its file’s name or the layer’s address, the zones’ own layer and whether its copy was kept, and its zones’ names.',
+  method: 'GET',
+  path: '/projects/:projectId/map-versions',
+  params: projectId,
+  query: pagedAfter,
+  answer: mapVersionsAnswerSchema,
+});
+
+const mapVersionId = z.strictObject({ mapVersionId: z.uuid() });
+
+export const readMapVersionEndpoint = endpoint({
+  ...read,
+  name: 'readMapVersion',
+  summary: 'One map version with its boundary and each zone’s shape, as they were loaded.',
+  method: 'GET',
+  path: '/map-versions/:mapVersionId',
+  params: mapVersionId,
+  answer: mapVersionAnswerSchema,
+});
+
+export const mapVersionFileEndpoint = endpoint({
+  ...read,
+  name: 'mapVersionFile',
+  summary:
+    'A map version’s file as it was kept, or the copy of its zones’ own Esri layer: the bytes that were stored, under the type they were kept as, sent as a download and never as a page.',
+  method: 'GET',
+  path: '/map-versions/:mapVersionId/files/:file',
+  params: z.strictObject({ mapVersionId: z.uuid(), file: z.enum(['map', 'zones']) }),
+  answersFile: true,
+  answersFileOf: mapFileTypes,
+  answer: keptFileAnswerSchema,
+});
+
+export const listListValuesEndpoint = endpoint({
+  ...read,
+  name: 'listListValues',
+  summary:
+    'One of the firm’s lists, a page at a time, in its order: its values in service, or the archived ones apart, each with what its list asks beside its name (a field tag its project).',
+  method: 'GET',
+  path: '/lists/:list/values',
+  params: z.strictObject({ list: z.enum(firmLists) }),
+  query: z.strictObject({
+    archived: z.enum(['true', 'false']).optional(),
+    after: z.uuid().optional(),
+    limit: readPage,
+  }),
+  answer: listValuesAnswerSchema,
+});
+
+// What a setup save would change, before it is saved (ADR-229, 535 (3)): each takes exactly its
+// save's body, and nothing of it is kept.
+const preview = (of: string) =>
+  `What ${of} would do, before it is saved: the record as it would be, its warnings and how many tickets it would queue (and pass by, locked as invoiced), or why it wouldn’t be saved. Nothing is kept.`;
+
+export const previewPayItemChangeEndpoint = endpoint({
+  ...setup,
+  name: 'previewPayItemChange',
+  summary: preview('a change to a pay item'),
+  method: 'POST',
+  path: '/pay-items/:payItemId/previews',
+  params: payItemId,
+  body: changePayItemEndpoint.body,
+  answer: previewAnswer(payItemRecordSchema),
+});
+
+export const previewPaysWhenEndpoint = endpoint({
+  ...setup,
+  name: 'previewPaysWhen',
+  summary: preview('saving a pay item’s "Pays when"'),
+  method: 'POST',
+  path: '/pay-items/:payItemId/pays-when/previews',
+  params: payItemId,
+  body: savePaysWhenEndpoint.body,
+  answer: previewAnswer(rulesKeptRecordSchema),
+});
+
+export const previewPayItemRateEndpoint = endpoint({
+  ...setup,
+  name: 'previewPayItemRate',
+  summary: preview('a prime’s rate'),
+  method: 'POST',
+  path: '/pay-items/:payItemId/rates/:primeId/previews',
+  params: setPayItemRateEndpoint.params,
+  body: setPayItemRateEndpoint.body,
+  answer: previewAnswer(payItemRateRecordSchema),
+});
+
+export const previewNewRuleEndpoint = endpoint({
+  ...setup,
+  name: 'previewNewRule',
+  summary: preview('a new rule'),
+  method: 'POST',
+  path: '/projects/:projectId/rules/previews',
+  params: projectId,
+  body: ruleBody,
+  answer: previewAnswer(savedRuleRecordSchema),
+});
+
+export const previewRuleChangeEndpoint = endpoint({
+  ...setup,
+  name: 'previewRuleChange',
+  summary: preview('a change to a rule'),
+  method: 'POST',
+  path: '/rules/:ruleId/previews',
+  params: z.strictObject({ ruleId: z.uuid() }),
+  body: ruleBody,
+  answer: previewAnswer(savedRuleRecordSchema),
+});
+
+// QC and a lock for many tickets in one request (C148; ADR-535 (4)): each its own piece of work,
+// in order, each answered.
+const severalAtMost = 200;
+
+export const setQcStatusesEndpoint = endpoint({
+  ...reviewer,
+  permission: 'QC',
+  name: 'setQcStatuses',
+  summary:
+    'QC statuses set on many records at once, up to 200, each as one would be: in the order sent, each its own piece of work and each answered, saved with its mark or not with its reason and words (a ticket locked as invoiced among them). One refused never stops the rest.',
+  method: 'PUT',
+  path: '/qc-marks/several',
+  body: z.strictObject({
+    marks: z
+      .array(z.strictObject({ record: qcMarked, status: z.enum(qcStatuses), note: reviewNote }))
+      .min(1)
+      .max(severalAtMost),
+  }),
+  answer: severalAnswer(qcMarkRecordSchema),
+});
+
+export const lockSeveralAsInvoicedEndpoint = endpoint({
+  ...reviewer,
+  permission: 'LOCK_INVOICED',
+  name: 'lockSeveralAsInvoiced',
+  summary:
+    'Many tickets locked as invoiced at once, up to 200, each in the batch named where one is: in the order sent, each its own piece of work and each answered, locked or not with its reason and words (not QC Approved, not whole, flagged, already locked). One refused never stops the rest.',
+  method: 'POST',
+  path: '/invoice-locks/several',
+  body: z.strictObject({
+    tickets: z.array(ticketMarked).min(1).max(severalAtMost),
+    invoiceBatchId: z.uuid().optional(),
+  }),
+  answer: severalAnswer(invoiceLockRecordSchema),
+});
+
+// The viewers' reads of the same records (ADR-520 (3), 535 (6)): what the database shows the
+// signed-in viewer and no more.
+const viewerRead = { access: 'SIGNED_IN', roles: viewerOnly } as const;
+const viewerPaged = z.strictObject({ after: z.uuid().optional(), limit: viewerPage });
+
+export const viewerCertificationsEndpoint = endpoint({
+  ...viewerRead,
+  name: 'viewerCertifications',
+  summary:
+    'A project’s certifications as the signed-in viewer is shown them, a page at a time, by cert number: each with its boxes, who it names by name and any revocation; never the driver’s phone or licence number. A contractor user is shown those naming its contractor.',
+  method: 'GET',
+  path: '/viewer/projects/:projectId/certifications',
+  params: projectId,
+  query: viewerPaged,
+  answer: viewerCertificationsAnswerSchema,
+});
+
+export const viewerSurveysEndpoint = endpoint({
+  ...viewerRead,
+  name: 'viewerSurveys',
+  summary:
+    'A project’s surveys as the signed-in viewer is shown them, a page at a time, in the order they were made. A contractor user is shown none.',
+  method: 'GET',
+  path: '/viewer/projects/:projectId/surveys',
+  params: projectId,
+  query: viewerPaged,
+  answer: viewerSurveysAnswerSchema,
+});
+
+export const viewerIncidentsEndpoint = endpoint({
+  ...viewerRead,
+  name: 'viewerIncidents',
+  summary:
+    'A project’s incidents as the signed-in viewer is shown them, a page at a time, in the order they were made. A contractor user is shown none.',
+  method: 'GET',
+  path: '/viewer/projects/:projectId/incidents',
+  params: projectId,
+  query: viewerPaged,
+  answer: viewerIncidentsAnswerSchema,
+});
+
+export const viewerDropOffLogsEndpoint = endpoint({
+  ...viewerRead,
+  name: 'viewerDropOffLogs',
+  summary:
+    'A project’s citizen drop-off logs as the signed-in viewer is shown them, a page at a time, in the order they were made: the resident and where their debris came from only where the firm lets this viewer see private citizens by name. A contractor user is shown none.',
+  method: 'GET',
+  path: '/viewer/projects/:projectId/drop-off-logs',
+  params: projectId,
+  query: viewerPaged,
+  answer: viewerDropOffLogsAnswerSchema,
+});
+
+export const viewerSetupEndpoint = endpoint({
+  ...viewerRead,
+  name: 'viewerSetup',
+  summary:
+    'A project’s setup as a client user or an auditor reads it: its forms and debris types, its pay items by code and description (never a rate), its sites and their facts, its contracts and their primes, its rules by name. Not found for a contractor user.',
+  method: 'GET',
+  path: '/viewer/projects/:projectId/setup',
+  params: projectId,
+  answer: viewerSetupAnswerSchema,
+});
+
+export const viewerSetupCheckEndpoint = endpoint({
+  ...viewerRead,
+  name: 'viewerSetupCheck',
+  summary:
+    'The setup check as a client user or an auditor reads it: everything the project’s setup leaves open, each in plain words. Not found for a contractor user.',
+  method: 'GET',
+  path: '/viewer/projects/:projectId/setup-check',
+  params: projectId,
+  answer: setupCheckAnswerSchema,
+});
+
+export const viewerQuantityLookupEndpoint = endpoint({
+  ...viewerRead,
+  name: 'viewerQuantityLookup',
+  summary:
+    'What each of the project’s sites’ phones ask for, as a client user or an auditor reads it. Not found for a contractor user.',
+  method: 'GET',
+  path: '/viewer/projects/:projectId/quantity-lookup',
+  params: projectId,
+  answer: quantityLookupAnswerSchema,
+});
+
+export const viewerPhotographFileEndpoint = endpoint({
+  ...viewerRead,
+  name: 'viewerPhotographFile',
+  summary:
+    'A photograph’s file, or its depth file, as kept, for a viewer the database shows the photograph’s record: the bytes that were stored, under the type their own first bytes said, sent as a download and never as a page. A photograph the viewer isn’t shown is not found.',
+  method: 'GET',
+  path: '/viewer/photographs/:photoId/files/:file',
+  params: photoFileNamed,
+  answersFile: true,
+  answer: keptFileAnswerSchema,
+});
+
 export const endpoints: readonly Endpoint[] = [
   healthEndpoint,
   readinessEndpoint,
@@ -3683,6 +4352,11 @@ export const endpoints: readonly Endpoint[] = [
   createDeclarationEventEndpoint,
   changeDeclarationEventEndpoint,
   createProjectEndpoint,
+  listProjectsEndpoint,
+  readProjectEndpoint,
+  reviewQueueEndpoint,
+  listFlagsEndpoint,
+  readTicketEndpoint,
   changeProjectSettingsEndpoint,
   changeProjectWindowEndpoint,
   closingCheckEndpoint,
@@ -3701,29 +4375,45 @@ export const endpoints: readonly Endpoint[] = [
   addDebrisTypeEndpoint,
   addPayableTypeEndpoint,
   addListValueEndpoint,
+  listListValuesEndpoint,
   renameListValueEndpoint,
   archiveListValueEndpoint,
   unarchiveListValueEndpoint,
+  listFormsEndpoint,
   createFormEndpoint,
   changeFormEndpoint,
   addFormDebrisTypeEndpoint,
   changeFormDebrisTypeEndpoint,
   addFormDefinitionEndpoint,
+  listPayItemsEndpoint,
   createPayItemEndpoint,
+  listPayItemRatesEndpoint,
   changePayItemEndpoint,
+  previewPayItemChangeEndpoint,
   setPayItemRateEndpoint,
+  previewPayItemRateEndpoint,
   setCrewDayStepsEndpoint,
   savePaysWhenEndpoint,
+  previewPaysWhenEndpoint,
+  listRulesEndpoint,
   createRuleEndpoint,
+  previewNewRuleEndpoint,
   changeRuleEndpoint,
+  previewRuleChangeEndpoint,
+  listSitesEndpoint,
   createSiteEndpoint,
   changeSiteEndpoint,
   giveSiteLabelEndpoint,
   removeSiteLabelEndpoint,
+  listSiteShapesEndpoint,
   addSiteShapeEndpoint,
+  siteShapeFileEndpoint,
   linkTippingFeeEndpoint,
   removeTippingFeeEndpoint,
+  listMapVersionsEndpoint,
   loadMapEndpoint,
+  readMapVersionEndpoint,
+  mapVersionFileEndpoint,
   sendMapFileEndpoint,
   loadMapFileEndpoint,
   addSiteShapeFileEndpoint,
@@ -3738,6 +4428,7 @@ export const endpoints: readonly Endpoint[] = [
   changeViewerTwoStepEndpoint,
   changeMonitorSessionHoursEndpoint,
   listPhonesEndpoint,
+  listPhoneSessionsEndpoint,
   enrolPhoneEndpoint,
   challengePhoneEndpoint,
   provePhoneEndpoint,
@@ -3767,16 +4458,23 @@ export const endpoints: readonly Endpoint[] = [
   changeAssignmentEndpoint,
   withdrawAssignmentEndpoint,
   reinstateAssignmentEndpoint,
+  searchBoardEndpoint,
   voidTicketEndpoint,
   unvoidTicketEndpoint,
   acceptFlagEndpoint,
   withdrawAcceptanceEndpoint,
   setQcStatusEndpoint,
+  setQcStatusesEndpoint,
+  listInvoiceBatchesEndpoint,
   createInvoiceBatchEndpoint,
+  readInvoiceBatchEndpoint,
+  renameInvoiceBatchEndpoint,
   lockAsInvoicedEndpoint,
+  lockSeveralAsInvoicedEndpoint,
   setLockBatchEndpoint,
   unlockInvoicedEndpoint,
   reprocessTicketsEndpoint,
+  readFieldEventEndpoint,
   correctFieldEventEndpoint,
   renumberFieldEventEndpoint,
   correctItemLineEndpoint,
@@ -3784,6 +4482,7 @@ export const endpoints: readonly Endpoint[] = [
   markPhotographEndpoint,
   photographFileEndpoint,
   addPhotographEndpoint,
+  readScaleReceiptEndpoint,
   correctScaleReceiptEndpoint,
   correctRoeEndpoint,
   correctRoeScopeEndpoint,
@@ -3800,11 +4499,17 @@ export const endpoints: readonly Endpoint[] = [
   closeSetAsideFileEndpoint,
   listQuarantinedRecordsEndpoint,
   createFieldEventEndpoint,
+  listRoesEndpoint,
   createRoeEndpoint,
+  listSurveysEndpoint,
   createSurveyEndpoint,
+  listIncidentsEndpoint,
   createIncidentEndpoint,
+  listDropOffLogsEndpoint,
   createDropOffLogEndpoint,
+  listCertificationsEndpoint,
   createCertificationEndpoint,
+  readCertificationEndpoint,
   correctCertificationEndpoint,
   correctCertificationBoxEndpoint,
   addCertificationBoxEndpoint,
@@ -3813,6 +4518,14 @@ export const endpoints: readonly Endpoint[] = [
   unrevokeCertificationEndpoint,
   viewerProjectsEndpoint,
   viewerRoesEndpoint,
+  viewerCertificationsEndpoint,
+  viewerSurveysEndpoint,
+  viewerIncidentsEndpoint,
+  viewerDropOffLogsEndpoint,
+  viewerSetupEndpoint,
+  viewerSetupCheckEndpoint,
+  viewerQuantityLookupEndpoint,
   viewerTicketsEndpoint,
   viewerTicketEndpoint,
+  viewerPhotographFileEndpoint,
 ];

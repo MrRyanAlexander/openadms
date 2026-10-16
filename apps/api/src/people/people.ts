@@ -106,6 +106,9 @@ export interface PersonChanges {
 export interface PeopleAsked {
   readonly role?: PersonRead['role'] | undefined;
   readonly archived: boolean;
+  // What the name holds, anywhere in it, in any case; and in name order where asked (C101).
+  readonly name?: string | undefined;
+  readonly order?: 'ADDED' | 'NAME' | undefined;
   readonly after?: string | undefined;
   readonly limit: number;
 }
@@ -263,9 +266,13 @@ export class People {
         where: {
           role: asked.role ?? { notIn: [...actorsOnly] },
           archivedAt: asked.archived ? { not: null } : null,
-          ...(asked.after === undefined ? {} : { id: { gt: asked.after } }),
+          ...(asked.name === undefined
+            ? {}
+            : { name: { contains: asked.name, mode: 'insensitive' as const } }),
         },
-        orderBy: { id: 'asc' },
+        // In the order they were added, or by name; a page follows the last person's id.
+        orderBy: asked.order === 'NAME' ? [{ name: 'asc' }, { id: 'asc' }] : { id: 'asc' },
+        ...(asked.after === undefined ? {} : { cursor: { id: asked.after }, skip: 1 }),
         // One more than the page, to know whether another follows.
         take: asked.limit + 1,
         select: personRead,

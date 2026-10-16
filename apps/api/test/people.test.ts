@@ -218,21 +218,52 @@ describe('permissions, read from the database on every request', () => {
     ).toEqual([
       'listPeople',
       'readPerson',
+      // The back office's reads (ADR-535): a project and its review queue, flags and tickets,
+      // the firm's lists, setup but its rates, a site's shapes and a map's versions and files.
+      'listProjects',
+      'readProject',
+      'reviewQueue',
+      'listFlags',
+      'readTicket',
+      'listListValues',
+      'listForms',
+      'listPayItems',
+      'listRules',
+      'listSites',
+      'listSiteShapes',
+      'siteShapeFile',
+      'listMapVersions',
+      'readMapVersion',
+      'mapVersionFile',
       'setupCheck',
       'quantityLookup',
       'siteQuantityLookup',
-      // The firm's phones (ADR-428).
+      // The firm's phones (ADR-428), and a phone's sessions (ADR-535).
       'listPhones',
-      // A day's dispatch board (ADR-429).
+      'listPhoneSessions',
+      // A day's dispatch board (ADR-429), and the board searched (ADR-535).
       'listAssignments',
-      // A photograph's file (ADR-483).
+      'searchBoard',
+      // Invoice batches and what each holds, a field event (ADR-535).
+      'listInvoiceBatches',
+      'readInvoiceBatch',
+      'readFieldEvent',
+      // A photograph's file (ADR-483), and a scale receipt (ADR-535).
       'photographFile',
+      'readScaleReceipt',
       // What a sync held for a person and what waits in quarantine, and a file set aside
       // (ADR-526).
       'listHeldRecords',
       'listSetAsideFiles',
       'setAsideFile',
       'listQuarantinedRecords',
+      // The forms and certifications (ADR-535).
+      'listRoes',
+      'listSurveys',
+      'listIncidents',
+      'listDropOffLogs',
+      'listCertifications',
+      'readCertification',
     ]);
     // The permissions an endpoint takes yet are Setup (task 2.4.2; the list by name is
     // setup-endpoints.test.ts's), Dispatch (task 2.4.3; phones.test.ts's) and those of review's

@@ -102,6 +102,8 @@ import {
 import { apiBackOfficeRecords, apiQuarantineReview } from '../review/review-records.controller.ts';
 import { apiHeldReads, apiHeldReview } from '../review/held.controller.ts';
 import { HeldReads } from '../review/held-reads.ts';
+import { apiReviewReads } from '../review/review-reads.controller.ts';
+import { ReviewReads } from '../review/review-reads.ts';
 import { HeldReview } from '../review/held-review.ts';
 import { apiHeldThings, HeldThings } from '../sync/held.ts';
 import { Voids } from '../review/voids.ts';
@@ -117,6 +119,8 @@ import { EsriLayers, type EsriLayerSource } from '../setup/esri-layers.ts';
 import { MapFileReader } from '../setup/map-file-reader.ts';
 import { MapFiles } from '../setup/map-files.ts';
 import { apiMapFiles } from '../setup/map-files.controller.ts';
+import { apiSetupReads } from '../setup/setup-reads.controller.ts';
+import { SetupReads } from '../setup/setup-reads.ts';
 import { apiProjectSetup } from '../setup/project-setup.controller.ts';
 import { ProjectSetup } from '../setup/project-setup.ts';
 import { RuleSetup } from '../setup/rule-setup.ts';
@@ -501,6 +505,11 @@ export class ApiProcess {
             }),
           ],
           [apiSetupStanding, new SetupStanding(database)],
+          // Setup as the back office reads it, a kept map's file among it (task 2.8.8).
+          [
+            apiSetupReads,
+            new SetupReads(database, { media, fileBytesAtMost: policy.mapFileBytesAtMost }),
+          ],
           // The firm's own settings (task 2.8.6).
           [apiFirmSettings, new FirmSettings(database, clock)],
           // Dispatch and phones (task 2.4.3).
@@ -519,6 +528,8 @@ export class ApiProcess {
           // What a sync held for a person, read and resolved (task 2.8.4).
           [apiHeldReview, new HeldReview(database, clock, policy, { intake, certifications })],
           [apiHeldReads, new HeldReads(database)],
+          // What the back office reads to review, fix and QC (task 2.8.8).
+          [apiReviewReads, new ReviewReads(database)],
           [apiHeldThings, held],
           // A certification's changes (task 2.4.4, part 4): only an admin revokes.
           [apiCertifications, certifications],

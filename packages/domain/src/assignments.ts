@@ -32,8 +32,10 @@
 //   sites: a site move is a setup anew, and the earlier assignment stands), or a phone passed
 //   to a monitor who had no assignment it could take. Each is a use of the master passcode.
 //
-// Nothing here stops a second assignment for one person or one phone on a day (AC-02-29), judges
-// a date, or says an assignment has run out: it never expires and never stops work (ADR-240).
+// Nothing here stops a second assignment for one person or one phone on a day (AC-02-29), or
+// says an assignment has run out: it never expires and never stops work (ADR-240). **The board
+// warns** of what a person reading it would want to see (`BoardWarnings`, ADR-535): warnings are
+// read beside an assignment, never stop a write, and are worked out from the board as it stands.
 import { ProjectClock } from './project-clock.ts';
 
 // The forms an assignment may name, as the database's check holds them.
@@ -241,5 +243,137 @@ export class AssignmentRules {
       };
     }
     return null;
+  }
+}
+
+// What the board warns of beside an assignment (BACKLOG C103, C115; ADR-535 (1)): each a plain
+// sentence a person reads, never a refusal and never a ticket's flag (ADR-240). Worked out from
+// the assignment, its project and site as they stand, and the other assignments that stand that
+// day for the same person or the same phone.
+export const boardWarningCodes = [
+  // Another assignment that stands for the same person that day (AC-02-29).
+  'PERSON_TWICE_THAT_DAY',
+  // Another assignment that stands naming the same phone that day.
+  'PHONE_TWICE_THAT_DAY',
+  // The day is before the project's active window opens or after it closes (ADR-057, 161).
+  'OUTSIDE_THE_ACTIVE_WINDOW',
+  // The project is closed (ADR-529 (b)).
+  'PROJECT_CLOSED',
+  // Unit rate pay items are named where no unit rate work is.
+  'PAY_ITEMS_WITHOUT_UNIT_RATE_WORK',
+  // Its site isn't yet active that day, or was closed by then.
+  'SITE_NOT_ACTIVE',
+] as const;
+
+export type BoardWarningCode = (typeof boardWarningCodes)[number];
+
+export interface BoardWarning {
+  readonly code: BoardWarningCode;
+  readonly message: string;
+}
+
+// An assignment as the board's warnings read it.
+export interface AssignmentOnTheBoard {
+  readonly id: string;
+  readonly personName: string;
+  // 2026-10-12, in the project's time zone.
+  readonly workDate: string;
+  readonly withdrawn: boolean;
+  readonly deviceId: string | null;
+  readonly deviceName: string | null;
+  readonly personId: string;
+  readonly fieldEventKinds: readonly string[];
+  readonly payItemCount: number;
+  readonly project: {
+    readonly name: string;
+    // Calendar days, the end optional.
+    readonly activeFrom: string;
+    readonly activeTo: string | null;
+    readonly closed: boolean;
+  };
+  readonly site: {
+    readonly name: string;
+    // Calendar days, either optional.
+    readonly activeFrom: string | null;
+    readonly closedOn: string | null;
+  } | null;
+}
+
+export class BoardWarnings {
+  // The warnings beside one assignment; `others` are the other assignments that stand that day
+  // for its person or its phone, on any project. A withdrawn assignment is warned of nothing.
+  of(
+    assignment: AssignmentOnTheBoard,
+    others: readonly {
+      readonly id: string;
+      readonly personId: string;
+      readonly deviceId: string | null;
+      readonly projectName: string;
+    }[],
+  ): BoardWarning[] {
+    if (assignment.withdrawn) return [];
+    const day = assignment.workDate;
+    const who = assignment.personName;
+    const warnings: BoardWarning[] = [];
+    const elsewhere = others.filter((other) => other.id !== assignment.id);
+    const samePerson = elsewhere.filter((other) => other.personId === assignment.personId);
+    if (samePerson.length > 0) {
+      warnings.push({
+        code: 'PERSON_TWICE_THAT_DAY',
+        message: `${who} has ${BoardWarnings.count(samePerson.length, 'other assignment')} on ${day} (${BoardWarnings.projects(samePerson)}). A phone takes one assignment at a time.`,
+      });
+    }
+    const samePhone =
+      assignment.deviceId === null
+        ? []
+        : elsewhere.filter((other) => other.deviceId === assignment.deviceId);
+    if (samePhone.length > 0) {
+      warnings.push({
+        code: 'PHONE_TWICE_THAT_DAY',
+        message: `${assignment.deviceName ?? 'This phone'} is named on ${BoardWarnings.count(samePhone.length, 'other assignment')} on ${day} (${BoardWarnings.projects(samePhone)}).`,
+      });
+    }
+    const { project } = assignment;
+    if (day < project.activeFrom || (project.activeTo !== null && day > project.activeTo)) {
+      warnings.push({
+        code: 'OUTSIDE_THE_ACTIVE_WINDOW',
+        message: `${day} is outside ${project.name}’s active window (${project.activeFrom} to ${project.activeTo ?? 'no end'}): its tickets will be flagged "project not active".`,
+      });
+    }
+    if (project.closed) {
+      warnings.push({
+        code: 'PROJECT_CLOSED',
+        message: `${project.name} is closed: field work sent for it is held for a person.`,
+      });
+    }
+    if (assignment.payItemCount > 0 && !assignment.fieldEventKinds.includes('UNIT_RATE')) {
+      warnings.push({
+        code: 'PAY_ITEMS_WITHOUT_UNIT_RATE_WORK',
+        message: `${who}’s assignment names ${BoardWarnings.count(assignment.payItemCount, 'unit rate pay item')} but no unit rate work: the phone won’t offer them.`,
+      });
+    }
+    const { site } = assignment;
+    if (
+      site !== null &&
+      ((site.activeFrom !== null && day < site.activeFrom) ||
+        (site.closedOn !== null && day > site.closedOn))
+    ) {
+      warnings.push({
+        code: 'SITE_NOT_ACTIVE',
+        message:
+          site.activeFrom !== null && day < site.activeFrom
+            ? `${site.name} isn’t active until ${site.activeFrom}.`
+            : `${site.name} was closed on ${site.closedOn ?? ''}.`,
+      });
+    }
+    return warnings;
+  }
+
+  private static count(n: number, what: string): string {
+    return `${String(n)} ${what}${n === 1 ? '' : 's'}`;
+  }
+
+  private static projects(others: readonly { readonly projectName: string }[]): string {
+    return [...new Set(others.map((other) => other.projectName))].join(', ');
   }
 }

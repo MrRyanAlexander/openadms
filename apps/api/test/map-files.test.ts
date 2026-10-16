@@ -13,7 +13,9 @@ import {
   createSiteEndpoint,
   filePartMediaType,
   loadMapFileEndpoint,
+  mapVersionFileEndpoint,
   sendMapFileEndpoint,
+  siteShapeFileEndpoint,
 } from '@open-adms/contracts';
 import type { Database } from '@open-adms/db';
 import { PutObjectCommand, type S3Client } from '@aws-sdk/client-s3';
@@ -207,6 +209,20 @@ describe('a map, and a site’s shape, loaded from a map’s file', () => {
         ).record;
         expect(loaded).toMatchObject({ version: 1, source: 'UPLOAD', fileKept: true });
         expect(await tx.zone.count({ where: { mapVersionId: loaded.id } })).toBe(3);
+        // AC-10-103: the kept file read back whole; the map has no zones' copy of its own.
+        const handedBack = await ask(api, dana, mapVersionFileEndpoint, {
+          ids: { mapVersionId: loaded.id, file: 'map' },
+        });
+        expect(handedBack.status).toBe(200);
+        expect(Buffer.compare(handedBack.bytes, Buffer.from(kmz))).toBe(0);
+        expect(handedBack.headers['content-type']).toBe('application/zip');
+        expect(
+          (
+            await ask(api, dana, mapVersionFileEndpoint, {
+              ids: { mapVersionId: loaded.id, file: 'zones' },
+            })
+          ).status,
+        ).toBe(404);
         const laughs = kmlFile(
           p1ZonesKml,
           '<?xml version="1.0"?>\n<!DOCTYPE kml [<!ENTITY a "a">]>\n',
@@ -338,6 +354,18 @@ describe('a map, and a site’s shape, loaded from a map’s file', () => {
           '-75.625',
           '39.095',
         ]);
+        // AC-10-103: the file the shape came from, handed back as it was kept: its own bytes,
+        // under the type kept with them, a download never run as a page (ADR-483, 535 (2)).
+        const handedBack = await ask(api, dana, siteShapeFileEndpoint, {
+          ids: { siteAreaVersionId: version.id },
+        });
+        expect(handedBack.status).toBe(200);
+        expect(Buffer.compare(handedBack.bytes, Buffer.from(shape))).toBe(0);
+        expect(handedBack.headers['content-type']).toBe('application/geo+json');
+        expect(handedBack.headers['content-disposition']).toBe(
+          `attachment; filename="${version.id}-shape.geojson"`,
+        );
+        expect(handedBack.headers['content-security-policy']).toContain('sandbox');
         // P1's map file holds two layers: one is named.
         const map = saved(sendMapFileEndpoint, await sent(api, dana, project.id, p1MapFile)).record;
         const unnamed = await ask(api, dana, addSiteShapeFileEndpoint, {

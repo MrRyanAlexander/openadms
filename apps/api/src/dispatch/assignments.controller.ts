@@ -7,6 +7,7 @@ import {
   assignmentsAnswerSchema,
   changeAssignmentEndpoint,
   listAssignmentsEndpoint,
+  searchBoardEndpoint,
   reinstateAssignmentEndpoint,
   withdrawAssignmentEndpoint,
   writeAssignmentEndpoint,
@@ -58,6 +59,25 @@ export class AssignmentsController {
       assignments: outcome.assignments,
       next: outcome.next,
     });
+  }
+
+  @Serves(searchBoardEndpoint)
+  async search(
+    @Query() query: QueryOf<typeof searchBoardEndpoint>,
+    @Req() request: FastifyRequest,
+  ) {
+    const found = await this.assignments.search(callerOf(request).userId, {
+      userId: query.userId,
+      deviceId: query.deviceId,
+      projectId: query.projectId,
+      from: query.from,
+      to: query.to,
+      withdrawn: query.withdrawn === 'true',
+      after: query.after,
+      limit: query.limit === undefined ? assignmentsPage : Number(query.limit),
+    });
+    if (found === null) throw new Refusal('NOT_ALLOWED', 403);
+    return searchBoardEndpoint.answer.parse(found);
   }
 
   @Serves(writeAssignmentEndpoint)

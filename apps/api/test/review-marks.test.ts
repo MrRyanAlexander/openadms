@@ -102,10 +102,14 @@ describe('who may ask', () => {
     // An acceptance taken back (ADR-534 (8)).
     expect(taking('ACCEPT_FLAG')).toEqual(['acceptFlag', 'withdrawAcceptance']);
     // Signatures on file are marked at QC (certifications.test.ts; ADR-433).
-    expect(taking('QC')).toEqual(['setQcStatus', 'markSignaturesOnFile']);
+    // Many at once, each its own act (ADR-535 (4)).
+    expect(taking('QC')).toEqual(['setQcStatus', 'setQcStatuses', 'markSignaturesOnFile']);
+    // A batch renamed, and many locked at once (ADR-535 (4)).
     expect(taking('LOCK_INVOICED')).toEqual([
       'createInvoiceBatch',
+      'renameInvoiceBatch',
       'lockAsInvoiced',
+      'lockSeveralAsInvoiced',
       'setLockBatch',
     ]);
     expect(taking('UNLOCK_INVOICED')).toEqual(['unlockInvoiced']);

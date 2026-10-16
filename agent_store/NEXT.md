@@ -10,8 +10,8 @@
 
 An audit of Phase 2 (ADR-519 (1)) found its own server work moved to later phases or left "no
 task yet". The user: "all 3 of these are part of phase 2", "these should be part of phase 2".
-ADR-518's exit is withdrawn; **Milestone 2.8 (`BACKLOG.md`), nine tasks, is the work**: 2.8.1…2.8.7
-done, **2.8.8, 2.8.9 to go**. Phase 3 stays the user's to open, after Phase 2's exit is met
+ADR-518's exit is withdrawn; **Milestone 2.8 (`BACKLOG.md`), nine tasks, is the work**: 2.8.1…2.8.8
+done, **2.8.9 to go**. Phase 3 stays the user's to open, after Phase 2's exit is met
 again.
 
 **What Phase 2 is.** The server in front of what Phase 1 built: the API as a running process over
@@ -71,14 +71,14 @@ things stand, where the product ends up, the road there, and how the user works*
 now, topic by topic, is `SUMMARY.md` (its header's topic index, then only the topics you touch);
 the round-by-round history is the session log at the end of `DECISIONS.md`.
 
-### Where things stand (2026-10-15, through ADR-532)
+### Where things stand (2026-10-16, through ADR-535)
 - **Phases 0 and 1 are done** (Phase 0 closed 2026-10-01, all 17 REQs, ADR-281…288; Phase 1's exit
   met 2026-10-06, ADR-371, 372). **Every spec page is approved** (ARCHITECTURE, VISION, INDEX, the
   part pages, LISTS, RATE-SHEET, RULES, DATA-MODEL, FLAGS, CONVENTIONS, the golden mission and its
   numbers, all ten acceptance files, THREAT-MODEL, CHECKLIST-API §3.1). Their record: `ROADMAP.md`
   §3a–§3b and `DECISIONS.md`.
 - **Phase 2:** 32 tasks of Milestones 2.0…2.7 closed (ADR-376…518); **Milestone 2.8, from the
-  audit:** 2.8.1…2.8.7 done (ADR-522…531, 534), **next 2.8.8**. What each task left is `BACKLOG.md`'s
+  audit:** 2.8.1…2.8.8 done (ADR-522…531, 534, 535), **next 2.8.9, Phase 2's exit**. What each task left is `BACKLOG.md`'s
   carry-forward register (live items only since ADR-532).
 - **Housekeeping, 2026-10-15 (ADR-532), at the user's word:** `SUMMARY.md` cut by topic (432 → 202
   KB, every rule kept with its ADRs), `BACKLOG.md`'s register live-only and its done phases one
@@ -218,12 +218,13 @@ same scenarios passing at each layer (engine, API, apps). The finished surfaces 
 
 ## 📍 Next Atomic Task
 
-**Task 2.8.8, the back office's reads and bulk acts** (`BACKLOG.md`, Milestone 2.8; REQ-217):
-its ADR first, then **its whole line**, the register's "For 2.8.8" items included (since 2.8.7: a
-certification with who entered it from its sheet, a photograph's view and upload time, an
-acceptance's withdrawal, a field event's passcode session, C171), **and the viewers' reads of the
-same records** (ADR-520 (3)). Then 2.8.9, Phase 2's exit, in a response of its own. At every
-task's close, no server "no task yet" is left unfiled (ADR-519).
+**Task 2.8.9, Phase 2's exit, again** (`BACKLOG.md`, Milestone 2.8; ADR-376's seven criteria and
+ADR-519's three, above): each criterion checked and reported from a run that was seen, not
+assumed; **`SUMMARY.md` §4's agent defaults put to the user on one page**, each confirmed or
+overturned (C164); three full runs of `pnpm scenarios` in a row, `burst` with no 500 in its API's
+log (REQ-210); the 22 REQs ticked or re-filed with an ADR (21 ticked, REQ-006 moved); the
+scenario count again; no server "no task yet" left in the register; the state files turned. Then
+Phase 3 is offered to the user to open; nothing of Phase 3 starts before their word.
 
 **New session?** Read the Handoff above, then `SUMMARY.md`'s header (its topic index) and only the
 topics your task touches. Product discovery is closed (ADR-230). **Every command starts with**

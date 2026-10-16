@@ -21,6 +21,7 @@ import { PhoneSignInsController } from '../phone/phone-sign-ins.controller.ts';
 import { CorrectionsController } from '../review/corrections.controller.ts';
 import { ReviewMarksController } from '../review/review-marks.controller.ts';
 import { ReviewRecordsController } from '../review/review-records.controller.ts';
+import { ReviewReadsController } from '../review/review-reads.controller.ts';
 import { HeldController } from '../review/held.controller.ts';
 import { ContractorSetupController } from '../setup/contractor-setup.controller.ts';
 import { FormSetupController } from '../setup/form-setup.controller.ts';
@@ -28,6 +29,7 @@ import { ListSetupController } from '../setup/list-setup.controller.ts';
 import { PricingSetupController } from '../setup/pricing-setup.controller.ts';
 import { ProjectSetupController } from '../setup/project-setup.controller.ts';
 import { SetupStandingController } from '../setup/setup-standing.controller.ts';
+import { SetupReadsController } from '../setup/setup-reads.controller.ts';
 import { FirmSettingsController } from '../firm/firm-settings.controller.ts';
 import { MapFilesController } from '../setup/map-files.controller.ts';
 import { SiteSetupController } from '../setup/site-setup.controller.ts';
@@ -54,6 +56,7 @@ import { HealthController } from './health.controller.ts';
     ListSetupController,
     FormSetupController,
     PricingSetupController,
+    SetupReadsController,
     SiteSetupController,
     MapFilesController,
     SetupStandingController,
@@ -80,6 +83,7 @@ import { HealthController } from './health.controller.ts';
     ReviewMarksController,
     CorrectionsController,
     ReviewRecordsController,
+    ReviewReadsController,
     HeldController,
     CertificationsController,
     ViewerReadsController,

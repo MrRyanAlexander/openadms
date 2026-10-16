@@ -22,6 +22,7 @@ import {
   healthAnswerSchema,
   healthEndpoint,
   loadMapFileEndpoint,
+  mapVersionFileEndpoint,
   notTaken,
   openApiDocument,
   answerFileTypes,
@@ -30,6 +31,8 @@ import {
   photographFileEndpoint,
   sendMapFileEndpoint,
   setAsideFileEndpoint,
+  siteShapeFileEndpoint,
+  viewerPhotographFileEndpoint,
   sendPhotoFilePartEndpoint,
   taken,
 } from '../src/index.ts';
@@ -353,12 +356,32 @@ describe('the endpoints that take a file', () => {
 });
 
 describe('the two endpoints that answer a file', () => {
-  it('AC-10-48, ADR-483, 526 are the back office’s reads of a photograph’s file and of a file set aside: each a GET, open to the back office alone, that takes no file and is described as bytes of the kinds of image a file is kept as', () => {
+  it('AC-10-48, ADR-483, 526, 535 are the back office’s reads of a photograph’s file, of a file set aside and of a kept map’s file, and a viewer’s read of a photograph’s file: each a GET that takes no file and is described as bytes of the kinds of image a file is kept as, or a map’s file’s', () => {
     expect(endpoints.filter(({ answersFile }) => answersFile === true)).toEqual([
+      siteShapeFileEndpoint,
+      mapVersionFileEndpoint,
       photographFileEndpoint,
       setAsideFileEndpoint,
+      viewerPhotographFileEndpoint,
     ]);
-    for (const each of [photographFileEndpoint, setAsideFileEndpoint]) {
+    expect([
+      viewerPhotographFileEndpoint.method,
+      viewerPhotographFileEndpoint.roles,
+      'permission' in viewerPhotographFileEndpoint,
+    ]).toEqual(['GET', ['READ_ONLY_VIEWER'], false]);
+    for (const each of [siteShapeFileEndpoint, mapVersionFileEndpoint]) {
+      expect(each.answersFileOf, each.name).toEqual([
+        'application/zip',
+        'application/geo+json',
+        'application/vnd.google-earth.kml+xml',
+      ]);
+    }
+    for (const each of [
+      siteShapeFileEndpoint,
+      mapVersionFileEndpoint,
+      photographFileEndpoint,
+      setAsideFileEndpoint,
+    ]) {
       expect([each.method, each.access, each.roles, 'permission' in each], each.name).toEqual([
         'GET',
         'SIGNED_IN',

@@ -28,6 +28,7 @@ const phoneRead = {
   outOfServiceAt: true,
   outOfServiceMarkedAt: true,
   outOfServiceReasonId: true,
+  outOfServiceReason: { select: { name: true } },
   keyRevokedAt: true,
   keyRevokedBy: true,
   masterPasscodeVersion: true,
@@ -44,6 +45,8 @@ export interface PhoneRead {
   readonly outOfServiceAt: string | null;
   readonly outOfServiceMarkedAt: string | null;
   readonly outOfServiceReasonId: string | null;
+  // That reason's name, as the list has it now (C170).
+  readonly outOfServiceReason: string | null;
   readonly keyRevokedAt: string | null;
   readonly keyRevokedBy: 'TURN_IN' | 'FIRM_TIME' | null;
   readonly masterPasscodeVersion: number;
@@ -61,6 +64,24 @@ export interface PhonesAsked {
 export type PhonesPage =
   | { readonly done: true; readonly phones: readonly PhoneRead[]; readonly next: string | null }
   | { readonly done: false; readonly code: 'NOT_ALLOWED' };
+
+// A phone of that id the firm doesn't have: the read answers it as not found.
+export class NotFoundPhone extends Error {}
+
+export interface PhoneSessionsPage {
+  readonly sessions: readonly {
+    readonly id: string;
+    readonly userId: string;
+    readonly createdAt: string;
+    readonly expiresAt: string;
+    readonly revokedAt: string | null;
+    readonly masterPasscodeSession: 'AS_MONITOR' | 'TEMPORARY' | null;
+    readonly offlineSignIn: boolean;
+    readonly signedInAt: string | null;
+    readonly signedInUtcOffsetMinutes: number | null;
+  }[];
+  readonly next: string | null;
+}
 
 export interface PhoneRemoved {
   readonly status: PhoneRemoval;
@@ -103,6 +124,62 @@ export class Phones extends DispatchService {
       return {
         done: true,
         phones: page.map((row) => this.shown(row, current)),
+        next: rows.length > asked.limit ? (page.at(-1)?.id ?? null) : null,
+      };
+    });
+  }
+
+  // A phone's sessions, newest first (C170; ADR-535 (1)): whose, when, until when, whether
+  // ended, which way one under the master passcode was opened and whether it came from a sign-in
+  // made offline. Never a token or its hash. Null for a reader who isn't the back office.
+  async sessions(
+    readerId: string,
+    deviceId: string,
+    asked: { readonly after?: string | undefined; readonly limit: number },
+  ): Promise<PhoneSessionsPage | null> {
+    return this.db.$read(async (tx): Promise<PhoneSessionsPage | null> => {
+      const reader = await tx.user.findUnique({
+        where: { id: readerId },
+        select: { role: true, archivedAt: true },
+      });
+      if (
+        reader?.archivedAt !== null ||
+        (reader.role !== 'ADMIN' && reader.role !== 'MANAGER_ANALYST')
+      ) {
+        return null;
+      }
+      const phone = await tx.device.findUnique({ where: { id: deviceId }, select: { id: true } });
+      if (phone === null) throw new NotFoundPhone();
+      const rows = await tx.session.findMany({
+        where: { deviceId },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: asked.limit + 1,
+        ...(asked.after === undefined ? {} : { cursor: { id: asked.after }, skip: 1 }),
+        select: {
+          id: true,
+          userId: true,
+          createdAt: true,
+          expiresAt: true,
+          revokedAt: true,
+          masterPasscodeSession: true,
+          offlineSignInId: true,
+          signedInAt: true,
+          signedInUtcOffsetMinutes: true,
+        },
+      });
+      const page = rows.slice(0, asked.limit);
+      return {
+        sessions: page.map((row) => ({
+          id: row.id,
+          userId: row.userId,
+          createdAt: row.createdAt.toISOString(),
+          expiresAt: row.expiresAt.toISOString(),
+          revokedAt: row.revokedAt?.toISOString() ?? null,
+          masterPasscodeSession: row.masterPasscodeSession,
+          offlineSignIn: row.offlineSignInId !== null,
+          signedInAt: row.signedInAt?.toISOString() ?? null,
+          signedInUtcOffsetMinutes: row.signedInUtcOffsetMinutes,
+        })),
         next: rows.length > asked.limit ? (page.at(-1)?.id ?? null) : null,
       };
     });
@@ -228,6 +305,7 @@ export class Phones extends DispatchService {
       outOfServiceAt: row.outOfServiceAt?.toISOString() ?? null,
       outOfServiceMarkedAt: row.outOfServiceMarkedAt?.toISOString() ?? null,
       outOfServiceReasonId: row.outOfServiceReasonId,
+      outOfServiceReason: row.outOfServiceReason?.name ?? null,
       keyRevokedAt: row.keyRevokedAt?.toISOString() ?? null,
       keyRevokedBy: row.keyRevokedBy,
       masterPasscodeVersion: row.masterPasscodeVersion,

@@ -93,6 +93,8 @@ export class PeopleController {
     const outcome = await this.people.list(callerOf(request).userId, {
       role: query.role,
       archived: query.archived === 'true',
+      name: query.name,
+      order: query.order,
       after: query.after,
       limit: query.limit === undefined ? peoplePage : Number(query.limit),
     });

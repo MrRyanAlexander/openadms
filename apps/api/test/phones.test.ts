@@ -167,6 +167,7 @@ describe('the firm’s phones', () => {
         outOfServiceAt: null,
         outOfServiceMarkedAt: null,
         outOfServiceReasonId: null,
+        outOfServiceReason: null,
         keyRevokedAt: null,
         keyRevokedBy: null,
         masterPasscodeVersion: await inForce(tx),
@@ -212,6 +213,7 @@ describe('the firm’s phones', () => {
           outOfServiceAt: '2026-10-12T22:10:00.000Z',
           outOfServiceMarkedAt: '2026-10-12T22:10:00.000Z',
           outOfServiceReasonId: null,
+          outOfServiceReason: null,
           keyRevokedAt: null,
           keyRevokedBy: null,
           masterPasscodeVersion: await inForce(tx),
@@ -388,6 +390,7 @@ describe('a phone’s other acts at the back office (ADR-530; C102)', () => {
         outOfServiceAt: '2026-10-12T20:00:00.000Z',
         outOfServiceMarkedAt: '2026-10-12T22:10:00.000Z',
         outOfServiceReasonId: stolen.id,
+        outOfServiceReason: stolen.name,
       });
       expect(enrolledAt < '2026-10-12T20:00:00.000Z').toBe(true);
       // Tuesday morning it is written off: retired, marked again now, lost since 4:00 pm still.
@@ -402,6 +405,7 @@ describe('a phone’s other acts at the back office (ADR-530; C102)', () => {
         outOfServiceAt: '2026-10-12T20:00:00.000Z',
         outOfServiceMarkedAt: '2026-10-13T13:00:00.000Z',
         outOfServiceReasonId: stolen.id,
+        outOfServiceReason: stolen.name,
       });
       const again = await ask(served, tuesday, removePhoneEndpoint, {
         ids,
@@ -448,6 +452,7 @@ describe('a phone’s other acts at the back office (ADR-530; C102)', () => {
         outOfServiceAt: null,
         outOfServiceMarkedAt: null,
         outOfServiceReasonId: null,
+        outOfServiceReason: null,
         keyRevokedAt: null,
       });
       const [audited] = await tx.auditRecord.findMany({ where: { requestId: back.requestId } });

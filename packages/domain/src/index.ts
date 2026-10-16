@@ -213,13 +213,18 @@ export {
 } from './people.ts';
 export {
   AssignmentRules,
+  BoardWarnings,
+  boardWarningCodes,
   assignableRoles,
   assignmentFormDocumentTypes,
   noAssignmentReasons,
   unplannedAssignmentRefusals,
   unplannedOccasions,
   type AssignmentFormDocumentType,
+  type AssignmentOnTheBoard,
   type AssignmentRefusal,
+  type BoardWarning,
+  type BoardWarningCode,
   type AssignmentRefusalCode,
   type AssignmentTaken,
   type NoAssignmentReason,

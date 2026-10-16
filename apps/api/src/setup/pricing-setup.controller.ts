@@ -2,7 +2,8 @@
 // AC-01-39…51, 60…68, 81; AC-10-27, 38; BACKLOG 2.4.2, C97; ADR-206, 229, 239, 301, 313, 420,
 // 425): a pay item read off the contract, a change to one, a prime's rate on it and its "Pays
 // when"; a rule written in the rule builder, and one stated anew; a crew day's steps (ADR-527
-// (7)). Each of them moves what
+// (7)). Each save of a pay item, a rate, "Pays when" and a rule is previewed first by its own
+// request, run as the save and undone (ADR-229, 535 (3)). Each of them moves what
 // tickets bill, and its answer says what it queued (ADR-422). The door has already asked the
 // caller's role and that they hold Setup; each service asks again inside its own piece of work.
 import {
@@ -10,6 +11,11 @@ import {
   changeRuleEndpoint,
   createPayItemEndpoint,
   createRuleEndpoint,
+  previewNewRuleEndpoint,
+  previewPayItemChangeEndpoint,
+  previewPayItemRateEndpoint,
+  previewPaysWhenEndpoint,
+  previewRuleChangeEndpoint,
   savePaysWhenEndpoint,
   setCrewDayStepsEndpoint,
   setPayItemRateEndpoint,
@@ -23,7 +29,8 @@ import { Serves } from '../process/serves.ts';
 import { callerOf } from '../sign-in/admission.ts';
 import { PayItemSetup } from './pay-item-setup.ts';
 import { RuleSetup } from './rule-setup.ts';
-import { answered, stated } from './setup-answered.ts';
+import { answered, previewed, stated } from './setup-answered.ts';
+import { previewing } from './setup-service.ts';
 import {
   crewDayStepsRecord,
   payItemRateRecord,
@@ -155,6 +162,74 @@ export class PricingSetupController {
       answered(request, outcome, savedRuleRecord, 'A rule was changed.'),
     );
   }
+  // What each save would change, before it is saved: the same service, run as a preview.
+  @Serves(previewPayItemChangeEndpoint)
+  async previewPayItemChange(
+    @Param() params: OnPayItem,
+    @Body() body: BodyOf<typeof changePayItemEndpoint>,
+    @Req() request: FastifyRequest,
+  ) {
+    const outcome = await previewing(() =>
+      this.payItems.change(callerOf(request).userId, params.payItemId, stated(body)),
+    );
+    return previewPayItemChangeEndpoint.answer.parse(previewed(request, outcome, payItemRecord));
+  }
+
+  @Serves(previewPayItemRateEndpoint)
+  async previewRate(
+    @Param() params: ParamsOf<typeof setPayItemRateEndpoint>,
+    @Body() body: BodyOf<typeof setPayItemRateEndpoint>,
+    @Req() request: FastifyRequest,
+  ) {
+    const outcome = await previewing(() =>
+      this.payItems.rate(callerOf(request).userId, params.payItemId, params.primeId, body.rate),
+    );
+    return previewPayItemRateEndpoint.answer.parse(previewed(request, outcome, payItemRateRecord));
+  }
+
+  @Serves(previewPaysWhenEndpoint)
+  async previewPaysWhen(
+    @Param() params: OnPayItem,
+    @Body() body: BodyOf<typeof savePaysWhenEndpoint>,
+    @Req() request: FastifyRequest,
+  ) {
+    const outcome = await previewing(() =>
+      this.payItems.paysWhen(
+        callerOf(request).userId,
+        params.payItemId,
+        body.pays.map((each) => ({ ...stated(each), criteria: each.criteria.map(stated) })),
+      ),
+    );
+    return previewPaysWhenEndpoint.answer.parse(previewed(request, outcome, rulesKeptRecord));
+  }
+
+  @Serves(previewNewRuleEndpoint)
+  async previewNewRule(
+    @Param() params: ParamsOf<typeof createRuleEndpoint>,
+    @Body() body: RuleBody,
+    @Req() request: FastifyRequest,
+  ) {
+    const outcome = await previewing(() =>
+      this.rules.save(callerOf(request).userId, {
+        projectId: params.projectId,
+        ...ruleStated(body),
+      }),
+    );
+    return previewNewRuleEndpoint.answer.parse(previewed(request, outcome, savedRuleRecord));
+  }
+
+  @Serves(previewRuleChangeEndpoint)
+  async previewRuleChange(
+    @Param() params: ParamsOf<typeof changeRuleEndpoint>,
+    @Body() body: RuleBody,
+    @Req() request: FastifyRequest,
+  ) {
+    const outcome = await previewing(() =>
+      this.rules.change(callerOf(request).userId, params.ruleId, ruleStated(body)),
+    );
+    return previewRuleChangeEndpoint.answer.parse(previewed(request, outcome, savedRuleRecord));
+  }
+
   @Serves(setCrewDayStepsEndpoint)
   async setCrewDaySteps(
     @Param() params: OnPayItem,

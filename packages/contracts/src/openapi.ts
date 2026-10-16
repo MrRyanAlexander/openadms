@@ -71,7 +71,7 @@ function operation(served: Endpoint): Json {
         content:
           served.answersFile === true
             ? Object.fromEntries(
-                answerFileTypes.map((type) => [
+                (served.answersFileOf ?? answerFileTypes).map((type) => [
                   type,
                   { schema: { type: 'string', contentMediaType: type } },
                 ]),

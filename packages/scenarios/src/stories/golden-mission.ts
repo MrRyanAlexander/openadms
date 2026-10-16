@@ -29,9 +29,15 @@ import {
 import {
   acceptFlagEndpoint,
   createInvoiceBatchEndpoint,
+  listInvoiceBatchesEndpoint,
   lockAsInvoicedEndpoint,
+  lockSeveralAsInvoicedEndpoint,
+  previewPayItemRateEndpoint,
+  readInvoiceBatchEndpoint,
+  readTicketEndpoint,
   renumberFieldEventEndpoint,
-  setQcStatusEndpoint,
+  reviewQueueEndpoint,
+  setQcStatusesEndpoint,
   voidTicketEndpoint,
   type AnswerOf,
   type Endpoint,
@@ -979,6 +985,46 @@ export const goldenMission: Story = {
       ],
     );
 
+    // The same queue as Luis reads it at its endpoint (ADR-535 (1)): one workflow a page, each
+    // ticket with its open flags, and the project's open flags counted by cause.
+    const queueOf = async (workflow: 'LOAD' | 'UNIT_RATE') =>
+      byLuis(reviewQueueEndpoint, { ids: { projectId: p1 }, query: { workflow } });
+    const loadsWaiting = await queueOf('LOAD');
+    const unitRateWaiting = await queueOf('UNIT_RATE');
+    const lineOf = (ticket: (typeof loadsWaiting)['tickets'][number]) =>
+      [
+        `${ticket.ticketNumber} ${ticket.statuses.join(',')}`,
+        ...ticket.flags.map((flag) => flag.message),
+      ].join(' · ');
+    story.check(
+      'AC-10-93 Luis reads the same queue at its endpoint: the loads waiting by number (101003 in review, its flag; 101006 and 101060 pending, 101060 with its typed-number flag) and the unit rate ticket 301005 with its two flags; the open flags counted by cause, four flags on three tickets',
+      [
+        loadsWaiting.tickets.map(lineOf),
+        unitRateWaiting.tickets.map(lineOf),
+        [loadsWaiting.next, unitRateWaiting.next],
+      ],
+      [
+        [
+          '101003 MANUAL_REVIEW · Ticket 101003: load call 96%. Flagged for review.',
+          '101006 PENDING',
+          '101060 PENDING · Ticket 101060: typed ticket number (Barcode damaged). Flagged for review.',
+        ],
+        [
+          '301005 MANUAL_REVIEW · Ticket 301005: not an eligible stump (20 in, under 24 in). Flagged for review. · Ticket 301005: no survey. Flagged for review.',
+        ],
+        [null, null],
+      ],
+    );
+    story.check(
+      'AC-10-93 counted by cause, the queue’s four open flags are on three tickets, one cause each but 301005’s two',
+      [
+        loadsWaiting.causes.reduce((sum, cause) => sum + cause.flags, 0),
+        loadsWaiting.causes.length,
+        loadsWaiting.causes.reduce((sum, cause) => sum + cause.tickets, 0),
+      ],
+      [4, 4, 4],
+    );
+
     // ------------------------------------------------------------------------------------------
     story.at(
       on('14', '08:00'),
@@ -1207,8 +1253,6 @@ export const goldenMission: Story = {
       | { roeId: string }
       | { surveyId: string }
       | { certificationId: string };
-    const marking = async (record: Marked, status: string) =>
-      (await byLuis(setQcStatusEndpoint, { json: { record, status } })).record;
     const approve: [string, Marked][] = [];
     for (const number of p1Loads) approve.push([`CLT ${number}`, await loadOf(number)]);
     for (const number of p1HaulOuts) approve.push([`CHO ${number}`, await haulOutOf(number)]);
@@ -1232,15 +1276,23 @@ export const goldenMission: Story = {
       await api.auditRecord.count({ where: { actorId: systemActorId } }),
     ];
     const beforeQc = await workerWrote();
-    const marked: string[] = [];
-    for (const [what, target] of approve) {
-      const mark = await marking(target, 'QC_APPROVED');
-      marked.push(`${what} ${mark.status} ${names.get(mark.setById) ?? ''}`);
-    }
-    for (const number of p1Voided) {
-      const mark = await marking(await unitRateOf(number), 'QC_VOID');
-      marked.push(`URT ${number} ${mark.status} ${names.get(mark.setById) ?? ''}`);
-    }
+    // Thirty marks in one request, each its own act and each answered (ADR-535 (4); C148).
+    const voidedQc: [string, Marked][] = [];
+    for (const number of p1Voided) voidedQc.push([`URT ${number}`, await unitRateOf(number)]);
+    const { outcomes: qcOutcomes } = await byLuis(setQcStatusesEndpoint, {
+      json: {
+        marks: [
+          ...approve.map(([, record]) => ({ record, status: 'QC_APPROVED' })),
+          ...voidedQc.map(([, record]) => ({ record, status: 'QC_VOID' })),
+        ],
+      },
+    });
+    const marked: string[] = [...approve, ...voidedQc].map(([what], at) => {
+      const outcome = qcOutcomes[at];
+      return outcome?.saved === true
+        ? `${what} ${outcome.record.status} ${names.get(outcome.record.setById) ?? ''}`
+        : `${what} refused`;
+    });
     story.check(
       'AC-08-63 QC Approved stands on completed loads 101001…101006, completed haul-outs 201001 and 201004, P2’s 102001, the five live unit rate tickets, the incident, the drop-off log, ROEs R-0007 and R-0008 with their four surveys, and the six certifications; 301003 and 301005 are QC Void; each mark is Luis’s, set by hand: the worker ran nothing and wrote nothing',
       [marked, [await workerWrote(), beforeQc]],
@@ -1285,16 +1337,14 @@ export const goldenMission: Story = {
       ids: { projectId: p1 },
       json: { name: batchName },
     });
-    // Thirteen requests: a lock is one ticket's (BACKLOG C104).
-    for (const number of p1Loads) {
-      await byLuis(lockAsInvoicedEndpoint, locking(await loadOf(number), batch.id));
-    }
-    for (const number of p1HaulOuts) {
-      await byLuis(lockAsInvoicedEndpoint, locking(await haulOutOf(number), batch.id));
-    }
-    for (const number of p1LiveUnitRate) {
-      await byLuis(lockAsInvoicedEndpoint, locking(await unitRateOf(number), batch.id));
-    }
+    // One request for the thirteen, each its own lock and each answered (ADR-535 (4); C148).
+    const toLock: Ticket[] = [];
+    for (const number of p1Loads) toLock.push(await loadOf(number));
+    for (const number of p1HaulOuts) toLock.push(await haulOutOf(number));
+    for (const number of p1LiveUnitRate) toLock.push(await unitRateOf(number));
+    const { outcomes: lockOutcomes } = await byLuis(lockSeveralAsInvoicedEndpoint, {
+      json: { tickets: toLock, invoiceBatchId: batch.id },
+    });
     const lockedIn = (
       await api.invoiceLock.findMany({
         where: { projectId: p1, unlockedAt: null, invoiceBatch: { name: batchName } },
@@ -1328,6 +1378,34 @@ export const goldenMission: Story = {
         [],
         '422 NOT_SAVED · NOT_COMPLETED: Ticket 301003 is void: it bills nothing and isn’t locked as invoiced. Nothing was locked.',
         13,
+      ],
+    );
+    const heldBy = await byLuis(readInvoiceBatchEndpoint, { ids: { invoiceBatchId: batch.id } });
+    const batches = await byLuis(listInvoiceBatchesEndpoint, { ids: { projectId: p1 } });
+    const ticket101002 = await byLuis(readTicketEndpoint, {
+      ids: { projectId: p1, workflow: 'LOAD', ticketNumber: '101002' },
+    });
+    story.check(
+      'AC-10-98, AC-10-99, AC-10-94 the thirteen were locked in one request, each answered locked; read at its endpoint, the batch holds them, thirteen locks in force; 101002 read whole shows its two field events, its completed load, its line with its rate and amount, its QC mark and its lock in the batch',
+      [
+        lockOutcomes.map((outcome) => outcome.saved),
+        heldBy.locks.map((each) => each.ticket.ticketNumber).sort(),
+        batches.batches.map((each) => [each.batch.name, each.locksInForce]),
+        ticket101002.fieldEvents.map((event) => `${event.kind} ${event.status}`),
+        ticket101002.completed?.collections.length,
+        ticket101002.lines.map(
+          (line) => `#${String(line.slot)} ${line.quantity} × ${line.rate} = ${line.amount}`,
+        ),
+        [ticket101002.qcMark?.status, ticket101002.locks.map((lock) => lock.invoiceBatchId)],
+      ],
+      [
+        toLock.map(() => true),
+        [...p1Loads, ...p1HaulOuts, ...p1LiveUnitRate].sort(),
+        [[batchName, 13]],
+        ['COLLECTION COMPLETED', 'DISPOSAL COMPLETED'],
+        1,
+        ['#1 36.0000 × 8.2500 = 297.00', '#2 36.0000 × 4.0000 = 144.00'],
+        ['QC_APPROVED', [batch.id]],
       ],
     );
     const { record: lock102001 } = await byLuis(lockAsInvoicedEndpoint, locking(l102001));
@@ -1370,6 +1448,45 @@ export const goldenMission: Story = {
       return outcome.queued;
     };
     const runsBefore = await api.reconciliationRun.count({ where: { projectId: p1 } });
+    // First she asks what it would change (ADR-229, 535 (3)): the save run and undone.
+    const veg15 = await api.payItem.findFirstOrThrow({
+      where: { projectId: p1, code: 'VEG-HAUL-CY-15' },
+    });
+    const kept = async () => [
+      (
+        await api.payItemRate.findFirstOrThrow({
+          where: { payItemId: veg15.id, primeId: coastline, archivedAt: null },
+        })
+      ).rate.toFixed(2),
+      await api.auditRecord.count({ where: { tableName: 'pay_item_rate' } }),
+      await api.reconciliationJob.count({ where: { projectId: p1 } }),
+    ];
+    const beforePreview = await kept();
+    const preview = await (
+      await backOffice.danas()
+    ).answered(previewPayItemRateEndpoint, {
+      ids: { payItemId: veg15.id, primeId: coastline },
+      json: { rate: '7.75' },
+    });
+    story.check(
+      'AC-10-104 previewed first, the change says what it would do: Coastline’s rate at $7.75, no ticket queued and all thirteen passed by, locked as invoiced; and nothing of it was kept: the rate is $7.50 still, no audit record of a rate and no job were written',
+      [
+        preview.wouldSave ? { ...preview, record: { rate: preview.record.rate } } : preview,
+        await kept(),
+      ],
+      [
+        {
+          wouldSave: true,
+          record: { rate: '7.75' },
+          warnings: [],
+          queued: {
+            tickets: 0,
+            lockedAsInvoiced: [...p1Loads, ...p1HaulOuts, ...p1LiveUnitRate].length,
+          },
+        },
+        beforePreview,
+      ],
+    );
     const rated = await rateTo('7.75');
     await queue.settle(p1);
     story.check(

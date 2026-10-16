@@ -7,7 +7,7 @@
 > task's ADR and its session-log line in `DECISIONS.md`). No other file carries these counts.
 > **A count that differs from this page without a reason is a finding, not noise.**
 
-**Seen whole:** 2026-10-16, `pnpm chain` after task 2.8.7 (ADR-534), on the user's Mac, the installation at head: `pnpm ready`, the frozen install (no dependency added), typecheck, `pnpm test`, `pnpm scenarios`, `pnpm security`, lint and licences, 9 passed in 8 min 4 s. Memory last sampled after ADR-512 (Docker's VM at 4 GB, the containers together under 1 GB through a full `pnpm test`).
+**Seen whole:** 2026-10-16, `pnpm chain` after task 2.8.8 (ADR-535), on the user's Mac, the installation at head: `pnpm ready`, the frozen install (no dependency added), typecheck, `pnpm scenarios`, `pnpm security`, lint and licences passed in 12 min 14 s; its `pnpm test` stopped on one test whose list the task's reads had widened, fixed, and `pnpm chain test lint` then passed with the counts below. Memory last sampled after ADR-512 (Docker's VM at 4 GB, the containers together under 1 GB through a full `pnpm test`).
 
 ## `pnpm ready`
 
@@ -20,13 +20,13 @@
 
 ## `pnpm test`
 
-**`Test Files 183 passed (183)`, `Tests 3191 passed (3191)`.**
+**`Test Files 184 passed (184)`, `Tests 3210 passed (3210)`.**
 
 | Project | Tests | Files | Needs |
 |---|---|---|---|
-| `packages/domain` | 839 | 45 | nothing |
+| `packages/domain` | 845 | 45 | nothing |
 | `packages/contracts` | 91 | 9 | nothing |
-| `apps/api` | 713 | 55 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
+| `apps/api` | 726 | 56 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
 | `packages/db` | 1087 | 48 | `pnpm ready` |
 | `packages/scenarios` | 157 | 7 | `pnpm ready` for `stories.test.ts` (the runner and a run's template, 5) and `story-api.test.ts` (a story's API over HTTPS through the proxy, every request of a story's phone, the back office and the viewers at their browsers, and a turn-in meeting another request of its phone in the database, 16); the flag catalogue (79 flags), the harness, the phone held to the sync contract's suite and to what it sends and takes in at a sync, its photographs' files and its turn-in among it, and its wait when told to (25), the policy and the server apps' exports (2) need nothing. **The stories themselves are not here** (ADR-446) |
 | `apps/worker` | 51 | 6 | `pnpm ready` for the map servers (13), their answers on an HTTPS server of the stack's certificate (6) and its container (3); the process (14), the job loop (its set-aside lines and its health, 11) and the lost phones' backstop (4) need nothing |
@@ -52,11 +52,11 @@ failed.`** Each story `passed: N checks, N passed, 0 failed`:
 | `dispatch-monday` | 22 | | `p1-reviewed` | 35 |
 | `setup` | 52 | | `p1-voided` | 30 |
 | `certification` | 28 | | `p1-invoiced` | 26 |
-| `numbering` | 16 | | `golden-mission` | 28 |
+| `numbering` | 16 | | `golden-mission` | 32 |
 | `p1-field-days` | 35 | | `p1-left-out` | 31 |
 | `sync` | 51 | | `first-admin` | 32 |
 | `p1-any-order` | 4 | | `p1-queued` | 19 |
-| `p1-reconciled` | 39 | | `p1-viewed` | 15 |
+| `p1-reconciled` | 39 | | `p1-viewed` | 25 |
 | `under-the-passcode` | 9 | | `held-for-review` | 16 |
 | `interrupted-upload` | 8 | | `burst` | 8 |
 | `lost-phone-key` | 14 | | | |

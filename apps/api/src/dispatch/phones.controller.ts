@@ -6,6 +6,7 @@
 import {
   changeMasterPasscodeEndpoint,
   listPhonesEndpoint,
+  listPhoneSessionsEndpoint,
   masterPasscodeAnswerSchema,
   phonesAnswerSchema,
   removePhoneEndpoint,
@@ -27,7 +28,7 @@ import { answered } from '../setup/setup-answered.ts';
 import { callerOf } from '../sign-in/admission.ts';
 import type { Outcome } from '../setup/setup-service.ts';
 import { MasterPasscode } from './master-passcode.ts';
-import { Phones, type PhoneRead } from './phones.ts';
+import { NotFoundPhone, Phones, type PhoneRead } from './phones.ts';
 
 export const apiPhones = Symbol('the API’s phones');
 export const apiMasterPasscode = Symbol('the API’s master passcode');
@@ -46,6 +47,25 @@ export class PhonesController {
   ) {
     this.phones = phones;
     this.passcode = passcode;
+  }
+
+  @Serves(listPhoneSessionsEndpoint)
+  async sessions(
+    @Param() params: ParamsOf<typeof listPhoneSessionsEndpoint>,
+    @Query() query: QueryOf<typeof listPhoneSessionsEndpoint>,
+    @Req() request: FastifyRequest,
+  ) {
+    try {
+      const page = await this.phones.sessions(callerOf(request).userId, params.deviceId, {
+        after: query.after,
+        limit: query.limit === undefined ? 50 : Number(query.limit),
+      });
+      if (page === null) throw new Refusal('NOT_ALLOWED', 403);
+      return listPhoneSessionsEndpoint.answer.parse(page);
+    } catch (thrown) {
+      if (thrown instanceof NotFoundPhone) throw new Refusal('NOT_FOUND', 404);
+      throw thrown;
+    }
   }
 
   @Serves(listPhonesEndpoint)

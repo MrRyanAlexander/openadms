@@ -31,6 +31,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { openApiViewerDatabase } from '../src/process/api-database.ts';
 import { ViewerReads } from '../src/viewer/viewer-reads.ts';
 import { installationSettings, openInstallation } from './support/database.ts';
+import { jpeg, kimsPhone, Kept } from './support/kims-phone.ts';
 import { notTaken, p1WithTickets } from './support/review.ts';
 import { danasEmail, long, longer, luissEmail, worldOn } from './support/served.ts';
 import { ask, at, p1, saved, told, viewerSignsIn } from './support/setup.ts';
@@ -61,8 +62,17 @@ describe('who may ask', () => {
     expect(viewers.map(({ name }) => name)).toEqual([
       'viewerProjects',
       'viewerRoes',
+      // The same records the back office reads, as the database shows each viewer (ADR-535 (6)).
+      'viewerCertifications',
+      'viewerSurveys',
+      'viewerIncidents',
+      'viewerDropOffLogs',
+      'viewerSetup',
+      'viewerSetupCheck',
+      'viewerQuantityLookup',
       'viewerTickets',
       'viewerTicket',
+      'viewerPhotographFile',
     ]);
     expect(viewers.map(({ path }) => path.startsWith('/viewer/'))).toEqual(viewers.map(() => true));
     expect(viewers.map(({ method }) => method)).toEqual(viewers.map(() => 'GET'));
@@ -225,6 +235,46 @@ describe('a read-only viewer’s read', () => {
   });
 });
 
+describe('a photograph’s file for a viewer', () => {
+  it('AC-10-105 a viewer the database shows a photograph’s record is handed its file as kept, a download never run as a page; one nobody has, or whose file hasn’t arrived, is not found', async () => {
+    await world(
+      async (served, tx, who, within) => {
+        const p = await kimsPhone(served, tx, who);
+        const collection = p.collection();
+        const pile = jpeg();
+        const photo = p.photographOf(collection, pile);
+        const waiting = p.photographOf(collection, jpeg());
+        await p.sync({
+          records: [{ record: 'FIELD_EVENT', fieldEvent: collection }],
+          photos: [photo, waiting],
+        });
+        await p.upload(photo.id, pile);
+        const viewer = await viewerSignsIn(served, tx, who.viewer, within);
+        const file = (photoId: string) =>
+          served.ask('GET', `/viewer/photographs/${photoId}/files/photo`, {
+            cookies: viewer.cookies,
+          });
+        const handed = await file(photo.id);
+        expect(handed.status).toBe(200);
+        expect(Buffer.compare(handed.bytes, pile)).toBe(0);
+        expect([
+          handed.headers['content-type'],
+          handed.headers['content-disposition'],
+          String(handed.headers['content-security-policy']).includes('sandbox'),
+        ]).toEqual(['image/jpeg', `attachment; filename="${photo.id}-photo.jpg"`, true]);
+        // The test's stand-in shows every row (support/database.ts): which a viewer is shown is
+        // the story `p1-viewed`'s and packages/db's.
+        expect(served.viewerStated.at(-1)).toBe(who.viewer);
+        expect(told(await file(waiting.id))).toEqual([404, 'NOT_FOUND']);
+        expect(told(await file(randomUUID()))).toEqual([404, 'NOT_FOUND']);
+      },
+      undefined,
+      undefined,
+      { media: new Kept() },
+    );
+  });
+});
+
 describe('as the database’s read-only login itself', () => {
   it('AC-10-30 every read the service makes is one the login is granted, and somebody the firm issued no viewer’s login is shown nothing', async () => {
     // The real login, on the installation's database: a read of a column it isn't granted
@@ -255,6 +305,30 @@ describe('as the database’s read-only login itself', () => {
         roes: [],
         next: null,
       });
+      // The same records the back office reads (ADR-535 (6)): each read of a page whose rows
+      // nobody is shown still asks every column it names; the setup and its check end where the
+      // database shows the viewer no project's setup, so their columns are the story's to hold.
+      const nothing = { next: null };
+      expect(await reads.certifications(randomUUID(), project, { limit: 200 })).toEqual({
+        certifications: [],
+        ...nothing,
+      });
+      expect(await reads.surveys(randomUUID(), project, { limit: 200 })).toEqual({
+        surveys: [],
+        ...nothing,
+      });
+      expect(await reads.incidents(randomUUID(), project, { limit: 200 })).toEqual({
+        incidents: [],
+        ...nothing,
+      });
+      expect(await reads.dropOffLogs(randomUUID(), project, { limit: 200 })).toEqual({
+        dropOffLogs: [],
+        ...nothing,
+      });
+      expect(await reads.setup(randomUUID(), project)).toBeNull();
+      expect(await reads.setupCheck(randomUUID(), project)).toBeNull();
+      expect(await reads.quantityLookup(randomUUID(), project)).toBeNull();
+      expect(await reads.photograph(randomUUID(), randomUUID())).toBe(false);
     } finally {
       await viewed.$disconnect();
     }

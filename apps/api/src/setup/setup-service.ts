@@ -12,6 +12,8 @@
 // Who may change the setup (an admin, or a manager/analyst granted Setup) is read here, inside the
 // same piece of work and before anything is changed, whatever the door already asked (ADR-364,
 // 424): `setup` is what every setup service writes through.
+import { AsyncLocalStorage } from 'node:async_hooks';
+
 import type { Actor, Database, Prisma } from '@open-adms/db';
 import { SetupRights, type Policy, type SetupWarning } from '@open-adms/domain';
 
@@ -39,6 +41,8 @@ export type Outcome<T> =
       readonly warnings: readonly SetupWarning[];
       // Stated where the change queued work or passed a locked ticket by.
       readonly queued?: QueuedBySetup;
+      // A preview's: what the save would have answered, its piece of work undone (ADR-535 (3)).
+      readonly previewed?: true;
     }
   | { readonly saved: false; readonly refusal: Refusal };
 
@@ -89,6 +93,26 @@ export function archiveChange(
   return { archivedAt: archive ? now : null };
 }
 
+// "What it would change" before a setup save (ADR-229, 535 (3)): the save run as it would be, in
+// its own piece of work, which is then undone, so the preview can never say other than the save
+// would and nothing of it stays (no row, no audit record, no job: a job's notice goes only on
+// commit). Every save of a setup service runs as a preview inside `previewing`.
+const previews = new AsyncLocalStorage<true>();
+
+export function previewing<T>(save: () => Promise<T>): Promise<T> {
+  return previews.run(true, save);
+}
+
+// Thrown at the end of a preview's piece of work to undo it, carrying what it made.
+class Previewed extends Error {
+  readonly made: unknown;
+
+  constructor(made: unknown) {
+    super('A preview’s piece of work is undone.');
+    this.made = made;
+  }
+}
+
 // Thrown inside a piece of work to undo it; the service answers with the refusal.
 export class Refused extends Error {
   readonly refusal: Refusal;
@@ -100,6 +124,30 @@ export class Refused extends Error {
 }
 
 export type Warn = (warnings: readonly SetupWarning[]) => void;
+
+// Why this person may not change the setup now, or nothing: an admin, or a manager/analyst who
+// holds Setup at this moment (the domain's `SetupRights`), read inside the piece of work asking.
+// A read that takes Setup (a pay item's rates) asks it too (ADR-535 (2)).
+export async function setupRefusalOf(
+  tx: Prisma.TransactionClient,
+  person: string,
+): Promise<Refusal | null> {
+  const user = await tx.user.findUnique({ where: { id: person } });
+  const granted =
+    user === null
+      ? []
+      : await tx.userPermission.findMany({ where: { userId: person, archivedAt: null } });
+  return new SetupRights(
+    user === null
+      ? null
+      : {
+          name: user.name,
+          role: user.role,
+          archived: user.archivedAt !== null,
+          granted: granted.map((grant) => grant.permission),
+        },
+  ).refusal();
+}
 
 export abstract class SetupService {
   protected readonly db: Database;
@@ -125,21 +173,7 @@ export abstract class SetupService {
     work: (tx: Prisma.TransactionClient, warn: Warn) => Promise<T>,
   ): Promise<Outcome<T>> {
     return this.write(person, async (tx, warn) => {
-      const user = await tx.user.findUnique({ where: { id: person } });
-      const granted =
-        user === null
-          ? []
-          : await tx.userPermission.findMany({ where: { userId: person, archivedAt: null } });
-      const refusal = new SetupRights(
-        user === null
-          ? null
-          : {
-              name: user.name,
-              role: user.role,
-              archived: user.archivedAt !== null,
-              granted: granted.map((grant) => grant.permission),
-            },
-      ).refusal();
+      const refusal = await setupRefusalOf(tx, person);
       if (refusal !== null) throw new Refused(refusal);
       return work(tx, warn);
     });
@@ -175,15 +209,21 @@ export abstract class SetupService {
     work: (tx: Prisma.TransactionClient, warn: Warn) => Promise<T>,
   ): Promise<Outcome<T>> {
     const warnings: SetupWarning[] = [];
+    const preview = previews.getStore() === true;
     try {
-      const record = await this.db.$write(actor, (tx) =>
-        work(tx, (more) => {
+      const record = await this.db.$write(actor, async (tx) => {
+        const made = await work(tx, (more) => {
           warnings.push(...more);
-        }),
-      );
+        });
+        if (preview) throw new Previewed(made);
+        return made;
+      });
       return { saved: true, record, warnings };
     } catch (error) {
       if (error instanceof Refused) return { saved: false, refusal: error.refusal };
+      if (error instanceof Previewed) {
+        return { saved: true, record: error.made as T, warnings, previewed: true };
+      }
       throw error;
     }
   }

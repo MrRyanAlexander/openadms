@@ -235,8 +235,9 @@ export class Served {
       ...(more.bytes === undefined ? {} : { payload: Buffer.from(more.bytes) }),
     });
     const setCookie = [answered.headers['set-cookie'] ?? []].flat().map(String);
-    // A file is answered as bytes of its own type, never JSON (ADR-483).
-    const file = (answered.headers['content-type'] ?? '').startsWith('image/');
+    // A file is answered as bytes of its own type, never JSON, and always a download (ADR-483,
+    // 535 (2)): a photograph's, or a kept map's.
+    const file = (answered.headers['content-disposition'] ?? '').startsWith('attachment');
     const body: unknown = file ? undefined : answered.json();
     const refused = errorAnswerSchema.safeParse(body);
     return {
