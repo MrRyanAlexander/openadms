@@ -20,7 +20,7 @@ is tried on). **Read the one you need before you write a test or a migration the
 |---|---|
 | `packages/db/prisma/schema/`, a migration, a guard, a new table's tests | `schema-and-migrations.md` |
 | `packages/db` or its tests; a throw-away copy of `adms`; a guard's loosening | `database-tests.md` |
-| `apps/api`, an endpoint in `packages/contracts`, an API test, a phone's or a monitor's requests | `api-tests.md` |
+| `apps/api`, an endpoint in `packages/contracts`, an API test, a phone's or a monitor's requests | `api-tests.md` (its first section, then the one for your area) |
 | `apps/worker`, the job queue, what queues work | `worker-tests.md` |
 
 # PART 1 — THE CHAIN
