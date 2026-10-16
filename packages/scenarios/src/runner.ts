@@ -333,7 +333,7 @@ export class Runner {
           out(`  ${projectTime(story.timeZone, clock.now())}  ${what}`);
         },
         phone: (setup) => new SimulatedDevice(setup, clock),
-        proofs: { proves: (deviceId) => served.proves(deviceId) },
+        proofs: { proves: (deviceId, passcode) => served.proves(deviceId, passcode) },
         openWorker() {
           const another = opened.open('worker');
           open.push(another);

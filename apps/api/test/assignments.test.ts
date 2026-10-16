@@ -23,7 +23,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { Assignments } from '../src/dispatch/assignments.ts';
 import { installationSettings, openInstallation, type Tx } from './support/database.ts';
-import { enrolledPhone, proven } from './support/phones.ts';
+import { enrolledPhone, provenWithPasscode } from './support/phones.ts';
 import { danasEmail, long, longer, luissEmail, worldOn, type Served } from './support/served.ts';
 import {
   ask,
@@ -705,7 +705,8 @@ describe('an assignment changed and withdrawn', () => {
       const tower = await enrolledPhone(served, tx, 'P1-TWR-LF');
       const unplanned = { id: randomUUID() };
       const reported = await served.ask('POST', reportUnplannedAssignmentEndpoint.path, {
-        bearer: await proven(served, tower),
+        // The supervisor who set it up, at the phone: the passcode beside its proof (ADR-531).
+        bearer: await provenWithPasscode(served, tower),
         payload: {
           id: unplanned.id,
           projectId: p1.project.id,

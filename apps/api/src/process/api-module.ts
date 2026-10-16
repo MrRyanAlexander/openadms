@@ -7,6 +7,7 @@ import { AssignmentsController } from '../dispatch/assignments.controller.ts';
 import { PhonesController } from '../dispatch/phones.controller.ts';
 import { PeopleController } from '../people/people.controller.ts';
 import { EnrolmentController } from '../phone/enrolment.controller.ts';
+import { OfflineSignInsController } from '../phone/offline-sign-ins.controller.ts';
 import { PasscodeSessionsController } from '../phone/passcode-sessions.controller.ts';
 import { PasscodeUsesController } from '../phone/passcode-uses.controller.ts';
 import { SetupChoicesController } from '../phone/setup-choices.controller.ts';
@@ -62,6 +63,7 @@ import { HealthController } from './health.controller.ts';
     PhoneMonitorsController,
     PhoneSignInsController,
     PasscodeSessionsController,
+    OfflineSignInsController,
     PasscodeUsesController,
     PhoneListsController,
     PhoneLoginListController,

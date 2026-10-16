@@ -4,8 +4,17 @@
 // C64, C69, C122, C126…C132; ADR-022, 052, 065, 100, 420, 453, 454, 457, 464, 466…473; KD-56;
 // REQ-016, 203, 308c). OWASP ASVS 5.0 V2, V16; API Security Top 10 API1, API3, API4.
 //
-// - **The phone is the one that proved itself.** Nothing sent says which phone it is: every
-//   record read is given `source: 'DEVICE'` and that phone's id here.
+// - **The phone is the one that proved itself, with somebody signed in on it** (the door's,
+//   ADR-531). Nothing sent says which phone it is: every record read is given `source: 'DEVICE'`
+//   and that phone's id here.
+// - **Its standing is the door's read, decided once, first** (ADR-531): a phone in service is
+//   received and given what it is due; a phone taken out of service, or proven with the passcode
+//   because the firm's time revoked its key, only sends. Its work is received (ADR-134) and each
+//   series it reports is answered with the blocks it already holds, never topped up (ADR-065:
+//   a lost or retired phone's blocks end; ADR-530: a revoked one's ended already), and it is
+//   brought nothing (ADR-473: a phone out of service or with a revoked key gets no check of the
+//   passcode). Nothing asks the database again what the door read. A phone marked out of service
+//   while its sync runs is held by the allocator and the database (number-allocator.ts).
 // - **A `Sync` is written first**, as the device key's actor on that phone, with the server's
 //   clock, the phone's, and the phone's less the server's in whole seconds (ADR-100, 471).
 //   One row a call, a retry too: it is the record that the phone connected.
@@ -32,15 +41,16 @@
 // - **A photograph whose record is held is kept with it** (ADR-526 (4)), answered saved, so its
 //   files reach the server while its record waits for a person: intake's to find.
 // - **Nothing is refused over eligibility** (ADR-052), and nothing here concludes anything.
-// - **The numbers:** for each series reported, the phone is topped up to a full block and
-//   answered the blocks it holds now; where the report can't be taken (no such series, none
-//   left), `toppedUp: false` and the blocks it held before (ADR-065, 467 (8)).
-// - **What a sync brings besides** (§9 (6); AC-02-23, AC-05-48; ADR-473), last, and only what
-//   needs nobody signed in: the master passcode's version in force, with its check where the
-//   phone says it holds another (`PhoneLoginList.passcodeBrought`, the login list's own); and
-//   the setup version of the project whose lists the phone says it holds, as that project's
-//   phones are shown it now (`SetupVersions`), written once on the sync's own row. A number,
-//   never the lists: those are an assignment's, read by a signed-in monitor's phone.
+// - **The numbers:** for each series reported, a phone in service is topped up to a full block
+//   and answered the blocks it holds now; where the report can't be taken (no such series, none
+//   left, the phone out of service), `toppedUp: false` and the blocks it held before (ADR-065,
+//   467 (8)).
+// - **What a sync brings besides** (§9 (6); AC-02-23, AC-05-48; ADR-473), last, to a phone in
+//   service only: the master passcode's version in force, with its check where the phone says it
+//   holds another (`PhoneLoginList.passcodeBrought`, the login list's own); and the setup version
+//   of the project whose lists the phone says it holds, as that project's phones are shown it now
+//   (`SetupVersions`), written once on the sync's own row. A number, never the lists: those are an
+//   assignment's, read by a signed-in monitor's phone online.
 import {
   photoNames,
   photoRead,
@@ -68,6 +78,7 @@ import type { PasscodeUses } from '../phone/passcode-uses.ts';
 import type { PhoneLoginList } from '../phone/phone-login-list.ts';
 import type { UnplannedAssignments } from '../phone/unplanned-assignments.ts';
 import { databaseRefusalOf } from '../process/database-refusal.ts';
+import type { ProvenPhone } from '../phone/phone-proofs.ts';
 import type { Clock } from '../setup/setup-service.ts';
 import { SetupVersions } from '../setup/setup-versions.ts';
 import type { HeldThings } from './held.ts';
@@ -128,6 +139,9 @@ export function fromPhone(
   }
 }
 
+// The phone a sync is from, as the door read it for this request.
+export type SyncingPhone = Pick<ProvenPhone, 'deviceId' | 'status' | 'keyRevoked'>;
+
 const blocksOf = (held: readonly NumberBlock[]): SeriesHeld['blocks'] =>
   held.map(({ firstNumber, lastNumber, lastUsedNumber }) => ({
     firstNumber,
@@ -147,7 +161,10 @@ export class Sync {
   }
 
   // One sync from the phone that proved itself.
-  async received(deviceId: string, sent: SyncReceived): Promise<Synced> {
+  async received(phone: SyncingPhone, sent: SyncReceived): Promise<Synced> {
+    const { deviceId } = phone;
+    // Decided once: a phone not in service only sends (ADR-531).
+    const inService = phone.status === 'ACTIVE' && !phone.keyRevoked;
     const startedAt = this.parts.clock.now();
     const clockDifferenceSeconds = Math.round(
       (sent.clockAt.getTime() - startedAt.getTime()) / 1000,
@@ -217,13 +234,20 @@ export class Sync {
     for (const one of sent.photos) photos.push(await this.photo(deviceId, brought, one));
 
     const numbers: SeriesHeld[] = [];
-    for (const report of sent.lastUsed) numbers.push(await this.toppedUp(deviceId, report));
+    for (const report of sent.lastUsed) {
+      numbers.push(
+        inService
+          ? await this.toppedUp(deviceId, report)
+          : await this.notToppedUp(deviceId, report),
+      );
+    }
 
-    const masterPasscode = await this.parts.loginList.passcodeBrought(
-      deviceId,
-      sent.holds.masterPasscodeVersion,
-    );
-    const setupVersion = await this.setupVersion(deviceId, brought, sent.holds.listsProjectId);
+    const masterPasscode = inService
+      ? await this.parts.loginList.passcodeBrought(deviceId, sent.holds.masterPasscodeVersion)
+      : null;
+    const setupVersion = inService
+      ? await this.setupVersion(deviceId, brought, sent.holds.listsProjectId)
+      : null;
 
     return {
       syncId: brought.syncId,
@@ -344,14 +368,6 @@ export class Sync {
   // Why nothing is written for this project, where it is closed: its name and the day it closed,
   // in its own time zone. None for one open, or one the server doesn't have (its constraints say
   // so, as before).
-  // Whether the phone's key is revoked: by the firm's time, since a phone turned in syncs no more.
-  private async keyRevoked(deviceId: string): Promise<boolean> {
-    const phone = await this.db.$read((tx) =>
-      tx.device.findUnique({ where: { id: deviceId }, select: { keyRevokedAt: true } }),
-    );
-    return phone?.keyRevokedAt != null;
-  }
-
   private async closed(projectId: string): Promise<NotSaved | null> {
     const project = await this.db.$read((tx) =>
       tx.project.findUnique({
@@ -444,6 +460,18 @@ export class Sync {
     return { answer: 'NOT_SAVED', id: names.id, reason: told.reason, message: told.message };
   }
 
+  // A phone not in service: the blocks of the series it holds now, its report not taken. A
+  // read, and nothing more: its blocks end at its turn-in, or ended when the firm's time
+  // revoked its key (ADR-065, 488, 530).
+  private async notToppedUp(
+    deviceId: string,
+    report: SyncReceived['lastUsed'][number],
+  ): Promise<SeriesHeld> {
+    const { projectId, series } = report;
+    const held = await this.parts.numbers.held(deviceId, report);
+    return { projectId, series, toppedUp: false, blocks: blocksOf(held) };
+  }
+
   // The phone's blocks of one series after its report: topped up to a full block, or, where
   // the report isn't taken, what it held before.
   private async toppedUp(
@@ -452,8 +480,7 @@ export class Sync {
   ): Promise<SeriesHeld> {
     const { projectId, series } = report;
     // A closed project's numbers were retired at its close: none is issued again (ADR-529 (b)).
-    // Nor to a phone whose key the firm's time revoked: its blocks were retired then (ADR-530).
-    if ((await this.closed(projectId)) !== null || (await this.keyRevoked(deviceId))) {
+    if ((await this.closed(projectId)) !== null) {
       return { projectId, series, toppedUp: false, blocks: [] };
     }
     for (let attempt = 1; ; attempt += 1) {

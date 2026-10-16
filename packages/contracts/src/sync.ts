@@ -353,14 +353,16 @@ export const setupVersionBroughtSchema = z.strictObject({
 
 // What a phone is answered: one answer for each thing it sent, in the order it sent them, then
 // what the sync brings besides. `setupVersion` is null for a phone that holds no lists, or
-// whose project the server doesn't have.
+// whose project the server doesn't have. A phone not in service (out of service, or proven with
+// the passcode because the firm's time revoked its key) only sends: it is brought neither
+// (`masterPasscode` and `setupVersion` null) and given no numbers (ADR-473, 531).
 export const syncAnsweredSchema = z.strictObject({
   unplannedAssignments: z.array(unplannedAssignmentAnswerSchema),
   passcodeUses: z.array(passcodeUseAnswerSchema),
   records: z.array(recordAnswerSchema),
   photos: z.array(photoAnswerSchema),
   numbers: z.array(seriesHeldSchema),
-  masterPasscode: passcodeBroughtSchema,
+  masterPasscode: passcodeBroughtSchema.nullable(),
   setupVersion: setupVersionBroughtSchema.nullable(),
 });
 

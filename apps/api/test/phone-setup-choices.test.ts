@@ -271,7 +271,8 @@ describe('who may read what a phone is set up from', () => {
         });
         expect([told(answer), (answer.body as { message?: string }).message]).toEqual([
           [409, 'PHONE_OUT_OF_SERVICE'],
-          'Not read: this phone was taken out of service. A phone is set up while it is in service.',
+          // The door's, before the service is asked (ADR-531).
+          'Not done: this phone was taken out of service. It only sends what it holds and is turned in.',
         ]);
         expect(Object.keys(answer.body as object).sort()).toEqual(['code', 'message', 'requestId']);
         expect(await audited(tx, answer.requestId)).toEqual([]);

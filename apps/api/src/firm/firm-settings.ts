@@ -9,6 +9,10 @@
 // - **Whether read-only viewers must use two-step sign-in** is changed by an admin alone: it is
 //   sign-in policy (C157). Sign-in reads it with the session on every request, so a viewer with
 //   none is sent to set one up at their very next request.
+// - **How many hours a monitor's sign-in on a phone lasts** (1 to 24; ADR-531, the user: shifts
+//   never run past a day) is changed by an admin alone: it is sign-in policy. Each sign-in reads
+//   it as it is made, online, under the passcode or taken from one made offline; a session
+//   already open keeps its end.
 // - Each change says the person's note, where they gave one, to the audit log as its reason.
 import type { Prisma } from '@open-adms/db';
 import { SetupRights } from '@open-adms/domain';
@@ -20,9 +24,14 @@ type Tx = Prisma.TransactionClient;
 export interface FirmSettingsRead {
   readonly phoneKeyRevokedAfterHours: number | null;
   readonly viewerTwoStepRequired: boolean;
+  readonly monitorSessionHours: number;
 }
 
-const settingsRead = { phoneKeyRevokedAfterHours: true, viewerTwoStepRequired: true } as const;
+const settingsRead = {
+  phoneKeyRevokedAfterHours: true,
+  viewerTwoStepRequired: true,
+  monitorSessionHours: true,
+} as const;
 
 export class FirmSettings extends SetupService {
   // The record, inside any piece of work. The seed writes it: an installation without it was
@@ -40,6 +49,11 @@ export class FirmSettings extends SetupService {
   // Whether the firm requires two-step sign-in of its read-only viewers.
   static async viewersRequired(tx: Tx): Promise<boolean> {
     return (await FirmSettings.of(tx)).viewerTwoStepRequired;
+  }
+
+  // How many hours a monitor's sign-in on a phone lasts, as the firm has it now.
+  static async monitorSessionHours(tx: Tx): Promise<number> {
+    return (await FirmSettings.of(tx)).monitorSessionHours;
   }
 
   // The settings, for whoever may set the firm up; undefined for anybody else.
@@ -83,6 +97,25 @@ export class FirmSettings extends SetupService {
         tx.firmSettings.update({
           where: { id: 1 },
           data: { viewerTwoStepRequired: required },
+          select: settingsRead,
+        }),
+      note,
+    );
+  }
+
+  // How many hours a monitor's sign-in on a phone lasts: an admin's alone.
+  changeMonitorSessionHours(
+    person: string,
+    hours: number,
+    note?: string,
+  ): Promise<Outcome<FirmSettingsRead>> {
+    return this.asAdmin(
+      person,
+      'change how long a monitor’s sign-in on a phone lasts',
+      (tx) =>
+        tx.firmSettings.update({
+          where: { id: 1 },
+          data: { monitorSessionHours: hours },
           select: settingsRead,
         }),
       note,

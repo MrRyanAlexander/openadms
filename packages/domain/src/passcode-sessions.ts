@@ -7,8 +7,8 @@
 // - **Two ways, and the session says which.** As the phone's monitor (the passcode in place of
 //   their password), or the temporary session for a monitor picked from the roster when a phone
 //   changes hands.
-// - **Neither outlasts a monitor's own sign-in** (`MONITOR_SESSION_HOURS`), and quiet ends
-//   neither, as it ends no monitor's.
+// - **Neither outlasts a monitor's own sign-in** (the firm's hours, `MONITOR_SESSION_HOURS` as
+//   shipped; ADR-531), and quiet ends neither, as it ends no monitor's.
 // - **The temporary one also ends with the project's day**, so the monitor signs in properly
 //   next time (ADR-120): the day is the project's own (its time zone, ADR-100), the project that
 //   of the assignment the phone takes for them. With no assignment taken there is no project's

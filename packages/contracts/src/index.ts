@@ -18,6 +18,7 @@ export {
   monitorCreatedAnswerSchema,
   monitorSignedInAnswerSchema,
   passcodeSessionOpenedAnswerSchema,
+  offlineSignInTakenAnswerSchema,
   passcodeUseAnswerSchema,
   phoneAssignmentSchema,
   phoneListsAnswerSchema,
@@ -76,6 +77,7 @@ export {
   type MonitorCreatedAnswer,
   type MonitorSignedInAnswer,
   type PasscodeSessionOpenedAnswer,
+  type OfflineSignInTakenAnswer,
   type PasscodeUseAnswer,
   type PhoneAssignmentAnswer,
   type PhoneListsAnswer,
@@ -133,6 +135,7 @@ export {
   createMonitorOnPhoneEndpoint,
   signInOnPhoneEndpoint,
   openPasscodeSessionOnPhoneEndpoint,
+  takeOfflineSignInOnPhoneEndpoint,
   reportPasscodeUseEndpoint,
   signOutOnPhoneEndpoint,
   phoneMonitorEndpoint,
@@ -153,6 +156,7 @@ export {
   firmSettingsEndpoint,
   changePhoneKeyHoursEndpoint,
   changeViewerTwoStepEndpoint,
+  changeMonitorSessionHoursEndpoint,
   closeProjectEndpoint,
   closingCheckEndpoint,
   reopenProjectEndpoint,
@@ -538,8 +542,10 @@ export {
 } from './sync-client-suite.ts';
 export * as syncExamples from './sync-examples.ts';
 export {
+  offlineSignInReportSchema,
   passcodeUseReportSchema,
   unplannedAssignmentReportSchema,
+  type OfflineSignInReport,
   type PasscodeUseReport,
   type UnplannedAssignmentReport,
 } from './phone-reports.ts';

@@ -285,11 +285,13 @@ export const phoneRecordSchema = z.strictObject({
 
 export type PhoneRecord = z.infer<typeof phoneRecordSchema>;
 
-// The firm's own settings (REQ-214, 215; ADR-520, 530): how many hours a phone marked lost or
-// retired keeps its key (null: off), and whether a read-only viewer must use two-step sign-in.
+// The firm's own settings (REQ-214, 215; ADR-520, 530, 531): how many hours a phone marked lost or
+// retired keeps its key (null: off), whether a read-only viewer must use two-step sign-in, and how
+// many hours a monitor's sign-in on a phone lasts.
 export const firmSettingsAnswerSchema = z.strictObject({
   phoneKeyRevokedAfterHours: z.number().int().min(1).max(8760).nullable(),
   viewerTwoStepRequired: z.boolean(),
+  monitorSessionHours: z.number().int().min(1).max(24),
 });
 
 export type FirmSettingsAnswer = z.infer<typeof firmSettingsAnswerSchema>;
@@ -666,6 +668,21 @@ export const passcodeSessionOpenedAnswerSchema = monitorSignedInAnswerSchema.ext
 });
 
 export type PasscodeSessionOpenedAnswer = z.infer<typeof passcodeSessionOpenedAnswerSchema>;
+
+// A sign-in made on a phone with no connection, taken once it was reported and proven (ADR-531):
+// the session's token for the x-adms-monitor-session header, whom it is for, how long it has left
+// from now, and which way it was opened under the master passcode, null on the monitor's own
+// password. The phone took its assignment when the sign-in was made: none is answered here.
+export const offlineSignInTakenAnswerSchema = z.strictObject({
+  token: z.string().min(1),
+  userId: z.uuid(),
+  monitorNumber: z.string().regex(/^M\d{6,}$/),
+  name: z.string(),
+  expiresInSeconds: z.number().int().min(1),
+  masterPasscodeSession: z.enum(masterPasscodeSessions).nullable(),
+});
+
+export type OfflineSignInTakenAnswer = z.infer<typeof offlineSignInTakenAnswerSchema>;
 
 // The monitor signed in on a phone, as the server has them now, and how long their sign-in has
 // left. Never the token. `masterPasscodeSession`: how the session was opened where it was

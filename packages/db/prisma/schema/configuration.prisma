@@ -1208,6 +1208,12 @@ model Session {
   // authentication of the monitor it is for, so it is marked, written as the master passcode's
   // actor on that phone (the guard migration), and never changes.
   masterPasscodeSession MasterPasscodeSession? @map("master_passcode_session")
+  // A sign-in made on the phone with no connection, reported once it had one and proven by what
+  // only the password (or the passcode) typed could make (ADR-531): the phone's own id for it,
+  // the phone's clock when it was made and its offset (ADR-100). All three or none; never changed.
+  offlineSignInId          String?   @unique @map("offline_sign_in_id") @db.Uuid
+  signedInAt               DateTime? @map("signed_in_at") @db.Timestamptz(3)
+  signedInUtcOffsetMinutes Int?      @map("signed_in_utc_offset_minutes")
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
@@ -1253,6 +1259,10 @@ enum SecurityEventKind {
   // A phone out of service whose key the firm's time revoked: its blocks retired, its sessions
   // ended, by the worker as the system actor (ADR-530).
   DEVICE_KEY_REVOKED
+  // A sign-in made on a phone with no connection, reported and proven once it had one; and one
+  // whose proof the server could not take, which the back office is shown (ADR-531).
+  OFFLINE_SIGN_IN
+  OFFLINE_SIGN_IN_REFUSED
 
   @@map("security_event_kind")
 }
@@ -1333,6 +1343,9 @@ model FirmSettings {
   phoneKeyRevokedAfterHours Int?    @map("phone_key_revoked_after_hours")
   // Whether a read-only viewer must use two-step sign-in too (ADR-511, 530; ASVS 6.3.3).
   viewerTwoStepRequired     Boolean @default(false) @map("viewer_two_step_required")
+  // How many hours a monitor's sign-in on a phone lasts (ADR-531, the user: a shift never runs
+  // past a day). 1 to 24 (a check; NIST SP 800-63B-4 §2.2.3 allows a day at most).
+  monitorSessionHours       Int     @default(24) @map("monitor_session_hours")
 
   @@map("firm_settings")
 }

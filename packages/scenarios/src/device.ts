@@ -1230,7 +1230,8 @@ export class SimulatedDevice {
         held.blocks.map((block) => ({ ...block, series: held.series, status: 'ISSUED' })),
       );
     }
-    this.passcodeVersion = read.masterPasscode.version;
+    // A phone not in service is brought nothing (ADR-531): it keeps the version it holds.
+    this.passcodeVersion = read.masterPasscode?.version ?? this.passcodeVersion;
     this.setupVersionNow = read.setupVersion?.version ?? null;
     return true;
   }

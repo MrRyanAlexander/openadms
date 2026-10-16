@@ -13,7 +13,9 @@
 // it is thrown, not saved, for the caller to ask again (the sync endpoint's, Phase 2). A top-up
 // and its phone's turn-in at the same moment are ordered by the phone's row: the top-up first,
 // and the turn-in ends its block; the turn-in first, and the top-up is refused, the phone proven
-// no more (ADR-524).
+// no more (ADR-524). A phone taken out of service is topped up no more (ADR-065, 134, 531): the
+// sync never asks for one (its standing is the door's), and one marked out of service while its
+// sync runs is answered not topped up, under the same lock; the database refuses its block too.
 import type { Database, NumberBlock, NumberSeries, Prisma } from '@open-adms/db';
 import {
   NumberSeriesBook,
@@ -75,11 +77,13 @@ export class NumberAllocator extends SetupService {
       async (tx) => {
         // The phone's row under the share lock the database's guard takes for a block (ADR-488),
         // taken first (ADR-524): a turn-in of the phone at the same moment waits for this top-up
-        // and ends its block, or this one waits for the turn-in and finds the key revoked.
-        const [standing] = await tx.$queryRaw<{ revoked: boolean }[]>`
-          SELECT "key_revoked_at" IS NOT NULL AS "revoked" FROM "device"
-          WHERE "id" = ${phone.deviceId}::uuid FOR SHARE`;
+        // and ends its block, or this one waits for the turn-in and finds the key revoked; a mark
+        // out of service at the same moment likewise (ADR-531).
+        const [standing] = await tx.$queryRaw<{ revoked: boolean; inService: boolean }[]>`
+          SELECT "key_revoked_at" IS NOT NULL AS "revoked", "status" = 'ACTIVE' AS "inService"
+          FROM "device" WHERE "id" = ${phone.deviceId}::uuid FOR SHARE`;
         if (standing?.revoked === true) throw new Refusal('PHONE_NOT_PROVEN', 401);
+        if (standing?.inService === false) throw new Refused(NumberAllocator.outOfService);
         const series = await tx.projectNumberSeries.findUnique({
           where: { projectId_series: { projectId: report.projectId, series: report.series } },
         });
@@ -239,6 +243,12 @@ export class NumberAllocator extends SetupService {
     }
     return ended;
   }
+
+  private static readonly outOfService = {
+    code: 'PHONE_OUT_OF_SERVICE',
+    message:
+      'No block cut: this phone was taken out of service. It keeps what it holds until it is turned in.',
+  } as const;
 
   private static noSeries(series: NumberSeries): Refused {
     return new Refused({

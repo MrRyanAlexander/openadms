@@ -234,6 +234,12 @@ export {
   type MasterPasscodeSessionKind,
 } from './passcode-sessions.ts';
 export {
+  OfflineSignInRules,
+  offlineSignInKinds,
+  type OfflineSignInKind,
+  type OfflineSignInSaid,
+} from './offline-sign-ins.ts';
+export {
   PasscodeLogRules,
   loggedPasscodeUseRefusals,
   loggedPasscodeUses,

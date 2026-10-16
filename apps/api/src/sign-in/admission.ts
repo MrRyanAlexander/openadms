@@ -17,9 +17,16 @@
 // A phone that has proved itself sends its proof's token as `Authorization: Bearer`, never as a
 // cookie (ARCHITECTURE §6, Device sessions; AC-10-46; ADR-440): no browser sends that header by
 // itself, so such a call needs no CSRF value. The phone is read from the database for this
-// request too: a key revoked a moment ago refuses now, whatever the token says. A phone whose
-// key the firm's time revoked, proven with the master passcode beside it, reaches only the
-// endpoints that say `keyRevokedToo` (ADR-530).
+// request too: a key revoked a moment ago refuses now, whatever the token says. **Its standing is
+// decided here, once a request** (ADR-531): a phone taken out of service only sends, reaching
+// the endpoints that say `outOfServiceToo` and refused `PHONE_OUT_OF_SERVICE` at any other,
+// whatever session it still holds; a phone whose key the firm's time revoked, proven with the
+// master passcode beside it, reaches those alone too (ADR-530). A proof with the passcode of a
+// phone whose key stands is its key's proof with the master user at it besides. Every endpoint
+// behind reads that standing from what it is handed, never again from the database.
+//
+// What a phone sends (`PHONE_IN_USE`) needs somebody signed in on it (ADR-531, the user): the
+// monitor's session, read as below, or the master user, by the passcode at its proof.
 //
 // A monitor signed in on that phone (ADR-443) sends their session's token beside it, in a header
 // of its own, never as a cookie: the phone is read first, then the session, both from the
@@ -73,7 +80,7 @@ export function refreshTokenOf(request: object): string {
   return token;
 }
 
-// The proven phone a request is from. Only an endpoint whose access is `PROVEN_PHONE` has one.
+// The proven phone a request is from: every endpoint open to a phone has one.
 export function phoneOf(request: object): ProvenPhone {
   const phone = admitted.get(request)?.phone;
   if (phone === undefined) throw new Error('This endpoint has no proven phone.');
@@ -114,18 +121,31 @@ export class Admission {
   // Lets the request through, or refuses it with a plain code.
   async admit(endpoint: Endpoint, request: FastifyRequest): Promise<void> {
     if (endpoint.access === 'ANYBODY') return;
-    if (endpoint.access === 'PROVEN_PHONE' || endpoint.access === 'MONITOR_ON_PHONE') {
+    if (
+      endpoint.access === 'PROVEN_PHONE' ||
+      endpoint.access === 'MONITOR_ON_PHONE' ||
+      endpoint.access === 'PHONE_IN_USE'
+    ) {
       const sent = request.headers.authorization;
       const phone = await this.phones.proven(bearer.exec(sent ?? '')?.[1]);
       if (phone === undefined) throw refused(request, endpoint, 'PHONE_NOT_PROVEN', 401);
-      // A phone whose key the firm's time revoked, proven with the master passcode, is let
-      // through only to what gets its records onto the server and it turned in (ADR-530).
-      if (phone.keyRevoked && endpoint.keyRevokedToo !== true) {
-        throw refused(request, endpoint, 'PHONE_NOT_PROVEN', 401, { deviceId: phone.deviceId });
+      const whose = { deviceId: phone.deviceId };
+      if (endpoint.outOfServiceToo !== true) {
+        // A phone whose key the firm's time revoked, proven with the passcode, reaches only what
+        // gets its records onto the server and it turned in (ADR-530).
+        if (phone.keyRevoked) throw refused(request, endpoint, 'PHONE_NOT_PROVEN', 401, whose);
+        // A phone taken out of service only sends, whatever session it still holds (ADR-531).
+        if (phone.status !== 'ACTIVE') {
+          throw refused(request, endpoint, 'PHONE_OUT_OF_SERVICE', 409, whose, outOfService);
+        }
       }
       // Counted for the phone, as well as for its address (ADR-490).
       this.limits.phoneAsked(phone.deviceId);
-      if (endpoint.access === 'PROVEN_PHONE') {
+      // The master user at the phone is somebody signed in on it (ADR-531).
+      if (
+        endpoint.access === 'PROVEN_PHONE' ||
+        (endpoint.access === 'PHONE_IN_USE' && phone.withPasscode)
+      ) {
         admitted.set(request, { phone });
         return;
       }
@@ -190,16 +210,22 @@ interface Whose {
   readonly deviceId?: string;
 }
 
+// What a phone taken out of service is told at anything but what it sends (ADR-531), as the
+// services behind told it before the door did.
+const outOfService =
+  'Not done: this phone was taken out of service. It only sends what it holds and is turned in.';
+
 function refused(
   request: FastifyRequest,
   endpoint: Endpoint,
   code: ErrorCode,
   status: number,
   who: Whose = {},
+  message?: string,
 ): Refusal {
   request.log.warn(
     { endpoint: endpoint.name, refused: code, ...who },
     'The door refused a request.',
   );
-  return new Refusal(code, status);
+  return new Refusal(code, status, message);
 }

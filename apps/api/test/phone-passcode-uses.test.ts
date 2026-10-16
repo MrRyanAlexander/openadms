@@ -21,7 +21,7 @@ import { deviceKeyActorId, masterPasscodeActorId, type Database } from '@open-ad
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { installationSettings, openInstallation, type Tx } from './support/database.ts';
-import { enrolledPhone, passcode, proven, type TestPhone } from './support/phones.ts';
+import { enrolledPhone, passcode, provenBoth, senderOf, type TestPhone } from './support/phones.ts';
 import { notTaken } from './support/review.ts';
 import { danasEmail, long, worldOn, type Answer, type Served } from './support/served.ts';
 import { ask, p1Priced, saved, told } from './support/setup.ts';
@@ -48,7 +48,8 @@ const offset = -240;
 const report = (served: Served, bearer: string | undefined, payload: object): Promise<Answer> =>
   served.ask('POST', reportPasscodeUseEndpoint.path, {
     payload,
-    ...(bearer === undefined ? {} : { bearer }),
+    // What a phone sends goes with somebody signed in on it: the master user (ADR-531).
+    ...(bearer === undefined ? {} : { bearer: senderOf(bearer) }),
   });
 
 // What a report was answered: `SAVED`, `ALREADY_SAVED`, or `NOT_SAVED` and why.
@@ -67,7 +68,7 @@ async function theTowersPhone(served: Served, tx: Tx) {
   const dana = await served.signedIn(danasEmail, long);
   const priced = await p1Priced(served, dana, tx);
   const phone = await enrolledPhone(served, tx, 'P1-TWR-LF');
-  const token = await proven(served, phone);
+  const token = await provenBoth(served, phone);
   const created = async (name: string, password: string) => {
     const made = await served.ask('POST', '/phones/current/monitors', {
       bearer: token,
@@ -176,10 +177,10 @@ const lines = (served: Served, msg: string) =>
 const said = 'A phone reported a use of the master passcode it logged.';
 
 describe('who may report one', () => {
-  it('AC-10-27 it is a proven phone’s call, with nobody signed in and no passcode sent: no token, a back-office session and a body that isn’t whole are refused, and nothing is written', async () => {
+  it('AC-10-27, ADR-531 it is a proven phone’s call with somebody signed in on it, no passcode sent with it: no token, nobody signed in, a back-office session and a body that isn’t whole are refused, and nothing is written', async () => {
     const { access, roles, permission } =
       endpoints.find(({ name }) => name === 'reportPasscodeUse') ?? {};
-    expect([access, roles, permission]).toEqual(['PROVEN_PHONE', undefined, undefined]);
+    expect([access, roles, permission]).toEqual(['PHONE_IN_USE', undefined, undefined]);
     await world(async (served, tx) => {
       const { dana, phone, token, sam, logged } = await theTowersPhone(served, tx);
       const sent = logged('MONITOR_SWITCH', sam.userId);
@@ -251,7 +252,7 @@ describe('a switch to a monitor who has their own assignment', () => {
     await world(async (served, tx) => {
       const { phone, sam, samsPlan, logged } = await theTowersPhone(served, tx);
       served.clock.at = mondayAfternoon;
-      const token = await proven(served, phone);
+      const token = await provenBoth(served, phone);
       served.lines.length = 0;
       const sent = logged('MONITOR_SWITCH', sam.userId);
       const { said: first, requestId } = await answered(served, token, sent);
@@ -309,7 +310,7 @@ describe('a switch to a monitor who has their own assignment', () => {
       expect(await written(tx, phone)).toEqual([2, 0, 0]);
       // Another phone can't claim it, or learn anything of it but that the id is held.
       const other = await enrolledPhone(served, tx, 'P1-COL-1');
-      const others = await proven(served, other);
+      const others = await provenBoth(served, other);
       const held = ['NOT_SAVED', 'ID_ALREADY_HELD'];
       expect((await answered(served, others, sent)).said).toEqual(held);
       // An event the server saw itself (Sam created on this phone under the passcode) is no
@@ -333,7 +334,7 @@ describe('a session opened on the phone with no connection', () => {
     await world(async (served, tx) => {
       const { phone, tariq, sam, logged } = await theTowersPhone(served, tx);
       served.clock.at = mondayAfternoon;
-      const token = await proven(served, phone);
+      const token = await provenBoth(served, phone);
       served.lines.length = 0;
       const morning = '2026-10-12T10:45:00.000Z';
       const asTariq = logged('SESSION_AS_MONITOR', tariq.userId, { loggedAt: morning });
@@ -404,7 +405,7 @@ describe('a session opened on the phone with no connection', () => {
       }
       // The temporary session for Sam opened at 13:00 with no connection, reported at 13:05.
       served.clock.at = mondayAfternoon;
-      const afternoon = await proven(served, phone);
+      const afternoon = await provenBoth(served, phone);
       const forSam = logged('TEMPORARY_SESSION', sam.userId);
       const { said: first, requestId } = await answered(served, afternoon, forSam);
       expect(first).toEqual(['SAVED', null]);
@@ -440,7 +441,7 @@ describe('a wrong try at the passcode on a phone', () => {
     await world(async (served, tx) => {
       const { phone, tariq, logged } = await theTowersPhone(served, tx);
       served.clock.at = mondayAfternoon;
-      const token = await proven(served, phone);
+      const token = await provenBoth(served, phone);
       const sent = Array.from({ length: 6 }, (_, nth) =>
         logged('WRONG_TRY', null, { loggedAt: `2026-10-12T16:5${String(nth)}:00.000Z` }),
       );

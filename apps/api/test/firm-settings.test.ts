@@ -1,12 +1,15 @@
 // The firm's own settings, against the database (REQ-214, 215; ARCHITECTURE §6, §7.4;
-// spec/acceptance/10-api-and-sync.md AC-10-83, 85; ADR-170, 412, 511, 520, 530). OWASP ASVS 5.0
+// spec/acceptance/10-api-and-sync.md AC-10-83, 85; ADR-170, 412, 511, 520, 530, 531). OWASP ASVS 5.0
 // 6.3.3, 8.2.1; API Security Top 10 API5. The real process, in this test's own memory, on the
 // installation's database as `adms_api`: it needs `pnpm local:up` after `pnpm installer`, and
 // fails saying so. Each test's work is undone (support/database.ts).
 import {
+  changeMonitorSessionHoursEndpoint,
   changePhoneKeyHoursEndpoint,
   changeViewerTwoStepEndpoint,
   firmSettingsEndpoint,
+  monitorCreatedAnswerSchema,
+  monitorSignedInAnswerSchema,
   sessionAnswerSchema,
 } from '@open-adms/contracts';
 import { randomUUID } from 'node:crypto';
@@ -16,6 +19,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { FirmSettings } from '../src/firm/firm-settings.ts';
 import { installationSettings, openInstallation } from './support/database.ts';
+import { enrolledPhone, passcode, proven } from './support/phones.ts';
 import { danasEmail, long, longer, luissEmail, worldOn, type Served } from './support/served.ts';
 import { ask, saved, told, viewerSignsIn, type Browser } from './support/setup.ts';
 
@@ -49,6 +53,7 @@ describe('who may read and change them', () => {
           [firmSettingsEndpoint, {}],
           [changePhoneKeyHoursEndpoint, { payload: { hours: 48 } }],
           [changeViewerTwoStepEndpoint, { payload: { required: true } }],
+          [changeMonitorSessionHoursEndpoint, { payload: { hours: 12 } }],
         ] as const) {
           expect(told(await ask(served, nobody, served_, more)), served_.name).toEqual([
             403,
@@ -59,6 +64,7 @@ describe('who may read and change them', () => {
       expect(saved(firmSettingsEndpoint, await ask(served, dana, firmSettingsEndpoint))).toEqual({
         phoneKeyRevokedAfterHours: 24,
         viewerTwoStepRequired: false,
+        monitorSessionHours: 24,
       });
       // Setup opens the hours to Luis, never the viewers' sign-in.
       await tx.userPermission.create({ data: { userId: who.luis, permission: 'SETUP' } });
@@ -66,12 +72,19 @@ describe('who may read and change them', () => {
       expect(
         told(await ask(served, luis, changeViewerTwoStepEndpoint, { payload: { required: true } })),
       ).toEqual([403, 'NOT_ALLOWED']);
+      // Nor how long a monitor's sign-in lasts: an admin's alone (ADR-531).
+      expect(
+        told(
+          await ask(served, luis, changeMonitorSessionHoursEndpoint, { payload: { hours: 12 } }),
+        ),
+      ).toEqual([403, 'NOT_ALLOWED']);
       const changed = await ask(served, luis, changePhoneKeyHoursEndpoint, {
         payload: { hours: 72, note: 'Our crews work three-day rotations' },
       });
       expect(saved(changePhoneKeyHoursEndpoint, changed)).toEqual({
         phoneKeyRevokedAfterHours: 72,
         viewerTwoStepRequired: false,
+        monitorSessionHours: 24,
       });
       expect(
         await tx.auditRecord.findMany({
@@ -139,6 +152,9 @@ describe('the service asks again inside its own piece of work (ADR-364)', () => 
       await tx.userPermission.create({ data: { userId: who.luis, permission: 'SETUP' } });
       const luis = await service.changeViewerTwoStep(who.luis, true);
       expect(luis.saved ? 'saved' : luis.refusal.code).toBe('NOT_ALLOWED');
+      // Nor how long a monitor's sign-in lasts, Setup or not: an admin's alone (ADR-531).
+      const hours = await service.changeMonitorSessionHours(who.luis, 12);
+      expect(hours.saved ? 'saved' : hours.refusal.code).toBe('NOT_ALLOWED');
       expect(await service.changePhoneKeyHours(who.luis, 48)).toMatchObject({ saved: true });
       expect(
         await tx.firmSettings.findUniqueOrThrow({
@@ -190,6 +206,51 @@ describe('the read-only viewers’ two-step', () => {
       expect(await tx.userCredential.count({ where: { twoStepSecret: { not: null } } })).toBe(
         authenticators,
       );
+    });
+  });
+});
+
+describe('how long a monitor’s sign-in on a phone lasts (ADR-531)', () => {
+  it('a day as shipped; an admin sets it from 1 to 24 hours, audited with their note; a sign-in made after reads it, one already open keeps its end', async () => {
+    await world(async (served, tx) => {
+      const dana = await served.signedIn(danasEmail, long);
+      for (const hours of [0, 25]) {
+        expect(
+          told(await ask(served, dana, changeMonitorSessionHoursEndpoint, { payload: { hours } })),
+          String(hours),
+        ).toEqual([400, 'BAD_REQUEST']);
+      }
+      const changed = await ask(served, dana, changeMonitorSessionHoursEndpoint, {
+        payload: { hours: 14, note: 'Our shifts end by eight at night' },
+      });
+      expect(saved(changeMonitorSessionHoursEndpoint, changed).monitorSessionHours).toBe(14);
+      expect(
+        await tx.auditRecord.findMany({
+          where: { requestId: changed.requestId },
+          select: { tableName: true, changedFields: true, reason: true, domain: true },
+        }),
+      ).toEqual([
+        {
+          tableName: 'firm_settings',
+          changedFields: ['monitor_session_hours'],
+          reason: 'Our shifts end by eight at night',
+          domain: 'SECURITY',
+        },
+      ]);
+      // A monitor signs in on a phone: the session lasts the firm's hours now.
+      const phone = await enrolledPhone(served, tx, 'P1-COL-1');
+      const token = await proven(served, phone);
+      const made = await served.ask('POST', '/phones/current/monitors', {
+        bearer: token,
+        payload: { name: 'Lee Morgan', password: '5550142', passcode },
+      });
+      expect(told(made)).toEqual([200, undefined]);
+      const { monitorNumber } = monitorCreatedAnswerSchema.parse(made.body);
+      const signedIn = await served.ask('POST', '/phones/current/sign-ins', {
+        bearer: token,
+        payload: { monitorNumber, password: '5550142' },
+      });
+      expect(monitorSignedInAnswerSchema.parse(signedIn.body).expiresInSeconds).toBe(14 * 3600);
     });
   });
 });

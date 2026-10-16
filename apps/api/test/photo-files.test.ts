@@ -35,7 +35,7 @@ import {
   tidied,
   versionsUnder,
 } from './support/media.ts';
-import { enrolledPhone, proven } from './support/phones.ts';
+import { enrolledPhone, provenWithPasscode } from './support/phones.ts';
 import {
   danasEmail,
   long,
@@ -108,7 +108,7 @@ async function photographed(
   const { project } = await p1(served, dana, tx);
   projects.add(project.id);
   const phone = await enrolledPhone(served, tx, files.name ?? 'P1-COL-1');
-  const token = await proven(served, phone);
+  const token = await provenWithPasscode(served, phone);
   const assignment = await tx.assignment.create({
     data: {
       personId: who.kim,
@@ -209,7 +209,7 @@ const standing = async (served: Served, p: Photographed, file: 'photo' | 'depth'
   answered(await served.ask('GET', at(p.photoId, file), { bearer: p.token }));
 
 describe('the media endpoint', () => {
-  it('AC-10-47 is the one endpoint a phone sends a file to, open to a proven phone, and a file is no body any other endpoint takes', async () => {
+  it('AC-10-47 is the one endpoint a phone sends a file to, open to a proven phone with somebody signed in on it (ADR-531), and a file is no body any other endpoint takes', async () => {
     // The other is the back office's map's file (ADR-485; KD-76).
     expect(endpoints.filter(({ file }) => file === true).map(({ name }) => name)).toEqual([
       'sendMapFile',
@@ -217,7 +217,7 @@ describe('the media endpoint', () => {
     ]);
     for (const served of [photoFileEndpoint, sendPhotoFilePartEndpoint]) {
       expect([served.access, served.path]).toEqual([
-        'PROVEN_PHONE',
+        'PHONE_IN_USE',
         '/phones/current/photos/:photoId/files/:file',
       ]);
     }
@@ -661,7 +661,7 @@ describe('who may send one', () => {
           'PHONE_NOT_PROVEN',
         ]);
         const other = await enrolledPhone(served, tx, 'P1-COL-2');
-        const its = await proven(served, other);
+        const its = await provenWithPasscode(served, other);
         expect(told(await sent(served, its, p.photoId, 'photo', part))).toEqual([404, 'NOT_FOUND']);
         expect(told(await served.ask('GET', at(p.photoId, 'photo'), { bearer: its }))).toEqual([
           404,

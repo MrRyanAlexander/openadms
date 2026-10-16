@@ -12806,7 +12806,7 @@
     "/firm-settings": {
       "get": {
         "operationId": "firmSettings",
-        "summary": "The firm’s own settings: how many hours a phone marked lost or retired keeps its key (or off), and whether read-only viewers must use two-step sign-in.",
+        "summary": "The firm’s own settings: how many hours a phone marked lost or retired keeps its key (or off), whether read-only viewers must use two-step sign-in, and how many hours a monitor’s sign-in on a phone lasts.",
         "x-open-adms-access": "SIGNED_IN",
         "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
         "x-open-adms-permission": "SETUP",
@@ -12832,9 +12832,18 @@
                     },
                     "viewerTwoStepRequired": {
                       "type": "boolean"
+                    },
+                    "monitorSessionHours": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 24
                     }
                   },
-                  "required": ["phoneKeyRevokedAfterHours", "viewerTwoStepRequired"],
+                  "required": [
+                    "phoneKeyRevokedAfterHours",
+                    "viewerTwoStepRequired",
+                    "monitorSessionHours"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -12913,9 +12922,18 @@
                     },
                     "viewerTwoStepRequired": {
                       "type": "boolean"
+                    },
+                    "monitorSessionHours": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 24
                     }
                   },
-                  "required": ["phoneKeyRevokedAfterHours", "viewerTwoStepRequired"],
+                  "required": [
+                    "phoneKeyRevokedAfterHours",
+                    "viewerTwoStepRequired",
+                    "monitorSessionHours"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -12984,9 +13002,100 @@
                     },
                     "viewerTwoStepRequired": {
                       "type": "boolean"
+                    },
+                    "monitorSessionHours": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 24
                     }
                   },
-                  "required": ["phoneKeyRevokedAfterHours", "viewerTwoStepRequired"],
+                  "required": [
+                    "phoneKeyRevokedAfterHours",
+                    "viewerTwoStepRequired",
+                    "monitorSessionHours"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/firm-settings/monitor-sessions": {
+      "patch": {
+        "operationId": "changeMonitorSessionHours",
+        "summary": "An admin sets how many whole hours (1 to 24) a monitor’s sign-in on a phone lasts, online or made with no connection, and a session under the master passcode at most. It applies to sign-ins made from then on; a session already open keeps its end. Audited.",
+        "x-open-adms-access": "SIGNED_IN",
+        "x-open-adms-roles": ["ADMIN"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "hours": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 24
+                  },
+                  "note": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                },
+                "required": ["hours"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "phoneKeyRevokedAfterHours": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 8760
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "viewerTwoStepRequired": {
+                      "type": "boolean"
+                    },
+                    "monitorSessionHours": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 24
+                    }
+                  },
+                  "required": [
+                    "phoneKeyRevokedAfterHours",
+                    "viewerTwoStepRequired",
+                    "monitorSessionHours"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -13316,7 +13425,7 @@
     "/phones/{deviceId}/proofs": {
       "post": {
         "operationId": "provePhone",
-        "summary": "A phone proves itself: it sends back the challenge it was made and its signature over it. The answer is a token for that phone, good for the policy’s minutes, which the calls of its sync carry as Authorization: Bearer. A challenge is good once. A proof that isn’t one is refused by one code, whatever the reason; a phone taken out of service still proves itself, one whose key its turn-in revoked does not. A phone whose key the firm’s time revoked sends the master passcode beside its signature, and its token then opens only its sync, its photographs’ files, its reports and its turn-in; without the passcode it is told the passcode is needed. A passcode that isn’t taken is refused by the proof’s one code, and counts as a wrong try as it does when a phone is enrolled.",
+        "summary": "A phone proves itself: it sends back the challenge it was made and its signature over it. The answer is a token for that phone, good for the policy’s minutes, which the calls of its sync carry as Authorization: Bearer. A challenge is good once. A proof that isn’t one is refused by one code, whatever the reason; a phone taken out of service still proves itself, one whose key its turn-in revoked does not. Whoever holds the master passcode may send it beside the signature: the master user is then at the phone, and its token opens what a proof by the key opens and counts as somebody signed in on the phone for what it sends. A phone whose key the firm’s time revoked proves itself only so, and its token opens only its sync, its photographs’ files, its reports, its turn-in and its read of itself; without the passcode it is told the passcode is needed. Each passcode taken is a security event; one that isn’t is refused by the proof’s one code, and counts as a wrong try as it does when a phone is enrolled.",
         "x-open-adms-access": "ANYBODY",
         "parameters": [
           {
@@ -13946,11 +14055,145 @@
         }
       }
     },
+    "/phones/current/offline-sign-ins": {
+      "post": {
+        "operationId": "takeOfflineSignInOnPhone",
+        "summary": "A phone reports a sign-in made on it with no connection, once it has one: the monitor’s own password checked against its login list, or a session opened under the master passcode as the phone’s monitor or the temporary one. It says who, how, when by its own clock with the offset, the version of the master passcode whose check it held (under the passcode only), and its proof: an HMAC-SHA256 over what the sign-in says, keyed by the first slow hash of what was typed, which the server checks against the monitor’s offline seed or its own hash of the passcode in force. Taken, the answer is a session’s token for the x-adms-monitor-session header and how long it has left, counted from the sign-in by the firm’s hours (a temporary session also ends with the project’s day); any other session on the phone ends, and it is a security event. Refused by one code, and written as a security event the back office is shown, where the proof isn’t one, the password was set anew or the passcode changed since, the monitor is not in service, the session has already run out, or the server knows of a sign-in or sign-out on the phone after it: the phone keeps everything and its monitor signs in online. The same sign-in reported again by the phone gives a new token and ends the one before. Open to a phone in service that has proved itself, by its token.",
+        "x-open-adms-access": "PROVEN_PHONE",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": ["OWN_PASSWORD", "AS_MONITOR", "TEMPORARY"]
+                  },
+                  "personId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "signedInAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                  },
+                  "deviceUtcOffsetMinutes": {
+                    "type": "integer",
+                    "minimum": -720,
+                    "maximum": 840
+                  },
+                  "masterPasscodeVersion": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 2147483647
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "proof": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{43}$"
+                  }
+                },
+                "required": [
+                  "id",
+                  "kind",
+                  "personId",
+                  "signedInAt",
+                  "deviceUtcOffsetMinutes",
+                  "masterPasscodeVersion",
+                  "proof"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "token": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "userId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "monitorNumber": {
+                      "type": "string",
+                      "pattern": "^M\\d{6,}$"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "expiresInSeconds": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
+                    },
+                    "masterPasscodeSession": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": ["AS_MONITOR", "TEMPORARY"]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "token",
+                    "userId",
+                    "monitorNumber",
+                    "name",
+                    "expiresInSeconds",
+                    "masterPasscodeSession"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/phones/current/passcode-uses": {
       "post": {
         "operationId": "reportPasscodeUse",
-        "summary": "A phone reports a use of the firm’s master passcode it logged with no connection: the phone passed to a monitor who has their own assignment, a session opened on it as the phone’s monitor or the temporary session for a monitor picked from the roster, or the passcode typed wrong. It says when by the phone’s own clock, with the clock’s offset, and for which monitor; a wrong try names nobody. The id is the phone’s own: the same report sent again is answered as already saved and kept once. It is kept as the phone reports it, for a monitor archived since and from a phone out of service too, and is not saved only where it names somebody who is no monitor or its id is another record’s. The passcode itself is never sent: the phone checked it, and a wrong try reported here does not count toward the lock on the server’s own check. Each one saved is a security event at the phone’s own time: a phone switched and a use of the master passcode; a use that says which way a session was opened; or a failed try. A switch or a session saved ends what anybody else had open on that phone before it, by the phone’s clock. A setup, a site move and a switch to a monitor who has no assignment are reported as an unplanned assignment instead. Open to a phone that has proved itself, by its token; nobody need be signed in.",
-        "x-open-adms-access": "PROVEN_PHONE",
+        "summary": "A phone reports a use of the firm’s master passcode it logged with no connection: the phone passed to a monitor who has their own assignment, a session opened on it as the phone’s monitor or the temporary session for a monitor picked from the roster, or the passcode typed wrong. It says when by the phone’s own clock, with the clock’s offset, and for which monitor; a wrong try names nobody. The id is the phone’s own: the same report sent again is answered as already saved and kept once. It is kept as the phone reports it, for a monitor archived since and from a phone out of service too, and is not saved only where it names somebody who is no monitor or its id is another record’s. The passcode itself is never sent: the phone checked it, and a wrong try reported here does not count toward the lock on the server’s own check. Each one saved is a security event at the phone’s own time: a phone switched and a use of the master passcode; a use that says which way a session was opened; or a failed try. A switch or a session saved ends what anybody else had open on that phone before it, by the phone’s clock. A setup, a site move and a switch to a monitor who has no assignment are reported as an unplanned assignment instead. Open to a phone that has proved itself, by its token, with somebody signed in on it: the monitor, by their session’s token in the x-adms-monitor-session header, or the master user, by the master passcode sent beside the phone’s proof. A phone taken out of service sends it too.",
+        "x-open-adms-access": "PHONE_IN_USE",
         "requestBody": {
           "required": true,
           "content": {
@@ -15521,8 +15764,8 @@
     "/phones/current/unplanned-assignments": {
       "post": {
         "operationId": "reportUnplannedAssignment",
-        "summary": "A phone reports an unplanned assignment made on it under the firm’s master passcode, when its monitor had none: the project, the monitor, their work (the kinds of field event, certifying, the forms, the unit rate pay items), one site where the work is at one, and when it was made by the phone’s own clock, with the clock’s offset. The id is the phone’s own: the same report sent again is answered as already saved and kept once. It is kept as the phone reports it, marked unplanned on the dispatch board and never flagged, for a phone out of service too; its day is the day the phone’s clock said, in the project’s time zone. It is not saved only where something it names is no record of the kind it must be, or its id is another record’s. The passcode itself is never sent: the phone checked it. It says what it was made at: the phone set up (a phone moved to another of its project’s sites is set up anew there, and the earlier assignment stands with everything recorded under it), or the phone passed to another monitor, who had no assignment it could take. Each one saved is two security events at the phone’s own time: a phone set up or a phone switched, and a use of the master passcode. Where several of a monitor’s assignments for a day name one phone, their sign-in on it takes the one made on it last. Open to a phone that has proved itself, by its token; nobody need be signed in.",
-        "x-open-adms-access": "PROVEN_PHONE",
+        "summary": "A phone reports an unplanned assignment made on it under the firm’s master passcode, when its monitor had none: the project, the monitor, their work (the kinds of field event, certifying, the forms, the unit rate pay items), one site where the work is at one, and when it was made by the phone’s own clock, with the clock’s offset. The id is the phone’s own: the same report sent again is answered as already saved and kept once. It is kept as the phone reports it, marked unplanned on the dispatch board and never flagged, for a phone out of service too; its day is the day the phone’s clock said, in the project’s time zone. It is not saved only where something it names is no record of the kind it must be, or its id is another record’s. The passcode itself is never sent: the phone checked it. It says what it was made at: the phone set up (a phone moved to another of its project’s sites is set up anew there, and the earlier assignment stands with everything recorded under it), or the phone passed to another monitor, who had no assignment it could take. Each one saved is two security events at the phone’s own time: a phone set up or a phone switched, and a use of the master passcode. Where several of a monitor’s assignments for a day name one phone, their sign-in on it takes the one made on it last. Open to a phone that has proved itself, by its token, with somebody signed in on it: the monitor, by their session’s token in the x-adms-monitor-session header, or the master user, by the master passcode sent beside the phone’s proof. A phone taken out of service sends it too.",
+        "x-open-adms-access": "PHONE_IN_USE",
         "requestBody": {
           "required": true,
           "content": {
@@ -15682,8 +15925,8 @@
     "/phones/current/syncs": {
       "post": {
         "operationId": "syncPhone",
-        "summary": "A phone syncs: it sends its clock, the unplanned assignments made on it, the uses of the master passcode it logged, its records (field events, scale receipts, incidents, drop-off logs, surveys, ROEs and certifications, each under the id the phone made for it, 200 at most) and the last number it used of each series. The server keeps the sync with both clocks and their difference, then reads each thing in that order and gives each its own answer, in the order sent. A record is saved; already saved, where it was sent before (never stored twice, and never taken for a duplicate ticket number); kept in quarantine, not saved, where another record holds its number, with the reason and the record that holds it; or not saved, where it can’t be read, names something the server doesn’t have, was made under an assignment that was not saved, or is a certification its own rules refuse: what was sent is then held on the server exactly as sent, for a person, and the answer says so. One record never stops the others. Nothing is refused over eligibility, and no answer carries a status, a flag or money: reconciliation is queued for what arrived and never waited for. For each series reported the answer lists the blocks of numbers the phone holds now, topped up to a full block where the project has such a series. A phone with more than one sync’s worth sends another. Open to a phone that has proved itself, by its token; nobody need be signed in.",
-        "x-open-adms-access": "PROVEN_PHONE",
+        "summary": "A phone syncs: it sends its clock, the unplanned assignments made on it, the uses of the master passcode it logged, its records (field events, scale receipts, incidents, drop-off logs, surveys, ROEs and certifications, each under the id the phone made for it, 200 at most) and the last number it used of each series. The server keeps the sync with both clocks and their difference, then reads each thing in that order and gives each its own answer, in the order sent. A record is saved; already saved, where it was sent before (never stored twice, and never taken for a duplicate ticket number); kept in quarantine, not saved, where another record holds its number, with the reason and the record that holds it; or not saved, where it can’t be read, names something the server doesn’t have, was made under an assignment that was not saved, or is a certification its own rules refuse: what was sent is then held on the server exactly as sent, for a person, and the answer says so. One record never stops the others. Nothing is refused over eligibility, and no answer carries a status, a flag or money: reconciliation is queued for what arrived and never waited for. For each series reported the answer lists the blocks of numbers the phone holds now, topped up to a full block where the project has such a series and the phone is in service. A phone in service is brought the master passcode’s version in force, with its check where the phone holds another, and the setup version of the project whose lists it holds; a phone out of service, or proven with the passcode because the firm’s time revoked its key, is given no numbers and brought nothing. A phone with more than one sync’s worth sends another. Open to a phone that has proved itself, by its token, with somebody signed in on it: the monitor, by their session’s token in the x-adms-monitor-session header, or the master user, by the master passcode sent beside the phone’s proof. A phone taken out of service sends it too.",
+        "x-open-adms-access": "PHONE_IN_USE",
         "requestBody": {
           "required": true,
           "content": {
@@ -16279,65 +16522,78 @@
                       }
                     },
                     "masterPasscode": {
-                      "type": "object",
-                      "properties": {
-                        "version": {
-                          "type": "integer",
-                          "minimum": 1,
-                          "maximum": 2147483647
-                        },
-                        "check": {
-                          "anyOf": [
-                            {
-                              "type": "object",
-                              "properties": {
-                                "first": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "version": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 2147483647
+                            },
+                            "check": {
+                              "anyOf": [
+                                {
                                   "type": "object",
                                   "properties": {
-                                    "salt": {
+                                    "first": {
+                                      "type": "object",
+                                      "properties": {
+                                        "salt": {
+                                          "type": "string",
+                                          "pattern": "^[A-Za-z0-9+/]+$"
+                                        },
+                                        "memory": {
+                                          "type": "integer",
+                                          "minimum": 1,
+                                          "maximum": 9007199254740991
+                                        },
+                                        "passes": {
+                                          "type": "integer",
+                                          "minimum": 1,
+                                          "maximum": 9007199254740991
+                                        },
+                                        "parallelism": {
+                                          "type": "integer",
+                                          "minimum": 1,
+                                          "maximum": 9007199254740991
+                                        },
+                                        "bytes": {
+                                          "type": "integer",
+                                          "minimum": 16,
+                                          "maximum": 9007199254740991
+                                        }
+                                      },
+                                      "required": [
+                                        "salt",
+                                        "memory",
+                                        "passes",
+                                        "parallelism",
+                                        "bytes"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    "check": {
                                       "type": "string",
-                                      "pattern": "^[A-Za-z0-9+/]+$"
-                                    },
-                                    "memory": {
-                                      "type": "integer",
-                                      "minimum": 1,
-                                      "maximum": 9007199254740991
-                                    },
-                                    "passes": {
-                                      "type": "integer",
-                                      "minimum": 1,
-                                      "maximum": 9007199254740991
-                                    },
-                                    "parallelism": {
-                                      "type": "integer",
-                                      "minimum": 1,
-                                      "maximum": 9007199254740991
-                                    },
-                                    "bytes": {
-                                      "type": "integer",
-                                      "minimum": 16,
-                                      "maximum": 9007199254740991
+                                      "pattern": "^\\$argon2id\\$v=19\\$m=\\d+,t=\\d+,p=\\d+\\$[A-Za-z0-9+/]+\\$[A-Za-z0-9+/]+$"
                                     }
                                   },
-                                  "required": ["salt", "memory", "passes", "parallelism", "bytes"],
+                                  "required": ["first", "check"],
                                   "additionalProperties": false
                                 },
-                                "check": {
-                                  "type": "string",
-                                  "pattern": "^\\$argon2id\\$v=19\\$m=\\d+,t=\\d+,p=\\d+\\$[A-Za-z0-9+/]+\\$[A-Za-z0-9+/]+$"
+                                {
+                                  "type": "null"
                                 }
-                              },
-                              "required": ["first", "check"],
-                              "additionalProperties": false
-                            },
-                            {
-                              "type": "null"
+                              ]
                             }
-                          ]
+                          },
+                          "required": ["version", "check"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
                         }
-                      },
-                      "required": ["version", "check"],
-                      "additionalProperties": false
+                      ]
                     },
                     "setupVersion": {
                       "anyOf": [
@@ -16677,8 +16933,8 @@
     "/phones/current/photos/{photoId}/files/{file}": {
       "get": {
         "operationId": "photoFile",
-        "summary": "Where a photograph’s file stands: kept (nothing more to send), or how many of its bytes the server has taken, of a file how long, so the phone sends the rest from there (none, where it holds none). The photograph is named by its own id, and the file is the photograph itself or the depth file beside it; only the phone that took it may ask, once its record is saved. Open to a phone that has proved itself, by its token; nobody need be signed in.",
-        "x-open-adms-access": "PROVEN_PHONE",
+        "summary": "Where a photograph’s file stands: kept (nothing more to send), or how many of its bytes the server has taken, of a file how long, so the phone sends the rest from there (none, where it holds none). The photograph is named by its own id, and the file is the photograph itself or the depth file beside it; only the phone that took it may ask, once its record is saved. Open to a phone that has proved itself, by its token, with somebody signed in on it: the monitor, by their session’s token in the x-adms-monitor-session header, or the master user, by the master passcode sent beside the phone’s proof. A phone taken out of service sends it too.",
+        "x-open-adms-access": "PHONE_IN_USE",
         "parameters": [
           {
             "name": "photoId",
@@ -16776,8 +17032,8 @@
       },
       "patch": {
         "operationId": "sendPhotoFilePart",
-        "summary": "A part of a photograph’s file, sent by the phone that took it, once its record is saved: the bytes in the body, the offset they go at and the whole file’s length in the query. Taken only where it goes on from the last part the server took, or starts the file; otherwise the answer says where to go on from. The file is at most the policy’s size and a part at most the policy’s; its first part is told to be an image by its own first bytes (JPEG, HEIC or HEIF, PNG, TIFF), or refused. When the last part arrives the server reads the whole file’s SHA-256: the one the phone gave in the photograph’s record (or the depth file’s) and the file is kept, once, where the server placed it, never overwritten, and its upload time written; any other, and the file is set aside on the server for a person, never kept as the photograph’s, and the phone sends its file again from the first byte. A file kept already is answered kept, and nothing changes. Open to a phone that has proved itself, by its token; nobody need be signed in.",
-        "x-open-adms-access": "PROVEN_PHONE",
+        "summary": "A part of a photograph’s file, sent by the phone that took it, once its record is saved: the bytes in the body, the offset they go at and the whole file’s length in the query. Taken only where it goes on from the last part the server took, or starts the file; otherwise the answer says where to go on from. The file is at most the policy’s size and a part at most the policy’s; its first part is told to be an image by its own first bytes (JPEG, HEIC or HEIF, PNG, TIFF), or refused. When the last part arrives the server reads the whole file’s SHA-256: the one the phone gave in the photograph’s record (or the depth file’s) and the file is kept, once, where the server placed it, never overwritten, and its upload time written; any other, and the file is set aside on the server for a person, never kept as the photograph’s, and the phone sends its file again from the first byte. A file kept already is answered kept, and nothing changes. Open to a phone that has proved itself, by its token, with somebody signed in on it: the monitor, by their session’s token in the x-adms-monitor-session header, or the master user, by the master passcode sent beside the phone’s proof. A phone taken out of service sends it too.",
+        "x-open-adms-access": "PHONE_IN_USE",
         "parameters": [
           {
             "name": "photoId",

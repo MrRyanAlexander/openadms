@@ -488,8 +488,9 @@ describe('what a phone is answered', () => {
     ).toEqual([]);
     const not = (more: object): boolean =>
       !syncAnsweredSchema.safeParse({ ...answered, ...more }).success;
+    // A phone not in service is brought nothing: `null` is an answer (ADR-531).
     expect([
-      not({ masterPasscode: null }),
+      !not({ masterPasscode: null }),
       not({ masterPasscode: { version: 4 } }),
       not({ masterPasscode: { version: 4, check: 'osprey-landing-marsh' } }),
       not({ setupVersion: { projectId: p1, version: 0 } }),

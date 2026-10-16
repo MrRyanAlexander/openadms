@@ -415,8 +415,11 @@ describe('a session', () => {
       'expires_at',
       'id',
       'master_passcode_session',
+      'offline_sign_in_id',
       'refresh_token_hash',
       'revoked_at',
+      'signed_in_at',
+      'signed_in_utc_offset_minutes',
       'user_id',
     ]);
     await asTheApi();
@@ -473,8 +476,11 @@ describe('a session', () => {
           'expires_at',
           'id',
           'master_passcode_session',
+          'offline_sign_in_id',
           'refresh_token_hash',
           'revoked_at',
+          'signed_in_at',
+          'signed_in_utc_offset_minutes',
           'user_id',
         ],
         prior: null,
@@ -957,6 +963,9 @@ describe('a security event', () => {
       'DEVICE_TURN_IN',
       // A lost phone's key revoked after the firm's time (ADR-530).
       'DEVICE_KEY_REVOKED',
+      // A sign-in made offline, taken, and one the server could not take (ADR-531).
+      'OFFLINE_SIGN_IN',
+      'OFFLINE_SIGN_IN_REFUSED',
     ]);
     const at = '2026-10-12T12:05:00Z';
     expect((await db.refused(note, ['PASSWORD_GUESSED', world.admin, null, at])).code).toBe(

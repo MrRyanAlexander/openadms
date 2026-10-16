@@ -742,6 +742,21 @@ So the protection can't rest on the password. It rests on these:
 > fiftieth until an admin sets the password anew (the phone's own screen keeps its 5 and 10).
 > A phone taken out of service signs nobody in. The database itself lets a monitor's session be
 > opened on a phone only (point 1).
+
+⏳ **Awaiting approval** **ADR-531 (2026-10-15; the user's answers, their design agent defaults):
+> nothing is sent with nobody signed in, and a sign-in made offline proven.** The user: a phone
+> syncs only while somebody is signed in on it, a monitor or the master user, and the server knows
+> it. So a sync, a photograph's file and the phone's two reports need **the monitor's session**
+> beside the phone's token, or **the master user**: the master passcode sent beside the phone's
+> proof. **A sign-in made with no connection** is reported when the phone finds signal, with a
+> proof the server checks itself: an HMAC over who, how and when, keyed by the first slow hash of
+> what was typed, which only the right password (or passcode) makes; the server makes the same
+> from what it keeps. Taken, it is a session from when it was made; refused (a proof that isn't
+> one, a password set anew since, a later sign-in on the phone, taken already), the back office
+> is told and the monitor signs in online, nothing on the phone lost. **A monitor's sign-in lasts
+> the firm's hours, a day as shipped** (the user: shifts never run past a day), changed by an
+> admin; the twelve hours above are superseded. The app keeps the proof, never the hash, and drops
+> it at sign-out.
 >
 ✅ **Approved:** **ADR-444 (2026-10-09; agent defaults, this note awaits approval, building didn't wait):
 > the phone takes the assignment at that sign-in.** The sign-in's answer carries the monitor's
@@ -806,6 +821,12 @@ So the protection can't rest on the password. It rests on these:
 > its token opens only its sync, its photographs' files, its reports and its turn-in; its turn-in
 > then revokes the key for good. A phone whose key is revoked, by either kind, is never put back
 > in service: it is wiped and enrolled anew. A found phone whose key stands may be (ADR-530 (5)).
+
+⏳ **Awaiting approval** **ADR-531 (2026-10-15; the user's answer): a phone out of service only
+> sends.** Its standing is read once a request, at the door: a phone marked lost or retired sends
+> its records, photographs and reports and is turned in, and is given nothing (no new numbers, no
+> check of the passcode, no lists), whatever session it still holds; the database issues it no
+> new block. A phone whose key the firm's time revoked is the same, with the passcode at its proof.
 
 ### 7.5 The master passcode
 

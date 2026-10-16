@@ -37,6 +37,7 @@ import {
   monitorCreatedAnswerSchema,
   monitorSignedInAnswerSchema,
   passcodeSessionOpenedAnswerSchema,
+  offlineSignInTakenAnswerSchema,
   passcodeUseAnswerSchema,
   phoneAddressLookupAnswerSchema,
   phoneListsAnswerSchema,
@@ -78,6 +79,7 @@ import { places } from './field-event-details.ts';
 import { formDefinitionFields } from './form-definition.ts';
 import {
   assignedWork,
+  offlineSignInReportSchema,
   once,
   passcodeUseReportSchema,
   unplannedAssignmentReportSchema,
@@ -162,13 +164,17 @@ export type EndpointMethod = (typeof endpointMethods)[number];
 // device key, by the token its proof gave it, sent as `Authorization: Bearer` and never as a
 // cookie (ARCHITECTURE §6, Device sessions; ADR-440). `MONITOR_ON_PHONE`: a proven phone, by
 // that token, and the monitor signed in on it, by their session's token in the header named
-// below: both are read from the database on every request (ADR-443).
+// below: both are read from the database on every request (ADR-443). `PHONE_IN_USE`: a proven
+// phone with somebody signed in on it (ADR-531, the user: a phone with nobody signed in sends
+// nothing): a monitor's session, as `MONITOR_ON_PHONE` takes it, or the master passcode sent
+// beside its proof, the master user at the phone. What a phone sends is open to it alone.
 export const endpointAccess = [
   'ANYBODY',
   'SIGNED_IN',
   'REFRESH_TOKEN',
   'PROVEN_PHONE',
   'MONITOR_ON_PHONE',
+  'PHONE_IN_USE',
 ] as const;
 
 export type EndpointAccess = (typeof endpointAccess)[number];
@@ -204,10 +210,12 @@ export interface Endpoint {
   // Served even to a person who must first set an authenticator up (ADR-412): only what they
   // need to do that. Left out, such a person is refused.
   readonly beforeTwoStepSetup?: true;
-  // On a `PROVEN_PHONE` endpoint, and only there: served even to a phone whose key the firm's time
-  // revoked, which proved itself with the master passcode beside its key (ADR-530): only what
-  // gets its records onto the server and the phone turned in. Left out, such a phone is refused.
-  readonly keyRevokedToo?: true;
+  // On a `PROVEN_PHONE` or `PHONE_IN_USE` endpoint, and only there: served even to a phone taken
+  // out of service, and to one whose key the firm's time revoked, proven with the master passcode
+  // beside it (ADR-530, 531): only what gets its records onto the server and the phone turned in,
+  // and its read of itself. Left out, a phone out of service is refused (`PHONE_OUT_OF_SERVICE`),
+  // and a revoked one is proven no more.
+  readonly outOfServiceToo?: true;
   readonly method: EndpointMethod;
   // From the root, a parameter written `:name`: `/projects/:projectId`.
   readonly path: string;
@@ -290,9 +298,18 @@ export function endpoint<const E extends Endpoint>(defined: E): E {
       `The endpoint ${defined.name} doesn’t say whole who may call it: a signed-in endpoint names its roles, no other does, and a permission is asked only where a manager/analyst may call.`,
     );
   }
-  if (defined.keyRevokedToo === true && defined.access !== 'PROVEN_PHONE') {
+  if (
+    defined.outOfServiceToo === true &&
+    defined.access !== 'PROVEN_PHONE' &&
+    defined.access !== 'PHONE_IN_USE'
+  ) {
     throw new Error(
-      `The endpoint ${defined.name}: only a proven phone’s endpoint is served to a phone whose key the firm’s time revoked.`,
+      `The endpoint ${defined.name}: only a proven phone’s endpoint is served to a phone out of service.`,
+    );
+  }
+  if (defined.access === 'PHONE_IN_USE' && defined.outOfServiceToo !== true) {
+    throw new Error(
+      `The endpoint ${defined.name}: what a phone sends is taken from a phone out of service too (ADR-134).`,
     );
   }
   return defined;
@@ -1989,7 +2006,7 @@ export const challengePhoneEndpoint = endpoint({
 export const provePhoneEndpoint = endpoint({
   name: 'provePhone',
   summary:
-    'A phone proves itself: it sends back the challenge it was made and its signature over it. The answer is a token for that phone, good for the policy’s minutes, which the calls of its sync carry as Authorization: Bearer. A challenge is good once. A proof that isn’t one is refused by one code, whatever the reason; a phone taken out of service still proves itself, one whose key its turn-in revoked does not. A phone whose key the firm’s time revoked sends the master passcode beside its signature, and its token then opens only its sync, its photographs’ files, its reports and its turn-in; without the passcode it is told the passcode is needed. A passcode that isn’t taken is refused by the proof’s one code, and counts as a wrong try as it does when a phone is enrolled.',
+    'A phone proves itself: it sends back the challenge it was made and its signature over it. The answer is a token for that phone, good for the policy’s minutes, which the calls of its sync carry as Authorization: Bearer. A challenge is good once. A proof that isn’t one is refused by one code, whatever the reason; a phone taken out of service still proves itself, one whose key its turn-in revoked does not. Whoever holds the master passcode may send it beside the signature: the master user is then at the phone, and its token opens what a proof by the key opens and counts as somebody signed in on the phone for what it sends. A phone whose key the firm’s time revoked proves itself only so, and its token opens only its sync, its photographs’ files, its reports, its turn-in and its read of itself; without the passcode it is told the passcode is needed. Each passcode taken is a security event; one that isn’t is refused by the proof’s one code, and counts as a wrong try as it does when a phone is enrolled.',
   access: 'ANYBODY',
   method: 'POST',
   path: '/phones/:deviceId/proofs',
@@ -2009,7 +2026,7 @@ export const provenPhoneEndpoint = endpoint({
   summary:
     'The phone a proof’s token is of, as the server has it now: its name, whether it is in service, the version of the master passcode whose check it holds and the version in force. Open to a phone that has proved itself, by its token.',
   access: 'PROVEN_PHONE',
-  keyRevokedToo: true,
+  outOfServiceToo: true,
   method: 'GET',
   path: '/phones/current',
   answer: provenPhoneAnswerSchema,
@@ -2088,6 +2105,24 @@ export const openPasscodeSessionOnPhoneEndpoint = endpoint({
   answer: passcodeSessionOpenedAnswerSchema,
 });
 
+// A sign-in made on the phone with no connection, reported once it has one (ARCHITECTURE §7.2,
+// §7.3; ADR-105, 454, 462, 531): a monitor's own password checked against the phone's login list,
+// or a session opened under the master passcode. The phone proves it with what only what was
+// typed could make (the domain's `OfflineSignInRules`), and the server checks that proof itself
+// against what it keeps: it never takes the phone's word for who signed in. Taken, it is a
+// session as an online sign-in is, from when it was made. Reported first, before anything the
+// phone sends while that monitor is signed in.
+export const takeOfflineSignInOnPhoneEndpoint = endpoint({
+  name: 'takeOfflineSignInOnPhone',
+  summary:
+    'A phone reports a sign-in made on it with no connection, once it has one: the monitor’s own password checked against its login list, or a session opened under the master passcode as the phone’s monitor or the temporary one. It says who, how, when by its own clock with the offset, the version of the master passcode whose check it held (under the passcode only), and its proof: an HMAC-SHA256 over what the sign-in says, keyed by the first slow hash of what was typed, which the server checks against the monitor’s offline seed or its own hash of the passcode in force. Taken, the answer is a session’s token for the x-adms-monitor-session header and how long it has left, counted from the sign-in by the firm’s hours (a temporary session also ends with the project’s day); any other session on the phone ends, and it is a security event. Refused by one code, and written as a security event the back office is shown, where the proof isn’t one, the password was set anew or the passcode changed since, the monitor is not in service, the session has already run out, or the server knows of a sign-in or sign-out on the phone after it: the phone keeps everything and its monitor signs in online. The same sign-in reported again by the phone gives a new token and ends the one before. Open to a phone in service that has proved itself, by its token.',
+  access: 'PROVEN_PHONE',
+  method: 'POST',
+  path: '/phones/current/offline-sign-ins',
+  body: offlineSignInReportSchema,
+  answer: offlineSignInTakenAnswerSchema,
+});
+
 // A use of the firm's master passcode a phone logged with no connection, reported when it has
 // one (ARCHITECTURE §7's notes, §7.3, §7.5, §10; AC-02-23, 42, 46; BACKLOG 2.5.4, C122…C125;
 // ADR-106, 456 (3), (5)(e), 462, 464; REQ-202b). Only what no other report carries: a setup, a
@@ -2097,13 +2132,14 @@ export const openPasscodeSessionOnPhoneEndpoint = endpoint({
 // the passcode against its own check; the server is not sent it, takes the phone's word, the
 // phone having proved itself with its device key, and counts no try: a wrong try on a phone
 // never moves the server's own count or its lock. The id is the phone's own, so the same
-// report sent again is answered "already saved" and kept once. Nobody need be signed in.
+// report sent again is answered "already saved" and kept once. Somebody is signed in on the
+// phone, as for all it sends (ADR-531).
 export const reportPasscodeUseEndpoint = endpoint({
   name: 'reportPasscodeUse',
   summary:
-    'A phone reports a use of the firm’s master passcode it logged with no connection: the phone passed to a monitor who has their own assignment, a session opened on it as the phone’s monitor or the temporary session for a monitor picked from the roster, or the passcode typed wrong. It says when by the phone’s own clock, with the clock’s offset, and for which monitor; a wrong try names nobody. The id is the phone’s own: the same report sent again is answered as already saved and kept once. It is kept as the phone reports it, for a monitor archived since and from a phone out of service too, and is not saved only where it names somebody who is no monitor or its id is another record’s. The passcode itself is never sent: the phone checked it, and a wrong try reported here does not count toward the lock on the server’s own check. Each one saved is a security event at the phone’s own time: a phone switched and a use of the master passcode; a use that says which way a session was opened; or a failed try. A switch or a session saved ends what anybody else had open on that phone before it, by the phone’s clock. A setup, a site move and a switch to a monitor who has no assignment are reported as an unplanned assignment instead. Open to a phone that has proved itself, by its token; nobody need be signed in.',
-  access: 'PROVEN_PHONE',
-  keyRevokedToo: true,
+    'A phone reports a use of the firm’s master passcode it logged with no connection: the phone passed to a monitor who has their own assignment, a session opened on it as the phone’s monitor or the temporary session for a monitor picked from the roster, or the passcode typed wrong. It says when by the phone’s own clock, with the clock’s offset, and for which monitor; a wrong try names nobody. The id is the phone’s own: the same report sent again is answered as already saved and kept once. It is kept as the phone reports it, for a monitor archived since and from a phone out of service too, and is not saved only where it names somebody who is no monitor or its id is another record’s. The passcode itself is never sent: the phone checked it, and a wrong try reported here does not count toward the lock on the server’s own check. Each one saved is a security event at the phone’s own time: a phone switched and a use of the master passcode; a use that says which way a session was opened; or a failed try. A switch or a session saved ends what anybody else had open on that phone before it, by the phone’s clock. A setup, a site move and a switch to a monitor who has no assignment are reported as an unplanned assignment instead. Open to a phone that has proved itself, by its token, with somebody signed in on it: the monitor, by their session’s token in the x-adms-monitor-session header, or the master user, by the master passcode sent beside the phone’s proof. A phone taken out of service sends it too.',
+  access: 'PHONE_IN_USE',
+  outOfServiceToo: true,
   method: 'POST',
   path: '/phones/current/passcode-uses',
   body: passcodeUseReportSchema,
@@ -2224,7 +2260,7 @@ export const returnPhoneEndpoint = endpoint({
 export const firmSettingsEndpoint = endpoint({
   name: 'firmSettings',
   summary:
-    'The firm’s own settings: how many hours a phone marked lost or retired keeps its key (or off), and whether read-only viewers must use two-step sign-in.',
+    'The firm’s own settings: how many hours a phone marked lost or retired keeps its key (or off), whether read-only viewers must use two-step sign-in, and how many hours a monitor’s sign-in on a phone lasts.',
   access: 'SIGNED_IN',
   roles: backOfficeRoles,
   permission: 'SETUP',
@@ -2259,6 +2295,21 @@ export const changeViewerTwoStepEndpoint = endpoint({
   path: '/firm-settings/viewer-two-step',
   body: z.strictObject({
     required: z.boolean(),
+    note: z.string().trim().min(1).max(500).optional(),
+  }),
+  answer: firmSettingsAnswerSchema,
+});
+
+export const changeMonitorSessionHoursEndpoint = endpoint({
+  name: 'changeMonitorSessionHours',
+  summary:
+    'An admin sets how many whole hours (1 to 24) a monitor’s sign-in on a phone lasts, online or made with no connection, and a session under the master passcode at most. It applies to sign-ins made from then on; a session already open keeps its end. Audited.',
+  access: 'SIGNED_IN',
+  roles: adminOnly,
+  method: 'PATCH',
+  path: '/firm-settings/monitor-sessions',
+  body: z.strictObject({
+    hours: z.number().int().min(1).max(24),
     note: z.string().trim().min(1).max(500).optional(),
   }),
   answer: firmSettingsAnswerSchema,
@@ -2394,7 +2445,8 @@ export const phoneSetupChoicesEndpoint = endpoint({
 // a connection. The phone checked the passcode against its own check; the server is not sent
 // it and takes the phone's word, the phone having proved itself with its device key. The id is
 // the phone's own, so the same report sent again is answered "already saved" and kept once. The
-// day is the day the phone's clock said, in the project's time zone. Nobody need be signed in.
+// day is the day the phone's clock said, in the project's time zone. Somebody is signed in on the
+// phone, as for all it sends (ADR-531): the master user who set it up, at the least.
 // **A site move and a monitor switch are reported the same way** (AC-02-46, 47; ADR-456 (5),
 // 458): the phone moved to another of its project's sites is set up anew there, a new
 // unplanned assignment, and the earlier one stands; the phone passed to a monitor who has no
@@ -2404,9 +2456,9 @@ export const phoneSetupChoicesEndpoint = endpoint({
 export const reportUnplannedAssignmentEndpoint = endpoint({
   name: 'reportUnplannedAssignment',
   summary:
-    'A phone reports an unplanned assignment made on it under the firm’s master passcode, when its monitor had none: the project, the monitor, their work (the kinds of field event, certifying, the forms, the unit rate pay items), one site where the work is at one, and when it was made by the phone’s own clock, with the clock’s offset. The id is the phone’s own: the same report sent again is answered as already saved and kept once. It is kept as the phone reports it, marked unplanned on the dispatch board and never flagged, for a phone out of service too; its day is the day the phone’s clock said, in the project’s time zone. It is not saved only where something it names is no record of the kind it must be, or its id is another record’s. The passcode itself is never sent: the phone checked it. It says what it was made at: the phone set up (a phone moved to another of its project’s sites is set up anew there, and the earlier assignment stands with everything recorded under it), or the phone passed to another monitor, who had no assignment it could take. Each one saved is two security events at the phone’s own time: a phone set up or a phone switched, and a use of the master passcode. Where several of a monitor’s assignments for a day name one phone, their sign-in on it takes the one made on it last. Open to a phone that has proved itself, by its token; nobody need be signed in.',
-  access: 'PROVEN_PHONE',
-  keyRevokedToo: true,
+    'A phone reports an unplanned assignment made on it under the firm’s master passcode, when its monitor had none: the project, the monitor, their work (the kinds of field event, certifying, the forms, the unit rate pay items), one site where the work is at one, and when it was made by the phone’s own clock, with the clock’s offset. The id is the phone’s own: the same report sent again is answered as already saved and kept once. It is kept as the phone reports it, marked unplanned on the dispatch board and never flagged, for a phone out of service too; its day is the day the phone’s clock said, in the project’s time zone. It is not saved only where something it names is no record of the kind it must be, or its id is another record’s. The passcode itself is never sent: the phone checked it. It says what it was made at: the phone set up (a phone moved to another of its project’s sites is set up anew there, and the earlier assignment stands with everything recorded under it), or the phone passed to another monitor, who had no assignment it could take. Each one saved is two security events at the phone’s own time: a phone set up or a phone switched, and a use of the master passcode. Where several of a monitor’s assignments for a day name one phone, their sign-in on it takes the one made on it last. Open to a phone that has proved itself, by its token, with somebody signed in on it: the monitor, by their session’s token in the x-adms-monitor-session header, or the master user, by the master passcode sent beside the phone’s proof. A phone taken out of service sends it too.',
+  access: 'PHONE_IN_USE',
+  outOfServiceToo: true,
   method: 'POST',
   path: '/phones/current/unplanned-assignments',
   body: unplannedAssignmentReportSchema,
@@ -2415,15 +2467,16 @@ export const reportUnplannedAssignmentEndpoint = endpoint({
 
 // One sync, whole (ARCHITECTURE §9, §10; spec/parts/05-sync.md steps 2…8; AC-05-03, 04, 15, 16,
 // 20, 45…47; AC-10-35, 46, 51; BACKLOG 2.6.2, C64, C69, C126…C131; ADR-022, 052, 065, 100, 466…472;
-// REQ-016, 203). The phone has proved itself; it never says which phone it is. The body and the
-// answer are `sync.ts`'s. Nothing is refused over eligibility, and nothing is reconciled while
+// REQ-016, 203). The phone has proved itself, with somebody signed in on it (ADR-531); it never
+// says which phone it is, and what it is given is decided by its standing, read once (ADR-531:
+// a phone out of service only sends). The body and the answer are `sync.ts`'s. Nothing is refused over eligibility, and nothing is reconciled while
 // the phone waits.
 export const syncPhoneEndpoint = endpoint({
   name: 'syncPhone',
   summary:
-    'A phone syncs: it sends its clock, the unplanned assignments made on it, the uses of the master passcode it logged, its records (field events, scale receipts, incidents, drop-off logs, surveys, ROEs and certifications, each under the id the phone made for it, 200 at most) and the last number it used of each series. The server keeps the sync with both clocks and their difference, then reads each thing in that order and gives each its own answer, in the order sent. A record is saved; already saved, where it was sent before (never stored twice, and never taken for a duplicate ticket number); kept in quarantine, not saved, where another record holds its number, with the reason and the record that holds it; or not saved, where it can’t be read, names something the server doesn’t have, was made under an assignment that was not saved, or is a certification its own rules refuse: what was sent is then held on the server exactly as sent, for a person, and the answer says so. One record never stops the others. Nothing is refused over eligibility, and no answer carries a status, a flag or money: reconciliation is queued for what arrived and never waited for. For each series reported the answer lists the blocks of numbers the phone holds now, topped up to a full block where the project has such a series. A phone with more than one sync’s worth sends another. Open to a phone that has proved itself, by its token; nobody need be signed in.',
-  access: 'PROVEN_PHONE',
-  keyRevokedToo: true,
+    'A phone syncs: it sends its clock, the unplanned assignments made on it, the uses of the master passcode it logged, its records (field events, scale receipts, incidents, drop-off logs, surveys, ROEs and certifications, each under the id the phone made for it, 200 at most) and the last number it used of each series. The server keeps the sync with both clocks and their difference, then reads each thing in that order and gives each its own answer, in the order sent. A record is saved; already saved, where it was sent before (never stored twice, and never taken for a duplicate ticket number); kept in quarantine, not saved, where another record holds its number, with the reason and the record that holds it; or not saved, where it can’t be read, names something the server doesn’t have, was made under an assignment that was not saved, or is a certification its own rules refuse: what was sent is then held on the server exactly as sent, for a person, and the answer says so. One record never stops the others. Nothing is refused over eligibility, and no answer carries a status, a flag or money: reconciliation is queued for what arrived and never waited for. For each series reported the answer lists the blocks of numbers the phone holds now, topped up to a full block where the project has such a series and the phone is in service. A phone in service is brought the master passcode’s version in force, with its check where the phone holds another, and the setup version of the project whose lists it holds; a phone out of service, or proven with the passcode because the firm’s time revoked its key, is given no numbers and brought nothing. A phone with more than one sync’s worth sends another. Open to a phone that has proved itself, by its token, with somebody signed in on it: the monitor, by their session’s token in the x-adms-monitor-session header, or the master user, by the master passcode sent beside the phone’s proof. A phone taken out of service sends it too.',
+  access: 'PHONE_IN_USE',
+  outOfServiceToo: true,
   method: 'POST',
   path: '/phones/current/syncs',
   body: syncSentSchema,
@@ -2442,7 +2495,7 @@ export const turnInPhoneEndpoint = endpoint({
   summary:
     'A phone is turned in ("Sync and turn in") under the firm’s master passcode, after it has synced every queue and sent every photograph’s file. It sends the passcode, everything it still holds by the ids it made (its unplanned assignments, the uses of the master passcode it logged, its records, its photographs) and by fingerprint what it sent with no id the server could read, and the last number it used of each series it holds numbers of. Only when the server has all of it from that phone (a record saved, kept in quarantine, or held for a person; a photograph saved with every file kept) is the phone turned in: the unused rest of each series it reported is handed back for the next phone, and a series it doesn’t report, or every block of a phone marked lost, is retired whole; a phone in service is taken out of service as retired; its sessions end; its key is revoked, so it proves nothing again; and the answer tells it to wipe. Otherwise nothing is changed and nothing is wiped, and the answer names what the server doesn’t have. A phone out of service is turned in the same way. Each use of the passcode is a security event, and a turn-in another. Open to a phone that has proved itself, by its token; nobody need be signed in. A passcode that isn’t taken is refused by one code; wrong tries count as they do when a phone is enrolled.',
   access: 'PROVEN_PHONE',
-  keyRevokedToo: true,
+  outOfServiceToo: true,
   method: 'POST',
   path: '/phones/current/turn-ins',
   body: turnInSentSchema,
@@ -2466,9 +2519,9 @@ const photoFileNamed = z.strictObject({
 export const photoFileEndpoint = endpoint({
   name: 'photoFile',
   summary:
-    'Where a photograph’s file stands: kept (nothing more to send), or how many of its bytes the server has taken, of a file how long, so the phone sends the rest from there (none, where it holds none). The photograph is named by its own id, and the file is the photograph itself or the depth file beside it; only the phone that took it may ask, once its record is saved. Open to a phone that has proved itself, by its token; nobody need be signed in.',
-  access: 'PROVEN_PHONE',
-  keyRevokedToo: true,
+    'Where a photograph’s file stands: kept (nothing more to send), or how many of its bytes the server has taken, of a file how long, so the phone sends the rest from there (none, where it holds none). The photograph is named by its own id, and the file is the photograph itself or the depth file beside it; only the phone that took it may ask, once its record is saved. Open to a phone that has proved itself, by its token, with somebody signed in on it: the monitor, by their session’s token in the x-adms-monitor-session header, or the master user, by the master passcode sent beside the phone’s proof. A phone taken out of service sends it too.',
+  access: 'PHONE_IN_USE',
+  outOfServiceToo: true,
   method: 'GET',
   path: '/phones/current/photos/:photoId/files/:file',
   params: photoFileNamed,
@@ -2478,9 +2531,9 @@ export const photoFileEndpoint = endpoint({
 export const sendPhotoFilePartEndpoint = endpoint({
   name: 'sendPhotoFilePart',
   summary:
-    'A part of a photograph’s file, sent by the phone that took it, once its record is saved: the bytes in the body, the offset they go at and the whole file’s length in the query. Taken only where it goes on from the last part the server took, or starts the file; otherwise the answer says where to go on from. The file is at most the policy’s size and a part at most the policy’s; its first part is told to be an image by its own first bytes (JPEG, HEIC or HEIF, PNG, TIFF), or refused. When the last part arrives the server reads the whole file’s SHA-256: the one the phone gave in the photograph’s record (or the depth file’s) and the file is kept, once, where the server placed it, never overwritten, and its upload time written; any other, and the file is set aside on the server for a person, never kept as the photograph’s, and the phone sends its file again from the first byte. A file kept already is answered kept, and nothing changes. Open to a phone that has proved itself, by its token; nobody need be signed in.',
-  access: 'PROVEN_PHONE',
-  keyRevokedToo: true,
+    'A part of a photograph’s file, sent by the phone that took it, once its record is saved: the bytes in the body, the offset they go at and the whole file’s length in the query. Taken only where it goes on from the last part the server took, or starts the file; otherwise the answer says where to go on from. The file is at most the policy’s size and a part at most the policy’s; its first part is told to be an image by its own first bytes (JPEG, HEIC or HEIF, PNG, TIFF), or refused. When the last part arrives the server reads the whole file’s SHA-256: the one the phone gave in the photograph’s record (or the depth file’s) and the file is kept, once, where the server placed it, never overwritten, and its upload time written; any other, and the file is set aside on the server for a person, never kept as the photograph’s, and the phone sends its file again from the first byte. A file kept already is answered kept, and nothing changes. Open to a phone that has proved itself, by its token, with somebody signed in on it: the monitor, by their session’s token in the x-adms-monitor-session header, or the master user, by the master passcode sent beside the phone’s proof. A phone taken out of service sends it too.',
+  access: 'PHONE_IN_USE',
+  outOfServiceToo: true,
   method: 'PATCH',
   path: '/phones/current/photos/:photoId/files/:file',
   params: photoFileNamed,
@@ -3357,6 +3410,7 @@ export const endpoints: readonly Endpoint[] = [
   firmSettingsEndpoint,
   changePhoneKeyHoursEndpoint,
   changeViewerTwoStepEndpoint,
+  changeMonitorSessionHoursEndpoint,
   listPhonesEndpoint,
   enrolPhoneEndpoint,
   challengePhoneEndpoint,
@@ -3365,6 +3419,7 @@ export const endpoints: readonly Endpoint[] = [
   createMonitorOnPhoneEndpoint,
   signInOnPhoneEndpoint,
   openPasscodeSessionOnPhoneEndpoint,
+  takeOfflineSignInOnPhoneEndpoint,
   reportPasscodeUseEndpoint,
   signOutOnPhoneEndpoint,
   phoneMonitorEndpoint,

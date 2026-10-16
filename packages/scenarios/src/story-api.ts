@@ -18,6 +18,12 @@
 //   setup picks from, its lists, a sync, a file's part and the turn-in. **A phone holds its
 //   monitor's session** as it holds its own token: a sign-in or a session opened on it is the
 //   one its monitor's requests carry, in the contracts' header beside the phone's token.
+// - **What a phone sends goes with somebody signed in on it** (ADR-531): its monitor's session
+//   while it lasts by the clock in use; once it has run out (a story's phone goes on recording
+//   for days after its monitor's sign-in), or where nobody signed in on it, the master user at
+//   the phone: **a phone nobody is signed in on proves itself with the story's master passcode
+//   beside its key**, as whoever holds the passcode does at the yard, and that one token does
+//   all its key's does besides. A sync and a file's part alike; the turn-in carries the passcode.
 // - **A person of the back office or a read-only viewer reaches it at their browser** (BACKLOG
 //   2.7.1 part 4): signed in with their email address, password and authenticator's code, the
 //   session held only as the cookies it sets, its CSRF value sent with every call that isn't a
@@ -68,7 +74,7 @@ import type { Policy } from '@open-adms/domain';
 import { answered, codeOf, OverHttps, type Asked, type AskedWith } from './over-https.ts';
 import { ToldToWait, type PhoneServer } from './device.ts';
 import type { SoftwareKey } from './software-key.ts';
-import type { StoryDatabase } from './story-database.ts';
+import { storyMasterPasscode, type StoryDatabase } from './story-database.ts';
 import type { StoryMedia } from './story-media.ts';
 
 // The signing secret of a story's API: made up, the same for every story, used nowhere else.
@@ -154,9 +160,13 @@ export interface StoryApiParts {
 export class StoryApi {
   private readonly parts: StoryApiParts;
   private readonly keys = new Map<string, SoftwareKey>();
-  private readonly tokens = new Map<string, { readonly token: string; readonly until: Date }>();
-  // The session of the monitor signed in on each phone, as the phone holds it.
-  private readonly sessions = new Map<string, string>();
+  // Each phone's token, until when, and whether it was proven with the passcode beside its key.
+  private readonly tokens = new Map<
+    string,
+    { readonly token: string; readonly until: Date; readonly withPasscode: boolean }
+  >();
+  // The session of the monitor signed in on each phone, as the phone holds it, and until when.
+  private readonly sessions = new Map<string, { readonly token: string; readonly until: Date }>();
   private door: OverHttps | undefined;
   private process: ApiProcess | undefined;
   private starting: Promise<ApiProcess> | undefined;
@@ -195,8 +205,12 @@ export class StoryApi {
       }
       return this.during(at, work);
     };
-    const holding = <T extends { readonly token: string }>(deviceId: string, answer: T): T => {
-      this.sessions.set(deviceId, answer.token);
+    const holding = <T extends { readonly token: string; readonly expiresInSeconds: number }>(
+      deviceId: string,
+      answer: T,
+    ): T => {
+      const until = new Date(at.now().getTime() + answer.expiresInSeconds * 1000);
+      this.sessions.set(deviceId, { token: answer.token, until });
       return answer;
     };
     return {
@@ -204,12 +218,12 @@ export class StoryApi {
         received: (deviceId, sent) =>
           asked(async () => ({
             answered: syncAnsweredSchema.parse(
-              await this.asPhone(deviceId, syncPhoneEndpoint, { json: sent }),
+              await this.asSender(deviceId, syncPhoneEndpoint, { json: sent }),
             ),
           })),
         filePart: (deviceId, part) =>
           asked(() =>
-            this.asPhone(deviceId, sendPhotoFilePartEndpoint, {
+            this.asSender(deviceId, sendPhotoFilePartEndpoint, {
               ids: { photoId: part.photoId, file: part.file },
               query: { offset: String(part.offset), length: String(part.length) },
               bytes: { of: part.bytes, contentType: filePartMediaType },
@@ -340,15 +354,30 @@ export class StoryApi {
   // A request of a proven phone: its token, proving itself first where it holds none that is
   // good now, and once more where the API says it isn't proven. The answer's body; a limit
   // reached, the phone told to wait; any other answer but a 200 stops the story, saying what
-  // came back.
-  private async asPhone(deviceId: string, served: Endpoint, more: AskedWith): Promise<unknown> {
-    let answer = await this.ask(served, this.withToken(more, await this.tokenOf(deviceId)));
-    if (answer.status === 401 && codeOf(answer) === 'PHONE_NOT_PROVEN') {
-      this.tokens.delete(deviceId);
-      answer = await this.ask(served, this.withToken(more, await this.tokenOf(deviceId)));
-    }
+  // came back. `master`: the request needs the master user at the phone (ADR-531).
+  private async asPhone(
+    deviceId: string,
+    served: Endpoint,
+    more: AskedWith,
+    master = false,
+  ): Promise<unknown> {
+    const answer = await this.askedAsPhone(deviceId, served, more, master);
     toldToWait(answer);
     return answered(served, answer);
+  }
+
+  private async askedAsPhone(
+    deviceId: string,
+    served: Endpoint,
+    more: AskedWith,
+    master: boolean,
+  ): Promise<Asked> {
+    let answer = await this.ask(served, this.withToken(more, await this.tokenOf(deviceId, master)));
+    if (answer.status === 401 && codeOf(answer) === 'PHONE_NOT_PROVEN') {
+      this.tokens.delete(deviceId);
+      answer = await this.ask(served, this.withToken(more, await this.tokenOf(deviceId, master)));
+    }
+    return answer;
   }
 
   // A request of the monitor signed in on a proven phone: the phone's token and the session the
@@ -360,22 +389,63 @@ export class StoryApi {
     }
     return this.asPhone(deviceId, served, {
       ...more,
-      headers: { ...more.headers, [monitorSessionHeader]: session },
+      headers: { ...more.headers, [monitorSessionHeader]: session.token },
     });
+  }
+
+  // What a phone sends, with somebody signed in on it (ADR-531): its monitor's session while it
+  // lasts, else the master user, by its proof with the story's passcode beside its key. A session
+  // the server ended meanwhile (a sign-in on the phone since, reported from offline) is dropped,
+  // and the master user sends, as a supervisor at the phone would.
+  private async asSender(deviceId: string, served: Endpoint, more: AskedWith): Promise<unknown> {
+    const session = this.sessions.get(deviceId);
+    let answer =
+      session !== undefined && this.signedIn(deviceId)
+        ? await this.askedAsPhone(
+            deviceId,
+            served,
+            { ...more, headers: { ...more.headers, [monitorSessionHeader]: session.token } },
+            false,
+          )
+        : await this.askedAsPhone(deviceId, served, more, true);
+    if (answer.status === 401 && codeOf(answer) === 'NOT_SIGNED_IN') {
+      this.sessions.delete(deviceId);
+      answer = await this.askedAsPhone(deviceId, served, more, true);
+    }
+    toldToWait(answer);
+    return answered(served, answer);
+  }
+
+  // Whether the phone holds a monitor's session good now.
+  private signedIn(deviceId: string): boolean {
+    const session = this.sessions.get(deviceId);
+    return session !== undefined && this.on.now() < session.until;
   }
 
   private withToken(more: AskedWith, token: string): AskedWith {
     return { ...more, headers: { ...more.headers, authorization: `Bearer ${token}` } };
   }
 
-  private async tokenOf(deviceId: string): Promise<string> {
+  // The phone's token good now. A phone nobody is signed in on proves itself with the story's
+  // master passcode beside its key, the master user at it, as at the yard: the one token then
+  // does all a key's proof does besides (ADR-531), and two proofs of one phone never meet at one
+  // moment of the story's clock (a phone answers only a challenge made after its last). One
+  // proof of a phone at a time (ADR-505).
+  private async tokenOf(deviceId: string, master = false): Promise<string> {
     const held = this.tokens.get(deviceId);
-    if (held !== undefined && this.on.now() < held.until) return held.token;
+    if (held !== undefined && this.on.now() < held.until && (!master || held.withPasscode)) {
+      return held.token;
+    }
     let proving = this.proving.get(deviceId);
     if (proving === undefined) {
-      proving = (async () => this.proved(deviceId, await this.signedChallenge(deviceId)))().finally(
-        () => this.proving.delete(deviceId),
-      );
+      // Never the token it held: a proof refused leaves the phone holding none.
+      this.tokens.delete(deviceId);
+      const withPasscode = master || !this.signedIn(deviceId);
+      proving = (async () =>
+        this.proved(deviceId, {
+          ...(await this.signedChallenge(deviceId)),
+          ...(withPasscode ? { passcode: storyMasterPasscode } : {}),
+        }))().finally(() => this.proving.delete(deviceId));
       this.proving.set(deviceId, proving);
     }
     const answer = await proving;
@@ -409,6 +479,7 @@ export class StoryApi {
       this.tokens.set(deviceId, {
         token: proven.token,
         until: new Date(now.getTime() + proven.expiresInSeconds * 1000),
+        withPasscode: proof.passcode !== undefined,
       });
     }
     return proofAnswer(answer);

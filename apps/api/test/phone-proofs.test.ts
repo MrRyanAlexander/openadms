@@ -88,12 +88,19 @@ describe('who may ask', () => {
       'createMonitorOnPhone',
       'signInOnPhone',
       'openPasscodeSessionOnPhone',
-      'reportPasscodeUse',
+      // A sign-in made with no connection, reported (ADR-531).
+      'takeOfflineSignInOnPhone',
       'phoneSetupChoices',
-      'reportUnplannedAssignment',
-      'syncPhone',
       // A phone turned in under the master passcode (ADR-488).
       'turnInPhone',
+    ]);
+    // What a phone sends, with somebody signed in on it (ADR-531): a new one is added on purpose.
+    expect(
+      endpoints.filter(({ access }) => access === 'PHONE_IN_USE').map(({ name }) => name),
+    ).toEqual([
+      'reportPasscodeUse',
+      'reportUnplannedAssignment',
+      'syncPhone',
       // A photograph's files, by the phone that took it (ADR-482).
       'photoFile',
       'sendPhotoFilePart',

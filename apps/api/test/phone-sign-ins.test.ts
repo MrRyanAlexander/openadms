@@ -41,7 +41,8 @@ const world = worldOn(() => db);
 
 const refused = [401, 'SIGN_IN_REFUSED'];
 const notSignedIn = [401, 'NOT_SIGNED_IN'];
-const twelveHours = 12 * 3600;
+// As the firm's settings ship (ADR-531): a day.
+const aDay = 24 * 3600;
 
 // The firm's practice: a monitor's own phone number without the area code (ADR-105).
 interface Monitor {
@@ -81,6 +82,24 @@ async function signedIn(served: Served, bearer: string, monitor: Monitor): Promi
   expect(told(answer)).toEqual([200, undefined]);
   return monitorSignedInAnswerSchema.parse(answer.body).token;
 }
+
+// An empty sync, sent by the phone with the monitor's session beside its token: what a phone
+// taken out of service still does (ADR-134, 531).
+const sends = (served: Served, bearer: string, monitorSession: string): Promise<Answer> =>
+  served.ask('POST', '/phones/current/syncs', {
+    bearer,
+    monitorSession,
+    payload: {
+      clockAt: served.clock.now().toISOString(),
+      deviceUtcOffsetMinutes: -240,
+      unplannedAssignments: [],
+      passcodeUses: [],
+      records: [],
+      photos: [],
+      lastUsed: [],
+      holds: { masterPasscodeVersion: null, listsProjectId: null },
+    },
+  });
 
 const whoIsOn = (served: Served, bearer?: string, monitorSession?: string): Promise<Answer> =>
   served.ask('GET', '/phones/current/monitor', {
@@ -177,7 +196,7 @@ describe('who may sign in on a phone', () => {
     });
   });
 
-  it('ADR-441 (6)(c) a phone taken out of service signs nobody in, and its try is never a wrong try; a monitor signed in on it before keeps their session, to hand its work over', async () => {
+  it('ADR-441 (6)(c), ADR-531 a phone taken out of service signs nobody in, and its try is never a wrong try; a monitor signed in on it before keeps their session to hand its work over, and with it the phone only sends', async () => {
     await world(async (served, tx) => {
       const { phone, token, lee } = await leeOn(served, tx);
       const session = await signedIn(served, token, lee);
@@ -193,18 +212,20 @@ describe('who may sign in on a phone', () => {
         const answer = await signIn(served, token, { monitorNumber: lee.monitorNumber, password });
         expect([told(answer), (answer.body as { message?: string }).message]).toEqual([
           [409, 'PHONE_OUT_OF_SERVICE'],
-          'Not signed in: this phone was taken out of service. A monitor signs in on a phone in service.',
+          // The door's, before the service is asked (ADR-531).
+          'Not done: this phone was taken out of service. It only sends what it holds and is turned in.',
         ]);
         expect(await audited(tx, answer.requestId)).toEqual([]);
       }
       expect(await tries(tx, lee.userId)).toEqual({ failedSignIns: 0, lockedUntil: null });
-      expect(told(await whoIsOn(served, token, session))).toEqual([200, undefined]);
+      expect(told(await sends(served, token, session))).toEqual([200, undefined]);
+      expect(told(await whoIsOn(served, token, session))).toEqual([409, 'PHONE_OUT_OF_SERVICE']);
     });
   });
 });
 
 describe('a monitor signs in on a phone', () => {
-  it('AC-02-39 Lee Morgan signs in on P1-COL-1 with their Monitor ID and password: the session names the phone and lasts twelve hours, its token is kept only as a hash, and the records are Lee’s, from that phone', async () => {
+  it('AC-02-39 Lee Morgan signs in on P1-COL-1 with their Monitor ID and password: the session names the phone and lasts the firm’s hours, a day as shipped, its token is kept only as a hash, and the records are Lee’s, from that phone', async () => {
     await world(async (served, tx) => {
       // 6:45 am in Bayline County, at the staging area. A Monitor ID typed in lower case is taken.
       served.clock.at = new Date('2026-10-12T10:45:00Z');
@@ -219,7 +240,7 @@ describe('a monitor signs in on a phone', () => {
         userId: lee.userId,
         monitorNumber: lee.monitorNumber,
         name: 'Lee Morgan',
-        expiresInSeconds: twelveHours,
+        expiresInSeconds: aDay,
       });
       const [sessionId] = made.token.split('.');
       const kept = await tx.session.findUniqueOrThrow({ where: { id: sessionId ?? '' } });
@@ -227,7 +248,7 @@ describe('a monitor signs in on a phone', () => {
         userId: lee.userId,
         deviceId: phone.id,
         createdAt: new Date('2026-10-12T10:45:00Z'),
-        expiresAt: new Date('2026-10-12T22:45:00Z'),
+        expiresAt: new Date('2026-10-13T10:45:00Z'),
         revokedAt: null,
       });
       expect(kept.refreshTokenHash).toMatch(/^[0-9a-f]{64}$/);
@@ -244,14 +265,14 @@ describe('a monitor signs in on a phone', () => {
         userId: lee.userId,
         monitorNumber: lee.monitorNumber,
         name: 'Lee Morgan',
-        expiresInSeconds: twelveHours,
+        expiresInSeconds: aDay,
         // Her own sign-in: not a session under the master passcode (ADR-462).
         masterPasscodeSession: null,
       });
     });
   });
 
-  it('ADR-441 (6)(b) the session takes the phone and the monitor together, and lasts the shift: quiet doesn’t end it, twelve hours do', async () => {
+  it('ADR-441 (6)(b) the session takes the phone and the monitor together, and lasts the working day: quiet doesn’t end it, the firm’s hours (a day) do', async () => {
     await world(async (served, tx) => {
       const { phone, token, lee } = await leeOn(served, tx);
       const session = await signedIn(served, token, lee);
@@ -274,8 +295,8 @@ describe('a monitor signs in on a phone', () => {
       expect(told(await whoIsOn(served, await proven(served, other), session))).toEqual(
         notSignedIn,
       );
-      // Out of signal all day: eleven hours and fifty-nine minutes later, with a fresh proof.
-      served.clock.later(11 * 60 + 59);
+      // Out of signal all day: twenty-three hours and fifty-nine minutes later, a fresh proof.
+      served.clock.later(23 * 60 + 59);
       const later = await proven(served, phone);
       const asked = await whoIsOn(served, later, session);
       expect(told(asked)).toEqual([200, undefined]);
@@ -355,7 +376,7 @@ describe('a monitor’s session ends at once', () => {
           outOfServiceMarkedAt: served.clock.now(),
         },
       });
-      expect(told(await whoIsOn(served, token, samsSession))).toEqual([200, undefined]);
+      expect(told(await sends(served, token, samsSession))).toEqual([200, undefined]);
       // Turned in: its key is revoked, and its sessions end with it (ADR-488).
       await turnedIn(served, token);
       expect(told(await whoIsOn(served, token, samsSession))).toEqual([401, 'PHONE_NOT_PROVEN']);
@@ -622,7 +643,7 @@ describe('the phone takes the monitor’s assignment', () => {
         'Ana Brooks',
         null,
         'NONE_THAT_DAY',
-        twelveHours,
+        aDay,
       ]);
       expect(
         told(await whoIsOn(served, token, anas.token)),

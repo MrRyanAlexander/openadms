@@ -1,8 +1,10 @@
-// The firm's own settings' endpoints (REQ-214, 215; ADR-520, 530): read them, change the hours a
-// lost phone keeps its key, change whether read-only viewers must use two-step sign-in. The door
+// The firm's own settings' endpoints (REQ-214, 215; ADR-520, 530, 531): read them, change the hours
+// a lost phone keeps its key, change whether read-only viewers must use two-step sign-in, change
+// how many hours a monitor's sign-in on a phone lasts. The door
 // has already asked the caller's role and permission (admission.ts); the service asks again
 // inside its own piece of work. The log says what was done or why not, by code: never a note.
 import {
+  changeMonitorSessionHoursEndpoint,
   changePhoneKeyHoursEndpoint,
   changeViewerTwoStepEndpoint,
   firmSettingsAnswerSchema,
@@ -67,6 +69,23 @@ export class FirmSettingsController {
       request,
       outcome,
       'Whether read-only viewers must use two-step sign-in was changed.',
+    );
+  }
+
+  @Serves(changeMonitorSessionHoursEndpoint)
+  async changeMonitorSessionHours(
+    @Body() body: BodyOf<typeof changeMonitorSessionHoursEndpoint>,
+    @Req() request: FastifyRequest,
+  ): Promise<FirmSettingsAnswer> {
+    const outcome = await this.settings.changeMonitorSessionHours(
+      callerOf(request).userId,
+      body.hours,
+      body.note,
+    );
+    return FirmSettingsController.answered(
+      request,
+      outcome,
+      'The hours a monitor’s sign-in on a phone lasts were changed.',
     );
   }
 

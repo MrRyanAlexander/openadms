@@ -281,6 +281,8 @@ const triggers = [
   // How a session was opened, by a monitor's own sign-in or under the master passcode, never
   // changes (ADR-462).
   `CREATE TRIGGER session_refuse_master_passcode_session_edit BEFORE UPDATE OF master_passcode_session ON public.session FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
+  // What a session says of a sign-in made offline never changes (ADR-531).
+  `CREATE TRIGGER session_refuse_offline_sign_in_edit BEFORE UPDATE OF offline_sign_in_id, signed_in_at, signed_in_utc_offset_minutes ON public.session FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
   `CREATE TRIGGER security_event_refuse_edit BEFORE UPDATE ON public.security_event FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
   // A security event a phone reported is written as the master passcode's actor for the phone
   // it names (ADR-464).
@@ -642,6 +644,11 @@ describe('the guards in the catalog', () => {
         name: 'firm_settings_phone_key_hours_check',
         definition:
           'CHECK (((phone_key_revoked_after_hours IS NULL) OR ((phone_key_revoked_after_hours >= 1) AND (phone_key_revoked_after_hours <= 8760))))',
+      },
+      // A monitor's sign-in on a phone lasts 1 to 24 hours (ADR-531).
+      {
+        name: 'firm_settings_monitor_session_hours_check',
+        definition: 'CHECK (((monitor_session_hours >= 1) AND (monitor_session_hours <= 24)))',
       },
       {
         name: 'form_debris_type_document_type_check',
@@ -1290,6 +1297,13 @@ describe('the guards in the catalog', () => {
       {
         name: 'session_master_passcode_session_check',
         definition: 'CHECK (((master_passcode_session IS NULL) OR (device_id IS NOT NULL)))',
+      },
+      // A sign-in made offline: its id, the phone's time and its offset, all or none, on a phone
+      // (ADR-531).
+      {
+        name: 'session_offline_sign_in_check',
+        definition:
+          "CHECK (((((offline_sign_in_id IS NULL) AND (signed_in_at IS NULL) AND (signed_in_utc_offset_minutes IS NULL)) OR ((device_id IS NOT NULL) AND (offline_sign_in_id IS NOT NULL) AND (signed_in_at IS NOT NULL) AND (signed_in_utc_offset_minutes IS NOT NULL) AND ((signed_in_utc_offset_minutes >= '-720'::integer) AND (signed_in_utc_offset_minutes <= 840)))) IS TRUE))",
       },
       // A security event carries an offset only where a phone reported it (ADR-457).
       {

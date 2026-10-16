@@ -227,7 +227,7 @@ export const ticket101001: Story = {
       [['user', 'user', 'user', 'master_passcode'], 98, 15, 'firm_settings'],
     );
     story.check(
-      'and then holds exactly the two phones’ enrolments under the master passcode (each the phone and the security event of the passcode’s use), Dana’s twenty setup rows (the client, the declaration event, P1, its five number series and its five kinds of unit rate work, Coastline, its place as P1’s prime and its contract among them), the two monitors created on a phone under the master passcode over HTTPS (each first the phone’s proof, the challenge it answered kept on it; then the person, their sign-in record and the security event of the passcode’s use), the board’s two assignments, the sync at the yard that gave Ana’s phone its block (the sync, the series moved on, the block cut: her phone’s token still good), the two sign-ins (each a security event and a session), P1’s setup version 1, made when Ana’s phone was first sent its lists and by nothing Kim’s read after it (ADR-453), and the two syncs over HTTPS through the API’s own process (ADR-472, 473, 475, 491): each the phone’s proof, then the sync, its field event with its row in the idempotency ledger and the job its arrival queued, naming its ticket, then the setup version the sync brought, written once on its own row; Ana’s also reports the one number she used, and her phone is topped up (her block’s last used number, the series moved on, a block of one cut)',
+      'and then holds exactly the two phones’ enrolments under the master passcode (each the phone and the security event of the passcode’s use), Dana’s twenty setup rows (the client, the declaration event, P1, its five number series and its five kinds of unit rate work, Coastline, its place as P1’s prime and its contract among them), the two monitors created on a phone under the master passcode over HTTPS (each first the phone’s proof, made with the passcode beside it by the supervisor at the yard, nobody being signed in yet: the challenge it answered kept on it and the passcode’s use; then the person, their sign-in record and the security event of the passcode’s use), the board’s two assignments, the sync at the yard that gave Ana’s phone its block (the sync, the series moved on, the block cut: her phone’s token still good), the two sign-ins (each a security event and a session), P1’s setup version 1, made when Ana’s phone was first sent its lists and by nothing Kim’s read after it (ADR-453), and the two syncs over HTTPS through the API’s own process (ADR-472, 473, 475, 491): each the phone’s proof, then the sync, its field event with its row in the idempotency ledger and the job its arrival queued, naming its ticket, then the setup version the sync brought, written once on its own row; Ana’s also reports the one number she used, and her phone is topped up (her block’s last used number, the series moved on, a block of one cut)',
       audit.slice(afterSeed).map((record) => [record.tableName, record.source]),
       [
         ['device', 'DEVICE'],
@@ -255,11 +255,15 @@ export const ticket101001: Story = {
         ['disposal_site', 'BACK_OFFICE'],
         // Each request of a phone over HTTPS begins with its proof, where its token has run
         // out: the challenge it answered kept on its record (ADR-440, 491). Ana's, then Kim's.
+        // Nobody is signed in on either yet: the supervisor at the yard types the passcode beside
+        // it, a use of the passcode (ADR-531).
         ['device', 'DEVICE'],
+        ['security_event', 'DEVICE'],
         ['user', 'DEVICE'],
         ['user_credential', 'DEVICE'],
         ['security_event', 'DEVICE'],
         ['device', 'DEVICE'],
+        ['security_event', 'DEVICE'],
         ['user', 'DEVICE'],
         ['user_credential', 'DEVICE'],
         ['security_event', 'DEVICE'],

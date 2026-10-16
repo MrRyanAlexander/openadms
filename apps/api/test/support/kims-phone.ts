@@ -20,7 +20,7 @@ import { expect } from 'vitest';
 
 import type { KeptFile, Media } from '../../src/media/media-store.ts';
 import type { Tx } from './database.ts';
-import { enrolledPhone, proven } from './phones.ts';
+import { enrolledPhone, provenBoth, senderOf } from './phones.ts';
 import { danasEmail, long, type Answer, type People, type Served } from './served.ts';
 import { p1Priced, told } from './setup.ts';
 
@@ -87,7 +87,7 @@ export async function kimsOther(
   dana: Awaited<ReturnType<Served['signedIn']>>,
 ) {
   const phone = await enrolledPhone(served, tx, name);
-  const token = await proven(served, phone);
+  const token = await provenBoth(served, phone);
   const assignment = await tx.assignment.create({
     data: {
       personId: who.kim,
@@ -118,7 +118,7 @@ export async function kimsOther(
   });
   const sync = async (more: Partial<SyncSent>) => {
     const answer = await served.ask('POST', syncPhoneEndpoint.path, {
-      bearer: token,
+      bearer: senderOf(token),
       payload: {
         clockAt: served.clock.now().toISOString(),
         deviceUtcOffsetMinutes: -240,
@@ -139,7 +139,7 @@ export async function kimsOther(
     const answer = await served.ask(
       'PATCH',
       `/phones/current/photos/${photoId}/files/${which}?offset=0&length=${String(file.length)}`,
-      { bearer: token, bytes: file, contentType: filePartMediaType },
+      { bearer: senderOf(token), bytes: file, contentType: filePartMediaType },
     );
     expect(told(answer)).toEqual([200, undefined]);
   };
@@ -153,7 +153,7 @@ export const turnIn = (
 ): Promise<Answer> =>
   served.ask('POST', turnInPhoneEndpoint.path, {
     payload,
-    ...(bearer === undefined ? {} : { bearer }),
+    ...(bearer === undefined ? {} : { bearer: senderOf(bearer) }),
   });
 
 // A turn-in that must be answered: the answer, read by its schema.

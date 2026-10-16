@@ -201,6 +201,8 @@ describe('permissions, read from the database on every request', () => {
       'reopenProject',
       // Whether read-only viewers must use two-step sign-in: ADR-530.
       'changeViewerTwoStep',
+      // How long a monitor's sign-in on a phone lasts: ADR-531.
+      'changeMonitorSessionHours',
       // The firm's master passcode: ADR-428.
       'changeMasterPasscode',
       // A certification revoked (AC-03-55): ADR-433.

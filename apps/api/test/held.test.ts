@@ -35,7 +35,7 @@ import { Intake } from '../src/sync/intake.ts';
 import { sentFingerprint } from '../src/sync/sync.ts';
 import { installationSettings, openInstallation, type Tx } from './support/database.ts';
 import { jpeg, Kept, kimsPhone, nothingHeld, sha256Of, turnedIn } from './support/kims-phone.ts';
-import { passcode } from './support/phones.ts';
+import { passcode, senderOf } from './support/phones.ts';
 import { shippedPolicy } from './support/process.ts';
 import { jobsFor, luisHolds } from './support/review.ts';
 import { worldOn, type Served } from './support/served.ts';
@@ -537,7 +537,7 @@ describe('what a sync held, resolved', () => {
       // photograph of a record the phone never sent.
       const use = { ...syncExamples.switched, id: randomUUID(), personId: randomUUID() };
       const reported = await served.ask('POST', reportPasscodeUseEndpoint.path, {
-        bearer: p.token,
+        bearer: senderOf(p.token),
         payload: use,
       });
       expect(reported.body).toEqual({

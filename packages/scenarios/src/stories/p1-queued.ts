@@ -703,7 +703,7 @@ export const p1Queued: Story = {
       if (read === null) throw new Error('What came back is no answer to the sync sent.');
       brought.push([
         read.records.map((each) => each.answer),
-        read.masterPasscode.check,
+        read.masterPasscode?.check,
         read.setupVersion?.version,
       ]);
     }

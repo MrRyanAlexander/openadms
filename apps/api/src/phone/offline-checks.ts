@@ -21,6 +21,11 @@
 //   the phone, the monitor and their seed as kept. A phone that sends a mark still good is made
 //   no new entry; a password set anew makes a new seed, so its mark is good no more.
 // - **Nothing made here is kept on the server**: an entry exists on the phone it was made for.
+// - **A sign-in made offline is proven by the first hash** (ADR-531; the domain's
+//   `OfflineSignInRules`): the phone made it from what was typed to check it, and keyed an
+//   HMAC-SHA256 with it over what the sign-in says. The server makes the same from what it keeps
+//   (the seed opened, its own hash of the passcode) and compares in constant time: only somebody
+//   who typed the right password or passcode could have made it.
 import {
   argon2,
   createCipheriv,
@@ -129,6 +134,34 @@ export class OfflineChecks {
   async ofPasscode(serverHash: string): Promise<OfflineCheck | undefined> {
     const first = this.read(serverHash);
     return first === undefined ? undefined : this.second(first);
+  }
+
+  // Whether a sign-in a phone made offline with a monitor's password is proven: the HMAC keyed
+  // by their seed as kept now. False where this process can't open it.
+  signedWithSeed(userId: string, kept: string, signed: string, proof: string): boolean {
+    const first = this.opened(userId, kept);
+    return first !== undefined && OfflineChecks.sameProof(first.hash, signed, proof);
+  }
+
+  // Whether a sign-in a phone made offline under the master passcode is proven: the HMAC keyed
+  // by the server's own hash of the passcode. False for a hash a phone couldn't make.
+  signedWithPasscode(serverHash: string, signed: string, proof: string): boolean {
+    const first = this.read(serverHash);
+    return first !== undefined && OfflineChecks.sameProof(first.hash, signed, proof);
+  }
+
+  // What a phone sends as the proof of a sign-in it made offline, from the first hash: the
+  // phone's own making of it (a test's or a story's phone makes it so too).
+  static proofOf(firstHash: Buffer, signed: string): string {
+    return createHmac('sha256', firstHash).update(signed).digest('base64url');
+  }
+
+  private static sameProof(firstHash: Buffer, signed: string, proof: string): boolean {
+    const [made, sent] = [
+      Buffer.from(OfflineChecks.proofOf(firstHash, signed)),
+      Buffer.from(proof),
+    ];
+    return made.length === sent.length && timingSafeEqual(made, sent);
   }
 
   private async second(first: FirstHash): Promise<OfflineCheck> {

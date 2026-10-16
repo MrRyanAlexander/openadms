@@ -126,6 +126,18 @@ gets tracked on a spreadsheet."
     record by record (saved, already saved, not saved); topped up with numbers and fresh lists; any
     phone with a connection may refresh its lists at any time (ADR-151, 240; ARCHITECTURE §9).
     **A phone needn't be handed in for its work to arrive.**
+    ⚠️ **User, 2026-10-15 (ADR-531):** "a phone that is not signed in should not be trying to
+    sync … When NO user is signed in at all, the app should not try to sync. In addition the
+    server should be smart enough to know that the user is not signed in". **The app syncs only
+    while somebody is signed in on it**, a monitor or the master user (the passcode typed, sent
+    beside the phone's proof); the server refuses a sync with nobody (`401 NOT_SIGNED_IN`). **A
+    sign-in made offline is reported first when the phone finds signal**
+    (`POST /phones/current/offline-sign-ins`) with a proof: an HMAC-SHA256 over what
+    `OfflineSignInRules.signed` says, keyed by the first slow hash of what was typed (made anyway
+    to check it against the login list). The phone keeps the proof, never the hash, and drops it
+    at sign-out; refused, it asks the monitor to sign in online and keeps everything. A monitor's
+    sign-in lasts the firm's hours, a day as shipped. **A phone taken out of service only sends**:
+    it is topped up with nothing and brought nothing (no lists, no check of the passcode).
 12. **Sync and turn in** (taking a phone out of service), with the master passcode, even without the
     monitor: it proves itself, uploads every queue (archived ones too), waits for the server to
     confirm each record, returns its unused numbers, then wipes. Nothing is wiped before the server

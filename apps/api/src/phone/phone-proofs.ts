@@ -19,12 +19,15 @@
 // - **A phone merely taken out of service still proves itself** (its work is received and
 //   flagged, ADR-134). **One whose key its turn-in revoked proves nothing**, and a token it was
 //   given before stops at once: the phone is read on every request.
-// - **One whose key the firm's time revoked** (REQ-214; ADR-520 (2), 530) proves itself with
-//   its key and the master passcode together: its signature is checked first, then the passcode
-//   by the one check every act under it shares (a wrong one counts as at enrolment), and the use
-//   is a security event. It is given a token of a second kind, signed for that purpose alone,
-//   which the door lets through to its sync and its turn-in only. Without the passcode it is
-//   told the passcode is needed, and only once its signature is its own.
+// - **Any phone may prove itself with its key and the master passcode together** (ADR-531): the
+//   master user is then at the phone, which counts as somebody signed in on it for what it sends,
+//   nobody else being. Its signature is checked first, then the passcode by the one check every
+//   act under it shares (a wrong one counts as at enrolment), and the use is a security event.
+//   It is given a token of a second kind, signed for that purpose alone: the door takes it as
+//   the key's proof with the master user at the phone besides.
+// - **One whose key the firm's time revoked** (REQ-214; ADR-520 (2), 530) proves itself only so.
+//   Without the passcode it is told the passcode is needed, and only once its signature is its
+//   own.
 // - **A refused proof writes nothing**: nothing a stranger sends grows the database (ADR-401).
 import {
   byDeviceKey,
@@ -55,7 +58,7 @@ export type ProofRefused =
   // The firm's time revoked the key, and no passcode was sent beside it: the one refusal the
   // phone is told apart (MASTER_PASSCODE_NEEDED), since only its own signature reaches it.
   | 'PASSCODE_NEEDED'
-  // The firm's time revoked the key, and the passcode sent beside it wasn't taken.
+  // The passcode sent beside the signature wasn't taken.
   | 'PASSCODE_REFUSED';
 
 export type ProofOutcome =
@@ -74,9 +77,11 @@ export interface ProvenPhone {
   readonly status: DeviceStatus;
   readonly outOfServiceAt: Date | null;
   readonly masterPasscodeVersion: number;
-  // Whether the firm's time revoked its key: it proved itself with the master passcode, and is
-  // let through to its sync and its turn-in alone (ADR-530).
+  // Whether the firm's time revoked its key (ADR-530): it proved itself with the master passcode.
   readonly keyRevoked: boolean;
+  // Whether it proved itself with the master passcode beside its key: the master user is at it,
+  // somebody signed in for what it sends (ADR-531).
+  readonly withPasscode: boolean;
 }
 
 export interface PhoneProofParts {
@@ -135,9 +140,9 @@ export class PhoneProofs {
       return { proven: false, why: 'SPENT' };
     }
     const revoked = phone.keyRevokedBy === 'FIRM_TIME';
+    if (revoked && passcode === undefined) return { proven: false, why: 'PASSCODE_NEEDED' };
     let checked: Awaited<ReturnType<MasterPasscodeCheck['check']>> | undefined;
-    if (revoked) {
-      if (passcode === undefined) return { proven: false, why: 'PASSCODE_NEEDED' };
+    if (passcode !== undefined) {
       checked = await this.parts.passcode.check(passcode, now, deviceId);
       if (!checked.taken) return { proven: false, why: 'PASSCODE_REFUSED' };
     }
@@ -163,21 +168,21 @@ export class PhoneProofs {
         this.parts.passcode.used(tx, taken, now, { deviceId }),
       );
     }
-    const kind = revoked ? underPasscode : tokens;
+    const kind = checked === undefined ? tokens : underPasscode;
     return { proven: true, token: kind.make(deviceId, now), expiresInSeconds: kind.seconds };
   }
 
   // The phone a token is of, read now; undefined when the token isn't one the API made, has
   // run out, or names a phone whose key is revoked otherwise than its kind of token allows: a
   // token of a proof by the key alone, a key that stands; one of a proof with the passcode, a
-  // key the firm's time revoked and nobody has turned in since.
+  // key that stands or one the firm's time revoked and nobody has turned in since.
   async proven(token: string | undefined): Promise<ProvenPhone | undefined> {
     const { tokens, underPasscode, clock } = this.parts;
     const now = clock.now();
     const byKey = tokens.deviceOf(token, now);
     const deviceId = byKey ?? underPasscode.deviceOf(token, now);
     if (deviceId === undefined) return undefined;
-    const wanted: DeviceKeyRevocation | null = byKey === undefined ? 'FIRM_TIME' : null;
+    const withPasscode = byKey === undefined;
     const phone = await this.db.$read((tx) =>
       tx.device.findUnique({
         where: { id: deviceId },
@@ -190,14 +195,19 @@ export class PhoneProofs {
         },
       }),
     );
-    if (phone?.keyRevokedBy !== wanted) return undefined;
+    if (phone === null) return undefined;
+    const allowed: readonly (DeviceKeyRevocation | null)[] = withPasscode
+      ? [null, 'FIRM_TIME']
+      : [null];
+    if (!allowed.includes(phone.keyRevokedBy)) return undefined;
     return {
       deviceId,
       name: phone.name,
       status: phone.status,
       outOfServiceAt: phone.outOfServiceAt,
       masterPasscodeVersion: phone.masterPasscodeVersion,
-      keyRevoked: wanted !== null,
+      keyRevoked: phone.keyRevokedBy !== null,
+      withPasscode,
     };
   }
 

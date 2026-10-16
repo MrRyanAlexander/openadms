@@ -132,6 +132,7 @@ const inventory = [
   'firmSettings GET /firm-settings SIGNED_IN ADMIN,MANAGER_ANALYST SETUP',
   'changePhoneKeyHours PATCH /firm-settings/phone-key SIGNED_IN ADMIN,MANAGER_ANALYST SETUP',
   'changeViewerTwoStep PATCH /firm-settings/viewer-two-step SIGNED_IN ADMIN',
+  'changeMonitorSessionHours PATCH /firm-settings/monitor-sessions SIGNED_IN ADMIN',
   'listPhones GET /phones SIGNED_IN ADMIN,MANAGER_ANALYST',
   'enrolPhone POST /phones/enrolments ANYBODY',
   'challengePhone POST /phones/:deviceId/challenges ANYBODY',
@@ -140,18 +141,19 @@ const inventory = [
   'createMonitorOnPhone POST /phones/current/monitors PROVEN_PHONE',
   'signInOnPhone POST /phones/current/sign-ins PROVEN_PHONE',
   'openPasscodeSessionOnPhone POST /phones/current/passcode-sessions PROVEN_PHONE',
-  'reportPasscodeUse POST /phones/current/passcode-uses PROVEN_PHONE',
+  'takeOfflineSignInOnPhone POST /phones/current/offline-sign-ins PROVEN_PHONE',
+  'reportPasscodeUse POST /phones/current/passcode-uses PHONE_IN_USE',
   'signOutOnPhone POST /phones/current/sign-outs MONITOR_ON_PHONE',
   'phoneMonitor GET /phones/current/monitor MONITOR_ON_PHONE',
   'phoneLists GET /phones/current/lists MONITOR_ON_PHONE',
   'phoneLoginList POST /phones/current/login-list MONITOR_ON_PHONE',
   'phoneAddressLookup POST /phones/current/address-lookups MONITOR_ON_PHONE',
   'phoneSetupChoices POST /phones/current/setup-choices PROVEN_PHONE',
-  'reportUnplannedAssignment POST /phones/current/unplanned-assignments PROVEN_PHONE',
-  'syncPhone POST /phones/current/syncs PROVEN_PHONE',
+  'reportUnplannedAssignment POST /phones/current/unplanned-assignments PHONE_IN_USE',
+  'syncPhone POST /phones/current/syncs PHONE_IN_USE',
   'turnInPhone POST /phones/current/turn-ins PROVEN_PHONE',
-  'photoFile GET /phones/current/photos/:photoId/files/:file PROVEN_PHONE',
-  'sendPhotoFilePart PATCH /phones/current/photos/:photoId/files/:file PROVEN_PHONE',
+  'photoFile GET /phones/current/photos/:photoId/files/:file PHONE_IN_USE',
+  'sendPhotoFilePart PATCH /phones/current/photos/:photoId/files/:file PHONE_IN_USE',
   'renamePhone PATCH /phones/:deviceId SIGNED_IN ADMIN,MANAGER_ANALYST DISPATCH',
   'removePhone POST /phones/:deviceId/removals SIGNED_IN ADMIN,MANAGER_ANALYST DISPATCH',
   'returnPhone POST /phones/:deviceId/returns SIGNED_IN ADMIN,MANAGER_ANALYST DISPATCH',
@@ -242,7 +244,10 @@ function door({ access, roles = [], permission }: Endpoint, caller: Caller): Doo
       return through;
     case 'PROVEN_PHONE':
       return onPhone ? through : [401, 'PHONE_NOT_PROVEN'];
+    // What a phone sends, with somebody signed in on it (ADR-531), as what a monitor does: the
+    // monitor here; the master user's way, the passcode beside the proof, is `phone-proof.test.ts`'s.
     case 'MONITOR_ON_PHONE':
+    case 'PHONE_IN_USE':
       if (!onPhone) return [401, 'PHONE_NOT_PROVEN'];
       return caller === 'a monitor on a phone' ? through : [401, 'NOT_SIGNED_IN'];
     case 'REFRESH_TOKEN':
@@ -408,7 +413,8 @@ describe('every endpoint', () => {
                 ? []
                 : verdict[1] === 'NOT_ALLOWED'
                   ? ['userId']
-                  : verdict[1] === 'NOT_SIGNED_IN' && endpoint.access === 'MONITOR_ON_PHONE'
+                  : verdict[1] === 'NOT_SIGNED_IN' &&
+                      (endpoint.access === 'MONITOR_ON_PHONE' || endpoint.access === 'PHONE_IN_USE')
                     ? ['deviceId']
                     : [],
           });

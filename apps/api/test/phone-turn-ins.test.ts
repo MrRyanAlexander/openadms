@@ -35,7 +35,13 @@ import {
   turnedIn,
   turnIn,
 } from './support/kims-phone.ts';
-import { answered, passcode, proven, type TestPhone } from './support/phones.ts';
+import {
+  answered,
+  passcode,
+  proven,
+  provenWithPasscode,
+  type TestPhone,
+} from './support/phones.ts';
 import { notTaken } from './support/review.ts';
 import { worldOn } from './support/served.ts';
 import { told } from './support/setup.ts';
@@ -436,7 +442,8 @@ describe('a phone turned in', () => {
       });
       expect(told(removal)).toEqual([200, undefined]);
       served.clock.at = new Date('2026-10-14T22:00:00Z');
-      const token = await proven(served, p.phone);
+      // The master user at it: the phone out of service only sends (ADR-531).
+      const token = await provenWithPasscode(served, p.phone);
       const afterward = p.collection();
       const wednesday = await served.ask('POST', syncPhoneEndpoint.path, {
         bearer: token,

@@ -126,7 +126,8 @@ describe('who may create a monitor', () => {
         const answer = await create(served, token, { ...lee, passcode: given });
         expect([told(answer), (answer.body as { message?: string }).message]).toEqual([
           [409, 'PHONE_OUT_OF_SERVICE'],
-          'Not created: this phone was taken out of service. A monitor is created on a phone in service.',
+          // The door's, before the service is asked (ADR-531).
+          'Not done: this phone was taken out of service. It only sends what it holds and is turned in.',
         ]);
         expect(await audited(tx, answer.requestId)).toEqual([]);
       }

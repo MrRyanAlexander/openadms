@@ -18,7 +18,6 @@ import {
   MasterPasscodeRules,
   MasterPasscodeTries,
   PasswordRules,
-  PasscodeSessionRules,
   TurnInRules,
   PhoneProofRules,
   RateLimits,
@@ -63,6 +62,8 @@ import { apiPhoneLists } from '../phone/phone-lists.controller.ts';
 import { PhoneLists } from '../phone/phone-lists.ts';
 import { apiPhoneLoginList } from '../phone/phone-login-list.controller.ts';
 import { PhoneLoginList } from '../phone/phone-login-list.ts';
+import { apiOfflineSignIns } from '../phone/offline-sign-ins.controller.ts';
+import { OfflineSignIns } from '../phone/offline-sign-ins.ts';
 import { apiPasscodeSessions } from '../phone/passcode-sessions.controller.ts';
 import { PasscodeSessions } from '../phone/passcode-sessions.ts';
 import { apiPasscodeUses } from '../phone/passcode-uses.controller.ts';
@@ -395,8 +396,9 @@ export class ApiProcess {
       clock,
       requestNow,
     });
-    // A phone's proof of itself (task 2.5.1): nobody is signed in. One whose key the firm's
-    // time revoked proves itself with the passcode beside its key (task 2.8.6).
+    // A phone's proof of itself (task 2.5.1): nobody is signed in. Any phone may prove itself
+    // with the passcode beside its key, the master user at it (ADR-531); one whose key the
+    // firm's time revoked only so (task 2.8.6).
     const proofRules = new PhoneProofRules(policy);
     const phoneProofs = new PhoneProofs(database, {
       rules: proofRules,
@@ -420,7 +422,6 @@ export class ApiProcess {
       tries,
       assignments: new PhoneAssignments(database),
       clock,
-      hours: policy.monitorSessionHours,
       requestNow,
     });
     // What a phone reports besides its records (task 2.5.4), by its own endpoints and in a sync.
@@ -532,9 +533,20 @@ export class ApiProcess {
             new PasscodeSessions(database, {
               passcode: passcodeCheck,
               tokens,
-              rules: new PasscodeSessionRules(policy.monitorSessionHours),
               assignments: new PhoneAssignments(database),
               clock,
+            }),
+          ],
+          // A sign-in made on a phone with no connection, taken once it has one (ADR-531).
+          [
+            apiOfflineSignIns,
+            new OfflineSignIns(database, {
+              offline,
+              tokens,
+              tries,
+              assignments: new PhoneAssignments(database),
+              clock,
+              requestNow,
             }),
           ],
           // What a phone being set up under the master passcode picks from (task 2.5.4, part 4).

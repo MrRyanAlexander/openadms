@@ -48,6 +48,7 @@ import {
 import { uuidv7 } from '../ids.ts';
 import type { EnrolledPhone } from '../software-key.ts';
 import type { Story, StoryMonitor } from '../runner.ts';
+import { storyMasterPasscode } from '../story-database.ts';
 import {
   assigned,
   firstBlocks,
@@ -533,10 +534,11 @@ export const sync: Story = {
     // asks for a challenge, signs it with the key only it holds, and sends both back; its sync
     // then carries the token it was given. What comes of the proof, and of the same signed
     // answer sent a second time, which is told only the one code a proof that isn't one gets.
-    const provesItself = async (name: string): Promise<[string, string]> => {
+    // `passcode`: whoever holds it is at the phone, typing it beside the phone's proof (ADR-531).
+    const provesItself = async (name: string, passcode?: string): Promise<[string, string]> => {
       const phone = enrolled[name];
       if (phone === undefined) throw new Error(`No phone ${name}`);
-      const proof = await story.proofs.proves(phone.id);
+      const proof = await story.proofs.proves(phone.id, passcode);
       return [proof.answer, await proof.again()];
     };
     story.check(
@@ -1710,8 +1712,8 @@ export const sync: Story = {
       'P1-TWR-LF turns up in Tariq’s truck and syncs, two days after Luis marked it lost',
     );
     story.check(
-      'AC-10-46, AC-02-60 marked lost two days ago, P1-TWR-LF still proves itself: its key stands until the phone is turned in',
-      await provesItself('P1-TWR-LF'),
+      'AC-10-46, AC-02-60 marked lost two days ago, P1-TWR-LF still proves itself, the supervisor who syncs it typing the master passcode beside its proof (ADR-531): its key stands until the phone is turned in',
+      await provesItself('P1-TWR-LF', storyMasterPasscode),
       ['PROVEN', 'PHONE_NOT_PROVEN'],
     );
     const lostAnswers = await syncing(lost);

@@ -1,5 +1,6 @@
 // A phone's sync (ARCHITECTURE §9, §10; AC-05-03, 04, 16, 45; AC-10-46, 51; BACKLOG 2.6.2, C86,
-// C128…C131; ADR-466…472, 481). Open to a phone that has proved itself; nobody need be signed in.
+// C128…C131; ADR-466…472, 481, 531). Open to a phone that has proved itself, with somebody signed
+// in on it (the door's); its standing, as the door read it, goes to the sync whole.
 // The log says which phone synced, the sync's id, how far its clock stood from the server's,
 // how many of each thing got which answer, the master passcode's version and whether its check
 // was sent, and the setup version sent: never a record or a photograph's, an id one was sent under, what
@@ -42,7 +43,7 @@ export class SyncController {
   ): Promise<SyncAnswered> {
     const phone = phoneOf(request);
     const { syncId, clockDifferenceSeconds, setupVersionSent, answered } = await this.sync.received(
-      phone.deviceId,
+      phone,
       body,
     );
     request.log.info(
@@ -56,8 +57,8 @@ export class SyncController {
         photos: counted(answered.photos),
         seriesToppedUp: answered.numbers.filter(({ toppedUp }) => toppedUp).length,
         seriesNotToppedUp: answered.numbers.filter(({ toppedUp }) => !toppedUp).length,
-        masterPasscodeVersion: answered.masterPasscode.version,
-        masterPasscodeCheckSent: answered.masterPasscode.check !== null,
+        masterPasscodeVersion: answered.masterPasscode?.version ?? null,
+        masterPasscodeCheckSent: answered.masterPasscode?.check != null,
         setupVersionSent,
       },
       'A phone synced.',

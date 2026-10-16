@@ -24,7 +24,7 @@ export interface SeedOptions {
   readonly masterPasscodeHash?: string;
   // The release's policy values, for what a new installation's settings start as. Read from
   // packages/domain/policy.env when not given.
-  readonly policy?: Pick<Policy, 'phoneKeyRevokedAfterHours'>;
+  readonly policy?: Pick<Policy, 'phoneKeyRevokedAfterHours' | 'monitorSessionHours'>;
 }
 
 // The release's policy values, beside the domain package (the seed runs from src and from dist).
@@ -51,7 +51,7 @@ export class Seed {
     ];
   }
 
-  // The firm's settings (ADR-530): written once, from the release's policy values, as the system
+  // The firm's settings (ADR-530, 531): written once, from the release's policy values, as the system
   // actor. Once there they are the firm's: the seed never changes them.
   private async ensureFirmSettings(): Promise<string> {
     const found = await this.db.firmSettings.findUnique({ where: { id: 1 }, select: { id: true } });
@@ -61,10 +61,15 @@ export class Seed {
     const hours = PhoneKeyRules.startingHours(policy);
     await this.db.$write(systemActor, (tx) =>
       tx.firmSettings.create({
-        data: { id: 1, phoneKeyRevokedAfterHours: hours, viewerTwoStepRequired: false },
+        data: {
+          id: 1,
+          phoneKeyRevokedAfterHours: hours,
+          viewerTwoStepRequired: false,
+          monitorSessionHours: policy.monitorSessionHours,
+        },
       }),
     );
-    return `+ wrote the firm's settings: a lost phone's key revoked ${hours === null ? 'never (off)' : `${String(hours)} hours after its mark`}, two-step optional for read-only viewers`;
+    return `+ wrote the firm's settings: a lost phone's key revoked ${hours === null ? 'never (off)' : `${String(hours)} hours after its mark`}, two-step optional for read-only viewers, a monitor's sign-in on a phone lasting ${String(policy.monitorSessionHours)} hours`;
   }
 
   // Written with itself as the actor, as the first user is (ADR-270 (4)). Never a person: no

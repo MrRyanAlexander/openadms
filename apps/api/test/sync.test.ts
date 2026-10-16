@@ -10,6 +10,7 @@ import {
   addFieldTagEndpoint,
   changeMasterPasscodeEndpoint,
   endpoints,
+  removePhoneEndpoint,
   sentWeight,
   syncAnswerRead,
   syncAnsweredSchema,
@@ -20,6 +21,7 @@ import {
   syncSentSchema,
   type SyncedCertification,
   type SyncedFieldEvent,
+  type SyncAnswered,
   type SyncedPhoto,
   type SyncSent,
 } from '@open-adms/contracts';
@@ -39,7 +41,7 @@ import { Intake } from '../src/sync/intake.ts';
 import { sentFingerprint, Sync } from '../src/sync/sync.ts';
 import { installationSettings, openInstallation, type Tx } from './support/database.ts';
 import { opens } from './support/offline-check.ts';
-import { enrolledPhone, passcode, proven } from './support/phones.ts';
+import { enrolledPhone, passcode, provenWithPasscode } from './support/phones.ts';
 import { shippedPolicy } from './support/process.ts';
 import { notTaken } from './support/review.ts';
 import {
@@ -70,13 +72,24 @@ const held = ' Held on the server for review.';
 
 // P1 as Dana prices it; the collection phone, enrolled and proven; Kim Nguyen's Monday on P1,
 // planned by Dana: loads at both ends, and certifying.
+// A phone in service, as the door reads one, for a sync built by hand.
+const inService = (deviceId: string) =>
+  ({ deviceId, status: 'ACTIVE', keyRevoked: false }) as const;
+
+// What a sync brought a phone in service: never nothing (ADR-531).
+function passcodeOf(answered: SyncAnswered): NonNullable<SyncAnswered['masterPasscode']> {
+  if (answered.masterPasscode === null) throw new Error('The sync brought no passcode’s check.');
+  return answered.masterPasscode;
+}
+
 async function kimOnP1(served: Served, tx: Tx, who: People) {
   served.clock.at = mondayAfternoon;
   const dana = await served.signedIn(danasEmail, long);
   const priced = await p1Priced(served, dana, tx);
   const projectId = priced.project.id;
   const phone = await enrolledPhone(served, tx, 'P1-COL-1');
-  const token = await proven(served, phone);
+  // Somebody signed in on it (ADR-531): the master user, by the passcode beside its proof.
+  const token = await provenWithPasscode(served, phone);
   const assignment = await tx.assignment.create({
     data: {
       personId: who.kim,
@@ -165,11 +178,11 @@ const heldOf = (tx: Tx, deviceId: string) =>
   tx.heldRecord.findMany({ where: { deviceId }, orderBy: { id: 'asc' } });
 
 describe('who may sync', () => {
-  it('AC-05-03, AC-10-46 a sync is a proven phone’s: nobody need be signed in, and a caller with no phone’s token sends nothing that is taken', async () => {
+  it('AC-05-03, AC-10-46, ADR-531 a sync is a proven phone’s with somebody signed in on it (its monitor, or the master user by the passcode at its proof: offline-sign-ins.test.ts), and a caller with no phone’s token sends nothing that is taken', async () => {
     const { access, roles, permission, method, path } =
       endpoints.find(({ name }) => name === 'syncPhone') ?? {};
     expect([access, roles, permission, method, path]).toEqual([
-      'PROVEN_PHONE',
+      'PHONE_IN_USE',
       undefined,
       undefined,
       'POST',
@@ -750,7 +763,7 @@ describe('what could not be saved is held for a person', () => {
           { record: 'FIELD_EVENT', fieldEvent: noSite },
         ],
       });
-      const { answered } = await sync.received(p.phone.id, syncSentSchema.parse(sent));
+      const { answered } = await sync.received(inService(p.phone.id), syncSentSchema.parse(sent));
       expect(syncAnswerRead(sent, answered)).not.toBeNull();
       const message = `Not saved: this record names something the server doesn’t have: its project, its monitor, its assignment, or something picked from a list.${held}`;
       expect(answered.records).toEqual([
@@ -1191,6 +1204,65 @@ describe('the numbers a phone holds', () => {
   });
 });
 
+describe('a phone taken out of service only sends (ADR-065, 134, 473, 531)', () => {
+  it('its records are saved, and each series it reports is answered with the blocks it holds, never topped up; it is brought no check of the passcode and no setup version, whatever version it holds; the database cuts it no block', async () => {
+    await world(async (served, tx, who) => {
+      const p = await kimOnP1(served, tx, who);
+      const load = { projectId: p.projectId, series: 'LOAD' as const };
+      const first = await synced(
+        served,
+        p.token,
+        p.sync({ lastUsed: [{ ...load, lastUsedNumber: null }] }),
+      );
+      const [held] = first.numbers;
+      expect(held?.toppedUp).toBe(true);
+      saved(
+        removePhoneEndpoint,
+        await ask(served, p.dana, removePhoneEndpoint, {
+          ids: { deviceId: p.phone.id },
+          payload: { status: 'LOST' },
+        }),
+      );
+      const collection = p.event();
+      const used = (held?.blocks[0]?.firstNumber ?? 0) + 999;
+      const sent = p.sync({
+        records: [{ record: 'FIELD_EVENT', fieldEvent: collection }],
+        lastUsed: [{ ...load, lastUsedNumber: used }],
+        holds: { masterPasscodeVersion: null, listsProjectId: p.projectId },
+      });
+      const answered = await synced(served, p.token, sent);
+      expect(answered.records).toEqual([{ answer: 'SAVED', id: collection.id, notes: [] }]);
+      expect(answered.numbers).toEqual([{ ...load, toppedUp: false, blocks: held?.blocks }]);
+      expect([answered.masterPasscode, answered.setupVersion]).toEqual([null, null]);
+      expect(await tx.numberBlock.count({ where: { deviceId: p.phone.id } })).toBe(1);
+      // Its report is not taken: the block's last used number stays as the server had it.
+      const block = await tx.numberBlock.findFirstOrThrow({ where: { deviceId: p.phone.id } });
+      expect([block.status, block.lastUsedNumber]).toEqual(['ISSUED', null]);
+    });
+  });
+
+  it('a top-up asked of a phone marked out of service meanwhile is not taken, under the lock its row is read with (the database refuses its block too: packages/db)', async () => {
+    await world(async (served, tx, who, within) => {
+      const p = await kimOnP1(served, tx, who);
+      const load = { projectId: p.projectId, series: 'LOAD' as const };
+      await synced(served, p.token, p.sync({ lastUsed: [{ ...load, lastUsedNumber: null }] }));
+      saved(
+        removePhoneEndpoint,
+        await ask(served, p.dana, removePhoneEndpoint, {
+          ids: { deviceId: p.phone.id },
+          payload: { status: 'RETIRED' },
+        }),
+      );
+      const allocator = new NumberAllocator(within, served.clock, shippedPolicy);
+      const outcome = await allocator.topUp(
+        { person: deviceKeyActorId, deviceId: p.phone.id },
+        { ...load, lastUsedNumber: null },
+      );
+      expect(outcome.saved ? 'saved' : outcome.refusal.code).toBe('PHONE_OUT_OF_SERVICE');
+    });
+  });
+});
+
 describe('a top-up that loses the race for its series', () => {
   it('AC-05-51, ADR-505 every phone of a project syncing at once tops up from one series: a top-up that loses the race every time is not taken at this sync, the phone told it holds what it held, and its records are saved all the same; any other failure is the server’s', async () => {
     await world(async (served, tx, who, within) => {
@@ -1237,7 +1309,7 @@ describe('a top-up that loses the race for its series', () => {
         lastUsed: [{ ...load, lastUsedNumber: cut.firstNumber }],
       });
       const { answered } = await syncWith(losing(() => new SeriesMovedOn())).received(
-        p.phone.id,
+        inService(p.phone.id),
         syncSentSchema.parse(sent),
       );
       expect(syncAnswerRead(sent, answered)).not.toBeNull();
@@ -1251,7 +1323,7 @@ describe('a top-up that loses the race for its series', () => {
       const again = p.sync({ lastUsed: [{ ...load, lastUsedNumber: cut.firstNumber }] });
       await expect(
         syncWith(losing(() => new Error('The database went away.'))).received(
-          p.phone.id,
+          inService(p.phone.id),
           syncSentSchema.parse(again),
         ),
       ).rejects.toThrow('The database went away.');
@@ -1271,10 +1343,10 @@ describe('what a sync brings besides its answers', () => {
         (await tx.device.findUniqueOrThrow({ where: { id: p.phone.id } })).masterPasscodeVersion;
 
       const first = await synced(served, p.token, holding(null));
-      expect(first.masterPasscode.version).toBe(enrolledUnder);
+      expect(passcodeOf(first).version).toBe(enrolledUnder);
       expect([
-        await opens(passcode, first.masterPasscode.check),
-        await opens('osprey-landing-march', first.masterPasscode.check),
+        await opens(passcode, passcodeOf(first).check),
+        await opens('osprey-landing-march', passcodeOf(first).check),
       ]).toEqual([true, false]);
       // Not the server's own hash: a check of this phone's, made from it.
       const inForce = await tx.masterPasscode.findUniqueOrThrow({
@@ -1292,10 +1364,10 @@ describe('what a sync brings besides its answers', () => {
       // Until the phone syncs, its record holds the version it was enrolled under.
       expect(await versionHeld()).toBe(enrolledUnder);
       const second = await synced(served, p.token, holding(enrolledUnder));
-      expect(second.masterPasscode.version).toBe(enrolledUnder + 1);
+      expect(passcodeOf(second).version).toBe(enrolledUnder + 1);
       expect([
-        await opens(changedTo, second.masterPasscode.check),
-        await opens(passcode, second.masterPasscode.check),
+        await opens(changedTo, passcodeOf(second).check),
+        await opens(passcode, passcodeOf(second).check),
       ]).toEqual([true, false]);
       expect(await versionHeld()).toBe(enrolledUnder + 1);
       const audited = await tx.auditRecord.findMany({

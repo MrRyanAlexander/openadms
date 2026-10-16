@@ -340,31 +340,56 @@ describe('a phone whose key the firm’s time revoked', () => {
       deviceId: collection,
       keyRevoked: true,
     });
-    // A token of a proof by the key alone names no such phone; nor, turned in, does either.
+    // A token of a proof by the key alone names no such phone; nor, turned in, does either. A
+    // key that stands takes a token of either kind (ADR-531: the master user at the phone).
     expect(await proofs.proven(byKey.make(collection, now))).toBeUndefined();
     expect(await proofsOn('TURN_IN').proven(outcome.token)).toBeUndefined();
-    expect(await proofsOn(null).proven(outcome.token)).toBeUndefined();
+    expect(await proofsOn(null).proven(outcome.token)).toMatchObject({
+      keyRevoked: false,
+      withPasscode: true,
+    });
   });
 
-  it('ADR-488 a key its turn-in revoked proves nothing, passcode or not; a key that stands is given the token of a proof by the key', async () => {
+  it('ADR-488, ADR-531 a key its turn-in revoked proves nothing, passcode or not; a key that stands is given the token of a proof by the key, or with the passcode beside it the token of the master user at the phone, its use a security event; a wrong passcode proves nothing', async () => {
     expect(await proof(proofsOn('TURN_IN'), 'heron-marsh-delphine')).toEqual({
       proven: false,
       why: 'KEY_REVOKED',
     });
-    const standing = await proof(proofsOn(null), 'heron-marsh-delphine');
-    if (!standing.proven) throw new Error(standing.why);
-    expect(byKey.deviceOf(standing.token, now)).toBe(collection);
-    expect(await proofsOn(null).proven(standing.token)).toMatchObject({ keyRevoked: false });
+    const byItsKey = await proof(proofsOn(null));
+    if (!byItsKey.proven) throw new Error(byItsKey.why);
+    expect(byKey.deviceOf(byItsKey.token, now)).toBe(collection);
+    expect(await proofsOn(null).proven(byItsKey.token)).toMatchObject({
+      keyRevoked: false,
+      withPasscode: false,
+    });
+    used.length = 0;
+    expect(await proof(proofsOn(null), 'wrong-passcode-9f3c')).toEqual({
+      proven: false,
+      why: 'PASSCODE_REFUSED',
+    });
+    const master = await proof(proofsOn(null), 'heron-marsh-delphine');
+    if (!master.proven) throw new Error(master.why);
+    expect(used).toEqual([{ deviceId: collection }]);
+    expect([underPasscode.deviceOf(master.token, now), byKey.deviceOf(master.token, now)]).toEqual([
+      collection,
+      undefined,
+    ]);
+    expect(await proofsOn(null).proven(master.token)).toMatchObject({
+      keyRevoked: false,
+      withPasscode: true,
+    });
   });
 });
 
 describe('the door for a phone whose key the firm’s time revoked', () => {
-  // Which endpoints it reaches, held whole (ADR-530): what gets its records onto the server and
-  // the phone turned in, nothing a monitor signs in for, no list, no setup, no monitor made.
+  // Which endpoints it reaches, held whole (ADR-530, 531): what gets its records onto the server
+  // and the phone turned in, nothing a monitor signs in for, no list, no setup, no monitor made.
+  // A phone taken out of service reaches the same, and any phone proven with the passcode beside
+  // its key (`outOfServiceToo`).
   it('AC-10-86 reaches only the phone read, its sync, its photographs’ files, its two reports and its turn-in', async () => {
     const { endpoints } = await import('@open-adms/contracts');
     expect(
-      endpoints.filter(({ keyRevokedToo }) => keyRevokedToo === true).map(({ name }) => name),
+      endpoints.filter(({ outOfServiceToo }) => outOfServiceToo === true).map(({ name }) => name),
     ).toEqual([
       'provenPhone',
       'reportPasscodeUse',
@@ -382,6 +407,7 @@ describe('the door for a phone whose key the firm’s time revoked', () => {
       outOfServiceAt: now,
       masterPasscodeVersion: 1,
       keyRevoked: true,
+      withPasscode: true,
     };
     const door = new Admission(
       {} as never,
@@ -392,7 +418,8 @@ describe('the door for a phone whose key the firm’s time revoked', () => {
     );
     const refusedAt: string[] = [];
     for (const endpoint of endpoints.filter(
-      ({ access }) => access === 'PROVEN_PHONE' || access === 'MONITOR_ON_PHONE',
+      ({ access }) =>
+        access === 'PROVEN_PHONE' || access === 'MONITOR_ON_PHONE' || access === 'PHONE_IN_USE',
     )) {
       const request = {
         headers: { authorization: 'Bearer a-token-of-the-second-kind' },
@@ -409,6 +436,7 @@ describe('the door for a phone whose key the firm’s time revoked', () => {
       'createMonitorOnPhone',
       'signInOnPhone',
       'openPasscodeSessionOnPhone',
+      'takeOfflineSignInOnPhone',
       'signOutOnPhone',
       'phoneMonitor',
       'phoneLists',
@@ -416,5 +444,109 @@ describe('the door for a phone whose key the firm’s time revoked', () => {
       'phoneAddressLookup',
       'phoneSetupChoices',
     ]);
+  });
+});
+
+describe('the door decides a phone’s standing once a request (ADR-531)', () => {
+  // The door as it stands for one phone, with or without a monitor's session beside it: which
+  // endpoints refuse it, by which code.
+  async function refusals(
+    phone: { status: 'ACTIVE' | 'LOST' | 'RETIRED'; withPasscode: boolean },
+    signedIn: boolean,
+  ): Promise<Record<string, string[]>> {
+    const { endpoints } = await import('@open-adms/contracts');
+    const { Admission } = await import('../src/sign-in/admission.ts');
+    const proven = {
+      deviceId: collection,
+      name: 'P1-COL-1',
+      status: phone.status,
+      outOfServiceAt: phone.status === 'ACTIVE' ? null : now,
+      masterPasscodeVersion: 1,
+      keyRevoked: false,
+      withPasscode: phone.withPasscode,
+    };
+    const monitor = {
+      sessionId: tower,
+      deviceId: collection,
+      userId: tower,
+      monitorNumber: 'M000001',
+      name: 'Lee Morgan',
+      expiresAt: now,
+      masterPasscodeSession: null,
+    };
+    const door = new Admission(
+      {} as never,
+      {} as never,
+      { asked: () => undefined, phoneAsked: () => undefined },
+      { proven: () => Promise.resolve(proven) },
+      { onPhone: () => Promise.resolve(signedIn ? monitor : undefined) },
+    );
+    const refused: Record<string, string[]> = {};
+    for (const endpoint of endpoints.filter(
+      ({ access }) =>
+        access === 'PROVEN_PHONE' || access === 'MONITOR_ON_PHONE' || access === 'PHONE_IN_USE',
+    )) {
+      const request = {
+        headers: { authorization: 'Bearer a-token', 'x-adms-monitor-session': 'a-session' },
+        log: { warn: () => undefined },
+      };
+      try {
+        await door.admit(endpoint, request as never);
+      } catch (refusal) {
+        const told = refusal as { code: string; getStatus(): number };
+        (refused[`${String(told.getStatus())} ${told.code}`] ??= []).push(endpoint.name);
+      }
+    }
+    return refused;
+  }
+
+  const notWhatItSends = [
+    'createMonitorOnPhone',
+    'signInOnPhone',
+    'openPasscodeSessionOnPhone',
+    'takeOfflineSignInOnPhone',
+    'signOutOnPhone',
+    'phoneMonitor',
+    'phoneLists',
+    'phoneLoginList',
+    'phoneAddressLookup',
+    'phoneSetupChoices',
+  ];
+
+  it('a phone taken out of service only sends, whatever session it still holds: told so everywhere else', async () => {
+    for (const status of ['LOST', 'RETIRED'] as const) {
+      expect(await refusals({ status, withPasscode: false }, true), status).toEqual({
+        '409 PHONE_OUT_OF_SERVICE': notWhatItSends,
+      });
+    }
+  });
+
+  it('what a phone sends needs somebody signed in on it: a monitor, or the master user by the passcode beside its proof', async () => {
+    expect(await refusals({ status: 'ACTIVE', withPasscode: false }, false)).toEqual({
+      '401 NOT_SIGNED_IN': [
+        'reportPasscodeUse',
+        'signOutOnPhone',
+        'phoneMonitor',
+        'phoneLists',
+        'phoneLoginList',
+        'phoneAddressLookup',
+        'reportUnplannedAssignment',
+        'syncPhone',
+        'photoFile',
+        'sendPhotoFilePart',
+      ],
+    });
+    expect(await refusals({ status: 'ACTIVE', withPasscode: false }, true)).toEqual({});
+    // The master user at the phone: the key's proof besides, so it sends with nobody else signed
+    // in; what a monitor does still takes the monitor's session.
+    expect(await refusals({ status: 'ACTIVE', withPasscode: true }, false)).toEqual({
+      '401 NOT_SIGNED_IN': [
+        'signOutOnPhone',
+        'phoneMonitor',
+        'phoneLists',
+        'phoneLoginList',
+        'phoneAddressLookup',
+      ],
+    });
   });
 });

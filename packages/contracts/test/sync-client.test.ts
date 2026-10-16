@@ -475,7 +475,9 @@ describe('what a client reads of what it was answered', () => {
     expect(not({ ...answered, numbers: [{ ...answered.numbers[0], series: 'ROE' }] })).toBe(true);
     expect(not({ ...answered, setupVersion: { projectId: made('98'), version: 4 } })).toBe(true);
     const { masterPasscode, ...withoutPasscode } = answered;
-    expect([masterPasscode.version, not(withoutPasscode)]).toEqual([3, true]);
+    expect([masterPasscode?.version, not(withoutPasscode)]).toEqual([3, true]);
+    // A phone not in service is brought nothing (ADR-531): no passcode is an answer still.
+    expect(not({ ...answered, masterPasscode: null, setupVersion: null })).toBe(false);
     expect(not({ ...answered, status: 'COMPLETED' })).toBe(true);
     expect(not({ ...answered, records: [first, { answer: 'OK', id: disposal.id }] })).toBe(true);
     for (const nothing of [undefined, null, 'OK', 200, []]) expect(not(nothing)).toBe(true);
