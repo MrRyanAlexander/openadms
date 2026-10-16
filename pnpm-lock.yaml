@@ -191,6 +191,12 @@ importers:
         specifier: 8.23.1
         version: 8.23.1
 
+  tools/chain:
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.6
+        version: 24.13.6
+
   tools/licences:
     devDependencies:
       '@types/node':

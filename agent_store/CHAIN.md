@@ -7,20 +7,20 @@
 > task's ADR and its session-log line in `DECISIONS.md`). No other file carries these counts.
 > **A count that differs from this page without a reason is a finding, not noise.**
 
-**Seen whole:** 2026-10-15, the user's review of task 2.8.6 (ADR-531), on the user's Mac, the installation at head: `pnpm ready`, the frozen install (no dependency added), typecheck, `pnpm test`, `pnpm scenarios`, `pnpm security`, lint and licences. Memory last sampled after ADR-512 (Docker's VM at 4 GB, the containers together under 1 GB through a full `pnpm test`).
+**Seen whole:** 2026-10-15, `pnpm chain`'s first run (ADR-533), on the user's Mac, the installation at head: `pnpm ready`, the frozen install (no dependency added), typecheck, `pnpm test`, `pnpm scenarios`, `pnpm security`, lint and licences, 9 passed in 8 min 12 s. Memory last sampled after ADR-512 (Docker's VM at 4 GB, the containers together under 1 GB through a full `pnpm test`).
 
 ## `pnpm ready`
 
 | What | Today |
 |---|---|
-| `pnpm local:up` | eight `Healthy` services (`routing-tls` the seventh, ADR-517; `objectstore-tls` the eighth, ADR-525), `Keeping the stack’s root and every service’s certificate.`, `Keeping the object store’s bucket adms-media (it keeps every version).` (ADR-480), then the API's and the worker's containers: `https://api.adms.localhost/health → 200 {"status":"ok"}` and `the worker’s health answer → 200 {"status":"ok","jobsWaiting":0,"jobsSetAside":0,"oldestJobWaitingSeconds":0}` |
+| `pnpm local:up` | eight `Healthy` services (`pnpm chain` says `10 containers Healthy`: these eight, the API's and the worker's) (`routing-tls` the seventh, ADR-517; `objectstore-tls` the eighth, ADR-525), `Keeping the stack’s root and every service’s certificate.`, `Keeping the object store’s bucket adms-media (it keeps every version).` (ADR-480), then the API's and the worker's containers: `https://api.adms.localhost/health → 200 {"status":"ok"}` and `the worker’s health answer → 200 {"status":"ok","jobsWaiting":0,"jobsSetAside":0,"oldestJobWaitingSeconds":0}` |
 | `pnpm installer:check` | **37 `✓`**, no `✗`, exit 0 (the two since ADR-530: each service's policy values in force) |
 | Migrations at head | **132** (`packages/db/prisma/migrations/` is the list) |
 | `pnpm local:down` (close-out) | 10 containers and the network: 11 `Removed` lines |
 
 ## `pnpm test`
 
-**`Test Files 181 passed (181)`, `Tests 3152 passed (3152)`.**
+**`Test Files 182 passed (182)`, `Tests 3167 passed (3167)`.**
 
 | Project | Tests | Files | Needs |
 |---|---|---|---|
@@ -33,6 +33,7 @@
 | `infra/local` | 77 | 6 | `pnpm ready` for the map services and every hop's TLS, the object store's thirteen ports refused among it (`hops.test.ts`, 25); Docker alone for `compose.test.ts` (18); nothing for the certificates (12) and the extract |
 | `tools/security` | 141 | 3 | nothing (the scan's and the grant tests' rules 49, who reaches Postgres 35, the guard hook 57) |
 | `tools/setup` | 20 | 3 | nothing |
+| `tools/chain` | 15 | 1 | nothing (how `pnpm chain` reads each step's output and this page) |
 
 ## `pnpm lint`, `pnpm licences`
 
@@ -69,8 +70,8 @@ P1 $5,548.25 on 19 lines, P2 $324.00. `p1-reconciled` through `p1-left-out`, `p1
 `✓ 0 open advisories` (3 accepted by id); secretlint `0 found`; the installation's own secrets
 (11 values from 4 env files; the eleventh the API's key file's path, ADR-517) `0 found`; a password-like setting `0 found`; a whole slow hash, an
 authenticator's secret or a private key as a JWK `0 found` (8 inline exceptions named); env files
-`✓ every one ignored by git and untracked`; who reaches Postgres: `of 13 workspaces, the
-product's that reach it: apps/api, apps/worker, packages/db` (3 tools named), `508 source files
+`✓ every one ignored by git and untracked`; who reaches Postgres: `of 14 workspaces, the
+product's that reach it: apps/api, apps/worker, packages/db` (3 tools named), `512 source files
 read`, `13 statements` (a turn-in's and a top-up's lock on the phone's row, ADR-524; a phone's back-office change and the worker's revocation, each locking the phone's row, ADR-530), `prisma migrate diff: no difference`; the grant tests **`48 files, 1083
 tests: 1083 passed, 0 failed`**; ending **`Security checks: 12 passed, 0 failed.`**
 
@@ -82,6 +83,7 @@ series on `adms` moves with every run (a sequence isn't rolled back); gaps are n
 
 ## How long it takes here (the user's Mac, seen 2026-10-09; for judging a hang, not a target)
 
+`pnpm chain`, the whole chain, 8 min 12 s (seen 2026-10-15; `pnpm test` 3 min 41 s of it).
 `pnpm test` about 2 min 20 s; `pnpm scenarios` about 3 min, of which `burst` under 2 min (its drain about 38 s since ADR-506);
 `pnpm security` a few seconds after `pnpm test` (the database tests run again otherwise);
 `pnpm ready` on a stopped stack under a minute.

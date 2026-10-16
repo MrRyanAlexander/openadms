@@ -1,9 +1,9 @@
 ---
 name: adms-verify
-description: Run the Open ADMS verification chain and report real observed output. Covers loading Node 24 through fnm, `pnpm ready` before the chain, the frozen pnpm install, typecheck, the Vitest run, lint and format, the licence report, the stories, the security checks, the local stack and the installer, the clean-copy check after a dependency change, how loosenings are tried in one command, and which page to read for the layer you touch (the schema, the database tests, the API's tests, the worker's). Today's expected counts are in agent_store/CHAIN.md. Use after any code or config edit, before closing out any code task, or whenever asked to verify, test, typecheck, or confirm the build is green.
+description: Run the Open ADMS verification chain and report real observed output. Covers loading Node 24 through fnm, `pnpm ready` before the chain, the frozen pnpm install, typecheck, the Vitest run, lint and format, the licence report, the stories, the security checks, the local stack and the installer, `pnpm chain` (the whole chain in one command, one summary held against CHAIN.md), the clean-copy check after a dependency change, how loosenings are tried in one command, and which page to read for the layer you touch (the schema, the database tests, the API's tests, the worker's). Today's expected counts are in agent_store/CHAIN.md. Use after any code or config edit, before closing out any code task, or whenever asked to verify, test, typecheck, or confirm the build is green.
 ---
 
-<!-- skill-status: current (rewritten for the rebuild's chain 2026-09-29, ADR-259; cut to the chain itself 2026-10-09, ADR-445: the counts are `agent_store/CHAIN.md`'s, each layer's tests have a page of their own beside this one, and the list of ADRs that stood here is in DECISIONS.md's scratchpad, "Moved 2026-10-09 (ADR-445)"; the stories once and the grant tests' earlier run, ADR-446; a run's template, ADR-447; a container kept, ADR-448) -->
+<!-- skill-status: current (rewritten for the rebuild's chain 2026-09-29, ADR-259; cut to the chain itself 2026-10-09, ADR-445: the counts are `agent_store/CHAIN.md`'s, each layer's tests have a page of their own beside this one, and the list of ADRs that stood here is in DECISIONS.md's scratchpad, "Moved 2026-10-09 (ADR-445)"; the stories once and the grant tests' earlier run, ADR-446; a run's template, ADR-447; a container kept, ADR-448; the whole chain in one command, `pnpm chain`, ADR-533) -->
 
 > **This page is the chain: what to run, what each command proves, what a pass looks like.** The
 > rule never changes: **report real observed output, never "should pass".** **Today's counts are in
@@ -39,8 +39,25 @@ the whole test run fails by the hundred otherwise, and a run is lost (seen 2026-
 If every `docker` call answers 500, quit and reopen Docker Desktop; if `up` then meets `RWLayer …
 is unexpectedly nil` or `ECONNRESET`, `pnpm local:down` and `pnpm ready` once more.
 
+**The whole chain is one command: `pnpm chain`** (ADR-533; `tools/chain`). It runs the steps below
+in this order (`local:up` and `installer:check`, which are `pnpm ready`; the frozen install;
+typecheck; test; scenarios; security; lint; licences), keeps each one's whole output in
+`.cache/adms/chain/NN-<step>.log` (emptied at each run, a run of some steps too), and prints one summary: each step's ✓ or ✗ and its time, its key
+lines, what failed **by name** (a test from Vitest's report, a story's check, a security ✗, an ESLint
+problem by file and place, a licence refused), then **the counts held against `agent_store/CHAIN.md`**
+(`≠` differs, `+` not written there, `−` written there and not seen), then `The chain: N passed, N
+failed, N not run, in …`. A failed `ready`, install or typecheck stops the run (the rest would fail
+by the hundred). Exit 0 only when every step passed; a count that differs is printed, not failed:
+it is a finding, or the count a task changed, and CHAIN.md is then replaced. `pnpm chain <step…>`
+runs some (`pnpm chain ready test security`), `--fresh` is passed to `pnpm security`. **It takes
+about ten minutes, past the Bash tool's ten-minute limit: run it in the background** and read its
+summary when it ends; open a step's log only when the summary names a failure. It leaves the stack
+up (the close-out stops it). Every command below still runs on its own, and this page still says
+what each proves.
+
 ```bash
 eval "$(fnm env --shell zsh)"
+pnpm chain                       # all of what follows, one summary (above)
 pnpm ready                       # the stack up, the installation at head and re-checked (above)
 pnpm install --frozen-lockfile   # the committed lockfile, the supply-chain policy
 pnpm typecheck                   # pnpm generate (the Prisma client), then tsc --build

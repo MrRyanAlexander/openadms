@@ -179,8 +179,8 @@ same scenarios passing at each layer (engine, API, apps). The finished surfaces 
   Say "set up", never "provision".
 
 ### Tools and housekeeping
-- **Every command starts with** `eval "$(fnm env --shell zsh)"`. **Before the chain, `pnpm ready`**
-  (the stack up, then `installer:check`). **Leave nothing running** (ADR-277): stop the stack with
+- **Every command starts with** `eval "$(fnm env --shell zsh)"`. **The chain is `pnpm chain`**, run in
+  the background (ADR-533); its first step is `pnpm ready` (the stack up, then `installer:check`). **Leave nothing running** (ADR-277): stop the stack with
   `pnpm local:down` at close-out (`adms-close-out` §0); nothing needs to stay running today. Docker
   Desktop may be closed at a session's start: `open -a Docker`, and quit it at close-out if you
   opened it.
@@ -228,7 +228,8 @@ close, no server "no task yet" is left unfiled (ADR-519).
 
 **New session?** Read the Handoff above, then `SUMMARY.md`'s header (its topic index) and only the
 topics your task touches. Product discovery is closed (ADR-230). **Every command starts with**
-`eval "$(fnm env --shell zsh)"`; **`pnpm ready` before the chain**; after a change to `apps/api`
+`eval "$(fnm env --shell zsh)"`; **the chain is `pnpm chain`** (in the background: about ten
+minutes; `pnpm ready` is its first step, ADR-533); after a change to `apps/api`
 or `apps/worker`, `pnpm local:up` again. The checks are `adms-verify`'s (read the page for the
 layer you touch); the counts are `CHAIN.md`'s. **If Docker's 8 GB disk is full, stop and ask the
 user**; the rest of what Docker and a Linux host need is the Handoff's "Tools and housekeeping".
