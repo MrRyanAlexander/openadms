@@ -24,6 +24,7 @@ import {
   unlockInvoicedEndpoint,
   unvoidTicketEndpoint,
   voidTicketEndpoint,
+  withdrawAcceptanceEndpoint,
   type Endpoint,
 } from '@open-adms/contracts';
 import type { Database } from '@open-adms/db';
@@ -60,6 +61,7 @@ const marks = [
   [voidTicketEndpoint, 'VOID'],
   [unvoidTicketEndpoint, 'VOID'],
   [acceptFlagEndpoint, 'ACCEPT_FLAG'],
+  [withdrawAcceptanceEndpoint, 'ACCEPT_FLAG'],
   [setQcStatusEndpoint, 'QC'],
   [createInvoiceBatchEndpoint, 'LOCK_INVOICED'],
   [lockAsInvoicedEndpoint, 'LOCK_INVOICED'],
@@ -97,7 +99,8 @@ describe('who may ask', () => {
       'closeHeldRecord',
       'closeSetAsideFile',
     ]);
-    expect(taking('ACCEPT_FLAG')).toEqual(['acceptFlag']);
+    // An acceptance taken back (ADR-534 (8)).
+    expect(taking('ACCEPT_FLAG')).toEqual(['acceptFlag', 'withdrawAcceptance']);
     // Signatures on file are marked at QC (certifications.test.ts; ADR-433).
     expect(taking('QC')).toEqual(['setQcStatus', 'markSignaturesOnFile']);
     expect(taking('LOCK_INVOICED')).toEqual([
@@ -431,6 +434,23 @@ describe('a flag’s acceptance', () => {
     });
   });
 
+  it('AC-08-70 an acceptance is taken back with a note, which is required and never blank; one nobody made is not found; nothing is written (the flag standing again on the next run is the story p1-voided’s)', async () => {
+    await world(async (served, tx, who) => {
+      const luis = await luisHolds(served, tx, who.luis, 'ACCEPT_FLAG');
+      const send = (payload: object) =>
+        ask(served, luis, withdrawAcceptanceEndpoint, {
+          ids: { flagAcceptanceId: randomUUID() },
+          payload,
+        });
+      expect(told(await send({}))).toEqual([400, 'BAD_REQUEST']);
+      expect(plainly(await send({ note: '  ' }))).toBe('Not taken: note in the body is blank.');
+      const none = await send({ note: 'The photos show a 90% load after all' });
+      expect(told(none)).toEqual([404, 'NOT_FOUND']);
+      expect(plainly(none)).toBe('Nothing with that id is on record.');
+      expect(await tx.flagAcceptance.count({ where: { withdrawnAt: { not: null } } })).toBe(0);
+    });
+  });
+
   it('an acceptance and a lock are answered as the contracts say them: a unit rate ticket by its field event, times as text, no amount', () => {
     const at = new Date('2026-10-16T14:05:00Z');
     const [projectId, flagId, reasonId, luis, fieldEventId, lockId] = [1, 2, 3, 4, 5, 6].map(() =>
@@ -446,9 +466,12 @@ describe('a flag’s acceptance', () => {
           note: null,
           acceptedById: luis ?? '',
           acceptedAt: at,
+          withdrawnById: null,
+          withdrawnAt: null,
+          withdrawNote: null,
         }),
       ),
-    ).toMatchObject({ flagId, acceptedAt: '2026-10-16T14:05:00.000Z' });
+    ).toMatchObject({ flagId, acceptedAt: '2026-10-16T14:05:00.000Z', withdrawnAt: null });
     expect(
       invoiceLockRecordSchema.parse(
         invoiceLockRecord({

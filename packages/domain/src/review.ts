@@ -89,7 +89,11 @@ export interface ReviewRefusal {
     | 'NOT_THE_ID_SENT'
     | 'NOT_THE_KIND_SENT'
     | 'CLOSED_ONLY'
-    | 'NOT_IN_THE_PROJECT_SENT';
+    | 'NOT_IN_THE_PROJECT_SENT'
+    | 'ALREADY_WITHDRAWN'
+    | 'ANSWERS_DO_NOT_FIT'
+    | 'NOT_MADE_IN_THE_BACK_OFFICE'
+    | 'VIEW_NOT_ON_THIS_RECORD';
   readonly message: string;
 }
 
@@ -473,6 +477,72 @@ export class FlagAccepting {
     return null;
   }
 }
+
+// An acceptance taken back (ADR-534 (8)): once, by a person, with a note; the flag stands again,
+// and accepting it again is an acceptance of its own.
+export class AcceptanceWithdrawal {
+  private readonly acceptance: { readonly message: string; readonly withdrawn: boolean };
+
+  constructor(acceptance: { message: string; withdrawn: boolean }) {
+    this.acceptance = acceptance;
+  }
+
+  refusal(): ReviewRefusal | null {
+    if (!this.acceptance.withdrawn) return null;
+    return {
+      code: 'ALREADY_WITHDRAWN',
+      message: `This acceptance was already taken back ("${this.acceptance.message}"). Nothing was changed.`,
+    };
+  }
+}
+
+// The answers to the firm's own fields, given by a person at the back office (ADR-534 (4), (9)):
+// the person is there to be told, so answers that don't fit the version they answer are refused,
+// never kept as sent as a phone's are (ADR-327, 432).
+export const FormAnswersGiven = {
+  notFitting(version: number, fields: readonly string[]): ReviewRefusal {
+    return {
+      code: 'ANSWERS_DO_NOT_FIT',
+      message: `The answers don’t fit the form’s own fields as version ${String(version)} has them${fields.length === 0 ? '' : ` (${fields.join(', ')})`}. Nothing was saved.`,
+    };
+  },
+
+  // The version named is another kind's form's, or another project's.
+  notThisForm(record: string): ReviewRefusal {
+    return {
+      code: 'ANSWERS_DO_NOT_FIT',
+      message: `The version of a form’s own fields named isn’t one of this project’s ${record} form’s. Nothing was saved.`,
+    };
+  },
+
+  // With no version of a form's fields there is nothing to answer.
+  noFields(): ReviewRefusal {
+    return {
+      code: 'ANSWERS_DO_NOT_FIT',
+      message:
+        'This record answers no version of a form’s own fields, so it takes no answers: name the version they answer. Nothing was saved.',
+    };
+  },
+} as const;
+
+// A photograph added in the back office (ADR-534 (2)): only on a record made there, since a
+// phone's record keeps its own phone's photographs; and a view only on a certification's.
+export const BackOfficePhotograph = {
+  notMadeInTheBackOffice(record: string): ReviewRefusal {
+    return {
+      code: 'NOT_MADE_IN_THE_BACK_OFFICE',
+      message: `This ${record} was made on a phone: its photographs are its phone’s, and none is added in the back office. Nothing was saved.`,
+    };
+  },
+
+  viewOnlyOnACertification(): ReviewRefusal {
+    return {
+      code: 'VIEW_NOT_ON_THIS_RECORD',
+      message:
+        'A view (operator with placard, interior or back, right, left, front) is a certification’s photograph’s alone. Nothing was saved.',
+    };
+  },
+} as const;
 
 // The back office's QC status, as the database's QcStatus keeps it (ADR-107). A record nobody
 // has marked is at QC Review.

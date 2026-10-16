@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 import { refusedBy } from './support/database.ts';
 import {
   crewLike,
+  backOfficeEventLike,
   eventInsertOf,
   fieldEventLike,
   fingerprintOf,
@@ -958,6 +959,28 @@ describe('a photograph', () => {
         [kept],
       ),
     ).toEqual({ kept: 1 });
+  });
+
+  it('AC-10-92 a photograph with no phone, added in the back office to a record made there, has its upload time written by a person from the back office, once; never by a phone', async () => {
+    const { db, world } = tested;
+    await asTheBackOffice();
+    const made = (
+      await db.one<{ id: string }>(
+        ...eventInsertOf(backOfficeEventLike(world, { ticket_number: '101029' })),
+      )
+    ).id;
+    const id = await photograph({ field_event_id: made }, { device_id: null });
+    const upload = (at: string): [string, unknown[]] => [
+      `UPDATE "photo" SET "uploaded_at" = $2 WHERE "id" = $1`,
+      [id, at],
+    ];
+    await asThePhone();
+    const byAPhone = await db.refused(...upload('2026-10-14T16:00:00Z'));
+    expect(byAPhone.code).toBe(refusedBy.grant);
+    expect(byAPhone.message).toContain('uploaded from the back office, by a person');
+    await asTheBackOffice();
+    expect(await db.run(...upload('2026-10-14T16:00:00Z'))).toBe(1);
+    expect((await db.refused(...upload('2026-10-14T17:00:00Z'))).code).toBe(refusedBy.trigger);
   });
 
   it('AC-10-75 a file set aside is closed once, by a person at the back office who is named on it, with words; never by a system actor, a phone or another person', async () => {

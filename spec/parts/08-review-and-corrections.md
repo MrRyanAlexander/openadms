@@ -56,7 +56,9 @@ cause**, with bulk accept, fix and QC; photos reviewed inside the ticket. It hol
    changed**: an admin, or a manager/analyst with *correct*; it changes no record and only queues
    the job; a ticket locked as invoiced is left as it is (ADR-498).
 5. **An accepted flag** stays in the ticket's history and isn't raised again unless the facts it was
-   about change; when every flag is fixed or accepted, the ticket is `COMPLETED` (ADR-166).
+   about change; when every flag is fixed or accepted, the ticket is `COMPLETED` (ADR-166). An
+   acceptance made in error is **taken back** with a note: the flag stands again on the next run
+   (ADR-534).
 6. **A void** keeps the record, **stops all billing** (its lines removed, each copied to the audit
    log first) and needs a reason. Unvoiding is an audited override. **A rule's void always wins**: to
    keep a ticket a rule voids, correct the data or the rule (ADR-060, 118, 167). A ticket in review
@@ -68,7 +70,8 @@ cause**, with bulk accept, fix and QC; photos reviewed inside the ticket. It hol
 8. **An invoice-locked ticket** is unlocked first (audited), then corrected and reprocessed
    ([Part 9](09-invoice-deliver-closeout.md); ADR-057).
 9. **A device failed?** The back office **creates the record**, marked with the person and a reason,
-   flagged, and it pairs like any other (ADR-156).
+   flagged, and it pairs like any other (ADR-156): a field event, an ROE, a survey, an incident, a
+   drop-off log or a certification from its paper sheet, with its photographs (ADR-521, 534).
 
 Nothing technically stops a wrong choice (renumbering a phantom). The audit trail is the backstop.
 

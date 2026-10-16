@@ -35,7 +35,7 @@ export const collection: SyncedFieldEvent = {
   monitorId: ana,
   assignmentId: assignment,
   setupVersion: 3,
-  temporarySession: false,
+  masterPasscodeSession: null,
   numberTyped: false,
   numberTypedReasonId: null,
   certNumber: '730415',

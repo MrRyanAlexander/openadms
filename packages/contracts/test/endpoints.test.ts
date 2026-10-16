@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import {
+  addPhotographEndpoint,
   addSiteShapeFileEndpoint,
   changePersonEndpoint,
   changeProjectSettingsEndpoint,
@@ -210,10 +211,12 @@ describe('an endpoint is defined whole, or not at all', () => {
 
 describe('the endpoints that take a file', () => {
   it('AC-10-47, ADR-482 takes a part of a file as bytes, never JSON; is defined with no body of its own and never as a GET; and is described as bytes', () => {
-    // The media endpoint, and the map's file at the back office (ADR-485; KD-76).
+    // The media endpoint, the map's file at the back office (ADR-485; KD-76), and a photograph
+    // added there to a record made there (ADR-534 (2)).
     expect(endpoints.filter(({ file }) => file === true)).toEqual([
       sendMapFileEndpoint,
       sendPhotoFilePartEndpoint,
+      addPhotographEndpoint,
     ]);
     const read = {
       params: { photoId: '01a1325e-741f-716f-b9d4-738fd7f66e2b', file: 'photo' },

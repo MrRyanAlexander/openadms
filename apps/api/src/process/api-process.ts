@@ -10,6 +10,7 @@ import { readFileSync } from 'node:fs';
 import {
   filePartMediaType,
   sendMapFileEndpoint,
+  addPhotographEndpoint,
   sendPhotoFilePartEndpoint,
   setupChoicesMonitorsAtMost,
 } from '@open-adms/contracts';
@@ -81,6 +82,10 @@ import { PhoneTokens } from '../phone/phone-tokens.ts';
 import { apiUnplannedAssignments } from '../phone/unplanned-assignments.controller.ts';
 import { UnplannedAssignments } from '../phone/unplanned-assignments.ts';
 import { Acceptances } from '../review/acceptances.ts';
+import {
+  apiBackOfficePhotographs,
+  BackOfficePhotographs,
+} from '../media/back-office-photographs.ts';
 import { BackOfficeRecords } from '../review/back-office-records.ts';
 import { apiCorrections, apiReprocesses } from '../review/corrections.controller.ts';
 import { Corrections } from '../review/corrections.ts';
@@ -303,6 +308,14 @@ export class ApiProcess {
         [route.method].flat().includes(sendMapFileEndpoint.method)
       ) {
         route.bodyLimit = policy.mapFileBytesAtMost;
+      }
+      // And a photograph's file, sent whole at the back office, up to the policy's size
+      // (ADR-534 (2)).
+      if (
+        route.url === addPhotographEndpoint.path &&
+        [route.method].flat().includes(addPhotographEndpoint.method)
+      ) {
+        route.bodyLimit = policy.mediaFileBytesAtMost;
       }
     });
     // Only JSON and a part of a file are read (OWASP ASVS 5.0 3.5.2; AC-10-59; ADR-513): a body a
@@ -603,6 +616,14 @@ export class ApiProcess {
               receiving: new Receiving(policy.mediaReceivingBytesAtMost),
               limits,
               clock,
+              fileBytesAtMost: policy.mediaFileBytesAtMost,
+            }),
+          ],
+          // A photograph added in the back office to a record made there (task 2.8.7).
+          [
+            apiBackOfficePhotographs,
+            new BackOfficePhotographs(database, clock, policy, {
+              media,
               fileBytesAtMost: policy.mediaFileBytesAtMost,
             }),
           ],

@@ -36,6 +36,7 @@ import { SessionsController } from '../sign-in/sessions.controller.ts';
 import { TwoStepController } from '../sign-in/two-step.controller.ts';
 import { PhotoFilesController } from '../media/photo-files.controller.ts';
 import { PhotographFilesController } from '../media/photograph-files.controller.ts';
+import { BackOfficePhotographsController } from '../media/back-office-photographs.controller.ts';
 import { SyncController } from '../sync/sync.controller.ts';
 import { TurnInsController } from '../phone/turn-ins.controller.ts';
 import { ViewerReadsController } from '../viewer/viewer-reads.controller.ts';
@@ -74,6 +75,7 @@ import { HealthController } from './health.controller.ts';
     TurnInsController,
     PhotoFilesController,
     PhotographFilesController,
+    BackOfficePhotographsController,
     AssignmentsController,
     ReviewMarksController,
     CorrectionsController,

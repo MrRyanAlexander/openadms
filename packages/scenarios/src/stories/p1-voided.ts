@@ -18,6 +18,7 @@ import {
   renumberFieldEventEndpoint,
   unvoidTicketEndpoint,
   voidTicketEndpoint,
+  withdrawAcceptanceEndpoint,
   type AnswerOf,
   type Endpoint,
 } from '@open-adms/contracts';
@@ -139,11 +140,11 @@ export const p1Voided: Story = {
         await api.flag.findMany({
           where: { projectId: p1, ticketNumber },
           orderBy: { id: 'asc' },
-          include: { acceptances: { include: { reason: true } } },
+          include: { acceptances: { include: { reason: true }, orderBy: { id: 'asc' } } },
         })
       ).map(
         (flag) =>
-          `${flag.message}${flag.acceptances.map((each) => ` (accepted: ${each.reason.name})`).join('')}${flag.clearedAt === null ? '' : ' (cleared)'}`,
+          `${flag.message}${flag.acceptances.map((each) => ` (accepted: ${each.reason.name}${each.withdrawnAt === null ? '' : ', taken back'})`).join('')}${flag.clearedAt === null ? '' : ' (cleared)'}`,
       );
     const standingFlag = (ticketNumber: string, code?: string) =>
       api.flag.findFirstOrThrow({
@@ -377,9 +378,75 @@ export const p1Voided: Story = {
     );
 
     story.at(
+      on('14', '08:06'),
+      'The photographs were of another truck: Luis takes his acceptance back, "Photos were 101005’s"; the worker runs',
+    );
+    const takenBack = await reviewed(withdrawAcceptanceEndpoint, {
+      ids: { flagAcceptanceId: accepted.record.id },
+      json: { note: 'Photos were 101005’s' },
+    });
+    story.check(
+      'AC-08-70 an acceptance taken back: who, when and why are kept on it, audited under Luis; the flag stands again on the run it queued and the ticket is MANUAL_REVIEW, still billing $468.00; taken back once',
+      [
+        [
+          names.get(takenBack.record.withdrawnById),
+          takenBack.record.withdrawnAt,
+          takenBack.record.withdrawNote,
+        ],
+        await auditOf('flag_acceptance', accepted.record.id),
+        [takenBack.queued?.jobs.length, takenBack.queued?.tickets],
+        of(last.run, '101003'),
+        await flagsOn('101003'),
+        await linesOf('101003'),
+        await refusal(withdrawAcceptanceEndpoint, {
+          ids: { flagAcceptanceId: accepted.record.id },
+          json: { note: 'Again' },
+        }),
+      ],
+      [
+        ['Luis', new Date(on('14', '08:06')).toISOString(), 'Photos were 101005’s'],
+        [
+          'Luis · BACK_OFFICE · INSERT · Heaped; photos confirm',
+          'Luis · BACK_OFFICE · UPDATE · withdrawn_at, withdrawn_by_id, withdraw_note · Photos were 101005’s',
+        ],
+        [1, 1],
+        ['101003 · MANUAL_REVIEW · Ticket 101003: load call 96%. Flagged for review.'],
+        [
+          'Ticket 101003: load call 96%. Flagged for review. (accepted: Photos confirm, taken back)',
+        ],
+        ['101003 #1 VEG-HAUL-CY-15 62.4 × $7.50 = $468.00'],
+        '422 NOT_SAVED · ALREADY_WITHDRAWN: This acceptance was already taken back ("Ticket 101003: load call 96%. Flagged for review."). Nothing was changed.',
+      ],
+    );
+    story.at(
+      on('14', '08:07'),
+      'Luis finds 101003’s own photographs and accepts the flag again; the worker runs',
+    );
+    const acceptedAgain = await reviewed(
+      acceptFlagEndpoint,
+      accepting(high96.id, photosConfirm, 'Heaped; its own photos confirm'),
+    );
+    story.check(
+      'AC-08-70 accepted again, it is an acceptance of its own beside the one taken back, and the ticket is COMPLETED',
+      [
+        acceptedAgain.record.id === accepted.record.id,
+        of(last.run, '101003'),
+        await flagsOn('101003'),
+      ],
+      [
+        false,
+        ['101003 · COMPLETED · Ticket 101003: load call 96%. Flagged for review.'],
+        [
+          'Ticket 101003: load call 96%. Flagged for review. (accepted: Photos confirm, taken back) (accepted: Photos confirm)',
+        ],
+      ],
+    );
+
+    story.at(
       on('14', '08:10'),
       'The call was keyed wrong: Luis corrects it to 97%; the worker runs',
     );
+
     const dis101003 = await eventOf('101003', 'DISPOSAL');
     await reviewed(correctFieldEventEndpoint, {
       ids: { fieldEventId: dis101003.id },
@@ -391,7 +458,7 @@ export const p1Voided: Story = {
       [
         ['101003 · MANUAL_REVIEW · Ticket 101003: load call 97%. Flagged for review.'],
         [
-          'Ticket 101003: load call 96%. Flagged for review. (accepted: Photos confirm) (cleared)',
+          'Ticket 101003: load call 96%. Flagged for review. (accepted: Photos confirm, taken back) (accepted: Photos confirm) (cleared)',
           'Ticket 101003: load call 97%. Flagged for review.',
         ],
         ['101003 #1 VEG-HAUL-CY-15 63.05 × $7.50 = $472.88'],
@@ -408,10 +475,10 @@ export const p1Voided: Story = {
       [
         ['101003 · COMPLETED · Ticket 101003: load call 97%. Flagged for review.'],
         [
-          'Ticket 101003: load call 96%. Flagged for review. (accepted: Photos confirm) (cleared)',
+          'Ticket 101003: load call 96%. Flagged for review. (accepted: Photos confirm, taken back) (accepted: Photos confirm) (cleared)',
           'Ticket 101003: load call 97%. Flagged for review. (accepted: Confirmed with the monitor)',
         ],
-        2,
+        3,
       ],
     );
 

@@ -182,6 +182,50 @@ describe('a later change to a certification', () => {
     );
   });
 
+  it('AC-03-64 only an admin takes a revocation back, and only one that stands, with a reason', () => {
+    const changes = new CertificationChanges('730415');
+    expect(
+      changes.revoker({ name: 'Dana Reyes', role: 'ADMIN', archived: false }, 'un-revoke'),
+    ).toBeNull();
+    expect(
+      changes.revoker(
+        { name: 'Luis Ortega', role: 'MANAGER_ANALYST', archived: false },
+        'un-revoke',
+      )?.message,
+    ).toBe(
+      'Luis Ortega may not un-revoke certification 730415: it takes an admin. Nothing was changed.',
+    );
+    expect(changes.unrevocation(true, 'Tailgate found')).toBeNull();
+    expect(changes.unrevocation(false, 'Tailgate found')).toEqual({
+      code: 'NOT_REVOKED',
+      message: 'Certification 730415 isn’t revoked. Nothing was changed.',
+    });
+    expect(changes.unrevocation(true, ' ')).toEqual({
+      code: 'UNREVOCATION_NEEDS_REASON',
+      message: 'Not saved: certification 730415’s revocation is taken back with a reason.',
+    });
+  });
+
+  it('AC-03-63 the primary box is corrected, never taken off; a crew takes no box', () => {
+    expect(new CertificationChanges('730415').primaryStays()).toEqual({
+      code: 'PRIMARY_STAYS',
+      message:
+        'Not saved: box 0 is certification 730415’s primary box, the main interior. It is corrected, never taken off.',
+    });
+    expect(new CertificationChanges('730417').crewHasNoBox()).toEqual({
+      code: 'CREW_HAS_NO_BOX',
+      message: 'Not saved: certification 730417 is a crew’s, and a crew is never measured.',
+    });
+  });
+
+  it('AC-03-61 a sheet entered from paper whose number the project already has is refused', () => {
+    expect(new CertificationChanges('88120').numberHeld()).toEqual({
+      code: 'CERT_NUMBER_HELD',
+      message:
+        'Not saved: this project already has a certification 88120. A cert number is used once on a project.',
+    });
+  });
+
   it('a measuring mistake is corrected on a box the certification has', () => {
     expect(new CertificationChanges('730417').noBox(3)).toEqual({
       code: 'NO_SUCH_BOX',

@@ -7,6 +7,9 @@
 import {
   backOfficeCreated,
   backOfficeRolesChanged,
+  boxShapes,
+  boxSigns,
+  certificationViews,
   countShapes,
   crewTimeConversions,
   fieldEventKinds,
@@ -106,7 +109,13 @@ import {
   ticketUnvoidRecordSchema,
   ticketVoidRecordSchema,
 } from './review-answers.ts';
-import { cornerCount, inches } from './sync-records.ts';
+import {
+  certificationBoxesAtMost,
+  certificationHelpersAtMost,
+  cornerCount,
+  inches,
+  syncedCertificationBoxSchema,
+} from './sync-records.ts';
 import { syncAnsweredSchema, syncSentSchema } from './sync.ts';
 import { turnInAnswerSchema, turnInSentSchema } from './turn-in.ts';
 import {
@@ -2624,6 +2633,21 @@ export const acceptFlagEndpoint = endpoint({
   answer: savedAnswer(flagAcceptanceRecordSchema),
 });
 
+// An acceptance taken back (ADR-534 (8)): the flag stands again on the next run, and accepting it
+// again is an acceptance of its own. The note is required: it is why.
+export const withdrawAcceptanceEndpoint = endpoint({
+  name: 'withdrawAcceptance',
+  summary:
+    'A flag’s acceptance is taken back, with the reviewer’s note: who and when are kept on it, and the flag stands again on the run it queues. Accepting the flag again is a new acceptance. Refused for an acceptance already taken back and a ticket locked as invoiced.',
+  ...reviewer,
+  permission: 'ACCEPT_FLAG',
+  method: 'POST',
+  path: '/flag-acceptances/:flagAcceptanceId/withdrawals',
+  params: z.strictObject({ flagAcceptanceId: z.uuid() }),
+  body: z.strictObject({ note: z.string().trim().min(1).max(500) }),
+  answer: savedAnswer(flagAcceptanceRecordSchema),
+});
+
 // A record has one QC mark, so the status is put: set again, it is the same mark changed, the
 // status before kept in the audit log (ADR-107). It changes nothing on the record and queues
 // nothing.
@@ -2894,6 +2918,41 @@ export const photographFileEndpoint = endpoint({
   answer: keptFileAnswerSchema,
 });
 
+// A photograph added in the back office (ARCHITECTURE §6 "Uploads", §11; T-25; BACKLOG 2.8.7;
+// ADR-101, 482, 521, 534 (2)): **the third endpoint that takes a file**, sent whole, as bytes, by a
+// route with its own size limit (`MEDIA_FILE_BYTES_AT_MOST`), as a map's file is. Only onto a
+// record made in the back office: a phone's record keeps its phone's photographs. What it is on,
+// its view (a certification's, one of the five, or none) and when it was taken go in the query;
+// its kind is told by its own first bytes; both its fingerprints are the server's reading of the
+// bytes; the server makes its place.
+export const backOfficePhotographOwners = [
+  'FIELD_EVENT',
+  'CERTIFICATION',
+  'ROE',
+  'SURVEY',
+  'INCIDENT',
+  'DROP_OFF_LOG',
+] as const;
+
+export const addPhotographEndpoint = endpoint({
+  name: 'addPhotograph',
+  summary:
+    'A photograph is added in the back office to a record made there (a field event, a certification, an ROE, a survey, an incident or a drop-off log), its file sent whole as bytes, at most the policy’s size: what it is on, a certification’s view where it has one, and when it was taken with its clock’s offset, in the query. Its kind is told by its own first bytes (JPEG, HEIC or HEIF, PNG, TIFF); it is kept once where the server places it, its fingerprints the server’s reading of the bytes. The ticket it is on is queued, or a certification’s own flags. Refused for a record a phone made, a view on anything but a certification and a ticket locked as invoiced.',
+  ...reviewer,
+  permission: 'CORRECT',
+  method: 'POST',
+  path: '/photographs',
+  query: z.strictObject({
+    on: z.enum(backOfficePhotographOwners),
+    recordId: z.uuid(),
+    view: z.enum(certificationViews).optional(),
+    capturedAt: z.iso.datetime(),
+    utcOffsetMinutes: z.string().regex(/^(0|-?[1-9][0-9]{0,2})$/),
+  }),
+  file: true,
+  answer: savedAnswer(photographRecordSchema),
+});
+
 // A receipt several tickets may share (a tandem's two): each ticket on it is queued, and one
 // locked as invoiced waits for its unlock.
 export const correctScaleReceiptEndpoint = endpoint({
@@ -2925,18 +2984,36 @@ export const correctScaleReceiptEndpoint = endpoint({
 
 // Corrections to an ROE and to the forms, a quarantined record resolved, and a record created in
 // the back office (spec/parts/08-review-and-corrections.md steps 2, 9, "One review queue";
-// AC-08-19, 21, 25, 26; AC-10-27, 28, 37; BACKLOG 2.4.4, C66, C79, C105; ADR-022, 149, 156, 327,
-// 338, 364, 432). **A correction and a record created in the back office take `CORRECT`;
-// resolving a quarantined record takes `RENUMBER`**, as their services ask again. Not here,
-// because no service does it yet (BACKLOG C79): an ROE's number corrected, the answers to a
-// form's own fields corrected, and an ROE, a survey, an incident or a drop-off log created in
-// the back office.
+// AC-08-19, 21, 25, 26; AC-10-27, 28, 37; BACKLOG 2.4.4, 2.8.7, C66, C79, C105; ADR-022, 149,
+// 156, 327, 338, 364, 432, 534). **A correction and a record created in the back office take
+// `CORRECT`; resolving a quarantined record takes `RENUMBER`**, as their services ask again. An
+// ROE's number is corrected too (what names it finds it, and what named the old one no longer
+// does), and the answers to a form's own fields, given whole against the version they answer
+// and refused where they don't fit it.
 const roeId = z.strictObject({ roeId: z.uuid() });
+
+// The answers to the firm's own fields, keyed by field id, whole, and the version of the form's
+// fields they answer (left out: the one the record answers already).
+const answersGiven = z.strictObject({
+  answers: z
+    .record(
+      z.string().min(1).max(100),
+      z.union([
+        z.string().max(2000),
+        z.number().min(-9_999_999_999.99).max(9_999_999_999.99),
+        z.boolean(),
+      ]),
+    )
+    .refine((answers) => Object.keys(answers).length <= 200, {
+      message: 'At most 200 answers.',
+    }),
+  formDefinitionId: z.uuid().optional(),
+});
 
 export const correctRoeEndpoint = endpoint({
   name: 'correctRoe',
   summary:
-    'An ROE is corrected in place: its parcel, address, owner, whether and when it was signed, and its notes; only what is stated changes, and `null` empties a detail that may be empty. Every ticket on it is queued; one locked as invoiced is left as it is. Never its number.',
+    'An ROE is corrected in place: its number, parcel, address, owner, whether and when it was signed, its notes and the answers to its form’s own fields; only what is stated changes, and `null` empties a detail that may be empty. A corrected number is found by what names it, and what named the old one finds no ROE; what each says it named never changes. Every ticket on it, before and after, is queued; one locked as invoiced is left as it is. Refused for a number another ROE of the project holds and answers that don’t fit their version.',
   ...reviewer,
   permission: 'CORRECT',
   method: 'PATCH',
@@ -2945,12 +3022,14 @@ export const correctRoeEndpoint = endpoint({
   body: z.strictObject({
     changes: z
       .strictObject({
+        roeNumber: numberAsWritten,
         parcelId: numberAsWritten.nullable(),
         address: typed.nullable(),
         ownerName: named.nullable(),
         signed: z.boolean(),
         signedDate: day.nullable(),
         notes: typed.nullable(),
+        answers: answersGiven,
       })
       .partial()
       .refine(stated),
@@ -2986,7 +3065,7 @@ export const correctRoeScopeEndpoint = endpoint({
 export const correctSurveyEndpoint = endpoint({
   name: 'correctSurvey',
   summary:
-    'A survey is corrected in place: its work type, its survey number, the ROE number it names and its notes; only what is stated changes. A corrected ROE number finds its ROE again. The project’s surveys are checked again on the next run. Never the answers to the firm’s own fields.',
+    'A survey is corrected in place: its work type, its survey number, the ROE number it names and its notes; only what is stated changes. A corrected ROE number finds its ROE again. The answers to its form’s own fields are given whole, against the version they answer. The project’s surveys are checked again on the next run. Refused for answers that don’t fit their version.',
   ...reviewer,
   permission: 'CORRECT',
   method: 'PATCH',
@@ -2999,6 +3078,7 @@ export const correctSurveyEndpoint = endpoint({
         surveyNumber: numberAsWritten.nullable(),
         roeNumber: numberAsWritten.nullable(),
         notes: typed.nullable(),
+        answers: answersGiven,
       })
       .partial()
       .refine(stated),
@@ -3010,7 +3090,7 @@ export const correctSurveyEndpoint = endpoint({
 export const correctIncidentEndpoint = endpoint({
   name: 'correctIncident',
   summary:
-    'An incident is corrected in place: its type and sub-type, what happened, who was involved, where, the contractor, cert number and ROE number it names, and its notes; only what is stated changes. A corrected cert number finds its certification again, an ROE number its ROE. It is on no ticket, so nothing is queued. Never the answers to the firm’s own fields.',
+    'An incident is corrected in place: its type and sub-type, what happened, who was involved, where, the contractor, cert number and ROE number it names, and its notes; only what is stated changes. A corrected cert number finds its certification again, an ROE number its ROE. The answers to its form’s own fields are given whole, against the version they answer. It is on no ticket, so nothing is queued. Refused for answers that don’t fit their version.',
   ...reviewer,
   permission: 'CORRECT',
   method: 'PATCH',
@@ -3028,6 +3108,7 @@ export const correctIncidentEndpoint = endpoint({
         certNumber: numberAsWritten.nullable(),
         roeNumber: numberAsWritten.nullable(),
         notes: typed.nullable(),
+        answers: answersGiven,
       })
       .partial()
       .refine(stated),
@@ -3039,7 +3120,7 @@ export const correctIncidentEndpoint = endpoint({
 export const correctDropOffLogEndpoint = endpoint({
   name: 'correctDropOffLog',
   summary:
-    'A citizen drop-off log is corrected in place: its site, the resident’s name, where the debris came from and its notes; only what is stated changes. It is on no ticket, so nothing is queued. Refused for a site of another project.',
+    'A citizen drop-off log is corrected in place: its site, the resident’s name, where the debris came from, its notes and the answers to its form’s own fields; only what is stated changes. It is on no ticket, so nothing is queued. Refused for a site of another project and answers that don’t fit their version.',
   ...reviewer,
   permission: 'CORRECT',
   method: 'PATCH',
@@ -3052,6 +3133,7 @@ export const correctDropOffLogEndpoint = endpoint({
         residentName: named.nullable(),
         originAddress: typed.nullable(),
         notes: typed.nullable(),
+        answers: answersGiven,
       })
       .partial()
       .refine(stated),
@@ -3252,20 +3334,120 @@ export const createFieldEventEndpoint = endpoint({
   answer: savedAnswer(fieldEventRecordSchema),
 });
 
+// A form made on paper, entered in the back office (ADR-156, 534 (9)): as its monitor would have
+// made it, naming that monitor, with a reason from the firm's list; when by the paper, where if
+// known, the answers to the form's own fields against the version they answer. What a phone
+// alone would have said (its phone, its assignment, its lists' version) isn't entered.
+const formEntered = {
+  monitorId: z.uuid(),
+  madeAt: instant,
+  deviceUtcOffsetMinutes: z.number().int().min(-720).max(840),
+  fix: correctedFix,
+  notes: typed.nullable(),
+  answers: answersGiven,
+  reasonId: z.uuid(),
+};
+
+export const createRoeEndpoint = endpoint({
+  name: 'createRoe',
+  summary:
+    'An ROE made on paper is entered in the back office: its number off the paper, parcel, address, owner, whether and when it was signed, where, its notes and the answers to its form’s own fields; it names the person who entered it. What was already waiting for its number points at it, and those tickets are queued. Refused for a number another ROE of the project holds, a fix that can’t be one and answers that don’t fit their version.',
+  ...reviewer,
+  permission: 'CORRECT',
+  method: 'POST',
+  path: '/projects/:projectId/roes',
+  params: projectId,
+  body: z.strictObject({
+    roeNumber: numberAsWritten,
+    parcelId: numberAsWritten.nullable(),
+    address: typed.nullable(),
+    ownerName: named.nullable(),
+    signed: z.boolean(),
+    signedDate: day.nullable(),
+    fix: correctedFix,
+    madeAt: instant.nullable(),
+    notes: typed.nullable(),
+    answers: answersGiven,
+  }),
+  answer: savedAnswer(roeRecordSchema),
+});
+
+export const createSurveyEndpoint = endpoint({
+  name: 'createSurvey',
+  summary:
+    'A survey made on paper is entered in the back office: the monitor whose work it was, when and where, its work type, survey number, the ROE number it names (which finds its ROE), notes and the answers to its form’s own fields, with a reason picked from the firm’s list. The project’s surveys are checked on the next run. Refused for a reason the firm doesn’t offer for this, a fix that can’t be one and answers that don’t fit their version.',
+  ...reviewer,
+  permission: 'CORRECT',
+  method: 'POST',
+  path: '/projects/:projectId/surveys',
+  params: projectId,
+  body: z.strictObject({
+    ...formEntered,
+    workTypeId: z.uuid(),
+    surveyNumber: numberAsWritten.nullable(),
+    roeNumber: numberAsWritten.nullable(),
+  }),
+  answer: savedAnswer(surveyRecordSchema),
+});
+
+export const createIncidentEndpoint = endpoint({
+  name: 'createIncident',
+  summary:
+    'An incident written on paper is entered in the back office: the monitor whose record it was, when and where, its type and sub-type, what happened, who was involved, the address, the contractor, cert number and ROE number it names (each finds its record), notes and the answers to its form’s own fields, with a reason picked from the firm’s list. It is on no ticket, so nothing is queued. Refused for a reason the firm doesn’t offer for this, a fix that can’t be one and answers that don’t fit their version.',
+  ...reviewer,
+  permission: 'CORRECT',
+  method: 'POST',
+  path: '/projects/:projectId/incidents',
+  params: projectId,
+  body: z.strictObject({
+    ...formEntered,
+    incidentTypeId: z.uuid(),
+    incidentSubTypeId: z.uuid().nullable(),
+    description: typed.nullable(),
+    parties: typed.nullable(),
+    address: typed.nullable(),
+    contractorId: z.uuid().nullable(),
+    certNumber: numberAsWritten.nullable(),
+    roeNumber: numberAsWritten.nullable(),
+  }),
+  answer: savedAnswer(incidentRecordSchema),
+});
+
+export const createDropOffLogEndpoint = endpoint({
+  name: 'createDropOffLog',
+  summary:
+    'A citizen drop-off log kept on paper is entered in the back office: the monitor whose log it was, when and where, the site, the resident’s name and where the debris came from, notes and the answers to its form’s own fields, with a reason picked from the firm’s list. It is on no ticket, so nothing is queued. Refused for a site of another project, a reason the firm doesn’t offer for this, a fix that can’t be one and answers that don’t fit their version.',
+  ...reviewer,
+  permission: 'CORRECT',
+  method: 'POST',
+  path: '/projects/:projectId/drop-off-logs',
+  params: projectId,
+  body: z.strictObject({
+    ...formEntered,
+    siteId: z.uuid(),
+    residentName: named.nullable(),
+    originAddress: typed.nullable(),
+  }),
+  answer: savedAnswer(dropOffLogRecordSchema),
+});
+
 // The back office's changes to a certification (spec/parts/03-certification.md steps 10…13;
 // AC-03-38, 55; AC-10-27, 28, 35, 37; BACKLOG 2.4.4, C106; ADR-079, 080, 082, 364, 433). **A
 // measuring mistake takes `CORRECT`, signatures on file take `QC`, and a revocation is an
 // admin's alone**: no permission opens it to a manager/analyst. Each service asks again inside
 // its own piece of work. **Nobody sends a capacity**: it is worked out again from the boxes, and
-// measurements that give none are answered `NOT_SAVED` in the domain's own words. Not here: a
-// certification is made, and a modified truck certified again, on a phone, so both arrive with
-// its sync (BACKLOG 2.6.2); its QC status is `setQcStatus`'s.
+// measurements that give none are answered `NOT_SAVED` in the domain's own words. A certification
+// is made, and a modified truck certified again, on a phone, so both arrive with its sync
+// (BACKLOG 2.6.2); **or, where the phone failed, entered from the paper sheet** (ADR-521, 534
+// (1)), which takes `CORRECT` as a field event made in the back office does. Every captured field
+// is corrected (ADR-534 (5), (6)), and a revocation is taken back by an admin alone (7). Its QC
+// status is `setQcStatus`'s.
 const certificationId = z.strictObject({ certificationId: z.uuid() });
 
 export const correctCertificationBoxEndpoint = endpoint({
   name: 'correctCertificationBox',
   summary:
-    'A measuring mistake on one of a container certification’s boxes is corrected in place (box 0 is the primary): only the measurements stated change, in whole inches, and the capacity is worked out again from the boxes, never sent. Every ticket that scanned the certification is queued where the capacity changed; one locked as invoiced is left as it is. Refused for a box the certification doesn’t have, for measurements that give no capacity and for a measurement the box’s shape doesn’t hold. Never a box’s shape, its sign or its feature.',
+    'A mistake on one of a container certification’s boxes is corrected in place (box 0 is the primary): its measurements in whole inches, its shape (with the measurements that shape holds, and no others), whether it adds or subtracts, its feature (picked or typed), or the box taken off or put back; only what is stated changes, and the capacity is worked out again from the boxes, never sent. Every ticket that scanned the certification is queued where the capacity changed; one locked as invoiced is left as it is. Refused for a box the certification doesn’t have, for the primary taken off, for measurements that give no capacity and for a measurement the box’s shape doesn’t hold.',
   ...reviewer,
   permission: 'CORRECT',
   method: 'PATCH',
@@ -3287,6 +3469,67 @@ export const correctCertificationBoxEndpoint = endpoint({
         radius: inches,
         run: inches,
         corners: cornerCount,
+        shape: z.enum(boxShapes),
+        sign: z.enum(boxSigns),
+        // A feature picked from the firm's list, or typed: stating one clears the other.
+        featureId: z.uuid().nullable(),
+        featureOther: z.string().trim().min(1).max(200).nullable(),
+        takenOff: z.boolean(),
+      })
+      .partial()
+      .refine(stated),
+    note: reviewNote,
+  }),
+  answer: savedAnswer(certificationRecordSchema),
+});
+
+// A box the sheet had and the certification lacks: added after its last.
+export const addCertificationBoxEndpoint = endpoint({
+  name: 'addCertificationBox',
+  summary:
+    'A box is added to a container certification after its last, as the sheet has it: a feature (picked or typed), a shape with its own measurements in whole inches, and whether it adds or subtracts. The capacity is worked out again from the boxes, never sent, and every ticket that scanned the certification is queued where it changed; one locked as invoiced is left as it is. Refused for a crew, which is never measured, and for measurements that give no capacity.',
+  ...reviewer,
+  permission: 'CORRECT',
+  method: 'POST',
+  path: '/certifications/:certificationId/boxes',
+  params: certificationId,
+  body: z.strictObject({ box: syncedCertificationBoxSchema, note: reviewNote }),
+  answer: savedAnswer(certificationRecordSchema),
+});
+
+// The rest of what was keyed on a certification (ADR-534 (5)): the subs are typed names, placed
+// as a phone's are; a prime changed takes the subs it had under it by name.
+const keyed = z.string().trim().min(1).max(200);
+
+export const correctCertificationEndpoint = endpoint({
+  name: 'correctCertification',
+  summary:
+    'A certification is corrected in place: its prime and subs (typed by name, placed under the prime as at certifying, a name already placed elsewhere on the project saved as a separate contractor with a warning), what was certified (picked or typed) or the crew type, the driver, the tag, the representatives and notes; only what is stated changes, and `null` empties a detail that may be empty. With the prime changed, the subs it had are placed again under the new prime by name. Every ticket that scanned it is queued, with the tickets that read them; one locked as invoiced is left as it is. Refused for a prime that isn’t one of the project’s and a second tier with no first.',
+  ...reviewer,
+  permission: 'CORRECT',
+  method: 'PATCH',
+  path: '/certifications/:certificationId',
+  params: certificationId,
+  body: z.strictObject({
+    changes: z
+      .strictObject({
+        primeId: z.uuid(),
+        firstTierSub: keyed.nullable(),
+        secondTierSub: keyed.nullable(),
+        vehicleTypeId: z.uuid().nullable(),
+        vehicleTypeOther: keyed.nullable(),
+        crewTypeId: z.uuid().nullable(),
+        driverName: keyed.nullable(),
+        driverPhone: keyed.nullable(),
+        driverLicenceNumber: keyed.nullable(),
+        driverLicenceState: keyed.nullable(),
+        driverLicenceExpiry: day.nullable(),
+        tagNumber: keyed.nullable(),
+        tagState: keyed.nullable(),
+        tagExpiry: day.nullable(),
+        clientRepresentativeName: keyed.nullable(),
+        contractorRepresentativeName: keyed.nullable(),
+        notes: typed.nullable(),
       })
       .partial()
       .refine(stated),
@@ -3321,6 +3564,89 @@ export const revokeCertificationEndpoint = endpoint({
   path: '/certifications/:certificationId/revocations',
   params: certificationId,
   body: z.strictObject({ from: day, reason: typed }),
+  answer: savedAnswer(certificationRecordSchema),
+});
+
+// A revocation taken back (ADR-534 (7)): an admin's alone, as revoking is, with a reason the
+// audit log keeps beside the revocation it clears.
+export const unrevokeCertificationEndpoint = endpoint({
+  name: 'unrevokeCertification',
+  summary:
+    'A certification’s revocation is taken back, with a reason: its day, reason and admin are cleared, the audit log keeping them, and every ticket that scanned it is queued, flagged no more for it; one locked as invoiced is left as it is. Refused for a certification that isn’t revoked.',
+  access: 'SIGNED_IN',
+  roles: adminOnly,
+  method: 'POST',
+  path: '/certifications/:certificationId/unrevocations',
+  params: certificationId,
+  body: z.strictObject({ reason: typed }),
+  answer: savedAnswer(certificationRecordSchema),
+});
+
+// A certification sheet whose phone failed, entered in the back office (ADR-521, 534 (1)): the
+// monitor who certified it, the sheet's own number (pre-printed, or the one the phone gave the
+// placard), when by the sheet, what was certified, the boxes measured (never a capacity), the
+// helpers picked, the driver and tag, the representatives, and the reason picked; a modified
+// truck names the certification it replaces. What a phone alone would have said (its phone, its
+// assignment) isn't entered.
+export const createCertificationEndpoint = endpoint({
+  name: 'createCertification',
+  summary:
+    'A certification sheet whose phone failed is entered in the back office: its number as the sheet has it, a container or a crew, the prime picked and the subs typed, what was certified, the boxes measured (the primary first; the capacity is worked out, never sent), the driver and the tag, when it was certified by the sheet, the monitor who certified it and the helpers, the representatives, the certification it replaces where a modified truck was certified again, notes and a reason picked from the firm’s list. It names the person who entered it. The field events already on its number are linked to it, and their tickets queued (the replaced one’s too). Refused for a number another certification of the project has, a reason the firm doesn’t offer for this and measurements that give no capacity.',
+  ...reviewer,
+  permission: 'CORRECT',
+  method: 'POST',
+  path: '/projects/:projectId/certifications',
+  params: projectId,
+  body: z
+    .strictObject({
+      certNumber: numberAsWritten,
+      kind: z.enum(['CONTAINER', 'CREW']),
+      primeId: z.uuid(),
+      firstTierSub: keyed.nullable(),
+      secondTierSub: keyed.nullable(),
+      vehicleTypeId: z.uuid().nullable(),
+      vehicleTypeOther: keyed.nullable(),
+      crewTypeId: z.uuid().nullable(),
+      boxes: z.array(syncedCertificationBoxSchema).max(certificationBoxesAtMost),
+      driverName: keyed.nullable(),
+      driverPhone: keyed.nullable(),
+      driverLicenceNumber: keyed.nullable(),
+      driverLicenceState: keyed.nullable(),
+      driverLicenceExpiry: day.nullable(),
+      tagNumber: keyed.nullable(),
+      tagState: keyed.nullable(),
+      tagExpiry: day.nullable(),
+      certifiedAt: instant,
+      deviceUtcOffsetMinutes: z.number().int().min(-720).max(840),
+      certifiedById: z.uuid(),
+      helperIds: z
+        .array(z.uuid())
+        .max(certificationHelpersAtMost)
+        .refine((helpers) => new Set(helpers).size === helpers.length, {
+          message: 'A helper is picked once.',
+        }),
+      clientRepresentativeName: keyed.nullable(),
+      contractorRepresentativeName: keyed.nullable(),
+      replaces: z.strictObject({ certificationId: z.uuid(), reason: typed }).nullable(),
+      notes: typed.nullable(),
+      reasonId: z.uuid(),
+    })
+    .superRefine((sheet, context) => {
+      if (sheet.vehicleTypeId !== null && sheet.vehicleTypeOther !== null) {
+        context.addIssue({
+          code: 'custom',
+          message: 'A vehicle type is picked or typed, never both.',
+          path: ['vehicleTypeOther'],
+        });
+      }
+      if (sheet.kind === 'CONTAINER' && sheet.crewTypeId !== null) {
+        context.addIssue({
+          code: 'custom',
+          message: 'A container has no crew type.',
+          path: ['crewTypeId'],
+        });
+      }
+    }),
   answer: savedAnswer(certificationRecordSchema),
 });
 
@@ -3444,6 +3770,7 @@ export const endpoints: readonly Endpoint[] = [
   voidTicketEndpoint,
   unvoidTicketEndpoint,
   acceptFlagEndpoint,
+  withdrawAcceptanceEndpoint,
   setQcStatusEndpoint,
   createInvoiceBatchEndpoint,
   lockAsInvoicedEndpoint,
@@ -3456,6 +3783,7 @@ export const endpoints: readonly Endpoint[] = [
   correctCarriedTicketEndpoint,
   markPhotographEndpoint,
   photographFileEndpoint,
+  addPhotographEndpoint,
   correctScaleReceiptEndpoint,
   correctRoeEndpoint,
   correctRoeScopeEndpoint,
@@ -3472,9 +3800,17 @@ export const endpoints: readonly Endpoint[] = [
   closeSetAsideFileEndpoint,
   listQuarantinedRecordsEndpoint,
   createFieldEventEndpoint,
+  createRoeEndpoint,
+  createSurveyEndpoint,
+  createIncidentEndpoint,
+  createDropOffLogEndpoint,
+  createCertificationEndpoint,
+  correctCertificationEndpoint,
   correctCertificationBoxEndpoint,
+  addCertificationBoxEndpoint,
   markSignaturesOnFileEndpoint,
   revokeCertificationEndpoint,
+  unrevokeCertificationEndpoint,
   viewerProjectsEndpoint,
   viewerRoesEndpoint,
   viewerTicketsEndpoint,

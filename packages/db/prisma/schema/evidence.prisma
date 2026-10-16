@@ -109,11 +109,15 @@ model FieldEvent {
   // Where it came from. One created in the back office (a phone failed) says who created it and
   // why, picked from the firm's reasons (ADR-156, 173). None of these has a default: whoever
   // writes a field event says.
-  source           RecordSource
-  createdById      String?      @map("created_by_id") @db.Uuid
-  createdReasonId  String?      @map("created_reason_id") @db.Uuid
+  source                RecordSource
+  createdById           String?                @map("created_by_id") @db.Uuid
+  createdReasonId       String?                @map("created_reason_id") @db.Uuid
   // Made under the master passcode's temporary session for this monitor (ADR-120).
-  temporarySession Boolean      @map("temporary_session")
+  temporarySession      Boolean                @map("temporary_session")
+  // Made in a session opened under the master passcode, and which way: as the phone's monitor
+  // or the temporary session; none in a monitor's own (ADR-462, 534; AC-02-42). A temporary
+  // session's is TEMPORARY, and only its (a check in the guard migration).
+  masterPasscodeSession MasterPasscodeSession? @map("master_passcode_session")
 
   // The number typed instead of scanned, and the reason picked (ADR-111, 173).
   numberTyped         Boolean @map("number_typed")

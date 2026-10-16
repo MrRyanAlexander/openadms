@@ -37,7 +37,7 @@ import {
   type WorkflowName,
 } from '@open-adms/domain';
 
-import { type Outcome, QueueingService, Refused } from '../setup/setup-service.ts';
+import { type Outcome, QueueingService, Refused, type Warn } from '../setup/setup-service.ts';
 
 export type Tx = Prisma.TransactionClient;
 
@@ -181,14 +181,14 @@ export abstract class ReviewService extends QueueingService {
     person: string,
     permission: ReviewPermission,
     note: string | undefined,
-    work: (tx: Tx) => Promise<T>,
+    work: (tx: Tx, warn: Warn) => Promise<T>,
   ): Promise<Outcome<T>> {
     const reason = note?.trim() ?? '';
     return this.writeAs(
       { actorId: person, source: 'BACK_OFFICE', ...(reason === '' ? {} : { reason }) },
-      async (tx) => {
+      async (tx, warn) => {
         await ReviewService.permitted(tx, person, permission);
-        return work(tx);
+        return work(tx, warn);
       },
     );
   }
@@ -258,6 +258,22 @@ export abstract class ReviewService extends QueueingService {
       },
     });
     return locks > 0;
+  }
+
+  // Refuses, in the domain's words, a change to a ticket while a lock stands on it, asked before
+  // anything is written: the database holds a locked ticket's field events and their lines itself
+  // (ADR-534 (10)), so a write there would be refused as the server's failure, never in words.
+  protected static async refusedIfLocked(
+    tx: Tx,
+    projectId: string,
+    tickets: readonly TicketNamed[],
+  ): Promise<void> {
+    const locked: string[] = [];
+    for (const ticket of tickets) {
+      if (await ReviewService.locked(tx, projectId, ticket)) locked.push(ticket.ticketNumber);
+    }
+    const refusal = new LockedTicket(locked).refusal();
+    if (refusal !== null) throw new Refused(refusal);
   }
 
   // The ticket a QC mark or a lock names. A load's or a haul-out's single field event is refused

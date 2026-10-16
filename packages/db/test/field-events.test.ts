@@ -474,6 +474,8 @@ describe('a field event', () => {
       'load_call',
       'map_version_id',
       'marked_ineligible',
+      // Which way a session under the master passcode was opened (ADR-534 (11)).
+      'master_passcode_session',
       'measured_as',
       'measurement_inches',
       'monitor_id',
@@ -580,13 +582,35 @@ describe('a field event', () => {
     );
   });
 
-  it('AC-04-28 made in a temporary session under the master passcode is marked so', async () => {
+  it('AC-04-28, AC-02-42 made in a session under the master passcode is marked so, and which way: the temporary session, or as the phone’s monitor; the two marks agree, and only a phone’s record has one', async () => {
+    const { db } = tested;
     await asThePhone();
-    const event = await received({ temporary_session: true });
-    expect(await kept(event, `"temporary_session"`)).toEqual({ temporary_session: true });
-    expect(await kept(tested.world.loads.l101001.collection, `"temporary_session"`)).toEqual({
-      temporary_session: false,
+    const temporary = await received({
+      temporary_session: true,
+      master_passcode_session: 'TEMPORARY',
     });
+    const asMonitor = await received({
+      ticket_number: '101014',
+      master_passcode_session: 'AS_MONITOR',
+    });
+    const marks = `"temporary_session", "master_passcode_session"::text AS way`;
+    expect(await kept(temporary, marks)).toEqual({ temporary_session: true, way: 'TEMPORARY' });
+    expect(await kept(asMonitor, marks)).toEqual({ temporary_session: false, way: 'AS_MONITOR' });
+    expect(await kept(tested.world.loads.l101001.collection, marks)).toEqual({
+      temporary_session: false,
+      way: null,
+    });
+    for (const [temporarySession, way] of [
+      [true, null],
+      [true, 'AS_MONITOR'],
+      [false, 'TEMPORARY'],
+    ] as const) {
+      const refused = await db.refused(
+        `UPDATE "field_event" SET "temporary_session" = $2, "master_passcode_session" = $3::"master_passcode_session" WHERE "id" = $1`,
+        [asMonitor, temporarySession, way],
+      );
+      expect(refused.code, `${String(temporarySession)} ${String(way)}`).toBe(refusedBy.check);
+    }
   });
 
   it('AC-04-29 starts PENDING; its status and reconciled time are the worker’s alone, and the worker changes nothing a monitor captured', async () => {
@@ -823,6 +847,9 @@ describe('a field event', () => {
       ).map((trigger) => trigger.name),
     ).toEqual([
       'field_event_audit',
+      // A ticket locked as invoiced keeps its field events as they are (ADR-534 (10)): a lock,
+      // never a rule of eligibility.
+      'field_event_locked_ticket',
       // A closed project's field events change no more (ADR-529 (b)).
       'field_event_project_open',
       'field_event_refuse_delete',

@@ -8,8 +8,11 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  AcceptanceWithdrawal,
+  BackOfficePhotograph,
   BatchName,
   FlagAccepting,
+  FormAnswersGiven,
   InvoiceLocking,
   LockedTicket,
   PickedReason,
@@ -276,6 +279,40 @@ describe('a person’s void and unvoid', () => {
       code: 'NOT_VOID',
       message: 'Ticket 301003 isn’t void. Nothing was changed.',
     });
+  });
+});
+
+describe('an acceptance taken back, answers given and a photograph added in the back office (ADR-534)', () => {
+  it('AC-08-70 an acceptance standing may be taken back, once', () => {
+    const message = 'Ticket 101003: load call 96%. Flagged for review.';
+    expect(new AcceptanceWithdrawal({ message, withdrawn: false }).refusal()).toBeNull();
+    expect(new AcceptanceWithdrawal({ message, withdrawn: true }).refusal()).toEqual({
+      code: 'ALREADY_WITHDRAWN',
+      message:
+        'This acceptance was already taken back ("Ticket 101003: load call 96%. Flagged for review."). Nothing was changed.',
+    });
+  });
+
+  it('AC-08-69 answers that don’t fit say which fields, by their labels; another form’s version and none at all are told so', () => {
+    expect(FormAnswersGiven.notFitting(2, ['Photos taken?'])).toEqual({
+      code: 'ANSWERS_DO_NOT_FIT',
+      message:
+        'The answers don’t fit the form’s own fields as version 2 has them (Photos taken?). Nothing was saved.',
+    });
+    expect(FormAnswersGiven.notFitting(1, []).message).toBe(
+      'The answers don’t fit the form’s own fields as version 1 has them. Nothing was saved.',
+    );
+    expect(FormAnswersGiven.notThisForm('survey').code).toBe('ANSWERS_DO_NOT_FIT');
+    expect(FormAnswersGiven.noFields().code).toBe('ANSWERS_DO_NOT_FIT');
+  });
+
+  it('AC-10-92 a photograph goes only on a record made in the back office, and a view only on a certification’s', () => {
+    expect(BackOfficePhotograph.notMadeInTheBackOffice('ROE')).toEqual({
+      code: 'NOT_MADE_IN_THE_BACK_OFFICE',
+      message:
+        'This ROE was made on a phone: its photographs are its phone’s, and none is added in the back office. Nothing was saved.',
+    });
+    expect(BackOfficePhotograph.viewOnlyOnACertification().code).toBe('VIEW_NOT_ON_THIS_RECORD');
   });
 });
 

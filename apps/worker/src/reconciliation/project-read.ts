@@ -348,7 +348,8 @@ export class ProjectRead {
     const accepted = new Set(
       (
         await db.flagAcceptance.findMany({
-          where: { projectId, flag: { clearedAt: null } },
+          // Those in force: one taken back no longer holds its flag (ADR-534 (8)).
+          where: { projectId, withdrawnAt: null, flag: { clearedAt: null } },
           select: { flagId: true },
         })
       ).map((acceptance) => acceptance.flagId),

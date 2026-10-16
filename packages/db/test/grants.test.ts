@@ -196,6 +196,8 @@ const captured = [
   'start_latitude',
   'start_longitude',
   'temporary_session',
+  // Which way a session under the master passcode was opened (ADR-534 (11)).
+  'master_passcode_session',
   'typed_capacity_cy',
   // What each kind records (ADR-325).
   'carried_count',

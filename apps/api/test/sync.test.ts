@@ -308,6 +308,42 @@ describe('a sync is kept with both clocks', () => {
   });
 });
 
+describe('a record made in a session under the master passcode', () => {
+  it('AC-02-42, ADR-534 (11) a field event made in a session the master passcode opened says which way, as the phone’s monitor or the temporary session, and one made in the monitor’s own says none; a temporary session’s is the temporary mark it always kept; the database holds the two to agree', async () => {
+    await world(async (served, tx, who) => {
+      const p = await kimOnP1(served, tx, who);
+      const own = p.event();
+      const asMonitor = { ...p.disposal(), masterPasscodeSession: 'AS_MONITOR' as const };
+      const temporary = {
+        ...p.event(),
+        ticketNumber: '101002',
+        masterPasscodeSession: 'TEMPORARY' as const,
+      };
+      const answered = await synced(
+        served,
+        p.token,
+        p.sync({
+          records: [
+            { record: 'FIELD_EVENT', fieldEvent: own },
+            { record: 'FIELD_EVENT', fieldEvent: asMonitor },
+            { record: 'FIELD_EVENT', fieldEvent: temporary },
+          ],
+        }),
+      );
+      expect(answered.records.map(({ answer }) => answer)).toEqual(['SAVED', 'SAVED', 'SAVED']);
+      const marks = async (id: string) => {
+        const event = await tx.fieldEvent.findUniqueOrThrow({ where: { id } });
+        return [event.masterPasscodeSession, event.temporarySession];
+      };
+      expect([await marks(own.id), await marks(asMonitor.id), await marks(temporary.id)]).toEqual([
+        [null, false],
+        ['AS_MONITOR', false],
+        ['TEMPORARY', true],
+      ]);
+    });
+  });
+});
+
 describe('a record is stored once', () => {
   it('AC-02-45, AC-05-08, AC-08-06, T-05 a record its monitor submitted is sealed: sent again under its id with its load call changed, it is answered “already saved”, and the server keeps what it stored; nothing is written and nothing queued', async () => {
     await world(async (served, tx, who) => {

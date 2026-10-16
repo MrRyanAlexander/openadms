@@ -123,7 +123,10 @@ export class RecordWrite {
         setupVersion: event.source === 'DEVICE' ? event.setupVersion : null,
         createdById: event.source === 'BACK_OFFICE' ? event.createdById : null,
         createdReasonId: event.source === 'BACK_OFFICE' ? event.createdReasonId : null,
-        temporarySession: event.temporarySession,
+        // A temporary session's mark is the one the field event kept before it said which way
+        // (ADR-534 (11)); the database holds the two to agree.
+        temporarySession: event.masterPasscodeSession === 'TEMPORARY',
+        masterPasscodeSession: event.masterPasscodeSession,
         numberTyped: event.numberTyped,
         numberTypedReasonId: event.numberTypedReasonId,
         certNumber: event.certNumber,

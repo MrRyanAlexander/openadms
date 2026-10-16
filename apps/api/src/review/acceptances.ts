@@ -12,8 +12,13 @@
 // acceptance: a ticket whose every flag is fixed or accepted is COMPLETED, and the flag isn't
 // raised again while its facts stand. Changed facts clear it and raise another, which nobody
 // has accepted.
+//
+// **An acceptance is taken back** (ADR-534 (8)) by a person holding the same grant, with a note:
+// who and when are written on its own row, which is history after; the flag stands again on the
+// next run, and accepting it again is an acceptance of its own. One acceptance is in force for a
+// flag at most, held by the database.
 import type { FlagAcceptance } from '@open-adms/db';
-import { FlagAccepting, PickedReason } from '@open-adms/domain';
+import { AcceptanceWithdrawal, FlagAccepting, PickedReason } from '@open-adms/domain';
 
 import { type Outcome, Refused } from '../setup/setup-service.ts';
 import { ReviewService, type Reviewed } from './review-service.ts';
@@ -39,7 +44,7 @@ export class Acceptances extends ReviewService {
         if (notOffered !== null) throw new Refused(notOffered);
         const flag = await tx.flag.findUniqueOrThrow({
           where: { id: flagId },
-          include: { acceptances: { select: { id: true } } },
+          include: { acceptances: { where: { withdrawnAt: null }, select: { id: true } } },
         });
         const refusal = new FlagAccepting({
           message: flag.message,
@@ -68,6 +73,39 @@ export class Acceptances extends ReviewService {
       'REFUSED',
       // An acceptance changes nothing another ticket reads: only the flag's own ticket is
       // worked again.
+      'LEFT',
+    );
+  }
+
+  withdraw(
+    person: string,
+    acceptanceId: string,
+    note: string,
+  ): Promise<Outcome<Reviewed<FlagAcceptance>>> {
+    return this.review(
+      person,
+      'ACCEPT_FLAG',
+      note,
+      async (tx) => {
+        const acceptance = await tx.flagAcceptance.findUniqueOrThrow({
+          where: { id: acceptanceId },
+          include: { flag: { select: { message: true, workflow: true, ticketNumber: true } } },
+        });
+        const refusal = new AcceptanceWithdrawal({
+          message: acceptance.flag.message,
+          withdrawn: acceptance.withdrawnAt !== null,
+        }).refusal();
+        if (refusal !== null) throw new Refused(refusal);
+        const record = await tx.flagAcceptance.update({
+          where: { id: acceptanceId },
+          data: { withdrawnById: person, withdrawnAt: this.clock.now(), withdrawNote: note.trim() },
+        });
+        const { workflow, ticketNumber } = acceptance.flag;
+        return workflow === null || ticketNumber === null
+          ? { record, projectId: record.projectId, tickets: [], projectRecords: true }
+          : { record, projectId: record.projectId, tickets: [{ workflow, ticketNumber }] };
+      },
+      'REFUSED',
       'LEFT',
     );
   }

@@ -436,8 +436,11 @@ export {
 } from './project-settings.ts';
 
 export {
+  AcceptanceWithdrawal,
+  BackOfficePhotograph,
   BatchName,
   FlagAccepting,
+  FormAnswersGiven,
   InvoiceLocking,
   LockedTicket,
   PickedReason,

@@ -923,6 +923,8 @@ primary box); a box repeats its certification's `kind`, so only a container hold
 | **certifiedById** | → `User` | The monitor who made it and measured it: one whose assignment includes certifying (ADR-151, 294) |
 | deviceId | → `Device` | |
 | assignmentId | → `Assignment` | |
+| createdById | → `User` | Entered in the back office from the paper sheet, its phone having failed: who entered it (ADR-521, 534). With `createdReasonId`, both or neither; never with a phone or an assignment; never changed |
+| createdReasonId | → `Reason` | And why, from the firm's reasons for a record made in the back office |
 | clientRepresentativeName, contractorRepresentativeName | text | Names only |
 | **signaturesOnFile** | bool | Set at QC |
 | replacesId | → `Certification` | A modified truck's new certification (ADR-082) |
@@ -935,7 +937,9 @@ primary box); a box repeats its certification's `kind`, so only a container hold
 
 **Who did what on a certification** (ADR-294): it is **made and measured** by the certifying monitor
 (`certifiedById`); **helped** by whoever that monitor picks, or nobody (`CertificationHelper`);
-**audited** by the back office at QC (its `QcMark.setById`, "checked by"). No other field says who.
+**audited** by the back office at QC (its `QcMark.setById`, "checked by"). One entered in the
+back office from its sheet also says who entered it and why (`createdById`, `createdReasonId`;
+ADR-534 (1)); its certifier is still the monitor named on the sheet. No other field says who.
 
 #### `CertificationHelper`
 
@@ -1096,6 +1100,7 @@ version used, both and the worked-out pay item to the field event's own project)
 | createdById | → `User` | The back-office person who created it (ADR-156); required when `source` is `BACK_OFFICE` |
 | createdReasonId | → `Reason` | And why; required the same way |
 | **temporarySession** | bool | Made under the master passcode's temporary session for this monitor (ADR-120) |
+| masterPasscodeSession | enum `MasterPasscodeSession` | Made in a session the master passcode opened, and which way: `AS_MONITOR` (signed in as the phone's monitor) or `TEMPORARY`; none in a monitor's own sign-in (ADR-462, 534 (11); AC-02-42). Only on a phone's record; `TEMPORARY` exactly when `temporarySession` |
 | **certNumber** | text | The number as scanned: a snapshot (ADR-017) |
 | certificationId | → `Certification` | Empty while no certification on the project has that number (ADR-154) |
 | **certKeyedByHand** | bool | A truck keyed in by hand: only the monitor's claim (ADR-154) |
@@ -1344,8 +1349,8 @@ item requires is a flag.
 | **objectKey** | text | Where the file is kept: **made by the server**, never sent by a phone: `projects/<project>/photos/<photograph>` (ADR-481) |
 | depthObjectKey | text | The depth file's place, beside it with `.depth` after it, where the phone said one comes (ADR-481) |
 | depthSha256 | text | The depth file's own fingerprint, the phone's word; there exactly where a depth file goes (ADR-482) |
-| deviceId | → `Device` | |
-| uploadedAt | instant | When the file reached storage, through the media endpoint: written once, by the phone that took it (ADR-482) |
+| deviceId | → `Device` | None on a photograph added in the back office (ADR-534 (2)) |
+| uploadedAt | instant | When the file reached storage, through the media endpoint: written once, by the phone that took it (ADR-482); on one added in the back office, by the person who sent it |
 | depthUploadedAt | instant | The same for the depth file (ADR-482) |
 | archivedAt | instant | The back office removed it from the record (ADR-329 (9), 337): a mark only, cleared to put it back. Nothing is deleted; who and when is the audit record |
 | label | text | The back office's own words for what it shows; never blank; read by no check (ADR-337) |
@@ -1374,7 +1379,10 @@ once, and is there exactly where `depthObjectKey` is (`photo_depth_check`). **A 
 before its files reach storage** (no upload time on an insert); `uploadedAt` and
 `depthUploadedAt` are each written once, and only with the source `DEVICE` and the photograph's own
 phone stated (`photo_upload_guard`); the API writes them under the device key's actor when the
-media endpoint has kept a file it checked. A viewer's view shows both new columns.
+media endpoint has kept a file it checked. A viewer's view shows both new columns. **Added in
+the back office (ADR-534 (2)):** a photograph with no phone, sent whole to a record made in the back
+office; both fingerprints are the server's reading of its bytes; its upload time is written by a
+person from the back office alone (`photo_upload_guard`).
 
 #### `SetAsideFile` (`set_aside_file`)
 
@@ -1901,11 +1909,13 @@ itself is never changed by an acceptance; the acceptance stays on its flag (ADR-
 
 | Field | Type | Notes |
 |---|---|---|
-| **flagId** | → `Flag`, unique | |
+| **flagId** | → `Flag` | One acceptance in force a flag: unique among those not taken back (an exclusion, ADR-534 (8)) |
 | **reasonId** | → `Reason` | |
 | note | text | |
 | **acceptedById** | → `User` | |
 | **acceptedAt** | instant | |
+| withdrawnById, withdrawnAt | → `User`, instant | Taken back: who and when, both or neither; a person (ADR-534 (8)). The flag stands again; accepting it again is a new row; one taken back is history |
+| withdrawNote | text | Why, only with them; never blank |
 
 #### `TicketVoid`
 

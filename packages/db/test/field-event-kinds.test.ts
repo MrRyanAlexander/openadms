@@ -286,6 +286,9 @@ describe('a load', () => {
       ).map((trigger) => trigger.name),
     ).toEqual([
       'field_event_audit',
+      // A ticket locked as invoiced keeps its field events as they are (ADR-534 (10)): a lock,
+      // never a rule of eligibility.
+      'field_event_locked_ticket',
       // A closed project's field events change no more (ADR-529 (b)).
       'field_event_project_open',
       'field_event_refuse_delete',

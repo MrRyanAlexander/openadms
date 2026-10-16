@@ -1070,6 +1070,7 @@ model User {
   // The certifications they made and measured, helped on, or revoked (ADR-079, 294).
   certificationsMade          Certification[]       @relation("CertificationCertifiedBy")
   certificationsRevoked       Certification[]       @relation("CertificationRevokedBy")
+  certificationsCreated       Certification[]       @relation("CertificationCreatedBy")
   certificationsHelped        CertificationHelper[]
   fieldEvents                 FieldEvent[]          @relation("FieldEventMonitor")
   fieldEventsCreated          FieldEvent[]          @relation("FieldEventCreatedBy")
@@ -1090,7 +1091,8 @@ model User {
   invoiceBatchesCreated       InvoiceBatch[]
   invoiceLocks                InvoiceLock[]         @relation("InvoiceLockLockedBy")
   invoiceLocksUnlocked        InvoiceLock[]         @relation("InvoiceLockUnlockedBy")
-  flagAcceptances             FlagAcceptance[]
+  flagAcceptances             FlagAcceptance[]      @relation("FlagAcceptanceAcceptedBy")
+  flagAcceptancesWithdrawn    FlagAcceptance[]      @relation("FlagAcceptanceWithdrawnBy")
   ticketVoids                 TicketVoid[]          @relation("TicketVoidVoidedBy")
   ticketVoidsLifted           TicketVoid[]          @relation("TicketVoidLiftedBy")
   ticketUnvoids               TicketUnvoid[]
@@ -1196,24 +1198,24 @@ model UserCredential {
 // this row; a monitor's session token on a phone, which never rotates. Revoked, the row is
 // history and never changes again. Only the API reads it; the hash is kept out of the audit log.
 model Session {
-  id                    String                 @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  userId                String                 @map("user_id") @db.Uuid
-  refreshTokenHash      String                 @unique @map("refresh_token_hash")
+  id                       String                 @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId                   String                 @map("user_id") @db.Uuid
+  refreshTokenHash         String                 @unique @map("refresh_token_hash")
   // The proven phone a monitor signed in on (ARCHITECTURE §6, Device sessions; §7.2; ADR-443):
   // a monitor's session always names one and never changes it, and no other session names one
   // (the guard migration), so a monitor's ID and password open nothing but a phone's calls.
-  deviceId              String?                @map("device_id") @db.Uuid
+  deviceId                 String?                @map("device_id") @db.Uuid
   // Opened under the firm's master passcode, with a connection, and which way (ARCHITECTURE
   // §7.2, §7.3; AC-02-42; ADR-456 (5)(d), 462): empty on a person's own sign-in. It is no
   // authentication of the monitor it is for, so it is marked, written as the master passcode's
   // actor on that phone (the guard migration), and never changes.
-  masterPasscodeSession MasterPasscodeSession? @map("master_passcode_session")
+  masterPasscodeSession    MasterPasscodeSession? @map("master_passcode_session")
   // A sign-in made on the phone with no connection, reported once it had one and proven by what
   // only the password (or the passcode) typed could make (ADR-531): the phone's own id for it,
   // the phone's clock when it was made and its offset (ADR-100). All three or none; never changed.
-  offlineSignInId          String?   @unique @map("offline_sign_in_id") @db.Uuid
-  signedInAt               DateTime? @map("signed_in_at") @db.Timestamptz(3)
-  signedInUtcOffsetMinutes Int?      @map("signed_in_utc_offset_minutes")
+  offlineSignInId          String?                @unique @map("offline_sign_in_id") @db.Uuid
+  signedInAt               DateTime?              @map("signed_in_at") @db.Timestamptz(3)
+  signedInUtcOffsetMinutes Int?                   @map("signed_in_utc_offset_minutes")
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
@@ -1372,39 +1374,39 @@ enum DeviceKeyRevocation {
 // A phone, enrolled once with its device key; no project, no monitor (ADR-095, 240). What it may
 // make comes from the assignment it holds.
 model Device {
-  id                          String       @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  id                          String               @id @default(dbgenerated("uuidv7()")) @db.Uuid
   // What the dispatch board calls it, e.g. P1-COL-1.
   name                        String
   // The public half of the key pair made in the phone's secure hardware (ARCHITECTURE §7.4): one
   // key, one phone.
-  publicKey                   String       @unique @map("public_key")
-  status                      DeviceStatus @default(ACTIVE)
+  publicKey                   String               @unique @map("public_key")
+  status                      DeviceStatus         @default(ACTIVE)
   // Which version of the master passcode's check the phone holds; a change reaches it at its
   // next sync (ARCHITECTURE §7.5).
-  masterPasscodeVersion       Int          @map("master_passcode_version")
-  enrolledAt                  DateTime     @default(now()) @map("enrolled_at") @db.Timestamptz(3)
+  masterPasscodeVersion       Int                  @map("master_passcode_version")
+  enrolledAt                  DateTime             @default(now()) @map("enrolled_at") @db.Timestamptz(3)
   // Its removal time: what it made after this arrives flagged, never refused (ADR-134). Set
   // exactly when it's lost or retired (a check in the guard migrations).
-  outOfServiceAt              DateTime?    @map("out_of_service_at") @db.Timestamptz(3)
+  outOfServiceAt              DateTime?            @map("out_of_service_at") @db.Timestamptz(3)
   // When it was last marked lost or retired (ADR-520 (1), 530): the firm's time for its key runs
   // from here, never from its removal time, which may be stated by hand. Set exactly while it is
   // out of service (a check in the guard migration).
-  outOfServiceMarkedAt        DateTime?    @map("out_of_service_marked_at") @db.Timestamptz(3)
+  outOfServiceMarkedAt        DateTime?            @map("out_of_service_marked_at") @db.Timestamptz(3)
   // Why, from the firm's reasons list (use PHONE_REMOVAL), where the person picked one (ADR-530).
-  outOfServiceReasonId        String?      @map("out_of_service_reason_id") @db.Uuid
+  outOfServiceReasonId        String?              @map("out_of_service_reason_id") @db.Uuid
   // When its key was revoked: once a lost or retired phone has synced, been confirmed and wiped
   // (ARCHITECTURE §7.4; C47), or once it stood out of service past the firm's time (ADR-530).
   // Only a phone out of service has one (a check in the guard migration); refusing the key is
   // the API's. Written by the phone's turn-in, as the master passcode's actor for that phone, or
   // by the worker as the system actor; only once it holds no block still issued; and never
   // changed after (ADR-488, 530).
-  keyRevokedAt                DateTime?    @map("key_revoked_at") @db.Timestamptz(3)
+  keyRevokedAt                DateTime?            @map("key_revoked_at") @db.Timestamptz(3)
   // Which revoked it, set exactly when keyRevokedAt is (ADR-530).
   keyRevokedBy                DeviceKeyRevocation? @map("key_revoked_by")
   // When the server made the last challenge this phone proved itself with (ARCHITECTURE §7.4;
   // AC-10-45; ADR-437, 440): a challenge is good once, so only one made after this is taken.
   // Written by the phone's own proof alone, and only ever later (the guard migration).
-  lastAnsweredChallengeMadeAt DateTime?    @map("last_answered_challenge_made_at") @db.Timestamptz(3)
+  lastAnsweredChallengeMadeAt DateTime?            @map("last_answered_challenge_made_at") @db.Timestamptz(3)
 
   masterPasscode     MasterPasscode      @relation(fields: [masterPasscodeVersion], references: [version], onDelete: Restrict, onUpdate: Restrict)
   outOfServiceReason Reason?             @relation(fields: [outOfServiceReasonId], references: [id], onDelete: Restrict, onUpdate: Restrict)
@@ -1688,6 +1690,11 @@ model Certification {
   certifiedById          String   @map("certified_by_id") @db.Uuid
   deviceId               String?  @map("device_id") @db.Uuid
   assignmentId           String?  @map("assignment_id") @db.Uuid
+  // Entered in the back office from the paper sheet, its phone having failed (ADR-521, 534): who
+  // entered it and why, picked from the firm's reasons for a record made in the back office.
+  // Both or neither, and never with a phone or an assignment (a check in the guard migration).
+  createdById            String?  @map("created_by_id") @db.Uuid
+  createdReasonId        String?  @map("created_reason_id") @db.Uuid
 
   // The representatives: names only, no ID, no signature (ADR-080). Whether signatures are on
   // file (kept elsewhere) is marked at QC.
@@ -1722,6 +1729,8 @@ model Certification {
   replaces        Certification?        @relation("CertificationReplaced", fields: [projectId, replacesId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
   replacedBy      Certification?        @relation("CertificationReplaced")
   revokedBy       User?                 @relation("CertificationRevokedBy", fields: [revokedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  createdBy       User?                 @relation("CertificationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  createdReason   Reason?               @relation(fields: [createdReasonId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   boxes           CertificationBox[]
   helpers         CertificationHelper[]
   fieldEvents     FieldEvent[]
@@ -2202,6 +2211,7 @@ model Reason {
   surveysCreated         Survey[]
   incidentsCreated       Incident[]
   dropOffLogsCreated     DropOffLog[]
+  certificationsCreated  Certification[]
   // Picked for a flag's acceptance and for a person's void (marks.prisma).
   flagAcceptances        FlagAcceptance[]
   ticketVoids            TicketVoid[]

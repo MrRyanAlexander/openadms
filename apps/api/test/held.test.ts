@@ -12,6 +12,7 @@ import { randomUUID } from 'node:crypto';
 import {
   closeHeldRecordEndpoint,
   closeSetAsideFileEndpoint,
+  createIncidentEndpoint,
   heldRecordsAnswerSchema,
   listHeldRecordsEndpoint,
   listQuarantinedRecordsEndpoint,
@@ -37,7 +38,7 @@ import { installationSettings, openInstallation, type Tx } from './support/datab
 import { jpeg, Kept, kimsPhone, nothingHeld, sha256Of, turnedIn } from './support/kims-phone.ts';
 import { passcode, senderOf } from './support/phones.ts';
 import { shippedPolicy } from './support/process.ts';
-import { jobsFor, luisHolds } from './support/review.ts';
+import { jobsFor, luisHolds, reasonNamed } from './support/review.ts';
 import { worldOn, type Served } from './support/served.ts';
 import { ask, notSaved, saved, told, type Browser } from './support/setup.ts';
 
@@ -480,6 +481,74 @@ describe('what a sync held, resolved', () => {
           }),
         )[0],
       ).toBe('CLOSED_ONLY');
+    });
+  });
+
+  it('AC-08-72 a line the phone couldn’t read back came with no id: it isn’t saved as corrected; Kim says it was an incident at 22 Elm St, so Luis, who holds correct and void, enters the incident in the back office as a record of its own and closes the held one, saying so; the incident names Kim and the reason, the held record keeps what was sent', async () => {
+    await withFiles(async (served, tx, who) => {
+      const m = await kimsMonday(served, tx, who);
+      const luis = await luisHolds(served, tx, who.luis, 'CORRECT', 'VOID');
+      const [, noId] = (await page(served, luis, '')).heldRecords;
+      expect([noId?.sentId, noId?.projectId]).toEqual([null, null]);
+      const damage = await tx.incidentType.findFirstOrThrow({ where: { name: 'Property damage' } });
+      const incident = {
+        monitorId: who.kim,
+        incidentTypeId: damage.id,
+        incidentSubTypeId: null,
+        description: 'Mailbox clipped by the trailer',
+        parties: null,
+        address: '22 Elm St',
+        contractorId: null,
+        certNumber: null,
+        roeNumber: null,
+        madeAt: '2026-10-12T15:30:00Z',
+        deviceUtcOffsetMinutes: -240,
+        fix: null,
+        notes: null,
+        answers: { answers: {} },
+      };
+      expect(
+        notSaved(
+          await ask(served, luis, saveHeldRecordEndpoint, {
+            ids: { heldRecordId: String(noId?.id) },
+            payload: {
+              record: {
+                record: 'FIELD_EVENT',
+                fieldEvent: { ...m.good, id: randomUUID(), ticketNumber: '101039' },
+              },
+              note: 'Kim’s line, as she remembers it',
+            },
+          }),
+        ),
+      ).toEqual([
+        'NO_ID_SENT',
+        'This held record came with no id the server could read: enter it in the back office as a record of its own, then close this one. Nothing was changed.',
+      ]);
+      const entered = saved(
+        createIncidentEndpoint,
+        await ask(served, luis, createIncidentEndpoint, {
+          ids: { projectId: m.p.projectId },
+          payload: { ...incident, reasonId: await reasonNamed(tx, 'Device failed') },
+        }),
+      );
+      expect(entered.record).toMatchObject({
+        source: 'BACK_OFFICE',
+        monitorId: who.kim,
+        createdById: who.luis,
+        address: '22 Elm St',
+      });
+      const closed = saved(
+        closeHeldRecordEndpoint,
+        await ask(served, luis, closeHeldRecordEndpoint, {
+          ids: { heldRecordId: String(noId?.id) },
+          payload: { note: `Entered in the back office as incident ${entered.record.id}` },
+        }),
+      );
+      expect([closed.record.resolvedById, closed.record.sent]).toEqual([who.luis, m.noId]);
+      const audit = await tx.auditRecord.findFirstOrThrow({
+        where: { tableName: 'held_record', recordId: String(noId?.id), operation: 'UPDATE' },
+      });
+      expect(audit.reason).toBe(`Entered in the back office as incident ${entered.record.id}`);
     });
   });
 

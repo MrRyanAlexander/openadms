@@ -159,7 +159,7 @@ const words: Readonly<Record<string, string>> = {
   // Review's marks (task 2.4.4, part 1). The service asks each of these first: the database
   // answers only where two people act at the same moment, or the project isn't on record.
   ticket_void_voided_once: 'Not saved: the ticket is already void.',
-  flag_acceptance_flag_id_key: 'Not saved: the flag is already accepted.',
+  flag_acceptance_accepted_once: 'Not saved: the flag is already accepted.',
   invoice_lock_load_locked_once: 'Not saved: the ticket is already locked as invoiced.',
   invoice_lock_haul_out_locked_once: 'Not saved: the ticket is already locked as invoiced.',
   invoice_lock_unit_rate_ticket_locked_once: 'Not saved: the ticket is already locked as invoiced.',
@@ -222,6 +222,44 @@ const words: Readonly<Record<string, string>> = {
     'Not saved: the contractor an incident names is one on its own project.',
   drop_off_log_project_id_site_id_fkey:
     'Not saved: a drop-off log’s site is one of its own project’s sites.',
+  // Every captured field correctable, and records made in the back office (task 2.8.7): the
+  // services ask what they can first; these are what only the database answers.
+  certification_project_id_cert_number_key:
+    'Not saved: the project already has a certification with that number.',
+  certification_project_id_prime_id_fkey:
+    'Not saved: a certification’s prime is one of its own project’s primes.',
+  certification_prime_id_fkey: 'Not saved: the prime a certification names isn’t on record.',
+  certification_vehicle_type_check:
+    'Not saved: what was certified is picked from the firm’s list or typed, never both.',
+  certification_vehicle_type_id_fkey:
+    'Not saved: the vehicle type a certification names isn’t on the firm’s list.',
+  certification_crew_type_id_fkey:
+    'Not saved: the crew type a certification names isn’t on the firm’s list.',
+  certification_kind_check:
+    'Not saved: a container has a capacity and no crew type; a crew has no capacity.',
+  certification_subs_check:
+    'Not saved: a second-tier sub works under a first-tier sub, and one contractor is in one tier.',
+  certification_certified_by_id_fkey: 'Not saved: the monitor who certified it isn’t on record.',
+  certification_created_reason_id_fkey: 'Not saved: the reason picked isn’t on the firm’s list.',
+  certification_project_id_replaces_id_fkey:
+    'Not saved: a certification replaces one of its own project’s.',
+  certification_project_id_replaces_id_key:
+    'Not saved: that certification is already replaced by another.',
+  certification_helper_user_id_fkey: 'Not saved: a helper picked isn’t on record.',
+  certification_box_primary_check:
+    'Not saved: box 0 is the primary, the main interior: a rectangle that adds, never taken off.',
+  certification_box_feature_check:
+    'Not saved: every box after the primary is a feature, picked from the firm’s list or typed, never both.',
+  certification_box_feature_id_fkey: 'Not saved: the feature a box names isn’t on the firm’s list.',
+  certification_box_radius_corner_check: 'Not saved: a radius corner is always subtracted.',
+  roe_answers_check:
+    'Not saved: answers to a form’s own fields come with the version of the ROE form they answer.',
+  survey_monitor_id_fkey: 'Not saved: the monitor a survey names isn’t on record.',
+  incident_monitor_id_fkey: 'Not saved: the monitor an incident names isn’t on record.',
+  drop_off_log_monitor_id_fkey: 'Not saved: the monitor a drop-off log names isn’t on record.',
+  survey_created_reason_id_fkey: 'Not saved: the reason picked isn’t on the firm’s list.',
+  incident_created_reason_id_fkey: 'Not saved: the reason picked isn’t on the firm’s list.',
+  drop_off_log_created_reason_id_fkey: 'Not saved: the reason picked isn’t on the firm’s list.',
 };
 
 const notFound: DatabaseRefusal = {

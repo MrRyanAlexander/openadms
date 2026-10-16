@@ -466,11 +466,11 @@ every edit of a migration file and allows a write only while the file is still P
 | Input | Every request body validated by the shared Zod schema at the boundary; size limits; unknown fields rejected |
 | Output | No stack traces or internal errors in responses; plain error codes; security headers (CSP, `frame-ancestors 'none'`, `nosniff`, referrer policy) on the web apps |
 | Logs | Structured, with a request ID; never secrets, tokens, passwords or full personal details |
-| Uploads | Files only through the media endpoint (§11) and the back office's map's file (§3; ADR-485, 486), each by its own route and size limit: type and size checked (a photograph's hash verified, a zip bounded unzipped), stored outside the web root, never executed |
+| Uploads | Files only through the media endpoint (§11), the back office's map's file (§3; ADR-485, 486) and a photograph the back office adds to a record made there (ADR-534 (2); agent default, awaiting approval), each by its own route and size limit: type and size checked (a photograph's hash verified, a zip bounded unzipped), stored outside the web root, never executed |
 
 ### Every way in
 
-✍️ *Agent-written (task 2.7.3 part 4, ADR-515), as the checklist's §3.1 approved it (ADR-513): OWASP ASVS 5.0 6.1.3 and 6.3.4.* Every way a person, a phone or a command is let in, and nothing else. Each endpoint says which it takes (`access` in `packages/contracts/src/endpoints.ts`), and `apps/api/test/every-endpoint.test.ts` holds the 120 endpoints to that one list (AC-10-27), so a way in this table doesn't name fails it. The checklist page has the rest of the written answers (`spec/CHECKLIST-API.md` §5).
+✅ **Approved** *Agent-written (task 2.7.3 part 4, ADR-515), as the checklist's §3.1 approved it (ADR-513): OWASP ASVS 5.0 6.1.3 and 6.3.4.* Every way a person, a phone or a command is let in, and nothing else. Each endpoint says which it takes (`access` in `packages/contracts/src/endpoints.ts`), and `apps/api/test/every-endpoint.test.ts` holds the 120 endpoints to that one list (AC-10-27), so a way in this table doesn't name fails it. The checklist page has the rest of the written answers (`spec/CHECKLIST-API.md` §5).
 
 | Way in | Who | What it takes | What it gives, and for how long | Where (ADR) |
 |---|---|---|---|---|

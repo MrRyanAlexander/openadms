@@ -267,6 +267,15 @@ const triggers = [
   `CREATE TRIGGER invoice_lock_refuse_lock_edit BEFORE UPDATE OF id, project_id, completed_load_id, completed_haul_out_id, field_event_id, field_event_kind, locked_by_id, locked_at ON public.invoice_lock FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
   `CREATE TRIGGER invoice_lock_refuse_edit_once_unlocked BEFORE UPDATE ON public.invoice_lock FOR EACH ROW WHEN ((old.unlocked_at IS NOT NULL)) EXECUTE FUNCTION refuse_edit()`,
   `CREATE TRIGGER flag_acceptance_refuse_flag_edit BEFORE UPDATE OF id, project_id, flag_id, accepted_by_id, accepted_at ON public.flag_acceptance FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
+  // An acceptance taken back is history (ADR-534 (8)).
+  `CREATE TRIGGER flag_acceptance_refuse_edit_once_withdrawn BEFORE UPDATE ON public.flag_acceptance FOR EACH ROW WHEN ((old.withdrawn_at IS NOT NULL)) EXECUTE FUNCTION refuse_edit()`,
+  // Who entered a certification from its sheet, and why, never change (ADR-534 (1)).
+  `CREATE TRIGGER certification_refuse_created_edit BEFORE UPDATE OF created_by_id, created_reason_id ON public.certification FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
+  // While a lock stands on a ticket, nothing changes its field events, their lines or the
+  // tickets they carry, but the two links a number finds (ADR-534 (10); C81).
+  `CREATE TRIGGER field_event_locked_ticket BEFORE UPDATE ON public.field_event FOR EACH ROW EXECUTE FUNCTION field_event_locked_ticket_guard()`,
+  `CREATE TRIGGER field_event_item_locked_ticket BEFORE INSERT OR UPDATE ON public.field_event_item FOR EACH ROW EXECUTE FUNCTION field_event_line_locked_ticket_guard()`,
+  `CREATE TRIGGER carried_ticket_locked_ticket BEFORE INSERT OR UPDATE ON public.carried_ticket FOR EACH ROW EXECUTE FUNCTION field_event_line_locked_ticket_guard()`,
   `CREATE TRIGGER ticket_void_refuse_void_edit BEFORE UPDATE OF id, project_id, workflow, ticket_number, voided_by_id, voided_at ON public.ticket_void FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
   `CREATE TRIGGER ticket_void_refuse_edit_once_lifted BEFORE UPDATE ON public.ticket_void FOR EACH ROW WHEN ((old.lifted_at IS NOT NULL)) EXECUTE FUNCTION refuse_edit()`,
   // An unvoid, once written, is history (ADR-366).
@@ -1218,6 +1227,25 @@ describe('the guards in the catalog', () => {
         definition:
           "CHECK ((((accepted_by_id <> '00000000-0000-7000-8000-000000000001'::uuid) AND ((note IS NULL) OR (btrim(note) <> ''::text))) IS TRUE))",
       },
+      // An acceptance taken back says who and when together, a note only with them (ADR-534 (8)).
+      {
+        name: 'flag_acceptance_withdrawn_check',
+        definition:
+          "CHECK ((((num_nonnulls(withdrawn_by_id, withdrawn_at) = ANY (ARRAY[0, 2])) AND ((withdraw_note IS NULL) OR ((withdrawn_at IS NOT NULL) AND (btrim(withdraw_note) <> ''::text))) AND (withdrawn_by_id IS DISTINCT FROM '00000000-0000-7000-8000-000000000001'::uuid)) IS TRUE))",
+      },
+      // A certification entered from its sheet names who and why, never with a phone (ADR-534 (1)).
+      {
+        name: 'certification_created_check',
+        definition:
+          "CHECK ((((num_nonnulls(created_by_id, created_reason_id) = ANY (ARRAY[0, 2])) AND ((created_by_id IS NULL) OR (num_nonnulls(device_id, assignment_id) = 0)) AND (created_by_id IS DISTINCT FROM '00000000-0000-7000-8000-000000000001'::uuid)) IS TRUE))",
+      },
+      // Which way a passcode session was opened, on a phone's record alone, agreeing with the
+      // temporary mark (ADR-534 (11)).
+      {
+        name: 'field_event_master_passcode_session_check',
+        definition:
+          "CHECK (((((master_passcode_session IS NULL) OR (source = 'DEVICE'::record_source)) AND (temporary_session = (NOT (master_passcode_session IS DISTINCT FROM 'TEMPORARY'::master_passcode_session)))) IS TRUE))",
+      },
       // A person's void names its ticket; an unvoid is who and when together.
       {
         name: 'ticket_void_ticket_check',
@@ -1477,6 +1505,11 @@ describe('the guards in the catalog', () => {
       // What a block holds: its whole run, or, once reclaimed, only what its phone used (ADR-323).
       // In force once (ADR-363): a ticket has one lock not unlocked at most, and one void not
       // lifted.
+      // A flag has one acceptance in force (ADR-534 (8)).
+      {
+        name: 'flag_acceptance_accepted_once',
+        definition: 'EXCLUDE USING btree (flag_id WITH =) WHERE ((withdrawn_at IS NULL))',
+      },
       {
         name: 'invoice_lock_haul_out_locked_once',
         definition:

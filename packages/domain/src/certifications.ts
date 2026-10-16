@@ -50,7 +50,12 @@ export interface CertificationRefusal {
     | 'REPLACEMENT_NEEDS_REASON'
     | 'REVOCATION_NEEDS_REASON'
     | 'NOT_PERMITTED'
-    | 'NO_SUCH_BOX';
+    | 'NO_SUCH_BOX'
+    | 'NOT_REVOKED'
+    | 'UNREVOCATION_NEEDS_REASON'
+    | 'PRIMARY_STAYS'
+    | 'CREW_HAS_NO_BOX'
+    | 'CERT_NUMBER_HELD';
   readonly message: string;
 }
 
@@ -169,13 +174,57 @@ export class CertificationChanges {
     };
   }
 
-  // Only an admin revokes (ADR-079; AC-03-55): no permission opens it to anybody else. `person`
-  // is null where the database has nobody of that id.
-  revoker(person: Revoker | null): CertificationRefusal | null {
+  // Only an admin revokes (ADR-079; AC-03-55), and only an admin takes a revocation back
+  // (ADR-534 (7)): no permission opens either to anybody else. `person` is null where the
+  // database has nobody of that id.
+  revoker(
+    person: Revoker | null,
+    act: 'revoke' | 'un-revoke' = 'revoke',
+  ): CertificationRefusal | null {
     if (person !== null && person.role === 'ADMIN' && !person.archived) return null;
     return {
       code: 'NOT_PERMITTED',
-      message: `${person?.name ?? 'Somebody the firm has no record of'} may not revoke certification ${this.certNumber}: it takes an admin. Nothing was changed.`,
+      message: `${person?.name ?? 'Somebody the firm has no record of'} may not ${act} certification ${this.certNumber}: it takes an admin. Nothing was changed.`,
+    };
+  }
+
+  // A revocation taken back (ADR-534 (7)): only one that stands, and with a reason.
+  unrevocation(revoked: boolean, reason: string): CertificationRefusal | null {
+    if (!revoked) {
+      return {
+        code: 'NOT_REVOKED',
+        message: `Certification ${this.certNumber} isn’t revoked. Nothing was changed.`,
+      };
+    }
+    if (reason.trim() !== '') return null;
+    return {
+      code: 'UNREVOCATION_NEEDS_REASON',
+      message: `Not saved: certification ${this.certNumber}’s revocation is taken back with a reason.`,
+    };
+  }
+
+  // Box 0 is the primary, the main interior: corrected, never taken off (ADR-076).
+  primaryStays(): CertificationRefusal {
+    return {
+      code: 'PRIMARY_STAYS',
+      message: `Not saved: box 0 is certification ${this.certNumber}’s primary box, the main interior. It is corrected, never taken off.`,
+    };
+  }
+
+  // A crew is never measured (invariant 10): it takes no box.
+  crewHasNoBox(): CertificationRefusal {
+    return {
+      code: 'CREW_HAS_NO_BOX',
+      message: `Not saved: certification ${this.certNumber} is a crew’s, and a crew is never measured.`,
+    };
+  }
+
+  // A cert number once per project (ADR-045, 318): a sheet entered in the back office whose
+  // number another certification of the project already has.
+  numberHeld(): CertificationRefusal {
+    return {
+      code: 'CERT_NUMBER_HELD',
+      message: `Not saved: this project already has a certification ${this.certNumber}. A cert number is used once on a project.`,
     };
   }
 

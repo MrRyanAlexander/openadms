@@ -28,6 +28,7 @@ import {
   type CertificationKind,
   FieldEventDetails,
   fieldEventKinds,
+  masterPasscodeSessions,
   measuredAs,
   workflows,
 } from '@open-adms/domain';
@@ -93,8 +94,10 @@ export const syncedFieldEventSchema = z
     // The assignment the phone held, and the version of its lists (ADR-240, 324).
     assignmentId: id,
     setupVersion,
-    // Made under the master passcode's temporary session for this monitor (ADR-120).
-    temporarySession: z.boolean(),
+    // Made in a session opened under the master passcode, and which way: as the phone's monitor
+    // or the temporary session for a monitor picked from the roster (ADR-120, 462, 534;
+    // AC-02-42); none in a monitor's own sign-in.
+    masterPasscodeSession: z.enum(masterPasscodeSessions).nullable(),
     // Typed because the barcode wouldn't read, with the reason picked (ADR-111, 173).
     numberTyped: z.boolean(),
     numberTypedReasonId: id.nullable(),

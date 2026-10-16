@@ -210,10 +210,12 @@ const standing = async (served: Served, p: Photographed, file: 'photo' | 'depth'
 
 describe('the media endpoint', () => {
   it('AC-10-47 is the one endpoint a phone sends a file to, open to a proven phone with somebody signed in on it (ADR-531), and a file is no body any other endpoint takes', async () => {
-    // The other is the back office's map's file (ADR-485; KD-76).
+    // The others are the back office's: a map's file (ADR-485; KD-76) and a photograph added to a
+    // record made there (ADR-534 (2)).
     expect(endpoints.filter(({ file }) => file === true).map(({ name }) => name)).toEqual([
       'sendMapFile',
       'sendPhotoFilePart',
+      'addPhotograph',
     ]);
     for (const served of [photoFileEndpoint, sendPhotoFilePartEndpoint]) {
       expect([served.access, served.path]).toEqual([

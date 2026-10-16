@@ -4,9 +4,9 @@
 // memory, on the installation's database as `adms_api`: it needs `pnpm local:up` after `pnpm
 // installer`, and fails saying so. Each test's work is undone (support/database.ts), so a test
 // stays short: a piece of work ends after five seconds.
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
-import { sessionAnswerSchema } from '@open-adms/contracts';
+import { sessionAnswerSchema, voidTicketEndpoint } from '@open-adms/contracts';
 import { systemActorId, type Database } from '@open-adms/db';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -396,6 +396,33 @@ describe('a write made on the strength of a cookie', () => {
       const own = await served.ask('POST', '/test/voids', { cookies, csrf: signed.csrf, payload });
       expect([own.status, own.body]).toEqual([200, { status: 'ok' }]);
       expect(ran).toEqual(['ok']);
+      // And the void's own endpoint (ADR-534 (13); BACKLOG C90): a void of 101031, forged, is
+      // refused before anything sent is read, and no void is written; sent by her page, it gets
+      // past the check to the endpoint's own rules.
+      const voids = await tx.ticketVoid.count();
+      const voidAt = voidTicketEndpoint.path.replace(':projectId', randomUUID());
+      const asked = {
+        workflow: 'LOAD',
+        ticketNumber: '101031',
+        reasonId: randomUUID(),
+        note: 'Never happened',
+      };
+      for (const csrf of [undefined, '', other.csrf, `${signed.csrf}x`]) {
+        const forged = await served.ask('POST', voidAt, {
+          cookies,
+          payload: asked,
+          ...(csrf === undefined ? {} : { csrf }),
+        });
+        expect([forged.status, forged.code]).toEqual([403, 'CSRF_REFUSED']);
+      }
+      expect(await tx.ticketVoid.count()).toBe(voids);
+      const fromHerPage = await served.ask('POST', voidAt, {
+        cookies,
+        csrf: signed.csrf,
+        payload: asked,
+      });
+      expect(fromHerPage.code).not.toBe('CSRF_REFUSED');
+      expect(await tx.ticketVoid.count()).toBe(voids);
     });
   });
 

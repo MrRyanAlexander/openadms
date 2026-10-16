@@ -105,6 +105,8 @@ describe('who may ask', () => {
       'correctItemLine',
       'correctCarriedTicket',
       'markPhotograph',
+      // A photograph added in the back office to a record made there (ADR-534 (2)).
+      'addPhotograph',
       'correctScaleReceipt',
       'correctRoe',
       'correctRoeScope',
@@ -114,8 +116,16 @@ describe('who may ask', () => {
       // A held record saved as corrected (held.test.ts; ADR-526).
       'saveHeldRecord',
       'createFieldEvent',
-      // Part 4's (certifications.test.ts): a measuring mistake on a certification.
+      // The forms and a certification made in the back office (ADR-534 (1), (9)).
+      'createRoe',
+      'createSurvey',
+      'createIncident',
+      'createDropOffLog',
+      'createCertification',
+      // Part 4's (certifications.test.ts): a certification corrected, and its boxes.
+      'correctCertification',
       'correctCertificationBox',
+      'addCertificationBox',
     ]);
     expect(taking('RENUMBER')).toEqual([
       'renumberFieldEvent',

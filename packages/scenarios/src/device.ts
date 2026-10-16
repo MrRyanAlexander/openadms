@@ -778,7 +778,7 @@ export class SimulatedDevice {
       deviceId: this.current.deviceId,
       assignmentId: this.current.assignmentId,
       setupVersion: this.lists.setupVersion,
-      temporarySession: false,
+      masterPasscodeSession: null,
       numberTyped: entry.from === 'TYPED',
       numberTypedReasonId:
         entry.from === 'TYPED'
