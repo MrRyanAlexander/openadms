@@ -70,14 +70,14 @@ things stand, where the product ends up, the road there, and how the user works*
 now, topic by topic, is `SUMMARY.md` (its header's topic index, then only the topics you touch);
 the round-by-round history is the session log at the end of `DECISIONS.md`.
 
-### Where things stand (2026-10-17, through ADR-550)
+### Where things stand (2026-10-17, through ADR-551)
 - **The independent check of Phases 0–2** (`AUDIT-2026-10-17-PHASE-2.md`) **is answered whole** at
   the user's word "resolve all of these" (ADR-541…550): the passcode can't be held shut by a
   stranger, bursts are counted try by try, one key a purpose with the passcode's own sealed seed, a
   record naming somebody who didn't hold the phone flagged, the audit log and the jobs set aside
   read, a phone's held budget, sign-in by one indexed equality, map files read in a thread, an
-  untrusted proxy logged; the threat model read again whole. Three answers wait on the user
-  (`SUMMARY.md` §4).
+  untrusted proxy logged; the threat model read again whole. The user answered its three
+  questions (ADR-551): the new flags kept, no second thing to enrol, the firm's own passcode.
 - **Phases 0 and 1 are done** (Phase 0 closed 2026-10-01, all 17 REQs, ADR-281…288; Phase 1's exit
   met 2026-10-06, ADR-371, 372). **Every spec page is approved** (ARCHITECTURE, VISION, INDEX, the
   part pages, LISTS, RATE-SHEET, RULES, DATA-MODEL, FLAGS, CONVENTIONS, the golden mission and its
@@ -198,8 +198,12 @@ same scenarios passing at each layer (engine, API, apps). The finished surfaces 
   it. **Try loosened guards two at a time**, each copy `STRATEGY FILE_COPY` then a `CHECKPOINT`
   after its drop (`adms-verify` §1.3). A first `local:up` downloads the map extract (20 MB, IPv4
   only) and takes about two minutes; a resume about 12 s.
-- **When Docker misbehaves:** every `docker` call answering 500 → `docker desktop restart`
-  (quitting by `osascript` left its backend running); `local:up` meeting `ECONNRESET` or a container
+- **When Docker misbehaves:** it hangs often on this machine and a restart always clears it (the
+  user, ADR-551): a `docker` call or `local:up` that hangs, or every call answering 500 →
+  `docker desktop restart` at once, never a long wait (quitting by `osascript` left its backend
+  running); then `pnpm local:down` and `up`. **Volumes nobody recognises are an agent's one-off
+  containers** (the stack's own are all named `open-adms-local_…`): run every one-off with `--rm`,
+  and before close-out `docker volume ls -f dangling=true` must show none you made; `local:up` meeting `ECONNRESET` or a container
   whose layer is gone → `pnpm local:down` and `up` once more. **On a Linux host (a cloud session)**
   the containers run as uid 1000: after `pnpm installer` the two service env files, after each
   `local:up` the copied Caddy root, and each key under `infra/local/.generated/tls/` by its own

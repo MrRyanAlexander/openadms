@@ -164,8 +164,9 @@ Said plainly, so nobody reads more into the controls than is there.
    the firm chooses (ADR-106). Whoever holds it can sign in as a phone's monitor; every use is
    marked and logged, none is stopped. Offline, a phone's check of it is a slow hash of what is
    typed, so its length is its whole defence there: a long one (four or five random words) is the
-   firm's best answer. Whether enrolment should also take a second thing (a code the back office
-   issues per phone) is the user's to decide (ADR-541 (3)).
+   firm's best answer, and the firm's to choose: it makes the passcode up itself, and the installer
+   suggests none (the user, ADR-551 (3)). Enrolment takes the passcode alone; a second thing (a code
+   the back office issues per phone) is not built, at the user's word "not now" (ADR-541 (3), 551 (2)).
 5. **A monitor's password.** By the firm's practice it is seven digits a coworker may know
    (ADR-105). The controls of T-01 stand in for it.
 6. **A phone with no screen lock.** The encrypted store's protection rests on the phone's own

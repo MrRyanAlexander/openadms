@@ -9,7 +9,7 @@
 > requirement) and `spec/VISION.md` §7–§8 (the finished surfaces, and what "done" means). If this
 > page disagrees with them, they win.
 >
-> **Last updated:** 2026-10-17 (**the independent check of Phases 0–2 is answered whole, ADR-541…550.** A stranger can no longer keep the master passcode shut; bursts of guesses are counted one by one; each of the API's secrets now keys one thing, and the passcode's offline check no longer rests on what the server checks it against; a phone's record naming somebody who didn't hold the phone is kept and flagged; the back office and the client's viewers can read a ticket's history; jobs set aside are listed; a phone that floods the server is reported; sign-in no longer reads everybody's credentials; map files are read apart; a misplaced proxy is reported. **Three things wait on you** (see §4 of the summary): the new flag and its words, whether enrolling a phone should take a second code, and whether the installer should suggest a generated passcode. Phase 2 stays done; Phase 3 is yours to open.)
+> **Last updated:** 2026-10-17 (**your three answers to the Phase 2 audit are recorded, ADR-551.** The two new flags stay as worded; enrolling a phone takes the master passcode alone, a second step not now; your firm makes up its own master passcode, and one like `Category5$` is accepted as the rules stand. Nothing in the code changed. **Next: your word to open Phase 3.**)
 >
 > *This line holds the latest session alone (ADR-516); what each session did is its ADR and `DECISIONS.md`'s session log.*
 
@@ -195,8 +195,7 @@ Nothing here blocks the next task. Each is listed with the point where it starts
 
 | What | Why it's yours | Matters by |
 |---|---|---|
-| **The defaults page, `spec/DEFAULTS-REVIEW.md`** | Phase 2's last exit criterion: each default confirmed or overturned (ADR-519, 537) | Now: Phase 2 closes on it |
-| **Opening Phase 3** (the field app) | An agent never opens a phase | Once you've answered the defaults page |
+| **Opening Phase 3** (the field app) | An agent never opens a phase | Now: Phase 2's exit is met (ADR-537…540) and the audit's questions answered (ADR-551) |
 | **The agent's defaults** | Each recorded call you may overturn, with its ADR: `SUMMARY.md` §4, all of them on the defaults page above (D1…D162) | Any time; building doesn't wait |
 | **Whether *photos required* should take a number** (asked 2026-10-05, ADR-345) | Today a pay item's *photos required* is yes or no, meaning at least one. Your example spoke of a ticket that requires 4. If you want a firm to set a number, it is a new pay item setting; if "at least one" is enough, nothing changes. Nothing waits on it |
 | Commit each response's changes | Agents don't write to git; every file-changing response ends with a block for you to run. The history began 2026-10-01 (nine commits on `phase0-foundation`, ADR-288) | After each response, so no work sits uncommitted (tasks 1.8.4…1.9.3 and the 2026-10-06 housekeeping were waiting on 2026-10-06; one script commits them) |

@@ -157,7 +157,7 @@ REQ in the same response (ADR-519's lesson).
 - [x] **2.8.10 The independent check's findings answered** (`agent_store/AUDIT-2026-10-17-PHASE-2.md`,
   at the user's word "resolve all of these"): F1…F11 and R1…R5.
   ✅ **done 2026-10-17 (ADR-541…550):** AC-10-108…116 written and passing; the threat model read
-  again whole; three answers wait on the user (`SUMMARY.md` §4).
+  again whole; the user's three answers recorded (ADR-551).
 
 **Every one of Phase 2's 22 REQs is named by a task:** 004 → 2.1.3, 2.6.1 · 006 → 2.1.2, 2.7.4 ·
 016 → 2.6.2 · 201 → 2.4.2…2.4.5 · 202 → 2.2.3…2.2.5 · 202a → 2.5.1, 2.6.5 · 202b → 2.2.3, 2.5.4, 2.6.5 ·

@@ -257,8 +257,8 @@ that phone then: a session of theirs on it, begun before the field time ended an
 before it started (a session past its hours still counts; one ended by a sign-out, another's
 sign-in or a password set anew doesn't); the phone set up for them under the master passcode
 (which is never flagged, ADR-540); or the board's assignment of theirs naming that very phone,
-with nobody else signed in on it then. It keeps the answer with the sync. *Agent default,
-worded by the agent, for the user to approve* (ADR-543; the Phase 2 audit's F4; T-13).
+with nobody else signed in on it then. It keeps the answer with the sync. Worded by the
+agent, **approved by the user on 2026-10-17** (ADR-543, 551; the Phase 2 audit's F4; T-13).
 
 | Code | Raised when | Message | Bills | Facts kept | ADR |
 |---|---|---|---|---|---|
@@ -272,7 +272,7 @@ one, and these nine. **Added:** `SCALE_NET_DISAGREES` and `TWO_QUANTITIES`, word
 approved by the user on 2026-10-05 ("Agree on both proposed in the two questions", ADR-348). The
 catalogue was 77 flags. **Added:** `NOT_PROCESSED_LINES_STAND` (the user, 2026-10-06: "KD-73
 recommended approved", ADR-360). The catalogue was 79 flags (`SUB_NAME_ALIKE` added by ADR-529);
-**81** with §3.13's two (ADR-543, agent default).
+**81** with §3.13's two (ADR-543, approved by the user, ADR-551).
 
 ---
 
