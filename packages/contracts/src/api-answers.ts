@@ -286,6 +286,9 @@ export const phoneRecordSchema = z.strictObject({
   keyRevokedBy: z.enum(['TURN_IN', 'FIRM_TIME']).nullable(),
   masterPasscodeVersion: z.number().int().min(1),
   holdsCurrentPasscode: z.boolean(),
+  // The last time it made the server hold more for a person in a day than the firm's budget: a
+  // phone to look at (ADR-546). None where it never did.
+  heldBudgetPassedAt: z.iso.datetime().nullable(),
 });
 
 export type PhoneRecord = z.infer<typeof phoneRecordSchema>;

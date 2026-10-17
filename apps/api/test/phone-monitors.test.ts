@@ -19,7 +19,7 @@ import { enrolledPhone, passcode, proven, SoftwareKey } from './support/phones.t
 import { notTaken } from './support/review.ts';
 import { danasEmail, long, worldOn, type Answer, type Served } from './support/served.ts';
 import { told } from './support/setup.ts';
-import { signingSecret } from './support/sign-in.ts';
+import { passwordKey } from './support/sign-in.ts';
 
 let db: Database;
 
@@ -179,7 +179,7 @@ describe('a monitor is created on a phone', () => {
       });
       const hash = credential.passwordHash ?? '';
       expect(hash).toMatch(/^\$argon2id\$/);
-      const hasher = new PasswordHasher(signingSecret);
+      const hasher = new PasswordHasher(passwordKey);
       expect(await hasher.verify('5550142', hash)).toBe(true);
       expect(await hasher.verify('5550143', hash)).toBe(false);
       // The audit log names the master passcode's own actor, on that phone: never a person.
@@ -281,7 +281,7 @@ describe('the master passcode entered wrong on a phone', () => {
     });
   });
 
-  it('AC-10-22 the fifth wrong try in a row makes the next wait, wherever each was made: while it waits the right passcode creates nobody and nothing is written; one address is stopped at its own fourth', async () => {
+  it('AC-10-22, AC-10-108 the fifth wrong try in a row makes the next wait, wherever each was made: while it waits the right passcode creates nobody from an address that tried it wrong, and nothing is written; one address is stopped at its own fourth', async () => {
     await world(async (served, tx) => {
       const phone = await enrolledPhone(served, tx, 'P1-COL-1');
       const version = phone.masterPasscodeVersion;
@@ -307,7 +307,7 @@ describe('the master passcode entered wrong on a phone', () => {
       );
       const waiting = new Date(served.clock.now().getTime() + 30_000);
       expect(await tries(tx, version)).toEqual({ failedTries: 5, lockedUntil: waiting });
-      served.from = '198.51.100.12';
+      // While it waits, from the address that tried it wrong last (ADR-541).
       const during = await create(served, token, { ...lee, passcode });
       expect(told(during)).toEqual(refused);
       expect(await audited(tx, during.requestId)).toEqual([]);

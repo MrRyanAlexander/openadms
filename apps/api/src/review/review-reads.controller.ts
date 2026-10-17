@@ -7,6 +7,9 @@
 // log says what was read or done, by count: never a name, a number or a note.
 import {
   listCertificationsEndpoint,
+  listSetAsideJobsEndpoint,
+  readRecordHistoryEndpoint,
+  readTicketHistoryEndpoint,
   listDropOffLogsEndpoint,
   listFlagsEndpoint,
   listIncidentsEndpoint,
@@ -43,10 +46,12 @@ import {
   qcMarkRecord,
   reviewed,
 } from './review-answered.ts';
+import { AuditTrail } from './audit-trail.ts';
 import { apiInvoiceLocks, apiQcMarks } from './review-marks.controller.ts';
 import { ReviewReads, type PageAsked } from './review-reads.ts';
 
 export const apiReviewReads = Symbol('the API’s reads for review');
+export const apiAuditTrail = Symbol('the API’s reads of the audit log');
 
 // A page's size where the request names none.
 const pageOf = 50;
@@ -109,15 +114,63 @@ export class ReviewReadsController {
   private readonly reads: ReviewReads;
   private readonly qcMarks: QcMarks;
   private readonly invoiceLocks: InvoiceLocks;
+  private readonly auditTrail: AuditTrail;
 
   constructor(
     @Inject(apiReviewReads) reads: ReviewReads,
     @Inject(apiQcMarks) qcMarks: QcMarks,
     @Inject(apiInvoiceLocks) invoiceLocks: InvoiceLocks,
+    @Inject(apiAuditTrail) auditTrail: AuditTrail,
   ) {
     this.reads = reads;
     this.qcMarks = qcMarks;
     this.invoiceLocks = invoiceLocks;
+    this.auditTrail = auditTrail;
+  }
+
+  // A project's jobs set aside (ADR-545).
+  @Serves(listSetAsideJobsEndpoint)
+  async setAsideJobs(
+    @Param() params: ParamsOf<typeof listSetAsideJobsEndpoint>,
+    @Query() query: QueryOf<typeof listSetAsideJobsEndpoint>,
+    @Req() request: FastifyRequest,
+  ) {
+    return listSetAsideJobsEndpoint.answer.parse(
+      await this.reads.setAsideJobs(callerOf(request).userId, params.projectId, paged(query)),
+    );
+  }
+
+  // What the audit log holds of a ticket, and of one record (ADR-544).
+  @Serves(readTicketHistoryEndpoint)
+  async ticketHistory(
+    @Param() params: ParamsOf<typeof readTicketHistoryEndpoint>,
+    @Query() query: QueryOf<typeof readTicketHistoryEndpoint>,
+    @Req() request: FastifyRequest,
+  ) {
+    return readTicketHistoryEndpoint.answer.parse(
+      await this.auditTrail.ticketHistory(
+        callerOf(request).userId,
+        params.projectId,
+        params.workflow,
+        params.ticketNumber,
+        paged(query),
+      ),
+    );
+  }
+
+  @Serves(readRecordHistoryEndpoint)
+  async recordHistory(
+    @Query() query: QueryOf<typeof readRecordHistoryEndpoint>,
+    @Req() request: FastifyRequest,
+  ) {
+    return readRecordHistoryEndpoint.answer.parse(
+      await this.auditTrail.recordHistory(
+        callerOf(request).userId,
+        query.tableName,
+        query.recordId,
+        paged(query),
+      ),
+    );
   }
 
   @Serves(reviewQueueEndpoint)

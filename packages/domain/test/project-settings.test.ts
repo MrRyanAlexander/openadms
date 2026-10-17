@@ -69,6 +69,10 @@ const shipped = {
   MAP_SERVER_ANSWER_SECONDS: '30',
   DEVICE_CLOCK_OFF_LIMIT_MINUTES: '5',
   JOB_TICKETS_AT_MOST: '200',
+  PHONE_HELD_BYTES_PER_DAY: '16777216',
+  PHONE_HELD_RECORDS_PER_DAY: '1000',
+  MAP_FILE_READ_SECONDS: '60',
+  MAP_FILE_READ_MEMORY_MEBIBYTES: '512',
 };
 
 // The program types of the example world: PPDR requires an ROE, ROW doesn't.
@@ -190,6 +194,10 @@ describe('the policy values', () => {
       mapServerAnswerSeconds: 'MAP_SERVER_ANSWER_SECONDS',
       deviceClockOffLimitMinutes: 'DEVICE_CLOCK_OFF_LIMIT_MINUTES',
       jobTicketsAtMost: 'JOB_TICKETS_AT_MOST',
+      phoneHeldBytesPerDay: 'PHONE_HELD_BYTES_PER_DAY',
+      phoneHeldRecordsPerDay: 'PHONE_HELD_RECORDS_PER_DAY',
+      mapFileReadSeconds: 'MAP_FILE_READ_SECONDS',
+      mapFileReadMemoryMebibytes: 'MAP_FILE_READ_MEMORY_MEBIBYTES',
     });
     expect(Object.keys(shipped).sort()).toEqual(Object.values(policyNames).sort());
   });

@@ -47,6 +47,8 @@ const warning = 'Git-ignored. Never commit, print or share it.';
 // How the hash reaches the seed (its process's environment), and where an installation made before
 // the database kept it still has it (packages/db/.env, ADR-266).
 const passcodeKey = 'ADMS_MASTER_PASSCODE_HASH';
+// The API's keys of their own purposes beside its signing secret (ADR-542).
+const partedKeys = ['ADMS_PASSWORD_KEY', 'ADMS_SEALING_KEY'] as const;
 // What the worker's settings name of the map servers (apps/worker/src/process/settings.ts).
 const workerMapKeys = [
   'ADMS_ROUTING_URL',
@@ -132,6 +134,7 @@ export class Installer {
           return;
         }
         this.requireSecrets();
+        this.ensurePartedKeys(record);
         this.ensureDatabaseTls();
       } else {
         await this.refuseLeftovers(database);
@@ -296,6 +299,8 @@ export class Installer {
         ['DATABASE_URL', url('adms_api')],
         ['READONLY_DATABASE_URL', url('adms_readonly')],
         ['ADMS_TOKEN_SIGNING_SECRET', maker.password()],
+        // One key a purpose (ADR-542): a password's slow hash, and what is sealed at rest.
+        ...partedKeys.map((key): [string, string] => [key, maker.password()]),
         ['SMTP_URL', answers.mail === 'mail catcher' ? `smtp://${host}:${smtpPort}` : ''],
         ...(answers.mail === 'mail catcher' ? this.apiMailSettings() : []),
         ...this.apiTlsSettings(),
@@ -317,7 +322,7 @@ export class Installer {
       firm: answers.firm,
       mail: answers.mail,
       database: { host, port: server.port, name: databaseName },
-      steps: { secrets: now },
+      steps: { secrets: now, keys: now },
       createdAt: now,
       updatedAt: now,
     };
@@ -358,6 +363,31 @@ export class Installer {
         );
       }
     }
+  }
+
+  // The API's password key and sealing key (ADR-542; the Phase 2 audit's F11): an installation
+  // made before the API held a key a purpose is given them once, at the end of its env file, every
+  // line already there left as it was (what was made under the signing secret before still opens:
+  // the API reads it, and makes it again at its owner's next sign-in). Once made, one gone is a
+  // secret lost, as any other: never made again.
+  private ensurePartedKeys(record: InstallationRecord): void {
+    const name = this.relative(this.apiEnv.path);
+    const held = this.apiEnv.read();
+    const missing = partedKeys.filter((key) => held[key] === undefined);
+    if (missing.length === 0) {
+      console.log(`✓ ${name} holds the API's password key and sealing key`);
+      return;
+    }
+    if (record.steps.keys !== undefined) {
+      throw new Error(
+        `${name} (${missing.join(', ')}) is gone, and with it a secret I won't remake. ` +
+          'Nothing was changed. To start over: `pnpm installer:teardown`, then `pnpm installer`.',
+      );
+    }
+    const maker = new SecretMaker();
+    const added = this.apiEnv.add(missing.map((key): [string, string] => [key, maker.password()]));
+    record.steps.keys = new Date().toISOString();
+    console.log(`+ added to ${name}: ${added.join(', ')} (one key a purpose)`);
   }
 
   // Every login's URL asks TLS alone, the server's certificate checked against the stack's root
@@ -615,6 +645,14 @@ export class Installer {
       text: `every table is guarded${gaps.length === 0 ? '' : ` (${gaps.join('; ')})`}`,
     });
     checks.push(...this.policyChecks());
+    if (this.apiEnv.exists()) {
+      const held = this.apiEnv.read();
+      const keys = [held['ADMS_TOKEN_SIGNING_SECRET'], ...partedKeys.map((key) => held[key])];
+      checks.push({
+        ok: keys.every((key) => key !== undefined) && new Set(keys).size === keys.length,
+        text: 'the API holds a signing secret, a password key and a sealing key, each its own (ADR-542)',
+      });
+    }
     checks.push(await this.masterPasscodeCheck());
     for (const [seeded, called] of [
       [seededActors.system, 'the system actor'],

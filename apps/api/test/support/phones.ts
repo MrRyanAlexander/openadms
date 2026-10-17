@@ -16,7 +16,7 @@ import { expect } from 'vitest';
 import { PasswordHasher } from '../../src/sign-in/password-hasher.ts';
 import type { Tx } from './database.ts';
 import type { Answer, Served } from './served.ts';
-import { signingSecret } from './sign-in.ts';
+import { passwordKey } from './sign-in.ts';
 
 export const passcode = 'osprey-landing-marsh';
 
@@ -25,7 +25,8 @@ const versions = new WeakMap<object, number>();
 // The firm's master passcode for this test: a version of the test's own, now the one in force.
 export async function passcodeSet(tx: Tx): Promise<number> {
   const last = (await tx.masterPasscode.aggregate({ _max: { version: true } }))._max.version ?? 0;
-  const hash = await new PasswordHasher(signingSecret).hashWithoutKey(passcode);
+  // As the installer makes it: no key, no seed, until its first right use (ADR-542).
+  const hash = await new PasswordHasher(passwordKey).hashWithoutKey(passcode);
   await tx.masterPasscode.create({ data: { version: last + 1, hash } });
   versions.set(tx, last + 1);
   return last + 1;

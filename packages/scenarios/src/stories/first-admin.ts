@@ -39,6 +39,8 @@ const first = 'marsh heron delphine ferry';
 const second = 'ferry delphine heron marsh';
 // Stands for the installation's signing secret: made up, and only this story's database knows it.
 const signingSecret = 'made-up-signing-secret-for-this-story-only';
+const passwordKey = 'made-up-password-key-for-this-story-only';
+const sealingKey = 'made-up-sealing-key-for-this-story-only';
 // What Dana's authenticator app holds (RFC 6238's own test secret).
 const authenticator = Buffer.from('12345678901234567890');
 
@@ -83,14 +85,10 @@ export const firstAdmin: Story = {
     const { api, clock, policy } = story;
     const requestNow = (): undefined => undefined;
     const mail = new NoMail();
-    const hasher = new PasswordHasher(signingSecret);
+    const hasher = new PasswordHasher(passwordKey);
     const rules = new PasswordRules(policy, shippedBreachedPasswords());
     const codes = new OneTimeCodes();
-    const check = new TwoStepCheck(
-      new TwoStepRules(policy),
-      codes,
-      new TwoStepSecrets(signingSecret),
-    );
+    const check = new TwoStepCheck(new TwoStepRules(policy), codes, new TwoStepSecrets(sealingKey));
     const sessions = new Sessions(api, {
       tokens: new SessionTokens(signingSecret, policy.accessTokenMinutes),
       hasher,

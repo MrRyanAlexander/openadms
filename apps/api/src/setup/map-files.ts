@@ -78,7 +78,8 @@ export interface MapFromFile {
 
 export interface MapFileParts {
   readonly media: Media;
-  readonly reader: MapFileReader;
+  // Its reading: apart from the API's own work where the process reads (ADR-548).
+  readonly reader: Pick<MapFileReader, 'read'>;
   readonly fileBytesAtMost: number;
   readonly projects: ProjectSetup;
   readonly sites: SiteSetup;
@@ -110,7 +111,7 @@ const refused = (code: string, message: string): Outcome<never> => ({
 
 export class MapFiles extends SetupService {
   private readonly media: Media;
-  private readonly reader: MapFileReader;
+  private readonly reader: Pick<MapFileReader, 'read'>;
   private readonly fileBytesAtMost: number;
   private readonly projects: ProjectSetup;
   private readonly sites: SiteSetup;

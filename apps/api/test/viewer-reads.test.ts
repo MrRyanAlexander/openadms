@@ -62,6 +62,8 @@ describe('who may ask', () => {
     expect(viewers.map(({ name }) => name)).toEqual([
       'viewerProjects',
       'viewerRoes',
+      // What the audit log holds of a ticket, as the database shows the viewer (ADR-544).
+      'viewerTicketHistory',
       // The same records the back office reads, as the database shows each viewer (ADR-535 (6)).
       'viewerCertifications',
       'viewerSurveys',

@@ -483,7 +483,7 @@ describe('the passcode it is opened under', () => {
     });
   });
 
-  it('AC-10-22 while the passcode waits after wrong tries the right one opens nothing either, and nothing is written; one address is stopped at its own fourth', async () => {
+  it('AC-10-22, AC-10-108 while the passcode waits after wrong tries the right one opens nothing either from an address that tried it wrong, and nothing is written; one address is stopped at its own fourth', async () => {
     await world(async (served, tx) => {
       const { phone, token, tariq } = await theTowersPhone(served, tx);
       const asked = { personId: tariq.userId, kind: 'AS_MONITOR' };
@@ -500,8 +500,8 @@ describe('the passcode it is opened under', () => {
       expect(told(await open(served, token, { ...asked, passcode: wrongPasscode }))).toEqual(
         refused,
       );
-      // The fifth wrong try in a row: the passcode waits, wherever the next comes from.
-      served.from = '198.51.100.12';
+      // The fifth wrong try in a row: the passcode waits for every address that tried it wrong
+      // (ADR-541), this one among them.
       const waiting = await open(served, token, { ...asked, passcode });
       expect(told(waiting)).toEqual(refused);
       expect(await audited(tx, waiting.requestId)).toEqual([]);

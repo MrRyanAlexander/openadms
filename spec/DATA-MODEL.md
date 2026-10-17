@@ -362,13 +362,14 @@ neither table (ADR-361, *agent default*: ROEs and forms stay unseen unless the u
 
 #### `MasterPasscode`
 
-*Configuration, as built (ADR-281).* A version and its slow hash, never edited, read only by the API.
+*Configuration, as built (ADR-281, 542).* A version, its keyed slow hash and its sealed offline seed, read only by the API; never edited but to key the installer's verifier and write its seed, each once (ADR-542).
 
 | Field | Type | Notes |
 |---|---|---|
 | **id** | uuid | |
 | **version** | int, unique | |
-| **hash** | text | Kept out of the audit log (§7) |
+| **hash** | text | Argon2id, keyed with the API's password key (the installer's first version keyed at its first right use). Kept out of the audit log (§7) |
+| offlineSeed | text | The first slow hash of the passcode under its own salt, sealed with the API's sealing key and bound to the version: what a phone's check is made from and an offline sign-in under it proven against (ADR-542). None until the API first has the passcode in hand. Kept out of the audit log |
 | **createdAt** | instant | |
 
 #### `MasterPasscodeTries`
@@ -1464,6 +1465,8 @@ The idempotency ledger: a retry is answered "already saved" from here and never 
 | **recordKind** | *open* | |
 | **syncId** | → `Sync` | |
 | **answer** | enum `SyncAnswer` | `SAVED` · `QUARANTINED` |
+| monitorId | → `User` | A field event saved: the person it named as its monitor (ADR-543) |
+| monitorSignedIn | bool | And whether they held that phone over its field time when it arrived: what the worker flags `MONITOR_NOT_SIGNED_IN` from. Both or neither |
 
 **As built (ADR-471, task 2.6.2 part 1; agent defaults).** Table `synced_record`; **the key's
 column is `id`** (the phone-made id; the audit log names every row by a column of that name),
@@ -1496,6 +1499,7 @@ defaults). Inert: never a field event, never paired, never billed, never read by
 | sentMonitorId | uuid | The monitor it named, as sent: not a relation |
 | **payload** | JSONB | What stood in the record's place, exactly as sent: any JSON value |
 | **sentSha256** | text | The SHA-256 of what was sent |
+| sentBytes | int | Its size as canonical JSON in UTF-8: what the phone's daily budget counts (ADR-546). Never changed |
 | **reason** | enum `NotSavedReason` | `NOT_A_RECORD` · `NAMES_NO_RECORD` · `ASSIGNMENT_NOT_SAVED` · `CERTIFICATION_REFUSED` · `OWNER_NOT_SAVED` (a photograph whose record the server has nowhere, ADR-481, 526) · `REPORT_NOT_SAVED` (an unplanned assignment or a use of the passcode the server could not keep, ADR-526) · `PROJECT_CLOSED` (field work for a project closed before it arrived, ADR-529) (the domain's `heldReasons`) |
 | **message** | text | What the phone was told |
 | **receivedAt** | instant | |

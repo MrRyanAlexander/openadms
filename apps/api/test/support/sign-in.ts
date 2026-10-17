@@ -19,6 +19,9 @@ import { WrongTries } from '../../src/sign-in/wrong-tries.ts';
 import { shippedPolicy } from './process.ts';
 
 export const signingSecret = 'made-up-signing-secret-for-this-test-only';
+// The keys of their own purposes (ADR-542): never the signing secret.
+export const passwordKey = 'made-up-password-key-for-this-test-only';
+export const sealingKey = 'made-up-sealing-key-for-this-test-only';
 
 // What the firm's mail server would have been handed.
 export class Outbox implements Mail {
@@ -67,14 +70,14 @@ export function signInOn(
   clock: Clock = new TestClock(),
   policy = shippedPolicy,
 ): SignIn {
-  const hasher = new PasswordHasher(signingSecret);
+  const hasher = new PasswordHasher(passwordKey, signingSecret);
   const tokens = new SessionTokens(signingSecret, policy.accessTokenMinutes);
   const requestNow = (): undefined => undefined;
   const tries = new WrongTries(within, { rules: new SignInTries(policy), clock, mail, requestNow });
   const check = new TwoStepCheck(
     new TwoStepRules(policy),
     new OneTimeCodes(),
-    new TwoStepSecrets(signingSecret),
+    new TwoStepSecrets(sealingKey, signingSecret),
   );
   const sessions = new Sessions(within, {
     tokens,
@@ -96,7 +99,7 @@ export function signInOn(
     sessions,
     tries,
     limits: { setAnew: () => undefined },
-    offline: new OfflineChecks(signingSecret),
+    offline: new OfflineChecks(sealingKey, signingSecret),
   });
   return { hasher, tokens, sessions, passwords, check, twoStep };
 }

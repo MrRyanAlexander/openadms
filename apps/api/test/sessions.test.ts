@@ -4,7 +4,7 @@
 // memory, on the installation's database as `adms_api`: it needs `pnpm local:up` after `pnpm
 // installer`, and fails saying so. Each test's work is undone (support/database.ts), so a test
 // stays short: a piece of work ends after five seconds.
-import { createHash, randomUUID } from 'node:crypto';
+import { createCipheriv, createHash, createHmac, randomBytes, randomUUID } from 'node:crypto';
 
 import { sessionAnswerSchema, voidTicketEndpoint } from '@open-adms/contracts';
 import { systemActorId, type Database } from '@open-adms/db';
@@ -14,6 +14,7 @@ import { accessCookie, refreshCookie } from '../src/sign-in/session-cookies.ts';
 import { installationSettings, openInstallation, type Tx } from './support/database.ts';
 import {
   danasEmail,
+  danasSecret,
   long,
   longer,
   luissEmail,
@@ -23,7 +24,7 @@ import {
   type Answer,
 } from './support/served.ts';
 import { shippedPolicy } from './support/process.ts';
-import { NoServer, Outbox, signInOn } from './support/sign-in.ts';
+import { NoServer, Outbox, signingSecret, signInOn } from './support/sign-in.ts';
 
 const keptOut = '[kept out of the audit]';
 const sha256 = (value: string): string => createHash('sha256').update(value).digest('hex');
@@ -200,6 +201,15 @@ describe('signing in', () => {
     });
   });
 
+  it('AC-10-114 the address is found as the database’s own rule holds it, whatever its capitals: Dana signs in with hers typed in capitals, and a name nobody has is refused as before (ADR-547)', async () => {
+    await world(async (served) => {
+      const shouted = danasEmail.toUpperCase();
+      const signed = await served.signIn(shouted, long, served.codeOf(danasEmail));
+      expect([signed.status, signed.code]).toEqual([200, undefined]);
+      refused401(await served.signIn('nobody@gates.example', long), 'SIGN_IN_REFUSED');
+    });
+  });
+
   it('a hash with no key is made again at its owner’s next sign-in (ADR-411)', async () => {
     await world(async (served, tx, { luis }, within) => {
       // Made with no key, by the installer's hasher, for the stories' made-up master passcode.
@@ -209,9 +219,39 @@ describe('signing in', () => {
       await tx.userCredential.update({ where: { userId: luis }, data: { passwordHash: earlier } });
       await served.signedIn(luissEmail, 'heron-marsh-delphine');
       const kept = await tx.userCredential.findUniqueOrThrow({ where: { userId: luis } });
-      expect(kept.passwordHash).toMatch(/^\$argon2id\$v=19\$m=19456,t=2,p=1,keyid=djE\$/);
+      expect(kept.passwordHash).toMatch(/^\$argon2id\$v=19\$m=19456,t=2,p=1,keyid=djI\$/);
       const { hasher } = signInOn(within, new NoServer());
       expect(await hasher.verify('heron-marsh-delphine', kept.passwordHash ?? '')).toBe(true);
+    });
+  });
+
+  it('AC-10-109 an authenticator’s secret sealed before the keys were parted (v1, under the signing secret) still opens at sign-in, and is sealed again under the sealing key; nobody sets anything up again (ADR-542)', async () => {
+    await world(async (served, tx, { dana }, within) => {
+      // Sealed as the API sealed it before ADR-542: a key drawn from the signing secret, `v1`.
+      const key = createHmac('sha256', signingSecret)
+        .update('open-adms/two-step-secret/v1')
+        .digest();
+      const nonce = randomBytes(12);
+      const cipher = createCipheriv('aes-256-gcm', key, nonce);
+      cipher.setAAD(Buffer.from(`kept\n${dana}`));
+      const hidden = Buffer.concat([cipher.update(danasSecret), cipher.final()]);
+      const earlier = [
+        'v1',
+        ...[nonce, hidden, cipher.getAuthTag()].map((bytes) => bytes.toString('base64url')),
+      ].join('.');
+      await tx.userCredential.update({ where: { userId: dana }, data: { twoStepSecret: earlier } });
+      await served.signedIn(danasEmail, long);
+      const kept = await tx.userCredential.findUniqueOrThrow({ where: { userId: dana } });
+      expect(kept.twoStepSecret).toMatch(/^v2\./);
+      const { check } = signInOn(within, new NoServer());
+      expect(check.secrets.open(dana, kept.twoStepSecret ?? '')?.equals(danasSecret)).toBe(true);
+      // The audit log says it changed, never from or to what.
+      const audited = await tx.auditRecord.findFirstOrThrow({
+        where: { tableName: 'user_credential', recordId: kept.id, operation: 'UPDATE' },
+        orderBy: { id: 'desc' },
+      });
+      expect(audited.changedFields).toContain('two_step_secret');
+      expect(JSON.stringify([audited.priorValue, audited.newValue])).not.toContain(earlier);
     });
   });
 });
@@ -488,6 +528,24 @@ describe('wrong tries at a login', () => {
         lockedUntil: null,
       });
       expect((await kindsOf(tx, luis)).at(-1)).toBe('SIGN_IN');
+    });
+  });
+
+  it('AC-10-108 twenty wrong tries sent at once from twenty addresses are counted one at a time: the fifth puts the wait on the login, and the other fifteen are refused unchecked, so the count is the policy’s five, never the burst’s twenty (ADR-541)', async () => {
+    await world(async (served, tx, { luis }) => {
+      const answers = await Promise.all(
+        Array.from({ length: 20 }, (_, each) => {
+          served.from = `203.0.113.${String(100 + each)}`;
+          return served.signIn(luissEmail, wrong);
+        }),
+      );
+      for (const answer of answers) refused401(answer, 'SIGN_IN_REFUSED');
+      expect(await tx.userCredential.findUniqueOrThrow({ where: { userId: luis } })).toMatchObject({
+        failedSignIns: shippedPolicy.signInTriesBeforeWait,
+      });
+      expect(await kindsOf(tx, luis)).toEqual(
+        Array(shippedPolicy.signInTriesBeforeWait).fill('SIGN_IN_FAILED'),
+      );
     });
   });
 

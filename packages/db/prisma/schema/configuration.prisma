@@ -1083,6 +1083,7 @@ model User {
   dropOffLogs                 DropOffLog[]          @relation("DropOffLogMonitor")
   dropOffLogsCreated          DropOffLog[]          @relation("DropOffLogCreatedBy")
   quarantinedRecords          QuarantinedRecord[]   @relation("QuarantinedRecordMonitor")
+  syncedRecordsNamed          SyncedRecord[]        @relation("SyncedRecordMonitor")
   quarantinedRecordsResolved  QuarantinedRecord[]   @relation("QuarantinedRecordResolvedBy")
   heldRecordsResolved         HeldRecord[]          @relation("HeldRecordResolvedBy")
   setAsideFilesResolved       SetAsideFile[]        @relation("SetAsideFileResolvedBy")
@@ -1270,6 +1271,9 @@ enum SecurityEventKind {
   // whose proof the server could not take, which the back office is shown (ADR-531).
   OFFLINE_SIGN_IN
   OFFLINE_SIGN_IN_REFUSED
+  // A phone made the server hold more for a person in a day than the firm's budget: its records
+  // are still received (ADR-546).
+  PHONE_HELD_BUDGET_PASSED
 
   @@map("security_event_kind")
 }
@@ -1308,10 +1312,15 @@ model SecurityEvent {
 // change is a new version, never an edit: the highest version is the current one. The hash is
 // kept out of the audit log, and only the API may read it (the guard migrations, ADR-281).
 model MasterPasscode {
-  id      String @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  version Int    @unique
-  // Argon2id, as a PHC string.
-  hash    String
+  id          String  @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  version     Int     @unique
+  // Argon2id, as a PHC string: keyed with the API's password key (ADR-542), or with none where
+  // the installer made it and it has not yet been used.
+  hash        String
+  // What a phone's check of this version is made from, and a sign-in made offline under it is
+  // proven against: the first slow hash of the passcode, sealed with the API's sealing key and
+  // bound to the version (ADR-542). None until the API first has the passcode in hand.
+  offlineSeed String? @map("offline_seed")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 

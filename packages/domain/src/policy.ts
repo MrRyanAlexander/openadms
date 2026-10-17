@@ -141,6 +141,14 @@ export const policyNames = {
   // services: the API cuts a change that touches more into jobs of that size, and the worker
   // takes up waiting jobs, the oldest first, until their tickets come to it.
   jobTicketsAtMost: 'JOB_TICKETS_AT_MOST',
+  // What one phone may make the server hold for a person in a day, in bytes and in records,
+  // before the admins are told (ADR-546): its records are received all the same.
+  phoneHeldBytesPerDay: 'PHONE_HELD_BYTES_PER_DAY',
+  phoneHeldRecordsPerDay: 'PHONE_HELD_RECORDS_PER_DAY',
+  // How long a map file may take to be read, in seconds, and how much memory its reading may
+  // hold, in mebibytes, apart from the API's own work (ADR-548).
+  mapFileReadSeconds: 'MAP_FILE_READ_SECONDS',
+  mapFileReadMemoryMebibytes: 'MAP_FILE_READ_MEMORY_MEBIBYTES',
 } as const;
 
 export type PolicyName = (typeof policyNames)[keyof typeof policyNames];
@@ -236,6 +244,10 @@ const ranges: Record<PolicyName, { least: number; most: number }> = {
   [policyNames.mapServerAnswerSeconds]: { least: 1, most: 600 },
   [policyNames.deviceClockOffLimitMinutes]: { least: 1, most: 1440 },
   [policyNames.jobTicketsAtMost]: { least: 1, most: 100000 },
+  [policyNames.phoneHeldBytesPerDay]: { least: 1048576, most: 1073741824 },
+  [policyNames.phoneHeldRecordsPerDay]: { least: 10, most: 100000 },
+  [policyNames.mapFileReadSeconds]: { least: 5, most: 600 },
+  [policyNames.mapFileReadMemoryMebibytes]: { least: 64, most: 4096 },
 };
 
 export class Policy {
@@ -299,6 +311,10 @@ export class Policy {
   readonly mapServerAnswerSeconds: number;
   readonly deviceClockOffLimitMinutes: number;
   readonly jobTicketsAtMost: number;
+  readonly phoneHeldBytesPerDay: number;
+  readonly phoneHeldRecordsPerDay: number;
+  readonly mapFileReadSeconds: number;
+  readonly mapFileReadMemoryMebibytes: number;
 
   private constructor(values: Readonly<Record<string, string | undefined>>) {
     this.loadCallLowLimit = Policy.read(values, policyNames.loadCallLowLimit);
@@ -367,6 +383,10 @@ export class Policy {
     this.mapServerAnswerSeconds = Policy.read(values, policyNames.mapServerAnswerSeconds);
     this.deviceClockOffLimitMinutes = Policy.read(values, policyNames.deviceClockOffLimitMinutes);
     this.jobTicketsAtMost = Policy.read(values, policyNames.jobTicketsAtMost);
+    this.phoneHeldBytesPerDay = Policy.read(values, policyNames.phoneHeldBytesPerDay);
+    this.phoneHeldRecordsPerDay = Policy.read(values, policyNames.phoneHeldRecordsPerDay);
+    this.mapFileReadSeconds = Policy.read(values, policyNames.mapFileReadSeconds);
+    this.mapFileReadMemoryMebibytes = Policy.read(values, policyNames.mapFileReadMemoryMebibytes);
     // Three pairs hold only together: an access token that outlasted the session's quiet time would
     // keep a session nobody uses alive; a lock that came no later than the first wait would
     // leave no wait at all; and one address allowed as many wrong tries at a login as put a wait

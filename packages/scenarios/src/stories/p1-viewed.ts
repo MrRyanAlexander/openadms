@@ -37,6 +37,7 @@ import {
   viewerSetupEndpoint,
   viewerSurveysEndpoint,
   viewerTicketEndpoint,
+  viewerTicketHistoryEndpoint,
   viewerTicketsEndpoint,
   type Endpoint,
   type ViewerTicketAnswer,
@@ -447,6 +448,32 @@ export const p1Viewed: Story = {
         (await load(coastlines, '101001'))?.ticketNumber,
       ],
       [null, null, '101001'],
+    );
+    // What the audit log holds of a ticket, as the database shows each viewer (ADR-544).
+    const historyOf = async (viewer: OfficeBrowser, ticketNumber: string) => {
+      const answer = await viewer.asked(viewerTicketHistoryEndpoint, {
+        ids: { projectId: p1, workflow: 'LOAD', ticketNumber },
+        query: { limit: '200' },
+      });
+      if (answer.status === 404 && codeOf(answer) === 'NOT_FOUND') return null;
+      return viewerTicketHistoryEndpoint.answer.parse(
+        answered(viewerTicketHistoryEndpoint, answer),
+      );
+    };
+    const clientsHistory = await historyOf(client, '101001');
+    const auditorsHistory = await historyOf(auditor, '101001');
+    const tablesOf = new Set(clientsHistory?.entries.map(({ tableName }) => tableName) ?? []);
+    story.check(
+      'AC-10-111 the client user and the auditor read 101001’s history through the database’s own view: its field events as the monitors sent them, the completed load and its lines as the worker wrote them, each with who made it and from where and never why; Coastline’s contractor user, shown the ticket, is shown none of its history; a viewer not given P1 not the ticket',
+      [
+        ['field_event', 'completed_load', 'transaction'].every((table) => tablesOf.has(table)),
+        clientsHistory?.entries.every(({ reason }) => reason === null),
+        clientsHistory?.entries.some(({ actor }) => actor?.name === 'Open ADMS (system)'),
+        auditorsHistory?.entries.map(({ id }) => id),
+        (await historyOf(coastlines, '101001'))?.entries,
+        await historyOf(notGiven, '101001'),
+      ],
+      [true, true, true, clientsHistory?.entries.map(({ id }) => id), [], null],
     );
     story.check(
       'and the other way about: Summit’s reads nothing of Coastline’s 101001 or of Rivera’s 101002; Rivera’s nothing of Coastline’s own 101001 or of the haul-out 201004',

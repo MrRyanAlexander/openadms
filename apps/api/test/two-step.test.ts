@@ -316,7 +316,7 @@ describe('setting an authenticator up', () => {
         csrf: signed.csrf,
       });
       const now = await kept(tx, luis);
-      expect(now.twoStepSecret).toMatch(/^v1\./);
+      expect(now.twoStepSecret).toMatch(/^v2\./);
       expect(now.twoStepSecret).not.toContain(secret);
       expect(now.twoStepLastStep).toBe(served.step());
       expect(await kindsOf(tx, luis)).toEqual(['SIGN_IN', 'SIGN_IN', 'TWO_STEP_SET_UP']);
@@ -387,7 +387,7 @@ describe('setting an authenticator up', () => {
       expect((await kept(tx, dana)).twoStepSecret).toBeNull();
       // She begins again, and that one is taken.
       await setUp(served, late, danasEmail);
-      expect((await kept(tx, dana)).twoStepSecret).toMatch(/^v1\./);
+      expect((await kept(tx, dana)).twoStepSecret).toMatch(/^v2\./);
     });
   });
 
@@ -505,7 +505,7 @@ describe('an admin clears somebody’s authenticator', () => {
       ]);
       expect(told(await clear('luis', danas))).toEqual([400, 'BAD_REQUEST']);
       for (const userId of [dana, luis]) {
-        expect((await kept(tx, userId)).twoStepSecret).toMatch(/^v1\./);
+        expect((await kept(tx, userId)).twoStepSecret).toMatch(/^v2\./);
         expect(await kindsOf(tx, userId)).toEqual(['SIGN_IN']);
       }
       expect(told(await served.current(luiss.cookies))).toEqual([200, undefined]);
@@ -524,7 +524,7 @@ describe('an admin clears somebody’s authenticator', () => {
         cleared: false,
         code: 'NOT_ALLOWED',
       });
-      expect((await kept(tx, luis)).twoStepSecret).toMatch(/^v1\./);
+      expect((await kept(tx, luis)).twoStepSecret).toMatch(/^v2\./);
     });
   });
 });
@@ -567,7 +567,7 @@ describe('a person removes their own authenticator (ADR-530; C91)', () => {
         expect(told(await remove(served, signed, code)), code).toEqual([422, 'TWO_STEP_REFUSED']);
       }
       expect((await kept(tx, dana)).failedSignIns).toBe(3);
-      expect((await kept(tx, dana)).twoStepSecret).toMatch(/^v1\./);
+      expect((await kept(tx, dana)).twoStepSecret).toMatch(/^v2\./);
       expect(told(await remove(served, { cookies: {}, csrf: signed.csrf }, '123456'))).toEqual([
         401,
         'NOT_SIGNED_IN',

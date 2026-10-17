@@ -150,8 +150,14 @@ export const reviewQueueAnswerSchema = z.strictObject({
       ticketNumber: z.string(),
       statuses: z.array(z.enum(ticketStatuses)),
       flags: z.array(openFlag),
+      // Named by a job set aside that no job has worked it since: its lines and status may be
+      // stale until a person puts the job back (ADR-545).
+      waitingOnSetAsideJob: z.boolean(),
     }),
   ),
+  // The workflow's tickets waiting on a job set aside, whether or not they are on the queue for
+  // a flag: what `listSetAsideJobs` lists (ADR-545).
+  waitingOnSetAsideJobs: z.int().min(0),
   next: z.string().nullable(),
 });
 
@@ -303,6 +309,69 @@ export const ticketDecisionsAnswerSchema = z.strictObject({
 });
 
 export type TicketDecisionsAnswer = z.infer<typeof ticketDecisionsAnswerSchema>;
+
+// A project's jobs set aside (ADR-498, 545; the Phase 2 audit's F6): each failed whole too often to
+// be taken up again, and waits for a person to put it back (`reprocessTickets` with its id). When
+// it was queued and set aside, what queued it and who asked, how many tries it had, and its
+// tickets, each said to be waiting where no job has worked it since. Never why it failed: the
+// error's words are the server's log's.
+export const setAsideJobsAnswerSchema = z.strictObject({
+  jobs: z.array(
+    z.strictObject({
+      id,
+      trigger: z.enum(reconciliationTriggers),
+      requestedById: id.nullable(),
+      queuedAt: at,
+      setAsideAt: at,
+      tries: z.int().min(0),
+      tickets: z.array(
+        z.strictObject({
+          workflow: z.enum(workflows),
+          ticketNumber: z.string(),
+          waiting: z.boolean(),
+        }),
+      ),
+    }),
+  ),
+  next: id.nullable(),
+});
+
+export type SetAsideJobsAnswer = z.infer<typeof setAsideJobsAnswerSchema>;
+
+// What the audit log holds of a record (ARCHITECTURE §5.3; invariant 3; ADR-097, 544; the Phase 2
+// audit's F5): one change a row, newest first, as the database wrote it. A value the capture
+// leaves out (a hash, a secret) reads "[kept out of the audit]"; for anybody but an admin a
+// person's phone number reads so too. The actor by id and name (the system actor, the master
+// passcode's, the device key's included); the source; the phone; the reason given; never the
+// request's id. Its number is the log's own, as text.
+export const auditOperations = ['INSERT', 'UPDATE', 'DELETE'] as const;
+export const auditSources = ['DEVICE', 'BACK_OFFICE', 'SYSTEM'] as const;
+const auditEntry = z.strictObject({
+  id: z.string().regex(/^[0-9]+$/),
+  occurredAt: at,
+  tableName: z.string(),
+  recordId: z.string(),
+  operation: z.enum(auditOperations),
+  changedFields: z.array(z.string()),
+  priorValue: z.json().nullable(),
+  newValue: z.json().nullable(),
+  actor: named.nullable(),
+  source: z.enum(auditSources),
+  deviceId: id.nullable(),
+  // The back office's alone: a viewer is never shown why (a note may name anything).
+  reason: z.string().nullable(),
+});
+
+export const auditTrailAnswerSchema = z.strictObject({
+  entries: z.array(auditEntry),
+  // The last entry of the page before: the answer's `next`.
+  next: z
+    .string()
+    .regex(/^[0-9]+$/)
+    .nullable(),
+});
+
+export type AuditTrailAnswer = z.infer<typeof auditTrailAnswerSchema>;
 
 // A scale receipt with its photographs and the field events that name it.
 export const scaleReceiptAnswerSchema = z.strictObject({

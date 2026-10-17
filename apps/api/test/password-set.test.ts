@@ -25,14 +25,22 @@ import { Passwords } from '../src/sign-in/passwords.ts';
 import { ResetCodes } from '../src/sign-in/reset-codes.ts';
 import { installationSettings, openInstallation, undone, type Tx } from './support/database.ts';
 import { madeUpSettings, ready, shippedPolicy } from './support/process.ts';
-import { NoServer, Outbox, signingSecret, signInOn, TestClock } from './support/sign-in.ts';
+import {
+  NoServer,
+  Outbox,
+  passwordKey,
+  sealingKey,
+  signingSecret,
+  signInOn,
+  TestClock,
+} from './support/sign-in.ts';
 import { hostCertFile, hostKeyFile, stackRootCert } from './support/stack-https.ts';
 
 const long = 'marsh heron delphine ferry';
 const longer = 'ferry delphine heron marsh';
 const keptOut = '[kept out of the audit]';
 const secret = signingSecret;
-const hasher = new PasswordHasher(secret);
+const hasher = new PasswordHasher(passwordKey);
 
 // The example world's people (CONVENTIONS §6): Gates Disaster Recovery's back office, Bayline
 // County's debris manager, and a monitor.
@@ -99,7 +107,7 @@ describe('an admin sets a password', () => {
       const set = await passwordsOn(within, new NoServer()).setByAdmin(dana, luis, long);
       expect(set).toEqual({ set: true, told: false });
       const kept = await tx.userCredential.findUniqueOrThrow({ where: { userId: luis } });
-      expect(kept.passwordHash).toMatch(/^\$argon2id\$v=19\$m=19456,t=2,p=1,keyid=djE\$/);
+      expect(kept.passwordHash).toMatch(/^\$argon2id\$v=19\$m=19456,t=2,p=1,keyid=djI\$/);
       expect(await hasher.verify(long, kept.passwordHash ?? '')).toBe(true);
       const audited = await tx.auditRecord.findMany({
         where: { tableName: 'user_credential', recordId: kept.id },
@@ -371,7 +379,7 @@ describe('the reset endpoints, through the process', () => {
       const lines: string[] = [];
       const api = await ApiProcess.create(
         ApiModule,
-        { ...madeUpSettings, tokenSigningSecret: secret },
+        { ...madeUpSettings, tokenSigningSecret: secret, passwordKey, sealingKey },
         shippedPolicy,
         { stream: { write: (line) => lines.push(line) }, database: within, mail: outbox },
       );
@@ -525,7 +533,7 @@ describe('AC-10-70 the mail server’s answers (API10)', () => {
         const lines: string[] = [];
         const api = await ApiProcess.create(
           ApiModule,
-          { ...madeUpSettings, tokenSigningSecret: secret },
+          { ...madeUpSettings, tokenSigningSecret: secret, passwordKey, sealingKey },
           shippedPolicy,
           {
             stream: { write: (line) => lines.push(line) },

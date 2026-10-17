@@ -1,5 +1,10 @@
 # Open ADMS — An independent check of everything built through Phase 2
 
+> **Answered the same day (ADR-541…550), at the user's word "resolve all of these":** F1…F11 built
+> and proven (AC-10-108…116), R1…R5 put right. Three answers wait on the user (`SUMMARY.md` §4):
+> F4's flag and its wording (evidence), a second thing to enrol a phone (F1 (3)), and a generated
+> master passcode (R5). This report stays as it was written below.
+
 **Written 2026-10-17, at the user's request** ("perform a thorough check of everything completed
 thus far. Check security. Check workflows. Think as various roles step by step."). A point-in-time
 report: **it decides nothing.** Each recommendation is the user's to take, and anything taken

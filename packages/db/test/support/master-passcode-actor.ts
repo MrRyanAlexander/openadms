@@ -36,6 +36,7 @@ export const columnsNamingAUser: readonly (readonly [table: string, column: stri
   ['site_area_version', 'created_by_id'],
   ['survey', 'created_by_id'],
   ['survey', 'monitor_id'],
+  ['synced_record', 'monitor_id'],
   ['ticket_unvoid', 'unvoided_by_id'],
   ['ticket_void', 'lifted_by_id'],
   ['ticket_void', 'voided_by_id'],

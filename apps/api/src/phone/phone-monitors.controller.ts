@@ -41,35 +41,40 @@ export class PhoneMonitorsController {
     const phone = phoneOf(request);
     // An address refused too often already is stopped before the passcode is touched, as at
     // enrolment: its try is never a wrong try there (ADR-416, 438).
-    this.limits.mayTry(request.ip, atThePasscode);
-    const outcome = await this.monitors.create(phone, body);
-    if (!outcome.created) {
-      request.log.info(
-        { why: outcome.why, deviceId: phone.deviceId },
-        'Creating a monitor on a phone was refused.',
-      );
-      if (outcome.why === 'PHONE_OUT_OF_SERVICE') {
-        throw new Refusal(
-          'PHONE_OUT_OF_SERVICE',
-          409,
-          'Not created: this phone was taken out of service. A monitor is created on a phone in service.',
+    const underWay = this.limits.mayTry(request.ip, atThePasscode);
+    try {
+      const outcome = await this.monitors.create(phone, body);
+      if (!outcome.created) {
+        request.log.info(
+          { why: outcome.why, deviceId: phone.deviceId },
+          'Creating a monitor on a phone was refused.',
         );
+        if (outcome.why === 'PHONE_OUT_OF_SERVICE') {
+          throw new Refusal(
+            'PHONE_OUT_OF_SERVICE',
+            409,
+            'Not created: this phone was taken out of service. A monitor is created on a phone in service.',
+          );
+        }
+        // The passcode was right: why the password wasn't taken, in the domain's plain words,
+        // for whoever typed it. No wrong try.
+        if (outcome.why === 'PASSWORD_REFUSED')
+          throw new Refusal(outcome.code, 422, outcome.message);
+        this.limits.wrongTry(request.ip, atThePasscode);
+        throw new Refusal('MASTER_PASSCODE_REFUSED', 401);
       }
-      // The passcode was right: why the password wasn't taken, in the domain's plain words,
-      // for whoever typed it. No wrong try.
-      if (outcome.why === 'PASSWORD_REFUSED') throw new Refusal(outcome.code, 422, outcome.message);
-      this.limits.wrongTry(request.ip, atThePasscode);
-      throw new Refusal('MASTER_PASSCODE_REFUSED', 401);
+      this.limits.signedIn(request.ip, atThePasscode);
+      request.log.warn(
+        { deviceId: phone.deviceId, userId: outcome.userId },
+        'A monitor was created on a phone under the master passcode.',
+      );
+      return monitorCreatedAnswerSchema.parse({
+        userId: outcome.userId,
+        monitorNumber: outcome.monitorNumber,
+        name: outcome.name,
+      });
+    } finally {
+      underWay.over();
     }
-    this.limits.signedIn(request.ip, atThePasscode);
-    request.log.warn(
-      { deviceId: phone.deviceId, userId: outcome.userId },
-      'A monitor was created on a phone under the master passcode.',
-    );
-    return monitorCreatedAnswerSchema.parse({
-      userId: outcome.userId,
-      monitorNumber: outcome.monitorNumber,
-      name: outcome.name,
-    });
   }
 }

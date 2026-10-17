@@ -18,6 +18,7 @@ import {
   viewerRoesEndpoint,
   viewerTicketAnswerSchema,
   viewerTicketEndpoint,
+  viewerTicketHistoryEndpoint,
   viewerTicketsAnswerSchema,
   viewerTicketsEndpoint,
   type ParamsOf,
@@ -121,6 +122,25 @@ export class ViewerReadsController {
     );
     if (ticket === null) throw new Refusal('NOT_FOUND', 404);
     return viewerTicketAnswerSchema.parse(ticket);
+  }
+
+  // What the audit log holds of a ticket, as this viewer is shown it (ADR-544): a ticket the
+  // database shows this viewer nothing of is answered as one nobody has.
+  @Serves(viewerTicketHistoryEndpoint)
+  async ticketHistory(
+    @Param() params: ParamsOf<typeof viewerTicketHistoryEndpoint>,
+    @Query() query: QueryOf<typeof viewerTicketHistoryEndpoint>,
+    @Req() request: FastifyRequest,
+  ) {
+    const history = await this.reads.ticketHistory(
+      callerOf(request).userId,
+      params.projectId,
+      params.workflow,
+      params.ticketNumber,
+      { after: query.after, limit: query.limit === undefined ? page : Number(query.limit) },
+    );
+    if (history === null) throw new Refusal('NOT_FOUND', 404);
+    return viewerTicketHistoryEndpoint.answer.parse(history);
   }
 
   @Serves(viewerCertificationsEndpoint)

@@ -134,7 +134,8 @@ const domains: Record<string, string> = {
 
 // The columns an audit trigger names so the capture leaves them out of the audit log (ADR-281).
 const keptOut: Record<string, string[]> = {
-  master_passcode: ['hash'],
+  // Its verifier, and its offline seed (ADR-542).
+  master_passcode: ['hash', 'offline_seed'],
   // A password's hash, an authenticator's secret and a refresh token's hash (ADR-397, 398); a
   // monitor's offline seed (ADR-454).
   user_credential: ['password_hash', 'two_step_secret', 'offline_seed'],
@@ -313,7 +314,7 @@ const triggers = [
   `CREATE TRIGGER sync_refuse_reported_edit BEFORE UPDATE OF id, device_id, started_at, device_clock_at, device_utc_offset_minutes, clock_difference_seconds ON public.sync FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
   `CREATE TRIGGER sync_refuse_edit_once_answered BEFORE UPDATE ON public.sync FOR EACH ROW WHEN ((old.setup_version_sent IS NOT NULL)) EXECUTE FUNCTION refuse_edit()`,
   `CREATE TRIGGER synced_record_refuse_edit BEFORE UPDATE ON public.synced_record FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
-  `CREATE TRIGGER held_record_refuse_sent_edit BEFORE UPDATE OF id, device_id, sync_id, sent_id, project_id, sent_monitor_id, payload, sent_sha256, reason, message, received_at ON public.held_record FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
+  `CREATE TRIGGER held_record_refuse_sent_edit BEFORE UPDATE OF id, device_id, sync_id, sent_id, project_id, sent_monitor_id, payload, sent_sha256, sent_bytes, reason, message, received_at ON public.held_record FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
   `CREATE TRIGGER sync_from_its_phone BEFORE INSERT OR UPDATE ON public.sync FOR EACH ROW EXECUTE FUNCTION sync_from_its_phone_guard()`,
   `CREATE TRIGGER synced_record_from_its_phone BEFORE INSERT ON public.synced_record FOR EACH ROW EXECUTE FUNCTION sync_from_its_phone_guard()`,
   `CREATE TRIGGER held_record_from_its_phone BEFORE INSERT ON public.held_record FOR EACH ROW EXECUTE FUNCTION sync_from_its_phone_guard()`,
@@ -335,6 +336,9 @@ const triggers = [
   `CREATE TRIGGER device_key_revocation BEFORE INSERT OR UPDATE ON public.device FOR EACH ROW EXECUTE FUNCTION device_key_revocation_guard()`,
   `CREATE TRIGGER number_block_key_standing BEFORE INSERT OR UPDATE ON public.number_block FOR EACH ROW EXECUTE FUNCTION number_block_key_standing_guard()`,
   `CREATE TRIGGER user_credential_offline_seed BEFORE UPDATE ON public.user_credential FOR EACH ROW EXECUTE FUNCTION user_credential_offline_seed_guard()`,
+  // A version of the master passcode is never edited but to key the installer's verifier and
+  // write its sealed offline seed, each once (ADR-542).
+  `CREATE TRIGGER master_passcode_kept_once BEFORE UPDATE ON public.master_passcode FOR EACH ROW EXECUTE FUNCTION master_passcode_kept_once_guard()`,
   // A monitor's session names a phone in service, and only theirs does (ADR-443).
   `CREATE TRIGGER session_on_a_phone BEFORE INSERT ON public.session FOR EACH ROW EXECUTE FUNCTION session_on_a_phone_guard()`,
   // The firm's last admin stays (ADR-415).
@@ -922,6 +926,11 @@ describe('the guards in the catalog', () => {
           "CHECK ((\nCASE source\n    WHEN 'DEVICE'::record_source THEN ((num_nonnulls(device_id, assignment_id, setup_version) = 3) AND (num_nonnulls(created_by_id, created_reason_id) = 0))\n    WHEN 'BACK_OFFICE'::record_source THEN ((num_nonnulls(device_id, assignment_id, setup_version) = 0) AND (num_nonnulls(created_by_id, created_reason_id) = 2))\n    ELSE false\nEND IS TRUE))",
       },
       { name: 'master_passcode_hash_check', definition: "CHECK ((hash ~~ '$argon2id$%'::text))" },
+      {
+        name: 'master_passcode_offline_seed_sealed_check',
+        definition:
+          "CHECK ((offline_seed ~ '^v2\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$'::text))",
+      },
       { name: 'master_passcode_version_check', definition: 'CHECK ((version >= 1))' },
       {
         name: 'number_block_ended_check',
@@ -1286,7 +1295,7 @@ describe('the guards in the catalog', () => {
       {
         name: 'user_credential_offline_seed_sealed_check',
         definition:
-          "CHECK ((offline_seed ~ '^v1\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$'::text))",
+          "CHECK ((offline_seed ~ '^v[12]\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$'::text))",
       },
       {
         name: 'user_credential_offline_seed_together_check',
@@ -1297,7 +1306,7 @@ describe('the guards in the catalog', () => {
       {
         name: 'user_credential_two_step_sealed_check',
         definition:
-          "CHECK ((two_step_secret ~ '^v1\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$'::text))",
+          "CHECK ((two_step_secret ~ '^v[12]\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$'::text))",
       },
       {
         name: 'user_credential_two_step_last_step_check',
@@ -1386,6 +1395,17 @@ describe('the guards in the catalog', () => {
       {
         name: 'synced_record_record_kind_check',
         definition: "CHECK ((record_kind ~ '^[A-Z]+(_[A-Z]+)*$'::text))",
+      },
+      // Who a phone's field event named, and whether they held the phone then (ADR-543).
+      {
+        name: 'synced_record_monitor_check',
+        definition:
+          "CHECK (((((monitor_id IS NULL) = (monitor_signed_in IS NULL)) AND ((monitor_id IS NULL) OR ((record_kind = 'FIELD_EVENT'::text) AND (answer = 'SAVED'::sync_answer)))) IS TRUE))",
+      },
+      // What a phone's daily budget of held records counts (ADR-546).
+      {
+        name: 'held_record_sent_bytes_check',
+        definition: 'CHECK (((sent_bytes >= 0) AND (sent_bytes <= 16777216)))',
       },
       {
         name: 'held_record_message_check',
@@ -1579,6 +1599,8 @@ describe('the guards in the catalog', () => {
         ...asTheViewer,
         // Who recorded a field event asks the viewer's question itself too (ADR-324).
         { name: 'viewer_field_event_monitor', options: ['security_barrier=true'] },
+        // The audit log of a client user's or an auditor's projects (ADR-544).
+        { name: 'viewer_audit_record', options: ['security_barrier=true'] },
         { name: 'viewer_project_setup', options: ['security_barrier=true'] },
         // A private citizen's columns too (ADR-336).
         ...citizenViews.map((name) => ({ name, options: ['security_barrier=true'] })),

@@ -12,6 +12,7 @@
 // setup come from the owner's views (`viewer.prisma`), each of which answers nothing where the
 // viewer isn't to see it: what is missing there is `null` here.
 import type {
+  AuditTrailAnswer,
   QuantityLookupAnswer,
   SetupCheckAnswer,
   ViewerCertificationsAnswer,
@@ -26,6 +27,14 @@ import type {
 } from '@open-adms/contracts';
 import type { Prisma, ViewerDatabase } from '@open-adms/db';
 
+import {
+  answered,
+  AuditTrail,
+  auditAfter,
+  auditPaged,
+  ofRecords,
+  type AuditPageAsked,
+} from '../review/audit-trail.ts';
 import { quantityAsksOf, setupGapsOf, SetupStanding } from '../setup/setup-standing.ts';
 
 type Workflow = ViewerTicketAnswer['workflow'];
@@ -115,6 +124,57 @@ export class ViewerReads {
 
   constructor(viewed: ViewerDatabase) {
     this.viewed = viewed;
+  }
+
+  // What the audit log holds of one ticket, as the database shows it this viewer (ADR-544): the
+  // records the ticket is made of, as this viewer reads them, and of the log only what its view
+  // shows (`viewer_audit_record`: a client user's and an auditor's projects, the columns the
+  // read-only login reads, never why). None where the viewer is shown no field event of it.
+  async ticketHistory(
+    viewerId: string,
+    projectId: string,
+    workflow: Workflow,
+    ticketNumber: string,
+    asked: AuditPageAsked,
+  ): Promise<AuditTrailAnswer | null> {
+    return this.viewed.$viewed(viewerId, async (tx): Promise<AuditTrailAnswer | null> => {
+      const keys = await AuditTrail.ticketRecords(
+        tx,
+        projectId,
+        workflow,
+        ticketNumber,
+        // Prisma reads no JSON path of a view: the project's removed lines, as this viewer is
+        // shown them, matched here to the ticket's records by what each was priced on.
+        async (viewed, on) =>
+          (
+            await viewed.viewerAuditRecord.findMany({
+              where: { projectId, tableName: 'transaction', operation: 'DELETE' },
+              select: { recordId: true, priorValue: true },
+            })
+          ).filter(({ priorValue }) =>
+            on.some(
+              ({ column, id }) =>
+                typeof priorValue === 'object' &&
+                priorValue !== null &&
+                !Array.isArray(priorValue) &&
+                priorValue[column] === id,
+            ),
+          ),
+      );
+      if (keys === undefined) return null;
+      const rows = await tx.viewerAuditRecord.findMany({
+        where: { AND: [{ projectId }, ofRecords(keys), auditAfter(asked)] },
+        ...auditPaged(asked),
+      });
+      return answered(
+        rows.map((row) => ({
+          ...row,
+          actor: row.actorId === null ? null : { id: row.actorId, name: row.actorName ?? '' },
+          reason: null,
+        })),
+        asked.limit,
+      );
+    });
   }
 
   // The projects the viewer is given, in the order they were entered: what every viewer may

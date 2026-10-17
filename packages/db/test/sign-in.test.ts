@@ -248,7 +248,7 @@ describe('what sign-in keeps of a person', () => {
       ['5550142', 'user_credential_offline_seed_sealed_check'],
       [aHash, 'user_credential_offline_seed_sealed_check'],
       ['', 'user_credential_offline_seed_sealed_check'],
-      ['v2.a.b.c', 'user_credential_offline_seed_sealed_check'],
+      ['v3.a.b.c', 'user_credential_offline_seed_sealed_check'],
     ] as const) {
       const refusal = await db.refused(set, [id, anotherHash, value]);
       expect(refusal.code, value).toBe(refusedBy.check);
@@ -354,7 +354,7 @@ describe('what sign-in keeps of a person', () => {
     // Two checks refuse a blank; the database asks them by name, and "sealed" comes first.
     expect(refusal.message).toContain('"user_credential_two_step_sealed_check"');
     // Nor the secret an authenticator app is given: only what the API sealed (ADR-412).
-    for (const plain of ['JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP', 'v1.only-two.parts', 'v2.a.b.c']) {
+    for (const plain of ['JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP', 'v1.only-two.parts', 'v3.a.b.c']) {
       const unsealed = await db.refused(
         `UPDATE "user_credential" SET "two_step_secret" = $2 WHERE "id" = $1`,
         [id, plain],
@@ -966,6 +966,8 @@ describe('a security event', () => {
       // A sign-in made offline, taken, and one the server could not take (ADR-531).
       'OFFLINE_SIGN_IN',
       'OFFLINE_SIGN_IN_REFUSED',
+      // A phone past its daily budget of held records (ADR-546).
+      'PHONE_HELD_BUDGET_PASSED',
     ]);
     const at = '2026-10-12T12:05:00Z';
     expect((await db.refused(note, ['PASSWORD_GUESSED', world.admin, null, at])).code).toBe(

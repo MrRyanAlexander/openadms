@@ -66,6 +66,10 @@ const shipped = {
   MAP_SERVER_ANSWER_SECONDS: '30',
   DEVICE_CLOCK_OFF_LIMIT_MINUTES: '5',
   JOB_TICKETS_AT_MOST: '200',
+  PHONE_HELD_BYTES_PER_DAY: '16777216',
+  PHONE_HELD_RECORDS_PER_DAY: '1000',
+  MAP_FILE_READ_SECONDS: '60',
+  MAP_FILE_READ_MEMORY_MEBIBYTES: '512',
 };
 
 // Monday 12 October 2026, 10:00 in Bayline County.
@@ -216,5 +220,28 @@ describe('wrong tries at the master passcode', () => {
     expect(tries.closed(5, waiting, waiting)).toBe(false);
     expect(tries.closed(50, null, new Date('2027-10-12T13:50:00Z'))).toBe(true);
     expect(tries.closed(0, null, now)).toBe(false);
+  });
+});
+
+describe('the master passcode’s wait, by address (ADR-541)', () => {
+  it('AC-10-108 its wait holds only an address that has tried it wrong; the lock holds everybody; the first wait is the fifth wrong try in a row, never the lock', () => {
+    const tries = new MasterPasscodeTries(Policy.from(shipped));
+    const now = new Date('2026-10-12T13:50:00Z');
+    const waiting = new Date('2026-10-12T13:50:30Z');
+    // A stranger who tried it wrong waits; a supervisor at the office, who hasn't, doesn't.
+    expect(tries.closedTo(5, waiting, now, true)).toBe(true);
+    expect(tries.closedTo(5, waiting, now, false)).toBe(false);
+    expect(tries.closedTo(5, waiting, waiting, true)).toBe(false);
+    // The lock refuses everybody, wherever they are, however long they wait.
+    expect(tries.closedTo(50, null, new Date('2027-10-12T13:50:00Z'), false)).toBe(true);
+    expect(tries.closedTo(0, null, now, true)).toBe(false);
+    expect([1, 4, 5, 6, 49, 50].map((count) => tries.firstWait(count))).toEqual([
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+    ]);
   });
 });

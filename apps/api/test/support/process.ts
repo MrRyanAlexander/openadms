@@ -23,8 +23,10 @@ export const madeUpSettings: ProcessSettings = {
   corsOrigins: [listedOrigin],
   // No proxy stands in front of a test's process: a caller's address is the one that connected.
   trustedProxies: [],
-  // Made up as the login's password is; the installer's is 32 random bytes.
+  // Made up as the login's password is; the installer's are 32 random bytes each, one a purpose.
   tokenSigningSecret: [word, word].join('-'),
+  passwordKey: [word, 'password', word].join('-'),
+  sealingKey: [word, 'sealing', word].join('-'),
   // No mail server, unless a test hands the process a mail of its own.
   smtpUrl: '',
   smtpAddress: undefined,

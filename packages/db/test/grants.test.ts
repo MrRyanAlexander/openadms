@@ -84,7 +84,8 @@ const tableGrants: Record<string, Record<string, string>> = {
     listTables.map((table) => [table, { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' }]),
   ),
   // A version is added, never edited, and the worker has no business reading it (ADR-281).
-  master_passcode: { adms_api: 'INSERT SELECT' },
+  // Updated only to key the installer's verifier and seal its seed, once (ADR-542; its trigger).
+  master_passcode: { adms_api: 'INSERT SELECT UPDATE' },
   // The firm's own settings (ADR-530): the seed writes the one record, the API changes it, the
   // worker reads it; nobody adds another.
   firm_settings: { adms_api: 'SELECT UPDATE', adms_worker: 'SELECT' },
@@ -152,6 +153,8 @@ const tableGrants: Record<string, Record<string, string>> = {
   viewer_project_setup: { adms_readonly: 'SELECT' },
   // Who recorded a field event: a monitor's name and Monitor ID (ADR-324).
   viewer_field_event_monitor: { adms_readonly: 'SELECT' },
+  // The audit log of a client user's or an auditor's projects (ADR-544).
+  viewer_audit_record: { adms_readonly: 'SELECT' },
   ...Object.fromEntries(
     viewedTables.map((table) => [`viewer_${table}`, { adms_readonly: 'SELECT' }]),
   ),

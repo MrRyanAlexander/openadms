@@ -97,7 +97,18 @@ export class PhoneSignIns {
     this.parts = parts;
   }
 
-  async signIn(
+  // One try at a time at one Monitor ID (ADR-541): each reads the count the one before it left.
+  signIn(
+    phone: SigningInPhone,
+    monitorNumber: string,
+    password: string,
+  ): Promise<PhoneSignInOutcome> {
+    return this.parts.tries.inTurn(`monitor ${monitorNumber.trim().toUpperCase()}`, () =>
+      this.signInNow(phone, monitorNumber, password),
+    );
+  }
+
+  private async signInNow(
     phone: SigningInPhone,
     monitorNumber: string,
     password: string,

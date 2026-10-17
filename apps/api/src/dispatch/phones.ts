@@ -33,6 +33,13 @@ const phoneRead = {
   keyRevokedAt: true,
   keyRevokedBy: true,
   masterPasscodeVersion: true,
+  // The last time it passed its daily budget of held records (ADR-546).
+  securityEvents: {
+    where: { kind: 'PHONE_HELD_BUDGET_PASSED' },
+    orderBy: { occurredAt: 'desc' },
+    take: 1,
+    select: { occurredAt: true },
+  },
 } as const;
 
 type PhoneRow = Prisma.DeviceGetPayload<{ select: typeof phoneRead }>;
@@ -52,6 +59,7 @@ export interface PhoneRead {
   readonly keyRevokedBy: 'TURN_IN' | 'FIRM_TIME' | null;
   readonly masterPasscodeVersion: number;
   readonly holdsCurrentPasscode: boolean;
+  readonly heldBudgetPassedAt: string | null;
 }
 
 // Which phones a page holds: those in service or those out of it, after the last phone of the
@@ -297,6 +305,7 @@ export class Phones extends DispatchService {
       keyRevokedBy: row.keyRevokedBy,
       masterPasscodeVersion: row.masterPasscodeVersion,
       holdsCurrentPasscode: row.masterPasscodeVersion === current,
+      heldBudgetPassedAt: row.securityEvents[0]?.occurredAt.toISOString() ?? null,
     };
   }
 }

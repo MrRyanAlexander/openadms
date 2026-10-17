@@ -7,10 +7,12 @@
 //
 // The hash is keyed (NIST SP 800-63B-4 §3.1.1.2: a keyed hash with a secret kept apart from the
 // hashed passwords): Argon2's own secret input, a key of this purpose alone drawn from the API's
-// signing secret, which is in the API's settings and never in the database. Whoever copies the
-// database alone can't try a single guess against a hash. The string names the key (`keyid`),
-// never holds it; one with no key named was made before, still checks, and is made again at its
-// owner's next sign-in.
+// own password key (`ADMS_PASSWORD_KEY`, ADR-542; the Phase 2 audit's F11), which is in the API's
+// settings and never in the database, and is used for nothing else. Whoever copies the database
+// alone can't try a single guess against a hash. The string names the key (`keyid`), never holds
+// it: `v2` is the password key's. One with no key named, or named `v1` (a key drawn from the
+// signing secret, ADR-411, before the keys were parted), was made before, still checks where this
+// process holds that key, and is made again at its owner's next sign-in.
 import { argon2, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 
 import { passwordAsKept } from '@open-adms/domain';
@@ -24,18 +26,26 @@ interface Cost {
 export class PasswordHasher {
   // In kibibytes, passes and lanes.
   static readonly cost: Cost = { memory: 19456, passes: 2, parallelism: 1 };
-  // The name of the key in a hash's string: "v1" in the PHC format's base64.
-  static readonly keyId = 'djE';
+  // The name of the key in a hash's string: "v2" in the PHC format's base64; "v1", the key drawn
+  // from the signing secret before ADR-542, is only ever read.
+  static readonly keyId = 'djI';
+  private static readonly earlierKeyId = 'djE';
   private static readonly saltBytes = 16;
   private static readonly tagBytes = 32;
   private static readonly format =
     /^\$argon2id\$v=19\$m=(\d+),t=(\d+),p=(\d+)(?:,keyid=([A-Za-z0-9+/]+))?\$([A-Za-z0-9+/]+)\$([A-Za-z0-9+/]+)$/;
 
   private readonly key: Buffer;
+  private readonly earlierKey: Buffer | undefined;
 
-  // The signing secret is the API's (ADMS_TOKEN_SIGNING_SECRET).
-  constructor(signingSecret: string) {
-    this.key = createHmac('sha256', signingSecret).update('open-adms/password-key/v1').digest();
+  // The password key is the API's (ADMS_PASSWORD_KEY). The signing secret (ADMS_TOKEN_SIGNING_SECRET),
+  // where given, is only to check a hash made under the key drawn from it before ADR-542.
+  constructor(passwordKey: string, earlierSigningSecret?: string) {
+    this.key = createHmac('sha256', passwordKey).update('open-adms/password-key/v2').digest();
+    this.earlierKey =
+      earlierSigningSecret === undefined
+        ? undefined
+        : createHmac('sha256', earlierSigningSecret).update('open-adms/password-key/v1').digest();
   }
 
   // The whole password, in Unicode's composed form: never trimmed, folded or cut short.
@@ -53,9 +63,9 @@ export class PasswordHasher {
     return `$argon2id$v=19$${settings}$${this.encode(salt)}$${this.encode(tag)}`;
   }
 
-  // The master passcode's hash, with no key, as the installer makes the firm's first one
-  // (`tools/setup`, which reads it back by that format; whether it is keyed is task 2.5.1's,
-  // with what a phone's own check is made from).
+  // A hash with no key, as the installer makes the firm's first master passcode (`tools/setup`,
+  // which reads it back by that format): the API keys it at its first right use (ADR-542). Only a
+  // test makes one here, to stand for the installer's.
   async hashWithoutKey(passcode: string): Promise<string> {
     const salt = randomBytes(PasswordHasher.saltBytes);
     const tag = await this.derive(
@@ -75,20 +85,34 @@ export class PasswordHasher {
     if (parts === null) return false;
     const [, memory, passes, parallelism, keyId, salt, tag] = parts;
     // A key this process doesn't hold: nothing checks against it.
-    if (keyId !== undefined && keyId !== PasswordHasher.keyId) return false;
+    const secret =
+      keyId === undefined
+        ? undefined
+        : keyId === PasswordHasher.keyId
+          ? this.key
+          : keyId === PasswordHasher.earlierKeyId
+            ? this.earlierKey
+            : null;
+    if (secret === null || (keyId !== undefined && secret === undefined)) return false;
     const expected = Buffer.from(tag ?? '', 'base64');
     const actual = await this.derive(
       password,
       Buffer.from(salt ?? '', 'base64'),
       { memory: Number(memory), passes: Number(passes), parallelism: Number(parallelism) },
       expected.length,
-      keyId === undefined ? undefined : this.key,
+      secret,
     );
     return actual.length === expected.length && timingSafeEqual(actual, expected);
   }
 
-  // Whether a hash that checked should be made again: it has no key, or was made under settings
-  // since raised.
+  // Whether a hash is keyed with this process's password key: a master passcode's verifier is made
+  // again only where it isn't (ADR-542), never for settings since raised.
+  keyedNow(phc: string): boolean {
+    return PasswordHasher.format.exec(phc)?.[4] === PasswordHasher.keyId;
+  }
+
+  // Whether a hash that checked should be made again: it has no key or an earlier one, or was
+  // made under settings since raised.
   stale(phc: string): boolean {
     const parts = PasswordHasher.format.exec(phc);
     if (parts === null) return true;

@@ -227,6 +227,8 @@ describe('permissions, read from the database on every request', () => {
       // What every one of them reads (ADR-539): the projects and the lists' values.
       'listProjects',
       'readProject',
+      // A record's history: by the area it belongs to, asked inside (ADR-544).
+      'readRecordHistory',
       'listListValues',
     ]);
     // Every other read of the back office takes its area's view (the user, ADR-539): the review
@@ -248,6 +250,7 @@ describe('permissions, read from the database on every request', () => {
       'listQuarantinedRecords',
       'listRoes',
       'listSetAsideFiles',
+      'listSetAsideJobs',
       'listSurveys',
       'photographFile',
       'readCertification',
@@ -256,6 +259,7 @@ describe('permissions, read from the database on every request', () => {
       'readScaleReceipt',
       'readTicket',
       'readTicketDecisions',
+      'readTicketHistory',
       'reviewQueue',
       'setAsideFile',
     ]);

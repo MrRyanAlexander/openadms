@@ -668,8 +668,8 @@ ADR-106 (master passcode) and ADR-120 (changing monitors, username). **The word 
 > checks a sign-in against. Each entry costs the server about a hundredth of a second, so it
 > makes only those the phone doesn't hold, a bounded number a call; a password set anew
 > replaces its entry at the phone's next read. **The master passcode's check** is made the same
-> way and sent with its version; the phone's record says which version it was sent (§7.5). The
-> server keeps no entry.
+> way, from the passcode's own sealed seed (ADR-542), and sent with its version; the phone's
+> record says which version it was sent (§7.5). The server keeps no entry.
 
 ✅ **Decided** *(ADR-176, user 2026-09-27, Q-170)*: the setup manifest carries the project's **service
 codes and their settings** (photos, GPS, measurement and weight required; payable type) for **every

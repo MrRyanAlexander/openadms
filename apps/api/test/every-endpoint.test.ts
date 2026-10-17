@@ -85,6 +85,11 @@ const inventory = [
   'listFlags GET /projects/:projectId/flags SIGNED_IN ADMIN,MANAGER_ANALYST VIEW_REVIEW',
   'readTicket GET /projects/:projectId/tickets/:workflow/:ticketNumber SIGNED_IN ADMIN,MANAGER_ANALYST VIEW_REVIEW',
   'readTicketDecisions GET /projects/:projectId/tickets/:workflow/:ticketNumber/decisions SIGNED_IN ADMIN,MANAGER_ANALYST VIEW_REVIEW',
+  // The audit log, read (ADR-544): a record's history by the area it belongs to, asked inside.
+  'readTicketHistory GET /projects/:projectId/tickets/:workflow/:ticketNumber/history SIGNED_IN ADMIN,MANAGER_ANALYST VIEW_REVIEW',
+  'readRecordHistory GET /audit-records SIGNED_IN ADMIN,MANAGER_ANALYST',
+  // A project's jobs set aside (ADR-545).
+  'listSetAsideJobs GET /projects/:projectId/set-aside-jobs SIGNED_IN ADMIN,MANAGER_ANALYST VIEW_REVIEW',
   'changeProjectSettings PATCH /projects/:projectId/settings SIGNED_IN ADMIN,MANAGER_ANALYST SETUP',
   'changeProjectWindow PATCH /projects/:projectId/active-window SIGNED_IN ADMIN,MANAGER_ANALYST SETUP',
   'closingCheck GET /projects/:projectId/closing-check SIGNED_IN ADMIN',
@@ -248,6 +253,8 @@ const inventory = [
   'unrevokeCertification POST /certifications/:certificationId/unrevocations SIGNED_IN ADMIN',
   'viewerProjects GET /viewer/projects SIGNED_IN READ_ONLY_VIEWER',
   'viewerRoes GET /viewer/projects/:projectId/roes SIGNED_IN READ_ONLY_VIEWER',
+  // What the audit log holds of a ticket, as the database shows the viewer (ADR-544).
+  'viewerTicketHistory GET /viewer/projects/:projectId/tickets/:workflow/:ticketNumber/history SIGNED_IN READ_ONLY_VIEWER',
   'viewerCertifications GET /viewer/projects/:projectId/certifications SIGNED_IN READ_ONLY_VIEWER',
   'viewerSurveys GET /viewer/projects/:projectId/surveys SIGNED_IN READ_ONLY_VIEWER',
   'viewerIncidents GET /viewer/projects/:projectId/incidents SIGNED_IN READ_ONLY_VIEWER',

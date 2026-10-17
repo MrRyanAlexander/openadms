@@ -17,11 +17,18 @@ import type { Admission } from '../sign-in/admission.ts';
 import { Refusal } from './refusal.ts';
 import { servedBy } from './serves.ts';
 
-const requests = new AsyncLocalStorage<{ readonly requestId: string }>();
+const requests = new AsyncLocalStorage<{ readonly requestId: string; readonly address: string }>();
 
 // The id of the request the work now running is for; none outside a request.
 export function requestNow(): string | undefined {
   return requests.getStore()?.requestId;
+}
+
+// The address the request the work now running is for came from, as the rate limits count it
+// (`request.ip`: the connecting one, or a trusted proxy's word); none outside a request. Never
+// logged or stored (ADR-416): only asked whether it has been refused at a secret (ADR-541).
+export function addressNow(): string | undefined {
+  return requests.getStore()?.address;
 }
 
 export class Boundary implements NestInterceptor {
@@ -48,7 +55,9 @@ export class Boundary implements NestInterceptor {
     }
     Object.assign(request, read);
     return new Observable((to) =>
-      requests.run({ requestId: request.id }, () => next.handle().subscribe(to)),
+      requests.run({ requestId: request.id, address: request.ip }, () =>
+        next.handle().subscribe(to),
+      ),
     );
   }
 }

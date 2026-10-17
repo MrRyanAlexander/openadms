@@ -77,8 +77,11 @@ import type { SoftwareKey } from './software-key.ts';
 import { storyMasterPasscode, type StoryDatabase } from './story-database.ts';
 import type { StoryMedia } from './story-media.ts';
 
-// The signing secret of a story's API: made up, the same for every story, used nowhere else.
+// The signing secret of a story's API, and its password and sealing keys (ADR-542): made up, the
+// same for every story, used nowhere else.
 export const storySigningSecret = 'made-up-signing-secret-for-the-stories-only';
+export const storyPasswordKey = 'made-up-password-key-for-the-stories-only';
+export const storySealingKey = 'made-up-sealing-key-for-the-stories-only';
 
 // Where the stories' API listens: the stack's proxy names it (infra/local/Caddyfile).
 export const storyApiPort = 3180;
@@ -534,6 +537,8 @@ export class StoryApi {
         // No proxy is believed: a caller's address is the one that connected.
         trustedProxies: [],
         tokenSigningSecret: storySigningSecret,
+        passwordKey: storyPasswordKey,
+        sealingKey: storySealingKey,
         smtpUrl: '',
         smtpAddress: undefined,
         smtpCaFile: null,

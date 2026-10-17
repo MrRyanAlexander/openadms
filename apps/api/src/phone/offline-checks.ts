@@ -7,16 +7,20 @@
 //
 // - **A check is two slow hashes, one made from the other.** The first is Argon2id of what is
 //   typed, under a salt of its own and no key: for a monitor's password their **offline seed**,
-//   for the master passcode the server's own hash of it. The second is Argon2id of the first
-//   under a salt made for that phone alone. The phone is sent how to make the first (its salt
-//   and settings, never the hash itself) and the second whole; it checks what is typed by doing
-//   both steps. So one phone's check is not another's, and nothing sent to a phone is what the
-//   server itself checks a sign-in against.
-// - **The offline seed is kept sealed** (AES-256-GCM, as an authenticator's secret is, ADR-412),
-//   under a key of this purpose alone drawn from the API's signing secret and bound to the
-//   monitor it is for. A password's own hash is keyed (ADR-411) and no phone could make it, so
-//   the seed is what a phone's entry for a monitor who never signed in on it is made from.
-//   Whoever copies the database alone holds nothing a guess can be tried against.
+//   for the master passcode **its own offline seed** (ADR-542; the Phase 2 audit's F3). The
+//   second is Argon2id of the first under a salt made for that phone alone. The phone is sent how
+//   to make the first (its salt and settings, never the hash itself) and the second whole; it
+//   checks what is typed by doing both steps. So one phone's check is not another's, and nothing
+//   sent to a phone is what the server itself checks a sign-in against.
+// - **Every offline seed is kept sealed** (AES-256-GCM, as an authenticator's secret is, ADR-412),
+//   under a key of this purpose alone drawn from the API's sealing key (`ADMS_SEALING_KEY`,
+//   ADR-542) and bound to what it is for: a monitor, or a version of the master passcode. A
+//   password's own hash and the passcode's are keyed (ADR-411, 542) and no phone could make
+//   either, so the seed is what a phone's check is made from, and what a sign-in made offline is
+//   proven against. Whoever copies the database alone holds nothing a guess can be tried
+//   against, and nothing a proof can be made from. A seed sealed `v1` (under a key drawn from the
+//   signing secret, before ADR-542) is opened where this process holds that secret and made
+//   again at its monitor's next sign-in.
 // - **A mark says which check a phone holds** without holding the check: a keyed fingerprint of
 //   the phone, the monitor and their seed as kept. A phone that sends a mark still good is made
 //   no new entry; a password set anew makes a new seed, so its mark is good no more.
@@ -24,7 +28,7 @@
 // - **A sign-in made offline is proven by the first hash** (ADR-531; the domain's
 //   `OfflineSignInRules`): the phone made it from what was typed to check it, and keyed an
 //   HMAC-SHA256 with it over what the sign-in says. The server makes the same from what it keeps
-//   (the seed opened, its own hash of the passcode) and compares in constant time: only somebody
+//   (the monitor's seed or the passcode's, opened) and compares in constant time: only somebody
 //   who typed the right password or passcode could have made it.
 import {
   argon2,
@@ -57,7 +61,8 @@ export interface OfflineCheck {
   readonly check: string;
 }
 
-const sealVersion = 'v1';
+const sealVersion = 'v2';
+const earlierSealVersion = 'v1';
 const sealPart = /^[A-Za-z0-9_-]+$/;
 const phc = /^\$argon2id\$v=19\$m=(\d+),t=(\d+),p=(\d+)\$([A-Za-z0-9+/]+)\$([A-Za-z0-9+/]+)$/;
 
@@ -73,32 +78,48 @@ export class OfflineChecks {
   private static readonly hashBytes = 32;
 
   private readonly seedKey: Buffer;
+  private readonly earlierSeedKey: Buffer | undefined;
+  private readonly passcodeSeedKey: Buffer;
   private readonly markKey: Buffer;
 
-  // The signing secret is the API's (ADMS_TOKEN_SIGNING_SECRET).
-  constructor(signingSecret: string) {
-    const keyFor = (purpose: string): Buffer =>
-      createHmac('sha256', signingSecret).update(purpose).digest();
-    this.seedKey = keyFor('open-adms/offline-seed/v1');
-    this.markKey = keyFor('open-adms/login-list-mark/v1');
+  // The sealing key is the API's (ADMS_SEALING_KEY). The signing secret, where given, is only to
+  // open a monitor's seed sealed under the key drawn from it before ADR-542.
+  constructor(sealingKey: string, earlierSigningSecret?: string) {
+    const keyFor = (secret: string, purpose: string): Buffer =>
+      createHmac('sha256', secret).update(purpose).digest();
+    this.seedKey = keyFor(sealingKey, 'open-adms/offline-seed/v2');
+    this.passcodeSeedKey = keyFor(sealingKey, 'open-adms/master-passcode-seed/v2');
+    this.markKey = keyFor(sealingKey, 'open-adms/login-list-mark/v2');
+    this.earlierSeedKey =
+      earlierSigningSecret === undefined
+        ? undefined
+        : keyFor(earlierSigningSecret, 'open-adms/offline-seed/v1');
   }
 
   // What `user_credential.offlineSeed` holds for this monitor, made from the password as it is
   // set or as it just checked.
   async seedOf(userId: string, password: string): Promise<string> {
-    const salt = randomBytes(OfflineChecks.saltBytes);
-    const hash = await this.derive(
-      Buffer.from(passwordAsKept(password)),
-      salt,
-      OfflineChecks.cost,
-      OfflineChecks.hashBytes,
+    return this.sealed(
+      this.seedKey,
+      OfflineChecks.boundToMonitor(userId),
+      await this.first(password),
     );
-    return this.sealed(userId, Buffer.from(this.written(OfflineChecks.cost, salt, hash)));
+  }
+
+  // What `master_passcode.offlineSeed` holds for that version, made from the passcode as it is
+  // set or as it just checked (ADR-542).
+  async passcodeSeedOf(version: number, passcode: string): Promise<string> {
+    return this.sealed(
+      this.passcodeSeedKey,
+      OfflineChecks.boundToPasscode(version),
+      await this.first(passcode),
+    );
   }
 
   // Whether a seed should be made again at a sign-in that worked: there is none, this process
-  // can't open it, or it was made under settings since raised.
+  // can't open it, it was sealed under an earlier key, or made under settings since raised.
   stale(userId: string, kept: string | null): boolean {
+    if (kept !== null && !kept.startsWith(`${sealVersion}.`)) return true;
     const first = kept === null ? undefined : this.opened(userId, kept);
     if (first === undefined) return true;
     const { cost } = OfflineChecks;
@@ -129,10 +150,10 @@ export class OfflineChecks {
     return first === undefined ? undefined : this.second(first);
   }
 
-  // A phone's check of the master passcode, made from the server's own hash of it, which has
-  // no key; undefined for a hash a phone couldn't make (one with a key).
-  async ofPasscode(serverHash: string): Promise<OfflineCheck | undefined> {
-    const first = this.read(serverHash);
+  // A phone's check of a version of the master passcode, made from its offline seed; undefined
+  // where this process can't open it.
+  async ofPasscode(version: number, kept: string): Promise<OfflineCheck | undefined> {
+    const first = this.openedPasscode(version, kept);
     return first === undefined ? undefined : this.second(first);
   }
 
@@ -143,10 +164,10 @@ export class OfflineChecks {
     return first !== undefined && OfflineChecks.sameProof(first.hash, signed, proof);
   }
 
-  // Whether a sign-in a phone made offline under the master passcode is proven: the HMAC keyed
-  // by the server's own hash of the passcode. False for a hash a phone couldn't make.
-  signedWithPasscode(serverHash: string, signed: string, proof: string): boolean {
-    const first = this.read(serverHash);
+  // Whether a sign-in a phone made offline under a version of the master passcode is proven: the
+  // HMAC keyed by that version's offline seed. False where this process can't open it.
+  signedWithPasscode(version: number, kept: string, signed: string, proof: string): boolean {
+    const first = this.openedPasscode(version, kept);
     return first !== undefined && OfflineChecks.sameProof(first.hash, signed, proof);
   }
 
@@ -162,6 +183,26 @@ export class OfflineChecks {
       Buffer.from(proof),
     ];
     return made.length === sent.length && timingSafeEqual(made, sent);
+  }
+
+  // The first hash of what is typed, as the PHC string a seed seals.
+  private async first(typed: string): Promise<Buffer> {
+    const salt = randomBytes(OfflineChecks.saltBytes);
+    const hash = await this.derive(
+      Buffer.from(passwordAsKept(typed)),
+      salt,
+      OfflineChecks.cost,
+      OfflineChecks.hashBytes,
+    );
+    return Buffer.from(this.written(OfflineChecks.cost, salt, hash));
+  }
+
+  private static boundToMonitor(userId: string): string {
+    return `offline-seed\n${userId}`;
+  }
+
+  private static boundToPasscode(version: number): string {
+    return `master-passcode-seed\n${String(version)}`;
   }
 
   private async second(first: FirstHash): Promise<OfflineCheck> {
@@ -214,11 +255,12 @@ export class OfflineChecks {
     });
   }
 
-  // Sealed for one monitor: a row's value put on another's opens nothing.
-  private sealed(userId: string, plain: Buffer): string {
+  // Sealed for one monitor or one version of the passcode: a row's value put on another's opens
+  // nothing.
+  private sealed(key: Buffer, boundTo: string, plain: Buffer): string {
     const nonce = randomBytes(12);
-    const cipher = createCipheriv('aes-256-gcm', this.seedKey, nonce);
-    cipher.setAAD(Buffer.from(`offline-seed\n${userId}`));
+    const cipher = createCipheriv('aes-256-gcm', key, nonce);
+    cipher.setAAD(Buffer.from(boundTo));
     const hidden = Buffer.concat([cipher.update(plain), cipher.final()]);
     return [
       sealVersion,
@@ -227,16 +269,44 @@ export class OfflineChecks {
   }
 
   private opened(userId: string, kept: string): FirstHash | undefined {
+    const earlier = kept.startsWith(`${earlierSealVersion}.`);
+    const key = earlier ? this.earlierSeedKey : this.seedKey;
+    return key === undefined
+      ? undefined
+      : this.openedBy(
+          key,
+          earlier ? earlierSealVersion : sealVersion,
+          OfflineChecks.boundToMonitor(userId),
+          kept,
+        );
+  }
+
+  // A passcode's seed is only ever sealed under the sealing key.
+  private openedPasscode(version: number, kept: string): FirstHash | undefined {
+    return this.openedBy(
+      this.passcodeSeedKey,
+      sealVersion,
+      OfflineChecks.boundToPasscode(version),
+      kept,
+    );
+  }
+
+  private openedBy(
+    key: Buffer,
+    version: string,
+    boundTo: string,
+    kept: string,
+  ): FirstHash | undefined {
     const [said, nonce, hidden, tag, ...more] = kept.split('.');
-    if (said !== sealVersion || more.length > 0) return undefined;
+    if (said !== version || more.length > 0) return undefined;
     if (nonce === undefined || hidden === undefined || tag === undefined) return undefined;
     if (![nonce, hidden, tag].every((text) => sealPart.test(text))) return undefined;
     const nonceBytes = Buffer.from(nonce, 'base64url');
     const tagBytes = Buffer.from(tag, 'base64url');
     if (nonceBytes.length !== 12 || tagBytes.length !== 16) return undefined;
     try {
-      const decipher = createDecipheriv('aes-256-gcm', this.seedKey, nonceBytes);
-      decipher.setAAD(Buffer.from(`offline-seed\n${userId}`));
+      const decipher = createDecipheriv('aes-256-gcm', key, nonceBytes);
+      decipher.setAAD(Buffer.from(boundTo));
       decipher.setAuthTag(tagBytes);
       const plain = Buffer.concat([
         decipher.update(Buffer.from(hidden, 'base64url')),
@@ -244,7 +314,7 @@ export class OfflineChecks {
       ]);
       return this.read(plain.toString());
     } catch {
-      // Not sealed by this key, not for this monitor, or altered.
+      // Not sealed by this key, not for this monitor or version, or altered.
       return undefined;
     }
   }

@@ -104,7 +104,7 @@ export interface TwoStepParts {
   readonly mail: Mail;
   readonly sessions: Pick<Sessions, 'endAll'>;
   // A code that isn't the authenticator's is a wrong try at the login (ADR-530).
-  readonly tries: Pick<WrongTries, 'wrong' | 'closed'>;
+  readonly tries: Pick<WrongTries, 'wrong' | 'closed' | 'inTurn'>;
   // The request the work now running is for, if any.
   readonly requestNow: () => string | undefined;
 }
@@ -269,7 +269,17 @@ export class TwoStep {
   // The signed-in person removes their own authenticator, giving a code from it. The code is
   // taken as at sign-in (a step allowed now, after the last one taken); a wrong one, or any while
   // the login waits or is locked, is refused, and a wrong one counts. Their other sessions end.
-  async removeOwn(userId: string, sessionId: string, code: string): Promise<TwoStepRemoved> {
+  removeOwn(userId: string, sessionId: string, code: string): Promise<TwoStepRemoved> {
+    return this.parts.tries.inTurn(`person ${userId}`, () =>
+      this.removeOwnNow(userId, sessionId, code),
+    );
+  }
+
+  private async removeOwnNow(
+    userId: string,
+    sessionId: string,
+    code: string,
+  ): Promise<TwoStepRemoved> {
     const now = this.parts.clock.now();
     const person = await this.db.$read((tx) =>
       tx.user.findUnique({ where: { id: userId }, select: personRead }),

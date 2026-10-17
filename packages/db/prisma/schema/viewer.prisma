@@ -102,3 +102,26 @@ view ViewerFieldEventMonitor {
 
   @@map("viewer_field_event_monitor")
 }
+
+// What the audit log holds of a client user's or an auditor's projects' records (ADR-544; the
+// Phase 2 audit's F5): each change to a table the read-only login reads, of a row that names one
+// of their projects, with only the columns that login may read of it (the rest left out of the
+// values and of what changed); who made it and from where; never why or which request, and never
+// the log's security domain. A contractor user is shown none.
+view ViewerAuditRecord {
+  id            BigInt         @unique
+  occurredAt    DateTime       @map("occurred_at") @db.Timestamptz(3)
+  tableName     String         @map("table_name")
+  recordId      String         @map("record_id")
+  operation     AuditOperation
+  changedFields String[]       @map("changed_fields")
+  priorValue    Json?          @map("prior_value")
+  newValue      Json?          @map("new_value")
+  actorId       String?        @map("actor_id") @db.Uuid
+  actorName     String?        @map("actor_name")
+  source        AuditSource
+  deviceId      String?        @map("device_id") @db.Uuid
+  projectId     String         @map("project_id") @db.Uuid
+
+  @@map("viewer_audit_record")
+}

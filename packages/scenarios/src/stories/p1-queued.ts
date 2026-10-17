@@ -26,6 +26,7 @@
 //
 // Not here: the worker's container (the local stack's; `apps/worker/test`).
 import {
+  listSetAsideJobsEndpoint,
   reprocessTicketsEndpoint,
   syncAnswerRead,
   syncSentSchema,
@@ -516,10 +517,41 @@ export const p1Queued: Story = {
       json: { setAsideJobId },
     });
     const auditedDoomed = (await auditOf(doomed)).length;
+    // What the back office reads of the jobs set aside (ADR-545): each, and whether its tickets
+    // still wait on it.
+    const setAsideNow = async () =>
+      (
+        await danas.answered(listSetAsideJobsEndpoint, {
+          ids: { projectId: p1 },
+          query: { limit: '200' },
+        })
+      ).jobs.map((job) => [
+        job.id,
+        job.trigger,
+        job.tries,
+        job.tickets.map((ticket) => `${ticket.ticketNumber} ${String(ticket.waiting)}`),
+      ]);
+    const listedBefore = await setAsideNow();
     const again = await danas.answered(reprocessTicketsEndpoint, putBack(doomed));
     const [againJob = ''] = again.queued?.jobs ?? [];
     const recordsAgain = await danas.answered(reprocessTicketsEndpoint, putBack(records));
     const againRun = worked(await reconciliation.waitingJobs(p1, tries, atMost));
+    story.check(
+      'AC-10-112 Dana reads the jobs set aside without the log: each with what queued it, its tries and its tickets; 101005 waits on the first until the job that puts it back has worked it, and the job stays listed, set aside, as the record',
+      [listedBefore, await setAsideNow()],
+      [
+        [
+          [records, 'SETUP_CHANGE', 5, []],
+          [silent, 'REPROCESS', 5, ['101002 true']],
+          [doomed, 'REPROCESS', 5, ['101005 true']],
+        ],
+        [
+          [records, 'SETUP_CHANGE', 5, []],
+          [silent, 'REPROCESS', 5, ['101002 true']],
+          [doomed, 'REPROCESS', 5, ['101005 false']],
+        ],
+      ],
+    );
     story.check(
       'ADR-498 a new REPROCESS job names the set-aside job’s ticket, under Dana, and the setup’s is put back as a job for the records that are no ticket’s; one run works both: 101005 COMPLETED. The job set aside stays exactly as it was, the record of what failed: still set aside, its reason and tries kept, no audit record added',
       [

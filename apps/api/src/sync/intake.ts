@@ -36,6 +36,7 @@ import { WorkQueue, type WorkAsked } from '../jobs/work-queue.ts';
 import { type LastUsed, NumberAllocator, type PhoneAtSync } from '../numbering/number-allocator.ts';
 import type { Clock } from '../setup/setup-service.ts';
 import { type Brought, ledgerRow } from './ledger.ts';
+import { signedInThere } from './monitor-on-phone.ts';
 import { gpsNote, RecordWrite } from './record-write.ts';
 import { photoPlaces } from '../media/photo-places.ts';
 import type {
@@ -72,12 +73,14 @@ export class Intake {
   private readonly clock: Clock;
   private readonly allocator: NumberAllocator;
   private readonly ticketsAJob: number;
+  private readonly clockAllowanceMinutes: number;
 
   constructor(db: Database, clock: Clock, policy: Policy) {
     this.db = db;
     this.clock = clock;
     this.allocator = new NumberAllocator(db, clock, policy);
     this.ticketsAJob = policy.jobTicketsAtMost;
+    this.clockAllowanceMinutes = policy.deviceClockOffLimitMinutes;
   }
 
   // One record, one answer. The received time is the server's clock, never the phone's.
@@ -228,11 +231,18 @@ export class Intake {
         }
 
         const notes = await new RecordWrite(tx, receivedAt).fieldEvent(event);
+        // Whether the person it names was signed in on the phone over its field time: asked
+        // once, as it arrives, and kept with the sync for the worker to flag from (ADR-543).
+        const monitorSignedIn =
+          brought === undefined
+            ? undefined
+            : await signedInThere(tx, event, brought.syncId, this.clockAllowanceMinutes);
         await ledgerRow(tx, brought, {
           recordId: event.id,
           recordKind: 'FIELD_EVENT',
           deviceId: event.deviceId,
           answer: 'SAVED',
+          ...(monitorSignedIn === undefined ? {} : { monitorId: event.monitorId, monitorSignedIn }),
         });
         // Its ticket, and the tickets whose conclusions read it as the records now stand: its
         // partner is the same ticket; an overlap on one truck, a shared scale receipt and a

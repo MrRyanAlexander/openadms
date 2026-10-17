@@ -822,8 +822,8 @@ describe('a flag', () => {
     const page = readFileSync(new URL('../../../spec/FLAGS.md', import.meta.url), 'utf8');
     // A row of the catalogue starts with its code; a withdrawn one is struck through.
     const catalogue = [...page.matchAll(/^\| `([A-Z0-9_]+)` \|/gm)].map((match) => match[1]);
-    expect(catalogue).toHaveLength(79);
-    expect(new Set(catalogue).size).toBe(79);
+    expect(catalogue).toHaveLength(81);
+    expect(new Set(catalogue).size).toBe(81);
     const codes = await db.rows<{ code: string }>(
       `SELECT unnest(enum_range(NULL::flag_code))::text AS code`,
     );

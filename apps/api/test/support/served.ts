@@ -26,7 +26,14 @@ import type { Mail } from '../../src/sign-in/mail.ts';
 import { OneTimeCodes } from '../../src/sign-in/one-time-codes.ts';
 import { undone, ViewedWithin, type Tx } from './database.ts';
 import { madeUpSettings, ready, shippedPolicy } from './process.ts';
-import { NoServer, signingSecret, signInOn, TestClock } from './sign-in.ts';
+import {
+  NoServer,
+  passwordKey,
+  sealingKey,
+  signingSecret,
+  signInOn,
+  TestClock,
+} from './sign-in.ts';
 
 export const long = 'marsh heron delphine ferry';
 export const longer = 'ferry delphine heron marsh';
@@ -188,7 +195,7 @@ export class Served {
     served.viewerStated = viewed.stated;
     served.api = await ApiProcess.create(
       WritingModule,
-      { ...madeUpSettings, tokenSigningSecret: signingSecret },
+      { ...madeUpSettings, tokenSigningSecret: signingSecret, passwordKey, sealingKey },
       policy,
       {
         stream: { write: (line) => served.lines.push(line) },

@@ -25,7 +25,7 @@ import { installationSettings, openInstallation, type Tx } from './support/datab
 import { enrolledPhone, proven, turnedIn } from './support/phones.ts';
 import { danasEmail, long, longer, luissEmail, worldOn, type Served } from './support/served.ts';
 import { ask, saved, told, viewerSignsIn } from './support/setup.ts';
-import { Outbox, signingSecret } from './support/sign-in.ts';
+import { Outbox, passwordKey } from './support/sign-in.ts';
 
 let db: Database;
 
@@ -172,6 +172,7 @@ describe('the firm’s phones', () => {
         keyRevokedBy: null,
         masterPasscodeVersion: await inForce(tx),
         holdsCurrentPasscode: true,
+        heldBudgetPassedAt: null,
       });
       const rest = saved(
         listPhonesEndpoint,
@@ -218,6 +219,7 @@ describe('the firm’s phones', () => {
           keyRevokedBy: null,
           masterPasscodeVersion: await inForce(tx),
           holdsCurrentPasscode: true,
+          heldBudgetPassedAt: null,
         },
         warnings: [],
       });
@@ -496,9 +498,14 @@ describe('the master passcode', () => {
         Array.from({ length: before + 1 }, (_, at) => at + 1),
       );
       const hash = versions.at(-1)?.hash ?? '';
-      // With no key, as the installer makes the first one and reads it back.
-      expect(hash).toMatch(/^\$argon2id\$v=19\$m=19456,t=2,p=1\$[A-Za-z0-9+/]+\$[A-Za-z0-9+/]+$/);
-      const hasher = new PasswordHasher(signingSecret);
+      // Keyed with the password key, and its offline seed sealed for it (ADR-542).
+      expect(hash).toMatch(
+        /^\$argon2id\$v=19\$m=19456,t=2,p=1,keyid=djI\$[A-Za-z0-9+/]+\$[A-Za-z0-9+/]+$/,
+      );
+      expect(versions.at(-1)?.offlineSeed).toMatch(
+        /^v2\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/,
+      );
+      const hasher = new PasswordHasher(passwordKey);
       expect([await hasher.verify(passcode, hash), await hasher.verify(long, hash)]).toEqual([
         true,
         false,

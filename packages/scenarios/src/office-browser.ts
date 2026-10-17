@@ -40,7 +40,7 @@ import {
 } from '@open-adms/api';
 
 import { answered, codeOf, type Asked, type AskedWith } from './over-https.ts';
-import { storySigningSecret } from './story-api.ts';
+import { storyPasswordKey } from './story-api.ts';
 
 interface Clock {
   now(): Date;
@@ -70,7 +70,7 @@ export async function setOnTheServer(
   const password = madeUpPassword();
   const outcome = await new ServerAdmin(db, {
     rules: new PasswordRules(policy, shippedBreachedPasswords()),
-    hasher: new PasswordHasher(storySigningSecret),
+    hasher: new PasswordHasher(storyPasswordKey),
     sessions: { endAll: () => Promise.resolve(0) },
     clock,
   }).letBackIn(admin.email, password, false);

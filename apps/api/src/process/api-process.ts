@@ -56,7 +56,7 @@ import { AddressServer, type Addresses } from '../phone/address-server.ts';
 import { DeviceKeys } from '../phone/device-keys.ts';
 import { apiEnrolment } from '../phone/enrolment.controller.ts';
 import { Enrolment } from '../phone/enrolment.ts';
-import { MasterPasscodeCheck } from '../phone/master-passcode-check.ts';
+import { atThePasscode, MasterPasscodeCheck } from '../phone/master-passcode-check.ts';
 import { OfflineChecks } from '../phone/offline-checks.ts';
 import { PhoneAssignments } from '../phone/phone-assignments.ts';
 import { apiPhoneLists } from '../phone/phone-lists.controller.ts';
@@ -102,7 +102,8 @@ import {
 import { apiBackOfficeRecords, apiQuarantineReview } from '../review/review-records.controller.ts';
 import { apiHeldReads, apiHeldReview } from '../review/held.controller.ts';
 import { HeldReads } from '../review/held-reads.ts';
-import { apiReviewReads } from '../review/review-reads.controller.ts';
+import { apiAuditTrail, apiReviewReads } from '../review/review-reads.controller.ts';
+import { AuditTrail } from '../review/audit-trail.ts';
 import { ReviewReads } from '../review/review-reads.ts';
 import { HeldReview } from '../review/held-review.ts';
 import { apiHeldThings, HeldThings } from '../sync/held.ts';
@@ -116,7 +117,7 @@ import { ListSetup } from '../setup/list-setup.ts';
 import { PayItemSetup } from '../setup/pay-item-setup.ts';
 import { apiPayItemSetup, apiRuleSetup } from '../setup/pricing-setup.controller.ts';
 import { EsriLayers, type EsriLayerSource } from '../setup/esri-layers.ts';
-import { MapFileReader } from '../setup/map-file-reader.ts';
+import { MapFileReadsApart } from '../setup/map-file-apart.ts';
 import { MapFiles } from '../setup/map-files.ts';
 import { apiMapFiles } from '../setup/map-files.controller.ts';
 import { apiSetupReads } from '../setup/setup-reads.controller.ts';
@@ -161,9 +162,10 @@ import {
   openApiDatabase,
   openApiViewerDatabase,
 } from './api-database.ts';
-import { Boundary, requestNow } from './boundary.ts';
+import { addressNow, Boundary, requestNow } from './boundary.ts';
 import { ErrorFilter } from './error-filter.ts';
 import { apiLimits, Limits } from './limits.ts';
+import { UntrustedProxy } from './untrusted-proxy.ts';
 import { logged, ProcessLog } from './logs.ts';
 import { apiReadiness, Readiness } from './readiness.ts';
 import type { Settings } from './settings.ts';
@@ -177,6 +179,8 @@ export type ProcessSettings = Pick<
   | 'corsOrigins'
   | 'trustedProxies'
   | 'tokenSigningSecret'
+  | 'passwordKey'
+  | 'sealingKey'
   | 'smtpUrl'
   | 'smtpAddress'
   | 'smtpCaFile'
@@ -348,7 +352,17 @@ export class ApiProcess {
     const viewerDatabase = more.viewerDatabase ?? openApiViewerDatabase(settings, pool);
     const clock = more.clock ?? { now: () => new Date() };
     const limits = new Limits(new RateLimits(policy), clock);
-    answersWith(server, settings.corsOrigins, (request) => limits.arrived(request.ip));
+    // A proxy in front of the API that ADMS_TRUSTED_PROXIES doesn't name, said in the log (ADR-549).
+    const untrusted = new UntrustedProxy(clock, policy.signInAddressWindowMinutes);
+    answersWith(server, settings.corsOrigins, (request) => {
+      if (untrusted.seen(request)) {
+        request.log.warn(
+          { setting: 'ADMS_TRUSTED_PROXIES' },
+          'A request came through a proxy the API doesn’t trust: every caller behind it shares its one address, for every rate limit and every count of refused tries. Name the proxy in ADMS_TRUSTED_PROXIES.',
+        );
+      }
+      return limits.arrived(request.ip);
+    });
     const mail = more.mail ?? mailFor(settings);
     // The object store the API keeps files in (task 2.6.4, part 1), under the API's own identity.
     const media =
@@ -366,7 +380,9 @@ export class ApiProcess {
       });
     const projectSetup = new ProjectSetup(database, clock, policy);
     const siteSetup = new SiteSetup(database, clock, policy);
-    const hasher = new PasswordHasher(settings.tokenSigningSecret);
+    // One key per purpose (ADR-542): the signing secret is handed to the password key's and the
+    // sealing key's users only to read what was made under the keys drawn from it before.
+    const hasher = new PasswordHasher(settings.passwordKey, settings.tokenSigningSecret);
     const tokens = new SessionTokens(settings.tokenSigningSecret, policy.accessTokenMinutes);
     const tries = new WrongTries(database, {
       rules: new SignInTries(policy),
@@ -377,7 +393,7 @@ export class ApiProcess {
     const check = new TwoStepCheck(
       new TwoStepRules(policy),
       new OneTimeCodes(),
-      new TwoStepSecrets(settings.tokenSigningSecret),
+      new TwoStepSecrets(settings.sealingKey, settings.tokenSigningSecret),
     );
     const sessions = new Sessions(database, {
       tokens,
@@ -391,7 +407,7 @@ export class ApiProcess {
     const twoStep = new TwoStep(database, { check, clock, mail, sessions, tries, requestNow });
     const breached = shippedBreachedPasswords();
     // What a phone's login-list entry for a monitor is made from (task 2.5.3, part 4).
-    const offline = new OfflineChecks(settings.tokenSigningSecret);
+    const offline = new OfflineChecks(settings.sealingKey, settings.tokenSigningSecret);
     const passwords = new Passwords(database, {
       rules: new PasswordRules(policy, breached),
       hasher,
@@ -409,9 +425,24 @@ export class ApiProcess {
     const passcodeCheck = new MasterPasscodeCheck(database, {
       rules: new MasterPasscodeTries(policy),
       hasher,
+      offline,
       mail,
       clock,
       requestNow,
+      // Its wait holds only an address refused at it within the longest wait (ADR-541).
+      here: {
+        refusedLately: () => {
+          const address = addressNow();
+          return (
+            address === undefined ||
+            limits.refusedLately(address, atThePasscode, policy.signInLongestWaitMinutes * 60)
+          );
+        },
+        refused: () => {
+          const address = addressNow();
+          if (address !== undefined) limits.refusedAt(address, atThePasscode);
+        },
+      },
     });
     // A phone's proof of itself (task 2.5.1): nobody is signed in. Any phone may prove itself
     // with the passcode beside its key, the master user at it (ADR-531); one whose key the
@@ -447,7 +478,12 @@ export class ApiProcess {
     const certifications = new Certifications(database, clock, policy);
     const intake = new Intake(database, clock, policy);
     // Where what a phone sent and the server can't save is held for a person (ADR-468, 526).
-    const held = new HeldThings(database, clock);
+    // What a sync can't save is held, and counted against its phone's daily budget (ADR-546).
+    const held = new HeldThings(database, clock, {
+      bytesPerDay: policy.phoneHeldBytesPerDay,
+      recordsPerDay: policy.phoneHeldRecordsPerDay,
+      mail,
+    });
     // The login list's service also makes the passcode's check a sync brings (ADR-473).
     const loginList = new PhoneLoginList(database, {
       assignments: new PhoneAssignments(database),
@@ -484,10 +520,13 @@ export class ApiProcess {
             apiMapFiles,
             new MapFiles(database, clock, {
               media,
-              reader: new MapFileReader({
+              // Read in a thread of its own, bounded in time and memory (ADR-548).
+              reader: new MapFileReadsApart({
                 unzippedBytesAtMost: policy.mapFileUnzippedBytesAtMost,
                 entriesAtMost: policy.mapFileEntriesAtMost,
                 ringPairsAtMost: policy.mapFileRingPairsAtMost,
+                seconds: policy.mapFileReadSeconds,
+                memoryMebibytes: policy.mapFileReadMemoryMebibytes,
               }),
               fileBytesAtMost: policy.mapFileBytesAtMost,
               projects: projectSetup,
@@ -530,6 +569,8 @@ export class ApiProcess {
           [apiHeldReads, new HeldReads(database)],
           // What the back office reads to review, fix and QC (task 2.8.8).
           [apiReviewReads, new ReviewReads(database)],
+          // The audit log, read (ADR-544).
+          [apiAuditTrail, new AuditTrail(database)],
           [apiHeldThings, held],
           // A certification's changes (task 2.4.4, part 4): only an admin revokes.
           [apiCertifications, certifications],
@@ -648,6 +689,7 @@ export class ApiProcess {
             new MasterPasscode(database, {
               rules: new MasterPasscodeRules(policy, breached),
               hasher,
+              offline,
               tries,
               mail,
               clock,

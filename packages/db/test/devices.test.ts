@@ -14,6 +14,9 @@ const tested = eachTestRolledBack();
 
 // Shaped like an Argon2id hash (a PHC string); nothing hashes to it.
 const aHash = '$argon2id$v=19$m=19456,t=2,p=1$c2FsdA$aGFzaA';
+// The same, keyed with the API's password key (ADR-542), and a seed as the API seals one.
+const aKeyedHash = '$argon2id$v=19$m=19456,t=2,p=1,keyid=djI$c2FsdA$aGFzaA';
+const aSeed = 'v2.bm9uY2U.aGlkZGVu.dGFn';
 const keptOut = '[kept out of the audit]';
 
 async function asTheApi(): Promise<void> {
@@ -323,13 +326,62 @@ describe('the master passcode', () => {
     expect(
       await db.run(`INSERT INTO "master_passcode" ("version", "hash") VALUES (2, $1)`, [aHash]),
     ).toBe(1);
+    for (const [sql, by] of [
+      [
+        `UPDATE "master_passcode" SET "hash" = '${aHash}Zm9v' WHERE "version" = 2`,
+        refusedBy.restrict,
+      ],
+      [`UPDATE "master_passcode" SET "version" = 3 WHERE "version" = 2`, refusedBy.restrict],
+      [
+        `UPDATE "master_passcode" SET "created_at" = "created_at" - interval '1 day' WHERE "version" = 2`,
+        refusedBy.restrict,
+      ],
+      [`DELETE FROM "master_passcode" WHERE "version" = 2`, refusedBy.grant],
+      [`TRUNCATE "master_passcode" CASCADE`, refusedBy.grant],
+    ] as const) {
+      expect((await db.refused(sql)).code, sql).toBe(by);
+    }
+  });
+
+  it('AC-10-109 the API keys the installer’s verifier once and writes a version’s sealed offline seed once, where it has none: never anything else, never again, never cleared (ADR-542)', async () => {
+    const { db } = tested;
+    await asTheApi();
+    await db.run(`INSERT INTO "master_passcode" ("version", "hash") VALUES (2, $1)`, [aHash]);
+    expect(
+      await db.run(
+        `UPDATE "master_passcode" SET "hash" = $1, "offline_seed" = $2 WHERE "version" = 2`,
+        [aKeyedHash, aSeed],
+      ),
+    ).toBe(1);
     for (const sql of [
-      `UPDATE "master_passcode" SET "hash" = '${aHash}' WHERE "version" = 1`,
-      `UPDATE "master_passcode" SET "version" = 3 WHERE "version" = 2`,
-      `DELETE FROM "master_passcode" WHERE "version" = 2`,
-      `TRUNCATE "master_passcode" CASCADE`,
+      // A keyed verifier made again, or taken back to none.
+      `UPDATE "master_passcode" SET "hash" = '${aKeyedHash.replace('c2FsdA', 'c2FsdB')}' WHERE "version" = 2`,
+      `UPDATE "master_passcode" SET "hash" = '${aHash}' WHERE "version" = 2`,
+      // A seed changed, or cleared.
+      `UPDATE "master_passcode" SET "offline_seed" = '${aSeed.replace('dGFn', 'dGFo')}' WHERE "version" = 2`,
+      `UPDATE "master_passcode" SET "offline_seed" = NULL WHERE "version" = 2`,
     ]) {
-      expect((await db.refused(sql)).code, sql).toBe(refusedBy.grant);
+      expect((await db.refused(sql)).code, sql).toBe(refusedBy.restrict);
+    }
+    // A verifier keyed with the signing secret's earlier key is no keyed one of the password key's.
+    await db.run(`INSERT INTO "master_passcode" ("version", "hash") VALUES (3, $1)`, [aHash]);
+    expect(
+      (
+        await db.refused(
+          `UPDATE "master_passcode" SET "hash" = '${aKeyedHash.replace('keyid=djI', 'keyid=djE')}' WHERE "version" = 3`,
+        )
+      ).code,
+    ).toBe(refusedBy.restrict);
+    // A seed that isn't one the API sealed.
+    for (const seed of ['v1.bm9uY2U.aGlkZGVu.dGFn', 'osprey-landing-marsh']) {
+      expect(
+        (
+          await db.refused(`UPDATE "master_passcode" SET "offline_seed" = $1 WHERE "version" = 3`, [
+            seed,
+          ])
+        ).code,
+        seed,
+      ).toBe(refusedBy.check);
     }
   });
 
@@ -365,15 +417,19 @@ describe('the master passcode', () => {
       `INSERT INTO "master_passcode" ("version", "hash") VALUES (2, $1) RETURNING "id"::text`,
       [aHash],
     );
-    // Only the owner could change one; even then the audit says that it changed, never to what.
-    await db.as('adms_owner');
+    // Keyed and sealed at its first use: the audit says that each changed, never from or to what.
     await db.actor(world.admin, 'BACK_OFFICE', { reason: 'A test of the audit capture' });
-    await db.run(`UPDATE "master_passcode" SET "hash" = $2 WHERE "id" = $1`, [id, `${aHash}Zm9v`]);
+    await db.run(`UPDATE "master_passcode" SET "hash" = $2, "offline_seed" = $3 WHERE "id" = $1`, [
+      id,
+      aKeyedHash,
+      aSeed,
+    ]);
     // The worker reads the audit log; this is all it sees of the passcode.
     await db.as('adms_worker');
     const audited = await db.rows(
       `SELECT "operation"::text, "domain"::text, "changed_fields", "prior_value" ->> 'hash' AS prior,
-         "new_value" ->> 'hash' AS new, "new_value" ->> 'version' AS version
+         "new_value" ->> 'hash' AS new, "new_value" ->> 'offline_seed' AS seed,
+         "new_value" ->> 'version' AS version
        FROM "audit_record" WHERE "table_name" = 'master_passcode' AND "record_id" = $1 ORDER BY "id"`,
       [id],
     );
@@ -381,17 +437,19 @@ describe('the master passcode', () => {
       {
         operation: 'INSERT',
         domain: 'SECURITY',
-        changed_fields: ['created_at', 'hash', 'id', 'version'],
+        changed_fields: ['created_at', 'hash', 'id', 'offline_seed', 'version'],
         prior: null,
         new: keptOut,
+        seed: keptOut,
         version: '2',
       },
       {
         operation: 'UPDATE',
         domain: 'SECURITY',
-        changed_fields: ['hash'],
+        changed_fields: ['hash', 'offline_seed'],
         prior: keptOut,
         new: keptOut,
+        seed: keptOut,
         version: '2',
       },
     ]);

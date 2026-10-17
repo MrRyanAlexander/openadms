@@ -49,19 +49,23 @@ export class PasswordResetsController {
     @Body() body: { code: string; password: string },
     @Req() request: FastifyRequest,
   ): Promise<PasswordSetAnswer> {
-    this.limits.mayTry(request.ip);
-    const outcome = await this.passwords.completeReset(body.code, body.password);
-    if (!outcome.set) {
-      if (
-        outcome.code === 'NOT_ALLOWED' ||
-        outcome.code === 'NOT_FOUND' ||
-        outcome.code === 'RESET_REFUSED'
-      ) {
-        this.limits.wrongTry(request.ip);
-        throw new Refusal('RESET_REFUSED', 400);
+    const underWay = this.limits.mayTry(request.ip);
+    try {
+      const outcome = await this.passwords.completeReset(body.code, body.password);
+      if (!outcome.set) {
+        if (
+          outcome.code === 'NOT_ALLOWED' ||
+          outcome.code === 'NOT_FOUND' ||
+          outcome.code === 'RESET_REFUSED'
+        ) {
+          this.limits.wrongTry(request.ip);
+          throw new Refusal('RESET_REFUSED', 400);
+        }
+        throw new Refusal(outcome.code, 422, outcome.message);
       }
-      throw new Refusal(outcome.code, 422, outcome.message);
+      return passwordSetAnswerSchema.parse({ status: 'ok' });
+    } finally {
+      underWay.over();
     }
-    return passwordSetAnswerSchema.parse({ status: 'ok' });
   }
 }

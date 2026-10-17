@@ -17,7 +17,13 @@
 // with the certificate and key ADMS_API_TLS_CERT_FILE and ADMS_API_TLS_KEY_FILE name; each
 // database login's URL asks `sslmode=verify-full`, checked against the root its `sslrootcert`
 // names, or ADMS_DATABASE_CA_FILE where the installation has one; mail goes over TLS alone,
-// checked against ADMS_SMTP_CA_FILE where the installation has one.
+// checked against ADMS_SMTP_CA_FILE where the installation has one. **Three secrets, each for one
+// purpose** (ADR-542; the Phase 2 audit's F11): ADMS_TOKEN_SIGNING_SECRET signs what lives
+// minutes or hours (tokens, the CSRF value, reset codes, a phone's challenges, a login list's
+// marks); ADMS_PASSWORD_KEY keys every password's slow hash and the master passcode's; and
+// ADMS_SEALING_KEY seals what is kept at rest (authenticators' secrets, offline seeds). Losing the
+// first ends sessions; losing either key means every password, or every authenticator, is set
+// anew; leaking one opens only what it keys.
 import { existsSync, readFileSync } from 'node:fs';
 import { BlockList, isIP } from 'node:net';
 import { fileURLToPath } from 'node:url';
@@ -69,6 +75,8 @@ export class Settings {
   readonly databaseUrl: string;
   readonly readOnlyDatabaseUrl: string;
   readonly tokenSigningSecret: string;
+  readonly passwordKey: string;
+  readonly sealingKey: string;
   // Empty when the firm has no mail server (ARCHITECTURE §6).
   readonly smtpUrl: string;
   // Where the mail server is when it isn't where SMTP_URL says (the local stack's, from inside it).
@@ -106,6 +114,8 @@ export class Settings {
     databaseUrl: string;
     readOnlyDatabaseUrl: string;
     tokenSigningSecret: string;
+    passwordKey: string;
+    sealingKey: string;
     smtpUrl: string;
     smtpAddress: string | undefined;
     smtpCaFile: string | null;
@@ -125,6 +135,8 @@ export class Settings {
     this.databaseUrl = values.databaseUrl;
     this.readOnlyDatabaseUrl = values.readOnlyDatabaseUrl;
     this.tokenSigningSecret = values.tokenSigningSecret;
+    this.passwordKey = values.passwordKey;
+    this.sealingKey = values.sealingKey;
     this.smtpUrl = values.smtpUrl;
     this.smtpAddress = values.smtpAddress;
     this.smtpCaFile = values.smtpCaFile;
@@ -243,6 +255,20 @@ export class Settings {
         'ADMS_TOKEN_SIGNING_SECRET',
         required('ADMS_TOKEN_SIGNING_SECRET'),
         (value) => value.length >= 32,
+      ),
+      // As the signing secret, and never the same as it or as each other: one secret per purpose.
+      passwordKey: checked(
+        'ADMS_PASSWORD_KEY',
+        required('ADMS_PASSWORD_KEY'),
+        (value) => value.length >= 32 && value !== environment['ADMS_TOKEN_SIGNING_SECRET'],
+      ),
+      sealingKey: checked(
+        'ADMS_SEALING_KEY',
+        required('ADMS_SEALING_KEY'),
+        (value) =>
+          value.length >= 32 &&
+          value !== environment['ADMS_TOKEN_SIGNING_SECRET'] &&
+          value !== environment['ADMS_PASSWORD_KEY'],
       ),
       smtpUrl: checked(
         'SMTP_URL',

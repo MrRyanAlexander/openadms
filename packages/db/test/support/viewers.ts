@@ -137,7 +137,8 @@ export const viewerSights: Record<string, Sight> = {
   quarantined_record: project([], ['payload']),
   // That a record of their project could not be saved and is held for a person, and why; what
   // was sent may name a private citizen (ADR-468 (5), 471).
-  held_record: project([], ['payload']),
+  // Its size, what a phone's daily budget counts, is the API's alone (ADR-546).
+  held_record: project(['sent_bytes'], ['payload']),
   // What the worker concluded for their project: its completed loads and haul-outs, each with
   // its collection rows, and its flags (ADR-340).
   // A contractor user: a completed record with its disposal event, a property's or a pile's row

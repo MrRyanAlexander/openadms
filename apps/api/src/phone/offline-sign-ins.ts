@@ -8,8 +8,8 @@
 //
 // - **The server never takes the phone's word for who signed in.** The phone sends a proof that
 //   only what was typed could make (offline-checks.ts; the domain's `OfflineSignInRules`), and
-//   the server checks it against what it keeps: the monitor's offline seed as kept now, or its
-//   own hash of the master passcode in force. A password set anew since, or a passcode changed
+//   the server checks it against what it keeps: the monitor's offline seed as kept now, or the
+//   offline seed of the master passcode in force (ADR-542; never its verifier). A password set anew since, or a passcode changed
 //   since, makes it no proof: the monitor signs in online.
 // - **The same rules as an online sign-in**: a phone in service; a monitor in service whose login
 //   neither waits nor is locked; one monitor at a time on a phone, so any other session on it
@@ -115,7 +115,7 @@ export class OfflineSignIns {
       }),
       passcode: await tx.masterPasscode.findFirst({
         orderBy: { version: 'desc' },
-        select: { version: true, hash: true },
+        select: { version: true, offlineSeed: true },
       }),
       hours: (await FirmSettings.of(tx)).monitorSessionHours,
       taken: await tx.session.count({ where: { offlineSignInId: reported.id } }),
@@ -144,9 +144,14 @@ export class OfflineSignIns {
       underPasscode === null
         ? kept.offlineSeed !== null &&
           offline.signedWithSeed(person.id, kept.offlineSeed, signed, reported.proof)
-        : passcode !== null &&
+        : passcode?.offlineSeed != null &&
           reported.masterPasscodeVersion === passcode.version &&
-          offline.signedWithPasscode(passcode.hash, signed, reported.proof);
+          offline.signedWithPasscode(
+            passcode.version,
+            passcode.offlineSeed,
+            signed,
+            reported.proof,
+          );
     if (!proven) return refused('NOT_PROVEN');
     if (read.later > 0) return refused('SUPERSEDED');
     // A temporary session ends with the day of the project the phone takes for the monitor.

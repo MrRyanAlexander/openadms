@@ -24,6 +24,9 @@ import {
 
 const p1 = '0199a000-0000-7000-8000-0000000000a1';
 const p2 = '0199a000-0000-7000-8000-0000000000a2';
+// Kim Nguyen and Ana Brooks, monitors (CONVENTIONS §6).
+const kim = '0199a000-0000-7000-8000-0000000000c1';
+const ana = '0199a000-0000-7000-8000-0000000000c2';
 
 // A time on the device's clock in Bayline County: four hours behind UTC until 1 November 2026,
 // five after.
@@ -89,6 +92,9 @@ function recorded(
     kindOfWorkId: kind === 'UNIT_RATE' ? 'kind-hangers' : null,
     unreadableGps: null,
     assignmentProjectId: more.projectId ?? p1,
+    monitorId: kim,
+    assignmentPersonId: kim,
+    monitorAtSync: null,
     ...more,
   };
 }
@@ -949,6 +955,58 @@ describe('a record that should not have been possible is kept and flagged', () =
     });
     expect(
       flagsOf([collection('101043', at(mon, '09:40'), { assignmentProjectId: null })]),
+    ).toEqual([]);
+  });
+
+  it('AC-10-110 a phone’s record naming a monitor who wasn’t signed in on that phone over its field time is flagged, kept as sent; one whose monitor was, or that nobody asked about, is not (ADR-543)', () => {
+    const named = { id: ana, name: 'Ana Brooks' };
+    const flags = flagsOf([
+      collection('101044', at(mon, '09:40'), {
+        monitorId: ana,
+        assignmentPersonId: ana,
+        monitorAtSync: { monitor: named, signedIn: false },
+      }),
+    ]);
+    expect(messagesOf(flags)).toEqual([
+      "Ticket 101044: recorded under Ana Brooks, who wasn't signed in on that phone. Flagged for review.",
+    ]);
+    expect(flags[0]).toMatchObject({
+      code: 'MONITOR_NOT_SIGNED_IN',
+      billing: 'BILLS',
+      facts: { monitorId: ana },
+    });
+    for (const monitorAtSync of [{ monitor: named, signedIn: true }, null]) {
+      expect(
+        flagsOf([
+          collection('101044', at(mon, '09:40'), {
+            monitorId: ana,
+            assignmentPersonId: ana,
+            monitorAtSync,
+          }),
+        ]),
+      ).toEqual([]);
+    }
+  });
+
+  it('AC-10-110 a phone’s record under another person’s assignment is flagged; a back-office record has none (ADR-543)', () => {
+    const flags = flagsOf([
+      collection('101045', at(mon, '09:40'), { monitorId: kim, assignmentPersonId: ana }),
+    ]);
+    expect(messagesOf(flags)).toEqual([
+      "Ticket 101045: recorded under another person's assignment. Flagged for review.",
+    ]);
+    expect(flags[0]).toMatchObject({
+      code: 'ASSIGNMENT_OF_ANOTHER_PERSON',
+      facts: { monitorId: kim, assignmentPersonId: ana },
+    });
+    expect(
+      flagsOf([
+        collection('101045', at(mon, '09:40'), {
+          monitorId: kim,
+          assignmentPersonId: null,
+          assignmentProjectId: null,
+        }),
+      ]),
     ).toEqual([]);
   });
 });

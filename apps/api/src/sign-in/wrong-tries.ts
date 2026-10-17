@@ -9,10 +9,15 @@
 // the person whose login was tried: the row is theirs, and the event says the try failed, never
 // that they made it (ADR-409). A try a phone made at a monitor's login (ADR-443) is written as a
 // phone's write, naming that phone, and the security events name it too.
+//
+// **Tries at one login are taken one at a time** (`inTurn`; ADR-541, the Phase 2 audit's F2): a
+// service reads the login's count, checks the guess and counts a wrong one inside its turn, so a
+// burst sent at once is counted try by try and is refused unchecked once the login waits.
 import type { Database } from '@open-adms/db';
 import type { SignInTries, WrongTry } from '@open-adms/domain';
 
 import type { Clock } from '../setup/setup-service.ts';
+import { InTurn } from './in-turn.ts';
 import type { Mail } from './mail.ts';
 
 export interface Tried {
@@ -42,10 +47,18 @@ export interface WrongTriesParts {
 export class WrongTries {
   private readonly db: Database;
   private readonly parts: WrongTriesParts;
+  private readonly turns = new InTurn();
 
   constructor(db: Database, parts: WrongTriesParts) {
     this.db = db;
     this.parts = parts;
+  }
+
+  // A try at one login, from reading its count to counting a wrong guess, once every earlier try
+  // at it is over. `login` names it as it was typed (an address or a Monitor ID, as the service
+  // compares it) or as a person's id where the caller is signed in.
+  inTurn<T>(login: string, work: () => Promise<T>): Promise<T> {
+    return this.turns.run(login, work);
   }
 
   // Whether the login may not be tried now: the right password is refused too.

@@ -72,19 +72,23 @@ export class SessionsController {
   ): Promise<SessionAnswer> {
     // An address refused too often already, here or at this login, is stopped before the login
     // is touched: its try is never a wrong try there (ADR-416).
-    this.limits.mayTry(request.ip, body.email);
-    const outcome = await this.sessions.signIn(body.email, body.password, body.code);
-    if (!outcome.signedIn) {
-      request.log.info({ why: outcome.why }, 'A sign-in was refused.');
-      // The one refusal told apart: the password was right, and the authenticator's code is
-      // asked for. Nothing was opened and nothing written.
-      if (outcome.why === 'CODE_NEEDED') throw new Refusal('TWO_STEP_CODE_NEEDED', 401);
-      this.limits.wrongTry(request.ip, body.email);
-      throw new Refusal('SIGN_IN_REFUSED', 401);
+    const underWay = this.limits.mayTry(request.ip, body.email);
+    try {
+      const outcome = await this.sessions.signIn(body.email, body.password, body.code);
+      if (!outcome.signedIn) {
+        request.log.info({ why: outcome.why }, 'A sign-in was refused.');
+        // The one refusal told apart: the password was right, and the authenticator's code is
+        // asked for. Nothing was opened and nothing written.
+        if (outcome.why === 'CODE_NEEDED') throw new Refusal('TWO_STEP_CODE_NEEDED', 401);
+        this.limits.wrongTry(request.ip, body.email);
+        throw new Refusal('SIGN_IN_REFUSED', 401);
+      }
+      this.limits.signedIn(request.ip, body.email);
+      request.log.info('A sign-in worked.');
+      return this.opened(reply, outcome);
+    } finally {
+      underWay.over();
     }
-    this.limits.signedIn(request.ip, body.email);
-    request.log.info('A sign-in worked.');
-    return this.opened(reply, outcome);
   }
 
   @Serves(refreshSessionEndpoint)
@@ -131,24 +135,28 @@ export class SessionsController {
     @Req() request: FastifyRequest,
   ): Promise<PasswordSetAnswer> {
     const caller = callerOf(request);
-    this.limits.mayTry(request.ip);
-    const outcome = await this.passwords.changeOwn(
-      caller.userId,
-      caller.sessionId,
-      body.current,
-      body.password,
-    );
-    if (!outcome.set) {
-      if (outcome.code === 'NOT_FOUND' || outcome.code === 'NOT_ALLOWED') {
-        throw new Refusal('NOT_SIGNED_IN', 401);
+    const underWay = this.limits.mayTry(request.ip);
+    try {
+      const outcome = await this.passwords.changeOwn(
+        caller.userId,
+        caller.sessionId,
+        body.current,
+        body.password,
+      );
+      if (!outcome.set) {
+        if (outcome.code === 'NOT_FOUND' || outcome.code === 'NOT_ALLOWED') {
+          throw new Refusal('NOT_SIGNED_IN', 401);
+        }
+        if (outcome.code === 'RESET_REFUSED' || outcome.code === 'NO_MAIL') {
+          throw new Error('Changing a password answered as a reset does.');
+        }
+        if (outcome.code === 'PASSWORD_WRONG') this.limits.wrongTry(request.ip);
+        throw new Refusal(outcome.code, 422, outcome.message);
       }
-      if (outcome.code === 'RESET_REFUSED' || outcome.code === 'NO_MAIL') {
-        throw new Error('Changing a password answered as a reset does.');
-      }
-      if (outcome.code === 'PASSWORD_WRONG') this.limits.wrongTry(request.ip);
-      throw new Refusal(outcome.code, 422, outcome.message);
+      return passwordSetAnswerSchema.parse({ status: 'ok' });
+    } finally {
+      underWay.over();
     }
-    return passwordSetAnswerSchema.parse({ status: 'ok' });
   }
 
   private opened(reply: FastifyReply, opened: Opened): SessionAnswer {

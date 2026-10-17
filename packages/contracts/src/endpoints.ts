@@ -111,6 +111,8 @@ import {
   surveysAnswerSchema,
   ticketAnswerSchema,
   ticketDecisionsAnswerSchema,
+  auditTrailAnswerSchema,
+  setAsideJobsAnswerSchema,
   viewerCertificationsAnswerSchema,
   viewerDropOffLogsAnswerSchema,
   viewerIncidentsAnswerSchema,
@@ -3825,6 +3827,58 @@ export const readTicketDecisionsEndpoint = endpoint({
   answer: ticketDecisionsAnswerSchema,
 });
 
+// The audit log, read (ARCHITECTURE §5.3; invariant 3; REQ-407; ADR-544; the Phase 2 audit's F5):
+// "corrected in place, prior value kept" is a promise to an auditor, kept here. A page of it, newest
+// first, by its own number.
+const auditPage = z.strictObject({
+  // The last entry of the page before: the answer's `next`.
+  after: z
+    .string()
+    .regex(/^[1-9][0-9]{0,18}$/)
+    .optional(),
+  limit: readPage,
+});
+
+export const readTicketHistoryEndpoint = endpoint({
+  ...read,
+  permission: 'VIEW_REVIEW',
+  name: 'readTicketHistory',
+  summary:
+    'What the audit log holds of one ticket, newest first, a page at a time: every change to its field events and what is recorded beside them (item lines, carried tickets, photographs’ records), the completed record and its rows, its lines (those the worker removed included, each copied whole first), its flags and their acceptances, and its QC marks, locks, voids and unvoids; each with the values before and after, who made it, from where and why. A ticket with no field event is not found.',
+  method: 'GET',
+  path: '/projects/:projectId/tickets/:workflow/:ticketNumber/history',
+  params: projectTicket,
+  query: auditPage,
+  answer: auditTrailAnswerSchema,
+});
+
+export const readRecordHistoryEndpoint = endpoint({
+  ...read,
+  name: 'readRecordHistory',
+  summary:
+    'What the audit log holds of one record, by its table and id, newest first, a page at a time. Read by the area it belongs to: a ticket’s records with view review, setup with view setup, people, phones and the board with view dispatch; sign-in’s and the firm’s security records by an admin alone. A person’s phone number is shown to an admin alone.',
+  method: 'GET',
+  path: '/audit-records',
+  query: auditPage.extend({
+    tableName: z.string().regex(/^[a-z][a-z_]{0,62}$/),
+    recordId: z.string().regex(/^[0-9A-Za-z-]{1,40}$/),
+  }),
+  answer: auditTrailAnswerSchema,
+});
+
+export const listSetAsideJobsEndpoint = endpoint({
+  ...read,
+  permission: 'VIEW_REVIEW',
+  name: 'listSetAsideJobs',
+  summary:
+    'A project’s jobs set aside after failing too often, newest first, a page at a time: when each was queued and set aside, what queued it and who asked, its tries, and its tickets, each said to be waiting where no job has worked it since. Put one back with a reprocess naming it. Never why it failed.',
+  method: 'GET',
+  path: '/projects/:projectId/set-aside-jobs',
+  params: projectId,
+  query: pagedAfter,
+  answer: setAsideJobsAnswerSchema,
+});
+
 export const readFieldEventEndpoint = endpoint({
   ...read,
   permission: 'VIEW_REVIEW',
@@ -4275,6 +4329,32 @@ export const lockSeveralAsInvoicedEndpoint = endpoint({
 const viewerRead = { access: 'SIGNED_IN', roles: viewerOnly } as const;
 const viewerPaged = z.strictObject({ after: z.uuid().optional(), limit: viewerPage });
 
+// What the audit log holds of one ticket, as the database shows it to a client user or an auditor
+// (ADR-544): the same changes the back office reads, with what this viewer reads of each row and
+// nothing more, never why. A contractor user is shown none. A ticket the viewer isn't shown is not
+// found.
+export const viewerTicketHistoryEndpoint = endpoint({
+  ...viewerRead,
+  name: 'viewerTicketHistory',
+  summary:
+    'What the audit log holds of one ticket as the signed-in client user or auditor is shown it, newest first, a page at a time: each change to its records, the values before and after as this viewer reads them, who made it and from where; never why. A contractor user is shown none; a ticket the viewer isn’t shown is not found.',
+  method: 'GET',
+  path: '/viewer/projects/:projectId/tickets/:workflow/:ticketNumber/history',
+  params: z.strictObject({
+    projectId: z.uuid(),
+    workflow: z.enum(workflows),
+    ticketNumber: viewedNumber,
+  }),
+  query: z.strictObject({
+    after: z
+      .string()
+      .regex(/^[1-9][0-9]{0,18}$/)
+      .optional(),
+    limit: viewerPage,
+  }),
+  answer: auditTrailAnswerSchema,
+});
+
 export const viewerCertificationsEndpoint = endpoint({
   ...viewerRead,
   name: 'viewerCertifications',
@@ -4407,6 +4487,9 @@ export const endpoints: readonly Endpoint[] = [
   listFlagsEndpoint,
   readTicketEndpoint,
   readTicketDecisionsEndpoint,
+  readTicketHistoryEndpoint,
+  readRecordHistoryEndpoint,
+  listSetAsideJobsEndpoint,
   changeProjectSettingsEndpoint,
   changeProjectWindowEndpoint,
   closingCheckEndpoint,
@@ -4568,6 +4651,7 @@ export const endpoints: readonly Endpoint[] = [
   unrevokeCertificationEndpoint,
   viewerProjectsEndpoint,
   viewerRoesEndpoint,
+  viewerTicketHistoryEndpoint,
   viewerCertificationsEndpoint,
   viewerSurveysEndpoint,
   viewerIncidentsEndpoint,

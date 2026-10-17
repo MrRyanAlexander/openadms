@@ -21,6 +21,7 @@ import type {
   FlagsAnswer,
   ReviewQueueAnswer,
   ScaleReceiptAnswer,
+  SetAsideJobsAnswer,
   TicketAnswer,
   TicketDecisionsAnswer,
 } from '@open-adms/contracts';
@@ -47,6 +48,7 @@ import {
   ticketUnvoidRecord,
   ticketVoidRecord,
 } from './review-answered.ts';
+import { SetAside } from './set-aside.ts';
 
 type Tx = Prisma.TransactionClient;
 
@@ -298,6 +300,8 @@ export class ReviewReads {
         where: { ...openHere, workflow: asked.workflow, ticketNumber: { in: page } },
         orderBy: { raisedAt: 'asc' },
       });
+      // A ticket a job set aside still names, unworked since (ADR-545).
+      const waiting = (await SetAside.of(tx, projectId)).waiting(asked.workflow);
       return {
         causes: byCause.map((row) => ({
           code: row.code,
@@ -319,8 +323,47 @@ export class ReviewReads {
               billing: flag.billing,
               raisedAt: flag.raisedAt.toISOString(),
             })),
+          waitingOnSetAsideJob: waiting.has(ticketNumber),
         })),
+        waitingOnSetAsideJobs: waiting.size,
         next: numbers.length > asked.limit ? (page.at(-1) ?? null) : null,
+      };
+    });
+  }
+
+  // A project's jobs set aside, newest first, a page at a time (ADR-545): what each is, and its
+  // tickets, each said to wait on it where no job has worked it since. Never `lastError`.
+  setAsideJobs(readerId: string, projectId: string, asked: PageAsked): Promise<SetAsideJobsAnswer> {
+    return this.db.$read(async (tx) => {
+      await backOfficeReader(tx, readerId, 'VIEW_REVIEW');
+      await ReviewReads.project(tx, projectId);
+      const ids = await tx.reconciliationJob.findMany({
+        where: { projectId, setAsideAt: { not: null } },
+        orderBy: { id: 'desc' },
+        select: { id: true },
+        ...fromCursor(asked),
+      });
+      const { rows: page, next } = pageOf(ids, asked.limit);
+      const setAside = await SetAside.of(
+        tx,
+        projectId,
+        page.map((row) => row.id),
+      );
+      return {
+        jobs: setAside.jobs.map((job) => ({
+          id: job.id,
+          trigger: job.trigger,
+          requestedById: job.requestedById,
+          queuedAt: job.queuedAt.toISOString(),
+          setAsideAt: job.setAsideAt.toISOString(),
+          tries: job.attempts,
+          tickets: job.tickets.map((ticket) => ({
+            workflow: ticket.workflow,
+            ticketNumber: ticket.ticketNumber,
+            waiting: setAside.waitsOn(job, ticket.workflow, ticket.ticketNumber),
+          })),
+        })),
+        next,
       };
     });
   }

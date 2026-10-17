@@ -67,11 +67,11 @@ describe('an authenticator’s codes', () => {
 });
 
 describe('an authenticator’s secret, as the server keeps it', () => {
-  const secrets = new TwoStepSecrets('made-up-signing-secret-for-this-test-only');
+  const secrets = new TwoStepSecrets('made-up-sealing-key-for-this-test-only');
 
   it('AC-10-11 is sealed: what is kept holds the secret in no form, and opens only for the person it was sealed for', () => {
     const kept = secrets.seal(dana, secret);
-    expect(kept).toMatch(/^v1\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{27}\.[A-Za-z0-9_-]{22}$/);
+    expect(kept).toMatch(/^v2\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{27}\.[A-Za-z0-9_-]{22}$/);
     for (const form of ['utf8', 'hex', 'base64', 'base64url'] as const) {
       expect(kept).not.toContain(secret.toString(form));
     }
@@ -91,7 +91,8 @@ describe('an authenticator’s secret, as the server keeps it', () => {
       [version, flipped(nonce), hidden, tag],
       [version, nonce, flipped(hidden), tag],
       [version, nonce, hidden, flipped(tag)],
-      ['v2', nonce, hidden, tag],
+      ['v1', nonce, hidden, tag],
+      ['v3', nonce, hidden, tag],
       [version, nonce, hidden],
       [version, nonce, hidden, tag, tag],
     ]) {

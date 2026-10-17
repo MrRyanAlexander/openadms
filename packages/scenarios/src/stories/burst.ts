@@ -560,14 +560,15 @@ export const burst: Story = {
         `${ms(setupReads.at(-1) ?? 0)} ms`,
     );
     // A phone's first sync is made the master passcode's check (C134): a slow hash, made outside
-    // any piece of work, so it holds no connection. One, then one for each phone at once.
-    const { hash } = await api.masterPasscode.findFirstOrThrow({ orderBy: { version: 'desc' } });
-    const checks = new OfflineChecks('a signing secret of the burst’s own');
+    // any piece of work, so it holds no connection. One, then one for each phone at once; from a
+    // seed of the burst's own, sealed as the API seals the passcode's (ADR-542).
+    const checks = new OfflineChecks('a sealing key of the burst’s own');
+    const seed = await checks.passcodeSeedOf(1, 'a passcode of the burst’s own');
     const checking = performance.now();
-    await checks.ofPasscode(hash);
+    await checks.ofPasscode(1, seed);
     const oneCheck = performance.now() - checking;
     const allChecking = performance.now();
-    await Promise.all(phones.map(() => checks.ofPasscode(hash)));
+    await Promise.all(phones.map(() => checks.ofPasscode(1, seed)));
     say(
       `The master passcode's check a phone's first sync is made: one took ${ms(oneCheck)} ms; ` +
         `one for each of the ${String(phones.length)} phones at once, ` +

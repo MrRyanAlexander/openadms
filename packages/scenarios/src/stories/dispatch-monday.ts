@@ -208,9 +208,13 @@ export const dispatchMonday: Story = {
     );
     const passcode = await api.auditRecord.findMany({ where: { tableName: 'master_passcode' } });
     story.check(
-      'the passcode itself is nowhere: the database keeps its slow hash, the audit log not even that',
+      'the passcode itself is nowhere: the database keeps its slow hash, keyed at its first use with its offline seed sealed (ADR-542), and the audit log holds not even that',
       passcode.map((record) => [record.source, (record.newValue as { hash: string }).hash]),
-      [['SYSTEM', '[kept out of the audit]']],
+      [
+        ['SYSTEM', '[kept out of the audit]'],
+        ['DEVICE', '[kept out of the audit]'],
+        ['DEVICE', '[kept out of the audit]'],
+      ],
     );
 
     story.at(

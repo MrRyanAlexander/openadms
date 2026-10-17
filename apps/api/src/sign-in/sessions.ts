@@ -27,6 +27,7 @@ import type { Policy } from '@open-adms/domain';
 import { FirmSettings } from '../firm/firm-settings.ts';
 import type { Clock } from '../setup/setup-service.ts';
 import type { PasswordHasher } from './password-hasher.ts';
+import { signingInWith } from './signs-in-with.ts';
 import type { SessionTokens } from './session-tokens.ts';
 import type { TwoStepCheck } from './two-step.ts';
 import type { WrongTries } from './wrong-tries.ts';
@@ -123,7 +124,14 @@ export class Sessions {
     this.parts = parts;
   }
 
-  async signIn(email: string, password: string, code?: string): Promise<SignInOutcome> {
+  // One try at a time at one address (ADR-541): each reads the count the one before it left.
+  signIn(email: string, password: string, code?: string): Promise<SignInOutcome> {
+    return this.parts.tries.inTurn(`email ${email.trim().toLowerCase()}`, () =>
+      this.signInNow(email, password, code),
+    );
+  }
+
+  private async signInNow(email: string, password: string, code?: string): Promise<SignInOutcome> {
     const person = await this.named(email);
     const kept = person?.credential;
     if (person === undefined || kept?.passwordHash == null) {
@@ -159,10 +167,15 @@ export class Sessions {
       );
       if (step === undefined) return this.wrongCode(person);
     }
-    // Made again where it has no key or was made under settings since raised.
+    // Made again where it has no key or an earlier one, or was made under settings since raised;
+    // an authenticator's secret sealed again where it was sealed under an earlier key (ADR-542).
     const passwordHash = this.parts.hasher.stale(kept.passwordHash)
       ? await this.parts.hasher.hash(password)
       : undefined;
+    const twoStepSecret =
+      kept.twoStepSecret === null
+        ? undefined
+        : this.parts.twoStep.secrets.resealed(person.id, kept.twoStepSecret);
     const requestId = this.parts.requestNow();
     const made = this.parts.tokens.newRefresh();
     const expiresAt = this.until(now, now);
@@ -181,13 +194,19 @@ export class Sessions {
           });
           if (count !== 1) return undefined;
         }
-        if (kept.failedSignIns > 0 || kept.lockedUntil !== null || passwordHash !== undefined) {
+        if (
+          kept.failedSignIns > 0 ||
+          kept.lockedUntil !== null ||
+          passwordHash !== undefined ||
+          twoStepSecret !== undefined
+        ) {
           await tx.userCredential.update({
             where: { userId: person.id },
             data: {
               failedSignIns: 0,
               lockedUntil: null,
               ...(passwordHash === undefined ? {} : { passwordHash }),
+              ...(twoStepSecret === undefined ? {} : { twoStepSecret }),
             },
           });
         }
@@ -318,35 +337,35 @@ export class Sessions {
     return count;
   }
 
-  // The one person the firm holds that address for, among those who sign in here. Compared
-  // whole and without regard to capitals, never as a pattern in the database. Where two share
-  // an address neither is meant, as for a reset by email (ADR-404).
+  // The one person the firm holds that address for, among those who sign in here, found by the
+  // database's own rule and index (signs-in-with.ts; ADR-547). Where two share an address neither
+  // is meant, as for a reset by email (ADR-404). Only that person's credential is read.
   private async named(email: string) {
-    const typed = email.trim().toLowerCase();
-    const people = (
-      await this.db.$read((tx) =>
-        tx.user.findMany({
-          where: { email: { not: null }, archivedAt: null, role: { in: [...signsInHere] } },
-          select: {
-            id: true,
-            name: true,
-            role: true,
-            email: true,
-            permissions: { where: { archivedAt: null }, select: { permission: true } },
-            credential: {
-              select: {
-                passwordHash: true,
-                failedSignIns: true,
-                lockedUntil: true,
-                passwordChangeRequired: true,
-                twoStepSecret: true,
-                twoStepLastStep: true,
+    const people = await this.db.$read(async (tx) => {
+      const ids = await signingInWith(tx, email);
+      return ids.length !== 1
+        ? []
+        : tx.user.findMany({
+            where: { id: { in: [...ids] }, archivedAt: null, role: { in: [...signsInHere] } },
+            select: {
+              id: true,
+              name: true,
+              role: true,
+              email: true,
+              permissions: { where: { archivedAt: null }, select: { permission: true } },
+              credential: {
+                select: {
+                  passwordHash: true,
+                  failedSignIns: true,
+                  lockedUntil: true,
+                  passwordChangeRequired: true,
+                  twoStepSecret: true,
+                  twoStepLastStep: true,
+                },
               },
             },
-          },
-        }),
-      )
-    ).filter((held) => held.email?.trim().toLowerCase() === typed);
+          });
+    });
     const [person, another] = people;
     if (person === undefined || another !== undefined || !signsIn(person.role)) return undefined;
     return { ...person, role: person.role };

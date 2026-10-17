@@ -5,10 +5,11 @@
 // - **An admin changes it**, read as an admin inside the same piece of work (ADR-364). It opens
 //   every phone, so whoever changes it gives their own password again: a session left open or
 //   stolen is not enough. A wrong one counts as a wrong try at their login.
-// - **A change is a new version.** The database lets the API add one and never edit or remove
-//   one; only the slow hash is kept, and the audit log holds not even that. Each phone's check
-//   moves to the new version at its next sync (the sync's, task 2.5.x); until then a phone says
-//   which version it holds.
+// - **A change is a new version.** The database lets the API add one and never remove one, nor
+//   edit one but to key the installer's and seal its seed, once (ADR-542); only its keyed slow
+//   hash and its sealed offline seed are kept, and the audit log holds neither. Each phone's
+//   check moves to the new version at its next sync; until then a phone says which version it
+//   holds.
 // - **The rules are the domain's** (`MasterPasscodeRules`): 8 to 128 characters, never one known
 //   from breaches; and never the one in force again.
 // - **Every admin is told by mail**, where the firm has any, so a change nobody asked for is
@@ -16,6 +17,7 @@
 import type { Database } from '@open-adms/db';
 import type { MasterPasscodeRules, PasswordProblemCode } from '@open-adms/domain';
 
+import type { OfflineChecks } from '../phone/offline-checks.ts';
 import type { Clock } from '../setup/setup-service.ts';
 import type { Mail } from '../sign-in/mail.ts';
 import type { PasswordHasher } from '../sign-in/password-hasher.ts';
@@ -33,6 +35,7 @@ export type PasscodeOutcome =
 export interface MasterPasscodeParts {
   readonly rules: MasterPasscodeRules;
   readonly hasher: PasswordHasher;
+  readonly offline: Pick<OfflineChecks, 'passcodeSeedOf'>;
   readonly tries: WrongTries;
   readonly mail: Mail;
   readonly clock: Clock;
@@ -49,7 +52,13 @@ export class MasterPasscode {
     this.parts = parts;
   }
 
-  async change(
+  change(adminId: string, currentPassword: string, passcode: string): Promise<PasscodeOutcome> {
+    return this.parts.tries.inTurn(`person ${adminId}`, () =>
+      this.changeNow(adminId, currentPassword, passcode),
+    );
+  }
+
+  private async changeNow(
     adminId: string,
     currentPassword: string,
     passcode: string,
@@ -85,24 +94,29 @@ export class MasterPasscode {
     if (inForce !== null && (await hasher.verify(passcode, inForce.hash))) {
       return { changed: false, code: 'PASSWORD_UNCHANGED' };
     }
-    const hash = await hasher.hashWithoutKey(passcode);
-    const version = await this.db.$write(
+    // Keyed, and its offline seed sealed for the version it will be (ADR-542). Two admins
+    // changing it at one moment: the second's version is already kept, and the database's own key
+    // refuses it, answered plainly (process/database-refusal.ts).
+    const next = (
+      await this.db.$read((tx) => tx.masterPasscode.aggregate({ _max: { version: true } }))
+    )._max.version;
+    const version = (next ?? 0) + 1;
+    const hash = await hasher.hash(passcode);
+    const offlineSeed = await this.parts.offline.passcodeSeedOf(version, passcode);
+    const made = await this.db.$write(
       { actorId: adminId, source: 'BACK_OFFICE' },
       async (tx): Promise<number | undefined> => {
         const still = await tx.user.findUnique({ where: { id: adminId }, select: adminRead });
         if (still?.role !== 'ADMIN' || still.archivedAt !== null) return undefined;
-        const last = await tx.masterPasscode.aggregate({ _max: { version: true } });
-        // Two admins changing it at one moment: the second's version is already kept, and the
-        // database's own key refuses it, answered plainly (process/database-refusal.ts).
-        const made = await tx.masterPasscode.create({
-          data: { version: (last._max.version ?? 0) + 1, hash },
+        const created = await tx.masterPasscode.create({
+          data: { version, hash, offlineSeed },
           select: { version: true },
         });
-        return made.version;
+        return created.version;
       },
     );
-    if (version === undefined) return { changed: false, code: 'NOT_ALLOWED' };
-    return { changed: true, version, told: await this.tellAdmins(admin.name) };
+    if (made === undefined) return { changed: false, code: 'NOT_ALLOWED' };
+    return { changed: true, version: made, told: await this.tellAdmins(admin.name) };
   }
 
   // A message that can't be sent undoes nothing: email is never required.

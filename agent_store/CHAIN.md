@@ -7,28 +7,28 @@
 > task's ADR and its session-log line in `DECISIONS.md`). No other file carries these counts.
 > **A count that differs from this page without a reason is a finding, not noise.**
 
-**Seen whole:** 2026-10-17, Phase 2's exit met (task 2.8.9, ADR-539), on the user's Mac, the installation at head: `pnpm chain` 7 of 9 in 10 min 04 s (test: one contracts test still held the file reads open to every reader; lint: an unused import), both fixed, then `pnpm chain test lint` 2 passed; every count below as seen (the five that moved: a migration, three domain tests, one API test). Then `pnpm scenarios` twice more, three full runs in a row with the chain's.
+**Seen whole:** 2026-10-17, the Phase 2 audit answered (ADR-541…550), on the user's Mac, the installation at head: `pnpm chain` 8 of 9 (its test step met a second chain still running beside it, the stories' port and the database shared: the agent's own overlap), then `pnpm chain test` alone passed and `pnpm security` passed; every count below as seen (what moved: seven migrations, the tests of AC-10-108…116, the two flags, the policy's four values, a check each in `p1-queued` and `p1-viewed`, a check of the installer's).
 
 ## `pnpm ready`
 
 | What | Today |
 |---|---|
 | `pnpm local:up` | eight `Healthy` services (`pnpm chain` says `10 containers Healthy`: these eight, the API's and the worker's) (`routing-tls` the seventh, ADR-517; `objectstore-tls` the eighth, ADR-525), `Keeping the stack’s root and every service’s certificate.`, `Keeping the object store’s bucket adms-media (it keeps every version).` (ADR-480), then the API's and the worker's containers: `https://api.adms.localhost/health → 200 {"status":"ok"}` and `the worker’s health answer → 200 {"status":"ok","jobsWaiting":0,"jobsSetAside":0,"oldestJobWaitingSeconds":0}` |
-| `pnpm installer:check` | **37 `✓`**, no `✗`, exit 0 (the two since ADR-530: each service's policy values in force) |
-| Migrations at head | **138** (`packages/db/prisma/migrations/` is the list) |
+| `pnpm installer:check` | **38 `✓`**, no `✗`, exit 0 (the two since ADR-530: each service's policy values in force; one since ADR-542: the API's three secrets there and apart) |
+| Migrations at head | **145** (`packages/db/prisma/migrations/` is the list) |
 | `pnpm local:down` (close-out) | 10 containers and the network: 11 `Removed` lines |
 
 ## `pnpm test`
 
-**`Test Files 184 passed (184)`, `Tests 3214 passed (3214)`.**
+**`Test Files 187 passed (187)`, `Tests 3253 passed (3253)`.**
 
 | Project | Tests | Files | Needs |
 |---|---|---|---|
-| `packages/domain` | 848 | 45 | nothing |
+| `packages/domain` | 859 | 45 | nothing |
 | `packages/contracts` | 91 | 9 | nothing |
-| `apps/api` | 727 | 56 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
-| `packages/db` | 1087 | 48 | `pnpm ready` |
-| `packages/scenarios` | 157 | 7 | `pnpm ready` for `stories.test.ts` (the runner and a run's template, 5) and `story-api.test.ts` (a story's API over HTTPS through the proxy, every request of a story's phone, the back office and the viewers at their browsers, and a turn-in meeting another request of its phone in the database, 16); the flag catalogue (79 flags), the harness, the phone held to the sync contract's suite and to what it sends and takes in at a sync, its photographs' files and its turn-in among it, and its wait when told to (25), the policy and the server apps' exports (2) need nothing. **The stories themselves are not here** (ADR-446) |
+| `apps/api` | 750 | 58 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
+| `packages/db` | 1090 | 49 | `pnpm ready` |
+| `packages/scenarios` | 159 | 7 | `pnpm ready` for `stories.test.ts` (the runner and a run's template, 5) and `story-api.test.ts` (a story's API over HTTPS through the proxy, every request of a story's phone, the back office and the viewers at their browsers, and a turn-in meeting another request of its phone in the database, 16); the flag catalogue (81 flags), the harness, the phone held to the sync contract's suite and to what it sends and takes in at a sync, its photographs' files and its turn-in among it, and its wait when told to (25), the policy and the server apps' exports (2) need nothing. **The stories themselves are not here** (ADR-446) |
 | `apps/worker` | 51 | 6 | `pnpm ready` for the map servers (13), their answers on an HTTPS server of the stack's certificate (6) and its container (3); the process (14), the job loop (its set-aside lines and its health, 11) and the lost phones' backstop (4) need nothing |
 | `infra/local` | 77 | 6 | `pnpm ready` for the map services and every hop's TLS, the object store's thirteen ports refused among it (`hops.test.ts`, 25); Docker alone for `compose.test.ts` (18); nothing for the certificates (12) and the extract |
 | `tools/security` | 141 | 3 | nothing (the scan's and the grant tests' rules 49, who reaches Postgres 35, the guard hook 57) |
@@ -43,7 +43,7 @@
 
 ## `pnpm scenarios`
 
-`This run’s template, adms_story_template_…: 138 migrations applied`, then **`Stories: 23 passed, 0
+`This run’s template, adms_story_template_…: 145 migrations applied`, then **`Stories: 23 passed, 0
 failed.`** Each story `passed: N checks, N passed, 0 failed`:
 
 | Story | Checks | | Story | Checks |
@@ -55,8 +55,8 @@ failed.`** Each story `passed: N checks, N passed, 0 failed`:
 | `numbering` | 16 | | `golden-mission` | 32 |
 | `p1-field-days` | 35 | | `p1-left-out` | 31 |
 | `sync` | 51 | | `first-admin` | 32 |
-| `p1-any-order` | 4 | | `p1-queued` | 19 |
-| `p1-reconciled` | 39 | | `p1-viewed` | 25 |
+| `p1-any-order` | 4 | | `p1-queued` | 20 |
+| `p1-reconciled` | 39 | | `p1-viewed` | 26 |
 | `under-the-passcode` | 9 | | `held-for-review` | 16 |
 | `interrupted-upload` | 8 | | `burst` | 8 |
 | `lost-phone-key` | 14 | | | |
@@ -68,12 +68,12 @@ P1 $5,548.25 on 19 lines, P2 $324.00. `p1-reconciled` through `p1-left-out`, `p1
 ## `pnpm security`
 
 `✓ 0 open advisories` (3 accepted by id); secretlint `0 found`; the installation's own secrets
-(11 values from 4 env files; the eleventh the API's key file's path, ADR-517) `0 found`; a password-like setting `0 found`; a whole slow hash, an
+(13 values from 4 env files; the eleventh the API's key file's path, ADR-517; the twelfth and thirteenth the password and sealing keys, ADR-542) `0 found`; a password-like setting `0 found`; a whole slow hash, an
 authenticator's secret or a private key as a JWK `0 found` (8 inline exceptions named); env files
 `✓ every one ignored by git and untracked`; who reaches Postgres: `of 14 workspaces, the
-product's that reach it: apps/api, apps/worker, packages/db` (3 tools named), `512 source files
-read`, `13 statements` (a turn-in's and a top-up's lock on the phone's row, ADR-524; a phone's back-office change and the worker's revocation, each locking the phone's row, ADR-530), `prisma migrate diff: no difference`; the grant tests **`48 files, 1087
-tests: 1087 passed, 0 failed`**; ending **`Security checks: 12 passed, 0 failed.`**
+product's that reach it: apps/api, apps/worker, packages/db` (3 tools named), `533 source files
+read`, `15 statements` (a turn-in's and a top-up's lock on the phone's row, ADR-524; a phone's back-office change and the worker's revocation, each locking the phone's row, ADR-530; who signs in with an address, ADR-547), `prisma migrate diff: no difference`; the grant tests **`49 files, 1090
+tests: 1090 passed, 0 failed`**; ending **`Security checks: 12 passed, 0 failed.`**
 
 ## What the installation holds after a run
 

@@ -37,30 +37,34 @@ export class EnrolmentController {
     // An address refused too often already, here or anywhere, is stopped before the passcode is
     // touched: its try is never a wrong try there, so one address can't spend the passcode's
     // count (ADR-416, 438).
-    this.limits.mayTry(request.ip, atThePasscode);
-    const outcome = await this.enrolment.enrol(body);
-    if (!outcome.enrolled) {
-      request.log.info({ why: outcome.why }, 'An enrolment was refused.');
-      // The passcode was right, and the key isn't one: told apart, since only somebody who
-      // holds the passcode hears it.
-      if (outcome.why === 'KEY_REFUSED') {
-        throw new Refusal(
-          'DEVICE_KEY_REFUSED',
-          422,
-          'Not enrolled: what the phone sent isn’t a public key of the kind a phone makes.',
-        );
+    const underWay = this.limits.mayTry(request.ip, atThePasscode);
+    try {
+      const outcome = await this.enrolment.enrol(body);
+      if (!outcome.enrolled) {
+        request.log.info({ why: outcome.why }, 'An enrolment was refused.');
+        // The passcode was right, and the key isn't one: told apart, since only somebody who
+        // holds the passcode hears it.
+        if (outcome.why === 'KEY_REFUSED') {
+          throw new Refusal(
+            'DEVICE_KEY_REFUSED',
+            422,
+            'Not enrolled: what the phone sent isn’t a public key of the kind a phone makes.',
+          );
+        }
+        this.limits.wrongTry(request.ip, atThePasscode);
+        throw new Refusal('ENROLMENT_REFUSED', 401);
       }
-      this.limits.wrongTry(request.ip, atThePasscode);
-      throw new Refusal('ENROLMENT_REFUSED', 401);
+      this.limits.signedIn(request.ip, atThePasscode);
+      request.log.warn(
+        { deviceId: outcome.deviceId, masterPasscodeVersion: outcome.masterPasscodeVersion },
+        'A phone was enrolled under the master passcode.',
+      );
+      return phoneEnrolledAnswerSchema.parse({
+        deviceId: outcome.deviceId,
+        masterPasscodeVersion: outcome.masterPasscodeVersion,
+      });
+    } finally {
+      underWay.over();
     }
-    this.limits.signedIn(request.ip, atThePasscode);
-    request.log.warn(
-      { deviceId: outcome.deviceId, masterPasscodeVersion: outcome.masterPasscodeVersion },
-      'A phone was enrolled under the master passcode.',
-    );
-    return phoneEnrolledAnswerSchema.parse({
-      deviceId: outcome.deviceId,
-      masterPasscodeVersion: outcome.masterPasscodeVersion,
-    });
   }
 }

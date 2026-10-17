@@ -248,11 +248,31 @@ scale receipt and a disposal's quantities, were approved the same day (ADR-348).
 
 (Listed last for the same reason; it belongs with §3.7's certification flags.)
 
+### 3.13 Who a phone's record names
+
+A phone's record names the person the phone says made it, and is saved as sent: a phone that
+changed hands carries an earlier monitor's records honestly, so nothing here is refused (ADR-052).
+When the server receives a field event from a phone it asks whether the person it names held
+that phone then: a session of theirs on it, begun before the field time ended and not ended
+before it started (a session past its hours still counts; one ended by a sign-out, another's
+sign-in or a password set anew doesn't); the phone set up for them under the master passcode
+(which is never flagged, ADR-540); or the board's assignment of theirs naming that very phone,
+with nobody else signed in on it then. It keeps the answer with the sync. *Agent default,
+worded by the agent, for the user to approve* (ADR-543; the Phase 2 audit's F4; T-13).
+
+| Code | Raised when | Message | Bills | Facts kept | ADR |
+|---|---|---|---|---|---|
+| `MONITOR_NOT_SIGNED_IN` | A phone's field event names a person who, when it arrived, didn't hold that phone over its field time (within the device clock's own allowance), as above. A reviewer who corrects who it names clears it | "Ticket 101044: recorded under Ana Brooks, who wasn't signed in on that phone." | yes | the person named | 543 |
+| `ASSIGNMENT_OF_ANOTHER_PERSON` | A phone's field event was recorded under an assignment of somebody other than the person it names | "Ticket 101045: recorded under another person's assignment." | yes | the person named, the assignment's person | 543 |
+
+(Listed last for the same reason as §3.11.)
+
 **Added:** the nine flags of §3.10 (ADR-345). The catalogue was 75 flags: 66 after ADR-328 withdrew
 one, and these nine. **Added:** `SCALE_NET_DISAGREES` and `TWO_QUANTITIES`, worded by the agent and
 approved by the user on 2026-10-05 ("Agree on both proposed in the two questions", ADR-348). The
 catalogue was 77 flags. **Added:** `NOT_PROCESSED_LINES_STAND` (the user, 2026-10-06: "KD-73
-recommended approved", ADR-360). The catalogue is 79 flags (`SUB_NAME_ALIKE` added by ADR-529).
+recommended approved", ADR-360). The catalogue was 79 flags (`SUB_NAME_ALIKE` added by ADR-529);
+**81** with §3.13's two (ADR-543, agent default).
 
 ---
 

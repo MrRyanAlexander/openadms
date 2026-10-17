@@ -31,6 +31,8 @@ const good: Record<string, string> = {
   DATABASE_URL: urlOf('adms_api'),
   READONLY_DATABASE_URL: urlOf('adms_readonly'),
   ADMS_TOKEN_SIGNING_SECRET: `${word}-${word}`,
+  ADMS_PASSWORD_KEY: `${word}-password-${word}`,
+  ADMS_SEALING_KEY: `${word}-sealing-${word}`,
   SMTP_URL: '',
   ADMS_API_HOST: '127.0.0.1',
   ADMS_API_PORT: '3000',
@@ -103,6 +105,20 @@ describe('the settings the API starts with', () => {
     }
   });
 
+  it('AC-10-109 one secret a purpose: a password key or a sealing key that is the signing secret, or the one the other, is malformed, named and never said (ADR-542)', () => {
+    const signing = good['ADMS_TOKEN_SIGNING_SECRET'] ?? '';
+    for (const [shared, key] of [
+      [{ ADMS_PASSWORD_KEY: signing }, 'ADMS_PASSWORD_KEY'],
+      [{ ADMS_SEALING_KEY: signing }, 'ADMS_SEALING_KEY'],
+      [{ ADMS_SEALING_KEY: good['ADMS_PASSWORD_KEY'] ?? '' }, 'ADMS_SEALING_KEY'],
+    ] as const) {
+      const problem = problemOf({ ...good, ...shared });
+      expect(problem.keys).toEqual([key]);
+      expect(problem.message).toBe(`The API did not start: ${key} is malformed.`);
+      expect(problem.message).not.toContain(word);
+    }
+  });
+
   it.each(Object.keys(good))('AC-10-55: without %s the API does not start, and says so', (key) => {
     const problem = problemOf(without(key));
     expect(problem.keys).toEqual([key]);
@@ -131,6 +147,8 @@ describe('the settings the API starts with', () => {
     ['ADMS_API_TLS_KEY_FILE', certFile],
     ['READONLY_DATABASE_URL', urlOf('adms_readonly-9f3c').replace('/adms', '')],
     ['ADMS_TOKEN_SIGNING_SECRET', 'short-9f3c'],
+    ['ADMS_PASSWORD_KEY', 'short-9f3c'],
+    ['ADMS_SEALING_KEY', 'short-9f3c'],
     ['SMTP_URL', 'mail-9f3c'],
     ['ADMS_API_HOST', 'api-9f3c.adms.localhost'],
     ['ADMS_API_PORT', '9f3c'],
@@ -357,6 +375,8 @@ describe('the API as a process, started with settings that are off', () => {
       'DATABASE_URL=not-a-url-9f3c',
       `READONLY_DATABASE_URL=${urlOf('adms_readonly')}`,
       'ADMS_TOKEN_SIGNING_SECRET=short-9f3c',
+      `ADMS_PASSWORD_KEY=${good['ADMS_PASSWORD_KEY'] ?? ''}`,
+      `ADMS_SEALING_KEY=${good['ADMS_SEALING_KEY'] ?? ''}`,
       'ADMS_API_HOST=127.0.0.1',
       'ADMS_API_PORT=3000',
       `ADMS_API_TLS_CERT_FILE=${certFile}`,

@@ -80,7 +80,7 @@ async function main(): Promise<number> {
   const clock = { now: () => new Date() };
   const admin = new ServerAdmin(db, {
     rules: new PasswordRules(policy, shippedBreachedPasswords()),
-    hasher: new PasswordHasher(settings.tokenSigningSecret),
+    hasher: new PasswordHasher(settings.passwordKey, settings.tokenSigningSecret),
     // Ending a person's sessions, as sign-in's own service does it.
     sessions: {
       endAll: async (tx, userId) =>

@@ -109,7 +109,9 @@ export interface InstallationRecord {
   mail: 'mail catcher' | 'none';
   database: { host: string; port: number; name: string };
   // When each step last finished, as ISO times.
-  steps: Partial<Record<'secrets' | 'roles' | 'database', string>>;
+  // `keys`: when the API's password key and sealing key were made (ADR-542), so that one lost
+  // afterwards is never made again unseen.
+  steps: Partial<Record<'secrets' | 'roles' | 'database' | 'keys', string>>;
   createdAt: string;
   updatedAt: string;
 }

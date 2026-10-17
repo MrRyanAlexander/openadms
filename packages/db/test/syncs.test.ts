@@ -329,6 +329,9 @@ describe('the idempotency ledger', () => {
       'answer',
       'device_id',
       'id',
+      // Who a field event named, and whether they held the phone then (ADR-543).
+      'monitor_id',
+      'monitor_signed_in',
       'record_kind',
       'sync_id',
     ]);
@@ -575,6 +578,8 @@ describe('a record the server could not save, held for a person', () => {
       'resolution',
       'resolved_at',
       'resolved_by_id',
+      // Its size, what a phone's daily budget counts (ADR-546).
+      'sent_bytes',
       'sent_id',
       'sent_monitor_id',
       'sent_sha256',

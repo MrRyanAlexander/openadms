@@ -70,7 +70,14 @@ things stand, where the product ends up, the road there, and how the user works*
 now, topic by topic, is `SUMMARY.md` (its header's topic index, then only the topics you touch);
 the round-by-round history is the session log at the end of `DECISIONS.md`.
 
-### Where things stand (2026-10-17, through ADR-540)
+### Where things stand (2026-10-17, through ADR-550)
+- **The independent check of Phases 0–2** (`AUDIT-2026-10-17-PHASE-2.md`) **is answered whole** at
+  the user's word "resolve all of these" (ADR-541…550): the passcode can't be held shut by a
+  stranger, bursts are counted try by try, one key a purpose with the passcode's own sealed seed, a
+  record naming somebody who didn't hold the phone flagged, the audit log and the jobs set aside
+  read, a phone's held budget, sign-in by one indexed equality, map files read in a thread, an
+  untrusted proxy logged; the threat model read again whole. Three answers wait on the user
+  (`SUMMARY.md` §4).
 - **Phases 0 and 1 are done** (Phase 0 closed 2026-10-01, all 17 REQs, ADR-281…288; Phase 1's exit
   met 2026-10-06, ADR-371, 372). **Every spec page is approved** (ARCHITECTURE, VISION, INDEX, the
   part pages, LISTS, RATE-SHEET, RULES, DATA-MODEL, FLAGS, CONVENTIONS, the golden mission and its
@@ -135,7 +142,7 @@ same scenarios passing at each layer (engine, API, apps). The finished surfaces 
 |---|---|---|
 | 0 Foundation | approved architecture, scaffold, database hardening, scenario harness | ✅ 2026-10-01 |
 | 1 Data core and engine | every record, the engine, the ledger, review; the golden mission at the engine | ✅ 2026-10-06 |
-| 2 API and sync | the API, sign-in, phones, sync, queued jobs; the mission through the real endpoints | 🔄 exit met but for the user's answers (ADR-537) |
+| 2 API and sync | the API, sign-in, phones, sync, queued jobs; the mission through the real endpoints | ✅ exit met 2026-10-17 (ADR-537…540); the audit's F1…F11 answered (ADR-541…550) |
 | 3 Field app | browser, then iPhone, then Android | 🔒 the user opens it |
 | 4 Back office and portal | setup screens, the rule builder, the review queue, exports, viewers | 🔒 |
 | 5 Later features and the demo deploy | Railway + Netlify, the outside penetration test, later features | 🔒 |

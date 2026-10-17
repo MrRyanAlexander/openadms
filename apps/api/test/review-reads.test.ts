@@ -123,7 +123,16 @@ describe('the review queue and a ticket whole', () => {
       );
       expect(first).toEqual({
         causes: [],
-        tickets: [{ workflow: 'LOAD', ticketNumber: '101031', statuses: ['PENDING'], flags: [] }],
+        tickets: [
+          {
+            workflow: 'LOAD',
+            ticketNumber: '101031',
+            statuses: ['PENDING'],
+            flags: [],
+            waitingOnSetAsideJob: false,
+          },
+        ],
+        waitingOnSetAsideJobs: 0,
         next: '101031',
       });
       expect(
@@ -152,7 +161,7 @@ describe('the review queue and a ticket whole', () => {
             query: '?workflow=LOAD&cause=DEBRIS_TYPE_MISMATCH',
           }),
         ),
-      ).toEqual({ causes: [], tickets: [], next: null });
+      ).toEqual({ causes: [], tickets: [], waitingOnSetAsideJobs: 0, next: null });
       expect(
         saved(
           listFlagsEndpoint,

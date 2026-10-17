@@ -10,6 +10,8 @@ import {
   addFieldTagEndpoint,
   changeMasterPasscodeEndpoint,
   endpoints,
+  listPhonesEndpoint,
+  monitorCreatedAnswerSchema,
   removePhoneEndpoint,
   sentWeight,
   syncAnswerRead,
@@ -53,7 +55,7 @@ import {
   type Served,
 } from './support/served.ts';
 import { ask, p1Priced, saved, told } from './support/setup.ts';
-import { signingSecret } from './support/sign-in.ts';
+import { Outbox, sealingKey } from './support/sign-in.ts';
 
 let db: Database;
 
@@ -304,6 +306,86 @@ describe('a sync is kept with both clocks', () => {
       expect(logged).toContain('"records":{"SAVED":2}');
       expect(logged).not.toContain(collection.id);
       expect(logged).not.toContain('101001');
+    });
+  });
+});
+
+describe('who a phone’s record names (ADR-543)', () => {
+  it('AC-10-110 every field event is saved as sent, and the ledger keeps whether the person it names held that phone over its field time: their own session there; or the board’s assignment of theirs on that very phone with nobody else signed in on it then; never somebody else’s session, or an assignment with no phone', async () => {
+    await world(async (served, tx, who) => {
+      const p = await kimOnP1(served, tx, who);
+      // Kim's own day on this very phone, as the board planned it.
+      const onThisPhone = await tx.assignment.create({
+        data: {
+          personId: who.kim,
+          workDate: new Date('2026-10-12'),
+          projectId: p.projectId,
+          fieldEventKinds: ['COLLECTION'],
+          origin: 'PLANNED',
+          madeById: who.dana,
+          deviceId: p.phone.id,
+        },
+      });
+      // Ana Brooks is created on the phone under the passcode, and signs in on it at 1:05 pm.
+      const createdAna = await served.ask('POST', '/phones/current/monitors', {
+        bearer: p.token,
+        payload: { name: 'Ana Brooks', password: '5550143', passcode },
+      });
+      expect(told(createdAna)).toEqual([200, undefined]);
+      const ana = monitorCreatedAnswerSchema.parse(createdAna.body);
+      const signIn = await served.ask('POST', '/phones/current/sign-ins', {
+        bearer: p.token,
+        payload: { monitorNumber: ana.monitorNumber, password: '5550143' },
+      });
+      expect(told(signIn)).toEqual([200, undefined]);
+      served.clock.later(30);
+      // 1:10 to 1:20 pm, while Ana holds the phone; and 9:05 to 9:40 am, before anybody did.
+      const whileAnas = {
+        startedAt: '2026-10-12T17:10:00.000Z',
+        endedAt: '2026-10-12T17:20:00.000Z',
+      };
+      const records = {
+        anasOwn: p.event({ ...whileAnas, ticketNumber: '101044', monitorId: ana.userId }),
+        kimsWhileAnas: p.event({ ...whileAnas, ticketNumber: '101045' }),
+        kimsOnHerPhoneWhileAnas: p.event({
+          ...whileAnas,
+          ticketNumber: '101046',
+          assignmentId: onThisPhone.id,
+        }),
+        kimsOnHerPhoneBefore: p.event({ ticketNumber: '101047', assignmentId: onThisPhone.id }),
+      };
+      // The phone's token has run out meanwhile: it proves itself again, the master user at it.
+      const answered = await synced(
+        served,
+        await provenWithPasscode(served, p.phone),
+        p.sync({
+          records: Object.values(records).map((fieldEvent) => ({
+            record: 'FIELD_EVENT' as const,
+            fieldEvent,
+          })),
+        }),
+      );
+      expect(answered.records.map(({ answer }) => answer)).toEqual(Array(4).fill('SAVED'));
+      const kept = new Map(
+        (
+          await tx.syncedRecord.findMany({
+            where: { deviceId: p.phone.id },
+            select: { recordId: true, monitorId: true, monitorSignedIn: true },
+          })
+        ).map((row) => [row.recordId, [row.monitorId, row.monitorSignedIn]]),
+      );
+      expect(Object.values(records).map((record) => kept.get(record.id))).toEqual([
+        [ana.userId, true],
+        [who.kim, false],
+        [who.kim, false],
+        [who.kim, true],
+      ]);
+      // Nothing was refused: each is the field event its phone sent.
+      expect(
+        await tx.fieldEvent.count({
+          where: { id: { in: Object.values(records).map((r) => r.id) } },
+        }),
+      ).toBe(4);
     });
   });
 });
@@ -781,7 +863,7 @@ describe('what could not be saved is held for a person', () => {
         numbers: new NumberAllocator(each, clock, shippedPolicy),
         loginList: new PhoneLoginList(each, {
           assignments: new PhoneAssignments(each),
-          offline: new OfflineChecks(signingSecret),
+          offline: new OfflineChecks(sealingKey),
           clock,
           entriesPerCall: shippedPolicy.loginListEntriesPerCall,
         }),
@@ -822,6 +904,59 @@ describe('what could not be saved is held for a person', () => {
         [elsewhere.id, elsewhere.projectId, 'NAMES_NO_RECORD'],
         [noSite.id, p.projectId, 'NAMES_NO_RECORD'],
       ]);
+    });
+  });
+});
+
+describe('a phone’s daily budget of held records (ADR-546)', () => {
+  it('AC-10-113 a phone that makes the server hold more in a day than the firm’s budget is still received and held, record by record; once a day it is a security event, every admin is told by mail, never what was sent, and the phones list marks it', async () => {
+    await world(async (served, tx, who, within) => {
+      const p = await kimOnP1(served, tx, who);
+      const outbox = new Outbox();
+      const held = new HeldThings(within, served.clock, {
+        bytesPerDay: shippedPolicy.phoneHeldBytesPerDay,
+        recordsPerDay: 2,
+        mail: outbox,
+      });
+      // A report sent to its own endpoint, held with no sync (ADR-526 (5)).
+      const notice = {
+        reason: 'REPORT_NOT_SAVED',
+        message: 'Not saved: the server couldn’t keep this report.',
+      } as const;
+      const names = { id: null, projectId: null, monitorId: null };
+      for (let each = 1; each <= 4; each += 1) {
+        await held.held(p.phone.id, null, { garbage: `sent ${String(each)}` }, notice, names);
+      }
+      // The same thing again is the same held record, and counts nothing more.
+      await held.held(p.phone.id, null, { garbage: 'sent 4' }, notice, names);
+      const kept = await heldOf(tx, p.phone.id);
+      expect(kept.map(({ sentBytes }) => sentBytes)).toEqual([20, 20, 20, 20]);
+      const passed = await tx.securityEvent.findMany({
+        where: { deviceId: p.phone.id, kind: 'PHONE_HELD_BUDGET_PASSED' },
+      });
+      expect(passed).toHaveLength(1);
+      expect(outbox.sent.map(({ to, subject }) => [to, subject])).toEqual([
+        [danasEmail, 'The phone P1-COL-1 is sending more than it should'],
+      ]);
+      expect(outbox.sent[0]?.text).toContain('3 records');
+      expect(outbox.sent[0]?.text).not.toContain('garbage');
+      // A day later the count starts again.
+      served.clock.later(24 * 60 + 1);
+      for (let each = 5; each <= 7; each += 1) {
+        await held.held(p.phone.id, null, { garbage: `sent ${String(each)}` }, notice, names);
+      }
+      expect(
+        await tx.securityEvent.count({
+          where: { deviceId: p.phone.id, kind: 'PHONE_HELD_BUDGET_PASSED' },
+        }),
+      ).toBe(2);
+      // Dana, signed in again a day later, reads the phones list.
+      const dana = await served.signedIn(danasEmail, long);
+      const phones = await ask(served, dana, listPhonesEndpoint, { query: '?limit=200' });
+      expect(
+        listPhonesEndpoint.answer.parse(phones.body).phones.find(({ id }) => id === p.phone.id)
+          ?.heldBudgetPassedAt,
+      ).toBe(served.clock.now().toISOString());
     });
   });
 });
@@ -1332,7 +1467,7 @@ describe('a top-up that loses the race for its series', () => {
           numbers,
           loginList: new PhoneLoginList(within, {
             assignments: new PhoneAssignments(within),
-            offline: new OfflineChecks(signingSecret),
+            offline: new OfflineChecks(sealingKey),
             clock: served.clock,
             entriesPerCall: shippedPolicy.loginListEntriesPerCall,
           }),

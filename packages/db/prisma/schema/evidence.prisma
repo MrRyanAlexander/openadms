@@ -796,14 +796,21 @@ enum SyncAnswer {
 model SyncedRecord {
   // The id the phone made for the record: no default here. The column is `id`, as every
   // table's key is: the audit log names a row by it.
-  recordId   String     @id @map("id") @db.Uuid
+  recordId        String     @id @map("id") @db.Uuid
   // The contract's word for the kind of record (`FIELD_EVENT`, `ROE`…).
-  recordKind String     @map("record_kind")
-  syncId     String     @map("sync_id") @db.Uuid
-  deviceId   String     @map("device_id") @db.Uuid
-  answer     SyncAnswer
+  recordKind      String     @map("record_kind")
+  syncId          String     @map("sync_id") @db.Uuid
+  deviceId        String     @map("device_id") @db.Uuid
+  answer          SyncAnswer
+  // For a field event saved: the person it named as its monitor, and whether, when it arrived,
+  // they had a session on this phone over its field time or the phone was set up for them under
+  // the master passcode (ADR-543; the Phase 2 audit's F4). What the worker flags it from; none
+  // for any other record.
+  monitorId       String?    @map("monitor_id") @db.Uuid
+  monitorSignedIn Boolean?   @map("monitor_signed_in")
 
-  sync Sync @relation(fields: [syncId, deviceId], references: [id, deviceId], onDelete: Restrict, onUpdate: Restrict)
+  sync    Sync  @relation(fields: [syncId, deviceId], references: [id, deviceId], onDelete: Restrict, onUpdate: Restrict)
+  monitor User? @relation("SyncedRecordMonitor", fields: [monitorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
 
   @@map("synced_record")
 }
@@ -849,6 +856,9 @@ model HeldRecord {
   payload    Json
   // The SHA-256 of what was sent, so a retry is the same held record.
   sentSha256 String         @map("sent_sha256")
+  // How many bytes what was sent is, as canonical JSON in UTF-8: what a phone's daily budget of
+  // held records counts (ADR-546). None on one held before it was counted.
+  sentBytes  Int?           @map("sent_bytes")
   reason     NotSavedReason
   // What the phone was told.
   message    String

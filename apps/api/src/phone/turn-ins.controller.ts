@@ -39,31 +39,35 @@ export class TurnInsController {
     const phone = phoneOf(request);
     // An address refused too often already is stopped before the passcode is touched, as at
     // enrolment: its try is never a wrong try there (ADR-416, 438).
-    this.limits.mayTry(request.ip, atThePasscode);
-    const outcome = await this.turnIns.turnIn(phone, body);
-    if (!outcome.checked) {
-      request.log.info(
-        { why: outcome.why, deviceId: phone.deviceId },
-        'A turn-in was refused at the master passcode.',
-      );
-      this.limits.wrongTry(request.ip, atThePasscode);
-      throw new Refusal('MASTER_PASSCODE_REFUSED', 401);
+    const underWay = this.limits.mayTry(request.ip, atThePasscode);
+    try {
+      const outcome = await this.turnIns.turnIn(phone, body);
+      if (!outcome.checked) {
+        request.log.info(
+          { why: outcome.why, deviceId: phone.deviceId },
+          'A turn-in was refused at the master passcode.',
+        );
+        this.limits.wrongTry(request.ip, atThePasscode);
+        throw new Refusal('MASTER_PASSCODE_REFUSED', 401);
+      }
+      this.limits.signedIn(request.ip, atThePasscode);
+      if (!outcome.turnedIn) {
+        request.log.info(
+          {
+            deviceId: phone.deviceId,
+            notOnTheServer: Object.values(outcome.notOnTheServer).flat().length,
+          },
+          'A phone was not turned in: the server doesn’t have everything it holds.',
+        );
+      } else {
+        request.log.warn(
+          { deviceId: phone.deviceId, status: phone.status },
+          'A phone was turned in under the master passcode: its key is revoked.',
+        );
+      }
+      return turnInAnswerSchema.parse(turnInAnswerOf(outcome));
+    } finally {
+      underWay.over();
     }
-    this.limits.signedIn(request.ip, atThePasscode);
-    if (!outcome.turnedIn) {
-      request.log.info(
-        {
-          deviceId: phone.deviceId,
-          notOnTheServer: Object.values(outcome.notOnTheServer).flat().length,
-        },
-        'A phone was not turned in: the server doesn’t have everything it holds.',
-      );
-    } else {
-      request.log.warn(
-        { deviceId: phone.deviceId, status: phone.status },
-        'A phone was turned in under the master passcode: its key is revoked.',
-      );
-    }
-    return turnInAnswerSchema.parse(turnInAnswerOf(outcome));
   }
 }

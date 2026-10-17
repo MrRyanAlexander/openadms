@@ -4,32 +4,42 @@
 // strongly protected against unauthorized disclosure".
 //
 // - **At rest** it is sealed with AES-256-GCM under a key of this purpose alone, drawn from the
-//   API's signing secret, which is in the API's settings and never in the database. Whoever
-//   copies the database or a backup alone holds no secret an authenticator could be made from.
-//   The sealing is bound to the person it is for: one row's value put on another's opens
-//   nothing. The string says its version (`v1`), so a later key can be told from this one.
+//   API's own sealing key (`ADMS_SEALING_KEY`, ADR-542; the Phase 2 audit's F11), which is in the
+//   API's settings and never in the database, and seals nothing but what is kept at rest.
+//   Whoever copies the database or a backup alone holds no secret an authenticator could be made
+//   from. The sealing is bound to the person it is for: one row's value put on another's opens
+//   nothing. The string says its version: `v2`, the sealing key's; `v1`, a key drawn from the
+//   signing secret before the keys were parted, is opened where this process holds that secret,
+//   and sealed again at its owner's next sign-in (`stale`).
 // - **While it is being set up** nothing is in the database at all. The server hands the person
 //   the secret and, beside it, the same secret sealed with whose it is and when it runs out (a
 //   key of that purpose alone); the person sends that back with their first code. Only a code
 //   that proves the app has the secret gets it kept.
 //
-// Losing or changing the signing secret means every authenticator is set up again, as every
-// password is set anew (ADR-411).
+// Losing or changing the sealing key means every authenticator is set up again (ADR-411, 542);
+// losing the signing secret now only ends sessions and codes in flight.
 import { createCipheriv, createDecipheriv, createHmac, randomBytes } from 'node:crypto';
 
-const version = 'v1';
+const version = 'v2';
+const earlierVersion = 'v1';
 const part = /^[A-Za-z0-9_-]+$/;
 
 export class TwoStepSecrets {
   private readonly keptKey: Buffer;
+  private readonly earlierKeptKey: Buffer | undefined;
   private readonly setupKey: Buffer;
 
-  // The signing secret is the API's (ADMS_TOKEN_SIGNING_SECRET).
-  constructor(signingSecret: string) {
-    const keyFor = (purpose: string): Buffer =>
-      createHmac('sha256', signingSecret).update(purpose).digest();
-    this.keptKey = keyFor('open-adms/two-step-secret/v1');
-    this.setupKey = keyFor('open-adms/two-step-setup/v1');
+  // The sealing key is the API's (ADMS_SEALING_KEY). The signing secret, where given, is only to
+  // open a secret sealed under the key drawn from it before ADR-542.
+  constructor(sealingKey: string, earlierSigningSecret?: string) {
+    const keyFor = (secret: string, purpose: string): Buffer =>
+      createHmac('sha256', secret).update(purpose).digest();
+    this.keptKey = keyFor(sealingKey, 'open-adms/two-step-secret/v2');
+    this.setupKey = keyFor(sealingKey, 'open-adms/two-step-setup/v2');
+    this.earlierKeptKey =
+      earlierSigningSecret === undefined
+        ? undefined
+        : keyFor(earlierSigningSecret, 'open-adms/two-step-secret/v1');
   }
 
   // What `user_credential.twoStepSecret` holds for this person.
@@ -40,8 +50,19 @@ export class TwoStepSecrets {
   // The secret a person's row holds; undefined when this process can't open it.
   open(userId: string, kept: string): Buffer | undefined {
     const [said, ...parts] = kept.split('.');
-    if (said !== version) return undefined;
-    return this.opened(this.keptKey, `kept\n${userId}`, parts);
+    const key =
+      said === version ? this.keptKey : said === earlierVersion ? this.earlierKeptKey : undefined;
+    if (key === undefined) return undefined;
+    return this.opened(key, `kept\n${userId}`, parts);
+  }
+
+  // What a row should hold instead, where it is sealed under an earlier key this process can
+  // open: the same secret, sealed under the sealing key. Undefined where it is current already,
+  // or can't be opened.
+  resealed(userId: string, kept: string): string | undefined {
+    if (kept.startsWith(`${version}.`)) return undefined;
+    const secret = this.open(userId, kept);
+    return secret === undefined ? undefined : this.seal(userId, secret);
   }
 
   // What a person sends back with their first code: the secret, whose it is, and its end.
