@@ -105,7 +105,7 @@ const holdsNoPoint = (said: string): void => {
   expect(said).not.toMatch(/39\.1385|75\.5537|39\.09|75\.62|lat=|lon=/);
 };
 
-describe('an answer that sends the worker elsewhere (ASVS 5.0 15.3.2)', () => {
+describe('AC-10-69 an answer that sends the worker elsewhere (ASVS 5.0 15.3.2)', () => {
   it('is followed nowhere: each of the four questions throws, and where it points is never asked', async () => {
     const elsewhere = await server(json({}));
     for (const status of [301, 302, 303, 307, 308]) {
@@ -134,7 +134,7 @@ describe('an answer that sends the worker elsewhere (ASVS 5.0 15.3.2)', () => {
   });
 });
 
-describe('an answer that is too large or too slow (API10)', () => {
+describe('AC-10-70 an answer that is too large or too slow (API10)', () => {
   it('too large: past the bytes an answer may be, it is no answer', async () => {
     const big = await server(
       json({ trip: { units: 'miles', summary: { length: 8.1167 } }, pad: 'x'.repeat(4096) }),
@@ -166,7 +166,7 @@ describe('an answer that is too large or too slow (API10)', () => {
   });
 });
 
-describe('a value that is not what was asked for (API10)', () => {
+describe('AC-10-70 a value that is not what was asked for (API10)', () => {
   it('a route’s length is a finite number of miles, zero or more: a string, a negative, an infinite or none throws, and never becomes “no route” or a straight line', async () => {
     for (const length of ['"8.1167"', '-0.5', '1e400', 'null', '{}']) {
       const wrong = await server(json(`{"trip":{"units":"miles","summary":{"length":${length}}}}`));

@@ -11,7 +11,7 @@
 An audit of Phase 2 (ADR-519 (1)) found its own server work moved to later phases or left "no
 task yet". The user: "all 3 of these are part of phase 2", "these should be part of phase 2".
 ADR-518's exit is withdrawn; **Milestone 2.8 (`BACKLOG.md`), nine tasks, is the work**: 2.8.1…2.8.8
-done, **2.8.9 to go**. Phase 3 stays the user's to open, after Phase 2's exit is met
+done; **2.8.9 done but for the user's answers** to `spec/DEFAULTS-REVIEW.md` (ADR-537). Phase 3 stays the user's to open, after Phase 2's exit is met
 again.
 
 **What Phase 2 is.** The server in front of what Phase 1 built: the API as a running process over
@@ -36,8 +36,9 @@ before any task.
 
 ## Exit criteria for Phase 2 *(ADR-376, and 8…10 by ADR-519; agent default, the user may change them)*
 
-The seven were met once (2026-10-14, ADR-518: how each was met is that ADR); **they are met again,
-with 8…10, at task 2.8.9.** All observed and reported, not assumed.
+The seven were met once (2026-10-14, ADR-518: how each was met is that ADR); **at task 2.8.9
+(2026-10-16, ADR-537) all ten are met from runs that were seen but 9, which waits on the user's
+answers to `spec/DEFAULTS-REVIEW.md`.**
 
 1. **The golden mission syncs through the real endpoints and is reconciled by queued jobs**, with
    the exact statuses, review queue, ledger (P1 $5,548.25 on 19 lines; P2 $324.00) and audit rows
@@ -71,14 +72,14 @@ things stand, where the product ends up, the road there, and how the user works*
 now, topic by topic, is `SUMMARY.md` (its header's topic index, then only the topics you touch);
 the round-by-round history is the session log at the end of `DECISIONS.md`.
 
-### Where things stand (2026-10-16, through ADR-535)
+### Where things stand (2026-10-16, through ADR-537)
 - **Phases 0 and 1 are done** (Phase 0 closed 2026-10-01, all 17 REQs, ADR-281…288; Phase 1's exit
   met 2026-10-06, ADR-371, 372). **Every spec page is approved** (ARCHITECTURE, VISION, INDEX, the
   part pages, LISTS, RATE-SHEET, RULES, DATA-MODEL, FLAGS, CONVENTIONS, the golden mission and its
   numbers, all ten acceptance files, THREAT-MODEL, CHECKLIST-API §3.1). Their record: `ROADMAP.md`
   §3a–§3b and `DECISIONS.md`.
 - **Phase 2:** 32 tasks of Milestones 2.0…2.7 closed (ADR-376…518); **Milestone 2.8, from the
-  audit:** 2.8.1…2.8.8 done (ADR-522…531, 534, 535), **next 2.8.9, Phase 2's exit**. What each task left is `BACKLOG.md`'s
+  audit:** 2.8.1…2.8.8 done (ADR-522…531, 534, 535), what 2.8.8 left (C172) done (ADR-536); **2.8.9, Phase 2's exit, met but for criterion 9 (ADR-537): §4's defaults are on one page, `spec/DEFAULTS-REVIEW.md`, waiting on the user**. What each task left is `BACKLOG.md`'s
   carry-forward register (live items only since ADR-532).
 - **Housekeeping, 2026-10-15 (ADR-532), at the user's word:** `SUMMARY.md` cut by topic (432 → 202
   KB, every rule kept with its ADRs), `BACKLOG.md`'s register live-only and its done phases one
@@ -97,7 +98,7 @@ the round-by-round history is the session log at the end of `DECISIONS.md`.
   `pnpm installer:admin` are never run for real here; the API's tests rely on it). Its master
   passcode is a throw-away random value.
 - **Open deviations:** none (`SUMMARY.md` §3). **Waiting on the user:** nothing blocks; the agent
-  defaults the user may overturn are `SUMMARY.md` §4 (put to them at 2.8.9).
+  defaults the user may overturn are `SUMMARY.md` §4, put to them on one page, `spec/DEFAULTS-REVIEW.md` (ADR-537).
 - **The user's word (ADR-401): sign-in follows NIST SP 800-63B and ASVS Level 2; when a direction
   in security is suggested, say what the standard asks before building it.**
 
@@ -136,7 +137,7 @@ same scenarios passing at each layer (engine, API, apps). The finished surfaces 
 |---|---|---|
 | 0 Foundation | approved architecture, scaffold, database hardening, scenario harness | ✅ 2026-10-01 |
 | 1 Data core and engine | every record, the engine, the ledger, review; the golden mission at the engine | ✅ 2026-10-06 |
-| 2 API and sync | the API, sign-in, phones, sync, queued jobs; the mission through the real endpoints | 🔄 Milestone 2.8 |
+| 2 API and sync | the API, sign-in, phones, sync, queued jobs; the mission through the real endpoints | 🔄 exit met but for the user's answers (ADR-537) |
 | 3 Field app | browser, then iPhone, then Android | 🔒 the user opens it |
 | 4 Back office and portal | setup screens, the rule builder, the review queue, exports, viewers | 🔒 |
 | 5 Later features and the demo deploy | Railway + Netlify, the outside penetration test, later features | 🔒 |
@@ -218,13 +219,13 @@ same scenarios passing at each layer (engine, API, apps). The finished surfaces 
 
 ## 📍 Next Atomic Task
 
-**Task 2.8.9, Phase 2's exit, again** (`BACKLOG.md`, Milestone 2.8; ADR-376's seven criteria and
-ADR-519's three, above): each criterion checked and reported from a run that was seen, not
-assumed; **`SUMMARY.md` §4's agent defaults put to the user on one page**, each confirmed or
-overturned (C164); three full runs of `pnpm scenarios` in a row, `burst` with no 500 in its API's
-log (REQ-210); the 22 REQs ticked or re-filed with an ADR (21 ticked, REQ-006 moved); the
-scenario count again; no server "no task yet" left in the register; the state files turned. Then
-Phase 3 is offered to the user to open; nothing of Phase 3 starts before their word.
+**Task 2.8.9, Phase 2's exit, again: the user's answers** (`BACKLOG.md` 2.8.9, C164; ADR-537).
+Every criterion but 9 is met from runs that were seen. **Waiting on the user:** their answers to
+`spec/DEFAULTS-REVIEW.md` (`SUMMARY.md` §4's defaults, D1…D162). When they answer: record each
+answer as its own ADR (verbatim, read back where it's an either-or), build each overturned
+default as Phase 2's own work inside 2.8.9 (its tests, the chain), take the answered rows out of
+§4, then state Phase 2's exit met (ADR-518's way) and offer Phase 3 to the user; nothing of
+Phase 3 starts before their word.
 
 **New session?** Read the Handoff above, then `SUMMARY.md`'s header (its topic index) and only the
 topics your task touches. Product discovery is closed (ADR-230). **Every command starts with**

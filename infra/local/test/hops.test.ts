@@ -42,7 +42,7 @@ const upstreams = [
   { name: 'addresses', at: 'addresses:8080', path: '/status' },
 ] as const;
 
-describe('inside the stack’s network, each service Caddy reaches (KD-78)', () => {
+describe('AC-10-67 inside the stack’s network, each service Caddy reaches (KD-78)', () => {
   it.each(upstreams)(
     '$name answers HTTPS with its certificate of the stack’s root, for its own name alone',
     ({ at, path }) => {
@@ -97,7 +97,7 @@ describe('inside the stack’s network, each service Caddy reaches (KD-78)', () 
     9333, 19333, 8080, 18080, 8888, 18888, 8334, 18334, 9340, 19340, 18333, 23646, 33646,
   ];
   it.each(storePorts)(
-    'the object store’s port %i is its container’s loopback alone: the network can’t reach it',
+    'AC-10-72 the object store’s port %i is its container’s loopback alone: the network can’t reach it',
     (port) => {
       const plain = curl('--output', '/dev/null', `http://objectstore:${String(port)}/`);
       expect(plain.status).toBe(7);

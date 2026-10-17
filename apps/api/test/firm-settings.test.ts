@@ -210,7 +210,7 @@ describe('the read-only viewers’ two-step', () => {
   });
 });
 
-describe('how long a monitor’s sign-in on a phone lasts (ADR-531)', () => {
+describe('AC-10-91 how long a monitor’s sign-in on a phone lasts (ADR-531)', () => {
   it('a day as shipped; an admin sets it from 1 to 24 hours, audited with their note; a sign-in made after reads it, one already open keeps its end', async () => {
     await world(async (served, tx) => {
       const dana = await served.signedIn(danasEmail, long);

@@ -112,7 +112,7 @@ const expected: Readonly<Record<string, Hardening & { readonly why?: string }>> 
   },
 };
 
-describe('every container, hardened as far as its image allows (ASVS 5.0 4.2.1; KD-79)', () => {
+describe('AC-10-68 every container, hardened as far as its image allows (ASVS 5.0 4.2.1; KD-79)', () => {
   const defined = services();
 
   it('is one this list names: a new service is hardened, or its departure named, before it runs', () => {
@@ -139,7 +139,7 @@ describe('every container, hardened as far as its image allows (ASVS 5.0 4.2.1; 
   });
 });
 
-describe('every hop over TLS (ASVS 5.0 12.3.3; KD-78)', () => {
+describe('AC-10-67 every hop over TLS (ASVS 5.0 12.3.3; KD-78)', () => {
   const defined = services();
   const environment = (name: string): Readonly<Record<string, string>> =>
     defined[name]?.environment ?? {};
@@ -204,7 +204,7 @@ describe('every hop over TLS (ASVS 5.0 12.3.3; KD-78)', () => {
     expect(sidecar).toContain('reverse_proxy 127.0.0.1:8002');
   });
 
-  it('the object store’s servers, S3 among them, listen on its own loopback alone, and its own Caddy takes TLS for S3 (ADR-525)', () => {
+  it('AC-10-72 the object store’s servers, S3 among them, listen on its own loopback alone, and its own Caddy takes TLS for S3 (ADR-525)', () => {
     const command = defined['objectstore']?.command ?? [];
     // `server`, the one command that binds S3 apart from the rest; never `mini`, whose admin
     // server's gRPC listens on every interface whatever it is told.

@@ -20,7 +20,7 @@ import {
 const importing = (module: string) => `import { thing } from '${module}';`;
 const raw = (call: string, sql: string) => `await tx.$${call}\`${sql}\`;`;
 
-describe('the workspaces that may reach Postgres', () => {
+describe('AC-10-56 the workspaces that may reach Postgres', () => {
   it('are packages/db and the two server apps of the product, and three named tools', () => {
     expect(productReaches).toEqual(['packages/db', 'apps/api', 'apps/worker']);
     expect(Object.keys(toolReaches).sort()).toEqual([

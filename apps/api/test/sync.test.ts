@@ -1240,7 +1240,7 @@ describe('the numbers a phone holds', () => {
   });
 });
 
-describe('a phone taken out of service only sends (ADR-065, 134, 473, 531)', () => {
+describe('AC-10-88 a phone taken out of service only sends (ADR-065, 134, 473, 531)', () => {
   it('its records are saved, and each series it reports is answered with the blocks it holds, never topped up; it is brought no check of the passcode and no setup version, whatever version it holds; the database cuts it no block', async () => {
     await world(async (served, tx, who) => {
       const p = await kimOnP1(served, tx, who);

@@ -24,7 +24,7 @@ async function asTheApi(): Promise<void> {
   await db.actor(world.admin, 'BACK_OFFICE');
 }
 
-describe('a phone taken out of service (ADR-065, 134, 531)', () => {
+describe('AC-10-88 a phone taken out of service (ADR-065, 134, 531)', () => {
   it('is issued no new block of numbers, lost or retired; the block it holds is still written on, its last used number and its end', async () => {
     const { db, world } = tested;
     await asTheApi();
@@ -54,7 +54,7 @@ describe('a phone taken out of service (ADR-065, 134, 531)', () => {
   });
 });
 
-describe('a sign-in made offline, kept on its session (ADR-531)', () => {
+describe('AC-10-90 a sign-in made offline, kept on its session (ADR-531)', () => {
   const opened = `INSERT INTO "session" ("user_id", "refresh_token_hash", "expires_at", "device_id",
       "offline_sign_in_id", "signed_in_at", "signed_in_utc_offset_minutes")
     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING "id"::text`;
@@ -123,7 +123,7 @@ describe('a sign-in made offline, kept on its session (ADR-531)', () => {
   });
 });
 
-describe('how long a monitor’s sign-in on a phone lasts (ADR-531)', () => {
+describe('AC-10-91 how long a monitor’s sign-in on a phone lasts (ADR-531)', () => {
   it('is a day as the seed writes it, and 1 to 24 hours as the firm sets it, audited in the security domain', async () => {
     const { db } = tested;
     expect(

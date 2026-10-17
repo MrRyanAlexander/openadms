@@ -26,8 +26,17 @@ describe('a monitor’s offline seed', () => {
     expect(
       await new OfflineChecks('another-installation’s-secret').entry(lee, seed),
     ).toBeUndefined();
-    const [version, nonce, hidden, tag] = seed.split('.');
-    const altered = [version, nonce, `${(hidden ?? '').slice(0, -2)}AA`, tag].join('.');
+    // One character in the middle made another: it carries six bits of the hidden part, so the
+    // seed always changes (the last ones may carry unused bits, C173).
+    const [version, nonce, hidden = '', tag] = seed.split('.');
+    const at = Math.floor(hidden.length / 2);
+    const other = hidden[at] === 'A' ? 'B' : 'A';
+    const altered = [
+      version,
+      nonce,
+      `${hidden.slice(0, at)}${other}${hidden.slice(at + 1)}`,
+      tag,
+    ].join('.');
     expect(await offline.entry(lee, altered)).toBeUndefined();
     expect(await offline.entry(lee, 'v2.a.b.c')).toBeUndefined();
   });

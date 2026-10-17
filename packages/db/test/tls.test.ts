@@ -58,7 +58,7 @@ async function refusal(asked: Promise<unknown>): Promise<string> {
   throw new Error('Postgres took the connection.');
 }
 
-describe('the stack’s Postgres', () => {
+describe('AC-10-67 the stack’s Postgres', () => {
   it('KD-78 refuses a connection that won’t speak TLS, whoever logs in, before any password is asked', async () => {
     const said = await refusal(asAdministrator(false, () => Promise.resolve()));
     expect(said).toMatch(/no pg_hba\.conf entry for host .* no encryption/);

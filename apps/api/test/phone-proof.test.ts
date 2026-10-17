@@ -513,7 +513,7 @@ describe('the door decides a phone’s standing once a request (ADR-531)', () =>
     'phoneSetupChoices',
   ];
 
-  it('a phone taken out of service only sends, whatever session it still holds: told so everywhere else', async () => {
+  it('AC-10-88 a phone taken out of service only sends, whatever session it still holds: told so everywhere else', async () => {
     for (const status of ['LOST', 'RETIRED'] as const) {
       expect(await refusals({ status, withPasscode: false }, true), status).toEqual({
         '409 PHONE_OUT_OF_SERVICE': notWhatItSends,
@@ -521,7 +521,7 @@ describe('the door decides a phone’s standing once a request (ADR-531)', () =>
     }
   });
 
-  it('what a phone sends needs somebody signed in on it: a monitor, or the master user by the passcode beside its proof', async () => {
+  it('AC-10-89 what a phone sends needs somebody signed in on it: a monitor, or the master user by the passcode beside its proof', async () => {
     expect(await refusals({ status: 'ACTIVE', withPasscode: false }, false)).toEqual({
       '401 NOT_SIGNED_IN': [
         'reportPasscodeUse',

@@ -508,7 +508,7 @@ async function refusingMailServer(offersTls: boolean): Promise<MailServer> {
   };
 }
 
-describe('the mail server’s answers (API10)', () => {
+describe('AC-10-70 the mail server’s answers (API10)', () => {
   const mailAt = (port: number) =>
     new SmtpMail({
       smtpUrl: `smtp://127.0.0.1:${String(port)}`,

@@ -7,7 +7,7 @@
 > task's ADR and its session-log line in `DECISIONS.md`). No other file carries these counts.
 > **A count that differs from this page without a reason is a finding, not noise.**
 
-**Seen whole:** 2026-10-16, `pnpm chain` after task 2.8.8 (ADR-535), on the user's Mac, the installation at head: `pnpm ready`, the frozen install (no dependency added), typecheck, `pnpm scenarios`, `pnpm security`, lint and licences passed in 12 min 14 s; its `pnpm test` stopped on one test whose list the task's reads had widened, fixed, and `pnpm chain test lint` then passed with the counts below. Memory last sampled after ADR-512 (Docker's VM at 4 GB, the containers together under 1 GB through a full `pnpm test`).
+**Seen whole:** 2026-10-16, Phase 2's exit again (task 2.8.9, ADR-537), on the user's Mac, the installation at head: `pnpm chain` 9 passed in 12 min 34 s, every count below the same (53); after the task's test names, `pnpm chain ready test lint`, three full runs of `pnpm scenarios` in a row and `pnpm chain security licences`, all passed, the same counts. Memory last sampled after ADR-512 (Docker's VM at 4 GB, the containers together under 1 GB through a full `pnpm test`).
 
 ## `pnpm ready`
 
@@ -48,10 +48,10 @@ failed.`** Each story `passed: N checks, N passed, 0 failed`:
 
 | Story | Checks | | Story | Checks |
 |---|---|---|---|---|
-| `ticket-101001` | 16 | | `p1-priced` | 28 |
-| `dispatch-monday` | 22 | | `p1-reviewed` | 35 |
-| `setup` | 52 | | `p1-voided` | 30 |
-| `certification` | 28 | | `p1-invoiced` | 26 |
+| `ticket-101001` | 16 | | `p1-priced` | 29 |
+| `dispatch-monday` | 22 | | `p1-reviewed` | 36 |
+| `setup` | 52 | | `p1-voided` | 32 |
+| `certification` | 28 | | `p1-invoiced` | 27 |
 | `numbering` | 16 | | `golden-mission` | 32 |
 | `p1-field-days` | 35 | | `p1-left-out` | 31 |
 | `sync` | 51 | | `first-admin` | 32 |

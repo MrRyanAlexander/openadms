@@ -347,7 +347,7 @@ describe('what the API asks the address server, and takes from it (API7, API10)'
     }
   });
 
-  it('OWASP ASVS 5.0 15.3.2 follows no redirect: an answer that sends it elsewhere is no address, and where it points is never asked', async () => {
+  it('AC-10-69, OWASP ASVS 5.0 15.3.2 follows no redirect: an answer that sends it elsewhere is no address, and where it points is never asked', async () => {
     const elsewhere = await StackHttpsServer.on((_request, response) => {
       response.writeHead(200, { 'content-type': 'application/json' });
       response.end(JSON.stringify({ address: { house_number: '25', road: 'The Green' } }));

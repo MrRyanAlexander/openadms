@@ -164,7 +164,7 @@ const eventsOf = async (
   kind: 'OFFLINE_SIGN_IN' | 'OFFLINE_SIGN_IN_REFUSED',
 ) => tx.securityEvent.count({ where: { deviceId, kind } });
 
-describe('what a phone sends needs somebody signed in on it (ADR-531)', () => {
+describe('AC-10-89 what a phone sends needs somebody signed in on it (ADR-531)', () => {
   it('a phone with nobody signed in sends nothing: its sync is refused and writes nothing; the monitor’s session, or the passcode beside its proof, lets it', async () => {
     await world(async (served, tx) => {
       const p = await leeOnP1(served, tx);
@@ -187,7 +187,7 @@ describe('what a phone sends needs somebody signed in on it (ADR-531)', () => {
   });
 });
 
-describe('a sign-in made offline, taken once the phone has a connection (ADR-531)', () => {
+describe('AC-10-90 a sign-in made offline, taken once the phone has a connection (ADR-531)', () => {
   it('Lee’s own password: proven by what only it could make, it is his session from when he signed in, the firm’s hours long; it ends the one before, sends his sync and is a security event', async () => {
     await world(async (served, tx) => {
       const p = await leeOnP1(served, tx);
