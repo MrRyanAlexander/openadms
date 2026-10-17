@@ -129,6 +129,7 @@ export const p1FieldDays: Story = {
       });
       // Luis writes each day's board: Dana grants him *dispatch* (ADR-428, 429).
       await tx.userPermission.create({ data: { userId: luis.id, permission: 'DISPATCH' } });
+      await tx.userPermission.create({ data: { userId: luis.id, permission: 'VIEW_DISPATCH' } });
       const p1 = await setUpP1(tx, story.policy);
       const { tdsr, landfill } = await setUpP1Sites(tx, p1.project);
       // The firm's own sub-type of an incident (golden mission §2).

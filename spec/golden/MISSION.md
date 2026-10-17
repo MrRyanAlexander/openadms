@@ -30,7 +30,7 @@ PPDR project; QC, the invoice lock and batch, and what each viewer sees.
 
 **The firm:** **Gates Disaster Recovery**, which installs and runs its own installation of Open ADMS
 and holds the master passcode. Back office: **Dana Reyes** (admin), **Luis Ortega** (manager/analyst:
-review, correct, renumber, void, accept flags, QC, lock).
+view review, correct, renumber, void, accept flags, QC, lock; ADR-539).
 
 **Client:** Bayline County (a record). Its debris manager has a **client user** login (read-only).
 **Event:** Hurricane Delphine, `DR-9001-FL` (fictional). **Prime:** Coastline Haulers LLC, with a

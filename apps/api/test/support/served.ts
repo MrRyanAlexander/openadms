@@ -104,12 +104,21 @@ export interface People {
   readonly kimsId: string;
 }
 
-async function people(tx: Tx, dana: string): Promise<People> {
+// The views the test world grants Luis from the start.
+export const luisSees = ['VIEW_REVIEW', 'VIEW_SETUP', 'VIEW_DISPATCH'] as const;
+
+async function people(tx: Tx, dana: string, sees: boolean): Promise<People> {
   await tx.user.create({
     data: { id: dana, name: 'Dana Reyes', role: 'ADMIN', email: 'dana.reyes@gates.example' },
   });
+  // Luis is let see the whole back office (ADR-539); what he may do is granted test by test.
   const luis = await tx.user.create({
-    data: { name: 'Luis Ortega', role: 'MANAGER_ANALYST', email: 'Luis.Ortega@gates.example' },
+    data: {
+      name: 'Luis Ortega',
+      role: 'MANAGER_ANALYST',
+      email: 'Luis.Ortega@gates.example',
+      permissions: { create: (sees ? luisSees : []).map((permission) => ({ permission })) },
+    },
   });
   const viewer = await tx.user.create({
     data: {
@@ -312,7 +321,9 @@ export const luissSecret = Buffer.from('09876543210987654321');
 // up, as an admin and a manager/analyst must (ADR-412).
 export type Work = (served: Served, tx: Tx, who: People, within: Database) => Promise<void>;
 
-export function worldOn(db: () => Database) {
+// `luisSees`: whether Luis starts with the three views (`luisSees`); the people's own tests start
+// him with no grant at all.
+export function worldOn(db: () => Database, { luisSees: sees = true } = {}) {
   return (
     work: Work,
     mail: Mail = new NoServer(),
@@ -323,7 +334,7 @@ export function worldOn(db: () => Database) {
   ): Promise<void> => {
     const dana = randomUUID();
     return undone(db(), dana, async (within, tx) => {
-      const who = await people(tx, dana);
+      const who = await people(tx, dana, sees);
       const { hasher, check } = signInOn(within, mail);
       const served = await Served.on(within, mail, policy, more);
       for (const [userId, password, email, secret] of [

@@ -261,12 +261,14 @@ export const setup: Story = {
         data: { name: 'Luis Ortega', role: 'MANAGER_ANALYST' },
       });
       await tx.userPermission.create({ data: { userId: person.id, permission: 'SETUP' } });
+      await tx.userPermission.create({ data: { userId: person.id, permission: 'VIEW_SETUP' } });
       return person.id;
     });
     names.set(dana, 'Dana').set(luis, 'Luis');
-    story.check('two people and one permission, each written by Dana', await audited(), {
+    // Setup takes "view setup" beside it (ADR-539).
+    story.check('two people and two permissions, each written by Dana', await audited(), {
       'Dana: user INSERT (BACK_OFFICE)': 2,
-      'Dana: user_permission INSERT (BACK_OFFICE)': 1,
+      'Dana: user_permission INSERT (BACK_OFFICE)': 2,
     });
 
     // ------------------------------------------------------------------------------------------

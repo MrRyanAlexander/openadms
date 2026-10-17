@@ -588,7 +588,7 @@ export const certification: Story = {
       await danas()
     ).answered(setPermissionsEndpoint, {
       ids: { userId: luis },
-      json: { permissions: ['SETUP', 'CORRECT'] },
+      json: { permissions: ['SETUP', 'CORRECT', 'VIEW_SETUP', 'VIEW_REVIEW'] },
     });
     // The sideboards are its second box, after the primary (0); its dog box is the third.
     const boxOf = (position: string, changes: { length?: number; height?: number }) => ({

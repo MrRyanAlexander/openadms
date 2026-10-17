@@ -49,7 +49,15 @@ const morgansEmail = 'morgan.ellis@gates.example';
 const given = 'ferry heron marsh delphine';
 // What the golden mission grants Luis: not *unlock*.
 // (In the order the database keeps the permissions in.)
-const luissGrants = ['CORRECT', 'RENUMBER', 'VOID', 'ACCEPT_FLAG', 'QC', 'LOCK_INVOICED'];
+const luissGrants = [
+  'CORRECT',
+  'RENUMBER',
+  'VOID',
+  'ACCEPT_FLAG',
+  'QC',
+  'LOCK_INVOICED',
+  'VIEW_REVIEW',
+];
 
 let db: Database;
 
@@ -60,7 +68,7 @@ afterAll(async () => {
   await db.$disconnect();
 });
 
-const world = worldOn(() => db);
+const world = worldOn(() => db, { luisSees: false });
 
 type Browser = Pick<Signed, 'cookies' | 'csrf'>;
 
@@ -148,7 +156,7 @@ describe('permissions, read from the database on every request', () => {
       expect(told(await post(served, dana, '/test/unlocks'))).toEqual([200, undefined]);
       expect(ran).toEqual(['void', 'void', 'unlock']);
       // One row a permission, taken away by its archive and given back by clearing it.
-      expect(await tx.userPermission.count({ where: { userId: who.luis } })).toBe(6);
+      expect(await tx.userPermission.count({ where: { userId: who.luis } })).toBe(7);
     });
   });
 
@@ -216,64 +224,79 @@ describe('permissions, read from the database on every request', () => {
       // Reading a person or a page of them (ADR-427), and the setup as it stands (the setup
       // check and the lookups, ADR-426).
     ).toEqual([
-      'listPeople',
-      'readPerson',
-      // The back office's reads (ADR-535): a project and its review queue, flags and tickets
-      // (and what each run decided, ADR-536), the firm's lists, setup but its rates, a site's
-      // shapes and a map's versions and files.
+      // What every one of them reads (ADR-539): the projects and the lists' values.
       'listProjects',
       'readProject',
-      'reviewQueue',
+      'listListValues',
+    ]);
+    // Every other read of the back office takes its area's view (the user, ADR-539): the review
+    // queue, tickets, field events, flags, receipts, certifications, forms, held records and
+    // batches "view review"; setup but its rates, the setup check, the lookups, maps and shapes
+    // "view setup"; people, phones, their sessions and the board "view dispatch".
+    const byView = (view: string) =>
+      signedIn
+        .filter(({ method, permission }) => method === 'GET' && permission === view)
+        .map(({ name }) => name)
+        .sort();
+    expect(byView('VIEW_REVIEW')).toEqual([
+      'listCertifications',
+      'listDropOffLogs',
       'listFlags',
+      'listHeldRecords',
+      'listIncidents',
+      'listInvoiceBatches',
+      'listQuarantinedRecords',
+      'listRoes',
+      'listSetAsideFiles',
+      'listSurveys',
+      'photographFile',
+      'readCertification',
+      'readFieldEvent',
+      'readInvoiceBatch',
+      'readScaleReceipt',
       'readTicket',
       'readTicketDecisions',
-      'listListValues',
+      'reviewQueue',
+      'setAsideFile',
+    ]);
+    expect(byView('VIEW_SETUP')).toEqual([
       'listForms',
+      'listMapVersions',
       'listPayItems',
       'listRules',
-      'listSites',
       'listSiteShapes',
-      'siteShapeFile',
-      'listMapVersions',
-      'readMapVersion',
+      'listSites',
       'mapVersionFile',
-      'setupCheck',
       'quantityLookup',
+      'readMapVersion',
+      'setupCheck',
       'siteQuantityLookup',
-      // The firm's phones (ADR-428), and a phone's sessions (ADR-535).
-      'listPhones',
-      'listPhoneSessions',
-      // A day's dispatch board (ADR-429), and the board searched (ADR-535).
-      'listAssignments',
-      'searchBoard',
-      // Invoice batches and what each holds, a field event (ADR-535).
-      'listInvoiceBatches',
-      'readInvoiceBatch',
-      'readFieldEvent',
-      // A photograph's file (ADR-483), and a scale receipt (ADR-535).
-      'photographFile',
-      'readScaleReceipt',
-      // What a sync held for a person and what waits in quarantine, and a file set aside
-      // (ADR-526).
-      'listHeldRecords',
-      'listSetAsideFiles',
-      'setAsideFile',
-      'listQuarantinedRecords',
-      // The forms and certifications (ADR-535).
-      'listRoes',
-      'listSurveys',
-      'listIncidents',
-      'listDropOffLogs',
-      'listCertifications',
-      'readCertification',
+      'siteShapeFile',
     ]);
+    expect(byView('VIEW_DISPATCH')).toEqual([
+      'listAssignments',
+      'listPeople',
+      'listPhoneSessions',
+      'listPhones',
+      'readPerson',
+      'searchBoard',
+    ]);
+    // A view is only ever a read's.
+    expect(
+      signedIn.filter(
+        ({ method, permission }) => method !== 'GET' && permission?.startsWith('VIEW_') === true,
+      ),
+    ).toEqual([]);
     // The permissions an endpoint takes yet are Setup (task 2.4.2; the list by name is
     // setup-endpoints.test.ts's), Dispatch (task 2.4.3; phones.test.ts's) and those of review's
     // marks (task 2.4.4, part 1; review-marks.test.ts's), then correct and renumber (part 2;
     // corrections.test.ts's). A reprocess with nothing changed takes correct: no permission of
     // its own (reprocesses.test.ts; ADR-498).
     expect([...new Set(endpoints.flatMap(({ permission }) => permission ?? []))]).toEqual([
+      'VIEW_DISPATCH',
       'SETUP',
+      'VIEW_REVIEW',
+      'VIEW_SETUP',
       'DISPATCH',
       'VOID',
       'ACCEPT_FLAG',
@@ -316,6 +339,9 @@ describe('permissions, read from the database on every request', () => {
       const url = readPersonEndpoint.path.replace(':userId', who.kim);
       expect(told(await served.ask('GET', url))).toEqual([401, 'NOT_SIGNED_IN']);
       expect(told(await read(served, viewer, who.kim))).toEqual([403, 'NOT_ALLOWED']);
+      // A person is read with "view dispatch" (ADR-539): Luis holds nothing yet, then is given it.
+      expect(told(await read(served, luis, who.kim))).toEqual([403, 'NOT_ALLOWED']);
+      await tx.userPermission.create({ data: { userId: who.luis, permission: 'VIEW_DISPATCH' } });
       expect(told(await read(served, luis, who.kim))).toEqual([200, undefined]);
       expect(await users(tx)).toBe(before);
       expect((await tx.user.findUniqueOrThrow({ where: { id: who.dana } })).archivedAt).toBeNull();
@@ -598,8 +624,8 @@ describe('an admin gives and takes', () => {
       const fewer = person(await grants(served, dana, who.luis, ['CORRECT', 'QC', 'QC']));
       expect(fewer.permissions).toEqual(['CORRECT', 'QC']);
       const rows = await tx.userPermission.findMany({ where: { userId: who.luis } });
-      expect(rows).toHaveLength(6);
-      expect(rows.filter(({ archivedAt }) => archivedAt !== null)).toHaveLength(4);
+      expect(rows).toHaveLength(7);
+      expect(rows.filter(({ archivedAt }) => archivedAt !== null)).toHaveLength(5);
       // Stated again as they are: nothing is written.
       const same = await grants(served, dana, who.luis, ['QC', 'CORRECT']);
       expect(person(same).permissions).toEqual(['CORRECT', 'QC']);
@@ -678,6 +704,7 @@ describe('reading a person', () => {
       });
       const dana = await served.signedIn(danasEmail, long);
       const luis = await served.signedIn(luissEmail, longer);
+      await tx.userPermission.create({ data: { userId: who.luis, permission: 'VIEW_DISPATCH' } });
       const seenByLuis = await read(served, luis, ana.id);
       expect(person(seenByLuis)).toMatchObject({
         name: 'Ana Brooks',

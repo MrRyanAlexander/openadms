@@ -34,6 +34,7 @@ import {
   type FieldEventKindName,
 } from '@open-adms/domain';
 
+import { backOfficeSees } from '../review/review-reads.ts';
 import { Refused, day, type Outcome } from '../setup/setup-service.ts';
 import { DispatchService } from './dispatch-service.ts';
 
@@ -155,14 +156,7 @@ export class Assignments extends DispatchService {
   // The board searched, by day and then in the order written, each with its warnings.
   async search(readerId: string, asked: BoardSearched): Promise<BoardFound | null> {
     return this.db.$read(async (tx): Promise<BoardFound | null> => {
-      const reader = await tx.user.findUnique({
-        where: { id: readerId },
-        select: { role: true, archivedAt: true },
-      });
-      if (
-        reader?.archivedAt !== null ||
-        (reader.role !== 'ADMIN' && reader.role !== 'MANAGER_ANALYST')
-      ) {
+      if (!(await backOfficeSees(tx, readerId, 'VIEW_DISPATCH'))) {
         return null;
       }
       const rows = await tx.assignment.findMany({
@@ -267,14 +261,7 @@ export class Assignments extends DispatchService {
     asked: AssignmentsAsked,
   ): Promise<AssignmentsPage> {
     return this.db.$read(async (tx): Promise<AssignmentsPage> => {
-      const reader = await tx.user.findUnique({
-        where: { id: readerId },
-        select: { role: true, archivedAt: true },
-      });
-      if (
-        reader?.archivedAt !== null ||
-        (reader.role !== 'ADMIN' && reader.role !== 'MANAGER_ANALYST')
-      ) {
+      if (!(await backOfficeSees(tx, readerId, 'VIEW_DISPATCH'))) {
         return { done: false, code: 'NOT_ALLOWED' };
       }
       const project = await tx.project.findUnique({

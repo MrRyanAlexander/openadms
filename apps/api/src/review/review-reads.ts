@@ -3,9 +3,10 @@
 // C148, C171, C172; ADR-224, 228, 363, 365, 433, 526 (1), 534, 535, 536). OWASP API1, API3, API4;
 // ASVS V8.
 //
-// - **Open to every admin and manager/analyst in service**, whatever they hold: the back office
-//   sees everything about a ticket (ADR-224). Asked again here, inside the read, whatever the door
-//   asked. A record nobody has is 404.
+// - **Open to an admin, and to a manager/analyst granted the read's view** (the user, ADR-539):
+//   "view review" for what is reviewed, "view dispatch" for the board's search and a phone's
+//   sessions. Whoever is let see review sees everything about a ticket (ADR-224). Asked again
+//   here, inside the read, whatever the door asked. A record nobody has is 404.
 // - **A ticket is its project, its workflow and its bare number** and the field events under it
 //   (ADR-236): one with no field event is no ticket. Its lines carry their rate and amount (the
 //   ledger is the back office's current truth, ADR-535 (1)).
@@ -24,7 +25,7 @@ import type {
   TicketDecisionsAnswer,
 } from '@open-adms/contracts';
 import type { Database, FieldEvent, Flag, FlagAcceptance, Prisma } from '@open-adms/db';
-import type { WorkflowName } from '@open-adms/domain';
+import { Access, type ViewPermission, type WorkflowName } from '@open-adms/domain';
 
 import { Refusal } from '../process/refusal.ts';
 import {
@@ -70,18 +71,38 @@ export function pageOf<T extends { readonly id: string }>(
   return { rows: page, next: rows.length > limit ? (page.at(-1)?.id ?? null) : null };
 }
 
-// An admin or a manager/analyst in service; anybody else is refused (ADR-526 (1) (a)).
-export async function backOfficeReader(tx: Tx, readerId: string): Promise<void> {
+// Whether this reader is an admin, or a manager/analyst in service granted that view (`null`:
+// what every one of them reads) (ADR-526 (1) (a), 539).
+export async function backOfficeSees(
+  tx: Tx,
+  readerId: string,
+  view: ViewPermission | null,
+): Promise<boolean> {
   const reader = await tx.user.findUnique({
     where: { id: readerId },
-    select: { role: true, archivedAt: true },
+    select: {
+      role: true,
+      archivedAt: true,
+      permissions: { where: { archivedAt: null }, select: { permission: true } },
+    },
   });
-  if (
-    reader?.archivedAt !== null ||
-    (reader.role !== 'ADMIN' && reader.role !== 'MANAGER_ANALYST')
-  ) {
-    throw new Refusal('NOT_ALLOWED', 403);
-  }
+  return (
+    reader !== null &&
+    new Access({
+      role: reader.role,
+      archived: reader.archivedAt !== null,
+      granted: reader.permissions.map((grant) => grant.permission),
+    }).sees(view)
+  );
+}
+
+// The same, anybody else refused.
+export async function backOfficeReader(
+  tx: Tx,
+  readerId: string,
+  view: ViewPermission | null,
+): Promise<void> {
+  if (!(await backOfficeSees(tx, readerId, view))) throw new Refusal('NOT_ALLOWED', 403);
 }
 
 const notFound = (): Refusal => new Refusal('NOT_FOUND', 404);
@@ -225,7 +246,7 @@ export class ReviewReads {
     asked: ReviewQueueAsked,
   ): Promise<ReviewQueueAnswer> {
     return this.db.$read(async (tx) => {
-      await backOfficeReader(tx, readerId);
+      await backOfficeReader(tx, readerId, 'VIEW_REVIEW');
       await ReviewReads.project(tx, projectId);
       const openHere = { projectId, ...open };
       const byCause = await tx.flag.groupBy({
@@ -307,7 +328,7 @@ export class ReviewReads {
   // A project's flags, oldest first, each with every acceptance it had.
   flags(readerId: string, projectId: string, asked: FlagsAsked): Promise<FlagsAnswer> {
     return this.db.$read(async (tx) => {
-      await backOfficeReader(tx, readerId);
+      await backOfficeReader(tx, readerId, 'VIEW_REVIEW');
       await ReviewReads.project(tx, projectId);
       const rows = await tx.flag.findMany({
         where: {
@@ -332,7 +353,7 @@ export class ReviewReads {
     ticketNumber: string,
   ): Promise<TicketAnswer> {
     return this.db.$read(async (tx) => {
-      await backOfficeReader(tx, readerId);
+      await backOfficeReader(tx, readerId, 'VIEW_REVIEW');
       const named = { projectId, workflow, ticketNumber };
       const events = await tx.fieldEvent.findMany({
         where: named,
@@ -423,7 +444,7 @@ export class ReviewReads {
     asked: PageAsked,
   ): Promise<TicketDecisionsAnswer> {
     return this.db.$read(async (tx) => {
-      await backOfficeReader(tx, readerId);
+      await backOfficeReader(tx, readerId, 'VIEW_REVIEW');
       const named = { projectId, workflow, ticketNumber };
       const event = await tx.fieldEvent.findFirst({ where: named, select: { id: true } });
       if (event === null) throw notFound();
@@ -457,7 +478,7 @@ export class ReviewReads {
   // One field event with what is recorded beside it.
   fieldEvent(readerId: string, fieldEventId: string): Promise<FieldEventAnswer> {
     return this.db.$read(async (tx) => {
-      await backOfficeReader(tx, readerId);
+      await backOfficeReader(tx, readerId, 'VIEW_REVIEW');
       const event = await tx.fieldEvent.findUnique({
         where: { id: fieldEventId },
         include: {
@@ -481,7 +502,7 @@ export class ReviewReads {
   // One scale receipt, its photographs and the field events that name it.
   scaleReceipt(readerId: string, scaleReceiptId: string): Promise<ScaleReceiptAnswer> {
     return this.db.$read(async (tx) => {
-      await backOfficeReader(tx, readerId);
+      await backOfficeReader(tx, readerId, 'VIEW_REVIEW');
       const receipt = await tx.scaleReceipt.findUnique({
         where: { id: scaleReceiptId },
         include: { fieldEvents: { select: { id: true }, orderBy: { id: 'asc' } } },
@@ -503,7 +524,7 @@ export class ReviewReads {
     asked: PageAsked & { readonly certNumber?: string | undefined },
   ): Promise<{ certifications: CertificationRead[]; next: string | null }> {
     return this.db.$read(async (tx) => {
-      await backOfficeReader(tx, readerId);
+      await backOfficeReader(tx, readerId, 'VIEW_REVIEW');
       await ReviewReads.project(tx, projectId);
       const rows = await tx.certification.findMany({
         where: {
@@ -523,7 +544,7 @@ export class ReviewReads {
 
   certification(readerId: string, certificationId: string): Promise<CertificationRead> {
     return this.db.$read(async (tx) => {
-      await backOfficeReader(tx, readerId);
+      await backOfficeReader(tx, readerId, 'VIEW_REVIEW');
       return ReviewReads.certificationIn(tx, certificationId);
     });
   }
@@ -612,7 +633,7 @@ export class ReviewReads {
   // A project's invoice batches in name order, each with how many locks in force it holds.
   invoiceBatches(readerId: string, projectId: string, asked: PageAsked) {
     return this.db.$read(async (tx) => {
-      await backOfficeReader(tx, readerId);
+      await backOfficeReader(tx, readerId, 'VIEW_REVIEW');
       await ReviewReads.project(tx, projectId);
       const rows = await tx.invoiceBatch.findMany({
         where: { projectId },
@@ -634,7 +655,7 @@ export class ReviewReads {
   // One batch, each lock in force that names it and the ticket it locks.
   invoiceBatch(readerId: string, invoiceBatchId: string) {
     return this.db.$read(async (tx) => {
-      await backOfficeReader(tx, readerId);
+      await backOfficeReader(tx, readerId, 'VIEW_REVIEW');
       const batch = await tx.invoiceBatch.findUnique({ where: { id: invoiceBatchId } });
       if (batch === null) throw notFound();
       const locks = await tx.invoiceLock.findMany({
@@ -672,7 +693,7 @@ export class ReviewReads {
     ) => Promise<{ readonly id: string; readonly shown: S }[]>,
   ): Promise<{ rows: S[]; next: string | null }> {
     return this.db.$read(async (tx) => {
-      await backOfficeReader(tx, readerId);
+      await backOfficeReader(tx, readerId, 'VIEW_REVIEW');
       await ReviewReads.project(tx, projectId);
       const { rows, next } = pageOf(await read(tx, fromCursor(asked)), asked.limit);
       return { rows: rows.map((row) => row.shown), next };

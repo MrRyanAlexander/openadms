@@ -24,11 +24,17 @@ describe('who may dispatch', () => {
 
   it('an admin may, and a manager/analyst who holds Dispatch now; a manager/analyst without it is told who may, in plain words', () => {
     expect(refusal(dana, 'Dana Reyes')).toBeNull();
-    expect(refusal({ ...luis, granted: [...luis.granted, 'DISPATCH'] }, 'Luis Ortega')).toBeNull();
+    expect(
+      refusal({ ...luis, granted: [...luis.granted, 'DISPATCH', 'VIEW_DISPATCH'] }, 'Luis Ortega'),
+    ).toBeNull();
+    // Dispatch without its view is no dispatch (ADR-539).
+    expect(refusal({ ...luis, granted: [...luis.granted, 'DISPATCH'] }, 'Luis Ortega')?.code).toBe(
+      'NOT_ALLOWED',
+    );
     expect(refusal(luis, 'Luis Ortega')).toEqual({
       code: 'NOT_ALLOWED',
       message:
-        'Luis Ortega may not dispatch: it takes an admin, or a manager/analyst granted "dispatch". Nothing was changed.',
+        'Luis Ortega may not dispatch: it takes an admin, or a manager/analyst granted "dispatch" and "view dispatch". Nothing was changed.',
     });
     // Setup is another permission: holding it opens nothing here.
     expect(refusal({ ...luis, granted: ['SETUP'] }, 'Luis Ortega')?.code).toBe('NOT_ALLOWED');
@@ -42,7 +48,7 @@ describe('who may dispatch', () => {
     }
     expect(refusal({ ...dana, archived: true }, 'Dana Reyes')?.code).toBe('NOT_ALLOWED');
     expect(new DispatchRights(null).refusal()?.message).toBe(
-      'Somebody the firm has no record of may not dispatch: it takes an admin, or a manager/analyst granted "dispatch". Nothing was changed.',
+      'Somebody the firm has no record of may not dispatch: it takes an admin, or a manager/analyst granted "dispatch" and "view dispatch". Nothing was changed.',
     );
   });
 });

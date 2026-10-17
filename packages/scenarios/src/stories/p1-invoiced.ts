@@ -403,7 +403,15 @@ export const p1Invoiced: Story = {
       on('14', '07:45'),
       'Dana grants Luis correct, renumber, void, accept flags, QC and lock as invoiced; nobody is granted unlock',
     );
-    await backOffice.grantLuis('CORRECT', 'RENUMBER', 'VOID', 'ACCEPT_FLAG', 'QC', 'LOCK_INVOICED');
+    await backOffice.grantLuis(
+      'CORRECT',
+      'RENUMBER',
+      'VOID',
+      'ACCEPT_FLAG',
+      'QC',
+      'LOCK_INVOICED',
+      'VIEW_REVIEW',
+    );
 
     // ------------------------------------------------------------------------------------------
     story.at(

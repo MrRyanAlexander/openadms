@@ -4,9 +4,17 @@
 // 415). OWASP ASVS 5.0 V8; API Security Top 10, API5.
 //
 // - **Who may call.** An endpoint names the roles it is open to and, where it is a reviewer's or
-//   a setup action, the one permission it takes. An admin holds every permission; a
-//   manager/analyst holds the ones granted and not taken away; nobody else holds any. The API
-//   asks this of the person as the database has them at that moment, on every request.
+//   a setup action or a read of the back office, the one permission it takes. An admin holds
+//   every permission; a manager/analyst holds the ones granted and not taken away; nobody else
+//   holds any. The API asks this of the person as the database has them at that moment, on every
+//   request.
+// - **What the back office sees is granted too (the user, ADR-539).** Three view permissions,
+//   granted apart from the acts: `VIEW_REVIEW` (the review queue, tickets and their lines with
+//   rate and amount, field events, flags, certifications, the forms' records, a ticket's run
+//   decisions, held, quarantined and set-aside records, invoice batches), `VIEW_SETUP` (setup's
+//   records, the setup check, the quantity lookup, maps and shapes) and `VIEW_DISPATCH` (the
+//   board, phones and their sessions, people). **An act needs its area's view beside its own
+//   grant**: QC without `VIEW_REVIEW` is no QC.
 // - **Who is created in the back office.** An admin, a manager/analyst and a read-only viewer; a
 //   monitor is created on a phone under the master passcode, and the system actor by the seed.
 // - **Who gives a permission.** An admin, who holds them all: so nobody gives one they don't
@@ -33,9 +41,61 @@ export const permissions = [
   'APPROVE_HOURS',
   'SETUP',
   'DISPATCH',
+  'VIEW_REVIEW',
+  'VIEW_SETUP',
+  'VIEW_DISPATCH',
 ] as const;
 
 export type PermissionName = (typeof permissions)[number];
+
+// What a manager/analyst is let see of the back office, each granted on its own (ADR-539).
+export const viewPermissions = ['VIEW_REVIEW', 'VIEW_SETUP', 'VIEW_DISPATCH'] as const;
+
+export type ViewPermission = (typeof viewPermissions)[number];
+
+// The view an act needs beside its own grant: none for a view itself, nor for approving hours,
+// whose time clock has nothing to read yet (Phase 4).
+const viewOfAct: Record<PermissionName, ViewPermission | null> = {
+  CORRECT: 'VIEW_REVIEW',
+  RENUMBER: 'VIEW_REVIEW',
+  VOID: 'VIEW_REVIEW',
+  ACCEPT_FLAG: 'VIEW_REVIEW',
+  QC: 'VIEW_REVIEW',
+  LOCK_INVOICED: 'VIEW_REVIEW',
+  UNLOCK_INVOICED: 'VIEW_REVIEW',
+  APPROVE_HOURS: null,
+  SETUP: 'VIEW_SETUP',
+  DISPATCH: 'VIEW_DISPATCH',
+  VIEW_REVIEW: null,
+  VIEW_SETUP: null,
+  VIEW_DISPATCH: null,
+};
+
+// A permission as the back office's refusals name it.
+export const permissionInWords: Record<PermissionName, string> = {
+  CORRECT: 'correct',
+  RENUMBER: 'renumber',
+  VOID: 'void',
+  ACCEPT_FLAG: 'accept flags',
+  QC: 'QC',
+  LOCK_INVOICED: 'lock as invoiced',
+  UNLOCK_INVOICED: 'unlock',
+  APPROVE_HOURS: 'approve hours',
+  SETUP: 'setup',
+  DISPATCH: 'dispatch',
+  VIEW_REVIEW: 'view review',
+  VIEW_SETUP: 'view setup',
+  VIEW_DISPATCH: 'view dispatch',
+};
+
+// What a manager/analyst must be granted to hold that permission, as a refusal says it: the
+// permission and, for an act, its area's view (`"QC" and "view review"`).
+export function grantsInWords(permission: PermissionName): string {
+  const view = viewOfAct[permission];
+  return view === null
+    ? `"${permissionInWords[permission]}"`
+    : `"${permissionInWords[permission]}" and "${permissionInWords[view]}"`;
+}
 
 // Who signs in at the back office and the portal, and so who an admin creates there.
 export const backOfficeCreated = ['ADMIN', 'MANAGER_ANALYST', 'READ_ONLY_VIEWER'] as const;
@@ -74,12 +134,28 @@ export class Access {
     this.person = person;
   }
 
-  // An admin holds every permission and needs no grant; a manager/analyst the ones granted; a
-  // monitor, a read-only viewer, the system actor and anyone archived none.
+  // An admin holds every permission and needs no grant; a manager/analyst the ones granted, an
+  // act only with its area's view granted too (ADR-539); a monitor, a read-only viewer, the system
+  // actor and anyone archived none.
   holds(permission: PermissionName): boolean {
     const { role, archived, granted } = this.person;
     if (archived) return false;
-    return role === 'ADMIN' || (role === 'MANAGER_ANALYST' && granted.includes(permission));
+    if (role === 'ADMIN') return true;
+    const view = viewOfAct[permission];
+    return (
+      role === 'MANAGER_ANALYST' &&
+      granted.includes(permission) &&
+      (view === null || granted.includes(view))
+    );
+  }
+
+  // Whether this person reads the back office's records of that area (ADR-539): an admin, or a
+  // manager/analyst granted its view; `null` for what every one of them reads (the projects, the
+  // lists' values). Nobody else, and nobody archived.
+  sees(view: ViewPermission | null): boolean {
+    const { role, archived } = this.person;
+    if (archived || (role !== 'ADMIN' && role !== 'MANAGER_ANALYST')) return false;
+    return view === null || this.holds(view);
   }
 
   // Whether this person may call what asks for those roles and that permission. What names no
@@ -114,7 +190,7 @@ export class SetupRights {
     if (this.access?.holds('SETUP') === true) return null;
     return {
       code: 'NOT_ALLOWED',
-      message: `${this.name} may not change the setup: it takes an admin, or a manager/analyst granted "setup". Nothing was changed.`,
+      message: `${this.name} may not change the setup: it takes an admin, or a manager/analyst granted ${grantsInWords('SETUP')}. Nothing was changed.`,
     };
   }
 }
@@ -142,7 +218,7 @@ export class DispatchRights {
     if (this.access?.holds('DISPATCH') === true) return null;
     return {
       code: 'NOT_ALLOWED',
-      message: `${this.name} may not dispatch: it takes an admin, or a manager/analyst granted "dispatch". Nothing was changed.`,
+      message: `${this.name} may not dispatch: it takes an admin, or a manager/analyst granted ${grantsInWords('DISPATCH')}. Nothing was changed.`,
     };
   }
 }

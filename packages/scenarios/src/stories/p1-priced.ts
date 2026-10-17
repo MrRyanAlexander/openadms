@@ -390,7 +390,7 @@ export const p1Priced: Story = {
     // request at its endpoint, part of correcting; each correction queues its own job, the
     // ticket and its neighbours, at its endpoint.
     const backOffice = p1BackOffice(story, office);
-    await backOffice.grantLuis('CORRECT');
+    await backOffice.grantLuis('CORRECT', 'VIEW_REVIEW');
     const luiss = await backOffice.luiss();
     const standing = await ids();
     const auditedLines = await audited('transaction');
@@ -576,7 +576,7 @@ export const p1Priced: Story = {
     const loadOf101004 = await api.completedLoad.findFirstOrThrow({
       where: { ticketNumber: '101004' },
     });
-    await backOffice.grantLuis('QC', 'LOCK_INVOICED');
+    await backOffice.grantLuis('QC', 'LOCK_INVOICED', 'VIEW_REVIEW');
     const ticket101004 = { completedLoadId: loadOf101004.id };
     await luiss.answered(setQcStatusEndpoint, {
       json: { record: ticket101004, status: 'QC_APPROVED' },

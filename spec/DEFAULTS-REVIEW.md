@@ -12,7 +12,15 @@ is built and working today. Phase 2 closes once you have confirmed or overturned
    note in the **Your answer** cell of each row you're overturning, saying what you want instead.
 2. Or work through it row by row: write **OK** or what you want instead in each **Your answer** cell.
 
+99% APPROVAL - SEE 1 note, labelled as *NOTE*
+
 Your answer for the whole page:
+
+> **Recorded 2026-10-17 (ADR-538).** Every row confirmed but **D1, overturned** (your 1a note, and
+> your answers in chat: new view permissions; a ticket's money kept as it is): built as three view
+> permissions, ADR-539, with **D8, D10, D12, D48 and D78** following it. **D39:** your note confirms
+> what is built (nothing flags a move or a setup made under the master passcode), ADR-540. Phase 2's
+> exit is met. This page is now a record; `agent_store/SUMMARY.md` §4 holds no open default.
 
 **Where to spend your time.** Part 1 is what a firm, a monitor or the back office would notice. Part 2
 is about sign-in and security. Parts 3–5 are how the server is built (limits, timeouts, internal
@@ -27,20 +35,22 @@ An overturned row becomes its own task. Nothing changes until you answer.
 
 ### 1a. What the back office can see and do
 
+*NOTE* Everyone in the back office should not have access to everything. Permissions should get settings and details that otherwise do not pertain to the other user. For instance an A
+
 | # | What we chose | ADR | Your answer |
 |---|---|---|---|
-| D1 | Everyone in the back office (admins and managers/analysts) can **read** everything in the back office, whatever permissions they hold. Permissions only gate *acts* (correct, void, QC, lock…) | 535 (1) | |
-| D2 | A ticket's transaction lines show their **rate and amount** to every back-office reader | 535 (2) | |
+| D1 | Everyone in the back office (admins and managers/analysts) can **read** everything in the back office, whatever permissions they hold. Permissions only gate *acts* (correct, void, QC, lock…) | 535 (1) | **Overturned** (your note): a manager/analyst reads an area only with its view (view review, view setup, view dispatch); an act needs its area's view too. ADR-539 |
+| D2 | A ticket's transaction lines show their **rate and amount** to every back-office reader | 535 (2) | Confirmed (you: "keep as is"): whoever reads the ticket, with view review. ADR-539 |
 | D3 | A pay item's **rates** are a separate read that needs the **Setup** permission | 535 (3) | |
 | D4 | **Previewing a setup save** (e.g. "what would changing this rate re-price?") works by actually running the save and undoing it, so the preview is exactly what the save would do | 535 (4) | |
 | D5 | **QC or locking many tickets at once**: each ticket succeeds or is refused on its own (one bad ticket doesn't stop the rest); at most **200** tickets per request | 535 (5) | |
 | D6 | An **invoice batch is never archived** | 535 (6) | |
 | D7 | The **dispatch board** warns of six things beside a row (the same person twice that day, the same phone twice that day, outside the project's active window, the project closed, unit rate pay items without unit rate work, and the site not active that day). A board search covers **62 days** at most. *(This replaces ADR-429's "nothing warns of a second assignment".)* | 535 (9) | |
-| D8 | A phone's **sign-in sessions** can be read by anyone in the back office | 535 (10) | |
+| D8 | A phone's **sign-in sessions** can be read by anyone in the back office | 535 (10) | Follows D1: with view dispatch. ADR-539 |
 | D9 | For a certification, "what it was saved with" is read as **its flags** | 535 (11) | |
-| D10 | For any ticket, the back office can read **what each reconciliation run decided and why**, newest first, open to the whole back office | 536 (1) | |
+| D10 | For any ticket, the back office can read **what each reconciliation run decided and why**, newest first, open to the whole back office | 536 (1) | Follows D1: with view review. ADR-539 |
 | D11 | When a run **couldn't process** a ticket, the back office is told that it couldn't. The technical error text stays in the server's log | 536 (2) | |
-| D12 | The **held records, files set aside and quarantined records** are readable by every admin and manager/analyst | 526 (a) | |
+| D12 | The **held records, files set aside and quarantined records** are readable by every admin and manager/analyst | 526 (a) | Follows D1: with view review. ADR-539 |
 | D13 | **Reprocess** names just the tickets. A ticket locked as invoiced is left out and counted ("N queued, M locked left as they are"). Asking about a number that isn't a ticket is answered `NOT_A_TICKET` only for numbers a person typed. At most 100,000 tickets per request | 498, 499 | |
 | D14 | Review acts take **no new permission** (each uses the one it always had). "Not allowed" never says who does hold it. A note is up to **500** characters | 430…435 | |
 | D15 | A refused request says **which field** was wrong. A correction's answer doesn't wait for the re-run's results. An impossible fix to a back-office record is refused | 430…435 | |
@@ -77,7 +87,9 @@ An overturned row becomes its own task. Nothing changes until you answer.
 | D36 | A **monitor is created only from an enrolled phone, with the master passcode**; nobody ever types a Monitor ID | 436…442 | |
 | D37 | A phone's name is 1–80 characters | 436…442 | |
 | D38 | **An unplanned assignment** (set up on the phone with the master passcode): kept as the phone reported it; for a monitor only; on the phone's own day; the first report stands | 455…464 | |
-| D39 | A **move to another site and a switch of monitor** go through the same request. The server doesn't refuse a move to another project or other work (it flags, never blocks). **Two planned assignments for one phone at the same time**: the phone takes neither, and the monitor asks their supervisor | 455…464 | |
+| D39 | A **move to another site and a switch of monitor** go through the same request. The server doesn't refuse a move to another project or other work (it flags, never blocks). **Two planned assignments for one phone at the same time**: the phone takes neither, and the monitor asks their supervisor | 455…464 | Confirmed (your note): a move or setup under the passcode is never flagged. ADR-540 |
+*NOTE* through the same request...which requires the master passcode. There would be no reason to flag this move or setup on a user as the master passcode was used. 
+
 | D40 | A session under the passcode is marked as such; a **temporary one lasts to the day's end or 12 hours** | 455…464 | |
 | D41 | What setup by passcode offers: every open project, every monitor in service, only live sites and pay items; each read is logged as a use of the passcode | 455…464 | |
 | D42 | A **wrong password tried offline** never counts against the monitor on the server. A switch or session reported later signs out the earlier one | 455…464 | |
@@ -86,7 +98,7 @@ An overturned row becomes its own task. Nothing changes until you answer.
 | D45 | The **login list** (offline sign-in): only what the phone lacks, 50 at a time; the passcode's check always sent | 449…454 | |
 | D46 | A phone tells the server which passcode version and which lists it holds; a setup version is made only when the phone first gets something different | 471…475 | |
 | D47 | A **planned assignment** is for a monitor, admin or manager/analyst; never on a phone out of service; it can be changed or withdrawn while it stands. An unplanned one is shown, never changed | 423…429 | |
-| D48 | Dispatch takes the *dispatch* permission. Any admin or manager/analyst can read phones | 423…429 | |
+| D48 | Dispatch takes the *dispatch* permission. Any admin or manager/analyst can read phones | 423…429 | Follows D1: phones read with view dispatch. ADR-539 |
 
 ### 1d. Held records, turn-in and lost phones
 
@@ -133,7 +145,7 @@ An overturned row becomes its own task. Nothing changes until you answer.
 |---|---|---|---|
 | D76 | A right password with no two-step code is told "a code is needed"; a wrong code counts as a wrong try | 412 | |
 | D77 | **No admin clears their own authenticator** (another admin does). Setting one up ends the person's other sessions and must be finished in 10 minutes | 412 | |
-| D78 | **Only an admin manages people**; any admin or manager/analyst can read a person; no Monitor ID in the back office; an archived person's email can be used again | 412, 415 | |
+| D78 | **Only an admin manages people**; any admin or manager/analyst can read a person; no Monitor ID in the back office; an archived person's email can be used again | 412, 415 | Follows D1: a person read with view dispatch. ADR-539 |
 | D79 | `pnpm installer:admin` lets any admin back in (the way back if every admin is locked out) | 415 | |
 | D80 | A phone's key is **ECDSA P-256**; a sign-in challenge lasts 2 minutes and works once; a phone's token lasts **15 minutes**, one per sync | 436…442 | |
 | D81 | "Device key" and "Master passcode" appear in the audit log as actors that are no person. A failed phone proof is logged, not stored. A wrong passcode always gets the same one refusal | 436…442 | |

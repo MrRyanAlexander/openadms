@@ -265,7 +265,7 @@ export const p1Queued: Story = {
       'Dana grants Luis correct; at his browser he asks for 101001 and 101003 to be reprocessed: one job, naming the two',
     );
     const before = await concluded();
-    await backOffice.grantLuis('CORRECT');
+    await backOffice.grantLuis('CORRECT', 'VIEW_REVIEW');
     const first = await asks('101001', '101003');
     story.check('The job waits: no try yet, not finished, not set aside', await jobOf(first), {
       attempts: 0,

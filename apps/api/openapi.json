@@ -1037,7 +1037,10 @@
                           "UNLOCK_INVOICED",
                           "APPROVE_HOURS",
                           "SETUP",
-                          "DISPATCH"
+                          "DISPATCH",
+                          "VIEW_REVIEW",
+                          "VIEW_SETUP",
+                          "VIEW_DISPATCH"
                         ]
                       }
                     },
@@ -1087,6 +1090,7 @@
         "summary": "The firm’s people, a page at a time, in the order they were added or by name: those in service, or the archived ones, of one role, or those whose name holds what is searched. A monitor’s phone number is in an admin’s answer only.",
         "x-open-adms-access": "SIGNED_IN",
         "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "VIEW_DISPATCH",
         "parameters": [
           {
             "name": "role",
@@ -1237,7 +1241,10 @@
                                 "UNLOCK_INVOICED",
                                 "APPROVE_HOURS",
                                 "SETUP",
-                                "DISPATCH"
+                                "DISPATCH",
+                                "VIEW_REVIEW",
+                                "VIEW_SETUP",
+                                "VIEW_DISPATCH"
                               ]
                             }
                           },
@@ -1306,6 +1313,7 @@
         "summary": "One person, as an admin or a manager/analyst reads them. A monitor’s phone number is in an admin’s answer only.",
         "x-open-adms-access": "SIGNED_IN",
         "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "VIEW_DISPATCH",
         "parameters": [
           {
             "name": "userId",
@@ -1405,7 +1413,10 @@
                           "UNLOCK_INVOICED",
                           "APPROVE_HOURS",
                           "SETUP",
-                          "DISPATCH"
+                          "DISPATCH",
+                          "VIEW_REVIEW",
+                          "VIEW_SETUP",
+                          "VIEW_DISPATCH"
                         ]
                       }
                     },
@@ -1633,7 +1644,10 @@
                           "UNLOCK_INVOICED",
                           "APPROVE_HOURS",
                           "SETUP",
-                          "DISPATCH"
+                          "DISPATCH",
+                          "VIEW_REVIEW",
+                          "VIEW_SETUP",
+                          "VIEW_DISPATCH"
                         ]
                       }
                     },
@@ -1705,7 +1719,7 @@
                 "type": "object",
                 "properties": {
                   "permissions": {
-                    "maxItems": 10,
+                    "maxItems": 13,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -1719,7 +1733,10 @@
                         "UNLOCK_INVOICED",
                         "APPROVE_HOURS",
                         "SETUP",
-                        "DISPATCH"
+                        "DISPATCH",
+                        "VIEW_REVIEW",
+                        "VIEW_SETUP",
+                        "VIEW_DISPATCH"
                       ]
                     }
                   }
@@ -1817,7 +1834,10 @@
                           "UNLOCK_INVOICED",
                           "APPROVE_HOURS",
                           "SETUP",
-                          "DISPATCH"
+                          "DISPATCH",
+                          "VIEW_REVIEW",
+                          "VIEW_SETUP",
+                          "VIEW_DISPATCH"
                         ]
                       }
                     },
@@ -1991,7 +2011,10 @@
                           "UNLOCK_INVOICED",
                           "APPROVE_HOURS",
                           "SETUP",
-                          "DISPATCH"
+                          "DISPATCH",
+                          "VIEW_REVIEW",
+                          "VIEW_SETUP",
+                          "VIEW_DISPATCH"
                         ]
                       }
                     },
@@ -2266,7 +2289,10 @@
                           "UNLOCK_INVOICED",
                           "APPROVE_HOURS",
                           "SETUP",
-                          "DISPATCH"
+                          "DISPATCH",
+                          "VIEW_REVIEW",
+                          "VIEW_SETUP",
+                          "VIEW_DISPATCH"
                         ]
                       }
                     },
@@ -2435,7 +2461,10 @@
                           "UNLOCK_INVOICED",
                           "APPROVE_HOURS",
                           "SETUP",
-                          "DISPATCH"
+                          "DISPATCH",
+                          "VIEW_REVIEW",
+                          "VIEW_SETUP",
+                          "VIEW_DISPATCH"
                         ]
                       }
                     },
@@ -2586,7 +2615,10 @@
                           "UNLOCK_INVOICED",
                           "APPROVE_HOURS",
                           "SETUP",
-                          "DISPATCH"
+                          "DISPATCH",
+                          "VIEW_REVIEW",
+                          "VIEW_SETUP",
+                          "VIEW_DISPATCH"
                         ]
                       }
                     },
@@ -4328,6 +4360,7 @@
         "summary": "The review queue of one workflow on a project: the tickets whose field events stand pending or in review, a page at a time by number, each with its open flags (not cleared, no acceptance in force); and the project’s open flags counted by cause. Narrowed to one cause, only the tickets with an open flag of it.",
         "x-open-adms-access": "SIGNED_IN",
         "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "VIEW_REVIEW",
         "parameters": [
           {
             "name": "projectId",
@@ -4733,6 +4766,7 @@
         "summary": "A project’s flags, a page at a time, oldest first: on a ticket or on another record (a certification, a site, a survey), of one cause or every one, open or cleared, each with every acceptance it had and whether it was taken back.",
         "x-open-adms-access": "SIGNED_IN",
         "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "VIEW_REVIEW",
         "parameters": [
           {
             "name": "projectId",
@@ -5220,6 +5254,7 @@
         "summary": "One ticket whole, as the back office reads it: its field events in field time (as recorded and corrected, with their status, zone and worked-out pay item), the completed record that stands with its collection rows, its lines with their rates and amounts, its flags with their acceptances, its QC mark, every lock it had, its voids and unvoids. A ticket with no field event is not found.",
         "x-open-adms-access": "SIGNED_IN",
         "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "VIEW_REVIEW",
         "parameters": [
           {
             "name": "projectId",
@@ -6788,6 +6823,7 @@
         "summary": "What each reconciliation run decided for one ticket and why, newest first, a page at a time: the run (what started it, when), the status it left, its words, the field events it grouped and the kinds still to arrive, the lines it priced with the rule that made each, the flags it raised, and the rule or person that voided it; whether the ticket could be processed. A ticket with no field event is not found.",
         "x-open-adms-access": "SIGNED_IN",
         "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "VIEW_REVIEW",
         "parameters": [
           {
             "name": "projectId",
@@ -10885,6 +10921,7 @@
         "summary": "A project’s forms, one for each document type at most: each with its debris types’ entries (those archived kept, marked) and the newest version of its own fields.",
         "x-open-adms-access": "SIGNED_IN",
         "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "VIEW_SETUP",
         "parameters": [
           {
             "name": "projectId",
@@ -12004,6 +12041,7 @@
         "summary": "A project’s pay items, a page at a time, by code: each as the firm entered it, with its crew day’s steps in force. Never a rate: a pay item’s rates are a read that takes Setup.",
         "x-open-adms-access": "SIGNED_IN",
         "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "VIEW_SETUP",
         "parameters": [
           {
             "name": "projectId",
@@ -14304,6 +14342,7 @@
         "summary": "A project’s rules, a page at a time, in the order written: each whole as the rule builder states it (each picked value with its name and whether it is gone), the pay item whose \"Pays when\" wrote it, and whether it is valid now and why not.",
         "x-open-adms-access": "SIGNED_IN",
         "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "VIEW_SETUP",
         "parameters": [
           {
             "name": "projectId",
@@ -15744,6 +15783,7 @@
         "summary": "A project’s sites, a page at a time, in name order: each with its labels, its tipping fee links and its own shape’s newest version.",
         "x-open-adms-access": "SIGNED_IN",
         "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "VIEW_SETUP",
         "parameters": [
           {
             "name": "projectId",
@@ -16793,6 +16833,7 @@
         "summary": "A site’s own shape, every version, newest first: each with its shape, how it came (drawn, a file, an Esri layer), its file’s name or the layer’s address, and whether its file was kept. Never where.",
         "x-open-adms-access": "SIGNED_IN",
         "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "VIEW_SETUP",
         "parameters": [
           {
             "name": "siteId",
@@ -17142,6 +17183,7 @@
         "summary": "The file a site’s shape version was loaded from, as it was kept: the bytes that were stored, under the type they were kept as, sent as a download and never as a page. None for a shape that was drawn.",
         "x-open-adms-access": "SIGNED_IN",
         "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "VIEW_SETUP",
         "parameters": [
           {
             "name": "siteAreaVersionId",
@@ -17466,6 +17508,7 @@
         "summary": "A project’s map versions, a page at a time, newest first: each with how it came, its file’s name or the layer’s address, the zones’ own layer and whether its copy was kept, and its zones’ names.",
         "x-open-adms-access": "SIGNED_IN",
         "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "VIEW_SETUP",
         "parameters": [
           {
             "name": "projectId",
@@ -17851,6 +17894,7 @@
         "summary": "One map version with its boundary and each zone’s shape, as they were loaded.",
         "x-open-adms-access": "SIGNED_IN",
         "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "VIEW_SETUP",
         "parameters": [
           {
             "name": "mapVersionId",
@@ -18030,6 +18074,7 @@
         "summary": "A map version’s file as it was kept, or the copy of its zones’ own Esri layer: the bytes that were stored, under the type they were kept as, sent as a download and never as a page.",
         "x-open-adms-access": "SIGNED_IN",
         "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "VIEW_SETUP",
         "parameters": [
           {
             "name": "mapVersionId",
@@ -19165,6 +19210,7 @@
         "summary": "The setup check: everything a project’s setup leaves open, in plain words; none when it is whole. It lists and never refuses.",
         "x-open-adms-access": "SIGNED_IN",
         "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "VIEW_SETUP",
         "parameters": [
           {
             "name": "projectId",
@@ -19305,6 +19351,7 @@
         "summary": "What each site’s phones ask for: the load call, the scale weight, a count of the items carried or nothing more, for each site, debris type and prime. Worked out from the setup as it stands.",
         "x-open-adms-access": "SIGNED_IN",
         "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "VIEW_SETUP",
         "parameters": [
           {
             "name": "projectId",
@@ -19384,6 +19431,7 @@
         "summary": "What one site’s phones ask for: its rows of the project’s quantity lookup, worked out from the setup as it stands; or, asked with a setup version, as its phones held them under that version, for the debris types phones are shown. No such version of its project: not found.",
         "x-open-adms-access": "SIGNED_IN",
         "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "VIEW_SETUP",
         "parameters": [
           {
             "name": "siteId",
@@ -19783,6 +19831,7 @@
         "summary": "The firm’s phones, a page at a time, in the order they were enrolled: those in service, or those taken out of it. Each says which version of the master passcode’s check it holds, when it was marked lost or retired and why, and which revoked its key.",
         "x-open-adms-access": "SIGNED_IN",
         "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "VIEW_DISPATCH",
         "parameters": [
           {
             "name": "outOfService",
@@ -19969,6 +20018,7 @@
         "summary": "A phone’s sessions, a page at a time, newest first: whose, when made, until when and whether ended, which way one opened under the master passcode was, and whether it came from a sign-in made on the phone offline. Never a token.",
         "x-open-adms-access": "SIGNED_IN",
         "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "VIEW_DISPATCH",
         "parameters": [
           {
             "name": "deviceId",
@@ -24728,6 +24778,7 @@
         "summary": "One project’s dispatch board for one day, a page at a time, in the order the assignments were written: those that stand, or the withdrawn ones. One made on a phone under the master passcode is among them, marked unplanned.",
         "x-open-adms-access": "SIGNED_IN",
         "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "VIEW_DISPATCH",
         "parameters": [
           {
             "name": "projectId",
@@ -26285,6 +26336,7 @@
         "summary": "The dispatch board searched: a person’s or a phone’s assignments (or a project’s), from one day to another (62 days at most), standing or withdrawn, a page at a time by day and then in the order written; each with what the board warns of beside it (a second assignment for the person or the phone that day, a day outside the project’s active window, a closed project, unit rate pay items named with no unit rate work, a site not yet active or closed). A warning never stops anything.",
         "x-open-adms-access": "SIGNED_IN",
         "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "VIEW_DISPATCH",
         "parameters": [
           {
             "name": "userId",
@@ -28071,6 +28123,7 @@
         "summary": "A project’s invoice batches, a page at a time, in name order: each with how many locks in force it holds.",
         "x-open-adms-access": "SIGNED_IN",
         "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "VIEW_REVIEW",
         "parameters": [
           {
             "name": "projectId",
@@ -28344,6 +28397,7 @@
         "summary": "One invoice batch and what it holds: each lock in force that names it, with the ticket it locks. No amount: a batch is a name and its tickets.",
         "x-open-adms-access": "SIGNED_IN",
         "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "VIEW_REVIEW",
         "parameters": [
           {
             "name": "invoiceBatchId",
@@ -29937,6 +29991,7 @@
         "summary": "One field event as recorded and corrected, with its status, its item lines and the tickets it carries (those taken off kept, marked), its photographs’ records (each with its view, when it was taken and when its file reached storage) and the scale receipt it names. Never where a file is kept.",
         "x-open-adms-access": "SIGNED_IN",
         "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "VIEW_REVIEW",
         "parameters": [
           {
             "name": "fieldEventId",
@@ -32696,6 +32751,7 @@
         "summary": "A photograph’s file as it was kept: the photograph itself or the depth file beside it, the bytes that were stored, under the type their own first bytes said, sent as a download and never as a page. A photograph removed from the record is read all the same. One whose file hasn’t arrived, or that has no depth file, is not found.",
         "x-open-adms-access": "SIGNED_IN",
         "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "VIEW_REVIEW",
         "parameters": [
           {
             "name": "photoId",
@@ -33075,6 +33131,7 @@
         "summary": "One scale receipt as the tower copied it, with its photographs’ records and the field events that name it.",
         "x-open-adms-access": "SIGNED_IN",
         "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "VIEW_REVIEW",
         "parameters": [
           {
             "name": "scaleReceiptId",
@@ -35721,6 +35778,7 @@
         "summary": "What a phone sent that the server couldn’t save, held for a person, a page at a time, oldest first: by project (as sent) or by phone, waiting or resolved. Each exactly as sent, with what it was sent as, why it is held, the words its phone was told, the photographs kept with it and how it was resolved.",
         "x-open-adms-access": "SIGNED_IN",
         "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "VIEW_REVIEW",
         "parameters": [
           {
             "name": "projectId",
@@ -38516,6 +38574,7 @@
         "summary": "The files a phone uploaded for a photograph that weren’t the file it fingerprinted, a page at a time, oldest first: by project or by phone, waiting or resolved. Each beside its photograph (what it belongs to, the fingerprint its phone gave and whether that file has been kept since), with what arrived and how it was resolved. Never where either is kept.",
         "x-open-adms-access": "SIGNED_IN",
         "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "VIEW_REVIEW",
         "parameters": [
           {
             "name": "projectId",
@@ -38743,6 +38802,7 @@
         "summary": "A file set aside, as it was kept: the bytes that were stored, under the type their own first bytes said, sent as a download and never as a page.",
         "x-open-adms-access": "SIGNED_IN",
         "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "VIEW_REVIEW",
         "parameters": [
           {
             "name": "setAsideFileId",
@@ -39047,6 +39107,7 @@
         "summary": "The records a phone sent whose number another record holds, a page at a time, oldest first: by project or by phone, waiting or resolved. Each with what the phone sent, its phone and monitor, why, the record that holds its number and how it was resolved.",
         "x-open-adms-access": "SIGNED_IN",
         "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "VIEW_REVIEW",
         "parameters": [
           {
             "name": "projectId",
@@ -40635,6 +40696,7 @@
         "summary": "A project’s ROEs, a page at a time, in the order they were made: each with its scope, its photographs’ records and its QC mark.",
         "x-open-adms-access": "SIGNED_IN",
         "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "VIEW_REVIEW",
         "parameters": [
           {
             "name": "projectId",
@@ -41629,6 +41691,7 @@
         "summary": "A project’s surveys, a page at a time, in the order they were made: each with its own flags, its photographs’ records and its QC mark.",
         "x-open-adms-access": "SIGNED_IN",
         "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "VIEW_REVIEW",
         "parameters": [
           {
             "name": "projectId",
@@ -42868,6 +42931,7 @@
         "summary": "A project’s incidents, a page at a time, in the order they were made: each with its photographs’ records and its QC mark.",
         "x-open-adms-access": "SIGNED_IN",
         "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "VIEW_REVIEW",
         "parameters": [
           {
             "name": "projectId",
@@ -43962,6 +44026,7 @@
         "summary": "A project’s citizen drop-off logs, a page at a time, in the order they were made: each with its photographs’ records and its QC mark.",
         "x-open-adms-access": "SIGNED_IN",
         "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "VIEW_REVIEW",
         "parameters": [
           {
             "name": "projectId",
@@ -44863,6 +44928,7 @@
         "summary": "A project’s certifications, a page at a time, by cert number as written: each whole, with its boxes, helpers, photographs’ records, QC mark and its own flags, where it came from (its phone, or the paper sheet with who entered it and why) and any revocation.",
         "x-open-adms-access": "SIGNED_IN",
         "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "VIEW_REVIEW",
         "parameters": [
           {
             "name": "projectId",
@@ -46849,6 +46915,7 @@
         "summary": "One certification whole: its boxes (those taken off kept, marked), helpers, photographs’ records, QC mark and its own flags, where it came from and any revocation. Never the driver’s phone or licence number.",
         "x-open-adms-access": "SIGNED_IN",
         "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "VIEW_REVIEW",
         "parameters": [
           {
             "name": "certificationId",

@@ -525,7 +525,7 @@ export const p1LeftOut: Story = {
       'Dana gives Luis the grant to correct. Sam Grant says the second pile was 60% so far, not 30: Luis corrects pile -B’s call at his browser, which queues its job; the worker runs',
     );
     const backOffice = p1BackOffice(story, office);
-    await backOffice.grantLuis('CORRECT');
+    await backOffice.grantLuis('CORRECT', 'VIEW_REVIEW');
     const pileB = await api.fieldEvent.findFirstOrThrow({
       where: { projectId: p1, ticketNumber: '201006', splitSuffix: 'B' },
     });

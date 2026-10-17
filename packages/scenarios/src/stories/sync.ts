@@ -123,6 +123,7 @@ export const sync: Story = {
       const luis = await tx.user.create({ data: { name: 'Luis Ortega', role: 'MANAGER_ANALYST' } });
       // Luis writes the board and marks a phone lost: Dana grants him *dispatch* (ADR-428).
       await tx.userPermission.create({ data: { userId: luis.id, permission: 'DISPATCH' } });
+      await tx.userPermission.create({ data: { userId: luis.id, permission: 'VIEW_DISPATCH' } });
       const p1 = await setUpP1(tx, story.policy);
       const { tdsr, landfill } = await setUpP1Sites(tx, p1.project);
       const ppdr = await tx.programType.findFirstOrThrow({ where: { name: 'PPDR' } });

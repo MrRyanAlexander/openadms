@@ -328,14 +328,14 @@ export const p1Voided: Story = {
       ['403 NOT_ALLOWED', '403 NOT_ALLOWED', '403 NOT_ALLOWED', [0, 0]],
     );
     story.at(on('14', '07:45'), 'Dana grants Luis correct and renumber');
-    await backOffice.grantLuis('CORRECT', 'RENUMBER');
+    await backOffice.grantLuis('CORRECT', 'RENUMBER', 'VIEW_REVIEW');
     story.check(
       'AC-08-05 accept flags is a grant of its own: granted correct alone, Luis still can’t accept a flag (the user, 2026-10-06, KD-74)',
       [await refusal(acceptFlagEndpoint, accepting(high96.id, photosConfirm)), await marks()],
       ['403 NOT_ALLOWED', [0, 0]],
     );
     story.at(on('14', '07:50'), 'Dana grants Luis void and accept flags');
-    await backOffice.grantLuis('VOID', 'ACCEPT_FLAG');
+    await backOffice.grantLuis('VOID', 'ACCEPT_FLAG', 'VIEW_REVIEW');
 
     // ------------------------------------------------------------------------------------------
     story.at(

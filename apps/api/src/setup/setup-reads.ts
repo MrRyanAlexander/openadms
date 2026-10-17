@@ -1,10 +1,11 @@
 // Setup as the back office reads it (spec/parts/01-setup.md; REQ-217; BACKLOG 2.8.8, C99, C100,
 // C169; ADR-229, 316, 357, 485, 527, 529, 535 (2)). OWASP API1, API3, API4; ASVS V8, 3.2.1, V5.4.
 //
-// - **Open to every admin and manager/analyst in service** (a reviewer correcting a field event
-//   reads what its pay item, site or debris type is), asked again inside the read. **A pay item's
-//   rates are a read of their own, which takes Setup** (an admin, or a manager/analyst who holds it
-//   now): the domain's `SetupRights`, asked here as a setup save asks it.
+// - **Open to an admin, and to a manager/analyst granted "view setup"** (the user, ADR-539); the
+//   projects and the lists' values to every admin and manager/analyst in service. Asked again
+//   inside the read. **A pay item's rates are a read of their own, which takes Setup** (an admin,
+//   or a manager/analyst who holds it now, with "view setup" beside it): the domain's
+//   `SetupRights`, asked here as a setup save asks it.
 // - **Each list is a page**, in the order its screen reads it (a name, a code, a list's own
 //   order, a version newest first); one row more is read to know whether another follows.
 // - **A rule is read as the worker runs it** (packages/db's `RuleRows`), whole, with "Is valid"
@@ -143,7 +144,7 @@ export class SetupReads {
     page: PageAsked & { readonly closed?: boolean | undefined },
   ): Promise<ProjectsAnswer> {
     return this.db.$read(async (tx) => {
-      await backOfficeReader(tx, readerId);
+      await backOfficeReader(tx, readerId, null);
       const rows = await tx.project.findMany({
         where: page.closed === undefined ? {} : { closedAt: page.closed ? { not: null } : null },
         orderBy: [{ name: 'asc' }, { id: 'asc' }],
@@ -157,7 +158,7 @@ export class SetupReads {
   // One project's page: its record, kinds of work, contractors' places by name and contracts.
   project(readerId: string, projectId: string): Promise<ProjectAnswer> {
     return this.db.$read(async (tx) => {
-      await backOfficeReader(tx, readerId);
+      await backOfficeReader(tx, readerId, null);
       const project = await tx.project.findUnique({
         where: { id: projectId },
         include: {
@@ -183,7 +184,7 @@ export class SetupReads {
   // A project's forms, each with its debris types' entries and its fields' newest version.
   forms(readerId: string, projectId: string): Promise<FormsAnswer> {
     return this.db.$read(async (tx) => {
-      await backOfficeReader(tx, readerId);
+      await backOfficeReader(tx, readerId, 'VIEW_SETUP');
       await SetupReads.projectIn(tx, projectId);
       const forms = await tx.form.findMany({
         where: { projectId },
@@ -209,7 +210,7 @@ export class SetupReads {
   // A project's pay items by code, each with its crew day's steps in force: never a rate.
   payItems(readerId: string, projectId: string, page: PageAsked): Promise<PayItemsAnswer> {
     return this.db.$read(async (tx) => {
-      await backOfficeReader(tx, readerId);
+      await backOfficeReader(tx, readerId, 'VIEW_SETUP');
       await SetupReads.projectIn(tx, projectId);
       const rows = await tx.payItem.findMany({
         where: { projectId },
@@ -252,7 +253,7 @@ export class SetupReads {
     page: PageAsked & { readonly archived?: boolean | undefined },
   ): Promise<RulesAnswer> {
     return this.db.$read(async (tx) => {
-      await backOfficeReader(tx, readerId);
+      await backOfficeReader(tx, readerId, 'VIEW_SETUP');
       await SetupReads.projectIn(tx, projectId);
       const ids = await tx.rule.findMany({
         where: {
@@ -315,7 +316,7 @@ export class SetupReads {
   // A project's sites in name order, each with its labels, fee links and newest shape.
   sites(readerId: string, projectId: string, page: PageAsked): Promise<SitesAnswer> {
     return this.db.$read(async (tx) => {
-      await backOfficeReader(tx, readerId);
+      await backOfficeReader(tx, readerId, 'VIEW_SETUP');
       await SetupReads.projectIn(tx, projectId);
       const rows = await tx.disposalSite.findMany({
         where: { projectId },
@@ -346,7 +347,7 @@ export class SetupReads {
   // A site's shape versions, newest first, each with its shape.
   siteShapes(readerId: string, siteId: string, page: PageAsked): Promise<SiteShapeVersionsAnswer> {
     return this.db.$read(async (tx) => {
-      await backOfficeReader(tx, readerId);
+      await backOfficeReader(tx, readerId, 'VIEW_SETUP');
       const site = await tx.disposalSite.findUnique({
         where: { id: siteId },
         select: { id: true },
@@ -371,7 +372,7 @@ export class SetupReads {
   // A project's map versions, newest first, each with its zones' names.
   mapVersions(readerId: string, projectId: string, page: PageAsked): Promise<MapVersionsAnswer> {
     return this.db.$read(async (tx) => {
-      await backOfficeReader(tx, readerId);
+      await backOfficeReader(tx, readerId, 'VIEW_SETUP');
       await SetupReads.projectIn(tx, projectId);
       const rows = await tx.mapVersion.findMany({
         where: { projectId },
@@ -387,7 +388,7 @@ export class SetupReads {
   // One map version with its boundary and its zones' shapes.
   mapVersion(readerId: string, mapVersionId: string): Promise<MapVersionAnswer> {
     return this.db.$read(async (tx) => {
-      await backOfficeReader(tx, readerId);
+      await backOfficeReader(tx, readerId, 'VIEW_SETUP');
       const version = await tx.mapVersion.findUnique({
         where: { id: mapVersionId },
         include: { zones: { orderBy: { name: 'asc' } } },
@@ -413,7 +414,7 @@ export class SetupReads {
     page: PageAsked & { readonly archived?: boolean | undefined },
   ): Promise<ListValuesAnswer> {
     return this.db.$read(async (tx) => {
-      await backOfficeReader(tx, readerId);
+      await backOfficeReader(tx, readerId, null);
       const table = tables[list](tx) as ListTable;
       const rows = await table.findMany({
         where: { archivedAt: page.archived === true ? { not: null } : null },
@@ -428,7 +429,7 @@ export class SetupReads {
   // The file a site's shape version was loaded from, as it was kept.
   async siteShapeFile(readerId: string, siteAreaVersionId: string): Promise<KeptMapFile> {
     const place = await this.db.$read(async (tx) => {
-      await backOfficeReader(tx, readerId);
+      await backOfficeReader(tx, readerId, 'VIEW_SETUP');
       const version = await tx.siteAreaVersion.findUnique({
         where: { id: siteAreaVersionId },
         select: { uploadedFileKey: true },
@@ -446,7 +447,7 @@ export class SetupReads {
     file: 'map' | 'zones',
   ): Promise<KeptMapFile> {
     const place = await this.db.$read(async (tx) => {
-      await backOfficeReader(tx, readerId);
+      await backOfficeReader(tx, readerId, 'VIEW_SETUP');
       const version = await tx.mapVersion.findUnique({
         where: { id: mapVersionId },
         select: { uploadedFileKey: true, zonesFileKey: true },

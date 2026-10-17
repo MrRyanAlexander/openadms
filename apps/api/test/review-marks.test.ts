@@ -191,7 +191,7 @@ describe('who may ask', () => {
         refusal: {
           code: 'NOT_PERMITTED',
           message:
-            'Luis Ortega may not void or unvoid a ticket: it takes an admin, or a manager/analyst granted "void". Nothing was changed.',
+            'Luis Ortega may not void or unvoid a ticket: it takes an admin, or a manager/analyst granted "void" and "view review". Nothing was changed.',
         },
       });
       expect(await tx.ticketVoid.count()).toBe(0);

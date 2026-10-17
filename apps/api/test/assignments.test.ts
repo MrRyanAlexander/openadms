@@ -116,12 +116,12 @@ const noWork = {
 const assignmentsOn = (tx: Tx, projectId: string) => tx.assignment.count({ where: { projectId } });
 
 describe('who may ask', () => {
-  it('AC-10-27 a day’s board is read by the back office; an assignment is written, changed and withdrawn by an admin or a manager/analyst who holds Dispatch', () => {
+  it('AC-10-27 a day’s board is read by an admin or a manager/analyst let see dispatch; an assignment is written, changed and withdrawn by an admin or a manager/analyst who holds Dispatch', () => {
     const asked = (name: string) => {
       const { access, roles, permission } = endpoints.find((one) => one.name === name) ?? {};
       return [access, roles, permission];
     };
-    expect(asked('listAssignments')).toEqual(['SIGNED_IN', backOfficeRoles, undefined]);
+    expect(asked('listAssignments')).toEqual(['SIGNED_IN', backOfficeRoles, 'VIEW_DISPATCH']);
     for (const name of [
       'writeAssignment',
       'changeAssignment',
@@ -233,7 +233,7 @@ describe('who may ask', () => {
       }
       const luis = await service.withdraw(who.luis, kims.id);
       expect(luis.saved ? '' : luis.refusal.message).toBe(
-        'Luis Ortega may not dispatch: it takes an admin, or a manager/analyst granted "dispatch". Nothing was changed.',
+        'Luis Ortega may not dispatch: it takes an admin, or a manager/analyst granted "dispatch" and "view dispatch". Nothing was changed.',
       );
       const kept = await tx.assignment.findMany({ where: { projectId: p1.project.id } });
       expect(kept.map(({ id, certifying, archivedAt }) => [id, certifying, archivedAt])).toEqual([

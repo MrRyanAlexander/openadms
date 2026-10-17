@@ -646,6 +646,7 @@ export const readPersonEndpoint = endpoint({
     'One person, as an admin or a manager/analyst reads them. A monitor’s phone number is in an admin’s answer only.',
   access: 'SIGNED_IN',
   roles: backOfficeRoles,
+  permission: 'VIEW_DISPATCH',
   method: 'GET',
   path: '/people/:userId',
   params: personId,
@@ -734,6 +735,7 @@ export const listPeopleEndpoint = endpoint({
     'The firm’s people, a page at a time, in the order they were added or by name: those in service, or the archived ones, of one role, or those whose name holds what is searched. A monitor’s phone number is in an admin’s answer only.',
   access: 'SIGNED_IN',
   roles: backOfficeRoles,
+  permission: 'VIEW_DISPATCH',
   method: 'GET',
   path: '/people',
   query: z.strictObject({
@@ -1847,13 +1849,13 @@ export const addSiteShapeFromEsriEndpoint = endpoint({
 });
 
 // The setup as it stands (AC-01-69…77; ADR-229, 423, 426): the setup check and what each site's
-// phones ask for. They read and change nothing, and hold no rate: **open to every admin and
-// manager/analyst, whether or not they hold Setup**, since whoever reviews a ticket that paid
-// nothing needs the list that says why.
+// phones ask for. They read and change nothing, and hold no rate: open to an admin and to a
+// manager/analyst granted "view setup", whether or not they hold Setup (the user, ADR-539).
 const standing = { access: 'SIGNED_IN', roles: backOfficeRoles } as const;
 
 export const setupCheckEndpoint = endpoint({
   ...standing,
+  permission: 'VIEW_SETUP',
   name: 'setupCheck',
   summary:
     'The setup check: everything a project’s setup leaves open, in plain words; none when it is whole. It lists and never refuses.',
@@ -1865,6 +1867,7 @@ export const setupCheckEndpoint = endpoint({
 
 export const quantityLookupEndpoint = endpoint({
   ...standing,
+  permission: 'VIEW_SETUP',
   name: 'quantityLookup',
   summary:
     'What each site’s phones ask for: the load call, the scale weight, a count of the items carried or nothing more, for each site, debris type and prime. Worked out from the setup as it stands.',
@@ -1876,6 +1879,7 @@ export const quantityLookupEndpoint = endpoint({
 
 export const siteQuantityLookupEndpoint = endpoint({
   ...standing,
+  permission: 'VIEW_SETUP',
   name: 'siteQuantityLookup',
   summary:
     'What one site’s phones ask for: its rows of the project’s quantity lookup, worked out from the setup as it stands; or, asked with a setup version, as its phones held them under that version, for the debris types phones are shown. No such version of its project: not found.',
@@ -1996,6 +2000,7 @@ export const listPhonesEndpoint = endpoint({
     'The firm’s phones, a page at a time, in the order they were enrolled: those in service, or those taken out of it. Each says which version of the master passcode’s check it holds, when it was marked lost or retired and why, and which revoked its key.',
   access: 'SIGNED_IN',
   roles: backOfficeRoles,
+  permission: 'VIEW_DISPATCH',
   method: 'GET',
   path: '/phones',
   query: z.strictObject({
@@ -2405,6 +2410,7 @@ export const listAssignmentsEndpoint = endpoint({
     'One project’s dispatch board for one day, a page at a time, in the order the assignments were written: those that stand, or the withdrawn ones. One made on a phone under the master passcode is among them, marked unplanned.',
   access: 'SIGNED_IN',
   roles: backOfficeRoles,
+  permission: 'VIEW_DISPATCH',
   method: 'GET',
   path: '/projects/:projectId/assignments',
   params: projectId,
@@ -2946,9 +2952,8 @@ export const markPhotographEndpoint = endpoint({
 });
 
 // A photograph's file, read by the back office (ARCHITECTURE §6 "Uploads"; AC-10-48; T-25;
-// ADR-482 (10), 483). **Open to every admin and manager/analyst, whether or not they hold a
-// permission**, as the setup check is: the back office sees everything, and a reviewer reads a
-// photograph to review its ticket. What OWASP ASVS 5.0 asks of a file handed back, and how the
+// ADR-482 (10), 483). **Open to an admin and to a manager/analyst granted "view review"**
+// (ADR-539): a reviewer reads a photograph to review its ticket. What OWASP ASVS 5.0 asks of a file handed back, and how the
 // API meets it: the bytes that were stored and nothing made of them; the type they were kept
 // under, which their own first bytes said; `X-Content-Type-Options: nosniff`, so no browser
 // guesses another; `Content-Disposition: attachment`, with a name the server makes and never the
@@ -2959,6 +2964,7 @@ export const photographFileEndpoint = endpoint({
   summary:
     'A photograph’s file as it was kept: the photograph itself or the depth file beside it, the bytes that were stored, under the type their own first bytes said, sent as a download and never as a page. A photograph removed from the record is read all the same. One whose file hasn’t arrived, or that has no depth file, is not found.',
   ...reviewer,
+  permission: 'VIEW_REVIEW',
   method: 'GET',
   path: '/photographs/:photoId/files/:file',
   params: photoFileNamed,
@@ -3257,6 +3263,7 @@ export const listHeldRecordsEndpoint = endpoint({
   summary:
     'What a phone sent that the server couldn’t save, held for a person, a page at a time, oldest first: by project (as sent) or by phone, waiting or resolved. Each exactly as sent, with what it was sent as, why it is held, the words its phone was told, the photographs kept with it and how it was resolved.',
   ...reviewer,
+  permission: 'VIEW_REVIEW',
   method: 'GET',
   path: '/held-records',
   query: waitingQuery,
@@ -3294,6 +3301,7 @@ export const listSetAsideFilesEndpoint = endpoint({
   summary:
     'The files a phone uploaded for a photograph that weren’t the file it fingerprinted, a page at a time, oldest first: by project or by phone, waiting or resolved. Each beside its photograph (what it belongs to, the fingerprint its phone gave and whether that file has been kept since), with what arrived and how it was resolved. Never where either is kept.',
   ...reviewer,
+  permission: 'VIEW_REVIEW',
   method: 'GET',
   path: '/set-aside-files',
   query: waitingQuery,
@@ -3307,6 +3315,7 @@ export const setAsideFileEndpoint = endpoint({
   summary:
     'A file set aside, as it was kept: the bytes that were stored, under the type their own first bytes said, sent as a download and never as a page.',
   ...reviewer,
+  permission: 'VIEW_REVIEW',
   method: 'GET',
   path: '/set-aside-files/:setAsideFileId/file',
   params: setAsideFileId,
@@ -3332,6 +3341,7 @@ export const listQuarantinedRecordsEndpoint = endpoint({
   summary:
     'The records a phone sent whose number another record holds, a page at a time, oldest first: by project or by phone, waiting or resolved. Each with what the phone sent, its phone and monitor, why, the record that holds its number and how it was resolved.',
   ...reviewer,
+  permission: 'VIEW_REVIEW',
   method: 'GET',
   path: '/quarantined-records',
   query: waitingQuery,
@@ -3700,9 +3710,10 @@ export const createCertificationEndpoint = endpoint({
 
 // ---------------------------------------------------------------------------------------------
 // The back office's reads, setup's reads, a save's preview, the bulk acts and the viewers' reads of
-// the same records (REQ-217; BACKLOG 2.8.8; ADR-535). **A read is open to every admin and
-// manager/analyst in service, whatever they hold** (the back office sees everything, ADR-224),
-// asked again inside the read; a pay item's rates take Setup. Every list is a page, oldest first
+// the same records (REQ-217; BACKLOG 2.8.8; ADR-535). **A read takes its area's view** (the user,
+// ADR-539): `VIEW_REVIEW`, `VIEW_SETUP` or `VIEW_DISPATCH`, which an admin holds and a
+// manager/analyst is granted; the projects and the lists' values are every one of theirs to read.
+// Asked again inside the read; a pay item's rates take Setup. Every list is a page, oldest first
 // or in the order it names, 50 where none is said and 200 at most.
 const readPage = z
   .string()
@@ -3751,6 +3762,7 @@ export const readProjectEndpoint = endpoint({
 // the tickets waiting for a person, one workflow a page, by number as text.
 export const reviewQueueEndpoint = endpoint({
   ...read,
+  permission: 'VIEW_REVIEW',
   name: 'reviewQueue',
   summary:
     'The review queue of one workflow on a project: the tickets whose field events stand pending or in review, a page at a time by number, each with its open flags (not cleared, no acceptance in force); and the project’s open flags counted by cause. Narrowed to one cause, only the tickets with an open flag of it.',
@@ -3770,6 +3782,7 @@ export const reviewQueueEndpoint = endpoint({
 
 export const listFlagsEndpoint = endpoint({
   ...read,
+  permission: 'VIEW_REVIEW',
   name: 'listFlags',
   summary:
     'A project’s flags, a page at a time, oldest first: on a ticket or on another record (a certification, a site, a survey), of one cause or every one, open or cleared, each with every acceptance it had and whether it was taken back.',
@@ -3789,6 +3802,7 @@ export const listFlagsEndpoint = endpoint({
 
 export const readTicketEndpoint = endpoint({
   ...read,
+  permission: 'VIEW_REVIEW',
   name: 'readTicket',
   summary:
     'One ticket whole, as the back office reads it: its field events in field time (as recorded and corrected, with their status, zone and worked-out pay item), the completed record that stands with its collection rows, its lines with their rates and amounts, its flags with their acceptances, its QC mark, every lock it had, its voids and unvoids. A ticket with no field event is not found.',
@@ -3800,6 +3814,7 @@ export const readTicketEndpoint = endpoint({
 
 export const readTicketDecisionsEndpoint = endpoint({
   ...read,
+  permission: 'VIEW_REVIEW',
   name: 'readTicketDecisions',
   summary:
     'What each reconciliation run decided for one ticket and why, newest first, a page at a time: the run (what started it, when), the status it left, its words, the field events it grouped and the kinds still to arrive, the lines it priced with the rule that made each, the flags it raised, and the rule or person that voided it; whether the ticket could be processed. A ticket with no field event is not found.',
@@ -3812,6 +3827,7 @@ export const readTicketDecisionsEndpoint = endpoint({
 
 export const readFieldEventEndpoint = endpoint({
   ...read,
+  permission: 'VIEW_REVIEW',
   name: 'readFieldEvent',
   summary:
     'One field event as recorded and corrected, with its status, its item lines and the tickets it carries (those taken off kept, marked), its photographs’ records (each with its view, when it was taken and when its file reached storage) and the scale receipt it names. Never where a file is kept.',
@@ -3823,6 +3839,7 @@ export const readFieldEventEndpoint = endpoint({
 
 export const readScaleReceiptEndpoint = endpoint({
   ...read,
+  permission: 'VIEW_REVIEW',
   name: 'readScaleReceipt',
   summary:
     'One scale receipt as the tower copied it, with its photographs’ records and the field events that name it.',
@@ -3834,6 +3851,7 @@ export const readScaleReceiptEndpoint = endpoint({
 
 export const listCertificationsEndpoint = endpoint({
   ...read,
+  permission: 'VIEW_REVIEW',
   name: 'listCertifications',
   summary:
     'A project’s certifications, a page at a time, by cert number as written: each whole, with its boxes, helpers, photographs’ records, QC mark and its own flags, where it came from (its phone, or the paper sheet with who entered it and why) and any revocation.',
@@ -3851,6 +3869,7 @@ export const listCertificationsEndpoint = endpoint({
 
 export const readCertificationEndpoint = endpoint({
   ...read,
+  permission: 'VIEW_REVIEW',
   name: 'readCertification',
   summary:
     'One certification whole: its boxes (those taken off kept, marked), helpers, photographs’ records, QC mark and its own flags, where it came from and any revocation. Never the driver’s phone or licence number.',
@@ -3862,6 +3881,7 @@ export const readCertificationEndpoint = endpoint({
 
 export const listRoesEndpoint = endpoint({
   ...read,
+  permission: 'VIEW_REVIEW',
   name: 'listRoes',
   summary:
     'A project’s ROEs, a page at a time, in the order they were made: each with its scope, its photographs’ records and its QC mark.',
@@ -3874,6 +3894,7 @@ export const listRoesEndpoint = endpoint({
 
 export const listSurveysEndpoint = endpoint({
   ...read,
+  permission: 'VIEW_REVIEW',
   name: 'listSurveys',
   summary:
     'A project’s surveys, a page at a time, in the order they were made: each with its own flags, its photographs’ records and its QC mark.',
@@ -3886,6 +3907,7 @@ export const listSurveysEndpoint = endpoint({
 
 export const listIncidentsEndpoint = endpoint({
   ...read,
+  permission: 'VIEW_REVIEW',
   name: 'listIncidents',
   summary:
     'A project’s incidents, a page at a time, in the order they were made: each with its photographs’ records and its QC mark.',
@@ -3898,6 +3920,7 @@ export const listIncidentsEndpoint = endpoint({
 
 export const listDropOffLogsEndpoint = endpoint({
   ...read,
+  permission: 'VIEW_REVIEW',
   name: 'listDropOffLogs',
   summary:
     'A project’s citizen drop-off logs, a page at a time, in the order they were made: each with its photographs’ records and its QC mark.',
@@ -3910,6 +3933,7 @@ export const listDropOffLogsEndpoint = endpoint({
 
 export const listInvoiceBatchesEndpoint = endpoint({
   ...read,
+  permission: 'VIEW_REVIEW',
   name: 'listInvoiceBatches',
   summary:
     'A project’s invoice batches, a page at a time, in name order: each with how many locks in force it holds.',
@@ -3924,6 +3948,7 @@ const invoiceBatchId = z.strictObject({ invoiceBatchId: z.uuid() });
 
 export const readInvoiceBatchEndpoint = endpoint({
   ...read,
+  permission: 'VIEW_REVIEW',
   name: 'readInvoiceBatch',
   summary:
     'One invoice batch and what it holds: each lock in force that names it, with the ticket it locks. No amount: a batch is a name and its tickets.',
@@ -3950,6 +3975,7 @@ export const renameInvoiceBatchEndpoint = endpoint({
 // The board searched by person or phone, across projects and days (C103, C115; ADR-535 (1)).
 export const searchBoardEndpoint = endpoint({
   ...read,
+  permission: 'VIEW_DISPATCH',
   name: 'searchBoard',
   summary:
     'The dispatch board searched: a person’s or a phone’s assignments (or a project’s), from one day to another (62 days at most), standing or withdrawn, a page at a time by day and then in the order written; each with what the board warns of beside it (a second assignment for the person or the phone that day, a day outside the project’s active window, a closed project, unit rate pay items named with no unit rate work, a site not yet active or closed). A warning never stops anything.',
@@ -3983,6 +4009,7 @@ export const searchBoardEndpoint = endpoint({
 
 export const listPhoneSessionsEndpoint = endpoint({
   ...read,
+  permission: 'VIEW_DISPATCH',
   name: 'listPhoneSessions',
   summary:
     'A phone’s sessions, a page at a time, newest first: whose, when made, until when and whether ended, which way one opened under the master passcode was, and whether it came from a sign-in made on the phone offline. Never a token.',
@@ -3996,6 +4023,7 @@ export const listPhoneSessionsEndpoint = endpoint({
 // Setup's reads (C99, C100, C169).
 export const listFormsEndpoint = endpoint({
   ...read,
+  permission: 'VIEW_SETUP',
   name: 'listForms',
   summary:
     'A project’s forms, one for each document type at most: each with its debris types’ entries (those archived kept, marked) and the newest version of its own fields.',
@@ -4007,6 +4035,7 @@ export const listFormsEndpoint = endpoint({
 
 export const listPayItemsEndpoint = endpoint({
   ...read,
+  permission: 'VIEW_SETUP',
   name: 'listPayItems',
   summary:
     'A project’s pay items, a page at a time, by code: each as the firm entered it, with its crew day’s steps in force. Never a rate: a pay item’s rates are a read that takes Setup.',
@@ -4031,6 +4060,7 @@ export const listPayItemRatesEndpoint = endpoint({
 
 export const listRulesEndpoint = endpoint({
   ...read,
+  permission: 'VIEW_SETUP',
   name: 'listRules',
   summary:
     'A project’s rules, a page at a time, in the order written: each whole as the rule builder states it (each picked value with its name and whether it is gone), the pay item whose "Pays when" wrote it, and whether it is valid now and why not.',
@@ -4048,6 +4078,7 @@ export const listRulesEndpoint = endpoint({
 
 export const listSitesEndpoint = endpoint({
   ...read,
+  permission: 'VIEW_SETUP',
   name: 'listSites',
   summary:
     'A project’s sites, a page at a time, in name order: each with its labels, its tipping fee links and its own shape’s newest version.',
@@ -4060,6 +4091,7 @@ export const listSitesEndpoint = endpoint({
 
 export const listSiteShapesEndpoint = endpoint({
   ...read,
+  permission: 'VIEW_SETUP',
   name: 'listSiteShapes',
   summary:
     'A site’s own shape, every version, newest first: each with its shape, how it came (drawn, a file, an Esri layer), its file’s name or the layer’s address, and whether its file was kept. Never where.',
@@ -4074,6 +4106,7 @@ export const listSiteShapesEndpoint = endpoint({
 // type kept with them, as a download and never as a page.
 export const siteShapeFileEndpoint = endpoint({
   ...read,
+  permission: 'VIEW_SETUP',
   name: 'siteShapeFile',
   summary:
     'The file a site’s shape version was loaded from, as it was kept: the bytes that were stored, under the type they were kept as, sent as a download and never as a page. None for a shape that was drawn.',
@@ -4087,6 +4120,7 @@ export const siteShapeFileEndpoint = endpoint({
 
 export const listMapVersionsEndpoint = endpoint({
   ...read,
+  permission: 'VIEW_SETUP',
   name: 'listMapVersions',
   summary:
     'A project’s map versions, a page at a time, newest first: each with how it came, its file’s name or the layer’s address, the zones’ own layer and whether its copy was kept, and its zones’ names.',
@@ -4101,6 +4135,7 @@ const mapVersionId = z.strictObject({ mapVersionId: z.uuid() });
 
 export const readMapVersionEndpoint = endpoint({
   ...read,
+  permission: 'VIEW_SETUP',
   name: 'readMapVersion',
   summary: 'One map version with its boundary and each zone’s shape, as they were loaded.',
   method: 'GET',
@@ -4111,6 +4146,7 @@ export const readMapVersionEndpoint = endpoint({
 
 export const mapVersionFileEndpoint = endpoint({
   ...read,
+  permission: 'VIEW_SETUP',
   name: 'mapVersionFile',
   summary:
     'A map version’s file as it was kept, or the copy of its zones’ own Esri layer: the bytes that were stored, under the type they were kept as, sent as a download and never as a page.',

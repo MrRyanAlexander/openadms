@@ -136,7 +136,7 @@ for an ADMS (e.g. "Gates Disaster Recovery") is the **firm**, not a client.
 | User | Who | Created by | Signs in | Can |
 |---|---|---|---|---|
 | **Admin** | the firm's back office | an admin | back office, two-step sign-in required | everything, setup included |
-| **Manager / analyst** | the firm's back office | an admin | back office, two-step required | what they're granted: review, correct, renumber, void, accept flags, QC, lock as invoiced |
+| **Manager / analyst** | the firm's back office | an admin | back office, two-step required | what they're granted: review, correct, renumber, void, accept flags, QC, lock as invoiced; and which parts of the back office they see (view review, setup, dispatch; an act needs its part's view, the user, ADR-539) |
 | **Field monitor** | the firm's (or a monitoring sub's) field staff; each has a system **Monitor ID** (`M004127`) | the master user, **on a phone, online** | Monitor ID + password on an **enrolled phone**, which takes their day's **assignment**; offline from its login list | make records on their assignment's one project; never edit one after submitting it; never see a rate or a code |
 | **Read-only viewer** | a **client user**, a **contractor user** or an **auditor** | an admin | web, two-step optional | clients and auditors see their whole project except personal phone and licence numbers; a contractor sees only its own tickets and transactions (a prime, its subs' too) |
 

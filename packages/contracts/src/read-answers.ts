@@ -1,7 +1,7 @@
 // What the back office reads, and what a read-only viewer reads of the same records (REQ-217;
 // spec/parts/08-review-and-corrections.md, "One review queue"; spec/parts/09; ARCHITECTURE §5.5,
-// §6, Output; BACKLOG 2.8.8; ADR-224, 228, 315, 361, 435, 535). **The back office sees everything
-// about a ticket** (ADR-224): its field events as recorded and corrected, what the worker
+// §6, Output; BACKLOG 2.8.8; ADR-224, 228, 315, 361, 435, 535). **Whoever is let see review sees
+// everything about a ticket** (ADR-224, 539): its field events as recorded and corrected, what the worker
 // concluded, its lines with their money, its flags and every mark people set on it. Every list is
 // a page: `next` is what to send as `after` for the page that follows, null when this is the last.
 // Never where a file is kept, a credential, a fact a flag was raised on (the worker's own inputs)

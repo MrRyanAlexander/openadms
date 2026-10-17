@@ -425,7 +425,7 @@ export const p1Reconciled: Story = {
     // Dana and Luis at their browsers (ADR-497, 498): a reprocess with nothing changed is his
     // request at its endpoint, part of correcting.
     const backOffice = p1BackOffice(story, office);
-    await backOffice.grantLuis('CORRECT');
+    await backOffice.grantLuis('CORRECT', 'VIEW_REVIEW');
     asked = [];
     await backOffice.reprocess(await everyTicket());
     const second = await queue.settled(p1);
@@ -918,7 +918,7 @@ export const p1Reconciled: Story = {
     );
     // Luis at his browser (ADR-497): a correction of a disposal's load call and a renumber of
     // one, each queuing its own job (its tickets and their neighbours) at its endpoint.
-    await backOffice.grantLuis('RENUMBER');
+    await backOffice.grantLuis('RENUMBER', 'VIEW_REVIEW');
     const luiss = await backOffice.luiss();
     const disposalOf = (ticketNumber: string) =>
       api.fieldEvent.findFirstOrThrow({ where: { projectId: p1, ticketNumber, kind: 'DISPOSAL' } });

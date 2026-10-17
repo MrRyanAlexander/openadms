@@ -3,9 +3,9 @@
 // 2.8.4, C106, C139; ADR-022, 338, 468, 471, 482, 526 (1)). OWASP ASVS 5.0 V8; API Security
 // Top 10 API3, API4.
 //
-// - **Open to every admin and manager/analyst in service**, whether or not they hold a
-//   permission: the back office sees everything (ADR-526 (1) (a)). Asked again here, inside the
-//   read, whatever the door asked.
+// - **Open to an admin, and to a manager/analyst granted "view review"** (the user, ADR-539;
+//   ADR-526 (1) (a) opened them to the whole back office). Asked again here, inside the read,
+//   whatever the door asked.
 // - **A page at a time**, oldest first (by id, which a UUIDv7 orders by when it was made), by
 //   project or by phone, waiting or resolved; one more is read than the page holds, to know
 //   whether another follows.
@@ -21,8 +21,8 @@ import type {
   SetAsideFile,
 } from '@open-adms/db';
 
-import { Refusal } from '../process/refusal.ts';
 import { HeldReview, type HeldShown } from './held-review.ts';
+import { backOfficeReader } from './review-reads.ts';
 
 type Tx = Prisma.TransactionClient;
 
@@ -205,17 +205,8 @@ export class HeldReads {
     });
   }
 
-  // An admin or a manager/analyst in service; anybody else is refused.
+  // An admin, or a manager/analyst in service granted "view review"; anybody else is refused.
   private static async reader(tx: Tx, readerId: string): Promise<void> {
-    const reader = await tx.user.findUnique({
-      where: { id: readerId },
-      select: { role: true, archivedAt: true },
-    });
-    if (
-      reader?.archivedAt !== null ||
-      (reader.role !== 'ADMIN' && reader.role !== 'MANAGER_ANALYST')
-    ) {
-      throw new Refusal('NOT_ALLOWED', 403);
-    }
+    await backOfficeReader(tx, readerId, 'VIEW_REVIEW');
   }
 }

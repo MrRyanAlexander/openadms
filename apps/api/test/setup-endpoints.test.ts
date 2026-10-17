@@ -339,7 +339,7 @@ describe('who may change the setup', () => {
       }
       const luis = await projects.client(who.luis, { name: 'Bayline County' });
       expect(luis.saved ? '' : luis.refusal.message).toBe(
-        'Luis Ortega may not change the setup: it takes an admin, or a manager/analyst granted "setup". Nothing was changed.',
+        'Luis Ortega may not change the setup: it takes an admin, or a manager/analyst granted "setup" and "view setup". Nothing was changed.',
       );
       expect([await tx.client.count(), await tx.contractor.count()]).toEqual([0, 0]);
       await tx.userPermission.create({ data: { userId: who.luis, permission: 'SETUP' } });

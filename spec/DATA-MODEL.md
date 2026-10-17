@@ -251,7 +251,7 @@ permission"; an admin needs none.
 |---|---|---|
 | **id** | uuid | |
 | **userId** | → `User` | Unique with `permission`. Never the system actor (check) |
-| **permission** | enum `Permission` | `CORRECT` · `RENUMBER` · `VOID` · `ACCEPT_FLAG` · `QC` · `LOCK_INVOICED` · `UNLOCK_INVOICED` · `APPROVE_HOURS` · `SETUP` · `DISPATCH` |
+| **permission** | enum `Permission` | `CORRECT` · `RENUMBER` · `VOID` · `ACCEPT_FLAG` · `QC` · `LOCK_INVOICED` · `UNLOCK_INVOICED` · `APPROVE_HOURS` · `SETUP` · `DISPATCH` · `VIEW_REVIEW` · `VIEW_SETUP` · `VIEW_DISPATCH` (the three views, ADR-539: what the back office reads, granted apart; an act needs its area's view) |
 | **createdAt** | instant | |
 | archivedAt | instant | **Taken away by archiving, given back by clearing it**: never deleted, never a second row (*agent default*, ADR-315) |
 
@@ -2074,7 +2074,7 @@ A new value in any of them is a code change with an ADR (`spec/LISTS.md` Group 2
 | `ContractorKind` ✅ | `HAULER` · `MONITORING` · `CREW` · `OTHER` | `Contractor` |
 | `ContractorPosition` ✅ | `PRIME` · `SUB_TIER_1` · `SUB_TIER_2` | `ProjectContractor` |
 | `ViewerKind` | `CLIENT` · `CONTRACTOR` · `AUDITOR` | `User` |
-| `Permission` | `CORRECT` · `RENUMBER` · `VOID` · `ACCEPT_FLAG` · `QC` · `LOCK_INVOICED` · `UNLOCK_INVOICED` · `APPROVE_HOURS` · `SETUP` · `DISPATCH` | `UserPermission` |
+| `Permission` | `CORRECT` · `RENUMBER` · `VOID` · `ACCEPT_FLAG` · `QC` · `LOCK_INVOICED` · `UNLOCK_INVOICED` · `APPROVE_HOURS` · `SETUP` · `DISPATCH` · `VIEW_REVIEW` · `VIEW_SETUP` · `VIEW_DISPATCH` | `UserPermission` |
 | `ReasonUse` ✅ | `VOID` · `TYPED_NUMBER` · `ACCEPT_FLAG` · `BACK_OFFICE_RECORD` · `PHONE_REMOVAL` (ADR-530) | `Reason` |
 | `FormDocumentType` | `LOAD` · `HAUL_OUT` · `UNIT_RATE` · `CERTIFICATION` · `ROE` · `SURVEY` · `INCIDENT` · `DROP_OFF_LOG` | `Form`, `Assignment` |
 | `IncidentOffer` ✅ | `CONTRACTOR` · `CERT_NUMBER` · `ROE_NUMBER` | `Form.incidentOffers` (ADR-334) |

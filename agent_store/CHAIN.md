@@ -7,7 +7,7 @@
 > task's ADR and its session-log line in `DECISIONS.md`). No other file carries these counts.
 > **A count that differs from this page without a reason is a finding, not noise.**
 
-**Seen whole:** 2026-10-16, Phase 2's exit again (task 2.8.9, ADR-537), on the user's Mac, the installation at head: `pnpm chain` 9 passed in 12 min 34 s, every count below the same (53); after the task's test names, `pnpm chain ready test lint`, three full runs of `pnpm scenarios` in a row and `pnpm chain security licences`, all passed, the same counts. Memory last sampled after ADR-512 (Docker's VM at 4 GB, the containers together under 1 GB through a full `pnpm test`).
+**Seen whole:** 2026-10-17, Phase 2's exit met (task 2.8.9, ADR-539), on the user's Mac, the installation at head: `pnpm chain` 7 of 9 in 10 min 04 s (test: one contracts test still held the file reads open to every reader; lint: an unused import), both fixed, then `pnpm chain test lint` 2 passed; every count below as seen (the five that moved: a migration, three domain tests, one API test). Then `pnpm scenarios` twice more, three full runs in a row with the chain's.
 
 ## `pnpm ready`
 
@@ -15,18 +15,18 @@
 |---|---|
 | `pnpm local:up` | eight `Healthy` services (`pnpm chain` says `10 containers Healthy`: these eight, the API's and the worker's) (`routing-tls` the seventh, ADR-517; `objectstore-tls` the eighth, ADR-525), `Keeping the stack’s root and every service’s certificate.`, `Keeping the object store’s bucket adms-media (it keeps every version).` (ADR-480), then the API's and the worker's containers: `https://api.adms.localhost/health → 200 {"status":"ok"}` and `the worker’s health answer → 200 {"status":"ok","jobsWaiting":0,"jobsSetAside":0,"oldestJobWaitingSeconds":0}` |
 | `pnpm installer:check` | **37 `✓`**, no `✗`, exit 0 (the two since ADR-530: each service's policy values in force) |
-| Migrations at head | **137** (`packages/db/prisma/migrations/` is the list) |
+| Migrations at head | **138** (`packages/db/prisma/migrations/` is the list) |
 | `pnpm local:down` (close-out) | 10 containers and the network: 11 `Removed` lines |
 
 ## `pnpm test`
 
-**`Test Files 184 passed (184)`, `Tests 3210 passed (3210)`.**
+**`Test Files 184 passed (184)`, `Tests 3214 passed (3214)`.**
 
 | Project | Tests | Files | Needs |
 |---|---|---|---|
-| `packages/domain` | 845 | 45 | nothing |
+| `packages/domain` | 848 | 45 | nothing |
 | `packages/contracts` | 91 | 9 | nothing |
-| `apps/api` | 726 | 56 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
+| `apps/api` | 727 | 56 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
 | `packages/db` | 1087 | 48 | `pnpm ready` |
 | `packages/scenarios` | 157 | 7 | `pnpm ready` for `stories.test.ts` (the runner and a run's template, 5) and `story-api.test.ts` (a story's API over HTTPS through the proxy, every request of a story's phone, the back office and the viewers at their browsers, and a turn-in meeting another request of its phone in the database, 16); the flag catalogue (79 flags), the harness, the phone held to the sync contract's suite and to what it sends and takes in at a sync, its photographs' files and its turn-in among it, and its wait when told to (25), the policy and the server apps' exports (2) need nothing. **The stories themselves are not here** (ADR-446) |
 | `apps/worker` | 51 | 6 | `pnpm ready` for the map servers (13), their answers on an HTTPS server of the stack's certificate (6) and its container (3); the process (14), the job loop (its set-aside lines and its health, 11) and the lost phones' backstop (4) need nothing |
@@ -43,7 +43,7 @@
 
 ## `pnpm scenarios`
 
-`This run’s template, adms_story_template_…: 137 migrations applied`, then **`Stories: 23 passed, 0
+`This run’s template, adms_story_template_…: 138 migrations applied`, then **`Stories: 23 passed, 0
 failed.`** Each story `passed: N checks, N passed, 0 failed`:
 
 | Story | Checks | | Story | Checks |

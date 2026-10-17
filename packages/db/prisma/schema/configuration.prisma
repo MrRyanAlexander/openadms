@@ -1116,6 +1116,11 @@ enum Permission {
   APPROVE_HOURS
   SETUP
   DISPATCH
+  // What a manager/analyst is let see of the back office, granted apart from the acts; an act
+  // needs its area's view beside it (the user, ADR-539).
+  VIEW_REVIEW
+  VIEW_SETUP
+  VIEW_DISPATCH
 
   @@map("permission")
 }

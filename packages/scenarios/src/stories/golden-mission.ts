@@ -176,7 +176,15 @@ export const goldenMission: Story = {
     await setUpP1Pricing(story, office);
     // Dana and Luis at their browsers (ADR-497, 500): she grants at his record.
     const backOffice = p1BackOffice(story, office);
-    await backOffice.grantLuis('CORRECT', 'RENUMBER', 'VOID', 'ACCEPT_FLAG', 'QC', 'LOCK_INVOICED');
+    await backOffice.grantLuis(
+      'CORRECT',
+      'RENUMBER',
+      'VOID',
+      'ACCEPT_FLAG',
+      'QC',
+      'LOCK_INVOICED',
+      'VIEW_REVIEW',
+    );
 
     story.at(
       on('09', '09:00'),

@@ -177,7 +177,7 @@ export const p1Reviewed: Story = {
     // Dana and Luis at their browsers (ADR-497, 501). Her grants are her request at his record;
     // a setup service asks whether its caller holds Setup, inside its own piece of work (ADR-424).
     const backOffice = p1BackOffice(story, office);
-    await backOffice.grantLuis('SETUP');
+    await backOffice.grantLuis('SETUP', 'VIEW_SETUP');
     const p2 = await api.$write({ actorId: luis, source: 'BACK_OFFICE' }, async (tx) => {
       const first = await tx.project.findUniqueOrThrow({ where: { id: p1 } });
       const ppdr = await tx.programType.findFirstOrThrow({ where: { name: 'PPDR' } });
@@ -523,7 +523,7 @@ export const p1Reviewed: Story = {
       ['403 NOT_ALLOWED', '403 NOT_ALLOWED', 80, true],
     );
     story.at(on('14', '07:45'), 'Dana grants Luis correct and renumber');
-    await backOffice.grantLuis('CORRECT', 'RENUMBER');
+    await backOffice.grantLuis('CORRECT', 'RENUMBER', 'VIEW_REVIEW');
 
     story.at(
       on('14', '07:55'),
@@ -1555,7 +1555,7 @@ export const p1Reviewed: Story = {
       on('15', '11:00'),
       'Dana grants Luis QC and lock as invoiced; he QC Approves 101001 and locks it as invoiced (the lock itself is Part 9’s). Then a measuring mistake is found on certification 730415: its sideboards are 12 in, not 16. Luis corrects the box; the worker runs',
     );
-    await backOffice.grantLuis('QC', 'LOCK_INVOICED');
+    await backOffice.grantLuis('QC', 'LOCK_INVOICED', 'VIEW_REVIEW');
     const ticket101001 = { completedLoadId: load101001?.id ?? '' };
     await byLuis(setQcStatusEndpoint, { json: { record: ticket101001, status: 'QC_APPROVED' } });
     await byLuis(lockAsInvoicedEndpoint, { json: { ticket: ticket101001 } });

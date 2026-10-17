@@ -15,6 +15,7 @@
 import type { Prisma } from '@open-adms/db';
 import { PhoneRules, type PhoneRemoval } from '@open-adms/domain';
 
+import { backOfficeSees } from '../review/review-reads.ts';
 import { Refused, type Outcome } from '../setup/setup-service.ts';
 import { DispatchService } from './dispatch-service.ts';
 
@@ -99,14 +100,7 @@ export class Phones extends DispatchService {
   // A page of the firm's phones, in the order they were enrolled.
   async list(readerId: string, asked: PhonesAsked): Promise<PhonesPage> {
     return this.db.$read(async (tx): Promise<PhonesPage> => {
-      const reader = await tx.user.findUnique({
-        where: { id: readerId },
-        select: { role: true, archivedAt: true },
-      });
-      if (
-        reader?.archivedAt !== null ||
-        (reader.role !== 'ADMIN' && reader.role !== 'MANAGER_ANALYST')
-      ) {
+      if (!(await backOfficeSees(tx, readerId, 'VIEW_DISPATCH'))) {
         return { done: false, code: 'NOT_ALLOWED' };
       }
       const rows = await tx.device.findMany({
@@ -138,14 +132,7 @@ export class Phones extends DispatchService {
     asked: { readonly after?: string | undefined; readonly limit: number },
   ): Promise<PhoneSessionsPage | null> {
     return this.db.$read(async (tx): Promise<PhoneSessionsPage | null> => {
-      const reader = await tx.user.findUnique({
-        where: { id: readerId },
-        select: { role: true, archivedAt: true },
-      });
-      if (
-        reader?.archivedAt !== null ||
-        (reader.role !== 'ADMIN' && reader.role !== 'MANAGER_ANALYST')
-      ) {
+      if (!(await backOfficeSees(tx, readerId, 'VIEW_DISPATCH'))) {
         return null;
       }
       const phone = await tx.device.findUnique({ where: { id: deviceId }, select: { id: true } });

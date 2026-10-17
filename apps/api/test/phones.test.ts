@@ -60,12 +60,12 @@ const change = (currentPassword: string, to: string) => ({
 });
 
 describe('who may ask', () => {
-  it('AC-10-27 the phones are read by the back office; one is taken out of service by an admin or a manager/analyst who holds Dispatch; the master passcode is an admin’s alone', () => {
+  it('AC-10-27 the phones are read by an admin or a manager/analyst let see dispatch; one is taken out of service by an admin or a manager/analyst who holds Dispatch; the master passcode is an admin’s alone', () => {
     const asked = (name: string) => {
       const { access, roles, permission } = endpoints.find((one) => one.name === name) ?? {};
       return [access, roles, permission];
     };
-    expect(asked('listPhones')).toEqual(['SIGNED_IN', backOfficeRoles, undefined]);
+    expect(asked('listPhones')).toEqual(['SIGNED_IN', backOfficeRoles, 'VIEW_DISPATCH']);
     expect(asked('removePhone')).toEqual(['SIGNED_IN', backOfficeRoles, 'DISPATCH']);
     expect(asked('changeMasterPasscode')).toEqual(['SIGNED_IN', adminOnly, undefined]);
     expect(
@@ -142,7 +142,7 @@ describe('who may ask', () => {
       }
       const luis = await service.remove(who.luis, phones.landfillTower.id, { status: 'LOST' });
       expect(luis.saved ? '' : luis.refusal.message).toBe(
-        'Luis Ortega may not dispatch: it takes an admin, or a manager/analyst granted "dispatch". Nothing was changed.',
+        'Luis Ortega may not dispatch: it takes an admin, or a manager/analyst granted "dispatch" and "view dispatch". Nothing was changed.',
       );
       expect(await tx.device.count({ where: { status: { not: 'ACTIVE' } } })).toBe(0);
     });

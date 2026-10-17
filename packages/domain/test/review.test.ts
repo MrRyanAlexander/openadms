@@ -33,7 +33,7 @@ const luis: ReviewingPerson = {
   name: 'Luis Ortega',
   role: 'MANAGER_ANALYST',
   archived: false,
-  granted: ['CORRECT', 'RENUMBER', 'VOID', 'ACCEPT_FLAG', 'QC', 'LOCK_INVOICED'],
+  granted: ['CORRECT', 'RENUMBER', 'VOID', 'ACCEPT_FLAG', 'QC', 'LOCK_INVOICED', 'VIEW_REVIEW'],
 };
 const dana: ReviewingPerson = { name: 'Dana Reyes', role: 'ADMIN', archived: false, granted: [] };
 
@@ -46,22 +46,32 @@ describe('who may do a reviewer’s action', () => {
 
   it('AC-08-05 a manager/analyst may do each action he is granted, and no other: Luis, granted no unlock, can’t unlock', () => {
     const reviewer = new Reviewer(luis);
-    for (const permission of luis.granted) {
-      expect(reviewer.refusal(permission as (typeof reviewPermissions)[number])).toBeNull();
+    for (const permission of reviewPermissions.filter((each) => luis.granted.includes(each))) {
+      expect(reviewer.refusal(permission)).toBeNull();
     }
     expect(reviewer.refusal('UNLOCK_INVOICED')).toEqual({
       code: 'NOT_PERMITTED',
       message:
-        'Luis Ortega may not unlock an invoiced ticket: it takes an admin, or a manager/analyst granted "unlock". Nothing was changed.',
+        'Luis Ortega may not unlock an invoiced ticket: it takes an admin, or a manager/analyst granted "unlock" and "view review". Nothing was changed.',
     });
   });
 
   it('AC-08-05 a manager/analyst without void can’t void, in plain words', () => {
     const withoutVoid = { ...luis, granted: luis.granted.filter((grant) => grant !== 'VOID') };
     expect(new Reviewer(withoutVoid).refusal('VOID')?.message).toBe(
-      'Luis Ortega may not void or unvoid a ticket: it takes an admin, or a manager/analyst granted "void". Nothing was changed.',
+      'Luis Ortega may not void or unvoid a ticket: it takes an admin, or a manager/analyst granted "void" and "view review". Nothing was changed.',
     );
     expect(new Reviewer(withoutVoid).refusal('CORRECT')).toBeNull();
+  });
+
+  it('AC-10-107 a manager/analyst granted an action but not “view review” can’t do it', () => {
+    const blind = { ...luis, granted: luis.granted.filter((grant) => grant !== 'VIEW_REVIEW') };
+    for (const permission of reviewPermissions) {
+      expect(new Reviewer(blind).refusal(permission)?.code, permission).toBe('NOT_PERMITTED');
+    }
+    expect(new Reviewer(blind).refusal('QC')?.message).toBe(
+      'Luis Ortega may not set a QC status: it takes an admin, or a manager/analyst granted "QC" and "view review". Nothing was changed.',
+    );
   });
 
   it('AC-08-06 a monitor, a read-only viewer and the system actor may do none, whatever a row says they are granted', () => {
@@ -78,7 +88,7 @@ describe('who may do a reviewer’s action', () => {
         'CORRECT',
       )?.message,
     ).toBe(
-      'Ana Brooks may not correct a record: it takes an admin, or a manager/analyst granted "correct". Nothing was changed.',
+      'Ana Brooks may not correct a record: it takes an admin, or a manager/analyst granted "correct" and "view review". Nothing was changed.',
     );
   });
 
@@ -232,13 +242,13 @@ describe('a quarantined record’s resolution', () => {
 
 describe('who may accept a flag', () => {
   it('AC-08-05 accept flags is a grant of its own: a manager/analyst granted correct alone can’t accept (the user, 2026-10-06, KD-74)', () => {
-    const correctsOnly = new Reviewer({ ...luis, granted: ['CORRECT'] });
+    const correctsOnly = new Reviewer({ ...luis, granted: ['CORRECT', 'VIEW_REVIEW'] });
 
     expect(correctsOnly.refusal('CORRECT')).toBeNull();
     expect(correctsOnly.refusal('ACCEPT_FLAG')).toEqual({
       code: 'NOT_PERMITTED',
       message:
-        'Luis Ortega may not accept a flag: it takes an admin, or a manager/analyst granted "accept flags". Nothing was changed.',
+        'Luis Ortega may not accept a flag: it takes an admin, or a manager/analyst granted "accept flags" and "view review". Nothing was changed.',
     });
     expect(new Reviewer({ ...luis, granted: ['ACCEPT_FLAG'] }).refusal('CORRECT')?.code).toBe(
       'NOT_PERMITTED',

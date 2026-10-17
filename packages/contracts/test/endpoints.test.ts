@@ -376,17 +376,18 @@ describe('the two endpoints that answer a file', () => {
         'application/vnd.google-earth.kml+xml',
       ]);
     }
-    for (const each of [
-      siteShapeFileEndpoint,
-      mapVersionFileEndpoint,
-      photographFileEndpoint,
-      setAsideFileEndpoint,
-    ]) {
-      expect([each.method, each.access, each.roles, 'permission' in each], each.name).toEqual([
+    // Each the back office's, read with its area's view (ADR-539).
+    for (const [each, view] of [
+      [siteShapeFileEndpoint, 'VIEW_SETUP'],
+      [mapVersionFileEndpoint, 'VIEW_SETUP'],
+      [photographFileEndpoint, 'VIEW_REVIEW'],
+      [setAsideFileEndpoint, 'VIEW_REVIEW'],
+    ] as const) {
+      expect([each.method, each.access, each.roles, each.permission], each.name).toEqual([
         'GET',
         'SIGNED_IN',
         ['ADMIN', 'MANAGER_ANALYST'],
-        false,
+        view,
       ]);
     }
     const base = {

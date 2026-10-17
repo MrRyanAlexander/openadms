@@ -1,6 +1,6 @@
 // The back office's reads and bulk acts through their endpoints, against the database (spec/
 // parts/08, "One review queue"; spec/parts/09; spec/acceptance/10-api-and-sync.md AC-10-93…103;
-// BACKLOG 2.8.8; ADR-535). OWASP API1, API3, API4; ASVS V8. The real process, in this test's own
+// BACKLOG 2.8.8; ADR-535, 539). OWASP API1, API3, API4; ASVS V8. The real process, in this test's own
 // memory, on the installation's database as `adms_api`: it needs `pnpm local:up` after `pnpm
 // installer`. Each test's work is undone (support/database.ts).
 //
@@ -69,6 +69,9 @@ import type { Database } from '@open-adms/db';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { Certifications } from '../src/certification/certifications.ts';
+import { Assignments } from '../src/dispatch/assignments.ts';
+import { Phones } from '../src/dispatch/phones.ts';
+import { HeldReads } from '../src/review/held-reads.ts';
 import { InvoiceLocks } from '../src/review/invoice-locks.ts';
 import { QcMarks } from '../src/review/qc-marks.ts';
 import { ReviewReads } from '../src/review/review-reads.ts';
@@ -1025,6 +1028,92 @@ describe('setup as the back office reads it', () => {
         reason: 'RULE_FROM_PAY_ITEM',
         message: 'Not saved: this rule is from pay item VEG-HAUL-CY-15. Change it on the pay item.',
       });
+    });
+  });
+});
+
+describe('what the back office is let see', () => {
+  it('AC-10-107 each read asks its view again inside itself: past the door, Luis without “view review”, “view setup” or “view dispatch” reads none of that area, Setup or Dispatch held or not; given the view, he reads it; the projects and the lists stay his', async () => {
+    await world(async (served, tx, who, within) => {
+      const nobodysProject = randomUUID();
+      const reads = new ReviewReads(within);
+      const setupReads = new SetupReads(within, { media: new Kept(), fileBytesAtMost: 1 });
+      const held = new HeldReads(within);
+      const phones = new Phones(within, served.clock);
+      const board = new Assignments(within, served.clock);
+      const page = { limit: 10 };
+      const refusedOrRead = async (work: () => Promise<unknown>) => {
+        try {
+          const answer = await work();
+          const said = answer as { done?: boolean; code?: string } | null;
+          return answer === null || said?.done === false ? 'NOT_ALLOWED' : 'read';
+        } catch (error) {
+          const { code } = error as { code?: string };
+          // A project nobody has is past the reader's check.
+          return code === 'NOT_FOUND' ? 'read' : (code ?? 'thrown');
+        }
+      };
+      const areas = async () => ({
+        review: [
+          await refusedOrRead(() => reads.invoiceBatches(who.luis, nobodysProject, page)),
+          await refusedOrRead(() => held.heldRecords(who.luis, page)),
+        ],
+        setup: [await refusedOrRead(() => setupReads.forms(who.luis, nobodysProject))],
+        dispatch: [
+          await refusedOrRead(() => phones.list(who.luis, { outOfService: false, ...page })),
+          await refusedOrRead(() =>
+            board.search(who.luis, {
+              userId: who.kim,
+              from: '2026-10-12',
+              to: '2026-10-12',
+              withdrawn: false,
+              ...page,
+            }),
+          ),
+        ],
+        everyone: [await refusedOrRead(() => setupReads.projects(who.luis, page))],
+      });
+      // The test world lets him see all three.
+      expect(await areas()).toEqual({
+        review: ['read', 'read'],
+        setup: ['read'],
+        dispatch: ['read', 'read'],
+        everyone: ['read'],
+      });
+      // Each view taken away, the acts of its area held: he reads none of it.
+      await tx.userPermission.updateMany({
+        where: { userId: who.luis },
+        data: { archivedAt: new Date() },
+      });
+      for (const permission of ['QC', 'SETUP', 'DISPATCH'] as const) {
+        await tx.userPermission.create({ data: { userId: who.luis, permission } });
+      }
+      expect(await areas()).toEqual({
+        review: ['NOT_ALLOWED', 'NOT_ALLOWED'],
+        setup: ['NOT_ALLOWED'],
+        dispatch: ['NOT_ALLOWED', 'NOT_ALLOWED'],
+        everyone: ['read'],
+      });
+      // "View setup" given back alone: setup, and nothing else.
+      await tx.userPermission.update({
+        where: { userId_permission: { userId: who.luis, permission: 'VIEW_SETUP' } },
+        data: { archivedAt: null },
+      });
+      expect(await areas()).toEqual({
+        review: ['NOT_ALLOWED', 'NOT_ALLOWED'],
+        setup: ['read'],
+        dispatch: ['NOT_ALLOWED', 'NOT_ALLOWED'],
+        everyone: ['read'],
+      });
+      // An admin reads every area with no grant at all; a read-only viewer none, whatever it holds.
+      const danaReads = await refusedOrRead(() =>
+        reads.invoiceBatches(who.dana, nobodysProject, page),
+      );
+      expect(danaReads).toBe('read');
+      await tx.userPermission.create({ data: { userId: who.viewer, permission: 'VIEW_REVIEW' } });
+      expect(
+        await refusedOrRead(() => reads.invoiceBatches(who.viewer, nobodysProject, page)),
+      ).toBe('NOT_ALLOWED');
     });
   });
 });

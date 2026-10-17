@@ -464,15 +464,15 @@ describe('step 3: Dana loads P1’s map through the endpoint', () => {
 describe('the setup as it stands', () => {
   const standing = [setupCheckEndpoint, quantityLookupEndpoint, siteQuantityLookupEndpoint];
 
-  it('AC-10-27 the setup check and the lookups are open to an admin and to a manager/analyst, with or without Setup; nobody not signed in and no read-only viewer is answered', async () => {
+  it('AC-10-27, AC-10-107 the setup check and the lookups are open to an admin and to a manager/analyst let see setup, with or without Setup; nobody not signed in, no read-only viewer and no manager/analyst without the view is answered', async () => {
     await world(async (api, tx, who, within) => {
       for (const served of standing) {
-        const { name, access, roles, method } = served;
-        expect([name, access, roles, 'permission' in served, method]).toEqual([
+        const { name, access, roles, permission, method } = served;
+        expect([name, access, roles, permission, method]).toEqual([
           name,
           'SIGNED_IN',
           backOfficeRoles,
-          false,
+          'VIEW_SETUP',
           'GET',
         ]);
       }
@@ -501,6 +501,16 @@ describe('the setup as it stands', () => {
           told(await ask(api, luis, served, { ...more, query: '?archived=true' })),
           served.name,
         ).toEqual([400, 'BAD_REQUEST']);
+      }
+      // "View setup" taken from him, his very next ask of each is refused, Setup or not (ADR-539).
+      await tx.userPermission.updateMany({
+        where: { userId: who.luis, permission: 'VIEW_SETUP' },
+        data: { archivedAt: new Date() },
+      });
+      await tx.userPermission.create({ data: { userId: who.luis, permission: 'SETUP' } });
+      for (const served of standing) {
+        const more = { ids: { ...ids, siteId: tdsr.id } };
+        expect(told(await ask(api, luis, served, more)), served.name).toEqual([403, 'NOT_ALLOWED']);
       }
     });
   });

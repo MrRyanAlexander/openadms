@@ -34,6 +34,7 @@ import {
   type PermissionName,
 } from '@open-adms/domain';
 
+import { backOfficeSees } from '../review/review-reads.ts';
 import type { Clock } from '../setup/setup-service.ts';
 import type { Mail } from '../sign-in/mail.ts';
 import type { Sessions } from '../sign-in/sessions.ts';
@@ -239,10 +240,7 @@ export class People {
   async read(readerId: string, userId: string): Promise<PersonOutcome> {
     return this.db.$read(async (tx) => {
       const reader = await tx.user.findUnique({ where: { id: readerId }, select: personRead });
-      if (
-        reader?.archivedAt !== null ||
-        (reader.role !== 'ADMIN' && reader.role !== 'MANAGER_ANALYST')
-      ) {
+      if (reader?.archivedAt !== null || !(await backOfficeSees(tx, readerId, 'VIEW_DISPATCH'))) {
         return { done: false, code: 'NOT_ALLOWED' };
       }
       const row = await tx.user.findUnique({ where: { id: userId }, select: personRead });
@@ -256,10 +254,7 @@ export class People {
   async list(readerId: string, asked: PeopleAsked): Promise<PeoplePage> {
     return this.db.$read(async (tx): Promise<PeoplePage> => {
       const reader = await tx.user.findUnique({ where: { id: readerId }, select: personRead });
-      if (
-        reader?.archivedAt !== null ||
-        (reader.role !== 'ADMIN' && reader.role !== 'MANAGER_ANALYST')
-      ) {
+      if (reader?.archivedAt !== null || !(await backOfficeSees(tx, readerId, 'VIEW_DISPATCH'))) {
         return { done: false, code: 'NOT_ALLOWED' };
       }
       const rows = await tx.user.findMany({

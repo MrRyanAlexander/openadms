@@ -13,6 +13,7 @@
 // QC Approved and COMPLETED, a second lock, an unlock of a ticket that isn't locked, and a change
 // to a ticket while its lock stands (ADR-367).
 import type { FieldEventKindName } from './field-event-details.ts';
+import { Access, grantsInWords } from './people.ts';
 
 // The grants a reviewer's action asks for, as the database's Permission keeps them.
 export const reviewPermissions = [
@@ -26,14 +27,14 @@ export const reviewPermissions = [
 ] as const;
 export type ReviewPermission = (typeof reviewPermissions)[number];
 
-const permissionInWords: Record<ReviewPermission, { grant: string; action: string }> = {
-  CORRECT: { grant: 'correct', action: 'correct a record' },
-  RENUMBER: { grant: 'renumber', action: 'renumber a record' },
-  VOID: { grant: 'void', action: 'void or unvoid a ticket' },
-  ACCEPT_FLAG: { grant: 'accept flags', action: 'accept a flag' },
-  QC: { grant: 'QC', action: 'set a QC status' },
-  LOCK_INVOICED: { grant: 'lock as invoiced', action: 'lock a ticket as invoiced' },
-  UNLOCK_INVOICED: { grant: 'unlock', action: 'unlock an invoiced ticket' },
+const actionInWords: Record<ReviewPermission, string> = {
+  CORRECT: 'correct a record',
+  RENUMBER: 'renumber a record',
+  VOID: 'void or unvoid a ticket',
+  ACCEPT_FLAG: 'accept a flag',
+  QC: 'set a QC status',
+  LOCK_INVOICED: 'lock a ticket as invoiced',
+  UNLOCK_INVOICED: 'unlock an invoiced ticket',
 };
 
 export type ReviewerRole =
@@ -105,17 +106,13 @@ export class Reviewer {
   }
 
   // Why this person may not do it, or nothing: an admin may do every action; a manager/analyst
-  // the ones granted; a monitor, a read-only viewer and the system actor none (ADR-050, 051).
+  // the ones granted, with "view review" beside them (ADR-539); a monitor, a read-only viewer and
+  // the system actor none (ADR-050, 051).
   refusal(permission: ReviewPermission): ReviewRefusal | null {
-    const { name, role, archived, granted } = this.person;
-    const allowed =
-      !archived &&
-      (role === 'ADMIN' || (role === 'MANAGER_ANALYST' && granted.includes(permission)));
-    if (allowed) return null;
-    const { grant, action } = permissionInWords[permission];
+    if (new Access(this.person).holds(permission)) return null;
     return {
       code: 'NOT_PERMITTED',
-      message: `${name} may not ${action}: it takes an admin, or a manager/analyst granted "${grant}". Nothing was changed.`,
+      message: `${this.person.name} may not ${actionInWords[permission]}: it takes an admin, or a manager/analyst granted ${grantsInWords(permission)}. Nothing was changed.`,
     };
   }
 }

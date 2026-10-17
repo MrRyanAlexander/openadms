@@ -40,8 +40,11 @@ Decides who can do what, and on which phone:
    a contractor record, and a subcontracted monitoring firm or temp agency is a contractor of the
    monitoring kind (Q-97).
 2. **Grant permissions** to a manager/analyst: correct, renumber, void, accept flags, QC, lock and
-   unlock as invoiced (ADR-050). Each is its own grant; one is taken away by archiving it, never
-   deleted, and every grant and removal is audited (*agent default*, ADR-315).
+   unlock as invoiced (ADR-050), setup, dispatch, approve hours, and **what they may see**: view
+   review, view setup, view dispatch. A manager/analyst reads a part of the back office only with
+   its view, and an act needs its part's view beside it (the user, ADR-539). Each is its own grant;
+   one is taken away by archiving it, never deleted, and every grant and removal is audited
+   (*agent default*, ADR-315).
 3. **Enrol a phone, once** (online, master passcode): it makes its **device key** and joins the
    firm's phones, with no project and no monitor (ADR-240; ARCHITECTURE §7.4). Its data is
    **encrypted** and **never backed up**, bound to that phone (ADR-096).

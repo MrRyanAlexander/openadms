@@ -200,7 +200,10 @@ export {
   actorsOnly,
   backOfficeCreated,
   backOfficeRolesChanged,
+  grantsInWords,
+  permissionInWords,
   permissions,
+  viewPermissions,
   type ActorOnly,
   type Asked,
   type BackOfficeCreated,
@@ -210,6 +213,7 @@ export {
   type PeopleRefusalCode,
   type PermissionName,
   type SetupRightsRefusal,
+  type ViewPermission,
 } from './people.ts';
 export {
   AssignmentRules,

@@ -10,9 +10,8 @@
 
 An audit of Phase 2 (ADR-519 (1)) found its own server work moved to later phases or left "no
 task yet". The user: "all 3 of these are part of phase 2", "these should be part of phase 2".
-ADR-518's exit is withdrawn; **Milestone 2.8 (`BACKLOG.md`), nine tasks, is the work**: 2.8.1…2.8.8
-done; **2.8.9 done but for the user's answers** to `spec/DEFAULTS-REVIEW.md` (ADR-537). Phase 3 stays the user's to open, after Phase 2's exit is met
-again.
+ADR-518's exit is withdrawn; **Milestone 2.8 (`BACKLOG.md`), nine tasks, is the work: all nine done;
+Phase 2's exit is met again (2026-10-17, ADR-537…540).** Phase 3 is the user's to open.
 
 **What Phase 2 is.** The server in front of what Phase 1 built: the API as a running process over
 HTTPS, sign-in and permissions, a phone's enrolment and its proof of itself, the sync endpoints,
@@ -36,9 +35,8 @@ before any task.
 
 ## Exit criteria for Phase 2 *(ADR-376, and 8…10 by ADR-519; agent default, the user may change them)*
 
-The seven were met once (2026-10-14, ADR-518: how each was met is that ADR); **at task 2.8.9
-(2026-10-16, ADR-537) all ten are met from runs that were seen but 9, which waits on the user's
-answers to `spec/DEFAULTS-REVIEW.md`.**
+The seven were met once (2026-10-14, ADR-518: how each was met is that ADR); **all ten are met
+(task 2.8.9, 2026-10-16…17, ADR-537…540)**: 9 by the user's answers to `spec/DEFAULTS-REVIEW.md`.
 
 1. **The golden mission syncs through the real endpoints and is reconciled by queued jobs**, with
    the exact statuses, review queue, ledger (P1 $5,548.25 on 19 lines; P2 $324.00) and audit rows
@@ -72,14 +70,14 @@ things stand, where the product ends up, the road there, and how the user works*
 now, topic by topic, is `SUMMARY.md` (its header's topic index, then only the topics you touch);
 the round-by-round history is the session log at the end of `DECISIONS.md`.
 
-### Where things stand (2026-10-16, through ADR-537)
+### Where things stand (2026-10-17, through ADR-540)
 - **Phases 0 and 1 are done** (Phase 0 closed 2026-10-01, all 17 REQs, ADR-281…288; Phase 1's exit
   met 2026-10-06, ADR-371, 372). **Every spec page is approved** (ARCHITECTURE, VISION, INDEX, the
   part pages, LISTS, RATE-SHEET, RULES, DATA-MODEL, FLAGS, CONVENTIONS, the golden mission and its
   numbers, all ten acceptance files, THREAT-MODEL, CHECKLIST-API §3.1). Their record: `ROADMAP.md`
   §3a–§3b and `DECISIONS.md`.
 - **Phase 2:** 32 tasks of Milestones 2.0…2.7 closed (ADR-376…518); **Milestone 2.8, from the
-  audit:** 2.8.1…2.8.8 done (ADR-522…531, 534, 535), what 2.8.8 left (C172) done (ADR-536); **2.8.9, Phase 2's exit, met but for criterion 9 (ADR-537): §4's defaults are on one page, `spec/DEFAULTS-REVIEW.md`, waiting on the user**. What each task left is `BACKLOG.md`'s
+  audit:** 2.8.1…2.8.8 done (ADR-522…531, 534, 535), what 2.8.8 left (C172) done (ADR-536); **2.8.9 done: Phase 2's exit met (ADR-537…540)**; the user's answers to the defaults page confirmed all but D1, built as the back office's view permissions (ADR-539). **Phase 3 waits on the user's word.** What each task left is `BACKLOG.md`'s
   carry-forward register (live items only since ADR-532).
 - **Housekeeping, 2026-10-15 (ADR-532), at the user's word:** `SUMMARY.md` cut by topic (432 → 202
   KB, every rule kept with its ADRs), `BACKLOG.md`'s register live-only and its done phases one
@@ -97,8 +95,8 @@ the round-by-round history is the session log at the end of `DECISIONS.md`.
 - **This machine's installation holds no person but the seed's actors** (`pnpm local:accounts` and
   `pnpm installer:admin` are never run for real here; the API's tests rely on it). Its master
   passcode is a throw-away random value.
-- **Open deviations:** none (`SUMMARY.md` §3). **Waiting on the user:** nothing blocks; the agent
-  defaults the user may overturn are `SUMMARY.md` §4, put to them on one page, `spec/DEFAULTS-REVIEW.md` (ADR-537).
+- **Open deviations:** none (`SUMMARY.md` §3). **Waiting on the user:** their word to open Phase 3;
+  every agent default on `spec/DEFAULTS-REVIEW.md` is answered (ADR-538), `SUMMARY.md` §4 lists what stays open.
 - **The user's word (ADR-401): sign-in follows NIST SP 800-63B and ASVS Level 2; when a direction
   in security is suggested, say what the standard asks before building it.**
 
@@ -219,13 +217,10 @@ same scenarios passing at each layer (engine, API, apps). The finished surfaces 
 
 ## 📍 Next Atomic Task
 
-**Task 2.8.9, Phase 2's exit, again: the user's answers** (`BACKLOG.md` 2.8.9, C164; ADR-537).
-Every criterion but 9 is met from runs that were seen. **Waiting on the user:** their answers to
-`spec/DEFAULTS-REVIEW.md` (`SUMMARY.md` §4's defaults, D1…D162). When they answer: record each
-answer as its own ADR (verbatim, read back where it's an either-or), build each overturned
-default as Phase 2's own work inside 2.8.9 (its tests, the chain), take the answered rows out of
-§4, then state Phase 2's exit met (ADR-518's way) and offer Phase 3 to the user; nothing of
-Phase 3 starts before their word.
+**Phase 2's exit is met (task 2.8.9, ADR-537…540). Waiting on the user: their word to open Phase 3.**
+Nothing of Phase 3 starts before it. When they open it: task 3.0.1 writes its plan
+(`REQUIREMENTS-LATER.md`'s Phase 3 and the register's map), and asks first, before any screen is
+designed, the accessibility standard and level (REQ-324, C41).
 
 **New session?** Read the Handoff above, then `SUMMARY.md`'s header (its topic index) and only the
 topics your task touches. Product discovery is closed (ADR-230). **Every command starts with**
@@ -235,10 +230,6 @@ or `apps/worker`, `pnpm local:up` again. The checks are `adms-verify`'s (read th
 layer you touch); the counts are `CHAIN.md`'s. **If Docker's 8 GB disk is full, stop and ask the
 user**; the rest of what Docker and a Linux host need is the Handoff's "Tools and housekeeping".
 Names: `spec/CONVENTIONS.md`; field names: `spec/DATA-MODEL.md`; flag wording: `spec/FLAGS.md`.
-
-**When Phase 2's exit is met again and the user opens Phase 3:** task 3.0.1 writes its plan
-(`REQUIREMENTS-LATER.md`'s Phase 3 and the register's map); ask first, before any screen is
-designed, the accessibility standard and level (REQ-324, C41).
 
 **Keep this section short (ADR-375):** the hook prints all of it into every session. It holds the
 next task and what that task needs, never a list of finished ones.

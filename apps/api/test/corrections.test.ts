@@ -211,7 +211,7 @@ describe('who may ask', () => {
           refusal: {
             code: 'NOT_PERMITTED',
             message:
-              'Luis Ortega may not renumber a record: it takes an admin, or a manager/analyst granted "renumber". Nothing was changed.',
+              'Luis Ortega may not renumber a record: it takes an admin, or a manager/analyst granted "renumber" and "view review". Nothing was changed.',
           },
         },
       );
