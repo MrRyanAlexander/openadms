@@ -18,6 +18,7 @@ import {
   readFieldEventEndpoint,
   readInvoiceBatchEndpoint,
   readScaleReceiptEndpoint,
+  readTicketDecisionsEndpoint,
   readTicketEndpoint,
   renameInvoiceBatchEndpoint,
   reviewQueueEndpoint,
@@ -160,6 +161,23 @@ export class ReviewReadsController {
         params.projectId,
         params.workflow,
         params.ticketNumber,
+      ),
+    );
+  }
+
+  @Serves(readTicketDecisionsEndpoint)
+  async ticketDecisions(
+    @Param() params: ParamsOf<typeof readTicketDecisionsEndpoint>,
+    @Query() query: QueryOf<typeof readTicketDecisionsEndpoint>,
+    @Req() request: FastifyRequest,
+  ) {
+    return readTicketDecisionsEndpoint.answer.parse(
+      await this.reads.ticketDecisions(
+        callerOf(request).userId,
+        params.projectId,
+        params.workflow,
+        params.ticketNumber,
+        paged(query),
       ),
     );
   }

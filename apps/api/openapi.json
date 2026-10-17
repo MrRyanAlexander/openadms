@@ -6782,6 +6782,384 @@
         }
       }
     },
+    "/projects/{projectId}/tickets/{workflow}/{ticketNumber}/decisions": {
+      "get": {
+        "operationId": "readTicketDecisions",
+        "summary": "What each reconciliation run decided for one ticket and why, newest first, a page at a time: the run (what started it, when), the status it left, its words, the field events it grouped and the kinds still to arrive, the lines it priced with the rule that made each, the flags it raised, and the rule or person that voided it; whether the ticket could be processed. A ticket with no field event is not found.",
+        "x-open-adms-access": "SIGNED_IN",
+        "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "workflow",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["LOAD", "HAUL_OUT", "UNIT_RATE"]
+            }
+          },
+          {
+            "name": "ticketNumber",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^([1-9][0-9]?|1[0-9]{2}|200)$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "decisions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "run": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "trigger": {
+                                "type": "string",
+                                "enum": ["SYNC", "CORRECTION", "SETUP_CHANGE", "REPROCESS"]
+                              },
+                              "startedAt": {
+                                "type": "string",
+                                "format": "date-time",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                              }
+                            },
+                            "required": ["id", "trigger", "startedAt"],
+                            "additionalProperties": false
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": ["PENDING", "COMPLETED", "MANUAL_REVIEW", "VOID"]
+                          },
+                          "why": {
+                            "type": "string"
+                          },
+                          "processed": {
+                            "type": "boolean"
+                          },
+                          "fieldEvents": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "COLLECTION",
+                                    "DISPOSAL",
+                                    "HAUL_OUT_COLLECTION",
+                                    "HAUL_OUT_DISPOSAL",
+                                    "UNIT_RATE"
+                                  ]
+                                },
+                                "splitSuffix": {
+                                  "type": ["string", "null"]
+                                },
+                                "startedAt": {
+                                  "type": "string",
+                                  "format": "date-time",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                                },
+                                "endedAt": {
+                                  "type": "string",
+                                  "format": "date-time",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                                }
+                              },
+                              "required": ["id", "kind", "splitSuffix", "startedAt", "endedAt"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "waitingFor": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "COLLECTION",
+                                "DISPOSAL",
+                                "HAUL_OUT_COLLECTION",
+                                "HAUL_OUT_DISPOSAL",
+                                "UNIT_RATE"
+                              ]
+                            }
+                          },
+                          "lines": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "splitSuffix": {
+                                  "type": "string"
+                                },
+                                "slot": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "ruleId": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                "payItemId": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                "quantity": {
+                                  "type": "string",
+                                  "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+                                },
+                                "rate": {
+                                  "type": "string",
+                                  "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+                                },
+                                "amount": {
+                                  "type": "string",
+                                  "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+                                }
+                              },
+                              "required": [
+                                "splitSuffix",
+                                "slot",
+                                "ruleId",
+                                "payItemId",
+                                "quantity",
+                                "rate",
+                                "amount"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "flags": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "DEBRIS_TYPE_MISMATCH",
+                                "CERT_NUMBER_MISMATCH",
+                                "DISPOSAL_BEFORE_COLLECTION_ENDED",
+                                "OVERLAPPING_LOADS",
+                                "SPLIT_SUFFIX_GAP",
+                                "CARRIED_COUNT_MISMATCH",
+                                "NO_CERTIFICATION",
+                                "TYPED_CAPACITY_DIFFERS",
+                                "TAG_EXPIRED",
+                                "CERTIFICATION_REVOKED",
+                                "CERTIFICATION_REPLACED",
+                                "OUTSIDE_PROJECT_BOUNDARY",
+                                "NO_ZONE",
+                                "OUTSIDE_SITE_AREA",
+                                "PROJECT_NOT_ACTIVE",
+                                "SITE_NOT_YET_ACTIVE",
+                                "SITE_CLOSED",
+                                "NO_ROAD_ROUTE",
+                                "DEVICE_CLOCK_OFF",
+                                "WORK_TIME_AFTER_RECEIVED",
+                                "WORK_TIME_BEFORE_ENROLMENT",
+                                "DEVICE_TIME_ZONE_DIFFERS",
+                                "PHONE_OUT_OF_SERVICE",
+                                "TYPED_TICKET_NUMBER",
+                                "BACK_OFFICE_RECORD",
+                                "SITE_DOES_NOT_TAKE_LOADS",
+                                "SITE_NOT_FOR_HAUL_OUTS",
+                                "INELIGIBLE_SITE",
+                                "TIPPING_FEE_RULE_MISSING",
+                                "HAUL_OUT_DUMPED_AT_TDSR",
+                                "LOAD_CALL_ZERO",
+                                "LOAD_CALL_LOW",
+                                "LOAD_CALL_HIGH",
+                                "PILE_CALL_NOT_HIGHER",
+                                "QUANTITY_MISSING_FOR_PAY_ITEM",
+                                "SHARED_SCALE_WEIGHT",
+                                "RECEIPT_TWO_DEBRIS_TYPES",
+                                "SCALE_WEIGHT_UNUSABLE",
+                                "CARRIED_TICKET_NOT_FOUND",
+                                "CARRIED_TICKET_ON_ANOTHER_LOAD",
+                                "MEASUREMENT_MISSING",
+                                "GPS_MISSING",
+                                "PHOTOS_MISSING",
+                                "DECIMAL_COUNT",
+                                "NO_SIZE_BAND",
+                                "OUTSIDE_SIZE_BAND",
+                                "MARKED_INELIGIBLE",
+                                "STUMP_UNDER_24",
+                                "ROOT_BALL_NOT_WIDER",
+                                "FILL_WITHOUT_EXPOSED_ROOT_BALL",
+                                "ROOT_BALL_MISSING",
+                                "NO_SURVEY",
+                                "CREW_ITEM_OVER_12_HOURS",
+                                "CREW_TIME_OVERLAP",
+                                "ROE_MISSING",
+                                "ROE_NOT_ON_PROJECT",
+                                "ROE_UNSIGNED",
+                                "ROE_OUT_OF_SCOPE",
+                                "NO_PRE_WORK_SURVEY",
+                                "CERTIFICATION_PHOTO_MISSING",
+                                "PERMIT_OUTSTANDING",
+                                "NO_PRICING_RULE",
+                                "DUPLICATE_TRANSACTION_NUMBER",
+                                "NO_RATE_FOR_PRIME",
+                                "RATE_TO_BE_NEGOTIATED",
+                                "NOT_PROCESSED",
+                                "DETAIL_MISSING",
+                                "TYPED_NUMBER_NO_REASON",
+                                "WRONG_KIND_OF_BADGE",
+                                "GPS_UNREADABLE",
+                                "NOT_A_TICKET_NUMBER",
+                                "ENDED_BEFORE_STARTED",
+                                "SPLIT_NOT_ALLOWED",
+                                "OUTSIDE_CONTROL_RANGES",
+                                "ASSIGNMENT_ON_ANOTHER_PROJECT",
+                                "SCALE_NET_DISAGREES",
+                                "TWO_QUANTITIES",
+                                "NOT_PROCESSED_LINES_STAND",
+                                "SUB_NAME_ALIKE"
+                              ]
+                            }
+                          },
+                          "voidedByRules": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                "name": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["id", "name"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "voidedByPerson": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "reason": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["name", "reason"],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "run",
+                          "status",
+                          "why",
+                          "processed",
+                          "fieldEvents",
+                          "waitingFor",
+                          "lines",
+                          "flags",
+                          "voidedByRules",
+                          "voidedByPerson"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "next": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["decisions", "next"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/projects/{projectId}/settings": {
       "patch": {
         "operationId": "changeProjectSettings",

@@ -218,13 +218,15 @@ describe('permissions, read from the database on every request', () => {
     ).toEqual([
       'listPeople',
       'readPerson',
-      // The back office's reads (ADR-535): a project and its review queue, flags and tickets,
-      // the firm's lists, setup but its rates, a site's shapes and a map's versions and files.
+      // The back office's reads (ADR-535): a project and its review queue, flags and tickets
+      // (and what each run decided, ADR-536), the firm's lists, setup but its rates, a site's
+      // shapes and a map's versions and files.
       'listProjects',
       'readProject',
       'reviewQueue',
       'listFlags',
       'readTicket',
+      'readTicketDecisions',
       'listListValues',
       'listForms',
       'listPayItems',

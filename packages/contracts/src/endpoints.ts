@@ -110,6 +110,7 @@ import {
   sitesAnswerSchema,
   surveysAnswerSchema,
   ticketAnswerSchema,
+  ticketDecisionsAnswerSchema,
   viewerCertificationsAnswerSchema,
   viewerDropOffLogsAnswerSchema,
   viewerIncidentsAnswerSchema,
@@ -3797,6 +3798,18 @@ export const readTicketEndpoint = endpoint({
   answer: ticketAnswerSchema,
 });
 
+export const readTicketDecisionsEndpoint = endpoint({
+  ...read,
+  name: 'readTicketDecisions',
+  summary:
+    'What each reconciliation run decided for one ticket and why, newest first, a page at a time: the run (what started it, when), the status it left, its words, the field events it grouped and the kinds still to arrive, the lines it priced with the rule that made each, the flags it raised, and the rule or person that voided it; whether the ticket could be processed. A ticket with no field event is not found.',
+  method: 'GET',
+  path: '/projects/:projectId/tickets/:workflow/:ticketNumber/decisions',
+  params: projectTicket,
+  query: pagedAfter,
+  answer: ticketDecisionsAnswerSchema,
+});
+
 export const readFieldEventEndpoint = endpoint({
   ...read,
   name: 'readFieldEvent',
@@ -4357,6 +4370,7 @@ export const endpoints: readonly Endpoint[] = [
   reviewQueueEndpoint,
   listFlagsEndpoint,
   readTicketEndpoint,
+  readTicketDecisionsEndpoint,
   changeProjectSettingsEndpoint,
   changeProjectWindowEndpoint,
   closingCheckEndpoint,

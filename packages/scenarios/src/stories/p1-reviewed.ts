@@ -14,7 +14,7 @@
 // worker concluded. One correction alone is made in process, on purpose: the one whose job queue
 // is made to fail (AC-10-50), which no request can do. Last, a sub typed twice at certification
 // is flagged on the certifications that name either spelling, never merged (AC-01-21; ADR-529
-// (f)).
+// (f)), and the review queue counts those flags as a cause on no ticket (AC-10-93; ADR-536).
 //
 // Not here: voiding the phantom, unvoiding and accepting a flag (the story `p1-voided`); QC, the
 // lock and a batch for themselves (the story `p1-invoiced`). The golden mission's whole review is
@@ -39,6 +39,7 @@ import {
   markSecondCopyEndpoint,
   renumberFieldEventEndpoint,
   renumberQuarantinedRecordEndpoint,
+  reviewQueueEndpoint,
   setQcStatusEndpoint,
   unlockInvoicedEndpoint,
   type AnswerOf,
@@ -1667,6 +1668,17 @@ export const p1Reviewed: Story = {
         ],
         [],
       ],
+    );
+    // The review queue counts each cause's open flags and, apart, the tickets they stand on:
+    // these two stand on certifications, so they are two flags on no ticket (ADR-536; C172).
+    const queued = await byLuis(reviewQueueEndpoint, {
+      ids: { projectId: p1 },
+      query: { workflow: 'LOAD' },
+    });
+    story.check(
+      'AC-10-93 Luis reads the review queue: the sub named alike is a cause of two open flags on no ticket, since a flag on a certification is no ticket waiting',
+      queued.causes.filter((cause) => cause.code === 'SUB_NAME_ALIKE'),
+      [{ code: 'SUB_NAME_ALIKE', flags: 2, tickets: 0 }],
     );
     story.check(
       'nothing is merged and no line moves: both records stand in service, and every Rivera line still names the spelling its certification names',

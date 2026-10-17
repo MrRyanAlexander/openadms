@@ -1,6 +1,7 @@
 // What the back office reads to review, fix and QC (spec/parts/08-review-and-corrections.md, "One
 // review queue" and step 1; spec/parts/09; REQ-217; AC-10-27; BACKLOG 2.8.8, C98, C104, C107,
-// C148, C171; ADR-224, 228, 363, 365, 433, 526 (1), 534, 535). OWASP API1, API3, API4; ASVS V8.
+// C148, C171, C172; ADR-224, 228, 363, 365, 433, 526 (1), 534, 535, 536). OWASP API1, API3, API4;
+// ASVS V8.
 //
 // - **Open to every admin and manager/analyst in service**, whatever they hold: the back office
 //   sees everything about a ticket (ADR-224). Asked again here, inside the read, whatever the door
@@ -20,6 +21,7 @@ import type {
   ReviewQueueAnswer,
   ScaleReceiptAnswer,
   TicketAnswer,
+  TicketDecisionsAnswer,
 } from '@open-adms/contracts';
 import type { Database, FieldEvent, Flag, FlagAcceptance, Prisma } from '@open-adms/db';
 import type { WorkflowName } from '@open-adms/domain';
@@ -83,6 +85,61 @@ export async function backOfficeReader(tx: Tx, readerId: string): Promise<void> 
 }
 
 const notFound = (): Refusal => new Refusal('NOT_FOUND', 404);
+
+// A decision's summary as the worker wrote it (ARCHITECTURE §13): read by its keys, each as the
+// answer's schema then holds it, what a run didn't write read as none.
+type Decided = TicketDecisionsAnswer['decisions'][number];
+type Said = (key: string) => Prisma.JsonValue | undefined;
+const fieldsOf =
+  (value: Prisma.JsonValue | undefined): Said =>
+  (key) =>
+    typeof value === 'object' && value !== null && !Array.isArray(value) ? value[key] : undefined;
+const listOf = (value: Prisma.JsonValue | undefined): Prisma.JsonValue[] =>
+  Array.isArray(value) ? value : [];
+const textOf = (value: Prisma.JsonValue | undefined): string =>
+  typeof value === 'string' ? value : '';
+function decided(summary: Prisma.JsonValue): Omit<Decided, 'id' | 'run' | 'status' | 'processed'> {
+  const said = fieldsOf(summary);
+  const person = said('voidedByPerson');
+  const by = fieldsOf(person);
+  return {
+    why: textOf(said('why')),
+    fieldEvents: listOf(said('fieldEvents')).map((each) => {
+      const event = fieldsOf(each);
+      const suffix = event('splitSuffix');
+      return {
+        id: textOf(event('id')),
+        kind: textOf(event('kind')) as Decided['fieldEvents'][number]['kind'],
+        splitSuffix: typeof suffix === 'string' ? suffix : null,
+        startedAt: textOf(event('startedAt')),
+        endedAt: textOf(event('endedAt')),
+      };
+    }),
+    waitingFor: listOf(said('waitingFor')).map(textOf) as Decided['waitingFor'],
+    lines: listOf(said('lines')).map((each) => {
+      const line = fieldsOf(each);
+      const slot = line('slot');
+      return {
+        splitSuffix: textOf(line('splitSuffix')),
+        slot: typeof slot === 'number' ? slot : 0,
+        ruleId: textOf(line('ruleId')),
+        payItemId: textOf(line('payItemId')),
+        quantity: textOf(line('quantity')),
+        rate: textOf(line('rate')),
+        amount: textOf(line('amount')),
+      };
+    }),
+    flags: listOf(said('flags')).map(textOf) as Decided['flags'],
+    voidedByRules: listOf(said('voidedBy')).map((each) => {
+      const rule = fieldsOf(each);
+      return { id: textOf(rule('id')), name: textOf(rule('name')) };
+    }),
+    voidedByPerson:
+      person === undefined || person === null
+        ? null
+        : { name: textOf(by('name')), reason: textOf(by('reason')) },
+  };
+}
 const time = (at: Date | null): string | null => at?.toISOString() ?? null;
 // A number the database keeps exactly, as text to the places its column holds.
 interface Exact {
@@ -352,6 +409,47 @@ export class ReviewReads {
         locks: locks.map(invoiceLockRecord),
         voids: voids.map(ticketVoidRecord),
         unvoids: unvoids.map(ticketUnvoidRecord),
+      };
+    });
+  }
+
+  // What each run decided for one ticket and why, newest first (ADR-536; C172): the worker's
+  // own words for a person. Whether it could be processed, never the error's text (the log's).
+  ticketDecisions(
+    readerId: string,
+    projectId: string,
+    workflow: WorkflowName,
+    ticketNumber: string,
+    asked: PageAsked,
+  ): Promise<TicketDecisionsAnswer> {
+    return this.db.$read(async (tx) => {
+      await backOfficeReader(tx, readerId);
+      const named = { projectId, workflow, ticketNumber };
+      const event = await tx.fieldEvent.findFirst({ where: named, select: { id: true } });
+      if (event === null) throw notFound();
+      const rows = await tx.reconciliationDecision.findMany({
+        where: { workflow, ticketNumber, reconciliationRun: { projectId } },
+        // The order the worker wrote them: a decision's id is a UUIDv7.
+        orderBy: { id: 'desc' },
+        include: {
+          reconciliationRun: { select: { id: true, trigger: true, startedAt: true } },
+        },
+        ...fromCursor(asked),
+      });
+      const { rows: page, next } = pageOf(rows, asked.limit);
+      return {
+        decisions: page.map((row) => ({
+          id: row.id,
+          run: {
+            id: row.reconciliationRun.id,
+            trigger: row.reconciliationRun.trigger,
+            startedAt: row.reconciliationRun.startedAt.toISOString(),
+          },
+          status: row.status,
+          processed: row.error === null,
+          ...decided(row.summary),
+        })),
+        next,
       };
     });
   }

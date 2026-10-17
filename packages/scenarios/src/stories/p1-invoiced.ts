@@ -16,7 +16,9 @@ import {
   acceptFlagEndpoint,
   correctFieldEventEndpoint,
   createInvoiceBatchEndpoint,
+  listInvoiceBatchesEndpoint,
   lockAsInvoicedEndpoint,
+  readInvoiceBatchEndpoint,
   renumberFieldEventEndpoint,
   setLockBatchEndpoint,
   setQcStatusEndpoint,
@@ -588,6 +590,18 @@ export const p1Invoiced: Story = {
     const batchName = 'Bayline ROW, week of 12 Oct';
     const { record: batch } = await byLuis(createInvoiceBatchEndpoint, batching(batchName));
     const sameName = await refusal(createInvoiceBatchEndpoint, batching(` ${batchName} `));
+    // The batch at its endpoints, read as it is made and once its four are locked in it: a
+    // batch holds its own locks, never the project's others (ADR-536; C172).
+    const batchRead = async () => [
+      (await byLuis(readInvoiceBatchEndpoint, { ids: { invoiceBatchId: batch.id } })).locks
+        .map((each) => each.ticket.ticketNumber)
+        .sort(),
+      (await byLuis(listInvoiceBatchesEndpoint, { ids: { projectId: p1 } })).batches.map((each) => [
+        each.batch.name,
+        each.locksInForce,
+      ]),
+    ];
+    const madeEmpty = await batchRead();
     await byLuis(setLockBatchEndpoint, intoBatch(l101001, batch.id));
     await byLuis(setLockBatchEndpoint, intoBatch(l101003, batch.id));
     const h201004 = await haulOutOf('201004');
@@ -630,6 +644,14 @@ export const p1Invoiced: Story = {
         '422 NOT_SAVED · BATCH_NAME_USED: This project already has an invoice batch named "Bayline ROW, week of 12 Oct". Nothing was saved.',
         ['101001', '101003', '201004', '301001'],
         ['locked by Luis · Bayline ROW, week of 12 Oct · in force'],
+      ],
+    );
+    story.check(
+      'AC-10-98 read at its endpoints as it is made, the batch holds no lock, though 101001 and 101003 stand locked in no batch; with its four locked in it, it holds those four',
+      [madeEmpty, await batchRead()],
+      [
+        [[], [[batchName, 0]]],
+        [['101001', '101003', '201004', '301001'], [[batchName, 4]]],
       ],
     );
     story.check(

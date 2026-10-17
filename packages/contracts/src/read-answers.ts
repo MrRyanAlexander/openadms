@@ -9,6 +9,7 @@
 // Setup; a viewer reads none).
 import {
   boardWarningCodes,
+  fieldEventKinds,
   flagBillings,
   flagCodes,
   masterPasscodeSessions,
@@ -252,6 +253,56 @@ export const ticketAnswerSchema = z.strictObject({
 });
 
 export type TicketAnswer = z.infer<typeof ticketAnswerSchema>;
+
+// What started a reconciliation run: the database's own list (`ReconciliationTrigger`).
+export const reconciliationTriggers = ['SYNC', 'CORRECTION', 'SETUP_CHANGE', 'REPROCESS'] as const;
+
+// What one run decided for a ticket and why, as the worker wrote it for a person (spec/
+// DATA-MODEL.md, `ReconciliationDecision`; ADR-536): the run, the status it left, its own words,
+// the field events it grouped and the kinds still to arrive, the lines it priced (each with the
+// rule that made it), the flags it raised, and what voided it. Whether the ticket could be
+// processed, never the error's own text: that is the server's log.
+const decisionRead = z.strictObject({
+  id,
+  run: z.strictObject({ id, trigger: z.enum(reconciliationTriggers), startedAt: at }),
+  status: z.enum(ticketStatuses),
+  why: z.string(),
+  processed: z.boolean(),
+  fieldEvents: z.array(
+    z.strictObject({
+      id,
+      kind: z.enum(fieldEventKinds),
+      splitSuffix: z.string().nullable(),
+      startedAt: at,
+      endedAt: at,
+    }),
+  ),
+  waitingFor: z.array(z.enum(fieldEventKinds)),
+  lines: z.array(
+    z.strictObject({
+      // The property or pile it prices on a split; empty otherwise.
+      splitSuffix: z.string(),
+      slot: z.int(),
+      ruleId: id,
+      payItemId: id,
+      quantity: exact,
+      rate: exact,
+      amount: exact,
+    }),
+  ),
+  flags: z.array(z.enum(flagCodes)),
+  // The rules whose Void ticket ran (ADR-118), and the person's void with its reason.
+  voidedByRules: z.array(named),
+  voidedByPerson: z.strictObject({ name: z.string(), reason: z.string() }).nullable(),
+});
+
+// A ticket's decisions, newest first: one for every run that worked it.
+export const ticketDecisionsAnswerSchema = z.strictObject({
+  decisions: z.array(decisionRead),
+  next: id.nullable(),
+});
+
+export type TicketDecisionsAnswer = z.infer<typeof ticketDecisionsAnswerSchema>;
 
 // A scale receipt with its photographs and the field events that name it.
 export const scaleReceiptAnswerSchema = z.strictObject({

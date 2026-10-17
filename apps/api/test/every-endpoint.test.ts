@@ -84,6 +84,7 @@ const inventory = [
   'reviewQueue GET /projects/:projectId/review-queue SIGNED_IN ADMIN,MANAGER_ANALYST',
   'listFlags GET /projects/:projectId/flags SIGNED_IN ADMIN,MANAGER_ANALYST',
   'readTicket GET /projects/:projectId/tickets/:workflow/:ticketNumber SIGNED_IN ADMIN,MANAGER_ANALYST',
+  'readTicketDecisions GET /projects/:projectId/tickets/:workflow/:ticketNumber/decisions SIGNED_IN ADMIN,MANAGER_ANALYST',
   'changeProjectSettings PATCH /projects/:projectId/settings SIGNED_IN ADMIN,MANAGER_ANALYST SETUP',
   'changeProjectWindow PATCH /projects/:projectId/active-window SIGNED_IN ADMIN,MANAGER_ANALYST SETUP',
   'closingCheck GET /projects/:projectId/closing-check SIGNED_IN ADMIN',

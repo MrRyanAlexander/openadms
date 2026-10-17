@@ -54,6 +54,7 @@ import {
   readMapVersionEndpoint,
   readProjectEndpoint,
   readScaleReceiptEndpoint,
+  readTicketDecisionsEndpoint,
   readTicketEndpoint,
   removePhoneEndpoint,
   renameInvoiceBatchEndpoint,
@@ -68,7 +69,9 @@ import type { Database } from '@open-adms/db';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { Certifications } from '../src/certification/certifications.ts';
+import { InvoiceLocks } from '../src/review/invoice-locks.ts';
 import { QcMarks } from '../src/review/qc-marks.ts';
+import { ReviewReads } from '../src/review/review-reads.ts';
 import { SetupReads } from '../src/setup/setup-reads.ts';
 import { Voids } from '../src/review/voids.ts';
 import { installationSettings, openInstallation } from './support/database.ts';
@@ -170,7 +173,7 @@ describe('the review queue and a ticket whole', () => {
     });
   });
 
-  it('AC-10-94 a ticket whole: its field events in field time as recorded, with their status and which way a passcode session was opened; no completed record or line until the worker writes one; its QC mark and its voids, kept when lifted; a number nobody has is not found', async () => {
+  it('AC-10-94, AC-10-106 a ticket whole: its field events in field time as recorded, with their status and which way a passcode session was opened; no completed record, line or run’s decision until the worker writes one; its QC mark and its voids, kept when lifted; a number nobody has is not found', async () => {
     await world(async (served, tx, who, within) => {
       const p = await p1WithTickets(served, tx, within, who);
       const luis = await luisHolds(served, tx, who.luis);
@@ -229,6 +232,24 @@ describe('the review queue and a ticket whole', () => {
         status: 'QC_ISSUES',
         setById: who.dana,
       });
+      // What each run decided (ADR-536; C172): none until the worker runs, which is the
+      // stories' (`p1-voided`).
+      const decisions = (ticketNumber: string) =>
+        read(served, luis, readTicketDecisionsEndpoint, {
+          ids: { projectId: p.project.id, workflow: 'LOAD', ticketNumber },
+          query: '?limit=10',
+        });
+      expect(saved(readTicketDecisionsEndpoint, await decisions('101031'))).toEqual({
+        decisions: [],
+        next: null,
+      });
+      expect(told(await decisions('109999'))).toEqual([404, 'NOT_FOUND']);
+      // Past the door, as if it had let a viewer in: the read asks who reads itself.
+      await expect(
+        new ReviewReads(within).ticketDecisions(who.viewer, p.project.id, 'LOAD', '101031', {
+          limit: 10,
+        }),
+      ).rejects.toMatchObject({ code: 'NOT_ALLOWED' });
       const nobodys = await ticket('LOAD', '109999');
       expect(told(nobodys)).toEqual([404, 'NOT_FOUND']);
       expect(Object.keys(nobodys.body as object).sort()).toEqual(['code', 'requestId']);
@@ -536,6 +557,15 @@ describe('invoice batches and many at once', () => {
         saved(renameInvoiceBatchEndpoint, await rename(locker, '  Bayline ROW, Oct 12–18 ')).record,
       ).toMatchObject({ id: week.id, name: 'Bayline ROW, Oct 12–18' });
       expect(told(await rename(locker, '   '))).toEqual([400, 'BAD_REQUEST']);
+      // Past the request's schema, which trims a name and refuses a blank one first: the service
+      // asks the same itself (ADR-536; C172).
+      const locks = new InvoiceLocks(within, served.clock, shippedPolicy);
+      const blank = await locks.rename(who.dana, week.id, '   ');
+      const untrimmed = await locks.rename(who.dana, week.id, '  Bayline ROW, Oct 12–18 (2) ');
+      expect([
+        blank.saved ? 'saved' : blank.refusal.code,
+        untrimmed.saved ? untrimmed.record.name : untrimmed.refusal.code,
+      ]).toEqual(['BATCH_NAME_BLANK', 'Bayline ROW, Oct 12–18 (2)']);
       // The database's own key refuses a name used twice: a test's last request.
       const twice = await rename(locker, 'Bayline ROW, week of 5 Oct');
       expect([told(twice), (twice.body as { reason?: string }).reason]).toEqual([

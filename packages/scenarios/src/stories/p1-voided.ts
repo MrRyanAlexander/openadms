@@ -7,7 +7,8 @@
 // Every void, unvoid, acceptance and correction here is Luis Ortega's request at his browser,
 // signed in, over HTTPS to the story's API (BACKLOG 2.7.1 part 4b; ADR-497), by the grants Dana
 // gives him at hers. Each is a mark of its own beside the records, and queues its own job; the
-// worker takes it up, and the story reads what the worker concluded.
+// worker takes it up, and the story reads what the worker concluded; Luis reads what each run
+// decided for a voided ticket at its endpoint (AC-10-106; ADR-536).
 //
 // Not here: QC, the lock, a batch and the unlock (1.8.5). The golden mission's whole review is
 // 1.9.1.
@@ -15,6 +16,7 @@ import { RuleSetup, SiteSetup } from '@open-adms/api';
 import {
   acceptFlagEndpoint,
   correctFieldEventEndpoint,
+  readTicketDecisionsEndpoint,
   renumberFieldEventEndpoint,
   unvoidTicketEndpoint,
   voidTicketEndpoint,
@@ -192,6 +194,34 @@ export const p1Voided: Story = {
           where: { reconciliationRunId: run?.runId ?? '', ticketNumber },
         })
       ).map((decision) => [decision.status, (decision.summary as { why?: string }).why]);
+    // What each run decided for a ticket, newest first, as Luis reads it at its endpoint
+    // (ADR-536; C172): what started the run, the status it left, the person or rule that voided
+    // it, and each line it priced by its rule.
+    const decisionsOf = async (workflow: 'LOAD' | 'UNIT_RATE', ticketNumber: string) => {
+      const { decisions } = await (
+        await backOffice.luiss()
+      ).answered(readTicketDecisionsEndpoint, { ids: { projectId: p1, workflow, ticketNumber } });
+      const ruleNamed = async (id: string) =>
+        (await api.rule.findUniqueOrThrow({ where: { id } })).name;
+      return Promise.all(
+        decisions.map(async (decision) =>
+          [
+            decision.run.trigger,
+            decision.status,
+            ...(decision.voidedByPerson === null
+              ? []
+              : [`voided by ${decision.voidedByPerson.name} (${decision.voidedByPerson.reason})`]),
+            ...decision.voidedByRules.map((rule) => `voided by the rule "${rule.name}"`),
+            ...(await Promise.all(
+              decision.lines.map(
+                async (line) =>
+                  `#${String(line.slot)} "${await ruleNamed(line.ruleId)}" $${line.amount}`,
+              ),
+            )),
+          ].join(' · '),
+        ),
+      );
+    };
 
     // A reviewer's action, then the run it asks for.
     const last: { run: RunOutcome | null } = { run: null };
@@ -594,6 +624,14 @@ export const p1Voided: Story = {
         '422 NOT_SAVED · ALREADY_VOID: Ticket 301003 is already void. Nothing was saved.',
       ],
     );
+    story.check(
+      'AC-10-106 Luis reads at its endpoint what each run decided for 301003, newest first: the run his void asked for left it VOID, voided by him for his reason, with no line; the run before priced its line',
+      await decisionsOf('UNIT_RATE', '301003'),
+      [
+        'CORRECTION · VOID · voided by Luis Ortega (Duplicate ticket)',
+        'SETUP_CHANGE · COMPLETED · #1 "HNG-RMV-EA - Hanger removal" $68.00',
+      ],
+    );
 
     story.at(
       on('14', '09:00'),
@@ -990,6 +1028,15 @@ export const p1Voided: Story = {
         ],
         ['CORRECTION', 'Luis'],
         [],
+      ],
+    );
+    story.check(
+      'AC-10-106 Luis reads at its endpoint what each run decided for 101009, newest first: the run his unvoid asked for and the run the rule’s save asked for each left it VOID, voided by the rule; the run before priced its line',
+      await decisionsOf('LOAD', '101009'),
+      [
+        'CORRECTION · VOID · voided by the rule "Old Quarry Pit: void"',
+        'SETUP_CHANGE · VOID · voided by the rule "Old Quarry Pit: void"',
+        'SETUP_CHANGE · MANUAL_REVIEW · #1 "VEG-HAUL-CY-15 - ROW VEG haul 0–15 mi" $292.50',
       ],
     );
     story.check(

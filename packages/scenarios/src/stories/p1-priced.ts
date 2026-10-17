@@ -20,6 +20,7 @@ import { ContractorSetup, PayItemSetup, RuleSetup, SiteSetup } from '@open-adms/
 import {
   correctFieldEventEndpoint,
   lockAsInvoicedEndpoint,
+  readTicketDecisionsEndpoint,
   setQcStatusEndpoint,
 } from '@open-adms/contracts';
 import { Prisma, systemActorId, type Database } from '@open-adms/db';
@@ -470,6 +471,22 @@ export const p1Priced: Story = {
         0,
         '52.0',
       ],
+    );
+    // What the failed run decided, as Luis reads it at its endpoint (AC-10-106; ADR-536): that
+    // it could not be processed, in the worker's words, and never the error's own text.
+    const { decisions: failedDecisions } = await luiss.answered(readTicketDecisionsEndpoint, {
+      ids: { projectId: p1, workflow: 'LOAD', ticketNumber: '101001' },
+      query: { limit: '1' },
+    });
+    story.check(
+      'AC-10-106 Luis reads what the failed run decided for 101001: the ticket stood COMPLETED and could not be processed, in the worker’s words; the error’s own text is the server’s log, never the answer',
+      failedDecisions.map((decision) => [
+        decision.status,
+        decision.processed,
+        decision.why,
+        JSON.stringify(decision).includes('refused'),
+      ]),
+      [['COMPLETED', false, 'It could not be processed.', false]],
     );
 
     story.at(
